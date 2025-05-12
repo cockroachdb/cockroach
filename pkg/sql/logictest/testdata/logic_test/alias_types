@@ -17,7 +17,7 @@ aliases     CREATE TABLE public.aliases (
               CONSTRAINT aliases_pkey PRIMARY KEY (rowid ASC),
               FAMILY "primary" (a, rowid),
               FAMILY fam_1_b (b)
-            )
+            );
 
 statement ok
 INSERT INTO aliases VALUES (100, 'abc')

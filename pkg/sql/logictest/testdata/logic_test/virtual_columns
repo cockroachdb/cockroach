@@ -1193,7 +1193,7 @@ CREATE TABLE public.t63167_b (
   v INT8 NULL AS (a + 1:::INT8) VIRTUAL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t63167_b_pkey PRIMARY KEY (rowid ASC)
-)
+);
 
 # Test that columns backfills to tables with virtual columns work.
 subtest column_backfill
@@ -1362,7 +1362,7 @@ CREATE TABLE public.t_added (
   i4 INT4 NULL AS (4:::INT8) VIRTUAL,
   i2 INT2 NULL AS (2:::INT8) VIRTUAL,
   CONSTRAINT t_added_pkey PRIMARY KEY (i ASC)
-)
+);
 
 statement ok
 DROP TABLE t_added

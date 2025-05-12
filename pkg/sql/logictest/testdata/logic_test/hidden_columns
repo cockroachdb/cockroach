@@ -30,7 +30,7 @@ t  CREATE TABLE public.t (
      x INT8 NOT VISIBLE NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
-   )
+   );
 
 # Check that stars expand to no columns.
 

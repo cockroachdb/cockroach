@@ -110,7 +110,7 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON TABLE public.t IS 'table t'
+COMMENT ON TABLE public.t IS 'table t';
 
 statement ok
 COMMENT ON TABLE t IS 'table t AGAIN';
@@ -126,7 +126,7 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON TABLE public.t IS 'table t AGAIN'
+COMMENT ON TABLE public.t IS 'table t AGAIN';
 
 statement ok
 COMMENT ON TABLE t IS NULL;
@@ -141,7 +141,7 @@ CREATE TABLE public.t (
   INDEX idxb (b ASC),
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
-)
+);
 
 statement ok
 COMMENT ON COLUMN t.b IS 'column b';
@@ -157,7 +157,7 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON COLUMN public.t.b IS 'column b'
+COMMENT ON COLUMN public.t.b IS 'column b';
 
 statement ok
 COMMENT ON COLUMN t.b IS 'column b AGAIN';
@@ -176,7 +176,7 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON COLUMN public.t.b IS 'column b AGAIN'
+COMMENT ON COLUMN public.t.b IS 'column b AGAIN';
 
 statement ok
 COMMENT ON COLUMN t.b IS NULL;
@@ -191,7 +191,7 @@ CREATE TABLE public.t (
   INDEX idxb (b ASC),
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
-)
+);
 
 statement ok
 COMMENT ON INDEX t@idxb IS 'index b';
@@ -207,7 +207,7 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON INDEX public.t@idxb IS 'index b'
+COMMENT ON INDEX public.t@idxb IS 'index b';
 
 statement ok
 COMMENT ON INDEX t@idxb IS 'index b AGAIN';
@@ -223,7 +223,7 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON INDEX public.t@idxb IS 'index b AGAIN'
+COMMENT ON INDEX public.t@idxb IS 'index b AGAIN';
 
 statement ok
 COMMENT ON INDEX t@idxb IS NULL;
@@ -238,7 +238,7 @@ CREATE TABLE public.t (
   INDEX idxb (b ASC),
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
-)
+);
 
 statement ok
 COMMENT ON CONSTRAINT ckb ON t IS 'cst b';
@@ -254,7 +254,7 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON CONSTRAINT ckb ON public.t IS 'cst b'
+COMMENT ON CONSTRAINT ckb ON public.t IS 'cst b';
 
 statement ok
 COMMENT ON CONSTRAINT ckb ON t IS 'cst b AGAIN';
@@ -270,7 +270,7 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON CONSTRAINT ckb ON public.t IS 'cst b AGAIN'
+COMMENT ON CONSTRAINT ckb ON public.t IS 'cst b AGAIN';
 
 statement ok
 COMMENT ON CONSTRAINT ckb ON t IS NULL;
@@ -285,7 +285,7 @@ CREATE TABLE public.t (
   INDEX idxb (b ASC),
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
-)
+);
 
 # Make sure invalid comment type does not crash a server.
 subtest regression_99316

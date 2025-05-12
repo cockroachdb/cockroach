@@ -168,7 +168,7 @@ foo5  CREATE TABLE public.foo5 (
         b INT8 NOT NULL,
         c INT8 NULL,
         CONSTRAINT foo5_pkey PRIMARY KEY (b ASC)
-      )
+      );
 
 statement ok
 CREATE TABLE foo6 (
@@ -185,7 +185,7 @@ foo6  CREATE TABLE public.foo6 (
         b INT8 NULL,
         c INT8 NULL,
         CONSTRAINT foo6_pkey PRIMARY KEY (a ASC)
-      )
+      );
 
 statement error generate insert row: null value in column "x" violates not-null constraint
 CREATE TABLE foo7 (x PRIMARY KEY) AS VALUES (1), (NULL);
@@ -200,7 +200,7 @@ foo8  CREATE TABLE public.foo8 (
         item STRING NOT NULL,
         qty INT8 NULL,
         CONSTRAINT foo8_pkey PRIMARY KEY (item ASC)
-      )
+      );
 
 # Allow CREATE TABLE AS to specify composite primary keys.
 statement ok
@@ -219,7 +219,7 @@ foo9  CREATE TABLE public.foo9 (
         b INT8 NULL,
         c INT8 NOT NULL,
         CONSTRAINT foo9_pkey PRIMARY KEY (a ASC, c ASC)
-      )
+      );
 
 statement ok
 CREATE TABLE foo10 (a, PRIMARY KEY (c, b, a), b, c, FAMILY "primary" (a, b, c)) AS SELECT * FROM foo9
@@ -232,7 +232,7 @@ foo10  CREATE TABLE public.foo10 (
          b INT8 NOT NULL,
          c INT8 NOT NULL,
          CONSTRAINT foo10_pkey PRIMARY KEY (c ASC, b ASC, a ASC)
-       )
+       );
 
 statement ok
 CREATE TABLE foo11 (
@@ -250,7 +250,7 @@ foo11  CREATE TABLE public.foo11 (
          y INT8 NULL,
          z INT8 NOT NULL,
          CONSTRAINT foo11_pkey PRIMARY KEY (x ASC, z ASC)
-       )
+       );
 
 statement error pq: multiple primary keys for table "foo12" are not allowed
 CREATE TABLE foo12 (x PRIMARY KEY, y, PRIMARY KEY(y)) AS VALUES (1, 2), (3, 4);
@@ -279,7 +279,7 @@ foo12  CREATE TABLE public.foo12 (
          CONSTRAINT foo12_pkey PRIMARY KEY (a ASC),
          FAMILY f1 (a, b, d),
          FAMILY fam_1_c (c)
-       )
+       );
 
 # Test constraint style definition of column families.
 statement ok
@@ -296,7 +296,7 @@ foo13  CREATE TABLE public.foo13 (
          CONSTRAINT foo13_pkey PRIMARY KEY (a ASC, b ASC),
          FAMILY pk (a, b),
          FAMILY fam_1_c_d (c, d)
-       )
+       );
 
 # Test renaming columns still preserves the column families.
 statement ok
@@ -316,7 +316,7 @@ foo13  CREATE TABLE public.foo13 (
          CONSTRAINT foo13_pkey PRIMARY KEY (a ASC, b ASC),
          FAMILY pk (a, b),
          FAMILY fam_1_c_d (e, z)
-       )
+       );
 
 # Regression test for #41004
 statement ok

@@ -24,15 +24,15 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t1]
 ----
 CREATE TABLE public.t1 (
-   k INT8 NOT NULL,
-   v INT8 NULL,
-   i INT8 NULL,
-   CONSTRAINT t1_pkey PRIMARY KEY (k ASC),
-   INDEX idx_v_visible (v ASC),
-   INDEX idx_i_invisible (i ASC) NOT VISIBLE,
-   UNIQUE INDEX idx_v_invisible (v ASC) NOT VISIBLE,
-   FAMILY fam_0_k_v_i (k, v, i)
-)
+  k INT8 NOT NULL,
+  v INT8 NULL,
+  i INT8 NULL,
+  CONSTRAINT t1_pkey PRIMARY KEY (k ASC),
+  INDEX idx_v_visible (v ASC),
+  INDEX idx_i_invisible (i ASC) NOT VISIBLE,
+  UNIQUE INDEX idx_v_invisible (v ASC) NOT VISIBLE,
+  FAMILY fam_0_k_v_i (k, v, i)
+);
 
 # Test SHOW INDEX, SHOW INDEXES, SHOW KEYS FROM TABLE.
 query TTB
@@ -1706,7 +1706,7 @@ t  CREATE TABLE public.t (
      INDEX k_idx (k ASC) VISIBILITY 0.25,
      INDEX v_idx (v ASC) VISIBILITY 0.50,
      FAMILY fam_0_p_k_v (p, k, v)
-   )
+   );
 
 query TTBITTTBBBF colnames,rowsort
 SELECT * FROM [SHOW INDEX FROM t]

@@ -80,7 +80,7 @@ CREATE TABLE public.t1 (
   CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
   FAMILY fam_0 (a, b),
   CONSTRAINT check_b CHECK (public.f1(b) > 1:::INT8)
-)
+);
 
 # Make sure back references are tracked properly.
 let $fn_id
@@ -398,7 +398,7 @@ CREATE TABLE public.t1 (
   FAMILY fam_0 (a, b),
   CONSTRAINT check_b CHECK (public.f2(b) > 1:::INT8),
   CONSTRAINT cka CHECK (public.f2(a) > 1:::INT8)
-)
+);
 
 # Make sure that schema prefix is preserved through serialization and
 # deserialization.
@@ -424,7 +424,7 @@ CREATE TABLE public.t (
   CONSTRAINT t_pkey PRIMARY KEY (a ASC),
   FAMILY fam_0_b_a (b, a),
   CONSTRAINT check_b CHECK (sc1.f1(b) > 1:::INT8)
-)
+);
 
 # Make sure dependency circle is not allowed.
 statement ok
@@ -455,7 +455,7 @@ CREATE TABLE public.alter_add_check_constraint (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT alter_add_check_constraint_pkey PRIMARY KEY (rowid ASC),
   CONSTRAINT noop CHECK (public.true_is_true())
-)
+);
 
 # This is the original Reproduction of #109414. It's quite interesting in and
 # of itself, so it's been included as it may catch other regressions that the
@@ -485,9 +485,9 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE a];
 ----
 CREATE TABLE public.a (
-	account_id UUID NOT NULL,
-	account_type STRING NOT NULL,
-	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT a_pkey PRIMARY KEY (rowid ASC),
-	CONSTRAINT is_a_or_b CHECK (public.is_a_or_b(account_id, account_type))
-)
+  account_id UUID NOT NULL,
+  account_type STRING NOT NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT a_pkey PRIMARY KEY (rowid ASC),
+  CONSTRAINT is_a_or_b CHECK (public.is_a_or_b(account_id, account_type))
+);

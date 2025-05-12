@@ -242,7 +242,7 @@ test.public.users  CREATE TABLE public.users (
                      FAMILY fam_3_username_email (username, email),
                      CONSTRAINT check_nickname_name CHECK (length(nickname) < length(name)),
                      CONSTRAINT check_nickname CHECK (length(nickname) < 10:::INT8)
-                   )
+                   );
 
 statement ok
 CREATE TABLE test.dupe_generated (
@@ -301,7 +301,7 @@ test.public.named_constraints  CREATE TABLE public.named_constraints (
                                  FAMILY fam_3_username_email (username, email),
                                  CONSTRAINT ck2 CHECK (length(nickname) < length(name)),
                                  CONSTRAINT ck1 CHECK (length(nickname) < 10:::INT8)
-                               )
+                               );
 
 query TTTTB colnames
 SELECT * FROM [SHOW CONSTRAINTS FROM test.named_constraints] ORDER BY constraint_name
@@ -501,7 +501,7 @@ test.public.null_default  CREATE TABLE public.null_default (
                             ts TIMESTAMP NULL,
                             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                             CONSTRAINT null_default_pkey PRIMARY KEY (rowid ASC)
-                          )
+                          );
 
 # Issue #13873: don't permit invalid default columns
 statement error could not parse "blah" as type decimal

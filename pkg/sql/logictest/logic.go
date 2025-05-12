@@ -1334,6 +1334,8 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 	t.logsDir = logsDir
 
 	var envVars []string
+	// Set crash reporting URL to the empty string to disable Sentry crash reports.
+	envVars = append(envVars, "COCKROACH_CRASH_REPORTS=")
 	if strings.Contains(upgradeBinaryPath, "cockroach-short") {
 		// If we're using a cockroach-short binary, that means it was
 		// locally built, so we need to opt-out of version offsetting to

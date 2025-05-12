@@ -63,7 +63,7 @@ SHOW CREATE TABLE unlogged_tbl
 unlogged_tbl  CREATE TABLE public.unlogged_tbl (
                 col INT8 NOT NULL,
                 CONSTRAINT unlogged_tbl_pkey PRIMARY KEY (col ASC)
-              )
+              );
 
 statement error pgcode 22023 invalid storage parameter "foo"
 CREATE TABLE a (b INT) WITH (foo=100);

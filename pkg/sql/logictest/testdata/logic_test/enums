@@ -393,7 +393,7 @@ t1  CREATE TABLE public.t1 (
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
       CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
       INDEX i (x ASC)
-    )
+    );
 
 # SHOW CREATE uses a virtual index, so also check the code path where a
 # descriptor scan is used.
@@ -509,7 +509,7 @@ enum_default  CREATE TABLE public.enum_default (
                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                 CONSTRAINT enum_default_pkey PRIMARY KEY (rowid ASC),
                 FAMILY fam_0_x_y_z_rowid (x, y, z, rowid)
-              )
+              );
 
 # Test crdb_internal.table_columns.
 query TT
@@ -567,7 +567,7 @@ enum_computed  CREATE TABLE public.enum_computed (
                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                  CONSTRAINT enum_computed_pkey PRIMARY KEY (rowid ASC),
                  FAMILY fam_0_x_y_z_w_rowid (x, y, z, w, rowid)
-               )
+               );
 
 # Test information_schema.columns. generation_expression should not be
 # formatted with type annotations.
@@ -602,7 +602,7 @@ enum_checks  CREATE TABLE public.enum_checks (
                CONSTRAINT enum_checks_pkey PRIMARY KEY (rowid ASC),
                CONSTRAINT check_x CHECK (x = 'hello':::public.greeting),
                CONSTRAINT "check" CHECK ('hello':::public.greeting = 'hello':::public.greeting)
-             )
+             );
 
 # Ensure that we can add check constraints to tables with enums.
 statement ok
@@ -1586,7 +1586,7 @@ arr_t6  CREATE TABLE public.arr_t6 (
           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
           CONSTRAINT arr_t6_pkey PRIMARY KEY (rowid ASC),
           FAMILY fam_0_i_j_k_rowid (i, j, k, rowid)
-        )
+        );
 
 
 subtest regression_63138
@@ -1848,7 +1848,7 @@ CREATE TABLE public.t (
   "MixedCase Column" ➖➖."MixedCase" NULL DEFAULT 'mixed':::➖➖."MixedCase",
   🙏 public."Emoji 😉" NULL DEFAULT e'\U0001F60A':::public."Emoji 😉" ON UPDATE e'\U0001F614':::public."Emoji 😉",
   CONSTRAINT t_pkey PRIMARY KEY (i ASC)
-)
+);
 
 
 # Ensure that there's a database qualification on the enum type in
@@ -1867,4 +1867,4 @@ CREATE TABLE public.t (
   m public.mytype NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
-)
+);

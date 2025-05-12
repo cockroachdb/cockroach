@@ -15,6 +15,7 @@ create database mydb;
 comment on database mydb is 'my awesome db comment';
 create table mytable(mycolumn int, check (mycolumn > 123));
 comment on table mytable is 'my awesome tb comment';
+create policy p1 on mytable as restrictive for select using (true);
 create index myidx on mytable(mycolumn);
 comment on index mytable@myidx is 'my awesome idx comment';
 create materialized view mymview as select mycolumn from mytable;
@@ -1334,7 +1335,8 @@ sql -e \set echo -e \set display_format csv -e \d mytable
           c.relhasindex,
           EXISTS(SELECT 1 FROM pg_catalog.pg_constraint WHERE conrelid = c.oid AND contype = 'f') AS relhasfkey,
           EXISTS(SELECT 1 FROM pg_catalog.pg_constraint WHERE confrelid = c.oid AND contype = 'f') AS relhasifkey,
-          EXISTS(SELECT 1 FROM pg_catalog.pg_statistic_ext WHERE stxrelid = c.oid)
+          EXISTS(SELECT 1 FROM pg_catalog.pg_statistic_ext WHERE stxrelid = c.oid),
+          EXISTS(SELECT 1 FROM pg_catalog.pg_policy WHERE polrelid = c.oid) AS relhaspolicies
      FROM pg_catalog.pg_class c
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
     WHERE c.relname LIKE 'mytable'
@@ -1374,6 +1376,60 @@ SELECT attname AS "Column",
 Column,Type,Collation,Nullable,Default
 mycolumn,bigint,,,
 rowid,bigint,,not null,unique_rowid()
+> 
+WITH rls_status AS (
+  SELECT 
+    CASE 
+       WHEN c.relrowsecurity = true AND c.relforcerowsecurity = true THEN 
+          'Policies (forced row security enabled):'
+       WHEN c.relrowsecurity = false THEN 
+          'Policies (row security disabled):'
+       ELSE 
+          'Policies:'
+    END as status
+  FROM pg_catalog.pg_class c
+  WHERE c.oid = 106
+),
+all_rows AS (
+  -- First row: RLS status header
+  SELECT 1 as display_order, status as policy_def
+  FROM rls_status
+  UNION ALL
+  -- Policy rows with indentation and formatting
+  SELECT 2 as display_order,
+    '    POLICY "' || policyname || '"' || 
+    CASE WHEN permissive = 'restrictive' THEN ' AS RESTRICTIVE' ELSE '' END ||
+    CASE cmd
+      WHEN 'SELECT' THEN ' FOR SELECT'
+      WHEN 'INSERT' THEN ' FOR INSERT'
+      WHEN 'UPDATE' THEN ' FOR UPDATE'
+      WHEN 'DELETE' THEN ' FOR DELETE'
+      ELSE ''
+    END ||
+    CASE 
+      WHEN array_length(roles, 1) > 0 AND NOT (array_length(roles, 1) = 1 AND roles[1] = 'public') THEN
+        ' TO ' || array_to_string(roles, ', ')
+      WHEN array_length(roles, 1) = 1 AND roles[1] = 'public' THEN ' TO public'
+      ELSE ''
+    END ||
+    CASE 
+      WHEN qual IS NOT NULL AND qual <> '' THEN E'\n      USING (' || qual || ')'
+      ELSE ''
+    END ||
+    CASE 
+      WHEN with_check IS NOT NULL AND with_check <> '' THEN E'\n      WITH CHECK (' || with_check || ')'
+      ELSE ''
+    END
+  FROM pg_catalog.pg_policies
+  WHERE schemaname = 'public' AND tablename = 'mytable'
+)
+SELECT policy_def as "Row Level Security"
+FROM all_rows
+ORDER BY display_order, policy_def
+Row Level Security
+Policies (row security disabled):
+"    POLICY ""p1"" AS RESTRICTIVE FOR SELECT TO public
+      USING (true)"
 > WITH idx AS (
    SELECT c2.relname AS idxname,
           i.indisprimary, i.indisunique, i.indisclustered,
@@ -1437,7 +1493,8 @@ sql -e \set echo -e \set display_format csv -e \d+ myview
           c.relhasindex,
           EXISTS(SELECT 1 FROM pg_catalog.pg_constraint WHERE conrelid = c.oid AND contype = 'f') AS relhasfkey,
           EXISTS(SELECT 1 FROM pg_catalog.pg_constraint WHERE confrelid = c.oid AND contype = 'f') AS relhasifkey,
-          EXISTS(SELECT 1 FROM pg_catalog.pg_statistic_ext WHERE stxrelid = c.oid)
+          EXISTS(SELECT 1 FROM pg_catalog.pg_statistic_ext WHERE stxrelid = c.oid),
+          EXISTS(SELECT 1 FROM pg_catalog.pg_policy WHERE polrelid = c.oid) AS relhaspolicies
      FROM pg_catalog.pg_class c
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
     WHERE c.relname LIKE 'myview'
@@ -1499,7 +1556,8 @@ sql -e \set echo -e \set display_format csv -e \d+ mymview
           c.relhasindex,
           EXISTS(SELECT 1 FROM pg_catalog.pg_constraint WHERE conrelid = c.oid AND contype = 'f') AS relhasfkey,
           EXISTS(SELECT 1 FROM pg_catalog.pg_constraint WHERE confrelid = c.oid AND contype = 'f') AS relhasifkey,
-          EXISTS(SELECT 1 FROM pg_catalog.pg_statistic_ext WHERE stxrelid = c.oid)
+          EXISTS(SELECT 1 FROM pg_catalog.pg_statistic_ext WHERE stxrelid = c.oid),
+          EXISTS(SELECT 1 FROM pg_catalog.pg_policy WHERE polrelid = c.oid) AS relhaspolicies
      FROM pg_catalog.pg_class c
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
     WHERE c.relname LIKE 'mymview'
@@ -1594,7 +1652,8 @@ sql -e \set echo -e \set display_format csv -e \d ftable1
           c.relhasindex,
           EXISTS(SELECT 1 FROM pg_catalog.pg_constraint WHERE conrelid = c.oid AND contype = 'f') AS relhasfkey,
           EXISTS(SELECT 1 FROM pg_catalog.pg_constraint WHERE confrelid = c.oid AND contype = 'f') AS relhasifkey,
-          EXISTS(SELECT 1 FROM pg_catalog.pg_statistic_ext WHERE stxrelid = c.oid)
+          EXISTS(SELECT 1 FROM pg_catalog.pg_statistic_ext WHERE stxrelid = c.oid),
+          EXISTS(SELECT 1 FROM pg_catalog.pg_policy WHERE polrelid = c.oid) AS relhaspolicies
      FROM pg_catalog.pg_class c
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
     WHERE c.relname LIKE 'ftable1'
@@ -1695,7 +1754,8 @@ sql -e \set echo -e \set display_format csv -e \d ftable2
           c.relhasindex,
           EXISTS(SELECT 1 FROM pg_catalog.pg_constraint WHERE conrelid = c.oid AND contype = 'f') AS relhasfkey,
           EXISTS(SELECT 1 FROM pg_catalog.pg_constraint WHERE confrelid = c.oid AND contype = 'f') AS relhasifkey,
-          EXISTS(SELECT 1 FROM pg_catalog.pg_statistic_ext WHERE stxrelid = c.oid)
+          EXISTS(SELECT 1 FROM pg_catalog.pg_statistic_ext WHERE stxrelid = c.oid),
+          EXISTS(SELECT 1 FROM pg_catalog.pg_policy WHERE polrelid = c.oid) AS relhaspolicies
      FROM pg_catalog.pg_class c
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
     WHERE c.relname LIKE 'ftable2'
