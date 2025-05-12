@@ -23,6 +23,7 @@ INSERT INTO kv VALUES (111, 222)
 
 # Verify the right columns are hidden.
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t
 ----
@@ -31,6 +32,16 @@ t  CREATE TABLE public.t (
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
    );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE public.t (
+     x INT8 NOT VISIBLE NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+   ) WITH (schema_locked = true);
 
 # Check that stars expand to no columns.
 

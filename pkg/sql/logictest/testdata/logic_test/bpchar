@@ -17,6 +17,7 @@ ba
 c
 foobarbaz
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
@@ -25,3 +26,13 @@ CREATE TABLE public.t (
   CONSTRAINT t_pkey PRIMARY KEY (c ASC),
   FAMILY fam_0_c (c)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  c BPCHAR NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (c ASC),
+  FAMILY fam_0_c (c)
+) WITH (schema_locked = true);

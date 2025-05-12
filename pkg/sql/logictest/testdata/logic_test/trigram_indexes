@@ -265,6 +265,7 @@ create table err (a int, j json, inverted index (a gin_trgm_ops, j));
 statement ok
 CREATE TABLE t86614 (a int, s STRING, INVERTED INDEX (a, s gist_trgm_ops), FAMILY (a, s))
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t86614]
 ----
@@ -276,6 +277,19 @@ CREATE TABLE public.t86614 (
   INVERTED INDEX t86614_a_s_idx (a ASC, s gin_trgm_ops),
   FAMILY fam_0_a_s_rowid (a, s, rowid)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t86614]
+----
+CREATE TABLE public.t86614 (
+  a INT8 NULL,
+  s STRING NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t86614_pkey PRIMARY KEY (rowid ASC),
+  INVERTED INDEX t86614_a_s_idx (a ASC, s gin_trgm_ops),
+  FAMILY fam_0_a_s_rowid (a, s, rowid)
+) WITH (schema_locked = true);
 
 # Regression test for #88925. Return correct result with a variable on the RHS
 # of LIKE.
@@ -323,6 +337,7 @@ CREATE TABLE t_112713 (i INT PRIMARY KEY, t STRING, FAMILY (i, t));
 statement ok
 CREATE INVERTED INDEX ON t_112713 (t gin_trgm_ops);
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_112713];
 ----
@@ -333,6 +348,18 @@ CREATE TABLE public.t_112713 (
   INVERTED INDEX t_112713_t_idx (t gin_trgm_ops),
   FAMILY fam_0_i_t (i, t)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_112713];
+----
+CREATE TABLE public.t_112713 (
+  i INT8 NOT NULL,
+  t STRING NULL,
+  CONSTRAINT t_112713_pkey PRIMARY KEY (i ASC),
+  INVERTED INDEX t_112713_t_idx (t gin_trgm_ops),
+  FAMILY fam_0_i_t (i, t)
+) WITH (schema_locked = true);
 
 subtest end
 

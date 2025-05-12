@@ -71,6 +71,7 @@ SELECT get_checks($tbl_id);
     }
 ]
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t1];
 ----
@@ -81,6 +82,18 @@ CREATE TABLE public.t1 (
   FAMILY fam_0 (a, b),
   CONSTRAINT check_b CHECK (public.f1(b) > 1:::INT8)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t1];
+----
+CREATE TABLE public.t1 (
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
+  FAMILY fam_0 (a, b),
+  CONSTRAINT check_b CHECK (public.f1(b) > 1:::INT8)
+) WITH (schema_locked = true);
 
 # Make sure back references are tracked properly.
 let $fn_id
@@ -388,6 +401,7 @@ ALTER FUNCTION f1 RENAME to f2;
 statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(public\.f2\(b\) > 1:::INT8\)
 INSERT INTO t1 VALUES (2, -1);
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t1]
 ----
@@ -399,6 +413,19 @@ CREATE TABLE public.t1 (
   CONSTRAINT check_b CHECK (public.f2(b) > 1:::INT8),
   CONSTRAINT cka CHECK (public.f2(a) > 1:::INT8)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t1]
+----
+CREATE TABLE public.t1 (
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
+  FAMILY fam_0 (a, b),
+  CONSTRAINT check_b CHECK (public.f2(b) > 1:::INT8),
+  CONSTRAINT cka CHECK (public.f2(a) > 1:::INT8)
+) WITH (schema_locked = true);
 
 # Make sure that schema prefix is preserved through serialization and
 # deserialization.
@@ -415,6 +442,7 @@ CREATE TABLE t(
   FAMILY fam_0_b_a (b, a)
 );
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
@@ -425,6 +453,18 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (b, a),
   CONSTRAINT check_b CHECK (sc1.f1(b) > 1:::INT8)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  FAMILY fam_0_b_a (b, a),
+  CONSTRAINT check_b CHECK (sc1.f1(b) > 1:::INT8)
+) WITH (schema_locked = true);
 
 # Make sure dependency circle is not allowed.
 statement ok
@@ -448,6 +488,7 @@ CREATE TABLE alter_add_check_constraint();
 ALTER TABLE alter_add_check_constraint ADD CONSTRAINT noop CHECK (true_is_true());
 COMMIT;
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE alter_add_check_constraint];
 ----
@@ -456,6 +497,16 @@ CREATE TABLE public.alter_add_check_constraint (
   CONSTRAINT alter_add_check_constraint_pkey PRIMARY KEY (rowid ASC),
   CONSTRAINT noop CHECK (public.true_is_true())
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE alter_add_check_constraint];
+----
+CREATE TABLE public.alter_add_check_constraint (
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT alter_add_check_constraint_pkey PRIMARY KEY (rowid ASC),
+  CONSTRAINT noop CHECK (public.true_is_true())
+) WITH (schema_locked = true);
 
 # This is the original Reproduction of #109414. It's quite interesting in and
 # of itself, so it's been included as it may catch other regressions that the
@@ -481,6 +532,19 @@ CREATE TABLE a (
 ALTER TABLE a ADD CONSTRAINT is_a_or_b CHECK (is_a_or_b(account_id, account_type));
 COMMIT;
 
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE a];
+----
+CREATE TABLE public.a (
+  account_id UUID NOT NULL,
+  account_type STRING NOT NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT a_pkey PRIMARY KEY (rowid ASC),
+  CONSTRAINT is_a_or_b CHECK (public.is_a_or_b(account_id, account_type))
+) WITH (schema_locked = true);
+
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE a];
 ----

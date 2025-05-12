@@ -43,6 +43,7 @@ CREATE VIEW redacted_descriptors AS
 # The legacy and declarative schema changer have slightly different implementation
 # of `ADD COLUMN ... DEFAULT ... CHECK(...)`, resulting in slightly different
 # descriptor. We will skip the config that uses legacy schema changer.
+skipif config local-schema-locked
 skipif config local-legacy-schema-changer
 query T
 SELECT descriptor from redacted_descriptors where id = 'collate_partition'::REGCLASS;
@@ -173,6 +174,137 @@ SELECT descriptor from redacted_descriptors where id = 'collate_partition'::REGC
     }
 }
 
+onlyif config local-schema-locked
+query T
+SELECT descriptor from redacted_descriptors where id = 'collate_partition'::REGCLASS;
+----
+{
+    "table": {
+        "checks": [
+            {
+                "columnIds": [
+                    2
+                ],
+                "constraintId": 2,
+                "expr": "b != '_':::STRING",
+                "name": "check_b"
+            }
+        ],
+        "columns": [
+            {
+                "id": 1,
+                "name": "a",
+                "type": {
+                    "family": "CollatedStringFamily",
+                    "locale": "da",
+                    "oid": 25
+                }
+            },
+            {
+                "defaultExpr": "'_':::STRING",
+                "id": 2,
+                "name": "b",
+                "nullable": true,
+                "type": {
+                    "family": "StringFamily",
+                    "oid": 25
+                }
+            }
+        ],
+        "createAsOfTime": {
+            "wallTime": "0"
+        },
+        "families": [
+            {
+                "columnIds": [
+                    1,
+                    2
+                ],
+                "columnNames": [
+                    "a",
+                    "b"
+                ],
+                "defaultColumnId": 2,
+                "name": "primary"
+            }
+        ],
+        "formatVersion": 3,
+        "id": 106,
+        "modificationTime": {},
+        "name": "collate_partition",
+        "nextColumnId": 3,
+        "nextConstraintId": 5,
+        "nextFamilyId": 1,
+        "nextIndexId": 4,
+        "nextMutationId": 1,
+        "parentId": 104,
+        "primaryIndex": {
+            "compositeColumnIds": [
+                1
+            ],
+            "constraintId": 3,
+            "createdExplicitly": true,
+            "encodingType": 1,
+            "foreignKey": {},
+            "geoConfig": {},
+            "id": 2,
+            "interleave": {},
+            "keyColumnDirections": [
+                "ASC"
+            ],
+            "keyColumnIds": [
+                1
+            ],
+            "keyColumnNames": [
+                "a"
+            ],
+            "name": "collate_partition_pkey",
+            "partitioning": {
+                "numColumns": 1,
+                "range": [
+                    {
+                        "fromInclusive": "Xw==",
+                        "name": "p1",
+                        "toExclusive": "Xw=="
+                    }
+                ]
+            },
+            "sharded": {},
+            "storeColumnIds": [
+                2
+            ],
+            "storeColumnNames": [
+                "b"
+            ],
+            "unique": true,
+            "vecConfig": {},
+            "version": 4
+        },
+        "privileges": {
+            "ownerProto": "root",
+            "users": [
+                {
+                    "privileges": "2",
+                    "userProto": "admin",
+                    "withGrantOption": "2"
+                },
+                {
+                    "privileges": "2",
+                    "userProto": "root",
+                    "withGrantOption": "2"
+                }
+            ],
+            "version": 3
+        },
+        "replacementOf": {
+            "time": {}
+        },
+        "schemaLocked": true,
+        "unexposedParentSchemaId": 105,
+        "version": "10"
+    }
+}
+
 statement ok
 CREATE TABLE subpartition (
   a INT, b INT, c INT,
@@ -195,6 +327,182 @@ CREATE TABLE subpartition (
       PARTITION p3 VALUES IN (DEFAULT)
     )
 
+onlyif config local-schema-locked
+query T
+SELECT descriptor from redacted_descriptors where id = 'subpartition'::REGCLASS;
+----
+{
+    "table": {
+        "columns": [
+            {
+                "id": 1,
+                "name": "a",
+                "type": {
+                    "family": "IntFamily",
+                    "oid": 20,
+                    "width": 64
+                }
+            },
+            {
+                "id": 2,
+                "name": "b",
+                "type": {
+                    "family": "IntFamily",
+                    "oid": 20,
+                    "width": 64
+                }
+            },
+            {
+                "id": 3,
+                "name": "c",
+                "nullable": true,
+                "type": {
+                    "family": "IntFamily",
+                    "oid": 20,
+                    "width": 64
+                }
+            }
+        ],
+        "createAsOfTime": {},
+        "families": [
+            {
+                "columnIds": [
+                    1,
+                    2,
+                    3
+                ],
+                "columnNames": [
+                    "a",
+                    "b",
+                    "c"
+                ],
+                "defaultColumnId": 3,
+                "name": "primary"
+            }
+        ],
+        "formatVersion": 3,
+        "id": 108,
+        "modificationTime": {},
+        "name": "subpartition",
+        "nextColumnId": 4,
+        "nextConstraintId": 2,
+        "nextFamilyId": 1,
+        "nextIndexId": 2,
+        "nextMutationId": 1,
+        "parentId": 104,
+        "primaryIndex": {
+            "constraintId": 1,
+            "createdAtNanos": "0",
+            "encodingType": 1,
+            "foreignKey": {},
+            "geoConfig": {},
+            "id": 1,
+            "interleave": {},
+            "keyColumnDirections": [
+                "ASC",
+                "ASC"
+            ],
+            "keyColumnIds": [
+                1,
+                2
+            ],
+            "keyColumnNames": [
+                "a",
+                "b"
+            ],
+            "name": "subpartition_pkey",
+            "partitioning": {
+                "list": [
+                    {
+                        "name": "p1",
+                        "subpartitioning": {
+                            "list": [
+                                {
+                                    "name": "p1_1",
+                                    "subpartitioning": {},
+                                    "values": [
+                                        "Xw=="
+                                    ]
+                                },
+                                {
+                                    "name": "p1_2",
+                                    "subpartitioning": {},
+                                    "values": [
+                                        "Xw=="
+                                    ]
+                                }
+                            ],
+                            "numColumns": 1
+                        },
+                        "values": [
+                            "Xw=="
+                        ]
+                    },
+                    {
+                        "name": "p2",
+                        "subpartitioning": {
+                            "list": [
+                                {
+                                    "name": "p2_1",
+                                    "subpartitioning": {},
+                                    "values": [
+                                        "Xw=="
+                                    ]
+                                }
+                            ],
+                            "numColumns": 1
+                        },
+                        "values": [
+                            "Xw=="
+                        ]
+                    },
+                    {
+                        "name": "p3",
+                        "subpartitioning": {},
+                        "values": [
+                            "Xw=="
+                        ]
+                    }
+                ],
+                "numColumns": 1
+            },
+            "sharded": {},
+            "storeColumnIds": [
+                3
+            ],
+            "storeColumnNames": [
+                "c"
+            ],
+            "unique": true,
+            "vecConfig": {},
+            "version": 4
+        },
+        "privileges": {
+            "ownerProto": "root",
+            "users": [
+                {
+                    "privileges": "2",
+                    "userProto": "admin",
+                    "withGrantOption": "2"
+                },
+                {
+                    "privileges": "2",
+                    "userProto": "root",
+                    "withGrantOption": "2"
+                }
+            ],
+            "version": 3
+        },
+        "replacementOf": {
+            "time": {}
+        },
+        "schemaLocked": true,
+        "unexposedParentSchemaId": 105,
+        "version": "1"
+    }
+}
+
+skipif config local-schema-locked
 query T
 SELECT descriptor from redacted_descriptors where id = 'subpartition'::REGCLASS;
 ----

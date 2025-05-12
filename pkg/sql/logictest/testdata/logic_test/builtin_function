@@ -3991,10 +3991,17 @@ select crdb_internal.hide_sql_constants(e'\r');
 ·
 
 
+skipif config local-schema-locked
 query T
 SELECT crdb_internal.hide_sql_constants(create_statement) from crdb_internal.create_statements where descriptor_name = 'foo'
 ----
 CREATE TABLE public.foo (a INT8 NULL, rowid INT8 NOT NULL NOT VISIBLE DEFAULT unique_rowid(), CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC))
+
+onlyif config local-schema-locked
+query T
+SELECT crdb_internal.hide_sql_constants(create_statement) from crdb_internal.create_statements where descriptor_name = 'foo'
+----
+CREATE TABLE public.foo (a INT8 NULL, rowid INT8 NOT NULL NOT VISIBLE DEFAULT unique_rowid(), CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC)) WITH ('schema_locked' = _)
 
 # More tests are in parse_ident_builtin_test.go.
 query T rowsort
@@ -4171,12 +4178,21 @@ SELECT crdb_internal.redactable_sql_constants('WITH j AS (VALUES (0.1, false, ''
 ----
 WITH j AS (VALUES (‹0.1›, ‹false›, ‹'{}'›::JSONB, ARRAY[‹'x'›, ‹'y'›, ‹''›])) INSERT INTO i SELECT *, ‹7› FROM j WHERE ‹true›
 
+skipif config local-schema-locked
 query T
 SELECT crdb_internal.redactable_sql_constants(create_statement)
 FROM crdb_internal.create_statements
 WHERE descriptor_name = 'foo'
 ----
 CREATE TABLE public.foo (a INT8 NULL, rowid INT8 NOT NULL NOT VISIBLE DEFAULT unique_rowid(), CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC))
+
+onlyif config local-schema-locked
+query T
+SELECT crdb_internal.redactable_sql_constants(create_statement)
+FROM crdb_internal.create_statements
+WHERE descriptor_name = 'foo'
+----
+CREATE TABLE public.foo (a INT8 NULL, rowid INT8 NOT NULL NOT VISIBLE DEFAULT unique_rowid(), CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC)) WITH ('schema_locked' = ‹true›)
 
 statement ok
 CREATE TABLE redactable_sql_constants_table (
@@ -4187,12 +4203,21 @@ CREATE TABLE redactable_sql_constants_table (
   INDEX (b) WHERE b > 'z'
 );
 
+skipif config local-schema-locked
 query T
 SELECT crdb_internal.redactable_sql_constants(create_statement)
 FROM crdb_internal.create_statements
 WHERE descriptor_name = 'redactable_sql_constants_table'
 ----
 CREATE TABLE public.redactable_sql_constants_table (a INT8 NOT NULL, b STRING NULL DEFAULT ‹'yo'›:::STRING, c STRING NULL AS (b || ‹'foo'›:::STRING) VIRTUAL, CONSTRAINT redactable_sql_constants_table_pkey PRIMARY KEY (a ASC), INDEX redactable_sql_constants_table_b_idx (b ASC) WHERE b > ‹'z'›:::STRING, FAMILY fam_0_a_b (a, b), CONSTRAINT check_b CHECK (b != ‹'grapefruit'›:::STRING))
+
+onlyif config local-schema-locked
+query T
+SELECT crdb_internal.redactable_sql_constants(create_statement)
+FROM crdb_internal.create_statements
+WHERE descriptor_name = 'redactable_sql_constants_table'
+----
+CREATE TABLE public.redactable_sql_constants_table (a INT8 NOT NULL, b STRING NULL DEFAULT ‹'yo'›:::STRING, c STRING NULL AS (b || ‹'foo'›:::STRING) VIRTUAL, CONSTRAINT redactable_sql_constants_table_pkey PRIMARY KEY (a ASC), INDEX redactable_sql_constants_table_b_idx (b ASC) WHERE b > ‹'z'›:::STRING, FAMILY fam_0_a_b (a, b), CONSTRAINT check_b CHECK (b != ‹'grapefruit'›:::STRING)) WITH ('schema_locked' = ‹true›)
 
 statement ok
 DROP TABLE redactable_sql_constants_table

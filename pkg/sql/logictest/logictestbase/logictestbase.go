@@ -90,6 +90,9 @@ type TestClusterConfig struct {
 	// restart/upgrade nodes. This always bootstraps with the predecessor version
 	// of the current commit, and upgrades to the current commit.
 	UseCockroachGoTestserver bool
+	// UseSchemaLockedByDefault determines if all tables created by logictest
+	// are schema_locked by default.
+	UseSchemaLockedByDefault bool
 }
 
 // TenantMode is the type of the UseSecondaryTenant field in TestClusterConfig.
@@ -529,6 +532,12 @@ var LogicTestConfigs = []TestClusterConfig{
 		BootstrapVersion:         clusterversion.V25_1,
 		NumNodes:                 3,
 	},
+	{
+		Name:                     "local-schema-locked",
+		NumNodes:                 1,
+		OverrideDistSQLMode:      "off",
+		UseSchemaLockedByDefault: true,
+	},
 }
 
 // ConfigIdx is an index in the above slice.
@@ -618,6 +627,7 @@ var DefaultConfigSets = map[string]ConfigSet{
 		"local-mixed-24.3",
 		"local-mixed-25.1",
 		"local-mixed-25.2",
+		"local-schema-locked",
 	),
 
 	// Special alias for all 5 node configs.

@@ -1,4 +1,4 @@
-# LogicTest: !local-legacy-schema-changer
+# LogicTest: !local-legacy-schema-changer !local-schema-locked
 
 # A basic sanity check to demonstrate column type changes.
 subtest SanityCheck
@@ -67,7 +67,10 @@ statement ok
 CREATE INDEX idx2 ON t (i)
 
 statement ok
-ALTER TABLE t ALTER COLUMN i DROP STORED, DROP COLUMN b CASCADE
+ALTER TABLE t ALTER COLUMN i DROP STORED
+
+statement ok
+ALTER TABLE t DROP COLUMN b CASCADE
 
 query TT colnames
 show create table t

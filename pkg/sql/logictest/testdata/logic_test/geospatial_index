@@ -44,6 +44,7 @@ CREATE INDEX geog_idx_1 ON geo_table USING GIST(geog) WITH (s2_level_mod=2)
 statement ok
 CREATE INDEX geog_idx_2 ON geo_table USING GIST(geog)
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE geo_table]
 ----
@@ -62,6 +63,26 @@ CREATE TABLE public.geo_table (
   FAMILY fam_1_geom (geom),
   FAMILY fam_2_id (id)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE geo_table]
+----
+CREATE TABLE public.geo_table (
+  id INT8 NOT NULL,
+  geog GEOGRAPHY(GEOMETRY,4326) NULL,
+  geom GEOMETRY(GEOMETRY,3857) NULL,
+  CONSTRAINT geo_table_pkey PRIMARY KEY (id ASC),
+  INVERTED INDEX geom_idx_1 (geom) WITH (s2_max_level=15, geometry_min_x=0),
+  INVERTED INDEX geom_idx_2 (geom) WITH (geometry_min_x=0),
+  INVERTED INDEX geom_idx_3 (geom) WITH (s2_max_level=10),
+  INVERTED INDEX geom_idx_4 (geom),
+  INVERTED INDEX geog_idx_1 (geog) WITH (s2_level_mod=2),
+  INVERTED INDEX geog_idx_2 (geog),
+  FAMILY fam_0_geog (geog),
+  FAMILY fam_1_geom (geom),
+  FAMILY fam_2_id (id)
+) WITH (schema_locked = true);
 
 let $create_table
 SELECT create_statement FROM [SHOW CREATE TABLE geo_table]
@@ -72,6 +93,7 @@ DROP TABLE geo_table;
 statement ok
 $create_table
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE geo_table]
 ----
@@ -90,3 +112,23 @@ CREATE TABLE public.geo_table (
   FAMILY fam_1_geom (geom),
   FAMILY fam_2_id (id)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE geo_table]
+----
+CREATE TABLE public.geo_table (
+  id INT8 NOT NULL,
+  geog GEOGRAPHY(GEOMETRY,4326) NULL,
+  geom GEOMETRY(GEOMETRY,3857) NULL,
+  CONSTRAINT geo_table_pkey PRIMARY KEY (id ASC),
+  INVERTED INDEX geom_idx_1 (geom) WITH (s2_max_level=15, geometry_min_x=0),
+  INVERTED INDEX geom_idx_2 (geom) WITH (geometry_min_x=0),
+  INVERTED INDEX geom_idx_3 (geom) WITH (s2_max_level=10),
+  INVERTED INDEX geom_idx_4 (geom),
+  INVERTED INDEX geog_idx_1 (geog) WITH (s2_level_mod=2),
+  INVERTED INDEX geog_idx_2 (geog),
+  FAMILY fam_0_geog (geog),
+  FAMILY fam_1_geom (geom),
+  FAMILY fam_2_id (id)
+) WITH (schema_locked = true);

@@ -36,6 +36,7 @@ ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS foo UNIQUE (b)
 statement ok
 ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS foo UNIQUE (f)
 
+skipif config local-schema-locked
 query TTTRT
 SELECT description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
@@ -44,6 +45,16 @@ ORDER BY created DESC
 LIMIT 1
 ----
 ALTER TABLE test.public.t ADD CONSTRAINT foo UNIQUE (b)  root  succeeded  1  ·
+
+onlyif config local-schema-locked
+query TTTRT
+SELECT description, user_name, status, fraction_completed, error
+FROM crdb_internal.jobs
+WHERE job_type in ('NEW SCHEMA CHANGE', 'SCHEMA CHANGE')
+ORDER BY created DESC
+LIMIT 1
+----
+ALTER TABLE test.public.t ADD CONSTRAINT IF NOT EXISTS foo UNIQUE (f)  root  succeeded  1  ·
 
 statement error pgcode 42P07 .* name \"foo\" already exists
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
@@ -665,6 +676,10 @@ ALTER TABLE add_default ADD g INT DEFAULT 'foo'::regtype::INT
 
 subtest 26422
 
+onlyif config  local-schema-locked
+statement ok
+ALTER TABLE add_default SET (schema_locked=false)
+
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
@@ -691,6 +706,10 @@ ALTER TABLE add_default ALTER COLUMN a DROP DEFAULT
 
 statement ok
 COMMIT
+
+onlyif config  local-schema-locked
+statement ok
+ALTER TABLE add_default SET (schema_locked=true)
 
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM add_default
@@ -885,6 +904,7 @@ select a, b from decomputed_column order by a
 3 NULL
 4 99
 
+skipif config local-schema-locked
 query TT
 show create table decomputed_column
 ----
@@ -894,6 +914,16 @@ decomputed_column  CREATE TABLE public.decomputed_column (
                      CONSTRAINT decomputed_column_pkey PRIMARY KEY (a ASC)
                    );
 
+onlyif config local-schema-locked
+query TT
+show create table decomputed_column
+----
+decomputed_column  CREATE TABLE public.decomputed_column (
+                     a INT8 NOT NULL,
+                     b INT8 NULL,
+                     CONSTRAINT decomputed_column_pkey PRIMARY KEY (a ASC)
+                   ) WITH (schema_locked = true);
+
 # Test for https://github.com/cockroachdb/cockroach/issues/26483
 # We try to create a unique column on an un-indexable type.
 statement ok
@@ -902,7 +932,13 @@ CREATE TABLE b26483()
 # Verify that auditing can be enabled by root, and cannot be disabled by non-root.
 
 statement ok
+SET create_table_with_schema_locked=false
+
+statement ok
 CREATE TABLE audit(x INT); ALTER TABLE audit EXPERIMENTAL_AUDIT SET READ WRITE;
+
+statement ok
+RESET create_table_with_schema_locked
 
 query T
 SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name = 'sql.schema.set_audit_mode.read_write'
@@ -1129,6 +1165,10 @@ subtest multiple_set_drop_not_null_inside_txn
 statement ok
 CREATE TABLE t1(x INT, y INT);
 
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE t1 SET (schema_locked=false)
+
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL autocommit_before_ddl = false;
@@ -1142,6 +1182,10 @@ SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE t1 ALTER COLUMN x DROP NOT NULL;
 ALTER TABLE t1 ALTER COLUMN y DROP NOT NULL;
 COMMIT
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE t1 SET (schema_locked=true)
 
 statement ok
 DROP TABLE t1
@@ -1161,10 +1205,23 @@ subtest regression_qualification_feature_counts
 
 statement ok
 CREATE TABLE telemetry_test (d int);
+
+# Compute expressions with newly added columns are
+# not supported yet, so we end up falling back to the
+# legacy schema changer here.
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE telemetry_test SET (schema_locked=false)
+
+statement ok
 ALTER TABLE telemetry_test
   ADD COLUMN a int DEFAULT 1,
   ADD COLUMN b int UNIQUE CHECK(b > 1),
   ADD COLUMN c int AS (a + b) STORED
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE telemetry_test SET (schema_locked=true)
 
 query T rowsort
 SELECT feature_name FROM crdb_internal.feature_usage
@@ -1181,6 +1238,9 @@ sql.schema.new_column.qualification.default_expr
 statement ok
 DROP TABLE telemetry_test
 
+statement ok
+SET create_table_with_schema_locked=false
+
 # Disable stats injection in explicit transactions.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -1196,6 +1256,9 @@ ALTER TABLE inject_stats INJECT STATISTICS '[]'
 
 statement ok
 ROLLBACK
+
+statement ok
+RESET create_table_with_schema_locked
 
 subtest regression_47141
 
@@ -1229,6 +1292,7 @@ statement ok
 INSERT INTO t2 VALUES (1, 1)
 
 # Check that the foreign key was indeed added.
+skipif config local-schema-locked
 query TT
 SHOW CREATE t2
 ----
@@ -1240,6 +1304,18 @@ t2  CREATE TABLE public.t2 (
       CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x)
     );
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE t2
+----
+t2  CREATE TABLE public.t2 (
+      y INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      x INT8 NULL,
+      CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+      CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x)
+    ) WITH (schema_locked = true);
+
 # Test that only one index gets created when adding a column
 # with references and unique.
 statement ok
@@ -1248,6 +1324,7 @@ CREATE TABLE t3 (y INT)
 statement ok
 ALTER TABLE t3 ADD COLUMN x INT UNIQUE REFERENCES t1 (x)
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE t3
 ----
@@ -1260,6 +1337,19 @@ t3  CREATE TABLE public.t3 (
       UNIQUE INDEX t3_x_key (x ASC)
     );
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE t3
+----
+t3  CREATE TABLE public.t3 (
+      y INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      x INT8 NULL,
+      CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC),
+      CONSTRAINT t3_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
+      UNIQUE INDEX t3_x_key (x ASC)
+    ) WITH (schema_locked = true);
+
 # We allowed the foreign key validation code to look into the mutations
 # list to validate what columns / indexes can be used for foreign keys.
 # Ensure that we still have the correct restrictions.
@@ -1270,6 +1360,10 @@ statement ok
 CREATE TABLE t1 (x INT PRIMARY KEY);
 CREATE TABLE t2 (x INT, y INT, INDEX i (x))
 
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE t2 SET (schema_locked = false);
+
 statement error pq: column \"x\" does not exist
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL autocommit_before_ddl = false;
@@ -1278,6 +1372,10 @@ ALTER TABLE t2 ADD FOREIGN KEY (x) REFERENCES t1(x);
 
 statement ok
 ROLLBACK
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE t2 SET (schema_locked = true);
 
 statement ok
 INSERT INTO t2 VALUES (1, 2)
@@ -1292,6 +1390,7 @@ CREATE TABLE t1 (x INT PRIMARY KEY);
 statement ok
 ALTER TABLE t1 ADD COLUMN x2 INT REFERENCES t1 (x)
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE t1
 ----
@@ -1302,12 +1401,26 @@ t1  CREATE TABLE public.t1 (
       CONSTRAINT t1_x2_fkey FOREIGN KEY (x2) REFERENCES public.t1(x)
     );
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE t1
+----
+t1  CREATE TABLE public.t1 (
+      x INT8 NOT NULL,
+      x2 INT8 NULL,
+      CONSTRAINT t1_pkey PRIMARY KEY (x ASC),
+      CONSTRAINT t1_x2_fkey FOREIGN KEY (x2) REFERENCES public.t1(x)
+    ) WITH (schema_locked = true);
+
 statement error pq: insert on table "t1" violates foreign key constraint "t1_x2_fkey"
 INSERT INTO t1 VALUES (1, 2)
 
 # Test ADD COL REFERENCES on a new table in the same txn.
 statement ok
 DROP TABLE t1, t2 CASCADE
+
+statement ok
+SET create_table_with_schema_locked=false
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -1383,6 +1496,7 @@ t2  CREATE TABLE public.t2 (
 # Test the above on a table not created in the same txn.
 statement ok
 DROP TABLE t1, t2 CASCADE;
+
 
 statement ok
 CREATE TABLE t1 (x INT PRIMARY KEY);
@@ -1463,6 +1577,9 @@ t2  CREATE TABLE public.t2 (
       UNIQUE INDEX t2_x_key (x ASC)
     );
 
+statement ok
+RESET create_table_with_schema_locked
+
 # Regression 50069, computed exprs must only refer to columns inside the
 # current table.
 statement ok
@@ -1486,6 +1603,7 @@ CREATE TABLE parent (p INT PRIMARY KEY);
 CREATE TABLE child (c INT PRIMARY KEY, p INT REFERENCES parent(p), FAMILY (c, p));
 ALTER TABLE child DROP COLUMN p
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE child
 ----
@@ -1494,6 +1612,19 @@ child  CREATE TABLE public.child (
          CONSTRAINT child_pkey PRIMARY KEY (c ASC),
          FAMILY fam_0_c_p (c)
        );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE child
+----
+child  CREATE TABLE public.child (
+         c INT8 NOT NULL,
+         CONSTRAINT child_pkey PRIMARY KEY (c ASC),
+         FAMILY fam_0_c_p (c)
+       ) WITH (schema_locked = true);
+
+statement ok
+SET create_table_with_schema_locked=false
 
 # Regression test for #52816.
 statement ok
@@ -1522,6 +1653,9 @@ regression_54196_col2_col3_idx  rowid
 regression_54196_pkey           col2
 regression_54196_pkey           col3
 regression_54196_pkey           rowid
+
+statement ok
+RESET create_table_with_schema_locked
 
 # Test to ensure that renaming a constraint on top of an existing index
 # fails with the correct error.
@@ -1832,6 +1966,9 @@ DELETE FROM t54629 WHERE c = 1;
 subtest regression_45985
 
 statement ok
+SET create_table_with_schema_locked=false
+
+statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE t45985 (a INT);
@@ -1885,6 +2022,9 @@ ORDER BY feature_name DESC
 job.schema_change.successful
 job.schema_change.failed
 
+statement ok
+RESET create_table_with_schema_locked
+
 # Regression test for #61762. Do not allow adding OIDVECTOR or INT2VECTOR
 # columns.
 subtest regression_61762
@@ -1912,6 +2052,9 @@ ALTER TABLE t61762 ADD COLUMN v INT2VECTOR AS (ARRAY[1]) VIRTUAL
 
 # Regression test for #60786. Handle in-transaction constraint ADD+DROP correctly.
 subtest regression_60786
+
+statement ok
+SET create_table_with_schema_locked=false
 
 statement ok
 CREATE TABLE t60786(i INT PRIMARY KEY);
@@ -1944,6 +2087,9 @@ ALTER TABLE t60786 DROP CONSTRAINT uq CASCADE
 statement ok
 ROLLBACK
 
+statement ok
+RESET create_table_with_schema_locked
+
 # Visible values can be added and removed after table creation.
 statement ok
 CREATE TABLE visible_table (a int primary key)
@@ -1954,6 +2100,7 @@ ALTER TABLE visible_table ALTER COLUMN a SET VISIBLE
 statement error column "non_existent_column" does not exist
 ALTER TABLE visible_table ALTER COLUMN non_existent_column SET VISIBLE
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE visible_table
 ----
@@ -1962,9 +2109,19 @@ visible_table  CREATE TABLE public.visible_table (
                  CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC)
                );
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE visible_table
+----
+visible_table  CREATE TABLE public.visible_table (
+                 a INT8 NOT NULL,
+                 CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC)
+               ) WITH (schema_locked = true);
+
 statement ok
 ALTER TABLE visible_table ALTER COLUMN a SET NOT VISIBLE
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE visible_table
 ----
@@ -1972,6 +2129,15 @@ visible_table  CREATE TABLE public.visible_table (
                  a INT8 NOT VISIBLE NOT NULL,
                  CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC)
                );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE visible_table
+----
+visible_table  CREATE TABLE public.visible_table (
+                 a INT8 NOT VISIBLE NOT NULL,
+                 CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC)
+               ) WITH (schema_locked = true);
 
 subtest if_table_exists_already
 
@@ -2023,6 +2189,7 @@ ALTER TABLE t67234 ADD CONSTRAINT t67234_c1 UNIQUE (a) WHERE b > 0;
 statement ok
 ALTER TABLE t67234 ADD CONSTRAINT t67234_c2 UNIQUE WITHOUT INDEX (b) WHERE a > 0
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t67234]
 ----
@@ -2035,6 +2202,20 @@ CREATE TABLE public.t67234 (
   FAMILY fam_0_k_a_b (k, a, b),
   CONSTRAINT t67234_c2 UNIQUE WITHOUT INDEX (b) WHERE a > 0:::INT8
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t67234]
+----
+CREATE TABLE public.t67234 (
+  k INT8 NOT NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  CONSTRAINT t67234_pkey PRIMARY KEY (k ASC),
+  UNIQUE INDEX t67234_c1 (a ASC) WHERE b > 0:::INT8,
+  FAMILY fam_0_k_a_b (k, a, b),
+  CONSTRAINT t67234_c2 UNIQUE WITHOUT INDEX (b) WHERE a > 0:::INT8
+) WITH (schema_locked = true);
 
 subtest generated_as_identity
 statement ok
@@ -2052,6 +2233,7 @@ INSERT INTO t (b) VALUES (2)
 statement ok
 ALTER TABLE t ADD COLUMN c INT GENERATED BY DEFAULT AS IDENTITY
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t
 ----
@@ -2064,12 +2246,26 @@ t  CREATE TABLE public.t (
      UNIQUE INDEX t_a_key (a ASC)
    );
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE public.t (
+     a INT8 NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY,
+     c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY,
+     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+     UNIQUE INDEX t_a_key (a ASC)
+   ) WITH (schema_locked = true);
+
 statement ok
 INSERT INTO t (c) VALUES (2)
 
 statement ok
 ALTER TABLE t ADD COLUMN d SERIAL GENERATED BY DEFAULT AS IDENTITY
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t
 ----
@@ -2082,6 +2278,20 @@ t  CREATE TABLE public.t (
      CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
      UNIQUE INDEX t_a_key (a ASC)
    );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE public.t (
+     a INT8 NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY,
+     c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY,
+     d INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY,
+     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+     UNIQUE INDEX t_a_key (a ASC)
+   ) WITH (schema_locked = true);
 
 statement ok
 INSERT INTO t (c) VALUES (2)
@@ -2171,6 +2381,7 @@ statement ok
 ALTER TABLE t ADD COLUMN c INT GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3
  CACHE 10)
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t
 ----
@@ -2182,6 +2393,19 @@ t  CREATE TABLE public.t (
      CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
      UNIQUE INDEX t_a_key (a ASC)
    );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE public.t (
+     a INT8 NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     b INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3),
+     c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3 CACHE 10),
+     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+     UNIQUE INDEX t_a_key (a ASC)
+   ) WITH (schema_locked = true);
 
 statement ok
 ALTER TABLE t DROP COLUMN c
@@ -2223,6 +2447,7 @@ CREATE TABLE t (id INT NOT NULL)
 statement ok
 ALTER TABLE t ADD CONSTRAINT t_pkey PRIMARY KEY (id)
 
+skipif config local-schema-locked
 skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE TABLE t
@@ -2231,6 +2456,15 @@ t  CREATE TABLE public.t (
      id INT8 NOT NULL,
      CONSTRAINT t_pkey PRIMARY KEY (id ASC)
    );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE public.t (
+     id INT8 NOT NULL,
+     CONSTRAINT t_pkey PRIMARY KEY (id ASC)
+   ) WITH (schema_locked = true);
 
 # Table has a PRIMARY KEY named index; check it errors when assinging PRIMARY KEY to id.
 statement ok
@@ -2331,12 +2565,20 @@ INSERT INTO multipleinstmt (key, value) VALUES ('b', 'b');
 INSERT INTO multipleinstmt (key, value) VALUES ('c', 'c');
 
 
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE multipleinstmt SET (schema_locked=false)
+
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE multipleinstmt ADD COLUMN IF NOT EXISTS a BOOL DEFAULT false;
 ALTER TABLE multipleinstmt ADD COLUMN IF NOT EXISTS b STRING;
 COMMIT;
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE multipleinstmt SET (schema_locked=true)
 
 query TTBT
 SELECT * FROM multipleinstmt ORDER BY key ASC;
@@ -2367,6 +2609,9 @@ statement ok
 SET use_declarative_schema_changer = 'off';
 
 statement ok
+SET create_table_with_schema_locked=false
+
+statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE tb AS SELECT 123::INT AS k FROM generate_series(1, 10);
@@ -2387,6 +2632,7 @@ SELECT count(*) FROM tb WHERE v = 'abc';
 
 statement ok
 ROLLBACK;
+
 
 # Bring the threshold way down to force column backfiller batches to have no more 1 Put each.
 statement ok
@@ -2419,6 +2665,9 @@ RESET CLUSTER SETTING bulkio.column_backfill.update_chunk_size_threshold_bytes;
 
 statement ok
 SET use_declarative_schema_changer = $use_decl_sc;
+
+statement ok
+RESET create_table_with_schema_locked
 
 subtest storage_params
 
@@ -2459,6 +2708,9 @@ ALTER TABLE storage_param_table RESET (fillfactor, toast_tuple_target)
 # inside the transaction. The primary index will still exist, but will be
 # disabled via the drop constraint.
 subtest drop-and-add-constraint-primary-index
+
+statement ok
+SET create_table_with_schema_locked=false
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -2504,6 +2756,10 @@ COMMIT;
 # above.
 statement ok
 rollback
+
+
+statement ok
+RESET create_table_with_schema_locked
 
 # Test sequence is drop when a owner table/column is dropped
 subtest test_serial_ownership_add_column
@@ -2590,6 +2846,9 @@ DROP TABLE test_serial;
 subtest pk-swap-fk-ref
 
 statement ok
+SET create_table_with_schema_locked=false
+
+statement ok
 CREATE TABLE pk_fk_src(id int8 primary key, legacy_id int8 not null);
 CREATE TABLE pk_fk_ref(a_id int8 references pk_fk_src (id));
 
@@ -2612,6 +2871,11 @@ COMMIT;
 
 statement ok
 ROLLBACK;
+
+
+statement ok
+RESET create_table_with_schema_locked
+
 
 subtest table_settings
 
@@ -2660,7 +2924,10 @@ WHERE
 ----
 {"enabled": false}
 
+
+
 # SHOW CREATE TABLE displays the value properly.
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t5]
 ----
@@ -2669,6 +2936,16 @@ CREATE TABLE public.t5 (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t5_pkey PRIMARY KEY (rowid ASC)
 ) WITH (sql_stats_automatic_collection_enabled = false);
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t5]
+----
+CREATE TABLE public.t5 (
+  a INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t5_pkey PRIMARY KEY (rowid ASC)
+) WITH (sql_stats_automatic_collection_enabled = false, schema_locked = true);
 
 statement error pq: parameter "sql_stats_automatic_collection_enabled" requires a Boolean value
 ALTER TABLE t5 SET (sql_stats_automatic_collection_enabled = 123)
@@ -2715,6 +2992,7 @@ WHERE
 ----
 {"fractionStaleRows": 0.15, "minStaleRows": "1234"}
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t5]
 ----
@@ -2723,6 +3001,16 @@ CREATE TABLE public.t5 (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t5_pkey PRIMARY KEY (rowid ASC)
 ) WITH (sql_stats_automatic_collection_min_stale_rows = 1234, sql_stats_automatic_collection_fraction_stale_rows = 0.15);
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t5]
+----
+CREATE TABLE public.t5 (
+  a INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t5_pkey PRIMARY KEY (rowid ASC)
+) WITH (sql_stats_automatic_collection_min_stale_rows = 1234, sql_stats_automatic_collection_fraction_stale_rows = 0.15, schema_locked = true);
 
 subtest add_volatile_unique_column_81448
 
@@ -2763,6 +3051,7 @@ CREATE SEQUENCE IF NOT EXISTS s2
 statement ok
 ALTER TABLE tbl ADD COLUMN j INT NOT NULL DEFAULT nextval('s1') ON UPDATE nextval('s2')
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE tbl
 ----
@@ -2772,6 +3061,16 @@ tbl  CREATE TABLE public.tbl (
        CONSTRAINT tbl_pkey PRIMARY KEY (i ASC)
      );
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE tbl
+----
+tbl  CREATE TABLE public.tbl (
+       i INT8 NOT NULL,
+       j INT8 NOT NULL DEFAULT nextval('public.s1'::REGCLASS) ON UPDATE nextval('public.s2'::REGCLASS),
+       CONSTRAINT tbl_pkey PRIMARY KEY (i ASC)
+     ) WITH (schema_locked = true);
+
 # Now use `ALTER COLUMN` to swap the use of sequence 's1' and 's2'
 
 statement ok
@@ -2780,6 +3079,7 @@ ALTER TABLE tbl ALTER COLUMN j SET DEFAULT nextval('s2')
 statement ok
 ALTER TABLE tbl ALTER COLUMN j SET ON UPDATE nextval('s1')
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE tbl
 ----
@@ -2788,6 +3088,16 @@ tbl  CREATE TABLE public.tbl (
        j INT8 NOT NULL DEFAULT nextval('public.s2'::REGCLASS) ON UPDATE nextval('public.s1'::REGCLASS),
        CONSTRAINT tbl_pkey PRIMARY KEY (i ASC)
      );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE tbl
+----
+tbl  CREATE TABLE public.tbl (
+       i INT8 NOT NULL,
+       j INT8 NOT NULL DEFAULT nextval('public.s2'::REGCLASS) ON UPDATE nextval('public.s1'::REGCLASS),
+       CONSTRAINT tbl_pkey PRIMARY KEY (i ASC)
+     ) WITH (schema_locked = true);
 
 # Verify that adding not-null physical column with a default or computed expression
 # fails if the expression evaluates to NULL.
@@ -3047,8 +3357,16 @@ ALTER TABLE t_96648 ADD CONSTRAINT check_i CHECK (i > 0);
 statement error pq: failed to satisfy CHECK constraint \(i > 0:::INT8\)
 INSERT INTO t_96648 VALUES (0);
 
+onlyif config  local-schema-locked
+statement ok
+ALTER TABLE t_96648 SET (schema_locked=false)
+
 statement ok
 ALTER TABLE t_96648 ADD CONSTRAINT check_i1 CHECK (i > 10) NOT VALID, VALIDATE CONSTRAINT check_i1;
+
+onlyif config  local-schema-locked
+statement ok
+ALTER TABLE t_96648 SET (schema_locked=true)
 
 # Ensure check "check_i2" is successfully added.
 statement error pq: failed to satisfy CHECK constraint \(i > 10:::INT8\)
@@ -3149,6 +3467,7 @@ ALTER TABLE t_96727_2 DROP COLUMN j CASCADE;
 
 # Ensure that the unique index, unique without index constraint, as well
 # as the FK constraint are all dropped as a result of dropping the column.
+skipif config  local-schema-locked
 query TT
 SHOW CREATE TABLE t_96727_2
 ----
@@ -3158,6 +3477,7 @@ t_96727_2  CREATE TABLE public.t_96727_2 (
              FAMILY fam_0_i_j (i)
            );
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t_96727_1
 ----
@@ -3165,6 +3485,15 @@ t_96727_1  CREATE TABLE public.t_96727_1 (
              i INT8 NOT NULL,
              CONSTRAINT t_96727_1_pkey PRIMARY KEY (i ASC)
            );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t_96727_1
+----
+t_96727_1  CREATE TABLE public.t_96727_1 (
+             i INT8 NOT NULL,
+             CONSTRAINT t_96727_1_pkey PRIMARY KEY (i ASC)
+           ) WITH (schema_locked = true);
 
 # More testing when the column is referenced in other constraints.
 statement ok
@@ -3181,6 +3510,7 @@ ALTER TABLE t_96727_2 DROP COLUMN j;
 
 # Ensure dropping the column, even without CASCADE, will also
 # drop all the constraints.
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t_96727_2
 ----
@@ -3189,6 +3519,16 @@ t_96727_2  CREATE TABLE public.t_96727_2 (
              CONSTRAINT t_96727_2_pkey PRIMARY KEY (i ASC),
              FAMILY fam_0_i_j (i)
            );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t_96727_2
+----
+t_96727_2  CREATE TABLE public.t_96727_2 (
+             i INT8 NOT NULL,
+             CONSTRAINT t_96727_2_pkey PRIMARY KEY (i ASC),
+             FAMILY fam_0_i_j (i)
+           ) WITH (schema_locked = true);
 
 subtest regression_97546
 
@@ -3212,6 +3552,7 @@ SELECT f1();
 statement error pq: unknown function: f2\(\)
 SELECT f2();
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_twocol]
 ----
@@ -3221,6 +3562,17 @@ CREATE TABLE public.t_twocol (
   CONSTRAINT t_twocol_pkey PRIMARY KEY (id ASC),
   FAMILY fam_0 (id, a)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_twocol]
+----
+CREATE TABLE public.t_twocol (
+  id INT8 NOT NULL,
+  a INT8 NULL,
+  CONSTRAINT t_twocol_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0 (id, a)
+) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE t_twocol CASCADE;
@@ -3251,6 +3603,7 @@ $$ LANGUAGE SQL;
 statement ok
 ALTER TABLE t_twocol DROP COLUMN b CASCADE;
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_twocol]
 ----
@@ -3260,6 +3613,17 @@ CREATE TABLE public.t_twocol (
   CONSTRAINT t_twocol_pkey PRIMARY KEY (id ASC),
   FAMILY fam_0 (id, a)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_twocol]
+----
+CREATE TABLE public.t_twocol (
+  id INT8 NOT NULL,
+  a INT8 NULL,
+  CONSTRAINT t_twocol_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0 (id, a)
+) WITH (schema_locked = true);
 
 # This subtests ensures we cannot add an unvalidated PK constraint
 subtest add_unvalidated_pk_96729
@@ -3318,6 +3682,7 @@ skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE t_99035 ADD COLUMN k INT DEFAULT unique_rowid(), DROP COLUMN j;
 
+skipif config local-schema-locked
 skipif config local-legacy-schema-changer
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
@@ -3327,6 +3692,16 @@ CREATE TABLE public.t_99035 (
   k INT8 NULL DEFAULT unique_rowid(),
   CONSTRAINT t_99035_pkey PRIMARY KEY (i ASC)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
+----
+CREATE TABLE public.t_99035 (
+  i INT8 NOT NULL,
+  k INT8 NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_99035_pkey PRIMARY KEY (i ASC)
+) WITH (schema_locked = true);
 
 skipif config local-legacy-schema-changer
 statement ok
@@ -3336,6 +3711,7 @@ skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE t_99035 ADD COLUMN j INT, DROP COLUMN j;  -- noop
 
+skipif config local-schema-locked
 skipif config local-legacy-schema-changer
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
@@ -3345,6 +3721,16 @@ CREATE TABLE public.t_99035 (
   k INT8 NULL DEFAULT unique_rowid(),
   CONSTRAINT t_99035_pkey PRIMARY KEY (i ASC)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
+----
+CREATE TABLE public.t_99035 (
+  i INT8 NOT NULL,
+  k INT8 NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_99035_pkey PRIMARY KEY (i ASC)
+) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE IF EXISTS t_99035;
@@ -3355,6 +3741,7 @@ skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE t_99035 ADD COLUMN k INT DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (j);
 
+skipif config local-schema-locked
 skipif config local-legacy-schema-changer
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
@@ -3367,6 +3754,18 @@ CREATE TABLE public.t_99035 (
   UNIQUE INDEX t_99035_i_key (i ASC)
 );
 
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
+----
+CREATE TABLE public.t_99035 (
+  i INT8 NOT NULL,
+  j INT8 NOT NULL,
+  k INT8 NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC),
+  UNIQUE INDEX t_99035_i_key (i ASC)
+) WITH (schema_locked = true);
+
 statement ok
 DROP TABLE IF EXISTS t_99035;
 CREATE TABLE t_99035 (i INT PRIMARY KEY, j INT NOT NULL, FAMILY "primary" (i, j));
@@ -3376,6 +3775,7 @@ skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE t_99035 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i;
 
+skipif config local-schema-locked
 skipif config local-legacy-schema-changer
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
@@ -3384,6 +3784,15 @@ CREATE TABLE public.t_99035 (
   j INT8 NOT NULL,
   CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
+----
+CREATE TABLE public.t_99035 (
+  j INT8 NOT NULL,
+  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC)
+) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE IF EXISTS t_99035;
@@ -3394,6 +3803,7 @@ skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE t_99035 ADD COLUMN k INT DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i;
 
+skipif config local-schema-locked
 skipif config local-legacy-schema-changer
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
@@ -3403,6 +3813,17 @@ CREATE TABLE public.t_99035 (
   k INT8 NULL DEFAULT unique_rowid(),
   CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC)
 );
+
+onlyif config local-schema-locked
+skipif config local-legacy-schema-changer
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
+----
+CREATE TABLE public.t_99035 (
+  j INT8 NOT NULL,
+  k INT8 NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC)
+) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE IF EXISTS t_99035;
@@ -3422,6 +3843,7 @@ skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE t_99035 ADD COLUMN k INT DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i, ADD COLUMN p INT DEFAULT 30, ADD CHECK (j>=0);
 
+skipif config local-schema-locked
 skipif config local-legacy-schema-changer
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
@@ -3434,6 +3856,18 @@ CREATE TABLE public.t_99035 (
   CONSTRAINT check_j CHECK (j >= 0:::INT8)
 );
 
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
+----
+CREATE TABLE public.t_99035 (
+  j INT8 NOT NULL,
+  k INT8 NULL DEFAULT unique_rowid(),
+  p INT8 NULL DEFAULT 30:::INT8,
+  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC),
+  CONSTRAINT check_j CHECK (j >= 0:::INT8)
+) WITH (schema_locked = true);
+
 statement ok
 DROP TABLE IF EXISTS t_99035;
 CREATE TABLE t_99035 (i INT PRIMARY KEY, j INT NOT NULL, FAMILY "primary" (i, j));
@@ -3443,6 +3877,7 @@ skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE t_99035 ADD COLUMN k INT DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i, ADD COLUMN p INT DEFAULT 0, ADD CHECK (j>=0), ADD FOREIGN KEY (p) REFERENCES t_99035(j);
 
+skipif config local-schema-locked
 skipif config local-legacy-schema-changer
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
@@ -3455,6 +3890,19 @@ CREATE TABLE public.t_99035 (
   CONSTRAINT t_99035_p_fkey FOREIGN KEY (p) REFERENCES public.t_99035(j),
   CONSTRAINT check_j CHECK (j >= 0:::INT8)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
+----
+CREATE TABLE public.t_99035 (
+  j INT8 NOT NULL,
+  k INT8 NULL DEFAULT unique_rowid(),
+  p INT8 NULL DEFAULT 0:::INT8,
+  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC),
+  CONSTRAINT t_99035_p_fkey FOREIGN KEY (p) REFERENCES public.t_99035(j),
+  CONSTRAINT check_j CHECK (j >= 0:::INT8)
+) WITH (schema_locked = true);
 
 subtest end
 
@@ -3517,6 +3965,7 @@ skipif config local-legacy-schema-changer
 statement error pq: foreign key violation: "t_99281" row j=0, k=[0-1] has no match in "t_99281_other"
 ALTER TABLE t_99281 ALTER PRIMARY KEY USING COLUMNS (k), ADD FOREIGN KEY (j) REFERENCES t_99281_other;
 
+skipif config local-schema-locked
 query TT
 show create table t_99281
 ----
@@ -3526,6 +3975,17 @@ t_99281  CREATE TABLE public.t_99281 (
            k INT8 NOT NULL,
            CONSTRAINT t_99281_pkey PRIMARY KEY (i ASC)
          );
+
+onlyif config local-schema-locked
+query TT
+show create table t_99281
+----
+t_99281  CREATE TABLE public.t_99281 (
+           i INT8 NOT NULL,
+           j INT8 NOT NULL,
+           k INT8 NOT NULL,
+           CONSTRAINT t_99281_pkey PRIMARY KEY (i ASC)
+         ) WITH (schema_locked = true);
 
 subtest 99764
 
@@ -3539,6 +3999,7 @@ skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE t_99764 DROP COLUMN j CASCADE;
 
+skipif config local-schema-locked
 skipif config local-legacy-schema-changer
 query TT
 show create table t_99764
@@ -3547,6 +4008,15 @@ t_99764  CREATE TABLE public.t_99764 (
            i INT8 NOT NULL,
            CONSTRAINT t_99764_pkey PRIMARY KEY (i ASC)
          );
+
+onlyif config local-schema-locked
+query TT
+show create table t_99764
+----
+t_99764  CREATE TABLE public.t_99764 (
+           i INT8 NOT NULL,
+           CONSTRAINT t_99764_pkey PRIMARY KEY (i ASC)
+         ) WITH (schema_locked = true);
 
 # Validate that DROP COLUMN CASCADE generates the proper error if we attempt
 # to drop a key column
@@ -3639,6 +4109,7 @@ ALTER TABLE t_118246 ADD COLUMN j INT, ADD UNIQUE WITHOUT INDEX (j);
 statement ok
 ALTER TABLE t_118246 ADD COLUMN k INT DEFAULT 30, ADD UNIQUE WITHOUT INDEX (k);
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_118246]
 ----
@@ -3650,6 +4121,19 @@ CREATE TABLE public.t_118246 (
   CONSTRAINT unique_j UNIQUE WITHOUT INDEX (j),
   CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_118246]
+----
+CREATE TABLE public.t_118246 (
+  i INT8 NOT NULL,
+  j INT8 NULL,
+  k INT8 NULL DEFAULT 30:::INT8,
+  CONSTRAINT t_118246_pkey PRIMARY KEY (i ASC),
+  CONSTRAINT unique_j UNIQUE WITHOUT INDEX (j),
+  CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k)
+) WITH (schema_locked = true);
 
 subtest end
 
@@ -3696,14 +4180,25 @@ WHERE id = 't_120017'::regclass::oid
 ----
 NULL
 
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE t_120017 SET (schema_locked=false)
+
 statement ok
 ALTER TABLE t_120017
 DROP CONSTRAINT "t_120017_pkey",
 ADD CONSTRAINT "t_120017_pkey" PRIMARY KEY (a, c)
 
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE t_120017 SET (schema_locked=true)
+
 subtest end
 
 subtest identity_column
+
+statement ok
+SET create_table_with_schema_locked=false
 
 statement ok
 CREATE TABLE t_add_generated (
@@ -3843,8 +4338,13 @@ SELECT * FROM t_set_generated ORDER BY a
 3  8  NULL
 5  5  NULL
 
+statement ok
+RESET create_table_with_schema_locked
+
 subtest end
 
+statement ok
+SET create_table_with_schema_locked=false
 
 statement ok
 CREATE TABLE t_alter_identity (id SERIAL PRIMARY KEY, a int GENERATED ALWAYS AS IDENTITY, b int GENERATED ALWAYS AS IDENTITY, z int);
@@ -3984,6 +4484,9 @@ skipif config local-legacy-schema-changer
 statement error pgcode 42703 pq: column "i" does not exist
 ALTER TABLE foo DROP COLUMN i, DROP COLUMN i;
 
+statement ok
+RESET create_table_with_schema_locked
+
 subtest end
 
 subtest alter_primary_key_using_dropped_column
@@ -4075,6 +4578,7 @@ CREATE TABLE t_114316 (i INT PRIMARY KEY)
 statement ok
 ALTER TABLE t_114316 ADD COLUMN a INT[] DEFAULT ARRAY[]::OID[]
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_114316];
 ----
@@ -4083,6 +4587,16 @@ CREATE TABLE public.t_114316 (
   a INT8[] NULL DEFAULT ARRAY[]:::OID[],
   CONSTRAINT t_114316_pkey PRIMARY KEY (i ASC)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_114316];
+----
+CREATE TABLE public.t_114316 (
+  i INT8 NOT NULL,
+  a INT8[] NULL DEFAULT ARRAY[]:::OID[],
+  CONSTRAINT t_114316_pkey PRIMARY KEY (i ASC)
+) WITH (schema_locked = true);
 
 subtest end
 
@@ -4255,6 +4769,7 @@ alter table t_droppedcol alter column dropme set default 99;
 statement ok
 rollback;
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t_droppedcol;
 ----
@@ -4263,6 +4778,16 @@ t_droppedcol  CREATE TABLE public.t_droppedcol (
                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                 CONSTRAINT t_droppedcol_pkey PRIMARY KEY (rowid ASC)
               );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t_droppedcol;
+----
+t_droppedcol  CREATE TABLE public.t_droppedcol (
+                dropme INT8 NULL,
+                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                CONSTRAINT t_droppedcol_pkey PRIMARY KEY (rowid ASC)
+              ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE t_droppedcol;
@@ -4275,6 +4800,9 @@ subtest end
 
 
 subtest validate_not_null_during_sc
+
+statement ok
+SET create_table_with_schema_locked=false
 
 statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(n IS NOT NULL\)
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -4368,6 +4896,9 @@ CREATE SEQUENCE public.t1_serial_columns_l_seq MINVALUE 1 MAXVALUE 9223372036854
 CREATE SEQUENCE public.t1_serial_columns_z_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
 CREATE SEQUENCE public.t1_serial_columns_z_seq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
 
+statement ok
+RESET create_table_with_schema_locked
+
 # Regression tests for issue #137326. Add column with IF NOT EXIST.
 subtest add_col_if_not_exists
 
@@ -4386,6 +4917,7 @@ ALTER TABLE t1_add ADD COLUMN IF NOT EXISTS c1 TEXT ON UPDATE EXISTS ( TABLE err
 statement ok
 ALTER TABLE t1_add ADD COLUMN IF NOT EXISTS c1 TEXT ON UPDATE 10;
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t1_add
 ----
@@ -4394,6 +4926,16 @@ t1_add  CREATE TABLE public.t1_add (
           c1 INT8 NULL,
           CONSTRAINT t1_add_pkey PRIMARY KEY (rowid ASC)
         );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t1_add
+----
+t1_add  CREATE TABLE public.t1_add (
+          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+          c1 INT8 NULL,
+          CONSTRAINT t1_add_pkey PRIMARY KEY (rowid ASC)
+        ) WITH (schema_locked = true);
 
 let $use_decl_sc
 SHOW use_declarative_schema_changer
@@ -4413,6 +4955,7 @@ SELECT c1 FROM t1_add
 ----
 2024-08-31 00:00:00 +0000 +0000
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t1_add
 ----
@@ -4421,6 +4964,16 @@ t1_add  CREATE TABLE public.t1_add (
           c1 DATE NULL DEFAULT '2024-08-31':::DATE,
           CONSTRAINT t1_add_pkey PRIMARY KEY (rowid ASC)
         );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t1_add
+----
+t1_add  CREATE TABLE public.t1_add (
+          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+          c1 DATE NULL DEFAULT '2024-08-31':::DATE,
+          CONSTRAINT t1_add_pkey PRIMARY KEY (rowid ASC)
+        ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE t1_add

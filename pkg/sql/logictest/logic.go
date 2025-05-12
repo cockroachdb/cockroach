@@ -1801,6 +1801,13 @@ func (t *logicTest) newCluster(
 			}
 		}
 
+		if cfg.UseSchemaLockedByDefault {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.defaults.create_table_with_schema_locked = true",
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
 		// We disable the automatic stats collection in order to have
 		// deterministic tests.
 		//

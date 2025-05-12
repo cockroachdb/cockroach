@@ -2577,7 +2577,7 @@ func newTableDesc(
 
 	// For tables set schema_locked by default if it hasn't been set, and we
 	// aren't running under an internal executor.
-	if !ret.IsView() && !ret.IsSequence() &&
+	if !ret.IsView() && !ret.IsSequence() && !ret.IsTemporary() &&
 		n.StorageParams.GetVal("schema_locked") == nil &&
 		!params.p.SessionData().Internal &&
 		params.p.SessionData().CreateTableWithSchemaLocked &&
