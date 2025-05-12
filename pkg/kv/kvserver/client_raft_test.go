@@ -2499,7 +2499,7 @@ func TestQuotaPool(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 	// Override the kvflowcontrol.Mode setting to apply_to_elastic, as when
 	// apply_to_all is set (metamorphically), the quota pool will be disabled.
-	// See getQuotaPoolEnabledRLocked.
+	// See getQuotaPoolEnabled.
 	kvflowcontrol.Mode.Override(ctx, &settings.SV, kvflowcontrol.ApplyToElastic)
 	// Disable metamorphism and always run with fortification enabled, as it helps
 	// guard against unexpected leadership changes that the test doesn't expect.

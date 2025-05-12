@@ -42,7 +42,7 @@ func (r *Replica) maybeAcquireProposalQuota(
 	}
 
 	r.mu.RLock()
-	enabled := r.getQuotaPoolEnabledRLocked(ctx)
+	enabled := r.getQuotaPoolEnabled(ctx, r.descRLocked())
 	quotaPool := r.mu.proposalQuota
 	r.mu.RUnlock()
 
@@ -89,19 +89,16 @@ var logSlowRaftProposalQuotaAcquisition = quotapool.OnSlowAcquisition(
 	base.SlowRequestThreshold, quotapool.LogSlowAcquisition,
 )
 
-// getQuotaPoolEnabledRLocked returns whether the quota pool is enabled for the
-// replica. The quota pool is enabled iff all of the following conditions are
-// met:
+// getQuotaPoolEnabled returns whether the quota pool is enabled for the
+// replica. The quota pool is enabled iff all the following conditions are met:
 //
 //  1. "kv.raft.proposal_quota.enabled" is true
 //  2. replication admission control is not using pull mode
 //  3. the range is not the NodeLiveness range
-//
-// Replica.mu must be RLocked.
-func (r *Replica) getQuotaPoolEnabledRLocked(ctx context.Context) bool {
+func (r *Replica) getQuotaPoolEnabled(ctx context.Context, desc *roachpb.RangeDescriptor) bool {
 	return enableRaftProposalQuota.Get(&r.store.cfg.Settings.SV) &&
 		!r.shouldReplicationAdmissionControlUsePullMode(ctx) &&
-		quotaPoolEnabledForRange(r.shMu.state.Desc)
+		quotaPoolEnabledForRange(desc)
 }
 
 // shouldReplicationAdmissionControlUsePullMode returns whether replication
@@ -135,11 +132,13 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	ctx context.Context, lastLeaderID roachpb.ReplicaID,
 ) {
 	now := r.Clock().PhysicalTime()
+	// Since RaftMu is locked, we can get r.shMu.state.Desc without holding the
+	// replica mutex lock.
+	enabled := r.getQuotaPoolEnabled(ctx, r.shMu.state.Desc)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	status := r.mu.internalRaftGroup.BasicStatus()
-	enabled := r.getQuotaPoolEnabledRLocked(ctx)
 	// NB: We initialize and destroy the quota pool here, on leadership changes
 	// and when it's enabled/disabled via settings (see below). This obviates the
 	// need for a setting change callback, as handleRaftReady (the caller), will
@@ -153,7 +152,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			r.mu.lastProposalAtTicks = r.mu.ticks // delay imminent quiescence
 			// We're the new leader but we only create the quota pool if it's enabled
 			// for the range and generally enabled for the cluster, see
-			// getQuotaPoolEnabledRLocked.
+			// getQuotaPoolEnabled.
 			if enabled {
 				// Raft may propose commands itself (specifically the empty
 				// commands when leadership changes), and these commands don't go
