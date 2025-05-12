@@ -2768,9 +2768,23 @@ func init() {
 
 // MeasureReqCPUNanos measures the cpu time spent on this replica processing
 // requests.
-func (r *Replica) MeasureReqCPUNanos(start time.Duration) {
+func (r *Replica) MeasureReqCPUNanos(ctx context.Context, start time.Duration) {
 	r.measureNanosRunning(start, func(dur float64) {
 		r.loadStats.RecordReqCPUNanos(dur)
+		// NB: the caller also has a tenant ID, but we use the replica's here for
+		// simplicity. There is no established pattern for short-lived references
+		// to a specific tenant's metrics.
+		if r.tenantMetricsRef != nil {
+			// We can *not* use the tenant metrics directly because nothing in this
+			// current code path prevents the surrounding replica from getting
+			// destroyed, which could zero the refcount and release the metrics
+			// object. Instead, we go through acquireTenant, which gives us an object
+			// that is and remain valid. This is not an expensive operation in
+			// the common case (the replica still exists).
+			tm := r.store.metrics.acquireTenant(r.tenantMetricsRef.tenantID)
+			tm.ReqCPUNanos.Inc(dur)
+			r.store.metrics.releaseTenant(ctx, tm)
+		}
 	})
 }
 
