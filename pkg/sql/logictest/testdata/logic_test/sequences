@@ -2444,6 +2444,7 @@ CREATE TYPE t72820_i_seq AS enum ('a')
 statement ok
 CREATE TABLE t72820 (i SERIAL PRIMARY KEY)
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t72820]
 ----
@@ -2451,6 +2452,15 @@ CREATE TABLE public.t72820 (
   i INT8 NOT NULL DEFAULT nextval('public.t72820_i_seq1'::REGCLASS),
   CONSTRAINT t72820_pkey PRIMARY KEY (i ASC)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t72820]
+----
+CREATE TABLE public.t72820 (
+  i INT8 NOT NULL DEFAULT nextval('public.t72820_i_seq1'::REGCLASS),
+  CONSTRAINT t72820_pkey PRIMARY KEY (i ASC)
+) WITH (schema_locked = true);
 
 # Also make sure that creating a sequence directly handles the name conflict.
 skipif config local-legacy-schema-changer

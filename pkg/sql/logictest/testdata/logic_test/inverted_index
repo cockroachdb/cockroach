@@ -33,6 +33,7 @@ CREATE TABLE c (
   FAMILY "primary" (id, foo, "bAr", "qUuX")
 )
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE c
 ----
@@ -45,6 +46,20 @@ c  CREATE TABLE public.c (
      INVERTED INDEX c_foo_idx (foo),
      INVERTED INDEX "c_bAr_idx" ("bAr")
    );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE c
+----
+c  CREATE TABLE public.c (
+     id INT8 NOT NULL,
+     foo JSONB NULL,
+     "bAr" JSONB NULL,
+     "qUuX" JSONB NULL,
+     CONSTRAINT c_pkey PRIMARY KEY (id ASC),
+     INVERTED INDEX c_foo_idx (foo),
+     INVERTED INDEX "c_bAr_idx" ("bAr")
+   ) WITH (schema_locked = true);
 
 # Test that only the permitted opclasses are usable to make an inverted index.
 statement error operator class \"blah_ops\" does not exist
@@ -1553,6 +1568,7 @@ INSERT INTO c VALUES(1, ARRAY[], ARRAY['foo', 'bar', 'baz'])
 statement ok
 CREATE INDEX ON c USING GIN (bar)
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE c
 ----
@@ -1564,6 +1580,19 @@ c  CREATE TABLE public.c (
      INVERTED INDEX c_foo_idx (foo),
      INVERTED INDEX c_bar_idx (bar)
    );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE c
+----
+c  CREATE TABLE public.c (
+     id INT8 NOT NULL,
+     foo INT8[] NULL,
+     bar STRING[] NULL,
+     CONSTRAINT c_pkey PRIMARY KEY (id ASC),
+     INVERTED INDEX c_foo_idx (foo),
+     INVERTED INDEX c_bar_idx (bar)
+   ) WITH (schema_locked = true);
 
 query ITT
 SELECT * FROM c WHERE bar @> ARRAY['foo']
@@ -1923,6 +1952,7 @@ CREATE TABLE table_desc_inverted_index (
    FAMILY f2 (testdata)
 );
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE table_desc_inverted_index];
 ----
@@ -1935,6 +1965,20 @@ CREATE TABLE public.table_desc_inverted_index (
   FAMILY f1 (id, last_accessed),
   FAMILY f2 (testdata)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE table_desc_inverted_index];
+----
+CREATE TABLE public.table_desc_inverted_index (
+  id INT8 NOT NULL,
+  last_accessed TIMESTAMP NULL,
+  testdata JSONB NULL,
+  CONSTRAINT table_desc_inverted_index_pkey PRIMARY KEY (id ASC),
+  INVERTED INDEX inv_idx_testdata (last_accessed DESC, testdata),
+  FAMILY f1 (id, last_accessed),
+  FAMILY f2 (testdata)
+) WITH (schema_locked = true);
 
 subtest overlaps_with_array
 

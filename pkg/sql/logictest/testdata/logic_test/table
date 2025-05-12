@@ -1,3 +1,5 @@
+# LogicTest: !local-schema-locked
+
 statement ok
 SET DATABASE = ""
 

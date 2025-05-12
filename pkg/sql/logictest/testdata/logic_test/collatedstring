@@ -214,6 +214,7 @@ CREATE TABLE t (
   a STRING COLLATE en
 )
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t
 ----
@@ -222,6 +223,16 @@ t  CREATE TABLE public.t (
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
    );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE public.t (
+     a STRING COLLATE en NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+   ) WITH (schema_locked = true);
 
 statement ok
 INSERT INTO t VALUES
@@ -359,6 +370,7 @@ CREATE TABLE quoted_coll (
   FAMILY "primary" (a, b, c, d, e, rowid)
 )
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE quoted_coll
 ----
@@ -371,6 +383,20 @@ quoted_coll  CREATE TABLE public.quoted_coll (
                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                CONSTRAINT quoted_coll_pkey PRIMARY KEY (rowid ASC)
              );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE quoted_coll
+----
+quoted_coll  CREATE TABLE public.quoted_coll (
+               a STRING COLLATE en NULL,
+               b STRING COLLATE en_US NULL,
+               c STRING COLLATE en_US NULL DEFAULT ('c':::STRING COLLATE en_US),
+               d STRING COLLATE en_u_ks_level1 NULL DEFAULT ('d':::STRING COLLATE en_u_ks_level1),
+               e STRING COLLATE en_US NULL AS (a COLLATE en_US) STORED,
+               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+               CONSTRAINT quoted_coll_pkey PRIMARY KEY (rowid ASC)
+             ) WITH (schema_locked = true);
 
 # Regression for #46570.
 statement ok
@@ -489,6 +515,7 @@ Bbb
 statement ok
 CREATE TABLE collation_name_case (s STRING COLLATE en_us_u_ks_level2);
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE collation_name_case
 ----
@@ -497,6 +524,16 @@ collation_name_case  CREATE TABLE public.collation_name_case (
                        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                        CONSTRAINT collation_name_case_pkey PRIMARY KEY (rowid ASC)
                      );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE collation_name_case
+----
+collation_name_case  CREATE TABLE public.collation_name_case (
+                       s STRING COLLATE en_US_u_ks_level2 NULL,
+                       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                       CONSTRAINT collation_name_case_pkey PRIMARY KEY (rowid ASC)
+                     ) WITH (schema_locked = true);
 
 statement error invalid locale en-US-u-ks-le"vel2: language: tag is not well-formed
 CREATE TABLE nocase_strings (s STRING COLLATE "en-US-u-ks-le""vel2");

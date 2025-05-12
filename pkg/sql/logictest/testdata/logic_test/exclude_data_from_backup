@@ -10,6 +10,7 @@ SELECT id FROM system.namespace WHERE name='t';
 statement ok
 ALTER TABLE t SET (exclude_data_from_backup = true);
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t
 ----
@@ -18,9 +19,19 @@ t  CREATE TABLE public.t (
      CONSTRAINT t_pkey PRIMARY KEY (x ASC)
    ) WITH (exclude_data_from_backup = true);
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE public.t (
+     x INT8 NOT NULL,
+     CONSTRAINT t_pkey PRIMARY KEY (x ASC)
+   ) WITH (exclude_data_from_backup = true, schema_locked = true);
+
 statement ok
 ALTER TABLE t SET (exclude_data_from_backup = false);
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t
 ----
@@ -28,6 +39,15 @@ t  CREATE TABLE public.t (
      x INT8 NOT NULL,
      CONSTRAINT t_pkey PRIMARY KEY (x ASC)
    );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE public.t (
+     x INT8 NOT NULL,
+     CONSTRAINT t_pkey PRIMARY KEY (x ASC)
+   ) WITH (schema_locked = true);
 
 # Ensure we cannot set schema to a temporary schema.
 statement ok
@@ -50,6 +70,7 @@ ALTER TABLE t SET (exclude_data_from_backup = 'on');
 statement ok
 ALTER TABLE t2 SET (exclude_data_from_backup = 'true');
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t2
 ----
@@ -60,10 +81,22 @@ t2  CREATE TABLE public.t2 (
       CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t(x) ON DELETE CASCADE
     ) WITH (exclude_data_from_backup = true);
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t2
+----
+t2  CREATE TABLE public.t2 (
+      x INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+      CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t(x) ON DELETE CASCADE
+    ) WITH (exclude_data_from_backup = true, schema_locked = true);
+
 # Check that we can reset exclude_data_from_backup on a table.
 statement ok
 ALTER TABLE t2 RESET (exclude_data_from_backup);
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t2
 ----
@@ -73,3 +106,14 @@ t2  CREATE TABLE public.t2 (
       CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
       CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t(x) ON DELETE CASCADE
     );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t2
+----
+t2  CREATE TABLE public.t2 (
+      x INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+      CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t(x) ON DELETE CASCADE
+    ) WITH (schema_locked = true);

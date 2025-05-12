@@ -480,6 +480,7 @@ SELECT ARRAY[ROW()] FROM ident
 statement ok
 CREATE TABLE a (b INT ARRAY)
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE a
 ----
@@ -488,6 +489,16 @@ a  CREATE TABLE public.a (
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
    );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE a
+----
+a  CREATE TABLE public.a (
+     b INT8[] NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
+   ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE a
@@ -540,6 +551,7 @@ SELECT * FROM a
 ----
 {1,2,3}
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE a
 ----
@@ -548,6 +560,16 @@ a  CREATE TABLE public.a (
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
    );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE a
+----
+a  CREATE TABLE public.a (
+     b INT8[] NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
+   ) WITH (schema_locked = true);
 
 statement error could not parse "foo" as type int
 INSERT INTO a VALUES (ARRAY['foo'])
@@ -612,6 +634,7 @@ DROP TABLE a
 statement ok
 CREATE TABLE a (b SMALLINT[])
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE a
 ----
@@ -620,6 +643,16 @@ a  CREATE TABLE public.a (
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
    );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE a
+----
+a  CREATE TABLE public.a (
+     b INT2[] NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
+   ) WITH (schema_locked = true);
 
 statement error integer out of range for type int2
 INSERT INTO a VALUES (ARRAY[100000])

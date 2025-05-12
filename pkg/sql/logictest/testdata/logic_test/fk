@@ -494,6 +494,7 @@ CREATE TABLE delivery (
   FAMILY "primary" (ts, "order", shipment, item, rowid)
 )
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE delivery
 ----
@@ -508,6 +509,22 @@ delivery  CREATE TABLE public.delivery (
             CONSTRAINT delivery_item_fkey FOREIGN KEY (item) REFERENCES public.products(upc),
             INDEX delivery_item_idx (item ASC)
           );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE delivery
+----
+delivery  CREATE TABLE public.delivery (
+            ts TIMESTAMP NULL DEFAULT now():::TIMESTAMP,
+            "order" INT8 NULL,
+            shipment INT8 NULL,
+            item STRING NULL,
+            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+            CONSTRAINT delivery_pkey PRIMARY KEY (rowid ASC),
+            CONSTRAINT delivery_order_shipment_fkey FOREIGN KEY ("order", shipment) REFERENCES public.orders(id, shipment),
+            CONSTRAINT delivery_item_fkey FOREIGN KEY (item) REFERENCES public.products(upc),
+            INDEX delivery_item_idx (item ASC)
+          ) WITH (schema_locked = true);
 
 statement ok
 INSERT INTO delivery ("order", shipment, item) VALUES
@@ -579,9 +596,28 @@ ALTER TABLE "user content"."customer reviews"
 statement ok
 INSERT INTO "user content"."customer reviews" (id, product, body, "order") VALUES (3, '780', 'i ordered 100 of them', 9)
 
+# Cross database references are used below
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE "user content"."customer reviews" SET (schema_locked=false);
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE orders SET (schema_locked=false);
+
+
 statement ok
 ALTER TABLE "user content"."customer reviews"
   ADD CONSTRAINT orderfk2 FOREIGN KEY ("order", shipment) REFERENCES orders (id, shipment)
+
+# Cross database references are used below
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE "user content"."customer reviews" SET (schema_locked=true);
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE orders SET (schema_locked=true);
 
 # This is allowed because we match using MATCH SIMPLE.
 statement ok
@@ -819,6 +855,7 @@ refpairs    refpairs_pkey       false       2             a            a        
 refpairs    refpairs_pkey       false       3             b            b           N/A        true     false     true     1
 refpairs    refpairs_pkey       false       4             c            c           N/A        true     false     true     1
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE refpairs
 ----
@@ -831,6 +868,20 @@ refpairs  CREATE TABLE public.refpairs (
             CONSTRAINT refpairs_a_b_fkey FOREIGN KEY (a, b) REFERENCES public.pairs(src, dest) ON UPDATE RESTRICT,
             INDEX refpairs_a_b_c_idx (a ASC, b ASC, c ASC)
           );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE refpairs
+----
+refpairs  CREATE TABLE public.refpairs (
+            a INT8 NULL,
+            b STRING NULL,
+            c INT8 NULL,
+            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+            CONSTRAINT refpairs_pkey PRIMARY KEY (rowid ASC),
+            CONSTRAINT refpairs_a_b_fkey FOREIGN KEY (a, b) REFERENCES public.pairs(src, dest) ON UPDATE RESTRICT,
+            INDEX refpairs_a_b_c_idx (a ASC, b ASC, c ASC)
+          ) WITH (schema_locked = true);
 
 statement error pgcode 23503 insert on table "refpairs" violates foreign key constraint "refpairs_a_b_fkey"\nDETAIL: Key \(a, b\)=\(100, 'two'\) is not present in table "pairs".
 INSERT INTO refpairs VALUES (100, 'two'), (200, 'two')
@@ -1012,6 +1063,12 @@ SELECT job_type, description FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC
 ----
 SCHEMA CHANGE GC  GC for DROP TABLE test.public.a
 
+onlyif config local-legacy-schema-changer
+query TT
+SELECT job_type, description FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC' AND
+ description LIKE 'GC for DROP TABLE test.public.a';
+----
+
 statement ok
 DROP TABLE b
 
@@ -1039,6 +1096,7 @@ CREATE INDEX foo ON refers (a)
 statement ok
 ALTER INDEX refers@b_idx RENAME TO another_idx
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE refers
 ----
@@ -1051,6 +1109,20 @@ refers  CREATE TABLE public.refers (
           INDEX another_idx (b ASC),
           INDEX foo (a ASC)
         );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE refers
+----
+refers  CREATE TABLE public.refers (
+          a INT8 NULL,
+          b INT8 NULL,
+          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+          CONSTRAINT refers_pkey PRIMARY KEY (rowid ASC),
+          CONSTRAINT refers_a_fkey FOREIGN KEY (a) REFERENCES public.referee(id),
+          INDEX another_idx (b ASC),
+          INDEX foo (a ASC)
+        ) WITH (schema_locked = true);
 
 statement ok
 DROP INDEX refers@another_idx
@@ -1123,6 +1195,7 @@ CREATE TABLE pkref_a (a INT PRIMARY KEY)
 statement ok
 CREATE TABLE pkref_b (b INT PRIMARY KEY REFERENCES pkref_a ON UPDATE NO ACTION ON DELETE RESTRICT)
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE pkref_b
 ----
@@ -1131,6 +1204,16 @@ pkref_b  CREATE TABLE public.pkref_b (
            CONSTRAINT pkref_b_pkey PRIMARY KEY (b ASC),
            CONSTRAINT pkref_b_b_fkey FOREIGN KEY (b) REFERENCES public.pkref_a(a) ON DELETE RESTRICT
          );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE pkref_b
+----
+pkref_b  CREATE TABLE public.pkref_b (
+           b INT8 NOT NULL,
+           CONSTRAINT pkref_b_pkey PRIMARY KEY (b ASC),
+           CONSTRAINT pkref_b_b_fkey FOREIGN KEY (b) REFERENCES public.pkref_a(a) ON DELETE RESTRICT
+         ) WITH (schema_locked = true);
 
 subtest 20042
 
@@ -2731,6 +2814,14 @@ CREATE TABLE childid (
 statement ok
 INSERT INTO parentid (k, v) VALUES (0, 1); INSERT INTO childid (id) VALUES (2);
 
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE parentid SET (schema_locked=false)
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE childid SET (schema_locked=false)
+
 statement error column \"id\" does not exist
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL autocommit_before_ddl = false;
@@ -2739,6 +2830,15 @@ ALTER TABLE childid ADD CONSTRAINT fk_id FOREIGN KEY (id) REFERENCES parentid (i
 
 statement ok
 ROLLBACK;
+
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE parentid SET (schema_locked=true)
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE childid SET (schema_locked=true)
 
 subtest dont_check_nulls
 # Make sure that nulls are never checked while executing FK constraints.
@@ -3811,6 +3911,9 @@ DROP TABLE add_self_fk_fail
 subtest cross_db_fks
 
 statement ok
+SET create_table_with_schema_locked=false
+
+statement ok
 SET CLUSTER SETTING sql.cross_db_fks.enabled = FALSE
 
 statement ok
@@ -3923,6 +4026,9 @@ ALTER TABLE child_59582 ADD FOREIGN KEY (i) REFERENCES child_59582(rowid)
 
 statement ok
 DROP TABLE parent_59582, child_59582
+
+statement ok
+RESET create_table_with_schema_locked
 
 # Regression test for #65890. Duplicate column IDs in the input of an insert
 # fast path should not cause internal errors when shuffling columns during FK
@@ -4142,6 +4248,14 @@ statement ok
 CREATE TABLE drop_fk_during_addition (name INT8);
 CREATE TABLE drop_fk_during_addition_ref (name INT8 PRIMARY KEY);
 
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE drop_fk_during_addition SET (schema_locked=false);
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE drop_fk_during_addition_ref SET (schema_locked=false);
+
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL autocommit_before_ddl = false;
@@ -4269,6 +4383,7 @@ NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
 NOTICE: type of foreign key column "t1_fk_col1" (CHAR(5)) is not identical to referenced column "t1_fk"."col1" (CHAR(7))
 
 
+skipif config local-schema-locked
 skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE TABLE t2_fk
@@ -4282,6 +4397,20 @@ t2_fk  CREATE TABLE public.t2_fk (
          CONSTRAINT t2_fk_t1_fk_col1_t1_fk_col2_fkey FOREIGN KEY (t1_fk_col1, t1_fk_col2) REFERENCES public.t1_fk(col1, col2),
          FAMILY f1 (pk, t1_fk_col1, t1_fk_col2, col3)
        );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t2_fk
+----
+t2_fk  CREATE TABLE public.t2_fk (
+         pk INT8 NOT NULL,
+         t1_fk_col1 CHAR(5) NULL,
+         t1_fk_col2 INT8 NULL,
+         col3 INT8 NULL,
+         CONSTRAINT t2_fk_pkey PRIMARY KEY (pk ASC),
+         CONSTRAINT t2_fk_t1_fk_col1_t1_fk_col2_fkey FOREIGN KEY (t1_fk_col1, t1_fk_col2) REFERENCES public.t1_fk(col1, col2),
+         FAMILY f1 (pk, t1_fk_col1, t1_fk_col2, col3)
+       ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE t2_fk;
