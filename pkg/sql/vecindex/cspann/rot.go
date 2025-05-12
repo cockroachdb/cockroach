@@ -63,7 +63,7 @@ type givensRotation struct {
 	sin float32
 }
 
-// randomOrthoTransformer applies a random orthogonal transformation (ROT) to
+// RandomOrthoTransformer applies a random orthogonal transformation (ROT) to
 // data and query vectors to mitigate the effects of skewed input data
 // distributions:
 //
@@ -109,7 +109,7 @@ type givensRotation struct {
 // │   .:-==###    │    │-:=-::.+=--=+==│
 // │.***#*%*###    │    │*:*::*=-=-:==:.│
 // ╰───────────────╯    ╰───────────────╯
-type randomOrthoTransformer struct {
+type RandomOrthoTransformer struct {
 	// algo is the algorithm used for the orthogonal transformation.
 	algo RotAlgorithm
 	// dims is the dimensionality of vectors that will be transformed.
@@ -127,8 +127,8 @@ type randomOrthoTransformer struct {
 // Init intializes the transformer for the specified algorithm, operating on
 // vectors with the given number of dimensions. The same seed must always be
 // used for a given vector index, in order to generate the same transforms.
-func (t *randomOrthoTransformer) Init(algo RotAlgorithm, dims int, seed int64) {
-	*t = randomOrthoTransformer{
+func (t *RandomOrthoTransformer) Init(algo RotAlgorithm, dims int, seed int64) {
+	*t = RandomOrthoTransformer{
 		algo: algo,
 		dims: dims,
 		seed: seed,
@@ -177,7 +177,7 @@ func (t *randomOrthoTransformer) Init(algo RotAlgorithm, dims int, seed int64) {
 // "original" vector and writes it to the "randomized" vector. The caller is
 // responsible for allocating the randomized vector with length equal to the
 // original vector.
-func (t *randomOrthoTransformer) RandomizeVector(original vector.T, randomized vector.T) vector.T {
+func (t *RandomOrthoTransformer) RandomizeVector(original vector.T, randomized vector.T) vector.T {
 	switch t.algo {
 	case RotNone:
 		// Just copy the original, unchanged vector.
@@ -206,7 +206,7 @@ func (t *randomOrthoTransformer) RandomizeVector(original vector.T, randomized v
 // RandomizeVector, in order to recover the original vector from its randomized
 // form. The caller is responsible for allocating the original vector with
 // length equal to the randomized vector.
-func (t *randomOrthoTransformer) UnRandomizeVector(
+func (t *RandomOrthoTransformer) UnRandomizeVector(
 	randomized vector.T, original vector.T,
 ) vector.T {
 	switch t.algo {
