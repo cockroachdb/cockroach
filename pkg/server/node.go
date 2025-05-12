@@ -1866,18 +1866,10 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 
 // BatchStream implements the kvpb.InternalServer interface.
 func (n *Node) BatchStream(stream kvpb.Internal_BatchStreamServer) error {
-	return n.batchStreamImpl(stream, func(ba *kvpb.BatchRequest) error {
-		return stream.RecvMsg(ba)
-	})
+	return n.batchStreamImpl(stream)
 }
 
-func (n *Node) batchStreamImpl(
-	stream interface {
-		Context() context.Context
-		Send(response *kvpb.BatchResponse) error
-	},
-	recvMsg func(*kvpb.BatchRequest) error,
-) error {
+func (n *Node) batchStreamImpl(stream kvpb.RPCInternal_BatchStreamStream) error {
 	ctx := stream.Context()
 	for {
 		argsAlloc := new(struct {
@@ -1887,7 +1879,7 @@ func (n *Node) batchStreamImpl(
 		args := &argsAlloc.args
 		args.Requests = argsAlloc.reqs[:0]
 
-		err := recvMsg(args)
+		err := stream.RecvMsg(args)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return nil
@@ -1919,11 +1911,7 @@ func (n *drpcNode) Batch(
 }
 
 func (n *drpcNode) BatchStream(stream kvpb.DRPCInternal_BatchStreamStream) error {
-	return (*Node)(n).batchStreamImpl(stream, func(ba *kvpb.BatchRequest) error {
-		return stream.(interface {
-			RecvMsg(request *kvpb.BatchRequest) error
-		}).RecvMsg(ba)
-	})
+	return (*Node)(n).batchStreamImpl(stream)
 }
 
 // spanForRequest is the retval of setupSpanForIncomingRPC. It groups together a
