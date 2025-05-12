@@ -792,7 +792,7 @@ func maybeAddUniqueIndexForOldPrimaryKey(
 	rowidToDrop *scpb.Column,
 ) {
 	if !shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
-		b, tbl, oldPrimaryIndex.IndexID, newPrimaryIndex.IndexID, rowidToDrop,
+		b, t.n, tbl, oldPrimaryIndex.IndexID, newPrimaryIndex.IndexID, rowidToDrop,
 	) {
 		return
 	}
@@ -925,6 +925,7 @@ func addIndexNameForNewUniqueSecondaryIndex(b BuildCtx, tbl *scpb.Table, indexID
 //   - There is no existing secondary index on the old primary key columns.
 func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 	b BuildCtx,
+	n tree.NodeFormatter,
 	tbl *scpb.Table,
 	oldPrimaryIndexID, newPrimaryIndexID catid.IndexID,
 	rowidToDrop *scpb.Column,
@@ -979,7 +980,18 @@ func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 	alreadyHasSecondaryIndexOnPKColumns := func(
 		b BuildCtx, tableID catid.DescID, oldPrimaryIndexID catid.IndexID,
 	) (found bool) {
-		scpb.ForEachSecondaryIndex(b.QueryByID(tableID), func(
+		// In 25.2 we added the rule "primary index with new columns should validated
+		// before secondary indexes" and "secondary indexes should be in a validated
+		// state before primary indexes can go public" in dep_add_index.go, which
+		// allow us to properly handle more complex cases with ADD COLUMN UNIQUE and
+		// ALTER PRIMARY KEY IN the same transaction. (Otherwise, secondary indexes
+		// can be made public too early). Without this rule versions before 25.2 will fail
+		// during runtime trying to create the new secondary index.
+		if !b.ClusterSettings().Version.IsActive(b, clusterversion.V25_2) &&
+			!b.QueryByID(tableID).Filter(ghostElementFilter).FilterSecondaryIndex().IsEmpty() {
+			panic(scerrors.NotImplementedErrorf(n, "ghost secondary index elements found"))
+		}
+		scpb.ForEachSecondaryIndex(b.QueryByID(tableID).Filter(notFilter(ghostElementFilter)), func(
 			current scpb.Status, target scpb.TargetStatus, candidate *scpb.SecondaryIndex,
 		) {
 			if !mustRetrieveIndexElement(b, tableID, candidate.IndexID).IsUnique {

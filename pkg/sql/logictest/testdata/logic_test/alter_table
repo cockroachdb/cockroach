@@ -5135,3 +5135,46 @@ ALTER TABLE t_set_logged SET UNLOGGED;
 NOTICE: SET UNLOGGED is not supported and has no effect
 
 subtest end
+
+# Validate that a unique index creation and alter primary key do not
+# not break as seen in #128420
+subtest add_unique_and_alter_primary_key
+
+statement ok
+CREATE TABLE t_128420 (i int not null);
+
+# Not supported in mixed version configurations
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.3
+skipif config local-mixed-25.1
+statement ok
+ALTER TABLE t_128420 ADD COLUMN box BOX2D NULL UNIQUE, ALTER PRIMARY KEY USING COLUMNS (i) USING HASH;
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.3
+skipif config local-mixed-25.1
+skipif config local-schema-locked
+query TT
+show create table t_128420
+----
+t_128420  CREATE TABLE public.t_128420 (
+            i INT8 NOT NULL,
+            box BOX2D NULL,
+            crdb_internal_i_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(i))), 16:::INT8)) VIRTUAL,
+            CONSTRAINT t_128420_pkey PRIMARY KEY (i ASC) USING HASH WITH (bucket_count=16),
+            UNIQUE INDEX t_128420_box_key (box ASC)
+          );
+
+onlyif config local-schema-locked
+query TT
+show create table t_128420
+----
+t_128420  CREATE TABLE public.t_128420 (
+            i INT8 NOT NULL,
+            box BOX2D NULL,
+            crdb_internal_i_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(i))), 16:::INT8)) VIRTUAL,
+            CONSTRAINT t_128420_pkey PRIMARY KEY (i ASC) USING HASH WITH (bucket_count=16),
+            UNIQUE INDEX t_128420_box_key (box ASC)
+          ) WITH (schema_locked = true);
+
+subtest end
