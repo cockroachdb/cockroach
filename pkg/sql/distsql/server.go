@@ -368,7 +368,7 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	if !f.IsLocal() {
-		flowCtx.AmbientContext.AddLogTag("f", flowCtx.ID.Short())
+		flowCtx.AmbientContext.AddLogTag("f", redact.SafeString(flowCtx.ID.Short()))
 		if req.JobTag != "" {
 			flowCtx.AmbientContext.AddLogTag("job", req.JobTag)
 		}
