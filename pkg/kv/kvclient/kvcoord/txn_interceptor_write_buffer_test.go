@@ -632,6 +632,7 @@ func TestTxnWriteBufferServesPointReadsLocally(t *testing.T) {
 	// Perform a read on keyC. This should be sent to the KV layer, as no write
 	// for this key has been buffered.
 	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
 	getC := &kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyC}}
 	ba.Add(getC)
 
@@ -755,6 +756,7 @@ func TestTxnWriteBufferServesPointReadsAfterScan(t *testing.T) {
 
 	// Perform a read on keyC.
 	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
 	getC := &kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyC, Sequence: txn.Sequence}}
 	ba.Add(getC)
 
@@ -1133,8 +1135,9 @@ func TestTxnWriteBufferDecomposesConditionalPuts(t *testing.T) {
 			require.Equal(t, keyA, getReq.Key)
 			require.Equal(t, txn.Sequence, getReq.Sequence)
 			require.Equal(t, lock.Exclusive, getReq.KeyLockingStrength)
-
-			return ba.CreateReply(), nil
+			br := ba.CreateReply()
+			br.Txn = ba.Txn
+			return br, nil
 		})
 
 		br, pErr := twb.SendLocked(ctx, ba)
@@ -1208,7 +1211,9 @@ func TestTxnWriteBufferDecomposesConditionalPutsExpectingNoRow(t *testing.T) {
 		require.Equal(t, txn.Sequence, getReq.Sequence)
 		require.Equal(t, lock.Exclusive, getReq.KeyLockingStrength)
 		require.True(t, getReq.LockNonExisting)
-		return ba.CreateReply(), nil
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
 	})
 
 	br, pErr := twb.SendLocked(ctx, ba)
@@ -1278,7 +1283,9 @@ func TestTxnWriteBufferRespectsMustAcquireExclusiveLock(t *testing.T) {
 		require.Equal(t, txn.Sequence, getReq.Sequence)
 		require.Equal(t, lock.Exclusive, getReq.KeyLockingStrength)
 		require.True(t, getReq.LockNonExisting)
-		return ba.CreateReply(), nil
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
 	})
 
 	br, pErr := twb.SendLocked(ctx, ba)
@@ -1359,6 +1366,7 @@ func TestTxnWriteBufferMustSortBatchesBySequenceNumber(t *testing.T) {
 			}
 		}
 		br = ba.CreateReply()
+		br.Txn = ba.Txn
 		return br, nil
 	})
 
@@ -1738,6 +1746,7 @@ func TestTxnWriteBufferRollbackToSavepoint(t *testing.T) {
 
 	// Add some new writes. A second write to keyA and a new one to keyB.
 	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
 	txn.Sequence++
 	putA2 := putArgs(keyA, valA2, txn.Sequence)
 	ba.Add(putA2)
