@@ -946,6 +946,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	leaderID := r.shMu.leaderID
 	lastLeaderID := leaderID
 
+	shouldResetLastReplicaAdded := r.shouldResetLastReplicaAdded()
 	r.mu.Lock()
 	err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
 		r.deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(ctx, raftGroup)
@@ -993,6 +994,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	})
 	r.mu.applyingEntries = !ready.Committed.Empty()
 	pausedFollowers := r.mu.pausedFollowers
+	if shouldResetLastReplicaAdded {
+		// Since we already hold the Replica.mu lock, reset the lastReplicaAdded
+		// here if we need to.
+		r.mu.lastReplicaAdded = 0
+		r.mu.lastReplicaAddedTime = time.Time{}
+	}
 	r.mu.Unlock()
 	if errors.Is(err, errRemoved) {
 		// If we've been removed then just return.
@@ -3068,6 +3075,19 @@ func (r *Replica) updateLastUpdateTimesUsingStoreLivenessRLocked(
 			r.mu.lastUpdateTimes.update(desc.ReplicaID, r.Clock().PhysicalTime())
 		}
 	}
+}
+
+// shouldResetLastReplicaAdded returns true is the last replica added has caught
+// up with the leader.
+func (r *Replica) shouldResetLastReplicaAdded() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if pr := r.mu.internalRaftGroup.ReplicaProgress(raftpb.PeerID(r.mu.lastReplicaAdded)); pr != nil {
+		if kvpb.RaftIndex(pr.Match) >= kvpb.RaftIndex(r.raftBasicStatusRLocked().Commit) {
+			return true
+		}
+	}
+	return false
 }
 
 func truncateEntryString(s string, maxChars int) string {
