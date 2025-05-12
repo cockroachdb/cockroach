@@ -201,20 +201,20 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 ) {
 	if e.cumL0WriteBytes == 0 {
 		e.cumStoreAdmissionStats = admissionStats
-		e.cumL0WriteBytes = l0Metrics.BytesFlushed
-		e.cumL0IngestedBytes = l0Metrics.BytesIngested
+		e.cumL0WriteBytes = l0Metrics.TableBytesFlushed + l0Metrics.BlobBytesFlushed
+		e.cumL0IngestedBytes = l0Metrics.TableBytesIngested + l0Metrics.BlobBytesFlushed
 		e.cumLSMIngestedBytes = cumLSMIngestedBytes
 		e.cumDiskWrites = cumDiskWrite
 		return
 	}
-	intL0WriteBytes := int64(l0Metrics.BytesFlushed) - int64(e.cumL0WriteBytes)
+	intL0WriteBytes := int64(l0Metrics.TableBytesFlushed+l0Metrics.BlobBytesFlushed) - int64(e.cumL0WriteBytes)
 	intL0IgnoredWriteBytes := int64(admissionStats.statsToIgnore.writeBytes) -
 		int64(e.cumStoreAdmissionStats.statsToIgnore.writeBytes)
 	adjustedIntL0WriteBytes := intL0WriteBytes - intL0IgnoredWriteBytes
 	if adjustedIntL0WriteBytes < 0 {
 		adjustedIntL0WriteBytes = 0
 	}
-	intL0IngestedBytes := int64(l0Metrics.BytesIngested) - int64(e.cumL0IngestedBytes)
+	intL0IngestedBytes := int64(l0Metrics.TableBytesIngested) - int64(e.cumL0IngestedBytes)
 	intL0IgnoredIngestedBytes := int64(admissionStats.statsToIgnore.ingestStats.ApproxIngestedIntoL0Bytes) -
 		int64(e.cumStoreAdmissionStats.statsToIgnore.ingestStats.ApproxIngestedIntoL0Bytes)
 	adjustedIntL0IngestedBytes := intL0IngestedBytes - intL0IgnoredIngestedBytes
@@ -314,8 +314,8 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 	}
 	// Store the latest cumulative values.
 	e.cumStoreAdmissionStats = admissionStats
-	e.cumL0WriteBytes = l0Metrics.BytesFlushed
-	e.cumL0IngestedBytes = l0Metrics.BytesIngested
+	e.cumL0WriteBytes = l0Metrics.TableBytesFlushed + l0Metrics.BlobBytesFlushed
+	e.cumL0IngestedBytes = l0Metrics.TableBytesIngested
 	e.cumLSMIngestedBytes = cumLSMIngestedBytes
 	e.cumDiskWrites = cumDiskWrite
 }

@@ -70,7 +70,8 @@ func Run(t T, cfg Config) Result {
 					return
 				case <-notifyCh:
 					n++
-					newBytesFlushed := o.raftEng.GetMetrics().Levels[0].BytesFlushed
+					l0Metrics := o.raftEng.GetMetrics().Levels[0]
+					newBytesFlushed := l0Metrics.TableBytesFlushed + l0Metrics.BlobBytesFlushed
 					logf(t, "raft engine flush #%d completed; flushed %s", n,
 						humanizeutil.IBytes(int64(newBytesFlushed-bytesFlushed)))
 					bytesFlushed = newBytesFlushed
