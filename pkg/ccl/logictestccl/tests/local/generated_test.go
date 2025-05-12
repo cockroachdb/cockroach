@@ -89,6 +89,13 @@ func TestCCLLogic_auto_rehoming(
 	runCCLLogicTest(t, "auto_rehoming")
 }
 
+func TestCCLLogic_buffered_writes_lock_loss(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "buffered_writes_lock_loss")
+}
+
 func TestCCLLogic_builtins(
 	t *testing.T,
 ) {

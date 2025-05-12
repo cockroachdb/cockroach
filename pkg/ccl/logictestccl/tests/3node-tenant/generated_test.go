@@ -2710,6 +2710,13 @@ func TestTenantLogic_zone_config(
 	runLogicTest(t, "zone_config")
 }
 
+func TestTenantLogicCCL_buffered_writes_lock_loss(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "buffered_writes_lock_loss")
+}
+
 func TestTenantLogicCCL_cluster_locks_tenant(
 	t *testing.T,
 ) {
