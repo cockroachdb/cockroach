@@ -198,7 +198,11 @@ func NewServerEx(
 	if err != nil {
 		return nil, nil, ServerInterceptorInfo{}, err
 	}
-	RegisterHeartbeatServer(s, rpcCtx.NewHeartbeatService())
+	heartbeatSvc := rpcCtx.NewHeartbeatService()
+	RegisterHeartbeatServer(s, heartbeatSvc)
+	if err := DRPCRegisterHeartbeat(d.Mux, heartbeatSvc); err != nil {
+		return nil, nil, ServerInterceptorInfo{}, err
+	}
 
 	return s, d, ServerInterceptorInfo{
 		UnaryInterceptors:  unaryInterceptor,

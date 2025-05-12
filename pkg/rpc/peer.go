@@ -14,6 +14,7 @@ import (
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -27,6 +28,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/status"
+	"storj.io/drpc"
 	"storj.io/drpc/drpcpool"
 )
 
@@ -402,8 +404,9 @@ func (p *peer) runOnce(ctx context.Context, report func(error)) error {
 		defer p.remoteClocks.OnDisconnect(ctx, p.k.NodeID)
 	}
 
+	client := p.getHeartbeatClient(&p.opts.Settings.SV, cc, dc)
 	if err := runSingleHeartbeat(
-		ctx, NewHeartbeatClient(cc), p.k, p.peerMetrics.roundTripLatency, nil /* no remote clocks */, p.opts, p.heartbeatTimeout, PingRequest_BLOCKING,
+		ctx, client, p.k, p.peerMetrics.roundTripLatency, nil /* no remote clocks */, p.opts, p.heartbeatTimeout, PingRequest_BLOCKING,
 	); err != nil {
 		return err
 	}
@@ -413,9 +416,19 @@ func (p *peer) runOnce(ctx context.Context, report func(error)) error {
 	return p.runHeartbeatUntilFailure(ctx, connFailedCh)
 }
 
+func (p *peer) getHeartbeatClient(
+	sv *settings.Values, gconn *grpc.ClientConn, dconn drpc.Conn,
+) RPCHeartbeatClient {
+	if ExperimentalDRPCEnabled.Get(&p.opts.Settings.SV) {
+		return NewDRPCHeartbeatClientAdapter(dconn)
+	} else {
+		return NewGRPCHeartbeatClientAdapter(gconn)
+	}
+}
+
 func runSingleHeartbeat(
 	ctx context.Context,
-	heartbeatClient HeartbeatClient,
+	heartbeatClient RPCHeartbeatClient,
 	k peerKey,
 	roundTripLatency ewma.MovingAverage,
 	remoteClocks *RemoteClockMonitor, // nil if no RemoteClocks update should be made
@@ -532,7 +545,8 @@ func (p *peer) runHeartbeatUntilFailure(
 	// If we get here, we know `connFuture` has been resolved (due to the
 	// initial heartbeat having succeeded), so we have a Conn() we can
 	// use.
-	heartbeatClient := NewHeartbeatClient(p.snap().c.connFuture.Conn())
+	client := p.getHeartbeatClient(
+		&p.opts.Settings.SV, p.snap().c.connFuture.Conn(), p.snap().c.connFuture.DRPCConn())
 
 	for {
 		select {
@@ -548,7 +562,7 @@ func (p *peer) runHeartbeatUntilFailure(
 		}
 
 		if err := runSingleHeartbeat(
-			ctx, heartbeatClient, p.k, p.peerMetrics.roundTripLatency, p.remoteClocks,
+			ctx, client, p.k, p.peerMetrics.roundTripLatency, p.remoteClocks,
 			p.opts, p.heartbeatTimeout, PingRequest_NON_BLOCKING,
 		); err != nil {
 			return err
