@@ -177,7 +177,7 @@ func (rc ReplicaChange) isPromoDemo() bool {
 		rc.prev.ReplicaType.ReplicaType != rc.next.ReplicaType.ReplicaType
 }
 
-func makeLeaseTransferChanges(
+func MakeLeaseTransferChanges(
 	rangeID roachpb.RangeID,
 	existingReplicas []StoreIDAndReplicaState,
 	rLoad RangeLoad,
@@ -243,24 +243,16 @@ func makeLeaseTransferChanges(
 	return [2]ReplicaChange{removeLease, addLease}
 }
 
-// makeAddReplicaChange creates a replica change which adds the replica type
+// MakeAddReplicaChange creates a replica change which adds the replica type
 // to the store addStoreID. The load impact of adding the replica does not
 // account for whether the replica is becoming the leaseholder or not.
-//
-// TODO(kvoli,sumeerbhola): Add promotion/demotion changes.
-//
-// TODO: makeAddReplicaChange and makeRemoveReplicaChange are not quite
-// symmetrical. Former takes a roachpb.ReplicaType parameter and the latter a
-// ReplicaState parameter. Hence the latter knows whether it is a leaseholder,
-// but then ignores whether it is a leaseholder in the loadDelta computation,
-// leaving it to the caller to fix it. We should be doing the correct
-// computation here by accepting a ReplicaState parameter in both cases.
-func makeAddReplicaChange(
+func MakeAddReplicaChange(
 	rangeID roachpb.RangeID,
 	rLoad RangeLoad,
-	rType roachpb.ReplicaType,
+	replicaState ReplicaState,
 	addTarget roachpb.ReplicationTarget,
 ) ReplicaChange {
+	replicaState.ReplicaID = unknownReplicaID
 	addReplica := ReplicaChange{
 		target:  addTarget,
 		rangeID: rangeID,
@@ -269,25 +261,24 @@ func makeAddReplicaChange(
 				ReplicaID: noReplicaID,
 			},
 		},
-		next: ReplicaIDAndType{
-			ReplicaID: unknownReplicaID,
-			ReplicaType: ReplicaType{
-				ReplicaType: rType,
-			},
-		},
+		next: replicaState.ReplicaIDAndType,
 	}
-
+	addReplica.next.ReplicaID = unknownReplicaID
 	addReplica.loadDelta.add(loadVectorToAdd(rLoad.Load))
-	// Set the load delta for CPU to be just the raft CPU. The non-raft CPU we
-	// assume is associated with the lease.
-	addReplica.loadDelta[CPURate] = loadToAdd(rLoad.RaftCPU)
+	if replicaState.IsLeaseholder {
+		addReplica.secondaryLoadDelta[LeaseCount] = 1
+	} else {
+		// Set the load delta for CPU to be just the raft CPU. The non-raft CPU we
+		// assume is associated with the lease.
+		addReplica.loadDelta[CPURate] = loadToAdd(rLoad.RaftCPU)
+	}
 	return addReplica
 }
 
-// makeRemoveReplicaChange creates a replica change which removes the replica
+// MakeRemoveReplicaChange creates a replica change which removes the replica
 // given. The load impact of removing the replica does not account for whether
 // the replica was the previous leaseholder or not.
-func makeRemoveReplicaChange(
+func MakeRemoveReplicaChange(
 	rangeID roachpb.RangeID,
 	rLoad RangeLoad,
 	replicaState ReplicaState,
@@ -302,9 +293,13 @@ func makeRemoveReplicaChange(
 		},
 	}
 	removeReplica.loadDelta.subtract(rLoad.Load)
-	// Set the load delta for CPU to be just the raft CPU. The non-raft CPU we
-	// assume is associated with the lease.
-	removeReplica.loadDelta[CPURate] = -rLoad.RaftCPU
+	if replicaState.IsLeaseholder {
+		removeReplica.secondaryLoadDelta[LeaseCount] = -1
+	} else {
+		// Set the load delta for CPU to be just the raft CPU. The non-raft CPU is
+		// associated with the lease.
+		removeReplica.loadDelta[CPURate] = -rLoad.RaftCPU
+	}
 	return removeReplica
 }
 
@@ -327,28 +322,20 @@ func makeRebalanceReplicaChanges(
 		log.Fatalf(context.Background(), "remove target %s not in existing replicas", removeTarget)
 	}
 
-	addReplicaChange := makeAddReplicaChange(rangeID, rLoad, remove.ReplicaType.ReplicaType, addTarget)
-	removeReplicaChange := makeRemoveReplicaChange(rangeID, rLoad, remove.ReplicaState, removeTarget)
-	if remove.IsLeaseholder {
-		// The existing leaseholder is being removed. The incoming replica will
-		// take the lease load, in addition to the replica load.
-		addReplicaChange.next.IsLeaseholder = true
-		addReplicaChange.loadDelta = LoadVector{}
-		removeReplicaChange.loadDelta = LoadVector{}
-		addReplicaChange.loadDelta.add(loadVectorToAdd(rLoad.Load))
-		removeReplicaChange.loadDelta.subtract(rLoad.Load)
-		addReplicaChange.secondaryLoadDelta[LeaseCount] = 1
-		removeReplicaChange.secondaryLoadDelta[LeaseCount] = -1
+	addState := ReplicaState{
+		ReplicaIDAndType: ReplicaIDAndType{
+			ReplicaID:   unknownReplicaID,
+			ReplicaType: remove.ReplicaType,
+		},
 	}
+	addReplicaChange := MakeAddReplicaChange(rangeID, rLoad, addState, addTarget)
+	removeReplicaChange := MakeRemoveReplicaChange(rangeID, rLoad, remove.ReplicaState, removeTarget)
 	return [2]ReplicaChange{addReplicaChange, removeReplicaChange}
 }
 
 // PendingRangeChange is a proposed set of change(s) to a range. It can consist
 // of multiple pending replica changes, such as adding or removing replicas, or
 // transferring the lease.
-//
-// TODO: The intention is to use these to applying changes by the enacting
-// module.
 type PendingRangeChange struct {
 	RangeID               roachpb.RangeID
 	pendingReplicaChanges []*pendingReplicaChange
@@ -463,6 +450,20 @@ func (prc PendingRangeChange) LeaseTransferTarget() roachpb.StoreID {
 	}
 	for _, c := range prc.pendingReplicaChanges {
 		if !c.prev.IsLeaseholder && c.next.IsLeaseholder {
+			return c.target.StoreID
+		}
+	}
+	panic("unreachable")
+}
+
+// LeaseTransferFrom returns the store ID of the store that is the source of
+// the lease transfer. It panics if the pending range change is not a
+func (prc PendingRangeChange) LeaseTransferFrom() roachpb.StoreID {
+	if !prc.IsTransferLease() {
+		panic("pendingRangeChange is not a lease transfer")
+	}
+	for _, c := range prc.pendingReplicaChanges {
+		if c.prev.IsLeaseholder && !c.next.IsLeaseholder {
 			return c.target.StoreID
 		}
 	}
@@ -1328,7 +1329,14 @@ func (cs *clusterState) applyReplicaChange(change ReplicaChange) {
 	}
 	rangeState, ok := cs.ranges[change.rangeID]
 	if !ok {
-		panic(fmt.Sprintf("range %v not found in cluster state", change.rangeID))
+		// This is the first time encountering this range, we add it to the cluster
+		// state.
+		//
+		// TODO(kvoli): Pass in the range descriptor to construct the range state
+		// here. Currently, when the replica change is a removal this won't work
+		// because the range state will not contain the replica being removed.
+		rangeState = newRangeState()
+		cs.ranges[change.rangeID] = rangeState
 	}
 
 	if change.isRemoval() {

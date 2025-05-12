@@ -138,11 +138,13 @@ func (s *Simulator) StoreAddNotify(storeID state.StoreID, _ state.State) {
 func (s *Simulator) addStore(storeID state.StoreID, tick time.Time) {
 	allocator := s.state.Allocator(storeID)
 	storePool := s.state.StorePool(storeID)
+	store, _ := s.state.Store(storeID)
 	s.rqs[storeID] = queue.NewReplicateQueue(
 		storeID,
 		s.changer,
 		s.settings,
 		allocator,
+		s.state.Node(store.NodeID()).AllocatorSync(),
 		storePool,
 		tick,
 	)
@@ -151,6 +153,7 @@ func (s *Simulator) addStore(storeID state.StoreID, tick time.Time) {
 		s.changer,
 		s.settings,
 		allocator,
+		s.state.Node(store.NodeID()).AllocatorSync(),
 		storePool,
 		tick,
 	)
@@ -191,11 +194,11 @@ func (s *Simulator) addStore(storeID state.StoreID, tick time.Time) {
 	for _, node := range s.state.Nodes() {
 		node.MMAllocator().SetStore(s.state.StoreDescriptors(false, storeID)[0])
 	}
-	store, _ := s.state.Store(storeID)
 	s.mmSRs[storeID] = mmaintegration.NewMMAStoreRebalancer(
 		storeID,
 		store.NodeID(),
 		s.state.Node(store.NodeID()).MMAllocator(),
+		s.state.Node(store.NodeID()).AllocatorSync(),
 		s.controllers[storeID],
 		s.settings,
 	)

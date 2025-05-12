@@ -76,3 +76,34 @@ func MakeStoreLoadMsg(desc roachpb.StoreDescriptor, origTimestampNanos int64) mm
 		LoadTime:      timeutil.FromUnixNanos(origTimestampNanos),
 	}
 }
+
+// UsageInfoToMMALoad converts a RangeUsageInfo to a mma.RangeLoad.
+func UsageInfoToMMALoad(usage RangeUsageInfo) mma.RangeLoad {
+	lv := mma.LoadVector{}
+	lv[mma.CPURate] = mma.LoadValue(usage.RequestCPUNanosPerSecond) + mma.LoadValue(usage.RaftCPUNanosPerSecond)
+	lv[mma.WriteBandwidth] = mma.LoadValue(usage.WriteBytesPerSecond)
+	lv[mma.ByteSize] = mma.LoadValue(usage.LogicalBytes)
+	return mma.RangeLoad{
+		Load:    lv,
+		RaftCPU: mma.LoadValue(usage.RaftCPUNanosPerSecond),
+	}
+}
+
+// ReplicaDescriptorToReplicaIDAndType converts a ReplicaDescriptor to a
+// StoreIDAndReplicaState. The leaseholder store is passed in as lh.
+func ReplicaDescriptorToReplicaIDAndType(
+	desc roachpb.ReplicaDescriptor, lh roachpb.StoreID,
+) mma.StoreIDAndReplicaState {
+	return mma.StoreIDAndReplicaState{
+		StoreID: desc.StoreID,
+		ReplicaState: mma.ReplicaState{
+			ReplicaIDAndType: mma.ReplicaIDAndType{
+				ReplicaID: desc.ReplicaID,
+				ReplicaType: mma.ReplicaType{
+					ReplicaType:   desc.Type,
+					IsLeaseholder: desc.StoreID == lh,
+				},
+			},
+		},
+	}
+}

@@ -84,7 +84,7 @@ US_West
 			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
   actual unavailable=0 under=0, over=0 violating=1 lease-violating=0 lease-less-preferred=0
 violating constraints:
-  r1:{0000000000-9999999999} [(n17,s17):14, (n18,s18):13, (n22,s22):7] applying num_voters=3 voter_constraints=[+region=US_West] lease_preferences=[{[+region=US_West]}]
+  r1:{0000000000-9999999999} [(n18,s18):13, (n17,s17):14, (n21,s21):7] applying num_voters=3 voter_constraints=[+region=US_West] lease_preferences=[{[+region=US_West]}]
 	executed at: 2022-03-21 11:25:00
 		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 voter_constraints:<num_replicas:2 constraints:<key:"region" value:"EU" > > lease_preferences:<constraints:<key:"region" value:"EU" > > 
 	executed at: 2022-03-21 11:30:00

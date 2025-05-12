@@ -397,12 +397,19 @@ func TestClusterState(t *testing.T) {
 							add, remove, _ := parseChangeAddRemove(t, parts[1])
 							addTarget := roachpb.ReplicationTarget{NodeID: cs.stores[add].NodeID, StoreID: add}
 							removeTarget := roachpb.ReplicationTarget{NodeID: cs.stores[remove].NodeID, StoreID: remove}
-							transferChanges := makeLeaseTransferChanges(rangeID, rState.replicas, rState.load, addTarget, removeTarget)
+							transferChanges := MakeLeaseTransferChanges(rangeID, rState.replicas, rState.load, addTarget, removeTarget)
 							changes = append(changes, transferChanges[:]...)
 						case "add-replica":
 							add, _, replType := parseChangeAddRemove(t, parts[1])
+							replState := ReplicaState{
+								ReplicaIDAndType: ReplicaIDAndType{
+									ReplicaType: ReplicaType{
+										ReplicaType: replType,
+									},
+								},
+							}
 							addTarget := roachpb.ReplicationTarget{NodeID: cs.stores[add].NodeID, StoreID: add}
-							changes = append(changes, makeAddReplicaChange(rangeID, rState.load, replType, addTarget))
+							changes = append(changes, MakeAddReplicaChange(rangeID, rState.load, replState, addTarget))
 						case "remove-replica":
 							_, remove, _ := parseChangeAddRemove(t, parts[1])
 							var removeRepl StoreIDAndReplicaState
@@ -412,7 +419,7 @@ func TestClusterState(t *testing.T) {
 								}
 							}
 							removeTarget := roachpb.ReplicationTarget{NodeID: cs.stores[remove].NodeID, StoreID: remove}
-							changes = append(changes, makeRemoveReplicaChange(rangeID, rState.load, removeRepl.ReplicaState, removeTarget))
+							changes = append(changes, MakeRemoveReplicaChange(rangeID, rState.load, removeRepl.ReplicaState, removeTarget))
 						case "rebalance-replica":
 							add, remove, _ := parseChangeAddRemove(t, parts[1])
 							addTarget := roachpb.ReplicationTarget{NodeID: cs.stores[add].NodeID, StoreID: add}
