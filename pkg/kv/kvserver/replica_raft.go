@@ -1041,6 +1041,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		// leader replica, no Ready is emitted. But given that the third
 		// replica has caught up, we can release
 		// some quota back to the pool.
+		r.maybeInitOrResetLastUpdateTimes(lastLeaderID, r.shMu.leaderID /* currentLeaderId */)
 		r.updateProposalQuotaRaftMuLocked(ctx, lastLeaderID)
 		return stats, nil
 	}
@@ -1369,6 +1370,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		// send-queue for the new leaseholder.
 		r.store.scheduler.EnqueueRaftReady(r.RangeID)
 	}
+	r.maybeInitOrResetLastUpdateTimes(lastLeaderID, r.shMu.leaderID /* currentLeaderId */)
 
 	// NB: All early returns other than the one due to not having a ready
 	// which also makes the below call are due to fatal errors.
@@ -3074,6 +3076,31 @@ func (r *Replica) updateLastUpdateTimesUsingStoreLivenessRLocked(
 		if storeClockTimestamp.ToTimestamp().LessEq(curExp) {
 			r.mu.lastUpdateTimes.update(desc.ReplicaID, r.Clock().PhysicalTime())
 		}
+	}
+}
+
+// maybeInitOrResetLastUpdateTimes initializes or resets the lastUpdateTimes
+// on leadership changes.
+func (r *Replica) maybeInitOrResetLastUpdateTimes(
+	lastLeaderID roachpb.ReplicaID, currentLeaderId roachpb.ReplicaID,
+) {
+	if lastLeaderID == currentLeaderId {
+		// There has been no leadership change, so we don't need to do anything.
+		return
+	}
+
+	// Only on leadership changes we take the replica mutex and initialize or
+	// reset the lastUpdateTimes map.
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.replicaID == currentLeaderId {
+		// We are the new leader, initialize the lastUpdateTimes map.
+		r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
+		r.mu.lastUpdateTimes.updateOnBecomeLeader(r.shMu.state.Desc.Replicas().Descriptors(),
+			r.Clock().PhysicalTime())
+	} else {
+		// We're becoming a follower, reset the lastUpdateTimes map.
+		r.mu.lastUpdateTimes = nil
 	}
 }
 
