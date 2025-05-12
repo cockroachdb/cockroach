@@ -760,6 +760,19 @@ INSERT INTO ins VALUES (13) RETURNING (SELECT k FROM other);
 ----
 99
 
+statement ok
+CREATE FUNCTION insert_15(n INT) RETURNS INT AS $$
+  INSERT INTO ins VALUES (15) RETURNING n;
+$$ LANGUAGE SQL
+
+query I
+SELECT insert_15(0)
+----
+0
+
+statement ok
+DROP FUNCTION insert_15
+
 # Verify that only rows that pass the USING expression are allowed (even numbers).
 statement ok
 INSERT INTO ins VALUES (2),(4) RETURNING c1;
@@ -4721,7 +4734,7 @@ SELECT * FROM employees
 statement error pq: new row violates row-level security policy for table "employees"
 INSERT INTO employees (id, name, department) VALUES (3, 'Eve', 'Engineering')
 
-# Test UPDATE with role inheritance - should succeed, 
+# Test UPDATE with role inheritance - should succeed,
 # but the update will not go as the default with ENABLED ROW LEVEL SECURITY.
 statement ok
 UPDATE employees SET name = 'Alice 2.0' WHERE name = 'Alice'
@@ -4935,7 +4948,7 @@ CREATE TRIGGER force_bob_ownership
   FOR EACH ROW
   EXECUTE FUNCTION change_owner_to_bob();
 
-# Try to insert a row - this should fail because the trigger modifies 
+# Try to insert a row - this should fail because the trigger modifies
 # the owner to 'bob' which violates alice's RLS policy.
 statement error pq: new row violates row-level security policy for table "trigger_rls_table"
 INSERT INTO trigger_rls_table VALUES (9, 900, 'alice');
