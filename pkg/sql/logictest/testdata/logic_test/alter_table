@@ -36,7 +36,6 @@ ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS foo UNIQUE (b)
 statement ok
 ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS foo UNIQUE (f)
 
-skipif config local-schema-locked
 query TTTRT
 SELECT description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
@@ -45,16 +44,6 @@ ORDER BY created DESC
 LIMIT 1
 ----
 ALTER TABLE test.public.t ADD CONSTRAINT foo UNIQUE (b)  root  succeeded  1  ·
-
-onlyif config local-schema-locked
-query TTTRT
-SELECT description, user_name, status, fraction_completed, error
-FROM crdb_internal.jobs
-WHERE job_type in ('NEW SCHEMA CHANGE', 'SCHEMA CHANGE')
-ORDER BY created DESC
-LIMIT 1
-----
-ALTER TABLE test.public.t ADD CONSTRAINT IF NOT EXISTS foo UNIQUE (f)  root  succeeded  1  ·
 
 statement error pgcode 42P07 .* name \"foo\" already exists
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
