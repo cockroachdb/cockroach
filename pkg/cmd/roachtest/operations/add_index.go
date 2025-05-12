@@ -58,16 +58,14 @@ func runAddIndex(
 		o.Fatal(err)
 	}
 
-	rows, err := conn.QueryContext(ctx, fmt.Sprintf(
-		`
+	rows, err := conn.QueryContext(ctx, fmt.Sprintf(`
 SELECT
 	attname, atttypid
 FROM
 	pg_catalog.pg_attribute
 WHERE
 	attrelid = '%s.%s'::REGCLASS::OID;
-`,
-		dbName, tableName))
+`, dbName, tableName))
 	if err != nil {
 		o.Fatal(err)
 	}
@@ -107,20 +105,48 @@ WHERE
 	}
 
 	indexName := fmt.Sprintf("add_index_op_%d", rng.Uint32())
-	o.Status(fmt.Sprintf("adding index to column %s in table %s.%s %s", colName, dbName, tableName, predicateClause))
-	// 50% chance to create a hash index
+
+	// Determine whether to use an inverted index based on the column's type.
+	// Inverted indexes are supported on JSON, ARRAY, GEOGRAPHY, GEOMETRY, and some STRING types.
+	// If eligible, we apply a 50% chance of choosing to create an inverted index.
 	indexUsingClause := ""
-	if rng.Intn(2) == 0 {
+	if typ, exists := types.OidToType[colType]; exists {
+		if typ.Family() == types.ArrayFamily ||
+			typ.Family() == types.JsonFamily ||
+			typ.Family() == types.GeographyFamily ||
+			typ.Family() == types.GeometryFamily ||
+			typ.Family() == types.StringFamily {
+			if rng.Intn(2) == 0 {
+				indexUsingClause = "INVERTED"
+			}
+		}
+	}
+	// Fallback to hash index randomly if not inverted
+	if indexUsingClause == "" && rng.Intn(2) == 0 {
 		indexUsingClause = "USING HASH "
 	}
-	createIndexStmt := fmt.Sprintf("CREATE INDEX %s ON %s.%s %s(%s) %s",
-		indexName,
-		dbName,
-		tableName,
-		indexUsingClause,
-		colName,
-		predicateClause,
-	)
+
+	o.Status(fmt.Sprintf("adding index %s on %s.%s (column %s) %s", indexName, dbName, tableName, colName, predicateClause))
+
+	var createIndexStmt string
+	if indexUsingClause == "INVERTED" {
+		createIndexStmt = fmt.Sprintf("CREATE INVERTED INDEX %s ON %s.%s (%s) %s",
+			indexName,
+			dbName,
+			tableName,
+			colName,
+			predicateClause,
+		)
+	} else {
+		createIndexStmt = fmt.Sprintf("CREATE INDEX %s ON %s.%s %s(%s) %s",
+			indexName,
+			dbName,
+			tableName,
+			indexUsingClause,
+			colName,
+			predicateClause,
+		)
+	}
 
 	_, err = conn.ExecContext(ctx, createIndexStmt)
 	if err != nil {
