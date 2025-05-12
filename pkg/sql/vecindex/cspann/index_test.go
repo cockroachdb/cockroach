@@ -7,13 +7,11 @@ package cspann_test
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"fmt"
 	"math"
 	"math/rand"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -46,6 +43,9 @@ func TestIndex(t *testing.T) {
 	ctx := context.Background()
 	state := testState{T: t, Ctx: ctx, Stopper: stop.NewStopper()}
 	defer state.Stopper.Stop(ctx)
+
+	// Load test dataset.
+	state.Dataset = testutils.LoadDataset(t, testutils.ImagesDataset)
 
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
 		if regexp.MustCompile("/.+/").MatchString(path) {
@@ -138,7 +138,7 @@ type testState struct {
 	MemStore  *memstore.Store
 	Index     *cspann.Index
 	Options   cspann.IndexOptions
-	Features  vector.Set
+	Dataset   vector.Set
 
 	// Parse args.
 	TreeKey       cspann.TreeKey
@@ -198,8 +198,8 @@ func (s *testState) Search(d *datadriven.TestData) string {
 
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
-		case "use-feature":
-			vec = s.parseUseFeature(arg)
+		case "use-dataset":
+			vec = s.parseUseDataset(arg)
 
 		case "max-results":
 			searchSet.MaxResults = s.parseInt(arg)
@@ -257,8 +257,8 @@ func (s *testState) SearchForInsert(d *datadriven.TestData) string {
 
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
-		case "use-feature":
-			vec = s.parseUseFeature(arg)
+		case "use-dataset":
+			vec = s.parseUseDataset(arg)
 		}
 	}
 
@@ -328,7 +328,7 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 	count := 0
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
-		case "load-features":
+		case "load-embeddings":
 			count = s.parseInt(arg)
 
 		case "hide-tree":
@@ -339,9 +339,7 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 	vectors := vector.MakeSet(s.Quantizer.GetDims())
 	childKeys := make([]cspann.ChildKey, 0, count)
 	if count != 0 {
-		// Load features.
-		s.Features = testutils.LoadFeatures(s.T, 10000)
-		vectors = s.Features
+		vectors = s.Dataset
 		vectors.SplitAt(count)
 		for i := range count {
 			key := cspann.KeyBytes(fmt.Sprintf("vec%d", i))
@@ -476,7 +474,7 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 	var err error
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
-		case "use-feature":
+		case "use-dataset":
 			// Use single designated sample.
 			offset := s.parseInt(arg)
 			numSamples = 1
@@ -497,12 +495,18 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 	}
 
 	data := s.MemStore.GetAllVectors()
+	dataVectors := vector.MakeSet(s.Dataset.Dims)
+	dataKeys := make([]string, len(data))
+	for i := range len(data) {
+		dataVectors.Add(data[i].Vector)
+		dataKeys[i] = string(data[i].Key.KeyBytes)
+	}
 
-	// Construct list of feature offsets.
+	// Construct list of offsets into the dataset.
 	if samples == nil {
-		// Shuffle the remaining features.
+		// Shuffle the remaining dataset vectors.
 		rng := rand.New(rand.NewSource(int64(seed)))
-		remaining := make([]int, s.Features.Count-len(data))
+		remaining := make([]int, s.Dataset.Count-len(data))
 		for i := range remaining {
 			remaining[i] = i
 		}
@@ -515,54 +519,32 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 		copy(samples, remaining[:numSamples])
 	}
 
-	// calcTruth calculates the true nearest neighbors for the query vector.
-	calcTruth := func(queryVector vector.T, data []cspann.VectorWithKey) []cspann.KeyBytes {
-		distances := make([]float32, len(data))
-		offsets := make([]int, len(data))
-		for i := range len(data) {
-			distances[i] = num32.L2SquaredDistance(queryVector, data[i].Vector)
-			offsets[i] = i
-		}
-		sort.SliceStable(offsets, func(i int, j int) bool {
-			res := cmp.Compare(distances[offsets[i]], distances[offsets[j]])
-			if res != 0 {
-				return res < 0
-			}
-			return data[offsets[i]].Key.Compare(data[offsets[j]].Key) < 0
-		})
-
-		truth := make([]cspann.KeyBytes, searchSet.MaxResults)
-		for i := range len(truth) {
-			truth[i] = data[offsets[i]].Key.KeyBytes
-		}
-		return truth
-	}
-
-	// Search for sampled features within a transaction.
-	var sumMAP float64
+	// Search for sampled dataset vectors within a transaction.
+	var sumRecall float64
 	commontest.RunTransaction(s.Ctx, s.T, s.MemStore, func(txn cspann.Txn) {
 		var idxCtx cspann.Context
 		idxCtx.Init(txn)
 		for i := range samples {
 			// Calculate truth set for the vector.
-			queryVector := s.Features.At(samples[i])
-			truth := calcTruth(queryVector, data)
+			queryVector := s.Dataset.At(samples[i])
+			truth := testutils.CalculateTruth(
+				searchSet.MaxResults, vecdist.L2Squared, queryVector, dataVectors, dataKeys)
 
 			// Calculate prediction set for the vector.
 			err = s.Index.Search(s.Ctx, &idxCtx, s.TreeKey, queryVector, &searchSet, options)
 			require.NoError(s.T, err)
 			results := searchSet.PopResults()
 
-			prediction := make([]cspann.KeyBytes, searchSet.MaxResults)
-			for res := 0; res < len(results); res++ {
-				prediction[res] = results[res].ChildKey.KeyBytes
+			prediction := make([]string, searchSet.MaxResults)
+			for res := range len(results) {
+				prediction[res] = string(results[res].ChildKey.KeyBytes)
 			}
 
-			sumMAP += findMAP(prediction, truth)
+			sumRecall += testutils.CalculateRecall(prediction, truth)
 		}
 	})
 
-	recall := sumMAP / float64(numSamples) * 100
+	recall := sumRecall / float64(numSamples) * 100
 	quantizedLeafVectors := float64(searchSet.Stats.QuantizedLeafVectorCount) / float64(numSamples)
 	quantizedVectors := float64(searchSet.Stats.QuantizedVectorCount) / float64(numSamples)
 	fullVectors := float64(searchSet.Stats.FullVectorCount) / float64(numSamples)
@@ -710,8 +692,8 @@ func (s *testState) parseTreeID(arg datadriven.CmdArg) cspann.TreeKey {
 	return memstore.ToTreeKey(memstore.TreeID(s.parseInt(arg)))
 }
 
-func (s *testState) parseUseFeature(arg datadriven.CmdArg) vector.T {
-	return s.Features.At(s.parseInt(arg))
+func (s *testState) parseUseDataset(arg datadriven.CmdArg) vector.T {
+	return s.Dataset.At(s.parseInt(arg))
 }
 
 // parseVector parses a vector string in this form: (1.5, 6, -4).
@@ -868,30 +850,6 @@ func parsePartitionStateDetails(s string) cspann.PartitionStateDetails {
 	return details
 }
 
-// findMAP returns mean average precision, which compares a set of predicted
-// results with the true set of results. Both sets are expected to be of equal
-// length. It returns the percentage overlap of the predicted set with the truth
-// set.
-func findMAP(prediction, truth []cspann.KeyBytes) float64 {
-	if len(prediction) != len(truth) {
-		panic(errors.AssertionFailedf("prediction and truth sets are not same length"))
-	}
-
-	predictionMap := make(map[string]bool, len(prediction))
-	for _, p := range prediction {
-		predictionMap[string(p)] = true
-	}
-
-	var intersect float64
-	for _, t := range truth {
-		_, ok := predictionMap[string(t)]
-		if ok {
-			intersect++
-		}
-	}
-	return intersect / float64(len(truth))
-}
-
 func TestRandomizeVector(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -961,19 +919,20 @@ func TestIndexConcurrency(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	// Load features.
-	const featureCount = 128
-	features := testutils.LoadFeatures(t, featureCount)
+	// Load dataset.
+	dataset := testutils.LoadDataset(t, testutils.ImagesDataset)
 
-	// Trim feature dimensions from 512 to 64, in order to make the test run
-	// faster and hit more interesting concurrency combinations.
+	// Trim dataset count from 10k to 128 and dataset dimensions from 512 to 64,
+	// in order to make the test run faster and hit more interesting concurrency
+	// combinations.
+	const vectorCount = 128
 	const dims = 64
 	vectors := vector.MakeSet(dims)
 
-	primaryKeys := make([]cspann.KeyBytes, features.Count)
-	for i := range features.Count {
+	primaryKeys := make([]cspann.KeyBytes, vectorCount)
+	for i := range vectorCount {
 		primaryKeys[i] = cspann.KeyBytes(fmt.Sprintf("vec%d", i))
-		vectors.Add(features.At(i)[:dims])
+		vectors.Add(dataset.At(i)[:dims])
 	}
 
 	for i := range 10 {

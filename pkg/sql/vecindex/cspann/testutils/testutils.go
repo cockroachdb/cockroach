@@ -6,26 +6,53 @@
 package testutils
 
 import (
+	"cmp"
 	"encoding/gob"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
 	"gonum.org/v1/gonum/floats/scalar"
 )
 
-// LoadFeatures loads up to 10K 512 dimension float32 unit vectors that are laid
-// out contiguously in row-wise order. These vectors are OpenAI embeddings of
-// images. If count < 10K, then a subset of the features are returned.
-func LoadFeatures(t testing.TB, count int) vector.Set {
+// DbpediaDataset consists of 1K 1536 dimension float32 vectors. Each vector is
+// an embedding from the DBpedia knowledge base, created using an OpenAI text
+// embedding model.
+const DbpediaDataset = "dbpedia-1536d-1k.gob"
+
+// LaionDataset consists of 1K 768 dimension float32 vectors. Each vector is
+// an embedding from the open source Laion image dataset, created using an
+// OpenAI image embedding model.
+const LaionDataset = "laion-768d-1k.gob"
+
+// FashionDataset consists of 10K 784 dimension float32 vectors. Each vector is
+// a 28x28 greyscale image (flattened to 784 dimensions) of clothing items, with
+// pixel values ranging from 0 to 255.
+const FashionDataset = "fashion-784d-10k.gob"
+
+// RandomDataset consists of 1K 20 dimension float32 vectors. Each vector was
+// randomly generated, with floating-point coordinates ranging between roughly
+// -14 to +14
+const RandomDataset = "random-20d-1k.gob"
+
+// ImagesDataset consists of 10K 512 dimension float32 vectors. Each vector is
+// an embedding of an image, created using an OpenAI image embedding model.
+const ImagesDataset = "images-512d-10k.gob"
+
+// LoadDataset loads a pre-built dataset serialized as a vector.Set in a .gob
+// file on disk. This is useful for testing. See the dataset name constants for
+// descriptions of the available datasets (e.g. LaionDataset).
+func LoadDataset(t testing.TB, datasetName string) vector.Set {
 	var filePath string
 	if bazel.BuiltWithBazel() {
-		runfile, err := bazel.Runfile("pkg/sql/vecindex/cspann/testdata/features_10000.gob")
+		runfile, err := bazel.Runfile("pkg/sql/vecindex/cspann/testdata/" + datasetName)
 		require.NoError(t, err)
 		filePath = runfile
 	} else {
@@ -33,9 +60,9 @@ func LoadFeatures(t testing.TB, count int) vector.Set {
 		_, testFile, _, ok := runtime.Caller(0)
 		require.True(t, ok)
 
-		// Point to the features file.
+		// Point to the dataset file.
 		parentDir := filepath.Dir(testFile)
-		filePath = filepath.Join(parentDir, "..", "testdata", "features_10000.gob")
+		filePath = filepath.Join(parentDir, "..", "testdata", datasetName)
 	}
 
 	f, err := os.Open(filePath)
@@ -43,11 +70,10 @@ func LoadFeatures(t testing.TB, count int) vector.Set {
 	defer f.Close()
 
 	decoder := gob.NewDecoder(f)
-	var data []float32
-	err = decoder.Decode(&data)
+	var vectors vector.Set
+	err = decoder.Decode(&vectors)
 	require.NoError(t, err)
-
-	return vector.MakeSetFromRawData(data[:count*512], 512)
+	return vectors
 }
 
 // RoundFloat rounds the given float32 value using the given precision.
@@ -72,4 +98,50 @@ func NormalizeSlice[T any](s []T) []T {
 		return []T(nil)
 	}
 	return s
+}
+
+// CalculateTruth calculates the top k true nearest data vectors for the given
+// query vector. It returns the keys of the top k results, sorted by distance.
+func CalculateTruth[T comparable](
+	k int, distanceMetric vecdist.Metric, queryVector vector.T, dataVectors vector.Set, dataKeys []T,
+) []T {
+	distances := make([]float32, dataVectors.Count)
+	offsets := make([]int, dataVectors.Count)
+	for i := range dataVectors.Count {
+		distances[i] = vecdist.Measure(distanceMetric, queryVector, dataVectors.At(i))
+		offsets[i] = i
+	}
+	sort.SliceStable(offsets, func(i int, j int) bool {
+		res := cmp.Compare(distances[offsets[i]], distances[offsets[j]])
+		if res != 0 {
+			return res < 0
+		}
+		// Break ties with offsets.
+		return offsets[i] < offsets[j]
+	})
+
+	truth := make([]T, k)
+	for i, offset := range offsets[:k] {
+		truth[i] = dataKeys[offset]
+	}
+	return truth
+}
+
+// CalculateRecall returns the percentage overlap of the predicted set with the
+// truth set. If the predicted set has fewer items than the truth set, it is
+// treated as if the predicted set has missing/incorrect items that reduce the
+// recall rate. Keys in the sets must be comparable.
+func CalculateRecall[T comparable](prediction, truth []T) float64 {
+	predictionMap := make(map[T]struct{}, len(prediction))
+	for _, p := range prediction {
+		predictionMap[p] = struct{}{}
+	}
+
+	var intersect float64
+	for _, t := range truth {
+		if _, ok := predictionMap[t]; ok {
+			intersect++
+		}
+	}
+	return intersect / float64(len(truth))
 }

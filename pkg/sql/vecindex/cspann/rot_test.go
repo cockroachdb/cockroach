@@ -70,7 +70,7 @@ func TestRandomOrthoTransformer(t *testing.T) {
 		for _, a := range algos {
 			t.Run(tc.name+"_"+a.name, func(t *testing.T) {
 				dims := len(tc.vec)
-				var rot randomOrthoTransformer
+				var rot RandomOrthoTransformer
 				rot.Init(a.algo, dims, seed)
 
 				// Transform the vectors.
@@ -131,7 +131,7 @@ func TestRandomOrthoTransformer_SkewedVectors(t *testing.T) {
 	// random orthogonal transformation spreads the input skew across all
 	// dimensions.
 	calculateCV := func(algo RotAlgorithm) float64 {
-		var rot randomOrthoTransformer
+		var rot RandomOrthoTransformer
 		rot.Init(algo, dims, seed)
 
 		// Transform all vectors.

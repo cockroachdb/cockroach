@@ -50,16 +50,17 @@ func TestVecIndexConcurrency(t *testing.T) {
 	// Enable vector indexes.
 	runner.Exec(t, `SET CLUSTER SETTING feature.vector_index.enabled = true`)
 
-	// Load features.
-	const featureCount = 2000
-	features := testutils.LoadFeatures(t, featureCount)
+	// Load 512d image embedding dataset.
+	dataset := testutils.LoadDataset(t, testutils.ImagesDataset)
 
-	// Trim feature dimensions from 512 to 64, in order to make the test run
-	// faster and hit more interesting concurrency combinations.
+	// Trim dataset count from 10K to 2K and dimensions from 512 to 64, in order
+	// to make the test run faster and hit more interesting concurrency
+	// combinations.
+	const vectorCount = 2000
 	const dims = 64
 	vectors := vector.MakeSet(dims)
-	for i := range features.Count {
-		vectors.Add(features.At(i)[:dims])
+	for i := range vectorCount {
+		vectors.Add(dataset.At(i)[:dims])
 	}
 
 	// Construct the table. Use small partition size so that the tree has more
@@ -120,7 +121,7 @@ func TestVecIndexConcurrency(t *testing.T) {
 		// Keep looping until we've inserted all vectors and until enough splits
 		// have occurred.
 		if int(insertCount.Load()) >= vectors.Count {
-			if int(metrics.SuccessfulSplits.Count()) >= featureCount/maxPartitionSize {
+			if int(metrics.SuccessfulSplits.Count()) >= vectors.Count/maxPartitionSize {
 				break
 			}
 		}
@@ -193,10 +194,11 @@ func TestVecIndexStandbyReader(t *testing.T) {
 	// Construct the table.
 	srcRunner.Exec(t, "CREATE TABLE t (id INT PRIMARY KEY, v VECTOR(512), VECTOR INDEX foo (v))")
 
-	// Load features and build the index.
+	// Load dataset and build the index.
 	const batchSize = 10
 	const numBatches = 100
-	vectors := testutils.LoadFeatures(t, batchSize*numBatches)
+	vectors := testutils.LoadDataset(t, testutils.ImagesDataset)
+	vectors = vectors.Slice(0, batchSize*numBatches)
 	for i := 0; i < numBatches; i++ {
 		insertVectors(t, srcRunner, i*batchSize, vectors.Slice(i*batchSize, batchSize))
 	}
@@ -251,7 +253,8 @@ func TestVecIndexDeletion(t *testing.T) {
 	runner.Exec(t, "CREATE TABLE t (id INT PRIMARY KEY, v VECTOR(512), VECTOR INDEX (v))")
 
 	// Load a small set of vectors for testing.
-	vectors := testutils.LoadFeatures(t, 10)
+	vectors := testutils.LoadDataset(t, testutils.ImagesDataset)
+	vectors = vectors.Slice(0, 10)
 
 	// Insert the vectors.
 	for i := 0; i < vectors.Count; i++ {
