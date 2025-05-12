@@ -970,6 +970,32 @@ func shouldSkipValidatingConstraint(
 	return skip, err
 }
 
+// maybeCleanupSchemaLocked will clean up any schema_locked elements if the
+// statement turns out to be idempotent.
+func maybeCleanupSchemaLocked(b BuildCtx, id catid.DescID) {
+	elts := b.QueryByID(id)
+
+	var schemaLocked *scpb.TableSchemaLocked
+	var keepSchemaLocked bool
+	// Detect any non-schema locked elements for this table that are
+	// being modified. If non-exist then the schema_locked element will be
+	// deleted.
+	elts.ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		if target == scpb.InvalidTarget {
+			return
+		}
+		var ok bool
+		if schemaLocked, ok = e.(*scpb.TableSchemaLocked); ok {
+			return
+		}
+		keepSchemaLocked = true
+	})
+	// This schema change was a no-op, so schema_locked doesn't matter.
+	if !keepSchemaLocked {
+		b.Drop(schemaLocked)
+	}
+}
+
 // checkTableSchemaChangePrerequisites checks any pre-requisites before a table
 // schema change is allowed. This function panics if a schema change is not
 // allowed on this table. A schema change is disallowed if one of the following
@@ -983,8 +1009,10 @@ func shouldSkipValidatingConstraint(
 // in a transient manner, allowing it to restore after the schema change.
 func checkTableSchemaChangePrerequisites(
 	b BuildCtx, tableElements ElementResultSet, n tree.Statement,
-) {
+) (maybeCleanupSchemaLockedFn func()) {
 	schemaLocked := tableElements.FilterTableSchemaLocked().MustGetZeroOrOneElement()
+	// No-op by default unless schema_locked has been setup.
+	maybeCleanupSchemaLockedFn = func() {}
 	if schemaLocked != nil && !tree.IsSetOrResetSchemaLocked(n) {
 		// Before 25.2 we don't support auto-unsetting schema locked.
 		if !b.ClusterSettings().Version.IsActive(b, clusterversion.V25_2) {
@@ -993,6 +1021,9 @@ func checkTableSchemaChangePrerequisites(
 		}
 		// Unset schema_locked for the user.
 		b.DropTransient(schemaLocked)
+		maybeCleanupSchemaLockedFn = func() {
+			maybeCleanupSchemaLocked(b, tableElements.FilterTable().MustGetOneElement().TableID)
+		}
 	}
 	_, _, ldrJobIDs := scpb.FindLDRJobIDs(tableElements)
 	if ldrJobIDs != nil && len(ldrJobIDs.JobIDs) > 0 {
@@ -1016,6 +1047,7 @@ func checkTableSchemaChangePrerequisites(
 			panic(sqlerrors.NewDisallowedSchemaChangeOnLDRTableErr(ns.Name, ldrJobIDs.JobIDs))
 		}
 	}
+	return maybeCleanupSchemaLockedFn
 }
 
 // panicIfSystemColumn blocks alter operations on system columns.
