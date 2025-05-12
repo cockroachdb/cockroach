@@ -31,8 +31,6 @@ type drpcServer struct {
 
 // newDRPCServer creates and configures a new drpcServer instance. It enables
 // DRPC if the experimental setting is on, otherwise returns a dummy server.
-//
-// TODO: Register DRPC Heartbeat service
 func newDRPCServer(ctx context.Context, rpcCtx *rpc.Context) (*drpcServer, error) {
 	drpcServer := &drpcServer{}
 	if rpc.ExperimentalDRPCEnabled.Get(&rpcCtx.Settings.SV) {
@@ -54,6 +52,10 @@ func newDRPCServer(ctx context.Context, rpcCtx *rpc.Context) (*drpcServer, error
 
 	drpcServer.tlsCfg = tlsCfg
 	drpcServer.setMode(modeInitializing)
+
+	if err := rpc.DRPCRegisterHeartbeat(drpcServer, rpcCtx.NewHeartbeatService()); err != nil {
+		return nil, err
+	}
 
 	return drpcServer, nil
 }
