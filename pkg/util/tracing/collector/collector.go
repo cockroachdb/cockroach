@@ -147,7 +147,7 @@ func (t *TraceCollector) getTraceSpanRecordingsForInstance(
 	ctx context.Context, traceID tracingpb.TraceID, instanceID base.SQLInstanceID,
 ) []tracingpb.Recording {
 	log.Infof(ctx, "getting span recordings from instance %s", instanceID)
-	conn, err := t.dialer.Dial(ctx, roachpb.NodeID(instanceID), rpc.DefaultClass)
+	conn, _, err := t.dialer.Dial(ctx, roachpb.NodeID(instanceID), rpc.DefaultClass)
 	if err != nil {
 		log.Warningf(ctx, "failed to dial instance %s: %v", instanceID, err)
 		return nil

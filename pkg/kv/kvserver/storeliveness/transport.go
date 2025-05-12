@@ -283,7 +283,7 @@ func (t *Transport) startProcessNewQueue(
 			log.Fatalf(ctx, "queue for n%d does not exist", toNodeID)
 		}
 		defer cleanup()
-		conn, err := t.dialer.Dial(ctx, toNodeID, connClass)
+		conn, _, err := t.dialer.Dial(ctx, toNodeID, connClass)
 		if err != nil {
 			// DialNode already logs sufficiently, so just return.
 			return

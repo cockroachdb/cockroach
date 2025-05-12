@@ -200,7 +200,7 @@ func NewBlobClientFactory(
 		if localNodeID == dialTarget && allowLocalFastpath {
 			return NewLocalClient(externalIODir)
 		}
-		conn, err := dialer.Dial(ctx, dialTarget, rpc.DefaultClass)
+		conn, _, err := dialer.Dial(ctx, dialTarget, rpc.DefaultClass)
 		if err != nil {
 			return nil, errors.Wrapf(err, "connecting to node %d", dialTarget)
 		}

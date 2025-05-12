@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
 	"storj.io/drpc/drpcpool"
 )
 
@@ -88,21 +89,21 @@ var _ = (*Dialer).Stopper
 // node first becomes unreachable or reachable.
 func (n *Dialer) Dial(
 	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
-) (_ *grpc.ClientConn, err error) {
+) (*grpc.ClientConn, drpc.Conn, error) {
 	if n == nil || n.resolver == nil {
-		return nil, errors.New("no node dialer configured")
+		return nil, nil, errors.New("no node dialer configured")
 	}
 	// Don't trip the breaker if we're already canceled.
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		return nil, errors.Wrap(ctxErr, "dial")
+		return nil, nil, errors.Wrap(ctxErr, "dial")
 	}
 	addr, locality, err := n.resolver(nodeID)
 	if err != nil {
 		err = errors.Wrapf(err, "failed to resolve n%d", nodeID)
-		return nil, err
+		return nil, nil, err
 	}
-	conn, _, _, _, err := n.dial(ctx, nodeID, addr, locality, true, class)
-	return conn, err
+	conn, _, dconn, _, err := n.dial(ctx, nodeID, addr, locality, true, class)
+	return conn, dconn, err
 }
 
 // DialNoBreaker is like Dial, but will not check the circuit breaker before

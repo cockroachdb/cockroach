@@ -269,7 +269,7 @@ type ConsistencyCheckResult struct {
 func (r *Replica) collectChecksumFromReplica(
 	ctx context.Context, replica roachpb.ReplicaDescriptor, id uuid.UUID,
 ) (CollectChecksumResponse, error) {
-	conn, err := r.store.cfg.NodeDialer.Dial(ctx, replica.NodeID, rpc.DefaultClass)
+	conn, _, err := r.store.cfg.NodeDialer.Dial(ctx, replica.NodeID, rpc.DefaultClass)
 	if err != nil {
 		return CollectChecksumResponse{},
 			errors.Wrapf(err, "could not dial node ID %d", replica.NodeID)

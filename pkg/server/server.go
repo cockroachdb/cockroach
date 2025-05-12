@@ -651,6 +651,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		clock,
 		kvNodeDialer,
 		grpcServer.Server,
+		grpcServer.drpc,
 		admissionControl.kvflowTokenDispatch,
 		admissionControl.storesFlowControl,
 		admissionControl.storesFlowControl,
