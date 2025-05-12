@@ -227,7 +227,7 @@ func (g *gossip) maybeUpdateState(tick time.Time, s state.State) {
 		updateMap[update.Desc.StoreID] = update
 	}
 
-	for _, store := range s.Stores() {
-		s.UpdateStorePool(store.StoreID(), updateMap)
+	for _, node := range s.Nodes() {
+		s.UpdateStorePool(node.NodeID(), updateMap)
 	}
 }
