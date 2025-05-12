@@ -18,12 +18,13 @@ import (
 // maybeRateLimitBatch may block the batch waiting to be rate-limited. Note that
 // the replica must be initialized and thus there is no synchronization issue
 // on the tenantRateLimiter.
-func (r *Replica) maybeRateLimitBatch(ctx context.Context, ba *kvpb.BatchRequest) error {
+func (r *Replica) maybeRateLimitBatch(
+	ctx context.Context, ba *kvpb.BatchRequest, tenantIDOrZero roachpb.TenantID,
+) error {
 	if r.tenantLimiter == nil {
 		return nil
 	}
-	tenantID, ok := roachpb.ClientTenantFromContext(ctx)
-	if !ok || tenantID == roachpb.SystemTenantID {
+	if !tenantIDOrZero.IsSet() || tenantIDOrZero.IsSystem() {
 		return nil
 	}
 

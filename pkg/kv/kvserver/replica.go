@@ -2725,6 +2725,12 @@ func init() {
 func (r *Replica) MeasureReqCPUNanos(start time.Duration) {
 	r.measureNanosRunning(start, func(dur float64) {
 		r.loadStats.RecordReqCPUNanos(dur)
+		// NB: the caller also has a tenant ID, but we use the replica's here for
+		// simplicity. There is no established pattern for short-lived references
+		// to a specific tenant's metrics.
+		if m, ok := r.store.metrics.getTenantLenient(r.tenantMetricsRef); ok {
+			m.ReqCPUNanos.Inc(dur)
+		}
 	})
 }
 

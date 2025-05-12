@@ -231,6 +231,13 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
+	metaReqCPUNanos = metric.Metadata{
+		Name:        "replicas.cpunanospersecond",
+		Help:        "Nanoseconds of CPU time in Replica request processing including evaluation but not replication",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
 	// Storage metrics.
 	metaLiveBytes = metric.Metadata{
 		Name:        "livebytes",
@@ -3102,8 +3109,12 @@ type tenantMetricsRef struct {
 	}
 }
 
+func (ref *tenantMetricsRef) finished() bool {
+	return atomic.LoadInt32(&ref._state) != 0
+}
+
 func (ref *tenantMetricsRef) assert(ctx context.Context) {
-	if atomic.LoadInt32(&ref._state) != 0 {
+	if ref.finished() {
 		ref._stack.Lock()
 		defer ref._stack.Unlock()
 		log.FatalfDepth(ctx, 1, "tenantMetricsRef already finalized in:\n%s", ref._stack.SafeStack)
@@ -3118,6 +3129,7 @@ func (ref *tenantMetricsRef) assert(ctx context.Context) {
 type TenantsStorageMetrics struct {
 	// NB: If adding more metrics to this struct, be sure to
 	// also update tenantsStorageMetricsSet().
+	ReqCPUNanos    *aggmetric.AggCounterFloat64
 	LiveBytes      *aggmetric.AggGauge
 	KeyBytes       *aggmetric.AggGauge
 	ValBytes       *aggmetric.AggGauge
@@ -3154,6 +3166,7 @@ type TenantsStorageMetrics struct {
 // see kvbase.TenantsStorageMetricsSet for public access. Assigned in init().
 func tenantsStorageMetricsSet() map[string]struct{} {
 	return map[string]struct{}{
+		metaReqCPUNanos.Name:    {},
 		metaLiveBytes.Name:      {},
 		metaKeyBytes.Name:       {},
 		metaValBytes.Name:       {},
@@ -3218,6 +3231,7 @@ func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) *tenan
 			// Successfully stored a new instance, initialize it and then unlock it.
 			tenantIDStr := tenantID.String()
 			m.mu.refCount++
+			m.ReqCPUNanos = sm.ReqCPUNanos.AddChild(tenantIDStr)
 			m.LiveBytes = sm.LiveBytes.AddChild(tenantIDStr)
 			m.KeyBytes = sm.KeyBytes.AddChild(tenantIDStr)
 			m.ValBytes = sm.ValBytes.AddChild(tenantIDStr)
@@ -3305,12 +3319,23 @@ func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, ref *tenantM
 func (sm *TenantsStorageMetrics) getTenant(
 	ctx context.Context, ref *tenantMetricsRef,
 ) *tenantStorageMetrics {
+	m, ok := sm.getTenantLenient(ref)
 	ref.assert(ctx)
-	m, ok := sm.tenants.Load(ref._tenantID)
 	if !ok {
 		log.Fatalf(ctx, "no metrics exist for tenant %v", ref._tenantID)
 	}
 	return m
+}
+
+// getTenantLenient is like getTenant, but will not fatal.
+func (sm *TenantsStorageMetrics) getTenantLenient(
+	ref *tenantMetricsRef,
+) (*tenantStorageMetrics, bool) {
+	m, ok := sm.tenants.Load(ref._tenantID)
+	if ref.finished() {
+		return nil, false
+	}
+	return m, ok
 }
 
 type tenantStorageMetrics struct {
@@ -3318,6 +3343,8 @@ type tenantStorageMetrics struct {
 		syncutil.Mutex
 		refCount int
 	}
+
+	ReqCPUNanos *aggmetric.CounterFloat64
 
 	LiveBytes      *aggmetric.Gauge
 	KeyBytes       *aggmetric.Gauge
@@ -3344,6 +3371,7 @@ type tenantStorageMetrics struct {
 func newTenantsStorageMetrics() *TenantsStorageMetrics {
 	b := aggmetric.MakeBuilder(multitenant.TenantIDLabel)
 	sm := &TenantsStorageMetrics{
+		ReqCPUNanos:    b.CounterFloat64(metaReqCPUNanos),
 		LiveBytes:      b.Gauge(metaLiveBytes),
 		KeyBytes:       b.Gauge(metaKeyBytes),
 		ValBytes:       b.Gauge(metaValBytes),
