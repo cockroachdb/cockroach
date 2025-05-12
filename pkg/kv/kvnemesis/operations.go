@@ -175,6 +175,10 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 		w.WriteString(newFctx.indent)
 		w.WriteString(newFctx.receiver)
 		fmt.Fprintf(w, `.SetIsoLevel(isolation.%s)`, o.IsoLevel)
+		w.WriteString("\n")
+		w.WriteString(newFctx.indent)
+		w.WriteString(newFctx.receiver)
+		fmt.Fprintf(w, `.SetBufferedWritesEnabled(%v)`, o.BufferedWrites)
 		formatOps(w, newFctx, o.Ops)
 		if o.CommitInBatch != nil {
 			newFctx.receiver = `b`
