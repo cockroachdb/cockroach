@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -37,12 +36,15 @@ func TestStatusAPIContentionEvents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 146412)
-
 	ctx := context.Background()
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
-
 	defer testCluster.Stopper().Stop(ctx)
+
+	hostRunner := sqlutils.MakeSQLRunner(testCluster.SystemLayer(0).SQLConn(t))
+	// If we happen to enable buffered writes metamorphically, we must have the
+	// split lock reliability enabled (which can be tweaked metamorphically too,
+	// #146412).
+	hostRunner.Exec(t, "SET CLUSTER SETTING kv.lock_table.unreplicated_lock_reliability.split.enabled = true")
 
 	s0 := testCluster.Server(0).ApplicationLayer()
 	s1 := testCluster.Server(1).ApplicationLayer()
