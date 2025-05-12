@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 var settingDistSQLNumRunners = settings.RegisterIntSetting(
@@ -404,12 +405,12 @@ func (dsp *DistSQLPlanner) setupFlows(
 	if len(statementSQL) > setupFlowRequestStmtMaxLength {
 		statementSQL = statementSQL[:setupFlowRequestStmtMaxLength]
 	}
-	getJobTag := func(ctx context.Context) string {
+	getJobTag := func(ctx context.Context) redact.SafeString {
 		tags := logtags.FromContext(ctx)
 		if tags != nil {
 			for _, tag := range tags.Get() {
 				if tag.Key() == "job" {
-					return tag.ValueStr()
+					return redact.SafeString(tag.ValueStr())
 				}
 			}
 		}
