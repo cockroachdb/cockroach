@@ -664,7 +664,7 @@ func (mgcq *mvccGCQueue) process(
 ) (processed bool, err error) {
 	// Record the CPU time processing the request for this replica. This is
 	// recorded regardless of errors that are encountered.
-	defer repl.MeasureReqCPUNanos(grunning.Time())
+	defer repl.MeasureReqCPUNanos(ctx, grunning.Time())
 
 	// Lookup the descriptor and GC policy for the zone containing this key range.
 	desc, conf := repl.DescAndSpanConfig()
