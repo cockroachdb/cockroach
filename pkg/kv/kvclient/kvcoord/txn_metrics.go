@@ -48,6 +48,7 @@ type TxnMetrics struct {
 	RestartsAsyncWriteFailure      telemetry.CounterWithMetric
 	RestartsCommitDeadlineExceeded telemetry.CounterWithMetric
 	RestartsReadWithinUncertainty  telemetry.CounterWithMetric
+	RestartsExclusionViolation     telemetry.CounterWithMetric
 	RestartsTxnAborted             telemetry.CounterWithMetric
 	RestartsTxnPush                telemetry.CounterWithMetric
 	RestartsUnknown                telemetry.CounterWithMetric
@@ -258,6 +259,12 @@ var (
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRestartsExclusionViolation = metric.Metadata{
+		Name:        "txn.restarts.exclusionviolation",
+		Help:        "Number of restarts due to an exclusion violation",
+		Measurement: "Restarted Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRestartsTxnAborted = metric.Metadata{
 		Name:        "txn.restarts.txnaborted",
 		Help:        "Number of restarts due to an abort by a concurrent transaction (usually due to deadlock)",
@@ -371,6 +378,7 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		RestartsAsyncWriteFailure:            telemetry.NewCounterWithMetric(metaRestartsAsyncWriteFailure),
 		RestartsCommitDeadlineExceeded:       telemetry.NewCounterWithMetric(metaRestartsCommitDeadlineExceeded),
 		RestartsReadWithinUncertainty:        telemetry.NewCounterWithMetric(metaRestartsReadWithinUncertainty),
+		RestartsExclusionViolation:           telemetry.NewCounterWithMetric(metaRestartsExclusionViolation),
 		RestartsTxnAborted:                   telemetry.NewCounterWithMetric(metaRestartsTxnAborted),
 		RestartsTxnPush:                      telemetry.NewCounterWithMetric(metaRestartsTxnPush),
 		RestartsUnknown:                      telemetry.NewCounterWithMetric(metaRestartsUnknown),
