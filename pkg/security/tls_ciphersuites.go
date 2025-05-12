@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"golang.org/x/exp/slices"
 )
 
@@ -179,7 +180,7 @@ func (*tlsRestrictConfiguration) configureTLSRestrict(ciphers []string) {
 			return &cipherRestrictError{errors.Errorf("cipher id %v does match implemented tls ciphers", selectedCipherID)}
 		}
 		if !slices.Contains(tlsRestrictConfig.c, cName) {
-			return &cipherRestrictError{errors.Newf("presented cipher %s not in allowed cipher suite list", cName)}
+			return &cipherRestrictError{errors.Newf("presented cipher %s not in allowed cipher suite list", redact.SafeString(cName))}
 		}
 		return
 	}
