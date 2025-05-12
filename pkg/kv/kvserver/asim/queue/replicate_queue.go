@@ -11,7 +11,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -23,9 +25,11 @@ import (
 
 type replicateQueue struct {
 	baseQueue
-	planner  plan.ReplicationPlanner
-	clock    *hlc.Clock
-	settings *config.SimulationSettings
+	planner       plan.ReplicationPlanner
+	clock         *hlc.Clock
+	settings      *config.SimulationSettings
+	lastChangeIDs []mma.ChangeID
+	as            *kvserver.AllocatorSync
 }
 
 // NewReplicateQueue returns a new replicate queue.
@@ -34,6 +38,7 @@ func NewReplicateQueue(
 	stateChanger state.Changer,
 	settings *config.SimulationSettings,
 	allocator allocatorimpl.Allocator,
+	allocatorSync *kvserver.AllocatorSync,
 	storePool storepool.AllocatorStorePool,
 	start time.Time,
 ) RangeQueue {
@@ -49,6 +54,7 @@ func NewReplicateQueue(
 		planner: plan.NewReplicaPlanner(
 			allocator, storePool, plan.ReplicaPlannerTestingKnobs{}),
 		clock: storePool.Clock(),
+		as:    allocatorSync,
 	}
 	rq.AddLogTag("replica", nil)
 	return &rq
@@ -109,6 +115,11 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 		rq.next = rq.lastTick
 	}
 
+	if !tick.Before(rq.next) && rq.lastChangeIDs != nil {
+		rq.as.PostApply(rq.lastChangeIDs, true /* success */)
+		rq.lastChangeIDs = nil
+	}
+
 	for !tick.Before(rq.next) && rq.priorityQueue.Len() != 0 {
 		item := heap.Pop(rq).(*replicaItem)
 		if item == nil {
@@ -143,8 +154,8 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 			continue
 		}
 
-		pushReplicateChange(
-			ctx, change, rng, tick, rq.settings.ReplicaChangeDelayFn(), rq.baseQueue)
+		rq.lastChangeIDs = pushReplicateChange(
+			ctx, change, repl, tick, rq.settings.ReplicaChangeDelayFn(), rq.baseQueue, rq.as)
 	}
 
 	rq.lastTick = tick
@@ -153,35 +164,54 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 func pushReplicateChange(
 	ctx context.Context,
 	change plan.ReplicateChange,
-	rng state.Range,
+	repl *SimulatorReplica,
 	tick time.Time,
 	delayFn func(int64, bool) time.Duration,
 	queue baseQueue,
-) {
+	as *kvserver.AllocatorSync,
+) []mma.ChangeID {
 	var stateChange state.Change
+	var changeIDs []mma.ChangeID
 	switch op := change.Op.(type) {
 	case plan.AllocationNoop:
 		// Nothing to do.
-		return
+		return nil
 	case plan.AllocationFinalizeAtomicReplicationOp:
 		panic("unimplemented finalize atomic replication op")
 	case plan.AllocationTransferLeaseOp:
+		if as != nil {
+			// as may be nil in some tests.
+			changeIDs = as.NonMMAPreTransferLease(
+				repl.Desc(),
+				repl.RangeUsageInfo(),
+				op.Source,
+				op.Target,
+			)
+		}
 		stateChange = &state.LeaseTransferChange{
 			RangeID:        state.RangeID(change.Replica.GetRangeID()),
-			TransferTarget: state.StoreID(op.Target),
-			Author:         state.StoreID(op.Source),
+			TransferTarget: state.StoreID(op.Target.StoreID),
+			Author:         state.StoreID(op.Source.StoreID),
 			// TODO(mma): Should this be add? I don't think so since it will assume
 			// it takes as long as adding a replica. Will need to regenerate the
 			// tests and check the output when changing this.
-			Wait: delayFn(rng.Size(), true /* add */),
+			Wait: delayFn(repl.rng.Size(), false /* add */),
 		}
 	case plan.AllocationChangeReplicasOp:
-		log.VEventf(ctx, 1, "pushing state change for range=%s, details=%s", rng, op.Details)
+		if as != nil {
+			// as may be nil in some tests.
+			changeIDs = as.NonMMAPreChangeReplicas(
+				repl.Desc(),
+				repl.RangeUsageInfo(),
+				op.Chgs,
+			)
+		}
+		log.VEventf(ctx, 1, "pushing state change for range=%s, details=%s", repl.rng, op.Details)
 		stateChange = &state.ReplicaChange{
 			RangeID: state.RangeID(change.Replica.GetRangeID()),
 			Changes: op.Chgs,
 			Author:  state.StoreID(op.LeaseholderStore),
-			Wait:    delayFn(rng.Size(), true /* add */),
+			Wait:    delayFn(repl.rng.Size(), true /* add */),
 		}
 	default:
 		panic(fmt.Sprintf("Unknown operation %+v, unable to create state change", op))
@@ -192,5 +222,8 @@ func pushReplicateChange(
 		log.VEventf(ctx, 1, "pushing state change succeeded, complete at %s (cur %s)", completeAt, tick)
 	} else {
 		log.VEventf(ctx, 1, "pushing state change failed")
+		as.PostApply(changeIDs, false /* success */)
+		changeIDs = nil
 	}
+	return changeIDs
 }

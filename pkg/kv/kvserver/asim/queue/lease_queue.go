@@ -10,7 +10,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -23,10 +25,12 @@ import (
 type leaseQueue struct {
 	baseQueue
 	plan.ReplicaPlanner
-	storePool storepool.AllocatorStorePool
-	planner   plan.ReplicationPlanner
-	clock     *hlc.Clock
-	settings  *config.SimulationSettings
+	storePool     storepool.AllocatorStorePool
+	planner       plan.ReplicationPlanner
+	clock         *hlc.Clock
+	settings      *config.SimulationSettings
+	as            *kvserver.AllocatorSync
+	lastChangeIDs []mma.ChangeID
 }
 
 // NewLeaseQueue returns a new lease queue.
@@ -35,6 +39,7 @@ func NewLeaseQueue(
 	stateChanger state.Changer,
 	settings *config.SimulationSettings,
 	allocator allocatorimpl.Allocator,
+	allocatorSync *kvserver.AllocatorSync,
 	storePool storepool.AllocatorStorePool,
 	start time.Time,
 ) RangeQueue {
@@ -50,6 +55,7 @@ func NewLeaseQueue(
 		planner:   plan.NewLeasePlanner(allocator, storePool),
 		storePool: storePool,
 		clock:     storePool.Clock(),
+		as:        allocatorSync,
 	}
 	lq.AddLogTag("lease", nil)
 	return &lq
@@ -109,6 +115,11 @@ func (lq *leaseQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 		lq.next = lq.lastTick
 	}
 
+	if !tick.Before(lq.next) && lq.lastChangeIDs != nil {
+		lq.as.PostApply(lq.lastChangeIDs, true /* success */)
+		lq.lastChangeIDs = nil
+	}
+
 	for !tick.Before(lq.next) && lq.priorityQueue.Len() != 0 {
 		item := heap.Pop(lq).(*replicaItem)
 		if item == nil {
@@ -148,8 +159,8 @@ func (lq *leaseQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 			continue
 		}
 
-		pushReplicateChange(
-			ctx, change, rng, tick, lq.settings.ReplicaChangeDelayFn(), lq.baseQueue)
+		lq.lastChangeIDs = pushReplicateChange(
+			ctx, change, repl, tick, lq.settings.ReplicaChangeDelayFn(), lq.baseQueue, lq.as)
 	}
 
 	lq.lastTick = tick

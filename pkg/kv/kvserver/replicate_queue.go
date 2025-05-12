@@ -809,7 +809,7 @@ func (rq *replicateQueue) applyChange(
 	case plan.AllocationFinalizeAtomicReplicationOp:
 		err = rq.finalizeAtomicReplication(ctx, replica)
 	case plan.AllocationTransferLeaseOp:
-		err = rq.TransferLease(ctx, replica, op.Source, op.Target, op.Usage)
+		err = rq.TransferLease(ctx, replica, op.Source.StoreID, op.Target.StoreID, op.Usage)
 	case plan.AllocationChangeReplicasOp:
 		err = rq.changeReplicas(
 			ctx,
