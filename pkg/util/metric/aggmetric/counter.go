@@ -129,21 +129,24 @@ func (g *Counter) Inc(i int64) {
 	atomic.AddInt64(&g.value, i)
 }
 
-// Update updates the AggCounter's value.
+// UpdateIfHigher updates the AggCounter's value.
 //
 // This method may not perform well under high concurrency,
 // so it should only be used if the Counter is not expected
 // to be frequently Update'd or Inc'd.
-func (g *Counter) Update(i int64) {
+func (g *Counter) UpdateIfHigher(i int64) {
 	var delta int64
 	for {
 		delta = i - atomic.LoadInt64(&g.value)
+		if delta <= 0 {
+			return
+		}
 		if atomic.CompareAndSwapInt64(&g.value, i-delta, i) {
 			break
 		}
 		// Raced with concurrent update, try again.
 	}
-	g.parent.g.Inc(delta)
+	g.parent.g.Inc(delta) // delta > 0
 }
 
 // AggCounterFloat64 maintains a value as the sum of its children. The counter will
