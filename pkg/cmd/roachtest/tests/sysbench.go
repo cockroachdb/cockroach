@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/google/pprof/profile"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -257,6 +259,31 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		}
 		if err := os.WriteFile(filepath.Join(t.ArtifactsDir(), "bench.txt"), []byte(goBenchOutput), 0666); err != nil {
 			return err
+		}
+
+		t.Status("running 75 second workload to collect profiles")
+		{
+			// Create a wait group to wait for the profile collection to finish
+			wg := sync.WaitGroup{}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				opts := opts
+				opts.duration = 75 * time.Second
+				result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()),
+					opts.cmd(useHAProxy)+" run")
+
+				if msg, crashed := detectSysbenchCrash(result); crashed {
+					t.Skipf("%s; skipping test", msg)
+				}
+				require.NoError(t, err)
+			}()
+
+			// Wait for 15 seconds to give a chance to the workload to start, and then
+			// collect CPU, mutex diffs, allocs diffs profiles.
+			time.Sleep(15 * time.Second)
+			collectSysbenchProfiles(t, ctx, c)
+			wg.Wait()
 		}
 
 		return nil
@@ -594,6 +621,101 @@ func exportSysbenchResults(
 	}
 
 	return nil
+}
+
+func collectSysbenchProfiles(t test.Test, ctx context.Context, c cluster.Cluster) {
+	// Collect the first mutex profiles. These will be subtracted from a future
+	// mutex profile to get the difference.
+	mutexProfiles1, err := roachtestutil.GetProfileForAllCRDBNodes(c,
+		t.L(),
+		func(nodeID int) (*profile.Profile, error) {
+			return roachtestutil.GetMutexProfile(ctx, c, t.L(), nodeID)
+		})
+	require.NoError(t, err)
+
+	// Similar to mutex profiles, collect the first allocs profiles.
+	allocsProfiles1, err := roachtestutil.GetProfileForAllCRDBNodes(c,
+		t.L(),
+		func(nodeID int) (*profile.Profile, error) {
+			return roachtestutil.GetAllocsProfile(ctx, c, t.L(), nodeID)
+		})
+	require.NoError(t, err)
+
+	// Collect 30 seconds of CPU profiles.
+	cpuProfiles, err := roachtestutil.GetProfileForAllCRDBNodes(c,
+		t.L(),
+		func(nodeID int) (*profile.Profile, error) {
+			return roachtestutil.GetCPUProfile(ctx, c, t.L(), nodeID, time.Second*30 /* duration */)
+		})
+	require.NoError(t, err)
+
+	// Collect the second mutex profiles.
+	mutexProfiles2, err := roachtestutil.GetProfileForAllCRDBNodes(c,
+		t.L(),
+		func(nodeID int) (*profile.Profile, error) {
+			return roachtestutil.GetMutexProfile(ctx, c, t.L(), nodeID)
+		})
+	require.NoError(t, err)
+
+	// Collect the second allocs profiles.
+	allocsProfiles2, err := roachtestutil.GetProfileForAllCRDBNodes(
+		c,
+		t.L(),
+		func(nodeID int) (*profile.Profile, error) {
+			return roachtestutil.GetAllocsProfile(ctx, c, t.L(), nodeID)
+		})
+	require.NoError(t, err)
+
+	// Merge the CPU profiles into one profile that contains all the nodes.
+	cpuMerged, err := profile.Merge(cpuProfiles)
+	require.NoError(t, err)
+
+	// Calculate the difference between the two mutex profiles, and also between
+	// the two allocs profiles.
+	mutexDiffProfiles := make([]*profile.Profile, len(c.CRDBNodes()))
+	allocsDiffProfiles := make([]*profile.Profile, len(c.CRDBNodes()))
+	for i := range len(c.CRDBNodes()) {
+		mutexProfiles1[i].Scale(-1)
+		mutexDiffProfiles[i], err = profile.Merge([]*profile.Profile{mutexProfiles1[i],
+			mutexProfiles2[i]})
+		require.NoError(t, err)
+		mutexDiffProfiles[i].TimeNanos = mutexProfiles2[i].TimeNanos
+		mutexDiffProfiles[i].DurationNanos = mutexProfiles2[i].TimeNanos - mutexProfiles1[i].TimeNanos
+
+		allocsProfiles1[i].Scale(-1)
+		allocsDiffProfiles[i], err = profile.Merge([]*profile.Profile{allocsProfiles1[i],
+			allocsProfiles2[i]})
+		require.NoError(t, err)
+		allocsDiffProfiles[i].TimeNanos = allocsProfiles2[i].TimeNanos
+		allocsDiffProfiles[i].DurationNanos = allocsProfiles2[i].TimeNanos -
+			allocsProfiles1[i].TimeNanos
+	}
+
+	// Merge the mutex diff profiles into one profile that contains all the nodes.
+	mutexDiffMerged, err := profile.Merge(mutexDiffProfiles)
+	require.NoError(t, err)
+
+	// Do the same for the allocs diff profiles.
+	allocsDiffMerged, err := profile.Merge(allocsDiffProfiles)
+	require.NoError(t, err)
+
+	// exportProfile exports a profile to the artifacts' directory.
+	exportProfile := func(profile *profile.Profile, filename string) {
+		buf := bytes.Buffer{}
+		require.NoError(t, profile.Write(&buf))
+		err = os.WriteFile(filepath.Join(t.ArtifactsDir(), filename), buf.Bytes(), 0644)
+		require.NoError(t, err)
+	}
+
+	// Export all the profiles.
+	exportProfile(cpuMerged, "cpu-merged.prof")
+	exportProfile(mutexDiffMerged, "mutex-diff-merged.prof")
+	exportProfile(allocsDiffMerged, "allocs-diff-merged.prof")
+	for i := range len(c.CRDBNodes()) {
+		exportProfile(mutexDiffProfiles[i], fmt.Sprintf("mutex-diff-%d.prof", i+1))
+		exportProfile(allocsDiffProfiles[i], fmt.Sprintf("allocs-diff-%d.prof", i+1))
+		exportProfile(cpuProfiles[i], fmt.Sprintf("cpu-%d.prof", i+1))
+	}
 }
 
 // Add sysbenchMetrics to the openmetricsMap
