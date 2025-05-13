@@ -92,7 +92,7 @@ func NewOneInputDiskSpiller(
 	op.diskSpillerBase = diskSpillerBase{
 		inputs:                  []colexecop.Operator{input},
 		inMemoryOp:              inMemoryOp,
-		inMemoryMemMonitorNames: []mon.Name{inMemoryMemMonitorName},
+		inMemoryMemMonitorNames: [2]mon.Name{inMemoryMemMonitorName, mon.EmptyName},
 		diskBackedOpConstructor: op.constructDiskBackedOp,
 		spillingCallbackFn:      spillingCallbackFn,
 	}
@@ -169,7 +169,7 @@ func (d *oneInputDiskSpiller) constructDiskBackedOp() colexecop.Operator {
 func NewTwoInputDiskSpiller(
 	inputOne, inputTwo colexecop.Operator,
 	inMemoryOp colexecop.BufferingInMemoryOperator,
-	inMemoryMemMonitorNames []mon.Name,
+	inMemoryMemMonitorNames [2]mon.Name,
 	diskBackedOpConstructor func(inputOne, inputTwo colexecop.Operator) colexecop.Operator,
 	spillingCallbackFn func(),
 ) colexecop.ClosableOperator {
@@ -213,7 +213,7 @@ type diskSpillerBase struct {
 	spilled bool
 
 	inMemoryOp              colexecop.BufferingInMemoryOperator
-	inMemoryMemMonitorNames []mon.Name
+	inMemoryMemMonitorNames [2]mon.Name
 	// diskBackedOp is created lazily when the diskSpillerBase spills to disk
 	// for the first time throughout its lifetime.
 	diskBackedOp            colexecop.Operator
@@ -250,7 +250,8 @@ func (d *diskSpillerBase) Next() coldata.Batch {
 			// Check if this error is from one of our memory monitors.
 			var found bool
 			for i := range d.inMemoryMemMonitorNames {
-				if strings.Contains(err.Error(), d.inMemoryMemMonitorNames[i].String()) {
+				name := &d.inMemoryMemMonitorNames[i]
+				if !name.Empty() && strings.Contains(err.Error(), name.String()) {
 					found = true
 					break
 				}
