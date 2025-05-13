@@ -242,7 +242,7 @@ fi
 for img in "${images[@]}"; do
   for platform_name in amd64 arm64; do
     tc_start_block "Verify $img on $platform_name"
-    if ! verify_docker_image "$img" "linux/$platform_name" "$BUILD_VCS_NUMBER" "$version" false; then
+    if ! verify_docker_image "$img" "linux/$platform_name" "$BUILD_VCS_NUMBER" "$version" false false; then
       error=1
     fi
     tc_end_block "Verify $img on $platform_name"
@@ -252,7 +252,7 @@ done
 images=("${dockerhub_tag_fips}" "${gcr_tag_fips}")
 for img in "${images[@]}"; do
   tc_start_block "Verify $img"
-  if ! verify_docker_image "$img" "linux/amd64" "$BUILD_VCS_NUMBER" "$version" true; then
+  if ! verify_docker_image "$img" "linux/amd64" "$BUILD_VCS_NUMBER" "$version" true false; then
     error=1
   fi
   tc_end_block "Verify $img"
