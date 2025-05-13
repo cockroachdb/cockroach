@@ -1,6 +1,7 @@
 /* setup */
 CREATE TABLE t (a INT NOT NULL, b INT NOT NULL);
 CREATE INDEX idx_b ON t(b);
+CREATE INDEX idx_c ON t(b) USING HASH;
 
 /* test */
 EXPLAIN (DDL, SHAPE) alter table t add primary key (a) USING HASH WITH (bucket_count=10);
@@ -11,21 +12,24 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │    └── into t_pkey~ (a, crdb_internal_a_shard_10+; rowid-, b)
  ├── execute 2 system table mutations transactions
  ├── merge temporary indexes into backfilled indexes in relation t
- │    └── from t@[7] into t_pkey~
+ │    └── from t@[11] into t_pkey~
  ├── execute 1 system table mutations transaction
  ├── validate UNIQUE constraint backed by index t_pkey~ in relation t
  ├── execute 2 system table mutations transactions
  ├── backfill using primary index t_pkey~ in relation t
  │    ├── into idx_b+ (b: a, crdb_internal_a_shard_10+)
- │    └── into t_pkey+ (a, crdb_internal_a_shard_10+; b)
+ │    ├── into idx_c+ (b, crdb_internal_b_shard_16: a, crdb_internal_a_shard_10+)
+ │    └── into t_pkey+ (crdb_internal_a_shard_10+, a; b)
  ├── execute 2 system table mutations transactions
  ├── merge temporary indexes into backfilled indexes in relation t
- │    ├── from t@[5] into idx_b+
- │    └── from t@[9] into t_pkey+
+ │    ├── from t@[7] into idx_b+
+ │    ├── from t@[9] into idx_c+
+ │    └── from t@[13] into t_pkey+
  ├── execute 1 system table mutations transaction
  ├── validate UNIQUE constraint backed by index t_pkey+ in relation t
  ├── validate NOT NULL constraint on column crdb_internal_a_shard_10+ in index t_pkey+ in relation t
  ├── validate UNIQUE constraint backed by index idx_b+ in relation t
+ ├── validate UNIQUE constraint backed by index idx_c+ in relation t
  ├── execute 3 system table mutations transactions
  ├── validate non-index-backed constraint check_crdb_internal_a_shard_10+ in relation t
  └── execute 3 system table mutations transactions

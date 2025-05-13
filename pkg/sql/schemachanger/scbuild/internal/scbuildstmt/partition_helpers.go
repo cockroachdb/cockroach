@@ -32,8 +32,20 @@ import (
 // configureIndexDescForNewIndexPartitioning returns a new copy of an index
 // descriptor containing modifications needed if partitioning is configured.
 func configureIndexDescForNewIndexPartitioning(
-	b BuildCtx, tableID catid.DescID, spec *indexSpecMutator, partitionByIndex *tree.PartitionByIndex,
+	b BuildCtx,
+	tableID catid.DescID,
+	sourcePartitionIndexID catid.IndexID,
+	prevSpec *indexSpec,
+	mutatedSpec *indexSpecMutator,
+	isPrimary bool,
+	partitionByIndex *tree.PartitionByIndex,
 ) error {
+	// If there was a previous specification is missing, then the mutated spec is
+	// the starting point. Otherwise, prevSpec is the base starting point, and mutated
+	// spec already has other changes applied.
+	if prevSpec == nil {
+		prevSpec = &mutatedSpec.indexSpec
+	}
 	var err error
 	partitionAllBy := b.QueryByID(tableID).FilterTablePartitioning().MustHaveZeroOrOne()
 	if partitionByIndex.ContainsPartitioningClause() || partitionAllBy != nil {
@@ -48,7 +60,7 @@ func configureIndexDescForNewIndexPartitioning(
 				"cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition",
 			)
 		} else {
-			partitionBy, err = partitionByFromTableID(b, tableID)
+			partitionBy, err = partitionByFromTableID(b, tableID, sourcePartitionIndexID)
 			if err != nil {
 				return err
 			}
@@ -59,11 +71,11 @@ func configureIndexDescForNewIndexPartitioning(
 			localityRBR != nil
 		if partitionBy != nil {
 			oldNumImplicitColumns := 0
-			if spec.partitioning != nil {
-				oldNumImplicitColumns = int(spec.partitioning.NumImplicitColumns)
+			if mutatedSpec.partitioning != nil {
+				oldNumImplicitColumns = int(prevSpec.partitioning.NumImplicitColumns)
 			}
-			oldKeyColumns := make([]string, 0, len(spec.columns))
-			for _, col := range spec.columns {
+			oldKeyColumns := make([]string, 0, len(prevSpec.columns))
+			for _, col := range prevSpec.columns {
 				if col.Kind == scpb.IndexColumn_KEY {
 					oldKeyColumns = append(oldKeyColumns,
 						mustRetrieveColumnName(b, col.TableID, col.ColumnID).Name)
@@ -81,7 +93,7 @@ func configureIndexDescForNewIndexPartitioning(
 			if err != nil {
 				return err
 			}
-			updateIndexPartitioning(spec, false /* isIndexPrimary */, newImplicitCols, newPartitioning)
+			updateIndexPartitioning(mutatedSpec, isPrimary /* isIndexPrimary */, newImplicitCols, newPartitioning)
 		}
 	}
 	return nil
@@ -110,8 +122,7 @@ func updateIndexPartitioning(
 		}
 		keyColsOnly = append(keyColsOnly, col)
 	}
-	// Remove the old prefix columns.
-	spec.removePrefixColumns(oldNumImplicitCols, scpb.IndexColumn_KEY)
+	spec.removeImplicitColumns()
 	newColIDs := catalog.MakeTableColSet()
 	for i, col := range newImplicitCols {
 		spec.prependColumn(&scpb.IndexColumn{
@@ -132,10 +143,15 @@ func updateIndexPartitioning(
 	if isNoOp {
 		return
 	}
-	spec.partitioning = &scpb.IndexPartitioning{
-		TableID:                spec.tableID(),
-		IndexID:                spec.indexID(),
-		PartitioningDescriptor: newPartitioning,
+
+	if spec.partitioning != nil {
+		spec.partitioning.PartitioningDescriptor = newPartitioning
+	} else {
+		spec.partitioning = &scpb.IndexPartitioning{
+			TableID:                spec.tableID(),
+			IndexID:                spec.indexID(),
+			PartitioningDescriptor: newPartitioning,
+		}
 	}
 	if !isIndexPrimary {
 		return
@@ -154,10 +170,15 @@ func updateIndexPartitioning(
 }
 
 // partitionByFromTableID constructs a PartitionBy clause from a tableID.
-func partitionByFromTableID(b BuildCtx, tableID catid.DescID) (*tree.PartitionBy, error) {
-	idx := getLatestPrimaryIndex(b, tableID)
-	partitioning := mustRetrievePartitioningFromIndexPartitioning(b, tableID, idx.IndexID)
-	return partitionByFromTableIDImpl(b, tableID, idx.IndexID, partitioning, 0)
+func partitionByFromTableID(
+	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
+) (*tree.PartitionBy, error) {
+	if indexID == 0 {
+		idx := getLatestPrimaryIndex(b, tableID)
+		indexID = idx.IndexID
+	}
+	partitioning := mustRetrievePartitioningFromIndexPartitioning(b, tableID, indexID)
+	return partitionByFromTableIDImpl(b, tableID, indexID, partitioning, 0)
 }
 
 // partitionByFromTableIDImpl contains the inner logic of partitionByFromTableID.
@@ -311,7 +332,7 @@ func createPartitioning(
 		newImplicitCols, err = collectImplicitPartitionColumns(
 			b,
 			tableID,
-			oldKeyColumnNames[0],
+			newIdxColumnNames[0],
 			partBy,
 			allowedNewColumnNames,
 		)

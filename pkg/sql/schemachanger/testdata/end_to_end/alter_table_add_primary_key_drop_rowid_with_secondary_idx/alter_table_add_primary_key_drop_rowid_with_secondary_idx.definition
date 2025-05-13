@@ -1,6 +1,7 @@
 setup
 CREATE TABLE t (a INT NOT NULL, b INT NOT NULL);
 CREATE INDEX idx_b ON t(b);
+CREATE INDEX idx_c ON t(b) USING HASH;
 ----
 
 stage-exec phase=PostCommitPhase stage=1:
@@ -25,6 +26,7 @@ stage-query phase=PostCommitPhase stage=:
 SELECT DISTINCT index_name FROM [ SHOW INDEXES FROM t] ORDER BY index_name;
 ----
 idx_b
+idx_c
 t_pkey
 
 stage-exec phase=PostCommitNonRevertiblePhase stage=:
@@ -49,6 +51,7 @@ stage-query phase=PostCommitNonRevertiblePhase stage=:
 SELECT DISTINCT index_name FROM [ SHOW INDEXES FROM t] ORDER BY index_name;
 ----
 idx_b
+idx_c
 t_pkey
 
 test
