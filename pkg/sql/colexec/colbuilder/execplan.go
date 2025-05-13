@@ -1274,7 +1274,7 @@ func NewColOperator(
 				} else {
 					diskSpiller := colexecdisk.NewTwoInputDiskSpiller(
 						inputs[0].Root, inputs[1].Root, inMemoryHashJoiner.(colexecop.BufferingInMemoryOperator),
-						[]mon.Name{hashJoinerMemMonitorName},
+						[2]mon.Name{hashJoinerMemMonitorName, mon.EmptyName},
 						func(inputOne, inputTwo colexecop.Operator) colexecop.Operator {
 							opName := redact.SafeString("external-hash-joiner")
 							accounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
@@ -1441,7 +1441,7 @@ func NewColOperator(
 			evalCtx.SingleDatumAggMemAccount = ehaMemAccount
 			diskSpiller := colexecdisk.NewTwoInputDiskSpiller(
 				inputs[0].Root, inputs[1].Root, hgj,
-				[]mon.Name{hashJoinerMemMonitorName, hashAggregatorMemMonitorName},
+				[2]mon.Name{hashJoinerMemMonitorName, hashAggregatorMemMonitorName},
 				func(inputOne, inputTwo colexecop.Operator) colexecop.Operator {
 					// When we spill to disk, we just use a combo of an external
 					// hash join followed by an external hash aggregation.
