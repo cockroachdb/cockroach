@@ -463,7 +463,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/explain.out --lab
  select jsonb_pretty(
    explain_filter_to_json('explain (analyze, verbose, buffers, format json)
                           select * from tenk1 order by tenthous')
-@@ -374,188 +260,17 @@
+@@ -374,188 +260,19 @@
    #- '{0,Plan,Plans,0,Sort Method}'
    #- '{0,Plan,Plans,0,Sort Space Type}'
  );
@@ -635,7 +635,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/explain.out --lab
  create temp table t1(f1 float8);
  create function pg_temp.mysin(float8) returns float8 language plpgsql
  as 'begin return sin($1); end';
-+ERROR:  sin(): no value provided for placeholder: $1
++ERROR:  unimplemented: cannot create user-defined functions under a temporary schema
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/104687/_version_
  select explain_filter('explain (verbose) select * from t1 where pg_temp.mysin(f1) < 0.5');
 -                       explain_filter                       
 -------------------------------------------------------------

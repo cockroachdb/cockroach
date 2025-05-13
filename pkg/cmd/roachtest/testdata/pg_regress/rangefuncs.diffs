@@ -1659,9 +1659,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
 +
 +If you would rather not post publicly, please contact us directly
 +using the support form.
- 
-+We appreciate your feedback.
 +
++We appreciate your feedback.
+ 
 +select insert_tt2('foollog','barlog') limit 1;
 +ERROR:  unknown function: insert_tt2()
  select * from tt;
@@ -1741,21 +1741,17 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  select t.a, t, t.a from rngfunc1(10000) t limit 1;
     a   |         t         |   a   
  -------+-------------------+-------
-@@ -1871,31 +1424,24 @@
+@@ -1871,8 +1424,6 @@
  
  select * from array_to_set(array['one', 'two']); -- fail
  ERROR:  a column definition list is required for functions returning "record"
 -LINE 1: select * from array_to_set(array['one', 'two']);
 -                      ^
  -- after-the-fact coercion of the columns is now possible, too
--select * from array_to_set(array['one', 'two']) as t(f1 numeric(4,2),f2 text);
--  f1  | f2  
--------+-----
-- 1.00 | one
-- 2.00 | two
--(2 rows)
--
-+-- select * from array_to_set(array['one', 'two']) as t(f1 numeric(4,2),f2 text);
+ select * from array_to_set(array['one', 'two']) as t(f1 numeric(4,2),f2 text);
+   f1  | f2  
+@@ -1883,19 +1434,20 @@
+ 
  -- and if it doesn't work, you get a compile-time not run-time error
  select * from array_to_set(array['one', 'two']) as t(f1 point,f2 text);
 -ERROR:  return type mismatch in function declared to return record
@@ -1785,18 +1781,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  -- but without, it can be:
  create or replace function array_to_set(anyarray) returns setof record as $$
    select i AS "index", $1[i] AS "value" from generate_subscripts($1, 1) i
-@@ -1914,26 +1460,21 @@
-   2 | two
+@@ -1922,18 +1474,19 @@
  (2 rows)
  
--select * from array_to_set(array['one', 'two']) as t(f1 numeric(4,2),f2 text);
--  f1  | f2  
--------+-----
-- 1.00 | one
-- 2.00 | two
--(2 rows)
--
-+-- select * from array_to_set(array['one', 'two']) as t(f1 numeric(4,2),f2 text);
  select * from array_to_set(array['one', 'two']) as t(f1 point,f2 text);
 -ERROR:  return type mismatch in function declared to return record
 -DETAIL:  Final statement returns integer instead of point at column 1.
@@ -1824,7 +1811,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  create temp table rngfunc(f1 int8, f2 int8);
  create function testrngfunc() returns record as $$
    insert into rngfunc values (1,2) returning *;
-@@ -1952,8 +1493,6 @@
+@@ -1952,8 +1505,6 @@
  
  select * from testrngfunc(); -- fail
  ERROR:  a column definition list is required for functions returning "record"
@@ -1833,7 +1820,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  drop function testrngfunc();
  create function testrngfunc() returns setof record as $$
    insert into rngfunc values (1,2), (3,4) returning *;
-@@ -1974,8 +1513,6 @@
+@@ -1974,8 +1525,6 @@
  
  select * from testrngfunc(); -- fail
  ERROR:  a column definition list is required for functions returning "record"
@@ -1842,7 +1829,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  drop function testrngfunc();
  -- Check that typmod imposed by a composite type is honored
  create type rngfunc_type as (f1 numeric(35,6), f2 numeric(35,2));
-@@ -1984,12 +1521,11 @@
+@@ -1984,12 +1533,11 @@
  $$ language sql immutable;
  explain (verbose, costs off)
  select testrngfunc();
@@ -1860,7 +1847,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  select testrngfunc();
     testrngfunc   
  -----------------
-@@ -1998,13 +1534,11 @@
+@@ -1998,13 +1546,11 @@
  
  explain (verbose, costs off)
  select * from testrngfunc();
@@ -1879,7 +1866,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  select * from testrngfunc();
      f1    |  f2  
  ----------+------
-@@ -2016,12 +1550,11 @@
+@@ -2016,12 +1562,11 @@
  $$ language sql volatile;
  explain (verbose, costs off)
  select testrngfunc();
@@ -1897,7 +1884,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  select testrngfunc();
     testrngfunc   
  -----------------
-@@ -2030,13 +1563,11 @@
+@@ -2030,13 +1575,11 @@
  
  explain (verbose, costs off)
  select * from testrngfunc();
@@ -1916,7 +1903,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  select * from testrngfunc();
      f1    |  f2  
  ----------+------
-@@ -2049,13 +1580,11 @@
+@@ -2049,13 +1592,11 @@
  $$ language sql immutable;
  explain (verbose, costs off)
  select testrngfunc();
@@ -1935,7 +1922,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  select testrngfunc();
     testrngfunc   
  -----------------
-@@ -2064,12 +1593,11 @@
+@@ -2064,12 +1605,11 @@
  
  explain (verbose, costs off)
  select * from testrngfunc();
@@ -1953,7 +1940,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  select * from testrngfunc();
      f1    |  f2  
  ----------+------
-@@ -2081,13 +1609,11 @@
+@@ -2081,13 +1621,11 @@
  $$ language sql volatile;
  explain (verbose, costs off)
  select testrngfunc();
@@ -1972,7 +1959,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  select testrngfunc();
     testrngfunc   
  -----------------
-@@ -2096,13 +1622,11 @@
+@@ -2096,13 +1634,11 @@
  
  explain (verbose, costs off)
  select * from testrngfunc();
@@ -1991,7 +1978,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  select * from testrngfunc();
      f1    |  f2  
  ----------+------
-@@ -2112,62 +1636,45 @@
+@@ -2112,62 +1648,45 @@
  create or replace function testrngfunc() returns setof rngfunc_type as $$
    select 1, 2 union select 3, 4 order by 1;
  $$ language sql immutable;
@@ -2075,7 +2062,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  --
  -- Check some cases involving added/dropped columns in a rowtype result
  --
-@@ -2178,79 +1685,37 @@
+@@ -2178,79 +1697,37 @@
  create or replace function get_first_user() returns users as
  $$ SELECT * FROM users ORDER BY userid LIMIT 1; $$
  language sql stable;
@@ -2168,7 +2155,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  -- We used to have a bug that would allow the above to succeed, posing
  -- hazards for later execution of the view.  Check that the internal
  -- defenses for those hazards haven't bit-rotted, in case some other
-@@ -2264,18 +1729,14 @@
+@@ -2264,18 +1741,14 @@
  returning pg_describe_object(classid, objid, objsubid) as obj,
            pg_describe_object(refclassid, refobjid, refobjsubid) as ref,
            deptype;
@@ -2191,7 +2178,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  -- likewise, check we don't crash if the dependency goes wrong
  begin;
  -- destroy the dependency entry that prevents the ALTER:
-@@ -2286,19 +1747,18 @@
+@@ -2286,19 +1759,18 @@
  returning pg_describe_object(classid, objid, objsubid) as obj,
            pg_describe_object(refclassid, refobjid, refobjsubid) as ref,
            deptype;
@@ -2217,7 +2204,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  drop table users;
  -- check behavior with type coercion required for a set-op
  create or replace function rngfuncbar() returns setof text as
-@@ -2320,17 +1780,11 @@
+@@ -2320,17 +1792,11 @@
  
  -- this function is now inlinable, too:
  explain (verbose, costs off) select * from rngfuncbar();
@@ -2240,7 +2227,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  drop function rngfuncbar();
  -- check handling of a SQL function with multiple OUT params (bug #5777)
  create or replace function rngfuncbar(out integer, out numeric) as
-@@ -2344,115 +1798,93 @@
+@@ -2344,115 +1810,93 @@
  create or replace function rngfuncbar(out integer, out numeric) as
  $$ select (1, 2) $$ language sql;
  select * from rngfuncbar();  -- fail
@@ -2407,7 +2394,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  (0 rows)
  
  drop type rngfunc2;
-@@ -2463,18 +1895,11 @@
+@@ -2463,18 +1907,11 @@
     from unnest(array['{"lectures": [{"id": "1"}]}'::jsonb])
          as unnested_modules(module)) as ss,
    jsonb_to_recordset(ss.lecture) as j (id text);

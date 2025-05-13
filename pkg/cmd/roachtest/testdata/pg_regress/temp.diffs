@@ -191,7 +191,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/temp.out --label=
    as $$select 'public'::text$$ language sql;
  create function pg_temp.whoami() returns text
    as $$select 'temp'::text$$ language sql;
-+ERROR:  unimplemented: cannot create UDFs under a temporary schema
++ERROR:  unimplemented: cannot create user-defined functions under a temporary schema
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/104687/_version_
  -- default should have pg_temp implicitly first, but only for tables
@@ -422,12 +422,12 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/temp.out --label=
  -- Tests with two-phase commit
  -- Transactions creating objects in a temporary namespace cannot be used
  -- with two-phase commit.
-@@ -327,33 +422,99 @@
+@@ -327,33 +422,51 @@
  begin;
  create function pg_temp.twophase_func() returns void as
    $$ select '2pc_func'::text $$ language sql;
 +NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-+ERROR:  unimplemented: cannot create UDFs under a temporary schema
++ERROR:  unimplemented: cannot create user-defined functions under a temporary schema
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/104687/_version_
  prepare transaction 'twophase_func';
@@ -436,7 +436,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/temp.out --label=
  -- Function drop
  create function pg_temp.twophase_func() returns void as
    $$ select '2pc_func'::text $$ language sql;
-+ERROR:  unimplemented: cannot create UDFs under a temporary schema
++ERROR:  unimplemented: cannot create user-defined functions under a temporary schema
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/104687/_version_
  begin;
@@ -468,67 +468,19 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/temp.out --label=
  begin;
  create view pg_temp.twophase_view as select 1;
 +NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-+ERROR:  internal error: invalid schema kind for getNonTemporarySchemaForCreate: 2
-+DETAIL:  stack trace:
-+pkg/sql/create_table.go:109: getNonTemporarySchemaForCreate()
-+pkg/sql/create_table.go:160: getSchemaForCreateTable()
-+pkg/sql/create_view.go:135: startExec()
-+pkg/sql/plan.go:580: startExec()
-+pkg/sql/plan_node_to_row_source.go:181: Start()
-+pkg/sql/colexec/columnarizer.go:178: Init()
-+pkg/sql/colflow/stats.go:96: init()
-+pkg/sql/colexecerror/error.go:162: CatchVectorizedRuntimeError()
-+pkg/sql/colflow/stats.go:105: Init()
-+pkg/sql/colflow/flow_coordinator.go:236: func2()
-+pkg/sql/colexecerror/error.go:162: CatchVectorizedRuntimeError()
-+pkg/sql/colflow/flow_coordinator.go:235: init()
-+pkg/sql/colflow/flow_coordinator.go:269: Run()
-+pkg/sql/colflow/vectorized_flow.go:316: Run()
-+pkg/sql/distsql_running.go:990: Run()
-+pkg/sql/distsql_running.go:2093: PlanAndRun()
-+pkg/sql/distsql_running.go:1797: func3()
-+pkg/sql/distsql_running.go:1800: PlanAndRunAll()
-+pkg/sql/conn_executor_exec.go:3452: execWithDistSQLEngine()
-+pkg/sql/conn_executor_exec.go:2983: dispatchToExecutionEngine()
-+pkg/sql/conn_executor_exec.go:1079: execStmtInOpenState()
-+pkg/sql/conn_executor_exec.go:171: func2()
-+pkg/sql/conn_executor_exec.go:4460: execWithProfiling()
-+pkg/sql/conn_executor_exec.go:170: execStmt()
-+pkg/sql/conn_executor.go:2342: func1()
-+pkg/sql/conn_executor.go:2347: execCmd()
-+pkg/sql/conn_executor.go:2264: run()
-+pkg/sql/conn_executor.go:1048: ServeConn()
-+pkg/sql/pgwire/conn.go:252: processCommands()
-+pkg/sql/pgwire/server.go:1197: func4()
-+src/runtime/asm_amd64.s:1700: goexit()
-+
-+HINT:  You have encountered an unexpected error.
-+
-+Please check the public issue tracker to check whether this problem is
-+already tracked. If you cannot find it there, please report the error
-+with details by creating a new issue.
-+
-+If you would rather not post publicly, please contact us directly
-+using the support form.
-+
-+We appreciate your feedback.
-+
  prepare transaction 'twophase_view';
 -ERROR:  cannot PREPARE a transaction that has operated on temporary objects
 +WARNING:  there is no transaction in progress
  begin;
  create sequence pg_temp.twophase_seq;
 +NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
-+ERROR:  unimplemented: cannot create UDFs under a temporary schema
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/104687/_version_
  prepare transaction 'twophase_sequence';
 -ERROR:  cannot PREPARE a transaction that has operated on temporary objects
 +WARNING:  there is no transaction in progress
  -- Temporary tables cannot be used with two-phase commit.
  create temp table twophase_tab (a int);
  begin;
-@@ -363,19 +524,22 @@
+@@ -363,19 +476,22 @@
  (0 rows)
  
  prepare transaction 'twophase_tab';
@@ -555,7 +507,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/temp.out --label=
  -- Corner case: current_schema may create a temporary schema if namespace
  -- creation is pending, so check after that.  First reset the connection
  -- to remove the temporary namespace.
-@@ -385,8 +549,7 @@
+@@ -385,8 +501,7 @@
  SELECT current_schema() ~ 'pg_temp' AS is_temp_schema;
   is_temp_schema 
  ----------------
