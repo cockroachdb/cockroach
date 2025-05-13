@@ -773,20 +773,27 @@ func (mb *mutationBuilder) buildInsert(
 	//   due to the conflict scan accessing existing data.
 	// - The RETURNING clause references any columns, which also necessitates
 	//   SELECT policies.
+	//
+	// These checks only matter if the target table has RLS enabled, so we gate
+	// the logic behind that for performance reasons.
 	var returningInScope, returningOutScope *scope
-	includeSelectPolicies := hasOnConflict
-	if mb.tab.IsRowLevelSecurityEnabled() && !includeSelectPolicies {
-		// Only track column references if RLS is enabled and there is no
-		// ON CONFLICT clause that automatically requires SELECT policies.
-		var colRefs opt.ColSet
-		returningInScope, returningOutScope = mb.buildReturningScopes(returning, &colRefs)
-		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-			if colRefs.Contains(mb.tabID.ColumnID(i)) {
-				includeSelectPolicies = true
-				break
+	includeSelectPolicies := false
+	if mb.tab.IsRowLevelSecurityEnabled() {
+		includeSelectPolicies = hasOnConflict
+		if !includeSelectPolicies {
+			// Only track column references if RLS is enabled and there is no
+			// ON CONFLICT clause that automatically requires SELECT policies.
+			var colRefs opt.ColSet
+			returningInScope, returningOutScope = mb.buildReturningScopes(returning, &colRefs)
+			for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+				if colRefs.Contains(mb.tabID.ColumnID(i)) {
+					includeSelectPolicies = true
+					break
+				}
 			}
 		}
-	} else {
+	}
+	if returningOutScope == nil {
 		returningInScope, returningOutScope = mb.buildReturningScopes(returning, nil /* colRefs */)
 	}
 
