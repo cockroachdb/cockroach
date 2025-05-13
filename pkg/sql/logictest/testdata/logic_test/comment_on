@@ -296,8 +296,15 @@ CREATE TABLE t_99316(a INT);
 statement ok
 INSERT INTO system.comments VALUES (4294967122, 't_99316'::regclass::OID, 0, 'bar');
 
-statement error pgcode XX000 internal error: invalid comment type 4294967122
+# Invalid comments will be ignored
+statement ok
 SELECT * FROM pg_catalog.pg_description WHERE objoid = 't'::regclass::OID;
+
+# Validation errors will be generated for them in invalid_objects.
+query ITTTT
+SELECT * FROM crdb_internal.invalid_objects ORDER BY id;
+----
+111  test  public  t_99316  invalid comment type: 4294967122 on object ID: 111
 
 statement ok
 DELETE FROM system.comments WHERE type = 4294967122
@@ -368,3 +375,30 @@ SELECT * FROM SYSTEM.COMMENTS;
 ----
 type  object_id  sub_id  comment
 4     109        0       Database_Schema
+
+# Test what happens if a user intentionally adds invalid comments.
+subtest validate_invalid_comments
+
+statement ok
+INSERT INTO system.comments VALUES (32, 11111, 0, 'abc');
+INSERT INTO system.comments VALUES (32, 1, 0, 'abc');
+
+# Validate we can scan pg_description fine even if an invalid
+# comment exists.
+statement ok
+SELECT count(*) FROM pg_catalog.pg_description
+
+query ITTTT
+SELECT * FROM crdb_internal.invalid_objects ORDER BY id;
+----
+1      system  ·  ·  invalid comment type: 32 on object ID: 1
+11111  ·       ·  ·  comment exists for non-existent descriptor 11111
+
+statement ok
+DELETE FROM system.comments WHERE type=32;
+
+query ITTTT
+SELECT * FROM crdb_internal.invalid_objects ORDER BY id;
+----
+
+subtest end
