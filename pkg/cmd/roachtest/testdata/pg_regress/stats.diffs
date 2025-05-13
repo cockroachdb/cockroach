@@ -96,7 +96,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  -- rollback a savepoint: this should count 4 inserts and have 2
  -- live tuples after commit (and 2 dead ones due to aborted subxact)
  BEGIN;
-@@ -73,203 +113,161 @@
+@@ -73,82 +113,88 @@
  INSERT INTO trunc_stats_test3 DEFAULT VALUES;
  INSERT INTO trunc_stats_test3 DEFAULT VALUES;
  TRUNCATE trunc_stats_test3;
@@ -216,13 +216,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  COMMIT;
  ----
  -- Basic tests for track_functions
- ---
- CREATE FUNCTION stats_test_func1() RETURNS VOID LANGUAGE plpgsql AS $$BEGIN END;$$;
- SELECT 'stats_test_func1()'::regprocedure::oid AS stats_test_func1_oid \gset
--CREATE FUNCTION stats_test_func2() RETURNS VOID LANGUAGE plpgsql AS $$BEGIN END;$$;
--SELECT 'stats_test_func2()'::regprocedure::oid AS stats_test_func2_oid \gset
-+-- CREATE FUNCTION stats_test_func2() RETURNS VOID LANGUAGE plpgsql AS $$BEGIN END;$$;
-+-- SELECT 'stats_test_func2()'::regprocedure::oid AS stats_test_func2_oid \gset
+@@ -160,48 +206,21 @@
  -- test that stats are accumulated
  BEGIN;
  SET LOCAL stats_fetch_consistency = none;
@@ -279,35 +273,16 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  COMMIT;
  -- Verify that function stats are not transactional
  -- rolled back savepoint in committing transaction
- BEGIN;
- SELECT stats_test_func2();
-- stats_test_func2 
--------------------
-- 
--(1 row)
--
-+ERROR:  unknown function: stats_test_func2()
- SAVEPOINT foo;
-+ERROR:  current transaction is aborted, commands ignored until end of transaction block
- SELECT stats_test_func2();
-- stats_test_func2 
--------------------
-- 
--(1 row)
--
-+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+@@ -221,17 +240,9 @@
+ 
  ROLLBACK TO SAVEPOINT foo;
-+ERROR:  savepoint "foo" does not exist
  SELECT pg_stat_get_xact_function_calls(:stats_test_func2_oid);
 - pg_stat_get_xact_function_calls 
 ----------------------------------
 -                               2
 -(1 row)
 -
-+ERROR:  at or near ":": syntax error
-+DETAIL:  source SQL:
-+SELECT pg_stat_get_xact_function_calls(:stats_test_func2_oid)
-+                                       ^
++ERROR:  unknown function: pg_stat_get_xact_function_calls()
  SELECT stats_test_func2();
 - stats_test_func2 
 -------------------
@@ -318,13 +293,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  COMMIT;
  -- rolled back transaction
  BEGIN;
- SELECT stats_test_func2();
-- stats_test_func2 
--------------------
-- 
--(1 row)
--
-+ERROR:  unknown function: stats_test_func2()
+@@ -243,33 +254,27 @@
+ 
  ROLLBACK;
  SELECT pg_stat_force_next_flush();
 - pg_stat_force_next_flush 
@@ -348,11 +318,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
 -------------------+-------
 - stats_test_func2 |     4
 -(1 row)
--
-+ERROR:  at or near ":": syntax error
-+DETAIL:  source SQL:
-+SELECT funcname, calls FROM pg_stat_user_functions WHERE funcid = :stats_test_func2_oid
-+                                                                  ^
++ funcname | calls 
++----------+-------
++(0 rows)
+ 
  -- check that a rolled back drop function stats leaves stats alive
  BEGIN;
  SELECT funcname, calls FROM pg_stat_user_functions WHERE funcid = :stats_test_func1_oid;
@@ -369,7 +338,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  -- shouldn't be visible via view
  SELECT funcname, calls FROM pg_stat_user_functions WHERE funcid = :stats_test_func1_oid;
   funcname | calls 
-@@ -278,68 +276,53 @@
+@@ -278,39 +283,30 @@
  
  -- but still via oid access
  SELECT pg_stat_get_function_calls(:stats_test_func1_oid);
@@ -419,49 +388,29 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  -- check that function dropped in a subtransaction leaves no stats behind
  BEGIN;
  SELECT stats_test_func2();
-- stats_test_func2 
--------------------
-- 
--(1 row)
--
-+ERROR:  unknown function: stats_test_func2()
- SAVEPOINT a;
-+ERROR:  current transaction is aborted, commands ignored until end of transaction block
- SELECT stats_test_func2();
-- stats_test_func2 
--------------------
-- 
--(1 row)
--
-+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+@@ -328,18 +324,16 @@
+ 
  SAVEPOINT b;
-+ERROR:  current transaction is aborted, commands ignored until end of transaction block
  DROP FUNCTION stats_test_func2();
-+ERROR:  current transaction is aborted, commands ignored until end of transaction block
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
  COMMIT;
++WARNING:  there is no transaction in progress
  SELECT funcname, calls FROM pg_stat_user_functions WHERE funcid = :stats_test_func2_oid;
-- funcname | calls 
------------+-------
--(0 rows)
--
-+ERROR:  at or near ":": syntax error
-+DETAIL:  source SQL:
-+SELECT funcname, calls FROM pg_stat_user_functions WHERE funcid = :stats_test_func2_oid
-+                                                                  ^
+  funcname | calls 
+ ----------+-------
+ (0 rows)
+ 
  SELECT pg_stat_get_function_calls(:stats_test_func2_oid);
 - pg_stat_get_function_calls 
 -----------------------------
 -                           
 -(1 row)
 -
-+ERROR:  at or near ":": syntax error
-+DETAIL:  source SQL:
-+SELECT pg_stat_get_function_calls(:stats_test_func2_oid)
-+                                  ^
++ERROR:  unknown function: pg_stat_get_function_calls()
  -- Check that stats for relations are dropped. For that we need to access stats
  -- by oid after the DROP TABLE. Save oids.
  CREATE TABLE drop_stats_test();
-@@ -352,210 +335,113 @@
+@@ -352,210 +346,113 @@
  INSERT INTO drop_stats_test_subxact DEFAULT VALUES;
  SELECT 'drop_stats_test_subxact'::regclass::oid AS drop_stats_test_subxact_oid \gset
  SELECT pg_stat_force_next_flush();
@@ -715,7 +664,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  -----
  -- Test that last_seq_scan, last_idx_scan are correctly maintained
  --
-@@ -566,204 +452,202 @@
+@@ -566,204 +463,202 @@
  -----
  BEGIN;
  CREATE TEMPORARY TABLE test_last_scan(idx_col int primary key, noidx_col int);
@@ -1035,7 +984,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  -----
  -- Test reset of some stats for shared table
  -----
-@@ -776,33 +660,25 @@
+@@ -776,33 +671,25 @@
  BEGIN;
  SELECT current_database() as datname \gset
  COMMENT ON DATABASE :"datname" IS 'This is a test comment';
@@ -1075,7 +1024,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  
  -- set back comment
  \if :{?description_before}
-@@ -815,220 +691,170 @@
+@@ -815,220 +702,170 @@
  -----
  -- Test that sessions is incremented when a new session is started in pg_stat_database
  SELECT sessions AS db_stat_sessions FROM pg_stat_database WHERE datname = (SELECT current_database()) \gset
@@ -1386,7 +1335,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  COMMIT;
  ----
  -- Changing stats_fetch_consistency in a transaction.
-@@ -1036,90 +862,51 @@
+@@ -1036,90 +873,51 @@
  BEGIN;
  -- Stats filled under the cache mode
  SET LOCAL stats_fetch_consistency = cache;
@@ -1494,7 +1443,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  select a from stats_test_tab1 where a = 3;
   a 
  ---
-@@ -1127,28 +914,19 @@
+@@ -1127,28 +925,19 @@
  (1 row)
  
  SELECT pg_stat_have_stats('relation', :dboid, :stats_test_idx1_oid);
@@ -1529,7 +1478,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  SELECT 'stats_test_idx1'::regclass::oid AS stats_test_idx1_oid \gset
  select a from stats_test_tab1 where a = 3;
   a 
-@@ -1157,20 +935,14 @@
+@@ -1157,20 +946,14 @@
  (1 row)
  
  SELECT pg_stat_have_stats('relation', :dboid, :stats_test_idx1_oid);
@@ -1554,7 +1503,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  SELECT 'stats_test_idx1'::regclass::oid AS stats_test_idx1_oid \gset
  select a from stats_test_tab1 where a = 3;
   a 
-@@ -1179,58 +951,37 @@
+@@ -1179,58 +962,37 @@
  (1 row)
  
  SELECT pg_stat_have_stats('relation', :dboid, :stats_test_idx1_oid);
@@ -1627,7 +1576,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  -- Test that the following operations are tracked in pg_stat_io:
  -- - reads of target blocks into shared buffers
  -- - writes of shared buffers to permanent storage
-@@ -1243,118 +994,126 @@
+@@ -1243,118 +1005,126 @@
  -- extends.
  SELECT sum(extends) AS io_sum_shared_before_extends
    FROM pg_stat_io WHERE context = 'normal' AND object = 'relation' \gset
@@ -1813,7 +1762,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  DROP TABLE test_io_shared;
  -- Test that the follow IOCONTEXT_LOCAL IOOps are tracked in pg_stat_io:
  -- - eviction of local buffers in order to reuse them
-@@ -1366,23 +1125,33 @@
+@@ -1366,23 +1136,33 @@
  -- accessed by previous tests in this session.
  \c
  SET temp_buffers TO 100;
@@ -1852,7 +1801,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  -- Read in evicted buffers, generating reads.
  SELECT COUNT(*) FROM test_io_local;
   count 
-@@ -1391,45 +1160,54 @@
+@@ -1391,45 +1171,54 @@
  (1 row)
  
  SELECT pg_stat_force_next_flush();
@@ -1927,7 +1876,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  -- Test that reuse of strategy buffers and reads of blocks into these reused
  -- buffers while VACUUMing are tracked in pg_stat_io. If there is sufficient
  -- demand for shared buffers from concurrent queries, some buffers may be
-@@ -1443,87 +1221,102 @@
+@@ -1443,87 +1232,102 @@
  -- shared buffers -- preventing us from testing BAS_VACUUM BufferAccessStrategy
  -- reads.
  SET wal_skip_threshold = '1 kB';
@@ -2070,7 +2019,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  CREATE FUNCTION wait_for_hot_stats() RETURNS void AS $$
  DECLARE
    start_time timestamptz := clock_timestamp();
-@@ -1544,6 +1337,31 @@
+@@ -1544,6 +1348,31 @@
      EXTRACT(epoch FROM clock_timestamp() - start_time);
  END
  $$ LANGUAGE plpgsql;
@@ -2102,7 +2051,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  UPDATE brin_hot SET val = -3 WHERE id = 42;
  -- We can't just call wait_for_hot_stats() at this point, because we only
  -- transmit stats when the session goes idle, and we probably didn't
-@@ -1553,19 +1371,12 @@
+@@ -1553,19 +1382,12 @@
  -- then send its stats before dying.
  \c -
  SELECT wait_for_hot_stats();
@@ -2125,7 +2074,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  -- Test handling of index predicates - updating attributes in precicates
  -- should not block HOT when summarizing indexes are involved. We update
  -- a row that was not indexed due to the index predicate, and becomes
-@@ -1573,14 +1384,28 @@
+@@ -1573,14 +1395,28 @@
  CREATE TABLE brin_hot_2 (a int, b int);
  INSERT INTO brin_hot_2 VALUES (1, 100);
  CREATE INDEX ON brin_hot_2 USING brin (b) WHERE a = 2;
@@ -2160,7 +2109,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  SELECT COUNT(*) FROM brin_hot_2 WHERE a = 2 AND b = 100;
   count 
  -------
-@@ -1588,15 +1413,13 @@
+@@ -1588,15 +1424,13 @@
  (1 row)
  
  SET enable_seqscan = off;
@@ -2182,7 +2131,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  SELECT COUNT(*) FROM brin_hot_2 WHERE a = 2 AND b = 100;
   count 
  -------
-@@ -1608,18 +1431,31 @@
+@@ -1608,18 +1442,31 @@
  -- BRIN column.
  -- https://postgr.es/m/05ebcb44-f383-86e3-4f31-0a97a55634cf@enterprisedb.com
  CREATE TABLE brin_hot_3 (a int, filler text) WITH (fillfactor = 10);
@@ -2222,7 +2171,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label
  SELECT COUNT(*) FROM brin_hot_3 WHERE a = 2;
   count 
  -------
-@@ -1628,4 +1464,5 @@
+@@ -1628,4 +1475,5 @@
  
  DROP TABLE brin_hot_3;
  SET enable_seqscan = on;
