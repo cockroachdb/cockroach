@@ -492,9 +492,8 @@ func (s *PreServeConnHandler) maybeUpgradeToSecureConn(
 		}
 		newConn = tls.Server(conn, tlsConfig)
 		// Conditionally perform handshake connection and determine additional restrictions.
-		serverErr = security.TLSCipherRestrict(newConn)
-		if serverErr != nil {
-			_ = newConn.Close()
+		if err := security.TLSCipherRestrict(newConn); err != nil {
+			clientErr = pgerror.Wrapf(err, pgcode.SQLserverRejectedEstablishmentOfSQLconnection, "cannot use SSL/TLS with the requested ciphers")
 			return
 		}
 		newConnType = hba.ConnHostSSL
