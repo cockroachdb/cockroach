@@ -1,0 +1,43 @@
+/* setup */
+CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3" SURVIVE REGION FAILURE;
+CREATE TABLE multiregion_db.public.table_regional_by_row (
+  k INT NOT NULL,
+  V STRING
+) LOCALITY REGIONAL BY ROW;
+CREATE INDEX on multiregion_db.table_regional_by_row(v);
+
+/* test */
+EXPLAIN (DDL, SHAPE) alter table multiregion_db.table_regional_by_row add column m int8 default unique_rowid(), alter primary key using columns(k) USING HASH;
+----
+Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› ADD COLUMN ‹m› INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (‹k›) USING HASH;
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index table_regional_by_row_pkey- in relation table_regional_by_row
+ │    └── into table_regional_by_row_pkey~ (rowid, crdb_region; m+, k, v)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation table_regional_by_row
+ │    └── from table_regional_by_row@[9] into table_regional_by_row_pkey~
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index table_regional_by_row_pkey~ in relation table_regional_by_row
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index table_regional_by_row_pkey~ in relation table_regional_by_row
+ │    ├── into table_regional_by_row_v_idx+ (crdb_region, v: k, crdb_internal_k_shard_16+)
+ │    └── into table_regional_by_row_pkey+ (crdb_internal_k_shard_16+, k, crdb_region; rowid, v, m+)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation table_regional_by_row
+ │    ├── from table_regional_by_row@[5] into table_regional_by_row_v_idx+
+ │    └── from table_regional_by_row@[11] into table_regional_by_row_pkey+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index table_regional_by_row_pkey+ in relation table_regional_by_row
+ ├── validate NOT NULL constraint on column crdb_internal_k_shard_16+ in index table_regional_by_row_pkey+ in relation table_regional_by_row
+ ├── validate UNIQUE constraint backed by index table_regional_by_row_v_idx+ in relation table_regional_by_row
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index table_regional_by_row_pkey+ in relation table_regional_by_row
+ │    └── into table_regional_by_row_rowid_key+ (rowid, crdb_region: crdb_internal_k_shard_16+, k)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation table_regional_by_row
+ │    └── from table_regional_by_row@[7] into table_regional_by_row_rowid_key+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index table_regional_by_row_rowid_key+ in relation table_regional_by_row
+ ├── execute 3 system table mutations transactions
+ ├── validate non-index-backed constraint check_crdb_internal_k_shard_16+ in relation table_regional_by_row
+ └── execute 3 system table mutations transactions
