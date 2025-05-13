@@ -134,14 +134,14 @@ func (g *Counter) Inc(i int64) {
 // This method may not perform well under high concurrency,
 // so it should only be used if the Counter is not expected
 // to be frequently Update'd or Inc'd.
-func (g *Counter) UpdateIfHigher(i int64) {
+func (g *Counter) UpdateIfHigher(newValue int64) {
 	var delta int64
 	for {
-		delta = i - atomic.LoadInt64(&g.value)
+		delta = newValue - atomic.LoadInt64(&g.value)
 		if delta <= 0 {
 			return
 		}
-		if atomic.CompareAndSwapInt64(&g.value, i-delta, i) {
+		if atomic.CompareAndSwapInt64(&g.value, newValue-delta, newValue) {
 			break
 		}
 		// Raced with concurrent update, try again.
@@ -260,12 +260,12 @@ func (g *CounterFloat64) Inc(i float64) {
 
 // UpdateIfHigher sets the counter's value only if it's higher
 // than the currently set one.
-func (g *CounterFloat64) UpdateIfHigher(i float64) {
-	old, updated := g.value.UpdateIfHigher(i)
+func (g *CounterFloat64) UpdateIfHigher(newValue float64) {
+	old, updated := g.value.UpdateIfHigher(newValue)
 	if !updated {
 		return
 	}
-	g.parent.g.Inc(i - old)
+	g.parent.g.Inc(newValue - old)
 }
 
 // SQLCounter maintains a value as the sum of its children. The counter will

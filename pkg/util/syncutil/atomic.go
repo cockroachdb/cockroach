@@ -48,7 +48,7 @@ func (f *AtomicFloat64) StoreIfHigher(new float64) (old float64, stored bool) {
 	for {
 		oldInt := f.val.Load()
 		oldFloat := math.Float64frombits(oldInt)
-		if oldFloat > new {
+		if oldFloat >= new {
 			return oldFloat, false
 		}
 		if f.val.CompareAndSwap(oldInt, newInt) {
