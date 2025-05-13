@@ -156,21 +156,19 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	now := r.Clock().PhysicalTime()
 	// Since RaftMu is locked, we can read r.shMu struct without holding the
 	// replica mutex lock.
-	quotaPoolEnabled := r.getQuotaPoolEnabled(ctx, r.shMu.state.Desc)
 	leadershipChanged := r.shMu.leaderID != lastLeaderID
-	currentlyLeader := r.replicaID == r.shMu.leaderID
-
 	if leadershipChanged {
 		r.updateProposalQuotaOnLeaderChangeRaftMuLocked(ctx)
 	}
 
-	if !currentlyLeader {
+	if currentlyLeader := r.replicaID == r.shMu.leaderID; !currentlyLeader {
 		// If we are already a follower, there is already nothing to do. If we just
 		// became a follower, updateProposalQuotaOnLeaderChangeRaftMuLocked() should
 		// have made the necessary replica updates, and now there is nothing to do.
 		return
 	}
 
+	quotaPoolEnabled := r.getQuotaPoolEnabled(ctx, r.shMu.state.Desc)
 	if !quotaPoolEnabled {
 		if r.mu.proposalQuota != nil {
 			r.mu.Lock()
