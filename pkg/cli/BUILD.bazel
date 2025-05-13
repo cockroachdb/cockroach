@@ -272,6 +272,7 @@ go_library(
         "@com_github_spf13_pflag//:pflag",
         "@com_google_cloud_go_storage//:storage",
         "@in_gopkg_yaml_v2//:yaml_v2",
+        "@in_gopkg_yaml_v3//:yaml_v3",
         "@org_golang_google_api//option",
         "@org_golang_google_grpc//:grpc",
         "@org_golang_google_grpc//codes",
