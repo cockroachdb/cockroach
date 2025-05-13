@@ -6,14 +6,21 @@
 package admission
 
 import (
+	"bytes"
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"golang.org/x/exp/trace"
 )
 
 // noGrantChain is a sentinel value representing that the grant is not
@@ -41,6 +48,15 @@ type slotGranter struct {
 	usedSlotsMetric              *metric.Gauge
 	slotsExhaustedDurationMetric *metric.Counter
 	exhaustedStart               time.Time
+
+	// For flight recording.
+	flightRecorder             *trace.FlightRecorder
+	flightRecorderDirName      string
+	lastExhaustedIntervalReset time.Time
+	// The exhausted interval in the recent past.
+	exhaustedInterval          time.Duration
+	lastFlightRecorderSnapshot time.Time
+	trySnapshotCallCount       uint64
 }
 
 var _ granterWithLockedCalls = &slotGranter{}
@@ -87,8 +103,9 @@ func (sg *slotGranter) returnGrantLocked(count int64, _ int8) {
 	}
 	if sg.usedSlots == sg.totalSlots {
 		now := timeutil.Now()
-		exhaustedMicros := now.Sub(sg.exhaustedStart).Microseconds()
-		sg.slotsExhaustedDurationMetric.Inc(exhaustedMicros)
+		exhaustedDur := now.Sub(sg.exhaustedStart)
+		sg.slotsExhaustedDurationMetric.Inc(exhaustedDur.Microseconds())
+		sg.exhaustedInterval += exhaustedDur
 	}
 	sg.usedSlots--
 	if sg.usedSlots < 0 {
@@ -153,8 +170,9 @@ func (sg *slotGranter) setTotalSlotsLockedInternal(totalSlots int) {
 	if totalSlots > sg.totalSlots {
 		if sg.totalSlots <= sg.usedSlots && totalSlots > sg.usedSlots {
 			now := timeutil.Now()
-			exhaustedMicros := now.Sub(sg.exhaustedStart).Microseconds()
-			sg.slotsExhaustedDurationMetric.Inc(exhaustedMicros)
+			exhaustedDur := now.Sub(sg.exhaustedStart)
+			sg.slotsExhaustedDurationMetric.Inc(exhaustedDur.Microseconds())
+			sg.exhaustedInterval += exhaustedDur
 		}
 	} else if totalSlots < sg.totalSlots {
 		if sg.totalSlots > sg.usedSlots && totalSlots <= sg.usedSlots {
@@ -163,6 +181,49 @@ func (sg *slotGranter) setTotalSlotsLockedInternal(totalSlots int) {
 	}
 
 	sg.totalSlots = totalSlots
+}
+
+//gcassert:inline
+func (sg *slotGranter) tryFlightRecorderSnapshotLocked() {
+	if sg.flightRecorder == nil {
+		return
+	}
+	sg.trySnapshotCallCount++
+	if sg.trySnapshotCallCount != 1000 {
+		return
+	}
+	sg.tryFlightRecorderSnapshotLockedSlow()
+}
+
+func (sg *slotGranter) tryFlightRecorderSnapshotLockedSlow() {
+	sg.trySnapshotCallCount = 0
+	now := timeutil.Now()
+	if now.Sub(sg.lastExhaustedIntervalReset) > 3000*time.Millisecond {
+		sg.lastExhaustedIntervalReset = now
+		sg.exhaustedInterval = 0
+		return
+	}
+	if sg.exhaustedInterval > 100*time.Millisecond &&
+		now.Sub(sg.lastFlightRecorderSnapshot) > 10*time.Minute {
+		sg.lastFlightRecorderSnapshot = now
+		go func() {
+			var b bytes.Buffer
+			n, err := sg.flightRecorder.WriteTo(&b)
+			if err != nil {
+				log.Infof(context.Background(), "FlightRecorder.Write failed with err %v", err)
+				return
+			}
+			// Write it to a file.
+			if err := os.WriteFile(
+				filepath.Join(sg.flightRecorderDirName,
+					fmt.Sprintf("fr.%s.out", timeutil.Now().Format(log.FileTimeFormat))),
+				b.Bytes(), 0o755); err != nil {
+				log.Infof(context.Background(), "FlightRecorder file write failed with err %v", err)
+				return
+			}
+			log.Infof(context.Background(), "FlightRecorder.Write succeeded with %d bytes", n)
+		}()
+	}
 }
 
 // tokenGranter implements granterWithLockedCalls.

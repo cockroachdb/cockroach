@@ -8,10 +8,12 @@ package admission
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
@@ -21,7 +23,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"golang.org/x/exp/trace"
 )
+
+var KVAdmissionFlightRecorderOnCPUOverload = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"admission.kv.flight_recorder.enabled",
+	"",
+	true,
+	settings.WithPublic)
 
 // GrantCoordinators holds {regular,elastic} GrantCoordinators for
 // {regular,elastic} work, and a StoreGrantCoordinators that allows for
@@ -375,6 +385,8 @@ type Options struct {
 	// Only non-nil for tests.
 	makeRequesterFunc      makeRequesterFunc
 	makeStoreRequesterFunc makeStoreRequesterFunc
+
+	FlightRecorderDirName string
 }
 
 var _ base.ModuleTestingKnobs = &Options{}
@@ -545,6 +557,18 @@ func makeRegularGrantCoordinator(
 		skipSlotEnforcement:          !goschedstats.Supported,
 		usedSlotsMetric:              metrics.KVUsedSlots,
 		slotsExhaustedDurationMetric: metrics.KVSlotsExhaustedDuration,
+	}
+	if KVAdmissionFlightRecorderOnCPUOverload.Get(&st.SV) {
+		if err := os.MkdirAll(opts.FlightRecorderDirName, 0755); err != nil {
+			log.Warningf(context.Background(), "cannot create FlightRecorder dir: %v", err)
+		}
+		// The default targetPeriod of 10s is fine.
+		fr := trace.NewFlightRecorder()
+		if err := fr.Start(); err != nil {
+			panic(err)
+		}
+		kvg.flightRecorder = fr
+		kvg.flightRecorderDirName = opts.FlightRecorderDirName
 	}
 
 	kvSlotAdjuster.granter = kvg
