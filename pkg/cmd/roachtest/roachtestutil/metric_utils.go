@@ -29,7 +29,7 @@ import (
 	"golang.org/x/exp/maps"
 )
 
-var openmetricsLineRegex = regexp.MustCompile(`^(\w+){([^}]*)} ([\d.e+-]+) ([\d.e+-]+)$`)
+var openmetricsLineRegex = regexp.MustCompile(`^([\w:]+){([^}]*)} ([\d.e+-]+) ([\d.e+-]+)$`)
 
 // AggregatedPerfMetrics is the output of PostProcessPerfMetrics function in individual test
 type AggregatedPerfMetrics []*AggregatedMetric

@@ -2014,7 +2014,7 @@ func (m *perfMetricsCollector) collectFromNodes(
 			continue
 		}
 		m.perfNodes = append(m.perfNodes, node)
-		if err := m.processFiles(files); err != nil {
+		if err := m.processFiles(files, log); err != nil {
 			return errors.Wrapf(err, "error while processing files")
 		}
 	}
@@ -2035,7 +2035,7 @@ func (m *perfMetricsCollector) findMetricsFiles(dirPath string) ([]string, error
 	return files, err
 }
 
-func (m *perfMetricsCollector) processFiles(files []string) error {
+func (m *perfMetricsCollector) processFiles(files []string, log *logger.Logger) error {
 	for _, file := range files {
 		fileBytes, err := os.ReadFile(file)
 		if err != nil {
@@ -2044,7 +2044,9 @@ func (m *perfMetricsCollector) processFiles(files []string) error {
 
 		histograms, labels, err := roachtestutil.GetHistogramMetrics(bytes.NewBuffer(fileBytes))
 		if err != nil {
-			return errors.Wrapf(err, "getting histogram metrics")
+			// This file didn't have valid histograms, continue with other files
+			log.Errorf("error getting histogram metrics for file %s: %v", file, err)
+			continue
 		}
 
 		m.histogramMetrics.Summaries = append(m.histogramMetrics.Summaries, histograms.Summaries...)
