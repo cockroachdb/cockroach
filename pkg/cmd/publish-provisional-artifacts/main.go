@@ -34,6 +34,8 @@ func main() {
 	var doProvisional bool
 	var isRelease bool
 	var doBless bool
+	var telemetryDisabled bool
+	var cockroachArchivePrefix string
 	flag.Var(&platforms, "platform", "platforms to build")
 	flag.BoolVar(&isRelease, "release", false, "build in release mode instead of bleeding-edge mode")
 	flag.StringVar(&gcsBucket, "gcs-bucket", "", "GCS bucket")
@@ -43,7 +45,8 @@ func main() {
 	flag.StringVar(&thirdPartyNoticesFileOverride, "third-party-notices-file", "", "override the file with third party notices")
 	flag.BoolVar(&doProvisional, "provisional", false, "publish provisional binaries")
 	flag.BoolVar(&doBless, "bless", false, "bless provisional binaries")
-
+	flag.BoolVar(&telemetryDisabled, "telemetry-disabled", false, "disable telemetry")
+	flag.StringVar(&cockroachArchivePrefix, "cockroach-archive-prefix", "cockroach", "prefix for the cockroach archive")
 	flag.Parse()
 	if len(platforms) == 0 {
 		platforms = release.DefaultPlatforms()
@@ -95,6 +98,8 @@ func main() {
 		sha:                           string(bytes.TrimSpace(shaOut)),
 		outputDirectory:               outputDirectory,
 		thirdPartyNoticesFileOverride: thirdPartyNoticesFileOverride,
+		telemetryDisabled:             telemetryDisabled,
+		cockroachArchivePrefix:        cockroachArchivePrefix,
 	}, release.ExecFn{})
 }
 
@@ -108,6 +113,8 @@ type runFlags struct {
 	pkgDir                        string
 	outputDirectory               string
 	thirdPartyNoticesFileOverride string
+	telemetryDisabled             bool
+	cockroachArchivePrefix        string
 }
 
 func run(
@@ -121,6 +128,15 @@ func run(
 	if !flags.isRelease {
 		flags.doProvisional = true
 		flags.doBless = false
+	}
+	if flags.cockroachArchivePrefix == "" {
+		flags.cockroachArchivePrefix = "cockroach"
+	}
+	if flags.telemetryDisabled && !flags.isRelease {
+		log.Panic("telemetry is disabled, but this is not a release build")
+	}
+	if flags.telemetryDisabled && flags.cockroachArchivePrefix == "cockroach" {
+		log.Panic("telemetry is disabled, but cockroach archive prefix is set to 'cockroach'")
 	}
 
 	var versionStr string
@@ -160,6 +176,7 @@ func run(
 		o.AbsolutePath = filepath.Join(flags.pkgDir, "cockroach"+release.SuffixFromPlatform(platform))
 		o.CockroachSQLAbsolutePath = filepath.Join(flags.pkgDir, "cockroach-sql"+release.SuffixFromPlatform(platform))
 		o.Channel = release.ChannelFromPlatform(platform)
+		o.TelemetryDisabled = flags.telemetryDisabled
 		cockroachBuildOpts = append(cockroachBuildOpts, o)
 	}
 
@@ -204,31 +221,34 @@ func run(
 						release.MakeCRDBLibraryArchiveFiles(o.PkgDir, o.Platform)...,
 					)
 					crdbFiles = append(crdbFiles, licenseFiles...)
-					crdbBody, err := release.CreateArchive(o.Platform, o.VersionStr, "cockroach", crdbFiles)
+					crdbBody, err := release.CreateArchive(o.Platform, o.VersionStr, flags.cockroachArchivePrefix, crdbFiles)
 					if err != nil {
 						log.Fatalf("cannot create crdb release archive %s", err)
 					}
-
-					sqlFiles := []release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.CockroachSQLAbsolutePath, "cockroach-sql")}
-					sqlFiles = append(sqlFiles, licenseFiles...)
-					sqlBody, err := release.CreateArchive(o.Platform, o.VersionStr, "cockroach-sql", sqlFiles)
-					if err != nil {
-						log.Fatalf("cannot create sql release archive %s", err)
-					}
 					release.PutRelease(provider, release.PutReleaseOptions{
 						NoCache:         false,
 						Platform:        o.Platform,
 						VersionStr:      o.VersionStr,
-						ArchivePrefix:   "cockroach",
+						ArchivePrefix:   flags.cockroachArchivePrefix,
 						OutputDirectory: flags.outputDirectory,
 					}, crdbBody)
-					release.PutRelease(provider, release.PutReleaseOptions{
-						NoCache:         false,
-						Platform:        o.Platform,
-						VersionStr:      o.VersionStr,
-						ArchivePrefix:   "cockroach-sql",
-						OutputDirectory: flags.outputDirectory,
-					}, sqlBody)
+
+					// telemetry disabled does not apply to cockroach-sql binaries
+					if !flags.telemetryDisabled {
+						sqlFiles := []release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.CockroachSQLAbsolutePath, "cockroach-sql")}
+						sqlFiles = append(sqlFiles, licenseFiles...)
+						sqlBody, err := release.CreateArchive(o.Platform, o.VersionStr, "cockroach-sql", sqlFiles)
+						if err != nil {
+							log.Fatalf("cannot create sql release archive %s", err)
+						}
+						release.PutRelease(provider, release.PutReleaseOptions{
+							NoCache:         false,
+							Platform:        o.Platform,
+							VersionStr:      o.VersionStr,
+							ArchivePrefix:   "cockroach-sql",
+							OutputDirectory: flags.outputDirectory,
+						}, sqlBody)
+					}
 				}
 			}
 		}
@@ -240,7 +260,7 @@ func run(
 		if updateLatest {
 			for _, o := range cockroachBuildOpts {
 				for _, provider := range providers {
-					markLatestRelease(provider, o)
+					markLatestRelease(provider, o, flags.cockroachArchivePrefix)
 				}
 			}
 		}
@@ -254,8 +274,9 @@ func buildCockroach(flags runFlags, o opts, execFn release.ExecFn) {
 	}()
 
 	buildOpts := release.BuildOptions{
-		ExecFn:  execFn,
-		Channel: release.ChannelFromPlatform(o.Platform),
+		ExecFn:            execFn,
+		Channel:           o.Channel,
+		TelemetryDisabled: o.TelemetryDisabled,
 	}
 	if flags.isRelease {
 		buildOpts.Release = true
@@ -277,13 +298,14 @@ type opts struct {
 	CockroachSQLAbsolutePath string
 	PkgDir                   string
 	Channel                  string
+	TelemetryDisabled        bool
 }
 
-func markLatestRelease(svc release.ObjectPutGetter, o opts) {
+func markLatestRelease(svc release.ObjectPutGetter, o opts, archivePrefix string) {
 	latestOpts := release.LatestOpts{
 		Platform:   o.Platform,
 		VersionStr: o.VersionStr,
 	}
-	release.MarkLatestReleaseWithSuffix(svc, latestOpts, "")
-	release.MarkLatestReleaseWithSuffix(svc, latestOpts, release.ChecksumSuffix)
+	release.MarkLatestReleaseWithSuffix(svc, latestOpts, archivePrefix, "")
+	release.MarkLatestReleaseWithSuffix(svc, latestOpts, archivePrefix, release.ChecksumSuffix)
 }
