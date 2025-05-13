@@ -79,7 +79,7 @@ tc_start_block "Verify docker images"
 error=0
 for arch in amd64 arm64; do
     tc_start_block "Verify $manifest on $arch"
-    if ! verify_docker_image "$manifest" "linux/$arch" "$BUILD_VCS_NUMBER" "$version" false; then
+    if ! verify_docker_image "$manifest" "linux/$arch" "$BUILD_VCS_NUMBER" "$version" false false; then
       error=1
     fi
     tc_end_block "Verify $manifest on $arch"
