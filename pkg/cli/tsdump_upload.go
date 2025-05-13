@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -40,6 +41,7 @@ const (
 const (
 	UploadStatusSuccess = "Success"
 	UploadStatusFailure = "Failed"
+	nodeKey             = "node_id"
 )
 
 var (
@@ -116,10 +118,11 @@ type datadogWriter struct {
 	apiKey    string
 	// namePrefix sets the string to prepend to all metric names. The
 	// names are kept with `.` delimiters.
-	namePrefix string
-	doRequest  func(req *http.Request) error
-	threshold  int
-	uploadTime time.Time
+	namePrefix     string
+	doRequest      func(req *http.Request) error
+	threshold      int
+	uploadTime     time.Time
+	storeToNodeMap map[string]string
 }
 
 func makeDatadogWriter(
@@ -133,14 +136,15 @@ func makeDatadogWriter(
 	currentTime := getCurrentTime()
 
 	return &datadogWriter{
-		targetURL:  targetURL,
-		uploadID:   newTsdumpUploadID(currentTime),
-		init:       init,
-		apiKey:     apiKey,
-		namePrefix: "crdb.tsdump.", // Default pre-set prefix to distinguish these uploads.
-		doRequest:  doRequest,
-		threshold:  threshold,
-		uploadTime: currentTime,
+		targetURL:      targetURL,
+		uploadID:       newTsdumpUploadID(currentTime),
+		init:           init,
+		apiKey:         apiKey,
+		namePrefix:     "crdb.tsdump.", // Default pre-set prefix to distinguish these uploads.
+		doRequest:      doRequest,
+		threshold:      threshold,
+		uploadTime:     currentTime,
+		storeToNodeMap: make(map[string]string),
 	}
 }
 
@@ -172,7 +176,12 @@ func doDDRequest(req *http.Request) error {
 	return nil
 }
 
-func dump(kv *roachpb.KeyValue) (*DatadogSeries, error) {
+// appendTag appends a formatted tag to the series tags.
+func appendTag(series *DatadogSeries, tagKey, tagValue string) {
+	series.Tags = append(series.Tags, fmt.Sprintf("%s:%s", tagKey, tagValue))
+}
+
+func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*DatadogSeries, error) {
 	name, source, _, _, err := ts.DecodeDataKey(kv.Key)
 	if err != nil {
 		return nil, err
@@ -190,15 +199,28 @@ func dump(kv *roachpb.KeyValue) (*DatadogSeries, error) {
 	}
 
 	sl := reCrStoreNode.FindStringSubmatch(name)
-	if len(sl) != 0 {
-		storeNodeKey := sl[1]
-		if storeNodeKey == "node" {
-			storeNodeKey += "_id"
-		}
-		series.Tags = append(series.Tags, fmt.Sprintf("%s:%s", storeNodeKey, source))
+	if len(sl) >= 3 {
+		// extract the node/store and metric name from the regex match.
+		key := sl[1]
 		series.Metric = sl[2]
+
+		switch key {
+		case "node":
+			appendTag(series, nodeKey, source)
+		case "store":
+			appendTag(series, key, source)
+			// We check the node associated with store if store to node mapping
+			// is provided as part of --store-to-node-map-file flag. If exists then
+			// emit node as tag.
+			if nodeID, ok := d.storeToNodeMap[source]; ok {
+				appendTag(series, nodeKey, nodeID)
+			}
+		default:
+			appendTag(series, key, source)
+		}
 	} else {
-		series.Tags = append(series.Tags, "node_id:0")
+		// add default node_id as 0 as there is no metric match for the regex.
+		appendTag(series, nodeKey, "0")
 	}
 
 	for i := 0; i < idata.SampleCount(); i++ {
@@ -338,6 +360,11 @@ func (d *datadogWriter) upload(fileName string) error {
 		return err
 	}
 
+	storeToNodeYamlFile := debugTimeSeriesDumpOpts.storeToNodeMapYAMLFile
+	if storeToNodeYamlFile != "" {
+		d.populateNodeAndStoreMap(storeToNodeYamlFile)
+	}
+
 	dec := gob.NewDecoder(f)
 	decodeOne := func() ([]DatadogSeries, error) {
 		var ddSeries []DatadogSeries
@@ -349,7 +376,7 @@ func (d *datadogWriter) upload(fileName string) error {
 				return ddSeries, err
 			}
 
-			datadogSeries, err := dump(&v)
+			datadogSeries, err := d.dump(&v)
 			if err != nil {
 				return nil, err
 			}
@@ -489,6 +516,27 @@ func (d *datadogWriter) upload(fileName string) error {
 
 	close(ch)
 	return nil
+}
+
+func (d *datadogWriter) populateNodeAndStoreMap(fileName string) {
+	file, err := os.Open(fileName)
+	if err != nil {
+		fmt.Printf("error in opening store to node mapping YAML file: %v\n", err)
+		return
+	}
+
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			fmt.Printf("error in clsoing store to node mapping YAML: %v\n", err)
+		}
+	}(file)
+
+	decoder := yaml.NewDecoder(file)
+	if err := decoder.Decode(&d.storeToNodeMap); err != nil {
+		fmt.Printf("error decoding store to node mapping file YAML: %v\n", err)
+		return
+	}
 }
 
 // getFileReader returns an io.Reader based on the file type.
