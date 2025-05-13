@@ -415,7 +415,7 @@ func TestPebbleEncryption2(t *testing.T) {
 		)
 		require.NoError(t, err)
 		require.NoError(t, db.Flush())
-		require.NoError(t, db.Compact())
+		require.NoError(t, db.Compact(context.Background()))
 		require.True(t, validateKeys(db))
 		db.Close()
 	}

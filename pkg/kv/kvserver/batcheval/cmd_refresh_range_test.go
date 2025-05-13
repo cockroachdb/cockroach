@@ -166,7 +166,7 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	if err := db.Flush(); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Compact(); err != nil {
+	if err := db.Compact(ctx); err != nil {
 		t.Fatal(err)
 	}
 

@@ -4166,7 +4166,7 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 	writeToEngine(t, eng, puts, &txn, debug)
 	// The two SET calls for writing the intent are collapsed down to L6.
 	require.NoError(t, eng.Flush())
-	require.NoError(t, eng.Compact())
+	require.NoError(t, eng.Compact(ctx))
 
 	txn.WriteTimestamp = timestamps[1]
 	txn.Sequence = seq
@@ -4223,7 +4223,7 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 	require.NoError(t, err)
 	// Compact the engine so that SINGLEDEL consumes the SETWITHDEL, becoming a
 	// DEL.
-	require.NoError(t, eng.Compact())
+	require.NoError(t, eng.Compact(ctx))
 	iter, err := eng.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: lu.Span.Key, UpperBound: lu.Span.EndKey})
 	if err != nil {
 		t.Fatal(err)
@@ -5077,7 +5077,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 	}
 	// Compact the engine; the ForTesting() config option will assert that all
 	// DELSIZED tombstones were appropriately sized.
-	require.NoError(t, engine.Compact())
+	require.NoError(t, engine.Compact(ctx))
 }
 
 // TestMVCCGarbageCollectNonDeleted verifies that the first value for
@@ -5126,7 +5126,7 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 
 	// Compact the engine; the ForTesting() config option will assert that all
 	// DELSIZED tombstones were appropriately sized.
-	require.NoError(t, engine.Compact())
+	require.NoError(t, engine.Compact(ctx))
 }
 
 // TestMVCCGarbageCollectIntent verifies that an intent cannot be GC'd.
@@ -5163,7 +5163,7 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 	}
 	// Compact the engine; the ForTesting() config option will assert that all
 	// DELSIZED tombstones were appropriately sized.
-	require.NoError(t, engine.Compact())
+	require.NoError(t, engine.Compact(ctx))
 }
 
 // TestMVCCGarbageCollectPanicsWithMixOfLocalAndGlobalKeys verifies that
@@ -5366,7 +5366,7 @@ func TestMVCCGarbageCollectUsesSeekLTAppropriately(t *testing.T) {
 			runTestCase(t, tc, engine)
 			// Compact the engine; the ForTesting() config option will assert
 			// that all DELSIZED tombstones were appropriately sized.
-			require.NoError(t, engine.Compact())
+			require.NoError(t, engine.Compact(context.Background()))
 		})
 	}
 }
@@ -5973,7 +5973,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 
 			// Compact the engine; the ForTesting() config option will assert
 			// that all DELSIZED tombstones were appropriately sized.
-			require.NoError(t, engine.Compact())
+			require.NoError(t, engine.Compact(ctx))
 		})
 	}
 }
@@ -6233,7 +6233,7 @@ func TestMVCCGarbageCollectClearRangeInlinedValue(t *testing.T) {
 		"expected error '%s' found '%s'", expectedError, err)
 	// Compact the engine; the ForTesting() config option will assert that all
 	// DELSIZED tombstones were appropriately sized.
-	require.NoError(t, engine.Compact())
+	require.NoError(t, engine.Compact(ctx))
 }
 
 func TestMVCCGarbageCollectClearPointsInRange(t *testing.T) {
@@ -6303,7 +6303,7 @@ func TestMVCCGarbageCollectClearPointsInRange(t *testing.T) {
 
 	// Compact the engine; the ForTesting() config option will assert that all
 	// DELSIZED tombstones were appropriately sized.
-	require.NoError(t, engine.Compact())
+	require.NoError(t, engine.Compact(ctx))
 }
 
 func TestMVCCGarbageCollectClearRangeFailure(t *testing.T) {
@@ -6434,7 +6434,7 @@ func TestMVCCTimeSeriesPartialMerge(t *testing.T) {
 		}
 
 		if i == 1 {
-			if err := engine.Compact(); err != nil {
+			if err := engine.Compact(ctx); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -6447,7 +6447,7 @@ func TestMVCCTimeSeriesPartialMerge(t *testing.T) {
 		}
 
 		if i == 1 {
-			if err := engine.Compact(); err != nil {
+			if err := engine.Compact(ctx); err != nil {
 				t.Fatal(err)
 			}
 		}

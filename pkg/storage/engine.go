@@ -927,7 +927,7 @@ type Engine interface {
 	// Properties returns the low-level properties for the engine's underlying storage.
 	Properties() roachpb.StoreProperties
 	// Compact forces compaction over the entire database.
-	Compact() error
+	Compact(ctx context.Context) error
 	// Env returns the filesystem environment used by the Engine.
 	Env() *fs.Env
 	// Excise removes all data for the given span from the engine.
@@ -1074,7 +1074,7 @@ type Engine interface {
 	) error
 	// CompactRange ensures that the specified range of key value pairs is
 	// optimized for space efficiency.
-	CompactRange(start, end roachpb.Key) error
+	CompactRange(ctx context.Context, start, end roachpb.Key) error
 	// ScanStorageInternalKeys returns key level statistics for each level of a pebble store (that overlap start and end).
 	ScanStorageInternalKeys(start, end roachpb.Key, megabytesPerSecond int64) ([]enginepb.StorageInternalKeysMetrics, error)
 	// GetTableMetrics returns information about sstables that overlap start and end.
