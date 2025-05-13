@@ -86,6 +86,14 @@ func UnderRace(t SkippableTest, args ...interface{}) {
 	}
 }
 
+// UnlessUnderRace skips this test if the race detector is not enabled.
+func UnlessUnderRace(t SkippableTest, args ...interface{}) {
+	t.Helper()
+	if !util.RaceEnabled {
+		maybeSkip(t, "disabled unless under race", args...)
+	}
+}
+
 // UnderRaceWithIssue skips this test if the race detector is enabled,
 // logging the given issue ID as the reason.
 func UnderRaceWithIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
