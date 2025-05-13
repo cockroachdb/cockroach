@@ -12,6 +12,7 @@ export * from "./badge";
 export * from "./barCharts";
 export * from "./button";
 export * from "./common";
+export * from "./components";
 export * from "./delayed";
 export * from "./downloadFile";
 export * from "./dropdown";
@@ -50,6 +51,7 @@ export * from "./contexts";
 export * from "./timestamp";
 export * from "./antdTheme";
 export * from "./pages";
+export * from "./types";
 // Reexport ConfigProvider instance from cluster-ui as exact instance
 // required in Db Console to apply Antd theme in Db Console.
 // TODO (koorosh): is it possible to define antd pacakge as peerDependency
