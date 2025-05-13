@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "om-converter",
+    testonly = 1,
+    srcs = ["processor.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/om-converter",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachtest/om-converter/converter",
+        "//pkg/cmd/roachtest/om-converter/model",
+        "//pkg/cmd/roachtest/om-converter/sink",
+        "//pkg/cmd/roachtest/om-converter/source",
+        "//pkg/cmd/roachtest/registry",
+        "@com_github_cockroachdb_errors//:errors",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)

@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	converter "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/om-converter"
+	util "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/om-converter/converter"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operations"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
@@ -219,10 +221,87 @@ Check --parallelism, --run-forever and --wait-before-next-execution flags`,
 	}
 	roachtestflags.AddRunOpsFlags(runOperationCmd.Flags())
 
+	var numWorkers int
+	var commitMappingFile string
+	var cleanupMaxAge int
+	var cleanupBatchSize int
+	var cleanupInterval int
+	var omConverterCmd = &cobra.Command{
+		SilenceUsage: true,
+		Use:          "om-converter [yaml file]",
+		Short:        "run one metrics converter that converts stats.json metrics to openmetrics",
+		Long: `Run one metrics converter that converts stats.json metrics to openmetrics
+`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) < 1 {
+				fmt.Println("Error: File path is required")
+				os.Exit(1)
+			}
+
+			filePath := args[0]
+			yamlContent, err := os.ReadFile(filePath)
+			if err != nil {
+				fmt.Printf("Error reading file: %v\n", err)
+				os.Exit(1)
+			}
+
+			r := makeTestRegistry()
+
+			// actual registering of tests
+			tests.RegisterTests(&r)
+			specs := r.AllTests()
+			if commitMappingFile != "" {
+				mapping, err := util.LoadCommitMappingFromCSV(commitMappingFile)
+				if err != nil {
+					fmt.Printf("Failed to load commit mapping: %v", err)
+				}
+				util.SetCommitMapping(mapping)
+			}
+
+			// Configure cleanup with values from CLI flags
+			if cleanupMaxAge > 0 || cleanupBatchSize > 0 || cleanupInterval > 0 {
+				maxAge := time.Duration(cleanupMaxAge) * time.Hour
+				if cleanupMaxAge == 0 {
+					maxAge = util.DefaultMaxEntryAge
+				}
+
+				batchSize := cleanupBatchSize
+				if batchSize == 0 {
+					batchSize = util.DefaultMaxCleanupBatchSize
+				}
+
+				interval := time.Duration(cleanupInterval) * time.Minute
+				if cleanupInterval == 0 {
+					interval = util.DefaultCleanupInterval
+				}
+
+				util.ConfigureCleanup(maxAge, batchSize, interval)
+				fmt.Printf("Configured cleanup: maxAge=%v, batchSize=%d, interval=%v\n",
+					maxAge, batchSize, interval)
+			}
+
+			err = converter.StartProcess(yamlContent, numWorkers, &specs)
+			if err != nil && !errors.Is(err, context.Canceled) {
+				fmt.Printf("Error in process: %v\n", err)
+				os.Exit(1)
+			}
+
+			fmt.Println("Process exited.")
+			return nil
+		},
+	}
+	omConverterCmd.Flags().IntVar(&numWorkers, "workers", 1, "Number of workers")
+	omConverterCmd.Flags().StringVar(&commitMappingFile, "commit-file", "", "Path of commit mapping file")
+	omConverterCmd.Flags().IntVar(&cleanupMaxAge, "cleanup-max-age", 0, "Maximum age of entries to keep in hours (default: 48)")
+	omConverterCmd.Flags().IntVar(&cleanupBatchSize, "cleanup-batch-size", 0, "Number of entries to clean up at once (default: 1000)")
+	omConverterCmd.Flags().IntVar(&cleanupInterval, "cleanup-interval", 0, "Interval between cleanup runs in minutes (default: 2)")
+
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(benchCmd)
 	rootCmd.AddCommand(runOperationCmd)
+	rootCmd.AddCommand(omConverterCmd)
 
 	var err error
 	config.OSUser, err = user.Current()
