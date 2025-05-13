@@ -25,20 +25,26 @@ type Handle struct {
 	alloc    *quotapool.IntAlloc // possibly nil
 	sp       *tracing.Span       // possibly nil (but nil is functional)
 
-	// The below fields are allocated only in Activate, i.e. on the async
+	// The fields below are allocated only in Activate, i.e. on the async
 	// goroutine.
 	region region
 }
 
 type activeHandle Handle
 
+// ActiveHandle is an activated Handle. It is returned by the
+// Handle.Activate method and must be released by calling Release.
+//
+// It's internally a pointer to the original Handle. The interface helps
+// separate concerns and allows for a more ergonomic API, all without additional
+// allocations.
 type ActiveHandle interface {
 	Release(ctx context.Context)
 	stopperHandleMarker() // makes it easy to navigate to impl
 }
 
 func (hdl *Handle) Activate(ctx context.Context) ActiveHandle {
-	growstack.Grow()
+	growstack.Grow() // see https://github.com/cockroachdb/cockroach/issues/130663
 
 	hdl.region = hdl.s.startRegion(ctx, hdl.taskName)
 	// NB: it's tempting for ergonomics to make `release` a method on `Handle` and
