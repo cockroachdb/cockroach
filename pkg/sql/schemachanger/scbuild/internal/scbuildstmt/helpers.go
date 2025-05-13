@@ -562,7 +562,7 @@ type indexSpecMutator struct {
 // changes from a previous to the current state. It removes outdated elements
 // and incorporates new or updated elements into the build context for processing.
 func (s *indexSpecMutator) applyDeltaForIndexColumns(
-	b BuildCtx, prev *indexSpec, isTransient bool,
+	b BuildCtx, prev *indexSpec, isIndexFinal bool,
 ) {
 	columnIDToElem := make(map[catid.ColumnID]*scpb.IndexColumn)
 	// Remove all old elements.
@@ -571,14 +571,15 @@ func (s *indexSpecMutator) applyDeltaForIndexColumns(
 		b.Drop(col)
 	}
 	// Next, apply the current state.
-	for _, col := range s.columns {
+	for idx, col := range s.columns {
 		// If the element already exists, we just need to copy
 		// the update in there.
 		if existingCol, ok := columnIDToElem[col.ColumnID]; ok {
 			*existingCol = *protoutil.Clone(col).(*scpb.IndexColumn)
 			col = existingCol
+			s.columns[idx] = col
 		}
-		if isTransient {
+		if isIndexFinal {
 			b.Add(col)
 		} else {
 			b.AddTransient(col)
@@ -721,18 +722,32 @@ func (s *indexSpecMutator) removeColumn(columnID catid.ColumnID, kind scpb.Index
 	}
 }
 
-// removePrefixColumns removes multiple columns based on the kind.
-func (s *indexSpecMutator) removePrefixColumns(numPrefixCols int, kind scpb.IndexColumn_Kind) {
+// removeImplicitColumns removes all implicit columns.
+func (s *indexSpecMutator) removeImplicitColumns() {
 	// The indexSpec must have ordered columns for this to work.
 	if buildutil.CrdbTestBuild &&
 		!sort.SliceIsSorted(s.columns, s.columnComparison) {
 		panic(errors.AssertionFailedf("indexSpec was not sorted first"))
 	}
-	for idx, col := range s.columns {
-		if col.Kind == kind {
-			s.columns = append(s.columns[:idx], s.columns[idx+numPrefixCols:]...)
-			s.reassignOrdinals(kind)
-			return
+	newColumns := make([]*scpb.IndexColumn, 0, len(s.columns))
+	for _, col := range s.columns {
+		if col.Implicit {
+			continue
+		}
+		newColumns = append(newColumns, col)
+	}
+	s.columns = newColumns
+}
+
+// assertColumnIsNotContained validates the column doesn't already exist.
+func (s *indexSpec) assertColumnIsNotContained(column *scpb.IndexColumn) {
+	if !buildutil.CrdbTestBuild {
+		return
+	}
+	for _, col := range s.columns {
+		if col.ColumnID == column.ColumnID && col.Kind == column.Kind {
+			panic(errors.AssertionFailedf("column %d %d %d already exists",
+				column.ColumnID, column.Kind, column.OrdinalInKind))
 		}
 	}
 }
@@ -740,6 +755,8 @@ func (s *indexSpecMutator) removePrefixColumns(numPrefixCols int, kind scpb.Inde
 // prependColumn columns before all others of the same kind. The columns should
 // be sorted first.
 func (s *indexSpecMutator) prependColumn(column *scpb.IndexColumn) {
+	// Sanity: Validate the column is not already contained.
+	s.assertColumnIsNotContained(column)
 	// The indexSpec must have ordered columns for this to work.
 	if buildutil.CrdbTestBuild &&
 		!sort.SliceIsSorted(s.columns, s.columnComparison) {
@@ -763,6 +780,8 @@ func (s *indexSpecMutator) prependColumn(column *scpb.IndexColumn) {
 // appendColumn columns after all others of the same kind. The columns should
 // be sorted first.
 func (s *indexSpecMutator) appendColumn(column *scpb.IndexColumn) {
+	// Sanity: Validate the column is not already contained.
+	s.assertColumnIsNotContained(column)
 	// The indexSpec must have ordered columns for this to work.
 	if buildutil.CrdbTestBuild &&
 		!sort.SliceIsSorted(s.columns, s.columnComparison) {
