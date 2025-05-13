@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+
 	// Placeholder for pgzip and zdstd.
 	_ "github.com/klauspost/compress/zstd"
 	_ "github.com/klauspost/pgzip"
@@ -68,11 +69,15 @@ func cloudStorageFormatTime(ts hlc.Timestamp) string {
 
 type cloudStorageSinkFile struct {
 	cloudStorageSinkKey
-	created       time.Time
-	codec         io.WriteCloser
-	rawSize       int
-	numMessages   int
-	buf           bytes.Buffer
+	created     time.Time
+	codec       io.WriteCloser
+	rawSize     int
+	numMessages int
+	buf         bytes.Buffer
+	// bufLen tracks the length of buf. Because some of the codecs write to the
+	// buffer asynchronously, we can't safely call `buf.Len()` while the codec
+	// is open.
+	bufLen        int64
 	alloc         kvevent.Alloc
 	oldestMVCC    hlc.Timestamp
 	parquetCodec  *parquetWriter
@@ -102,9 +107,19 @@ var _ io.Writer = &cloudStorageSinkFile{}
 func (f *cloudStorageSinkFile) Write(p []byte) (int, error) {
 	f.rawSize += len(p)
 	if f.codec != nil {
-		return f.codec.Write(p)
+		n, err := f.codec.Write(p) // WRITE
+		if err != nil {
+			return 0, err
+		}
+		f.bufLen += int64(n)
+		return n, nil
 	}
-	return f.buf.Write(p)
+	n, err := f.buf.Write(p)
+	if err != nil {
+		return 0, err
+	}
+	f.bufLen += int64(n)
+	return n, nil
 }
 
 // cloudStorageSink writes changefeed output to files in a cloud storage bucket
@@ -586,7 +601,7 @@ func (s *cloudStorageSink) EmitRow(
 	}
 	file.numMessages++
 
-	if int64(file.buf.Len()) > s.targetMaxFileSize {
+	if file.bufLen > s.targetMaxFileSize { // READ
 		s.metrics.recordSizeBasedFlush()
 		if err := s.flushTopicVersions(ctx, file.topic, file.schemaID); err != nil {
 			return err
@@ -772,7 +787,7 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 		if err := file.parquetCodec.close(); err != nil {
 			return err
 		}
-		file.rawSize = file.buf.Len()
+		file.rawSize = int(file.bufLen)
 	}
 	// We use this monotonically increasing fileID to ensure correct ordering
 	// among files emitted at the same timestamp during the same job session.
@@ -884,7 +899,7 @@ func (f *cloudStorageSinkFile) flushToStorage(
 		f.codec = nil
 	}
 
-	compressedBytes := f.buf.Len()
+	compressedBytes := int(f.bufLen)
 	if err := cloud.WriteFile(ctx, es, dest, bytes.NewReader(f.buf.Bytes())); err != nil {
 		return err
 	}

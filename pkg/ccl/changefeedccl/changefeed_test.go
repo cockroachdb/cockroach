@@ -11546,3 +11546,43 @@ func TestChangefeedAsSelectForEmptyTable(t *testing.T) {
 
 	cdcTest(t, testFn)
 }
+
+func TestCloudstorageParallelCompression(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numFeedsEach = 10
+
+	testutils.RunValues(t, "compression", []string{"zstd", "gzip"}, func(t *testing.T, compression string) {
+		s, cleanup := makeServer(t)
+		defer cleanup()
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT);`)
+		sqlDB.Exec(t, `INSERT INTO foo (a) SELECT * FROM generate_series(1, 5000);`)
+
+		t.Logf("inserted into table")
+
+		var jobIDs []int
+		for i := range numFeedsEach {
+			var jobID int
+			sqlDB.QueryRow(t, fmt.Sprintf(`CREATE CHANGEFEED FOR foo INTO 'nodelocal://1/%d-testout' WITH compression='%s', initial_scan='only', format='parquet';`, i, compression)).Scan(&jobID)
+			jobIDs = append(jobIDs, jobID)
+		}
+
+		t.Logf("created changefeeds")
+
+		// Wait for completion.
+		testutils.SucceedsSoon(t, func() error {
+			for _, jobID := range jobIDs {
+				var status string
+				sqlDB.QueryRow(t, fmt.Sprintf(`SELECT status FROM [SHOW JOBS] WHERE job_id = %d`, jobID)).Scan(&status)
+				t.Logf("job %d status: %s", jobID, status)
+				if status != "succeeded" {
+					return errors.New("job not completed")
+				}
+			}
+			return nil
+		})
+	})
+}
