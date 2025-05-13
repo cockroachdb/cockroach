@@ -237,11 +237,10 @@ func (s *testState) Search(d *datadriven.TestData) string {
 		result := &results[i]
 		var errorBound string
 		if result.ErrorBound != 0 {
-			errorBound = fmt.Sprintf("± %s ", utils.FormatFloat(result.ErrorBound, 2))
+			errorBound = fmt.Sprintf(" ± %s", utils.FormatFloat(result.ErrorBound, 2))
 		}
-		fmt.Fprintf(&buf, "%s: %s %s(centroid=%s)\n",
-			string(result.ChildKey.KeyBytes), utils.FormatFloat(result.QuerySquaredDistance, 4),
-			errorBound, utils.FormatFloat(result.CentroidDistance, 2))
+		fmt.Fprintf(&buf, "%s: %s%s\n",
+			string(result.ChildKey.KeyBytes), utils.FormatFloat(result.QueryDistance, 4), errorBound)
 	}
 
 	buf.WriteString(fmt.Sprintf("%d leaf vectors, ", searchSet.Stats.QuantizedLeafVectorCount))
@@ -285,7 +284,7 @@ func (s *testState) SearchForInsert(d *datadriven.TestData) string {
 	s.Index.UnRandomizeVector(result.Vector, original)
 	utils.WriteVector(&buf, original, 4)
 
-	fmt.Fprintf(&buf, ", sqdist=%s", utils.FormatFloat(result.QuerySquaredDistance, 4))
+	fmt.Fprintf(&buf, ", sqdist=%s", utils.FormatFloat(result.QueryDistance, 4))
 	if result.ErrorBound != 0 {
 		fmt.Fprintf(&buf, "±%s", utils.FormatFloat(result.ErrorBound, 2))
 	}
@@ -901,7 +900,7 @@ func TestRandomizeVector(t *testing.T) {
 	errorBounds := make([]float32, count)
 	quantizer.EstimateDistances(&workspace, originalSet, original.At(0), distances, errorBounds)
 	require.Equal(t, []float32{0, 272.75, 550.86, 950.93, 2421.41}, testutils.RoundFloats(distances, 2))
-	require.Equal(t, []float32{37.58, 46.08, 57.55, 69.46, 110.57}, testutils.RoundFloats(errorBounds, 2))
+	require.Equal(t, []float32{27.87, 46.08, 57.55, 69.46, 110.57}, testutils.RoundFloats(errorBounds, 2))
 
 	quantizer.EstimateDistances(&workspace, randomizedSet, randomized.At(0), distances, errorBounds)
 	require.Equal(t, []float32{5.1, 292.72, 454.95, 1011.85, 2475.87}, testutils.RoundFloats(distances, 2))

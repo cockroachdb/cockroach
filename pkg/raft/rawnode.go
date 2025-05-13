@@ -423,6 +423,10 @@ func (rn *RawNode) SparseStatus() SparseStatus {
 // ReplicaProgress returns the progress for the replica with the given ID.
 // It returns nil if the replica is not being tracked.
 func (rn *RawNode) ReplicaProgress(id pb.PeerID) *tracker.Progress {
+	if rn == nil || rn.raft == nil {
+		// If the replica has been deleted, the rn and/or rn.raft will be nil.
+		return nil
+	}
 	return getReplicaProgress(rn.raft, id)
 }
 

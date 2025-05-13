@@ -35,6 +35,9 @@ message RaBitQuantizedVectorSet {
   // Centroid is the average of vectors in the set, representing its "center of
   // mass". Note that the centroid is computed when a vector set is created and
   // is not updated when vectors are added or removed.
+  // NOTE: By default, this is the mean centroid for the L2Squared distance
+  // metric, but is the spherical centroid for InnerProduct and Cosine metrics.
+  // The spherical centroid is simply the mean centroid, but normalized.
   // NOTE: The centroid should be treated as immutable.
   repeated float centroid = 1;
   // Codes is a set of RaBitQ quantization codes, with one code per quantized
@@ -42,8 +45,8 @@ message RaBitQuantizedVectorSet {
   RaBitQCodeSet codes = 2 [(gogoproto.nullable) = false];
   // CodeCounts records the count of "1" bits in each of the quantization codes.
   repeated uint32 code_counts = 3;
-  // CentroidDistances is a slice of the exact distances of the original
-  // full-size vectors from the centroid.
+  // CentroidDistances is a slice of the exact Euclidean distances (non-squared)
+  // of the original full-size vectors from the centroid.
   repeated float centroid_distances = 4;
   // QuantizedDotProducts is a slice of the exact inner products between the
   // original full-size vectors and their corresponding quantized vectors.
@@ -64,11 +67,12 @@ message UnQuantizedVectorSet {
   // Centroid is the average of vectors in the set, representing its "center of
   // mass". Note that the centroid is computed when a vector set is created and
   // is not updated when vectors are added or removed.
+  // NOTE: By default, this is the mean centroid for the L2Squared distance
+  // metric, but is the spherical centroid for InnerProduct and Cosine metrics.
+  // The spherical centroid is simply the mean centroid, but normalized.
   // NOTE: The centroid should be treated as immutable.
   repeated float centroid = 1;
-  // CentroidDistances is a slice of the exact distances of the vectors in the
-  // set from the centroid.
-  repeated float centroid_distances = 2;
+  reserved 2; // CentroidDistances
   // Vectors is the set of original full-size vectors.
   cockroach.util.vector.Set vectors = 3 [(gogoproto.nullable) = false];
 }

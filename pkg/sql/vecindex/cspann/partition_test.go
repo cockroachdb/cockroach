@@ -96,7 +96,7 @@ func TestPartition(t *testing.T) {
 		require.NotEqual(t, partition, cloned)
 
 		cloned = partition.Clone()
-		cloned.quantizedSet.(*quantize.UnQuantizedVectorSet).CentroidDistances[0] = 99
+		cloned.quantizedSet.(*quantize.UnQuantizedVectorSet).Vectors.At(0)[0] = 99
 		require.NotEqual(t, partition, cloned)
 	})
 
@@ -210,11 +210,11 @@ func TestPartition(t *testing.T) {
 		count = partition.Search(&workspace, RootKey, vector.T{1, 1}, &searchSet)
 		require.Equal(t, 5, count)
 		result1 := SearchResult{
-			QuerySquaredDistance: 1, ErrorBound: 0, CentroidDistance: 3.2830, ParentPartitionKey: 1, ChildKey: childKey10, ValueBytes: valueBytes10}
+			QueryDistance: 1, ErrorBound: 0, ParentPartitionKey: 1, ChildKey: childKey10, ValueBytes: valueBytes10}
 		result2 := SearchResult{
-			QuerySquaredDistance: 13, ErrorBound: 0, CentroidDistance: 0.3333, ParentPartitionKey: 1, ChildKey: childKey40, ValueBytes: valueBytes40}
+			QueryDistance: 13, ErrorBound: 0, ParentPartitionKey: 1, ChildKey: childKey40, ValueBytes: valueBytes40}
 		result3 := SearchResult{
-			QuerySquaredDistance: 17, ErrorBound: 0, CentroidDistance: 1.6667, ParentPartitionKey: 1, ChildKey: childKey20, ValueBytes: valueBytes20}
+			QueryDistance: 17, ErrorBound: 0, ParentPartitionKey: 1, ChildKey: childKey20, ValueBytes: valueBytes20}
 		results = roundResults(searchSet.PopResults(), 4)
 		require.Equal(t, SearchResults{result1, result2, result3}, results)
 	})
@@ -271,9 +271,8 @@ func TestPartition(t *testing.T) {
 func roundResults(results SearchResults, prec int) SearchResults {
 	for i := range results {
 		result := &results[i]
-		result.QuerySquaredDistance = float32(scalar.Round(float64(result.QuerySquaredDistance), prec))
+		result.QueryDistance = float32(scalar.Round(float64(result.QueryDistance), prec))
 		result.ErrorBound = float32(scalar.Round(float64(result.ErrorBound), prec))
-		result.CentroidDistance = float32(scalar.Round(float64(result.CentroidDistance), prec))
 		result.Vector = testutils.RoundFloats(result.Vector, prec)
 	}
 	return results

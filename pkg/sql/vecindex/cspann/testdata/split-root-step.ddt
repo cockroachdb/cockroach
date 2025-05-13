@@ -250,12 +250,12 @@ force-split partition-key=1 steps=1
 search max-results=4 discard-fixups
 (-1, 2)
 ----
-vec1: 4 (centroid=4.24)
-vec7: 5 (centroid=2.24)
-vec8: 5 (centroid=2.24)
-vec3: 26 (centroid=0)
-vec4: 26 (centroid=0)
-vec9: 26 (centroid=1.41)
+vec1: 4
+vec7: 5
+vec8: 5
+vec3: 26
+vec4: 26
+vec9: 26
 9 leaf vectors, 13 vectors, 9 full vectors, 5 partitions
 
 # Move to the DrainingForSplit state, where sub-partition #6 has vectors.
@@ -304,12 +304,12 @@ format-tree root=6
 search max-results=4 discard-fixups
 (-1, 2)
 ----
-vec1: 4 (centroid=4.24)
-vec7: 5 (centroid=2.24)
-vec8: 5 (centroid=2.24)
-vec3: 26 (centroid=0)
-vec4: 26 (centroid=0)
-vec9: 26 (centroid=1.41)
+vec1: 4
+vec7: 5
+vec8: 5
+vec3: 26
+vec4: 26
+vec9: 26
 9 leaf vectors, 15 vectors, 9 full vectors, 7 partitions
 
 # Move to the point where partition #1 children have been cleared.
@@ -321,12 +321,12 @@ force-split partition-key=1 steps=2
 search max-results=4 discard-fixups
 (-1, 2)
 ----
-vec1: 4 (centroid=4.24)
-vec7: 5 (centroid=2.24)
-vec8: 5 (centroid=2.24)
-vec3: 26 (centroid=0)
-vec4: 26 (centroid=0)
-vec9: 26 (centroid=1.41)
+vec1: 4
+vec7: 5
+vec8: 5
+vec3: 26
+vec4: 26
+vec9: 26
 9 leaf vectors, 13 vectors, 9 full vectors, 7 partitions
 
 # Move to the AddingLevel state, where root partition's level has increased.
@@ -338,12 +338,12 @@ force-split partition-key=1 steps=1
 search max-results=4 discard-fixups
 (-1, 2)
 ----
-vec1: 4 (centroid=4.24)
-vec7: 5 (centroid=2.24)
-vec8: 5 (centroid=2.24)
-vec3: 26 (centroid=0)
-vec4: 26 (centroid=0)
-vec9: 26 (centroid=1.41)
+vec1: 4
+vec7: 5
+vec8: 5
+vec3: 26
+vec4: 26
+vec9: 26
 9 leaf vectors, 13 vectors, 9 full vectors, 7 partitions
 
 # Move to point where sub-partitions #6 and #7 have been added to the root.
@@ -380,12 +380,12 @@ force-split partition-key=1 steps=4
 search max-results=4 discard-fixups
 (-1, 2)
 ----
-vec1: 4 (centroid=4.24)
-vec7: 5 (centroid=2.24)
-vec8: 5 (centroid=2.24)
-vec3: 26 (centroid=0)
-vec4: 26 (centroid=0)
-vec9: 26 (centroid=1.41)
+vec1: 4
+vec7: 5
+vec8: 5
+vec3: 26
+vec4: 26
+vec9: 26
 9 leaf vectors, 15 vectors, 9 full vectors, 7 partitions
 
 # Finish the split.
@@ -422,12 +422,12 @@ force-split partition-key=1 steps=1
 search max-results=4 discard-fixups
 (-1, 2)
 ----
-vec1: 4 (centroid=4.24)
-vec7: 5 (centroid=2.24)
-vec8: 5 (centroid=2.24)
-vec3: 26 (centroid=0)
-vec4: 26 (centroid=0)
-vec9: 26 (centroid=1.41)
+vec1: 4
+vec7: 5
+vec8: 5
+vec3: 26
+vec4: 26
+vec9: 26
 9 leaf vectors, 15 vectors, 9 full vectors, 7 partitions
 
 # ----------------------------------------------------------------------

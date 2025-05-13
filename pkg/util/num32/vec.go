@@ -12,20 +12,15 @@ import (
 )
 
 // Normalize scales the dst vector so that it's a unit vector (L2 norm is 1). If
-// dst is a zero vector, then return a unit vector with all dimensions set to
-// 1/sqrt(dims). This function is commonly used to prepare vectors for cosine
-// similarity or distance computations, where unit length is required.
+// dst is a zero vector, then return a zero vector. This function is commonly
+// used to prepare vectors for cosine similarity or distance computations, where
+// unit length is required.
 func Normalize(dst []float32) {
+	// If norm is zero, then this is the degenerate case where dst is the zero
+	// vector - just return it unchanged.
 	norm := Norm(dst)
 	if norm != 0 {
 		Scale(1/norm, dst)
-	} else {
-		// Degenerate case where dst is the zero vector. In this case, return an
-		// arbitrary unit vector with all dimensions set to 1/sqrt(dims).
-		invSqrtDims := 1 / Sqrt(float32(len(dst)))
-		for i := range dst {
-			dst[i] = invSqrtDims
-		}
 	}
 }
 

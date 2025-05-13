@@ -151,17 +151,17 @@ func TestSearcher(t *testing.T) {
 	prefix = encoding.EncodeVarintAscending(prefix, 100)
 	require.NoError(t, searcher.Search(ctx, prefix, original))
 	res := searcher.NextResult()
-	require.InDelta(t, float32(1), res.QuerySquaredDistance, 0.01)
+	require.InDelta(t, float32(1), res.QueryDistance, 0.01)
 	res = searcher.NextResult()
-	require.InDelta(t, float32(20), res.QuerySquaredDistance, 0.01)
+	require.InDelta(t, float32(20), res.QueryDistance, 0.01)
 	require.Nil(t, searcher.NextResult())
 
 	// Search again to ensure search state is reset.
 	require.NoError(t, searcher.Search(ctx, prefix, original))
 	res = searcher.NextResult()
-	require.InDelta(t, float32(1), res.QuerySquaredDistance, 0.01)
+	require.InDelta(t, float32(1), res.QueryDistance, 0.01)
 	res = searcher.NextResult()
-	require.InDelta(t, float32(20), res.QuerySquaredDistance, 0.01)
+	require.InDelta(t, float32(20), res.QueryDistance, 0.01)
 	require.Nil(t, searcher.NextResult())
 
 	// Search for a vector to delete that doesn't exist (reuse memory).

@@ -408,10 +408,10 @@ func (suite *StoreTestSuite) TestSearchPartitions() {
 
 			// Validate search results.
 			result1 := cspann.SearchResult{
-				QuerySquaredDistance: 4.2, ErrorBound: 50.99, CentroidDistance: 7.21,
+				QueryDistance: 4.2, ErrorBound: 50.99,
 				ParentPartitionKey: testPartitionKey2, ChildKey: partitionKey4, ValueBytes: valueBytes4}
 			result2 := cspann.SearchResult{
-				QuerySquaredDistance: 8, ErrorBound: 0, CentroidDistance: 0,
+				QueryDistance: 8, ErrorBound: 0,
 				ParentPartitionKey: testPartitionKey, ChildKey: partitionKey3, ValueBytes: valueBytes3}
 			suite.Equal(cspann.SearchResults{result1, result2}, RoundResults(searchSet.PopResults(), 2))
 
