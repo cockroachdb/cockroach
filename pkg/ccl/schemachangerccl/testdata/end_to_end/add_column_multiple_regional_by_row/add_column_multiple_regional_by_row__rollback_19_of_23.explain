@@ -44,34 +44,34 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regi
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 5 (j-), IndexID: 7}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 5 (j-), IndexID: 8 (table_regional_by_row_pkey-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 5 (j-), IndexID: 9}
+      │    │    ├── BACKFILL_ONLY         → ABSENT      SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 2 (table_regional_by_row_j_key-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 8 (table_regional_by_row_pkey-), RecreateSourceIndexID: 0}
+      │    │    ├── PUBLIC                → ABSENT      IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 2 (table_regional_by_row_j_key-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 4 (crdb_region), IndexID: 2 (table_regional_by_row_j_key-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 5 (j-), IndexID: 2 (table_regional_by_row_j_key-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 2 (table_regional_by_row_j_key-)}
-      │    │    ├── BACKFILL_ONLY         → ABSENT      SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 2 (table_regional_by_row_j_key-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 8 (table_regional_by_row_pkey-), RecreateSourceIndexID: 0}
       │    │    ├── PUBLIC                → ABSENT      IndexName:{DescID: 108 (table_regional_by_row), Name: "table_regional_by_row_j_key", IndexID: 2 (table_regional_by_row_j_key-)}
+      │    │    ├── WRITE_ONLY            → DELETE_ONLY TemporaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 3, ConstraintID: 3, SourceIndexID: 8 (table_regional_by_row_pkey-)}
+      │    │    ├── TRANSIENT_ABSENT      → ABSENT      IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 3}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 4 (crdb_region), IndexID: 3}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 5 (j-), IndexID: 3}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 3}
-      │    │    ├── WRITE_ONLY            → DELETE_ONLY TemporaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 3, ConstraintID: 3, SourceIndexID: 8 (table_regional_by_row_pkey-)}
-      │    │    ├── PUBLIC                → ABSENT      IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 2 (table_regional_by_row_j_key-)}
-      │    │    ├── PUBLIC                → ABSENT      IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 3}
       │    │    ├── PUBLIC                → ABSENT      TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 1}
       │    │    ├── WRITE_ONLY            → DELETE_ONLY Column:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l-)}
       │    │    ├── PUBLIC                → ABSENT      ColumnName:{DescID: 108 (table_regional_by_row), Name: "l", ColumnID: 6 (l-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l-), IndexID: 7}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l-), IndexID: 8 (table_regional_by_row_pkey-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l-), IndexID: 9}
+      │    │    ├── BACKFILL_ONLY         → ABSENT      SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 4 (table_regional_by_row_l_key-), ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 8 (table_regional_by_row_pkey-), RecreateSourceIndexID: 0}
+      │    │    ├── PUBLIC                → ABSENT      IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 4 (table_regional_by_row_l_key-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 4 (crdb_region), IndexID: 4 (table_regional_by_row_l_key-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l-), IndexID: 4 (table_regional_by_row_l_key-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 4 (table_regional_by_row_l_key-)}
-      │    │    ├── BACKFILL_ONLY         → ABSENT      SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 4 (table_regional_by_row_l_key-), ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 8 (table_regional_by_row_pkey-), RecreateSourceIndexID: 0}
       │    │    ├── PUBLIC                → ABSENT      IndexName:{DescID: 108 (table_regional_by_row), Name: "table_regional_by_row_l_key", IndexID: 4 (table_regional_by_row_l_key-)}
+      │    │    ├── WRITE_ONLY            → DELETE_ONLY TemporaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 5, ConstraintID: 5, SourceIndexID: 8 (table_regional_by_row_pkey-)}
+      │    │    ├── TRANSIENT_ABSENT      → ABSENT      IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 5}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 4 (crdb_region), IndexID: 5}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l-), IndexID: 5}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 5}
-      │    │    ├── WRITE_ONLY            → DELETE_ONLY TemporaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 5, ConstraintID: 5, SourceIndexID: 8 (table_regional_by_row_pkey-)}
-      │    │    ├── PUBLIC                → ABSENT      IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 4 (table_regional_by_row_l_key-)}
-      │    │    ├── PUBLIC                → ABSENT      IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 5}
       │    │    ├── PUBLIC                → ABSENT      TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 2}
       │    │    └── PUBLIC                → ABSENT      TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 3}
       │    └── 55 Mutation operations
@@ -91,15 +91,27 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regi
       │         ├── SetColumnName {"ColumnID":5,"Name":"crdb_internal_co...","TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":5,"IndexID":7,"Kind":2,"Ordinal":2,"TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":5,"IndexID":9,"Kind":2,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":2,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":5,"IndexID":2,"Ordinal":1,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":108}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":108}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":3,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":5,"IndexID":3,"Ordinal":1,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":108}
       │         ├── DiscardTableZoneConfig {"TableID":108}
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":6,"TableID":108}
       │         ├── SetColumnName {"ColumnID":6,"Name":"crdb_internal_co...","TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":6,"IndexID":7,"Kind":2,"Ordinal":3,"TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":6,"IndexID":9,"Kind":2,"Ordinal":1,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":4,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":6,"IndexID":4,"Ordinal":1,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":4,"Kind":1,"TableID":108}
       │         ├── SetIndexName {"IndexID":4,"Name":"crdb_internal_in...","TableID":108}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":5,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":5,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":6,"IndexID":5,"Ordinal":1,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":5,"Kind":1,"TableID":108}
       │         ├── DiscardTableZoneConfig {"TableID":108}
       │         ├── DiscardTableZoneConfig {"TableID":108}
       │         ├── MakeWriteOnlyColumnPublic {"ColumnID":2,"TableID":108}
@@ -113,21 +125,9 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regi
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":8,"Ordinal":1,"TableID":108}
       │         ├── MakeIndexAbsent {"IndexID":9,"TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":5,"IndexID":8,"Kind":2,"TableID":108}
-      │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":2,"TableID":108}
-      │         ├── RemoveColumnFromIndex {"ColumnID":5,"IndexID":2,"Ordinal":1,"TableID":108}
-      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":108}
       │         ├── MakeIndexAbsent {"IndexID":2,"TableID":108}
-      │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":3,"TableID":108}
-      │         ├── RemoveColumnFromIndex {"ColumnID":5,"IndexID":3,"Ordinal":1,"TableID":108}
-      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":6,"IndexID":8,"Kind":2,"Ordinal":1,"TableID":108}
-      │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":4,"TableID":108}
-      │         ├── RemoveColumnFromIndex {"ColumnID":6,"IndexID":4,"Ordinal":1,"TableID":108}
-      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":4,"Kind":1,"TableID":108}
       │         ├── MakeIndexAbsent {"IndexID":4,"TableID":108}
-      │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":5,"TableID":108}
-      │         ├── RemoveColumnFromIndex {"ColumnID":6,"IndexID":5,"Ordinal":1,"TableID":108}
-      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":5,"Kind":1,"TableID":108}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       ├── Stage 2 of 4 in PostCommitNonRevertiblePhase

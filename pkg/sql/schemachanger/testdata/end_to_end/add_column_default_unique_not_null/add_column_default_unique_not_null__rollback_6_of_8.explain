@@ -14,25 +14,25 @@ Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN j INT8 
       │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 2 (j-)}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j-), IndexID: 1 (tbl_pkey)}
       │    │    ├── PUBLIC     → VALIDATED   ColumnNotNull:{DescID: 106 (tbl), ColumnID: 2 (j-), IndexID: 1 (tbl_pkey)}
+      │    │    ├── MERGE_ONLY → DELETE_ONLY SecondaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_j_key-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey), RecreateSourceIndexID: 0}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j-), IndexID: 2 (tbl_j_key-)}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_j_key-)}
-      │    │    ├── MERGE_ONLY → DELETE_ONLY SecondaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_j_key-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey), RecreateSourceIndexID: 0}
       │    │    ├── PUBLIC     → ABSENT      IndexName:{DescID: 106 (tbl), Name: "tbl_j_key", IndexID: 2 (tbl_j_key-)}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey)}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j-), IndexID: 3}
-      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 3}
-      │    │    └── WRITE_ONLY → DELETE_ONLY TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey)}
+      │    │    └── PUBLIC     → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 3}
       │    └── 13 Mutation operations
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":106}
       │         ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":106}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"Kind":2,"TableID":106}
       │         ├── MakePublicColumnNotNullValidated {"ColumnID":2,"TableID":106}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":106}
-      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":106}
-      │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":106}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"TableID":106}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":106}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":106}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":106}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":106}
+      │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":106}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
