@@ -334,12 +334,11 @@ func (s *Storage) createInstanceRow(
 			}
 
 			b := txn.NewBatch()
-			//encodeLocalityAddressList := true
-			//encodeLocalityAddressList, err = determineLocalityAddressListEncoding(ctx, txn, s, err)
-			//if err != nil {
-			//	return err
-			//}
-			value, err := s.rowCodec.encodeValue(rpcAddr, sqlAddr, session.ID(), locality, binaryVersion, false, true /* encodeLocalityAddressList*/, localityAddressList)
+			encodeLocalityAddressList, err = determineLocalityAddressListEncoding(ctx, txn, s)
+			if err != nil {
+				return err
+			}
+			value, err := s.rowCodec.encodeValue(rpcAddr, sqlAddr, session.ID(), locality, binaryVersion, false, encodeLocalityAddressList, localityAddressList)
 			if err != nil {
 				return err
 			}
