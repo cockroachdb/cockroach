@@ -1,0 +1,34 @@
+setup
+CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3" SURVIVE REGION FAILURE;
+CREATE TABLE multiregion_db.public.table_regional_by_row (
+  k INT NOT NULL,
+  V STRING
+) LOCALITY REGIONAL BY ROW;
+CREATE INDEX on multiregion_db.table_regional_by_row(v);
+----
+
+stage-exec phase=PostCommitPhase stage=:
+USE multiregion_db;
+INSERT INTO multiregion_db.table_regional_by_row(k) VALUES($stageKey);
+INSERT INTO  multiregion_db.table_regional_by_row(k) VALUES($stageKey + 1);
+----
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+USE multiregion_db;
+INSERT INTO multiregion_db.table_regional_by_row(k) VALUES($stageKey);
+INSERT INTO multiregion_db.table_regional_by_row(k) VALUES($stageKey + 1);
+----
+
+stage-exec phase=PostCommitPhase stage=:
+USE multiregion_db;
+SELECT crdb_internal.validate_multi_region_zone_configs()
+----
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+USE multiregion_db;
+SELECT crdb_internal.validate_multi_region_zone_configs()
+----
+
+test
+alter table multiregion_db.table_regional_by_row add column m int8 default unique_rowid(), alter primary key using columns(k) USING HASH;
+----
