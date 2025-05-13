@@ -81,7 +81,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
       - name: cockroachdb
-        image: cockroachdb/cockroach:v25.1.5
+        image: cockroachdb/cockroach:v25.1.6
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 26257
