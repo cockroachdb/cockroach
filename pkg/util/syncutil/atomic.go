@@ -58,6 +58,14 @@ func (f *AtomicFloat64) StoreIfHigher(new float64) (val float64) {
 	}
 }
 
+// CompareAndSwap is atomically replaces the current value with 'new' if the
+// existing value is 'old'. It returns whether this was the case.
+func (f *AtomicFloat64) CompareAndSwap(old, new float64) (swapped bool) {
+	oldInt := math.Float64bits(old)
+	newInt := math.Float64bits(new)
+	return f.val.CompareAndSwap(oldInt, newInt)
+}
+
 // AtomicString gives you atomic-style APIs for string.
 type AtomicString struct {
 	s atomic.Value

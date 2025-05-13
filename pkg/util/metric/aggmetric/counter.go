@@ -130,9 +130,20 @@ func (g *Counter) Inc(i int64) {
 }
 
 // Update updates the AggCounter's value.
+//
+// This method may not perform well under high concurrency,
+// so it should only be used if the Counter is not expected
+// to be frequently Update'd or Inc'd.
 func (g *Counter) Update(i int64) {
-	delta := i - atomic.LoadInt64(&g.value)
-	g.Inc(delta)
+	var delta int64
+	for {
+		delta = i - atomic.LoadInt64(&g.value)
+		if atomic.CompareAndSwapInt64(&g.value, i-delta, i) {
+			break
+		}
+		// Raced with concurrent update, try again.
+	}
+	g.parent.g.Inc(delta)
 }
 
 // AggCounterFloat64 maintains a value as the sum of its children. The counter will
@@ -247,12 +258,21 @@ func (g *CounterFloat64) Inc(i float64) {
 // UpdateIfHigher sets the counter's value only if it's higher
 // than the currently set one.
 func (g *CounterFloat64) UpdateIfHigher(i float64) {
-	delta := i - g.value.Count()
-	if delta <= 0 {
-		return
+	var delta float64
+	v := g.value.Atomic()    // value
+	p := g.parent.g.Atomic() // parent
+	for {
+		loaded := v.Load()
+		delta = i - loaded
+		if delta <= 0 {
+			return
+		}
+		if v.CompareAndSwap(loaded, i) {
+			break
+		}
+		// Raced, try again.
 	}
-	g.parent.g.Inc(delta)
-	g.value.Inc(delta)
+	p.Add(delta)
 }
 
 // SQLCounter maintains a value as the sum of its children. The counter will
