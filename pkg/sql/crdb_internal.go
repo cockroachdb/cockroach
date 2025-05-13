@@ -5554,7 +5554,7 @@ CREATE TABLE crdb_internal.gossip_alerts (
 					tree.NewDInt(tree.DInt(result.NodeID)),
 					storeID,
 					tree.NewDString(strings.ToLower(alert.Category.String())),
-					tree.NewDString(alert.Description),
+					tree.NewDString(string(alert.SafeDescription)),
 					tree.NewDFloat(tree.DFloat(alert.Value)),
 				); err != nil {
 					return err
