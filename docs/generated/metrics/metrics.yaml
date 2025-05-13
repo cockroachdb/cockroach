@@ -16018,6 +16018,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: storage.initial_stats_complete
+      exported_name: storage_initial_stats_complete
+      description: Set to 1 when initial table stats collection is complete.
+      y_axis_label: Boolean
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: storage.iterator.block-load.bytes
       exported_name: storage_iterator_block_load_bytes
       description: Bytes loaded by storage engine iterators (possibly cached). See storage.AggregatedIteratorStats for details.
@@ -16638,6 +16646,30 @@ layers:
       y_axis_label: SSTables
       type: GAUGE
       unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: storage.point_deletions.bytes
+      exported_name: storage_point_deletions_bytes
+      description: |
+        Estimated file bytes that will be saved by compacting all point deletions.
+
+        This is dependent on table stats collection, so can be very incomplete until
+        storage.initial_stats_complete becomes true.
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: storage.range_deletions.bytes
+      exported_name: storage_range_deletions_bytes
+      description: |
+        Estimated file bytes that will be saved by compacting all range deletions.
+
+        This is dependent on table stats collection, so can be very incomplete until
+        storage.initial_stats_complete becomes true.
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
       aggregation: AVG
       derivative: NONE
     - name: storage.secondary-cache.count
