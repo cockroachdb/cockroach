@@ -4855,20 +4855,20 @@ func TestConfChangeV2CheckBeforeCampaign(t *testing.T) {
 
 func TestFastLogRejection(t *testing.T) {
 	tests := []struct {
-		leaderLog       []pb.Entry // Logs on the leader
-		followerLog     []pb.Entry // Logs on the follower
-		followerCompact uint64     // Index at which the follower log is compacted.
-		rejectHintTerm  uint64     // Expected term included in rejected MsgAppResp.
-		rejectHintIndex uint64     // Expected index included in rejected MsgAppResp.
-		nextAppendTerm  uint64     // Expected term when leader appends after rejected.
-		nextAppendIndex uint64     // Expected index when leader appends after rejected.
+		leaderLog       LeadSlice // Logs on the leader
+		followerLog     LeadSlice // Logs on the follower
+		followerCompact uint64    // Index at which the follower log is compacted.
+		rejectHintTerm  uint64    // Expected term included in rejected MsgAppResp.
+		rejectHintIndex uint64    // Expected index included in rejected MsgAppResp.
+		nextAppendTerm  uint64    // Expected term when leader appends after rejected.
+		nextAppendIndex uint64    // Expected index when leader appends after rejected.
 	}{
 		// This case tests that leader can find the conflict index quickly.
 		// Firstly leader appends (type=MsgApp,index=7,logTerm=4, entries=...);
 		// After rejected leader appends (type=MsgApp,index=3,logTerm=2).
 		{
-			leaderLog:       index(1).terms(1, 2, 2, 4, 4, 4, 4),
-			followerLog:     index(1).terms(1, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3),
+			leaderLog:       entryID{index: 0, term: 1}.append(1, 2, 2, 4, 4, 4, 4),
+			followerLog:     entryID{index: 0, term: 0}.append(1, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3),
 			rejectHintTerm:  3,
 			rejectHintIndex: 7,
 			nextAppendTerm:  2,
@@ -4878,8 +4878,8 @@ func TestFastLogRejection(t *testing.T) {
 		// Firstly leader appends (type=MsgApp,index=8,logTerm=5, entries=...);
 		// After rejected leader appends (type=MsgApp,index=4,logTerm=3).
 		{
-			leaderLog:       index(1).terms(1, 2, 2, 3, 4, 4, 4, 5),
-			followerLog:     index(1).terms(1, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3),
+			leaderLog:       entryID{index: 0, term: 1}.append(1, 2, 2, 3, 4, 4, 4, 5),
+			followerLog:     entryID{index: 0, term: 0}.append(1, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3),
 			rejectHintTerm:  3,
 			rejectHintIndex: 8,
 			nextAppendTerm:  3,
@@ -4889,8 +4889,8 @@ func TestFastLogRejection(t *testing.T) {
 		// Firstly leader appends (type=MsgApp,index=4,logTerm=1, entries=...);
 		// After rejected leader appends (type=MsgApp,index=1,logTerm=1).
 		{
-			leaderLog:       index(1).terms(1, 1, 1, 1),
-			followerLog:     index(1).terms(1, 2, 2, 4),
+			leaderLog:       entryID{index: 0, term: 1}.append(1, 1, 1, 1),
+			followerLog:     entryID{index: 0, term: 0}.append(1, 2, 2, 4),
 			rejectHintTerm:  1,
 			rejectHintIndex: 1,
 			nextAppendTerm:  1,
@@ -4901,8 +4901,8 @@ func TestFastLogRejection(t *testing.T) {
 		// Firstly leader appends (type=MsgApp,index=6,logTerm=1, entries=...);
 		// After rejected leader appends (type=MsgApp,index=1,logTerm=1).
 		{
-			leaderLog:       index(1).terms(1, 1, 1, 1, 1, 1),
-			followerLog:     index(1).terms(1, 2, 2, 4),
+			leaderLog:       entryID{index: 0, term: 1}.append(1, 1, 1, 1, 1, 1),
+			followerLog:     entryID{index: 0, term: 0}.append(1, 2, 2, 4),
 			rejectHintTerm:  1,
 			rejectHintIndex: 1,
 			nextAppendTerm:  1,
@@ -4913,8 +4913,8 @@ func TestFastLogRejection(t *testing.T) {
 		// Firstly leader appends (type=MsgApp,index=4,logTerm=1, entries=...);
 		// After rejected leader appends (type=MsgApp,index=1,logTerm=1).
 		{
-			leaderLog:       index(1).terms(1, 1, 1, 1),
-			followerLog:     index(1).terms(1, 2, 2, 4, 4, 4),
+			leaderLog:       entryID{index: 0, term: 1}.append(1, 1, 1, 1),
+			followerLog:     entryID{index: 0, term: 0}.append(1, 2, 2, 4, 4, 4),
 			rejectHintTerm:  1,
 			rejectHintIndex: 1,
 			nextAppendTerm:  1,
@@ -4924,8 +4924,8 @@ func TestFastLogRejection(t *testing.T) {
 		// Firstly leader appends (type=MsgApp,index=5,logTerm=5, entries=...);
 		// After rejected leader appends (type=MsgApp,index=4,logTerm=4).
 		{
-			leaderLog:       index(1).terms(1, 1, 1, 4, 5),
-			followerLog:     index(1).terms(1, 1, 1, 4),
+			leaderLog:       entryID{index: 0, term: 1}.append(1, 1, 1, 4, 5),
+			followerLog:     entryID{index: 0, term: 0}.append(1, 1, 1, 4),
 			rejectHintTerm:  4,
 			rejectHintIndex: 4,
 			nextAppendTerm:  4,
@@ -4933,8 +4933,8 @@ func TestFastLogRejection(t *testing.T) {
 		},
 		// Test case from example comment in stepLeader (on leader).
 		{
-			leaderLog:       index(1).terms(2, 5, 5, 5, 5, 5, 5, 5, 5),
-			followerLog:     index(1).terms(2, 4, 4, 4, 4, 4),
+			leaderLog:       entryID{index: 0, term: 1}.append(2, 5, 5, 5, 5, 5, 5, 5, 5),
+			followerLog:     entryID{index: 0, term: 0}.append(2, 4, 4, 4, 4, 4),
 			rejectHintTerm:  4,
 			rejectHintIndex: 6,
 			nextAppendTerm:  2,
@@ -4942,27 +4942,61 @@ func TestFastLogRejection(t *testing.T) {
 		},
 		// Test case from example comment in handleAppendEntries (on follower).
 		{
-			leaderLog:       index(1).terms(2, 2, 2, 2, 2),
-			followerLog:     index(1).terms(2, 4, 4, 4, 4, 4, 4, 4),
+			leaderLog:       entryID{index: 0, term: 1}.append(2, 2, 2, 2, 2),
+			followerLog:     entryID{index: 0, term: 0}.append(2, 4, 4, 4, 4, 4, 4, 4),
 			rejectHintTerm:  2,
 			rejectHintIndex: 1,
 			nextAppendTerm:  2,
 			nextAppendIndex: 1,
 		},
-		// A case when a stale MsgApp from leader arrives after the corresponding
-		// log index got compacted.
-		// A stale (type=MsgApp,index=3,logTerm=3,entries=[(term=3,index=4)]) is
-		// delivered to a follower who has already compacted beyond log index 3. The
-		// MsgAppResp rejection will return same index=3, with logTerm=0. The leader
-		// will rollback by one entry, and send MsgApp with index=2,logTerm=1.
+		// // A case when a stale MsgApp from leader arrives after the corresponding
+		// // log index got compacted.
+		// // A stale (type=MsgApp,index=3,logTerm=3,entries=[(term=3,index=4)]) is
+		// // delivered to a follower who has already compacted beyond log index 3. The
+		// // MsgAppResp rejection will return same index=3, with logTerm=0. The leader
+		// // will rollback by one entry, and send MsgApp with index=2,logTerm=1.
+		// {
+		// 	leaderLog:       entryID{index: 0, term: 1}.append(1, 1, 3),
+		// 	followerLog:     entryID{index: 0, term: 0}.append(1, 1, 3, 3, 3),
+		// 	followerCompact: 5, // entries <= index 5 are compacted
+		// 	rejectHintTerm:  0,
+		// 	rejectHintIndex: 3,
+		// 	nextAppendTerm:  1,
+		// 	nextAppendIndex: 2,
+		// },
+		// Test term cache in RPC instant probe
 		{
-			leaderLog:       index(1).terms(1, 1, 3),
-			followerLog:     index(1).terms(1, 1, 3, 3, 3),
-			followerCompact: 5, // entries <= index 5 are compacted
-			rejectHintTerm:  0,
-			rejectHintIndex: 3,
-			nextAppendTerm:  1,
+			leaderLog:       entryID{index: 0, term: 1}.append(2, 2, 4, 6, 8),
+			followerLog:     entryID{index: 0, term: 0}.append(2, 3, 5, 7, 9),
+			rejectHintTerm:  7,
+			rejectHintIndex: 4,
+			nextAppendTerm:  2,
+			nextAppendIndex: 1,
+		},
+		{
+			leaderLog:       entryID{index: 0, term: 1}.append(2, 2, 4, 6, 8),
+			followerLog:     entryID{index: 0, term: 0}.append(2, 2, 5, 7, 9),
+			rejectHintTerm:  7,
+			rejectHintIndex: 4,
+			nextAppendTerm:  2,
 			nextAppendIndex: 2,
+		},
+		{
+			leaderLog:       entryID{index: 0, term: 1}.append(2, 2, 3, 6, 8),
+			followerLog:     entryID{index: 0, term: 0}.append(2, 2, 3, 7, 9),
+			rejectHintTerm:  7,
+			rejectHintIndex: 4,
+			nextAppendTerm:  3,
+			nextAppendIndex: 3,
+		},
+		{
+			leaderLog:       entryID{index: 0, term: 1}.append(2, 2, 3, 6, 8),
+			followerLog:     entryID{index: 0, term: 0}.append(2, 2, 3, 7, 9),
+			followerCompact: 3,
+			rejectHintTerm:  7,
+			rejectHintIndex: 4,
+			nextAppendTerm:  3,
+			nextAppendIndex: 3,
 		},
 	}
 
@@ -4970,8 +5004,8 @@ func TestFastLogRejection(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			s1 := NewMemoryStorage()
 			s1.snapshot.Metadata.ConfState = pb.ConfState{Voters: []pb.PeerID{1, 2, 3}}
-			s1.Append(test.leaderLog)
-			last := test.leaderLog[len(test.leaderLog)-1]
+			require.NoError(t, s1.Append(test.leaderLog.entries))
+			last := test.leaderLog.entries[len(test.leaderLog.entries)-1]
 			s1.SetHardState(pb.HardState{
 				Term:   last.Term - 1,
 				Commit: last.Index,
@@ -4982,15 +5016,22 @@ func TestFastLogRejection(t *testing.T) {
 
 			s2 := NewMemoryStorage()
 			s2.snapshot.Metadata.ConfState = pb.ConfState{Voters: []pb.PeerID{1, 2, 3}}
-			s2.Append(test.followerLog)
+
 			s2.SetHardState(pb.HardState{
 				Term:   last.Term,
 				Vote:   1,
 				Commit: 0,
 			})
 			n2 := newTestRaft(2, 10, 1, s2)
+			require.True(t, n2.raftLog.maybeAppend(test.followerLog))
+
 			if test.followerCompact != 0 {
-				s2.Compact(test.followerCompact)
+				n2.raftLog.commitTo(LogMark{Term: 3, Index: 5})
+				n2.raftLog.appliedTo(5)
+				require.NoError(t, s2.Append(test.followerLog.entries))
+				n2.raftLog.stableTo(LogMark{Term: 3, Index: 5})
+				n2.appliedTo(test.followerCompact - 1)
+				require.NoError(t, s2.Compact(test.followerCompact))
 				// NB: the state of n2 after this compaction isn't realistic because the
 				// commit index is still at 0. We do this to exercise a "doesn't happen"
 				// edge case behaviour, in case it still does happen in some other way.

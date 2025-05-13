@@ -2017,7 +2017,22 @@ func stepLeader(r *raft, m pb.Message) error {
 				//    7, the rejection points it at the end of the follower's log
 				//    which is at a higher log term than the actually committed
 				//    log.
-				nextProbeIdx, _ = r.raftLog.findConflictByTerm(m.RejectHint, m.LogTerm)
+				//
+				// If termCache is not transmitted, means we can only use
+				// the single hint entryID.
+				// Invariant:
+				// 		m.RejectHint > TcEntryIDs[0].Index if len(m.TcEntryIDs) != 0
+				if len(m.TcEntryIDs) == 0 {
+					nextProbeIdx, _ = r.raftLog.findConflictByTerm(m.RejectHint, m.LogTerm)
+				} else {
+					if matchID, found := r.raftLog.findMatch(convertEntryIDs(m.TcEntryIDs),
+						entryID{m.LogTerm, m.RejectHint}); found {
+						nextProbeIdx = matchID.index
+					} else {
+						nextProbeIdx, _ = r.raftLog.findConflictByTerm(m.TcEntryIDs[0].Index, m.TcEntryIDs[0].Term)
+						nextProbeIdx = min(nextProbeIdx, m.TcEntryIDs[0].Index-1)
+					}
+				}
 			}
 			if pr.MaybeDecrTo(m.Index, nextProbeIdx) {
 				r.logger.Debugf("%x decreased progress of %x to [%s]", r.id, m.From, pr)
@@ -2397,6 +2412,14 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 	// LogTerm in this response in any case, so we don't verify it here.
 	hintIndex := min(m.Index, r.raftLog.lastIndex())
 	hintIndex, hintTerm := r.raftLog.findConflictByTerm(hintIndex, m.LogTerm)
+	var tc []pb.EntryID
+	compacted := r.raftLog.compacted()
+	if hintIndex > r.raftLog.termCache.cache[0].index {
+		tc = r.raftLog.termCache.prepareProtoTcEntryIDs(compacted, hintIndex)
+	} else {
+		tc = nil
+	}
+
 	r.send(pb.Message{
 		To:    m.From,
 		Type:  pb.MsgAppResp,
@@ -2407,6 +2430,7 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 		Reject:     true,
 		RejectHint: hintIndex,
 		LogTerm:    hintTerm,
+		TcEntryIDs: tc,
 	})
 }
 
