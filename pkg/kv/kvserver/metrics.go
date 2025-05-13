@@ -2834,8 +2834,8 @@ type StoreMetrics struct {
 	RdbBytesIngested                  [7]*metric.Counter      // idx = level
 	RdbLevelSize                      [7]*metric.Gauge        // idx = level
 	RdbLevelScore                     [7]*metric.GaugeFloat64 // idx = level
-	RdbWriteStalls                    *metric.Gauge
-	RdbWriteStallNanos                *metric.Gauge
+	RdbWriteStalls                    *metric.Counter
+	RdbWriteStallNanos                *metric.Counter
 	SingleDelInvariantViolations      *metric.Counter
 	SingleDelIneffectualCount         *metric.Counter
 	SharedStorageBytesRead            *metric.Counter
@@ -3566,8 +3566,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbBytesIngested:                  rdbBytesIngested,
 		RdbLevelSize:                      rdbLevelSize,
 		RdbLevelScore:                     rdbLevelScore,
-		RdbWriteStalls:                    metric.NewGauge(metaRdbWriteStalls),
-		RdbWriteStallNanos:                metric.NewGauge(metaRdbWriteStallNanos),
+		RdbWriteStalls:                    metric.NewCounter(metaRdbWriteStalls),
+		RdbWriteStallNanos:                metric.NewCounter(metaRdbWriteStallNanos),
 		IterBlockBytes:                    metric.NewCounter(metaBlockBytes),
 		IterBlockBytesInCache:             metric.NewCounter(metaBlockBytesInCache),
 		IterBlockReadDuration:             metric.NewCounter(metaBlockReadDuration),

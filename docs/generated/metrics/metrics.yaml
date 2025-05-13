@@ -10030,10 +10030,10 @@ layers:
       exported_name: storage_write_stalls
       description: Number of instances of intentional write stalls to backpressure incoming writes
       y_axis_label: Events
-      type: GAUGE
+      type: COUNTER
       unit: COUNT
       aggregation: AVG
-      derivative: NONE
+      derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric reports actual disk stall events. Ideally, investigate all reports of disk stalls. As a pratical guideline, one stall per minute is not likely to have a material impact on workload beyond an occasional increase in response time. However one stall per second should be viewed as problematic and investigated actively. It is particularly problematic if the rate persists over an extended period of time, and worse, if it is increasing.
       essential: true
   - name: UNSET
@@ -16873,10 +16873,10 @@ layers:
       exported_name: storage_write_stall_nanos
       description: Total write stall duration in nanos
       y_axis_label: Nanoseconds
-      type: GAUGE
+      type: COUNTER
       unit: NANOSECONDS
       aggregation: AVG
-      derivative: NONE
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: storeliveness.callbacks.processing_duration
       exported_name: storeliveness_callbacks_processing_duration
       description: Duration of support withdrawal callback processing
