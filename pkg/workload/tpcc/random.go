@@ -32,6 +32,7 @@ const numbersAlphabet = `1234567890`
 
 type tpccRand struct {
 	*rand.Rand
+	*rand.PCG
 
 	aChars, letters, numbers workloadimpl.PrecomputedRand
 }
@@ -39,6 +40,16 @@ type tpccRand struct {
 type aCharsOffset int
 type lettersOffset int
 type numbersOffset int
+
+// Seed resets the RNG with the given seeds.
+func (rng *tpccRand) Seed(seed1, seed2 uint64) {
+	if rng.PCG != nil {
+		rng.PCG.Seed(seed1, seed2)
+		return
+	}
+	rng.PCG = rand.NewPCG(seed1, seed2)
+	rng.Rand = rand.New(rng.PCG)
+}
 
 func randStringFromAlphabet(
 	rng *rand.Rand,
