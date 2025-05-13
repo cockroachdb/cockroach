@@ -82,7 +82,7 @@ func TestFindConflictByTerm(t *testing.T) {
 		want  uint64
 	}{
 		// Log starts from index 1.
-		{sl: noSnap.append(2, 2, 5, 5, 5), index: 100, term: 2, want: 100}, // ErrUnavailable
+		{sl: noSnap.append(2, 2, 5, 5, 5), index: 100, term: 2, want: 2},
 		{sl: noSnap.append(2, 2, 5, 5, 5), index: 5, term: 6, want: 5},
 		{sl: noSnap.append(2, 2, 5, 5, 5), index: 5, term: 5, want: 5},
 		{sl: noSnap.append(2, 2, 5, 5, 5), index: 5, term: 4, want: 2},
@@ -92,7 +92,7 @@ func TestFindConflictByTerm(t *testing.T) {
 		{sl: noSnap.append(2, 2, 5, 5, 5), index: 1, term: 1, want: 0},
 		{sl: noSnap.append(2, 2, 5, 5, 5), index: 0, term: 0, want: 0},
 		// Log with compacted entries.
-		{sl: snap10.append(3, 3, 4, 4, 4), index: 30, term: 3, want: 30}, // ErrUnavailable
+		{sl: snap10.append(3, 3, 4, 4, 4), index: 30, term: 3, want: 12},
 		{sl: snap10.append(3, 3, 4, 4, 4), index: 14, term: 9, want: 14},
 		{sl: snap10.append(3, 3, 4, 4, 4), index: 14, term: 4, want: 14},
 		{sl: snap10.append(3, 3, 4, 4, 4), index: 14, term: 3, want: 12},
