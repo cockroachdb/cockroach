@@ -79,32 +79,32 @@ build:cross --stamp
 # `--workspace_status_command`; if using these `base` configs, you need to
 # specify an appropriate `--workspace_status_command`. These `base` configs are
 # used by the release process which needs to have more control over stamping.
-build:crosslinux '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu'
+build:crosslinux '--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu'
 build:crosslinux --config=crosslinuxbase
 build:crosslinuxbase --platforms=//build/toolchains:cross_linux
 build:crosslinuxbase --config=cross
-build:crosslinuxfips '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu'
+build:crosslinuxfips '--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu'
 build:crosslinuxfips --config=crosslinuxfipsbase
 build:crosslinuxfipsbase --platforms=//build/toolchains:cross_linux
 build:crosslinuxfipsbase --config=cross
 build:crosslinuxfipsbase --@io_bazel_rules_go//go/toolchain:sdk_version=1.23.7fips
-build:crosswindows '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32'
+build:crosswindows '--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-w64-mingw32'
 build:crosswindows --config=crosswindowsbase
 build:crosswindowsbase --platforms=//build/toolchains:cross_windows
 build:crosswindowsbase --config=cross
-build:crossmacos '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-apple-darwin21.2'
+build:crossmacos '--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-apple-darwin21.2'
 build:crossmacos --config=crossmacosbase
 build:crossmacosbase --platforms=//build/toolchains:cross_macos
 build:crossmacosbase --config=cross
-build:crossmacosarm '--workspace_status_command=./build/bazelutil/stamp.sh aarch64-apple-darwin21.2'
+build:crossmacosarm '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-apple-darwin21.2'
 build:crossmacosarm --config=crossmacosarmbase
 build:crossmacosarmbase --platforms=//build/toolchains:cross_macos_arm
 build:crossmacosarmbase --config=cross
-build:crosslinuxarm '--workspace_status_command=./build/bazelutil/stamp.sh aarch64-unknown-linux-gnu'
+build:crosslinuxarm '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-unknown-linux-gnu'
 build:crosslinuxarm --config=crosslinuxarmbase
 build:crosslinuxarmbase --platforms=//build/toolchains:cross_linux_arm
 build:crosslinuxarmbase --config=cross
-build:crosslinuxs390x '--workspace_status_command=./build/bazelutil/stamp.sh s390x-unknown-linux-gnu'
+build:crosslinuxs390x '--workspace_status_command=./build/bazelutil/stamp.sh -t s390x-unknown-linux-gnu'
 build:crosslinuxs390x --config=crosslinuxs390xbase
 build:crosslinuxs390xbase --platforms=//build/toolchains:cross_linux_s390x
 build:crosslinuxs390xbase --config=cross
