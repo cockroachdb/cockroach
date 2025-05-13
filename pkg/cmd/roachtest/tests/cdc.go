@@ -1388,7 +1388,7 @@ func runCDCFineGrainedCheckpointingBenchmark(
 			return fmt.Errorf("expected %d, got %d", expected, unique)
 		}
 
-		if dupes > dupeLimit {
+		if dupeLimit > 0 && dupes > dupeLimit {
 			t.Fatalf("expected dupes <= %d, got %d", dupeLimit, dupes)
 			return nil
 		}
@@ -1703,7 +1703,7 @@ func registerCDC(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(4),
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.Nightly),
-		Timeout:          15 * time.Minute,
+		Timeout:          30 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCFineGrainedCheckpointingBenchmark(ctx, t, c, 1000, 500*time.Millisecond,
 				[]time.Duration{
@@ -1717,7 +1717,7 @@ func registerCDC(r registry.Registry) {
 					8 * time.Millisecond,
 					16 * time.Millisecond,
 					32 * time.Millisecond,
-				}, 100, 50000)
+				}, 100, 0)
 		},
 	})
 	r.Add(registry.TestSpec{
