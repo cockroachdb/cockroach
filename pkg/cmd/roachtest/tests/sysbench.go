@@ -23,13 +23,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	roachprodErrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/google/pprof/profile"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -257,6 +260,30 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		}
 		if err := os.WriteFile(filepath.Join(t.ArtifactsDir(), "bench.txt"), []byte(goBenchOutput), 0666); err != nil {
 			return err
+		}
+
+		t.Status("running 75 second workload to collect profiles")
+		{
+			m := t.NewGroup(task.WithContext(ctx))
+			m.Go(
+				func(ctx context.Context, l *logger.Logger) error {
+					opts := opts
+					opts.duration = 75 * time.Second
+					result, err = c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()),
+						opts.cmd(useHAProxy)+" run")
+
+					if msg, crashed := detectSysbenchCrash(result); crashed {
+						t.Skipf("%s; skipping test", msg)
+					}
+					return err
+				},
+			)
+
+			// Wait for 30 seconds to give a chance to the workload to start, and then
+			// collect CPU, mutex diffs, allocs diffs profiles.
+			time.Sleep(30 * time.Second)
+			collectSysbenchProfiles(t, ctx, c)
+			m.Wait()
 		}
 
 		return nil
@@ -594,6 +621,74 @@ func exportSysbenchResults(
 	}
 
 	return nil
+}
+
+func collectSysbenchProfiles(t test.Test, ctx context.Context, c cluster.Cluster) {
+	var cpuProfiles []*profile.Profile
+	var allocsProfiles []*profile.Profile
+	var mutexProfiles []*profile.Profile
+
+	m := t.NewGroup(task.WithContext(ctx))
+	m.Go(
+		func(ctx context.Context, l *logger.Logger) error {
+			var err error
+			cpuProfiles, err = roachtestutil.GetProfile(ctx, c, l, "cpu",
+				time.Second*30 /* duration */, c.CRDBNodes())
+			return err
+		},
+	)
+
+	m.Go(
+		func(ctx context.Context, l *logger.Logger) error {
+			var err error
+			allocsProfiles, err = roachtestutil.GetProfile(ctx, c, l, "allocs",
+				time.Second*30 /* duration */, c.CRDBNodes())
+			return err
+		},
+	)
+
+	m.Go(
+		func(ctx context.Context, l *logger.Logger) error {
+			var err error
+			mutexProfiles, err = roachtestutil.GetProfile(ctx, c, l, "mutex",
+				time.Second*30 /* duration */, c.CRDBNodes())
+			return err
+		},
+	)
+
+	m.Wait()
+
+	// Merge the CPU profiles into one profile that contains all the nodes.
+	cpuMerged, err := profile.Merge(cpuProfiles)
+	require.NoError(t, err)
+
+	allocsMerged, err := profile.Merge(allocsProfiles)
+	require.NoError(t, err)
+
+	mutexMerged, err := profile.Merge(mutexProfiles)
+	require.NoError(t, err)
+
+	// Create the profiles directory in the artifacts directory.
+	profilesDir := filepath.Join(t.ArtifactsDir(), "profiles")
+	require.NoError(t, os.MkdirAll(profilesDir, 0755))
+
+	// exportProfile exports a profile to the artifacts' directory.
+	exportProfile := func(profile *profile.Profile, filename string) {
+		buf := bytes.Buffer{}
+		require.NoError(t, profile.Write(&buf))
+		err = os.WriteFile(filepath.Join(profilesDir, filename), buf.Bytes(), 0644)
+		require.NoError(t, err)
+	}
+
+	for i := range len(c.CRDBNodes()) {
+		exportProfile(cpuProfiles[i], fmt.Sprintf("n%d.cpu30s.pb.gz", i+1))
+		exportProfile(mutexProfiles[i], fmt.Sprintf("n%d.mutex30s.pb.gz", i+1))
+		exportProfile(allocsProfiles[i], fmt.Sprintf("n%d.allocs30s.pb.gz", i+1))
+	}
+
+	exportProfile(cpuMerged, "merged.cpu.pb.gz")
+	exportProfile(mutexMerged, "merged.mutex.pb.gz")
+	exportProfile(allocsMerged, "merged.allocs.pb.gz")
 }
 
 // Add sysbenchMetrics to the openmetricsMap
