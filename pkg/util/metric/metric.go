@@ -962,15 +962,10 @@ func (c *CounterFloat64) Inc(i float64) {
 	c.count.Add(i)
 }
 
-// Atomic returns the underlying AtomicFloat64.
-func (c *CounterFloat64) Atomic() *syncutil.AtomicFloat64 {
-	return &c.count
-}
-
 // UpdateIfHigher atomically sets the current value of the counter, unless the
 // current value is already greater.
-func (c *CounterFloat64) UpdateIfHigher(i float64) {
-	c.count.StoreIfHigher(i)
+func (c *CounterFloat64) UpdateIfHigher(i float64) (old float64, updated bool) {
+	return c.count.StoreIfHigher(i)
 }
 
 func (c *CounterFloat64) Snapshot() *CounterFloat64 {
