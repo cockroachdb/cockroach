@@ -261,21 +261,11 @@ func (g *CounterFloat64) Inc(i float64) {
 // UpdateIfHigher sets the counter's value only if it's higher
 // than the currently set one.
 func (g *CounterFloat64) UpdateIfHigher(i float64) {
-	var delta float64
-	v := g.value.Atomic()    // value
-	p := g.parent.g.Atomic() // parent
-	for {
-		loaded := v.Load()
-		delta = i - loaded
-		if delta <= 0 {
-			return
-		}
-		if v.CompareAndSwap(loaded, i) {
-			break
-		}
-		// Raced, try again.
+	old, updated := g.value.UpdateIfHigher(i)
+	if !updated {
+		return
 	}
-	p.Add(delta)
+	g.parent.g.Inc(i - old)
 }
 
 // SQLCounter maintains a value as the sum of its children. The counter will
