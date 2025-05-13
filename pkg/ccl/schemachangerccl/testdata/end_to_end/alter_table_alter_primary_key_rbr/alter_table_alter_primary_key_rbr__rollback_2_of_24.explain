@@ -1,0 +1,110 @@
+/* setup */
+CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3" SURVIVE REGION FAILURE;
+CREATE TABLE multiregion_db.public.table_regional_by_row (
+  k INT NOT NULL,
+  V STRING
+) LOCALITY REGIONAL BY ROW;
+CREATE INDEX on multiregion_db.table_regional_by_row(v);
+
+/* test */
+alter table multiregion_db.table_regional_by_row add column m int8 default unique_rowid(), alter primary key using columns(k) USING HASH;
+EXPLAIN (DDL) rollback at post-commit stage 2 of 24;
+----
+Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regional_by_row ADD COLUMN m INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (k) USING HASH;
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
+      │    ├── 32 elements transitioning toward ABSENT
+      │    │    ├── WRITE_ONLY       → DELETE_ONLY Column:{DescID: 108 (table_regional_by_row), ColumnID: 5 (m-)}
+      │    │    ├── PUBLIC           → ABSENT      ColumnName:{DescID: 108 (table_regional_by_row), Name: "m", ColumnID: 5 (m-)}
+      │    │    ├── BACKFILL_ONLY    → ABSENT      PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 8 (table_regional_by_row_pkey-), ConstraintID: 7, TemporaryIndexID: 9, SourceIndexID: 1 (table_regional_by_row_pkey+)}
+      │    │    ├── PUBLIC           → ABSENT      IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 8 (table_regional_by_row_pkey-)}
+      │    │    ├── PUBLIC           → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 3 (crdb_region), IndexID: 8 (table_regional_by_row_pkey-)}
+      │    │    ├── PUBLIC           → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 4 (rowid), IndexID: 8 (table_regional_by_row_pkey-)}
+      │    │    ├── PUBLIC           → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 8 (table_regional_by_row_pkey-)}
+      │    │    ├── PUBLIC           → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 2 (v), IndexID: 8 (table_regional_by_row_pkey-)}
+      │    │    ├── WRITE_ONLY       → DELETE_ONLY TemporaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 9, ConstraintID: 8, SourceIndexID: 1 (table_regional_by_row_pkey+)}
+      │    │    ├── TRANSIENT_ABSENT → ABSENT      IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 9}
+      │    │    ├── PUBLIC           → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 3 (crdb_region), IndexID: 9}
+      │    │    ├── PUBLIC           → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 4 (rowid), IndexID: 9}
+      │    │    ├── PUBLIC           → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 9}
+      │    │    ├── PUBLIC           → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 2 (v), IndexID: 9}
+      │    │    ├── BACKFILL_ONLY    → ABSENT      PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 10 (table_regional_by_row_pkey-), ConstraintID: 9, TemporaryIndexID: 11, SourceIndexID: 8 (table_regional_by_row_pkey-)}
+      │    │    ├── PUBLIC           → ABSENT      IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 10 (table_regional_by_row_pkey-)}
+      │    │    ├── PUBLIC           → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 3 (crdb_region), IndexID: 10 (table_regional_by_row_pkey-)}
+      │    │    ├── PUBLIC           → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 4 (rowid), IndexID: 10 (table_regional_by_row_pkey-)}
+      │    │    ├── PUBLIC           → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 10 (table_regional_by_row_pkey-)}
+      │    │    ├── PUBLIC           → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 2 (v), IndexID: 10 (table_regional_by_row_pkey-)}
+      │    │    ├── PUBLIC           → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 5 (m-), IndexID: 8 (table_regional_by_row_pkey-)}
+      │    │    ├── PUBLIC           → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 5 (m-), IndexID: 9}
+      │    │    ├── PUBLIC           → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 5 (m-), IndexID: 10 (table_regional_by_row_pkey-)}
+      │    │    ├── WRITE_ONLY       → DELETE_ONLY Column:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-)}
+      │    │    ├── PUBLIC           → ABSENT      ColumnName:{DescID: 108 (table_regional_by_row), Name: "crdb_internal_k_shard_16", ColumnID: 6 (crdb_internal_k_shard_16-)}
+      │    │    ├── WRITE_ONLY       → ABSENT      ColumnNotNull:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-), IndexID: 10 (table_regional_by_row_pkey-)}
+      │    │    ├── PUBLIC           → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-), IndexID: 10 (table_regional_by_row_pkey-)}
+      │    │    ├── PUBLIC           → ABSENT      TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 1}
+      │    │    ├── PUBLIC           → ABSENT      TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 2}
+      │    │    ├── PUBLIC           → ABSENT      TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 3}
+      │    │    ├── PUBLIC           → ABSENT      TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 4}
+      │    │    └── PUBLIC           → ABSENT      TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 5}
+      │    └── 31 Mutation operations
+      │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":5,"TableID":108}
+      │         ├── SetColumnName {"ColumnID":5,"Name":"crdb_internal_co...","TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":8,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":8,"Ordinal":1,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":8,"Kind":2,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":8,"Kind":2,"Ordinal":1,"TableID":108}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":9,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":9,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":9,"Ordinal":1,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":9,"Kind":2,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":9,"Kind":2,"Ordinal":1,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":10,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":10,"Kind":2,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":10,"Ordinal":2,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":10,"Kind":2,"Ordinal":1,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":5,"IndexID":8,"Kind":2,"Ordinal":2,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":5,"IndexID":9,"Kind":2,"Ordinal":2,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":5,"IndexID":10,"Kind":2,"Ordinal":2,"TableID":108}
+      │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":6,"TableID":108}
+      │         ├── SetColumnName {"ColumnID":6,"Name":"crdb_internal_co...","TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":6,"IndexID":10,"Ordinal":1,"TableID":108}
+      │         ├── DiscardTableZoneConfig {"TableID":108}
+      │         ├── DiscardTableZoneConfig {"TableID":108}
+      │         ├── DiscardTableZoneConfig {"TableID":108}
+      │         ├── DiscardTableZoneConfig {"TableID":108}
+      │         ├── DiscardTableZoneConfig {"TableID":108}
+      │         ├── MakeIndexAbsent {"IndexID":8,"TableID":108}
+      │         ├── MakeIndexAbsent {"IndexID":10,"TableID":108}
+      │         ├── RemoveColumnNotNull {"ColumnID":6,"TableID":108}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
+      │    ├── 10 elements transitioning toward ABSENT
+      │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108 (table_regional_by_row), ColumnID: 5 (m-)}
+      │    │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 108 (table_regional_by_row), ColumnFamilyID: 0 (primary), ColumnID: 5 (m-), TypeName: "INT8"}
+      │    │    ├── PUBLIC      → ABSENT ColumnDefaultExpression:{DescID: 108 (table_regional_by_row), ColumnID: 5 (m-), Expr: unique_rowid()}
+      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 8 (table_regional_by_row_pkey-)}
+      │    │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 9, ConstraintID: 8, SourceIndexID: 1 (table_regional_by_row_pkey+)}
+      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 9}
+      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 10 (table_regional_by_row_pkey-)}
+      │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-)}
+      │    │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 108 (table_regional_by_row), ColumnFamilyID: 0 (primary), ColumnID: 6 (crdb_internal_k_shard_16-), TypeName: "INT8"}
+      │    │    └── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-), Usage: REGULAR}
+      │    └── 10 Mutation operations
+      │         ├── RemoveColumnDefaultExpression {"ColumnID":5,"TableID":108}
+      │         ├── CreateGCJobForIndex {"IndexID":8,"TableID":108}
+      │         ├── MakeIndexAbsent {"IndexID":9,"TableID":108}
+      │         ├── CreateGCJobForIndex {"IndexID":9,"TableID":108}
+      │         ├── CreateGCJobForIndex {"IndexID":10,"TableID":108}
+      │         ├── RemoveColumnComputeExpression {"ColumnID":6,"TableID":108}
+      │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":5,"TableID":108}
+      │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":6,"TableID":108}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 3 of 3 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 108 (table_regional_by_row)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":108}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":108}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
