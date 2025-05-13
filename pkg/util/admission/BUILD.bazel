@@ -48,7 +48,6 @@ go_library(
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_cockroachdb_tokenbucket//:tokenbucket",
-        "@com_github_petermattis_goid//:goid",
     ],
 )
 

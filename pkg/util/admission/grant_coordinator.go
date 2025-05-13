@@ -8,8 +8,6 @@ package admission
 import (
 	"context"
 	"fmt"
-	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -23,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/petermattis/goid"
 )
 
 // GrantCoordinators holds {regular,elastic} GrantCoordinators for
@@ -614,7 +611,7 @@ func makeRegularGrantCoordinator(
 				adjustTime := timeSource.Now()
 				ticker := timeSource.NewTicker(time.Millisecond)
 				lastRemainingTicks := int64(0)
-				var remainingTicksSlice []int64
+				var remainingTicksCount int64
 				for {
 					select {
 					case t := <-ticker.Ch():
@@ -627,16 +624,12 @@ func makeRegularGrantCoordinator(
 								// coord.mu.Lock()
 								ctta.allocateTokensTick(1)
 								sll.unlock()
-								remainingTicksSlice = append(remainingTicksSlice, 1)
+								remainingTicksCount++
 							}
-							if len(remainingTicksSlice) < 100 {
-								var b strings.Builder
-								for _, ticks := range remainingTicksSlice {
-									fmt.Fprintf(&b, " %d", ticks)
-								}
-								log.Infof(context.Background(), "%s: remainingTicks: %s", t.String(), b.String())
+							if remainingTicksCount < 100 {
+								log.Infof(context.Background(), "%s: remainingTicksCount: %d", t.String(), remainingTicksCount)
 							}
-							remainingTicksSlice = remainingTicksSlice[:0]
+							remainingTicksCount = 0
 							remainingTicks = int64(time.Second / time.Millisecond)
 							adjustTime = t
 							totalCPUTimeMillis, cpuCapacity := opts.CPUMetricsProvider.GetCPUInfo()
@@ -655,7 +648,7 @@ func makeRegularGrantCoordinator(
 						ctta.allocateTokensTick(max(1, remainingTicks))
 						sll.unlock()
 						lastRemainingTicks = remainingTicks
-						remainingTicksSlice = append(remainingTicksSlice, remainingTicks)
+						remainingTicksCount++
 					case <-coord.closeCh:
 						log.Infof(context.Background(), "coord.closeCh closed")
 						return
@@ -1183,44 +1176,48 @@ func (e *ElasticCPUGrantCoordinator) NewPacer(unit time.Duration, wi WorkInfo) *
 }
 
 type slowMutexWithLogging struct {
-	name     string
-	mu       *syncutil.Mutex
-	goid     atomic.Int64
-	acquired atomic.Bool
-	released atomic.Bool
+	name string
+	mu   *syncutil.Mutex
+	// goid     atomic.Int64
+	// acquired atomic.Bool
+	// released atomic.Bool
 }
 
 func (sll *slowMutexWithLogging) lock() {
-	go func() {
-		start := timeutil.Now()
-		for {
-			time.Sleep(40 * time.Millisecond)
-			if sll.acquired.Load() {
-				break
+	/*
+		go func() {
+			start := timeutil.Now()
+			for {
+				time.Sleep(40 * time.Millisecond)
+				if sll.acquired.Load() {
+					break
+				}
+				if timeutil.Since(start) > 5*time.Second {
+					start = timeutil.Now()
+					log.Infof(context.Background(), "slow mutex lock %s %d", sll.name, sll.goid.Load())
+				}
 			}
-			if timeutil.Since(start) > 5*time.Second {
-				start = timeutil.Now()
-				log.Infof(context.Background(), "slow mutex lock %s %d", sll.name, sll.goid.Load())
+			start = timeutil.Now()
+			for {
+				if sll.released.Load() {
+					break
+				}
+				if timeutil.Since(start) > 5*time.Second {
+					start = timeutil.Now()
+					log.Infof(context.Background(), "slow mutex unlock %s %d", sll.name, sll.goid.Load())
+				}
+				time.Sleep(50 * time.Millisecond)
 			}
-		}
-		start = timeutil.Now()
-		for {
-			if sll.released.Load() {
-				break
-			}
-			if timeutil.Since(start) > 5*time.Second {
-				start = timeutil.Now()
-				log.Infof(context.Background(), "slow mutex unlock %s %d", sll.name, sll.goid.Load())
-			}
-			time.Sleep(50 * time.Millisecond)
-		}
-	}()
-	sll.goid.Store(goid.Get())
+		}()
+		sll.goid.Store(goid.Get())
+		sll.mu.Lock()
+		sll.acquired.Store(true)
+
+	*/
 	sll.mu.Lock()
-	sll.acquired.Store(true)
 }
 
 func (sll *slowMutexWithLogging) unlock() {
 	sll.mu.Unlock()
-	sll.released.Store(true)
+	// sll.released.Store(true)
 }
