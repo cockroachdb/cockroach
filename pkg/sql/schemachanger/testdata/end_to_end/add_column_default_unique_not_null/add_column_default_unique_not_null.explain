@@ -13,15 +13,15 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 2 (j+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (j+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j+), IndexID: 1 (tbl_pkey)}
+ │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_j_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey), RecreateSourceIndexID: 0}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j+), IndexID: 2 (tbl_j_key+)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_j_key+)}
- │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_j_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey), RecreateSourceIndexID: 0}
  │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 106 (tbl), IndexID: 2 (tbl_j_key+)}
  │         │    └── ABSENT → PUBLIC        IndexName:{DescID: 106 (tbl), Name: "tbl_j_key", IndexID: 2 (tbl_j_key+)}
  │         ├── 3 elements transitioning toward TRANSIENT_ABSENT
+ │         │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j+), IndexID: 3}
- │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 3}
- │         │    └── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey)}
+ │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 3}
  │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │         │    └── PUBLIC → ABSENT        TableSchemaLocked:{DescID: 106 (tbl)}
  │         └── 12 Mutation operations
@@ -31,10 +31,10 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │              ├── UpsertColumnType {"ColumnType":{"ColumnID":2,"TableID":106}}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":1,"Kind":2,"TableID":106}
  │              ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
- │              ├── SetIndexName {"IndexID":2,"Name":"tbl_j_key","TableID":106}
- │              ├── MakeAbsentTempIndexDeleteOnly {"IsSecondaryIndex":true}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":2,"TableID":106}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":106}
+ │              ├── SetIndexName {"IndexID":2,"Name":"tbl_j_key","TableID":106}
+ │              ├── MakeAbsentTempIndexDeleteOnly {"IsSecondaryIndex":true}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":3,"TableID":106}
  │              └── AddColumnToIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":106}
  ├── PreCommitPhase
@@ -44,15 +44,15 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    │    │    ├── PUBLIC        → ABSENT ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 2 (j+)}
  │    │    │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (j+), TypeName: "INT8"}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j+), IndexID: 1 (tbl_pkey)}
+ │    │    │    ├── BACKFILL_ONLY → ABSENT SecondaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_j_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey), RecreateSourceIndexID: 0}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j+), IndexID: 2 (tbl_j_key+)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_j_key+)}
- │    │    │    ├── BACKFILL_ONLY → ABSENT SecondaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_j_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey), RecreateSourceIndexID: 0}
  │    │    │    ├── PUBLIC        → ABSENT IndexData:{DescID: 106 (tbl), IndexID: 2 (tbl_j_key+)}
  │    │    │    └── PUBLIC        → ABSENT IndexName:{DescID: 106 (tbl), Name: "tbl_j_key", IndexID: 2 (tbl_j_key+)}
  │    │    ├── 3 elements transitioning toward TRANSIENT_ABSENT
+ │    │    │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j+), IndexID: 3}
- │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 3}
- │    │    │    └── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey)}
+ │    │    │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 3}
  │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │    │    │    └── ABSENT        → PUBLIC TableSchemaLocked:{DescID: 106 (tbl)}
  │    │    └── 1 Mutation operation
@@ -63,15 +63,15 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 2 (j+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (j+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j+), IndexID: 1 (tbl_pkey)}
+ │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_j_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey), RecreateSourceIndexID: 0}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j+), IndexID: 2 (tbl_j_key+)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_j_key+)}
- │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_j_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey), RecreateSourceIndexID: 0}
  │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 106 (tbl), IndexID: 2 (tbl_j_key+)}
  │         │    └── ABSENT → PUBLIC        IndexName:{DescID: 106 (tbl), Name: "tbl_j_key", IndexID: 2 (tbl_j_key+)}
  │         ├── 3 elements transitioning toward TRANSIENT_ABSENT
+ │         │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j+), IndexID: 3}
- │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 3}
- │         │    └── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey)}
+ │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 3}
  │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │         │    └── PUBLIC → ABSENT        TableSchemaLocked:{DescID: 106 (tbl)}
  │         └── 16 Mutation operations
@@ -82,11 +82,11 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":1,"Kind":2,"TableID":106}
  │              ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
  │              ├── MaybeAddSplitForIndex {"IndexID":2,"TableID":106}
+ │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":2,"TableID":106}
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":106}
  │              ├── SetIndexName {"IndexID":2,"Name":"tbl_j_key","TableID":106}
  │              ├── MakeAbsentTempIndexDeleteOnly {"IsSecondaryIndex":true}
  │              ├── MaybeAddSplitForIndex {"IndexID":3,"TableID":106}
- │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":2,"TableID":106}
- │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":106}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":3,"TableID":106}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":106}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
@@ -157,9 +157,9 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
       │    │    ├── WRITE_ONLY            → PUBLIC           Column:{DescID: 106 (tbl), ColumnID: 2 (j+)}
       │    │    └── VALIDATED             → PUBLIC           SecondaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_j_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey), RecreateSourceIndexID: 0}
       │    ├── 4 elements transitioning toward TRANSIENT_ABSENT
+      │    │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey)}
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j+), IndexID: 3}
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 3}
-      │    │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey)}
       │    │    └── PUBLIC                → TRANSIENT_ABSENT IndexData:{DescID: 106 (tbl), IndexID: 3}
       │    └── 10 Mutation operations
       │         ├── MakeWriteOnlyColumnPublic {"ColumnID":2,"TableID":106}
