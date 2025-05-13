@@ -140,7 +140,7 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 				err := txn2.SearchPartitions(ctx, treeKey, toSearch, vector.T{0, 0}, &searchSet)
 				require.NoError(t, err)
 				result1 := cspann.SearchResult{
-					QuerySquaredDistance: 25, ErrorBound: 0, CentroidDistance: 5,
+					QueryDistance: 25, ErrorBound: 0,
 					ParentPartitionKey: cspann.RootKey, ChildKey: childKey2, ValueBytes: valueBytes2}
 				require.Equal(t, cspann.SearchResults{result1}, searchSet.PopResults())
 				require.Equal(t, 2, toSearch[0].Count)
@@ -253,8 +253,7 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 		cspann.MakeReadyPartitionMetadata(1, centroid),
 		unquantizer,
 		&quantize.UnQuantizedVectorSet{
-			Centroid:          centroid,
-			CentroidDistances: []float32{1, 2, 3},
+			Centroid: centroid,
 			Vectors: vector.Set{
 				Dims:  2,
 				Count: 3,
@@ -271,8 +270,7 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 		cspann.MakeReadyPartitionMetadata(2, centroid),
 		raBitQuantizer,
 		&quantize.UnQuantizedVectorSet{
-			Centroid:          centroid,
-			CentroidDistances: []float32{1, 2, 3, 4},
+			Centroid: centroid,
 			Vectors: vector.Set{
 				Dims:  2,
 				Count: 3,

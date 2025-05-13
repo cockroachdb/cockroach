@@ -7316,7 +7316,7 @@ func TestQuotaPoolReleasedOnFailedProposal(t *testing.T) {
 	tsc := TestStoreConfig(nil /* clock */)
 	// Override the kvflowcontrol.Mode setting to apply_to_elastic, as when
 	// apply_to_all is set (metamorphically), the quota pool will be disabled.
-	// See getQuotaPoolEnabledRLocked.
+	// See getQuotaPoolEnabled.
 	kvflowcontrol.Mode.Override(ctx, &tsc.Settings.SV, kvflowcontrol.ApplyToElastic)
 	tsc.TestingKnobs.TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
 		if v := args.Ctx.Value(magicKey{}); v != nil {
@@ -7360,7 +7360,7 @@ func TestQuotaPoolAccessOnDestroyedReplica(t *testing.T) {
 
 	// Override the kvflowcontrol.Mode setting to apply_to_elastic, as when
 	// apply_to_all is set (metamorphically), the quota pool will be disabled.
-	// See getQuotaPoolEnabledRLocked.
+	// See getQuotaPoolEnabled.
 	tsc := TestStoreConfig(nil /* clock */)
 	kvflowcontrol.Mode.Override(ctx, &tsc.Settings.SV, kvflowcontrol.ApplyToElastic)
 	tc.StartWithStoreConfig(ctx, t, stopper, tsc)

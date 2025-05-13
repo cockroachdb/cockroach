@@ -89,7 +89,7 @@ func (s *testState) estimateDistances(t *testing.T, d *datadriven.TestData) stri
 	}
 
 	var buf bytes.Buffer
-	doTest := func(metric vecdist.Metric) {
+	doTest := func(metric vecdist.Metric, prec int) {
 		unquantizer := quantize.NewUnQuantizer(len(queryVector), metric)
 		unQuantizedSet := unquantizer.Quantize(&s.Workspace, vectors)
 		exact := make([]float32, unQuantizedSet.GetCount())
@@ -106,27 +106,34 @@ func (s *testState) estimateDistances(t *testing.T, d *datadriven.TestData) stri
 		rabitQ.EstimateDistances(
 			&s.Workspace, rabitQSet, queryVector, estimated, errorBounds)
 
+		// UnQuantizer and RaBitQuantizer should have calculated same centroid.
+		require.Equal(t, unQuantizedSet.GetCentroid(), rabitQSet.GetCentroid())
+
+		buf.WriteString("  Query = ")
+		utils.WriteVector(&buf, queryVector, 4)
+		buf.WriteByte('\n')
+
+		buf.WriteString("  Centroid = ")
+		utils.WriteVector(&buf, rabitQSet.GetCentroid(), 4)
+		buf.WriteByte('\n')
+
 		for i := range vectors.Count {
 			var errorBound string
 			if errorBounds[i] != 0 {
-				errorBound = fmt.Sprintf(" ± %s", utils.FormatFloat(errorBounds[i], 2))
+				errorBound = fmt.Sprintf(" ± %s", utils.FormatFloat(errorBounds[i], prec))
 			}
 			buf.WriteString("  ")
 			utils.WriteVector(&buf, vectors.At(i), 4)
 			fmt.Fprintf(&buf, ": exact is %s, estimate is %s%s\n",
-				utils.FormatFloat(exact[i], 3), utils.FormatFloat(estimated[i], 3), errorBound)
+				utils.FormatFloat(exact[i], 3), utils.FormatFloat(estimated[i], prec), errorBound)
 		}
 	}
 
-	centroid := vectors.Centroid(make(vector.T, vectors.Dims))
-	buf.WriteString("Centroid = ")
-	utils.WriteVector(&buf, centroid, 4)
-
-	buf.WriteString("\nL2Squared\n")
-	doTest(vecdist.L2Squared)
+	buf.WriteString("L2Squared\n")
+	doTest(vecdist.L2Squared, 1)
 
 	buf.WriteString("InnerProduct\n")
-	doTest(vecdist.InnerProduct)
+	doTest(vecdist.InnerProduct, 1)
 
 	// For cosine distance, normalize the query and input vectors.
 	num32.Normalize(queryVector)
@@ -135,7 +142,7 @@ func (s *testState) estimateDistances(t *testing.T, d *datadriven.TestData) stri
 	}
 
 	buf.WriteString("Cosine\n")
-	doTest(vecdist.Cosine)
+	doTest(vecdist.Cosine, 4)
 
 	return buf.String()
 }
@@ -220,11 +227,19 @@ func (s *testState) calculateRecall(t *testing.T, d *datadriven.TestData) string
 	fmt.Fprintf(&buf, "Euclidean: %.2f%% recall@%d\n",
 		calculateAvgRecall(vecdist.L2Squared)*100, topK)
 
-	fmt.Fprintf(&buf, "Cosine: %.2f%% recall@%d\n",
-		calculateAvgRecall(vecdist.Cosine)*100, topK)
-
 	fmt.Fprintf(&buf, "InnerProduct: %.2f%% recall@%d\n",
 		calculateAvgRecall(vecdist.InnerProduct)*100, topK)
+
+	// For cosine distance, normalize the query and input vectors.
+	for i := range queryVectors.Count {
+		num32.Normalize(queryVectors.At(i))
+	}
+	for i := range dataVectors.Count {
+		num32.Normalize(dataVectors.At(i))
+	}
+
+	fmt.Fprintf(&buf, "Cosine: %.2f%% recall@%d\n",
+		calculateAvgRecall(vecdist.Cosine)*100, topK)
 
 	return buf.String()
 }

@@ -1738,6 +1738,24 @@ var (
 		Measurement: "Wait time Duration",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	kvWaitDurationsMeta = metric.Metadata{
+		Name:        "admission.wait_durations.",
+		Help:        "Wait time durations for requests that waited",
+		Measurement: "Wait time Duration",
+		Unit:        metric.Unit_NANOSECONDS,
+		Essential:   true,
+		Category:    metric.Metadata_OVERLOAD,
+		HowToUse:    "This metric shows if CPU utilization-based admission control feature is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.",
+	}
+	kvStoresWaitDurationsMeta = metric.Metadata{
+		Name:        "admission.wait_durations.",
+		Help:        "Wait time durations for requests that waited",
+		Measurement: "Wait time Duration",
+		Unit:        metric.Unit_NANOSECONDS,
+		Essential:   true,
+		Category:    metric.Metadata_OVERLOAD,
+		HowToUse:    "This metric shows if I/O utilization-based admission control feature is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.",
+	}
 	waitQueueLengthMeta = metric.Metadata{
 		Name:        "admission.wait_queue_length.",
 		Help:        "Length of wait queue",
@@ -1866,13 +1884,20 @@ func makeWorkQueueMetrics(
 }
 
 func makeWorkQueueMetricsSingle(name string) *workQueueMetricsSingle {
+	wdm := waitDurationsMeta
+	if name == KVWork.String() {
+		wdm = kvWaitDurationsMeta
+	} else if name == fmt.Sprintf("%s-stores", KVWork.String()) {
+		wdm = kvStoresWaitDurationsMeta
+	}
+
 	return &workQueueMetricsSingle{
 		Requested: metric.NewCounter(addName(name, requestedMeta)),
 		Admitted:  metric.NewCounter(addName(name, admittedMeta)),
 		Errored:   metric.NewCounter(addName(name, erroredMeta)),
 		WaitDurations: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePreferHdrLatency,
-			Metadata:     addName(name, waitDurationsMeta),
+			Metadata:     addName(name, wdm),
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.IOLatencyBuckets,
 		}),

@@ -86,6 +86,14 @@ func MakeBaseMemMetrics(endpoint string, histogramWindow time.Duration) BaseMemo
 	prefix := "sql.mem." + endpoint
 	MetaMemMaxBytes := makeMemMetricMetadata(prefix+".max", "Memory usage per sql statement for "+endpoint)
 	MetaMemCurBytes := makeMemMetricMetadata(prefix+".current", "Current sql statement memory usage for "+endpoint)
+
+	// Add Essential flag and category if this is the 'root' endpoint
+	if endpoint == "root" {
+		MetaMemCurBytes.Essential = true
+		MetaMemCurBytes.Category = metric.Metadata_SQL
+		MetaMemCurBytes.HowToUse = `This metric shows how memory set aside for temporary materializations, such as hash tables and intermediary result sets, is utilized. Use this metric to optimize memory allocations based on long term observations. The maximum amount is set with --max_sql_memory. If the utilization of sql memory is persistently low, perhaps some portion of this memory allocation can be shifted to --cache.`
+	}
+
 	return BaseMemoryMetrics{
 		MaxBytesHist:  makeMemMetricHistogram(MetaMemMaxBytes, histogramWindow),
 		CurBytesCount: metric.NewGauge(MetaMemCurBytes),

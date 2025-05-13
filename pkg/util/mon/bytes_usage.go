@@ -297,6 +297,9 @@ type Name struct {
 	i      uint16
 }
 
+// EmptyName is an empty, uninitialized Name.
+var EmptyName Name
+
 // nameSuffix is an enum the represents one of a finite list of possible
 // monitor name suffixes.
 type nameSuffix uint8
@@ -370,6 +373,11 @@ func (mn Name) WithSuffix(suffix nameSuffix) Name {
 func (mn Name) WithInt(i uint16) Name {
 	mn.i = i
 	return mn
+}
+
+// Empty returns true if the name is empty, i.e., uninitialized.
+func (mn Name) Empty() bool {
+	return mn == Name{}
 }
 
 // String returns the monitor prefix as a string.

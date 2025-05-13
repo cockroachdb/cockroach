@@ -194,7 +194,7 @@ vec3
 search max-results=1
 (4, 3)
 ----
-vec4: 5 (centroid=1.12)
+vec4: 5
 4 leaf vectors, 6 vectors, 4 full vectors, 3 partitions
 
 # Again, with higher max results.
@@ -203,9 +203,9 @@ vec4: 5 (centroid=1.12)
 search max-results=2
 (4, 3)
 ----
-vec4: 5 (centroid=1.12)
-vec1: 10 (centroid=1.58)
-vec2: 10 (centroid=1.12)
+vec4: 5
+vec1: 10
+vec2: 10
 3 leaf vectors, 5 vectors, 3 full vectors, 3 partitions
 
 # Vector should now be gone from the index.
@@ -288,7 +288,7 @@ vec3
 search max-results=1
 (4, 3)
 ----
-vec4: 5 (centroid=7.07)
+vec4: 5
 4 leaf vectors, 4 vectors, 4 full vectors, 1 partitions
 
 # Split should detect missing vector and remove it.

@@ -72,7 +72,7 @@ var itemTypes = []*types.T{
 func (w *tpcc) tpccItemInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
-	l.rng.Rand = rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(rowIdx)))
+	l.rng.Seed(RandomSeed.Seed(), uint64(rowIdx))
 	ao := aCharsOffset(l.rng.IntN(len(aCharsAlphabet)))
 
 	iID := rowIdx + 1
@@ -115,7 +115,7 @@ func (w *tpcc) tpccWarehouseInitialRowBatch(
 ) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
-	l.rng.Rand = rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(rowIdx)))
+	l.rng.Seed(RandomSeed.Seed(), uint64(rowIdx))
 	no := numbersOffset(l.rng.IntN(len(numbersAlphabet)))
 	lo := lettersOffset(l.rng.IntN(len(lettersAlphabet)))
 
@@ -173,7 +173,7 @@ var stockTypes = []*types.T{
 func (w *tpcc) tpccStockInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
-	l.rng.Rand = rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(rowIdx)))
+	l.rng.Seed(RandomSeed.Seed(), uint64(rowIdx))
 	ao := aCharsOffset(l.rng.IntN(len(aCharsAlphabet)))
 
 	sID := (rowIdx % numStockPerWarehouse) + 1
@@ -245,7 +245,7 @@ func (w *tpcc) tpccDistrictInitialRowBatch(
 ) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
-	l.rng.Rand = rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(rowIdx)))
+	l.rng.Seed(RandomSeed.Seed(), uint64(rowIdx))
 	ao := aCharsOffset(l.rng.IntN(len(aCharsAlphabet)))
 	no := numbersOffset(l.rng.IntN(len(numbersAlphabet)))
 	lo := lettersOffset(l.rng.IntN(len(lettersAlphabet)))
@@ -318,7 +318,7 @@ func (w *tpcc) tpccCustomerInitialRowBatch(
 ) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
-	l.rng.Rand = rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(rowIdx)))
+	l.rng.Seed(RandomSeed.Seed(), uint64(rowIdx))
 	ao := aCharsOffset(l.rng.IntN(len(aCharsAlphabet)))
 	no := numbersOffset(l.rng.IntN(len(numbersAlphabet)))
 	lo := lettersOffset(l.rng.IntN(len(lettersAlphabet)))
@@ -416,7 +416,7 @@ var historyTypes = []*types.T{
 func (w *tpcc) tpccHistoryInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
-	l.rng.Rand = rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(rowIdx)))
+	l.rng.Seed(RandomSeed.Seed(), uint64(rowIdx))
 	ao := aCharsOffset(l.rng.IntN(len(aCharsAlphabet)))
 
 	// This used to be a V4 uuid made through the normal `uuid.MakeV4`
@@ -481,7 +481,7 @@ func (w *tpcc) tpccOrderInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufallo
 
 	// NB: numOrderLines is not allowed to use precomputed random data, make sure
 	// it stays that way. See 4.3.2.1.
-	l.rng.Rand = rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(rowIdx)))
+	l.rng.Seed(RandomSeed.Seed(), uint64(rowIdx))
 	numOrderLines := randInt(l.rng.Rand, minOrderLinesPerOrder, maxOrderLinesPerOrder)
 
 	oID := (rowIdx % numOrdersPerDistrict) + 1
@@ -602,7 +602,7 @@ func (w *tpcc) tpccOrderLineInitialRowBatch(
 
 	// NB: numOrderLines is not allowed to use precomputed random data, make sure
 	// it stays that way. See 4.3.2.1.
-	l.rng.Rand = rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(orderRowIdx)))
+	l.rng.Seed(RandomSeed.Seed(), uint64(orderRowIdx))
 	numOrderLines := int(randInt(l.rng.Rand, minOrderLinesPerOrder, maxOrderLinesPerOrder))
 
 	// NB: There is one batch of order_line rows per order

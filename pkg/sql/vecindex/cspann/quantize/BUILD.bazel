@@ -33,6 +33,7 @@ go_library(
         "rabitqpb.go",
         "unquantizedpb.go",
         "unquantizer.go",
+        "validate.go",
     ],
     embed = [":quantize_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize",
@@ -44,6 +45,7 @@ go_library(
         "//pkg/util/num32",
         "//pkg/util/vector",
         "@com_github_cockroachdb_errors//:errors",
+        "@org_gonum_v1_gonum//floats/scalar",
     ],
 )
 

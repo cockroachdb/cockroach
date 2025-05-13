@@ -8,7 +8,6 @@ package kvserver
 import (
 	"bytes"
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -42,7 +41,7 @@ func (r *Replica) maybeAcquireProposalQuota(
 	}
 
 	r.mu.RLock()
-	enabled := r.getQuotaPoolEnabledRLocked(ctx)
+	enabled := r.getQuotaPoolEnabled(ctx, r.descRLocked())
 	quotaPool := r.mu.proposalQuota
 	r.mu.RUnlock()
 
@@ -89,19 +88,16 @@ var logSlowRaftProposalQuotaAcquisition = quotapool.OnSlowAcquisition(
 	base.SlowRequestThreshold, quotapool.LogSlowAcquisition,
 )
 
-// getQuotaPoolEnabledRLocked returns whether the quota pool is enabled for the
-// replica. The quota pool is enabled iff all of the following conditions are
-// met:
+// getQuotaPoolEnabled returns whether the quota pool is enabled for the
+// replica. The quota pool is enabled iff all the following conditions are met:
 //
 //  1. "kv.raft.proposal_quota.enabled" is true
 //  2. replication admission control is not using pull mode
 //  3. the range is not the NodeLiveness range
-//
-// Replica.mu must be RLocked.
-func (r *Replica) getQuotaPoolEnabledRLocked(ctx context.Context) bool {
+func (r *Replica) getQuotaPoolEnabled(ctx context.Context, desc *roachpb.RangeDescriptor) bool {
 	return enableRaftProposalQuota.Get(&r.store.cfg.Settings.SV) &&
 		!r.shouldReplicationAdmissionControlUsePullMode(ctx) &&
-		quotaPoolEnabledForRange(r.shMu.state.Desc)
+		quotaPoolEnabledForRange(desc)
 }
 
 // shouldReplicationAdmissionControlUsePullMode returns whether replication
@@ -131,59 +127,99 @@ func (r *Replica) replicationAdmissionControlModeToUse(ctx context.Context) rac2
 	return rac2.MsgAppPush
 }
 
+// updateProposalQuotaOnLeaderChangeRaftMuLocked handles the proposal quota
+// updates on leadership changes.
+func (r *Replica) updateProposalQuotaOnLeaderChangeRaftMuLocked(ctx context.Context) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.replicaID == r.shMu.leaderID {
+		// We're becoming the leader.
+		r.mu.replicaFlowControlIntegration.onBecameLeader(ctx)
+		r.mu.lastProposalAtTicks = r.mu.ticks // delay imminent quiescence
+	} else {
+		// We're becoming a follower.
+		r.mu.replicaFlowControlIntegration.onBecameFollower(ctx)
+		if r.mu.proposalQuota != nil {
+			// We unblock all ongoing and subsequent quota acquisition goroutines
+			// (if any) and release the quotaReleaseQueue so its allocs are pooled.
+			r.mu.proposalQuota.Close("leader change")
+			r.mu.proposalQuota.Release(r.mu.quotaReleaseQueue...)
+			r.mu.quotaReleaseQueue = nil
+			r.mu.proposalQuota = nil
+		}
+	}
+}
+
 func (r *Replica) updateProposalQuotaRaftMuLocked(
 	ctx context.Context, lastLeaderID roachpb.ReplicaID,
 ) {
 	now := r.Clock().PhysicalTime()
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	// Since RaftMu is locked, we can read r.shMu struct without holding the
+	// replica mutex lock.
+	leadershipChanged := r.shMu.leaderID != lastLeaderID
+	if leadershipChanged {
+		r.updateProposalQuotaOnLeaderChangeRaftMuLocked(ctx)
+	}
 
-	status := r.mu.internalRaftGroup.BasicStatus()
-	enabled := r.getQuotaPoolEnabledRLocked(ctx)
+	if currentlyLeader := r.replicaID == r.shMu.leaderID; !currentlyLeader {
+		// If we are already a follower, there is already nothing to do. If we just
+		// became a follower, updateProposalQuotaOnLeaderChangeRaftMuLocked() should
+		// have made the necessary replica updates, and now there is nothing to do.
+		return
+	}
+
+	quotaPoolEnabled := r.getQuotaPoolEnabled(ctx, r.shMu.state.Desc)
+	if !quotaPoolEnabled {
+		if r.mu.proposalQuota != nil {
+			r.mu.Lock()
+			// The quota pool was previously enabled on this leader, but it is no longer
+			// enabled. We release all quota back to the pool and close the pool.
+			r.mu.proposalQuota.Close("quota pool disabled")
+			r.mu.proposalQuota.Release(r.mu.quotaReleaseQueue...)
+			r.mu.quotaReleaseQueue = nil
+			r.mu.proposalQuota = nil
+			r.mu.Unlock()
+		}
+
+		if r.raftMu.flowControlLevel <= kvflowcontrol.V2NotEnabledWhenLeader {
+			// We only need to tick the replicaFlowControlIntegration interface if we
+			// are not using flowControlV2. If we are using flowControlV2, the calls
+			// or no-ops.
+			r.mu.Lock()
+			r.mu.replicaFlowControlIntegration.onRaftTicked(ctx)
+			r.mu.Unlock()
+		}
+		return
+	}
+
+	// At this point, we know that quotaPoolEnabled==true, and we are currently
+	// the leader.
+	//
 	// NB: We initialize and destroy the quota pool here, on leadership changes
 	// and when it's enabled/disabled via settings (see below). This obviates the
 	// need for a setting change callback, as handleRaftReady (the caller), will
 	// be called at least at the tick interval for a non-quiescent range.
 	shouldInitQuotaPool := false
-	if r.shMu.leaderID != lastLeaderID {
-		if r.replicaID == r.shMu.leaderID {
-			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
-			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.shMu.state.Desc.Replicas().Descriptors(), now)
-			r.mu.replicaFlowControlIntegration.onBecameLeader(ctx)
-			r.mu.lastProposalAtTicks = r.mu.ticks // delay imminent quiescence
-			// We're the new leader but we only create the quota pool if it's enabled
-			// for the range and generally enabled for the cluster, see
-			// getQuotaPoolEnabledRLocked.
-			if enabled {
-				// Raft may propose commands itself (specifically the empty
-				// commands when leadership changes), and these commands don't go
-				// through the code paths where we acquire quota from the pool. To
-				// offset this we reset the quota pool whenever leadership changes
-				// hands.
-				shouldInitQuotaPool = true
-			}
-		} else {
-			// We're becoming a follower.
-			r.mu.lastUpdateTimes = nil
-			r.mu.replicaFlowControlIntegration.onBecameFollower(ctx)
-			if r.mu.proposalQuota != nil {
-				// We unblock all ongoing and subsequent quota acquisition goroutines
-				// (if any) and release the quotaReleaseQueue so its allocs are pooled.
-				r.mu.proposalQuota.Close("leader change")
-				r.mu.proposalQuota.Release(r.mu.quotaReleaseQueue...)
-				r.mu.quotaReleaseQueue = nil
-				r.mu.proposalQuota = nil
-			}
-			return
-		}
-	} else if r.replicaID == r.shMu.leaderID && r.mu.proposalQuota == nil && enabled {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if leadershipChanged {
+		// We're the new leader but we only create the quota pool if it's enabled
+		// for the range and generally enabled for the cluster, see
+		// getQuotaPoolEnabled.
+		//
+		// Raft may propose commands itself (specifically the empty
+		// commands when leadership changes), and these commands don't go
+		// through the code paths where we acquire quota from the pool. To
+		// offset this we reset the quota pool whenever leadership changes
+		// hands.
+		shouldInitQuotaPool = true
+	} else if !leadershipChanged && r.mu.proposalQuota == nil {
 		r.mu.lastProposalAtTicks = r.mu.ticks // delay imminent quiescence
 		shouldInitQuotaPool = true
-	} else if r.replicaID != r.shMu.leaderID {
-		// We're a follower and have been since the last update. Nothing to do.
-		return
 	}
 
+	status := r.mu.internalRaftGroup.BasicStatus()
 	if shouldInitQuotaPool {
 		// We're becoming the leader and the quota pool is enabled for the range,
 		// or we were the leader and the quota pool has dynamically been enabled.
@@ -208,16 +244,11 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 
 	// We're still the leader.
 	// Find the minimum index that active followers have acknowledged.
-
-	// commitIndex is used to determine whether a newly added replica has fully
-	// caught up.
-	commitIndex := kvpb.RaftIndex(status.Commit)
 	// Initialize minIndex to the currently applied index. The below progress
 	// checks will only decrease the minIndex. Given that the quotaReleaseQueue
 	// cannot correspond to values beyond the applied index there's no reason
 	// to consider progress beyond it as meaningful.
 	minIndex := kvpb.RaftIndex(status.Applied)
-
 	r.mu.internalRaftGroup.WithBasicProgress(func(id raftpb.PeerID, progress tracker.BasicProgress) {
 		rep, ok := r.shMu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(id))
 		if !ok {
@@ -231,7 +262,6 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		// for purposes of quiescing. Failure to consider a dead/stuck node as
 		// such for the purposes of releasing quota can have bad consequences
 		// (writes will stall), whereas for quiescing the downside is lower.
-
 		if !r.mu.lastUpdateTimes.isFollowerActiveSince(rep.ReplicaID, now, r.store.cfg.RangeLeaseDuration) {
 			return
 		}
@@ -288,49 +318,33 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		if progress.Match > 0 && kvpb.RaftIndex(progress.Match) < minIndex {
 			minIndex = kvpb.RaftIndex(progress.Match)
 		}
-		// If this is the most recently added replica, and it has caught up, clear
-		// our state that was tracking it. This is unrelated to managing proposal
-		// quota, but this is a convenient place to do so.
-		if rep.ReplicaID == r.mu.lastReplicaAdded && kvpb.RaftIndex(progress.Match) >= commitIndex {
-			r.mu.lastReplicaAdded = 0
-			r.mu.lastReplicaAddedTime = time.Time{}
-		}
 	})
 
-	if enabled {
-		if r.mu.proposalQuotaBaseIndex < minIndex {
-			// We've persisted at least minIndex-r.mu.proposalQuotaBaseIndex entries
-			// to the raft log on all 'active' replicas and applied at least minIndex
-			// entries locally since last we checked, so we are able to release the
-			// difference back to the quota pool.
-			numReleases := minIndex - r.mu.proposalQuotaBaseIndex
+	if r.mu.proposalQuotaBaseIndex < minIndex {
+		// We've persisted at least minIndex-r.mu.proposalQuotaBaseIndex entries
+		// to the raft log on all 'active' replicas and applied at least minIndex
+		// entries locally since last we checked, so we are able to release the
+		// difference back to the quota pool.
+		numReleases := minIndex - r.mu.proposalQuotaBaseIndex
 
-			// NB: Release deals with cases where allocs being released do not originate
-			// from this incarnation of quotaReleaseQueue, which can happen if a
-			// proposal acquires quota while this replica is the raft leader in some
-			// term and then commits while at a different term.
-			r.mu.proposalQuota.Release(r.mu.quotaReleaseQueue[:numReleases]...)
-			r.mu.quotaReleaseQueue = r.mu.quotaReleaseQueue[numReleases:]
-			r.mu.proposalQuotaBaseIndex += numReleases
-		}
-		// Assert the sanity of the base index and the queue. Queue entries should
-		// correspond to applied entries. It should not be possible for the base
-		// index and the not yet released applied entries to not equal the applied
-		// index.
-		releasableIndex := r.mu.proposalQuotaBaseIndex + kvpb.RaftIndex(len(r.mu.quotaReleaseQueue))
-		if releasableIndex != kvpb.RaftIndex(status.Applied) {
-			log.Fatalf(ctx, "proposalQuotaBaseIndex (%d) + quotaReleaseQueueLen (%d) = %d"+
-				" must equal the applied index (%d)",
-				r.mu.proposalQuotaBaseIndex, len(r.mu.quotaReleaseQueue), releasableIndex,
-				status.Applied)
-		}
-	} else if !enabled && r.mu.proposalQuota != nil {
-		// The quota pool was previously enabled on this leader, but it is no longer
-		// enabled. We release all quota back to the pool and close the pool.
-		r.mu.proposalQuota.Close("quota pool disabled")
-		r.mu.proposalQuota.Release(r.mu.quotaReleaseQueue...)
-		r.mu.quotaReleaseQueue = nil
-		r.mu.proposalQuota = nil
+		// NB: Release deals with cases where allocs being released do not originate
+		// from this incarnation of quotaReleaseQueue, which can happen if a
+		// proposal acquires quota while this replica is the raft leader in some
+		// term and then commits while at a different term.
+		r.mu.proposalQuota.Release(r.mu.quotaReleaseQueue[:numReleases]...)
+		r.mu.quotaReleaseQueue = r.mu.quotaReleaseQueue[numReleases:]
+		r.mu.proposalQuotaBaseIndex += numReleases
+	}
+	// Assert the sanity of the base index and the queue. Queue entries should
+	// correspond to applied entries. It should not be possible for the base
+	// index and the not yet released applied entries to not equal the applied
+	// index.
+	releasableIndex := r.mu.proposalQuotaBaseIndex + kvpb.RaftIndex(len(r.mu.quotaReleaseQueue))
+	if releasableIndex != kvpb.RaftIndex(status.Applied) {
+		log.Fatalf(ctx, "proposalQuotaBaseIndex (%d) + quotaReleaseQueueLen (%d) = %d"+
+			" must equal the applied index (%d)",
+			r.mu.proposalQuotaBaseIndex, len(r.mu.quotaReleaseQueue), releasableIndex,
+			status.Applied)
 	}
 
 	// Tick the replicaFlowControlIntegration interface. This is as convenient a

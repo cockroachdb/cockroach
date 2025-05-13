@@ -20,15 +20,12 @@ type SearchResults []SearchResult
 // SearchResult contains a set of results from searching partitions for data
 // vectors that are nearest to a query vector.
 type SearchResult struct {
-	// QuerySquaredDistance is the estimated squared distance of the data vector
-	// from the query vector.
-	QuerySquaredDistance float32
+	// QueryDistance is the estimated distance of the data vector from the query
+	// vector. The quantizer used by the index determines the distance metric.
+	QueryDistance float32
 	// ErrorBound captures the uncertainty of the distance estimate, which is
-	// highly likely to fall within QuerySquaredDistance ± ErrorBound.
+	// highly likely to fall within QueryDistance ± ErrorBound.
 	ErrorBound float32
-	// CentroidDistance is the (non-squared) exact distance of the data vector
-	// from its partition's centroid.
-	CentroidDistance float32
 	// ParentPartitionKey is the key of the parent of the partition that contains
 	// the data vector.
 	ParentPartitionKey PartitionKey
@@ -50,7 +47,7 @@ type SearchResult struct {
 // MaybeCloser returns true if this result's data vector may be closer (or the
 // same distance) to the query vector than the given result's data vector.
 func (r *SearchResult) MaybeCloser(r2 *SearchResult) bool {
-	return r.QuerySquaredDistance-r.ErrorBound <= r2.QuerySquaredDistance+r2.ErrorBound
+	return r.QueryDistance-r.ErrorBound <= r2.QueryDistance+r2.ErrorBound
 }
 
 // Compare returns an integer comparing two search results. The result is zero
@@ -69,8 +66,8 @@ func (r *SearchResult) Compare(r2 *SearchResult) int {
 	//
 
 	// Compare distances.
-	distance1 := r.QuerySquaredDistance
-	distance2 := r2.QuerySquaredDistance
+	distance1 := r.QueryDistance
+	distance2 := r2.QueryDistance
 	if distance1 < distance2 {
 		return -1
 	} else if distance1 > distance2 {
@@ -294,7 +291,7 @@ func (ss *SearchSet) FindBestDistances(distances []float64) []float64 {
 	maxDistance := float32(-1)
 	maxOffset := -1
 	for i := range k {
-		distance := ss.candidates[i].QuerySquaredDistance
+		distance := ss.candidates[i].QueryDistance
 		if distance > maxDistance {
 			maxDistance = distance
 			maxOffset = i
@@ -305,7 +302,7 @@ func (ss *SearchSet) FindBestDistances(distances []float64) []float64 {
 	// For each remaining candidate, if its distance is smaller than the largest
 	// in our result so far, replace that largest one.
 	for i := k; i < n; i++ {
-		distance := ss.candidates[i].QuerySquaredDistance
+		distance := ss.candidates[i].QueryDistance
 		if distance < maxDistance {
 			// Find the largest distance in our current result.
 			distances[maxOffset] = float64(distance)
