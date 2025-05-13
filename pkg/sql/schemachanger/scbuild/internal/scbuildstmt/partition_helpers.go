@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -33,11 +32,8 @@ import (
 // configureIndexDescForNewIndexPartitioning returns a new copy of an index
 // descriptor containing modifications needed if partitioning is configured.
 func configureIndexDescForNewIndexPartitioning(
-	b BuildCtx,
-	tableID catid.DescID,
-	indexDesc descpb.IndexDescriptor,
-	partitionByIndex *tree.PartitionByIndex,
-) (descpb.IndexDescriptor, error) {
+	b BuildCtx, tableID catid.DescID, spec *indexSpecMutator, partitionByIndex *tree.PartitionByIndex,
+) error {
 	var err error
 	partitionAllBy := b.QueryByID(tableID).FilterTablePartitioning().MustHaveZeroOrOne()
 	if partitionByIndex.ContainsPartitioningClause() || partitionAllBy != nil {
@@ -47,14 +43,14 @@ func configureIndexDescForNewIndexPartitioning(
 				partitionBy = partitionByIndex.PartitionBy
 			}
 		} else if partitionByIndex.ContainsPartitioningClause() {
-			return indexDesc, pgerror.New(
+			return pgerror.New(
 				pgcode.FeatureNotSupported,
 				"cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition",
 			)
 		} else {
 			partitionBy, err = partitionByFromTableID(b, tableID)
 			if err != nil {
-				return indexDesc, err
+				return err
 			}
 		}
 		localityRBR := b.QueryByID(tableID).FilterTableLocalityRegionalByRow().
@@ -62,84 +58,100 @@ func configureIndexDescForNewIndexPartitioning(
 		allowImplicitPartitioning := b.EvalCtx().SessionData().ImplicitColumnPartitioningEnabled ||
 			localityRBR != nil
 		if partitionBy != nil {
+			oldNumImplicitColumns := 0
+			if spec.partitioning != nil {
+				oldNumImplicitColumns = int(spec.partitioning.NumImplicitColumns)
+			}
+			oldKeyColumns := make([]string, 0, len(spec.columns))
+			for _, col := range spec.columns {
+				if col.Kind == scpb.IndexColumn_KEY {
+					oldKeyColumns = append(oldKeyColumns,
+						mustRetrieveColumnName(b, col.TableID, col.ColumnID).Name)
+				}
+			}
 			newImplicitCols, newPartitioning, err := createPartitioning(
 				b,
 				tableID,
 				partitionBy,
-				int(indexDesc.Partitioning.NumImplicitColumns),
-				indexDesc.KeyColumnNames,
+				oldNumImplicitColumns,
+				oldKeyColumns,
 				nil, /* allowedNewColumnNames */
 				allowImplicitPartitioning,
 			)
 			if err != nil {
-				return indexDesc, err
+				return err
 			}
-			updateIndexPartitioning(&indexDesc, false /* isIndexPrimary */, newImplicitCols, newPartitioning)
+			updateIndexPartitioning(spec, false /* isIndexPrimary */, newImplicitCols, newPartitioning)
 		}
 	}
-	return indexDesc, nil
+	return nil
 }
 
 // updateIndexPartitioning applies the new partition and adjusts the column info
 // for the specified index descriptor. Returns false iff this was a no-op.
 func updateIndexPartitioning(
-	idx *descpb.IndexDescriptor,
+	spec *indexSpecMutator,
 	isIndexPrimary bool,
 	newImplicitCols []*scpb.ColumnName,
 	newPartitioning catpb.PartitioningDescriptor,
-) bool {
-	oldNumImplicitCols := int(idx.Partitioning.NumImplicitColumns)
-	isNoOp := oldNumImplicitCols == len(newImplicitCols) && idx.Partitioning.Equal(newPartitioning)
-	numCols := len(idx.KeyColumnIDs)
-	newCap := numCols + len(newImplicitCols) - oldNumImplicitCols
-	newColumnIDs := make([]descpb.ColumnID, len(newImplicitCols), newCap)
-	newColumnNames := make([]string, len(newImplicitCols), newCap)
-	newColumnDirections := make([]catenumpb.IndexColumn_Direction, len(newImplicitCols), newCap)
+) {
+	oldNumImplicitCols := 0
+	if spec.partitioning != nil {
+		oldNumImplicitCols = int(spec.partitioning.NumImplicitColumns)
+	}
+	isNoOp := oldNumImplicitCols == len(newImplicitCols)
+	if isNoOp && oldNumImplicitCols > 0 {
+		isNoOp = spec.partitioning.Equal(newPartitioning)
+	}
+	keyColsOnly := make([]*scpb.IndexColumn, 0, len(spec.columns))
+	for _, col := range spec.columns {
+		if col.Kind != scpb.IndexColumn_KEY {
+			continue
+		}
+		keyColsOnly = append(keyColsOnly, col)
+	}
+	// Remove the old prefix columns.
+	spec.removePrefixColumns(oldNumImplicitCols, scpb.IndexColumn_KEY)
+	newColIDs := catalog.MakeTableColSet()
 	for i, col := range newImplicitCols {
-		newColumnIDs[i] = col.ColumnID
-		newColumnNames[i] = col.Name
-		newColumnDirections[i] = catenumpb.IndexColumn_ASC
+		spec.prependColumn(&scpb.IndexColumn{
+			TableID:       spec.tableID(),
+			IndexID:       spec.indexID(),
+			ColumnID:      col.ColumnID,
+			Implicit:      true,
+			OrdinalInKind: uint32(i),
+			Direction:     catenumpb.IndexColumn_ASC,
+			Kind:          scpb.IndexColumn_KEY,
+		})
+		newColIDs.Add(col.ColumnID)
 		if isNoOp &&
-			(idx.KeyColumnIDs[i] != newColumnIDs[i] ||
-				idx.KeyColumnNames[i] != newColumnNames[i] ||
-				idx.KeyColumnDirections[i] != newColumnDirections[i]) {
+			(keyColsOnly[i].ColumnID != col.ColumnID ||
+				keyColsOnly[i].Direction != catenumpb.IndexColumn_ASC) {
 			isNoOp = false
 		}
 	}
 	if isNoOp {
-		return false
+		return
 	}
-	idx.KeyColumnNames = append(newColumnNames, idx.KeyColumnNames[oldNumImplicitCols:]...)
-	idx.KeyColumnDirections = append(newColumnDirections, idx.KeyColumnDirections[oldNumImplicitCols:]...)
-	idx.Partitioning = newPartitioning
+	spec.partitioning = &scpb.IndexPartitioning{
+		TableID:                spec.tableID(),
+		IndexID:                spec.indexID(),
+		PartitioningDescriptor: newPartitioning,
+	}
 	if !isIndexPrimary {
-		return true
+		return
 	}
 
-	newStoreColumnIDs := make([]descpb.ColumnID, 0, len(idx.StoreColumnIDs))
-	newStoreColumnNames := make([]string, 0, len(idx.StoreColumnNames))
-	for i := range idx.StoreColumnIDs {
-		id := idx.StoreColumnIDs[i]
-		name := idx.StoreColumnNames[i]
-		found := false
-		for _, newColumnName := range newColumnNames {
-			if newColumnName == name {
-				found = true
-				break
-			}
+	// Iterate over a copy of the list since we are modifying it below.
+	for _, storeCol := range append([]*scpb.IndexColumn{}, spec.columns...) {
+		if storeCol.Kind != scpb.IndexColumn_STORED {
+			continue
 		}
-		if !found {
-			newStoreColumnIDs = append(newStoreColumnIDs, id)
-			newStoreColumnNames = append(newStoreColumnNames, name)
+		if !newColIDs.Contains(storeCol.ColumnID) {
+			continue
 		}
+		spec.removeColumn(storeCol.ColumnID, scpb.IndexColumn_STORED)
 	}
-	idx.StoreColumnIDs = newStoreColumnIDs
-	idx.StoreColumnNames = newStoreColumnNames
-	if len(idx.StoreColumnNames) == 0 {
-		idx.StoreColumnIDs = nil
-		idx.StoreColumnNames = nil
-	}
-	return true
 }
 
 // partitionByFromTableID constructs a PartitionBy clause from a tableID.
