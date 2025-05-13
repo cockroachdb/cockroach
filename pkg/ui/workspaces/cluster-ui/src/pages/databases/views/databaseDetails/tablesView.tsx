@@ -26,6 +26,7 @@ import {
   RegionNodesLabel,
   TableMetadataJobControl,
 } from "src/pages/databases/components";
+import { getNodesFromStores } from "src/pages/databases/utils";
 import PageCount from "src/sharedFromCloud/pageCount";
 import { Search } from "src/sharedFromCloud/search";
 import {
@@ -36,7 +37,7 @@ import {
 } from "src/sharedFromCloud/table";
 import useTable, { TableParams } from "src/sharedFromCloud/useTable";
 import { Timestamp } from "src/timestamp";
-import { StoreID } from "src/types/clusterTypes";
+import { NodeID, StoreID } from "src/types/clusterTypes";
 import { Bytes, DATE_WITH_SECONDS_FORMAT_24_TZ, tabAttr } from "src/util";
 
 import { TableColName } from "./constants";
@@ -235,12 +236,6 @@ export const TablesPageV2 = () => {
   );
   const nodesResp = useNodeStatuses();
 
-  const onNodeRegionsChange = (storeIDs: StoreID[]) => {
-    setFilters({
-      storeIDs: storeIDs.map(sid => sid.toString()),
-    });
-  };
-
   const tableList = data?.results;
   const tableData = useMemo(
     () =>
@@ -272,8 +267,24 @@ export const TablesPageV2 = () => {
     }
   };
 
-  const nodeRegionsValue = params.filters.storeIDs.map(
-    sid => parseInt(sid, 10) as StoreID,
+  const onNodeRegionsChange = (nodeIds: NodeID[]) => {
+    const { isLoading, nodeStatusByID } = nodesResp;
+    if (isLoading) {
+      return;
+    }
+    const storeIDs = nodeIds
+      .map((n: NodeID) => nodeStatusByID[n].stores)
+      .reduce((acc, v) => acc.concat(v), [] as StoreID[])
+      .map(String);
+
+    setFilters({
+      storeIDs,
+    });
+  };
+
+  const selectedNodes = useMemo(
+    () => getNodesFromStores(params.filters.storeIDs, nodesResp.nodeStatusByID),
+    [params.filters.storeIDs, nodesResp.nodeStatusByID],
   );
 
   const sort = params.sort;
@@ -304,10 +315,12 @@ export const TablesPageV2 = () => {
           </PageConfigItem>
           {!isTenant && (
             <PageConfigItem minWidth={"200px"}>
-              <NodeRegionsSelector
-                value={nodeRegionsValue}
-                onChange={onNodeRegionsChange}
-              />
+              {!nodesResp.isLoading && (
+                <NodeRegionsSelector
+                  initialValue={selectedNodes}
+                  onChange={onNodeRegionsChange}
+                />
+              )}
             </PageConfigItem>
           )}
         </PageConfig>
