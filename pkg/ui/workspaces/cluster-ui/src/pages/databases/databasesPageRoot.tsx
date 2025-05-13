@@ -30,7 +30,7 @@ import {
   TableColumnProps,
 } from "src/sharedFromCloud/table";
 import useTable, { TableParams } from "src/sharedFromCloud/useTable";
-import { StoreID } from "src/types/clusterTypes";
+import { NodeID, StoreID } from "src/types/clusterTypes";
 import { Bytes } from "src/util";
 
 import {
@@ -49,66 +49,66 @@ const COLUMNS: (TableColumnProps<DatabaseRow> & {
   sortKey?: DatabaseSortOptions;
   hideIfTenant?: boolean;
 })[] = [
-  {
-    title: (
-      <Tooltip title={"The name of the database."}>
-        {DatabaseColName.NAME}
-      </Tooltip>
-    ),
-    sorter: (a, b) => a.name.localeCompare(b.name),
-    sortKey: DatabaseSortOptions.NAME,
-    render: (db: DatabaseRow) => {
-      return <Link to={`/databases/${db.id}`}>{db.name}</Link>;
+    {
+      title: (
+        <Tooltip title={"The name of the database."}>
+          {DatabaseColName.NAME}
+        </Tooltip>
+      ),
+      sorter: (a, b) => a.name.localeCompare(b.name),
+      sortKey: DatabaseSortOptions.NAME,
+      render: (db: DatabaseRow) => {
+        return <Link to={`/databases/${db.id}`}>{db.name}</Link>;
+      },
     },
-  },
-  {
-    title: (
-      <Tooltip
-        title={
-          "The approximate total disk size across all table replicas in the database."
-        }
-      >
-        {DatabaseColName.SIZE}
-      </Tooltip>
-    ),
-    sortKey: DatabaseSortOptions.REPLICATION_SIZE,
-    sorter: (a, b) => a.approximateDiskSizeBytes - b.approximateDiskSizeBytes,
-    align: "right",
-    render: (db: DatabaseRow) => {
-      return Bytes(db.approximateDiskSizeBytes);
+    {
+      title: (
+        <Tooltip
+          title={
+            "The approximate total disk size across all table replicas in the database."
+          }
+        >
+          {DatabaseColName.SIZE}
+        </Tooltip>
+      ),
+      sortKey: DatabaseSortOptions.REPLICATION_SIZE,
+      sorter: (a, b) => a.approximateDiskSizeBytes - b.approximateDiskSizeBytes,
+      align: "right",
+      render: (db: DatabaseRow) => {
+        return Bytes(db.approximateDiskSizeBytes);
+      },
     },
-  },
-  {
-    title: (
-      <Tooltip title={"The total number of tables in the database."}>
-        {DatabaseColName.TABLE_COUNT}
-      </Tooltip>
-    ),
-    sortKey: DatabaseSortOptions.TABLE_COUNT,
-    sorter: true,
-    align: "right",
-    render: (db: DatabaseRow) => {
-      return db.tableCount;
+    {
+      title: (
+        <Tooltip title={"The total number of tables in the database."}>
+          {DatabaseColName.TABLE_COUNT}
+        </Tooltip>
+      ),
+      sortKey: DatabaseSortOptions.TABLE_COUNT,
+      sorter: true,
+      align: "right",
+      render: (db: DatabaseRow) => {
+        return db.tableCount;
+      },
     },
-  },
-  {
-    title: (
-      <Tooltip
-        title={"Regions/Nodes on which the database tables are located."}
-      >
-        {DatabaseColName.NODE_REGIONS}
-      </Tooltip>
-    ),
-    hideIfTenant: true,
-    width: "fit-content",
-    render: (db: DatabaseRow) => (
-      <RegionNodesLabel
-        loading={db.nodesByRegion.isLoading}
-        nodesByRegion={db.nodesByRegion?.data}
-      />
-    ),
-  },
-];
+    {
+      title: (
+        <Tooltip
+          title={"Regions/Nodes on which the database tables are located."}
+        >
+          {DatabaseColName.NODE_REGIONS}
+        </Tooltip>
+      ),
+      hideIfTenant: true,
+      width: "fit-content",
+      render: (db: DatabaseRow) => (
+        <RegionNodesLabel
+          loading={db.nodesByRegion.isLoading}
+          nodesByRegion={db.nodesByRegion?.data}
+        />
+      ),
+    },
+  ];
 
 const initialParams = {
   filters: {
@@ -155,12 +155,6 @@ export const DatabasesPageV2 = () => {
     names: [AUTO_STATS_ENABLED_CS],
   });
 
-  const onNodeRegionsChange = (storeIDs: StoreID[]) => {
-    setFilters({
-      storeIDs: storeIDs.map(sid => sid.toString()),
-    });
-  };
-
   const tableData = useMemo(
     () =>
       rawDatabaseMetadataToDatabaseRows(data?.results ?? [], {
@@ -201,9 +195,20 @@ export const DatabasesPageV2 = () => {
     [sort, isTenant],
   );
 
-  const nodeRegionsValue = params.filters.storeIDs.map(
-    sid => parseInt(sid, 10) as StoreID,
-  );
+  const onNodeRegionsChange = (nodeIds: string[]) => {
+    const { isLoading, nodeStatusByID } = nodesResp;
+    if (isLoading) {
+      return;
+    }
+    const storeIDs = nodeIds
+      .map((n: string) => nodeStatusByID[parseInt(n) as NodeID].stores)
+      .reduce((acc, v) => acc.concat(v), [] as StoreID[])
+      .map(String);
+
+    setFilters({
+      storeIDs,
+    });
+  };
 
   // 409 conflict - this error code arises when the CRDB version
   // is not compatible with the APIs used by this page.
@@ -233,10 +238,7 @@ export const DatabasesPageV2 = () => {
         </PageConfigItem>
         {!isTenant && (
           <PageConfigItem minWidth={"200px"}>
-            <NodeRegionsSelector
-              value={nodeRegionsValue}
-              onChange={onNodeRegionsChange}
-            />
+            <NodeRegionsSelector onApply={onNodeRegionsChange} />
           </PageConfigItem>
         )}
       </PageConfig>
