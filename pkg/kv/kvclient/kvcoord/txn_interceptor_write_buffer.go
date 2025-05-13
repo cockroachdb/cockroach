@@ -1249,12 +1249,13 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 	log.VEventf(ctx, 2, "disabling write buffering for this epoch")
 	twb.flushed = true
 
-	numBuffered := twb.buffer.Len()
-	if numBuffered == 0 {
+	numKeysBuffered := twb.buffer.Len()
+	if numKeysBuffered == 0 {
 		return twb.wrapped.SendLocked(ctx, ba) // nothing to flush
 	}
 
-	if _, ok := ba.GetArg(kvpb.EndTxn); !ok {
+	_, hasEndTxn := ba.GetArg(kvpb.EndTxn)
+	if !hasEndTxn {
 		// We're flushing the buffer even though the batch doesn't contain an EndTxn
 		// request. That means we buffered some writes and decided to disable write
 		// buffering mid-way through the transaction, thus necessitating this flush.
@@ -1263,10 +1264,21 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 
 	// Flush all buffered writes by pre-pending them to the requests being sent
 	// in the batch.
-	reqs := make([]kvpb.RequestUnion, 0, numBuffered+len(ba.Requests))
+	//
+	// TODO(ssd): We can maintain the revision count in the buffer as well to
+	// allocate this more accurately.
+	reqs := make([]kvpb.RequestUnion, 0, numKeysBuffered+len(ba.Requests))
 	it := twb.buffer.MakeIter()
+	numRevisionsBuffered := 0
 	for it.First(); it.Valid(); it.Next() {
-		reqs = append(reqs, it.Cur().toRequest())
+		if !hasEndTxn {
+			revs := it.Cur().toAllRevisionRequests()
+			numRevisionsBuffered += len(revs)
+			reqs = append(reqs, revs...)
+		} else {
+			numRevisionsBuffered++
+			reqs = append(reqs, it.Cur().toRequest())
+		}
 	}
 	twb.resetBuffer()
 
@@ -1289,11 +1301,11 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 	ba.Requests = append(reqs, ba.Requests...)
 	br, pErr := twb.wrapped.SendLocked(ctx, ba)
 	if pErr != nil {
-		return nil, twb.adjustErrorUponFlush(ctx, numBuffered, pErr)
+		return nil, twb.adjustErrorUponFlush(ctx, numRevisionsBuffered, pErr)
 	}
 
 	// Strip out responses for all the flushed buffered writes.
-	br.Responses = br.Responses[numBuffered:]
+	br.Responses = br.Responses[numRevisionsBuffered:]
 	return br, nil
 }
 
@@ -1377,6 +1389,39 @@ func (bv *bufferedValue) size() int64 {
 	return int64(len(bv.val.RawBytes)) + bufferedValueStructOverhead
 }
 
+func (bv *bufferedValue) toRequestUnion(key roachpb.Key) kvpb.RequestUnion {
+	var ru kvpb.RequestUnion
+	if bv.val.IsPresent() {
+		// TODO(arul): we could allocate PutRequest objects all at once when we're
+		// about to flush the buffer. We'll probably want to keep track of the
+		// number of each request type in the btree to avoid iterating and counting
+		// each request type.
+		//
+		// TODO(arul): should we use a sync.Pool here?
+		putAlloc := new(struct {
+			put   kvpb.PutRequest
+			union kvpb.RequestUnion_Put
+		})
+		putAlloc.put.Key = key
+		putAlloc.put.Value = bv.val
+		putAlloc.put.Sequence = bv.seq
+		putAlloc.put.KVNemesisSeq = bv.kvNemesisSeq
+		putAlloc.union.Put = &putAlloc.put
+		ru.Value = &putAlloc.union
+	} else {
+		delAlloc := new(struct {
+			del   kvpb.DeleteRequest
+			union kvpb.RequestUnion_Delete
+		})
+		delAlloc.del.Key = key
+		delAlloc.del.Sequence = bv.seq
+		delAlloc.del.KVNemesisSeq = bv.kvNemesisSeq
+		delAlloc.union.Delete = &delAlloc.del
+		ru.Value = &delAlloc.union
+	}
+	return ru
+}
+
 //go:generate ../../../util/interval/generic/gen.sh *bufferedWrite kvcoord
 
 // Methods required by util/interval/generic type contract.
@@ -1390,43 +1435,27 @@ func (bw *bufferedWrite) SetID(v uint64)      { bw.id = v }
 func (bw *bufferedWrite) SetKey(v []byte)     { bw.key = v }
 func (bw *bufferedWrite) SetEndKey(v []byte)  { bw.endKey = v }
 
+// toRequest() returns a request for the most recent revision of the buffered
+// writes for the key. A key may be written to multiple times during the course
+// of a transaction. However, when flushing to KV at the end of a transaction,
+// we only need to flush the most recent write (read: the one with the highest
+// sequence number).
 func (bw *bufferedWrite) toRequest() kvpb.RequestUnion {
-	var ru kvpb.RequestUnion
-	// A key may be written to multiple times during the course of a transaction.
-	// However, when flushing to KV, we only need to flush the most recent write
-	// (read: the one with the highest sequence number). As we store values in
-	// increasing sequence number order, this should be the last value in the
-	// slice.
-	val := bw.vals[len(bw.vals)-1]
-	if val.val.IsPresent() {
-		// TODO(arul): we could allocate PutRequest objects all at once when we're
-		// about to flush the buffer. We'll probably want to keep track of the
-		// number of each request type in the btree to avoid iterating and counting
-		// each request type.
-		//
-		// TODO(arul): should we use a sync.Pool here?
-		putAlloc := new(struct {
-			put   kvpb.PutRequest
-			union kvpb.RequestUnion_Put
-		})
-		putAlloc.put.Key = bw.key
-		putAlloc.put.Value = val.val
-		putAlloc.put.Sequence = val.seq
-		putAlloc.put.KVNemesisSeq = val.kvNemesisSeq
-		putAlloc.union.Put = &putAlloc.put
-		ru.Value = &putAlloc.union
-	} else {
-		delAlloc := new(struct {
-			del   kvpb.DeleteRequest
-			union kvpb.RequestUnion_Delete
-		})
-		delAlloc.del.Key = bw.key
-		delAlloc.del.Sequence = val.seq
-		delAlloc.del.KVNemesisSeq = val.kvNemesisSeq
-		delAlloc.union.Delete = &delAlloc.del
-		ru.Value = &delAlloc.union
+	// As we store values in increasing sequence number order, the most recent
+	// write should be the last value in the slice.
+	return bw.vals[len(bw.vals)-1].toRequestUnion(bw.key)
+}
+
+// toAllRevisionRequests returns requests for all revisions of the buffered
+// writes for the key. When the buffer is flushed before the end of a
+// transaction, all revisions must be written to storage to ensure that a future
+// savepoint rollback is properly handled.
+func (bw *bufferedWrite) toAllRevisionRequests() []kvpb.RequestUnion {
+	rus := make([]kvpb.RequestUnion, 0, len(bw.vals))
+	for _, val := range bw.vals {
+		rus = append(rus, val.toRequestUnion(bw.key))
 	}
-	return ru
+	return rus
 }
 
 // getKey reads the key for the next KV from a slice of BatchResponses field of
