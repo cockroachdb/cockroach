@@ -156,7 +156,7 @@ SELECT count(*) from t3
 ----
 0
 
-# Test savepoints, and in particular savepoint rollbacks, with buffered writes. 
+# Test savepoints, and in particular savepoint rollbacks, with buffered writes.
 # We test both intermediate selects after rollbacks and the final state
 # the transaction has been committed.
 subtest savepoint_rollbacks
@@ -187,7 +187,7 @@ SELECT * FROM t4
 6  600
 
 statement ok
-SAVEPOINT s2; 
+SAVEPOINT s2;
 INSERT INTO t4 VALUES(7, 700), (8, 800), (9, 900)
 
 query II rowsort
@@ -447,3 +447,35 @@ SELECT k FROM large ORDER BY k DESC;
 
 statement ok
 COMMIT;
+
+subtest rollback_after_mid_txn_flush
+
+statement ok
+CREATE TABLE t5 (pk int primary key, v int, FAMILY (pk, v))
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO t5 VALUES (1,1);
+
+statement ok
+SAVEPOINT rollback_target
+
+statement ok
+UPDATE t5 SET v = 2 WHERE pk = 1
+
+# Force a flush before commit with DeleteRange
+statement ok
+DELETE FROM t5 WHERE pk > 5
+
+statement ok
+ROLLBACK TO rollback_target
+
+statement ok
+COMMIT;
+
+query II
+SELECT pk,v FROM t5 WHERE pk = 1
+----
+1  1
