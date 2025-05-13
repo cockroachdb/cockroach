@@ -96,7 +96,7 @@ func (g *AggCounter) RemoveChild(labelVals ...string) {
 type Counter struct {
 	parent *AggCounter
 	labelValuesSlice
-	value int64
+	value atomic.Int64
 }
 
 // ToPrometheusMetric constructs a prometheus metric for this Counter.
@@ -120,13 +120,13 @@ func (g *Counter) Unlink() {
 
 // Value returns the AggCounter's current value.
 func (g *Counter) Value() int64 {
-	return atomic.LoadInt64(&g.value)
+	return g.value.Load()
 }
 
 // Inc increments the AggCounter's value.
 func (g *Counter) Inc(i int64) {
 	g.parent.g.Inc(i)
-	atomic.AddInt64(&g.value, i)
+	g.value.Add(i)
 }
 
 // UpdateIfHigher updates the AggCounter's value.
@@ -137,11 +137,11 @@ func (g *Counter) Inc(i int64) {
 func (g *Counter) UpdateIfHigher(newValue int64) {
 	var delta int64
 	for {
-		delta = newValue - atomic.LoadInt64(&g.value)
+		delta = newValue - g.value.Load()
 		if delta <= 0 {
 			return
 		}
-		if atomic.CompareAndSwapInt64(&g.value, newValue-delta, newValue) {
+		if g.value.CompareAndSwap(newValue-delta, newValue) {
 			break
 		}
 		// Raced with concurrent update, try again.
