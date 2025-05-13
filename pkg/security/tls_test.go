@@ -138,7 +138,7 @@ func TestTLSCipherRestrict(t *testing.T) {
 			wantErr: false},
 		{name: "invalid ciphers", ciphers: []string{"TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256"}, wantErr: true,
 			httpsErr:  []string{"\": EOF", "connect: connection refused", "read: connection reset by peer", "http: server closed idle connection"},
-			sqlErr:    "failed to connect to `host=127.0.0.1 user=root database=`: failed to receive message (unexpected EOF)",
+			sqlErr:    "^failed to connect to `host=127\\.0\\.0\\.1 user=root database=`: server error \\(ERROR: cannot use SSL\\/TLS with the requested ciphers: presented cipher [^ ]+ not in allowed cipher suite list \\(SQLSTATE 08004\\)\\)$",
 			rpcErr:    "initial connection heartbeat failed: grpc:",
 			cipherErr: "^presented cipher [^ ]+ not in allowed cipher suite list$"},
 	}
@@ -242,7 +242,7 @@ func TestTLSCipherRestrict(t *testing.T) {
 				errVal := cipherErrC.err
 				cipherErrC.Unlock()
 				require.Regexp(t, tt.cipherErr, errVal.Error())
-				require.Equal(t, tt.sqlErr, err.Error())
+				require.Regexp(t, tt.sqlErr, err.Error())
 			}
 
 			// test rpc connection for root user.
