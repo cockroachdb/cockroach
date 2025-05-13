@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -1022,9 +1021,6 @@ func (b *builderState) ResolveTargetObject(
 	b.ensureDescriptor(db.GetID())
 	if sc.SchemaKind() == catalog.SchemaVirtual {
 		panic(sqlerrors.NewCannotModifyVirtualSchemaError(sc.GetName()))
-	}
-	if sc.SchemaKind() == catalog.SchemaTemporary {
-		panic(unimplemented.NewWithIssue(104687, "cannot create UDFs under a temporary schema"))
 	}
 	b.ensureDescriptor(sc.GetID())
 	b.checkOwnershipOrPrivilegesOnSchemaDesc(objName.ObjectNamePrefix, sc, scbuildstmt.ResolveParams{RequiredPrivilege: requiredSchemaPriv})

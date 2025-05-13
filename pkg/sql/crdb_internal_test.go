@@ -175,10 +175,10 @@ func TestGossipAlertsTable(t *testing.T) {
 
 	if err := s.StorageLayer().GossipI().(*gossip.Gossip).AddInfoProto(gossip.MakeNodeHealthAlertKey(456), &statuspb.HealthCheckResult{
 		Alerts: []statuspb.HealthAlert{{
-			StoreID:     123,
-			Category:    statuspb.HealthAlert_METRICS,
-			Description: "foo",
-			Value:       100.0,
+			StoreID:         123,
+			Category:        statuspb.HealthAlert_METRICS,
+			SafeDescription: "foo",
+			Value:           100.0,
 		}},
 	}, time.Hour); err != nil {
 		t.Fatal(err)

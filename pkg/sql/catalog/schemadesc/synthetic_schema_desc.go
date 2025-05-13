@@ -114,7 +114,7 @@ func (p synthetic) ConcurrentSchemaChangeJobIDs() []catpb.JobID {
 // SkipNamespace implements the descriptor interface.
 // We never store synthetic descriptors.
 func (p synthetic) SkipNamespace() bool {
-	return true
+	return p.SchemaKind() != catalog.SchemaTemporary
 }
 
 // GetObjectType implements the Object interface.
