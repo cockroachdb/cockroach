@@ -15,6 +15,12 @@ source "$dir/teamcity-bazel-support.sh"  # for run_bazel
 tc_start_block "Variable Setup"
 
 platform="${PLATFORM:?PLATFORM must be specified}"
+telemetry_disabled="${TELEMETRY_DISABLED:-false}"
+cockroach_archive_prefix="${COCKROACH_ARCHIVE_PREFIX:-cockroach}"
+if [[ $telemetry_disabled == true && $cockroach_archive_prefix == "cockroach" ]]; then
+  echo "COCKROACH_ARCHIVE_PREFIX must be set to a non-default value when telemetry is disabled"
+  exit 1
+fi
 build_name=$(git describe --tags --dirty --match=v[0-9]* 2> /dev/null || git rev-parse --short HEAD;)
 
 # On no match, `grep -Eo` returns 1. `|| echo""` makes the script not error.
@@ -28,12 +34,12 @@ if [[ -z "${DRY_RUN}" ]] ; then
     export gcs_credentials="$GOOGLE_CREDENTIALS_CUSTOMIZED"
     google_credentials=$GOOGLE_CREDENTIALS_CUSTOMIZED
     gcs_bucket="cockroach-customized-builds-artifacts-prod"
-    gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb-customized/cockroach-customized"
+    gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb-customized/${cockroach_archive_prefix}-customized"
     gcr_hostname="us-docker.pkg.dev"
   else
     gcs_bucket="cockroach-builds-artifacts-prod"
     google_credentials=$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS
-    gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/cockroach"
+    gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/${cockroach_archive_prefix}"
     # Used for docker login for gcloud
     gcr_hostname="us-docker.pkg.dev"
     # export the variable to avoid shell escaping
@@ -70,7 +76,7 @@ git tag "${build_name}"
 tc_end_block "Tag the release"
 
 tc_start_block "Compile and publish artifacts"
-BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$build_name -e build_name=$build_name -e gcs_credentials -e gcs_bucket=$gcs_bucket -e platform=$platform" run_bazel << 'EOF'
+BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$build_name -e build_name=$build_name -e gcs_credentials -e gcs_bucket=$gcs_bucket -e platform=$platform -e telemetry_disabled=$telemetry_disabled -e cockroach_archive_prefix=$cockroach_archive_prefix" run_bazel << 'EOF'
 bazel build //pkg/cmd/publish-provisional-artifacts
 BAZEL_BIN=$(bazel info bazel-bin)
 export google_credentials="$gcs_credentials"
@@ -97,7 +103,7 @@ done
 
 tr -d '\r' < /tmp/THIRD-PARTY-NOTICES.txt.tmp > /tmp/THIRD-PARTY-NOTICES.txt
 
-$BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -provisional -release --gcs-bucket="$gcs_bucket" --output-directory=artifacts --build-tag-override="$build_name" --platform $platform --third-party-notices-file=/tmp/THIRD-PARTY-NOTICES.txt
+$BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -provisional -release --gcs-bucket="$gcs_bucket" --output-directory=artifacts --build-tag-override="$build_name" --platform $platform --third-party-notices-file=/tmp/THIRD-PARTY-NOTICES.txt --telemetry-disabled=$telemetry_disabled --cockroach-archive-prefix=$cockroach_archive_prefix
 
 EOF
 tc_end_block "Compile and publish artifacts"
@@ -115,7 +121,7 @@ if [[ $platform == "linux-amd64" || $platform == "linux-arm64" || $platform == "
   tar \
     --directory="build/deploy-${platform}" \
     --extract \
-    --file="artifacts/cockroach-${build_name}.${platform}.tgz" \
+    --file="artifacts/${cockroach_archive_prefix}-${build_name}.${platform}.tgz" \
     --ungzip \
     --ignore-zeros \
     --strip-components=1
@@ -155,3 +161,13 @@ Pull the docker image by:
   docker pull $gcr_repository:$build_name-fips
 
 EOF
+if [[ $telemetry_disabled == true ]]; then
+  cat << EOF
+
+Additionally, the binaries with telemetry disabled will be available at:
+  https://storage.googleapis.com/$gcs_bucket/${cockroach_archive_prefix}-${build_name}.linux-amd64.tgz
+  https://storage.googleapis.com/$gcs_bucket/${cockroach_archive_prefix}-${build_name}.linux-arm64.tgz
+
+EOF
+fi
+
