@@ -2662,6 +2662,8 @@ var builtinOidsArray = []string{
 	2699: `jsonb_path_match(target: jsonb, path: jsonpath) -> bool`,
 	2700: `jsonb_path_match(target: jsonb, path: jsonpath, vars: jsonb) -> bool`,
 	2701: `jsonb_path_match(target: jsonb, path: jsonpath, vars: jsonb, silent: bool) -> bool`,
+	2702: `crdb_internal.shard_cluster_key_encode32(val: int, mask_size: int, mask_offset: int) -> int4`,
+	2703: `crdb_internal.shard_cluster_key_encode64(val: int, mask_size: int, mask_offset: int) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

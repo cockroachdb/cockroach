@@ -149,6 +149,8 @@ go_library(
         "@com_github_knz_strtime//:strtime",
         "@com_github_lib_pq//oid",
         "@com_github_pierrec_lz4_v4//:lz4",
+        "@com_github_sean__go_sharded_cluster_keys//key32",
+        "@com_github_sean__go_sharded_cluster_keys//key64",
         "@com_github_twpayne_go_geom//:go-geom",
         "@com_github_twpayne_go_geom//encoding/ewkb",
         "@org_golang_x_crypto//bcrypt",
