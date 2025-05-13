@@ -4,7 +4,13 @@
 // included in the /LICENSE file.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from "@testing-library/react";
 import React from "react";
 
 import * as api from "src/api/nodesApi";
@@ -55,14 +61,18 @@ describe("NodeRegionsSelector", () => {
 
   it("should render", () => {
     render(<NodeRegionsSelector value={[]} onChange={() => {}} />);
-    expect(screen.getByText("Nodes")).toBeTruthy();
+    expect(screen.getByText("Select Nodes")).toBeTruthy();
   });
 
   it("displays correct options based on node data", async () => {
     render(<NodeRegionsSelector value={[]} onChange={() => {}} />);
 
-    const select = screen.getByText("Nodes");
-    fireEvent.keyDown(select, { key: "ArrowDown" });
+    // Find the select element by its name attribute and click it
+    const select = screen.getByRole("combobox");
+
+    await act(async () => {
+      fireEvent.mouseDown(select);
+    });
 
     await waitFor(() => {
       expect(screen.getByText("us-east")).toBeTruthy();
@@ -73,36 +83,40 @@ describe("NodeRegionsSelector", () => {
     });
   });
 
-  it("calls onChange with correct values when selecting options", async () => {
-    const value: StoreID[] = [];
-    const mockOnChange = jest.fn((selected: StoreID[]) => {
-      value.push(...selected);
-    });
-    render(<NodeRegionsSelector value={value} onChange={mockOnChange} />);
+  it("calls onSelect with correct values when selecting options", async () => {
+    const mockOnChange = jest.fn();
+    render(<NodeRegionsSelector value={[]} onChange={mockOnChange} />);
 
-    const select = screen.getByText("Nodes");
-    fireEvent.keyDown(select, { key: "ArrowDown" });
+    const select = screen.getByRole("combobox");
 
-    await waitFor(() => {
-      fireEvent.click(screen.getByText("n1"));
+    await act(async () => {
+      fireEvent.mouseDown(select);
     });
 
-    expect(mockOnChange).toHaveBeenCalledWith([101, 102]);
+    await waitFor(async () => {
+      const n1Option = screen.getByText("n1");
+      await act(async () => {
+        fireEvent.click(n1Option);
+      });
+    });
+
+    // Click the Apply button to trigger onApply
+    const applyButton = screen.getByText("Apply");
+    await act(async () => {
+      fireEvent.click(applyButton);
+    });
+
+    expect(mockOnChange).toHaveBeenCalledWith(["1"]);
   });
 
   it("displays selected values correctly", () => {
-    render(
-      <NodeRegionsSelector
-        value={[101 as StoreID, 201 as StoreID]}
-        onChange={() => {}}
-      />,
-    );
+    render(<NodeRegionsSelector value={["1", "2"]} onChange={() => {}} />);
 
     expect(screen.getByText("n1")).toBeTruthy();
     expect(screen.getByText("n2")).toBeTruthy();
   });
 
-  it("handles loading state", () => {
+  it("handles loading state", async () => {
     jest.spyOn(api, "useNodeStatuses").mockReturnValue({
       error: null,
       isLoading: true,
@@ -121,15 +135,20 @@ describe("NodeRegionsSelector", () => {
 
     render(<NodeRegionsSelector value={[]} onChange={() => {}} />);
 
-    const select = screen.getByText("Nodes");
-    fireEvent.keyDown(select, { key: "ArrowDown" });
+    const select = screen.getByRole("combobox");
+
+    await act(async () => {
+      fireEvent.mouseDown(select);
+    });
 
     // In the loading state, the component should still render options
     // based on the existing data
-    expect(screen.getByText("us-east")).toBeTruthy();
-    expect(screen.getByText("us-west")).toBeTruthy();
-    expect(screen.getByText("n1")).toBeTruthy();
-    expect(screen.getByText("n2")).toBeTruthy();
-    expect(screen.getByText("n3")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByText("us-east")).toBeTruthy();
+      expect(screen.getByText("us-west")).toBeTruthy();
+      expect(screen.getByText("n1")).toBeTruthy();
+      expect(screen.getByText("n2")).toBeTruthy();
+      expect(screen.getByText("n3")).toBeTruthy();
+    });
   });
 });

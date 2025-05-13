@@ -6,3 +6,4 @@
 export * from "./databasesPageRoot";
 export * from "./views/databaseDetails";
 export * from "./views/tableDetailsV2";
+export * from "./components";
