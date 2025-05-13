@@ -11155,21 +11155,21 @@ func TestChangefeedHeadersJSONVals(t *testing.T) {
 		expected       cdctest.Headers
 		warn           string
 	}{
-		// {
-		// 	name:           "empty",
-		// 	headersJSONStr: `'{}'`,
-		// 	expected:       cdctest.Headers{},
-		// },
-		// {
-		// 	name:           "flat primitives - happy path",
-		// 	headersJSONStr: `'{"a": "b", "c": "d", "e": 42, "f": false}'`,
-		// 	expected: cdctest.Headers{
-		// 		{K: "a", V: []byte("b")},
-		// 		{K: "c", V: []byte("d")},
-		// 		{K: "e", V: []byte("42")},
-		// 		{K: "f", V: []byte("false")},
-		// 	},
-		// },
+		{
+			name:           "empty",
+			headersJSONStr: `'{}'`,
+			expected:       cdctest.Headers{},
+		},
+		{
+			name:           "flat primitives - happy path",
+			headersJSONStr: `'{"a": "b", "c": "d", "e": 42, "f": false}'`,
+			expected: cdctest.Headers{
+				{K: "a", V: []byte("b")},
+				{K: "c", V: []byte("d")},
+				{K: "e", V: []byte("42")},
+				{K: "f", V: []byte("false")},
+			},
+		},
 		{
 			name:           "some bad some good",
 			headersJSONStr: `'{"a": "b", "c": 1, "d": true, "e": null, "f": [1, 2, 3], "g": {"h": "i"}}'`,
