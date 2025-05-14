@@ -20,6 +20,15 @@ eval
 ----
 false
 
+eval
+'TEST' ~~ 'TESTER'
+----
+false
+
+eval
+'TEST' ~ ~ 'TEST'
+----
+unsupported unary operator: ~ <string>
 
 eval
 '' LIKE ''
