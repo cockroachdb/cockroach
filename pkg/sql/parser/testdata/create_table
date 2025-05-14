@@ -555,35 +555,35 @@ CREATE TABLE _ (_ INT8 UNIQUE) -- identifiers removed
 parse
 CREATE TABLE a (b INT, UNIQUE INDEX foo (b))
 ----
-CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b)) -- normalized!
-CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b)) -- fully parenthesized
-CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b)) -- literals removed
-CREATE TABLE _ (_ INT8, CONSTRAINT _ UNIQUE (_)) -- identifiers removed
+CREATE TABLE a (b INT8, UNIQUE INDEX foo (b)) -- normalized!
+CREATE TABLE a (b INT8, UNIQUE INDEX foo (b)) -- fully parenthesized
+CREATE TABLE a (b INT8, UNIQUE INDEX foo (b)) -- literals removed
+CREATE TABLE _ (_ INT8, UNIQUE INDEX _ (_)) -- identifiers removed
 
 parse
 CREATE TABLE a (b INT, UNIQUE INDEX foo (b) WHERE c > 3)
 ----
-CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) WHERE c > 3) -- normalized!
-CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) WHERE ((c) > (3))) -- fully parenthesized
-CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) WHERE c > _) -- literals removed
-CREATE TABLE _ (_ INT8, CONSTRAINT _ UNIQUE (_) WHERE _ > 3) -- identifiers removed
+CREATE TABLE a (b INT8, UNIQUE INDEX foo (b) WHERE c > 3) -- normalized!
+CREATE TABLE a (b INT8, UNIQUE INDEX foo (b) WHERE ((c) > (3))) -- fully parenthesized
+CREATE TABLE a (b INT8, UNIQUE INDEX foo (b) WHERE c > _) -- literals removed
+CREATE TABLE _ (_ INT8, UNIQUE INDEX _ (_) WHERE _ > 3) -- identifiers removed
 
 parse
 CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))
 ----
-CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))) -- normalized!
-CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN ((1)))) -- fully parenthesized
-CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (_))) -- literals removed
-CREATE TABLE _ (UNIQUE (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1))) -- identifiers removed
+CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))
+CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN ((1)))) -- fully parenthesized
+CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (_))) -- literals removed
+CREATE TABLE _ (UNIQUE INDEX (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1))) -- identifiers removed
 
 # Regression test for #95238
 parse
 CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST ("c d") (PARTITION "e f" VALUES IN (1)))
 ----
-CREATE TABLE a (UNIQUE (b) PARTITION BY LIST ("c d") (PARTITION "e f" VALUES IN (1))) -- normalized!
-CREATE TABLE a (UNIQUE (b) PARTITION BY LIST ("c d") (PARTITION "e f" VALUES IN ((1)))) -- fully parenthesized
-CREATE TABLE a (UNIQUE (b) PARTITION BY LIST ("c d") (PARTITION "e f" VALUES IN (_))) -- literals removed
-CREATE TABLE _ (UNIQUE (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1))) -- identifiers removed
+CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST ("c d") (PARTITION "e f" VALUES IN (1)))
+CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST ("c d") (PARTITION "e f" VALUES IN ((1)))) -- fully parenthesized
+CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST ("c d") (PARTITION "e f" VALUES IN (_))) -- literals removed
+CREATE TABLE _ (UNIQUE INDEX (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1))) -- identifiers removed
 
 parse
 CREATE TABLE a (b INT8 UNIQUE WITHOUT INDEX)
@@ -2639,3 +2639,35 @@ CREATE TABLE a (a VECTOR)
 CREATE TABLE a (a VECTOR) -- fully parenthesized
 CREATE TABLE a (a VECTOR) -- literals removed
 CREATE TABLE _ (_ VECTOR) -- identifiers removed
+
+parse
+CREATE TABLE t (a INT PRIMARY KEY, b INT, UNIQUE INDEX ( b NULLS FIRST ) USING HASH WITH ( 'foo' = 'bar' ))
+----
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE INDEX (b NULLS FIRST) USING HASH WITH ('foo' = 'bar')) -- normalized!
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE INDEX (b NULLS FIRST) USING HASH WITH ('foo' = ('bar'))) -- fully parenthesized
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE INDEX (b NULLS FIRST) USING HASH WITH ('foo' = '_')) -- literals removed
+CREATE TABLE _ (_ INT8 PRIMARY KEY, _ INT8, UNIQUE INDEX (_ NULLS FIRST) USING HASH WITH ('foo' = 'bar')) -- identifiers removed
+
+parse
+CREATE TABLE t (a INT PRIMARY KEY, b INT, UNIQUE INDEX ( b NULLS FIRST ) USING HASH WITH BUCKET_COUNT = 10 WITH ( 'foo' = 'bar' ))
+----
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE INDEX (b NULLS FIRST) USING HASH WITH BUCKET_COUNT = 10 WITH ('foo' = 'bar')) -- normalized!
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE INDEX (b NULLS FIRST) USING HASH WITH BUCKET_COUNT = (10) WITH ('foo' = ('bar'))) -- fully parenthesized
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE INDEX (b NULLS FIRST) USING HASH WITH BUCKET_COUNT = _ WITH ('foo' = '_')) -- literals removed
+CREATE TABLE _ (_ INT8 PRIMARY KEY, _ INT8, UNIQUE INDEX (_ NULLS FIRST) USING HASH WITH BUCKET_COUNT = 10 WITH ('foo' = 'bar')) -- identifiers removed
+
+parse
+CREATE TABLE t (a INT PRIMARY KEY, b INT, UNIQUE INDEX (b) USING HASH)
+----
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE INDEX (b) USING HASH) -- normalized!
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE INDEX (b) USING HASH) -- fully parenthesized
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE INDEX (b) USING HASH) -- literals removed
+CREATE TABLE _ (_ INT8 PRIMARY KEY, _ INT8, UNIQUE INDEX (_) USING HASH) -- identifiers removed
+
+parse
+CREATE TABLE t (a INT PRIMARY KEY, b INT, UNIQUE INDEX idx (b) WITH ( 'foo' = 'bar' ))
+----
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE INDEX idx (b) WITH ('foo' = 'bar')) -- normalized!
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE INDEX idx (b) WITH ('foo' = ('bar'))) -- fully parenthesized
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE INDEX idx (b) WITH ('foo' = '_')) -- literals removed
+CREATE TABLE _ (_ INT8 PRIMARY KEY, _ INT8, UNIQUE INDEX _ (_) WITH ('foo' = 'bar')) -- identifiers removed
