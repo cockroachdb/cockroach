@@ -53,7 +53,7 @@ ID="$(git describe --tags --match=v[0-9]* "$SHA")"
 TAG="custombuild-$ID"
 
 git tag "$TAG" "$SHA"
-git push git@github.com:cockroachdb/cockroach.git "$TAG"
+git push https://github.com/cockroachdb/cockroach.git "$TAG"
 
 TAG_URL="https://github.com/cockroachdb/cockroach/releases/tag/${TAG}"
 TEAMCITY_URL="https://teamcity.cockroachdb.com/buildConfiguration/Internal_Cockroach_Release_Customized_MakeAndPublishCustomizedBuild?mode=builds&branch=${TAG}"
