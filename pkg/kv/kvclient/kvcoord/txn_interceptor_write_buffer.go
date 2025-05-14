@@ -33,7 +33,7 @@ var BufferedWritesEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"kv.transaction.write_buffering.enabled",
 	"if enabled, transactional writes are buffered on the client",
-	metamorphic.ConstantWithTestBool("kv.transactional.write_buffering.enabled", false /* defaultValue */),
+	metamorphic.ConstantWithTestBool("kv.transaction.write_buffering.enabled", false /* defaultValue */),
 	settings.WithPublic,
 )
 
