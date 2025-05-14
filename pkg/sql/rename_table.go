@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 type renameTableNode struct {
@@ -269,7 +270,7 @@ func (p *planner) dependentError(
 	}
 	switch desc.DescriptorType() {
 	case catalog.Table:
-		return p.dependentViewError(ctx, typeName, objName, parentID, desc.(catalog.TableDescriptor), op)
+		return p.dependentRelationError(ctx, typeName, objName, parentID, desc.(catalog.TableDescriptor), op)
 	case catalog.Function:
 		return p.dependentFunctionError(typeName, objName, desc.(catalog.FunctionDescriptor), op)
 	default:
@@ -286,25 +287,25 @@ func (p *planner) dependentFunctionError(
 	return sqlerrors.NewDependentBlocksOpError(op, typeName, objName, "function", fnDesc.GetName())
 }
 
-func (p *planner) dependentViewError(
+func (p *planner) dependentRelationError(
 	ctx context.Context,
 	typeName, objName string,
 	parentID descpb.ID,
-	viewDesc catalog.TableDescriptor,
+	desc catalog.TableDescriptor,
 	op string,
 ) error {
-	viewName := viewDesc.GetName()
-	if viewDesc.GetParentID() != parentID {
-		viewFQName, err := p.getQualifiedTableName(ctx, viewDesc)
+	viewName := desc.GetName()
+	if desc.GetParentID() != parentID {
+		viewFQName, err := p.getQualifiedTableName(ctx, desc)
 		if err != nil {
-			log.Warningf(ctx, "unable to retrieve name of view %d: %v", viewDesc.GetID(), err)
+			log.Warningf(ctx, "unable to retrieve name of relation %d: %v", desc.GetID(), err)
 			return sqlerrors.NewDependentObjectErrorf(
-				"cannot %s %s %q because a view depends on it",
-				op, typeName, objName)
+				"cannot %s %s %q because a %s depends on it",
+				redact.SafeString(op), redact.SafeString(typeName), objName, redact.SafeString(desc.GetObjectTypeString()))
 		}
 		viewName = viewFQName.FQString()
 	}
-	return sqlerrors.NewDependentBlocksOpError(op, typeName, objName, "view", viewName)
+	return sqlerrors.NewDependentBlocksOpError(op, typeName, objName, desc.GetObjectTypeString(), viewName)
 }
 
 // checkForCrossDbReferences validates if any cross DB references
