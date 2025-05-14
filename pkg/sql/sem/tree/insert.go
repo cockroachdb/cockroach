@@ -90,7 +90,7 @@ func (node *Insert) VectorInsert() bool {
 	if !ok {
 		return false
 	}
-	_, vectorRows := literalValues.Rows.(VectorRows)
+	_, vectorRows := literalValues.Rows.(*VectorRows)
 	return vectorRows
 }
 
