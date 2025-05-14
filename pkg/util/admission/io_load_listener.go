@@ -572,6 +572,7 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 		}
 		io.diskBW.bytesRead = metrics.DiskStats.BytesRead
 		io.diskBW.bytesWritten = metrics.DiskStats.BytesWritten
+		io.diskBandwidthLimiter.unlimitedTokensOverride = true
 		io.copyAuxEtcFromPerWorkEstimator()
 
 		// Assume system starts off unloaded.
@@ -746,9 +747,13 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 		io.diskReadTokens = tokens.readByteTokens
 		io.diskWriteTokensAllocated = 0
 	}
+	io.diskBandwidthLimiter.unlimitedTokensOverride = false
 	if metrics.DiskStats.ProvisionedBandwidth == 0 ||
-		!DiskBandwidthTokensForElasticEnabled.Get(&io.settings.SV) {
+		!DiskBandwidthTokensForElasticEnabled.Get(&io.settings.SV) ||
+		// Disk stats are not available, so fail open.
+		(metrics.DiskStats.BytesWritten == 0 && metrics.DiskStats.BytesRead == 0) {
 		io.diskWriteTokens = unlimitedTokens
+		io.diskBandwidthLimiter.unlimitedTokensOverride = true
 		// Currently, disk read tokens are only used to assess how many tokens were
 		// deducted from the writes bucket to account for future reads. A 0 value
 		// here represents that.
