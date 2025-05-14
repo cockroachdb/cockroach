@@ -40,10 +40,20 @@
 
 set -euo pipefail
 
+use_jj=false
+if [[ "${1-}" == "--jj" ]] ; then
+    use_jj=true
+    shift
+fi
+
 SHA="${1-}"
 
 if [ -z "$SHA" ] ; then
-    SHA="$(git rev-parse HEAD)"
+    if [ "$use_jj" = true ] ; then
+        SHA="$(jj log -n1 --template commit_id --no-graph)"
+    else
+        SHA="$(git rev-parse HEAD)"
+    fi
 fi
 
 # Ensure all the latest tags are downloaded locally
@@ -52,8 +62,7 @@ git fetch -t
 ID="$(git describe --tags --match=v[0-9]* "$SHA")"
 TAG="custombuild-$ID"
 
-git tag "$TAG" "$SHA"
-git push git@github.com:cockroachdb/cockroach.git "$TAG"
+git push git@github.com:cockroachdb/cockroach.git "$SHA:refs/tags/$TAG"
 
 TAG_URL="https://github.com/cockroachdb/cockroach/releases/tag/${TAG}"
 TEAMCITY_URL="https://teamcity.cockroachdb.com/buildConfiguration/Internal_Cockroach_Release_Customized_MakeAndPublishCustomizedBuild?mode=builds&branch=${TAG}"
