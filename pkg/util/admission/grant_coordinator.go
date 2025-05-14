@@ -562,8 +562,15 @@ func makeRegularGrantCoordinator(
 		if err := os.MkdirAll(opts.FlightRecorderDirName, 0755); err != nil {
 			log.Warningf(context.Background(), "cannot create FlightRecorder dir: %v", err)
 		}
-		// The default targetPeriod of 10s is fine.
 		fr := trace.NewFlightRecorder()
+		// 10s also happens to be the default, but we set it anyway.
+		fr.SetPeriod(10 * time.Second)
+		// Set the size to 100MiB (default is 10MiB). We've seen a 19MiB trace
+		// file that captured ~2s of CPU time, so 100MiB should be enough for 10s.
+		// Note that there can be a maximum 3s lag in writing the state of the
+		// flight recorder due to the logic in slotGranter, so being able to
+		// capture ~5s in the trace should be more than sufficient.
+		fr.SetSize(100 << 20)
 		if err := fr.Start(); err != nil {
 			panic(err)
 		}
