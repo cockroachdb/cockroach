@@ -42,8 +42,8 @@ func TestStorePerWorkTokenEstimator(t *testing.T) {
 				var intFlushed, intIngested uint64
 				d.ScanArgs(t, "flushed", &intFlushed)
 				d.ScanArgs(t, "ingested", &intIngested)
-				l0Metrics.BytesFlushed += intFlushed
-				l0Metrics.BytesIngested += intIngested
+				l0Metrics.TableBytesFlushed += intFlushed
+				l0Metrics.TableBytesIngested += intIngested
 				cumLSMIngestedBytes += intIngested
 				if d.HasArg("other-levels-ingested") {
 					var otherLevelsIngested uint64
