@@ -149,6 +149,9 @@ func NewServerEx(
 		unaryInterceptor = append(unaryInterceptor, grpc.UnaryServerInterceptor(o.metricsInterceptor))
 	}
 
+	// Recover from any uncaught panics caused by DB Console requests.
+	unaryInterceptor = append(unaryInterceptor, grpc.UnaryServerInterceptor(gatewayRequestRecoveryInterceptor))
+
 	if !rpcCtx.ContextOptions.Insecure {
 		a := kvAuth{
 			sv: &rpcCtx.Settings.SV,

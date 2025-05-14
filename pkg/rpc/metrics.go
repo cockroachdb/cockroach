@@ -7,19 +7,27 @@ package rpc
 
 import (
 	"context"
+	"net/http"
 	"strings"
 
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	prometheusgo "github.com/prometheus/client_model/go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
+
+// gwRequestKey is a field set on the context to indicate a request
+// is coming from gRPC gateway.
+const gwRequestKey = "gw-request"
 
 var (
 	// The below gauges store the current state of running heartbeat loops.
@@ -423,4 +431,34 @@ func NewRequestMetricsInterceptor(
 		}, float64(duration.Nanoseconds()))
 		return resp, err
 	}
+}
+
+// MarkGatewayRequest returns a grpc metadata object that contains the
+// gwRequestKey field. This is used by the gRPC gateway that forwards HTTP
+// requests to their respective gRPC handlers. See gatewayRequestRecoveryInterceptor below.
+func MarkGatewayRequest(ctx context.Context, r *http.Request) metadata.MD {
+	return metadata.Pairs(gwRequestKey, "true")
+}
+
+// gatewayRequestRecoveryInterceptor recovers from panics in gRPC handlers that
+// are invoked due to DB console requests. For these requests, we do not want
+// an uncaught panic to crash the node.
+func gatewayRequestRecoveryInterceptor(
+	ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
+) (resp interface{}, err error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if ok {
+		val := md.Get(gwRequestKey)
+		if len(val) > 0 {
+			defer func() {
+				if p := recover(); p != nil {
+					logcrash.ReportPanic(ctx, nil, p, 1 /* depth */)
+					// The gRPC gateway will put this message in the HTTP response to the client.
+					err = errors.New("an unexpected error occurred")
+				}
+			}()
+		}
+	}
+	resp, err = handler(ctx, req)
+	return resp, err
 }
