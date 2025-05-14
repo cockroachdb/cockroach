@@ -32,7 +32,17 @@ func (b *Benchmark) command(revision Revision, profileSuffix string) *exec.Cmd {
 		path.Join(suite.binDir(revision), b.binaryName()),
 		b.args(suite.artifactsDir(revision), profileSuffix)...,
 	)
-	cmd.Env = append(os.Environ(), "COCKROACH_RANDOM_SEED=1")
+	env := os.Environ()
+	envGodebug := os.Getenv("GODEBUG")
+	if envGodebug != "" {
+		envGodebug += ","
+	}
+	// Ensure that GODEBUG=[...,]runtimecontentionstacks=1 is set to improve
+	// mutex profiles.
+	envGodebug += "runtimecontentionstacks=1"
+	env = append(env, "GODEBUG="+envGodebug)
+	env = append(env, "COCKROACH_RANDOM_SEED=1")
+	cmd.Env = env
 	return cmd
 }
 

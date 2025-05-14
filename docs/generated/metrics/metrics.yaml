@@ -17049,18 +17049,18 @@ layers:
       exported_name: tenant_consumption_external_io_egress_bytes
       description: Total number of bytes written to external services such as cloud storage providers
       y_axis_label: Bytes
-      type: GAUGE
+      type: COUNTER
       unit: COUNT
       aggregation: AVG
-      derivative: NONE
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: tenant.consumption.external_io_ingress_bytes
       exported_name: tenant_consumption_external_io_ingress_bytes
       description: Total number of bytes read from external services such as cloud storage providers
       y_axis_label: Bytes
-      type: GAUGE
+      type: COUNTER
       unit: COUNT
       aggregation: AVG
-      derivative: NONE
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: tenant.consumption.kv_request_units
       exported_name: tenant_consumption_kv_request_units
       description: RU consumption attributable to KV
@@ -17073,34 +17073,34 @@ layers:
       exported_name: tenant_consumption_pgwire_egress_bytes
       description: Total number of bytes transferred from a SQL pod to the client
       y_axis_label: Bytes
-      type: GAUGE
+      type: COUNTER
       unit: COUNT
       aggregation: AVG
-      derivative: NONE
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: tenant.consumption.read_batches
       exported_name: tenant_consumption_read_batches
       description: Total number of KV read batches
       y_axis_label: Requests
-      type: GAUGE
+      type: COUNTER
       unit: COUNT
       aggregation: AVG
-      derivative: NONE
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: tenant.consumption.read_bytes
       exported_name: tenant_consumption_read_bytes
       description: Total number of bytes read from KV
       y_axis_label: Bytes
-      type: GAUGE
+      type: COUNTER
       unit: COUNT
       aggregation: AVG
-      derivative: NONE
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: tenant.consumption.read_requests
       exported_name: tenant_consumption_read_requests
       description: Total number of KV read requests
       y_axis_label: Requests
-      type: GAUGE
+      type: COUNTER
       unit: COUNT
       aggregation: AVG
-      derivative: NONE
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: tenant.consumption.request_units
       exported_name: tenant_consumption_request_units
       description: Total RU consumption
@@ -17113,34 +17113,34 @@ layers:
       exported_name: tenant_consumption_sql_pods_cpu_seconds
       description: Total amount of CPU used by SQL pods
       y_axis_label: CPU Seconds
-      type: GAUGE
+      type: COUNTER
       unit: SECONDS
       aggregation: AVG
-      derivative: NONE
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: tenant.consumption.write_batches
       exported_name: tenant_consumption_write_batches
       description: Total number of KV write batches
       y_axis_label: Requests
-      type: GAUGE
+      type: COUNTER
       unit: COUNT
       aggregation: AVG
-      derivative: NONE
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: tenant.consumption.write_bytes
       exported_name: tenant_consumption_write_bytes
       description: Total number of bytes written to KV
       y_axis_label: Bytes
-      type: GAUGE
+      type: COUNTER
       unit: COUNT
       aggregation: AVG
-      derivative: NONE
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: tenant.consumption.write_requests
       exported_name: tenant_consumption_write_requests
       description: Total number of KV write requests
       y_axis_label: Requests
-      type: GAUGE
+      type: COUNTER
       unit: COUNT
       aggregation: AVG
-      derivative: NONE
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: timeseries.write.bytes
       exported_name: timeseries_write_bytes
       description: Total size in bytes of metric samples written to disk
