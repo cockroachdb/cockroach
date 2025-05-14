@@ -1632,6 +1632,81 @@ func TestDrainSqlStatsPermissionDenied(t *testing.T) {
 	require.Contains(t, err.Error(), "user does not have admin role")
 }
 
+func TestClusterResetSQLStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	for _, flushed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("flushed=%t", flushed), func(t *testing.T) {
+			testCluster := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					Insecure: true,
+					Knobs: base.TestingKnobs{
+						SQLStatsKnobs: sqlstats.CreateTestingKnobs(),
+					},
+				},
+			})
+			defer testCluster.Stopper().Stop(ctx)
+
+			gateway := testCluster.Server(1 /* idx */).ApplicationLayer()
+			status := gateway.StatusServer().(serverpb.SQLStatusServer)
+
+			sqlRunner := sqlutils.MakeSQLRunner(gateway.SQLConn(t))
+			sqlRunner.Exec(t, `CREATE DATABASE t;`)
+			sqlRunner.Exec(t, `CREATE TABLE t.test (x INT PRIMARY KEY);`)
+			sqlRunner.Exec(t, `INSERT INTO t.test VALUES (1);`)
+			sqlRunner.Exec(t, `INSERT INTO t.test VALUES (2);`)
+			sqlRunner.Exec(t, `INSERT INTO t.test VALUES (3);`)
+
+			if flushed {
+				gateway.SQLServer().(*sql.Server).
+					GetSQLStatsProvider().MaybeFlush(ctx, gateway.AppStopper())
+			}
+
+			statsPreReset, err := status.Statements(ctx, &serverpb.StatementsRequest{
+				Combined: flushed,
+			})
+			require.NoError(t, err)
+
+			if statsCount := len(statsPreReset.Statements); statsCount == 0 {
+				t.Fatal("expected to find stats for at least one statement, but found:", statsCount)
+			}
+
+			_, err = status.ResetSQLStats(ctx, &serverpb.ResetSQLStatsRequest{
+				ResetPersistedStats: true,
+			})
+			require.NoError(t, err)
+
+			statsPostReset, err := status.Statements(ctx, &serverpb.StatementsRequest{
+				Combined: flushed,
+			})
+			require.NoError(t, err)
+
+			if !statsPostReset.LastReset.After(statsPreReset.LastReset) {
+				t.Fatal("expected to find stats last reset value changed, but didn't")
+			}
+
+			for _, txn := range statsPostReset.Transactions {
+				for _, previousTxn := range statsPreReset.Transactions {
+					if reflect.DeepEqual(txn, previousTxn) {
+						t.Fatal("expected to have reset SQL stats, but still found transaction", txn)
+					}
+				}
+			}
+
+			for _, stmt := range statsPostReset.Statements {
+				for _, previousStmt := range statsPreReset.Statements {
+					if reflect.DeepEqual(stmt, previousStmt) {
+						t.Fatal("expected to have reset SQL stats, but still found statement", stmt)
+					}
+				}
+			}
+		})
+	}
+}
+
 func createStmtFetchMode(
 	sort serverpb.StatsSortOptions,
 ) *serverpb.CombinedStatementsStatsRequest_FetchMode {
