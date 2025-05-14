@@ -516,11 +516,20 @@ func TestTransactionInsightsFailOnCommit(t *testing.T) {
 
 	connDefault.Exec(t, "SET CLUSTER SETTING sql.contention.event_store.resolution_interval = '100ms'")
 	// Disable write buffering since this test assumes that
-	// kvpb.TransactionRetryWithProtoRefreshError.ConflictingTxn is populated
-	// which is only the case for some retry reasons (like REASON_INTENT during
-	// a refresh) that doesn't happen with write buffering.
-	// TODO(#146238): confirm whether this behavior is expected, and perhaps
-	// adjust the test to be agnostic to buffered writes.
+	// kvpb.TransactionRetryWithProtoRefreshError.ConflictingTxn
+	// is populated which is only the case for some retry reasons
+	// (like REASON_INTENT during a refresh) that doesn't happen
+	// with write buffering.
+	//
+	// Write buffering produces a different error than the
+	// non-buffered case because of #146732.
+	//
+	// Despite #146732, however, we should be able to annotate the
+	// error received in this test with conflicting txn
+	// information.
+	//
+	// TODO(#146732, #146734): Allow write buffering in this test
+	// once one of the two bugs are fixed.
 	connDefault.Exec(t, "SET CLUSTER SETTING kv.transaction.write_buffering.enabled = false")
 
 	// Set up myUsers table with 2 users.
