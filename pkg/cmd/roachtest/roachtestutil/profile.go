@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -24,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/google/pprof/profile"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -303,4 +306,145 @@ func MeasureQPS(
 		afterOps := totalOpsCompleted()
 		return float64(afterOps-beforeOps) / duration.Seconds()
 	}
+}
+
+// getProfileWithTimeout is a helper function that receives an HTTP client and a
+// profile request URL, and returns the profile data. It keeps trying until
+// it succeeds or the timeout is reached.
+func getProfileWithTimeout(
+	ctx context.Context,
+	logger *logger.Logger,
+	client *RoachtestHTTPClient,
+	url string,
+	timeout time.Duration,
+) (*profile.Profile, error) {
+	logger.Printf("getting profile using URL: %s", url)
+
+	// Set up a timer to limit the time spent trying to get the profile.
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	var latestError error
+	for {
+		select {
+		case <-timer.C:
+			return nil, errors.Wrapf(latestError, "failed to get profile from %s after %s", url, timeout)
+		default:
+		}
+
+		// Request the profile.
+		resp, err := client.Get(ctx, url)
+		if err != nil {
+			latestError = err
+			resp.Body.Close()
+			continue
+		}
+
+		var buf bytes.Buffer
+		_, err = io.Copy(&buf, resp.Body)
+		if err != nil {
+			latestError = err
+			resp.Body.Close()
+			continue
+		}
+
+		// Parse the profile data. This ensures that the data is valid and not
+		// corrupt.
+		prof, err := profile.ParseData(buf.Bytes())
+		if err != nil {
+			latestError = err
+			resp.Body.Close()
+			continue
+		}
+
+		resp.Body.Close()
+		return prof, nil
+	}
+}
+
+// GetCPUProfile returns the CPU profile for the given node.
+func GetCPUProfile(
+	ctx context.Context,
+	cluster cluster.Cluster,
+	logger *logger.Logger,
+	nodeID int,
+	duration time.Duration,
+) (*profile.Profile, error) {
+	adminUIAddrs, err := cluster.ExternalAdminUIAddr(ctx, logger, cluster.Node(nodeID))
+	if err != nil {
+		return nil, err
+	}
+	// Use a long enough HTTP timeout that is larger than the profile duration.
+	client := DefaultHTTPClient(cluster, logger, HTTPTimeout(2*duration))
+	url := fmt.Sprintf("https://%s/debug/pprof/profile?seconds=%d", adminUIAddrs[0],
+		int(duration.Seconds()))
+	return getProfileWithTimeout(ctx, logger, client, url, 10*time.Second /* timeout */)
+}
+
+// GetAllocsProfile returns the allocs profile for the given node.
+func GetAllocsProfile(
+	ctx context.Context, cluster cluster.Cluster, logger *logger.Logger, nodeID int,
+) (*profile.Profile, error) {
+	adminUIAddrs, err := cluster.ExternalAdminUIAddr(ctx, logger, cluster.Node(nodeID))
+	if err != nil {
+		return nil, err
+	}
+	client := DefaultHTTPClient(cluster, logger, HTTPTimeout(10*time.Second))
+	url := fmt.Sprintf("https://%s/debug/pprof/allocs", adminUIAddrs[0])
+	return getProfileWithTimeout(ctx, logger, client, url, 10*time.Second /* timeout */)
+}
+
+// GetMutexProfile returns the mutex profile for the given node.
+func GetMutexProfile(
+	ctx context.Context, cluster cluster.Cluster, logger *logger.Logger, nodeID int,
+) (*profile.Profile, error) {
+	adminUIAddrs, err := cluster.ExternalAdminUIAddr(ctx, logger, cluster.Node(nodeID))
+	if err != nil {
+		return nil, err
+	}
+	client := DefaultHTTPClient(cluster, logger, HTTPTimeout(10*time.Second))
+	url := fmt.Sprintf("https://%s/debug/pprof/mutex", adminUIAddrs[0])
+	return getProfileWithTimeout(ctx, logger, client, url, 10*time.Second /* timeout */)
+}
+
+// GetProfileForAllCRDBNodes receives a function that can collect a profile
+// for a given node and uses it to collect profiles for all the nodes in the
+// cluster in parallel. It returns a slice of profiles and an error if any of
+// the profiles failed to collect. Each entry in the slices is in the same order
+// as the CRDB nodes in the cluster.
+func GetProfileForAllCRDBNodes(
+	c cluster.Cluster,
+	logger *logger.Logger,
+	collectProfile func(
+		nodeID int,
+	) (*profile.Profile, error),
+) ([]*profile.Profile, error) {
+	profiles := make([]*profile.Profile, len(c.CRDBNodes()))
+	errors := make([]error, len(c.CRDBNodes()))
+
+	// profileWg is used to wait for all the profiles to be collected.
+	profileWg := sync.WaitGroup{}
+	for i := range c.CRDBNodes() {
+		profileWg.Add(1)
+		go func(nodeID int) {
+			defer profileWg.Done()
+			var err error
+			profiles[nodeID-1], err = collectProfile(nodeID)
+
+			if err != nil {
+				logger.Printf("error getting profile for node %d: %s", nodeID, err)
+				errors[nodeID-1] = err
+			}
+		}(i + 1)
+	}
+	profileWg.Wait()
+
+	// Return an error if any of the profiles failed to collect.
+	for _, err := range errors {
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return profiles, nil
 }
