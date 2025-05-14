@@ -100,6 +100,8 @@ type diskBandwidthLimiterState struct {
 // diskBandwidthLimiter produces tokens for elastic work.
 type diskBandwidthLimiter struct {
 	state diskBandwidthLimiterState
+	// Only used for logging.
+	unlimitedTokensOverride bool
 }
 
 func newDiskBandwidthLimiter() *diskBandwidthLimiter {
@@ -148,11 +150,15 @@ func (d *diskBandwidthLimiter) computeElasticTokens(
 		writeIOPSTokens: 0,
 	}
 	prevState := d.state
+	diskBWUtil := 0.0
+	if prevState.tokens.writeByteTokens > 0 {
+		diskBWUtil = float64(totalUsedTokens.writeByteTokens) / float64(prevState.tokens.writeByteTokens)
+	}
 	d.state = diskBandwidthLimiterState{
 		tokens:     tokens,
 		prevTokens: prevState.tokens,
 		usedTokens: usedTokens,
-		diskBWUtil: float64(totalUsedTokens.writeByteTokens) / float64(prevState.tokens.writeByteTokens),
+		diskBWUtil: diskBWUtil,
 		diskLoad:   id,
 	}
 	return tokens
@@ -160,9 +166,14 @@ func (d *diskBandwidthLimiter) computeElasticTokens(
 
 func (d *diskBandwidthLimiter) SafeFormat(p redact.SafePrinter, _ rune) {
 	ib := humanizeutil.IBytes
-	p.Printf("diskBandwidthLimiter (tokenUtilization %.2f, tokensUsed (elastic %s, "+
+	var unlimitedPrefix string
+	if d.unlimitedTokensOverride {
+		unlimitedPrefix = " (unlimited)"
+	}
+	p.Printf("diskBandwidthLimiter%s (tokenUtilization %.2f, tokensUsed (elastic %s, "+
 		"snapshot %s, regular %s) tokens (write %s (prev %s), read %s (prev %s)), writeBW %s/s, "+
 		"readBW %s/s, provisioned %s/s)",
+		unlimitedPrefix,
 		d.state.diskBWUtil,
 		ib(d.state.usedTokens[admissionpb.ElasticStoreWorkType].writeByteTokens),
 		ib(d.state.usedTokens[admissionpb.SnapshotIngestStoreWorkType].writeByteTokens),
