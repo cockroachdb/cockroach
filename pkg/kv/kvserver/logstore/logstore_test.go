@@ -45,7 +45,7 @@ func TestRaftStorageWrites(t *testing.T) {
 		defer batch.Close()
 		prepare(batch)
 		wb := kvserverpb.WriteBatch{Data: batch.Repr()}
-		str, err := print.DecodeWriteBatch(&wb)
+		str, err := print.DecodeWriteBatch(wb.GetData())
 		require.NoError(t, err)
 		require.NoError(t, batch.Commit(true))
 		return str

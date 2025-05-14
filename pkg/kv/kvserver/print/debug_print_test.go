@@ -26,17 +26,20 @@ func TestStringifyWriteBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	wb := &kvserverpb.WriteBatch{}
-	_, err := DecodeWriteBatch(wb)
+	s, err := DecodeWriteBatch(nil)
+	require.NoError(t, err)
+	require.Equal(t, "<nil>\n", s)
+	_, err = DecodeWriteBatch([]byte{})
 	require.ErrorContains(t, err, "batch invalid: too small: 0 bytes")
 
+	wb := &kvserverpb.WriteBatch{}
 	batch := pebble.Batch{}
 	require.NoError(t, batch.Set(storage.EncodeMVCCKey(storage.MVCCKey{
 		Key:       roachpb.Key("/db1"),
 		Timestamp: hlc.Timestamp{WallTime: math.MaxInt64},
 	}), []byte("test value"), nil /* WriteOptions */))
 	wb.Data = batch.Repr()
-	s, err := DecodeWriteBatch(wb)
+	s, err = DecodeWriteBatch(wb.Data)
 	require.NoError(t, err)
 	require.Equal(t, "Put: 9223372036.854775807,0 \"/db1\" (0x2f646231007fffffffffffffff09): \"test value\"\n", s)
 
@@ -46,7 +49,7 @@ func TestStringifyWriteBatch(t *testing.T) {
 	err = batch.SingleDelete(encodedKey, nil)
 	require.NoError(t, err)
 	wb.Data = batch.Repr()
-	s, err = DecodeWriteBatch(wb)
+	s, err = DecodeWriteBatch(wb.Data)
 	require.NoError(t, err)
 	require.Equal(t, "Single Delete: /Local/Lock/Table/56/1/1169/5/3054/0 "+
 		"03623a9318c0384d07a6f22b858594df60 (0x017a6b12c089f704918df70bee8800010003623a9318c0384d07a6f22b858594df6012): \n",
@@ -72,7 +75,7 @@ func TestStringifyWriteBatch(t *testing.T) {
 		nil,
 	))
 	wb.Data = batch.Repr()
-	s, err = DecodeWriteBatch(wb)
+	s, err = DecodeWriteBatch(wb.Data)
 	require.NoError(t, err)
 	require.Equal(t, "Set Range Key: 0.000000001,0 /db{1-2} (0x2f64623100-0x2f64623200): \"\"\n"+
 		"Set Range Key: 0.000000002,0 /db{1-2} (0x2f64623100-0x2f64623200): \"\\x00\\x00\\x00\\x04e\\n\\x02\\b\\x01\"\n",
@@ -92,7 +95,7 @@ func TestStringifyWriteBatch(t *testing.T) {
 		nil,
 	))
 	wb.Data = batch.Repr()
-	s, err = DecodeWriteBatch(wb)
+	s, err = DecodeWriteBatch(wb.Data)
 	require.NoError(t, err)
 	require.Equal(t, "Unset Range Key: 0.000000001,0 /db{1-2} (0x2f64623100-0x2f64623200)\n"+
 		"Unset Range Key: 0.000000002,0 /db{1-2} (0x2f64623100-0x2f64623200)\n",
@@ -105,7 +108,7 @@ func TestStringifyWriteBatch(t *testing.T) {
 		nil,
 	))
 	wb.Data = batch.Repr()
-	s, err = DecodeWriteBatch(wb)
+	s, err = DecodeWriteBatch(wb.Data)
 	require.NoError(t, err)
 	require.Equal(t, "Delete Range Keys: /db{1-2} (0x2f64623100-0x2f64623200)\n", s)
 }

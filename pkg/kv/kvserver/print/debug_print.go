@@ -232,7 +232,7 @@ func tryIntent(kv storage.MVCCKeyValue) (string, error) {
 	return s, nil
 }
 
-func DecodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
+func DecodeWriteBatch(writeBatch []byte) (string, error) {
 	// Ensure that we always update this function to consider any necessary
 	// updates when a new key kind is introduced. To do this, we assert
 	// pebble.KeyKindDeleteSized is the most recent key kind, ensuring that
@@ -244,7 +244,7 @@ func DecodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
 		return "<nil>\n", nil
 	}
 
-	r, err := storage.NewBatchReader(writeBatch.Data)
+	r, err := storage.NewBatchReader(writeBatch)
 	if err != nil {
 		return "", err
 	}
@@ -381,7 +381,7 @@ func tryRaftLogEntry(kv storage.MVCCKeyValue) (string, error) {
 	e.Data = nil
 	cmd := e.Cmd
 
-	wbStr, err := DecodeWriteBatch(cmd.WriteBatch)
+	wbStr, err := DecodeWriteBatch(cmd.WriteBatch.GetData())
 	if err != nil {
 		wbStr = "failed to decode: " + err.Error() + "\nafter:\n" + wbStr
 	}
