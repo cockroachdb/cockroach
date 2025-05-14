@@ -271,7 +271,7 @@ func CreateTenantRecord(
 		return roachpb.TenantID{}, err
 	}
 	if info.Name != "" {
-		if err := info.Name.IsValid(); err != nil {
+		if err := info.Name.Validate(); err != nil {
 			return roachpb.TenantID{}, pgerror.WithCandidateCode(err, pgcode.Syntax)
 		}
 	}

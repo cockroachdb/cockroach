@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -66,7 +67,7 @@ func TestMetricsValues(t *testing.T) {
 		certsDir,
 		security.CommandTLSSettings{},
 		security.WithTimeSource(timeutil.NewManualTime(now)),
-		security.ForTenant(1),
+		security.ForTenant(roachpb.MustMakeTenantID(1)),
 	)
 	if err != nil {
 		t.Error(err)
@@ -126,7 +127,7 @@ func TestCertificateReload(t *testing.T) {
 		certsDir,
 		security.CommandTLSSettings{},
 		security.WithTimeSource(timeutil.NewManualTime(now)),
-		security.ForTenant(1),
+		security.ForTenant(roachpb.MustMakeTenantID(1)),
 	)
 	if err != nil {
 		t.Error(err)

@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
@@ -40,9 +41,10 @@ func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string) {
 		false,            // overwrite
 	))
 
+	tenantIdentity := roachpb.MustMakeTenantID(tenant)
 	// That dedicated service can make client certs for a tenant as follows:
 	tenantCerts, err := security.CreateTenantPair(
-		certsDir, tenantCAKey, testKeySize, 48*time.Hour, tenant, []string{"127.0.0.1"},
+		certsDir, tenantCAKey, testKeySize, 48*time.Hour, tenantIdentity, []string{"127.0.0.1"},
 	)
 	require.NoError(t, err)
 	// We write the certs to disk, though in production this would not necessarily
@@ -59,7 +61,7 @@ func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string) {
 		certsDir, serverCAKeyPath, testKeySize, 500*time.Hour, false, []string{"127.0.0.1"}))
 
 	// Also check that the tenant signing cert gets created.
-	require.NoError(t, security.CreateTenantSigningPair(certsDir, 500*time.Hour, false /* overwrite */, tenant))
+	require.NoError(t, security.CreateTenantSigningPair(certsDir, 500*time.Hour, false /* overwrite */, tenantIdentity))
 	return certsDir
 }
 
@@ -108,7 +110,8 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 
 	// Make a new CertificateManager for the tenant. We could've used this one
 	// for the server as well, but this way it's closer to reality.
-	cm, err = security.NewCertificateManager(certsDir, security.CommandTLSSettings{}, security.ForTenant(tenant))
+	cm, err = security.NewCertificateManager(certsDir, security.CommandTLSSettings{},
+		security.ForTenant(roachpb.MustMakeTenantID(tenant)))
 	require.NoError(t, err)
 
 	// The client in turn trusts the server CA and presents its tenant certs to the

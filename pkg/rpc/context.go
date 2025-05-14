@@ -149,11 +149,14 @@ func NewServerEx(
 		unaryInterceptor = append(unaryInterceptor, grpc.UnaryServerInterceptor(o.metricsInterceptor))
 	}
 
+	// TODO(chandrat): For now, this can't be anything other than TenantID.
+	// Once we add support for TenantName, we should add a check here.
+	tenantID, _ := rpcCtx.tenantIdentity.(roachpb.TenantID)
 	if !rpcCtx.ContextOptions.Insecure {
 		a := kvAuth{
 			sv: &rpcCtx.Settings.SV,
 			tenant: tenantAuthorizer{
-				tenantID:               rpcCtx.tenID,
+				tenantID:               tenantID,
 				capabilitiesAuthorizer: rpcCtx.capabilitiesAuthorizer,
 			},
 		}
@@ -1476,11 +1479,11 @@ func (rpcCtx *Context) GetClientTLSConfig() (*tls.Config, error) {
 		tlsCfg, err := cm.GetClientTLSConfig(rpcCtx.User)
 		return tlsCfg, wrapError(err)
 
-	case rpcCtx.UseNodeAuth || rpcCtx.tenID.IsSystem():
+	case rpcCtx.UseNodeAuth || rpcCtx.tenantIdentity.IsSystem():
 		tlsCfg, err := cm.GetNodeClientTLSConfig()
 		return tlsCfg, wrapError(err)
 
-	case !rpcCtx.tenID.IsSystem():
+	case !rpcCtx.tenantIdentity.IsSystem():
 		// A SQL server running in a standalone server doesn't have access
 		// to the node certs, and thus must use the standalone tenant
 		// client cert.

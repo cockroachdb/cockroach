@@ -1513,7 +1513,7 @@ func (c *transientCluster) generateCerts(ctx context.Context, certsDir string) (
 				certsDir,
 				c.demoCtx.DefaultCertLifetime,
 				true, /* overwrite */
-				2,
+				roachpb.MustMakeTenantID(3),
 			); err != nil {
 				return err
 			}
@@ -1527,7 +1527,7 @@ func (c *transientCluster) generateCerts(ctx context.Context, certsDir string) (
 					caKeyPath,
 					c.demoCtx.DefaultKeySize,
 					c.demoCtx.DefaultCertLifetime,
-					2,
+					roachpb.MustMakeTenantID(3),
 					tlsServerNames,
 				)
 				if err != nil {
