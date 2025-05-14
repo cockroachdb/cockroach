@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -222,6 +223,19 @@ func dropColumn(
 				)
 			}
 			dropCascadeDescriptor(b, e.FunctionID)
+		case *scpb.TriggerDeps:
+			if behavior == tree.DropCascade {
+				panic(unimplemented.NewWithIssuef(
+					146667, "ALTER TABLE DROP COLUMN cascade not supported with triggers"))
+			}
+			triggerName := b.QueryByID(e.TableID).FilterTriggerName().Filter(func(_ scpb.Status, _ scpb.TargetStatus, tn *scpb.TriggerName) bool {
+				return tn.TriggerID == e.TriggerID
+			}).MustGetOneElement()
+			tableName := b.QueryByID(e.TableID).FilterNamespace().MustGetOneElement()
+			panic(sqlerrors.NewDependentObjectErrorf(
+				"cannot drop column %q because trigger %q on table %q depends on it",
+				cn.Name, triggerName.Name, tableName.Name,
+			))
 		case *scpb.UniqueWithoutIndexConstraint:
 			constraintElems := b.QueryByID(e.TableID).Filter(hasConstraintIDAttrFilter(e.ConstraintID))
 			_, _, constraintName := scpb.FindConstraintWithoutIndexName(constraintElems.Filter(publicTargetFilter))
@@ -296,7 +310,8 @@ func walkColumnDependencies(
 				*scpb.ColumnDefaultExpression, *scpb.ColumnOnUpdateExpression,
 				*scpb.UniqueWithoutIndexConstraint, *scpb.CheckConstraint,
 				*scpb.UniqueWithoutIndexConstraintUnvalidated, *scpb.CheckConstraintUnvalidated,
-				*scpb.RowLevelTTL, *scpb.PolicyUsingExpr, *scpb.PolicyWithCheckExpr:
+				*scpb.RowLevelTTL, *scpb.PolicyUsingExpr, *scpb.PolicyWithCheckExpr,
+				*scpb.TriggerDeps:
 				fn(e, op, objType)
 			case *scpb.ColumnType:
 				if elt.ColumnID == col.ColumnID {
@@ -380,6 +395,12 @@ func walkColumnDependencies(
 		case *scpb.FunctionBody:
 			for _, ref := range elt.UsesTables {
 				if ref.TableID == col.TableID && catalog.MakeTableColSet(ref.ColumnIDs...).Contains(col.ColumnID) {
+					fn(e, op, objType)
+				}
+			}
+		case *scpb.TriggerDeps:
+			for _, ref := range elt.UsesRelations {
+				if ref.ID == col.TableID && catalog.MakeTableColSet(ref.ColumnIDs...).Contains(col.ColumnID) {
 					fn(e, op, objType)
 				}
 			}
