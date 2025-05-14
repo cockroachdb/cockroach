@@ -39,6 +39,7 @@ go_test(
     srcs = [
         "iterator_test.go",
         "main_test.go",
+        "reported_sql_stats_test.go",
         "sql_stats_ingester_test.go",
         "sql_stats_test.go",
     ],
