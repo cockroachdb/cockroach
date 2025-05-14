@@ -77,6 +77,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
@@ -2108,8 +2109,25 @@ type lockedMuxStream struct {
 func (s *lockedMuxStream) SendIsThreadSafe() {}
 
 func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
+	// slowMuxStreamSendLogThreshold is a latency threshold for logging a slow RPC
+	// to a MuxStream
+	const slowMuxStreamSendThreshold = 10 * time.Second
+
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
+
+	// Our intent is to provide observibility into a slow client from the server node.
+	// So, we don't include the lock acquisition time, as it is confounded by other
+	// factors, e.g., the number of MuxRangeFeeds contending for the MuxStream.
+	start := crtime.NowMono()
+	defer func() {
+		if dur := start.Elapsed(); dur > slowMuxStreamSendThreshold {
+			log.Infof(s.wrapped.Context(),
+				"slow send on stream %d for r%d took %s",
+				e.StreamID, e.RangeID, dur)
+		}
+	}()
+
 	return s.wrapped.Send(e)
 }
 
