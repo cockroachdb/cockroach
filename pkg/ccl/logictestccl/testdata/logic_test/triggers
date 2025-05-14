@@ -925,7 +925,7 @@ statement ok
 CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION trigger_func();
 
 # Relations are referenced by name, so renaming the table is not allowed.
-statement error pgcode 2BP01 cannot rename relation "t" because view "xy" depends on it
+statement error pgcode 2BP01 cannot rename relation "t" because table "xy" depends on it
 ALTER TABLE t RENAME TO t2;
 
 # Sequences are remapped to their IDs, so renaming is allowed.
