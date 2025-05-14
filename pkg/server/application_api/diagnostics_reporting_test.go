@@ -25,6 +25,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestTelemetrySQLStatsIndependence verifies that the collection of SQL statement
+// statistics is not affected by diagnostic reporting operations.
 func TestTelemetrySQLStatsIndependence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
