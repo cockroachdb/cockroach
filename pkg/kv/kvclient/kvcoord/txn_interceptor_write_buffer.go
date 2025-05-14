@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvcceval"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
@@ -1062,6 +1063,8 @@ type requestRecord struct {
 func (rr requestRecord) toResp(
 	ctx context.Context, twb *txnWriteBuffer, br kvpb.ResponseUnion, txn *roachpb.Transaction,
 ) (kvpb.ResponseUnion, *kvpb.Error) {
+	assertTrue(txn != nil, "unexpectedly nil transaction")
+
 	var ru kvpb.ResponseUnion
 	switch req := rr.origRequest.(type) {
 	case *kvpb.ConditionalPutRequest:
@@ -1095,11 +1098,15 @@ func (rr requestRecord) toResp(
 		// The condition was satisfied; buffer the write and return a
 		// synthesized response.
 		ru.MustSetInner(&kvpb.ConditionalPutResponse{})
-		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq)
+		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq, txn.ReadTimestamp)
 
 	case *kvpb.PutRequest:
+		exclusionTS := hlc.Timestamp{}
+		if req.MustAcquireExclusiveLock {
+			exclusionTS = txn.ReadTimestamp
+		}
 		ru.MustSetInner(&kvpb.PutResponse{})
-		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq)
+		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq, exclusionTS)
 
 	case *kvpb.DeleteRequest:
 		// To correctly populate FoundKey in the response, we must prefer any
@@ -1131,10 +1138,15 @@ func (rr requestRecord) toResp(
 			// clarify the behaviour on DeleteRequest.
 			foundKey = false
 		}
+		exclusionTS := hlc.Timestamp{}
+		if req.MustAcquireExclusiveLock {
+			exclusionTS = txn.ReadTimestamp
+		}
+
 		ru.MustSetInner(&kvpb.DeleteResponse{
 			FoundKey: foundKey,
 		})
-		twb.addToBuffer(req.Key, roachpb.Value{}, req.Sequence, req.KVNemesisSeq)
+		twb.addToBuffer(req.Key, roachpb.Value{}, req.Sequence, req.KVNemesisSeq, exclusionTS)
 
 	case *kvpb.GetRequest:
 		val, served := twb.maybeServeRead(req.Key, req.Sequence)
@@ -1197,7 +1209,11 @@ func (rr requestRecords) Empty() bool {
 
 // addToBuffer adds a write to the given key to the buffer.
 func (twb *txnWriteBuffer) addToBuffer(
-	key roachpb.Key, val roachpb.Value, seq enginepb.TxnSeq, kvNemSeq kvnemesisutil.Container,
+	key roachpb.Key,
+	val roachpb.Value,
+	seq enginepb.TxnSeq,
+	kvNemSeq kvnemesisutil.Container,
+	ts hlc.Timestamp,
 ) {
 	it := twb.buffer.MakeIter()
 	seek := twb.seekItemForSpan(key, nil)
@@ -1206,7 +1222,7 @@ func (twb *txnWriteBuffer) addToBuffer(
 	if it.Valid() {
 		// We've already seen a write for this key.
 		bw := it.Cur()
-		val := bufferedValue{val: val, seq: seq, kvNemesisSeq: kvNemSeq}
+		val := bufferedValue{val: val, seq: seq, kvNemesisSeq: kvNemSeq, ts: ts}
 		bw.vals = append(bw.vals, val)
 		twb.bufferSize += val.size()
 	} else {
@@ -1214,7 +1230,7 @@ func (twb *txnWriteBuffer) addToBuffer(
 		bw := &bufferedWrite{
 			id:   twb.bufferIDAlloc,
 			key:  key,
-			vals: []bufferedValue{{val: val, seq: seq, kvNemesisSeq: kvNemSeq}},
+			vals: []bufferedValue{{val: val, seq: seq, kvNemesisSeq: kvNemSeq, ts: ts}},
 		}
 		twb.buffer.Set(bw)
 		twb.bufferSize += bw.size()
@@ -1362,6 +1378,14 @@ type bufferedValue struct {
 	kvNemesisSeq kvnemesisutil.Container
 	val          roachpb.Value
 	seq          enginepb.TxnSeq
+	// ts, if non empty, is the read timestamp at which the txnWriteBuffer
+	// acquired an exclusive lock over the related key.
+	//
+	// TODO(ssd): Do we need to store this on every value? We could imagine
+	// storing this on a per-key basis, keeping just the lowest timestamp. But,
+	// it's unclear to me at the moment whether we need to do anything around
+	// savepoint rollbacks here.
+	ts hlc.Timestamp
 }
 
 // valPtr returns a pointer to the buffered value.
@@ -1413,6 +1437,7 @@ func (bw *bufferedWrite) toRequest() kvpb.RequestUnion {
 		putAlloc.put.Value = val.val
 		putAlloc.put.Sequence = val.seq
 		putAlloc.put.KVNemesisSeq = val.kvNemesisSeq
+		putAlloc.put.ExpectExclusionSince = val.ts
 		putAlloc.union.Put = &putAlloc.put
 		ru.Value = &putAlloc.union
 	} else {
@@ -1423,6 +1448,7 @@ func (bw *bufferedWrite) toRequest() kvpb.RequestUnion {
 		delAlloc.del.Key = bw.key
 		delAlloc.del.Sequence = val.seq
 		delAlloc.del.KVNemesisSeq = val.kvNemesisSeq
+		delAlloc.del.ExpectExclusionSince = val.ts
 		delAlloc.union.Delete = &delAlloc.del
 		ru.Value = &delAlloc.union
 	}

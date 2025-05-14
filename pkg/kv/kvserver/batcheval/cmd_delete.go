@@ -33,6 +33,7 @@ func Delete(
 		LocalTimestamp:                 cArgs.Now,
 		Stats:                          cArgs.Stats,
 		ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
+		ExclusionTimestamp:             args.ExpectExclusionSince,
 		OmitInRangefeeds:               cArgs.OmitInRangefeeds,
 		OriginID:                       h.WriteOptions.GetOriginID(),
 		OriginTimestamp:                h.WriteOptions.GetOriginTimestamp(),
