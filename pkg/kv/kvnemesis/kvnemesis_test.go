@@ -22,10 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -431,6 +433,7 @@ func testKVNemesisImpl(t *testing.T, cfg kvnemesisTestCfg) {
 	}
 
 	logger := newTBridge(t)
+	defer dumpRaftLogsOnFailure(t, logger.ll.dir, tc.Servers)
 	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger}
 	failures, err := RunNemesis(ctx, rng, env, config, cfg.concurrency, cfg.numSteps, dbs...)
 
@@ -462,4 +465,20 @@ func TestRunReproductionSteps(t *testing.T) {
 	_, _ = db0, ctx
 
 	// Paste a repro as printed by kvnemesis here.
+}
+
+func dumpRaftLogsOnFailure(t *testing.T, dir string, srvs []serverutils.TestServerInterface) {
+	if !t.Failed() {
+		return
+	}
+	d := kvtestutils.RaftLogDumper{Dir: dir}
+	for _, srv := range srvs {
+		require.NoError(t, srv.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+			s.VisitReplicas(func(replica *kvserver.Replica) (wantMore bool) {
+				d.Dump(t, s.LogEngine(), s.StoreID(), replica.RangeID)
+				return true // more
+			})
+			return nil
+		}))
+	}
 }
