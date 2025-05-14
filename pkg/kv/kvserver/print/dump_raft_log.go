@@ -31,11 +31,11 @@ func DumpRaftLog(w io.Writer, reader storage.Reader, rangeID roachpb.RangeID) er
 	return raftlog.Visit(ctx, reader, rangeID, 0, math.MaxUint64, func(ent raftpb.Entry) error {
 		put("****** index %d ******", ent.Index)
 		e, err := raftlog.NewEntry(ent)
-		defer e.Release()
 		if err != nil {
 			put("%s", err)
 			return nil // continue
 		}
+		defer e.Release()
 		wb := e.Cmd.WriteBatch
 		e.Cmd.WriteBatch = nil
 
@@ -49,7 +49,7 @@ func DumpRaftLog(w io.Writer, reader storage.Reader, rangeID roachpb.RangeID) er
 		s, err := DecodeWriteBatch(wb.GetData())
 		if err != nil {
 			put("%s", err)
-			// continue
+			return nil // continue
 		}
 		put("%s", strings.TrimSpace(s))
 		return nil
