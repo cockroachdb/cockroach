@@ -108,6 +108,7 @@ func dialDRPC(rpcCtx *Context) func(ctx context.Context, target string) (drpcpoo
 				return nil, err
 			}
 
+			// Add something like dialOptions as part of this drpcconn.Options struct in fork.
 			opts := drpcconn.Options{
 				Manager: drpcmanager.Options{
 					Reader: drpcwire.ReaderOptions{

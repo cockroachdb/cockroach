@@ -8,9 +8,11 @@ import (
 )
 
 type ClientConn struct {
-	conn  storjdrpc.Conn // this is not same as the connection returned from drpcpool.
-	enc   storjdrpc.Encoding
-	dopts dialOptions // Default and user specified dial options.
+	conn storjdrpc.Conn // this is not same as the connection returned from drpcpool.
+	// what if we wrap a connection pool here? Interchangable.
+	//connGetter func(...) storjdrpc.Conn
+	enc   storjdrpc.Encoding // not needed.
+	dopts dialOptions        // Default and user specified dial options.
 }
 
 type dialOptions struct {
@@ -47,4 +49,20 @@ func (cc *ClientConn) NewStream(
 	ctx context.Context, rpc string, enc storjdrpc.Encoding,
 ) (storjdrpc.Stream, error) {
 	return cc.conn.NewStream(ctx, rpc, enc)
+}
+
+func Dial(target string, opts ...DialOption) (*ClientConn, error) {
+	ctx := context.Background()
+	drpcConn, err := createDRPCConnection(ctx, target)
+	if err != nil {
+		return nil, err
+	}
+
+	clientOptions := applyDialOptions(opts)
+	cc := &ClientConn{
+		conn:  drpcConn,
+		dopts: dialOptions{chainUnaryInts: clientOptions.unaryInts},
+	}
+	chainUnaryClientInterceptors(cc)
+	return cc, nil
 }

@@ -14,6 +14,25 @@ type UnaryClientInterceptor func(ctx context.Context, rpc string, in, out drpc.M
 
 type UnaryInvoker func(ctx context.Context, rpc string, in, out drpc.Message, cc *ClientConn, enc drpc.Encoding) error
 
+// new folder for interceptors in drpc fork.
+
+// type of interceptor definition
+// add options to ClientConn wrapper.
+// ClientConn should work with both drpcconn.Conn and drpcpool.Conn
+
+// modify drpc pool so that we give our ClientConn object (haves list of interceptors, grabs connection from pool, etc. functionality), and it
+// should work with this.
+
+// server interceptors.
+// define type
+
+// -------------  list of commits order. IN drpc repo
+// interdceptor definitions in one commit
+// client connection object with dial options
+// add tests to use interceptors, ensure they are running
+
+// Then we can start porting interceptors
+
 //type StreamClientInterceptor func(ctx context.Context, rpc drpc.Description, next drpc.UnaryInvoker) error
 
 type DialOption func(*ClientConnOptions)
@@ -34,22 +53,6 @@ func WithUnaryInterceptor(ints ...UnaryClientInterceptor) DialOption {
 		opt.streamInts = append(opt.streamInts, ints...)
 	}
 }*/
-
-func Dial(target string, opts ...DialOption) (*ClientConn, error) {
-	ctx := context.Background()
-	drpcConn, err := createDRPCConnection(ctx, target)
-	if err != nil {
-		return nil, err
-	}
-
-	clientOptions := applyDialOptions(opts)
-	cc := &ClientConn{
-		conn:  drpcConn,
-		dopts: dialOptions{chainUnaryInts: clientOptions.unaryInts},
-	}
-	chainUnaryClientInterceptors(cc)
-	return cc, nil
-}
 
 func createDRPCConnection(ctx context.Context, target string) (drpc.Conn, error) {
 	rawConn, err := drpcmigrate.DialWithHeader(ctx, "tcp", target, drpcmigrate.DRPCHeader)
@@ -130,6 +133,7 @@ func chainUnaryClientInterceptors(cc *ClientConn) {
 }
 
 // getChainUnaryInvoker recursively generate the chained unary invoker.
+// Update this to a for loop.
 func getChainUnaryInvoker(
 	interceptors []UnaryClientInterceptor, curr int, finalInvoker UnaryInvoker,
 ) UnaryInvoker {
