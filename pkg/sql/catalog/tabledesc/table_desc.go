@@ -651,6 +651,11 @@ func (desc *wrapper) GetObjectType() privilege.ObjectType {
 
 // GetObjectTypeString implements the Object interface.
 func (desc *wrapper) GetObjectTypeString() string {
+	// Special handling for views since GetObjectType does not distinguish between
+	// views and regular tables.
+	if desc.IsView() {
+		return "view"
+	}
 	return string(desc.GetObjectType())
 }
 
