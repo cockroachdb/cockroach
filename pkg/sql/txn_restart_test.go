@@ -794,11 +794,13 @@ func isRetryableErr(err error) bool {
 // Returns true on retriable errors.
 func runTestTxn(
 	t *testing.T,
+	st *cluster.Settings,
 	magicVals *filterVals,
 	expectedErr string,
 	sqlDB *gosql.DB,
 	tx *gosql.Tx,
 	sentinelInsert string,
+	execCount int,
 ) bool {
 	// Run a bogus statement to disable the automatic server retries of subsequent
 	// statements.
@@ -806,19 +808,38 @@ func runTestTxn(
 		t.Fatal(err)
 	}
 
+	// On the first execution with buffered writes enabled, the arranged retriable
+	// error is not observed until the buffer is flushed. Once the buffer is
+	// flushed, future buffering is disabled so then we expect the following
+	// errors on the initial insert.
+	retryErrorDelayedUntilDelete := kvcoord.BufferedWritesEnabled.Get(&st.SV) && execCount == 1
+
 	retriesNeeded :=
 		(magicVals.restartCounts["boulanger"] + magicVals.abortCounts["boulanger"]) > 0
 	if retriesNeeded {
 		_, err := tx.Exec("INSERT INTO t.public.test(k, v) VALUES (1, 'boulanger')")
-		if !testutils.IsError(err, expectedErr) {
-			t.Fatalf("unexpected error: %v", err)
+		if retryErrorDelayedUntilDelete {
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		} else {
+			if !testutils.IsError(err, expectedErr) {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			return isRetryableErr(err)
 		}
-		return isRetryableErr(err)
 	}
 	// Now the INSERT should succeed.
 	if _, err := tx.Exec(
 		"DELETE FROM t.public.test WHERE true;" + sentinelInsert,
 	); err != nil {
+		if retriesNeeded && retryErrorDelayedUntilDelete {
+			if !testutils.IsError(err, expectedErr) {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			return isRetryableErr(err)
+		}
+
 		t.Fatal(err)
 	}
 
@@ -863,9 +884,6 @@ func TestTxnUserRestart(t *testing.T) {
 				defer srv.Stopper().Stop(context.Background())
 				s := srv.ApplicationLayer()
 
-				// TODO(#146238): either remove this or leave a comment for why it's ok.
-				kvcoord.BufferedWritesEnabled.Override(ctx, &s.ClusterSettings().SV, false)
-
 				{
 					pgURL, cleanup := s.PGUrl(t,
 						serverutils.CertsDirPrefix("TestTxnUserRestart"), serverutils.User(username.RootUser))
@@ -899,8 +917,10 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 
 				commitCount := s.MustGetSQLCounter(sql.MetaTxnCommitStarted.Name)
 				// This is the magic. Run the txn closure until all the retries are exhausted.
+				var execCount int
 				retryExec(t, sqlDB, rs, func(tx *gosql.Tx) bool {
-					return runTestTxn(t, tc.magicVals, tc.expectedErr, sqlDB, tx, sentinelInsert)
+					execCount++
+					return runTestTxn(t, s.ClusterSettings(), tc.magicVals, tc.expectedErr, sqlDB, tx, sentinelInsert, execCount)
 				})
 				checkRestarts(t, tc.magicVals)
 
