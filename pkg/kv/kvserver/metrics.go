@@ -4004,7 +4004,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.RdbBloomFilterPrefixChecked.Update(m.Filter.Hits + m.Filter.Misses)
 	sm.RdbMemtableTotalSize.Update(int64(m.MemTable.Size))
 	sm.RdbFlushes.Update(m.Flush.Count)
-	sm.RdbFlushedBytes.Update(int64(m.Levels[0].BytesFlushed))
+	sm.RdbFlushedBytes.Update(int64(m.Levels[0].TableBytesFlushed + m.Levels[0].BlobBytesFlushed))
 	sm.RdbCompactions.Update(m.Compact.Count)
 	sm.RdbIngestedBytes.Update(int64(m.IngestedBytes()))
 	compactedRead, compactedWritten := m.CompactedBytes()
@@ -4051,7 +4051,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.SecondaryCacheWriteBackFails.Update(m.SecondaryCacheMetrics.WriteBackFailures)
 	sm.RdbL0Sublevels.Update(int64(m.Levels[0].Sublevels))
 	sm.RdbL0NumFiles.Update(m.Levels[0].TablesCount)
-	sm.RdbL0BytesFlushed.Update(int64(m.Levels[0].BytesFlushed))
+	sm.RdbL0BytesFlushed.Update(int64(m.Levels[0].TableBytesFlushed + m.Levels[0].BlobBytesFlushed))
 	sm.FlushableIngestCount.Update(int64(m.Flush.AsIngestCount))
 	sm.FlushableIngestTableCount.Update(int64(m.Flush.AsIngestTableCount))
 	sm.FlushableIngestTableSize.Update(int64(m.Flush.AsIngestBytes))
@@ -4085,7 +4085,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 
 	totalWriteAmp := float64(0)
 	for level, stats := range m.Levels {
-		sm.RdbBytesIngested[level].Update(int64(stats.BytesIngested))
+		sm.RdbBytesIngested[level].Update(int64(stats.TableBytesIngested))
 		sm.RdbLevelSize[level].Update(stats.TablesSize)
 		sm.RdbLevelScore[level].Update(stats.Score)
 		totalWriteAmp += stats.WriteAmp()
