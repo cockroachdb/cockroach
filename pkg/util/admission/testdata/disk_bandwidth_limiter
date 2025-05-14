@@ -5,7 +5,7 @@ diskBandwidthLimiter (tokenUtilization 0.00, tokensUsed (elastic 0 B, snapshot 0
 # Since token utilization is from the previous estimation loop, we expect that to be +Inf in the first iteration.
 compute int-read-bytes=50 int-write-bytes=100 int-provisioned-bytes=1000 regular-tokens-used=60 snapshot-tokens-used=5 elastic-tokens-used=20
 ----
-diskBandwidthLimiter (tokenUtilization +Inf, tokensUsed (elastic 20 B, snapshot 5 B, regular 60 B) tokens (write 850 B (prev 0 B), read 50 B (prev 0 B)), writeBW 6 B/s, readBW 3 B/s, provisioned 66 B/s)
+diskBandwidthLimiter (tokenUtilization 0.00, tokensUsed (elastic 20 B, snapshot 5 B, regular 60 B) tokens (write 850 B (prev 0 B), read 50 B (prev 0 B)), writeBW 6 B/s, readBW 3 B/s, provisioned 66 B/s)
 
 # Utilization is now not Inf. For token calculation, we adjust using the max of smoothed read bytes and the current value. Here we use 80.
 compute int-read-bytes=80 int-write-bytes=150 int-provisioned-bytes=800 regular-tokens-used=100  snapshot-tokens-used=5 elastic-tokens-used=30
