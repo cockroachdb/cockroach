@@ -1785,10 +1785,10 @@ def go_deps():
         name = "com_github_cockroachdb_cmux",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/cmux",
-        sha256 = "88f6f9cf33eb535658540b46f6222f029398e590a3ff9cc873d7d561ac6debf0",
-        strip_prefix = "github.com/cockroachdb/cmux@v0.0.0-20170110192607-30d10be49292",
+        sha256 = "c1cf4cd99a1ad6a00f2ccd4188cbcf004cb0d56895670b2c171061ce564cd791",
+        strip_prefix = "github.com/cockroachdb/cmux@v0.0.0-20250514152509-914d3bf9ec58",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/cmux/com_github_cockroachdb_cmux-v0.0.0-20170110192607-30d10be49292.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/cmux/com_github_cockroachdb_cmux-v0.0.0-20250514152509-914d3bf9ec58.zip",
         ],
     )
     go_repository(
