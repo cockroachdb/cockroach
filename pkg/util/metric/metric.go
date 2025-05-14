@@ -962,25 +962,10 @@ func (c *CounterFloat64) Inc(i float64) {
 	c.count.Add(i)
 }
 
-// Update atomically sets the current value of the counter. The value must not
-// be smaller than the existing value.
-//
-// Update is intended to be used when the counter itself is not the source of
-// truth; instead it is a (periodically updated) copy of a counter that is
-// maintained elsewhere.
-func (c *CounterFloat64) Update(val float64) {
-	if buildutil.CrdbTestBuild {
-		if prev := c.count.Load(); val < prev {
-			panic(fmt.Sprintf("Counters should not decrease, prev: %f, new: %f.", prev, val))
-		}
-	}
-	c.count.Store(val)
-}
-
 // UpdateIfHigher atomically sets the current value of the counter, unless the
 // current value is already greater.
-func (c *CounterFloat64) UpdateIfHigher(i float64) {
-	c.count.StoreIfHigher(i)
+func (c *CounterFloat64) UpdateIfHigher(i float64) (old float64, updated bool) {
+	return c.count.StoreIfHigher(i)
 }
 
 func (c *CounterFloat64) Snapshot() *CounterFloat64 {
