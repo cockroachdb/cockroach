@@ -48,11 +48,6 @@ func Dial(target string, opts ...DialOption) (*ClientConn, error) {
 		dopts: dialOptions{chainUnaryInts: clientOptions.unaryInts},
 	}
 	chainUnaryClientInterceptors(cc)
-	//return &ClientConn{
-	//	conn:           drpcConn,
-	//	unaryIntercept: chainUnaryInterceptors(clientOptions.unaryInts...),
-	//	//streamInterceptor: chainStreamInterceptors(clientOptions.streamInts...),
-	//}, nil
 	return cc, nil
 }
 
@@ -74,38 +69,11 @@ func applyDialOptions(opts []DialOption) *ClientConnOptions {
 	return options
 }
 
-// Don't focus on this
-/*func chainUnaryInterceptors(interceptors ...UnaryClientInterceptor) UnaryClientInterceptor {
-	return func(ctx context.Context, rpc string, in, out drpc.Message, cc *ClientConn, enc drpc.Encoding, next UnaryInvoker) error {
-		var chained UnaryInvoker = func(ctx context.Context, rpc string, in, out drpc.Message, cc *ClientConn, enc drpc.Encoding) error {
-			return (cc.conn).Invoke(ctx, rpc, enc, in, out)
-		}
-		for i := len(interceptors) - 1; i >= 0; i-- {
-			interceptor := interceptors[i]
-			next := chained
-			chained = func(ctx context.Context, rpc string, in, out drpc.Message, cc *ClientConn, enc drpc.Encoding) error {
-				return interceptor(ctx, rpc, in, out, cc, next)
-			}
-		}
-		return chained(ctx, rpc, in, out, cc)
-	}
-}*/
-
 func TestFunction() error {
 	ctx := context.Background()
-	//// dial the drpc server with the drpc connection header
-	//rawconn, err := drpcmigrate.DialWithHeader(ctx, "tcp", "localhost:8080", drpcmigrate.DRPCHeader)
-	//if err != nil {
-	//	return err
-	//}
-	//// convert the net.Conn to a drpc.Conn
-	//conn := drpcconn.New(rawconn)
-	//defer conn.Close()
-	//// create a new drpc client from this conn
-
 	clientConn, err := Dial(
 		"localhost:9090",
-		WithUnaryInterceptor(logUnaryInterceptor() /*authUnaryInterceptor*/),
+		WithUnaryInterceptor(logUnaryInterceptor() /*, authUnaryInterceptor*/),
 		/*WithStreamInterceptor(logStreamInterceptor),*/
 	)
 	if err != nil {
@@ -116,11 +84,13 @@ func TestFunction() error {
 	req := &greeterpb.HelloRequest{
 		Name: "World",
 	}
+	// current way of invocation using generated drpc client
 	resp, err := client.SayHello(ctx, req)
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.Printf("Response: %s", resp.Message)
+	// previous way of invocation where we would need to know function name
 	//clientConn.Invoke(ctx, "TestFunction", nil, nil)
 
 	return nil

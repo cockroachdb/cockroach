@@ -43,13 +43,12 @@ func StartServer() error {
 			log.Fatalf("ListenMux run failed: %v", err)
 		}
 	}()
-	// grap the listen mux route for the DRPC Header and default listener
+	// grab the listen mux route for the DRPC Header and default listener
 	drpcLis := lisMux.Route(drpcmigrate.DRPCHeader)
 
 	// Create RPC server
 	greeter := &greeterServer{}
 	m := drpcmux.New()
-	//s := drpcserver.New(drpcmux.New())
 	// Register the greeter server
 	err = greeterpb.DRPCRegisterGreeter(m, greeter)
 	if err != nil {
@@ -57,22 +56,6 @@ func StartServer() error {
 	}
 	// Create DRPC server
 	s := drpcserver.New(m)
-	// Accept loop
-	/*for {
-		conn, err := lis.Accept()
-		log.Printf("accepted connection from %v", conn.RemoteAddr())
-		if err != nil {
-			log.Printf("failed to accept: %v", err)
-			continue
-		}
-		defer conn.Close()
-		go func() {
-			ctx := context.Background()
-			if err := s.ServeOne(ctx, conn); err != nil {
-				log.Printf("connection error: %v", err)
-			}
-		}()
-	}*/
 	ctx := context.Background()
 	return s.Serve(ctx, drpcLis)
 	return nil

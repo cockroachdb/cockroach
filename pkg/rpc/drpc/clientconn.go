@@ -11,8 +11,6 @@ type ClientConn struct {
 	conn  storjdrpc.Conn // this is not same as the connection returned from drpcpool.
 	enc   storjdrpc.Encoding
 	dopts dialOptions // Default and user specified dial options.
-	//unaryIntercept UnaryClientInterceptor
-	//streamInterceptor StreamClientInterceptor
 }
 
 type dialOptions struct {
@@ -27,14 +25,10 @@ func (cc *ClientConn) Close() error {
 	return cc.conn.Close()
 }
 
-//	func (cc *ClientConn) Invoke(ctx context.Context, method string, req, reply drpc.Message) error {
-//		return cc.unaryIntercept(ctx, method, req, reply, cc, func(ctx context.Context, method string, req, reply drpc.Message, cc *ClientConn) error {
-//			return (cc.conn).Invoke(ctx, method, cc.enc, req, reply)
-//		})
-//	}
 func (cc *ClientConn) Closed() <-chan struct{} {
 	return cc.conn.Closed()
 }
+
 func (cc *ClientConn) Invoke(
 	ctx context.Context, rpc string, enc storjdrpc.Encoding, in, out storjdrpc.Message,
 ) error {
