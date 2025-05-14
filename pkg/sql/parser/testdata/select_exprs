@@ -112,7 +112,7 @@ SELECT _ - _ -- literals removed
 SELECT -0. - -1 -- identifiers removed
 
 parse
-SELECT~~+~++~bd(*)
+SELECT~+~+~++~bd(*)
 ----
 SELECT ~(~(~(~bd(*)))) -- normalized!
 SELECT (~((~((~((~(bd((*)))))))))) -- fully parenthesized
