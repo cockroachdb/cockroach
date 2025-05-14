@@ -287,7 +287,7 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 
 		params.p.BufferClientNotice(
 			params.ctx,
-			pgnotice.Newf("Rolling restart is recommended after adding a region to system database in order to propogate region information."),
+			pgnotice.Newf("Rolling restart is recommended after adding a region to system database in order to propagate region information."),
 		)
 	}
 
@@ -402,23 +402,22 @@ func (p *planner) AlterDatabaseDropRegion(
 
 	removingPrimaryRegion := false
 	var toDrop []*typedesc.Mutable
+	typeID, err := dbDesc.MultiRegionEnumID()
+	if err != nil {
+		return nil, err
+	}
+	typeDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, typeID)
+	if err != nil {
+		return nil, err
+	}
+	regionEnumDesc := typeDesc.AsRegionEnumTypeDescriptor()
+	if regionEnumDesc == nil {
+		return nil, errors.AssertionFailedf(
+			"expected region enum type, not %s for type %q (%d)",
+			typeDesc.GetKind(), typeDesc.GetName(), typeDesc.GetID())
+	}
 	if dbDesc.RegionConfig.PrimaryRegion == catpb.RegionName(n.Region) {
 		removingPrimaryRegion = true
-
-		typeID, err := dbDesc.MultiRegionEnumID()
-		if err != nil {
-			return nil, err
-		}
-		typeDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, typeID)
-		if err != nil {
-			return nil, err
-		}
-		regionEnumDesc := typeDesc.AsRegionEnumTypeDescriptor()
-		if regionEnumDesc == nil {
-			return nil, errors.AssertionFailedf(
-				"expected region enum type, not %s for type %q (%d)",
-				typeDesc.GetKind(), typeDesc.GetName(), typeDesc.GetID())
-		}
 
 		// Ensure that there's only 1 region on the multi-region enum (the primary
 		// region) as this can only be dropped once all other regions have been
@@ -448,16 +447,16 @@ func (p *planner) AlterDatabaseDropRegion(
 		if isSystemDatabase {
 			return nil, pgerror.Newf(
 				pgcode.InvalidDatabaseDefinition,
-				"cannot drop %s; system database must have at least 1 region",
-				n.Region,
+				"cannot drop %q; system database must have at least 1 region",
+				catpb.RegionName(n.Region),
 			)
 		}
 		if allowDrop := allowDropFinalRegion.Get(&p.execCfg.Settings.SV); !allowDrop {
 			return nil, errors.WithHintf(
 				pgerror.Newf(
 					pgcode.InvalidDatabaseDefinition,
-					"cannot drop %s; databases in this cluster must have at least 1 region",
-					n.Region,
+					"cannot drop %q; databases in this cluster must have at least 1 region",
+					catpb.RegionName(n.Region),
 				),
 				"Try enabling the %s cluster setting.",
 				allowDropFinalRegion.Name(),
@@ -488,47 +487,6 @@ func (p *planner) AlterDatabaseDropRegion(
 		}
 	}
 
-	// If this is the system database, we can only drop a region if it is
-	// not a part of any other database.
-	if isSystemDatabase := dbDesc.ID == keys.SystemDatabaseID; isSystemDatabase {
-		if err := p.checkCanDropSystemDatabaseRegion(ctx, n.Region); err != nil {
-			return nil, err
-		}
-		tablesToClean := []string{"sqlliveness", "lease", "sql_instances"}
-		for _, t := range tablesToClean {
-			livenessQuery := fmt.Sprintf(
-				`SELECT count(*) > 0 FROM system.%s WHERE crdb_region = '%s' AND 
-          crdb_internal.sql_liveness_is_alive(session_id)`, t, n.Region)
-			row, err := p.QueryRowEx(ctx, "check-session-liveness-for-region",
-				sessiondata.NodeUserSessionDataOverride, livenessQuery)
-			if err != nil {
-				return nil, err
-			}
-			// Block dropping n.Region if any associated session is active.
-			if tree.MustBeDBool(row[0]) {
-				return nil, errors.WithHintf(
-					pgerror.Newf(
-						pgcode.InvalidDatabaseDefinition,
-						"cannot drop region %q",
-						n.Region,
-					),
-					"You must not have any active sessions that are in this region. "+
-						"Ensure that there no nodes that still belong to region %q", n.Region,
-				)
-			}
-		}
-		// For the region_liveness table, we can just safely remove the reference
-		// (if any) of the dropping region from the table.
-		if _, err := p.ExecEx(ctx, "remove-region-liveness-ref",
-			sessiondata.NodeUserSessionDataOverride, `DELETE FROM system.region_liveness
-			        WHERE crdb_region = $1`, n.Region); err != nil {
-			return nil, err
-		}
-		if err := regionliveness.CleanupSystemTableForRegion(ctx, p.execCfg.Codec, n.Region.String(), p.txn); err != nil {
-			return nil, err
-		}
-	}
-
 	// Ensure survivability goal and number of regions after the drop jive.
 	regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, dbDesc.ID, p.Descriptors())
 	if err != nil {
@@ -548,7 +506,9 @@ func (p *planner) AlterDatabaseDropRegion(
 
 // checkCanDropSystemDatabaseRegion checks if region is in use in any database
 // other than the system database. If it is, an error is returned.
-func (p *planner) checkCanDropSystemDatabaseRegion(ctx context.Context, region tree.Name) error {
+func (p *planner) checkCanDropSystemDatabaseRegion(
+	ctx context.Context, region catpb.RegionName,
+) error {
 	dbs, err := p.Descriptors().GetAllDatabases(ctx, p.txn)
 	if err != nil {
 		return err
@@ -618,10 +578,37 @@ func (p *planner) checkCanDropSystemDatabaseRegion(ctx context.Context, region t
 		})
 		return errors.WithHintf(
 			pgerror.Newf(pgcode.DependentObjectsStillExist,
-				"cannot drop region %v from the system database while that region is still in use",
-				&region,
+				"cannot drop region %q from the system database while that region is still in use",
+				region,
 			), "region is in use by databases: %v", &databases)
 	}
+
+	tablesToClean := []string{"sqlliveness", "lease", "sql_instances"}
+	for _, t := range tablesToClean {
+		// Use the synchronous version of sql_liveness_is_alive to make sure
+		// data is fresh.
+		livenessQuery := fmt.Sprintf(
+			`SELECT count(*) > 0 FROM system.%s WHERE crdb_region = $1 AND
+          crdb_internal.sql_liveness_is_alive(session_id, true)`, t)
+		row, err := p.QueryRowEx(ctx, "check-session-liveness-for-region",
+			sessiondata.NodeUserSessionDataOverride, livenessQuery, region)
+		if err != nil {
+			return err
+		}
+		// Block dropping n.Region if any associated session is active.
+		if tree.MustBeDBool(row[0]) {
+			return errors.WithHintf(
+				pgerror.Newf(
+					pgcode.InvalidDatabaseDefinition,
+					"cannot drop region %q from the system database while there are live nodes in that region",
+					region,
+				),
+				"You must not have any active sessions that are in this region. "+
+					"Ensure that there no nodes that still belong to region %q", region,
+			)
+		}
+	}
+
 	return nil
 }
 
@@ -798,6 +785,54 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 		return err
 	}
 
+	// Resolve the physical value for this region.
+	var physicalRegionRep []byte
+	for i := 0; i < typeDesc.NumEnumMembers(); i++ {
+		if typeDesc.GetMemberLogicalRepresentation(i) == string(n.n.Region) {
+			physicalRegionRep = typeDesc.GetMemberPhysicalRepresentation(i)
+			break
+		}
+	}
+
+	if len(physicalRegionRep) == 0 {
+		if n.n.IfExists {
+			params.p.BufferClientNotice(
+				params.ctx,
+				pgnotice.Newf("region %q is not defined on the database; skipping", n.n.Region),
+			)
+			return nil
+		}
+		return pgerror.Newf(
+			pgcode.UndefinedObject,
+			"region %q has not been added to the database",
+			n.n.Region,
+		)
+	}
+
+	// If the region is being dropped from the system database, we need to make
+	// sure no other databases are using that region and there are no nodes alive
+	// in that region. Then we must clean out all the rows from system tables that
+	// reference the region.
+	if n.desc.GetID() == keys.SystemDatabaseID {
+		if err := params.p.checkCanDropSystemDatabaseRegion(params.ctx, catpb.RegionName(n.n.Region)); err != nil {
+			return err
+		}
+
+		// For the region_liveness table, we can just safely remove the reference
+		// (if any) of the dropping region from the table.
+		if _, err := params.p.ExecEx(params.ctx, "remove-region-liveness-ref",
+			sessiondata.NodeUserSessionDataOverride, `DELETE FROM system.region_liveness
+			        WHERE crdb_region = $1`, n.n.Region); err != nil {
+			return err
+		}
+
+		if err := regionliveness.CleanupSystemTableForRegion(
+			params.ctx, params.p.execCfg.Codec, string(physicalRegionRep), params.p.txn,
+		); err != nil {
+			return err
+		}
+	}
+
 	if n.removingPrimaryRegion {
 		telemetry.Inc(sqltelemetry.AlterDatabaseDropPrimaryRegionCounter)
 		for _, desc := range n.toDrop {
@@ -832,20 +867,6 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 		// ROW table is homed in that region. The type schema changer is responsible
 		// for all the requisite validation.
 		if err := params.p.dropEnumValue(params.ctx, typeDesc, tree.EnumValue(n.n.Region)); err != nil {
-			if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
-				if n.n.IfExists {
-					params.p.BufferClientNotice(
-						params.ctx,
-						pgnotice.Newf("region %q is not defined on the database; skipping", n.n.Region),
-					)
-					return nil
-				}
-				return pgerror.Newf(
-					pgcode.UndefinedObject,
-					"region %q has not been added to the database",
-					n.n.Region,
-				)
-			}
 			return err
 		}
 	}
