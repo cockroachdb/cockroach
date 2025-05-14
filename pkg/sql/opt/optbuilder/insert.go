@@ -298,7 +298,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		if ins.OnConflict != nil {
 			panic(errors.AssertionFailedf("vectorized insert with on conflict is not supported"))
 		}
-		if ins.Returning != nil {
+		if ins.Returning != tree.AbsentReturningClause {
 			panic(errors.AssertionFailedf("vectorized insert with returning is not supported"))
 		}
 	}
