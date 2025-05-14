@@ -551,8 +551,8 @@ func (r *replicaLogStorage) stagePendingTruncationOnSnapshotRaftMuLocked(
 	// up that it wants to append to the log[1] (on top of the snapshot), as these
 	// entries are not yet stable and thus not in the log/cache yet.
 	//
-	// [1]: this is not properly supported yet and will currently fatal, see:
-	// TODO(during review) I couldn't find the issue, but I'm pretty sure we have one?
+	// [1]: this is not properly supported yet and will currently fatal.
+	// See: https://github.com/cockroachdb/cockroach/pull/125530
 	r.stagePendingTruncationSharedRaftMuLockedMuLocked(pendingTruncation{
 		RaftTruncatedState: truncState,
 		expectedFirstIndex: r.shMu.trunc.Index + 1,
