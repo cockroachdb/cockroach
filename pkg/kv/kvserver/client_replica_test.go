@@ -6250,7 +6250,10 @@ func TestMergeDropsLocksIfLargerThanMax(t *testing.T) {
 
 func TestMergeReplicatesLocks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+	scope := log.Scope(t)
+	defer scope.Close(t)
+
+	skip.UnderDuress(t, "too slow for testrace")
 
 	// Test Setup:
 	//
@@ -6288,9 +6291,25 @@ func TestMergeReplicatesLocks(t *testing.T) {
 					Settings: st,
 				},
 			})
+			defer tc.Stopper().Stop(ctx)
+
+			defer func() {
+				if !t.Failed() {
+					return
+				}
+				d := kvtestutils.RaftLogDumper{Dir: scope.GetDirectory()}
+				for _, srv := range tc.Servers {
+					require.NoError(t, srv.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+						s.VisitReplicas(func(replica *kvserver.Replica) (wantMore bool) {
+							d.Dump(t, s.LogEngine(), s.StoreID(), replica.RangeID)
+							return true // more
+						})
+						return nil
+					}))
+				}
+			}()
 
 			sql := tc.ServerConn(0)
-			defer tc.Stopper().Stop(ctx)
 			scratch := tc.ScratchRange(t)
 			mkKey := func(s string) roachpb.Key {
 				prefix := scratch.Clone()
