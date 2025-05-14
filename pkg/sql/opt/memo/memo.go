@@ -202,6 +202,7 @@ type Memo struct {
 	preferBoundedCardinality                   bool
 	minRowCount                                float64
 	checkInputMinRowCount                      float64
+	useExistsFilterHoistRule                   bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -295,6 +296,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		preferBoundedCardinality:                   evalCtx.SessionData().OptimizerPreferBoundedCardinality,
 		minRowCount:                                evalCtx.SessionData().OptimizerMinRowCount,
 		checkInputMinRowCount:                      evalCtx.SessionData().OptimizerCheckInputMinRowCount,
+		useExistsFilterHoistRule:                   evalCtx.SessionData().OptimizerUseExistsFilterHoistRule,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -466,6 +468,7 @@ func (m *Memo) IsStale(
 		m.preferBoundedCardinality != evalCtx.SessionData().OptimizerPreferBoundedCardinality ||
 		m.minRowCount != evalCtx.SessionData().OptimizerMinRowCount ||
 		m.checkInputMinRowCount != evalCtx.SessionData().OptimizerCheckInputMinRowCount ||
+		m.useExistsFilterHoistRule != evalCtx.SessionData().OptimizerUseExistsFilterHoistRule ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
