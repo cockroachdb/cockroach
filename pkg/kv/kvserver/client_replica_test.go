@@ -6253,6 +6253,8 @@ func TestMergeReplicatesLocks(t *testing.T) {
 	scope := log.Scope(t)
 	defer scope.Close(t)
 
+	skip.UnderDuress(t, "too slow for testrace")
+
 	// Test Setup:
 	//
 	// txn1: holding lock on key k1
