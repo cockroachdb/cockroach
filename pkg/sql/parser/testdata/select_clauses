@@ -874,6 +874,70 @@ SELECT a FROM t WHERE a NOT ILIKE b -- literals removed
 SELECT _ FROM _ WHERE _ NOT ILIKE _ -- identifiers removed
 
 parse
+SELECT a ~~* b
+----
+SELECT a ILIKE b -- normalized!
+SELECT ((a) ILIKE (b)) -- fully parenthesized
+SELECT a ILIKE b -- literals removed
+SELECT _ ILIKE _ -- identifiers removed
+
+parse
+SELECT a ~~* 'foo'
+----
+SELECT a ILIKE 'foo' -- normalized!
+SELECT ((a) ILIKE ('foo')) -- fully parenthesized
+SELECT a ILIKE '_' -- literals removed
+SELECT _ ILIKE 'foo' -- identifiers removed
+
+parse
+SELECT a FROM t WHERE a ~~* b
+----
+SELECT a FROM t WHERE a ILIKE b -- normalized!
+SELECT (a) FROM t WHERE ((a) ILIKE (b)) -- fully parenthesized
+SELECT a FROM t WHERE a ILIKE b -- literals removed
+SELECT _ FROM _ WHERE _ ILIKE _ -- identifiers removed
+
+parse
+SELECT a FROM t WHERE a ~~* 'foo'
+----
+SELECT a FROM t WHERE a ILIKE 'foo' -- normalized!
+SELECT (a) FROM t WHERE ((a) ILIKE ('foo')) -- fully parenthesized
+SELECT a FROM t WHERE a ILIKE '_' -- literals removed
+SELECT _ FROM _ WHERE _ ILIKE 'foo' -- identifiers removed
+
+parse
+SELECT a !~~* b
+----
+SELECT a NOT ILIKE b -- normalized!
+SELECT ((a) NOT ILIKE (b)) -- fully parenthesized
+SELECT a NOT ILIKE b -- literals removed
+SELECT _ NOT ILIKE _ -- identifiers removed
+
+parse
+SELECT a !~~* 'foo'
+----
+SELECT a NOT ILIKE 'foo' -- normalized!
+SELECT ((a) NOT ILIKE ('foo')) -- fully parenthesized
+SELECT a NOT ILIKE '_' -- literals removed
+SELECT _ NOT ILIKE 'foo' -- identifiers removed
+
+parse
+SELECT a FROM t WHERE a !~~* b
+----
+SELECT a FROM t WHERE a NOT ILIKE b -- normalized!
+SELECT (a) FROM t WHERE ((a) NOT ILIKE (b)) -- fully parenthesized
+SELECT a FROM t WHERE a NOT ILIKE b -- literals removed
+SELECT _ FROM _ WHERE _ NOT ILIKE _ -- identifiers removed
+
+parse
+SELECT a FROM t WHERE a !~~* 'foo'
+----
+SELECT a FROM t WHERE a NOT ILIKE 'foo' -- normalized!
+SELECT (a) FROM t WHERE ((a) NOT ILIKE ('foo')) -- fully parenthesized
+SELECT a FROM t WHERE a NOT ILIKE '_' -- literals removed
+SELECT _ FROM _ WHERE _ NOT ILIKE 'foo' -- identifiers removed
+
+parse
 SELECT a FROM t WHERE a SIMILAR TO b
 ----
 SELECT a FROM t WHERE a SIMILAR TO b

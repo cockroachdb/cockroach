@@ -286,7 +286,7 @@ func (s *SQLScanner) Scan(lval ScanSymType) {
 				s.pos++
 				lval.SetID(lexbase.NOT_REGIMATCH)
 				return
-			case '~': // !~~
+			case '~': // !~~ or !~~*
 				s.pos--
 				lval.SetID(lexbase.NOT)
 				return
@@ -430,6 +430,12 @@ func (s *SQLScanner) Scan(lval ScanSymType) {
 			return
 		case '~': // ~~
 			s.pos++
+			switch s.peek() {
+			case '*': // ~~*
+				s.pos++
+				lval.SetID(lexbase.ILIKE)
+				return
+			}
 			lval.SetID(lexbase.LIKE)
 			return
 		}
