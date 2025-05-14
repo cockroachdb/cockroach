@@ -41,6 +41,16 @@ eval
 unsupported unary operator: ~ <string>
 
 eval
+'TEST' ~~* 'test'
+----
+true
+
+eval
+'TEST' !~~* 'test'
+----
+false
+
+eval
 '' LIKE ''
 ----
 true
