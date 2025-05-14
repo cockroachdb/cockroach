@@ -64,9 +64,20 @@ func (p PrivilegeDescriptor) findUserIndex(user username.SQLUsername) int {
 	return -1
 }
 
-// FindUser looks for a specific user in the list.
+// AtomicFindUser looks for a specific user in the list.
 // Returns (nil, false) if not found, or (obj, true) if found.
-func (p PrivilegeDescriptor) FindUser(user username.SQLUsername) (*UserPrivileges, bool) {
+func (p PrivilegeDescriptor) AtomicFindUser(user username.SQLUsername) (*UserPrivileges, bool) {
+	// This ensures thread safety when multiple goroutines are modifying/reading privileges.
+	idx := getSafePriv().atomicFindUserIndex(user, p)
+	if idx == -1 {
+		return nil, false
+	}
+	return &p.Users[idx], true
+}
+
+// findUser looks for a specific user in the list.
+// Returns (nil, false) if not found, or (obj, true) if found.
+func (p PrivilegeDescriptor) findUser(user username.SQLUsername) (*UserPrivileges, bool) {
 	idx := p.findUserIndex(user)
 	if idx == -1 {
 		return nil, false
@@ -95,7 +106,8 @@ func (p *PrivilegeDescriptor) FindOrCreateUser(user username.SQLUsername) *UserP
 
 // RemoveUser looks for a given user in the list and removes it if present.
 func (p *PrivilegeDescriptor) RemoveUser(user username.SQLUsername) {
-	idx := p.findUserIndex(user)
+	// This ensures thread safety when multiple goroutines are modifying/reading privileges.
+	idx := getSafePriv().atomicFindUserIndex(user, *p)
 	if idx == -1 {
 		// Not found.
 		return
@@ -213,7 +225,7 @@ func NewBaseFunctionPrivilegeDescriptor(owner username.SQLUsername) *PrivilegeDe
 func (p *PrivilegeDescriptor) CheckGrantOptions(
 	user username.SQLUsername, privList privilege.List,
 ) bool {
-	userPriv, exists := p.FindUser(user)
+	userPriv, exists := p.AtomicFindUser(user)
 	if !exists {
 		return false
 	}
@@ -236,37 +248,8 @@ func (p *PrivilegeDescriptor) CheckGrantOptions(
 func (p *PrivilegeDescriptor) Grant(
 	user username.SQLUsername, privList privilege.List, withGrantOption bool,
 ) {
-	userPriv := p.FindOrCreateUser(user)
-	if privilege.ALL.IsSetIn(userPriv.WithGrantOption) && privilege.ALL.IsSetIn(userPriv.Privileges) {
-		// User already has 'ALL' privilege: no-op.
-		// If userPriv.WithGrantOption has ALL, then userPriv.Privileges must also have ALL.
-		// It is possible however for userPriv.Privileges to have ALL but userPriv.WithGrantOption to not have ALL
-		return
-	}
-
-	if privilege.ALL.IsSetIn(userPriv.Privileges) && !withGrantOption {
-		// A user can hold all privileges but not all grant options.
-		// If a user holds all privileges but withGrantOption is False,
-		// there is nothing left to be done
-		return
-	}
-
-	bits := privList.ToBitField()
-	if privilege.ALL.IsSetIn(bits) {
-		// Granting 'ALL' privilege: overwrite.
-		// TODO(marc): the grammar does not allow it, but we should
-		// check if other privileges are being specified and error out.
-		userPriv.Privileges = privilege.ALL.Mask()
-		if withGrantOption {
-			userPriv.WithGrantOption = privilege.ALL.Mask()
-		}
-		return
-	}
-
-	if withGrantOption {
-		userPriv.WithGrantOption |= bits
-	}
-	userPriv.Privileges |= bits
+	// This ensures thread safety when multiple goroutines are modifying/reading privileges.
+	getSafePriv().atomicGrant(user, privList, withGrantOption, p)
 }
 
 // Revoke removes privileges from this descriptor for a given list of users.
@@ -276,7 +259,7 @@ func (p *PrivilegeDescriptor) Revoke(
 	objectType privilege.ObjectType,
 	grantOptionFor bool,
 ) error {
-	userPriv, ok := p.FindUser(user)
+	userPriv, ok := p.AtomicFindUser(user)
 	if !ok || userPriv.Privileges == 0 {
 		// Removing privileges from a user without privileges is a no-op.
 		return nil
@@ -364,7 +347,7 @@ func (p PrivilegeDescriptor) ValidateSuperuserPrivileges(
 		// We expect an "admin" role. Check that it has desired superuser permissions.
 		username.AdminRoleName(),
 	} {
-		superPriv, ok := p.FindUser(user)
+		superPriv, ok := p.AtomicFindUser(user)
 		if !ok {
 			return fmt.Errorf(
 				"user %s does not have privileges over %s",
@@ -506,22 +489,7 @@ func (p PrivilegeDescriptor) Show(
 
 // CheckPrivilege returns true if 'user' has 'privilege' on this descriptor.
 func (p PrivilegeDescriptor) CheckPrivilege(user username.SQLUsername, priv privilege.Kind) bool {
-	if p.Owner() == user {
-		return true
-	}
-	userPriv, ok := p.FindUser(user)
-	if !ok {
-		// User "node" has all privileges.
-		return user.IsNodeUser()
-	}
-
-	if privilege.ALL.IsSetIn(userPriv.Privileges) && priv != privilege.NOSQLLOGIN {
-		// Since NOSQLLOGIN is a "negative" privilege, it's ignored for the ALL
-		// check. It's poor UX for someone with ALL privileges to not be able to
-		// log in.
-		return true
-	}
-	return priv.IsSetIn(userPriv.Privileges)
+	return getSafePriv().atomicCheckPrivilege(p, user, priv)
 }
 
 // AnyPrivilege returns true if 'user' has any privilege on this descriptor.
@@ -529,7 +497,7 @@ func (p PrivilegeDescriptor) AnyPrivilege(user username.SQLUsername) bool {
 	if p.Owner() == user {
 		return true
 	}
-	userPriv, ok := p.FindUser(user)
+	userPriv, ok := p.AtomicFindUser(user)
 	if !ok {
 		return false
 	}

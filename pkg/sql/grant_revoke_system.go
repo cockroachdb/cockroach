@@ -75,7 +75,7 @@ VALUES ($1, $2, $3, $4, (
 			for _, user := range n.grantees {
 				syntheticPrivDesc.Grant(user, n.desiredprivs, n.withGrantOption)
 
-				userPrivs, found := syntheticPrivDesc.FindUser(user)
+				userPrivs, found := syntheticPrivDesc.AtomicFindUser(user)
 				if !found {
 					return errors.AssertionFailedf("user %s not found", user)
 				}
@@ -127,7 +127,7 @@ VALUES ($1, $2, $3, $4, (
 				if err := syntheticPrivDesc.Revoke(user, n.desiredprivs, n.grantOn, n.withGrantOption); err != nil {
 					return err
 				}
-				userPrivs, found := syntheticPrivDesc.FindUser(user)
+				userPrivs, found := syntheticPrivDesc.AtomicFindUser(user)
 
 				// For Public role and virtual tables, leave an empty
 				// row to indicate that SELECT has been revoked.

@@ -139,7 +139,7 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		changePrivilege: func(
 			privDesc *catpb.PrivilegeDescriptor, privileges privilege.List, grantee username.SQLUsername,
 		) (changed bool, retErr error) {
-			granteePrivs, ok := privDesc.FindUser(grantee)
+			granteePrivs, ok := privDesc.AtomicFindUser(grantee)
 			if !ok {
 				return false, nil
 			}
@@ -147,7 +147,7 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 			if err := privDesc.Revoke(grantee, privileges, grantOn, n.GrantOptionFor); err != nil {
 				return false, err
 			}
-			granteePrivs, ok = privDesc.FindUser(grantee)
+			granteePrivs, ok = privDesc.AtomicFindUser(grantee)
 			// Revoke results in any privilege changes if
 			//   1. grantee's entry is removed from the privilege descriptor, or
 			//   2. grantee's entry is changed in its content.
