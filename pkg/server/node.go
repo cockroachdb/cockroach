@@ -77,6 +77,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
@@ -2108,8 +2109,26 @@ type lockedMuxStream struct {
 func (s *lockedMuxStream) SendIsThreadSafe() {}
 
 func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
+	// The threshold of 10s was borrowed from `slowDistSenderReplicaThreshold`
+	// in `dist_sender`, where it was deemed to be a reasonable latency
+	// threshold for an RPC to a single replica (as is the case here).
+	const slowMuxStreamSendThreshold = 10 * time.Second
+
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
+
+	// Our intent is to provide observability into a slow client from the server node.
+	// So, we don't include the lock acquisition time, as it is confounded by other
+	// factors, e.g., the number of rangefeeds contending for the lockedMuxStream.
+	start := crtime.NowMono()
+	defer func() {
+		if dur := start.Elapsed(); dur > slowMuxStreamSendThreshold {
+			log.Infof(s.wrapped.Context(),
+				"slow send on stream %d for r%d took %s",
+				e.StreamID, e.RangeID, dur)
+		}
+	}()
+
 	return s.wrapped.Send(e)
 }
 
