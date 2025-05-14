@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -221,7 +222,7 @@ type Flags struct {
 	File string
 
 	// PostQueryLevels limits the depth of recursive post-queries for
-	// build-post-queries.
+	// build-post-queries and opt-post-queries.
 	PostQueryLevels int
 
 	// NoStableFolds controls whether constant folding for normalization includes
@@ -354,7 +355,16 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //   - build-post-queries [flags]
 //
 //     Builds a query and then recursively builds cascading queries and AFTER
-//     triggers. Outputs all unoptimized plans.
+//     triggers. Outputs all unoptimized plans. NOTE: the column IDs in the
+//     displayed plan will be higher than those used during execution, because
+//     the execution plan is built with a different memo.
+//
+//   - opt-post-queries [flags]
+//
+//     Builds a query and then recursively builds cascading queries and AFTER
+//     triggers. Outputs all optimized plans. NOTE: the column IDs in the
+//     displayed plan will be higher than those used during execution, because
+//     the execution plan is built with a different memo.
 //
 //   - optsteps [flags]
 //
@@ -521,7 +531,7 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //   - inject-stats: the file path is relative to the test file.
 //
 //   - post-query-levels: used to limit the depth of recursive cascades for
-//     build-post-queries.
+//     build-post-queries and opt-post-queries.
 //
 //   - index-version: controls the version of the index descriptor created in
 //     the test catalog. This is used by the exec-ddl command for CREATE INDEX
@@ -684,81 +694,18 @@ func (ot *OptTester) runCommandInternal(tb testing.TB, d *datadriven.TestData) s
 		return ot.FormatExpr(e)
 
 	case "build-post-queries":
-		o := ot.makeOptimizer()
-		o.DisableOptimizations()
-		if err := ot.buildExpr(o.Factory()); err != nil {
+		result, err := ot.PostQueries(false /* optimize */)
+		if err != nil {
 			d.Fatalf(tb, "%+v", err)
 		}
-		e := o.Memo().RootExpr()
+		return result
 
-		var buildPostQueries func(e opt.Expr, tp treeprinter.Node, level int)
-		buildPostQueries = func(e opt.Expr, tp treeprinter.Node, level int) {
-			if ot.Flags.PostQueryLevels != 0 && level > ot.Flags.PostQueryLevels {
-				return
-			}
-			if opt.IsMutationOp(e) {
-				p := e.Private().(*memo.MutationPrivate)
-				inputRel := e.Child(0).(memo.RelExpr).Relational()
-
-				// Cascades need a map from the original memo to the one they are being
-				// built from. Since we're using the same memo to build the cascades, we
-				// build an identity map for the mutation's input columns.
-				var colMap opt.ColMap
-				inputRel.OutputCols.ForEach(func(col opt.ColumnID) {
-					colMap.Set(int(col), int(col))
-				})
-
-				for _, c := range p.FKCascades {
-					// We use the same memo to build the cascade. This makes the entire
-					// tree easier to read (e.g. the column IDs won't overlap).
-					cascade, err := c.Builder.Build(
-						context.Background(),
-						&ot.semaCtx,
-						&ot.evalCtx,
-						ot.catalog,
-						o.Factory(),
-						c.WithID,
-						inputRel,
-						colMap,
-					)
-					if err != nil {
-						d.Fatalf(tb, "error building cascade: %+v", err)
-					}
-					n := tp.Child("cascade")
-					n.Child(strings.TrimRight(ot.FormatExpr(cascade), "\n"))
-					buildPostQueries(cascade, n, level+1)
-				}
-				if t := p.AfterTriggers; t != nil {
-					// We use the same memo to build the triggers. This makes the entire
-					// tree easier to read (e.g. the column IDs won't overlap).
-					triggers, err := t.Builder.Build(
-						context.Background(),
-						&ot.semaCtx,
-						&ot.evalCtx,
-						ot.catalog,
-						o.Factory(),
-						t.WithID,
-						inputRel,
-						colMap,
-					)
-					if err != nil {
-						d.Fatalf(tb, "error building triggers: %+v", err)
-					}
-					n := tp.Child("after-triggers")
-					n.Child(strings.TrimRight(ot.FormatExpr(triggers), "\n"))
-					buildPostQueries(triggers, n, level+1)
-				}
-			}
-			for i := 0; i < e.ChildCount(); i++ {
-				buildPostQueries(e.Child(i), tp, level)
-			}
+	case "opt-post-queries":
+		result, err := ot.PostQueries(true /* optimize */)
+		if err != nil {
+			d.Fatalf(tb, "%+v", err)
 		}
-		tp := treeprinter.New()
-		root := tp.Child("root")
-		root.Child(strings.TrimRight(ot.FormatExpr(e), "\n"))
-		buildPostQueries(e, root, 1)
-
-		return tp.String()
+		return result
 
 	case "optsteps":
 		result, err := ot.OptSteps(true /* explore */)
@@ -2512,4 +2459,121 @@ func (ot *OptTester) StatementBundle(tb testing.TB) error {
 		}
 	}
 	return nil
+}
+
+func (ot *OptTester) PostQueries(optimize bool) (string, error) {
+	o := ot.makeOptimizer()
+	if !optimize {
+		o.DisableOptimizations()
+	}
+	if err := ot.buildExpr(o.Factory()); err != nil {
+		return "", err
+	}
+	e := o.Memo().RootExpr()
+
+	formatExpr := func(n treeprinter.Node, name string, expr opt.Expr) error {
+		var exprStr string
+		if optimize {
+			var o2 xform.Optimizer
+			o2.Init(ot.ctx, &ot.evalCtx, ot.catalog)
+			o2.Factory().CopyMetadataFrom(o.Memo())
+			o2.Memo().SetRoot(expr.(memo.RelExpr), &physical.Required{})
+			optimizedExpr, err := o2.Optimize()
+			if err != nil {
+				return errors.Wrapf(err, "error optimizing %s", name)
+			}
+			mem := o2.Memo()
+			exprStr = memo.FormatExpr(
+				ot.ctx, optimizedExpr, ot.Flags.ExprFormat, false /* redactableValues */, mem, ot.catalog,
+			)
+		} else {
+			exprStr = ot.FormatExpr(expr)
+		}
+		n.Child(strings.TrimRight(exprStr, "\n"))
+		return nil
+	}
+
+	var buildPostQueries func(e opt.Expr, tp treeprinter.Node, level int) error
+	buildPostQueries = func(e opt.Expr, tp treeprinter.Node, level int) error {
+		if ot.Flags.PostQueryLevels != 0 && level > ot.Flags.PostQueryLevels {
+			return nil
+		}
+		if opt.IsMutationOp(e) {
+			p := e.Private().(*memo.MutationPrivate)
+			inputRel := e.Child(0).(memo.RelExpr).Relational()
+
+			// Cascades need a map from the original memo to the one they are being
+			// built from. Since we're using the same memo to build the cascades, we
+			// build an identity map for the mutation's input columns.
+			var colMap opt.ColMap
+			inputRel.OutputCols.ForEach(func(col opt.ColumnID) {
+				colMap.Set(int(col), int(col))
+			})
+
+			for _, c := range p.FKCascades {
+				// We use the same memo to build the cascade. This makes the entire
+				// tree easier to read (e.g. the column IDs won't overlap).
+				cascade, err := c.Builder.Build(
+					context.Background(),
+					&ot.semaCtx,
+					&ot.evalCtx,
+					ot.catalog,
+					o.Factory(),
+					c.WithID,
+					inputRel,
+					colMap,
+				)
+				if err != nil {
+					return errors.Wrap(err, "error building cascade")
+				}
+				n := tp.Child("cascade")
+				if err = formatExpr(n, "cascade", cascade); err != nil {
+					return err
+				}
+				if err = buildPostQueries(cascade, n, level+1); err != nil {
+					return err
+				}
+			}
+			if t := p.AfterTriggers; t != nil {
+				// We use the same memo to build the triggers. This makes the entire
+				// tree easier to read (e.g. the column IDs won't overlap).
+				triggers, err := t.Builder.Build(
+					context.Background(),
+					&ot.semaCtx,
+					&ot.evalCtx,
+					ot.catalog,
+					o.Factory(),
+					t.WithID,
+					inputRel,
+					colMap,
+				)
+				if err != nil {
+					return errors.Wrap(err, "error building triggers")
+				}
+				n := tp.Child("after-triggers")
+				if err = formatExpr(n, "triggers", triggers); err != nil {
+					return err
+				}
+				if err = buildPostQueries(triggers, n, level+1); err != nil {
+					return err
+				}
+			}
+		}
+		for i := 0; i < e.ChildCount(); i++ {
+			if err := buildPostQueries(e.Child(i), tp, level); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	tp := treeprinter.New()
+	root := tp.Child("root")
+	if err := formatExpr(root, "root", e); err != nil {
+		return "", err
+	}
+	if err := buildPostQueries(e, root, 1); err != nil {
+		return "", err
+	}
+
+	return tp.String(), nil
 }
