@@ -2108,8 +2108,16 @@ type lockedMuxStream struct {
 func (s *lockedMuxStream) SendIsThreadSafe() {}
 
 func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
+	// TODO(michael): where should this be defined and what's a reasonable threshold?
+	const slowMuxStreamLockLogThreshold = 0 * time.Minute
+	start := timeutil.Now()
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
+	if dur := time.Since(start); dur > slowMuxStreamLockLogThreshold {
+		log.Infof(s.wrapped.Context(),
+			"slow lock acquisition on stream %d for r%d took %s",
+			e.StreamID, e.RangeID, dur)
+	}
 	return s.wrapped.Send(e)
 }
 
