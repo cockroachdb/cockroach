@@ -623,10 +623,20 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 	var targetUniqueConstraint *UniqueConstraint
 	targetCols := toCols
 	if targetTable.IsRegionalByRow() {
-		targetCols = make([]int, 0, len(toCols)+1)
-		targetCols =
-			append(targetCols, targetTable.FindOrdinal(string(targetTable.implicitRBRIndexElem.Column)))
-		targetCols = append(targetCols, toCols...)
+		// Add the RBR column for validation if it wasn't specified.
+		rbrCol := targetTable.FindOrdinal(string(targetTable.implicitRBRIndexElem.Column))
+		rbrColSpecified := false
+		for _, col := range toCols {
+			if col == rbrCol {
+				rbrColSpecified = true
+				break
+			}
+		}
+		if !rbrColSpecified {
+			targetCols = make([]int, 0, len(toCols)+1)
+			targetCols = append(targetCols, rbrCol)
+			targetCols = append(targetCols, toCols...)
+		}
 	}
 	for _, idx := range targetTable.Indexes {
 		if indexMatches(idx, targetCols, true /* strict */) {
