@@ -7,7 +7,6 @@ package kvserver
 
 import (
 	"context"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -534,13 +533,12 @@ func (r *replicaLogStorage) stagePendingTruncationOnSnapshotRaftMuLocked(
 	//
 	// The truncation finalized below, after the snapshot is visible.
 
-	// TODO(during review): when is it actually safe to clear the cache if we
-	// don't want to do it under both mutexes? The main addition to the cache does
-	// hold raftMu (append) but there are various paths into the cache coming
-	// through LoadEntries and via term loading. It would be easier if we only
-	// added to the cache in the one place that seems to matter - entry append.
-	// Is that a change we should make now, while we're here?
-	r.cache.Clear(r.ls.RangeID, math.MaxUint64)
+	// Clear the raft entry cache at the end of this method (after mu has
+	// been released). This means that the cache will lag the disk, but since
+	// we update the in-memory metadata for the raft log before mutating disk,
+	// the cached entries will never be visible to any readers until they are
+	// cleared from the cache.
+	defer r.cache.Drop(r.ls.RangeID)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
