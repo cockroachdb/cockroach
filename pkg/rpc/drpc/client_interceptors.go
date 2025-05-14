@@ -10,18 +10,11 @@ import (
 	"storj.io/drpc/drpcmigrate"
 )
 
-type UnaryClientInterceptor func(ctx context.Context, rpc string, in, out drpc.Message, cc *ClientConn, next HandlerFunc) error
+type UnaryClientInterceptor func(ctx context.Context, rpc string, in, out drpc.Message, cc *ClientConn, enc drpc.Encoding, next UnaryInvoker) error
 
-type HandlerFunc func(ctx context.Context, rpc string, in, out drpc.Message, cc *ClientConn) error
+type UnaryInvoker func(ctx context.Context, rpc string, in, out drpc.Message, cc *ClientConn, enc drpc.Encoding) error
 
-//type StreamClientInterceptor func(ctx context.Context, rpc drpc.Description, next drpc.HandlerFunc) error
-
-type ClientConn struct {
-	conn           drpc.Conn // this is not same as the connection returned from drpcpool.
-	enc            drpc.Encoding
-	unaryIntercept UnaryClientInterceptor
-	//streamInterceptor StreamClientInterceptor
-}
+//type StreamClientInterceptor func(ctx context.Context, rpc drpc.Description, next drpc.UnaryInvoker) error
 
 type DialOption func(*ClientConnOptions)
 
@@ -50,12 +43,17 @@ func Dial(target string, opts ...DialOption) (*ClientConn, error) {
 	}
 
 	clientOptions := applyDialOptions(opts)
-
-	return &ClientConn{
-		conn:           drpcConn,
-		unaryIntercept: chainUnaryInterceptors(clientOptions.unaryInts...),
-		//streamInterceptor: chainStreamInterceptors(clientOptions.streamInts...),
-	}, nil
+	cc := &ClientConn{
+		conn:  drpcConn,
+		dopts: dialOptions{chainUnaryInts: clientOptions.unaryInts},
+	}
+	chainUnaryClientInterceptors(cc)
+	//return &ClientConn{
+	//	conn:           drpcConn,
+	//	unaryIntercept: chainUnaryInterceptors(clientOptions.unaryInts...),
+	//	//streamInterceptor: chainStreamInterceptors(clientOptions.streamInts...),
+	//}, nil
+	return cc, nil
 }
 
 func createDRPCConnection(ctx context.Context, target string) (drpc.Conn, error) {
@@ -76,29 +74,24 @@ func applyDialOptions(opts []DialOption) *ClientConnOptions {
 	return options
 }
 
-func chainUnaryInterceptors(interceptors ...UnaryClientInterceptor) UnaryClientInterceptor {
-	return func(ctx context.Context, rpc string, in, out drpc.Message, cc *ClientConn, next HandlerFunc) error {
-		var chained HandlerFunc = func(ctx context.Context, rpc string, in, out drpc.Message, cc *ClientConn) error {
-			return (cc.conn).Invoke(ctx, rpc, cc.enc, in, out)
+// Don't focus on this
+/*func chainUnaryInterceptors(interceptors ...UnaryClientInterceptor) UnaryClientInterceptor {
+	return func(ctx context.Context, rpc string, in, out drpc.Message, cc *ClientConn, enc drpc.Encoding, next UnaryInvoker) error {
+		var chained UnaryInvoker = func(ctx context.Context, rpc string, in, out drpc.Message, cc *ClientConn, enc drpc.Encoding) error {
+			return (cc.conn).Invoke(ctx, rpc, enc, in, out)
 		}
 		for i := len(interceptors) - 1; i >= 0; i-- {
 			interceptor := interceptors[i]
 			next := chained
-			chained = func(ctx context.Context, rpc string, in, out drpc.Message, cc *ClientConn) error {
+			chained = func(ctx context.Context, rpc string, in, out drpc.Message, cc *ClientConn, enc drpc.Encoding) error {
 				return interceptor(ctx, rpc, in, out, cc, next)
 			}
 		}
 		return chained(ctx, rpc, in, out, cc)
 	}
-}
+}*/
 
-func (cc *ClientConn) Invoke(ctx context.Context, method string, req, reply drpc.Message) error {
-	return cc.unaryIntercept(ctx, method, req, reply, cc, func(ctx context.Context, method string, req, reply drpc.Message, cc *ClientConn) error {
-		return (cc.conn).Invoke(ctx, method, cc.enc, req, reply)
-	})
-}
-
-func testFunction() error {
+func TestFunction() error {
 	ctx := context.Background()
 	//// dial the drpc server with the drpc connection header
 	//rawconn, err := drpcmigrate.DialWithHeader(ctx, "tcp", "localhost:8080", drpcmigrate.DRPCHeader)
@@ -111,8 +104,8 @@ func testFunction() error {
 	//// create a new drpc client from this conn
 
 	clientConn, err := Dial(
-		"localhost:9000",
-		WithUnaryInterceptor(logUnaryInterceptor /*authUnaryInterceptor*/),
+		"localhost:9090",
+		WithUnaryInterceptor(logUnaryInterceptor() /*authUnaryInterceptor*/),
 		/*WithStreamInterceptor(logStreamInterceptor),*/
 	)
 	if err != nil {
@@ -120,6 +113,14 @@ func testFunction() error {
 	}
 
 	client := greeterpb.NewDRPCGreeterClient(clientConn)
+	req := &greeterpb.HelloRequest{
+		Name: "World",
+	}
+	resp, err := client.SayHello(ctx, req)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("Response: %s", resp.Message)
 	//clientConn.Invoke(ctx, "TestFunction", nil, nil)
 
 	return nil
@@ -128,15 +129,44 @@ func testFunction() error {
 // ensure that the interceptor builder function just takes only the necessary arguments.
 // Don't take in in,out,cc,next etc. functions.
 // Refer the example line 621 in rpc/context.go
-func logUnaryInterceptor(
-	ctx context.Context, rpc string, in, out drpc.Message, cc *ClientConn, next HandlerFunc,
-) error {
-	log.Printf("Starting RPC: %s", rpc)
-	err := next(ctx, rpc, in, out, cc)
-	if err != nil {
-		log.Printf("RPC %s failed: %v", rpc, err)
-	} else {
-		log.Printf("RPC %s succeeded", rpc)
+func logUnaryInterceptor() UnaryClientInterceptor {
+	return func(ctx context.Context, rpc string, in, out drpc.Message, cc *ClientConn, enc drpc.Encoding, next UnaryInvoker) error {
+		log.Printf("Starting RPC: %s", rpc)
+		err := next(ctx, rpc, in, out, cc, enc)
+		if err != nil {
+			log.Printf("RPC %s failed: %v", rpc, err)
+		} else {
+			log.Printf("RPC %s succeeded", rpc)
+		}
+		return err
 	}
-	return err
+}
+
+// ------------------- inspired from grpc code
+// chainUnaryClientInterceptors chains all unary client interceptors into one.
+func chainUnaryClientInterceptors(cc *ClientConn) {
+	interceptors := cc.dopts.chainUnaryInts
+	var chainedInt UnaryClientInterceptor
+	if len(interceptors) == 0 {
+		chainedInt = nil
+	} else if len(interceptors) == 1 {
+		chainedInt = interceptors[0]
+	} else {
+		chainedInt = func(ctx context.Context, method string, in, out drpc.Message, cc *ClientConn, enc drpc.Encoding, invoker UnaryInvoker) error {
+			return interceptors[0](ctx, method, in, out, cc, enc, getChainUnaryInvoker(interceptors, 0, invoker))
+		}
+	}
+	cc.dopts.unaryInt = chainedInt
+}
+
+// getChainUnaryInvoker recursively generate the chained unary invoker.
+func getChainUnaryInvoker(
+	interceptors []UnaryClientInterceptor, curr int, finalInvoker UnaryInvoker,
+) UnaryInvoker {
+	if curr == len(interceptors)-1 {
+		return finalInvoker
+	}
+	return func(ctx context.Context, method string, in, out drpc.Message, cc *ClientConn, enc drpc.Encoding) error {
+		return interceptors[curr+1](ctx, method, in, out, cc, enc, getChainUnaryInvoker(interceptors, curr+1, finalInvoker))
+	}
 }
