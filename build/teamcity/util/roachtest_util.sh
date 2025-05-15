@@ -32,7 +32,8 @@ stats_file_name="stats.json"
 EXPORT_OPENMETRICS="${EXPORT_OPENMETRICS:-false}"
 
 if [[ "${EXPORT_OPENMETRICS}" == "true" ]]; then
-  stats_file_name="stats.om"
+  # Use * to upload aggregated and other stats file
+  stats_file_name="*stats.om"
 fi
 
 COMMIT_SHA=$(git rev-parse --short HEAD)
@@ -42,9 +43,7 @@ function upload_stats {
   if tc_release_branch; then
     bucket="${ROACHTEST_BUCKET:-cockroach-nightly-${CLOUD}}"
     if [[ "${EXPORT_OPENMETRICS}" == "true" ]]; then
-
-        # TODO(sambhav-jain-16): Change the bucket after new buckets are created
-        bucket="${ROACHTEST_BUCKET:-cockroach-testeng-metrics/omloader/incoming/${CLOUD}}"
+        bucket="${ROACHTEST_BUCKET:-crl-artifacts-roachperf-openmetrics/${CLOUD}}"
     fi
 
     if [[ "${CLOUD}" == "gce" && "${EXPORT_OPENMETRICS}" == "false" ]]; then
@@ -63,12 +62,6 @@ function upload_stats {
     # In FIPS-mode, keep artifacts separate by using the 'fips' suffix.
     if [[ ${FIPS_ENABLED:-0} == 1 ]]; then
       remote_artifacts_dir="${remote_artifacts_dir}-fips"
-    fi
-
-    # If using openmetrics, activate new service account for uploading to openmetrics bucket
-    if [[ "${EXPORT_OPENMETRICS}" == "true" && "$ROACHPERF_OPENMETRICS_CREDENTIALS" ]]; then
-      echo "$ROACHPERF_OPENMETRICS_CREDENTIALS" > roachperf.json
-      gcloud auth activate-service-account --key-file=roachperf.json
     fi
 
     # The ${stats_file_name} files need some path translation:
@@ -91,7 +84,7 @@ function upload_stats {
           fi
           gsutil cp "${f}" "gs://${bucket}/${artifacts_dir}/${stats_dir}/${f}"
         fi
-      done <<< "$(find . -name ${stats_file_name} | sed 's/^\.\///')")
+      done <<< "$(find . -name "${stats_file_name}" | sed 's/^\.\///')")
   fi
 }
 
