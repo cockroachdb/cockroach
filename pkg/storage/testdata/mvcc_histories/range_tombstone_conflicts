@@ -48,7 +48,7 @@ stats: range_key_count=+1 range_key_bytes=+22 range_val_count=+2 gc_bytes_age=+2
 put: lock acquisition = {g id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
 stats: key_bytes=+12 val_count=+1 val_bytes=+54 live_count=+1 live_bytes=+68 gc_bytes_age=-194 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+93
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 gul=0,0
 rangekey: {a-c}/[3.000000000,0=/<empty>]
 rangekey: {c-k}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 data: "d"/1.000000000,0 -> /BYTES/d1
@@ -240,7 +240,7 @@ with t=A ts=7
 >> cput k=g v=g7 cond=g1 t=A ts=7
 stats: no change
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=7.000000000,0 gul=0,0 isn=1
 rangekey: {a-c}/[3.000000000,0=/<empty>]
 rangekey: {c-k}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 data: "d"/1.000000000,0 -> /BYTES/d1

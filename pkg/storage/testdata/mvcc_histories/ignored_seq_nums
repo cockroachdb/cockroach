@@ -22,7 +22,7 @@ put: lock acquisition = {k/20 id=00000001 key=/Min iso=Serializable pri=0.000000
 put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30 Replicated Intent []}
 put: lock acquisition = {k/30 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 gul=0,0
 meta: "k"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/11.000000000,0 -> /BYTES/c
 meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -52,7 +52,7 @@ get: "k" -> /BYTES/b @11.000000000,0
 get: "k" -> /BYTES/b @11.000000000,0
 get: "k" -> /BYTES/b @11.000000000,0
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 gul=0,0 isn=1
 
 # Mask a write in the middle.
 
@@ -68,7 +68,7 @@ scan: "k/10" -> /BYTES/10 @11.000000000,0
 scan: "k/30" -> /BYTES/30 @11.000000000,0
 get: "k" -> /BYTES/c @11.000000000,0
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 gul=0,0 isn=1
 
 # Mask all the writes.
 
@@ -82,7 +82,7 @@ with t=A
 scan: "k"-"l" -> <no data>
 get: "k" -> <no data>
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 gul=0,0 isn=1
 
 # Disjoint masks.
 
@@ -97,7 +97,7 @@ scan: "k" -> /BYTES/b @11.000000000,0
 scan: "k/20" -> /BYTES/20 @11.000000000,0
 get: "k" -> /BYTES/b @11.000000000,0
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=2
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 gul=0,0 isn=2
 
 # A historical read before the ignored range should retrieve the
 # historical value visible at that point.
@@ -113,7 +113,7 @@ scan: "k" -> /BYTES/a @11.000000000,0
 scan: "k/10" -> /BYTES/10 @11.000000000,0
 get: "k" -> /BYTES/a @11.000000000,0
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=12} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=12} lock=true stat=PENDING rts=11.000000000,0 gul=0,0 isn=1
 
 # A historical read with an ignored range before it should hide
 # the historical value hidden at that point.
@@ -129,7 +129,7 @@ scan: "k" -> /BYTES/b @11.000000000,0
 scan: "k/20" -> /BYTES/20 @11.000000000,0
 get: "k" -> /BYTES/b @11.000000000,0
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=22} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=22} lock=true stat=PENDING rts=11.000000000,0 gul=0,0 isn=1
 
 # A historical read with an ignored range that overlaps should hide
 # the historical value hidden at that point.
@@ -146,7 +146,7 @@ scan: "k/10" -> /BYTES/10 @11.000000000,0
 scan: "k/20" -> /BYTES/20 @11.000000000,0
 get: "k" -> /BYTES/b @11.000000000,0
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=32} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=32} lock=true stat=PENDING rts=11.000000000,0 gul=0,0 isn=1
 
 # Do an intent push by advancing the transaction timestamp, while also having
 # a range of ignored seqnums. This should permanently delete the value at seqnum
@@ -171,7 +171,7 @@ resolve_intent: "k" -> resolved key = true
 meta: "k" -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=20} ts=14.000000000,0 del=false klen=12 vlen=19 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "k" -> /BYTES/b @14.000000000,0
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=32} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=32} lock=true stat=PENDING rts=11.000000000,0 gul=0,0 isn=1
 meta: "k"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=20} ts=14.000000000,0 del=false klen=12 vlen=19 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -196,7 +196,7 @@ scan: "k/10" -> /BYTES/10 @11.000000000,0
 scan: "k/30" -> /BYTES/30 @11.000000000,0
 get: "k" -> /BYTES/a @14.000000000,0
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 gul=0,0 isn=1
 
 run ok
 with t=A
@@ -218,7 +218,7 @@ scan: "k/10" -> /BYTES/10 @11.000000000,0
 scan: "k/20" -> /BYTES/20 @11.000000000,0
 get: "k" -> /BYTES/b @14.000000000,0
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=25} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=25} lock=true stat=PENDING rts=11.000000000,0 gul=0,0 isn=1
 
 # Call mvccResolveWriteIntent with status=COMMITTED. This should fold the
 # intent while leaving the value unmodified.
@@ -236,7 +236,7 @@ meta: "k" -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=
 resolve_intent: "k" -> resolved key = true
 get: "k" -> /BYTES/b @14.000000000,0
 >> at end:
-txn: "B" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
+txn: "B" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 gul=0,0
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
@@ -265,7 +265,7 @@ put: lock acquisition = {l id=00000002 key=/Min iso=Serializable pri=0.00000000 
 meta: "l" -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=30} ts=20.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "l" -> /BYTES/c @20.000000000,0
 >> at end:
-txn: "B" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
+txn: "B" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=20.000000000,0 gul=0,0
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
@@ -293,7 +293,7 @@ meta: "l" -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=
 get: "l" -> <no data>
 resolve_intent: "l" -> resolved key = true
 >> at end:
-txn: "B" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=35} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0 isn=1
+txn: "B" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=35} lock=true stat=PENDING rts=20.000000000,0 gul=0,0 isn=1
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
@@ -311,7 +311,7 @@ with t=C
 ----
 get: "l" -> <no data>
 >> at end:
-txn: "C" meta={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=30.000000000,0 wto=false gul=0,0
+txn: "C" meta={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=30.000000000,0 gul=0,0
 
 
 # Put some values, then ignore all except the first, then do a commit. The
@@ -334,7 +334,7 @@ put: lock acquisition = {m id=00000003 key=/Min iso=Serializable pri=0.00000000 
 meta: "m" -> txn={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=30} ts=30.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "m" -> /BYTES/c @30.000000000,0
 >> at end:
-txn: "C" meta={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=30.000000000,0 wto=false gul=0,0
+txn: "C" meta={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=30.000000000,0 gul=0,0
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
@@ -357,7 +357,7 @@ meta: "m" -> txn={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=
 get: "m" -> /BYTES/a @30.000000000,0
 resolve_intent: "m" -> resolved key = true
 >> at end:
-txn: "C" meta={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=30.000000000,0 wto=false gul=0,0 isn=1
+txn: "C" meta={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=30.000000000,0 gul=0,0 isn=1
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
@@ -388,7 +388,7 @@ put: lock acquisition = {n id=00000004 key=/Min iso=Serializable pri=0.00000000 
 meta: "n" -> txn={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=30} ts=40.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "n" -> /BYTES/c @40.000000000,0
 >> at end:
-txn: "D" meta={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=40.000000000,0 wto=false gul=0,0
+txn: "D" meta={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=40.000000000,0 gul=0,0
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
@@ -417,7 +417,7 @@ resolve_intent: "n" -> resolved key = true
 meta: "n" -> txn={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=45.000000000,0 min=0,0 seq=30} ts=45.000000000,0 del=false klen=12 vlen=20 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "n" -> /BYTES/c @45.000000000,0
 >> at end:
-txn: "D" meta={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=45.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=40.000000000,0 wto=false gul=0,0
+txn: "D" meta={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=45.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=40.000000000,0 gul=0,0
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
@@ -446,7 +446,7 @@ get: "n" -> /BYTES/c @45.000000000,0
 resolve_intent: "n" -> resolved key = true
 get: "n" -> /BYTES/c @45.000000000,0
 >> at end:
-txn: "E" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0
+txn: "E" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=50.000000000,0 gul=0,0
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
@@ -484,7 +484,7 @@ put: lock acquisition = {o id=00000005 key=/Min iso=Serializable pri=0.00000000 
 put: lock acquisition = {n id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30 Replicated Intent []}
 put: lock acquisition = {o id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30 Replicated Intent []}
 >> at end:
-txn: "E" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0
+txn: "E" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=50.000000000,0 gul=0,0
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
@@ -513,7 +513,7 @@ get: "o" -> <no data>
 resolve_intent: "n" -> resolved key = true
 resolve_intent: "o" -> resolved key = true
 >> at end:
-txn: "E" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
+txn: "E" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=50.000000000,0 gul=0,0 isn=1
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
@@ -564,7 +564,7 @@ put: lock acquisition = {o id=00000005 key=/Min iso=Serializable pri=0.00000000 
 put: lock acquisition = {o id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30 Replicated Intent [{5 6}]}
 meta: "o" -> txn={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 >> at end:
-txn: "E" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
+txn: "E" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=50.000000000,0 gul=0,0 isn=1
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
@@ -588,7 +588,7 @@ with t=E
 resolve_intent: "o" -> resolved key = true
 get: "o" -> <no data>
 >> at end:
-txn: "E" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=55.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
+txn: "E" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=55.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=50.000000000,0 gul=0,0 isn=1
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
@@ -623,7 +623,7 @@ put: lock acquisition = {o id=00000006 key="o" iso=Serializable pri=0.00000000 e
 meta: "o" -> txn={id=00000006 key="o" iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "o" -> /BYTES/b @50.000000000,0
 >> at end:
-txn: "F" meta={id=00000006 key="o" iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=40.000000000,0 wto=false gul=0,0
+txn: "F" meta={id=00000006 key="o" iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=40.000000000,0 gul=0,0
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
@@ -653,7 +653,7 @@ resolve_intent: "o" -> resolved key = true
 meta: "o" -> txn={id=00000006 key="o" iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=10} ts=50.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "o" -> /BYTES/a @50.000000000,0
 >> at end:
-txn: "F" meta={id=00000006 key="o" iso=Serializable pri=0.00000000 epo=0 ts=45.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=40.000000000,0 wto=false gul=0,0 isn=1
+txn: "F" meta={id=00000006 key="o" iso=Serializable pri=0.00000000 epo=0 ts=45.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=40.000000000,0 gul=0,0 isn=1
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
@@ -690,7 +690,7 @@ put: lock acquisition = {p id=00000007 key="p" iso=Serializable pri=0.00000000 e
 meta: "p" -> txn={id=00000007 key="p" iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "p" -> /BYTES/b @50.000000000,0
 >> at end:
-txn: "G" meta={id=00000007 key="p" iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0
+txn: "G" meta={id=00000007 key="p" iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=50.000000000,0 gul=0,0
 meta: "p"/0,0 -> txn={id=00000007 key="p" iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "p"/50.000000000,0 -> /BYTES/b
 
@@ -704,7 +704,7 @@ with t=G k=p
 resolve_intent: "p" -> resolved key = true
 get: "p" -> <no data>
 >> at end:
-txn: "G" meta={id=00000007 key="p" iso=Serializable pri=0.00000000 epo=1 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
+txn: "G" meta={id=00000007 key="p" iso=Serializable pri=0.00000000 epo=1 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=50.000000000,0 gul=0,0 isn=1
 <no data>
 logical op: *enginepb.MVCCAbortIntentOp
 
@@ -734,7 +734,7 @@ put: lock acquisition = {q id=00000008 key="q" iso=Serializable pri=0.00000000 e
 meta: "q" -> txn={id=00000008 key="q" iso=Serializable pri=0.00000000 epo=1 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "q" -> /BYTES/b @50.000000000,0
 >> at end:
-txn: "H" meta={id=00000008 key="q" iso=Serializable pri=0.00000000 epo=1 ts=50.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0
+txn: "H" meta={id=00000008 key="q" iso=Serializable pri=0.00000000 epo=1 ts=50.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=50.000000000,0 gul=0,0
 meta: "q"/0,0 -> txn={id=00000008 key="q" iso=Serializable pri=0.00000000 epo=1 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "q"/50.000000000,0 -> /BYTES/b
 
@@ -748,7 +748,7 @@ with t=H k=q
 resolve_intent: "q" -> resolved key = false
 meta: "q" -> txn={id=00000008 key="q" iso=Serializable pri=0.00000000 epo=1 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 >> at end:
-txn: "H" meta={id=00000008 key="q" iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
+txn: "H" meta={id=00000008 key="q" iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=50.000000000,0 gul=0,0 isn=1
 meta: "q"/0,0 -> txn={id=00000008 key="q" iso=Serializable pri=0.00000000 epo=1 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "q"/50.000000000,0 -> /BYTES/b
 
@@ -778,7 +778,7 @@ put: lock acquisition = {r id=00000009 key="r" iso=Serializable pri=0.00000000 e
 meta: "r" -> txn={id=00000009 key="r" iso=Serializable pri=0.00000000 epo=1 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "r" -> /BYTES/b @50.000000000,0
 >> at end:
-txn: "I" meta={id=00000009 key="r" iso=Serializable pri=0.00000000 epo=1 ts=50.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0
+txn: "I" meta={id=00000009 key="r" iso=Serializable pri=0.00000000 epo=1 ts=50.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=50.000000000,0 gul=0,0
 meta: "r"/0,0 -> txn={id=00000009 key="r" iso=Serializable pri=0.00000000 epo=1 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "r"/50.000000000,0 -> /BYTES/b
 
@@ -793,7 +793,7 @@ with t=I k=r
 resolve_intent: "r" -> resolved key = true
 meta: "r" -> txn={id=00000009 key="r" iso=Serializable pri=0.00000000 epo=1 ts=60.000000000,0 min=0,0 seq=20} ts=60.000000000,0 del=false klen=12 vlen=20 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 >> at end:
-txn: "I" meta={id=00000009 key="r" iso=Serializable pri=0.00000000 epo=0 ts=60.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
+txn: "I" meta={id=00000009 key="r" iso=Serializable pri=0.00000000 epo=0 ts=60.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=50.000000000,0 gul=0,0 isn=1
 meta: "r"/0,0 -> txn={id=00000009 key="r" iso=Serializable pri=0.00000000 epo=1 ts=60.000000000,0 min=0,0 seq=20} ts=60.000000000,0 del=false klen=12 vlen=20 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "r"/60.000000000,0 -> {localTs=50.000000000,0}/BYTES/b
 logical op: *enginepb.MVCCUpdateIntentOp
