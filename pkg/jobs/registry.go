@@ -694,6 +694,75 @@ func (r *Registry) CreateIfNotExistAdoptableJobWithTxn(
 	return nil
 }
 
+func (r *Registry) FindMatchingChangefeedJobs(
+	ctx context.Context, record Record, txn isql.Txn,
+) (bool, error) {
+	if txn == nil {
+		return false, errors.New("txn is required")
+	}
+
+	it, err := txn.QueryIteratorEx(
+		ctx,
+		"find matching changefeed jobs",
+		txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		"select ji.value from system.jobs j inner join system.job_info ji on j.id = ji.job_id where j.job_type = 'CHANGEFEED' and ji.info_key = 'legacy_payload' and j.id != $1",
+		record.JobID,
+	)
+	if err != nil {
+		return false, err
+	}
+	defer func() {
+		closeErr := it.Close()
+		if err == nil {
+			err = closeErr
+		}
+	}()
+	if !it.HasResults() {
+		return false, nil
+	}
+other_changefeedjob:
+	for {
+		ok, err := it.Next(ctx)
+		if err != nil {
+			return false, err
+		}
+		if !ok {
+			break
+		}
+
+		datum := it.Cur()[0]
+
+		db, ok := datum.(*tree.DBytes)
+		if !ok {
+			return false, fmt.Errorf("expected DBytes, got %T", datum)
+		}
+
+		var payload jobspb.Payload
+		if err := protoutil.Unmarshal([]byte(*db), &payload); err != nil {
+			return false, err
+		}
+
+		changefeedDetails, ok := payload.Details.(*jobspb.Payload_Changefeed)
+		if !ok {
+			return false, fmt.Errorf("expected changefeed payload, got %T", payload.Details)
+		}
+
+		sinkURI := changefeedDetails.Changefeed.SinkURI
+		newSinkURI := record.Details.(jobspb.ChangefeedDetails).SinkURI
+		if sinkURI != newSinkURI || len(changefeedDetails.Changefeed.Tables) != len(record.Details.(jobspb.ChangefeedDetails).Tables) {
+			continue other_changefeedjob
+		}
+		for tableID, _ := range changefeedDetails.Changefeed.Tables {
+			if _, exists := record.Details.(jobspb.ChangefeedDetails).Tables[tableID]; !exists {
+				continue other_changefeedjob
+			}
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
 // CreateAdoptableJobWithTxn creates a job which will be adopted for execution
 // at a later time by some node in the cluster.
 func (r *Registry) CreateAdoptableJobWithTxn(
