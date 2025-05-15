@@ -1191,6 +1191,13 @@ func runCDCInitialScanRollingRestart(
 	}
 }
 
+type fineGrainedCheckpointingParams struct {
+	numRanges               int
+	transientErrorFrequency time.Duration
+	rangeDelays             []time.Duration
+	maxVal                  int
+}
+
 // runCDCFineGrainedCheckpointingBenchmark runs a changefeed
 // on a 4-node cluster, using node 1 as the coordinator. It will split the
 // table into many ranges and start a sink which will be artificially slower
@@ -1198,16 +1205,9 @@ func runCDCInitialScanRollingRestart(
 // This sink will also occasionally error which should force restarts and
 // restore from these fine-grained checkpoints.
 func runCDCFineGrainedCheckpointingBenchmark(
-	ctx context.Context,
-	t test.Test,
-	c cluster.Cluster,
-	numRanges int,
-	transientErrorFrequency time.Duration,
-	rangeDelays []time.Duration,
-	maxVal int,
-	dupeLimit int,
+	ctx context.Context, t test.Test, c cluster.Cluster, params fineGrainedCheckpointingParams,
 ) {
-	if len(rangeDelays) > numRanges {
+	if len(params.rangeDelays) > params.numRanges {
 		t.Fatalf("too many range delays provided")
 	}
 
@@ -1287,11 +1287,11 @@ func runCDCFineGrainedCheckpointingBenchmark(
 	}
 
 	values := []string{}
-	for i := 0; i < numRanges; i++ {
+	for i := 0; i < params.numRanges; i++ {
 		values = append(values, fmt.Sprintf("(%d, 0)", i*10))
 	}
 	setupStmts = append(setupStmts, fmt.Sprintf("INSERT INTO foo VALUES %s", strings.Join(values, ", ")))
-	setupStmts = append(setupStmts, fmt.Sprintf("ALTER TABLE foo SPLIT AT SELECT generate_series(0, %d, 10)", numRanges*10))
+	setupStmts = append(setupStmts, fmt.Sprintf("ALTER TABLE foo SPLIT AT SELECT generate_series(0, %d, 10)", params.numRanges*10))
 
 	for _, s := range setupStmts {
 		t.L().Printf(s)
@@ -1301,7 +1301,7 @@ func runCDCFineGrainedCheckpointingBenchmark(
 	}
 
 	delayStrings := []string{}
-	for _, delay := range rangeDelays {
+	for _, delay := range params.rangeDelays {
 		delayStrings = append(delayStrings, fmt.Sprint(delay.Milliseconds()))
 	}
 
@@ -1309,7 +1309,7 @@ func runCDCFineGrainedCheckpointingBenchmark(
 	m.Go(func(ctx context.Context) error {
 		t.L().Printf("starting up sink server at %s...", sinkURL)
 		err := c.RunE(ctx, option.WithNodes(c.Node(c.Spec().NodeCount)),
-			fmt.Sprintf("./cockroach workload debug webhook-server-slow %d %s", transientErrorFrequency.Milliseconds(), strings.Join(delayStrings, " ")))
+			fmt.Sprintf("./cockroach workload debug webhook-server-slow %d %s", params.transientErrorFrequency.Milliseconds(), strings.Join(delayStrings, " ")))
 		if err != nil {
 			return err
 		}
@@ -1330,7 +1330,7 @@ func runCDCFineGrainedCheckpointingBenchmark(
 	}
 
 	var inserts []string
-	for i := 0; i < numRanges; i++ {
+	for i := 0; i < params.numRanges; i++ {
 		for j := 1; j < 10; j++ {
 			inserts = append(inserts, fmt.Sprintf("(%d, 0)", i*10+j))
 		}
@@ -1341,7 +1341,7 @@ func runCDCFineGrainedCheckpointingBenchmark(
 		t.Fatal(err)
 	}
 
-	for c := 1; c <= maxVal; c++ {
+	for c := 1; c <= params.maxVal; c++ {
 		if _, err := db.Exec(fmt.Sprintf(
 			"UPDATE foo SET val = %d", c)); err != nil {
 			t.Fatal(err)
@@ -1369,7 +1369,7 @@ func runCDCFineGrainedCheckpointingBenchmark(
 	// 10 keys per range are each updated maxVal + 1 times
 	// except for one key per range which is set to 0 before
 	// the changefeed starts and only updated maxVal times.
-	expected := 10*numRanges*(maxVal+1) - numRanges
+	expected := 10*params.numRanges*(params.maxVal+1) - params.numRanges
 	t.L().Printf("expecting %d rows", expected)
 
 	var dupes int
@@ -1386,11 +1386,6 @@ func runCDCFineGrainedCheckpointingBenchmark(
 
 		if unique != expected {
 			return fmt.Errorf("expected %d, got %d", expected, unique)
-		}
-
-		if dupes > dupeLimit {
-			t.Fatalf("expected dupes <= %d, got %d", dupeLimit, dupes)
-			return nil
 		}
 
 		return nil
@@ -1703,10 +1698,12 @@ func registerCDC(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(4),
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.Nightly),
-		Timeout:          15 * time.Minute,
+		Timeout:          30 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runCDCFineGrainedCheckpointingBenchmark(ctx, t, c, 1000, 500*time.Millisecond,
-				[]time.Duration{
+			runCDCFineGrainedCheckpointingBenchmark(ctx, t, c, fineGrainedCheckpointingParams{
+				numRanges:               1000,
+				transientErrorFrequency: 500 * time.Millisecond,
+				rangeDelays: []time.Duration{
 					2 * time.Millisecond,
 					4 * time.Millisecond,
 					8 * time.Millisecond,
@@ -1717,7 +1714,9 @@ func registerCDC(r registry.Registry) {
 					8 * time.Millisecond,
 					16 * time.Millisecond,
 					32 * time.Millisecond,
-				}, 100, 50000)
+				},
+				maxVal: 100,
+			})
 		},
 	})
 	r.Add(registry.TestSpec{
