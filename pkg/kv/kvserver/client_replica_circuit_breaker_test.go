@@ -200,7 +200,11 @@ func TestReplicaCircuitBreaker_LeaselessTripped(t *testing.T) {
 	require.NoError(t, tc.Write(n1))
 	tc.SetProbeEnabled(n1, false)
 	tc.TripBreaker(n1)
+	// We don't know the lease type here, so make sure the lease is expired for
+	// both the cases of epoch or leader leases.
 	resumeHeartbeats := tc.ExpireAllLeasesAndN1LivenessRecord(t, pauseHeartbeats)
+	tc.DisableAllStoreLivenessHeartbeats.Store(true)
+	tc.ManualClock.Increment(tc.Servers[0].RaftConfig().RangeLeaseDuration.Nanoseconds())
 
 	// On n1, run into the circuit breaker when requesting lease. We have to
 	// resume heartbeats for this to not time out, as requesting the new lease
@@ -212,6 +216,7 @@ func TestReplicaCircuitBreaker_LeaselessTripped(t *testing.T) {
 	// (except the test harness categorically prevents n2 from getting a lease,
 	// injecting an error).
 	resumeHeartbeats()
+	tc.DisableAllStoreLivenessHeartbeats.Store(false)
 	testutils.SucceedsSoon(t, func() error {
 		err := tc.Read(n1)
 		if errors.HasType(err, (*kvpb.NotLeaseHolderError)(nil)) {
