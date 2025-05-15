@@ -1094,6 +1094,21 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 					conf.RangefeedEnabled = false
 					return conf
 				},
+				// This test has been failing with REASON_LOGICAL_OPS_MISSING (#146566)
+				// coming from waitForInitialCheckpointAcrossSpan, which could indicate
+				// that some other request to this range is racing with the enabling of
+				// the rangefeed and hitting an error in handleLogicalOpLogRaftMuLocked.
+				// To help debug this, we intercept all requests to this range. If the
+				// test stops flaking, we can remove this filter; it's not needed for
+				// the test functionality.
+				TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+					for _, req := range ba.Requests {
+						if req.GetInner().Header().Key.Equal(startKey) {
+							log.Infof(ctx, "intercepting request %+v", req.GetInner())
+						}
+					}
+					return nil
+				},
 			},
 		}
 		tc, _ := setup(t, knobs)
@@ -1104,9 +1119,12 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// Split the range so that the RHS is not a system range and thus will
-		// respect the rangefeed_enabled cluster setting.
+		// Split off a small range to ensure it's not a system range and thus will
+		// respect the rangefeed_enabled cluster setting. It also helps ensure no
+		// one else writes to it.
 		tc.SplitRangeOrFatal(t, startKey)
+		endKey := startKey.Next()
+		tc.SplitRangeOrFatal(t, endKey)
 
 		rightRangeID := store.LookupReplica(roachpb.RKey(startKey)).RangeID
 
@@ -1114,7 +1132,6 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		stream := newTestStream()
 		streamErrC := make(chan error, 1)
 
-		endKey := keys.ScratchRangeMax
 		rangefeedSpan := roachpb.Span{Key: startKey, EndKey: endKey}
 		go func() {
 			req := kvpb.RangeFeedRequest{
