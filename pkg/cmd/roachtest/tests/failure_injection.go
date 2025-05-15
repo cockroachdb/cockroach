@@ -392,6 +392,24 @@ var cgroupsDiskStallTests = func(c cluster.Cluster) []failureSmokeTest {
 		}, nil
 	}
 
+	// evictStore uses vmtouch to evict the store from memory.
+	evictStore := func(ctx context.Context, l *logger.Logger, c cluster.Cluster, node option.NodeListOption) error {
+		// For some unknown reason, vmtouch very rarely hangs indefinitely. Evict the nodes
+		// one at a time so we can stream the output and figure out what's wrong. This normally
+		// takes less than a millisecond so it shouldn't impact the correctness of the test.
+		vmtouchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		_, err := c.RunWithDetailsSingleNode(vmtouchCtx, l, option.WithNodes(node), "strace -tt -T -f vmtouch -ve /mnt/data1")
+		if err != nil {
+			if vmtouchCtx.Err() != nil {
+				return errors.Wrap(err, "vmtouch timed out")
+			} else {
+				return err
+			}
+		}
+		return nil
+	}
+
 	// Returns the read and write bytes read/written to disk over the last 30 seconds of the
 	// stalled node and a control unaffected node.
 	getRWBytesOverTime := func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f *failures.CGroupDiskStaller, stalledNode, unaffectedNode option.NodeListOption) (rwBytes, error) {
@@ -402,7 +420,13 @@ var cgroupsDiskStallTests = func(c cluster.Cluster) []failureSmokeTest {
 		// Evict the store from memory on each VM to force them to read from disk.
 		// Without this, we don't run the workload long enough for the process to read
 		// from disk instead of memory.
-		c.Run(ctx, option.WithNodes(c.CRDBNodes()), "vmtouch -ve /mnt/data1")
+		if err = evictStore(ctx, l, c, stalledNode); err != nil {
+			return rwBytes{}, err
+		}
+		if err = evictStore(ctx, l, c, unaffectedNode); err != nil {
+			return rwBytes{}, err
+		}
+
 		select {
 		case <-ctx.Done():
 			return rwBytes{}, ctx.Err()
@@ -460,9 +484,15 @@ var cgroupsDiskStallTests = func(c cluster.Cluster) []failureSmokeTest {
 			if bytes.stalledRead > threshold {
 				return errors.Errorf("expected stalled node to have read no bytes from disk, but read %d", bytes.stalledRead)
 			}
-		} else {
-			if bytes.stalledRead < readLowerThreshold {
-				return errors.Errorf("reads were not stalled on the stalled node, but only %d bytes were read", bytes.stalledRead)
+		} else if bytes.stalledRead < readLowerThreshold {
+			err := errors.Errorf("reads were not stalled on the stalled node, but only %d bytes were read", bytes.stalledRead)
+			// If writes are stalled, it may greatly impact read throughput even if reads are
+			// not explicitly stalled. We generally still see reads, but it can sometimes be lower
+			// than our threshold causing the test to flake In this case, just log a warning.
+			if writesStalled {
+				l.Printf("WARN: %s", err)
+			} else {
+				return err
 			}
 		}
 		if bytes.unaffectedRead < readLowerThreshold {
