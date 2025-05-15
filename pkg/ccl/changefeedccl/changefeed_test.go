@@ -159,6 +159,32 @@ func TestChangefeedBasics(t *testing.T) {
 	// cloudStorageTest is a regression test for #36994.
 }
 
+func TestDuplicateChangefeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, stop := makeServer(t)
+	defer stop()
+	sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+	duplicateNoticeStr := "You have created a duplicate changefeed"
+	sqlDB.Exec(t, `CREATE TABLE t1 (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.Exec(t, `INSERT INTO t1 VALUES (0, 'initial')`)
+	expectNotice(t, s.Server, `CREATE CHANGEFEED FOR d.t1 INTO 'null://'`, "(no notice)")
+	expectNotice(t, s.Server, "CREATE CHANGEFEED FOR d.t1 INTO 'null://'", duplicateNoticeStr)
+
+	sqlDB.Exec(t, `CREATE TABLE t2 (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.Exec(t, `INSERT INTO t2 VALUES (0, 'initial')`)
+	expectNotice(t, s.Server, `CREATE CHANGEFEED FOR d.t2 INTO 'null://'`, "(no notice)")
+	expectNotice(t, s.Server, "CREATE CHANGEFEED FOR d.t2 INTO 'null://'", duplicateNoticeStr)
+	expectNotice(t, s.Server, `CREATE CHANGEFEED FOR d.t1, d.t2 INTO 'null://'`, "(no notice)")
+	expectNotice(t, s.Server, "CREATE CHANGEFEED FOR d.t1, d.t2 INTO 'null://'", duplicateNoticeStr)
+	expectNotice(t, s.Server, "CREATE CHANGEFEED FOR d.t2, d.t1 INTO 'null://'", duplicateNoticeStr)
+
+	sqlDB.Exec(t, `ALTER TABLE t2 RENAME TO t3`)
+	expectNotice(t, s.Server, "CREATE CHANGEFEED FOR d.t3 INTO 'null://'", duplicateNoticeStr)
+}
+
 func TestChangefeedBasicQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

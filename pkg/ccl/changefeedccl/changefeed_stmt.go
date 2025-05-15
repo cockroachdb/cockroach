@@ -133,6 +133,23 @@ func changefeedTypeCheck(
 	return true, withSinkHeader, nil
 }
 
+func maybeShowDuplicateChangefeedNotice(
+	ctx context.Context, jr *jobs.Record, txn isql.Txn, p sql.PlanHookState,
+) error {
+	found, err := p.ExecCfg().JobRegistry.FindMatchingChangefeedJobs(ctx, *jr, txn)
+	if err != nil {
+		return err
+	}
+	if found {
+		err = p.SendClientNotice(ctx, pgnotice.Newf("You have created a duplicate changefeed"), true)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func maybeShowCursorAgeWarning(
 	ctx context.Context, p sql.PlanHookState, opts changefeedbase.StatementOptions,
 ) error {
@@ -341,6 +358,10 @@ func changefeedPlanHook(
 				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jr.JobID, txn, *jr); err != nil {
 					return err
 				}
+				if err := maybeShowDuplicateChangefeedNotice(ctx, jr, txn, p); err != nil {
+					return err
+				}
+
 				if ptr != nil {
 					return p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
 				}
