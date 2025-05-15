@@ -34,7 +34,13 @@ func ListenAndServeGRPC(
 	if err != nil {
 		return ln, err
 	}
+	if err := ServeGRPC(stopper, server, ln); err != nil {
+		return nil, err
+	}
+	return ln, nil
+}
 
+func ServeGRPC(stopper *stop.Stopper, server *grpc.Server, ln net.Listener) error {
 	ctx := context.TODO()
 
 	stopper.AddCloser(stop.CloserFn(server.Stop))
@@ -44,15 +50,12 @@ func ListenAndServeGRPC(
 	}
 	if err := stopper.RunAsyncTask(ctx, "listen-quiesce", waitQuiesce); err != nil {
 		waitQuiesce(ctx)
-		return nil, err
+		return err
 	}
 
-	if err := stopper.RunAsyncTask(ctx, "serve", func(context.Context) {
+	return stopper.RunAsyncTask(ctx, "serve", func(context.Context) {
 		FatalIfUnexpected(server.Serve(ln))
-	}); err != nil {
-		return nil, err
-	}
-	return ln, nil
+	})
 }
 
 var httpLogger = log.NewStdLogger(severity.ERROR, "net/http")
