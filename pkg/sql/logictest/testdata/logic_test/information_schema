@@ -4036,7 +4036,7 @@ max_connections                                            -1
 max_identifier_length                                      128
 max_index_keys                                             32
 max_prepared_transactions                                  2147483647
-max_retries_for_read_committed                             10
+max_retries_for_read_committed                             100
 node_id                                                    1
 null_ordered_last                                          off
 on_update_rehome_row_enabled                               on
