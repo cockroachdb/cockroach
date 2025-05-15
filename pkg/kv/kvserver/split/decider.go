@@ -278,20 +278,23 @@ func (d *Decider) recordLocked(
 				if now.Sub(d.mu.lastNoSplitKeyLoggingMetrics) > minNoSplitKeyLoggingMetricsInterval {
 					d.mu.lastNoSplitKeyLoggingMetrics = now
 					if causeMsg := d.mu.splitFinder.NoSplitKeyCauseLogMsg(); causeMsg != "" {
-						popularKeyFrequency := d.mu.splitFinder.PopularKey().Frequency
-						log.KvDistribution.Infof(ctx, "%s, most popular key occurs in %d%% of samples",
-							causeMsg, int(popularKeyFrequency*100))
 						log.KvDistribution.VInfof(ctx, 3, "splitter_state=%v", (*lockedDecider)(d))
+						causeLogBase := "%s, most popular key occurs in %d%% of samples, access balance %s-biased %d%%"
+
+						popularKeyFrequency := d.mu.splitFinder.PopularKey().Frequency
 						if popularKeyFrequency >= splitKeyThreshold {
+							causeLogBase += ", popular key detected"
 							d.loadSplitterMetrics.PopularKeyCount.Inc(1)
 						}
+
 						accessDirection := d.mu.splitFinder.AccessDirection()
 						direction := directionStr(accessDirection)
-						log.KvDistribution.Infof(ctx, "%s, access balance between left and right for sampled keys: %s-biased %d%%",
-							causeMsg, direction, int(math.Abs(accessDirection)*100))
 						if math.Abs(accessDirection) >= clearDirectionThreshold {
+							causeLogBase += ", clear direction detected"
 							d.loadSplitterMetrics.ClearDirectionCount.Inc(1)
 						}
+
+						log.KvDistribution.Infof(ctx, causeLogBase, causeMsg, int(popularKeyFrequency*100), direction, int(math.Abs(accessDirection)*100))
 						d.loadSplitterMetrics.NoSplitKeyCount.Inc(1)
 					}
 				}
@@ -554,7 +557,7 @@ func (t *maxStatTracker) windowWidth() time.Duration {
 
 // Returns the absolute percentage and direction of accesses
 // as a string to be used in a log statement.
-func directionStr(direction float64) string {
+func directionStr(direction float64) redact.SafeString {
 	dstr := "right"
 	if direction == 0 {
 		dstr = "even"
@@ -562,5 +565,5 @@ func directionStr(direction float64) string {
 	if direction < 0 {
 		dstr = "left"
 	}
-	return dstr
+	return redact.SafeString(dstr)
 }
