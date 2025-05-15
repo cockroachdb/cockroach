@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -2635,8 +2636,19 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		return err
 	}
 
+	// Use retry with exponential backoff and full jitter to reduce collisions for
+	// high-contention workloads. See https://en.wikipedia.org/wiki/Exponential_backoff and
+	// https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
 	maxRetries := int(ex.sessionData().MaxRetriesForReadCommitted)
-	for attemptNum := 0; ; attemptNum++ {
+	initialBackoff := ex.sessionData().InitialRetryBackoffForReadCommitted
+	useBackoff := initialBackoff > 0
+	opts := retry.Options{
+		InitialBackoff:      initialBackoff,
+		MaxBackoff:          1024 * initialBackoff,
+		Multiplier:          2.0,
+		RandomizationFactor: 1.0,
+	}
+	for attemptNum, r := 0, retry.StartWithCtx(ctx, opts); !useBackoff || r.Next(); attemptNum++ {
 		if attemptNum != 0 {
 			// Step both the sequence number and the read timestamp so that we can see
 			// the results of the conflicting transactions that caused us to fail and
@@ -2648,7 +2660,6 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 			stmtTS := ex.server.cfg.Clock.PhysicalTime()
 			p.extendedEvalCtx.StmtTimestamp = stmtTS
 		}
-
 		bufferPos := res.BufferedResultsLen()
 		if err = ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
 			return err
@@ -2704,6 +2715,14 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		ex.state.mu.autoRetryCounter++
 		ex.state.mu.autoRetryReason = txnRetryErr
 		ex.metrics.EngineMetrics.StatementRetryCount.Inc(1)
+	}
+	// Check if we exited the loop due to cancelation.
+	if useBackoff {
+		select {
+		case <-ctx.Done():
+			res.SetError(cancelchecker.QueryCanceledError)
+		default:
+		}
 	}
 	return nil
 }
