@@ -1293,21 +1293,13 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		}
 		return false
 	}()
-	mixedVersion, err := isMixedVersionState(ctx, tx)
+
+	// Randomly create as schema locked table.
+	versionBefore253, err := isClusterVersionLessThan(ctx, tx, clusterversion.V25_3.Version())
 	if err != nil {
 		return nil, err
 	}
-	hasUnsupportedBit0Type := func() bool {
-		for _, def := range stmt.Defs {
-			if col, ok := def.(*tree.ColumnTableDef); ok && isUnsupportedBit0Type(col.Type.SQLString(), mixedVersion) {
-				return true
-			}
-		}
-		return false
-	}()
-
-	// Randomly create as schema locked table.
-	if og.params.rng.Intn(2) == 0 {
+	if og.params.rng.Intn(2) == 0 && !versionBefore253 {
 		stmt.StorageParams = append(stmt.StorageParams, tree.StorageParam{
 			Key:   "schema_locked",
 			Value: tree.DBoolTrue,
@@ -1332,7 +1324,6 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	opStmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.Syntax, condition: hasVectorType},
 		{code: pgcode.FeatureNotSupported, condition: hasVectorType},
-		{code: pgcode.InvalidParameterValue, condition: hasUnsupportedBit0Type},
 	})
 	opStmt.sql = tree.Serialize(stmt)
 	return opStmt, nil
@@ -4046,14 +4037,9 @@ func (og *operationGenerator) randType(
 	if err != nil {
 		return nil, nil, err
 	}
-	mixedVersion, err := isMixedVersionState(ctx, tx)
-	if err != nil {
-		return nil, nil, err
-	}
 
 	typ := randgen.RandSortingType(og.params.rng)
-	for (pgVectorNotSupported && typ.Family() == types.PGVectorFamily) ||
-		isUnsupportedBit0Type(typ.SQLString(), mixedVersion) {
+	for pgVectorNotSupported && typ.Family() == types.PGVectorFamily {
 		typ = randgen.RandSortingType(og.params.rng)
 	}
 
@@ -4235,11 +4221,6 @@ FROM
 		possibleParamReferences = append(possibleParamReferences, fmt.Sprintf(`enum_%d %s`, i, enum["name"]))
 	}
 
-	mixedVersion, err := isMixedVersionState(ctx, tx)
-	if err != nil {
-		return nil, err
-	}
-
 	// Generate random parameters / values for builtin types.
 	for i, typeVal := range randgen.SeedTypes {
 		// If we have types where invalid values can exist then skip over these,
@@ -4250,9 +4231,6 @@ FROM
 			typeVal == types.RegClass ||
 			typeVal.Family() == types.OidFamily ||
 			typeVal.Family() == types.VoidFamily {
-			continue
-		}
-		if isUnsupportedBit0Type(typeVal.SQLString(), mixedVersion) {
 			continue
 		}
 
@@ -4898,22 +4876,6 @@ func isClusterVersionLessThan(
 		return false, err
 	}
 	return clusterVersion.Less(targetVersion), nil
-}
-
-// isMixedVersionState works similarly to isClusterVersionLessThan, but without
-// specifying a version. It returns true if the cluster version is not the
-// latest, indicating a mixed-version test.
-func isMixedVersionState(ctx context.Context, tx pgx.Tx) (bool, error) {
-	return isClusterVersionLessThan(ctx, tx, clusterversion.Latest.Version())
-}
-
-func isUnsupportedBit0Type(typName string, mixedVersion bool) bool {
-	// TODO(spilchen): In mixed-version testing, declaring a BIT(0) column can cause a
-	// syntax error. Support for this type was recently added and backported, but the
-	// backport release is still pending. We need to regenerate the type until
-	// something other than BIT(0) is generated. This can be removed once 24.2.5 is
-	// publicly released.
-	return mixedVersion && strings.HasPrefix(typName, "BIT(0)")
 }
 
 func (og *operationGenerator) setSeedInDB(ctx context.Context, tx pgx.Tx) error {
