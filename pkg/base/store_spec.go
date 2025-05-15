@@ -471,7 +471,7 @@ func PopulateWithEncryptionOpts(
 			break
 		}
 
-		for _, externalPath := range [2]storagepb.ExternalPath{walFailoverConfig.Path, walFailoverConfig.PrevPath} {
+		for _, externalPath := range [2]*storagepb.ExternalPath{&walFailoverConfig.Path, &walFailoverConfig.PrevPath} {
 			if !externalPath.IsSet() || !es.PathMatches(externalPath.Path) {
 				continue
 			}
