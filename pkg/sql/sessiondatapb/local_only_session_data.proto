@@ -670,6 +670,10 @@ message LocalOnlySessionData {
   // OptimizerUseExistsFilterHoistRule, when true, causes the optimizer to apply
   // the HoistUnboundFilterFromExistsSubquery rule to EXISTS conditions.
   bool optimizer_use_exists_filter_hoist_rule = 170;
+  // InitialRetryBackoffForReadCommitted controls the initial backoff
+  // duration for automatic retries of statements in explicit READ COMMITTED
+  // transactions that see a transaction retry error. 0 disables backoff.
+  int64 initial_retry_backoff_for_read_committed = 171 [(gogoproto.casttype) = "time.Duration"];
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
