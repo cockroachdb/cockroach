@@ -4576,6 +4576,15 @@ func (dsp *DistSQLPlanner) planVectorSearch(
 		return errors.AssertionFailedf("unexpected query vector type: %T", t)
 	}
 
+	vectorColumnID := planInfo.index.VectorColumnID()
+	vectorColumn := catalog.FindColumnByID(planInfo.table, vectorColumnID)
+	if vectorColumn == nil {
+		return errors.AssertionFailedf("vector column %d not found in table %s", vectorColumnID, planInfo.table.GetName())
+	}
+	if vectorColumn.GetType().Width() != int32(len(queryVector)) {
+		return pgerror.Newf(pgcode.DataException, "different vector dimensions %d and %d", vectorColumn.GetType().Width(), len(queryVector))
+	}
+
 	colTypes := getTypesFromResultColumns(planInfo.columns)
 	spec := &execinfrapb.VectorSearchSpec{
 		PrefixKeys:          planInfo.prefixKeys,
