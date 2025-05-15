@@ -21,3 +21,6 @@ var BackupAdmissionControlGrafanaJSON string
 
 //go:embed configs/changefeed-admission-control-grafana.json
 var ChangefeedAdmissionControlGrafana string
+
+//go:embed configs/cgroup-io-grafana.json
+var CgroupIOGrafanaJSON string
