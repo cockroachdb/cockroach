@@ -3,6 +3,7 @@
 source [file join [file dirname $argv0] common.tcl]
 
 set storedir "encryption_store"
+set failoverdir "wal_failover"
 set keydir "$storedir/keys"
 
 spawn /bin/bash
@@ -110,4 +111,11 @@ eexpect "level | tables  size val-bl vtables | score  ff  cff |   in  | tables  
 # Try running without the encryption flag.
 send "$argv debug pebble db lsm $storedir\r"
 eexpect "If this is an encrypted store, make sure the correct encryption key is set."
+end_test
+
+start_test "Run with WAL failover path."
+send "$argv start-single-node --insecure --store=$storedir --wal-failover=path=$failoverdir --enterprise-encryption=path=$storedir,key=$keydir/aes-256.key,old-key=$keydir/aes-128.key --enterprise-encryption=path=$failoverdir,key=$keydir/aes-256.key,old-key=$keydir/aes-128.key\r"
+eexpect "node starting"
+interrupt
+eexpect "shutdown completed"
 end_test
