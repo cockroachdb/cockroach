@@ -1174,6 +1174,9 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 // ALTER PARTITION
 %type <tree.Statement> alter_zone_partition_stmt
 
+// ALTER EXT CONNECTION
+%type <tree.Statement> alter_external_connection_stmt
+
 // ALTER DATABASE
 %type <tree.Statement> alter_rename_database_stmt
 %type <tree.Statement> alter_database_to_schema_stmt
@@ -1928,6 +1931,7 @@ stmt_without_legacy_transaction:
 // %Text: ALTER TABLE, ALTER INDEX, ALTER VIEW, ALTER SEQUENCE, ALTER DATABASE, ALTER USER, ALTER ROLE, ALTER DEFAULT PRIVILEGES
 alter_stmt:
   alter_ddl_stmt      // help texts in sub-rule
+| alter_external_connection_stmt // EXTEND WITH HELP: ALTER EXTERNAL CONNECTION
 | alter_role_stmt     // EXTEND WITH HELP: ALTER ROLE
 | alter_virtual_cluster_stmt   /* SKIP DOC */
 | alter_unsupported_stmt
@@ -3829,6 +3833,26 @@ create_external_connection_stmt:
 		}
 	}
  | CREATE EXTERNAL CONNECTION error // SHOW HELP: CREATE EXTERNAL CONNECTION
+
+// %Help: ALTER EXTERNAL CONNECTION - alter a existing external connection
+// %Category: Misc
+// %Text:
+// ALTER EXTERNAL CONNECTION [IF NOT EXISTS] <name> AS <endpoint>
+//
+// Name:
+//   Unique name for this external connection.
+//
+// Endpoint:
+//   Endpoint of the resource that the external connection represents.
+alter_external_connection_stmt:
+	ALTER EXTERNAL CONNECTION /*$4=*/label_spec AS /*$6=*/string_or_placeholder
+	{
+		$$.val = &tree.AlterExternalConnection{
+				  ConnectionLabelSpec: *($4.labelSpec()),
+		      As: $6.expr(),
+		}
+	}
+ | ALTER EXTERNAL CONNECTION error // SHOW HELP: ALTER EXTERNAL CONNECTION
 
 // %Help: CHECK EXTERNAL CONNECTION - check the status of an external connection
 // %Category: Misc

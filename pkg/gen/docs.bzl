@@ -35,6 +35,7 @@ DOCS_SRCS = [
     "//docs/generated/sql/bnf:alter_database_to_schema_stmt.bnf",
     "//docs/generated/sql/bnf:alter_ddl_stmt.bnf",
     "//docs/generated/sql/bnf:alter_default_privileges_stmt.bnf",
+    "//docs/generated/sql/bnf:alter_external_connection_stmt.bnf",
     "//docs/generated/sql/bnf:alter_func_dep_extension_stmt.bnf",
     "//docs/generated/sql/bnf:alter_func_options_stmt.bnf",
     "//docs/generated/sql/bnf:alter_func_owner_stmt.bnf",

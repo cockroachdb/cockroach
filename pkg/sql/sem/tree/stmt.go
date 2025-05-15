@@ -2396,6 +2396,15 @@ func (n *DropTrigger) StatementTag() string {
 }
 
 // StatementReturnType implements the Statement interface.
+func (*AlterExternalConnection) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*AlterExternalConnection) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterExternalConnection) StatementTag() string { return "ALTER EXTERNAL CONNECTION" }
+
+// StatementReturnType implements the Statement interface.
 func (*AlterFunctionOptions) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -2479,6 +2488,7 @@ func (n *AlterDatabaseSecondaryRegion) String() string        { return AsString(
 func (n *AlterDatabaseDropSecondaryRegion) String() string    { return AsString(n) }
 func (n *AlterDatabaseSetZoneConfigExtension) String() string { return AsString(n) }
 func (n *AlterDefaultPrivileges) String() string              { return AsString(n) }
+func (n *AlterExternalConnection) String() string             { return AsString(n) }
 func (n *AlterFunctionOptions) String() string                { return AsString(n) }
 func (n *AlterPolicy) String() string                         { return AsString(n) }
 func (n *AlterRoutineRename) String() string                  { return AsString(n) }

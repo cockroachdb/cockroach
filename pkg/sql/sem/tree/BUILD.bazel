@@ -11,6 +11,7 @@ go_library(
         "alter_changefeed.go",
         "alter_database.go",
         "alter_default_privileges.go",
+        "alter_external_connection.go",
         "alter_index.go",
         "alter_policy.go",
         "alter_range.go",
