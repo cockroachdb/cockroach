@@ -13,6 +13,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -44,6 +45,7 @@ type executorConfig struct {
 	affinity          bool
 	quiet             bool
 	recoverable       bool
+	postIssues        bool
 }
 
 type executor struct {
@@ -52,6 +54,13 @@ type executor struct {
 	ignorePackages         map[string]struct{}
 	runOptions             install.RunOptions
 	log                    *logger.Logger
+	postConfig             postConfig
+}
+
+type postConfig struct {
+	branch    string
+	binary    string
+	commitSHA string
 }
 
 type benchmark struct {
@@ -103,6 +112,18 @@ func newExecutor(config executorConfig) (*executor, error) {
 		return nil, errors.New("iterations must be greater than 0")
 	}
 
+	var pc postConfig
+	if config.postIssues {
+		pc = postConfig{
+			branch:    os.Getenv("GITHUB_BRANCH"),
+			binary:    os.Getenv("GITHUB_BINARY"),
+			commitSHA: os.Getenv("GITHUB_SHA"),
+		}
+		if pc.branch == "" || pc.binary == "" || pc.commitSHA == "" {
+			return nil, errors.New("GITHUB_BRANCH, GITHUB_BINARY, and GITHUB_SHA environment variables must be set when post-issues is enabled")
+		}
+	}
+
 	roachprodConfig.Quiet = config.quiet
 	timestamp := timeutil.Now()
 	l := InitLogger(filepath.Join(config.outputDir, fmt.Sprintf("roachprod-microbench-%s.log", timestamp.Format(util.TimeFormat))))
@@ -114,6 +135,7 @@ func newExecutor(config executorConfig) (*executor, error) {
 		ignorePackages:         ignorePackages,
 		runOptions:             runOptions,
 		log:                    l,
+		postConfig:             pc,
 	}, nil
 }
 
@@ -121,7 +143,7 @@ func defaultExecutorConfig() executorConfig {
 	return executorConfig{
 		binaries:     map[string]string{"experiment": "experiment"},
 		outputDir:    "artifacts/roachprod-microbench",
-		timeout:      "10m",
+		timeout:      "20m",
 		shellCommand: "COCKROACH_RANDOM_SEED=1",
 		iterations:   1,
 		lenient:      true,
@@ -264,6 +286,21 @@ func (e *executor) generateBenchmarkCommands(
 	// Sort the binary keys to ensure a deterministic order.
 	binaryKeys := maps.Keys(e.binaries)
 	sort.Strings(binaryKeys)
+
+	// If post issues is enabled, move the post config binary key to the front
+	// of the binary keys list to ensure it runs first. Since we might only run
+	// one iteration before cancelling the other iterations, we want to report
+	// the failure as soon as possible.
+	if e.postIssues {
+		for i, key := range binaryKeys {
+			if key == e.postConfig.binary {
+				// Move the key to front by removing it and inserting at index 0
+				binaryKeys = slices.Delete(binaryKeys, i, i+1)
+				binaryKeys = append([]string{e.postConfig.binary}, binaryKeys...)
+				break
+			}
+		}
+	}
 
 	// Generate the commands for each benchmark binary.
 	for _, bench := range benchmarks {
@@ -411,12 +448,23 @@ func (e *executor) executeBenchmarks() error {
 				fmt.Println()
 			}
 			tag := fmt.Sprintf("%d", logIndex)
+			timeout := false
 			if response.ExitStatus == 124 || response.ExitStatus == 137 {
 				tag = fmt.Sprintf("%d-timeout", logIndex)
+				timeout = true
 			}
 			err = report.writeBenchmarkErrorLogs(response, tag)
 			if err != nil {
 				e.log.Errorf("Failed to write error logs - %v", err)
+			}
+
+			if e.postIssues && benchmarkResponse.key == e.postConfig.binary {
+				artifactsDir := fmt.Sprintf("%s/%s", e.outputDir, benchmarkResponse.key)
+				formatter, req := createBenchmarkPostRequest(artifactsDir, response, timeout)
+				err = postBenchmarkIssue(context.Background(), e.log, formatter, req)
+				if err != nil {
+					e.log.Errorf("Failed to post benchmark issue - %v", err)
+				}
 			}
 			errorCount++
 			logIndex++
