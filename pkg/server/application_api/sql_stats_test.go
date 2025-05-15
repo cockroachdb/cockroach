@@ -130,6 +130,8 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 		}
 	}
 
+	// Wait for last app name to be flushed to in memory stats.
+
 	// Hit query endpoint.
 	var resp serverpb.StatementsResponse
 	if err := srvtestutils.GetStatusJSONProtoWithAdminAndTimeoutOption(firstServerProto, "combinedstmts", &resp, true, additionalTimeout); err != nil {
@@ -264,7 +266,6 @@ func TestStatusAPITransactions(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-
 	// Hit query endpoint.
 	var resp serverpb.StatementsResponse
 	if err := srvtestutils.GetStatusJSONProto(firstServerProto, "statements", &resp); err != nil {
@@ -426,6 +427,7 @@ func TestStatusAPIStatements(t *testing.T) {
 		{stmt: `SELECT * FROM posts`},
 	}
 
+	thirdServerSQL.Exec(t, `SET application_name = "test"`)
 	for _, stmt := range statements {
 		thirdServerSQL.Exec(t, stmt.stmt)
 	}
@@ -451,9 +453,7 @@ func TestStatusAPIStatements(t *testing.T) {
 				// be automatically retried, confusing the test success check.
 				continue
 			}
-			if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
-				// We ignore internal queries, these are not relevant for the
-				// validity of this test.
+			if respStatement.Key.KeyData.App != "test" {
 				continue
 			}
 			if strings.HasPrefix(respStatement.Key.KeyData.Query, "ALTER USER") {
@@ -756,10 +756,12 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 	expectedStatementStatsMap := make(map[string]ExpectedStatementData)
 
 	// Helper function to execute the statements and store the expected statement
+	stmtCount := 0
 	executeStatements := func(statements []TestCases) {
 		// Clear the map at the start of each execution batch.
 		expectedStatementStatsMap = make(map[string]ExpectedStatementData)
 		for _, stmt := range statements {
+			stmtCount++
 			thirdServerSQL.Exec(t, stmt.stmt)
 			expectedStatementStatsMap[stmt.respQuery] = ExpectedStatementData{
 				fullScan: stmt.fullScan,
@@ -868,6 +870,7 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 
 	firstServerProto := testCluster.Server(0).ApplicationLayer()
 	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
+	obsConn := sqlutils.MakeSQLRunner(testCluster.Server(0).SQLConn(t))
 
 	statements := []struct {
 		stmt          string
@@ -883,6 +886,7 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 		{stmt: `SELECT * FROM posts`},
 	}
 
+	thirdServerSQL.Exec(t, `SET application_name = "test"`)
 	for _, stmt := range statements {
 		thirdServerSQL.Exec(t, stmt.stmt)
 	}
@@ -909,12 +913,12 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 				// be automatically retried, confusing the test success check.
 				continue
 			}
-			if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
+			if respStatement.Key.KeyData.App != "test" {
 				// CombinedStatementStats should filter out internal queries.
-				t.Fatalf("unexpected internal query: %s", respStatement.Key.KeyData.Query)
-			}
-			if strings.HasPrefix(respStatement.Key.KeyData.Query, "ALTER USER") {
-				// Ignore the ALTER USER ... VIEWACTIVITY statement.
+				if strings.HasPrefix(respStatement.Key.KeyData.Query, catconstants.InternalAppNamePrefix) {
+					t.Fatalf("unexpected internal query: %s", respStatement.Key.KeyData.Query)
+				}
+				// Otherwise, ignore this statement since it's probably from the observer conn.
 				continue
 			}
 
@@ -960,7 +964,7 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 
 	t.Run("fetch_mode=combined, VIEWACTIVITY", func(t *testing.T) {
 		// Grant VIEWACTIVITY.
-		thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", apiconstants.TestingUserNameNoAdmin().Normalized()))
+		obsConn.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", apiconstants.TestingUserNameNoAdmin().Normalized()))
 
 		// Test with no query params.
 		verifyStmts("combinedstmts", expectedStatements, true, t)
@@ -975,9 +979,9 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 
 	t.Run("fetch_mode=combined, VIEWACTIVITYREDACTED", func(t *testing.T) {
 		// Remove VIEWACTIVITY so we can test with just the VIEWACTIVITYREDACTED role.
-		thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s NOVIEWACTIVITY", apiconstants.TestingUserNameNoAdmin().Normalized()))
+		obsConn.Exec(t, fmt.Sprintf("ALTER USER %s NOVIEWACTIVITY", apiconstants.TestingUserNameNoAdmin().Normalized()))
 		// Grant VIEWACTIVITYREDACTED.
-		thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", apiconstants.TestingUserNameNoAdmin().Normalized()))
+		obsConn.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", apiconstants.TestingUserNameNoAdmin().Normalized()))
 
 		// Test with no query params.
 		verifyStmts("combinedstmts", expectedStatements, true, t)
@@ -1041,6 +1045,7 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 
 	firstServerProto := testCluster.Server(0).ApplicationLayer()
 	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
+	obsConn := sqlutils.MakeSQLRunner(testCluster.Server(0).SQLConn(t))
 
 	statements := []string{
 		`set application_name = 'first-app'`,
@@ -1092,7 +1097,7 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	}
 
 	// Grant VIEWACTIVITY.
-	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", apiconstants.TestingUserNameNoAdmin().Normalized()))
+	obsConn.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", apiconstants.TestingUserNameNoAdmin().Normalized()))
 
 	// Test with no query params.
 	testPath(
@@ -1249,7 +1254,6 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	for _, stmt := range statements {
 		thirdServerSQL.Exec(t, stmt)
 	}
-
 	selectQuery := "SELECT _, _, _, _"
 	fingerprintID = appstatspb.ConstructStatementFingerprintID(selectQuery, true, "defaultdb")
 
@@ -1322,6 +1326,7 @@ func TestCombinedStatementUsesCorrectSourceTable(t *testing.T) {
 	conn := sqlutils.MakeSQLRunner(srv.ApplicationLayer().SQLConn(t))
 	conn.Exec(t, "SET application_name = $1", server.CrdbInternalStmtStatsCombined)
 	conn.Exec(t, "SET CLUSTER SETTING sql.stats.activity.flush.enabled = 'f'")
+
 	// Clear the in-memory stats so we only have the above app name.
 	// Then populate it with 1 query.
 	conn.Exec(t, "SELECT crdb_internal.reset_sql_stats()")
@@ -1557,7 +1562,6 @@ func TestDrainSqlStats(t *testing.T) {
 		conn.Exec(t, fmt.Sprintf("SET application_name = '%s'", appName))
 		conn.Exec(t, "SELECT 1")
 	}
-
 	statusServer := testCluster.Server(0).GetStatusClient(t)
 	resp, err := statusServer.DrainSqlStats(ctx, &serverpb.DrainSqlStatsRequest{})
 	require.NoError(t, err)

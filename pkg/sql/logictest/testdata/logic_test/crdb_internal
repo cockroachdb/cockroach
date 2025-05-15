@@ -808,7 +808,7 @@ RESET application_name
 # different fingerprint on retries is caused by in-place mutation of the AST
 # (#22847).
 #
-query TII
+query TII retry
 SELECT key, max_retries, failure_count
   FROM crdb_internal.node_statement_statistics
  WHERE application_name = 'test_max_retry'
@@ -1015,7 +1015,10 @@ BEGIN; SELECT * FROM t_53504; COMMIT;
 statement ok
 SELECT * FROM t_53504
 
-query ITTTI colnames
+statement ok
+RESET application_name
+
+query ITTTI colnames,retry
 SELECT node_id, application_name, key, statement_ids, count FROM crdb_internal.node_transaction_statistics where application_name = 'test_txn_statistics' ORDER BY key
 ----
 node_id  application_name     key                   statement_ids                                                  count
@@ -1023,6 +1026,7 @@ node_id  application_name     key                   statement_ids               
 1        test_txn_statistics  17664899828239596829  {6504861979500726978}                                          1
 1        test_txn_statistics  17976145939037309168  {6204733445766643503}                                          1
 1        test_txn_statistics  18364202634803759405  {6504861979500726990,6504861979500726990}                      2
+1        test_txn_statistics  79149212088773624     {12572515814643342375}                                         1
 1        test_txn_statistics  9852458619443781049   {6504861979500726990,6504861979500726990,6504861979500726990}  1
 
 ## crdb_internal.cluster_database_privileges

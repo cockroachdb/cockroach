@@ -28,8 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -418,6 +418,7 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 		},
 	})
 
+	appName := "test-app"
 	systemLayer := testCluster.Server(1 /* idx */).SystemLayer()
 
 	tenantStatusServer := tenant.StatusServer().(serverpb.SQLStatusServer)
@@ -438,12 +439,18 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 		{stmt: `SELECT * FROM posts_t`},
 	}
 
+	_, err := sqlDB.Exec(`SET application_name = $1`, appName)
+	require.NoError(t, err)
 	for _, stmt := range testCaseTenant {
 		_, err := sqlDB.Exec(stmt.stmt)
 		require.NoError(t, err)
 	}
 
-	err := sqlDB.Close()
+	conn := sqlutils.MakeSQLRunner(tenant.SQLConn(t))
+	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, conn, len(testCaseTenant),
+		sqlstatstestutil.StatementFilter{App: appName})
+
+	err = sqlDB.Close()
 	require.NoError(t, err)
 
 	testCaseNonTenant := []testCase{
@@ -459,10 +466,18 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 
 	sqlDB = systemLayer.SQLConn(t)
 
+	_, err = sqlDB.Exec(`SET application_name = $1`, appName)
+	require.NoError(t, err)
 	for _, stmt := range testCaseNonTenant {
 		_, err = sqlDB.Exec(stmt.stmt)
 		require.NoError(t, err)
 	}
+
+	conn = sqlutils.MakeSQLRunner(systemLayer.SQLConn(t))
+	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, conn, len(testCaseTenant), sqlstatstestutil.StatementFilter{
+		App: appName,
+	})
+
 	err = sqlDB.Close()
 	require.NoError(t, err)
 
@@ -510,9 +525,7 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 				// be automatically retried, confusing the test success check.
 				continue
 			}
-			if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
-				// We ignore internal queries, these are not relevant for the
-				// validity of this test.
+			if respStatement.Key.KeyData.App != appName {
 				continue
 			}
 			actualStatements = append(actualStatements, respStatement.Key.KeyData.Query)
@@ -579,9 +592,24 @@ func testResetSQLStatsRPCForTenant(
 
 	}()
 
+	getObsConn := func(tenant serverccl.TestTenant) (*sqlutils.SQLRunner, func()) {
+		pgUrl, cleanupPgUrl := tenant.GetTenant().PGUrl(t)
+		obsConn, cleanupObsConn := sqlstatstestutil.MakeObserverConnection(t, pgUrl)
+		cleanup := func() {
+			cleanupPgUrl()
+			cleanupObsConn()
+		}
+		return obsConn, cleanup
+	}
+
+	testTenantObs, cleanup1 := getObsConn(testCluster.Tenant(serverccl.RandomServer))
+	defer cleanup1()
+	controlTenantObsConn, cleanup2 := getObsConn(controlCluster.Tenant(serverccl.RandomServer))
+	defer cleanup2()
 	for _, flushed := range []bool{false, true} {
 		testTenant := testCluster.Tenant(serverccl.RandomServer)
 		testTenantConn := testTenant.GetTenantConn()
+
 		t.Run(fmt.Sprintf("flushed=%t", flushed), func(t *testing.T) {
 			// Clears the SQL Stats at the end of each test via builtin.
 			defer func() {
@@ -593,6 +621,9 @@ func testResetSQLStatsRPCForTenant(
 				testTenantConn.Exec(t, stmt)
 				controlCluster.TenantConn(serverccl.RandomServer).Exec(t, stmt)
 			}
+
+			sqlstatstestutil.WaitForStatementEntriesAtLeast(t, testTenantObs, len(stmts))
+			sqlstatstestutil.WaitForStatementEntriesAtLeast(t, controlTenantObsConn, len(stmts))
 
 			if flushed {
 				testTenantServer := testTenant.TenantSQLServer()

@@ -904,6 +904,7 @@ go_test(
         "//pkg/sql/sqlliveness/sqllivenesstestutils",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/persistedsqlstats",
+        "//pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
         "//pkg/sql/sqlstats/sslocal",
         "//pkg/sql/sqltestutils",

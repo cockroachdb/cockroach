@@ -66,7 +66,9 @@ func (s *sqlStatsTestSink) ObserveTransaction(
 	for _, stmt := range statements {
 		s.mu.stmts = append(s.mu.stmts, *stmt)
 	}
-	s.mu.txns = append(s.mu.txns, *transactionStats)
+	if transactionStats != nil {
+		s.mu.txns = append(s.mu.txns, *transactionStats)
+	}
 }
 
 type testEvent struct {
@@ -159,7 +161,6 @@ func TestSQLIngester(t *testing.T) {
 			ingester := NewSQLStatsIngester(nil, testSink)
 
 			ingester.Start(ctx, stopper, WithFlushInterval(10))
-			t.Log(tc.observations)
 			ingestEventsSync(ingester, tc.observations)
 
 			// Wait for the insights to come through.

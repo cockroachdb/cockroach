@@ -12,10 +12,6 @@ user root
 statement error division by zero
 SELECT 2/0;
 
-query TT
-SELECT last_error_code, last_error FROM crdb_internal.node_statement_statistics WHERE last_error_code!='NULL' AND application_name NOT LIKE '$ %' ORDER BY last_error_code ASC;
-----
-22012  division by zero
 
 # Test 2: database does not exist. Error code "3D000" should be added.
 query TTTTTT colnames,rowsort
@@ -30,34 +26,16 @@ test           root   NULL            NULL              {}       NULL
 statement error pq: database "posgres" does not exist
 use posgres
 
-query TT
-SELECT last_error_code, last_error FROM crdb_internal.node_statement_statistics WHERE last_error_code!='NULL' AND application_name NOT LIKE '$ %' ORDER BY last_error_code ASC;
-----
-22012  division by zero
-3D000  database "posgres" does not exist
 
 # Test 3: Nonexistant user. Error code "42704" should be added.
 statement error pq: role/user "who" does not exist
 ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES to who
 
-query TT
-SELECT last_error_code, last_error FROM crdb_internal.node_statement_statistics WHERE last_error_code!='NULL' AND application_name NOT LIKE '$ %' ORDER BY last_error_code ASC;
-----
-22012  division by zero
-3D000  database "posgres" does not exist
-42704  role/user "who" does not exist 
 
 # Test 4: Insufficient privilege. Error code "42501" should be added.
 statement error schema cannot be modified: "crdb_internal"
 CREATE TABLE crdb_internal.example (abc INT)
 
-query TT
-SELECT last_error_code, last_error FROM crdb_internal.node_statement_statistics WHERE last_error_code!='NULL' AND application_name NOT LIKE '$ %' ORDER BY last_error_code ASC;
-----
-22012  division by zero
-3D000  database "posgres" does not exist
-42501  schema cannot be modified: "crdb_internal"
-42704  role/user "who" does not exist
 
 # Test 5: Foreign key violation. Error code "23503" should be added.
 statement ok
@@ -77,7 +55,8 @@ RESET autocommit_before_ddl
 statement error foreign key
 UPDATE dst SET x = 'xyz'
 
-query TT
+# Expect 5 errors from tests above.
+query TT retry
 SELECT last_error_code, last_error   FROM crdb_internal.node_statement_statistics WHERE last_error_code!='NULL' AND application_name NOT LIKE '$ %' ORDER BY last_error_code ASC;
 ----
 22012  division by zero
