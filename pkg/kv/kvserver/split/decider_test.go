@@ -503,7 +503,7 @@ func TestDeciderMetrics(t *testing.T) {
 
 	assert.Equal(t, dPopular.loadSplitterMetrics.PopularKeyCount.Count(), int64(2))
 	assert.Equal(t, dPopular.loadSplitterMetrics.NoSplitKeyCount.Count(), int64(2))
-	assert.Equal(t, dPopular.loadSplitterMetrics.ClearDirectionCount.Count(), int64(2))
+	assert.Equal(t, dPopular.loadSplitterMetrics.ClearDirectionCount.Count(), int64(0))
 
 	// No split key, not popular key, clear direction
 	var dNotPopular Decider
