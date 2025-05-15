@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 
+	"github.com/cockroachdb/cockroach/pkg/rpc/drpc/chatpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/drpc/greeterpb"
 	"storj.io/drpc/drpcmigrate"
 	"storj.io/drpc/drpcmux"
@@ -24,6 +25,32 @@ func (g *greeterServer) SayHello(
 	return &greeterpb.HelloResponse{
 		Message: fmt.Sprintf("Hello, %s! Pong!", req.Name),
 	}, nil
+}
+
+type chatServer struct {
+	chatpb.DRPCChatServiceUnimplementedServer
+}
+
+func (s *chatServer) ChatStream(stream chatpb.DRPCChatService_ChatStreamStream) error {
+	for {
+		msg, err := stream.Recv()
+		if err != nil {
+			log.Printf("stream closed or errored: %v", err)
+			return err
+		}
+
+		log.Printf("Received from %s: %s", msg.Sender, msg.Text)
+
+		// Echo back the message with a prefix
+		response := &chatpb.ChatMessage{
+			Sender: "Server",
+			Text:   "Echo: " + msg.Text,
+		}
+
+		if err := stream.Send(response); err != nil {
+			return err
+		}
+	}
 }
 
 func StartServer() error {
@@ -59,4 +86,33 @@ func StartServer() error {
 	ctx := context.Background()
 	return s.Serve(ctx, drpcLis)
 	return nil
+}
+
+func StartChatServer() {
+	listener, err := net.Listen("tcp", ":9000")
+	if err != nil {
+		log.Fatalf("Failed to listen: %v", err)
+	}
+	defer listener.Close()
+
+	mux := drpcmux.New()
+	server := drpcserver.New(mux)
+	if err := chatpb.DRPCRegisterChatService(mux, &chatServer{}); err != nil {
+		log.Fatalf("Failed to register: %v", err)
+	}
+
+	log.Println("DRPC server listening on :9000")
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Printf("Accept error: %v", err)
+			continue
+		}
+		go func(conn net.Conn) {
+			ctx := context.Background()
+			if err := server.ServeOne(ctx, conn); err != nil {
+				log.Printf("Serve error: %v", err)
+			}
+		}(conn)
+	}
 }
