@@ -331,7 +331,7 @@ func makeKafkaSinkV2(
 	ctx context.Context,
 	u *changefeedbase.SinkURL,
 	targets changefeedbase.Targets,
-	jsonConfig changefeedbase.SinkSpecificJSONConfig,
+	sinkOpts changefeedbase.KafkaSinkOptions,
 	parallelism int,
 	pacerFactory func() *admission.Pacer,
 	timeSource timeutil.TimeSource,
@@ -339,6 +339,8 @@ func makeKafkaSinkV2(
 	mb metricsRecorderBuilder,
 	knobs kafkaSinkV2Knobs,
 ) (Sink, error) {
+	jsonConfig := sinkOpts.JSONConfig
+	// TODO: headers
 	batchCfg, retryOpts, err := getSinkConfigFromJson(jsonConfig, sinkJSONConfig{
 		// Defaults from the v1 sink - flush immediately.
 		Flush: sinkBatchConfig{},
