@@ -144,8 +144,7 @@ func runTransitionStep(
 }
 
 func Test_FailerLifecycle(t *testing.T) {
-	fr := NewFailureRegistry()
-	fr.Register()
+	fr := GetFailureRegistry()
 	f, err := fr.GetFailer("", NoopFailureName, nilLogger(), false /* secure */)
 	require.NoError(t, err)
 

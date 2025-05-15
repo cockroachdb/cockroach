@@ -28,8 +28,10 @@ type CGroupDiskStaller struct {
 	GenericFailure
 }
 
-func MakeCgroupDiskStaller(clusterName string, l *logger.Logger, secure bool) (FailureMode, error) {
-	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(secure))
+func MakeCgroupDiskStaller(
+	clusterName string, l *logger.Logger, clusterOpts ClusterOptions,
+) (FailureMode, error) {
+	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(clusterOpts.secure))
 	if err != nil {
 		return nil, err
 	}
@@ -89,6 +91,8 @@ if [ ! -L logs ]; then
 		if [ -e %[1]s ]; then
 				cp -va %[1]s/* logs/
 		fi
+else
+		echo "symlink already exists, not creating";
 fi
 `, tmpLogsDir)
 		if err := s.Run(ctx, l, diskStallArgs.Nodes, createSymlinkCmd); err != nil {
@@ -338,9 +342,9 @@ type DmsetupDiskStaller struct {
 }
 
 func MakeDmsetupDiskStaller(
-	clusterName string, l *logger.Logger, secure bool,
+	clusterName string, l *logger.Logger, clusterOpts ClusterOptions,
 ) (FailureMode, error) {
-	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(secure))
+	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(clusterOpts.secure))
 	if err != nil {
 		return nil, err
 	}
