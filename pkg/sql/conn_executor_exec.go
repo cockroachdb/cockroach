@@ -2702,6 +2702,14 @@ func (ex *connExecutor) rollbackSQLTransaction(
 func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 	ctx context.Context, p *planner, res RestrictedCommandResult,
 ) error {
+	if ex.executorType == executorTypeInternal {
+		// Because we step the external read timestamp below, this is not safe to
+		// call within internal executor.
+		return errors.AssertionFailedf(
+			"call of dispatchReadCommittedStmtToExecutionEngine within internal executor",
+		)
+	}
+
 	readCommittedSavePointToken, err := ex.state.mu.txn.CreateSavepoint(ctx)
 	if err != nil {
 		return err
@@ -2709,6 +2717,15 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 
 	maxRetries := int(ex.sessionData().MaxRetriesForReadCommitted)
 	for attemptNum := 0; ; attemptNum++ {
+		if attemptNum > 0 {
+			// Step both the sequence number and the external read timestamp so that
+			// we can see the results of the conflicting transactions that caused us
+			// to fail.
+			if err := ex.state.mu.txn.Step(ctx, true /* allowReadTimestampStep */); err != nil {
+				return err
+			}
+		}
+
 		bufferPos := res.BufferedResultsLen()
 		if err = ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
 			return err
@@ -2759,9 +2776,6 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 			return err
 		}
 		if err := ex.state.mu.txn.PrepareForPartialRetry(ctx); err != nil {
-			return err
-		}
-		if err := ex.state.mu.txn.Step(ctx, false /* allowReadTimestampStep */); err != nil {
 			return err
 		}
 		ex.state.mu.autoRetryCounter++
