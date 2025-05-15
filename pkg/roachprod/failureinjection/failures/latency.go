@@ -53,9 +53,9 @@ func registerNetworkLatencyFailure(r *FailureRegistry) {
 }
 
 func MakeNetworkLatencyFailure(
-	clusterName string, l *logger.Logger, secure bool,
+	clusterName string, l *logger.Logger, clusterOpts ClusterOptions,
 ) (FailureMode, error) {
-	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(secure))
+	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(clusterOpts.secure))
 	if err != nil {
 		return nil, err
 	}
