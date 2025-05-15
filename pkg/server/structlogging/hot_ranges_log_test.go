@@ -43,7 +43,7 @@ func (spy *hotRangesLogSpy) Intercept(e []byte) {
 	}
 
 	re := regexp.MustCompile(`"EventType":"hot_ranges_stats"`)
-	if entry.Channel != logpb.Channel_OPS || !re.MatchString(entry.Message) {
+	if entry.Channel != logpb.Channel_HEALTH || !re.MatchString(entry.Message) {
 		return
 	}
 
