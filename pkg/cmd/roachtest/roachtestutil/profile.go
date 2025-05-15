@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/google/pprof/profile"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -328,7 +328,8 @@ func getProfileWithTimeout(
 	for {
 		select {
 		case <-timer.C:
-			return nil, errors.Wrapf(latestError, "failed to get profile from %s after %s", url, timeout)
+			return nil, errors.Wrapf(errors.CombineErrors(latestError, errors.New("timed out")),
+				"failed to get profile from %s after %s", url, timeout)
 		default:
 		}
 
@@ -362,80 +363,73 @@ func getProfileWithTimeout(
 	}
 }
 
-// GetCPUProfile returns the CPU profile for the given node.
-func GetCPUProfile(
+// getProfileSingleNode returns the specified profile for a single node. If
+// taking the profile fails, we will keep retrying for 15 seconds.
+// Supported profile types are: {"cpu", "allocs", "mutex", "heap"}.
+func getProfileSingleNode(
 	ctx context.Context,
 	cluster cluster.Cluster,
 	logger *logger.Logger,
+	profileType string,
 	nodeID int,
 	duration time.Duration,
 ) (*profile.Profile, error) {
+	var actualProfileType string
+	switch profileType {
+	case "cpu":
+		// It's unfortunate that the CPU profile endpoint is called "profile".
+		actualProfileType = "profile"
+	case "allocs":
+		actualProfileType = "allocs"
+	case "mutex":
+		actualProfileType = "mutex"
+	case "heap":
+		actualProfileType = "heap"
+	default:
+		return nil, errors.Newf("invalid profile type %s", profileType)
+	}
 	adminUIAddrs, err := cluster.ExternalAdminUIAddr(ctx, logger, cluster.Node(nodeID))
 	if err != nil {
 		return nil, err
 	}
 	// Use a long enough HTTP timeout that is larger than the profile duration.
 	client := DefaultHTTPClient(cluster, logger, HTTPTimeout(2*duration))
-	url := fmt.Sprintf("https://%s/debug/pprof/profile?seconds=%d", adminUIAddrs[0],
-		int(duration.Seconds()))
-	return getProfileWithTimeout(ctx, logger, client, url, 10*time.Second /* timeout */)
+	url := fmt.Sprintf("https://%s/debug/pprof/%s?seconds=%d", adminUIAddrs[0],
+		actualProfileType, int(duration.Seconds()))
+	return getProfileWithTimeout(ctx, logger, client, url, 15*time.Second /* timeout */)
 }
 
-// GetAllocsProfile returns the allocs profile for the given node.
-func GetAllocsProfile(
-	ctx context.Context, cluster cluster.Cluster, logger *logger.Logger, nodeID int,
-) (*profile.Profile, error) {
-	adminUIAddrs, err := cluster.ExternalAdminUIAddr(ctx, logger, cluster.Node(nodeID))
-	if err != nil {
-		return nil, err
-	}
-	client := DefaultHTTPClient(cluster, logger, HTTPTimeout(10*time.Second))
-	url := fmt.Sprintf("https://%s/debug/pprof/allocs", adminUIAddrs[0])
-	return getProfileWithTimeout(ctx, logger, client, url, 10*time.Second /* timeout */)
-}
-
-// GetMutexProfile returns the mutex profile for the given node.
-func GetMutexProfile(
-	ctx context.Context, cluster cluster.Cluster, logger *logger.Logger, nodeID int,
-) (*profile.Profile, error) {
-	adminUIAddrs, err := cluster.ExternalAdminUIAddr(ctx, logger, cluster.Node(nodeID))
-	if err != nil {
-		return nil, err
-	}
-	client := DefaultHTTPClient(cluster, logger, HTTPTimeout(10*time.Second))
-	url := fmt.Sprintf("https://%s/debug/pprof/mutex", adminUIAddrs[0])
-	return getProfileWithTimeout(ctx, logger, client, url, 10*time.Second /* timeout */)
-}
-
-// GetProfileForAllCRDBNodes receives a function that can collect a profile
-// for a given node and uses it to collect profiles for all the nodes in the
-// cluster in parallel. It returns a slice of profiles and an error if any of
-// the profiles failed to collect. Each entry in the slices is in the same order
-// as the CRDB nodes in the cluster.
-func GetProfileForAllCRDBNodes(
-	c cluster.Cluster,
+// GetProfile collect profiles for all the nodes received in the function
+// parameters. It returns a slice of profiles and an error if any of the
+// profiles failed to collect. Each entry in the slices is in the same order as
+// the nodes received.
+// Supported profile types are: {"cpu", "allocs", "mutex", "heap"}.
+func GetProfile(
+	ctx context.Context,
+	cluster cluster.Cluster,
 	logger *logger.Logger,
-	collectProfile func(
-		nodeID int,
-	) (*profile.Profile, error),
+	profileType string,
+	duration time.Duration,
+	nodes option.NodeListOption,
 ) ([]*profile.Profile, error) {
-	profiles := make([]*profile.Profile, len(c.CRDBNodes()))
-	errors := make([]error, len(c.CRDBNodes()))
+	profiles := make([]*profile.Profile, len(nodes))
+	errors := make([]error, len(nodes))
 
 	// profileWg is used to wait for all the profiles to be collected.
 	profileWg := sync.WaitGroup{}
-	for i := range c.CRDBNodes() {
+	for _, nodeId := range nodes {
 		profileWg.Add(1)
 		go func(nodeID int) {
 			defer profileWg.Done()
 			var err error
-			profiles[nodeID-1], err = collectProfile(nodeID)
+			profiles[nodeID-1], err = getProfileSingleNode(ctx, cluster, logger, profileType,
+				nodeID, duration)
 
 			if err != nil {
 				logger.Printf("error getting profile for node %d: %s", nodeID, err)
 				errors[nodeID-1] = err
 			}
-		}(i + 1)
+		}(nodeId)
 	}
 	profileWg.Wait()
 
