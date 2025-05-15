@@ -4034,6 +4034,30 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	// CockroachDB extension. Configures the initial backoff duration for
+	// automatic retries of statements in explicit READ COMMITTED transactions
+	// that see a transaction retry error.
+	`initial_backoff_of_retries_for_read_committed`: {
+		GetStringVal: makeTimeoutVarGetter(`initial_backoff_of_retries_for_read_committed`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			duration, err := validateTimeoutVar(m.data.GetIntervalStyle(), s,
+				"initial_backoff_of_retries_for_read_committed",
+			)
+			if err != nil {
+				return err
+			}
+			m.SetInitialBackoffOfRetriesForReadCommitted(duration)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			ms := evalCtx.SessionData().InitialBackoffOfRetriesForReadCommitted.Nanoseconds() / int64(time.Millisecond)
+			return strconv.FormatInt(ms, 10), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "0ms"
+		},
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
