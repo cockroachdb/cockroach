@@ -385,8 +385,7 @@ func init() {
 
 // applyTimestampCache moves the batch timestamp forward depending on
 // the presence of overlapping entries in the timestamp cache. If the
-// batch is transactional, the txn timestamp and the txn.WriteTooOld
-// bool are updated.
+// batch is transactional the txn timestamp is updated.
 //
 // Two important invariants of Cockroach: 1) encountering a more
 // recently written value means transaction restart. 2) values must

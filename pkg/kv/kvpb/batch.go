@@ -938,11 +938,6 @@ func (ba *BatchRequest) ValidateForEvaluation() error {
 	if _, ok := ba.GetArg(EndTxn); ok && ba.Txn == nil {
 		return errors.AssertionFailedf("EndTxn request without transaction")
 	}
-	if ba.Txn != nil {
-		if ba.Txn.WriteTooOld && ba.Txn.ReadTimestamp == ba.Txn.WriteTimestamp {
-			return errors.AssertionFailedf("WriteTooOld set but no offset in timestamps. txn: %s", ba.Txn)
-		}
-	}
 	return nil
 }
 
