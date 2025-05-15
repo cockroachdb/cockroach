@@ -283,6 +283,7 @@ func (e *executor) generateBenchmarkCommands(
 			command := cluster.RemoteCommand{
 				Args:     []string{"sh", "-c", shellCommand},
 				Metadata: benchmarkKey{bench, key},
+				GroupID:  fmt.Sprintf("%s/%s", bench.pkg, bench.name),
 			}
 			benchmarkCommands = append(benchmarkCommands, command)
 		}
