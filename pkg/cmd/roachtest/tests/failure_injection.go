@@ -14,15 +14,18 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	dashboard "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
@@ -52,6 +55,21 @@ type failureSmokeTest struct {
 	validateRecover func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f failures.FailureMode) error
 	// The workload to be run during the failureSmokeTest, if nil, defaultSmokeTestWorkload is used.
 	workload func(ctx context.Context, c cluster.Cluster, args ...string) error
+}
+
+// annotateGrafana adds an annotation to both the internal and centralized Grafana
+// instance.
+func (t *failureSmokeTest) annotateGrafana(
+	ctx context.Context, l *logger.Logger, c cluster.Cluster, text string,
+) error {
+	if err := c.AddGrafanaAnnotation(ctx, l, grafana.AddAnnotationRequest{
+		Text: text,
+	}); err != nil {
+		return err
+	}
+	return c.AddInternalGrafanaAnnotation(ctx, l, grafana.AddAnnotationRequest{
+		Text: text,
+	})
 }
 
 func (t *failureSmokeTest) run(
@@ -90,9 +108,7 @@ func (t *failureSmokeTest) run(
 		return err
 	}
 	l.Printf("%s: Running Inject(); details in %s.log", t.failureName, file)
-	if err = c.AddGrafanaAnnotation(ctx, l, grafana.AddAnnotationRequest{
-		Text: fmt.Sprintf("%s injected", t.testName),
-	}); err != nil {
+	if err = t.annotateGrafana(ctx, l, c, fmt.Sprintf("%s injected", t.testName)); err != nil {
 		return err
 	}
 	if err = failureMode.Inject(ctx, quietLogger, t.args); err != nil {
@@ -119,9 +135,7 @@ func (t *failureSmokeTest) run(
 		return err
 	}
 	l.Printf("%s: Running Recover(); details in %s.log", t.failureName, file)
-	if err = c.AddGrafanaAnnotation(ctx, l, grafana.AddAnnotationRequest{
-		Text: fmt.Sprintf("%s recovered", t.testName),
-	}); err != nil {
+	if err = t.annotateGrafana(ctx, l, c, fmt.Sprintf("%s recovered", t.testName)); err != nil {
 		return err
 	}
 	if err = failureMode.Recover(ctx, quietLogger, t.args); err != nil {
@@ -617,6 +631,31 @@ func setupFailureSmokeTests(
 	if err := c.Install(ctx, t.L(), c.CRDBNodes(), "vmtouch"); err != nil {
 		return err
 	}
+
+	// Setup cgroup_exporter as a scrape target in prometheus.
+	// TODO(darryl): Once #143404 is complete, we should switch all cgroup
+	// performance assertions to use prometheus metrics instead of the current
+	// approach of sampling cgroup directly. There's nothing blocking us from
+	// using clusterstats to query for metrics, but the solution proposed in #143404
+	// is cleaner for this use case so lets not waste time on a temporary change.
+	promSetupLogger, _, err := roachtestutil.LoggerForCmd(t.L(), c.WorkloadNode(), "setup-prom")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	promCfg := &prometheus.Config{}
+	promCfg.WithPrometheusNode(c.WorkloadNode().InstallNodes()[0]).
+		WithCluster(c.CRDBNodes().InstallNodes()).
+		WithGrafanaDashboardJSON(dashboard.CgroupIOGrafanaJSON).
+		WithCgroupExporter(c.CRDBNodes().InstallNodes())
+
+	if err = c.StartGrafana(ctx, promSetupLogger, promCfg); err != nil {
+		t.Fatal(err)
+	}
+	if url, err := roachprod.GrafanaURL(ctx, t.L(), c.MakeNodes(), false /* openInBrowser */); err == nil {
+		t.L().Printf("Grafana Dashboard: %s", url)
+	}
+
 	startSettings := install.MakeClusterSettings()
 	startSettings.Env = append(startSettings.Env,
 		// Increase the time writes must be stalled before a node fatals. Disk stall tests
