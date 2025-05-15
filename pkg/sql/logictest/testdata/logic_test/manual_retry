@@ -38,7 +38,7 @@ query error restart transaction: TransactionRetryWithProtoRefreshError: forced b
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 onlyif config local-read-committed
-query error restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=10: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
+query error restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=100: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 statement ok

@@ -2275,7 +2275,7 @@ var varGen = map[string]sessionVar{
 			return strconv.FormatInt(int64(evalCtx.SessionData().MaxRetriesForReadCommitted), 10), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return "10"
+			return "100"
 		},
 	},
 
