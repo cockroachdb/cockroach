@@ -9,7 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"encoding/base64"
-	"encoding/json"
+	gojson "encoding/json"
 	"fmt"
 	"math"
 	"math/rand"
@@ -2729,7 +2729,7 @@ func TestChangefeedSchemaChangeAllowBackfill_Legacy(t *testing.T) {
 			// the backfill) occurs before the schema-change backfill for a drop
 			// column, the order in which the sink receives both backfills is
 			// uncertain. the only guarantee here is per-key ordering guarantees,
-			// so we must check both backfills in the same assertion.
+			// so we must check both backfills in the same assertion
 			assertPayloadsPerKeyOrderedStripTs(t, dropColumn, []string{
 				// Changefeed level backfill for DROP COLUMN b.
 				`drop_column: [1]->{"after": {"a": 1}}`,
@@ -5080,7 +5080,7 @@ func TestChangefeedDataTTL(t *testing.T) {
 						B int
 					}
 				}
-				err = json.Unmarshal(msg.Value, &decodedMessage)
+				err = gojson.Unmarshal(msg.Value, &decodedMessage)
 				require.NoError(t, err)
 				delete(upsertedValues, decodedMessage.After.B)
 				if len(upsertedValues) == 0 {
@@ -9935,6 +9935,39 @@ func TestCDCQuerySelectSingleRow(t *testing.T) {
 		}
 	}
 	cdcTest(t, testFn, withKnobsFn(knobsFn))
+}
+
+func assertReasonableMVCCTimestamp(t *testing.T, ts string) {
+	epochNanos := parseTimeToHLC(t, ts).WallTime
+	now := timeutil.Now()
+	require.GreaterOrEqual(t, epochNanos, now.Add(-1*time.Hour).UnixNano())
+}
+
+func TestChangefeedMVCCTimestampWithQueries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (key INT PRIMARY KEY);`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1);`)
+
+		feed, err := f.Feed(`CREATE CHANGEFEED WITH mvcc_timestamp AS SELECT * FROM foo`)
+		require.NoError(t, err)
+		defer closeFeed(t, feed)
+
+		msgs, err := readNextMessages(ctx, feed, 1)
+		require.NoError(t, err)
+
+		var m map[string]any
+		require.NoError(t, gojson.Unmarshal(msgs[0].Value, &m))
+		ts := m["__crdb__"].(map[string]any)["mvcc_timestamp"].(string)
+		assertReasonableMVCCTimestamp(t, ts)
+	}
+
+	cdcTest(t, testFn)
 }
 
 func TestCloudstorageParallelCompression(t *testing.T) {
