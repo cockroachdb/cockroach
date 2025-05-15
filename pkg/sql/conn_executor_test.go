@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
@@ -511,6 +512,8 @@ func TestAppNameStatisticsInitialization(t *testing.T) {
 	// Issue a query to be registered in stats.
 	sqlDB.Exec(t, "SELECT version()")
 
+	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, sqlDB, 1)
+
 	// Verify the query shows up in stats.
 	rows := sqlDB.Query(t, "SELECT application_name, key FROM crdb_internal.node_statement_statistics")
 	defer rows.Close()
@@ -544,6 +547,7 @@ func TestPrepareStatisticsMetadata(t *testing.T) {
 	_, err = stmt.Exec(3)
 	require.NoError(t, err)
 
+	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, sqlutils.MakeSQLRunner(sqlDB), 1)
 	// Verify that query and querySummary are equal in crdb_internal.statement_statistics.metadata.
 	rows, err := sqlDB.Query(`SELECT metadata->>'query', metadata->>'querySummary' FROM crdb_internal.statement_statistics WHERE metadata->>'query' LIKE 'SELECT _::INT8'`)
 	if err != nil {

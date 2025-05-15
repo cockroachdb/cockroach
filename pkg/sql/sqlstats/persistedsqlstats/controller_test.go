@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -67,6 +68,10 @@ func TestPersistedSQLStatsReset(t *testing.T) {
 		sqlDB.Exec(t, query)
 	}
 
+	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, observer,
+		len(testCasesForDisk),
+		sqlstatstestutil.StatementFilter{App: appName})
+
 	sqlStats := server.SQLServer().(*sql.Server).GetSQLStatsProvider()
 	sqlStats.MaybeFlush(ctx, cluster.ApplicationLayer(0).AppStopper())
 
@@ -80,6 +85,9 @@ func TestPersistedSQLStatsReset(t *testing.T) {
 			expectedStmtFingerprintToFingerprintID[fingerprint] = ""
 		}
 	}
+	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, observer,
+		len(testCasesForMem),
+		sqlstatstestutil.StatementFilter{App: appName})
 
 	// Sanity check that we still have the same count since we are still within
 	// the same aggregation interval.
