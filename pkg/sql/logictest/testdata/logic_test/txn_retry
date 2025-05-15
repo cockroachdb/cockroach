@@ -1,10 +1,19 @@
-# TODO(#144278): remove this or adjust the test.
-statement ok
-SET kv_transaction_buffered_writes_enabled = false;
-
 # Check that we auto-retry pushed transactions which can't be refreshed - if
 # they're pushed while we can still auto-retry them.
 subtest autoretry-on-push-first-batch
+
+# TODO(#146732): This test is testing a specific retry path that is
+# only used when a statement has resulted in a WriteTimestamp push,
+# can't be refreshed by the span refresher interceptor, and also
+# hasn't produced an error. In buffered writes, we don't detect this
+# WriteTimestamp push until the COMMIT and are no longer eligible for
+# the retry path tested here.
+#
+# It may seem like we could change the read-write conflict to a
+# write-write conflict. But the write-write conflict generates an
+# error which means it wouldn't test the same retry path.
+statement ok
+SET kv_transaction_buffered_writes_enabled = false;
 
 statement ok
 CREATE TABLE test_retry (
