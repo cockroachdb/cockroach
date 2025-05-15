@@ -8,13 +8,22 @@ package failures
 import (
 	"fmt"
 	"regexp"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+// ClusterOptions represents options that can be passed to a
+// Failer to describe how it should interact with the cluster.
+// For now, this just denotes if the cluster is secure or not,
+// but will be expanded on in the future to support multitenant clusters.
+type ClusterOptions struct {
+	secure bool
+}
+
 type failureSpec struct {
-	makeFailureFunc func(clusterName string, l *logger.Logger, secure bool) (FailureMode, error)
+	makeFailureFunc func(clusterName string, l *logger.Logger, clusterOptions ClusterOptions) (FailureMode, error)
 	args            FailureArgs
 }
 type FailureRegistry struct {
@@ -22,13 +31,22 @@ type FailureRegistry struct {
 	failures map[string]failureSpec
 }
 
-func NewFailureRegistry() *FailureRegistry {
-	return &FailureRegistry{
-		failures: make(map[string]failureSpec),
-	}
+var (
+	registry *FailureRegistry
+	once     sync.Once
+)
+
+func GetFailureRegistry() *FailureRegistry {
+	once.Do(func() {
+		registry = &FailureRegistry{
+			failures: make(map[string]failureSpec),
+		}
+		registry.register()
+	})
+	return registry
 }
 
-func (r *FailureRegistry) Register() {
+func (r *FailureRegistry) register() {
 	registerCgroupDiskStall(r)
 	registerDmsetupDiskStall(r)
 	registerIPTablesPartitionFailure(r)
@@ -41,7 +59,7 @@ func (r *FailureRegistry) Register() {
 func (r *FailureRegistry) add(
 	failureName string,
 	args FailureArgs,
-	makeFailureFunc func(clusterName string, l *logger.Logger, secure bool) (FailureMode, error),
+	makeFailureFunc func(clusterName string, l *logger.Logger, clusterOpts ClusterOptions) (FailureMode, error),
 ) {
 	r.Lock()
 	defer r.Unlock()
@@ -72,7 +90,7 @@ func (r *FailureRegistry) List(regex string) []string {
 }
 
 func (r *FailureRegistry) GetFailer(
-	clusterName, failureName string, l *logger.Logger, secure bool,
+	clusterName, failureName string, l *logger.Logger, opts ...ClusterOptionFunc,
 ) (*Failer, error) {
 	r.Lock()
 	spec, ok := r.failures[failureName]
@@ -80,7 +98,12 @@ func (r *FailureRegistry) GetFailer(
 	if !ok {
 		return nil, fmt.Errorf("unknown failure %s", failureName)
 	}
-	failureMode, err := spec.makeFailureFunc(clusterName, l, secure)
+
+	clusterOpts := ClusterOptions{}
+	for _, o := range opts {
+		o(&clusterOpts)
+	}
+	failureMode, err := spec.makeFailureFunc(clusterName, l, clusterOpts)
 	if err != nil {
 		return nil, err
 	}

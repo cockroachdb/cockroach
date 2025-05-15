@@ -241,7 +241,16 @@ func runDiskStalledDetection(
 
 	t.Status("setting up disk staller")
 	s.Setup(ctx)
-	defer s.Cleanup(ctx)
+
+	// NB: We use a background context in the defer'ed cleanup command,
+	// otherwise on test failure our c.Run calls will be ignored. Leaving
+	// the disk stalled will prevent artifact collection, making debugging
+	// difficult.
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		s.Cleanup(ctx)
+	}()
 
 	t.Status("starting cluster")
 	c.Start(ctx, t.L(), startOpts, startSettings, c.CRDBNodes())
@@ -314,15 +323,6 @@ func runDiskStalledDetection(
 		m.ExpectDeath()
 	}
 	s.Stall(ctx, c.Node(1))
-	// NB: We use a background context in the defer'ed unstall command,
-	// otherwise on test failure our c.Run calls will be ignored. Leaving
-	// the disk stalled will prevent artifact collection, making debugging
-	// difficult.
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		defer cancel()
-		s.Unstall(ctx, c.Node(1))
-	}()
 
 	// Wait twice the maximum sync duration and check if our SQL connection to
 	// node 1 is still alive. It should've been terminated.
@@ -335,7 +335,7 @@ func runDiskStalledDetection(
 		}
 		t.Status("pinging SQL connection to n1")
 		err := n1Conn.PingContext(ctx)
-		t.L().PrintfCtx(ctx, "pinging n1's connection: %s", err)
+		t.L().PrintfCtx(ctx, "pinging n1's connection: %v", err)
 		if doStall && err == nil {
 			t.Fatal("connection to n1 is still alive")
 		} else if !doStall && err != nil {

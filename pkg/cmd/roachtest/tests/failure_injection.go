@@ -60,9 +60,9 @@ type failureSmokeTest struct {
 }
 
 func (t *failureSmokeTest) run(
-	ctx context.Context, l *logger.Logger, c cluster.Cluster, fr *failures.FailureRegistry,
+	ctx context.Context, l *logger.Logger, c cluster.Cluster,
 ) (err error) {
-	failer, err := roachtestutil.GetFailer(fr, c, t.failureName, l)
+	failer, err := c.GetFailer(l, c.CRDBNodes(), t.failureName)
 	if err != nil {
 		return err
 	}
@@ -153,10 +153,8 @@ func (t *failureSmokeTest) run(
 	return t.validateRecover(ctx, l, c, failer)
 }
 
-func (t *failureSmokeTest) noopRun(
-	ctx context.Context, l *logger.Logger, c cluster.Cluster, fr *failures.FailureRegistry,
-) error {
-	failer, err := roachtestutil.GetFailer(fr, c, t.failureName, l)
+func (t *failureSmokeTest) noopRun(ctx context.Context, l *logger.Logger, c cluster.Cluster) error {
+	failer, err := c.GetFailer(l, c.CRDBNodes(), t.failureName)
 	if err != nil {
 		return err
 	}
@@ -865,8 +863,6 @@ func setupFailureSmokeTests(ctx context.Context, t test.Test, c cluster.Cluster)
 }
 
 func runFailureSmokeTest(ctx context.Context, t test.Test, c cluster.Cluster, noopFailer bool) {
-	fr := failures.NewFailureRegistry()
-	fr.Register()
 	if err := setupFailureSmokeTests(ctx, t, c); err != nil {
 		t.Error(err)
 	}
@@ -909,7 +905,7 @@ func runFailureSmokeTest(ctx context.Context, t test.Test, c cluster.Cluster, no
 	for _, test := range failureSmokeTests {
 		t.L().Printf("\n=====running %s test=====", test.testName)
 		if noopFailer {
-			if err := test.noopRun(ctx, t.L(), c, fr); err != nil {
+			if err := test.noopRun(ctx, t.L(), c); err != nil {
 				t.Fatal(err)
 			}
 		} else {
@@ -920,7 +916,7 @@ func runFailureSmokeTest(ctx context.Context, t test.Test, c cluster.Cluster, no
 			cancel := t.GoWithCancel(func(goCtx context.Context, l *logger.Logger) error {
 				return backgroundWorkload(goCtx, c)
 			}, task.Name(fmt.Sprintf("%s-workload", test.testName)))
-			err := test.run(ctx, t.L(), c, fr)
+			err := test.run(ctx, t.L(), c)
 			cancel()
 			if err != nil {
 				t.Fatal(errors.Wrapf(err, "%s failed", test.testName))

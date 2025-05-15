@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
@@ -3310,4 +3311,21 @@ func (c *clusterImpl) RegisterClusterHook(
 	default:
 		panic(fmt.Sprintf("unknown test hook type %v", hookType))
 	}
+}
+
+// GetFailer returns a *failures.Failer for the given failure mode name. Used
+// for conducting failure injection on a cluster.
+func (c *clusterImpl) GetFailer(
+	l *logger.Logger,
+	nodes option.NodeListOption,
+	failureModeName string,
+	opts ...failures.ClusterOptionFunc,
+) (*failures.Failer, error) {
+	fr := failures.GetFailureRegistry()
+	clusterOpts := append(opts, failures.Secure(c.IsSecure()))
+	failer, err := fr.GetFailer(c.MakeNodes(nodes), failureModeName, l, clusterOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return failer, err
 }
