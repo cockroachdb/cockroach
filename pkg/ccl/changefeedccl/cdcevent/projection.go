@@ -116,5 +116,7 @@ func (p *Projection) Project(r Row) (Row, error) {
 		return Row{}, err
 	}
 
+	p.MvccTimestamp = r.MvccTimestamp
+
 	return Row(*p), nil
 }
