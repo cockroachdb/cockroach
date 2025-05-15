@@ -19,7 +19,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -272,9 +271,10 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss *singleStep, l *logg
 		prefix := fmt.Sprintf("FINISHED [%s]", timeutil.Since(start))
 		tr.logStep(prefix, ss, l)
 		annotation := fmt.Sprintf("(%d): %s", ss.ID, ss.impl.Description())
-		err := tr.addGrafanaAnnotation(tr.ctx, tr.logger, grafana.AddAnnotationRequest{
-			Text: annotation, StartTime: start.UnixMilli(), EndTime: timeutil.Now().UnixMilli(),
-		})
+		err := tr.addGrafanaAnnotation(tr.ctx, tr.logger,
+			option.WithText(annotation),
+			option.WithTimeRange(start.UnixMilli(), timeutil.Now().UnixMilli()),
+		)
 		if err != nil {
 			l.Printf("WARN: Adding Grafana annotation failed: %s", err)
 		}
@@ -740,13 +740,13 @@ func (tr *testRunner) allServices() []*serviceRuntime {
 }
 
 func (tr *testRunner) addGrafanaAnnotation(
-	ctx context.Context, l *logger.Logger, req grafana.AddAnnotationRequest,
+	ctx context.Context, l *logger.Logger, opts ...option.GrafanaAnnotationOptionFunc,
 ) error {
 	if tr._addAnnotation != nil {
 		return tr._addAnnotation() // test-only
 	}
 
-	return tr.cluster.AddGrafanaAnnotation(ctx, l, req)
+	return tr.cluster.AddGrafanaAnnotation(ctx, l, opts...)
 }
 
 func newCRDBMonitor(

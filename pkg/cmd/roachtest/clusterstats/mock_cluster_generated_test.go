@@ -11,7 +11,6 @@ import (
 	reflect "reflect"
 	time "time"
 
-	grafana "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	cluster "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	option "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	spec "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -47,31 +46,22 @@ func (m *MockCluster) EXPECT() *MockClusterMockRecorder {
 }
 
 // AddGrafanaAnnotation mocks base method.
-func (m *MockCluster) AddGrafanaAnnotation(arg0 context.Context, arg1 *logger.Logger, arg2 grafana.AddAnnotationRequest) error {
+func (m *MockCluster) AddGrafanaAnnotation(arg0 context.Context, arg1 *logger.Logger, arg2 ...option.GrafanaAnnotationOptionFunc) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddGrafanaAnnotation", arg0, arg1, arg2)
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "AddGrafanaAnnotation", varargs...)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // AddGrafanaAnnotation indicates an expected call of AddGrafanaAnnotation.
-func (mr *MockClusterMockRecorder) AddGrafanaAnnotation(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockClusterMockRecorder) AddGrafanaAnnotation(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddGrafanaAnnotation", reflect.TypeOf((*MockCluster)(nil).AddGrafanaAnnotation), arg0, arg1, arg2)
-}
-
-// AddInternalGrafanaAnnotation mocks base method.
-func (m *MockCluster) AddInternalGrafanaAnnotation(arg0 context.Context, arg1 *logger.Logger, arg2 grafana.AddAnnotationRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddInternalGrafanaAnnotation", arg0, arg1, arg2)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AddInternalGrafanaAnnotation indicates an expected call of AddInternalGrafanaAnnotation.
-func (mr *MockClusterMockRecorder) AddInternalGrafanaAnnotation(arg0, arg1, arg2 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddInternalGrafanaAnnotation", reflect.TypeOf((*MockCluster)(nil).AddInternalGrafanaAnnotation), arg0, arg1, arg2)
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddGrafanaAnnotation", reflect.TypeOf((*MockCluster)(nil).AddGrafanaAnnotation), varargs...)
 }
 
 // AdminUIPorts mocks base method.
