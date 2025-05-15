@@ -329,7 +329,7 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 	// Try refreshing the txn spans so we can retry.
 	if refreshErr := sr.tryRefreshTxnSpans(ctx, refreshFrom, refreshToTxn); refreshErr != nil {
 		log.Eventf(ctx, "refresh failed; propagating original retry error")
-		// TODO(lidor): we should add refreshErr info to the returned error. See issue #41057.
+		// TODO(#146734): We should add refreshErr info to the returned error.
 		return nil, pErr
 	}
 
