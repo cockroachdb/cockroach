@@ -456,6 +456,9 @@ CREATE TABLE exec_test (
   FAMILY (a, b, vec1)
 )
 
+query error pgcode 22000 different vector dimensions 1 and 3
+SELECT a FROM exec_test ORDER BY vec1 <-> '[1]' LIMIT 1;
+
 statement ok
 INSERT INTO exec_test (a, b, vec1) VALUES
   (1, 1, '[1, 2, 3]'),
@@ -467,6 +470,12 @@ INSERT INTO exec_test (a, b, vec1) VALUES
   (7, NULL, '[1, 1, 1]'),
   (8, NULL, NULL),
   (9, 3, NULL);
+
+statement error pgcode 22000 pq: expected 3 dimensions, not 1
+INSERT INTO exec_test (a, b, vec1) VALUES (10, 1, '[1]');
+
+query error pgcode 22000 different vector dimensions 1 and 3
+SELECT a FROM exec_test ORDER BY vec1 <-> '[1]' LIMIT 1;
 
 # Get all rows that do not have NULL vector values.
 query IT rowsort
