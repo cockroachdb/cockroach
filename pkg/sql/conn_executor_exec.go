@@ -2722,6 +2722,14 @@ func (ex *connExecutor) rollbackSQLTransaction(
 func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 	ctx context.Context, p *planner, res RestrictedCommandResult,
 ) error {
+	if ex.executorType == executorTypeInternal {
+		// Because we step the external read timestamp below, this is not safe to
+		// call within internal executor.
+		return errors.AssertionFailedf(
+			"call of dispatchReadCommittedStmtToExecutionEngine within internal executor",
+		)
+	}
+
 	getPausablePortalInfo := func() *portalPauseInfo {
 		if p != nil && p.pausablePortal != nil {
 			return p.pausablePortal.pauseInfo
@@ -2749,7 +2757,17 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 			ex.sessionTracing.TraceRetryInformation(
 				ctx, "statement", p.autoRetryStmtCounter, p.autoRetryStmtReason,
 			)
+			// Step both the sequence number and the external read timestamp so that
+			// we can see the results of the conflicting transactions that caused us
+			// to fail.
+			if err := ex.state.mu.txn.Step(ctx, true /* allowReadTimestampStep */); err != nil {
+				return err
+			}
+			// Also step statement_timestamp so that any SQL using it is up-to-date.
+			stmtTS := ex.server.cfg.Clock.PhysicalTime()
+			p.extendedEvalCtx.StmtTimestamp = stmtTS
 		}
+
 		bufferPos := res.BufferedResultsLen()
 		if err = ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
 			return err
@@ -2800,9 +2818,6 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 			return err
 		}
 		if err := ex.state.mu.txn.PrepareForPartialRetry(ctx); err != nil {
-			return err
-		}
-		if err := ex.state.mu.txn.Step(ctx, false /* allowReadTimestampStep */); err != nil {
 			return err
 		}
 		p.autoRetryStmtCounter++
