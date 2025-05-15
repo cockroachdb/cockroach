@@ -93,6 +93,7 @@ type kv struct {
 	insertCount                          int
 	txnQoS                               string
 	prepareReadOnly                      bool
+	writesUseSelect1                     bool
 }
 
 func init() {
@@ -129,6 +130,7 @@ var kvMeta = workload.Meta{
 			`scatter`:           {RuntimeOnly: true},
 			`timeout`:           {RuntimeOnly: true},
 			`prepare-read-only`: {RuntimeOnly: true},
+			`sel1-writes`:       {RuntimeOnly: true},
 		}
 		g.flags.IntVar(&g.batchSize, `batch`, 1,
 			`Number of blocks to read/insert in a single SQL statement.`)
@@ -178,11 +180,13 @@ var kvMeta = workload.Meta{
 		g.flags.IntVar(&g.keySize, `key-size`, 0,
 			`Use string key of appropriate size instead of int`)
 		g.flags.DurationVar(&g.sfuDelay, `sfu-wait-delay`, 10*time.Millisecond,
-			`Delay before sfu write transaction commits or aborts`)
+			`Delay after SFU when using --sfu-writes (or after SELECT 1 when using --sel1-writes).`)
 		g.flags.StringVar(&g.txnQoS, `txn-qos`, `regular`,
 			`Set default_transaction_quality_of_service session variable, accepted`+
 				`values are 'background', 'regular' and 'critical'.`)
 		g.flags.BoolVar(&g.prepareReadOnly, `prepare-read-only`, false, `Prepare and perform only read statements.`)
+		g.flags.BoolVar(&g.writesUseSelect1, `sel1-writes`, false,
+			`Use SELECT 1 as the first statement of transactional writes with a sleep after SELECT 1.`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -550,6 +554,7 @@ func (w *kv) Ops(
 		if len(sfuStmtStr) > 0 && !op.config.prepareReadOnly {
 			op.sfuStmt = op.sr.Define(sfuStmtStr)
 		}
+		op.sel1Stmt = op.sr.Define("SELECT 1")
 		op.spanStmt = op.sr.Define(spanStmtStr)
 		if w.txnQoS != `regular` {
 			stmt := op.sr.Define(fmt.Sprintf(
@@ -582,6 +587,7 @@ type kvOp struct {
 	writeStmt        workload.StmtHandle
 	spanStmt         workload.StmtHandle
 	sfuStmt          workload.StmtHandle
+	sel1Stmt         workload.StmtHandle
 	delStmt          workload.StmtHandle
 	g                keyGenerator
 	t                keyTransformer
@@ -680,7 +686,7 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 	}
 	start := timeutil.Now()
 	var err error
-	if o.config.writesUseSelectForUpdate {
+	if o.config.writesUseSelect1 || o.config.writesUseSelectForUpdate {
 		// We could use crdb.ExecuteTx, but we avoid retries in this workload so
 		// that each run call makes 1 attempt, so that rate limiting in workerRun
 		// behaves as expected.
@@ -696,15 +702,27 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 				retErr = errors.CombineErrors(retErr, rollbackErr)
 			}
 		}()
-		rows, err := o.sfuStmt.QueryTx(ctx, tx, sfuArgs...)
-		if err != nil {
-			return err
+		if o.config.writesUseSelect1 {
+			rows, err := o.sel1Stmt.QueryTx(ctx, tx)
+			if err != nil {
+				return err
+			}
+			rows.Close()
+			if err = rows.Err(); err != nil {
+				return err
+			}
 		}
-		rows.Close()
-		if err = rows.Err(); err != nil {
-			return err
+		if o.config.writesUseSelectForUpdate {
+			rows, err := o.sfuStmt.QueryTx(ctx, tx, sfuArgs...)
+			if err != nil {
+				return err
+			}
+			rows.Close()
+			if err = rows.Err(); err != nil {
+				return err
+			}
 		}
-		// Simulate a transaction that does other work between the SFU and write.
+		// Simulate a transaction that does other work between the sel1 / SFU and write.
 		time.Sleep(o.config.sfuDelay)
 		if _, err = o.writeStmt.ExecTx(ctx, tx, writeArgs...); err != nil {
 			// Multiple write transactions can contend and encounter
