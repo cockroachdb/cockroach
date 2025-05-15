@@ -12,7 +12,7 @@ txn_begin t=C ts=12,0
 txn_begin t=D ts=13,0
 ----
 >> at end:
-txn: "D" meta={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=13.000000000,0 wto=false gul=0,0
+txn: "D" meta={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=13.000000000,0 gul=0,0
 
 run ok
 acquire_lock t=A k=k1 str=shared

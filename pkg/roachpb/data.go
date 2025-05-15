@@ -1537,10 +1537,8 @@ func (t Transaction) SafeFormat(w redact.SafePrinter, _ rune) {
 	if len(t.Name) > 0 {
 		w.Printf("%q ", redact.SafeString(t.Name))
 	}
-	// TODO(ssd): Remove wto from this log output. We avoid that for now to avoid
-	// updating many many tests that include this log line.
-	w.Printf("meta={%s} lock=%t stat=%s rts=%s wto=%t gul=%s",
-		t.TxnMeta, t.IsLocking(), t.Status, t.ReadTimestamp, false, t.GlobalUncertaintyLimit)
+	w.Printf("meta={%s} lock=%t stat=%s rts=%s gul=%s",
+		t.TxnMeta, t.IsLocking(), t.Status, t.ReadTimestamp, t.GlobalUncertaintyLimit)
 
 	// Print observed timestamps (limited to 5 for readability).
 	if obsCount := len(t.ObservedTimestamps); obsCount > 0 {

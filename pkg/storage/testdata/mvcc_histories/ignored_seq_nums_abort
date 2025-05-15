@@ -19,7 +19,7 @@ put: lock acquisition = {k id=00000001 key="k" iso=Serializable pri=0.00000000 e
 resolve_intent: "k" -> resolved key = true
 get: "k" -> <no data>
 >> at end:
-txn: "A" meta={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=11.000000000,0 gul=0,0 isn=1
 <no data>
 logical op: *enginepb.MVCCWriteIntentOp
 logical op: *enginepb.MVCCUpdateIntentOp
