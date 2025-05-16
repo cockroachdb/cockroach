@@ -381,30 +381,6 @@ message ConditionalPutResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// An InitPutRequest is the argument to the InitPut() method.
-//
-// - If key doesn't exist, sets value.
-// - If key exists, returns a ConditionFailedError if value != existing value
-//   If failOnTombstones is set to true, tombstone values count as mismatched
-//   values and will cause a ConditionFailedError.
-// TODO(yuzefovich): this can be removed once the compatibility with 24.3 is no
-// longer needed.
-message InitPutRequest {
-  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  Value value = 2 [(gogoproto.nullable) = false];
-  // NOTE: For internal use only! Set to indicate that the put is
-  // writing to virgin keyspace and no reads are necessary to
-  // rationalize MVCC.
-  bool blind = 3;
-  // If true, tombstones cause ConditionFailedErrors.
-  bool failOnTombstones = 4;
-}
-
-// A InitPutResponse is the return value from the InitPut() method.
-message InitPutResponse {
-  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
 // An IncrementRequest is the argument to the Increment() method. It
 // increments the value for key, and returns the new value. If no
 // value exists for a key, incrementing by 0 is not a noop, but will
@@ -2511,7 +2487,6 @@ message RequestUnion {
     ReverseScanRequest reverse_scan = 21;
     ComputeChecksumRequest compute_checksum = 22;
     CheckConsistencyRequest check_consistency = 24;
-    InitPutRequest init_put = 26;
     TransferLeaseRequest transfer_lease = 28;
     LeaseInfoRequest lease_info = 30;
     ExportRequest export = 32;
@@ -2533,7 +2508,7 @@ message RequestUnion {
     LinkExternalSSTableRequest link_external_sstable = 57;
     ExciseRequest excise = 58;
   }
-  reserved 8, 15, 23, 25, 27, 31, 34, 49, 52;
+  reserved 8, 15, 23, 25, 26, 27, 31, 34, 49, 52;
 }
 
 // A ResponseUnion contains exactly one of the responses.
@@ -2568,7 +2543,6 @@ message ResponseUnion {
     ReverseScanResponse reverse_scan = 21;
     ComputeChecksumResponse compute_checksum = 22;
     CheckConsistencyResponse check_consistency = 24;
-    InitPutResponse init_put = 26;
     LeaseInfoResponse lease_info = 30;
     ExportResponse export = 32;
     QueryTxnResponse query_txn = 33;
@@ -2589,7 +2563,7 @@ message ResponseUnion {
     LinkExternalSSTableResponse link_external_sstable = 57;
     ExciseResponse excise = 58;
   }
-  reserved 8, 15, 23, 25, 27, 28, 31, 34, 49, 52;
+  reserved 8, 15, 23, 25, 26, 27, 28, 31, 34, 49, 52;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary

@@ -218,9 +218,9 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 	cputArgs := kvpb.ConditionalPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}}
 	cputArgs.Sequence = 2
 	ba.Add(&cputArgs)
-	initPutArgs := kvpb.InitPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyB}}
-	initPutArgs.Sequence = 3
-	ba.Add(&initPutArgs)
+	putArgs = kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyB}}
+	putArgs.Sequence = 3
+	ba.Add(&putArgs)
 	incArgs := kvpb.IncrementRequest{RequestHeader: kvpb.RequestHeader{Key: keyC}}
 	incArgs.Sequence = 4
 	ba.Add(&incArgs)
@@ -235,7 +235,7 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 		require.True(t, ba.AsyncConsensus)
 		require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &kvpb.ConditionalPutRequest{}, ba.Requests[1].GetInner())
-		require.IsType(t, &kvpb.InitPutRequest{}, ba.Requests[2].GetInner())
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[2].GetInner())
 		require.IsType(t, &kvpb.IncrementRequest{}, ba.Requests[3].GetInner())
 		require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[4].GetInner())
 
@@ -260,7 +260,7 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 	require.NotNil(t, br)
 	require.Len(t, br.Responses, 4) // QueryIntent response stripped
 	require.IsType(t, &kvpb.ConditionalPutResponse{}, br.Responses[0].GetInner())
-	require.IsType(t, &kvpb.InitPutResponse{}, br.Responses[1].GetInner())
+	require.IsType(t, &kvpb.PutResponse{}, br.Responses[1].GetInner())
 	require.IsType(t, &kvpb.IncrementResponse{}, br.Responses[2].GetInner())
 	require.IsType(t, &kvpb.DeleteResponse{}, br.Responses[3].GetInner())
 	require.Nil(t, pErr)

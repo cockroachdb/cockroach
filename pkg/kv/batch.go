@@ -225,12 +225,6 @@ func (b *Batch) fillResults(ctx context.Context) {
 				if result.Err == nil {
 					row.Value = &req.Value
 				}
-			case *kvpb.InitPutRequest:
-				row := &result.Rows[k]
-				row.Key = []byte(req.Key)
-				if result.Err == nil {
-					row.Value = &req.Value
-				}
 			case *kvpb.IncrementRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)

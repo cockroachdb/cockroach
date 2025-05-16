@@ -516,17 +516,6 @@ data: "k4"/10.000000000,0 -> /BYTES/v4_prime
 error: (*kvpb.LockConflictError:) conflicting locks on "k3"
 
 run error
-initput t=B k=k3 v=v3
-----
->> at end:
-data: "k1"/5.000000000,0 -> /BYTES/v1
-data: "k2"/5.000000000,0 -> /BYTES/v2
-data: "k3"/5.000000000,0 -> /BYTES/v3
-meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{1 /BYTES/v4}} mergeTs=<nil> txnDidNotUpdateMeta=false
-data: "k4"/10.000000000,0 -> /BYTES/v4_prime
-error: (*kvpb.LockConflictError:) conflicting locks on "k3"
-
-run error
 del t=B k=k3
 ----
 >> at end:
