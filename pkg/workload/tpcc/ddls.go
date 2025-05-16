@@ -72,7 +72,8 @@ const (
 		c_payment_cnt  integer       not null,
 		c_delivery_cnt integer       not null,
 		c_data         varchar(500)  not null,
-		primary key        (c_w_id, c_d_id, c_id),
+		primary key        (c_w_id, c_d_id, c_id)`
+	tpccCustomerSecondaryIndexClause = `
 		index customer_idx (c_w_id, c_d_id, c_last, c_first)`
 	tpccCustomerColumnFamiliesSuffix = `
 		family static      (
@@ -80,6 +81,7 @@ const (
 			c_city, c_state, c_zip, c_phone, c_since, c_credit, c_credit_lim, c_discount
 		),
 		family dynamic (c_balance, c_ytd_payment, c_payment_cnt, c_data, c_delivery_cnt)`
+	tpccCustomerCreateSecondaryIndex = `CREATE INDEX customer_idx ON customer (c_w_id, c_d_id, c_last, c_first);`
 
 	// HISTORY table.
 	tpccHistorySchemaBase = `(
@@ -104,9 +106,10 @@ const (
 		o_carrier_id integer,
 		o_ol_cnt     integer,
 		o_all_local  integer,
-		primary key  (o_w_id, o_d_id, o_id DESC),
-		unique index order_idx (o_w_id, o_d_id, o_c_id, o_id DESC) storing (o_entry_d, o_carrier_id)
-	`
+		primary key  (o_w_id, o_d_id, o_id DESC)`
+	tpccOrderSecondaryIndexClause = `
+		unique index order_idx (o_w_id, o_d_id, o_c_id, o_id DESC) storing (o_entry_d, o_carrier_id)`
+	tpccOrderCreateSecondaryIndex = `CREATE UNIQUE INDEX order_idx ON "order" (o_w_id, o_d_id, o_c_id, o_id DESC) storing (o_entry_d, o_carrier_id);`
 
 	// NEW-ORDER table.
 	tpccNewOrderSchema = `(
@@ -170,12 +173,21 @@ const (
 )
 
 type schemaOptions struct {
-	familyClause   string
-	columnClause   string
-	localityClause string
+	secondaryIndexClause string
+	familyClause         string
+	columnClause         string
+	localityClause       string
 }
 
 type makeSchemaOption func(o *schemaOptions)
+
+func maybeAddSecondaryIndex(delaySecondaryIndexes bool, clause string) makeSchemaOption {
+	return func(o *schemaOptions) {
+		if !delaySecondaryIndexes {
+			o.secondaryIndexClause = clause
+		}
+	}
+}
 
 func maybeAddColumnFamiliesSuffix(separateColumnFamilies bool, suffix string) makeSchemaOption {
 	return func(o *schemaOptions) {
@@ -217,11 +229,14 @@ func makeSchema(base string, opts ...makeSchemaOption) string {
 		opt(&o)
 	}
 	ret := base
-	if o.familyClause != "" {
-		ret += "," + o.familyClause
-	}
 	if o.columnClause != "" {
 		ret += "," + o.columnClause
+	}
+	if o.secondaryIndexClause != "" {
+		ret += "," + o.secondaryIndexClause
+	}
+	if o.familyClause != "" {
+		ret += "," + o.familyClause
 	}
 	ret += endSchema
 	if o.localityClause != "" {

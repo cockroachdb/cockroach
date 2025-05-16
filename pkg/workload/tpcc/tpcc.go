@@ -83,6 +83,10 @@ type tpcc struct {
 	activeWorkers          int
 	fks                    bool
 	separateColumnFamilies bool
+	// delaySecondaryIndexes, if set, indicates that secondary indexes on the
+	// tables should be created during the post-load step (i.e. the ingestion
+	// will happen only with the primary index present).
+	delaySecondaryIndexes bool
 
 	txInfos []txInfo
 	// deck contains indexes into the txInfos slice.
@@ -276,6 +280,7 @@ var tpccMeta = workload.Meta{
 			`txn-preamble-file`:        {RuntimeOnly: true},
 			`aost`:                     {RuntimeOnly: true, CheckConsistencyOnly: true},
 			`literal-implementation`:   {RuntimeOnly: true},
+			`delay-secondary-indexes`:  {RuntimeOnly: true},
 		}
 
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
@@ -321,6 +326,7 @@ var tpccMeta = workload.Meta{
 			"This is an optional parameter to specify AOST; used exclusively in conjunction with the TPC-C consistency "+
 				"check. Example values are (\"'-1m'\", \"'-1h'\")")
 		g.flags.BoolVar(&g.literalImplementation, "literal-implementation", false, "If true, use a literal implementation of the TPC-C kit instead of an optimized version")
+		g.flags.BoolVar(&g.delaySecondaryIndexes, "delay-secondary-indexes", false, "If true, the secondary indexes will be created during the post-load stage")
 
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
@@ -548,6 +554,17 @@ func (w *tpcc) Hooks() workload.Hooks {
 			return nil
 		},
 		PostLoad: func(_ context.Context, db *gosql.DB) error {
+			if w.delaySecondaryIndexes {
+				// We delayed creation of secondary indexes until this point.
+				for _, createStmt := range []string{
+					tpccCustomerCreateSecondaryIndex,
+					tpccOrderCreateSecondaryIndex,
+				} {
+					if _, err := db.Exec(createStmt); err != nil {
+						return err
+					}
+				}
+			}
 			if w.fks {
 				// We avoid validating foreign keys because we just generated
 				// the data set and don't want to scan over the entire thing
@@ -701,11 +718,11 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `warehouse`,
 		Schema: makeSchema(
 			tpccWarehouseSchema,
-			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `w_id`),
 			maybeAddColumnFamiliesSuffix(
 				w.separateColumnFamilies,
 				tpccWarehouseColumnFamiliesSuffix,
 			),
+			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `w_id`),
 		),
 		InitialRows: workload.BatchedTuples{
 			NumBatches: w.warehouses,
@@ -745,6 +762,7 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `customer`,
 		Schema: makeSchema(
 			tpccCustomerSchemaBase,
+			maybeAddSecondaryIndex(w.delaySecondaryIndexes, tpccCustomerSecondaryIndexClause),
 			maybeAddColumnFamiliesSuffix(
 				w.separateColumnFamilies,
 				tpccCustomerColumnFamiliesSuffix,
@@ -779,6 +797,7 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `order`,
 		Schema: makeSchema(
 			tpccOrderSchemaBase,
+			maybeAddSecondaryIndex(w.delaySecondaryIndexes, tpccOrderSecondaryIndexClause),
 			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `o_w_id`),
 		),
 		InitialRows: workload.BatchedTuples{
