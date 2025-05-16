@@ -492,7 +492,6 @@ type StoreTestingKnobs struct {
 	// various components choking on the range tombstone:
 	//
 	// - rangefeed.TestingKnobs.IgnoreOnDeleteRangeError
-	// - kvserverbase.BatchEvalTestingKnobs.DisableInitPutFailOnTombstones
 	GlobalMVCCRangeTombstone bool
 
 	// LeaseUpgradeInterceptor intercepts leases that get upgraded to
