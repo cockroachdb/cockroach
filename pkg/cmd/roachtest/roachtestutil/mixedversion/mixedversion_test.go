@@ -290,12 +290,12 @@ func Test_choosePreviousReleases(t *testing.T) {
 			}
 
 			mvt := newTest(opts...)
-			mvt.options.predecessorFunc = func(_ *rand.Rand, v, _, _ *clusterupgrade.Version) (*clusterupgrade.Version, error) {
+			mvt.options.predecessorFunc = func(_ *rand.Rand, v *clusterupgrade.Version) (*clusterupgrade.Version, error) {
 				return testPredecessorMapping[v.Series()], tc.predecessorErr
 			}
 			mvt._arch = &tc.arch
 
-			releases, err := mvt.chooseUpgradePath()
+			releases, err := mvt.chooseUpgradePath(mvt.numUpgrades(), mvt.prng.Float64() < mvt.options.skipVersionProbability)
 			if tc.expectedErr == "" {
 				require.NoError(t, err)
 				var expectedVersions []*clusterupgrade.Version
@@ -421,12 +421,15 @@ func Test_randomPredecessor(t *testing.T) {
 				if tc.minBootstrap != "" {
 					minBootstrap = clusterupgrade.MustParseVersion(tc.minBootstrap)
 				}
-				pred, err = randomPredecessor(
-					newRand(),
-					clusterupgrade.MustParseVersion(tc.v),
-					clusterupgrade.MustParseVersion(tc.minSupported),
-					minBootstrap,
-				)
+				v := clusterupgrade.MustParseVersion(tc.v)
+				// N.B. `expectedPredecessor` is dependent on the seed, hence we must reuse rng in `maybeClampMsbMsv`.
+				// Otherwise, the patch versions may differ from the expected.
+				rng := newRand()
+				pred, err = randomPredecessor(rng, v)
+				if err != nil {
+					return err
+				}
+				pred, err = maybeClampMsbMsv(rng, pred, minBootstrap, clusterupgrade.MustParseVersion(tc.minSupported))
 
 				return err
 			})

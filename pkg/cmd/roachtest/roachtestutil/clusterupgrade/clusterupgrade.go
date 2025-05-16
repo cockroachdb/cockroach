@@ -54,15 +54,15 @@ type Version struct {
 // tested, we print the branch name being tested if the test is
 // running on TeamCity, to make it clearer (instead of "<current>").
 func (v *Version) String() string {
+	suffix := ""
 	if v.IsCurrent() {
 		if currentBranch != "" {
-			return currentBranch
+			suffix = fmt.Sprintf(" (%s)", currentBranch)
+		} else {
+			suffix = fmt.Sprintf(" (%s)", CurrentVersionString)
 		}
-
-		return CurrentVersionString
 	}
-
-	return v.Version.String()
+	return v.Version.String() + suffix
 }
 
 // IsCurrent returns whether this version corresponds to the current
