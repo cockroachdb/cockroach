@@ -110,6 +110,22 @@ func LoadExternalConnection(
 	return ec, nil
 }
 
+// ExternalConnectionExist loads an mutableExternalConnection from system table. Allow owner to modifiy the URI.
+func ExternalConnectionExist(ctx context.Context, name string, ownerID oid.Oid, txn isql.Txn) error {
+	row, _, err := txn.QueryRowExWithCols(ctx, "lookup-schedule", txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		fmt.Sprintf("SELECT * FROM system.external_connections WHERE connection_name = '%s' AND owner_id = '%d' ", name, ownerID))
+
+	if err != nil {
+		return errors.CombineErrors(err, &externalConnectionNotFoundError{connectionName: name})
+	}
+	if row == nil {
+		return &externalConnectionNotFoundError{connectionName: name}
+	}
+
+	return nil
+}
+
 // ConnectionName returns the connection_name.
 func (e *MutableExternalConnection) ConnectionName() string {
 	return e.rec.ConnectionName
@@ -326,6 +342,44 @@ func (e *MutableExternalConnection) Create(ctx context.Context, txn isql.Txn) er
 	// `EXTERNALCONNECTION` system privilege. We run the query as `node`
 	// since the user might not have `INSERT` on the system table.
 	createQuery := "INSERT INTO system.external_connections (%s) VALUES (%s) RETURNING connection_name"
+	row, retCols, err := txn.QueryRowExWithCols(ctx, "ExternalConnection.Create", txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		fmt.Sprintf(createQuery, strings.Join(cols, ","), generatePlaceholders(len(qargs))),
+		qargs...,
+	)
+	if err != nil {
+		// If we see a UniqueViolation it means that we are attempting to create an
+		// External Connection with a `connection_name` that already exists.
+		if pgerror.GetPGCode(err) == pgcode.UniqueViolation {
+			var connectionName interface{}
+			for i, col := range cols {
+				if col == "connection_name" {
+					connectionName = qargs[i]
+					break
+				}
+			}
+			return pgerror.Newf(pgcode.DuplicateObject,
+				"external connection with connection name %s already exists", connectionName)
+		}
+		return errors.Wrapf(err, "failed to create new external connection")
+	}
+	if row == nil {
+		return errors.New("failed to create new external connection")
+	}
+
+	return e.InitFromDatums(row, retCols)
+}
+
+func (e *MutableExternalConnection) Update(ctx context.Context, txn isql.Txn) error {
+	cols, qargs, err := e.marshalChanges()
+	if err != nil {
+		return err
+	}
+
+	// CREATE EXTERNAL CONNECTION is only allowed for users with the
+	// `EXTERNALCONNECTION` system privilege. We run the query as `node`
+	// since the user might not have `INSERT` on the system table.
+	createQuery := "UPSERT INTO system.external_connections (%s) VALUES (%s) RETURNING connection_name"
 	row, retCols, err := txn.QueryRowExWithCols(ctx, "ExternalConnection.Create", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf(createQuery, strings.Join(cols, ","), generatePlaceholders(len(qargs))),
