@@ -1045,7 +1045,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %token <str> PARALLEL PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PER PERMISSIVE PHYSICAL PLACEMENT PLACING
 %token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLICIES POLICY POLYGON POLYGONM POLYGONZ POLYGONZM
 %token <str> POSITION PRECEDING PRECISION PREPARE PREPARED PRESERVE PRIMARY PRIOR PRIORITY PRIVILEGES
-%token <str> PROCEDURAL PROCEDURE PROCEDURES PUBLIC PUBLICATION
+%token <str> PROCEDURAL PROCEDURE PROCEDURES PROVISIONING_SOURCE PUBLIC PUBLICATION
 
 %token <str> QUERIES QUERY QUOTE
 
@@ -1496,7 +1496,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 
 %type <str> name opt_name opt_name_parens
 %type <str> privilege savepoint_name
-%type <tree.KVOption> role_option password_clause valid_until_clause subject_clause
+%type <tree.KVOption> role_option password_clause valid_until_clause subject_clause provisioning_source_clause
 %type <tree.Operator> subquery_op
 %type <*tree.UnresolvedName> func_name func_name_no_crdb_extra
 %type <tree.ResolvableFunctionReference> func_application_name
@@ -12069,6 +12069,7 @@ role_option:
 | password_clause
 | valid_until_clause
 | subject_clause
+| provisioning_source_clause
 | REPLICATION
   {
     $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
@@ -12124,6 +12125,16 @@ subject_clause:
 | SUBJECT NULL
   {
     $$.val = tree.KVOption{Key: tree.Name("subject"), Value: tree.DNull}
+  }
+
+provisioning_source_clause:
+  PROVISIONING_SOURCE string_or_placeholder
+  {
+    $$.val = tree.KVOption{Key: tree.Name("provisioning_source"), Value: $2.expr()}
+  }
+| PROVISIONING_SOURCE NULL
+  {
+    $$.val = tree.KVOption{Key: tree.Name("provisioning_source"), Value: tree.DNull}
   }
 
 opt_view_recursive:
@@ -18403,6 +18414,7 @@ unreserved_keyword:
 | PRIVILEGES
 | PROCEDURE
 | PROCEDURES
+| PROVISIONING_SOURCE
 | PUBLIC
 | PUBLICATION
 | QUERIES
@@ -18982,6 +18994,7 @@ bare_label_keywords:
 | PRIVILEGES
 | PROCEDURE
 | PROCEDURES
+| PROVISIONING_SOURCE
 | PUBLIC
 | PUBLICATION
 | QUERIES
