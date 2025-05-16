@@ -771,14 +771,12 @@ func SendEmptySnapshot(
 		RangeSize:          ms.Total(),
 		RangeKeysInOrder:   true,
 	}
-	var client RPCMultiRaftClient
+	var stream RPCMultiRaft_RaftSnapshotClient
 	if rpc.ExperimentalDRPCEnabled.Get(&st.SV) {
-		client = NewDRPCMultiRaftClientAdapter(dconn)
+		stream, err = NewDRPCMultiRaftClient(dconn).RaftSnapshot(ctx)
 	} else {
-		client = NewGRPCMultiRaftClientAdapter(cc)
+		stream, err = NewMultiRaftClient(cc).RaftSnapshot(ctx)
 	}
-
-	stream, err := client.RaftSnapshot(ctx)
 	if err != nil {
 		return err
 	}

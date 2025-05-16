@@ -1099,18 +1099,14 @@ func (t *RaftTransport) startProcessNewQueue(
 			return
 		}
 
-		var client RPCMultiRaftClient
-		if rpc.ExperimentalDRPCEnabled.Get(&t.st.SV) {
-			log.Ops.Info(ctx, "Using DRPC multi raft client")
-			client = NewDRPCMultiRaftClientAdapter(dconn)
-		} else {
-			log.Ops.Info(ctx, "Using gRPC multi raft client")
-			client = NewGRPCMultiRaftClientAdapter(conn)
-		}
 		batchCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
-
-		stream, err := client.RaftMessageBatch(batchCtx) // closed via cancellation
+		var stream RPCMultiRaft_RaftMessageBatchClient
+		if rpc.ExperimentalDRPCEnabled.Get(&t.st.SV) {
+			stream, err = NewDRPCMultiRaftClient(dconn).RaftMessageBatch(batchCtx)
+		} else {
+			stream, err = NewMultiRaftClient(conn).RaftMessageBatch(batchCtx)
+		}
 		if err != nil {
 			log.Warningf(ctx, "creating batch client for node %d failed: %+v", toNodeID, err)
 			return
@@ -1257,13 +1253,12 @@ func (t *RaftTransport) SendSnapshot(
 	if err != nil {
 		return nil, err
 	}
-	var client RPCMultiRaftClient
+	var stream RPCMultiRaft_RaftSnapshotClient
 	if rpc.ExperimentalDRPCEnabled.Get(&t.st.SV) {
-		client = NewDRPCMultiRaftClientAdapter(dconn)
+		stream, err = NewDRPCMultiRaftClient(dconn).RaftSnapshot(ctx)
 	} else {
-		client = NewGRPCMultiRaftClientAdapter(conn)
+		stream, err = NewMultiRaftClient(conn).RaftSnapshot(ctx)
 	}
-	stream, err := client.RaftSnapshot(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1286,15 +1281,15 @@ func (t *RaftTransport) DelegateSnapshot(
 	if err != nil {
 		return nil, errors.Mark(err, errMarkSnapshotError)
 	}
-	var client RPCMultiRaftClient
-	if rpc.ExperimentalDRPCEnabled.Get(&t.st.SV) {
-		client = NewDRPCMultiRaftClientAdapter(dconn)
-	} else {
-		client = NewGRPCMultiRaftClientAdapter(conn)
-	}
 
 	// Creates a rpc stream between the leaseholder and sender.
-	stream, err := client.DelegateRaftSnapshot(ctx)
+	var stream RPCMultiRaft_DelegateRaftSnapshotClient
+	if rpc.ExperimentalDRPCEnabled.Get(&t.st.SV) {
+		stream, err = NewDRPCMultiRaftClient(dconn).DelegateRaftSnapshot(ctx)
+	} else {
+		stream, err = NewMultiRaftClient(conn).DelegateRaftSnapshot(ctx)
+	}
+
 	if err != nil {
 		return nil, errors.Mark(err, errMarkSnapshotError)
 	}
