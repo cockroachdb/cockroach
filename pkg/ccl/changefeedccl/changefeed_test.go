@@ -11558,7 +11558,7 @@ func TestChangefeedMVCCTimestampWithQueries(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (key INT PRIMARY KEY);`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1);`)
 
-		feed, err := f.Feed(`CREATE CHANGEFEED WITH mvcc_timestamp AS SELECT * FROM foo`)
+		feed, err := f.Feed(`CREATE CHANGEFEED WITH mvcc_timestamp, format=json, envelope=bare AS SELECT * FROM foo`)
 		require.NoError(t, err)
 		defer closeFeed(t, feed)
 
