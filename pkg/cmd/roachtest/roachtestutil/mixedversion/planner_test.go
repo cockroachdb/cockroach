@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/datadriven"
@@ -514,7 +515,7 @@ func boolP(b bool) *bool {
 // deterministic even as changes continue to happen in the
 // cockroach_releases.yaml file.
 func testPredecessorFunc(
-	rng *rand.Rand, v, _, _ *clusterupgrade.Version,
+	rng *rand.Rand, v *clusterupgrade.Version,
 ) (*clusterupgrade.Version, error) {
 	pred, ok := testPredecessorMapping[v.Series()]
 	if !ok {
@@ -587,8 +588,9 @@ func createDataDrivenMixedVersionTest(t *testing.T, args []datadriven.CmdArg) *T
 	if isLocal != nil {
 		mvt._isLocal = isLocal
 	}
+
 	if predecessors != nil {
-		mvt.options.predecessorFunc = func(_ *rand.Rand, v, _, _ *clusterupgrade.Version) (*clusterupgrade.Version, error) {
+		mvt.options.predecessorFunc = func(_ *rand.Rand, v *clusterupgrade.Version) (*clusterupgrade.Version, error) {
 			if v.IsCurrent() {
 				return predecessors[len(predecessors)-1], nil
 			}
@@ -628,7 +630,7 @@ func Test_stepSelectorFilter(t *testing.T) {
 			name:                   "no filter",
 			predicate:              func(*singleStep) bool { return true },
 			expectedAllSteps:       true,
-			expectedRandomStepType: runHookStep{},
+			expectedRandomStepType: preserveDowngradeOptionStep{},
 		},
 		{
 			name: "filter eliminates all steps",
@@ -691,6 +693,7 @@ func Test_stepSelectorFilter(t *testing.T) {
 			}
 
 			randomSelector := newSelector.RandomStep(newRand())
+
 			if tc.expectedRandomStepType == nil {
 				require.Empty(t, randomSelector)
 			} else {
@@ -1045,14 +1048,49 @@ func Test_SeparateProcessUsesLatestPred(t *testing.T) {
 	}
 }
 
-func Test_ChooseUpgradePathInvariants(t *testing.T) {
+// This is a regression test for the problem described in [1] and addressed in [2].
+// Namely, when 24.3 is the minimum supported version,
+// an upgrade plan terminating in 25.2 could end up skipping 25.1, at which point the user hooks
+// would never execute.
+//
+// N.B. Test_UpgradePaths below is a more exhaustive test for the soundness of `chooseUpgradePath`.
+//
+// [1] https://github.com/cockroachdb/cockroach/pull/151404
+// [2] https://github.com/cockroachdb/cockroach/pull/146857
+func Test_minimum_supported_version_regression(t *testing.T) {
+	defer withTestBuildVersion("v25.2.1")()
+
+	mvt := newBasicUpgradeTest(
+		NumUpgrades(2),
+		MinimumSupportedVersion("v24.3.1"),
+		// N.B. prior to the fix in [2], this would yield a runtime panic of the form,
+		// panic: runtime error: slice bounds out of range [:-1]
+		// owing to slices.IndexFunc in setupTest, failing to find a _from_ version <= MinimumSupportedVersion("v24.3.1").
+		WithSkipVersionProbability(1))
+
+	plan, err := mvt.plan()
+	require.NoError(t, err)
+	require.NotNil(t, plan)
+	// We expect the upgrade path to be v24.3.1 -> v25.1.x -> v25.2.1; i.e., no skips allowed.
+	require.Equal(t, 3, len(plan.Versions()))
+}
+
+// A property-based test that generates random upgrade plans and verifies their validity.
+//
+// The generator uses `minimumSupported` as the oldest possible version, v25.1.0 as the latest possible version.
+// It generates the following random inputs, constrained by the above oldest and latest versions,
+//
+//	finalVersion, minBootstrapVersion, minSupportedVersion, numUpgrades, skipVersions
+//
+// The asserted properties are described below in `assertNumUpgrades`, `assertMsbAndMsv`, `assertSkipUpgrade`.
+// In summary, we check that for all possible number of upgrades between the initial and final versions, a test plan
+// is feasible; i.e., the resulting test plan has the expected number of upgrades. We check that the minimum supported
+// and bootstrap versions, when specified, yield a valid test plan. This also exercises `assertExpectedUserHooks`, which
+// ensures that the resulting plan contains all expected user hooks. Finally, we check that skip upgrades are exercised,
+// when feasible, and that the skip to the final version is prioritized.
+func Test_UpgradePaths(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	defer withTestBuildVersion("v25.1.0")()
-
-	newestPossibleVersion := clusterupgrade.MustParseVersion("v25.1.0")
-	oldestVersionWithReleaseData := clusterupgrade.MustParseVersion("v22.1.0")
-	maxPossibleUpgrades, err := release.MajorReleasesBetween(&newestPossibleVersion.Version, &oldestVersionWithReleaseData.Version)
-	require.NoError(t, err)
 
 	randomNthPredecessor := func(rng *rand.Rand, v *clusterupgrade.Version, n int) *clusterupgrade.Version {
 		curVersion := v.Version
@@ -1065,140 +1103,130 @@ func Test_ChooseUpgradePathInvariants(t *testing.T) {
 		}
 		return &clusterupgrade.Version{Version: curVersion}
 	}
+	// N.B. technically, v22.1.0 is the oldest version with release data, but we want to streamline input generation.
+	// By designating `minimumSupported` (v22.2.0) as oldest, we can avoid a special case wherein generated finalVersion
+	// has the same release series as `minimumSupported`.
+	oldestVersionSupported := minimumSupported
+	newestPossibleVersion := clusterupgrade.MustParseVersion("v25.1.0")
+	maxPossibleUpgrades, err := release.MajorReleasesBetween(&newestPossibleVersion.Version, &oldestVersionSupported.Version)
+	require.NoError(t, err)
 
 	generator := func(values []reflect.Value, rng *rand.Rand) {
 		// We don't always want to upgrade into the latest release (v25.1) so pick a release
-		// n predecessors older.
-		finalVersionOffset := rng.Intn(maxPossibleUpgrades)
-		finalVersion := randomNthPredecessor(rng, newestPossibleVersion, finalVersionOffset)
+		// n predecessors older, excluding oldestVersionSupported.
+		n := rng.Intn(maxPossibleUpgrades)
+		finalVersion := randomNthPredecessor(rng, newestPossibleVersion, n)
 		values[0] = reflect.ValueOf(finalVersion.Version.String())
 
-		maxUpgrades := rng.Intn(maxPossibleUpgrades-finalVersionOffset) + 1
-		upgradesRemaining := maxUpgrades - finalVersionOffset
+		upgradesRemaining := maxPossibleUpgrades - n
+		require.Greater(t, upgradesRemaining, 0)
+		// Randomly choose minimumBootstrapVersion <= minimumSupportedVersion.
+		// N.B. we use rejection sampling to ensure all ordered pairs are chosen with uniform distribution.
+		chooseMbvAndMsv := func() (*clusterupgrade.Version, *clusterupgrade.Version) {
+			for {
+				// N.B. zero predecessor is the same as "no minimum bootstrap/supported version".
+				versionA := randomNthPredecessor(rng, finalVersion, rng.Intn(upgradesRemaining+1))
+				versionB := randomNthPredecessor(rng, finalVersion, rng.Intn(upgradesRemaining+1))
 
-		// We force the minSupportedVersion to be at least one release series older, otherwise we
-		// aren't testing anything interesting (e.g. no upgrades will be possible).
-		minSupportedVersionOffset := 1
-		if upgradesRemaining > 0 {
-			minSupportedVersionOffset = rng.Intn(upgradesRemaining) + 1
+				if versionB.Version.AtLeast(versionA.Version) {
+					return versionA, versionB
+				}
+				// Otherwise, reject the sample and try again.
+				// N.B. it may seem tempting to swap the versions and return, but that would bias the distribution since
+				// there are two ways to pick a valid pair when the versions are distinct, and one way when they are equal.
+			}
 		}
-		upgradesRemaining -= minSupportedVersionOffset
-		minSupportedVersion := randomNthPredecessor(rng, finalVersion, minSupportedVersionOffset)
-		values[1] = reflect.ValueOf(minSupportedVersion.Version.String())
-
-		// The minBootstrapVersion can be any version less than or equal to minSupportedVersion.
-		minBootstrapVersionOffset := 0
-		if upgradesRemaining > 0 {
-			minBootstrapVersionOffset = rng.Intn(upgradesRemaining)
+		mbv, msv := chooseMbvAndMsv()
+		initialVersion := oldestVersionSupported // default, in case mbv is "zero".
+		if mbv.Version.Equals(finalVersion.Version) {
+			// Chosen minimumBootstrapVersion equals finalVersion, assume it's unspecified.
+			values[1] = reflect.ValueOf("")
+		} else {
+			values[1] = reflect.ValueOf(mbv.Version.String())
+			initialVersion = mbv
 		}
-		upgradesRemaining -= minBootstrapVersionOffset
-		minBootstrapVersion := randomNthPredecessor(rng, minSupportedVersion, minBootstrapVersionOffset)
-		values[2] = reflect.ValueOf(minBootstrapVersion.Version.String())
+		if msv.Version.Equals(finalVersion.Version) {
+			// Chosen minimumSupportedVersion equals finalVersion, assume it's unspecified.
+			values[2] = reflect.ValueOf("")
+		} else {
+			values[2] = reflect.ValueOf(msv.Version.String())
+		}
 
 		// Find the maximum amount of possible upgrades from the minBootstrapVersion
 		// and pick a random value [1, maxUpgradesFromMBV] to set numUpgrades to.
-		maxUpgradesFromMBV, err := release.MajorReleasesBetween(&finalVersion.Version, &minBootstrapVersion.Version)
+		maxUpgradesFromMBV, err := release.MajorReleasesBetween(&finalVersion.Version, &initialVersion.Version)
 		require.NoError(t, err)
 
 		numUpgrades := rng.Intn(maxUpgradesFromMBV) + 1
 		values[3] = reflect.ValueOf(numUpgrades)
-
-		values[4] = reflect.ValueOf(rng.Float64() > 0.5)
-	}
-
-	cfg := quick.Config{
-		MaxCount: 100,
-		Rand:     rng,
-		Values:   generator,
-	}
-
-	var fatalErr error
-	fatalFunc := func() func(...interface{}) {
-		fatalErr = nil
-		return func(args ...interface{}) {
-			require.Len(t, args, 1)
-			err, isErr := args[0].(error)
-			require.True(t, isErr)
-
-			fatalErr = err
-		}
+		values[4] = reflect.ValueOf(rng.Float64() > 0.5) // skipVersions
 	}
 
 	verifyPlan := func(
-		finalVersion string, minSupportedVersion string, minBootstrapVersion string, numUpgrades int, skipVersions bool,
+		finalVersion string, minBootstrapVersion string, minSupportedVersion string, numUpgrades int, skipVersions bool,
 	) bool {
 		// The top level withTestBuildVersion will take care of resetting this for us.
 		_ = withTestBuildVersion(finalVersion)
 
-		// Set up our test plan using the generated values.
-		mvt := newTest(
-			NumUpgrades(numUpgrades),
-			MinimumSupportedVersion(minSupportedVersion),
-			MinimumBootstrapVersion(minBootstrapVersion),
-		)
-		if skipVersions {
-			mvt.options.skipVersionProbability = 1
-		}
-		mvt.options.predecessorFunc = randomPredecessor
+		genNewTest := func() *Test {
+			// Set up our test plan using the generated values.
+			opts := []CustomOption{NumUpgrades(numUpgrades)}
+			if minBootstrapVersion != "" {
+				opts = append(opts, MinimumBootstrapVersion(minBootstrapVersion))
+			}
+			if minSupportedVersion != "" {
+				opts = append(opts, MinimumSupportedVersion(minSupportedVersion))
+			}
+			mvt := newTest(
+				opts...,
+			)
+			// N.B. randomPredecessor is the default, but it can be overridden; e.g., SeparateProcessDeployment uses latestPredecessor.
+			// Here, we want to ensure that we are testing all possible upgrade paths, so we explicitly set randomPredecessor.
+			mvt.options.predecessorFunc = randomPredecessor
 
-		assertValidTest(mvt, fatalFunc())
-		if fatalErr != nil {
-			t.Log(fatalErr)
-			return false
-		}
+			if skipVersions {
+				mvt.options.skipVersionProbability = 1
+			} else {
+				mvt.options.skipVersionProbability = 0
+			}
+			// Setup user hooks so that we can exercise `mvt.assertExpectedUserHooks`.
+			mvt.BeforeClusterStart("BeforeClusterStart", dummyHook)
+			mvt.BackgroundFunc("Background", dummyHook)
+			mvt.OnStartup("OnStartup", dummyHook)
+			mvt.InMixedVersion("InMixedVersion", dummyHook)
+			mvt.AfterUpgradeFinalized("AfterUpgradeFinalized", dummyHook)
 
+			// As in mixedversion.NewTest, we must ensure that we have a valid test, before returning it.
+			assertValidTest(mvt, t.Fatal)
+			return mvt
+		}
+		// We have a valid test, let's get a plan.
+		mvt := genNewTest()
 		plan, err := mvt.plan()
-		logAndFail := func(format string, args ...any) bool {
-			t.Logf(format, args)
-			t.Log(plan.PrettyPrint())
+		if err != nil {
+			// Log the error and assert property failure.
+			t.Error(err)
 			return false
 		}
-		if err != nil {
-			return logAndFail(err.Error())
+		if plan == nil {
+			t.Error("expected a valid plan; got nil")
+			return false
 		}
+		// We have a valid plan owing to `assertValidPlan` in `mvt.plan()`.
+		return true
+	}
+	// 100 iterations take ~1.5 seconds on mac m1pro
+	numIterations := 100
 
-		// It is possible for the number of total upgrades generated to be less than the
-		// number requested if:
-		//
-		// 1. The requested number of upgrades is greater than the number of possible upgrades
-		// from the minBootstrapVersion to the current version. mvt.numUpgrades should reflect
-		// this upper bound.
-		// 2. Skip upgrades are enabled. The framework will prioritize testing at least one
-		// skip upgrade over matching the exact number of upgrades requested.
-		assertNumUpgrades := func() bool {
-			numUpgradesGenerated := len(plan.allUpgrades())
-			expectedUpgrades := mvt.numUpgrades()
-			if numUpgradesGenerated != expectedUpgrades {
-				if skipVersions && numUpgradesGenerated == expectedUpgrades-1 {
-					return true
-				}
-				return logAndFail("expected %d upgrades, got %d", expectedUpgrades, numUpgradesGenerated)
-			}
-			return true
-		}
+	if skip.Stress() {
+		// Stress tests take longer to run, so we increase the number of iterations.
+		numIterations = 1000
+	}
 
-		// randomPredecessor should take special care to pick a predecessor that is newer
-		// than the minimum supported version and minimum bootstrap version if they are in
-		// the same series as the predecessor.
-		assertRandomPredecessorRespectsMinVersion := func() bool {
-			msvSeries := mvt.options.minimumSupportedVersion.Series()
-			mbvSeries := mvt.options.minimumBootstrapVersion.Series()
-			for _, v := range plan.Versions() {
-				if v.Series() == msvSeries {
-					if v.LessThan(mvt.options.minimumSupportedVersion) {
-						return logAndFail("randomPredecessor should have picked predecessor newer than minimum supported version")
-					}
-				}
-				if v.Series() == mbvSeries {
-					if v.LessThan(mvt.options.minimumBootstrapVersion) {
-						return logAndFail("randomPredecessor should have picked predecessor newer than minimum bootstrap version")
-					}
-				}
-			}
-			return true
-		}
-
-		return assertNumUpgrades() && assertRandomPredecessorRespectsMinVersion()
+	cfg := quick.Config{
+		MaxCount: numIterations,
+		Rand:     rng,
+		Values:   generator,
 	}
 
 	require.NoError(t, quick.Check(verifyPlan, &cfg))
