@@ -2571,6 +2571,7 @@ func (s *adminServer) QueryPlan(
 
 	// As long as there's only one query provided it's safe to construct the
 	// explain query.
+	// TODO(alyshan): len(stmts) == 0, return nil, nil?
 	stmts, err := parser.Parse(req.Query)
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
