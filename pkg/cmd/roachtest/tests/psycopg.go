@@ -19,7 +19,7 @@ import (
 )
 
 var psycopgReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)(?:\.(?P<minor>\d+)(?:\.(?P<point>\d+)(?:\.(?P<subpoint>\d+))?)?)?$`)
-var supportedPsycopgTag = "3.2.6"
+var supportedPsycopgTag = "3.2.8"
 
 // This test runs psycopg full test suite against a single cockroach node.
 func registerPsycopg(r registry.Registry) {
