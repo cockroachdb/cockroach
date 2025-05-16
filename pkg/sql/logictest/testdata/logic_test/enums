@@ -1,5 +1,3 @@
-# LogicTest: !local-schema-locked
-
 statement ok
 CREATE TYPE t AS ENUM ()
 
@@ -387,6 +385,7 @@ SELECT b'\xFF'::as_bytes
 
 # Regression for #49300. Ensure that virtual tables have access to hydrated
 # type descriptors.
+skipif config local-schema-locked
 query TT
 SHOW CREATE t1
 ----
@@ -397,8 +396,20 @@ t1  CREATE TABLE public.t1 (
       INDEX i (x ASC)
     );
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE t1
+----
+t1  CREATE TABLE public.t1 (
+      x public.greeting NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
+      INDEX i (x ASC)
+    ) WITH (schema_locked = true);
+
 # SHOW CREATE uses a virtual index, so also check the code path where a
 # descriptor scan is used.
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM crdb_internal.create_statements WHERE descriptor_name = 't1'
 ----
@@ -408,6 +419,17 @@ CREATE TABLE public.t1 (
    CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
    INDEX i (x ASC)
 )
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM crdb_internal.create_statements WHERE descriptor_name = 't1'
+----
+CREATE TABLE public.t1 (
+  x public.greeting NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
+  INDEX i (x ASC)
+) WITH (schema_locked = true)
 
 # Test that the implicit array type has been created, and that we can use it.
 query TT
@@ -501,6 +523,7 @@ WHERE
 'hello'::public.greeting
 
 # Test that enum default values are formatted in human readable ways.
+skipif config local-schema-locked
 query TT
 SHOW CREATE enum_default
 ----
@@ -512,6 +535,19 @@ enum_default  CREATE TABLE public.enum_default (
                 CONSTRAINT enum_default_pkey PRIMARY KEY (rowid ASC),
                 FAMILY fam_0_x_y_z_rowid (x, y, z, rowid)
               );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE enum_default
+----
+enum_default  CREATE TABLE public.enum_default (
+                x INT8 NULL,
+                y public.greeting NULL DEFAULT 'hello':::public.greeting,
+                z BOOL NULL DEFAULT 'hello':::public.greeting IS OF (public.greeting, public.greeting),
+                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                CONSTRAINT enum_default_pkey PRIMARY KEY (rowid ASC),
+                FAMILY fam_0_x_y_z_rowid (x, y, z, rowid)
+              ) WITH (schema_locked = true);
 
 # Test crdb_internal.table_columns.
 query TT
@@ -558,6 +594,7 @@ SELECT * FROM enum_computed
 1 hello false hello
 2 hello false hello
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE enum_computed
 ----
@@ -570,6 +607,20 @@ enum_computed  CREATE TABLE public.enum_computed (
                  CONSTRAINT enum_computed_pkey PRIMARY KEY (rowid ASC),
                  FAMILY fam_0_x_y_z_w_rowid (x, y, z, w, rowid)
                );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE enum_computed
+----
+enum_computed  CREATE TABLE public.enum_computed (
+                 x INT8 NULL,
+                 y public.greeting NULL AS ('hello':::public.greeting) STORED,
+                 z BOOL NULL AS (w = 'howdy':::public.greeting) STORED,
+                 w public.greeting NULL,
+                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                 CONSTRAINT enum_computed_pkey PRIMARY KEY (rowid ASC),
+                 FAMILY fam_0_x_y_z_w_rowid (x, y, z, w, rowid)
+               ) WITH (schema_locked = true);
 
 # Test information_schema.columns. generation_expression should not be
 # formatted with type annotations.
@@ -595,6 +646,7 @@ CREATE TABLE enum_checks (
 );
 INSERT INTO enum_checks VALUES ('hello')
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE enum_checks
 ----
@@ -605,6 +657,18 @@ enum_checks  CREATE TABLE public.enum_checks (
                CONSTRAINT check_x CHECK (x = 'hello':::public.greeting),
                CONSTRAINT "check" CHECK ('hello':::public.greeting = 'hello':::public.greeting)
              );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE enum_checks
+----
+enum_checks  CREATE TABLE public.enum_checks (
+               x public.greeting NULL,
+               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+               CONSTRAINT enum_checks_pkey PRIMARY KEY (rowid ASC),
+               CONSTRAINT check_x CHECK (x = 'hello':::public.greeting),
+               CONSTRAINT "check" CHECK ('hello':::public.greeting = 'hello':::public.greeting)
+             ) WITH (schema_locked = true);
 
 # Ensure that we can add check constraints to tables with enums.
 statement ok
@@ -1279,7 +1343,7 @@ statement ok
 CREATE TYPE enum_with_vals AS ENUM ('val', 'other_val');
 
 statement ok
-CREATE TABLE table_with_not_null_enum (i INT PRIMARY KEY, v enum_with_vals NOT NULL);
+CREATE TABLE table_with_not_null_enum (i INT PRIMARY KEY, v enum_with_vals NOT NULL) WITH (schema_locked=false);
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -1298,7 +1362,7 @@ statement ok
 CREATE TYPE enum_with_no_vals AS ENUM ();
 
 statement ok
-CREATE TABLE table_with_not_null_enum_no_vals (i INT PRIMARY KEY, v enum_with_no_vals NOT NULL);
+CREATE TABLE table_with_not_null_enum_no_vals (i INT PRIMARY KEY, v enum_with_no_vals NOT NULL) WITH (schema_locked=false);
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -1578,6 +1642,7 @@ ALTER TYPE arr_typ RENAME TO arr_typ2
 statement ok
 INSERT INTO arr_t6 VALUES (default, default, default)
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE arr_t6
 ----
@@ -1590,6 +1655,18 @@ arr_t6  CREATE TABLE public.arr_t6 (
           FAMILY fam_0_i_j_k_rowid (i, j, k, rowid)
         );
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE arr_t6
+----
+arr_t6  CREATE TABLE public.arr_t6 (
+          i public.arr_typ2[] NULL DEFAULT ARRAY['a':::public.arr_typ2]:::public.arr_typ2[],
+          j public.arr_typ2 NULL DEFAULT (ARRAY['b':::public.arr_typ2]:::public.arr_typ2[])[1:::INT8],
+          k public.arr_typ2[] NULL DEFAULT ARRAY['c':::public.arr_typ2]:::public.arr_typ2[],
+          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+          CONSTRAINT arr_t6_pkey PRIMARY KEY (rowid ASC),
+          FAMILY fam_0_i_j_k_rowid (i, j, k, rowid)
+        ) WITH (schema_locked = true);
 
 subtest regression_63138
 
@@ -1775,6 +1852,10 @@ CREATE TABLE tab2 (k greeting)
 statement ok
 INSERT INTO tab2 VALUES ('hello')
 
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE tab2 SET (schema_locked=false)
+
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL autocommit_before_ddl = false;
@@ -1791,6 +1872,10 @@ INSERT INTO tab2 VALUES ('salud')
 
 statement ok
 ROLLBACK
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE tab2 SET (schema_locked=true)
 
 # This is a regression test for mixed case type references.
 subtest mixed_case_type_names
@@ -1842,6 +1927,7 @@ ALTER TABLE t ADD COLUMN "MixedCase Column" "➖➖"."MixedCase" DEFAULT ('mixed
 statement ok
 ALTER TABLE t ADD COLUMN "🙏" "DB➕➕".public."Emoji 😉" DEFAULT ('😊'::"DB➕➕".public."Emoji 😉") ON UPDATE ('😔':::public."Emoji 😉");
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
@@ -1853,6 +1939,18 @@ CREATE TABLE public.t (
 );
 
 
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  i INT8 NOT NULL,
+  "MixedCase Column" ➖➖."MixedCase" NULL DEFAULT 'mixed':::➖➖."MixedCase",
+  🙏 public."Emoji 😉" NULL DEFAULT e'\U0001F60A':::public."Emoji 😉" ON UPDATE e'\U0001F614':::public."Emoji 😉",
+  CONSTRAINT t_pkey PRIMARY KEY (i ASC)
+) WITH (schema_locked = true);
+
+
 # Ensure that there's a database qualification on the enum type in
 # SHOW CREATE TABLE.
 subtest show_create_table_udf_qualification
@@ -1862,6 +1960,7 @@ CREATE DATABASE db1;
 CREATE TYPE db1.mytype AS ENUM ('foo');
 CREATE TABLE db1.t (m db1.mytype)
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE db1.public.t]
 ----
@@ -1870,3 +1969,13 @@ CREATE TABLE public.t (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE db1.public.t]
+----
+CREATE TABLE public.t (
+  m public.mytype NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+) WITH (schema_locked = true);

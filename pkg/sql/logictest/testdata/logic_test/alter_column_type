@@ -1,4 +1,4 @@
-# LogicTest: !local-legacy-schema-changer !local-schema-locked
+# LogicTest: !local-legacy-schema-changer
 
 # A basic sanity check to demonstrate column type changes.
 subtest SanityCheck
@@ -72,6 +72,7 @@ ALTER TABLE t ALTER COLUMN i DROP STORED
 statement ok
 ALTER TABLE t DROP COLUMN b CASCADE
 
+skipif config local-schema-locked
 query TT colnames
 show create table t
 ----
@@ -82,6 +83,18 @@ t           CREATE TABLE public.t (
               CONSTRAINT t_pkey PRIMARY KEY (a ASC),
               INDEX idx2 (i ASC)
             );
+
+onlyif config local-schema-locked
+query TT colnames
+show create table t
+----
+table_name  create_statement
+t           CREATE TABLE public.t (
+              a INT8 NOT NULL,
+              i INT8 NULL,
+              CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+              INDEX idx2 (i ASC)
+            ) WITH (schema_locked = true);
 
 statement ok
 ALTER TABLE t RENAME COLUMN i TO b
@@ -223,6 +236,7 @@ id2    STRING  true   NULL            ·  {t3_pkey}  false
 id3    INT8    true   NULL            ·  {t3_pkey}  false
 rowid  INT8    false  unique_rowid()  ·  {t3_pkey}  true
 
+skipif config local-schema-locked
 query TT colnames
 show create table t3
 ----
@@ -235,6 +249,20 @@ t3          CREATE TABLE public.t3 (
               CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC),
               FAMILY f1 (id3, id2, id, rowid)
             );
+
+onlyif config local-schema-locked
+query TT colnames
+show create table t3
+----
+table_name  create_statement
+t3          CREATE TABLE public.t3 (
+              id INT8 NULL,
+              id2 STRING NULL,
+              id3 INT8 NULL,
+              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+              CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC),
+              FAMILY f1 (id3, id2, id, rowid)
+            ) WITH (schema_locked = true);
 
 statement ok
 INSERT INTO t3 VALUES (4,'4',4)
@@ -313,6 +341,7 @@ ALTER TABLE t8 ALTER COLUMN x TYPE INT
 statement error .*could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax
 ALTER TABLE t8 ALTER COLUMN x TYPE INT USING x::INT8
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t8
 ----
@@ -321,6 +350,16 @@ t8  CREATE TABLE public.t8 (
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
       CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC)
     );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t8
+----
+t8  CREATE TABLE public.t8 (
+      x STRING NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC)
+    ) WITH (schema_locked = true);
 
 # Ensure ALTER COLUMN TYPE is disallowed if column is part of primary key.
 statement ok
@@ -409,6 +448,7 @@ ALTER TABLE t17 ALTER COLUMN y TYPE INT
 statement error on update for column "y" cannot be cast automatically to type INT8
 ALTER TABLE t17 ALTER COLUMN y TYPE INT USING y::INT8
 
+skipif config local-schema-locked
 query TT colnames
 show create table t17
 ----
@@ -421,6 +461,18 @@ t17         CREATE TABLE public.t17 (
               FAMILY f1 (x, y, rowid)
             );
 
+onlyif config local-schema-locked
+query TT colnames
+show create table t17
+----
+table_name  create_statement
+t17         CREATE TABLE public.t17 (
+              x STRING NULL DEFAULT 'HELLO':::STRING,
+              y STRING NULL ON UPDATE 'HELLO':::STRING,
+              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+              CONSTRAINT t17_pkey PRIMARY KEY (rowid ASC),
+              FAMILY f1 (x, y, rowid)
+            ) WITH (schema_locked = true);
 
 # Ensure ALTER COLUMN TYPE fails if the column is part of an FK relationship.
 statement ok
@@ -437,7 +489,7 @@ ALTER TABLE t19 ALTER COLUMN y TYPE STRING
 
 # Ensure ALTER COLUMN TYPE does not work inside a transaction.
 statement ok
-CREATE TABLE t20 (x INT);
+CREATE TABLE t20 (x INT) WITH (schema_locked=false);
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -453,7 +505,7 @@ ROLLBACK
 
 # Ensure ALTER COLUMN TYPE cannot be used in combination with other ALTER TABLE commands.
 statement ok
-CREATE TABLE t21 (x INT);
+CREATE TABLE t21 (x INT) WITH (schema_locked=false);
 
 statement ok
 INSERT INTO t21 VALUES (888),(-32760);
@@ -517,6 +569,7 @@ INSERT INTO t24 VALUES ('1'), ('hello');
 statement error .*could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax
 ALTER TABLE t24  ALTER COLUMN x TYPE INT USING (x::int + 5)
 
+skipif config local-schema-locked
 query TT colnames
 show create table t24
 ----
@@ -526,6 +579,17 @@ t24         CREATE TABLE public.t24 (
               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
               CONSTRAINT t24_pkey PRIMARY KEY (rowid ASC)
             );
+
+onlyif config local-schema-locked
+query TT colnames
+show create table t24
+----
+table_name  create_statement
+t24         CREATE TABLE public.t24 (
+              x STRING NULL,
+              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+              CONSTRAINT t24_pkey PRIMARY KEY (rowid ASC)
+            ) WITH (schema_locked = true);
 
 # Ensure USING EXPRESSION rolls back if the USING EXPRESSION does not conform
 # to the new type of the column.
@@ -748,6 +812,7 @@ SELECT vis1, hid1 FROM t_with_hidden ORDER BY vis1
 2 1
 3 1
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t_with_hidden
 ----
@@ -758,6 +823,18 @@ t_with_hidden  CREATE TABLE public.t_with_hidden (
                  CONSTRAINT t_with_hidden_pkey PRIMARY KEY (rowid ASC),
                  FAMILY f1 (vis1, hid1, rowid)
                );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t_with_hidden
+----
+t_with_hidden  CREATE TABLE public.t_with_hidden (
+                 vis1 INT8 NULL,
+                 hid1 STRING NOT VISIBLE NULL DEFAULT 1:::INT8,
+                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                 CONSTRAINT t_with_hidden_pkey PRIMARY KEY (rowid ASC),
+                 FAMILY f1 (vis1, hid1, rowid)
+               ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE t_with_hidden;
@@ -815,6 +892,7 @@ SELECT a, b FROM t_with_on_update ORDER BY a
 1001 3
 10000 NULL
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t_with_on_update
 ----
@@ -824,6 +902,17 @@ t_with_on_update  CREATE TABLE public.t_with_on_update (
                     CONSTRAINT t_with_on_update_pkey PRIMARY KEY (a ASC),
                     FAMILY f1 (a, b)
                   );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t_with_on_update
+----
+t_with_on_update  CREATE TABLE public.t_with_on_update (
+                    a INT8 NOT NULL,
+                    b STRING NULL ON UPDATE 3:::INT8,
+                    CONSTRAINT t_with_on_update_pkey PRIMARY KEY (a ASC),
+                    FAMILY f1 (a, b)
+                  ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE t_with_on_update;
@@ -852,6 +941,7 @@ SELECT * FROM t_with_default ORDER BY c1
 ----
 32767
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t_with_default
 ----
@@ -861,6 +951,17 @@ t_with_default  CREATE TABLE public.t_with_default (
                   CONSTRAINT t_with_default_pkey PRIMARY KEY (rowid ASC),
                   FAMILY f1 (rowid, c1)
                 );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t_with_default
+----
+t_with_default  CREATE TABLE public.t_with_default (
+                  c1 INT2 NULL DEFAULT 32767:::INT8,
+                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                  CONSTRAINT t_with_default_pkey PRIMARY KEY (rowid ASC),
+                  FAMILY f1 (rowid, c1)
+                ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE t_with_default;
@@ -1004,6 +1105,7 @@ c2     CHAR(4) true   NULL            ·  {t_bytes_pkey}  false
 c3     UUID    true   NULL            ·  {t_bytes_pkey}  false
 rowid  INT8    false  unique_rowid()  ·  {t_bytes_pkey}  true
 
+skipif config local-schema-locked
 query TT colnames
 show create table t_bytes
 ----
@@ -1016,6 +1118,20 @@ t_bytes     CREATE TABLE public.t_bytes (
               CONSTRAINT t_bytes_pkey PRIMARY KEY (rowid ASC),
               FAMILY f1 (c1, c2, c3, rowid)
             );
+
+onlyif config local-schema-locked
+query TT colnames
+show create table t_bytes
+----
+table_name  create_statement
+t_bytes     CREATE TABLE public.t_bytes (
+              c1 STRING NULL,
+              c2 CHAR(4) NULL,
+              c3 UUID NULL,
+              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+              CONSTRAINT t_bytes_pkey PRIMARY KEY (rowid ASC),
+              FAMILY f1 (c1, c2, c3, rowid)
+            ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE t_bytes;
@@ -1072,6 +1188,7 @@ c2     DECIMAL(10,2) true   NULL            ·  {t_decimal_pkey}  false
 c3     DECIMAL(6,1)  true   NULL            ·  {t_decimal_pkey}  false
 rowid  INT8          false  unique_rowid()  ·  {t_decimal_pkey}  true
 
+skipif config local-schema-locked
 query TT colnames
 show create table t_decimal
 ----
@@ -1084,6 +1201,20 @@ t_decimal   CREATE TABLE public.t_decimal (
               CONSTRAINT t_decimal_pkey PRIMARY KEY (rowid ASC),
               FAMILY f1 (c1, c2, c3, rowid)
             );
+
+onlyif config local-schema-locked
+query TT colnames
+show create table t_decimal
+----
+table_name  create_statement
+t_decimal   CREATE TABLE public.t_decimal (
+              c1 DECIMAL(7,2) NULL,
+              c2 DECIMAL(10,2) NULL,
+              c3 DECIMAL(6,1) NULL,
+              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+              CONSTRAINT t_decimal_pkey PRIMARY KEY (rowid ASC),
+              FAMILY f1 (c1, c2, c3, rowid)
+            ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE t_decimal;
@@ -1372,6 +1503,7 @@ SELECT * FROM stored1 ORDER BY A;
 statement ok
 ALTER TABLE stored1 ALTER COLUMN COMP1 SET DATA TYPE BIGINT;
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE stored1;
 ----
@@ -1381,6 +1513,17 @@ stored1  CREATE TABLE public.stored1 (
            CONSTRAINT stored1_pkey PRIMARY KEY (a ASC),
            FAMILY f1 (a, comp1)
          );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE stored1;
+----
+stored1  CREATE TABLE public.stored1 (
+          a INT8 NOT NULL,
+          comp1 INT8 NOT NULL AS (a) STORED,
+          CONSTRAINT stored1_pkey PRIMARY KEY (a ASC),
+          FAMILY f1 (a, comp1)
+        ) WITH (schema_locked = true);
 
 query II
 SELECT * FROM stored1 ORDER BY A;
@@ -1403,6 +1546,7 @@ DELETE FROM stored1 WHERE a = 2147483648;
 statement ok
 ALTER TABLE stored1 ALTER COLUMN COMP1 SET DATA TYPE INT4;
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE stored1;
 ----
@@ -1412,6 +1556,17 @@ stored1  CREATE TABLE public.stored1 (
            CONSTRAINT stored1_pkey PRIMARY KEY (a ASC),
            FAMILY f1 (a, comp1)
          );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE stored1;
+----
+stored1  CREATE TABLE public.stored1 (
+           a INT8 NOT NULL,
+           comp1 INT4 NOT NULL AS (a) STORED,
+           CONSTRAINT stored1_pkey PRIMARY KEY (a ASC),
+           FAMILY f1 (a, comp1)
+         ) WITH (schema_locked = true);
 
 query II
 SELECT * FROM stored1 ORDER BY A;
@@ -1437,6 +1592,8 @@ ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE INT2 USING -1;
 statement ok
 INSERT INTO stored1 VALUES (-1000);
 
+skipif config local-mixed-24.3
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE stored1;
 ----
@@ -1446,6 +1603,17 @@ stored1  CREATE TABLE public.stored1 (
            CONSTRAINT stored1_pkey PRIMARY KEY (a ASC),
            FAMILY f1 (a, comp1)
          );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE stored1;
+----
+stored1  CREATE TABLE public.stored1 (
+           a INT8 NOT NULL,
+           comp1 INT2 NOT NULL AS (a) STORED,
+           CONSTRAINT stored1_pkey PRIMARY KEY (a ASC),
+           FAMILY f1 (a, comp1)
+         ) WITH (schema_locked = true);
 
 query II
 SELECT * FROM stored1 ORDER BY A;
@@ -1457,9 +1625,17 @@ SELECT * FROM stored1 ORDER BY A;
 2000 -1
 2147483647  -1
 
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE stored1 SET (schema_locked=false);
+
 # Attempt to drop stored along with changing the column type
 statement error pq: unimplemented: ALTER COLUMN TYPE operations that require rewriting on-disk data cannot be combined with other ALTER TABLE commands
 ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE INT4 USING -1, ALTER COLUMN comp1 drop stored;
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE stored1 SET (schema_locked=true);
 
 statement ok
 DROP TABLE stored1;
@@ -1485,6 +1661,7 @@ SELECT * from virt1 ORDER BY c1;
 100 100
 2147483647 2147483647
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE virt1;
 ----
@@ -1493,6 +1670,16 @@ virt1  CREATE TABLE public.virt1 (
          v1 INT4 NOT NULL AS (c1) VIRTUAL,
          CONSTRAINT virt1_pkey PRIMARY KEY (c1 ASC)
        );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE virt1;
+----
+virt1  CREATE TABLE public.virt1 (
+         c1 INT8 NOT NULL,
+         v1 INT4 NOT NULL AS (c1) VIRTUAL,
+         CONSTRAINT virt1_pkey PRIMARY KEY (c1 ASC)
+       ) WITH (schema_locked = true);
 
 statement error pq: validate check constraint: integer out of range for type int2
 ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE INT2;
@@ -1512,6 +1699,7 @@ SELECT * from virt1 ORDER BY c1;
 -9999 -9999
 100 100
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE virt1;
 ----
@@ -1520,6 +1708,16 @@ virt1  CREATE TABLE public.virt1 (
          v1 INT2 NOT NULL AS (c1) VIRTUAL,
          CONSTRAINT virt1_pkey PRIMARY KEY (c1 ASC)
        );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE virt1;
+----
+virt1  CREATE TABLE public.virt1 (
+         c1 INT8 NOT NULL,
+         v1 INT2 NOT NULL AS (c1) VIRTUAL,
+         CONSTRAINT virt1_pkey PRIMARY KEY (c1 ASC)
+       ) WITH (schema_locked = true);
 
 statement error pq: expected STORED COMPUTED COLUMN expression to have type string, but 'c1' has type int
 ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE TEXT;
@@ -1551,6 +1749,7 @@ SELECT * FROM virt2 ORDER BY c1;
 ----
 2024-10-31 16:50:00.123456 +0000 +0000  2024-10-31 16:50:00.12 +0000 +0000
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE virt2;
 ----
@@ -1560,6 +1759,16 @@ virt2  CREATE TABLE public.virt2 (
          CONSTRAINT virt2_pkey PRIMARY KEY (c1 ASC)
        );
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE virt2;
+----
+virt2  CREATE TABLE public.virt2 (
+         c1 TIMESTAMP(6) NOT NULL,
+         v1 TIMESTAMP(2) NULL AS (c1) VIRTUAL,
+         CONSTRAINT virt2_pkey PRIMARY KEY (c1 ASC)
+       ) WITH (schema_locked = true);
+
 statement ok
 ALTER TABLE virt2 ALTER COLUMN v1 SET DATA TYPE TIMESTAMP(5);
 
@@ -1568,6 +1777,7 @@ SELECT * FROM virt2 ORDER BY c1;
 ----
 2024-10-31 16:50:00.123456 +0000 +0000  2024-10-31 16:50:00.12346 +0000 +0000
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE virt2;
 ----
@@ -1576,6 +1786,16 @@ virt2  CREATE TABLE public.virt2 (
          v1 TIMESTAMP(5) NULL AS (c1) VIRTUAL,
          CONSTRAINT virt2_pkey PRIMARY KEY (c1 ASC)
        );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE virt2;
+----
+virt2  CREATE TABLE public.virt2 (
+         c1 TIMESTAMP(6) NOT NULL,
+         v1 TIMESTAMP(5) NULL AS (c1) VIRTUAL,
+         CONSTRAINT virt2_pkey PRIMARY KEY (c1 ASC)
+       ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE virt2;
@@ -1605,6 +1825,7 @@ SELECT * FROM virt3 ORDER BY c1;
 1.235 1.24
 12.346 12.35
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE virt3;
 ----
@@ -1613,6 +1834,16 @@ virt3  CREATE TABLE public.virt3 (
          v1 DECIMAL(6,2) NULL AS (c1) VIRTUAL,
          CONSTRAINT virt3_pkey PRIMARY KEY (c1 ASC)
        );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE virt3;
+----
+virt3  CREATE TABLE public.virt3 (
+         c1 DECIMAL(6,3) NOT NULL,
+         v1 DECIMAL(6,2) NULL AS (c1) VIRTUAL,
+         CONSTRAINT virt3_pkey PRIMARY KEY (c1 ASC)
+       ) WITH (schema_locked = true);
 
 statement error pq: validate check constraint: .*value with precision 5, scale 4 must round to an absolute value less than 10\^1
 ALTER TABLE virt3 ALTER COLUMN v1 SET DATA TYPE DECIMAL(5,4);
@@ -1627,6 +1858,7 @@ SELECT * FROM virt3 ORDER BY c1;
 1.235 1.2350
 12.346 12.3460
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE virt3;
 ----
@@ -1635,6 +1867,16 @@ virt3  CREATE TABLE public.virt3 (
          v1 DECIMAL(8,4) NULL AS (c1) VIRTUAL,
          CONSTRAINT virt3_pkey PRIMARY KEY (c1 ASC)
        );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE virt3;
+----
+virt3  CREATE TABLE public.virt3 (
+         c1 DECIMAL(6,3) NOT NULL,
+         v1 DECIMAL(8,4) NULL AS (c1) VIRTUAL,
+         CONSTRAINT virt3_pkey PRIMARY KEY (c1 ASC)
+       ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE virt3;
@@ -1669,6 +1911,7 @@ rollback;
 statement ok
 RESET autocommit_before_ddl
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t_droppedcol;
 ----
@@ -1677,6 +1920,16 @@ t_droppedcol  CREATE TABLE public.t_droppedcol (
                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                 CONSTRAINT t_droppedcol_pkey PRIMARY KEY (rowid ASC)
               );
+
+onlyif config local-schmea-locked
+query TT
+SHOW CREATE TABLE t_droppedcol;
+----
+t_droppedcol  CREATE TABLE public.t_droppedcol (
+                dropme INT8 NULL,
+                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                CONSTRAINT t_droppedcol_pkey PRIMARY KEY (rowid ASC)
+              ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE t_droppedcol;
@@ -1727,6 +1980,8 @@ select * from t_multi_alter order by c1;
 10 10 2024-04-22 00:00:00 +0000 +0000
 20 20 2024-04-22 00:00:00 +0000 +0000
 
+skipif config local-mixed-24.3
+skipif config local-schema-locked
 query TT colnames
 show create table t_multi_alter
 ----
@@ -1738,6 +1993,19 @@ t_multi_alter  CREATE TABLE public.t_multi_alter (
                  CONSTRAINT t_multi_alter_pkey PRIMARY KEY (c1 ASC),
                  FAMILY f1 (c1, c2, c3)
                );
+
+onlyif config local-schema-locked
+query TT colnames
+show create table t_multi_alter
+----
+table_name     create_statement
+t_multi_alter  CREATE TABLE public.t_multi_alter (
+                 c1 INT8 NOT NULL,
+                 c2 INT8 NOT NULL,
+                 c3 DATE NULL,
+                 CONSTRAINT t_multi_alter_pkey PRIMARY KEY (c1 ASC),
+                 FAMILY f1 (c1, c2, c3)
+               ) WITH (schema_locked = true);
 
 statement ok
 drop table t_multi_alter;
