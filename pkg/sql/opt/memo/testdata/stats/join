@@ -1042,160 +1042,367 @@ left-join (merge)
       └── y:2 > v:8 [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
 
 # Check that true filters are handled correctly for all join types.
-norm
+build
 SELECT * FROM (SELECT 1) JOIN (SELECT 1 WHERE false) ON true
 ----
-values
+inner-join (cross)
  ├── columns: "?column?":1(int!null) "?column?":2(int!null)
  ├── cardinality: [0 - 0]
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── stats: [rows=0]
  ├── key: ()
- └── fd: ()-->(1,2)
+ ├── fd: ()-->(1,2)
+ ├── project
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    └── () [type=tuple]
+ │    └── projections
+ │         └── 1 [as="?column?":1, type=int]
+ ├── project
+ │    ├── columns: "?column?":2(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(2)
+ │    ├── select
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── stats: [rows=0]
+ │    │    ├── key: ()
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── stats: [rows=1]
+ │    │    │    ├── key: ()
+ │    │    │    └── () [type=tuple]
+ │    │    └── filters
+ │    │         └── false [type=bool, constraints=(contradiction; tight)]
+ │    └── projections
+ │         └── 1 [as="?column?":2, type=int]
+ └── filters
+      └── true [type=bool]
 
-norm
+build
 SELECT * FROM (SELECT 1) LEFT JOIN (SELECT 1 WHERE false) ON true
 ----
 left-join (cross)
  ├── columns: "?column?":1(int!null) "?column?":2(int)
  ├── cardinality: [1 - 1]
- ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
- ├── values
+ ├── project
  │    ├── columns: "?column?":1(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
  │    ├── key: ()
  │    ├── fd: ()-->(1)
- │    └── (1,) [type=tuple{int}]
- ├── values
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    └── () [type=tuple]
+ │    └── projections
+ │         └── 1 [as="?column?":1, type=int]
+ ├── project
  │    ├── columns: "?column?":2(int!null)
  │    ├── cardinality: [0 - 0]
  │    ├── stats: [rows=0]
  │    ├── key: ()
- │    └── fd: ()-->(2)
- └── filters (true)
+ │    ├── fd: ()-->(2)
+ │    ├── select
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── stats: [rows=0]
+ │    │    ├── key: ()
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── stats: [rows=1]
+ │    │    │    ├── key: ()
+ │    │    │    └── () [type=tuple]
+ │    │    └── filters
+ │    │         └── false [type=bool, constraints=(contradiction; tight)]
+ │    └── projections
+ │         └── 1 [as="?column?":2, type=int]
+ └── filters
+      └── true [type=bool]
 
-norm
+build
 SELECT * FROM (SELECT 1) RIGHT JOIN (SELECT 1 WHERE false) ON true
 ----
-values
- ├── columns: "?column?":1(int!null) "?column?":2(int!null)
+right-join (cross)
+ ├── columns: "?column?":1(int) "?column?":2(int!null)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── key: ()
- └── fd: ()-->(1,2)
+ ├── fd: ()-->(1,2)
+ ├── project
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    └── () [type=tuple]
+ │    └── projections
+ │         └── 1 [as="?column?":1, type=int]
+ ├── project
+ │    ├── columns: "?column?":2(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(2)
+ │    ├── select
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── stats: [rows=0]
+ │    │    ├── key: ()
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── stats: [rows=1]
+ │    │    │    ├── key: ()
+ │    │    │    └── () [type=tuple]
+ │    │    └── filters
+ │    │         └── false [type=bool, constraints=(contradiction; tight)]
+ │    └── projections
+ │         └── 1 [as="?column?":2, type=int]
+ └── filters
+      └── true [type=bool]
 
-norm
+build
 SELECT * FROM (SELECT 1) FULL JOIN (SELECT 1 WHERE false) ON true
+----
+full-join (cross)
+ ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── cardinality: [1 - 1]
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ ├── stats: [rows=1]
+ ├── project
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    └── () [type=tuple]
+ │    └── projections
+ │         └── 1 [as="?column?":1, type=int]
+ ├── project
+ │    ├── columns: "?column?":2(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(2)
+ │    ├── select
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── stats: [rows=0]
+ │    │    ├── key: ()
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── stats: [rows=1]
+ │    │    │    ├── key: ()
+ │    │    │    └── () [type=tuple]
+ │    │    └── filters
+ │    │         └── false [type=bool, constraints=(contradiction; tight)]
+ │    └── projections
+ │         └── 1 [as="?column?":2, type=int]
+ └── filters
+      └── true [type=bool]
+
+build
+SELECT * FROM (SELECT 1 WHERE false) JOIN (SELECT 1) ON true
+----
+inner-join (cross)
+ ├── columns: "?column?":1(int!null) "?column?":2(int!null)
+ ├── cardinality: [0 - 0]
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── stats: [rows=0]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── project
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── select
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── stats: [rows=0]
+ │    │    ├── key: ()
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── stats: [rows=1]
+ │    │    │    ├── key: ()
+ │    │    │    └── () [type=tuple]
+ │    │    └── filters
+ │    │         └── false [type=bool, constraints=(contradiction; tight)]
+ │    └── projections
+ │         └── 1 [as="?column?":1, type=int]
+ ├── project
+ │    ├── columns: "?column?":2(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(2)
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    └── () [type=tuple]
+ │    └── projections
+ │         └── 1 [as="?column?":2, type=int]
+ └── filters
+      └── true [type=bool]
+
+build
+SELECT * FROM (SELECT 1 WHERE false) LEFT JOIN (SELECT 1) ON true
 ----
 left-join (cross)
  ├── columns: "?column?":1(int!null) "?column?":2(int)
- ├── cardinality: [1 - 1]
- ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
- ├── stats: [rows=1]
+ ├── cardinality: [0 - 0]
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ ├── stats: [rows=0]
  ├── key: ()
  ├── fd: ()-->(1,2)
- ├── values
+ ├── project
  │    ├── columns: "?column?":1(int!null)
- │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1]
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
  │    ├── key: ()
  │    ├── fd: ()-->(1)
- │    └── (1,) [type=tuple{int}]
- ├── values
+ │    ├── select
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── stats: [rows=0]
+ │    │    ├── key: ()
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── stats: [rows=1]
+ │    │    │    ├── key: ()
+ │    │    │    └── () [type=tuple]
+ │    │    └── filters
+ │    │         └── false [type=bool, constraints=(contradiction; tight)]
+ │    └── projections
+ │         └── 1 [as="?column?":1, type=int]
+ ├── project
  │    ├── columns: "?column?":2(int!null)
- │    ├── cardinality: [0 - 0]
- │    ├── stats: [rows=0]
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
  │    ├── key: ()
- │    └── fd: ()-->(2)
- └── filters (true)
+ │    ├── fd: ()-->(2)
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    └── () [type=tuple]
+ │    └── projections
+ │         └── 1 [as="?column?":2, type=int]
+ └── filters
+      └── true [type=bool]
 
-norm
-SELECT * FROM (SELECT 1 WHERE false) JOIN (SELECT 1) ON true
-----
-values
- ├── columns: "?column?":1(int!null) "?column?":2(int!null)
- ├── cardinality: [0 - 0]
- ├── stats: [rows=0]
- ├── key: ()
- └── fd: ()-->(1,2)
-
-norm
-SELECT * FROM (SELECT 1 WHERE false) LEFT JOIN (SELECT 1) ON true
-----
-values
- ├── columns: "?column?":1(int!null) "?column?":2(int!null)
- ├── cardinality: [0 - 0]
- ├── stats: [rows=0]
- ├── key: ()
- └── fd: ()-->(1,2)
-
-norm
+build
 SELECT * FROM (SELECT 1 WHERE false) RIGHT JOIN (SELECT 1) ON true
 ----
-left-join (cross)
+right-join (cross)
  ├── columns: "?column?":1(int) "?column?":2(int!null)
  ├── cardinality: [1 - 1]
- ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
- ├── values
+ ├── project
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── select
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── stats: [rows=0]
+ │    │    ├── key: ()
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── stats: [rows=1]
+ │    │    │    ├── key: ()
+ │    │    │    └── () [type=tuple]
+ │    │    └── filters
+ │    │         └── false [type=bool, constraints=(contradiction; tight)]
+ │    └── projections
+ │         └── 1 [as="?column?":1, type=int]
+ ├── project
  │    ├── columns: "?column?":2(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
  │    ├── key: ()
  │    ├── fd: ()-->(2)
- │    └── (1,) [type=tuple{int}]
- ├── values
- │    ├── columns: "?column?":1(int!null)
- │    ├── cardinality: [0 - 0]
- │    ├── stats: [rows=0]
- │    ├── key: ()
- │    └── fd: ()-->(1)
- └── filters (true)
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    └── () [type=tuple]
+ │    └── projections
+ │         └── 1 [as="?column?":2, type=int]
+ └── filters
+      └── true [type=bool]
 
-norm
+build
 SELECT * FROM (SELECT 1 WHERE false) FULL JOIN (SELECT 1) ON true
 ----
-left-join (cross)
- ├── columns: "?column?":1(int) "?column?":2(int!null)
+full-join (cross)
+ ├── columns: "?column?":1(int) "?column?":2(int)
  ├── cardinality: [1 - 1]
  ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── stats: [rows=1]
- ├── key: ()
- ├── fd: ()-->(1,2)
- ├── values
+ ├── project
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── select
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── stats: [rows=0]
+ │    │    ├── key: ()
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── stats: [rows=1]
+ │    │    │    ├── key: ()
+ │    │    │    └── () [type=tuple]
+ │    │    └── filters
+ │    │         └── false [type=bool, constraints=(contradiction; tight)]
+ │    └── projections
+ │         └── 1 [as="?column?":1, type=int]
+ ├── project
  │    ├── columns: "?column?":2(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
  │    ├── key: ()
  │    ├── fd: ()-->(2)
- │    └── (1,) [type=tuple{int}]
- ├── values
- │    ├── columns: "?column?":1(int!null)
- │    ├── cardinality: [0 - 0]
- │    ├── stats: [rows=0]
- │    ├── key: ()
- │    └── fd: ()-->(1)
- └── filters (true)
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    └── () [type=tuple]
+ │    └── projections
+ │         └── 1 [as="?column?":2, type=int]
+ └── filters
+      └── true [type=bool]
 
-norm
+build
 SELECT * FROM (SELECT 1 UNION SELECT 2) FULL JOIN (VALUES (1), (2)) ON true
 ----
-inner-join (cross)
- ├── columns: "?column?":3(int!null) column1:4(int!null)
+full-join (cross)
+ ├── columns: "?column?":3(int) column1:4(int)
  ├── cardinality: [2 - 4]
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
- ├── stats: [rows=4]
- ├── values
- │    ├── columns: column1:4(int!null)
- │    ├── cardinality: [2 - 2]
- │    ├── stats: [rows=2]
- │    ├── (1,) [type=tuple{int}]
- │    └── (2,) [type=tuple{int}]
+ ├── stats: [rows=2.66667]
  ├── union
  │    ├── columns: "?column?":3(int!null)
  │    ├── left columns: "?column?":1(int)
@@ -1203,21 +1410,40 @@ inner-join (cross)
  │    ├── cardinality: [1 - 2]
  │    ├── stats: [rows=2, distinct(3)=2, null(3)=0]
  │    ├── key: (3)
- │    ├── values
+ │    ├── project
  │    │    ├── columns: "?column?":1(int!null)
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1)
- │    │    └── (1,) [type=tuple{int}]
- │    └── values
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── stats: [rows=1]
+ │    │    │    ├── key: ()
+ │    │    │    └── () [type=tuple]
+ │    │    └── projections
+ │    │         └── 1 [as="?column?":1, type=int]
+ │    └── project
  │         ├── columns: "?column?":2(int!null)
  │         ├── cardinality: [1 - 1]
  │         ├── stats: [rows=1, distinct(2)=1, null(2)=0]
  │         ├── key: ()
  │         ├── fd: ()-->(2)
- │         └── (2,) [type=tuple{int}]
- └── filters (true)
+ │         ├── values
+ │         │    ├── cardinality: [1 - 1]
+ │         │    ├── stats: [rows=1]
+ │         │    ├── key: ()
+ │         │    └── () [type=tuple]
+ │         └── projections
+ │              └── 2 [as="?column?":2, type=int]
+ ├── values
+ │    ├── columns: column1:4(int!null)
+ │    ├── cardinality: [2 - 2]
+ │    ├── stats: [rows=2]
+ │    ├── (1,) [type=tuple{int}]
+ │    └── (2,) [type=tuple{int}]
+ └── filters
+      └── true [type=bool]
 
 exec-ddl
 CREATE TABLE table0 (
@@ -1235,7 +1461,7 @@ CREATE TABLE table1 (
 ----
 
 # Regression test for #38091.
-norm disable=EliminateJoinUnderProjectLeft
+norm disable=(EliminateJoinUnderProjectLeft,SimplifyLeftJoinWithZeroRowsRight)
 SELECT (
         SELECT 1
           FROM table1
@@ -1289,7 +1515,7 @@ project
  └── projections
       └── "?column?":23 [as="?column?":24, type=int, outer=(23)]
 
-norm colstat=1 colstat=2
+norm colstat=1 colstat=2 disable=SimplifyLeftJoinWithZeroRowsRight
 SELECT * FROM (SELECT 1) AS a(x) LEFT JOIN (SELECT 2) AS b(x) ON a.x = b.x
 ----
 left-join (cross)

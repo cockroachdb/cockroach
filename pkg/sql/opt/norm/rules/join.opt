@@ -324,6 +324,15 @@
 =>
 (ConstructNonLeftJoin (OpName) $left $right $on $private)
 
+# SimplifyLeftJoinWithZeroRowsRight replaces a LeftJoin with a Project when
+# the right input never returns any rows. The Project passes through columns
+# from the left input and produces NULL values for each column in the right
+# input.
+[SimplifyLeftJoinWithZeroRowsRight, Normalize]
+(LeftJoin $left:* $right:* & (HasZeroRows $right))
+=>
+(Project $left (MakeNullProjections $right) (OutputCols $left))
+
 # SimplifyRightJoin reduces a FullJoin operator to a LeftJoin operator when it's
 # known that every row in the join's right input will match at least one row in
 # the left input. This rule is symmetric with SimplifyLeftJoin; see that rule
