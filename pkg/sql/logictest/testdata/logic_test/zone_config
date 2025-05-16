@@ -1,5 +1,3 @@
-# LogicTest: !local-schema-locked
-
 # Check that we can alter the default zone config.
 statement ok
 ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1
@@ -159,6 +157,7 @@ SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
      lease_preferences = '[[+region=test]]'
 
 # Test SHOW CREATE TABLE correctly shows the CREATE TABLE.
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE a
 ----
@@ -166,6 +165,22 @@ a  CREATE TABLE public.a (
      id INT8 NOT NULL,
      CONSTRAINT a_pkey PRIMARY KEY (id ASC)
    );
+   ALTER TABLE test.public.a CONFIGURE ZONE USING
+     range_min_bytes = 200001,
+     range_max_bytes = 400000000,
+     gc.ttlseconds = 3600,
+     num_replicas = 1,
+     constraints = '[+region=test]',
+     lease_preferences = '[[+region=test]]';
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE a
+----
+a  CREATE TABLE public.a (
+     id INT8 NOT NULL,
+     CONSTRAINT a_pkey PRIMARY KEY (id ASC)
+   ) WITH (schema_locked = true);
    ALTER TABLE test.public.a CONFIGURE ZONE USING
      range_min_bytes = 200001,
      range_max_bytes = 400000000,
@@ -338,6 +353,7 @@ CREATE SCHEMA alternative_schema;
 CREATE TABLE alternative_schema.same_table_name();
 ALTER TABLE alternative_schema.same_table_name CONFIGURE ZONE USING gc.ttlseconds = 600
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE same_table_name
 ----
@@ -348,6 +364,18 @@ same_table_name  CREATE TABLE public.same_table_name (
                  ALTER TABLE test.public.same_table_name CONFIGURE ZONE USING
                    gc.ttlseconds = 500;
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE same_table_name
+----
+same_table_name  CREATE TABLE public.same_table_name (
+                   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                   CONSTRAINT same_table_name_pkey PRIMARY KEY (rowid ASC)
+                 ) WITH (schema_locked = true);
+                 ALTER TABLE test.public.same_table_name CONFIGURE ZONE USING
+                   gc.ttlseconds = 500;
+
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE alternative_schema.same_table_name
 ----
@@ -355,6 +383,18 @@ alternative_schema.same_table_name  CREATE TABLE alternative_schema.same_table_n
                                       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                                       CONSTRAINT same_table_name_pkey PRIMARY KEY (rowid ASC)
                                     );
+                                    ALTER TABLE test.alternative_schema.same_table_name CONFIGURE ZONE USING
+                                      gc.ttlseconds = 600;
+
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE alternative_schema.same_table_name
+----
+alternative_schema.same_table_name  CREATE TABLE alternative_schema.same_table_name (
+                                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                      CONSTRAINT same_table_name_pkey PRIMARY KEY (rowid ASC)
+                                    ) WITH (schema_locked = true);
                                     ALTER TABLE test.alternative_schema.same_table_name CONFIGURE ZONE USING
                                       gc.ttlseconds = 600;
 

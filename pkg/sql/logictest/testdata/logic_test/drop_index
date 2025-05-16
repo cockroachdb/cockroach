@@ -1,5 +1,3 @@
-# LogicTest: !local-schema-locked
-
 statement ok
 CREATE TABLE users (
   id    INT PRIMARY KEY,
@@ -327,6 +325,7 @@ ALTER TABLE fk1 ADD CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES fk2 (x);
 statement ok
 DROP INDEX fk1@i CASCADE
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE fk1
 ----
@@ -337,6 +336,18 @@ fk1  CREATE TABLE public.fk1 (
        CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES public.fk2(x),
        INDEX i2 (x ASC)
      );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE fk1
+----
+fk1  CREATE TABLE public.fk1 (
+       x INT8 NULL,
+       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+       CONSTRAINT fk1_pkey PRIMARY KEY (rowid ASC),
+       CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES public.fk2(x),
+       INDEX i2 (x ASC)
+     ) WITH (schema_locked = true);
 
 # test that notices are generated on index drops
 subtest notice_on_drop_index
@@ -363,6 +374,10 @@ INSERT INTO t VALUES (100, 500.5);
 statement ok
 SET autocommit_before_ddl = false;
 
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE t SET (schema_locked=false)
+
 statement ok
 BEGIN;
 DROP INDEX t_secondary CASCADE;
@@ -378,6 +393,10 @@ COMMIT;
 
 statement ok
 RESET autocommit_before_ddl
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE t SET (schema_locked=true)
 
 # test the primary key cannot be dropped with drop index; see #56853
 subtest drop_primary_key
@@ -568,6 +587,7 @@ DROP INDEX tab_145100@tab_145100_i_idx
 statement ok
 DROP INDEX tab_145100@tab_145100_i_idx CASCADE
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tab_145100]
 ----
@@ -578,6 +598,18 @@ CREATE TABLE public.tab_145100 (
   CONSTRAINT tab_145100_pkey PRIMARY KEY (id ASC),
   FAMILY fam_0_id_i_j (id, i, j)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE tab_145100]
+----
+CREATE TABLE public.tab_145100 (
+  id UUID NOT NULL,
+  i INT8 NOT NULL,
+  j INT8 NOT NULL,
+  CONSTRAINT tab_145100_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0_id_i_j (id, i, j)
+) WITH (schema_locked = true);
 
 # DROP INDEX ... CASCADE should have caused the procedure to be dropped.
 statement error procedure proc_select_145100 does not exist

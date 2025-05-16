@@ -1,5 +1,3 @@
-# LogicTest: !local-schema-locked
-
 statement ok
 CREATE SCHEMA s1
 
