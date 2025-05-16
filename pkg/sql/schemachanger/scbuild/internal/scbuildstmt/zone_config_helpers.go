@@ -1474,6 +1474,76 @@ func configureZoneConfigForNewIndexBackfill(
 	return nil
 }
 
+// configureZoneConfigForReplacementIndexPartitioning configures the zone config
+// for replacement indexes that are recreated as a part of ALTER PRIMARY KEY. The
+// subzone config for these indexes will be constructed using the index that
+// is being replaced.
+func configureZoneConfigForReplacementIndexPartitioning(
+	b BuildCtx, tableID catid.DescID, origIndexID descpb.IndexID, indexID descpb.IndexID,
+) error {
+	indexIDs := []descpb.IndexID{indexID}
+	if idx := findCorrespondingTemporaryIndexByID(b, tableID, indexID); idx != nil {
+		indexIDs = append(indexIDs, idx.IndexID)
+	}
+	// For REGIONAL BY ROW tables, correctly configure relevant zone configurations.
+	localityRBR := b.QueryByID(tableID).FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
+	if localityRBR != nil {
+		dbID := b.QueryByID(tableID).FilterNamespace().MustGetOneElement().DatabaseID
+		regionConfig, err := b.SynthesizeRegionConfig(b, dbID)
+		if err != nil {
+			return err
+		}
+		if err := applyZoneConfigForMultiRegionTable(
+			b,
+			regionConfig,
+			tableID,
+			applyZoneConfigForMultiRegionTableOptionReplacementIndexes(origIndexID, indexIDs...),
+		); err != nil {
+			return err
+		}
+	}
+	// Otherwise, duplicate the original zone config only if it exists.
+	mostRecentTableZoneConfig := getMostRecentTableZoneConfig(b, tableID)
+	if mostRecentTableZoneConfig == nil {
+		return nil
+	}
+	newZoneConfig := protoutil.Clone(mostRecentTableZoneConfig.ZoneConfig).(*zonepb.ZoneConfig)
+	zoneConfigModified := false
+	partitioning := mustRetrievePartitioningFromIndexPartitioning(b, tableID, indexID)
+	for _, currIndexID := range indexIDs {
+		err := partitioning.ForEachPartitionName(func(name string) error {
+			prevSubZone := mostRecentTableZoneConfig.ZoneConfig.GetSubzone(uint32(origIndexID), name)
+			if prevSubZone == nil {
+				return nil
+			}
+			zoneConfigModified = true
+			newSubZone := protoutil.Clone(&prevSubZone.Config).(*zonepb.ZoneConfig)
+			newZoneConfig.SetSubzone(zonepb.Subzone{
+				IndexID:       uint32(currIndexID),
+				Config:        *newSubZone,
+				PartitionName: name,
+			})
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if zoneConfigModified {
+		var err error
+		newZoneConfig.SubzoneSpans, err = generateSubzoneSpans(b, tableID, newZoneConfig.Subzones)
+		if err != nil {
+			return err
+		}
+		b.Add(&scpb.TableZoneConfig{
+			TableID:    tableID,
+			ZoneConfig: newZoneConfig,
+			SeqNum:     mostRecentTableZoneConfig.SeqNum + 1,
+		})
+	}
+	return nil
+}
+
 // configureZoneConfigForNewIndexPartitioning configures the zone config for any
 // new index in a REGIONAL BY ROW table.
 // This *must* be done after the index ID has been allocated.
@@ -1614,6 +1684,36 @@ func applyZoneConfigForMultiRegionTable(
 	}
 	b.Add(tzc)
 	return nil
+}
+
+// applyZoneConfigForMultiRegionTableOptionReplacementIndexes uses the sub zone
+// config from origIndexID to make the subzone configs for new index IDs.
+func applyZoneConfigForMultiRegionTableOptionReplacementIndexes(
+	origIndexID descpb.IndexID, newIndexIDs ...descpb.IndexID,
+) applyZoneConfigForMultiRegionTableOption {
+	return func(zoneConfig zonepb.ZoneConfig, regionConfig multiregion.RegionConfig, tableID catid.DescID) (newZoneConfig zonepb.ZoneConfig, err error) {
+		for _, newIndexID := range newIndexIDs {
+			for _, region := range regionConfig.Regions() {
+				base := zoneConfig.GetSubzoneExact(uint32(origIndexID), string(region))
+				var baseZoneConfig zonepb.ZoneConfig
+				if base != nil {
+					baseZoneConfig = *protoutil.Clone(&base.Config).(*zonepb.ZoneConfig)
+				} else {
+					var err error
+					baseZoneConfig, err = regions.ZoneConfigForMultiRegionPartition(region, regionConfig)
+					if err != nil {
+						return zoneConfig, err
+					}
+				}
+				zoneConfig.SetSubzone(zonepb.Subzone{
+					IndexID:       uint32(newIndexID),
+					PartitionName: string(region),
+					Config:        baseZoneConfig,
+				})
+			}
+		}
+		return zoneConfig, nil
+	}
 }
 
 // applyZoneConfigForMultiRegionTableOptionNewIndexes applies table zone configs
