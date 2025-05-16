@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package storagepb
+package storageconfig
 
 import (
 	"bytes"
@@ -15,6 +15,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
+)
+
+// EncryptionOptions defines the per-store encryption options.
+type EncryptionOptions struct {
+	// The store key source. Defines which fields are useful.
+	KeySource EncryptionKeySource
+	// Set if key_source == KeyFiles.
+	KeyFiles *EncryptionKeyFiles
+	// Default data key rotation in seconds.
+	DataKeyRotationPeriod int64
+}
+
+// EncryptionKeyFiles is used when plain key files are passed.
+type EncryptionKeyFiles struct {
+	CurrentKey string
+	OldKey     string
+}
+
+type EncryptionKeySource int32
+
+const (
+	// Plain key files.
+	EncryptionKeySource_KeyFiles EncryptionKeySource = 0
 )
 
 // DefaultRotationPeriod is the rotation period used if not specified.
