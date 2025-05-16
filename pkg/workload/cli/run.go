@@ -469,10 +469,12 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	defer cancel()
 	stacksCh := make(chan []byte, 1)
 	const prepareTimeout = 90 * time.Minute
-	defer time.AfterFunc(prepareTimeout, func() {
+	timer := time.AfterFunc(prepareTimeout, func() {
 		stacksCh <- allstacks.Get()
 		cancel()
-	}).Stop()
+	})
+	defer timer.Stop()
+
 	if prepareErr := func(ctx context.Context) error {
 		retry := retry.StartWithCtx(ctx, retry.Options{})
 		var err error
@@ -482,6 +484,8 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			}
 			ops, err = o.Ops(ctx, urls, reg)
 			if err == nil {
+				// Stop the timer since the generator has started successfully
+				timer.Stop()
 				return nil
 			}
 			err = errors.Wrapf(err, "failed to initialize the load generator")
