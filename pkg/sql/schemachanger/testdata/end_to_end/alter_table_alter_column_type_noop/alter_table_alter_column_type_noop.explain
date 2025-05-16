@@ -8,28 +8,7 @@ EXPLAIN (DDL) ALTER TABLE t ALTER COLUMN j SET DATA TYPE e;
 Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› SET DATA TYPE ‹e›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
- │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 106 (t)}
- │         └── 1 Mutation operation
- │              └── SetTableSchemaLocked {"TableID":106}
- ├── PreCommitPhase
- │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
- │    │    │    └── ABSENT → PUBLIC TableSchemaLocked:{DescID: 106 (t)}
- │    │    └── 1 Mutation operation
- │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
- │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
- │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 106 (t)}
- │         └── 3 Mutation operations
- │              ├── SetTableSchemaLocked {"TableID":106}
- │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
- │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
- └── PostCommitPhase
-      └── Stage 1 of 1 in PostCommitPhase
-           ├── 1 element transitioning toward TRANSIENT_PUBLIC
-           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 106 (t)}
-           └── 3 Mutation operations
-                ├── SetTableSchemaLocked {"Locked":true,"TableID":106}
-                ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
-                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
+ └── PreCommitPhase
+      └── Stage 1 of 1 in PreCommitPhase
+           └── 1 Mutation operation
+                └── UndoAllInTxnImmediateMutationOpSideEffects
