@@ -78,7 +78,7 @@ SHA="${1-}"
 
 if [ -z "$SHA" ] ; then
     if [ "$use_jj" = true ] ; then
-        SHA="$(jj log -n1 --template commit_id --no-graph)"
+        SHA="$(jj log -r@ -n1 --template commit_id --no-graph)"
     else
         SHA="$(git rev-parse HEAD)"
     fi
