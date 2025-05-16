@@ -58,15 +58,17 @@ type generativeSplitAndScatterProcessor struct {
 
 	spec execinfrapb.GenerativeSplitAndScatterSpec
 
-	// chunkSplitAndScatterers contain the splitAndScatterers for the group of
-	// split and scatter workers that's responsible for splitting and scattering
-	// the import span chunks. Each worker needs its own scatterer as one cannot
-	// be used concurrently.
+	// baseSplitAndScatterer is the scatterer responsible for splitting chunks
+	// into their own ranges before they are scattered.
+	baseSplitAndScatterer splitAndScatterer
+
+	// chunkSplitAndScatterers contain the scatterers responsible for scattering
+	// the import span chunks.
 	chunkSplitAndScatterers []splitAndScatterer
-	// chunkEntrySplitAndScatterers contain the splitAndScatterers for the group of
-	// split workers that's responsible for making splits at each import span
-	// entry. These scatterers only create splits for the start key of each import
-	// span and do not perform any scatters.
+
+	// chunkEntrySplitAndScatterers contain the scatterers responsible for making
+	// splits at each import span entry. These scatterers only create splits for
+	// the start key of each import span and do not perform any scatters.
 	chunkEntrySplitAndScatterers []splitAndScatterer
 
 	// cancelScatterAndWaitForWorker cancels the scatter goroutine and waits for
@@ -296,8 +298,14 @@ func newGenerativeSplitAndScatterProcessor(
 		chunkEntrySplitAndScatterers = append(chunkEntrySplitAndScatterers, scatterer)
 	}
 
+	baseSplitAndScatterer, err := mkSplitAndScatterer()
+	if err != nil {
+		return nil, err
+	}
+
 	ssp := &generativeSplitAndScatterProcessor{
 		spec:                         spec,
+		baseSplitAndScatterer:        baseSplitAndScatterer,
 		chunkSplitAndScatterers:      chunkSplitAndScatterers,
 		chunkEntrySplitAndScatterers: chunkEntrySplitAndScatterers,
 		// There's not much science behind this sizing of doneScatterCh,
@@ -337,7 +345,7 @@ func (gssp *generativeSplitAndScatterProcessor) Start(ctx context.Context) {
 		TaskName: "generativeSplitAndScatter-worker",
 		SpanOpt:  stop.ChildSpan,
 	}, func(ctx context.Context) {
-		gssp.scatterErr = runGenerativeSplitAndScatter(scatterCtx, gssp.FlowCtx, &gssp.spec, gssp.chunkSplitAndScatterers, gssp.chunkEntrySplitAndScatterers, gssp.doneScatterCh,
+		gssp.scatterErr = runGenerativeSplitAndScatter(scatterCtx, gssp.FlowCtx, &gssp.spec, gssp.baseSplitAndScatterer, gssp.chunkSplitAndScatterers, gssp.chunkEntrySplitAndScatterers, gssp.doneScatterCh,
 			&gssp.routingDatumCache)
 		cancel()
 		close(gssp.doneScatterCh)
@@ -433,14 +441,14 @@ func makeBackupMetadata(
 }
 
 type restoreEntryChunk struct {
-	entries  []execinfrapb.RestoreSpanEntry
-	splitKey roachpb.Key
+	entries []execinfrapb.RestoreSpanEntry
 }
 
 func runGenerativeSplitAndScatter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.GenerativeSplitAndScatterSpec,
+	baseSplitAndScatterer splitAndScatterer,
 	chunkSplitAndScatterers []splitAndScatterer,
 	chunkEntrySplitAndScatterers []splitAndScatterer,
 	doneScatterCh chan<- entryNode,
@@ -516,7 +524,14 @@ func runGenerativeSplitAndScatter(
 			entry.ProgressIdx = idx
 			idx++
 			if len(chunk.entries) == int(spec.ChunkSize) {
-				chunk.splitKey = entry.Span.Key
+				// The current chunk is full, so this entry will be the start of the
+				// next chunk. We split at the start of the next chunk, before passing
+				// the full chunk to a chunk scatter worker, to prevent two concurrent
+				// chunk workers from working on the same range. See #146083 for more
+				// details.
+				if err := baseSplitAndScatterer.split(ctx, flowCtx.Codec(), entry.Span.Key); err != nil {
+					return err
+				}
 				select {
 				case <-ctx.Done():
 					return errors.Wrap(ctx.Err(), "grouping restore span entries into chunks")
@@ -540,10 +555,10 @@ func runGenerativeSplitAndScatter(
 	importSpanChunksCh := make(chan scatteredChunk, chunkSplitAndScatterWorkers*2)
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(importSpanChunksCh)
-		// This group of goroutines processes the chunks from restoreEntryChunksCh.
-		// For each chunk, a split is created at the start key of the next chunk. The
-		// current chunk is then scattered, and the chunk with its destination is
-		// passed to importSpanChunksCh.
+		// This group of goroutines scatters the chunks from restoreEntryChunksCh
+		// and passes the chunk to importSpansCh. Note that for each chunk, a split
+		// was already created at the start key of the next chunk to prevent workers
+		// from working in the same ranges.
 		g2 := ctxgroup.WithContext(ctx)
 		for worker := 0; worker < chunkSplitAndScatterWorkers; worker++ {
 			worker := worker
@@ -554,13 +569,7 @@ func runGenerativeSplitAndScatter(
 				// cluster.
 				for importSpanChunk := range restoreEntryChunksCh {
 					scatterKey := importSpanChunk.entries[0].Span.Key
-					if !importSpanChunk.splitKey.Equal(roachpb.Key{}) {
-						// Split at the start of the next chunk, to partition off a
-						// prefix of the space to scatter.
-						if err := chunkSplitAndScatterers[worker].split(ctx, flowCtx.Codec(), importSpanChunk.splitKey); err != nil {
-							return err
-						}
-					}
+
 					chunkDestination, err := chunkSplitAndScatterers[worker].scatter(ctx, flowCtx.Codec(), scatterKey)
 					if err != nil {
 						return err
