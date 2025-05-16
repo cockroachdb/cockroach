@@ -2625,10 +2625,10 @@ def go_deps():
         name = "com_github_dgryski_go_metro",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/dgryski/go-metro",
-        sha256 = "3f97b3cdeaee7b4fbf4fa06b7c52e3ee6bca461a100077892e861c6c8fc03722",
-        strip_prefix = "github.com/dgryski/go-metro@v0.0.0-20180109044635-280f6062b5bc",
+        sha256 = "cbad2d78b4b3a5b14e14df7e61f96564351b664988aeb49582d12627ffb84550",
+        strip_prefix = "github.com/dgryski/go-metro@v0.0.0-20250106013310-edb8663e5e33",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/dgryski/go-metro/com_github_dgryski_go_metro-v0.0.0-20180109044635-280f6062b5bc.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/dgryski/go-metro/com_github_dgryski_go_metro-v0.0.0-20250106013310-edb8663e5e33.zip",
         ],
     )
     go_repository(
