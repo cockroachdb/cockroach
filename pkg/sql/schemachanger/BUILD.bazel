@@ -1,5 +1,4 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load("//pkg/sql/schemachanger/sctest/sctestgen:gen.bzl", "sctest_gen")
 
 go_library(
     name = "schemachanger",
@@ -27,7 +26,6 @@ go_test(
         "dml_injection_test.go",
         "main_test.go",
         "schemachanger_test.go",
-        ":test_gen",  # keep
     ],
     data = glob(["testdata/**"]) + [
         "//pkg/sql/logictest:testdata",
@@ -75,32 +73,5 @@ go_test(
         "@com_github_lib_pq//:pq",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
-    ],
-)
-
-sctest_gen(
-    name = "test_gen",
-    out = "sctest_generated_test.go",
-    ccl = False,
-    new_cluster_factory = "sctest.SingleNodeTestClusterFactory{}",
-    package = "schemachanger",
-    test_data = [
-        ":end_to_end_testdata_definitions",
-    ],
-    tests = [
-        "BackupRollbacks",
-        "BackupRollbacksMixedVersion",
-        "BackupSuccess",
-        "BackupSuccessMixedVersion",
-        "EndToEndSideEffects",
-        "ExecuteWithDMLInjection",
-        "GenerateSchemaChangeCorpus",
-        "Pause",
-        "PauseMixedVersion",
-        "Rollback",
-    ],
-    visibility = [
-        ":__pkg__",
-        "//pkg/gen:__pkg__",
     ],
 )
