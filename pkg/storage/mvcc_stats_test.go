@@ -1934,18 +1934,6 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		}
 		return true, ""
 	}
-	actions["InitPut"] = func(s *state) (bool, string) {
-		opts := MVCCWriteOptions{
-			Txn:   s.Txn,
-			Stats: s.MSDelta,
-		}
-		failOnTombstones := s.rng.Intn(2) == 0
-		desc := fmt.Sprintf("failOnTombstones=%t", failOnTombstones)
-		if _, err := MVCCInitPut(ctx, s.batch, s.key, s.TS, s.rngVal(), failOnTombstones, opts); err != nil {
-			return false, desc + ": " + err.Error()
-		}
-		return true, desc
-	}
 	actions["Del"] = func(s *state) (bool, string) {
 		opts := MVCCWriteOptions{
 			Txn:   s.Txn,

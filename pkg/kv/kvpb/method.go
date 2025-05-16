@@ -123,10 +123,6 @@ const (
 	// CheckConsistency verifies the consistency of all ranges falling within a
 	// key span.
 	CheckConsistency
-	// InitPut sets the value for a key if the key doesn't exist. It returns
-	// an error if the key exists and the existing value is different from the
-	// supplied one.
-	InitPut
 	// WriteBatch applies the operations encoded in a BatchRepr.
 	WriteBatch
 	// Export dumps a keyrange into files.
