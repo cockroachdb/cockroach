@@ -9,7 +9,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
@@ -248,7 +247,6 @@ CREATE TABLE person (
 	})
 
 	// Keep retrying until the old index and temporary index are removed by the GC job.
-	runner.SucceedsSoonDuration = 30 * time.Second
 	runner.CheckQueryResultsRetry(t, subzonesQuery, [][]string{
 		{"3", "north_america", "4", `/3/"CA"`, "NULL"},
 		{"3", "north_america", "4", `/3/"US"`, "NULL"},
