@@ -164,7 +164,7 @@ func (c *Cache) readFromStorage(
 	// grant. If there is an empty row for Public, then public
 	// does not have grant.
 	if spo.GetObjectType() == privilege.VirtualTable {
-		if _, found := privDesc.FindUser(username.PublicRoleName()); !found {
+		if _, found := privDesc.AtomicFindUser(username.PublicRoleName()); !found {
 			privDesc.Grant(username.PublicRoleName(), privilege.List{privilege.SELECT}, false)
 		}
 	}
