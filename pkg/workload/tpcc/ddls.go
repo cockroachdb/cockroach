@@ -72,7 +72,8 @@ const (
 		c_payment_cnt  integer       not null,
 		c_delivery_cnt integer       not null,
 		c_data         varchar(500)  not null,
-		primary key        (c_w_id, c_d_id, c_id),
+		primary key        (c_w_id, c_d_id, c_id)`
+	tpccCustomerSecondaryIndexClause = `
 		index customer_idx (c_w_id, c_d_id, c_last, c_first)`
 	tpccCustomerColumnFamiliesSuffix = `
 		family static      (
@@ -80,6 +81,7 @@ const (
 			c_city, c_state, c_zip, c_phone, c_since, c_credit, c_credit_lim, c_discount
 		),
 		family dynamic (c_balance, c_ytd_payment, c_payment_cnt, c_data, c_delivery_cnt)`
+	tpccCustomerCreateSecondaryIndex = `CREATE INDEX customer_idx ON customer (c_w_id, c_d_id, c_last, c_first);`
 
 	// HISTORY table.
 	tpccHistorySchemaBase = `(
@@ -93,9 +95,6 @@ const (
 		h_amount decimal(6,2),
 		h_data   varchar(24),
 		primary key (h_w_id, rowid)`
-	deprecatedTpccHistorySchemaFkSuffix = `
-		index history_customer_fk_idx (h_c_w_id, h_c_d_id, h_c_id),
-		index history_district_fk_idx (h_w_id, h_d_id)`
 
 	// ORDER table.
 	tpccOrderSchemaBase = `(
@@ -107,9 +106,10 @@ const (
 		o_carrier_id integer,
 		o_ol_cnt     integer,
 		o_all_local  integer,
-		primary key  (o_w_id, o_d_id, o_id DESC),
-		unique index order_idx (o_w_id, o_d_id, o_c_id, o_id DESC) storing (o_entry_d, o_carrier_id)
-	`
+		primary key  (o_w_id, o_d_id, o_id DESC)`
+	tpccOrderSecondaryIndexClause = `
+		unique index order_idx (o_w_id, o_d_id, o_c_id, o_id DESC) storing (o_entry_d, o_carrier_id)`
+	tpccOrderCreateSecondaryIndex = `CREATE UNIQUE INDEX order_idx ON "order" (o_w_id, o_d_id, o_c_id, o_id DESC) storing (o_entry_d, o_carrier_id);`
 
 	// NEW-ORDER table.
 	tpccNewOrderSchema = `(
@@ -149,8 +149,6 @@ const (
 		s_remote_cnt integer,
 		s_data       varchar(50),
 		primary key (s_w_id, s_i_id)`
-	deprecatedTpccStockSchemaFkSuffix = `
-		index stock_item_fk_idx (s_i_id)`
 
 	// ORDER-LINE table.
 	tpccOrderLineSchemaBase = `(
@@ -165,8 +163,6 @@ const (
 		ol_amount       decimal(6,2),
 		ol_dist_info    char(24),
 		primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number)`
-	deprecatedTpccOrderLineSchemaFkSuffix = `
-		index order_line_stock_fk_idx (ol_supply_w_id, ol_i_id)`
 
 	localityRegionalByRowSuffix = `
 		locality regional by row`
@@ -177,18 +173,18 @@ const (
 )
 
 type schemaOptions struct {
-	fkClause       string
-	familyClause   string
-	columnClause   string
-	localityClause string
+	secondaryIndexClause string
+	familyClause         string
+	columnClause         string
+	localityClause       string
 }
 
 type makeSchemaOption func(o *schemaOptions)
 
-func maybeAddFkSuffix(fks bool, suffix string) makeSchemaOption {
+func maybeAddSecondaryIndex(delaySecondaryIndexes bool, clause string) makeSchemaOption {
 	return func(o *schemaOptions) {
-		if fks {
-			o.fkClause = suffix
+		if !delaySecondaryIndexes {
+			o.secondaryIndexClause = clause
 		}
 	}
 }
@@ -233,14 +229,14 @@ func makeSchema(base string, opts ...makeSchemaOption) string {
 		opt(&o)
 	}
 	ret := base
-	if o.fkClause != "" {
-		ret += "," + o.fkClause
+	if o.columnClause != "" {
+		ret += "," + o.columnClause
+	}
+	if o.secondaryIndexClause != "" {
+		ret += "," + o.secondaryIndexClause
 	}
 	if o.familyClause != "" {
 		ret += "," + o.familyClause
-	}
-	if o.columnClause != "" {
-		ret += "," + o.columnClause
 	}
 	ret += endSchema
 	if o.localityClause != "" {

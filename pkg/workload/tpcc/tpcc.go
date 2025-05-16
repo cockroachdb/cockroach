@@ -83,9 +83,10 @@ type tpcc struct {
 	activeWorkers          int
 	fks                    bool
 	separateColumnFamilies bool
-	// deprecatedFKIndexes adds in foreign key indexes that are no longer needed
-	// due to origin index restrictions being lifted.
-	deprecatedFkIndexes bool
+	// delaySecondaryIndexes, if set, indicates that secondary indexes on the
+	// tables should be created during the post-load step (i.e. the ingestion
+	// will happen only with the primary index present).
+	delaySecondaryIndexes bool
 
 	txInfos []txInfo
 	// deck contains indexes into the txInfos slice.
@@ -274,17 +275,16 @@ var tpccMeta = workload.Meta{
 			`regions`:                  {RuntimeOnly: true},
 			`survival-goal`:            {RuntimeOnly: true},
 			`replicate-static-columns`: {RuntimeOnly: true},
-			`deprecated-fk-indexes`:    {RuntimeOnly: true},
 			`query-trace-file`:         {RuntimeOnly: true},
 			`fake-time`:                {RuntimeOnly: true},
 			`txn-preamble-file`:        {RuntimeOnly: true},
 			`aost`:                     {RuntimeOnly: true, CheckConsistencyOnly: true},
 			`literal-implementation`:   {RuntimeOnly: true},
+			`delay-secondary-indexes`:  {RuntimeOnly: true},
 		}
 
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
-		g.flags.BoolVar(&g.deprecatedFkIndexes, `deprecated-fk-indexes`, false, `Add deprecated foreign keys (needed when running against v20.1 or below clusters)`)
 
 		g.flags.StringVar(&g.mix, `mix`,
 			`newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1`,
@@ -326,6 +326,7 @@ var tpccMeta = workload.Meta{
 			"This is an optional parameter to specify AOST; used exclusively in conjunction with the TPC-C consistency "+
 				"check. Example values are (\"'-1m'\", \"'-1h'\")")
 		g.flags.BoolVar(&g.literalImplementation, "literal-implementation", false, "If true, use a literal implementation of the TPC-C kit instead of an optimized version")
+		g.flags.BoolVar(&g.delaySecondaryIndexes, "delay-secondary-indexes", false, "If true, the secondary indexes will be created during the post-load stage")
 
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
@@ -553,6 +554,17 @@ func (w *tpcc) Hooks() workload.Hooks {
 			return nil
 		},
 		PostLoad: func(_ context.Context, db *gosql.DB) error {
+			if w.delaySecondaryIndexes {
+				// We delayed creation of secondary indexes until this point.
+				for _, createStmt := range []string{
+					tpccCustomerCreateSecondaryIndex,
+					tpccOrderCreateSecondaryIndex,
+				} {
+					if _, err := db.Exec(createStmt); err != nil {
+						return err
+					}
+				}
+			}
 			if w.fks {
 				// We avoid validating foreign keys because we just generated
 				// the data set and don't want to scan over the entire thing
@@ -576,18 +588,11 @@ func (w *tpcc) Hooks() workload.Hooks {
 
 				for _, fkStmt := range fkStmts {
 					if _, err := db.Exec(fkStmt); err != nil {
+						// If the statement failed because the fk already
+						// exists, ignore it. Return the error for any other
+						// reason.
 						const duplFKErr = "columns cannot be used by multiple foreign key constraints"
-						const idxErr = "foreign key requires an existing index on columns"
-						switch {
-						case strings.Contains(err.Error(), idxErr):
-							fmt.Println(errors.WithHint(err, "try using the --deprecated-fk-indexes flag"))
-							// If the statement failed because of a missing FK index, suggest
-							// to use the deprecated-fks flag.
-							return errors.WithHint(err, "try using the --deprecated-fk-indexes flag")
-						case strings.Contains(err.Error(), duplFKErr):
-							// If the statement failed because the fk already exists,
-							// ignore it. Return the error for any other reason.
-						default:
+						if !strings.Contains(err.Error(), duplFKErr) {
 							return err
 						}
 					}
@@ -713,11 +718,11 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `warehouse`,
 		Schema: makeSchema(
 			tpccWarehouseSchema,
-			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `w_id`),
 			maybeAddColumnFamiliesSuffix(
 				w.separateColumnFamilies,
 				tpccWarehouseColumnFamiliesSuffix,
 			),
+			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `w_id`),
 		),
 		InitialRows: workload.BatchedTuples{
 			NumBatches: w.warehouses,
@@ -757,6 +762,7 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `customer`,
 		Schema: makeSchema(
 			tpccCustomerSchemaBase,
+			maybeAddSecondaryIndex(w.delaySecondaryIndexes, tpccCustomerSecondaryIndexClause),
 			maybeAddColumnFamiliesSuffix(
 				w.separateColumnFamilies,
 				tpccCustomerColumnFamiliesSuffix,
@@ -773,10 +779,6 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `history`,
 		Schema: makeSchema(
 			tpccHistorySchemaBase,
-			maybeAddFkSuffix(
-				w.deprecatedFkIndexes,
-				deprecatedTpccHistorySchemaFkSuffix,
-			),
 			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `h_w_id`),
 		),
 		InitialRows: workload.BatchedTuples{
@@ -795,6 +797,7 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `order`,
 		Schema: makeSchema(
 			tpccOrderSchemaBase,
+			maybeAddSecondaryIndex(w.delaySecondaryIndexes, tpccOrderSecondaryIndexClause),
 			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `o_w_id`),
 		),
 		InitialRows: workload.BatchedTuples{
@@ -836,10 +839,6 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `stock`,
 		Schema: makeSchema(
 			tpccStockSchemaBase,
-			maybeAddFkSuffix(
-				w.deprecatedFkIndexes,
-				deprecatedTpccStockSchemaFkSuffix,
-			),
 			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `s_w_id`),
 		),
 		InitialRows: workload.BatchedTuples{
@@ -852,10 +851,6 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `order_line`,
 		Schema: makeSchema(
 			tpccOrderLineSchemaBase,
-			maybeAddFkSuffix(
-				w.deprecatedFkIndexes,
-				deprecatedTpccOrderLineSchemaFkSuffix,
-			),
 			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `ol_w_id`),
 		),
 		InitialRows: workload.BatchedTuples{
