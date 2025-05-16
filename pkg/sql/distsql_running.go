@@ -2234,7 +2234,7 @@ func (dsp *DistSQLPlanner) PlanAndRunPostQueries(
 			// other words, allowAutoCommit = true here means that the plan _might_
 			// autocommit but doesn't guarantee that.
 			allowAutoCommit := planner.autoCommit
-			if len(plan.checkPlans) > 0 || cascadesIdx < len(plan.cascades)-1 {
+			if len(plan.checkPlans) > 0 || len(plan.triggers) > 0 || cascadesIdx < len(plan.cascades)-1 {
 				allowAutoCommit = false
 			}
 			evalCtx := evalCtxFactory(false /* usedConcurrently */)
