@@ -3053,6 +3053,7 @@ func (c *clusterImpl) AddInternalGrafanaAnnotation(
 	if err != nil {
 		return err
 	}
+	req.Tags = append(req.Tags, "roachtest")
 	// The internal grafana instance does not require auth.
 	return roachprod.AddGrafanaAnnotation(ctx, host, false /* secure */, req)
 }

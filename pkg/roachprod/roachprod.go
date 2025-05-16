@@ -927,6 +927,13 @@ func createLabels(nodeID int, v vm.VM, job string, insecure bool) map[string]str
 
 		// Node ID is exposed by cockroachdb metrics, we add it to ebpf_exporter
 		labels["node_id"] = strconv.Itoa(nodeID)
+
+	case "cgroup_exporter":
+		labels["__metrics_path__"] = vm.CgroupExporterMetricsPath
+		// cgroup_exporter is always scraped over http
+		labels["__scheme__"] = "http"
+		// Node ID is exposed by cockroachdb metrics, we add it to cgroup_exporter
+		labels["node_id"] = strconv.Itoa(nodeID)
 	}
 
 	return labels
@@ -1068,6 +1075,16 @@ func Install(ctx context.Context, l *logger.Logger, clusterName string, software
 		}
 		return err
 	})
+}
+
+func InstallGoVersion(
+	ctx context.Context, l *logger.Logger, clusterName string, version string,
+) error {
+	c, err := GetClusterFromCache(l, clusterName)
+	if err != nil {
+		return err
+	}
+	return install.InstallGoVersion(ctx, l, c, version)
 }
 
 // Download downloads 3rd party tools, using a GCS cache if possible.

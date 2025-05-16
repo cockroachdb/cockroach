@@ -34,6 +34,10 @@ const (
 	EbpfExporterPort = 9435
 	// EbpfExporterMetricsPath is the path that EbpfExporter serves metrics on.
 	EbpfExporterMetricsPath = "/metrics"
+	// CgroupExporterPort is the port that EbpfExporter listens on.
+	CgroupExporterPort = 9101
+	// CgroupExporterMetricsPath is the path that EbpfExporter serves metrics on.
+	CgroupExporterMetricsPath = "/metrics"
 
 	// DefaultSharedUser is the default user that is shared across all VMs.
 	DefaultSharedUser = "ubuntu"

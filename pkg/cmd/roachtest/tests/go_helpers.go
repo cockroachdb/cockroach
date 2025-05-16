@@ -7,12 +7,11 @@ package tests
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 )
 
 const goPath = `/mnt/data1/go`
@@ -22,53 +21,7 @@ const goPath = `/mnt/data1/go`
 func installGolang(
 	ctx context.Context, t test.Test, c cluster.Cluster, node option.NodeListOption,
 ) {
-	if err := repeatRunE(
-		ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := repeatRunE(
-		ctx,
-		t,
-		c,
-		node,
-		"install dependencies (go uses C bindings)",
-		`sudo apt-get -qq install build-essential`,
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	binary := "go1.21.3.linux-amd64.tar.gz"
-	sha := "1241381b2843fae5a9707eec1f8fb2ef94d827990582c7c7c32f5bdfbfd420c8"
-	if c.Architecture() == vm.ArchARM64 {
-		binary = "go1.21.3.linux-arm64.tar.gz"
-		sha = "fc90fa48ae97ba6368eecb914343590bbb61b388089510d0c56c2dde52987ef3"
-	} else if c.Architecture() == vm.ArchS390x {
-		binary = "go1.21.3.linux-s390x.tar.gz"
-		sha = "4c78e2e6f4c684a3d5a9bdc97202729053f44eb7be188206f0627ef3e18716b6"
-	}
-
-	if err := repeatRunE(
-		ctx, t, c, node, "download go", fmt.Sprintf(`curl -fsSL https://go.dev/dl/%s > /tmp/go.tgz`, binary),
-	); err != nil {
-		t.Fatal(err)
-	}
-	if err := repeatRunE(
-		ctx, t, c, node, "verify tarball", fmt.Sprintf(`sha256sum -c - <<EOF
-%s /tmp/go.tgz
-EOF`, sha),
-	); err != nil {
-		t.Fatal(err)
-	}
-	if err := repeatRunE(
-		ctx, t, c, node, "extract go", `sudo tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz`,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if err := repeatRunE(
-		ctx, t, c, node, "force symlink go", "sudo ln -sf /usr/local/go/bin/go /usr/bin",
-	); err != nil {
+	if err := roachprod.InstallGoVersion(ctx, t.L(), c.MakeNodes(node), "1.21.3"); err != nil {
 		t.Fatal(err)
 	}
 }
