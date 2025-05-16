@@ -92,7 +92,7 @@ func (sr *SQLRunner) ExecWithMessage(
 	helperOrNoop(t)()
 	r, err := sr.DB.ExecContext(context.Background(), query, args...)
 	if err != nil {
-		t.Fatalf("%serror executing query=%q args=%q: %s", fmtMessage(message), query, args, err)
+		t.Fatalf("%serror executing query=%q args=%q: %s", fmtMessage(message), query, args, pgerror.FullError(err))
 	}
 	return r
 }
@@ -104,7 +104,7 @@ func (sr *SQLRunner) ExecMultiple(t Fataler, queries ...string) {
 	for _, query := range queries {
 		_, err := sr.DB.ExecContext(context.Background(), query)
 		if err != nil {
-			t.Fatalf("error executing '%s': %s", query, err)
+			t.Fatalf("error executing '%s': %s", query, pgerror.FullError(err))
 		}
 	}
 }
