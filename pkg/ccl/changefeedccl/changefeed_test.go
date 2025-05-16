@@ -2832,7 +2832,7 @@ func TestChangefeedSchemaChangeAllowBackfill_Legacy(t *testing.T) {
 			// the backfill) occurs before the schema-change backfill for a drop
 			// column, the order in which the sink receives both backfills is
 			// uncertain. the only guarantee here is per-key ordering guarantees,
-			// so we must check both backfills in the same assertion
+			// so we must check both backfills in the same assertion.
 			assertPayloadsPerKeyOrderedStripTs(t, dropColumn, []string{
 				// Changefeed level backfill for DROP COLUMN b.
 				`drop_column: [1]->{"after": {"a": 1}}`,
@@ -5248,7 +5248,7 @@ func TestChangefeedDataTTL(t *testing.T) {
 						B int
 					}
 				}
-				err = json.Unmarshal(msg.Value, &decodedMessage)
+				err = gojson.Unmarshal(msg.Value, &decodedMessage)
 				require.NoError(t, err)
 				delete(upsertedValues, decodedMessage.After.B)
 				if len(upsertedValues) == 0 {
@@ -10137,8 +10137,14 @@ func TestChangefeedMVCCTimestampWithQueries(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (key INT PRIMARY KEY);`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1);`)
 
-		feed, err := f.Feed(`CREATE CHANGEFEED WITH mvcc_timestamp AS SELECT * FROM foo`)
+		feed, err := f.Feed(`CREATE CHANGEFEED WITH mvcc_timestamp, format=json, envelope=bare AS SELECT * FROM foo`)
 		require.NoError(t, err)
+		// Bypass some bad heuristics checks in these testfeeds.
+		if wf, ok := feed.(*webhookFeed); ok {
+			wf.isBare = true
+		} else if cf, ok := feed.(*cloudFeed); ok {
+			cf.isBare = true
+		}
 		defer closeFeed(t, feed)
 
 		msgs, err := readNextMessages(ctx, feed, 1)
