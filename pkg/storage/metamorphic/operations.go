@@ -252,34 +252,6 @@ func (m mvccCPutOp) run(ctx context.Context) string {
 	return "ok"
 }
 
-type mvccInitPutOp struct {
-	m      *metaTestRunner
-	writer readWriterID
-	key    roachpb.Key
-	value  roachpb.Value
-	txn    txnID
-}
-
-func (m mvccInitPutOp) run(ctx context.Context) string {
-	txn := m.m.getTxn(m.txn)
-	writer := m.m.getReadWriter(m.writer)
-	txn.Sequence++
-
-	_, err := storage.MVCCInitPut(ctx, writer, m.key, txn.ReadTimestamp, m.value, false, storage.MVCCWriteOptions{Txn: txn})
-	if err != nil {
-		if writeTooOldErr := (*kvpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
-			txn.WriteTimestamp.Forward(writeTooOldErr.ActualTimestamp)
-			// Update the txn's lock spans to account for this intent being written.
-			addKeyToLockSpans(txn, m.key)
-		}
-		return fmt.Sprintf("error: %s", err)
-	}
-
-	// Update the txn's lock spans to account for this intent being written.
-	addKeyToLockSpans(txn, m.key)
-	return "ok"
-}
-
 type mvccCheckForAcquireLockOp struct {
 	m                       *metaTestRunner
 	writer                  readWriterID
@@ -952,33 +924,6 @@ var opGenerators = []opGenerator{
 			operandTransaction,
 			operandUnusedMVCCKey,
 			operandValue,
-			operandValue,
-		},
-		weight: 50,
-	},
-	{
-		name: "mvcc_init_put",
-		generate: func(ctx context.Context, m *metaTestRunner, args ...string) mvccOp {
-			writer := readWriterID(args[0])
-			txn := txnID(args[1])
-			key := m.txnKeyGenerator.parse(args[2])
-			value := roachpb.MakeValueFromBytes(m.valueGenerator.parse(args[3]))
-
-			// Track this write in the txn generator. This ensures the batch will be
-			// committed before the transaction is committed
-			m.txnGenerator.trackTransactionalWrite(writer, txn, key.Key, nil)
-			return &mvccInitPutOp{
-				m:      m,
-				writer: writer,
-				key:    key.Key,
-				value:  value,
-				txn:    txn,
-			}
-		},
-		operands: []operandType{
-			operandReadWriter,
-			operandTransaction,
-			operandUnusedMVCCKey,
 			operandValue,
 		},
 		weight: 50,

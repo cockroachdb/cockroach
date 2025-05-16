@@ -966,7 +966,6 @@ type logicQuery struct {
 var allowedKVOpTypes = []string{
 	"CPut",
 	"Put",
-	"InitPut",
 	"Del",
 	"DelRange",
 	"ClearRange",
@@ -1538,7 +1537,6 @@ func (t *logicTest) newCluster(
 					DisableConsistencyQueue:  true,
 					GlobalMVCCRangeTombstone: globalMVCCRangeTombstone,
 					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
-						DisableInitPutFailOnTombstones:    ignoreMVCCRangeTombstoneErrors,
 						UseRangeTombstonesForPointDeletes: shouldUseMVCCRangeTombstonesForPointDeletes,
 					},
 				},
