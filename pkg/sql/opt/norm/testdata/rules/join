@@ -267,21 +267,17 @@ inner-join (cross)
 norm expect=DetectJoinContradiction expect-not=SimplifyJoinFilters
 SELECT * FROM a LEFT JOIN b ON k<1 AND k>2
 ----
-left-join (cross)
+project
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8 y:9
- ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  ├── key: (1)
- ├── fd: (1)-->(2-5,8,9)
+ ├── fd: ()-->(8,9), (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── values
- │    ├── columns: x:8!null y:9!null
- │    ├── cardinality: [0 - 0]
- │    ├── key: ()
- │    └── fd: ()-->(8,9)
- └── filters (true)
+ └── projections
+      ├── CAST(NULL AS INT8) [as=x:8]
+      └── CAST(NULL AS INT8) [as=y:9]
 
 # --------------------------------------------------
 # DetectJoinContradiction
@@ -299,21 +295,17 @@ values
 norm expect=DetectJoinContradiction
 SELECT * FROM a LEFT JOIN b ON (k<1 AND k>2) OR (k<4 AND k>5)
 ----
-left-join (cross)
+project
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8 y:9
- ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  ├── key: (1)
- ├── fd: (1)-->(2-5,8,9)
+ ├── fd: ()-->(8,9), (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── values
- │    ├── columns: x:8!null y:9!null
- │    ├── cardinality: [0 - 0]
- │    ├── key: ()
- │    └── fd: ()-->(8,9)
- └── filters (true)
+ └── projections
+      ├── CAST(NULL AS INT8) [as=x:8]
+      └── CAST(NULL AS INT8) [as=y:9]
 
 norm expect=DetectJoinContradiction
 SELECT * FROM a INNER JOIN xy ON NULL
@@ -2510,6 +2502,71 @@ left-join (hash)
  │    └── fd: (6)-->(7-10)
  └── filters
       └── y:2 = k:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+
+
+# --------------------------------------------------
+# SimplifyLeftJoinWithZeroRowsRight
+# --------------------------------------------------
+
+norm expect=SimplifyLeftJoinWithZeroRowsRight
+SELECT a.*, b_empty.* FROM a LEFT JOIN (SELECT * FROM b LIMIT 0) AS b_empty ON a.k = b_empty.x
+----
+project
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8 y:9
+ ├── key: (1)
+ ├── fd: ()-->(8,9), (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── projections
+      ├── CAST(NULL AS INT8) [as=x:8]
+      └── CAST(NULL AS INT8) [as=y:9]
+
+norm expect=SimplifyLeftJoinWithZeroRowsRight
+SELECT a.*, vals.* FROM a LEFT JOIN (VALUES (1, 2) LIMIT 0) AS vals(x, y) ON a.k = vals.x
+----
+project
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8 y:9
+ ├── key: (1)
+ ├── fd: ()-->(8,9), (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── projections
+      ├── CAST(NULL AS INT8) [as=column1:8]
+      └── CAST(NULL AS INT8) [as=column2:9]
+
+# No-op case because the join is an inner-join.
+norm expect-not=SimplifyLeftJoinWithZeroRowsRight
+SELECT a.*, b_empty.* FROM a INNER JOIN (SELECT * FROM b LIMIT 0) AS b_empty ON a.k = b_empty.x
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null x:8!null y:9!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5,8,9)
+
+# No-op case because the right input does not have zero rows.
+norm expect-not=SimplifyLeftJoinWithZeroRowsRight
+SELECT a.*, b.* FROM a LEFT JOIN b ON a.k = b.x
+----
+left-join (hash)
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8 y:9
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5,8,9), (8)-->(9)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── scan b
+ │    ├── columns: x:8!null y:9
+ │    ├── key: (8)
+ │    └── fd: (8)-->(9)
+ └── filters
+      └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # --------------------------------------------------
 # EliminateSemiJoin
