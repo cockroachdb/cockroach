@@ -83,9 +83,6 @@ type tpcc struct {
 	activeWorkers          int
 	fks                    bool
 	separateColumnFamilies bool
-	// deprecatedFKIndexes adds in foreign key indexes that are no longer needed
-	// due to origin index restrictions being lifted.
-	deprecatedFkIndexes bool
 
 	txInfos []txInfo
 	// deck contains indexes into the txInfos slice.
@@ -274,7 +271,6 @@ var tpccMeta = workload.Meta{
 			`regions`:                  {RuntimeOnly: true},
 			`survival-goal`:            {RuntimeOnly: true},
 			`replicate-static-columns`: {RuntimeOnly: true},
-			`deprecated-fk-indexes`:    {RuntimeOnly: true},
 			`query-trace-file`:         {RuntimeOnly: true},
 			`fake-time`:                {RuntimeOnly: true},
 			`txn-preamble-file`:        {RuntimeOnly: true},
@@ -284,7 +280,6 @@ var tpccMeta = workload.Meta{
 
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
-		g.flags.BoolVar(&g.deprecatedFkIndexes, `deprecated-fk-indexes`, false, `Add deprecated foreign keys (needed when running against v20.1 or below clusters)`)
 
 		g.flags.StringVar(&g.mix, `mix`,
 			`newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1`,
@@ -576,18 +571,11 @@ func (w *tpcc) Hooks() workload.Hooks {
 
 				for _, fkStmt := range fkStmts {
 					if _, err := db.Exec(fkStmt); err != nil {
+						// If the statement failed because the fk already
+						// exists, ignore it. Return the error for any other
+						// reason.
 						const duplFKErr = "columns cannot be used by multiple foreign key constraints"
-						const idxErr = "foreign key requires an existing index on columns"
-						switch {
-						case strings.Contains(err.Error(), idxErr):
-							fmt.Println(errors.WithHint(err, "try using the --deprecated-fk-indexes flag"))
-							// If the statement failed because of a missing FK index, suggest
-							// to use the deprecated-fks flag.
-							return errors.WithHint(err, "try using the --deprecated-fk-indexes flag")
-						case strings.Contains(err.Error(), duplFKErr):
-							// If the statement failed because the fk already exists,
-							// ignore it. Return the error for any other reason.
-						default:
+						if !strings.Contains(err.Error(), duplFKErr) {
 							return err
 						}
 					}
@@ -773,10 +761,6 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `history`,
 		Schema: makeSchema(
 			tpccHistorySchemaBase,
-			maybeAddFkSuffix(
-				w.deprecatedFkIndexes,
-				deprecatedTpccHistorySchemaFkSuffix,
-			),
 			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `h_w_id`),
 		),
 		InitialRows: workload.BatchedTuples{
@@ -836,10 +820,6 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `stock`,
 		Schema: makeSchema(
 			tpccStockSchemaBase,
-			maybeAddFkSuffix(
-				w.deprecatedFkIndexes,
-				deprecatedTpccStockSchemaFkSuffix,
-			),
 			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `s_w_id`),
 		),
 		InitialRows: workload.BatchedTuples{
@@ -852,10 +832,6 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `order_line`,
 		Schema: makeSchema(
 			tpccOrderLineSchemaBase,
-			maybeAddFkSuffix(
-				w.deprecatedFkIndexes,
-				deprecatedTpccOrderLineSchemaFkSuffix,
-			),
 			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `ol_w_id`),
 		),
 		InitialRows: workload.BatchedTuples{
