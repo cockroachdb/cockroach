@@ -237,7 +237,7 @@ func TestPebbleEncryption(t *testing.T) {
 	writeToFile(t, stickyRegistry.Get(stickyVFSID), "16.key", []byte(keyFile128))
 
 	encOptions := &storageconfig.EncryptionOptions{
-		KeySource: storageconfig.EncryptionKeySource_KeyFiles,
+		KeySource: storageconfig.EncryptionKeyFromFiles,
 		KeyFiles: &storageconfig.EncryptionKeyFiles{
 			CurrentKey: "16.key",
 			OldKey:     "plain",
@@ -374,7 +374,7 @@ func TestPebbleEncryption2(t *testing.T) {
 		key string, val string, encKeyFile string, oldEncFileKey string,
 	) {
 		encOptions := &storageconfig.EncryptionOptions{
-			KeySource: storageconfig.EncryptionKeySource_KeyFiles,
+			KeySource: storageconfig.EncryptionKeyFromFiles,
 			KeyFiles: &storageconfig.EncryptionKeyFiles{
 				CurrentKey: encKeyFile,
 				OldKey:     oldEncFileKey,
@@ -562,7 +562,7 @@ func makeEncryptedTestFS(t *testing.T, errorProb float64, errorRand *rand.Rand) 
 	require.NoError(t, dir.Close())
 
 	var encOptions storageconfig.EncryptionOptions
-	encOptions.KeySource = storageconfig.EncryptionKeySource_KeyFiles
+	encOptions.KeySource = storageconfig.EncryptionKeyFromFiles
 	encOptions.KeyFiles = &storageconfig.EncryptionKeyFiles{
 		CurrentKey: "16.key",
 		OldKey:     "plain",
