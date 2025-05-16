@@ -540,7 +540,6 @@ func (b *Builder) buildValuesRows(values *memo.ValuesExpr) ([][]tree.TypedExpr, 
 	numCols := len(values.Cols)
 
 	rows := makeTypedExprMatrix(len(values.Rows), numCols)
-	scalarCtx := buildScalarCtx{}
 	for i := range rows {
 		tup := values.Rows[i].(*memo.TupleExpr)
 		if len(tup.Elems) != numCols {
@@ -548,7 +547,7 @@ func (b *Builder) buildValuesRows(values *memo.ValuesExpr) ([][]tree.TypedExpr, 
 		}
 		var err error
 		for j := 0; j < numCols; j++ {
-			rows[i][j], err = b.buildScalar(&scalarCtx, tup.Elems[j])
+			rows[i][j], err = b.buildScalar(&emptyBuildScalarCtx, tup.Elems[j])
 			if err != nil {
 				return nil, err
 			}
@@ -3540,11 +3539,10 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 
 	// Build the argument expressions.
 	var args tree.TypedExprs
-	ctx := buildScalarCtx{}
 	if len(udf.Args) > 0 {
 		args = make(tree.TypedExprs, len(udf.Args))
 		for i := range udf.Args {
-			args[i], err = b.buildScalar(&ctx, udf.Args[i])
+			args[i], err = b.buildScalar(&emptyBuildScalarCtx, udf.Args[i])
 			if err != nil {
 				return execPlan{}, colOrdMap{}, err
 			}
@@ -3968,8 +3966,7 @@ func (b *Builder) buildVectorSearch(
 		}
 	}
 	outColOrds, outColMap := b.getColumns(search.Cols, search.Table)
-	ctx := buildScalarCtx{}
-	queryVector, err := b.buildScalar(&ctx, search.QueryVector)
+	queryVector, err := b.buildScalar(&emptyBuildScalarCtx, search.QueryVector)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
