@@ -138,11 +138,6 @@ func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) redac
 	var s redact.RedactableString
 	if status != nil && status.RaftState == raftpb.StateLeader {
 		for replicaID, pr := range status.Progress {
-			if replicaID == status.Lead {
-				// TODO(tschottdorf): remove this line once we have picked up
-				// https://github.com/etcd-io/etcd/pull/10279
-				continue
-			}
 			if pr.State == tracker.StateReplicate {
 				// This follower is in good working order.
 				continue
