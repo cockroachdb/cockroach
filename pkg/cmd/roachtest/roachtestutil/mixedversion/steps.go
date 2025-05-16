@@ -405,7 +405,7 @@ type runHookStep struct {
 func (s runHookStep) Background() shouldStop { return s.stopChan }
 
 func (s runHookStep) Description() string {
-	return fmt.Sprintf("run %q", s.hook.name)
+	return fmt.Sprintf("run %q hookId=%q", s.hook.name, s.hook.id)
 }
 
 func (s runHookStep) Run(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
