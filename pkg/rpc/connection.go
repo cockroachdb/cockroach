@@ -245,7 +245,7 @@ func (s *connFuture) Resolve(cc *grpc.ClientConn, dc drpcpool.Conn, err error) {
 	case <-s.ready:
 		// Already resolved, noop.
 	default:
-		s.cc, s.dc, s.err = cc, dc, err
+		s.cc, s.dc, s.err = cc, dc, err // Probably here, return drpc Conn with dial options.
 		close(s.ready)
 	}
 }
