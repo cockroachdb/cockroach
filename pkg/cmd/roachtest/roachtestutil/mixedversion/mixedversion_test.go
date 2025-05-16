@@ -41,7 +41,8 @@ var testPredecessorMapping = map[string]*clusterupgrade.Version{
 	"24.1": clusterupgrade.MustParseVersion("v23.2.4"),
 	"24.2": clusterupgrade.MustParseVersion("v24.1.1"),
 	"24.3": clusterupgrade.MustParseVersion("v24.2.2"),
-	"25.2": clusterupgrade.MustParseVersion("v24.3.0"),
+	"25.1": clusterupgrade.MustParseVersion("v24.3.0"),
+	"25.2": clusterupgrade.MustParseVersion("v25.1.3"),
 }
 
 //go:embed testdata/test_releases.yaml
@@ -266,10 +267,11 @@ func Test_choosePreviousReleases(t *testing.T) {
 			expectedReleases: []string{"23.2.4", "24.1.1", "24.2.2"},
 		},
 		{
-			name:             "predecessor history is filtered for ARM architectures",
-			arch:             vm.ArchARM64,
-			numUpgrades:      6,
-			expectedReleases: []string{"22.2.14", "23.1.17", "23.2.4", "24.1.1", "24.2.2"},
+			name:        "predecessor history is filtered for ARM architectures",
+			arch:        vm.ArchARM64,
+			numUpgrades: 6,
+			// N.B. 22.2.0 is minimumSupportedVersion (see setDefaultVersions)
+			expectedReleases: []string{"22.2.0", "22.2.14", "23.1.17", "23.2.4", "24.1.1", "24.2.2"},
 		},
 		{
 			name:              "skip-version upgrades",
@@ -290,12 +292,12 @@ func Test_choosePreviousReleases(t *testing.T) {
 			}
 
 			mvt := newTest(opts...)
-			mvt.options.predecessorFunc = func(_ *rand.Rand, v, _, _ *clusterupgrade.Version) (*clusterupgrade.Version, error) {
+			mvt.options.predecessorFunc = func(_ *rand.Rand, v *clusterupgrade.Version) (*clusterupgrade.Version, error) {
 				return testPredecessorMapping[v.Series()], tc.predecessorErr
 			}
 			mvt._arch = &tc.arch
 
-			releases, err := mvt.chooseUpgradePath()
+			releases, err := mvt.chooseUpgradePath(mvt.numUpgrades(), mvt.prng.Float64() < mvt.options.skipVersionProbability)
 			if tc.expectedErr == "" {
 				require.NoError(t, err)
 				var expectedVersions []*clusterupgrade.Version
@@ -421,12 +423,15 @@ func Test_randomPredecessor(t *testing.T) {
 				if tc.minBootstrap != "" {
 					minBootstrap = clusterupgrade.MustParseVersion(tc.minBootstrap)
 				}
-				pred, err = randomPredecessor(
-					newRand(),
-					clusterupgrade.MustParseVersion(tc.v),
-					clusterupgrade.MustParseVersion(tc.minSupported),
-					minBootstrap,
-				)
+				v := clusterupgrade.MustParseVersion(tc.v)
+				// N.B. `expectedPredecessor` is dependent on the seed, hence we must reuse rng in `maybeClampMsbMsv`.
+				// Otherwise, the patch versions may differ from the expected.
+				rng := newRand()
+				pred, err = randomPredecessor(rng, v)
+				if err != nil {
+					return err
+				}
+				pred, err = maybeClampMsbMsv(rng, pred, minBootstrap, clusterupgrade.MustParseVersion(tc.minSupported))
 
 				return err
 			})
