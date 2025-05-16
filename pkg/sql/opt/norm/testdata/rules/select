@@ -2477,3 +2477,121 @@ project
       │         └── row-number [as=row_num:25]
       └── filters
            └── row_num:25 <= 100 [outer=(25), constraints=(/25: (/NULL - /100]; tight)]
+
+# --------------------------------------------------
+# NormalizeIsToEq
+# --------------------------------------------------
+norm expect=NormalizeIsToEq
+SELECT * FROM a WHERE i IS NOT DISTINCT FROM k
+----
+select
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5
+ ├── key: (1)
+ ├── fd: (1)-->(3-5), (1)==(2), (2)==(1)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── i:2 = k:1 [outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+
+norm expect=NormalizeIsToEq
+SELECT * FROM a WHERE k IS NOT DISTINCT FROM 1
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+
+norm expect-not=NormalizeIsToEq
+SELECT * FROM a WHERE NULL IS NOT DISTINCT FROM k
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+norm expect-not=NormalizeIsToEq
+SELECT * FROM a WHERE k IS NOT DISTINCT FROM NULL
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+
+norm expect-not=NormalizeIsToEq
+SELECT * FROM a WHERE NULL IS NOT DISTINCT FROM NULL
+----
+scan a
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
+
+norm expect-not=NormalizeIsToEq
+SELECT * FROM a WHERE (k, i) IS NOT DISTINCT FROM (i, k)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── (k:1, i:2) IS NOT DISTINCT FROM (i:2, k:1) [outer=(1,2), immutable]
+
+norm expect-not=NormalizeIsToEq
+SELECT * FROM a WHERE (k, NULL) IS NOT DISTINCT FROM (i, f)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── (k:1, NULL) IS NOT DISTINCT FROM (i:2, f:3) [outer=(1-3), immutable]
+
+norm expect-not=NormalizeIsToEq
+SELECT * FROM a WHERE k IS NOT DISTINCT FROM 1.23
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── k:1 IS NOT DISTINCT FROM 1.23 [outer=(1)]
+
+norm expect-not=NormalizeIsToEq
+SELECT x IS NOT DISTINCT FROM 1 FROM (VALUES (0), (1), (NULL)) AS v(x)
+----
+project
+ ├── columns: "?column?":2!null
+ ├── cardinality: [3 - 3]
+ ├── values
+ │    ├── columns: column1:1
+ │    ├── cardinality: [3 - 3]
+ │    ├── (0,)
+ │    ├── (1,)
+ │    └── (NULL,)
+ └── projections
+      └── column1:1 IS NOT DISTINCT FROM 1 [as="?column?":2, outer=(1)]
