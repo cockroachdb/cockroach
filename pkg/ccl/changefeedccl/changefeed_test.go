@@ -11550,8 +11550,12 @@ func TestChangefeedMVCCTimestampWithQueries(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (key INT PRIMARY KEY);`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1);`)
 
-		feed, err := f.Feed(`CREATE CHANGEFEED WITH mvcc_timestamp AS SELECT * FROM foo`)
+		feed, err := f.Feed(`CREATE CHANGEFEED WITH mvcc_timestamp, format=json, envelope=bare AS SELECT * FROM foo`)
 		require.NoError(t, err)
+		// Bypass some bad heuristics checks in these testfeeds.
+		if cf, ok := feed.(*cloudFeed); ok {
+			cf.isBare = true
+		}
 		defer closeFeed(t, feed)
 
 		msgs, err := readNextMessages(ctx, feed, 1)
