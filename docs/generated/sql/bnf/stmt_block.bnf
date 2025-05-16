@@ -1394,6 +1394,7 @@ unreserved_keyword ::=
 	| 'PRIVILEGES'
 	| 'PROCEDURE'
 	| 'PROCEDURES'
+	| 'PROVISIONING_SOURCE'
 	| 'PUBLIC'
 	| 'PUBLICATION'
 	| 'QUERIES'
@@ -2552,7 +2553,7 @@ d_expr ::=
 opt_with_replication_options ::=
 	'WITH' replication_options_list
 	| 'WITH' 'OPTIONS' '(' replication_options_list ')'
-	| 
+	|
 
 backup_options ::=
 	'ENCRYPTION_PASSPHRASE' '=' string_or_placeholder
@@ -3289,6 +3290,7 @@ role_option ::=
 	| password_clause
 	| valid_until_clause
 	| subject_clause
+	| provisioning_source_clause
 	| 'REPLICATION'
 	| 'NOREPLICATION'
 	| 'BYPASSRLS'
@@ -3790,26 +3792,30 @@ subject_clause ::=
 	'SUBJECT' string_or_placeholder
 	| 'SUBJECT' 'NULL'
 
+provisioning_source_clause ::=
+	'PROVISIONING_SOURCE' string_or_placeholder
+	| 'PROVISIONING_SOURCE' 'NULL'
+
 func_name_no_crdb_extra ::=
 	type_function_name_no_crdb_extra
 	| prefixed_column_path
 
 opt_interval_qualifier ::=
 	interval_qualifier
-	| 
+	|
 
 within_group_clause ::=
 	'WITHIN' 'GROUP' '(' single_sort_clause ')'
-	| 
+	|
 
 filter_clause ::=
 	'FILTER' '(' 'WHERE' a_expr ')'
-	| 
+	|
 
 over_clause ::=
 	'OVER' window_specification
 	| 'OVER' window_name
-	| 
+	|
 
 func_expr_common_subexpr ::=
 	'COLLATION' 'FOR' '(' a_expr ')'
@@ -4317,6 +4323,7 @@ bare_label_keywords ::=
 	| 'PRIVILEGES'
 	| 'PROCEDURE'
 	| 'PROCEDURES'
+	| 'PROVISIONING_SOURCE'
 	| 'PUBLIC'
 	| 'PUBLICATION'
 	| 'QUERIES'
@@ -4975,17 +4982,17 @@ reference_actions ::=
 
 opt_existing_window_name ::=
 	name
-	| 
+	|
 
 opt_partition_clause ::=
 	'PARTITION' 'BY' expr_list
-	| 
+	|
 
 opt_frame_clause ::=
 	'RANGE' frame_extent opt_frame_exclusion
 	| 'ROWS' frame_extent opt_frame_exclusion
 	| 'GROUPS' frame_extent opt_frame_exclusion
-	| 
+	|
 
 extract_list ::=
 	extract_arg 'FROM' a_expr
@@ -4998,7 +5005,7 @@ overlay_list ::=
 
 position_list ::=
 	b_expr 'IN' b_expr
-	| 
+	|
 
 substr_list ::=
 	a_expr substr_from substr_for
@@ -5124,7 +5131,7 @@ frame_bound ::=
 
 opt_name_parens ::=
 	'(' name ')'
-	| 
+	|
 
 generated_as ::=
 	'AS'

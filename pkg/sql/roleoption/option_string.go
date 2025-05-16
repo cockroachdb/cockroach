@@ -44,6 +44,7 @@ func _() {
 	_ = x[SUBJECT-29]
 	_ = x[BYPASSRLS-30]
 	_ = x[NOBYPASSRLS-31]
+	_ = x[PROVISIONINGSOURCE-32]
 }
 
 func (i Option) String() string {
@@ -110,6 +111,8 @@ func (i Option) String() string {
 		return "BYPASSRLS"
 	case NOBYPASSRLS:
 		return "NOBYPASSRLS"
+	case PROVISIONINGSOURCE:
+		return "PROVISIONING_SOURCE"
 	default:
 		return "Option(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
