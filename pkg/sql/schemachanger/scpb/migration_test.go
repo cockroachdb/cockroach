@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/stretchr/testify/require"
 )
@@ -145,4 +146,35 @@ func TestDeprecatedIsInvertedMigration(t *testing.T) {
 	temp := state.Targets[2].GetTemporaryIndex()
 	require.True(t, temp.IsInverted)
 	require.Equal(t, idxtype.INVERTED, temp.Type)
+}
+
+// TestDeprecatedTriggerDeps tests that the relation IDs in TriggerDeps are
+// migrated to RelationReferences.
+func TestDeprecatedTriggerDeps(t *testing.T) {
+	state := DescriptorState{
+		Targets: []Target{
+			MakeTarget(ToPublic,
+				&TriggerDeps{
+					UsesRelationIDs: []catid.DescID{112, 113},
+				},
+				nil,
+			),
+		},
+		CurrentStatuses: []Status{Status_PUBLIC},
+		TargetRanks:     []uint32{1},
+	}
+	migrationOccurred := MigrateDescriptorState(
+		clusterversion.ClusterVersion{Version: clusterversion.Latest.Version()},
+		1,
+		&state,
+	)
+	require.True(t, migrationOccurred)
+	require.Len(t, state.Targets, 1)
+
+	triggerDeps := state.Targets[0].GetTriggerDeps()
+	require.Nil(t, triggerDeps.UsesRelationIDs)
+	require.NotNil(t, triggerDeps.UsesRelations)
+	require.Len(t, triggerDeps.UsesRelations, 2)
+	require.Equal(t, catid.DescID(112), triggerDeps.UsesRelations[0].ID)
+	require.Equal(t, catid.DescID(113), triggerDeps.UsesRelations[1].ID)
 }

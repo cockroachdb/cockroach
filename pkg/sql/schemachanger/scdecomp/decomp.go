@@ -878,12 +878,42 @@ func (w *walkCtx) walkTrigger(tbl catalog.TableDescriptor, t *descpb.TriggerDesc
 		FuncArgs:  t.FuncArgs,
 	})
 	w.ev(scpb.Status_PUBLIC, &scpb.TriggerDeps{
-		TableID:         tbl.GetID(),
-		TriggerID:       t.ID,
-		UsesRelationIDs: t.DependsOn,
-		UsesTypeIDs:     t.DependsOnTypes,
-		UsesRoutineIDs:  t.DependsOnRoutines,
+		TableID:        tbl.GetID(),
+		TriggerID:      t.ID,
+		UsesRelations:  w.buildTriggerRelationDependencies(tbl, t),
+		UsesTypeIDs:    t.DependsOnTypes,
+		UsesRoutineIDs: t.DependsOnRoutines,
 	})
+}
+
+func (w *walkCtx) buildTriggerRelationDependencies(
+	tbl catalog.TableDescriptor, t *descpb.TriggerDescriptor,
+) []scpb.TriggerDeps_RelationReference {
+	usesRelations := make([]scpb.TriggerDeps_RelationReference, 0)
+	for _, id := range t.DependsOn {
+		foundRelation := false
+		to := w.lookupFn(id)
+		toDesc, err := catalog.AsTableDescriptor(to)
+		if err != nil {
+			panic(err)
+		}
+		_ = toDesc.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+			if dep.ID != tbl.GetID() {
+				return nil
+			}
+			usesRelations = append(usesRelations, scpb.TriggerDeps_RelationReference{
+				ID:        id,
+				IndexID:   dep.IndexID,
+				ColumnIDs: dep.ColumnIDs,
+			})
+			foundRelation = true
+			return nil
+		})
+		if !foundRelation {
+			panic(errors.AssertionFailedf("could not find back-reference to relation %d", id))
+		}
+	}
+	return usesRelations
 }
 
 func (w *walkCtx) walkPolicy(tbl catalog.TableDescriptor, p *descpb.PolicyDescriptor) {

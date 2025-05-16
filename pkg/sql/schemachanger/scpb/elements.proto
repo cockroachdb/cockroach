@@ -628,11 +628,26 @@ message TriggerFunctionCall {
 }
 
 message TriggerDeps {
+  message RelationReference {
+    uint32 id = 1 [(gogoproto.customname) = "ID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+    repeated uint32 column_ids = 2 [(gogoproto.customname) = "ColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+    uint32 index_id = 3 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+  }
+
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
-  repeated uint32 uses_relation_ids = 3 [(gogoproto.customname) = "UsesRelationIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  // UsesRelationIDs is a deprecated field that tracks the IDs of relations
+  // used by this trigger. It remains for backward compatibility with older
+  // versions and is superseded by UsesRelations.
+  repeated uint32 uses_relation_ids = 3 [deprecated = true, (gogoproto.customname) = "UsesRelationIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  // UsesRelations specifies the relations that this trigger depends on.
+  // In addition to the relation itself, it may include optional ColumnIDs
+  // or IndexIDs to capture fine-grained dependencies.
+  repeated RelationReference uses_relations = 6 [(gogoproto.nullable) = false];
   repeated uint32 uses_type_ids = 4 [(gogoproto.customname) = "UsesTypeIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 uses_routine_ids = 5 [(gogoproto.customname) = "UsesRoutineIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+
+  // NEXT VALUE: 7
 }
 
 message EnumType {
