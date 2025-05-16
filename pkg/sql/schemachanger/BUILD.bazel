@@ -88,6 +88,10 @@ sctest_gen(
         ":end_to_end_testdata_definitions",
     ],
     tests = [
+        "BackupRollbacks",
+        "BackupRollbacksMixedVersion",
+        "BackupSuccess",
+        "BackupSuccessMixedVersion",
         "EndToEndSideEffects",
         "ExecuteWithDMLInjection",
         "GenerateSchemaChangeCorpus",
