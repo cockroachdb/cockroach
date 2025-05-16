@@ -102,6 +102,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/knz/strtime"
+	"github.com/sean-/go-sharded-cluster-keys/key32"
+	"github.com/sean-/go-sharded-cluster-keys/key64"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -9242,6 +9244,52 @@ WHERE object_id = table_descriptor_id
 				)
 				return tree.NewDInt(tree.DInt(jobID)), err
 			},
+		},
+	),
+	"crdb_internal.shard_cluster_key_encode32": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "val", Typ: types.Int},
+				{Name: "mask_size", Typ: types.Int},
+				{Name: "mask_offset", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Int4),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				val := tree.MustBeDInt(args[0])
+				maskSize := tree.MustBeDInt(args[1])
+				maskOffset := tree.MustBeDInt(args[2])
+				// TODO(seanc@) add error handling of the above
+
+				enc := key32.NewEncoder(int(maskOffset), int(maskSize))
+				encoded := enc.Encode(uint32(val))
+				return tree.NewDInt(tree.DInt(encoded)), nil
+			},
+			Info:       "Shard Cluster Encode an int4 value for use in an index or primary key.",
+			Volatility: volatility.Immutable,
+		},
+	),
+	"crdb_internal.shard_cluster_key_encode64": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "val", Typ: types.Int},
+				{Name: "mask_size", Typ: types.Int},
+				{Name: "mask_offset", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				val := tree.MustBeDInt(args[0])
+				maskSize := tree.MustBeDInt(args[1])
+				maskOffset := tree.MustBeDInt(args[2])
+				// TODO(seanc@) add error handling of the above
+
+				enc := key64.NewEncoder(int(maskOffset), int(maskSize))
+				encoded := enc.Encode(uint64(val))
+				return tree.NewDInt(tree.DInt(encoded)), nil
+			},
+			Info:       "Shard Cluster Encode an int8 value for use in an index or primary key.",
+			Volatility: volatility.Immutable,
 		},
 	),
 }

@@ -435,6 +435,7 @@ require (
 	github.com/rs/xid v1.3.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sahilm/fuzzy v0.1.0 // indirect
+	github.com/sean-/go-sharded-cluster-keys v0.0.0-20250513233829-780785014d3d // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/sirupsen/logrus v1.9.1 // indirect
 	github.com/slok/go-http-metrics v0.10.0 // indirect
