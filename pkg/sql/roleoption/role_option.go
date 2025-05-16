@@ -76,6 +76,7 @@ const (
 	SUBJECT
 	BYPASSRLS
 	NOBYPASSRLS
+	PROVISIONINGSOURCE // PROVISIONING_SOURCE
 )
 
 // ControlChangefeedDeprecationNoticeMsg is a user friendly notice which should be shown when CONTROLCHANGEFEED is used
@@ -118,6 +119,7 @@ var toSQLStmts = map[Option]string{
 	SUBJECT:                `UPSERT INTO system.role_options (username, option, value, user_id) VALUES ($1, 'SUBJECT', $2::string, $3)`,
 	BYPASSRLS:              `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'BYPASSRLS', $2) ON CONFLICT DO NOTHING`,
 	NOBYPASSRLS:            `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'BYPASSRLS'`,
+	PROVISIONINGSOURCE:     `UPSERT INTO system.role_options (username, option, value, user_id) VALUES ($1, 'PROVISIONING_SOURCE', $2::string, $3)`,
 }
 
 // Mask returns the bitmask for a given role option.
@@ -158,6 +160,7 @@ var ByName = map[string]Option{
 	"SUBJECT":                SUBJECT,
 	"BYPASSRLS":              BYPASSRLS,
 	"NOBYPASSRLS":            NOBYPASSRLS,
+	"PROVISIONING_SOURCE":    PROVISIONINGSOURCE,
 }
 
 // ToOption takes a string and returns the corresponding Option.
