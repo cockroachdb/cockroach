@@ -64,6 +64,7 @@ func TestRestoreRegisteredNames(t *testing.T) {
 		"restore/tpcc-30k/gce/nodes=4/cpus=8/lowmem",
 		"restore/tpcc-30k/gce/nodes=8/cpus=8",
 		"restore/tpcc-5k/gce/fullOnly/nodes=4/cpus=8",
+		"restore/tpcc-5k/gce/nodes=16/stores=4/cpus=4",
 		"restore/tpcc-5k/gce/nodes=4/cpus=8",
 	}
 	slices.Sort(r.testNames)
