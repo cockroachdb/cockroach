@@ -112,7 +112,7 @@ with t=A k=c
 ----
 put: lock acquisition = {c id=00000001 key="c" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000001 key="c" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=4.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key="c" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=4.000000000,0 gul=0,0
 data: "a"/5.000000000,0 -> /BYTES/12
 data: "a"/2.000000000,0 -> /BYTES/11
 meta: "c"/0,0 -> txn={id=00000001 key="c" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true

@@ -23,7 +23,7 @@ txn_begin t=D ts=15,0
 txn_begin t=E ts=16,0
 ----
 >> at end:
-txn: "E" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=16.000000000,0 wto=false gul=0,0
+txn: "E" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=16.000000000,0 gul=0,0
 
 run ok
 put k=k1 v=v1 ts=11,0

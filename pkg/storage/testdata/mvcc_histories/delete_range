@@ -121,7 +121,7 @@ with t=A
   txn_remove
 ----
 >> at end:
-txn: "A" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=46.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=46.000000000,0 gul=0,0
 data: "a"/45.000000000,0 -> /<empty>
 data: "a"/44.000000000,0 -> /BYTES/abc
 data: "a/123"/45.000000000,0 -> /<empty>

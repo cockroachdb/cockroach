@@ -172,7 +172,7 @@ del: "r": found key false
 del: lock acquisition = {r id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
 stats: key_bytes=+12 val_count=+1 val_bytes=+61 gc_bytes_age=+6787 intent_count=+1 intent_bytes=+25 lock_count=+1 lock_age=+93
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 gul=0,0
 rangekey: g{-gg}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 rangekey: {ggg-i}/[5.000000000,0=/<empty> 4.000000000,0=/<empty> 3.000000000,0=/<empty>]
 rangekey: {i-jjj}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
@@ -240,7 +240,7 @@ resolve_intent_range t=A k=a end=z status=COMMITTED
 resolve_intent_range: "a"-"z" -> resolved 18 key(s)
 stats: val_bytes=-669 live_bytes=-315 gc_bytes_age=-33241 intent_count=-18 intent_bytes=-318 lock_count=-18 lock_age=-1674
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 gul=0,0
 rangekey: g{-gg}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 rangekey: {ggg-i}/[5.000000000,0=/<empty> 4.000000000,0=/<empty> 3.000000000,0=/<empty>]
 rangekey: {i-jjj}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
@@ -291,7 +291,7 @@ resolve_intent_range t=A k=a end=z status=COMMITTED
 resolve_intent_range: "a"-"z" -> resolved 0 key(s)
 stats: no change
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=9.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=9.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 gul=0,0
 rangekey: g{-gg}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 rangekey: {ggg-i}/[5.000000000,0=/<empty> 4.000000000,0=/<empty> 3.000000000,0=/<empty>]
 rangekey: {i-jjj}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]

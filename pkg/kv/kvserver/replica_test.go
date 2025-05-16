@@ -388,7 +388,6 @@ func TestIsOnePhaseCommit(t *testing.T) {
 		isNonTxn     bool
 		canForwardTS bool
 		isRestarted  bool
-		isWTO        bool // isWTO implies isTSOff
 		isTSOff      bool
 		exp1PC       bool
 	}{
@@ -398,47 +397,37 @@ func TestIsOnePhaseCommit(t *testing.T) {
 		{ru: putReq, exp1PC: false},
 		{ru: etReq, exp1PC: true},
 		{ru: etReq, isTSOff: true, exp1PC: false},
-		{ru: etReq, isWTO: true, exp1PC: false},
 		{ru: etReq, isRestarted: true, exp1PC: false},
 		{ru: etReq, isRestarted: true, isTSOff: true, exp1PC: false},
-		{ru: etReq, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
 		{ru: etReq, canForwardTS: true, exp1PC: true},
 		{ru: etReq, canForwardTS: true, isTSOff: true, exp1PC: true},
-		{ru: etReq, canForwardTS: true, isWTO: true, exp1PC: true},
 		{ru: etReq, canForwardTS: true, isRestarted: true, exp1PC: false},
 		{ru: etReq, canForwardTS: true, isRestarted: true, isTSOff: true, exp1PC: false},
-		{ru: etReq, canForwardTS: true, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqs[:1], exp1PC: false},
 		{ru: txnReqs[1:], exp1PC: false},
 		{ru: txnReqs, exp1PC: true},
 		{ru: txnReqs, isTSOff: true, exp1PC: false},
-		{ru: txnReqs, isWTO: true, exp1PC: false},
 		{ru: txnReqs, isRestarted: true, exp1PC: false},
 		{ru: txnReqs, isRestarted: true, isTSOff: true, exp1PC: false},
-		{ru: txnReqs, isRestarted: true, isWTO: true, exp1PC: false},
 		{ru: txnReqs[:1], canForwardTS: true, exp1PC: false},
 		{ru: txnReqs[1:], canForwardTS: true, exp1PC: false},
 		{ru: txnReqs, canForwardTS: true, exp1PC: true},
 		{ru: txnReqs, canForwardTS: true, isTSOff: true, exp1PC: true},
-		{ru: txnReqs, canForwardTS: true, isWTO: true, exp1PC: true},
 		{ru: txnReqs, canForwardTS: true, isRestarted: true, exp1PC: false},
 		{ru: txnReqs, canForwardTS: true, isRestarted: true, isTSOff: true, exp1PC: false},
-		{ru: txnReqs, canForwardTS: true, isRestarted: true, isWTO: true, exp1PC: false},
 		{ru: txnReqsRequire1PC[:1], exp1PC: false},
 		{ru: txnReqsRequire1PC[1:], exp1PC: false},
 		{ru: txnReqsRequire1PC, exp1PC: true},
 		{ru: txnReqsRequire1PC, isTSOff: true, exp1PC: false},
-		{ru: txnReqsRequire1PC, isWTO: true, exp1PC: false},
 		{ru: txnReqsRequire1PC, isRestarted: true, exp1PC: true},
 		{ru: txnReqsRequire1PC, isRestarted: true, isTSOff: true, exp1PC: false},
-		{ru: txnReqsRequire1PC, isRestarted: true, isWTO: true, exp1PC: false},
 	}
 
 	clock := hlc.NewClockForTesting(nil)
 	for i, c := range testCases {
 		t.Run(
-			fmt.Sprintf("%d:isNonTxn:%t,canForwardTS:%t,isRestarted:%t,isWTO:%t,isTSOff:%t",
-				i, c.isNonTxn, c.canForwardTS, c.isRestarted, c.isWTO, c.isTSOff),
+			fmt.Sprintf("%d:isNonTxn:%t,canForwardTS:%t,isRestarted:%t,isTSOff:%t",
+				i, c.isNonTxn, c.canForwardTS, c.isRestarted, c.isTSOff),
 			func(t *testing.T) {
 				ba := &kvpb.BatchRequest{Requests: c.ru}
 				if !c.isNonTxn {
@@ -449,16 +438,11 @@ func TestIsOnePhaseCommit(t *testing.T) {
 					if c.isRestarted {
 						ba.Txn.Restart(-1, 0, clock.Now())
 					}
-					if c.isWTO {
-						ba.Txn.WriteTooOld = true
-						c.isTSOff = true
-					}
 					if c.isTSOff {
 						ba.Txn.WriteTimestamp = ba.Txn.ReadTimestamp.Add(1, 0)
 					}
 				} else {
 					require.False(t, c.isRestarted)
-					require.False(t, c.isWTO)
 					require.False(t, c.isTSOff)
 				}
 
@@ -4803,51 +4787,6 @@ func TestRPCRetryProtectionInTxn(t *testing.T) {
 		}
 		require.Regexp(t, expRx, pErr)
 	})
-}
-
-// Test that errors from batch evaluation never have the WriteTooOld flag set.
-// The WriteTooOld flag is supposed to only be set on successful responses.
-//
-// The test will construct a batch with a write that would normally cause the
-// WriteTooOld flag to be set on the response, and another CPut which causes an
-// error to be returned.
-func TestErrorsDontCarryWriteTooOldFlag(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	cfg := TestStoreConfig(nil /* clock */)
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
-
-	keyA := roachpb.Key("a")
-	keyB := roachpb.Key("b")
-	// Start a transaction early to get a low timestamp.
-	txn := roachpb.MakeTransaction("test", keyA, isolation.Serializable, roachpb.NormalUserPriority,
-		tc.Clock().Now(), 0 /* maxOffsetNs */, 0 /* coordinatorNodeID */, 0, false /* omitInRangefeeds */)
-
-	// Write a value outside of the txn to cause a WriteTooOldError later.
-	put := putArgs(keyA, []byte("val1"))
-	{
-		ba := &kvpb.BatchRequest{}
-		ba.Add(&put)
-		_, pErr := tc.Sender().Send(ctx, ba)
-		require.Nil(t, pErr)
-	}
-
-	ba := &kvpb.BatchRequest{}
-	// This put will cause the WriteTooOld flag to be set.
-	put = putArgs(keyA, []byte("val2"))
-	// This will cause a ConditionFailedError.
-	cput := cPutArgs(keyB, []byte("missing"), []byte("newVal"))
-	ba.Header = kvpb.Header{Txn: &txn}
-	ba.Add(&put)
-	ba.Add(&cput)
-	assignSeqNumsForReqs(&txn, &put, &cput)
-	_, pErr := tc.Sender().Send(ctx, ba)
-	require.IsType(t, pErr.GetDetail(), &kvpb.ConditionFailedError{})
-	require.False(t, pErr.GetTxn().WriteTooOld)
 }
 
 // TestBatchRetryCantCommitIntents tests that transactional retries cannot
@@ -11029,11 +10968,6 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				return
 			},
 		},
-		// TODO(andrei): We should also have a test similar to the one above, but
-		// with the WriteTooOld flag set by a different batch than the one with the
-		// EndTransaction. This is hard to do at the moment, though, because we
-		// never defer the handling of the write too old conditions to the end of
-		// the transaction (but we might in the future).
 		{
 			name: "serverside-refresh of read within uncertainty interval error on get in non-txn",
 			setupFn: func() (hlc.Timestamp, error) {
