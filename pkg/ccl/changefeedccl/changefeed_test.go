@@ -9824,20 +9824,32 @@ func TestChangefeedMVCCTimestampWithQueries(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (key INT PRIMARY KEY);`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1);`)
 
-		feed, err := f.Feed(`CREATE CHANGEFEED WITH mvcc_timestamp AS SELECT * FROM foo`)
+		feed, err := f.Feed(`CREATE CHANGEFEED WITH mvcc_timestamp, format=json, envelope=bare AS SELECT * FROM foo`)
 		require.NoError(t, err)
+		// Bypass some bad heuristics checks in these testfeeds.
+		if wf, ok := feed.(*webhookFeed); ok {
+			wf.isBare = true
+		} else if cf, ok := feed.(*cloudFeed); ok {
+			cf.isBare = true
+		}
 		defer closeFeed(t, feed)
 
 		msgs, err := readNextMessages(ctx, feed, 1)
 		require.NoError(t, err)
 
 		var m map[string]any
-		require.NoError(t, gojson.Unmarshal(msgs[0].Value, &m))
+		require.NoError(t, json.Unmarshal(msgs[0].Value, &m))
 		ts := m["__crdb__"].(map[string]any)["mvcc_timestamp"].(string)
 		assertReasonableMVCCTimestamp(t, ts)
 	}
 
 	cdcTest(t, testFn)
+}
+
+func assertReasonableMVCCTimestamp(t *testing.T, ts string) {
+	epochNanos := parseTimeToHLC(t, ts).WallTime
+	now := timeutil.Now()
+	require.GreaterOrEqual(t, epochNanos, now.Add(-1*time.Hour).UnixNano())
 }
 
 func TestCloudstorageParallelCompression(t *testing.T) {
