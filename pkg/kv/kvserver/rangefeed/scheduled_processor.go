@@ -7,6 +7,7 @@ package rangefeed
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed/rangefeedpb"
 	"sync/atomic"
 	"time"
 
@@ -802,6 +803,17 @@ func (p *ScheduledProcessor) publishValue(
 		PrevValue: prevVal,
 	})
 	p.reg.PublishToOverlapping(ctx, roachpb.Span{Key: key}, &event, valueMetadata, alloc)
+}
+
+func (p *ScheduledProcessor) CollectAllRangefeedStats() []rangefeedpb.InspectStoreRangefeedsResponse {
+	if p == nil {
+		return nil
+	}
+	var info []rangefeedpb.InspectStoreRangefeedsResponse
+	p.enqueueRequest(func(ctx context.Context) {
+		info = p.reg.CollectAllStats(ctx)
+	})
+	return info
 }
 
 func (p *ScheduledProcessor) publishDeleteRange(
