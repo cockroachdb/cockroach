@@ -665,10 +665,15 @@ func Load(data []byte) (*Store, error) {
 		return nil, err
 	}
 
+	raBitQuantizer := quantize.NewRaBitQuantizer(storeProto.Dims, storeProto.Seed, vecdist.L2Squared)
+	unquantizer := quantize.NewUnQuantizer(storeProto.Dims, vecdist.L2Squared)
+
 	// Construct the InMemoryStore object.
 	inMemStore := &Store{
-		dims: storeProto.Dims,
-		seed: storeProto.Seed,
+		dims:          storeProto.Dims,
+		seed:          storeProto.Seed,
+		rootQuantizer: unquantizer,
+		quantizer:     raBitQuantizer,
 	}
 	inMemStore.mu.clock = 2
 	inMemStore.mu.partitions = make(map[qualifiedPartitionKey]*memPartition, len(storeProto.Partitions))
@@ -676,9 +681,6 @@ func Load(data []byte) (*Store, error) {
 	inMemStore.mu.vectors = make(map[string]vector.T, len(storeProto.Vectors))
 	inMemStore.mu.stats = storeProto.Stats
 	inMemStore.mu.pending.Init()
-
-	raBitQuantizer := quantize.NewRaBitQuantizer(storeProto.Dims, storeProto.Seed, vecdist.L2Squared)
-	unquantizer := quantize.NewUnQuantizer(storeProto.Dims, vecdist.L2Squared)
 
 	// Construct the Partition objects.
 	for i := range storeProto.Partitions {
