@@ -88,23 +88,45 @@ func (s *testState) estimateDistances(t *testing.T, d *datadriven.TestData) stri
 		}
 	}
 
+	addVectors := func(
+		quantizer quantize.Quantizer, vectors vector.Set,
+	) (quantizedSet quantize.QuantizedVectorSet, distances, errorBounds []float32) {
+		// Quantize all vectors at once.
+		quantizedSet = quantizer.Quantize(&s.Workspace, vectors)
+		distances = make([]float32, quantizedSet.GetCount())
+		errorBounds = make([]float32, quantizedSet.GetCount())
+		quantizer.EstimateDistances(
+			&s.Workspace, quantizedSet, queryVector, distances, errorBounds)
+
+		// Now add the vectors one-by-one and ensure that distances and error
+		// bounds stay the same.
+		quantizedSet = quantizer.NewQuantizedVectorSet(vectors.Count, quantizedSet.GetCentroid())
+		for i := range vectors.Count {
+			quantizer.QuantizeInSet(&s.Workspace, quantizedSet, vectors.Slice(i, 1))
+		}
+		distances2 := make([]float32, quantizedSet.GetCount())
+		errorBounds2 := make([]float32, quantizedSet.GetCount())
+		quantizer.EstimateDistances(
+			&s.Workspace, quantizedSet, queryVector, distances2, errorBounds2)
+		require.Equal(t, distances2, distances)
+		require.Equal(t, errorBounds2, errorBounds)
+
+		return quantizedSet, distances, errorBounds
+	}
+
 	var buf bytes.Buffer
 	doTest := func(metric vecdist.Metric, prec int) {
-		unquantizer := quantize.NewUnQuantizer(len(queryVector), metric)
-		unQuantizedSet := unquantizer.Quantize(&s.Workspace, vectors)
-		exact := make([]float32, unQuantizedSet.GetCount())
-		errorBounds := make([]float32, unQuantizedSet.GetCount())
-		unquantizer.EstimateDistances(
-			&s.Workspace, unQuantizedSet, queryVector, exact, errorBounds)
+		// Test UnQuantizer.
+		unQuantizer := quantize.NewUnQuantizer(len(queryVector), metric)
+		unQuantizedSet, exact, errorBounds := addVectors(unQuantizer, vectors)
 		for _, error := range errorBounds {
+			// ErrorBounds should always be zero for UnQuantizer.
 			require.Zero(t, error)
 		}
 
+		// Test RaBitQuantizer.
 		rabitQ := quantize.NewRaBitQuantizer(len(queryVector), 42, metric)
-		rabitQSet := rabitQ.Quantize(&s.Workspace, vectors)
-		estimated := make([]float32, rabitQSet.GetCount())
-		rabitQ.EstimateDistances(
-			&s.Workspace, rabitQSet, queryVector, estimated, errorBounds)
+		rabitQSet, estimated, errorBounds := addVectors(rabitQ, vectors)
 
 		// UnQuantizer and RaBitQuantizer should have calculated same centroid.
 		require.Equal(t, unQuantizedSet.GetCentroid(), rabitQSet.GetCentroid())
