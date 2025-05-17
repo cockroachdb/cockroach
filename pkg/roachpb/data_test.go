@@ -604,13 +604,14 @@ var nonZeroTxn = Transaction{
 			Logical:  2,
 		},
 	}},
-	WriteTooOld:        true,
-	LockSpans:          []Span{{Key: []byte("a"), EndKey: []byte("b")}},
-	InFlightWrites:     []SequencedWrite{{Key: []byte("c"), Sequence: 1}},
-	ReadTimestampFixed: true,
-	IgnoredSeqNums:     []enginepb.IgnoredSeqNumRange{{Start: 888, End: 999}},
-	AdmissionPriority:  1,
-	OmitInRangefeeds:   true,
+	WriteTooOld:               true,
+	LockSpans:                 []Span{{Key: []byte("a"), EndKey: []byte("b")}},
+	InFlightWrites:            []SequencedWrite{{Key: []byte("c"), Sequence: 1}},
+	ReadTimestampFixed:        true,
+	IgnoredSeqNums:            []enginepb.IgnoredSeqNumRange{{Start: 888, End: 999}},
+	MaxExplicitRollbackTarget: 1,
+	AdmissionPriority:         1,
+	OmitInRangefeeds:          true,
 }
 
 func TestTransactionUpdate(t *testing.T) {
@@ -699,6 +700,7 @@ func TestTransactionUpdate(t *testing.T) {
 	expTxn5.LockSpans = nil
 	expTxn5.InFlightWrites = nil
 	expTxn5.IgnoredSeqNums = nil
+	expTxn5.MaxExplicitRollbackTarget = 0
 	expTxn5.WriteTooOld = false
 	expTxn5.ReadTimestampFixed = false
 	require.Equal(t, expTxn5, txn5)
@@ -886,6 +888,7 @@ func TestTransactionRestart(t *testing.T) {
 	expTxn.LockSpans = nil
 	expTxn.InFlightWrites = nil
 	expTxn.IgnoredSeqNums = nil
+	expTxn.MaxExplicitRollbackTarget = 0
 	require.Equal(t, expTxn, txn)
 }
 
