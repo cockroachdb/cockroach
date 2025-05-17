@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -212,6 +213,11 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			dropCascadeDescriptor(next, t.SequenceID)
 		}
 	})
+
+	// Log the schema names to assist with debugging DROP DATABASE. Schema names
+	// are object identifiers and do not need to be redacted in logs.
+	var namesToDrop []redact.SafeString
+
 	// Recurse on back-referenced elements.
 	ub := undroppedBackrefs(b, id)
 	ub.ForEach(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
@@ -241,7 +247,9 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 		case *scpb.Column, *scpb.ColumnType, *scpb.SecondaryIndexPartial:
 			// These only have type references.
 			break
-		case *scpb.Namespace, *scpb.Function, *scpb.SecondaryIndex, *scpb.PrimaryIndex,
+		case *scpb.Namespace:
+			namesToDrop = append(namesToDrop, redact.SafeString(t.Name))
+		case *scpb.Function, *scpb.SecondaryIndex, *scpb.PrimaryIndex,
 			*scpb.TableLocalitySecondaryRegion, *scpb.Trigger:
 			// These can be safely skipped and will be cleaned up on their own because
 			// of dependents cleaned up above.
@@ -263,6 +271,8 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 				"dropped or skipped", e, target))
 		}
 	})
+
+	log.Infof(b, "DROP cascading to: %v", namesToDrop)
 }
 
 func undroppedBackrefs(b BuildCtx, id catid.DescID) ElementResultSet {
