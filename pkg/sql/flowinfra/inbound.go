@@ -9,6 +9,7 @@ import (
 	"context"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -107,7 +108,14 @@ func processInboundStreamHelper(
 		dst.ProducerDone()
 	}
 
+	var streamID execinfrapb.StreamID
+	var producer base.SQLInstanceID
+
 	if firstMsg != nil {
+		if firstMsg.Header != nil {
+			streamID = firstMsg.Header.StreamID
+			producer = firstMsg.Header.Producer
+		}
 		if res := processProducerMessage(
 			ctx, f, stream, dst, &sd, &draining, firstMsg,
 		); res.err != nil || res.consumerClosed {
@@ -136,8 +144,13 @@ func processInboundStreamHelper(
 			if err != nil {
 				if err != io.EOF {
 					// Communication error.
-					log.VEventf(ctx, 2, "Inbox communication error: %v", err)
-					err = pgerror.Wrap(err, pgcode.InternalConnectionFailure, "inbox communication error")
+					log.VEventf(
+						ctx, 2, "Inbox communication error in stream %d from %d: %v", streamID, producer, err,
+					)
+					err = pgerror.Wrapf(
+						err, pgcode.InternalConnectionFailure, "inbox communication error in stream %d from %d",
+						streamID, producer,
+					)
 					sendErrToConsumer(err)
 					errChan <- err
 					return
@@ -148,7 +161,7 @@ func processInboundStreamHelper(
 				return
 			}
 
-			log.VEvent(ctx, 2, "Inbox received message")
+			log.VEventf(ctx, 2, "Inbox received message in stream %d from %d", streamID, producer)
 			if res := processProducerMessage(
 				ctx, f, stream, dst, &sd, &draining, msg,
 			); res.err != nil || res.consumerClosed {

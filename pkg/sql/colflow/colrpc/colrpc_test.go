@@ -114,7 +114,7 @@ func handleStream(
 ) chan error {
 	handleStreamErrCh := make(chan error, 1)
 	go func() {
-		handleStreamErrCh <- inbox.RunWithStream(ctx, stream)
+		handleStreamErrCh <- inbox.RunWithStream(ctx, stream, nil /* header */)
 		if doneFn != nil {
 			doneFn()
 		}
@@ -272,8 +272,9 @@ func TestOutboxInbox(t *testing.T) {
 			defer outboxMemAcc.Close(outboxCtx)
 			outboxConverterMemAcc := testMemMonitor.MakeBoundAccount()
 			defer outboxConverterMemAcc.Close(ctx)
+			var nodeid base.NodeIDContainer
 			outbox, err := NewOutbox(
-				&execinfra.FlowCtx{Gateway: false},
+				&execinfra.FlowCtx{NodeID: base.NewSQLIDContainerForNode(&nodeid), Gateway: false},
 				0, /* processorID */
 				colmem.NewAllocator(outboxCtx, &outboxMemAcc, coldata.StandardColumnFactory),
 				&outboxConverterMemAcc, colexecargs.OpWithMetaInfo{Root: input}, typs, nil, /* getStats */
@@ -517,8 +518,9 @@ func TestInboxHostCtxCancellation(t *testing.T) {
 	outboxInput := colexecutils.NewFixedNumTuplesNoInputOp(testAllocator, 1 /* numTuples */, nil /* opToInitialize */)
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(outboxHostCtx)
+	var nodeid base.NodeIDContainer
 	outbox, err := NewOutbox(
-		&execinfra.FlowCtx{Gateway: false},
+		&execinfra.FlowCtx{NodeID: base.NewSQLIDContainerForNode(&nodeid), Gateway: false},
 		0, /* processorID */
 		colmem.NewAllocator(outboxHostCtx, &outboxMemAcc, coldata.StandardColumnFactory),
 		testMemAcc, colexecargs.OpWithMetaInfo{Root: outboxInput}, typs, nil, /* getStats */
@@ -700,8 +702,9 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			if tc.overrideExpectedMetadata != nil {
 				expectedMetadata = tc.overrideExpectedMetadata
 			}
+			var nodeid base.NodeIDContainer
 			outbox, err := NewOutbox(
-				&execinfra.FlowCtx{Gateway: false},
+				&execinfra.FlowCtx{NodeID: base.NewSQLIDContainerForNode(&nodeid), Gateway: false},
 				0, /* processorID */
 				colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
 				testMemAcc,
@@ -798,8 +801,9 @@ func BenchmarkOutboxInbox(b *testing.B) {
 
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)
+	var nodeid base.NodeIDContainer
 	outbox, err := NewOutbox(
-		&execinfra.FlowCtx{Gateway: false},
+		&execinfra.FlowCtx{NodeID: base.NewSQLIDContainerForNode(&nodeid), Gateway: false},
 		0, /* processorID */
 		colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
 		testMemAcc, colexecargs.OpWithMetaInfo{Root: input}, typs, nil, /* getStats */
@@ -865,8 +869,9 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)
+	var nodeid base.NodeIDContainer
 	outbox, err := NewOutbox(
-		&execinfra.FlowCtx{Gateway: false},
+		&execinfra.FlowCtx{NodeID: base.NewSQLIDContainerForNode(&nodeid), Gateway: false},
 		0, /* processorID */
 		colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
 		testMemAcc, colexecargs.OpWithMetaInfo{Root: input}, typs, nil, /* getStats */
