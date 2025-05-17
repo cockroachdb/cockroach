@@ -11573,3 +11573,45 @@ func TestChangefeedMVCCTimestampWithQueries(t *testing.T) {
 
 	cdcTest(t, testFn)
 }
+
+func TestCloudstorageParallelCompression(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numFeedsEach = 10
+
+	testutils.RunValues(t, "compression", []string{"zstd", "gzip"}, func(t *testing.T, compression string) {
+		s, cleanup := makeServer(t)
+		defer cleanup()
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT);`)
+		sqlDB.Exec(t, `INSERT INTO foo (a) SELECT * FROM generate_series(1, 5000);`)
+
+		t.Logf("inserted into table")
+
+		var jobIDs []int
+		for i := range numFeedsEach {
+			var jobID int
+			sqlDB.QueryRow(t, fmt.Sprintf(`CREATE CHANGEFEED FOR foo INTO 'nodelocal://1/%d-testout' WITH compression='%s', initial_scan='only', format='parquet';`, i, compression)).Scan(&jobID)
+			jobIDs = append(jobIDs, jobID)
+		}
+
+		t.Logf("created changefeeds")
+
+		const duration = 5 * time.Minute
+		const checkStatusInterval = 10 * time.Second
+
+		for start := timeutil.Now(); timeutil.Since(start) < duration; {
+			// Check the statuses of the jobs.
+			rows := sqlDB.QueryStr(t, `SELECT job_id, status FROM [SHOW JOBS] WHERE job_id = in $1`, jobIDs)
+			for _, r := range rows {
+				if r[1] != "succeeded" && r[1] != "running" {
+					t.Fatalf("job %s entered unknown state: %s", r[0], r[1])
+				}
+			}
+			time.Sleep(checkStatusInterval)
+		}
+	})
+}
+

@@ -228,16 +228,16 @@ func (parquetSink *parquetCloudStorageSink) EncodeAndEmitRow(
 	// The size of the alloc associated with all the rows in the file should be
 	// the number of bytes in the file and the number of buffered bytes.
 	prevAllocSize := file.alloc.Bytes()
-	newAllocSize := int64(file.buf.Len()) + bufferedBytesEstimate
+	newAllocSize := file.bufLen + bufferedBytesEstimate
 	file.adjustBytesToTarget(ctx, newAllocSize)
 
 	if log.V(1) && parquetSink.everyN.ShouldLog() {
 		log.Infof(ctx, "topic: %d/%d, written: %d, buffered %d, new alloc: %d, old alloc: %d",
-			topic.GetTopicIdentifier().TableID, topic.GetTopicIdentifier().FamilyID, int64(file.buf.Len()),
+			topic.GetTopicIdentifier().TableID, topic.GetTopicIdentifier().FamilyID, file.bufLen,
 			bufferedBytesEstimate, prevAllocSize, newAllocSize)
 	}
 
-	if int64(file.buf.Len())+bufferedBytesEstimate > s.targetMaxFileSize {
+	if file.bufLen+bufferedBytesEstimate > s.targetMaxFileSize {
 		s.metrics.recordSizeBasedFlush()
 
 		if err = file.parquetCodec.close(); err != nil {
