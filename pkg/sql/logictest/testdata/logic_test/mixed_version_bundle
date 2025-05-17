@@ -1,4 +1,4 @@
-# LogicTest: cockroach-go-testserver-configs
+# LogicTest: cockroach-go-testserver-24.3 cockroach-go-testserver-25.1
 
 # This is a sanity check that stmt bundle collection works around the
 # V25_2_AddUsernameToStmtDiagRequest migration. Note that we don't inspect the
