@@ -1795,6 +1795,14 @@ Can be set to 1 to ensure only one node is polled for data at a time.
 `,
 	}
 
+	ZipValidateFile = FlagInfo{
+		Name: "validate-zip-file",
+		Description: `
+Validate debug zip file after generation. This is a quick check to validate
+whether the generated zip file is valid and not corrupted.
+`,
+	}
+
 	StmtDiagDeleteAll = FlagInfo{
 		Name:        "all",
 		Description: `Delete all bundles.`,
