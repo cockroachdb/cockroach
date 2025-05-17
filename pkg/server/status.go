@@ -2889,13 +2889,23 @@ func (s *systemStatusServer) HotRangesV2(
 		ErrorsByNodeID: make(map[roachpb.NodeID]string),
 	}
 
-	var requestedNodes []roachpb.NodeID
-	if len(req.NodeID) > 0 {
-		requestedNodeID, local, err := s.parseNodeID(req.NodeID)
+	nodes := req.Nodes
+	if req.NodeID != "" {
+		nodes = append(nodes, req.NodeID)
+	}
+	requestedNodes := []roachpb.NodeID{}
+	for _, nodeID := range nodes {
+		requestedNodeID, _, err := s.parseNodeID(nodeID)
 		if err != nil {
 			return nil, err
 		}
-		if local {
+		// Only execute the local call if the node is explicitly the local string.
+		if localRE.Match([]byte(nodeID)) {
+			// can only call one node if the local string is set.
+			if len(req.Nodes) > 1 {
+				return nil, errors.New("cannot call 'local' mixed with other nodes")
+			}
+
 			resp, err := s.localHotRanges(ctx, tenantID, requestedNodeID)
 			if err != nil {
 				return nil, err
@@ -2912,10 +2922,11 @@ func (s *systemStatusServer) HotRangesV2(
 			response.Ranges = append(response.Ranges, resp.Ranges...)
 			return response, nil
 		}
-		requestedNodes = []roachpb.NodeID{requestedNodeID}
+
+		requestedNodes = append(requestedNodes, requestedNodeID)
 	}
 
-	remoteRequest := serverpb.HotRangesRequest{NodeID: "local", TenantID: req.TenantID}
+	remoteRequest := serverpb.HotRangesRequest{Nodes: []string{"local"}, TenantID: req.TenantID}
 	nodeFn := func(ctx context.Context, status serverpb.StatusClient, nodeID roachpb.NodeID) ([]*serverpb.HotRangesResponseV2_HotRange, error) {
 		nodeResp, err := status.HotRangesV2(ctx, &remoteRequest)
 		if err != nil {

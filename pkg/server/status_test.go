@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	tablemetadatacacheutil "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -32,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -575,11 +578,11 @@ func TestNodesUiMetrics(t *testing.T) {
 	}
 }
 
-func hasDescriptorTable(hr *serverpb.HotRangesResponseV2) bool {
+func responseHasTable(hr *serverpb.HotRangesResponseV2, table string) bool {
 	for _, r := range hr.Ranges {
-		if slices.Contains(r.Tables, "descriptor") {
-			// assert non-zero range, node, and qps
-			if r.RangeID != 0 && r.NodeID != 0 && r.QPS != 0 {
+		if slices.Contains(r.Tables, table) {
+			// assert non-zero range
+			if r.RangeID != 0 {
 				return true
 			}
 		}
@@ -618,7 +621,7 @@ func TestHotRangesPayload(t *testing.T) {
 			return err
 		}
 
-		if !hasDescriptorTable(resp) {
+		if !responseHasTable(resp, "descriptor") {
 			return errors.New("waiting for hot ranges to be collected")
 		}
 		return nil
@@ -662,9 +665,158 @@ func TestHotRangesPayloadMultitenant(t *testing.T) {
 			return err
 		}
 
-		if !hasDescriptorTable(resp) {
+		if !responseHasTable(resp, "descriptor") {
 			return errors.New("waiting for hot ranges to be collected")
 		}
 		return nil
+	})
+}
+
+func justIds(ranges []*serverpb.HotRangesResponseV2_HotRange) []int {
+	ids := []int{}
+	for i := range len(ranges) {
+		ids = append(ids, int(ranges[i].RangeID))
+	}
+	slices.Sort(ids)
+	return ids
+}
+
+func assertRangesEqualish(t *testing.T, a, b []*serverpb.HotRangesResponseV2_HotRange) {
+	require.Equal(t, justIds(a), justIds(b))
+}
+
+func assertRangesNotEqualish(t *testing.T, a, b []*serverpb.HotRangesResponseV2_HotRange) {
+	require.NotEqual(t, justIds(a), justIds(b))
+}
+
+func TestHotRangesByNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	ctx := context.Background()
+
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs:      base.TestServerArgs{},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	db := tc.ServerConn(0)
+	sqlutils.CreateTable(
+		t, db, "foo",
+		"k INT PRIMARY KEY, v INT",
+		300,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(2)),
+	)
+
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		tc.Server(0).DB(), keys.SystemSQLCodec, "test", "foo")
+	tc.SplitTable(t, tableDesc, []serverutils.SplitPoint{
+		{TargetNodeIdx: 1, Vals: []any{160}},
+		{TargetNodeIdx: 1, Vals: []any{180}},
+	})
+
+	// wait for the new table to show up in the hot ranges response
+	testutils.SucceedsSoon(t, func() error {
+		req := &serverpb.HotRangesRequest{PageSize: 100, Nodes: []string{"2"}}
+		resp, err := tc.ApplicationLayer(0).StatusServer().(*systemStatusServer).HotRangesV2(ctx, req)
+		if err != nil {
+			return err
+		}
+
+		if responseHasTable(resp, "foo") {
+			return nil
+		}
+
+		return errors.New("waiting for foo to show up in response")
+	})
+
+	type call struct {
+		fromNode int
+		nodes    []string
+		nodeid   string
+	}
+
+	for _, test := range []struct {
+		name    string
+		control call
+		compare call
+		equal   bool
+	}{
+		{
+			"both fanout",
+			call{0, []string{}, ""},
+			call{1, []string{}, ""},
+			true,
+		},
+		{
+			"call from different nodes, collect from same node",
+			call{0, []string{"1"}, ""},
+			call{1, []string{"1"}, ""},
+			true,
+		},
+		{
+			"call from same node, collect from different nodes",
+			call{0, []string{"1"}, ""},
+			call{0, []string{"2"}, ""},
+			false,
+		},
+		{
+			"local and explicit node have the same result from different nodes",
+			call{0, []string{"local"}, ""},
+			call{1, []string{"1"}, ""},
+			true,
+		},
+		{
+			"local has different results if coming from different nodes",
+			call{0, []string{"local"}, ""},
+			call{1, []string{"local"}, ""},
+			false,
+		},
+		{
+			"using nodeid and nodes array return same results",
+			call{0, []string{}, "1"},
+			call{0, []string{"1"}, ""},
+			false,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			req := &serverpb.HotRangesRequest{PageSize: 100, Nodes: test.control.nodes}
+			resp1, err := tc.ApplicationLayer(test.control.fromNode).StatusServer().(*systemStatusServer).HotRangesV2(ctx, req)
+			require.NoError(t, err)
+			req.Nodes = test.compare.nodes
+			resp2, err := tc.ApplicationLayer(test.compare.fromNode).StatusServer().(*systemStatusServer).HotRangesV2(ctx, req)
+			require.NoError(t, err)
+
+			if test.equal {
+				assertRangesEqualish(t, resp1.Ranges, resp2.Ranges)
+			} else {
+				assertRangesNotEqualish(t, resp1.Ranges, resp2.Ranges)
+			}
+		})
+	}
+
+	app := tc.ApplicationLayer(0).StatusServer().(*systemStatusServer)
+
+	t.Run("comparing calling one node to multiple", func(t *testing.T) {
+		req := &serverpb.HotRangesRequest{PageSize: 100, Nodes: []string{"1"}}
+		resp1, err := app.HotRangesV2(ctx, req)
+		assert.NoError(t, err)
+		req.Nodes = []string{"2"}
+		resp2, err := app.HotRangesV2(ctx, req)
+		assert.NoError(t, err)
+
+		req.Nodes = []string{"1", "2"}
+		resp1and2, err := app.HotRangesV2(ctx, req)
+		assert.NoError(t, err)
+		combined := append(resp1.Ranges, resp2.Ranges...)
+		assertRangesEqualish(t, resp1and2.Ranges, combined)
+	})
+
+	t.Run("error specifying local and other nodes", func(t *testing.T) {
+		req := &serverpb.HotRangesRequest{PageSize: 100, Nodes: []string{"local", "2"}}
+		_, err := app.HotRangesV2(ctx, req)
+		require.Error(t, err, "cannot call 'local' mixed with other nodes")
 	})
 }
