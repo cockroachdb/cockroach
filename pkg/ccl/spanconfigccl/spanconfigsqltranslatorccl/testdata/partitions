@@ -45,15 +45,15 @@ ALTER PARTITION north_america OF TABLE db.person CONFIGURE ZONE USING gc.ttlseco
 translate database=db table=person
 ----
 /Table/106{-/1}                            range default
-/Table/106/1{-/"AU"}                       ttl_seconds=1
-/Table/106/1/"AU"{-/PrefixEnd}             ttl_seconds=2
-/Table/106/1/"{AU"/PrefixEnd-CA"}          ttl_seconds=1
-/Table/106/1/"CA"{-/PrefixEnd}             ttl_seconds=3
-/Table/106/1/"{CA"/PrefixEnd-NZ"}          ttl_seconds=1
-/Table/106/1/"NZ"{-/PrefixEnd}             ttl_seconds=2
-/Table/106/1/"{NZ"/PrefixEnd-US"}          ttl_seconds=1
-/Table/106/1/"US"{-/PrefixEnd}             ttl_seconds=3
-/Table/106/{1/"US"/PrefixEnd-2}            ttl_seconds=1
+/Table/106/1{-/"AU"}                       ttl_seconds=1 voter_constraints=[]
+/Table/106/1/"AU"{-/PrefixEnd}             ttl_seconds=2 voter_constraints=[]
+/Table/106/1/"{AU"/PrefixEnd-CA"}          ttl_seconds=1 voter_constraints=[]
+/Table/106/1/"CA"{-/PrefixEnd}             ttl_seconds=3 voter_constraints=[]
+/Table/106/1/"{CA"/PrefixEnd-NZ"}          ttl_seconds=1 voter_constraints=[]
+/Table/106/1/"NZ"{-/PrefixEnd}             ttl_seconds=2 voter_constraints=[]
+/Table/106/1/"{NZ"/PrefixEnd-US"}          ttl_seconds=1 voter_constraints=[]
+/Table/106/1/"US"{-/PrefixEnd}             ttl_seconds=3 voter_constraints=[]
+/Table/106/{1/"US"/PrefixEnd-2}            ttl_seconds=1 voter_constraints=[]
 /Table/10{6/2-7}                           range default
 
 exec-sql
@@ -75,19 +75,19 @@ ALTER PARTITION yung_na OF TABLE db.person CONFIGURE ZONE USING gc.ttlseconds = 
 translate database=db table=person
 ----
 /Table/106{-/1}                            range default
-/Table/106/1{-/"AU"}                       ttl_seconds=1
-/Table/106/1/"AU"{-/9131}                  ttl_seconds=4
-/Table/106/1/"AU"/{9131-PrefixEnd}         ttl_seconds=5
-/Table/106/1/"{AU"/PrefixEnd-CA"}          ttl_seconds=1
-/Table/106/1/"CA"{-/9131}                  ttl_seconds=6
-/Table/106/1/"CA"/{9131-PrefixEnd}         ttl_seconds=7
-/Table/106/1/"{CA"/PrefixEnd-NZ"}          ttl_seconds=1
-/Table/106/1/"NZ"{-/9131}                  ttl_seconds=4
-/Table/106/1/"NZ"/{9131-PrefixEnd}         ttl_seconds=5
-/Table/106/1/"{NZ"/PrefixEnd-US"}          ttl_seconds=1
-/Table/106/1/"US"{-/9131}                  ttl_seconds=6
-/Table/106/1/"US"/{9131-PrefixEnd}         ttl_seconds=7
-/Table/106/{1/"US"/PrefixEnd-2}            ttl_seconds=1
+/Table/106/1{-/"AU"}                       ttl_seconds=1 voter_constraints=[]
+/Table/106/1/"AU"{-/9131}                  ttl_seconds=4 voter_constraints=[]
+/Table/106/1/"AU"/{9131-PrefixEnd}         ttl_seconds=5 voter_constraints=[]
+/Table/106/1/"{AU"/PrefixEnd-CA"}          ttl_seconds=1 voter_constraints=[]
+/Table/106/1/"CA"{-/9131}                  ttl_seconds=6 voter_constraints=[]
+/Table/106/1/"CA"/{9131-PrefixEnd}         ttl_seconds=7 voter_constraints=[]
+/Table/106/1/"{CA"/PrefixEnd-NZ"}          ttl_seconds=1 voter_constraints=[]
+/Table/106/1/"NZ"{-/9131}                  ttl_seconds=4 voter_constraints=[]
+/Table/106/1/"NZ"/{9131-PrefixEnd}         ttl_seconds=5 voter_constraints=[]
+/Table/106/1/"{NZ"/PrefixEnd-US"}          ttl_seconds=1 voter_constraints=[]
+/Table/106/1/"US"{-/9131}                  ttl_seconds=6 voter_constraints=[]
+/Table/106/1/"US"/{9131-PrefixEnd}         ttl_seconds=7 voter_constraints=[]
+/Table/106/{1/"US"/PrefixEnd-2}            ttl_seconds=1 voter_constraints=[]
 /Table/10{6/2-7}                           range default
 
 exec-sql
@@ -119,8 +119,8 @@ ALTER PARTITION P2N1N2 OF TABLE db.list_default_then_range CONFIGURE ZONE USING 
 translate database=db table=list_default_then_range
 ----
 /Table/107{-/1}                            range default
-/Table/107/1{-/10}                         ttl_seconds=5
-/Table/107/{1/10-2}                        ttl_seconds=6
+/Table/107/1{-/10}                         ttl_seconds=5 voter_constraints=[]
+/Table/107/{1/10-2}                        ttl_seconds=6 voter_constraints=[]
 /Table/10{7/2-8}                           range default
 
 exec-sql
@@ -148,11 +148,11 @@ ALTER PARTITION six_and_seven OF TABLE db.list_multi_column_partitions CONFIGURE
 
 translate database=db table=list_multi_column_partitions
 ----
-/Table/108{-/1}                            ttl_seconds=3
-/Table/108/1{-/6/7}                        ttl_seconds=1
-/Table/108/1/6/{7-8}                       ttl_seconds=2
-/Table/108/{1/6/8-2}                       ttl_seconds=1
-/Table/10{8/2-9}                           ttl_seconds=3
+/Table/108{-/1}                            ttl_seconds=3 voter_constraints=[]
+/Table/108/1{-/6/7}                        ttl_seconds=1 voter_constraints=[]
+/Table/108/1/6/{7-8}                       ttl_seconds=2 voter_constraints=[]
+/Table/108/{1/6/8-2}                       ttl_seconds=1 voter_constraints=[]
+/Table/10{8/2-9}                           ttl_seconds=3 voter_constraints=[]
 
 exec-sql
 CREATE TABLE db.partition_by_list(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i) (
@@ -180,16 +180,16 @@ ALTER PARTITION everything_else OF TABLE db.partition_by_list CONFIGURE ZONE USI
 
 translate database=db table=partition_by_list
 ----
-/Table/109{-/1}                            ttl_seconds=1
-/Table/109/1{-/1}                          ttl_seconds=4
-/Table/109/1/{1-2}                         ttl_seconds=2
-/Table/109/1/{2-3}                         ttl_seconds=4
-/Table/109/1/{3-4}                         ttl_seconds=3
-/Table/109/1/{4-5}                         ttl_seconds=3
-/Table/109/1/{5-6}                         ttl_seconds=2
-/Table/109/1/{6-7}                         ttl_seconds=4
-/Table/109/{1/7-2}                         ttl_seconds=4
-/Table/109/{2-PrefixEnd}                   ttl_seconds=1
+/Table/109{-/1}                            ttl_seconds=1 voter_constraints=[]
+/Table/109/1{-/1}                          ttl_seconds=4 voter_constraints=[]
+/Table/109/1/{1-2}                         ttl_seconds=2 voter_constraints=[]
+/Table/109/1/{2-3}                         ttl_seconds=4 voter_constraints=[]
+/Table/109/1/{3-4}                         ttl_seconds=3 voter_constraints=[]
+/Table/109/1/{4-5}                         ttl_seconds=3 voter_constraints=[]
+/Table/109/1/{5-6}                         ttl_seconds=2 voter_constraints=[]
+/Table/109/1/{6-7}                         ttl_seconds=4 voter_constraints=[]
+/Table/109/{1/7-2}                         ttl_seconds=4 voter_constraints=[]
+/Table/109/{2-PrefixEnd}                   ttl_seconds=1 voter_constraints=[]
 
 exec-sql
 CREATE TABLE db.test(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i) (
@@ -212,11 +212,11 @@ ALTER PARTITION one_and_five OF TABLE db.test CONFIGURE ZONE USING gc.ttlseconds
 translate database=db table=test
 ----
 /Table/110{-/1}                            range default
-/Table/110/1{-/1}                          num_replicas=4
-/Table/110/1/{1-2}                         ttl_seconds=3 num_replicas=4
-/Table/110/1/{2-5}                         num_replicas=4
-/Table/110/1/{5-6}                         ttl_seconds=3 num_replicas=4
-/Table/110/{1/6-2}                         num_replicas=4
+/Table/110/1{-/1}                          num_replicas=4 voter_constraints=[]
+/Table/110/1/{1-2}                         ttl_seconds=3 num_replicas=4 voter_constraints=[]
+/Table/110/1/{2-5}                         num_replicas=4 voter_constraints=[]
+/Table/110/1/{5-6}                         ttl_seconds=3 num_replicas=4 voter_constraints=[]
+/Table/110/{1/6-2}                         num_replicas=4 voter_constraints=[]
 /Table/11{0/2-1}                           range default
 
 exec-sql
@@ -241,17 +241,17 @@ ALTER PARTITION p2 OF index db.part@idx CONFIGURE ZONE USING num_replicas = 11;
 translate database=db table=part
 ----
 /Table/111{-/2/10}                         range default
-/Table/111/2/1{0-1}                        num_replicas=10
+/Table/111/2/1{0-1}                        num_replicas=10 voter_constraints=[]
 /Table/111/2/{11-20}                       range default
-/Table/111/2/2{0-1}                        num_replicas=10
+/Table/111/2/2{0-1}                        num_replicas=10 voter_constraints=[]
 /Table/111/2/{21-30}                       range default
-/Table/111/2/3{0-1}                        num_replicas=10
+/Table/111/2/3{0-1}                        num_replicas=10 voter_constraints=[]
 /Table/111/2/{31-40}                       range default
-/Table/111/2/4{0-1}                        num_replicas=11
+/Table/111/2/4{0-1}                        num_replicas=11 voter_constraints=[]
 /Table/111/2/{41-50}                       range default
-/Table/111/2/5{0-1}                        num_replicas=11
+/Table/111/2/5{0-1}                        num_replicas=11 voter_constraints=[]
 /Table/111/2/{51-60}                       range default
-/Table/111/2/6{0-1}                        num_replicas=11
+/Table/111/2/6{0-1}                        num_replicas=11 voter_constraints=[]
 /Table/11{1/2/61-2}                        range default
 
 exec-sql
@@ -268,11 +268,11 @@ ALTER PARTITION p OF INDEX db.foo@idx CONFIGURE ZONE USING gc.ttlseconds = 5;
 translate database=db table=foo
 ----
 /Table/112{-/1/1}                          range default
-/Table/112/1/{1-2}                         ttl_seconds=2
+/Table/112/1/{1-2}                         ttl_seconds=2 voter_constraints=[]
 /Table/112/1/{2-5}                         range default
-/Table/112/1/{5-6}                         ttl_seconds=2
+/Table/112/1/{5-6}                         ttl_seconds=2 voter_constraints=[]
 /Table/112/{1/6-2/2}                       range default
-/Table/112/2/{2-3}                         ttl_seconds=5
+/Table/112/2/{2-3}                         ttl_seconds=5 voter_constraints=[]
 /Table/112/2/{3-4}                         range default
-/Table/112/2/{4-5}                         ttl_seconds=5
+/Table/112/2/{4-5}                         ttl_seconds=5 voter_constraints=[]
 /Table/11{2/2/5-3}                         range default

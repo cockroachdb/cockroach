@@ -22,7 +22,7 @@ ALTER RANGE timeseries CONFIGURE ZONE USING gc.ttlseconds=1000
 
 translate named-zone=timeseries
 ----
-/System{/tsd-tse}                          ttl_seconds=1000
+/System{/tsd-tse}                          ttl_seconds=1000 voter_constraints=[]
 
 # Change a field on the liveness range and ensure it behaves as expected.
 exec-sql
@@ -31,7 +31,7 @@ ALTER RANGE liveness CONFIGURE ZONE USING num_replicas=7;
 
 translate named-zone=liveness
 ----
-/System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=7
+/System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=7 voter_constraints=[]
 
 # We are allowed to discard the liveness range's zone configuration. The
 # generated span should have the RANGE DEFAULT config.
