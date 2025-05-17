@@ -760,6 +760,19 @@ INSERT INTO ins VALUES (13) RETURNING (SELECT k FROM other);
 ----
 99
 
+statement ok
+CREATE FUNCTION insert_15(n INT) RETURNS INT AS $$
+  INSERT INTO ins VALUES (15) RETURNING n;
+$$ LANGUAGE SQL
+
+query I
+SELECT insert_15(0)
+----
+0
+
+statement ok
+DROP FUNCTION insert_15
+
 # Verify that only rows that pass the USING expression are allowed (even numbers).
 statement ok
 INSERT INTO ins VALUES (2),(4) RETURNING c1;
