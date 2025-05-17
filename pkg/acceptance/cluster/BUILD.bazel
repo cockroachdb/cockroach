@@ -22,7 +22,7 @@ go_library(
         "//pkg/security",
         "//pkg/security/certnames",
         "//pkg/security/username",
-        "//pkg/storage/storagepb",
+        "//pkg/storage/storageconfig",
         "//pkg/testutils/datapathutils",
         "//pkg/util/log",
         "//pkg/util/log/logflags",
