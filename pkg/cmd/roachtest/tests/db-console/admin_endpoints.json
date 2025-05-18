@@ -1,0 +1,129 @@
+{
+  "endpoints": [
+    {
+      "url": "/_admin/v1/users",
+      "verb": "GET"
+    },
+    {
+      "url": "/_admin/v1/databases",
+      "verb": "GET"
+    },
+    {
+      "url": "/_admin/v1/databases/{database}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_admin/v1/databases/{database}/tables/{table}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_admin/v1/databases/{database}/tables/{table}/stats",
+      "verb": "GET"
+    },
+    {
+      "url": "/_admin/v1/nontablestats",
+      "verb": "GET"
+    },
+    {
+      "url": "/_admin/v1/events",
+      "verb": "GET"
+    },
+    {
+      "url": "/_admin/v1/uidata",
+      "verb": "POST",
+			"skip": true
+    },
+    {
+      "url": "/_admin/v1/uidata",
+      "verb": "GET",
+			"skip": true
+    },
+    {
+      "url": "/_admin/v1/cluster",
+      "verb": "GET"
+    },
+    {
+      "url": "/_admin/v1/settings",
+      "verb": "GET"
+    },
+    {
+      "url": "/_admin/v1/health",
+      "verb": "GET"
+    },
+    {
+      "url": "/health",
+      "verb": "GET"
+    },
+    {
+      "url": "/_admin/v1/liveness",
+      "verb": "GET"
+    },
+    {
+      "url": "/_admin/v1/jobs",
+      "verb": "GET"
+    },
+    {
+      "url": "/_admin/v1/jobs/{job_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_admin/v1/locations",
+      "verb": "GET"
+    },
+    {
+      "url": "/_admin/v1/queryplan",
+      "verb": "GET",
+			"skip": true
+    },
+    {
+      "url": "/_admin/v1/rangelog",
+      "verb": "GET"
+    },
+    {
+      "url": "/_admin/v1/rangelog/{range_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_admin/v1/data_distribution",
+      "verb": "GET"
+    },
+    {
+      "url": "/_admin/v1/metricmetadata",
+      "verb": "GET"
+    },
+    {
+      "url": "/_admin/v1/chartcatalog",
+      "verb": "GET"
+    },
+    {
+      "url": "/_admin/v1/enqueue_range",
+      "verb": "POST"
+    },
+    {
+      "url": "/_admin/v1/trace_snapshots",
+      "verb": "GET"
+    },
+    {
+      "url": "/_admin/v1/trace_snapshots",
+      "verb": "POST",
+			"skip": true
+    },
+    {
+      "url": "/_admin/v1/trace_snapshots/{snapshot_id}",
+      "verb": "GET",
+			"skip": true
+    },
+    {
+      "url": "/_admin/v1/traces",
+      "verb": "POST"
+    },
+    {
+      "url": "/_admin/v1/settracerecordingtype",
+      "verb": "POST"
+    },
+    {
+      "url": "/_admin/v1/tenants",
+      "verb": "GET"
+    }
+  ]
+} 
