@@ -34,8 +34,8 @@ func TestBalancedKMeans(t *testing.T) {
 	}
 
 	workspace := &workspace.T{}
-	rng := rand.New(rand.NewSource(42))
-	dataset := testutils.LoadDataset(t, testutils.ImagesDataset)
+	images := testutils.LoadDataset(t, testutils.ImagesDataset)
+	laion := testutils.LoadDataset(t, testutils.LaionDataset)
 
 	testCases := []struct {
 		desc           string
@@ -46,6 +46,7 @@ func TestBalancedKMeans(t *testing.T) {
 		leftCentroid   vector.T
 		rightCentroid  vector.T
 		skipPinTest    bool
+		testUnbalanced bool
 	}{
 		{
 			desc:           "partition vector set with only 2 elements",
@@ -128,8 +129,8 @@ func TestBalancedKMeans(t *testing.T) {
 				9, -14, 20,
 				5, 9, 4,
 			}, 3),
-			leftOffsets:  []uint64{0, 3},
-			rightOffsets: []uint64{1, 2, 4},
+			leftOffsets:  []uint64{1, 2},
+			rightOffsets: []uint64{0, 3, 4},
 		},
 		{
 			desc:           "cosine distance",
@@ -147,7 +148,7 @@ func TestBalancedKMeans(t *testing.T) {
 		{
 			desc:           "high-dimensional unit vectors, Euclidean distance",
 			distanceMetric: vecdist.L2Squared,
-			vectors:        dataset.Slice(0, 100),
+			vectors:        images.Slice(0, 100),
 			// It's challenging to test pinLeftCentroid for this case, due to the
 			// inherent randomness of the K-means++ algorithm. The other test cases
 			// should be sufficient to test that, however.
@@ -156,22 +157,39 @@ func TestBalancedKMeans(t *testing.T) {
 		{
 			desc:           "high-dimensional unit vectors, InnerProduct distance",
 			distanceMetric: vecdist.InnerProduct,
-			vectors:        dataset.Slice(0, 100),
+			vectors:        images.Slice(0, 100),
 			skipPinTest:    true,
 		},
 		{
 			desc:           "high-dimensional unit vectors, Cosine distance",
 			distanceMetric: vecdist.Cosine,
-			vectors:        dataset.Slice(0, 100),
+			vectors:        images.Slice(0, 100),
 			skipPinTest:    true,
+		},
+		{
+			// Note that laion.Slice(0, 100) actually fails the check that vectors
+			// in the left partition are closer to the left centroid than vectors
+			// in the right partition. This is because K-means++ happens to pick
+			// bad centroids that result in > 2/3rd the vectors being closer to
+			// the right centroid. In that case, the BalancedKMeans class will
+			// deliberately move vectors to the left partition, even though they
+			// are closer to the right partition, in order to obey the balancing
+			// constraint.
+			desc:           "different dataset, InnerProduct distance",
+			distanceMetric: vecdist.InnerProduct,
+			vectors:        laion.Slice(0, 100),
+			skipPinTest:    true,
+			testUnbalanced: true,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
+			// Re-initialize rng for each iteration so that order of test cases
+			// doesn't matter.
 			kmeans := BalancedKmeans{
 				Workspace:      workspace,
-				Rand:           rng,
+				Rand:           rand.New(rand.NewSource(42)),
 				DistanceMetric: tc.distanceMetric,
 			}
 
@@ -217,7 +235,11 @@ func TestBalancedKMeans(t *testing.T) {
 			// partition than those in the right partition.
 			leftMean := calcMeanDistance(tc.distanceMetric, tc.vectors, leftCentroid, leftOffsets)
 			rightMean := calcMeanDistance(tc.distanceMetric, tc.vectors, leftCentroid, rightOffsets)
-			require.LessOrEqual(t, leftMean, rightMean)
+			if tc.testUnbalanced {
+				require.Greater(t, leftMean, rightMean)
+			} else {
+				require.LessOrEqual(t, leftMean, rightMean)
+			}
 
 			if !tc.skipPinTest {
 				// Check that pinning the left centroid returns the same right centroid.
