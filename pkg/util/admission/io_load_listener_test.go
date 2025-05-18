@@ -266,10 +266,11 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	ioll := ioLoadListener{
-		settings:         st,
-		kvRequester:      req,
-		l0CompactedBytes: metric.NewCounter(l0CompactedBytes),
-		l0TokensProduced: metric.NewCounter(l0TokensProduced),
+		settings:             st,
+		kvRequester:          req,
+		diskBandwidthLimiter: newDiskBandwidthLimiter(),
+		l0CompactedBytes:     metric.NewCounter(l0CompactedBytes),
+		l0TokensProduced:     metric.NewCounter(l0TokensProduced),
 	}
 	ioll.kvGranter = kvGranter
 	// Bug 1: overflow when totalNumByteTokens is too large.
