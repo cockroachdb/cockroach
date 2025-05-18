@@ -78,6 +78,10 @@ func (km *BalancedKmeans) ComputeCentroids(
 	tolerance := km.calculateTolerance(vectors)
 
 	// Pick 2 centroids to start, using the K-means++ algorithm.
+	// TOOD(andyk): We should consider adding an outer loop here to generate new
+	// random centroids in the case where more than 2/3 the vectors are assigned
+	// to one of the partitions. If we're that unbalanced, it might just be
+	// because we picked bad starting centroids and retrying could correct that.
 	tempLeftCentroid := km.Workspace.AllocVector(vectors.Dims)
 	defer km.Workspace.FreeVector(tempLeftCentroid)
 	newLeftCentroid := tempLeftCentroid
@@ -109,12 +113,15 @@ func (km *BalancedKmeans) ComputeCentroids(
 		}
 		calcPartitionCentroid(km.DistanceMetric, vectors, rightOffsets, newRightCentroid)
 
-		// Check if algorithm has converged.
-		// TODO(andyk): Is there anything better than using Euclidean distances to
-		// check for convergence?
+		// Check for convergence using the scikit-learn algorithm.
+		// NOTE: This uses Euclidean distance, even when using spherical centroids
+		// with Cosine or InnerProduct distances. This approach mirrors the
+		// spherecluster library. Since spherical centroids are always normalized
+		// (unit vectors), the squared Euclidean distance is 2x the Cosine or
+		// InnerProduct distance, so it's a reasonable convergence check.
 		leftCentroidShift := num32.L2SquaredDistance(leftCentroid, newLeftCentroid)
 		rightCentroidShift := num32.L2SquaredDistance(rightCentroid, newRightCentroid)
-		if leftCentroidShift <= tolerance && rightCentroidShift <= tolerance {
+		if leftCentroidShift+rightCentroidShift <= tolerance {
 			break
 		}
 
