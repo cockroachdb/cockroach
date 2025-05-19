@@ -88,31 +88,49 @@ func StartServer() error {
 	return nil
 }
 
-func StartChatServer() {
+func StartChatServer() error {
 	listener, err := net.Listen("tcp", ":9000")
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
 	}
 	defer listener.Close()
 
+	// create a listen mux that evalutes enough bytes to recognize the DRPC header
+	lisMux := drpcmigrate.NewListenMux(listener, len(drpcmigrate.DRPCHeader))
+	// Start the mux in a background goroutine
+	go func() {
+		if err := lisMux.Run(context.Background()); err != nil {
+			log.Fatalf("ListenMux run failed: %v", err)
+		}
+	}()
+	// grab the listen mux route for the DRPC Header and default listener
+	drpcLis := lisMux.Route(drpcmigrate.DRPCHeader)
+
 	mux := drpcmux.New()
-	server := drpcserver.New(mux)
 	if err := chatpb.DRPCRegisterChatService(mux, &chatServer{}); err != nil {
 		log.Fatalf("Failed to register: %v", err)
 	}
+	server := drpcserver.New(mux)
 
 	log.Println("DRPC server listening on :9000")
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Printf("Accept error: %v", err)
-			continue
-		}
-		go func(conn net.Conn) {
-			ctx := context.Background()
-			if err := server.ServeOne(ctx, conn); err != nil {
-				log.Printf("Serve error: %v", err)
-			}
-		}(conn)
-	}
+	//for {
+	//	conn, err := listener.Accept()
+	//	if err != nil {
+	//		log.Printf("Accept error: %v", err)
+	//		continue
+	//	}
+	//	go func(conn net.Conn) {
+	//		ctx := context.Background()
+	//		if err := server.ServeOne(ctx, conn); err != nil {
+	//			log.Printf("Serve error: %v", err)
+	//		}
+	//	}(conn)
+	//}
+	//
+	// run the server
+	// N.B.: if you want TLS, you need to wrap the net.Listener with
+	// TLS before passing to Serve here.
+	ctx := context.Background()
+	return server.Serve(ctx, drpcLis)
+	return nil
 }

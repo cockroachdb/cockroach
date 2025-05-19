@@ -7,7 +7,11 @@ import (
 )
 
 func main() {
-	if err := drpc.StartServer(); err != nil {
+	//if err := drpc.StartServer(); err != nil {
+	//	log.Fatal(err)
+	//}
+
+	if err := drpc.StartChatServer(); err != nil {
 		log.Fatal(err)
 	}
 }

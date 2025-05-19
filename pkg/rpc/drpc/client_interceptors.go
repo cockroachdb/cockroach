@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/cockroachdb/cockroach/pkg/rpc/drpc/chatpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/drpc/greeterpb"
 	"storj.io/drpc"
 	"storj.io/drpc/drpcconn"
@@ -13,6 +14,12 @@ import (
 type UnaryClientInterceptor func(ctx context.Context, rpc string, in, out drpc.Message, cc *ClientConn, enc drpc.Encoding, next UnaryInvoker) error
 
 type UnaryInvoker func(ctx context.Context, rpc string, in, out drpc.Message, cc *ClientConn, enc drpc.Encoding) error
+
+// Streamer is a function that opens a new DRPC stream.
+type Streamer func(ctx context.Context, method string, conn *ClientConn) (drpc.Stream, error)
+
+// StreamClientInterceptor is the DRPC equivalent of a gRPC stream client interceptor.
+type StreamClientInterceptor func(ctx context.Context, method string, conn *ClientConn, streamer Streamer) (drpc.Stream, error)
 
 // new folder for interceptors in drpc fork.
 
@@ -38,27 +45,29 @@ type UnaryInvoker func(ctx context.Context, rpc string, in, out drpc.Message, cc
 type DialOption func(*ClientConnOptions)
 
 type ClientConnOptions struct {
-	unaryInts []UnaryClientInterceptor
-	//streamInts []StreamClientInterceptor
+	unaryInts  []UnaryClientInterceptor
+	streamInts []StreamClientInterceptor
 }
 
-func WithUnaryInterceptor(ints ...UnaryClientInterceptor) DialOption {
+func WithChainUnaryInterceptor(ints ...UnaryClientInterceptor) DialOption {
 	return func(opt *ClientConnOptions) {
 		opt.unaryInts = append(opt.unaryInts, ints...)
 	}
 }
 
-/*func WithStreamInterceptor(ints ...StreamClientInterceptor) DialOption {
+func WithChainStreamInterceptor(ints ...StreamClientInterceptor) DialOption {
 	return func(opt *ClientConnOptions) {
 		opt.streamInts = append(opt.streamInts, ints...)
 	}
-}*/
+}
 
 func createDRPCConnection(ctx context.Context, target string) (drpc.Conn, error) {
+	// Dial Raw TCP connection
 	rawConn, err := drpcmigrate.DialWithHeader(ctx, "tcp", target, drpcmigrate.DRPCHeader)
 	if err != nil {
 		return nil, err
 	}
+	// drpc connection
 	dconn := drpcconn.New(rawConn)
 	var conn drpc.Conn = dconn
 	return conn, nil
@@ -72,12 +81,49 @@ func applyDialOptions(opts []DialOption) *ClientConnOptions {
 	return options
 }
 
+func TestStreamFunction() error {
+	ctx := context.Background()
+	clientConn, err := Dial(
+		"localhost:9000",
+		WithChainUnaryInterceptor(logUnaryInterceptor() /*, authUnaryInterceptor*/),
+		WithChainStreamInterceptor(LogStreamInterceptor()),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer clientConn.Close()
+
+	// - Create the DRPC client
+	client := chatpb.NewDRPCChatServiceClient(clientConn)
+	// - Context with timeout
+	//ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	//defer cancel()
+
+	// - Open the bidirectional stream
+	stream, err := client.ChatStream(ctx)
+	if err != nil {
+		log.Fatalf("ChatStream error: %v", err)
+	}
+	// - Send & receive a few messages
+	for _, text := range []string{"Hi", "How are you?", "Bye!"} {
+		if err := stream.Send(&chatpb.ChatMessage{Sender: "Client", Text: text}); err != nil {
+			log.Fatalf("Send error: %v", err)
+		}
+		resp, err := stream.Recv()
+		if err != nil {
+			log.Fatalf("Recv error: %v", err)
+		}
+		log.Printf("Server replied: %s", resp.Text)
+	}
+	return nil
+}
+
 func TestFunction() error {
 	ctx := context.Background()
 	clientConn, err := Dial(
 		"localhost:9090",
-		WithUnaryInterceptor(logUnaryInterceptor() /*, authUnaryInterceptor*/),
-		/*WithStreamInterceptor(logStreamInterceptor),*/
+		WithChainUnaryInterceptor(logUnaryInterceptor() /*, authUnaryInterceptor*/),
+		/*WithChainStreamInterceptor(logStreamInterceptor()),*/
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -115,6 +161,36 @@ func logUnaryInterceptor() UnaryClientInterceptor {
 	}
 }
 
+type loggingStream struct {
+	drpc.Stream
+}
+
+func (s *loggingStream) MsgSend(msg drpc.Message, enc drpc.Encoding) error {
+	log.Printf("[LOG ] → Sending message: %T %#v", msg, msg)
+	return s.Stream.MsgSend(msg, enc)
+}
+
+func (s *loggingStream) MsgRecv(msg drpc.Message, enc drpc.Encoding) error {
+	err := s.Stream.MsgRecv(msg, enc)
+	if err == nil {
+		log.Printf("[LOG ] ← Received message: %T %#v", msg, msg)
+	}
+	return err
+}
+
+func LogStreamInterceptor() StreamClientInterceptor {
+	return func(ctx context.Context, rpc string, cc *ClientConn, streamer Streamer) (drpc.Stream, error) {
+		log.Printf("Starting stream: %s", rpc)
+		stream, err := streamer(ctx, rpc, cc)
+		if err != nil {
+			log.Printf("Stream %s failed: %v", rpc, err)
+			return nil, err
+		}
+		log.Printf("Stream %s succeeded", rpc)
+		return &loggingStream{stream}, nil
+	}
+}
+
 // ------------------- inspired from grpc code
 // chainUnaryClientInterceptors chains all unary client interceptors into one.
 func chainUnaryClientInterceptors(cc *ClientConn) {
@@ -142,5 +218,33 @@ func getChainUnaryInvoker(
 	}
 	return func(ctx context.Context, method string, in, out drpc.Message, cc *ClientConn, enc drpc.Encoding) error {
 		return interceptors[curr+1](ctx, method, in, out, cc, enc, getChainUnaryInvoker(interceptors, curr+1, finalInvoker))
+	}
+}
+
+// chainStreamClientInterceptors chains all stream client interceptors into one.
+func chainStreamClientInterceptors(cc *ClientConn) {
+	interceptors := cc.dopts.chainStreamInts
+	var chainedInt StreamClientInterceptor
+	if len(interceptors) == 0 {
+		chainedInt = nil
+	} else if len(interceptors) == 1 {
+		chainedInt = interceptors[0]
+	} else {
+		chainedInt = func(ctx context.Context, method string, cc *ClientConn, streamer Streamer) (drpc.Stream, error) {
+			return interceptors[0](ctx, method, cc, getChainStreamer(interceptors, 0, streamer))
+		}
+	}
+	cc.dopts.streamInt = chainedInt
+}
+
+// getChainStreamer recursively generate the chained client stream constructor.
+func getChainStreamer(
+	interceptors []StreamClientInterceptor, curr int, finalStreamer Streamer,
+) Streamer {
+	if curr == len(interceptors)-1 {
+		return finalStreamer
+	}
+	return func(ctx context.Context, method string, cc *ClientConn) (drpc.Stream, error) {
+		return interceptors[curr+1](ctx, method, cc, getChainStreamer(interceptors, curr+1, finalStreamer))
 	}
 }

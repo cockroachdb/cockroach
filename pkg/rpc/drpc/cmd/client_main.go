@@ -7,7 +7,10 @@ import (
 )
 
 func main() {
-	if err := drpc.TestFunction(); err != nil {
+	//if err := drpc.TestFunction(); err != nil {
+	//	log.Fatal(err)
+	//}
+	if err := drpc.TestStreamFunction(); err != nil {
 		log.Fatal(err)
 	}
 }
