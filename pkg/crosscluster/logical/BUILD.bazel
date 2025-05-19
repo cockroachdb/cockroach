@@ -7,6 +7,7 @@ go_library(
         "create_logical_replication_stmt.go",
         "dead_letter_queue.go",
         "event_decoder.go",
+        "kv_reader.go",
         "logical_replication_dist.go",
         "logical_replication_job.go",
         "logical_replication_writer_processor.go",

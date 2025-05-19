@@ -164,7 +164,7 @@ func (tu *tombstoneUpdater) getDeleter(ctx context.Context, txn *kv.Txn) (row.De
 			return row.Deleter{}, err
 		}
 
-		cols, err := writeableColunms(ctx, tu.leased.descriptor.Underlying().(catalog.TableDescriptor))
+		cols, err := writeableColumns(ctx, tu.leased.descriptor.Underlying().(catalog.TableDescriptor))
 		if err != nil {
 			return row.Deleter{}, err
 		}

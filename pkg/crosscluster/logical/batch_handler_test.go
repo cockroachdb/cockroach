@@ -183,8 +183,7 @@ func TestBatchHandlerExhaustive(t *testing.T) {
 	if uniqueConstraint {
 		runner.Exec(t, `ALTER TABLE test_table ADD CONSTRAINT unique_value UNIQUE (value)`)
 	}
-	// TODO(jeffswenson): enable this metamorphic option after fixing #146465.
-	if false && addAndRemoveColumn {
+	if addAndRemoveColumn {
 		runner.Exec(t, `ALTER TABLE test_table ADD COLUMN temp_col INT`)
 		runner.Exec(t, `ALTER TABLE test_table DROP COLUMN temp_col`)
 	}
@@ -358,8 +357,9 @@ func TestBatchHandlerExhaustive(t *testing.T) {
 
 	// TODO(jeffswenson): metamorphically enable batching
 	for _, tc := range testCases {
-		_, err := handler.HandleBatch(ctx, []streampb.StreamEvent_KV{getEvent(tc)})
-		require.NoError(t, err)
+		events := []streampb.StreamEvent_KV{getEvent(tc)}
+		_, err := handler.HandleBatch(ctx, events)
+		require.NoError(t, err, "failed to handle batch for test case %s", testCaseName(tc))
 	}
 
 	found := map[string]string{}
