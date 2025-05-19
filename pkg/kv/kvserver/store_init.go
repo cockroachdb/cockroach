@@ -144,6 +144,7 @@ func WriteInitialClusterData(
 			desc.RangeID, desc.StartKey, desc.EndKey, len(rangeInitialValues))
 
 		err := func() error {
+			// FIXME: write inits to WAG
 			batch := eng.NewBatch()
 			defer batch.Close()
 

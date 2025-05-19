@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -109,6 +110,12 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	desc := r.Desc()
 	inited := desc.IsInitialized()
 
+	if w, unlock := r.store.WAG(); w != nil {
+		w.Destroy(wag.FullAddr{RangeID: r.RangeID, LogAddr: wag.LogAddr{
+			LogID: 1, Index: r.shMu.state.RaftAppliedIndex,
+		}})
+		unlock()
+	}
 	opts := kvstorage.ClearRangeDataOptions{
 		ClearReplicatedBySpan: desc.RSpan(), // zero if !inited
 		// TODO(tbg): if it's uninitialized, we might as well clear

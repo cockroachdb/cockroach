@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -314,7 +315,8 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		//
 		// Alternatively if we discover that the RHS has already been removed
 		// from this store, clean up its data.
-		splitPreApply(ctx, b.r, b.batch, res.Split.SplitTrigger, cmd.Cmd.ClosedTimestamp)
+		splitPreApply(ctx, b.r, b.batch, wag.LogAddr{LogID: 1, Index: cmd.Index()},
+			res.Split.SplitTrigger, cmd.Cmd.ClosedTimestamp)
 
 		// The rangefeed processor will no longer be provided logical ops for
 		// its entire range, so it needs to be shut down and all registrations
@@ -355,6 +357,16 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		rhsRepl.mu.Unlock()
 		rhsRepl.readOnlyCmdMu.Unlock()
 
+		if w, unlock := b.r.store.WAG(); w != nil {
+			w.Merge(wag.FullAddr{
+				RangeID: b.r.RangeID,
+				LogAddr: wag.LogAddr{LogID: 1, Index: cmd.Index()},
+			}, wag.FullAddr{
+				RangeID: rhsRepl.RangeID,
+				LogAddr: wag.LogAddr{LogID: 1, Index: rhsRepl.shMu.state.RaftAppliedIndex},
+			})
+			unlock()
+		}
 		// Use math.MaxInt32 (mergedTombstoneReplicaID) as the nextReplicaID as an
 		// extra safeguard against creating new replicas of the RHS. This isn't
 		// required for correctness, since the merge protocol should guarantee that
@@ -447,6 +459,12 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		b.r.readOnlyCmdMu.Unlock()
 		b.changeRemovesReplica = true
 
+		if w, unlock := b.r.store.WAG(); w != nil {
+			w.Destroy(wag.FullAddr{RangeID: b.r.RangeID, LogAddr: wag.LogAddr{
+				LogID: 1, Index: cmd.Index(),
+			}})
+			unlock()
+		}
 		// Delete all of the Replica's data. We're going to delete the hard state too.
 		// We've set the replica's in-mem status to reflect the pending destruction
 		// above, and DestroyReplica will also add a range tombstone to the
