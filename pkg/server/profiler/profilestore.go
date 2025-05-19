@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// TODO(obs): this setting accidentally applies to ~all profilers and
+// not just the mem profiler.
 var maxProfiles = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"server.mem_profile.max_profiles",
@@ -40,9 +42,10 @@ func init() {
 // It supports automatic garbage collection of old profiles.
 type profileStore struct {
 	*dumpstore.DumpStore
-	prefix string
-	suffix string
-	st     *cluster.Settings
+	prefix           string
+	suffix           string
+	maxProfilesOrNil *settings.IntSetting // falls back to pkg-global maxProfiles
+	st               *cluster.Settings
 }
 
 func newProfileStore(
@@ -56,12 +59,20 @@ func (s *profileStore) gcProfiles(ctx context.Context, now time.Time) {
 	s.GC(ctx, now, s)
 }
 
-func (s *profileStore) makeNewFileName(timestamp time.Time, curHeap int64) string {
+func makeNewFileName(prefix, suffix string, timestamp time.Time, curMeasurement int64) string {
 	// We place the timestamp immediately after the (immutable) file
 	// prefix to ensure that a directory listing sort also sorts the
 	// profiles in timestamp order.
 	fileName := fmt.Sprintf("%s.%s.%d%s",
-		s.prefix, timestamp.Format(timestampFormat), curHeap, s.suffix)
+		prefix, timestamp.Format(timestampFormat), curMeasurement, suffix)
+	return fileName
+}
+
+func (s *profileStore) makeNewFileName(timestamp time.Time, curMeasurement int64) string {
+	// We place the timestamp immediately after the (immutable) file
+	// prefix to ensure that a directory listing sort also sorts the
+	// profiles in timestamp order.
+	fileName := makeNewFileName(s.prefix, s.suffix, timestamp, curMeasurement)
 	return s.GetFullPath(fileName)
 }
 
@@ -69,7 +80,11 @@ func (s *profileStore) makeNewFileName(timestamp time.Time, curHeap int64) strin
 func (s *profileStore) PreFilter(
 	ctx context.Context, files []os.FileInfo, cleanupFn func(fileName string) error,
 ) (preserved map[int]bool, _ error) {
-	maxP := maxProfiles.Get(&s.st.SV)
+	knob := s.maxProfilesOrNil
+	if knob == nil {
+		knob = maxProfiles
+	}
+	maxP := knob.Get(&s.st.SV)
 	preserved = s.cleanupLastRampup(ctx, files, maxP, cleanupFn)
 	return
 }

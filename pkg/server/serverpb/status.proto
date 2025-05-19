@@ -794,6 +794,7 @@ enum FileType {
   HEAP = 0;
   GOROUTINES = 1;
   CPU = 2;
+  EXECUTIONTRACE = 3;
 }
 
 message File {

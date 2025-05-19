@@ -183,6 +183,9 @@ type BaseConfig struct {
 	// Only used if DisableRuntimeStatsMonitor is false.
 	CPUProfileDirName string
 
+	// ExecutionTraceDirName is the directory name for Go execution traces.
+	ExecutionTraceDirName string
+
 	// InflightTraceDirName is the directory name for job traces.
 	InflightTraceDirName string
 
