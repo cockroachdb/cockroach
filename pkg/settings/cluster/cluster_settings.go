@@ -67,7 +67,7 @@ type OverridesInformer interface {
 
 var SettingOverrideErr = errors.New("cluster setting is overridden by system virtual cluster")
 
-// telemetryOptOutCompTimeString controls wether to opt out of telemetry
+// telemetryOptOutCompTimeString controls whether to opt out of telemetry
 // (including Sentry) or not compile time. The variable is set by bazel via stamping
 // (`stamp.sh -d true/false`). Becuase Go only supports strings for in
 // `-ldflags "-X ..."`, we have to use a string representation here.
