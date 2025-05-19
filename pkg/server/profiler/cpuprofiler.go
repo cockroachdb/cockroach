@@ -88,7 +88,7 @@ func NewCPUProfiler(ctx context.Context, dir string, st *cluster.Settings) (*CPU
 	dumpStore := dumpstore.NewStore(dir, maxCombinedCPUProfFileSize, st)
 	cp := &CPUProfiler{
 		profiler: makeProfiler(
-			newProfileStore(dumpStore, cpuProfFileNamePrefix, heapFileNameSuffix, st),
+			newProfileStore(dumpStore, cpuProfFileNamePrefix, profileFileNameSuffix, st),
 			func() int64 { return cpuUsageCombined.Get(&st.SV) },
 			func() time.Duration { return cpuProfileInterval.Get(&st.SV) },
 		),

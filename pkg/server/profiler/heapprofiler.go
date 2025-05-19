@@ -32,8 +32,8 @@ type HeapProfiler struct {
 // heapFileNamePrefix is the prefix of files containing pprof data.
 const heapFileNamePrefix = "memprof"
 
-// heapFileNameSuffix is the suffix of files containing pprof data.
-const heapFileNameSuffix = ".pprof"
+// profileFileNameSuffix is the suffix of files containing pprof data.
+const profileFileNameSuffix = ".pprof"
 
 var maxCombinedFileSize = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
@@ -63,7 +63,7 @@ func NewHeapProfiler(ctx context.Context, dir string, st *cluster.Settings) (*He
 
 	hp := &HeapProfiler{
 		profiler: makeProfiler(
-			newProfileStore(dumpStore, heapFileNamePrefix, heapFileNameSuffix, st),
+			newProfileStore(dumpStore, heapFileNamePrefix, profileFileNameSuffix, st),
 			zeroFloor,
 			envMemprofInterval,
 		),
