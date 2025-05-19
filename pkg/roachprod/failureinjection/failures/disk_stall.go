@@ -68,22 +68,44 @@ func (s *CGroupDiskStaller) Setup(ctx context.Context, l *logger.Logger, args Fa
 	// existing logs directory and copy the contents over after. If a symlink
 	// already exists, don't attempt to recreate it.
 	if diskStallArgs.StallLogs {
-		createSymlinkCmd := `
+		// We need to restart the cluster to make sure we don't lose any logs
+		// during the temporary copy and move.
+		if diskStallArgs.RestartNodes {
+			if err := s.StopCluster(ctx, l, roachprod.DefaultStopOpts()); err != nil {
+				return err
+			}
+		}
+
+		tmpLogsDir := fmt.Sprintf("tmp-disk-stall-%d", time.Now().Unix())
+		createSymlinkCmd := fmt.Sprintf(`
 if [ ! -L logs ]; then
-	echo "creating symlink";
-	mkdir -p {store-dir}/logs;
-	ln -s {store-dir}/logs logs;
+    echo "creating symlink";
+    if [ -e logs ]; then
+				echo "creating tmp directory %[1]s"
+        mv logs %[1]s
+    fi
+    mkdir -p {store-dir}/logs
+    ln -s {store-dir}/logs logs
+		if [ -e %[1]s ]; then
+				cp -va %[1]s/* logs/
+		fi
 fi
-`
+`, tmpLogsDir)
 		if err := s.Run(ctx, l, diskStallArgs.Nodes, createSymlinkCmd); err != nil {
 			return err
+		}
+		if diskStallArgs.RestartNodes {
+			if err := s.StartCluster(ctx, l); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 func (s *CGroupDiskStaller) Cleanup(ctx context.Context, l *logger.Logger, args FailureArgs) error {
+	diskStallArgs := args.(DiskStallArgs)
 	stallType := []bandwidthType{readBandwidth, writeBandwidth}
-	nodes := args.(DiskStallArgs).Nodes
+	nodes := diskStallArgs.Nodes
 
 	// Setting cgroup limits is idempotent so attempt to unlimit reads/writes in case
 	// something went wrong in Recover.
@@ -92,7 +114,7 @@ func (s *CGroupDiskStaller) Cleanup(ctx context.Context, l *logger.Logger, args 
 		l.PrintfCtx(ctx, "error unstalling the disk; stumbling on: %v", err)
 	}
 	if args.(DiskStallArgs).StallLogs {
-		if err = s.Run(ctx, l, nodes, "unlink logs/logs"); err != nil {
+		if err = s.Run(ctx, l, nodes, "unlink logs"); err != nil {
 			return err
 		}
 	}
