@@ -24,6 +24,6 @@ func newStatsCollector(fs vfs.FS) (*defaultCollector, error) {
 	return &defaultCollector{}, nil
 }
 
-func deviceIDFromFileInfo(fs.FileInfo) DeviceID {
+func deviceIDFromFileInfo(fs.FileInfo, string) DeviceID {
 	return DeviceID{}
 }
