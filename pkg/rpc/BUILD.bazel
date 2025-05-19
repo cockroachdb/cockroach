@@ -5,7 +5,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test", "gomock")
 go_library(
     name = "rpc",
     srcs = [
-        "addjoin.go",
         "auth.go",
         "auth_tenant.go",
         "client.go",
