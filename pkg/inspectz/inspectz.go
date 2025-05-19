@@ -73,6 +73,10 @@ func NewServer(
 		"/inspectz/storeliveness/supportFor",
 		server.makeStoreLivenessHandler(server.StoreLivenessSupportFor),
 	)
+	mux.Handle(
+		"/inspectz/rangefeed",
+		server.makeRangefeedHandler(server.Rangefeed),
+	)
 
 	return server
 }
@@ -138,6 +142,24 @@ func (s *Server) makeStoreLivenessHandler(
 	}
 }
 
+func (s *Server) makeRangefeedHandler(
+	impl func(ctx context.Context, request *rangefeedpb.InspectStoreRangefeedsRequest) (
+		*rangefeedpb.InspectStoreRangefeedsResponse, error,
+	),
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := s.AnnotateCtx(context.Background())
+		req := &rangefeedpb.InspectStoreRangefeedsRequest{}
+		resp, err := impl(ctx, req)
+		if err != nil {
+			log.ErrorfDepth(ctx, 1, "%s", err)
+			http.Error(w, "internal error: check logs for details", http.StatusInternalServerError)
+			return
+		}
+		respond(ctx, w, http.StatusOK, resp)
+	}
+}
+
 // KVFlowController implements the InspectzServer interface.
 func (s *Server) KVFlowController(
 	ctx context.Context, request *kvflowinspectpb.ControllerRequest,
@@ -188,8 +210,11 @@ func (s *Server) StoreLivenessSupportFor(
 
 func (s *Server) Rangefeed(
 	_ context.Context, _ *rangefeedpb.InspectStoreRangefeedsRequest,
-) (*rangefeedpb.InspectStoreRangefeedsResponse, error) {
-	resp := &rangefeedpb.InspectStoreRangefeedsResponse{}
+) ([]rangefeedpb.InspectStoreRangefeedsResponse, error) {
+	resp, err := s.rangefeed.InspectAllRangefeeds()
+	if err != nil {
+		return nil, err
+	}
 	return resp, nil
 }
 
