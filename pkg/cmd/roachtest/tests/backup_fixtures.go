@@ -33,7 +33,8 @@ import (
 
 type BackupFixture interface {
 	Kind() string
-	CountIncrementals() int
+	// The database that is backed up.
+	DatabaseName() string
 }
 
 type TpccFixture struct {
@@ -52,8 +53,8 @@ func (f TpccFixture) Kind() string {
 	return f.Name
 }
 
-func (f TpccFixture) CountIncrementals() int {
-	return f.IncrementalChainLength
+func (f TpccFixture) DatabaseName() string {
+	return "tpcc"
 }
 
 // TinyFixture is a TPCC fixture that is intended for smoke tests, local

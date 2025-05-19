@@ -64,6 +64,9 @@ func registerOnlineRestorePerf(r registry.Registry) {
 	// corresponding roachtest that runs a conventional restore over the same
 	// cluster topology and workload in order to measure post restore query
 	// latency relative to online restore (prefix restore/control/*).
+	//
+	// Performance optimizations to reduce download phase time require further
+	// investigation.
 	for _, sp := range []onlineRestoreSpecs{
 		{
 			// 350 GB tpcc Online Restore
@@ -72,16 +75,16 @@ func registerOnlineRestorePerf(r registry.Registry) {
 				backup: backupSpecs{
 					cloud: spec.GCE,
 					workload: tpccRestore{
-						fixture: SmallFixture,
-						opts:    tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 300},
+						opts: tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 300},
 					},
+					fixture: SmallFixture,
 				},
-				timeout:             1 * time.Hour,
-				suites:              registry.Suites(registry.Nightly),
-				numBackupsToRestore: 1,
+				timeout:        1 * time.Hour,
+				suites:         registry.Suites(registry.Nightly),
+				fullBackupOnly: true,
 			},
 			linkPhaseTimeout:     45 * time.Second, // typically takes 20 seconds
-			downloadPhaseTimeout: 20 * time.Minute, // typically takes 10 minutes. Should get faster once we address #124767.
+			downloadPhaseTimeout: 20 * time.Minute, // typically takes 10 minutes.
 		},
 		{
 			// 350 GB tpcc Online Restore with 48 incrementals
@@ -90,16 +93,15 @@ func registerOnlineRestorePerf(r registry.Registry) {
 				backup: backupSpecs{
 					cloud: spec.GCE,
 					workload: tpccRestore{
-						fixture: SmallFixture,
-						opts:    tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 300},
+						opts: tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 300},
 					},
+					fixture: SmallFixture,
 				},
-				timeout:             1 * time.Hour,
-				suites:              registry.Suites(registry.Nightly),
-				numBackupsToRestore: 0,
+				timeout: 1 * time.Hour,
+				suites:  registry.Suites(registry.Nightly),
 			},
 			linkPhaseTimeout:     45 * time.Second, // typically takes 20 seconds
-			downloadPhaseTimeout: 20 * time.Minute, // typically takes 10 minutes. Should get faster once we address #124767.
+			downloadPhaseTimeout: 20 * time.Minute, // typically takes 10 minutes.
 		},
 		{
 			// 2TB tpcc Online Restore
@@ -108,16 +110,16 @@ func registerOnlineRestorePerf(r registry.Registry) {
 				backup: backupSpecs{
 					cloud: spec.GCE,
 					workload: tpccRestore{
-						fixture: MediumFixture,
-						opts:    tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 1000},
+						opts: tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 1000},
 					},
+					fixture: MediumFixture,
 				},
-				timeout:             3 * time.Hour,
-				suites:              registry.Suites(registry.Nightly),
-				numBackupsToRestore: 1,
+				timeout:        3 * time.Hour,
+				suites:         registry.Suites(registry.Nightly),
+				fullBackupOnly: true,
 			},
 			linkPhaseTimeout:     10 * time.Minute, // typically takes 5 minutes
-			downloadPhaseTimeout: 4 * time.Hour,    // typically takes 2 hours. Should get faster once we address #124767.
+			downloadPhaseTimeout: 4 * time.Hour,    // typically takes 2 hours.
 		},
 	} {
 		for _, runOnline := range []bool{true, false} {
@@ -174,7 +176,7 @@ func registerOnlineRestorePerf(r registry.Registry) {
 									ctx,
 									c,
 									t.L(),
-									sp.backup.workload.DatabaseName(),
+									sp.backup.fixture.DatabaseName(),
 									restoreStats.downloadEndTimeLowerBound,
 								))
 							}
@@ -222,15 +224,14 @@ func registerOnlineRestoreCorrectness(r registry.Registry) {
 			backup: backupSpecs{
 				cloud: spec.AWS,
 				workload: tpccRestore{
-					fixture: TinyFixture,
-					opts:    tpccRunOpts{workers: 1, waitFraction: 0, maxOps: 1000},
+					opts: tpccRunOpts{workers: 1, waitFraction: 0, maxOps: 1000},
 				},
+				fixture: TinyFixture,
 			},
-			timeout:             15 * time.Minute,
-			suites:              registry.Suites(registry.Nightly),
-			numBackupsToRestore: 2,
-			namePrefix:          "online/correctness",
-			skip:                "skip for now - flaky",
+			timeout:    15 * time.Minute,
+			suites:     registry.Suites(registry.Nightly),
+			namePrefix: "online/correctness",
+			skip:       "skip for now - flaky",
 		}}
 	sp.initTestName()
 	r.Add(
@@ -591,7 +592,7 @@ func runRestore(
 			return errors.Wrapf(err, "failed to add some empty tables")
 		}
 		restoreStartTime = timeutil.Now()
-		restoreCmd := rd.restoreCmd(ctx, fmt.Sprintf("DATABASE %s", sp.backup.workload.DatabaseName()), opts)
+		restoreCmd := rd.restoreCmd(ctx, fmt.Sprintf("DATABASE %s", sp.backup.fixture.DatabaseName()), opts)
 		t.L().Printf("Running %s", restoreCmd)
 		if _, err = db.ExecContext(ctx, restoreCmd); err != nil {
 			return err
