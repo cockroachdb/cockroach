@@ -20,6 +20,9 @@ import (
 // StatT is syscall.Stat_t.
 type StatT = syscall.Stat_t
 
+// StatfsT is syscall.Statfs_t.
+type StatfsT = syscall.Statfs_t
+
 // ProcessIdentity returns a string describing the user and group that this
 // process is running as.
 func ProcessIdentity() redact.RedactableString {
@@ -42,4 +45,8 @@ func TerminateSelf() error {
 		return nil //nolint:returnerrcheck
 	}
 	return pr.Signal(unix.SIGTERM)
+}
+
+func Statfs(path string, stat *StatfsT) (err error) {
+	return syscall.Statfs(path, stat)
 }
