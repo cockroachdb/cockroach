@@ -39,7 +39,7 @@ var (
 	}()
 )
 
-// TestPrettyData reads in a single SQL statement from a file, formats
+// TestPrettyDataShort reads in a single SQL statement from a file, formats
 // it at 40 characters width, and compares that output to a known-good
 // output file. It is most useful when changing or implementing the
 // doc interface for a node, and should be used to compare and verify

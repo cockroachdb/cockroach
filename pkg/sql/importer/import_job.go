@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -96,7 +95,8 @@ var _ jobs.Resumer = &importResumer{}
 var processorsPerNode = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"bulkio.import.processors_per_node",
-	"number of input processors to run on each sql instance", 1,
+	"number of input processors to run on each sql instance",
+	1,
 	settings.PositiveInt,
 )
 
@@ -357,20 +357,6 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
-	// As of 21.2 we do not write a protected timestamp record during IMPORT INTO.
-	// In case of a mixed version cluster with 21.1 and 21.2 nodes, it is possible
-	// that the job was planned on an older node and then resumed on a 21.2 node.
-	// Thus, we still need to clear the timestamp record that was written when the
-	// IMPORT INTO was planned on the older node.
-	//
-	// TODO(adityamaru): Remove in 22.1.
-	if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return r.releaseProtectedTimestamp(
-			ctx, p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn),
-		)
-	}); err != nil {
-		log.Errorf(ctx, "failed to release protected timestamp: %v", err)
-	}
 	emitImportJobEvent(ctx, p, jobs.StateSucceeded, r.job)
 
 	addToFileFormatTelemetry(details.Format.Format.String(), "succeeded")
@@ -1511,12 +1497,7 @@ func (r *importResumer) OnFailOrCancel(
 		// schema before dropping the descriptor.
 		var err error
 		jobsToRunAfterTxnCommit, err = r.dropSchemas(ctx, txn, descsCol, cfg, p)
-		if err != nil {
-			return err
-		}
-		// TODO(adityamaru): Remove in 22.1 since we do not write PTS records during
-		// IMPORT INTO from 21.2+.
-		return r.releaseProtectedTimestamp(ctx, cfg.ProtectedTimestampProvider.WithTxn(txn))
+		return err
 	}); err != nil {
 		return err
 	}
@@ -1781,25 +1762,6 @@ func (r *importResumer) dropSchemas(
 	queuedJob = append(queuedJob, job.ID())
 
 	return queuedJob, nil
-}
-
-func (r *importResumer) releaseProtectedTimestamp(
-	ctx context.Context, pts protectedts.Storage,
-) error {
-	details := r.job.Details().(jobspb.ImportDetails)
-	ptsID := details.ProtectedTimestampRecord
-	// If the job doesn't have a protected timestamp then there's nothing to do.
-	if ptsID == nil {
-		return nil
-	}
-	err := pts.Release(ctx, *ptsID)
-	if errors.Is(err, protectedts.ErrNotExists) {
-		// No reason to return an error which might cause problems if it doesn't
-		// seem to exist.
-		log.Warningf(ctx, "failed to release protected which seems not to exist: %v", err)
-		err = nil
-	}
-	return err
 }
 
 // ReportResults implements JobResultsReporter interface.

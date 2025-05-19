@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -1024,9 +1023,6 @@ func newPgDumpReader(
 		jobID:      jobID,
 		evalCtx:    evalCtx,
 	}, nil
-}
-
-func (m *pgDumpReader) start(ctx ctxgroup.Group) {
 }
 
 func (m *pgDumpReader) readFiles(
