@@ -824,11 +824,11 @@ func (p *ScheduledProcessor) publishDeleteRange(
 	p.reg.PublishToOverlapping(ctx, span, &event, logicalOpMetadata{}, alloc)
 }
 
-func (p *ScheduledProcessor) CollectAllRangefeedStats() []rangefeedpb.InspectStoreRangefeedsResponse {
+func (p *ScheduledProcessor) CollectAllRangefeedStats() []rangefeedpb.Rangefeed {
 	if p == nil {
 		return nil
 	}
-	var info []rangefeedpb.InspectStoreRangefeedsResponse
+	var info []rangefeedpb.Rangefeed
 	p.enqueueRequest(func(ctx context.Context) {
 		info = p.reg.CollectAllStats(ctx)
 	})

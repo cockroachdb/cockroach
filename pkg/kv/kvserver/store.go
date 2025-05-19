@@ -4251,7 +4251,7 @@ func init() {
 	tracing.RegisterTagRemapping("s", "store")
 }
 
-func (s *Store) VisitRangefeeds() (res []rangefeedpb.InspectStoreRangefeedsResponse) {
+func (s *Store) VisitRangefeeds() (res rangefeedpb.RangefeedInfoPerStore) {
 	var rangeIDs []roachpb.RangeID
 	updateRangeIDs := func() []roachpb.RangeID {
 		rangeIDs = rangeIDs[:0]
@@ -4263,11 +4263,14 @@ func (s *Store) VisitRangefeeds() (res []rangefeedpb.InspectStoreRangefeedsRespo
 		return rangeIDs
 	}
 
+	res.NodeID = s.NodeID()
+	res.StoreID = s.StoreID()
+
 	for _, id := range updateRangeIDs() {
 		if r := s.GetReplicaIfExists(id); r != nil {
 			//cts := r.GetCurrentClosedTimestamp(ctx)
 			// populate the closed ts here
-			res = append(res, r.getRangefeedProcessor().CollectAllRangefeedStats()...)
+			res.Rangefeed = append(res.Rangefeed, r.getRangefeedProcessor().CollectAllRangefeedStats()...)
 		}
 	}
 	return res

@@ -117,6 +117,10 @@ func (br *bufferedRegistration) publish(
 	br.assertEvent(ctx, event)
 	e := getPooledSharedEvent(sharedEvent{event: br.maybeStripEvent(ctx, event), alloc: alloc})
 
+	if event.Checkpoint != nil {
+		br.baseRegistration.resolvedTimestamp = event.Checkpoint.ResolvedTS
+	}
+
 	br.mu.Lock()
 	defer br.mu.Unlock()
 	if br.mu.overflowed || br.mu.disconnected {

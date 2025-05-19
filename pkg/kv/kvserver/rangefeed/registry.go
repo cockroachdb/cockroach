@@ -37,7 +37,8 @@ type Disconnector interface {
 type registration interface {
 	Disconnector
 
-	getRangefeedInfo() rangefeedpb.InspectStoreRangefeedsResponse
+	getRangefeedInfo() rangefeedpb.Rangefeed
+	getResolvedTimestamp() hlc.Timestamp
 
 	// publish sends the provided event to the registration. It is up to the
 	// registration implementation to decide how to handle the event and how to
@@ -96,18 +97,24 @@ type baseRegistration struct {
 	// non-blocking.
 	removeRegFromProcessor func(registration)
 
-	catchUpTimestamp hlc.Timestamp // exclusive
-	id               int64         // internal
-	keys             interval.Range
-	shouldUnreg      atomic.Bool
+	resolvedTimestamp hlc.Timestamp
+	catchUpTimestamp  hlc.Timestamp // exclusive
+	id                int64         // internal
+	keys              interval.Range
+	shouldUnreg       atomic.Bool
 }
 
-func (r *baseRegistration) getRangefeedInfo() rangefeedpb.InspectStoreRangefeedsResponse {
-	return rangefeedpb.InspectStoreRangefeedsResponse{
-		//ConsumerID:       r.consumerID,
-		//Span:             r.span,
-		//CatchUpTimestamp: r.catchUpTimestamp,
+func (r *baseRegistration) getRangefeedInfo() rangefeedpb.Rangefeed {
+	return rangefeedpb.Rangefeed{
+		ConsumerID: r.consumerID,
+		Span:       r.span,
+		ResolvedTS: r.resolvedTimestamp,
+		CatchUpTS:  r.catchUpTimestamp,
 	}
+}
+
+func (r *baseRegistration) getResolvedTimestamp() hlc.Timestamp {
+	return r.resolvedTimestamp
 }
 
 // ID implements interval.Interface.
@@ -401,11 +408,11 @@ func (reg *registry) DisconnectAllOnShutdown(ctx context.Context, pErr *kvpb.Err
 	reg.DisconnectWithErr(ctx, all, pErr)
 }
 
-func (reg *registry) CollectAllStats(ctx context.Context) []rangefeedpb.InspectStoreRangefeedsResponse {
+func (reg *registry) CollectAllStats(ctx context.Context) []rangefeedpb.Rangefeed {
 	return reg.CollectStats(ctx, all)
 }
 
-func (reg *registry) CollectStats(ctx context.Context, span roachpb.Span) (infos []rangefeedpb.InspectStoreRangefeedsResponse) {
+func (reg *registry) CollectStats(ctx context.Context, span roachpb.Span) (infos []rangefeedpb.Rangefeed) {
 	reg.forOverlappingRegs(ctx, span, func(r registration) (bool, *kvpb.Error) {
 		infos = append(infos, r.getRangefeedInfo())
 		return false, nil

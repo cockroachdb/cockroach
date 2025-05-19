@@ -143,7 +143,7 @@ type RangefeedInfo struct {
 type Processor interface {
 	// Lifecycle of processor.
 
-	CollectAllRangefeedStats() []rangefeedpb.InspectStoreRangefeedsResponse
+	CollectAllRangefeedStats() []rangefeedpb.Rangefeed
 
 	// Start processor will start internal tasks and background initializations.
 	// It is ok to start registering streams before background initialization

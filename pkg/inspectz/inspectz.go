@@ -210,7 +210,8 @@ func (s *Server) StoreLivenessSupportFor(
 
 func (s *Server) Rangefeed(
 	_ context.Context, _ *rangefeedpb.InspectStoreRangefeedsRequest,
-) ([]rangefeedpb.InspectStoreRangefeedsResponse, error) {
+) (*rangefeedpb.InspectStoreRangefeedsResponse, error) {
+	// Server: rangefeed inspect all rangefeeds InspectStoreRangefeedsResponse
 	resp, err := s.rangefeed.InspectAllRangefeeds()
 	if err != nil {
 		return nil, err
