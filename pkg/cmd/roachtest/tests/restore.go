@@ -130,8 +130,9 @@ func registerRestore(r registry.Registry) {
 			cloud:   spec.GCE,
 			fixture: SmallFixture,
 		},
-		timeout:    3 * time.Hour,
-		namePrefix: "pause",
+		fullBackupOnly: false,
+		timeout:        3 * time.Hour,
+		namePrefix:     "pause",
 	}
 	withPauseSpecs.initTestName()
 
@@ -290,36 +291,41 @@ func registerRestore(r registry.Registry) {
 				cloud:   spec.GCE,
 				fixture: TinyFixture,
 			},
-			timeout: 1 * time.Hour,
-			suites:  registry.Suites(registry.Nightly),
+			fullBackupOnly: false,
+			timeout:        1 * time.Hour,
+			suites:         registry.Suites(registry.Nightly),
 		},
 		{
-			hardware: makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */}),
-			backup:   backupSpecs{cloud: spec.AWS, fixture: MediumFixture},
-			timeout:  1 * time.Hour,
-			suites:   registry.Suites(registry.Nightly),
+			hardware:       makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */}),
+			backup:         backupSpecs{cloud: spec.AWS, fixture: MediumFixture},
+			fullBackupOnly: false,
+			timeout:        1 * time.Hour,
+			suites:         registry.Suites(registry.Nightly),
 		},
 		{
-			hardware: makeHardwareSpecs(hardwareSpecs{}),
-			backup:   backupSpecs{cloud: spec.GCE, fixture: MediumFixture},
-			timeout:  1 * time.Hour,
-			suites:   registry.Suites(registry.Nightly),
+			hardware:       makeHardwareSpecs(hardwareSpecs{}),
+			backup:         backupSpecs{cloud: spec.GCE, fixture: MediumFixture},
+			fullBackupOnly: false,
+			timeout:        1 * time.Hour,
+			suites:         registry.Suites(registry.Nightly),
 		},
 		{
 			// Benchmarks using a low memory per core ratio - we don't expect ideal
 			// performance but nodes should not OOM.
-			hardware: makeHardwareSpecs(hardwareSpecs{mem: spec.Low}),
-			backup:   backupSpecs{cloud: spec.GCE, fixture: MediumFixture},
-			timeout:  1 * time.Hour,
-			suites:   registry.Suites(registry.Nightly),
+			hardware:       makeHardwareSpecs(hardwareSpecs{mem: spec.Low}),
+			backup:         backupSpecs{cloud: spec.GCE, fixture: MediumFixture},
+			fullBackupOnly: false,
+			timeout:        1 * time.Hour,
+			suites:         registry.Suites(registry.Nightly),
 		},
 		{
 			// Benchmarks if per node throughput remains constant if the number of
 			// nodes doubles relative to default.
-			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 8}),
-			backup:   backupSpecs{cloud: spec.GCE, fixture: MediumFixture},
-			timeout:  1 * time.Hour,
-			suites:   registry.Suites(registry.Nightly),
+			hardware:       makeHardwareSpecs(hardwareSpecs{nodes: 8}),
+			backup:         backupSpecs{cloud: spec.GCE, fixture: MediumFixture},
+			fullBackupOnly: false,
+			timeout:        1 * time.Hour,
+			suites:         registry.Suites(registry.Nightly),
 		},
 		{
 			// Benchmarks if per node throughput remains constant if the cluster
@@ -327,24 +333,27 @@ func registerRestore(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{
 				nodes: 9, ebsThroughput: 250, /* MB/s */
 				zones: []string{"us-east-2b", "us-west-2b", "eu-west-1b"}}), // These zones are AWS-specific.
-			backup:  backupSpecs{cloud: spec.AWS, fixture: MediumFixture},
-			timeout: 90 * time.Minute,
-			suites:  registry.Suites(registry.Nightly),
+			backup:         backupSpecs{cloud: spec.AWS, fixture: MediumFixture},
+			fullBackupOnly: false,
+			timeout:        90 * time.Minute,
+			suites:         registry.Suites(registry.Nightly),
 		},
 		{
 			// Benchmarks if per node throughput doubles if the vcpu count doubles
 			// relative to default.
-			hardware: makeHardwareSpecs(hardwareSpecs{cpus: 16}),
-			backup:   backupSpecs{cloud: spec.GCE, fixture: MediumFixture},
-			timeout:  1 * time.Hour,
-			suites:   registry.Suites(registry.Nightly),
+			hardware:       makeHardwareSpecs(hardwareSpecs{cpus: 16}),
+			backup:         backupSpecs{cloud: spec.GCE, fixture: MediumFixture},
+			fullBackupOnly: false,
+			timeout:        1 * time.Hour,
+			suites:         registry.Suites(registry.Nightly),
 		},
 		{
 			// The weekly 20TB Restore test.
-			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 15, cpus: 16, volumeSize: 5000}),
-			backup:   backupSpecs{cloud: spec.GCE, fixture: LargeFixture},
-			timeout:  24 * time.Hour,
-			suites:   registry.Suites(registry.Weekly),
+			hardware:       makeHardwareSpecs(hardwareSpecs{nodes: 15, cpus: 16, volumeSize: 5000}),
+			backup:         backupSpecs{cloud: spec.GCE, fixture: LargeFixture},
+			fullBackupOnly: false,
+			timeout:        24 * time.Hour,
+			suites:         registry.Suites(registry.Weekly),
 		},
 		// Following three tests are just used to benchmark classic restore against
 		// OR with the exact same fixtures and hardware.
@@ -357,11 +366,12 @@ func registerRestore(r registry.Registry) {
 			skip:           "used for adhoc benchmarking against OR",
 		},
 		{
-			hardware: makeHardwareSpecs(hardwareSpecs{}),
-			backup:   backupSpecs{cloud: spec.GCE, fixture: SmallFixture},
-			timeout:  1 * time.Hour,
-			suites:   registry.Suites(registry.Nightly),
-			skip:     "used for adhoc benchmarking against OR",
+			hardware:       makeHardwareSpecs(hardwareSpecs{}),
+			backup:         backupSpecs{cloud: spec.GCE, fixture: SmallFixture},
+			fullBackupOnly: false,
+			timeout:        1 * time.Hour,
+			suites:         registry.Suites(registry.Nightly),
+			skip:           "used for adhoc benchmarking against OR",
 		},
 		{
 			hardware:       makeHardwareSpecs(hardwareSpecs{nodes: 10, volumeSize: 1500, workloadNode: true}),
@@ -570,11 +580,6 @@ type backupSpecs struct {
 	// fixture is the fixture that will be restored.
 	fixture BackupFixture
 
-	// workload defines the workload that will run during the download phase of
-	// Online Restore. Ignored in classic restore roachtests. If set, must match
-	// the fixture that is being restored.
-	workload restoreWorkload
-
 	// allowLocal is true if the test should be allowed to run
 	// locally. We don't set this by default to avoid someone
 	// trying to run the very large roachtests locally.
@@ -618,9 +623,9 @@ func (bs *backupSpecs) CollectionURI(ctx context.Context, t test.Test) string {
 	return url.String()
 }
 
-// getAOSTCmd returns a sql cmd that will return a system time for a restore if
-// it is not restoring the latest backup.
-func (sp *restoreSpecs) getAostCmd(ctx context.Context, t test.Test) string {
+// getFullBackupEndTimeCmd returns a sql cmd that will return a system time for
+// a restore from the full backup of the latest chain.
+func (sp *restoreSpecs) getFullBackupEndTimeCmd(ctx context.Context, t test.Test) string {
 	return fmt.Sprintf(
 		`SELECT max(end_time) FROM [SELECT DISTINCT end_time FROM
 		[SHOW BACKUP FROM LATEST IN '%s'] ORDER BY end_time ASC LIMIT %d]`,
@@ -629,49 +634,9 @@ func (sp *restoreSpecs) getAostCmd(ctx context.Context, t test.Test) string {
 	)
 }
 
-// restoreWorkload describes the workload that will run during the download
-// phase of Online Restore.
-type restoreWorkload interface {
-	// Run begins a workload that runs indefinitely until the passed context is
-	// canceled.
-	Run(ctx context.Context, t test.Test, c cluster.Cluster, sp hardwareSpecs) error
-}
-
-type tpccRunOpts struct {
-	workers        int
-	maxOps         int
-	maxRate        int
-	waitFraction   float64
-	queryTraceFile string
-	seed           uint64
-	fakeTime       uint32
-}
-
-type tpccRestore struct {
-	opts tpccRunOpts
-}
-
-var _ restoreWorkload = &tpccRestore{}
-
-func (tpcc tpccRestore) Run(
-	ctx context.Context, t test.Test, c cluster.Cluster, sp hardwareSpecs,
-) error {
-	crdbNodes := sp.getCRDBNodes()
-	cmd := roachtestutil.NewCommand(`./cockroach workload run tpcc`).
-		MaybeFlag(tpcc.opts.workers > 0, "workers", tpcc.opts.workers).
-		MaybeFlag(tpcc.opts.waitFraction != 1, "wait", tpcc.opts.waitFraction).
-		MaybeFlag(tpcc.opts.maxOps != 0, "max-ops", tpcc.opts.maxOps).
-		MaybeFlag(tpcc.opts.maxRate != 0, "max-rate", tpcc.opts.maxRate).
-		MaybeFlag(tpcc.opts.seed != 0, "seed", tpcc.opts.seed).
-		MaybeFlag(tpcc.opts.fakeTime != 0, "fake-time", tpcc.opts.fakeTime).
-		MaybeFlag(tpcc.opts.queryTraceFile != "", "query-trace-file", tpcc.opts.queryTraceFile).
-		Arg("{pgurl:%d-%d}", crdbNodes[0], crdbNodes[len(crdbNodes)-1])
-	return c.RunE(ctx, option.WithNodes([]int{sp.getWorkloadNode()}), cmd.String())
-}
-
 // restoreSpecs define input parameters to a restore roachtest set during
-// registration. They should not be modified within test_spec.run(), as they are shared
-// across driver runs.
+// registration. They should not be modified within test_spec.run(), as they are
+// shared across driver runs.
 type restoreSpecs struct {
 	hardware hardwareSpecs
 
@@ -783,7 +748,7 @@ func (rd *restoreDriver) getAOST(ctx context.Context) {
 	var aost string
 	conn := rd.c.Conn(ctx, rd.t.L(), 1)
 	defer conn.Close()
-	aostCmd := rd.sp.getAostCmd(ctx, rd.t)
+	aostCmd := rd.sp.getFullBackupEndTimeCmd(ctx, rd.t)
 	err := conn.QueryRowContext(ctx, aostCmd).Scan(&aost)
 	require.NoError(rd.t, err, fmt.Sprintf("aost cmd failed: %s", aostCmd))
 	rd.aost = aost

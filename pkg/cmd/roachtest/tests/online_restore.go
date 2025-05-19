@@ -50,10 +50,54 @@ var queriesThroughputAgg = clusterstats.AggQuery{
 
 type onlineRestoreSpecs struct {
 	restoreSpecs
+
+	// workload defines the workload that will run during the download phase of
+	// Online Restore. If set, must match the fixture that is being restored.
+	workload restoreWorkload
 	// linkPhaseTimeout is the timeout for the link phase of the restore, if set.
 	linkPhaseTimeout time.Duration
 	// downloadPhaseTimeout is the timeout for the download phase of the restore, if set.
 	downloadPhaseTimeout time.Duration
+}
+
+// restoreWorkload describes the workload that will run during the download
+// phase of Online Restore.
+type restoreWorkload interface {
+	// Run begins a workload that runs indefinitely until the passed context is
+	// canceled.
+	Run(ctx context.Context, t test.Test, c cluster.Cluster, sp hardwareSpecs) error
+}
+
+type tpccRunOpts struct {
+	workers        int
+	maxOps         int
+	maxRate        int
+	waitFraction   float64
+	queryTraceFile string
+	seed           uint64
+	fakeTime       uint32
+}
+
+type tpccRestore struct {
+	opts tpccRunOpts
+}
+
+var _ restoreWorkload = &tpccRestore{}
+
+func (tpcc tpccRestore) Run(
+	ctx context.Context, t test.Test, c cluster.Cluster, sp hardwareSpecs,
+) error {
+	crdbNodes := sp.getCRDBNodes()
+	cmd := roachtestutil.NewCommand(`./cockroach workload run tpcc`).
+		MaybeFlag(tpcc.opts.workers > 0, "workers", tpcc.opts.workers).
+		MaybeFlag(tpcc.opts.waitFraction != 1, "wait", tpcc.opts.waitFraction).
+		MaybeFlag(tpcc.opts.maxOps != 0, "max-ops", tpcc.opts.maxOps).
+		MaybeFlag(tpcc.opts.maxRate != 0, "max-rate", tpcc.opts.maxRate).
+		MaybeFlag(tpcc.opts.seed != 0, "seed", tpcc.opts.seed).
+		MaybeFlag(tpcc.opts.fakeTime != 0, "fake-time", tpcc.opts.fakeTime).
+		MaybeFlag(tpcc.opts.queryTraceFile != "", "query-trace-file", tpcc.opts.queryTraceFile).
+		Arg("{pgurl:%d-%d}", crdbNodes[0], crdbNodes[len(crdbNodes)-1])
+	return c.RunE(ctx, option.WithNodes([]int{sp.getWorkloadNode()}), cmd.String())
 }
 
 func registerOnlineRestorePerf(r registry.Registry) {
@@ -73,15 +117,15 @@ func registerOnlineRestorePerf(r registry.Registry) {
 			restoreSpecs: restoreSpecs{
 				hardware: makeHardwareSpecs(hardwareSpecs{workloadNode: true}),
 				backup: backupSpecs{
-					cloud: spec.GCE,
-					workload: tpccRestore{
-						opts: tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 300},
-					},
+					cloud:   spec.GCE,
 					fixture: SmallFixture,
 				},
+				fullBackupOnly: true,
 				timeout:        1 * time.Hour,
 				suites:         registry.Suites(registry.Nightly),
-				fullBackupOnly: true,
+			},
+			workload: tpccRestore{
+				opts: tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 300},
 			},
 			linkPhaseTimeout:     45 * time.Second, // typically takes 20 seconds
 			downloadPhaseTimeout: 20 * time.Minute, // typically takes 10 minutes.
@@ -91,14 +135,15 @@ func registerOnlineRestorePerf(r registry.Registry) {
 			restoreSpecs: restoreSpecs{
 				hardware: makeHardwareSpecs(hardwareSpecs{workloadNode: true}),
 				backup: backupSpecs{
-					cloud: spec.GCE,
-					workload: tpccRestore{
-						opts: tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 300},
-					},
+					cloud:   spec.GCE,
 					fixture: SmallFixture,
 				},
-				timeout: 1 * time.Hour,
-				suites:  registry.Suites(registry.Nightly),
+				fullBackupOnly: false,
+				timeout:        1 * time.Hour,
+				suites:         registry.Suites(registry.Nightly),
+			},
+			workload: tpccRestore{
+				opts: tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 300},
 			},
 			linkPhaseTimeout:     45 * time.Second, // typically takes 20 seconds
 			downloadPhaseTimeout: 20 * time.Minute, // typically takes 10 minutes.
@@ -108,15 +153,15 @@ func registerOnlineRestorePerf(r registry.Registry) {
 			restoreSpecs: restoreSpecs{
 				hardware: makeHardwareSpecs(hardwareSpecs{nodes: 10, volumeSize: 1500, workloadNode: true}),
 				backup: backupSpecs{
-					cloud: spec.GCE,
-					workload: tpccRestore{
-						opts: tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 1000},
-					},
+					cloud:   spec.GCE,
 					fixture: MediumFixture,
 				},
+				fullBackupOnly: true,
 				timeout:        3 * time.Hour,
 				suites:         registry.Suites(registry.Nightly),
-				fullBackupOnly: true,
+			},
+			workload: tpccRestore{
+				opts: tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 1000},
 			},
 			linkPhaseTimeout:     10 * time.Minute, // typically takes 5 minutes
 			downloadPhaseTimeout: 4 * time.Hour,    // typically takes 2 hours.
@@ -222,17 +267,18 @@ func registerOnlineRestoreCorrectness(r registry.Registry) {
 		restoreSpecs: restoreSpecs{
 			hardware: makeHardwareSpecs(hardwareSpecs{workloadNode: true}),
 			backup: backupSpecs{
-				cloud: spec.AWS,
-				workload: tpccRestore{
-					opts: tpccRunOpts{workers: 1, waitFraction: 0, maxOps: 1000},
-				},
+				cloud:   spec.AWS,
 				fixture: TinyFixture,
 			},
 			timeout:    15 * time.Minute,
 			suites:     registry.Suites(registry.Nightly),
 			namePrefix: "online/correctness",
 			skip:       "skip for now - flaky",
-		}}
+		},
+		workload: tpccRestore{
+			opts: tpccRunOpts{workers: 1, waitFraction: 0, maxOps: 1000},
+		},
+	}
 	sp.initTestName()
 	r.Add(
 		registry.TestSpec{
@@ -506,7 +552,7 @@ func initCorrectnessRestoreSpecs(
 	t test.Test, baseSp onlineRestoreSpecs, seed uint64, fakeTime uint32, traceSuffix string,
 ) (onlineRestoreSpecs, tpccRestore) {
 	t.Helper()
-	tpccWorkload, ok := baseSp.backup.workload.(tpccRestore)
+	tpccWorkload, ok := baseSp.workload.(tpccRestore)
 	if !ok {
 		require.Fail(t, "only tpcc workloads are supported for correctness testing")
 	}
@@ -518,7 +564,7 @@ func initCorrectnessRestoreSpecs(
 	if tpccWorkload.opts.fakeTime == 0 {
 		tpccWorkload.opts.fakeTime = fakeTime
 	}
-	baseSp.backup.workload = tpccWorkload
+	baseSp.workload = tpccWorkload
 	return baseSp, tpccWorkload
 }
 
@@ -615,7 +661,7 @@ func runRestore(
 			return nil
 		}
 		workloadStartTime = timeutil.Now()
-		err := sp.backup.workload.Run(ctx, t, c, sp.hardware)
+		err := sp.workload.Run(ctx, t, c, sp.hardware)
 		// We expect the workload to return a context cancelled error because
 		// the roachtest driver cancels the monitor's context after the download job completes
 		if err != nil && ctx.Err() == nil {
