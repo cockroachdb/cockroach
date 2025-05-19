@@ -4147,7 +4147,6 @@ alter_unsupported_stmt:
 //
 // Options:
 //    distributed = '...'
-//    sstsize = '...'
 //    temp = '...'
 //
 // Use CREATE TABLE followed by IMPORT INTO to create and import into a table

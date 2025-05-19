@@ -46,7 +46,6 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverbase",
-        "//pkg/kv/kvserver/protectedts",
         "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/server/telemetry",
