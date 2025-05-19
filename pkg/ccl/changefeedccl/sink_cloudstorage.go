@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	// Placeholder for pgzip and zdstd.
 	_ "github.com/klauspost/compress/zstd"
@@ -66,13 +67,33 @@ func cloudStorageFormatTime(ts hlc.Timestamp) string {
 	return fmt.Sprintf(`%s%09d%010d`, t.Format(f), t.Nanosecond(), ts.Logical)
 }
 
+// byteBufferWithTrackedLength is a bytes.Buffer that also tracks its length
+// separately and atomically. This is useful for codecs that write to the buffer
+// asynchronously, such as pgzip/zstd, because we can't safely call `buf.Len()`
+// while the codec is open, because buf.Write() may be called after
+// codec.Write() returns.
+type byteBufferWithTrackedLength struct {
+	bytes.Buffer
+	len atomic.Int64
+}
+
+func (b *byteBufferWithTrackedLength) Write(p []byte) (n int, err error) {
+	n, err = b.Buffer.Write(p)
+	b.len.Add(int64(n))
+	return n, err
+}
+
+func (b *byteBufferWithTrackedLength) Len() int {
+	return int(b.len.Load())
+}
+
 type cloudStorageSinkFile struct {
 	cloudStorageSinkKey
 	created       time.Time
 	codec         io.WriteCloser
 	rawSize       int
 	numMessages   int
-	buf           bytes.Buffer
+	buf           byteBufferWithTrackedLength
 	alloc         kvevent.Alloc
 	oldestMVCC    hlc.Timestamp
 	parquetCodec  *parquetWriter
@@ -756,6 +777,9 @@ var logQueueDepth = log.Every(30 * time.Second)
 // flushFile flushes file to the cloud storage.
 // file should not be used after flushing.
 func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSinkFile) error {
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.cloudstorage_sink.flush_file")
+	defer sp.Finish()
+
 	asyncFlushEnabled := enableAsyncFlush.Get(&s.settings.SV)
 	if s.asyncFlushActive && !asyncFlushEnabled {
 		// Async flush behavior was turned off --  drain any active flush requests
