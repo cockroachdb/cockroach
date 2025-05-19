@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed/rangefeedpb"
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
@@ -209,6 +210,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalRegionsTable:                       crdbInternalRegionsTable,
 		catconstants.CrdbInternalDefaultPrivilegesTable:             crdbInternalDefaultPrivilegesTable,
 		catconstants.CrdbInternalActiveRangeFeedsTable:              crdbInternalActiveRangeFeedsTable,
+		catconstants.CrdbInternalServerActiveRangeFeedsTable:        crdbInternalActiveServerRangeFeedsTable,
 		catconstants.CrdbInternalTenantUsageDetailsViewID:           crdbInternalTenantUsageDetailsView,
 		catconstants.CrdbInternalPgCatalogTableIsImplementedTableID: crdbInternalPgCatalogTableIsImplementedTable,
 		catconstants.CrdbInternalShowTenantCapabilitiesCacheTableID: crdbInternalShowTenantCapabilitiesCache,
@@ -7650,6 +7652,44 @@ CREATE TABLE crdb_internal.active_range_feeds (
 	},
 }
 
+var crdbInternalActiveServerRangeFeedsTable = virtualSchemaTable{
+	comment: `node-level table listing all currently running range feeds`,
+	schema: `
+CREATE TABLE crdb_internal.active_server_range_feeds (
+	id INT,
+	tags STRING,
+	start_after DECIMAL,
+	diff BOOL,
+	node_id INT,
+	range_id INT,
+	created TIMESTAMPTZ,
+	range_start STRING,
+	range_end STRING,
+	resolved DECIMAL,
+	resolved_age INTERVAL,
+	last_event TIMESTAMPTZ,
+	catchup BOOL,
+	num_errs INT,
+	last_err STRING
+);`,
+
+	populate: func(ctx context.Context, p *planner, d catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		hasRoleOption, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		if err != nil {
+			return err
+		}
+		if !hasRoleOption {
+			return noViewActivityOrViewActivityRedactedRoleError(p.User())
+		}
+
+		resp, err := p.extendedEvalCtx.ExecCfg.InspectzServer.Rangefeed(ctx, &rangefeedpb.InspectStoreRangefeedsRequest{})
+		if err != nil {
+			return err
+		}
+		return populateRangefeedResponse(resp, addRow)
+	},
+}
+
 // crdb_internal.cluster_transaction_statistics contains cluster-wide transaction statistics
 // that have not yet been flushed to disk.
 var crdbInternalClusterTxnStatsTable = virtualSchemaTable{
@@ -10016,6 +10056,22 @@ func populateStoreLivenessSupportResponse(
 				tree.NewDInt(tree.DInt(ss.Target.StoreID)),
 				tree.NewDInt(tree.DInt(ss.Epoch)),
 				eval.TimestampToInexactDTimestamp(ss.Expiration),
+			); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func populateRangefeedResponse(
+	resp *rangefeedpb.InspectStoreRangefeedsResponse, addRow func(...tree.Datum) error,
+) error {
+	for _, ssps := range resp.RangefeedInfoPerStore {
+		for _, ss := range ssps.Rangefeed {
+			if err := addRow(
+				tree.NewDInt(tree.DInt(ssps.NodeID)),
+				tree.NewDInt(tree.DInt(ss.ConsumerID)),
 			); err != nil {
 				return err
 			}

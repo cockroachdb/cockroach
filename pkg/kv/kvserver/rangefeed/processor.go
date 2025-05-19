@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed/rangefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -122,6 +123,17 @@ func (sc *Config) SetDefaults() {
 	}
 }
 
+type RangefeedInfo struct {
+	// consumer ID
+	ConsumerID int64
+	// closed timestamp
+	ClosedTimestamp hlc.Timestamp
+	// resolved timestamp
+	Span roachpb.Span
+
+	CatchUpTimestamp hlc.Timestamp
+}
+
 // Processor manages a set of rangefeed registrations and handles the routing of
 // logical updates to these registrations. While routing logical updates to
 // rangefeed registrations, the processor performs two important tasks:
@@ -130,6 +142,8 @@ func (sc *Config) SetDefaults() {
 //     timestamp.
 type Processor interface {
 	// Lifecycle of processor.
+
+	CollectAllRangefeedStats() []rangefeedpb.InspectStoreRangefeedsResponse
 
 	// Start processor will start internal tasks and background initializations.
 	// It is ok to start registering streams before background initialization

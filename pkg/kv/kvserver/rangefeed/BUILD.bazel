@@ -30,6 +30,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/kv/kvserver/rangefeed/rangefeedpb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",

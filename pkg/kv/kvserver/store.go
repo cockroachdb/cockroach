@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed/rangefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
@@ -4248,4 +4249,26 @@ func (s *storeForTruncatorImpl) getEngine() storage.Engine {
 
 func init() {
 	tracing.RegisterTagRemapping("s", "store")
+}
+
+func (s *Store) VisitRangefeeds() (res []rangefeedpb.InspectStoreRangefeedsResponse) {
+	var rangeIDs []roachpb.RangeID
+	updateRangeIDs := func() []roachpb.RangeID {
+		rangeIDs = rangeIDs[:0]
+		s.rangefeedReplicas.Lock()
+		for rangeID := range s.rangefeedReplicas.m {
+			rangeIDs = append(rangeIDs, rangeID)
+		}
+		s.rangefeedReplicas.Unlock()
+		return rangeIDs
+	}
+
+	for _, id := range updateRangeIDs() {
+		if r := s.GetReplicaIfExists(id); r != nil {
+			//cts := r.GetCurrentClosedTimestamp(ctx)
+			// populate the closed ts here
+			res = append(res, r.getRangefeedProcessor().CollectAllRangefeedStats()...)
+		}
+	}
+	return res
 }

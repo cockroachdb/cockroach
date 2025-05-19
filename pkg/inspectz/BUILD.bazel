@@ -13,6 +13,7 @@ go_library(
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvflowcontrol",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb",
+        "//pkg/kv/kvserver/rangefeed/rangefeedpb",
         "//pkg/kv/kvserver/storeliveness/storelivenesspb",
         "//pkg/roachpb",
         "//pkg/util/errorutil",
