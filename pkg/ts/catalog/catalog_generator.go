@@ -7,6 +7,7 @@ package catalog
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -63,6 +64,10 @@ func generateInternal(
 			}
 		}
 
+		if meta.LabeledName == "" && len(meta.StaticLabels) > 0 {
+			panic(fmt.Sprintf("Metric %s has no LabeledName but has StaticLabels", name))
+		}
+
 		section, ok := chartSections[meta.Category]
 		if !ok {
 			chartSections[meta.Category] = &ChartSection{
@@ -95,6 +100,7 @@ func generateInternal(
 					MetricType:     meta.MetricType,
 					Essential:      meta.Essential,
 					HowToUse:       meta.HowToUse,
+					LabeledName:    formatLabeledName(meta),
 				},
 			},
 		})
@@ -103,4 +109,20 @@ func generateInternal(
 		sl = append(sl, *s)
 	}
 	return sl
+}
+
+func formatLabeledName(meta metric.Metadata) string {
+	if meta.LabeledName == "" && len(meta.StaticLabels) == 0 {
+		return ""
+	}
+	var labels []string
+	for _, lp := range meta.StaticLabels {
+		if lp.Name != nil && lp.Value != nil {
+			labels = append(labels, fmt.Sprintf("%s: %s", *lp.Name, *lp.Value))
+		}
+	}
+	if len(labels) == 0 {
+		return meta.LabeledName
+	}
+	return fmt.Sprintf("%s{%s}", meta.LabeledName, strings.Join(labels, ", "))
 }
