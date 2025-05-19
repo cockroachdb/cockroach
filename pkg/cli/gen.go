@@ -358,6 +358,7 @@ Output the list of metrics typical for a node.
 		type MetricInfo struct {
 			Name         string `yaml:"name"`
 			ExportedName string `yaml:"exported_name"`
+			LabeledName  string `yaml:"labeled_name,omitempty"`
 			Description  string `yaml:"description"`
 			YAxisLabel   string `yaml:"y_axis_label"`
 			Type         string `yaml:"type"`
@@ -405,6 +406,7 @@ Output the list of metrics typical for a node.
 				metric := MetricInfo{
 					Name:         chart.Metrics[0].Name,
 					ExportedName: chart.Metrics[0].ExportedName,
+					LabeledName:  chart.Metrics[0].LabeledName,
 					Description:  chart.Metrics[0].Help,
 					YAxisLabel:   chart.AxisLabel,
 					Type:         chart.Metrics[0].MetricType.String(),

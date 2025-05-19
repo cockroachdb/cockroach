@@ -94,6 +94,8 @@ message ChartMetric {
   required bool essential = 7 [(gogoproto.nullable) = false];
   // howToUse is the usage instructions for the metric.
   optional string howToUse = 8 [(gogoproto.nullable) = false];
+  // labeledName is the name of the metric with its labels, formatted as name{label1: value1, ...}.
+  optional string labeledName = 9 [(gogoproto.nullable) = false];
 }
 
 // IndividualChart describes both the properties necessary to display
