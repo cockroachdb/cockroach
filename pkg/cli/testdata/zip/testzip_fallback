@@ -1,5 +1,5 @@
 ----
-debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
+debug zip --concurrency=1 --cpu-profile-duration=1s --validate-zip-file=false /dev/null
 [cluster] discovering virtual clusters... done
 [cluster] creating output file /dev/null... done
 [cluster] establishing RPC connection to ...
@@ -44,7 +44,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [cluster] tenant hot range summary script... writing binary output: debug/hot-ranges-tenant.sh... done
 [cluster] capture debug zip flags... writing binary output: debug/debug_zip_command_flags.txt... done
 ----
-debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
+debug zip --concurrency=1 --cpu-profile-duration=1s --validate-zip-file=false /dev/null
 [cluster] discovering virtual clusters... done
 [cluster] creating output file /dev/null... done
 [cluster] establishing RPC connection to ...
