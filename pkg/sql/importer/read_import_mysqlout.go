@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/errors"
 )
 
@@ -55,9 +54,6 @@ func newMysqloutfileReader(
 		},
 		opts: opts,
 	}, nil
-}
-
-func (d *mysqloutfileReader) start(ctx ctxgroup.Group) {
 }
 
 func (d *mysqloutfileReader) readFiles(

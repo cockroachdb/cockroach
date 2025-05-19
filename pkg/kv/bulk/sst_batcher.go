@@ -132,8 +132,6 @@ type SSTBatcher struct {
 	// writeAtBatchTS is passed to the writeAtBatchTs argument to db.AddSStable.
 	writeAtBatchTS bool
 
-	initialSplitDone bool
-
 	// disableScatters controls scatters of the as-we-fill split ranges.
 	disableScatters bool
 
