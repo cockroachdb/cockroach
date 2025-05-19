@@ -65,6 +65,7 @@ layers:
       essential: true
     - name: jobs.changefeed.currently_paused
       exported_name: jobs_changefeed_currently_paused
+      labeled_name: 'jobs{name: changefeed, status: currently_paused}'
       description: Number of changefeed jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -75,6 +76,7 @@ layers:
       essential: true
     - name: jobs.changefeed.protected_age_sec
       exported_name: jobs_changefeed_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: changefeed}'
       description: The age of the oldest PTS record protected by changefeed jobs
       y_axis_label: seconds
       type: GAUGE
@@ -218,6 +220,7 @@ layers:
     metrics:
     - name: jobs.auto_create_stats.currently_paused
       exported_name: jobs_auto_create_stats_currently_paused
+      labeled_name: 'jobs{name: auto_create_stats, status: currently_paused}'
       description: Number of auto_create_stats jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -228,6 +231,7 @@ layers:
       essential: true
     - name: jobs.auto_create_stats.currently_running
       exported_name: jobs_auto_create_stats_currently_running
+      labeled_name: 'jobs{type: auto_create_stats, status: currently_running}'
       description: Number of auto_create_stats jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -238,6 +242,7 @@ layers:
       essential: true
     - name: jobs.auto_create_stats.resume_failed
       exported_name: jobs_auto_create_stats_resume_failed
+      labeled_name: 'jobs.resume{name: auto_create_stats, status: failed}'
       description: Number of auto_create_stats jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -248,6 +253,7 @@ layers:
       essential: true
     - name: jobs.backup.currently_paused
       exported_name: jobs_backup_currently_paused
+      labeled_name: 'jobs{name: backup, status: currently_paused}'
       description: Number of backup jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -258,6 +264,7 @@ layers:
       essential: true
     - name: jobs.backup.currently_running
       exported_name: jobs_backup_currently_running
+      labeled_name: 'jobs{type: backup, status: currently_running}'
       description: Number of backup jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -268,6 +275,7 @@ layers:
       essential: true
     - name: jobs.create_stats.currently_running
       exported_name: jobs_create_stats_currently_running
+      labeled_name: 'jobs{type: create_stats, status: currently_running}'
       description: Number of create_stats jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -278,6 +286,7 @@ layers:
       essential: true
     - name: schedules.BACKUP.failed
       exported_name: schedules_BACKUP_failed
+      labeled_name: 'schedules{name: BACKUP, status: failed}'
       description: Number of BACKUP jobs failed
       y_axis_label: Jobs
       type: COUNTER
@@ -346,6 +355,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.delete.count
       exported_name: sql_delete_count
+      labeled_name: 'sql.count{query_type: delete}'
       description: Number of SQL DELETE statements successfully executed
       y_axis_label: SQL Statements
       type: COUNTER
@@ -356,6 +366,7 @@ layers:
       essential: true
     - name: sql.delete.count.internal
       exported_name: sql_delete_count_internal
+      labeled_name: 'sql.count{query_type: delete, query_internal: true}'
       description: Number of SQL DELETE statements successfully executed (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -410,6 +421,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.insert.count
       exported_name: sql_insert_count
+      labeled_name: 'sql.count{query_type: insert}'
       description: Number of SQL INSERT statements successfully executed
       y_axis_label: SQL Statements
       type: COUNTER
@@ -420,6 +432,7 @@ layers:
       essential: true
     - name: sql.insert.count.internal
       exported_name: sql_insert_count_internal
+      labeled_name: 'sql.count{query_type: insert, query_internal: true}'
       description: Number of SQL INSERT statements successfully executed (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -448,6 +461,7 @@ layers:
       essential: true
     - name: sql.select.count
       exported_name: sql_select_count
+      labeled_name: 'sql.count{query_type: select}'
       description: Number of SQL SELECT statements successfully executed
       y_axis_label: SQL Statements
       type: COUNTER
@@ -458,6 +472,7 @@ layers:
       essential: true
     - name: sql.select.count.internal
       exported_name: sql_select_count_internal
+      labeled_name: 'sql.count{query_type: select, query_internal: true}'
       description: Number of SQL SELECT statements successfully executed (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -610,6 +625,7 @@ layers:
       derivative: NONE
     - name: sql.update.count
       exported_name: sql_update_count
+      labeled_name: 'sql.count{query_type: update}'
       description: Number of SQL UPDATE statements successfully executed
       y_axis_label: SQL Statements
       type: COUNTER
@@ -620,6 +636,7 @@ layers:
       essential: true
     - name: sql.update.count.internal
       exported_name: sql_update_count_internal
+      labeled_name: 'sql.count{query_type: update, query_internal: true}'
       description: Number of SQL UPDATE statements successfully executed (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -680,6 +697,7 @@ layers:
     metrics:
     - name: jobs.row_level_ttl.currently_paused
       exported_name: jobs_row_level_ttl_currently_paused
+      labeled_name: 'jobs{name: row_level_ttl, status: currently_paused}'
       description: Number of row_level_ttl jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -690,6 +708,7 @@ layers:
       essential: true
     - name: jobs.row_level_ttl.currently_running
       exported_name: jobs_row_level_ttl_currently_running
+      labeled_name: 'jobs{type: row_level_ttl, status: currently_running}'
       description: Number of row_level_ttl jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -720,6 +739,7 @@ layers:
       essential: true
     - name: jobs.row_level_ttl.resume_completed
       exported_name: jobs_row_level_ttl_resume_completed
+      labeled_name: 'jobs.resume{name: row_level_ttl, status: completed}'
       description: Number of row_level_ttl jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -730,6 +750,7 @@ layers:
       essential: true
     - name: jobs.row_level_ttl.resume_failed
       exported_name: jobs_row_level_ttl_resume_failed
+      labeled_name: 'jobs.resume{name: row_level_ttl, status: failed}'
       description: Number of row_level_ttl jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -800,6 +821,7 @@ layers:
       essential: true
     - name: schedules.scheduled-row-level-ttl-executor.failed
       exported_name: schedules_scheduled_row_level_ttl_executor_failed
+      labeled_name: 'schedules{name: scheduled-row-level-ttl-executor, status: failed}'
       description: Number of scheduled-row-level-ttl-executor jobs failed
       y_axis_label: Jobs
       type: COUNTER
@@ -3388,6 +3410,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_env_runner.currently_idle
       exported_name: jobs_auto_config_env_runner_currently_idle
+      labeled_name: 'jobs{type: auto_config_env_runner, status: currently_idle}'
       description: Number of auto_config_env_runner jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -3396,6 +3419,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_config_env_runner.currently_paused
       exported_name: jobs_auto_config_env_runner_currently_paused
+      labeled_name: 'jobs{name: auto_config_env_runner, status: currently_paused}'
       description: Number of auto_config_env_runner jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -3404,6 +3428,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_config_env_runner.currently_running
       exported_name: jobs_auto_config_env_runner_currently_running
+      labeled_name: 'jobs{type: auto_config_env_runner, status: currently_running}'
       description: Number of auto_config_env_runner jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -3412,6 +3437,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_config_env_runner.expired_pts_records
       exported_name: jobs_auto_config_env_runner_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: auto_config_env_runner}'
       description: Number of expired protected timestamp records owned by auto_config_env_runner jobs
       y_axis_label: records
       type: COUNTER
@@ -3420,6 +3446,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_env_runner.fail_or_cancel_completed
       exported_name: jobs_auto_config_env_runner_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: auto_config_env_runner, status: completed}'
       description: Number of auto_config_env_runner jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -3428,6 +3455,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_env_runner.fail_or_cancel_failed
       exported_name: jobs_auto_config_env_runner_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: auto_config_env_runner, status: failed}'
       description: Number of auto_config_env_runner jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -3436,6 +3464,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_env_runner.fail_or_cancel_retry_error
       exported_name: jobs_auto_config_env_runner_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: auto_config_env_runner, status: retry_error}'
       description: Number of auto_config_env_runner jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -3444,6 +3473,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_env_runner.protected_age_sec
       exported_name: jobs_auto_config_env_runner_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: auto_config_env_runner}'
       description: The age of the oldest PTS record protected by auto_config_env_runner jobs
       y_axis_label: seconds
       type: GAUGE
@@ -3452,6 +3482,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_config_env_runner.protected_record_count
       exported_name: jobs_auto_config_env_runner_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: auto_config_env_runner}'
       description: Number of protected timestamp records held by auto_config_env_runner jobs
       y_axis_label: records
       type: GAUGE
@@ -3460,6 +3491,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_config_env_runner.resume_completed
       exported_name: jobs_auto_config_env_runner_resume_completed
+      labeled_name: 'jobs.resume{name: auto_config_env_runner, status: completed}'
       description: Number of auto_config_env_runner jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -3468,6 +3500,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_env_runner.resume_failed
       exported_name: jobs_auto_config_env_runner_resume_failed
+      labeled_name: 'jobs.resume{name: auto_config_env_runner, status: failed}'
       description: Number of auto_config_env_runner jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -3476,6 +3509,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_env_runner.resume_retry_error
       exported_name: jobs_auto_config_env_runner_resume_retry_error
+      labeled_name: 'jobs.resume{name: auto_config_env_runner, status: retry_error}'
       description: Number of auto_config_env_runner jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -3484,6 +3518,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_runner.currently_idle
       exported_name: jobs_auto_config_runner_currently_idle
+      labeled_name: 'jobs{type: auto_config_runner, status: currently_idle}'
       description: Number of auto_config_runner jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -3492,6 +3527,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_config_runner.currently_paused
       exported_name: jobs_auto_config_runner_currently_paused
+      labeled_name: 'jobs{name: auto_config_runner, status: currently_paused}'
       description: Number of auto_config_runner jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -3500,6 +3536,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_config_runner.currently_running
       exported_name: jobs_auto_config_runner_currently_running
+      labeled_name: 'jobs{type: auto_config_runner, status: currently_running}'
       description: Number of auto_config_runner jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -3508,6 +3545,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_config_runner.expired_pts_records
       exported_name: jobs_auto_config_runner_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: auto_config_runner}'
       description: Number of expired protected timestamp records owned by auto_config_runner jobs
       y_axis_label: records
       type: COUNTER
@@ -3516,6 +3554,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_runner.fail_or_cancel_completed
       exported_name: jobs_auto_config_runner_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: auto_config_runner, status: completed}'
       description: Number of auto_config_runner jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -3524,6 +3563,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_runner.fail_or_cancel_failed
       exported_name: jobs_auto_config_runner_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: auto_config_runner, status: failed}'
       description: Number of auto_config_runner jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -3532,6 +3572,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_runner.fail_or_cancel_retry_error
       exported_name: jobs_auto_config_runner_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: auto_config_runner, status: retry_error}'
       description: Number of auto_config_runner jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -3540,6 +3581,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_runner.protected_age_sec
       exported_name: jobs_auto_config_runner_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: auto_config_runner}'
       description: The age of the oldest PTS record protected by auto_config_runner jobs
       y_axis_label: seconds
       type: GAUGE
@@ -3548,6 +3590,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_config_runner.protected_record_count
       exported_name: jobs_auto_config_runner_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: auto_config_runner}'
       description: Number of protected timestamp records held by auto_config_runner jobs
       y_axis_label: records
       type: GAUGE
@@ -3556,6 +3599,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_config_runner.resume_completed
       exported_name: jobs_auto_config_runner_resume_completed
+      labeled_name: 'jobs.resume{name: auto_config_runner, status: completed}'
       description: Number of auto_config_runner jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -3564,6 +3608,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_runner.resume_failed
       exported_name: jobs_auto_config_runner_resume_failed
+      labeled_name: 'jobs.resume{name: auto_config_runner, status: failed}'
       description: Number of auto_config_runner jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -3572,6 +3617,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_runner.resume_retry_error
       exported_name: jobs_auto_config_runner_resume_retry_error
+      labeled_name: 'jobs.resume{name: auto_config_runner, status: retry_error}'
       description: Number of auto_config_runner jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -3580,6 +3626,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_task.currently_idle
       exported_name: jobs_auto_config_task_currently_idle
+      labeled_name: 'jobs{type: auto_config_task, status: currently_idle}'
       description: Number of auto_config_task jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -3588,6 +3635,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_config_task.currently_paused
       exported_name: jobs_auto_config_task_currently_paused
+      labeled_name: 'jobs{name: auto_config_task, status: currently_paused}'
       description: Number of auto_config_task jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -3596,6 +3644,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_config_task.currently_running
       exported_name: jobs_auto_config_task_currently_running
+      labeled_name: 'jobs{type: auto_config_task, status: currently_running}'
       description: Number of auto_config_task jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -3604,6 +3653,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_config_task.expired_pts_records
       exported_name: jobs_auto_config_task_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: auto_config_task}'
       description: Number of expired protected timestamp records owned by auto_config_task jobs
       y_axis_label: records
       type: COUNTER
@@ -3612,6 +3662,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_task.fail_or_cancel_completed
       exported_name: jobs_auto_config_task_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: auto_config_task, status: completed}'
       description: Number of auto_config_task jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -3620,6 +3671,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_task.fail_or_cancel_failed
       exported_name: jobs_auto_config_task_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: auto_config_task, status: failed}'
       description: Number of auto_config_task jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -3628,6 +3680,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_task.fail_or_cancel_retry_error
       exported_name: jobs_auto_config_task_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: auto_config_task, status: retry_error}'
       description: Number of auto_config_task jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -3636,6 +3689,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_task.protected_age_sec
       exported_name: jobs_auto_config_task_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: auto_config_task}'
       description: The age of the oldest PTS record protected by auto_config_task jobs
       y_axis_label: seconds
       type: GAUGE
@@ -3644,6 +3698,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_config_task.protected_record_count
       exported_name: jobs_auto_config_task_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: auto_config_task}'
       description: Number of protected timestamp records held by auto_config_task jobs
       y_axis_label: records
       type: GAUGE
@@ -3652,6 +3707,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_config_task.resume_completed
       exported_name: jobs_auto_config_task_resume_completed
+      labeled_name: 'jobs.resume{name: auto_config_task, status: completed}'
       description: Number of auto_config_task jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -3660,6 +3716,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_task.resume_failed
       exported_name: jobs_auto_config_task_resume_failed
+      labeled_name: 'jobs.resume{name: auto_config_task, status: failed}'
       description: Number of auto_config_task jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -3668,6 +3725,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_task.resume_retry_error
       exported_name: jobs_auto_config_task_resume_retry_error
+      labeled_name: 'jobs.resume{name: auto_config_task, status: retry_error}'
       description: Number of auto_config_task jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -3676,6 +3734,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_create_partial_stats.currently_idle
       exported_name: jobs_auto_create_partial_stats_currently_idle
+      labeled_name: 'jobs{type: auto_create_partial_stats, status: currently_idle}'
       description: Number of auto_create_partial_stats jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -3684,6 +3743,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_create_partial_stats.currently_paused
       exported_name: jobs_auto_create_partial_stats_currently_paused
+      labeled_name: 'jobs{name: auto_create_partial_stats, status: currently_paused}'
       description: Number of auto_create_partial_stats jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -3692,6 +3752,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_create_partial_stats.currently_running
       exported_name: jobs_auto_create_partial_stats_currently_running
+      labeled_name: 'jobs{type: auto_create_partial_stats, status: currently_running}'
       description: Number of auto_create_partial_stats jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -3700,6 +3761,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_create_partial_stats.expired_pts_records
       exported_name: jobs_auto_create_partial_stats_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: auto_create_partial_stats}'
       description: Number of expired protected timestamp records owned by auto_create_partial_stats jobs
       y_axis_label: records
       type: COUNTER
@@ -3708,6 +3770,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_create_partial_stats.fail_or_cancel_completed
       exported_name: jobs_auto_create_partial_stats_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: auto_create_partial_stats, status: completed}'
       description: Number of auto_create_partial_stats jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -3716,6 +3779,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_create_partial_stats.fail_or_cancel_failed
       exported_name: jobs_auto_create_partial_stats_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: auto_create_partial_stats, status: failed}'
       description: Number of auto_create_partial_stats jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -3724,6 +3788,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_create_partial_stats.fail_or_cancel_retry_error
       exported_name: jobs_auto_create_partial_stats_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: auto_create_partial_stats, status: retry_error}'
       description: Number of auto_create_partial_stats jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -3732,6 +3797,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_create_partial_stats.protected_age_sec
       exported_name: jobs_auto_create_partial_stats_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: auto_create_partial_stats}'
       description: The age of the oldest PTS record protected by auto_create_partial_stats jobs
       y_axis_label: seconds
       type: GAUGE
@@ -3740,6 +3806,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_create_partial_stats.protected_record_count
       exported_name: jobs_auto_create_partial_stats_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: auto_create_partial_stats}'
       description: Number of protected timestamp records held by auto_create_partial_stats jobs
       y_axis_label: records
       type: GAUGE
@@ -3748,6 +3815,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_create_partial_stats.resume_completed
       exported_name: jobs_auto_create_partial_stats_resume_completed
+      labeled_name: 'jobs.resume{name: auto_create_partial_stats, status: completed}'
       description: Number of auto_create_partial_stats jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -3756,6 +3824,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_create_partial_stats.resume_failed
       exported_name: jobs_auto_create_partial_stats_resume_failed
+      labeled_name: 'jobs.resume{name: auto_create_partial_stats, status: failed}'
       description: Number of auto_create_partial_stats jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -3764,6 +3833,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_create_partial_stats.resume_retry_error
       exported_name: jobs_auto_create_partial_stats_resume_retry_error
+      labeled_name: 'jobs.resume{name: auto_create_partial_stats, status: retry_error}'
       description: Number of auto_create_partial_stats jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -3772,6 +3842,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_create_stats.currently_idle
       exported_name: jobs_auto_create_stats_currently_idle
+      labeled_name: 'jobs{type: auto_create_stats, status: currently_idle}'
       description: Number of auto_create_stats jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -3780,6 +3851,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_create_stats.expired_pts_records
       exported_name: jobs_auto_create_stats_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: auto_create_stats}'
       description: Number of expired protected timestamp records owned by auto_create_stats jobs
       y_axis_label: records
       type: COUNTER
@@ -3788,6 +3860,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_create_stats.fail_or_cancel_completed
       exported_name: jobs_auto_create_stats_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: auto_create_stats, status: completed}'
       description: Number of auto_create_stats jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -3796,6 +3869,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_create_stats.fail_or_cancel_failed
       exported_name: jobs_auto_create_stats_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: auto_create_stats, status: failed}'
       description: Number of auto_create_stats jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -3804,6 +3878,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_create_stats.fail_or_cancel_retry_error
       exported_name: jobs_auto_create_stats_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: auto_create_stats, status: retry_error}'
       description: Number of auto_create_stats jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -3812,6 +3887,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_create_stats.protected_age_sec
       exported_name: jobs_auto_create_stats_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: auto_create_stats}'
       description: The age of the oldest PTS record protected by auto_create_stats jobs
       y_axis_label: seconds
       type: GAUGE
@@ -3820,6 +3896,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_create_stats.protected_record_count
       exported_name: jobs_auto_create_stats_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: auto_create_stats}'
       description: Number of protected timestamp records held by auto_create_stats jobs
       y_axis_label: records
       type: GAUGE
@@ -3828,6 +3905,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_create_stats.resume_completed
       exported_name: jobs_auto_create_stats_resume_completed
+      labeled_name: 'jobs.resume{name: auto_create_stats, status: completed}'
       description: Number of auto_create_stats jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -3836,6 +3914,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_create_stats.resume_retry_error
       exported_name: jobs_auto_create_stats_resume_retry_error
+      labeled_name: 'jobs.resume{name: auto_create_stats, status: retry_error}'
       description: Number of auto_create_stats jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -3844,6 +3923,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_schema_telemetry.currently_idle
       exported_name: jobs_auto_schema_telemetry_currently_idle
+      labeled_name: 'jobs{type: auto_schema_telemetry, status: currently_idle}'
       description: Number of auto_schema_telemetry jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -3852,6 +3932,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_schema_telemetry.currently_paused
       exported_name: jobs_auto_schema_telemetry_currently_paused
+      labeled_name: 'jobs{name: auto_schema_telemetry, status: currently_paused}'
       description: Number of auto_schema_telemetry jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -3860,6 +3941,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_schema_telemetry.currently_running
       exported_name: jobs_auto_schema_telemetry_currently_running
+      labeled_name: 'jobs{type: auto_schema_telemetry, status: currently_running}'
       description: Number of auto_schema_telemetry jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -3868,6 +3950,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_schema_telemetry.expired_pts_records
       exported_name: jobs_auto_schema_telemetry_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: auto_schema_telemetry}'
       description: Number of expired protected timestamp records owned by auto_schema_telemetry jobs
       y_axis_label: records
       type: COUNTER
@@ -3876,6 +3959,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_schema_telemetry.fail_or_cancel_completed
       exported_name: jobs_auto_schema_telemetry_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: auto_schema_telemetry, status: completed}'
       description: Number of auto_schema_telemetry jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -3884,6 +3968,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_schema_telemetry.fail_or_cancel_failed
       exported_name: jobs_auto_schema_telemetry_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: auto_schema_telemetry, status: failed}'
       description: Number of auto_schema_telemetry jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -3892,6 +3977,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_schema_telemetry.fail_or_cancel_retry_error
       exported_name: jobs_auto_schema_telemetry_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: auto_schema_telemetry, status: retry_error}'
       description: Number of auto_schema_telemetry jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -3900,6 +3986,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_schema_telemetry.protected_age_sec
       exported_name: jobs_auto_schema_telemetry_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: auto_schema_telemetry}'
       description: The age of the oldest PTS record protected by auto_schema_telemetry jobs
       y_axis_label: seconds
       type: GAUGE
@@ -3908,6 +3995,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_schema_telemetry.protected_record_count
       exported_name: jobs_auto_schema_telemetry_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: auto_schema_telemetry}'
       description: Number of protected timestamp records held by auto_schema_telemetry jobs
       y_axis_label: records
       type: GAUGE
@@ -3916,6 +4004,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_schema_telemetry.resume_completed
       exported_name: jobs_auto_schema_telemetry_resume_completed
+      labeled_name: 'jobs.resume{name: auto_schema_telemetry, status: completed}'
       description: Number of auto_schema_telemetry jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -3924,6 +4013,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_schema_telemetry.resume_failed
       exported_name: jobs_auto_schema_telemetry_resume_failed
+      labeled_name: 'jobs.resume{name: auto_schema_telemetry, status: failed}'
       description: Number of auto_schema_telemetry jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -3932,6 +4022,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_schema_telemetry.resume_retry_error
       exported_name: jobs_auto_schema_telemetry_resume_retry_error
+      labeled_name: 'jobs.resume{name: auto_schema_telemetry, status: retry_error}'
       description: Number of auto_schema_telemetry jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -3940,6 +4031,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_span_config_reconciliation.currently_idle
       exported_name: jobs_auto_span_config_reconciliation_currently_idle
+      labeled_name: 'jobs{type: auto_span_config_reconciliation, status: currently_idle}'
       description: Number of auto_span_config_reconciliation jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -3948,6 +4040,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_span_config_reconciliation.currently_paused
       exported_name: jobs_auto_span_config_reconciliation_currently_paused
+      labeled_name: 'jobs{name: auto_span_config_reconciliation, status: currently_paused}'
       description: Number of auto_span_config_reconciliation jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -3956,6 +4049,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_span_config_reconciliation.currently_running
       exported_name: jobs_auto_span_config_reconciliation_currently_running
+      labeled_name: 'jobs{type: auto_span_config_reconciliation, status: currently_running}'
       description: Number of auto_span_config_reconciliation jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -3964,6 +4058,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_span_config_reconciliation.expired_pts_records
       exported_name: jobs_auto_span_config_reconciliation_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: auto_span_config_reconciliation}'
       description: Number of expired protected timestamp records owned by auto_span_config_reconciliation jobs
       y_axis_label: records
       type: COUNTER
@@ -3972,6 +4067,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_span_config_reconciliation.fail_or_cancel_completed
       exported_name: jobs_auto_span_config_reconciliation_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: auto_span_config_reconciliation, status: completed}'
       description: Number of auto_span_config_reconciliation jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -3980,6 +4076,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_span_config_reconciliation.fail_or_cancel_failed
       exported_name: jobs_auto_span_config_reconciliation_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: auto_span_config_reconciliation, status: failed}'
       description: Number of auto_span_config_reconciliation jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -3988,6 +4085,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_span_config_reconciliation.fail_or_cancel_retry_error
       exported_name: jobs_auto_span_config_reconciliation_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: auto_span_config_reconciliation, status: retry_error}'
       description: Number of auto_span_config_reconciliation jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -3996,6 +4094,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_span_config_reconciliation.protected_age_sec
       exported_name: jobs_auto_span_config_reconciliation_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: auto_span_config_reconciliation}'
       description: The age of the oldest PTS record protected by auto_span_config_reconciliation jobs
       y_axis_label: seconds
       type: GAUGE
@@ -4004,6 +4103,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_span_config_reconciliation.protected_record_count
       exported_name: jobs_auto_span_config_reconciliation_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: auto_span_config_reconciliation}'
       description: Number of protected timestamp records held by auto_span_config_reconciliation jobs
       y_axis_label: records
       type: GAUGE
@@ -4012,6 +4112,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_span_config_reconciliation.resume_completed
       exported_name: jobs_auto_span_config_reconciliation_resume_completed
+      labeled_name: 'jobs.resume{name: auto_span_config_reconciliation, status: completed}'
       description: Number of auto_span_config_reconciliation jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -4020,6 +4121,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_span_config_reconciliation.resume_failed
       exported_name: jobs_auto_span_config_reconciliation_resume_failed
+      labeled_name: 'jobs.resume{name: auto_span_config_reconciliation, status: failed}'
       description: Number of auto_span_config_reconciliation jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -4028,6 +4130,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_span_config_reconciliation.resume_retry_error
       exported_name: jobs_auto_span_config_reconciliation_resume_retry_error
+      labeled_name: 'jobs.resume{name: auto_span_config_reconciliation, status: retry_error}'
       description: Number of auto_span_config_reconciliation jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -4036,6 +4139,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_sql_stats_compaction.currently_idle
       exported_name: jobs_auto_sql_stats_compaction_currently_idle
+      labeled_name: 'jobs{type: auto_sql_stats_compaction, status: currently_idle}'
       description: Number of auto_sql_stats_compaction jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -4044,6 +4148,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_sql_stats_compaction.currently_paused
       exported_name: jobs_auto_sql_stats_compaction_currently_paused
+      labeled_name: 'jobs{name: auto_sql_stats_compaction, status: currently_paused}'
       description: Number of auto_sql_stats_compaction jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -4052,6 +4157,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_sql_stats_compaction.currently_running
       exported_name: jobs_auto_sql_stats_compaction_currently_running
+      labeled_name: 'jobs{type: auto_sql_stats_compaction, status: currently_running}'
       description: Number of auto_sql_stats_compaction jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -4060,6 +4166,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_sql_stats_compaction.expired_pts_records
       exported_name: jobs_auto_sql_stats_compaction_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: auto_sql_stats_compaction}'
       description: Number of expired protected timestamp records owned by auto_sql_stats_compaction jobs
       y_axis_label: records
       type: COUNTER
@@ -4068,6 +4175,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_sql_stats_compaction.fail_or_cancel_completed
       exported_name: jobs_auto_sql_stats_compaction_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: auto_sql_stats_compaction, status: completed}'
       description: Number of auto_sql_stats_compaction jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4076,6 +4184,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_sql_stats_compaction.fail_or_cancel_failed
       exported_name: jobs_auto_sql_stats_compaction_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: auto_sql_stats_compaction, status: failed}'
       description: Number of auto_sql_stats_compaction jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4084,6 +4193,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_sql_stats_compaction.fail_or_cancel_retry_error
       exported_name: jobs_auto_sql_stats_compaction_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: auto_sql_stats_compaction, status: retry_error}'
       description: Number of auto_sql_stats_compaction jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4092,6 +4202,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_sql_stats_compaction.protected_age_sec
       exported_name: jobs_auto_sql_stats_compaction_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: auto_sql_stats_compaction}'
       description: The age of the oldest PTS record protected by auto_sql_stats_compaction jobs
       y_axis_label: seconds
       type: GAUGE
@@ -4100,6 +4211,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_sql_stats_compaction.protected_record_count
       exported_name: jobs_auto_sql_stats_compaction_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: auto_sql_stats_compaction}'
       description: Number of protected timestamp records held by auto_sql_stats_compaction jobs
       y_axis_label: records
       type: GAUGE
@@ -4108,6 +4220,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_sql_stats_compaction.resume_completed
       exported_name: jobs_auto_sql_stats_compaction_resume_completed
+      labeled_name: 'jobs.resume{name: auto_sql_stats_compaction, status: completed}'
       description: Number of auto_sql_stats_compaction jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -4116,6 +4229,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_sql_stats_compaction.resume_failed
       exported_name: jobs_auto_sql_stats_compaction_resume_failed
+      labeled_name: 'jobs.resume{name: auto_sql_stats_compaction, status: failed}'
       description: Number of auto_sql_stats_compaction jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -4124,6 +4238,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_sql_stats_compaction.resume_retry_error
       exported_name: jobs_auto_sql_stats_compaction_resume_retry_error
+      labeled_name: 'jobs.resume{name: auto_sql_stats_compaction, status: retry_error}'
       description: Number of auto_sql_stats_compaction jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -4132,6 +4247,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_update_sql_activity.currently_idle
       exported_name: jobs_auto_update_sql_activity_currently_idle
+      labeled_name: 'jobs{type: auto_update_sql_activity, status: currently_idle}'
       description: Number of auto_update_sql_activity jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -4140,6 +4256,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_update_sql_activity.currently_paused
       exported_name: jobs_auto_update_sql_activity_currently_paused
+      labeled_name: 'jobs{name: auto_update_sql_activity, status: currently_paused}'
       description: Number of auto_update_sql_activity jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -4148,6 +4265,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_update_sql_activity.currently_running
       exported_name: jobs_auto_update_sql_activity_currently_running
+      labeled_name: 'jobs{type: auto_update_sql_activity, status: currently_running}'
       description: Number of auto_update_sql_activity jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -4156,6 +4274,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_update_sql_activity.expired_pts_records
       exported_name: jobs_auto_update_sql_activity_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: auto_update_sql_activity}'
       description: Number of expired protected timestamp records owned by auto_update_sql_activity jobs
       y_axis_label: records
       type: COUNTER
@@ -4164,6 +4283,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_update_sql_activity.fail_or_cancel_completed
       exported_name: jobs_auto_update_sql_activity_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: auto_update_sql_activity, status: completed}'
       description: Number of auto_update_sql_activity jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4172,6 +4292,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_update_sql_activity.fail_or_cancel_failed
       exported_name: jobs_auto_update_sql_activity_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: auto_update_sql_activity, status: failed}'
       description: Number of auto_update_sql_activity jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4180,6 +4301,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_update_sql_activity.fail_or_cancel_retry_error
       exported_name: jobs_auto_update_sql_activity_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: auto_update_sql_activity, status: retry_error}'
       description: Number of auto_update_sql_activity jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4188,6 +4310,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_update_sql_activity.protected_age_sec
       exported_name: jobs_auto_update_sql_activity_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: auto_update_sql_activity}'
       description: The age of the oldest PTS record protected by auto_update_sql_activity jobs
       y_axis_label: seconds
       type: GAUGE
@@ -4196,6 +4319,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_update_sql_activity.protected_record_count
       exported_name: jobs_auto_update_sql_activity_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: auto_update_sql_activity}'
       description: Number of protected timestamp records held by auto_update_sql_activity jobs
       y_axis_label: records
       type: GAUGE
@@ -4204,6 +4328,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_update_sql_activity.resume_completed
       exported_name: jobs_auto_update_sql_activity_resume_completed
+      labeled_name: 'jobs.resume{name: auto_update_sql_activity, status: completed}'
       description: Number of auto_update_sql_activity jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -4212,6 +4337,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_update_sql_activity.resume_failed
       exported_name: jobs_auto_update_sql_activity_resume_failed
+      labeled_name: 'jobs.resume{name: auto_update_sql_activity, status: failed}'
       description: Number of auto_update_sql_activity jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -4220,6 +4346,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_update_sql_activity.resume_retry_error
       exported_name: jobs_auto_update_sql_activity_resume_retry_error
+      labeled_name: 'jobs.resume{name: auto_update_sql_activity, status: retry_error}'
       description: Number of auto_update_sql_activity jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -4228,6 +4355,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.backup.currently_idle
       exported_name: jobs_backup_currently_idle
+      labeled_name: 'jobs{type: backup, status: currently_idle}'
       description: Number of backup jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -4236,6 +4364,7 @@ layers:
       derivative: NONE
     - name: jobs.backup.expired_pts_records
       exported_name: jobs_backup_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: backup}'
       description: Number of expired protected timestamp records owned by backup jobs
       y_axis_label: records
       type: COUNTER
@@ -4244,6 +4373,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.backup.fail_or_cancel_completed
       exported_name: jobs_backup_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: backup, status: completed}'
       description: Number of backup jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4252,6 +4382,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.backup.fail_or_cancel_failed
       exported_name: jobs_backup_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: backup, status: failed}'
       description: Number of backup jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4260,6 +4391,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.backup.fail_or_cancel_retry_error
       exported_name: jobs_backup_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: backup, status: retry_error}'
       description: Number of backup jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4268,6 +4400,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.backup.protected_age_sec
       exported_name: jobs_backup_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: backup}'
       description: The age of the oldest PTS record protected by backup jobs
       y_axis_label: seconds
       type: GAUGE
@@ -4276,6 +4409,7 @@ layers:
       derivative: NONE
     - name: jobs.backup.protected_record_count
       exported_name: jobs_backup_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: backup}'
       description: Number of protected timestamp records held by backup jobs
       y_axis_label: records
       type: GAUGE
@@ -4284,6 +4418,7 @@ layers:
       derivative: NONE
     - name: jobs.backup.resume_completed
       exported_name: jobs_backup_resume_completed
+      labeled_name: 'jobs.resume{name: backup, status: completed}'
       description: Number of backup jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -4292,6 +4427,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.backup.resume_failed
       exported_name: jobs_backup_resume_failed
+      labeled_name: 'jobs.resume{name: backup, status: failed}'
       description: Number of backup jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -4300,6 +4436,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.backup.resume_retry_error
       exported_name: jobs_backup_resume_retry_error
+      labeled_name: 'jobs.resume{name: backup, status: retry_error}'
       description: Number of backup jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -4308,6 +4445,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.changefeed.currently_idle
       exported_name: jobs_changefeed_currently_idle
+      labeled_name: 'jobs{type: changefeed, status: currently_idle}'
       description: Number of changefeed jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -4316,6 +4454,7 @@ layers:
       derivative: NONE
     - name: jobs.changefeed.currently_running
       exported_name: jobs_changefeed_currently_running
+      labeled_name: 'jobs{type: changefeed, status: currently_running}'
       description: Number of changefeed jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -4324,6 +4463,7 @@ layers:
       derivative: NONE
     - name: jobs.changefeed.expired_pts_records
       exported_name: jobs_changefeed_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: changefeed}'
       description: Number of expired protected timestamp records owned by changefeed jobs
       y_axis_label: records
       type: COUNTER
@@ -4332,6 +4472,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.changefeed.fail_or_cancel_completed
       exported_name: jobs_changefeed_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: changefeed, status: completed}'
       description: Number of changefeed jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4340,6 +4481,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.changefeed.fail_or_cancel_failed
       exported_name: jobs_changefeed_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: changefeed, status: failed}'
       description: Number of changefeed jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4348,6 +4490,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.changefeed.fail_or_cancel_retry_error
       exported_name: jobs_changefeed_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: changefeed, status: retry_error}'
       description: Number of changefeed jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4356,6 +4499,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.changefeed.protected_record_count
       exported_name: jobs_changefeed_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: changefeed}'
       description: Number of protected timestamp records held by changefeed jobs
       y_axis_label: records
       type: GAUGE
@@ -4364,6 +4508,7 @@ layers:
       derivative: NONE
     - name: jobs.changefeed.resume_completed
       exported_name: jobs_changefeed_resume_completed
+      labeled_name: 'jobs.resume{name: changefeed, status: completed}'
       description: Number of changefeed jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -4372,6 +4517,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.changefeed.resume_failed
       exported_name: jobs_changefeed_resume_failed
+      labeled_name: 'jobs.resume{name: changefeed, status: failed}'
       description: Number of changefeed jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -4380,6 +4526,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.changefeed.resume_retry_error
       exported_name: jobs_changefeed_resume_retry_error
+      labeled_name: 'jobs.resume{name: changefeed, status: retry_error}'
       description: Number of changefeed jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -4396,6 +4543,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.create_stats.currently_idle
       exported_name: jobs_create_stats_currently_idle
+      labeled_name: 'jobs{type: create_stats, status: currently_idle}'
       description: Number of create_stats jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -4404,6 +4552,7 @@ layers:
       derivative: NONE
     - name: jobs.create_stats.currently_paused
       exported_name: jobs_create_stats_currently_paused
+      labeled_name: 'jobs{name: create_stats, status: currently_paused}'
       description: Number of create_stats jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -4412,6 +4561,7 @@ layers:
       derivative: NONE
     - name: jobs.create_stats.expired_pts_records
       exported_name: jobs_create_stats_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: create_stats}'
       description: Number of expired protected timestamp records owned by create_stats jobs
       y_axis_label: records
       type: COUNTER
@@ -4420,6 +4570,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.create_stats.fail_or_cancel_completed
       exported_name: jobs_create_stats_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: create_stats, status: completed}'
       description: Number of create_stats jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4428,6 +4579,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.create_stats.fail_or_cancel_failed
       exported_name: jobs_create_stats_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: create_stats, status: failed}'
       description: Number of create_stats jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4436,6 +4588,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.create_stats.fail_or_cancel_retry_error
       exported_name: jobs_create_stats_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: create_stats, status: retry_error}'
       description: Number of create_stats jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4444,6 +4597,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.create_stats.protected_age_sec
       exported_name: jobs_create_stats_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: create_stats}'
       description: The age of the oldest PTS record protected by create_stats jobs
       y_axis_label: seconds
       type: GAUGE
@@ -4452,6 +4606,7 @@ layers:
       derivative: NONE
     - name: jobs.create_stats.protected_record_count
       exported_name: jobs_create_stats_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: create_stats}'
       description: Number of protected timestamp records held by create_stats jobs
       y_axis_label: records
       type: GAUGE
@@ -4460,6 +4615,7 @@ layers:
       derivative: NONE
     - name: jobs.create_stats.resume_completed
       exported_name: jobs_create_stats_resume_completed
+      labeled_name: 'jobs.resume{name: create_stats, status: completed}'
       description: Number of create_stats jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -4468,6 +4624,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.create_stats.resume_failed
       exported_name: jobs_create_stats_resume_failed
+      labeled_name: 'jobs.resume{name: create_stats, status: failed}'
       description: Number of create_stats jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -4476,6 +4633,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.create_stats.resume_retry_error
       exported_name: jobs_create_stats_resume_retry_error
+      labeled_name: 'jobs.resume{name: create_stats, status: retry_error}'
       description: Number of create_stats jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -4484,6 +4642,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.history_retention.currently_idle
       exported_name: jobs_history_retention_currently_idle
+      labeled_name: 'jobs{type: history_retention, status: currently_idle}'
       description: Number of history_retention jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -4492,6 +4651,7 @@ layers:
       derivative: NONE
     - name: jobs.history_retention.currently_paused
       exported_name: jobs_history_retention_currently_paused
+      labeled_name: 'jobs{name: history_retention, status: currently_paused}'
       description: Number of history_retention jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -4500,6 +4660,7 @@ layers:
       derivative: NONE
     - name: jobs.history_retention.currently_running
       exported_name: jobs_history_retention_currently_running
+      labeled_name: 'jobs{type: history_retention, status: currently_running}'
       description: Number of history_retention jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -4508,6 +4669,7 @@ layers:
       derivative: NONE
     - name: jobs.history_retention.expired_pts_records
       exported_name: jobs_history_retention_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: history_retention}'
       description: Number of expired protected timestamp records owned by history_retention jobs
       y_axis_label: records
       type: COUNTER
@@ -4516,6 +4678,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.history_retention.fail_or_cancel_completed
       exported_name: jobs_history_retention_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: history_retention, status: completed}'
       description: Number of history_retention jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4524,6 +4687,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.history_retention.fail_or_cancel_failed
       exported_name: jobs_history_retention_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: history_retention, status: failed}'
       description: Number of history_retention jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4532,6 +4696,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.history_retention.fail_or_cancel_retry_error
       exported_name: jobs_history_retention_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: history_retention, status: retry_error}'
       description: Number of history_retention jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4540,6 +4705,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.history_retention.protected_age_sec
       exported_name: jobs_history_retention_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: history_retention}'
       description: The age of the oldest PTS record protected by history_retention jobs
       y_axis_label: seconds
       type: GAUGE
@@ -4548,6 +4714,7 @@ layers:
       derivative: NONE
     - name: jobs.history_retention.protected_record_count
       exported_name: jobs_history_retention_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: history_retention}'
       description: Number of protected timestamp records held by history_retention jobs
       y_axis_label: records
       type: GAUGE
@@ -4556,6 +4723,7 @@ layers:
       derivative: NONE
     - name: jobs.history_retention.resume_completed
       exported_name: jobs_history_retention_resume_completed
+      labeled_name: 'jobs.resume{name: history_retention, status: completed}'
       description: Number of history_retention jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -4564,6 +4732,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.history_retention.resume_failed
       exported_name: jobs_history_retention_resume_failed
+      labeled_name: 'jobs.resume{name: history_retention, status: failed}'
       description: Number of history_retention jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -4572,6 +4741,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.history_retention.resume_retry_error
       exported_name: jobs_history_retention_resume_retry_error
+      labeled_name: 'jobs.resume{name: history_retention, status: retry_error}'
       description: Number of history_retention jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -4580,6 +4750,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.hot_ranges_logger.currently_idle
       exported_name: jobs_hot_ranges_logger_currently_idle
+      labeled_name: 'jobs{type: hot_ranges_logger, status: currently_idle}'
       description: Number of hot_ranges_logger jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -4588,6 +4759,7 @@ layers:
       derivative: NONE
     - name: jobs.hot_ranges_logger.currently_paused
       exported_name: jobs_hot_ranges_logger_currently_paused
+      labeled_name: 'jobs{name: hot_ranges_logger, status: currently_paused}'
       description: Number of hot_ranges_logger jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -4596,6 +4768,7 @@ layers:
       derivative: NONE
     - name: jobs.hot_ranges_logger.currently_running
       exported_name: jobs_hot_ranges_logger_currently_running
+      labeled_name: 'jobs{type: hot_ranges_logger, status: currently_running}'
       description: Number of hot_ranges_logger jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -4604,6 +4777,7 @@ layers:
       derivative: NONE
     - name: jobs.hot_ranges_logger.expired_pts_records
       exported_name: jobs_hot_ranges_logger_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: hot_ranges_logger}'
       description: Number of expired protected timestamp records owned by hot_ranges_logger jobs
       y_axis_label: records
       type: COUNTER
@@ -4612,6 +4786,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.hot_ranges_logger.fail_or_cancel_completed
       exported_name: jobs_hot_ranges_logger_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: hot_ranges_logger, status: completed}'
       description: Number of hot_ranges_logger jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4620,6 +4795,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.hot_ranges_logger.fail_or_cancel_failed
       exported_name: jobs_hot_ranges_logger_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: hot_ranges_logger, status: failed}'
       description: Number of hot_ranges_logger jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4628,6 +4804,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.hot_ranges_logger.fail_or_cancel_retry_error
       exported_name: jobs_hot_ranges_logger_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: hot_ranges_logger, status: retry_error}'
       description: Number of hot_ranges_logger jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4636,6 +4813,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.hot_ranges_logger.protected_age_sec
       exported_name: jobs_hot_ranges_logger_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: hot_ranges_logger}'
       description: The age of the oldest PTS record protected by hot_ranges_logger jobs
       y_axis_label: seconds
       type: GAUGE
@@ -4644,6 +4822,7 @@ layers:
       derivative: NONE
     - name: jobs.hot_ranges_logger.protected_record_count
       exported_name: jobs_hot_ranges_logger_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: hot_ranges_logger}'
       description: Number of protected timestamp records held by hot_ranges_logger jobs
       y_axis_label: records
       type: GAUGE
@@ -4652,6 +4831,7 @@ layers:
       derivative: NONE
     - name: jobs.hot_ranges_logger.resume_completed
       exported_name: jobs_hot_ranges_logger_resume_completed
+      labeled_name: 'jobs.resume{name: hot_ranges_logger, status: completed}'
       description: Number of hot_ranges_logger jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -4660,6 +4840,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.hot_ranges_logger.resume_failed
       exported_name: jobs_hot_ranges_logger_resume_failed
+      labeled_name: 'jobs.resume{name: hot_ranges_logger, status: failed}'
       description: Number of hot_ranges_logger jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -4668,6 +4849,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.hot_ranges_logger.resume_retry_error
       exported_name: jobs_hot_ranges_logger_resume_retry_error
+      labeled_name: 'jobs.resume{name: hot_ranges_logger, status: retry_error}'
       description: Number of hot_ranges_logger jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -4676,6 +4858,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.import.currently_idle
       exported_name: jobs_import_currently_idle
+      labeled_name: 'jobs{type: import, status: currently_idle}'
       description: Number of import jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -4684,6 +4867,7 @@ layers:
       derivative: NONE
     - name: jobs.import.currently_paused
       exported_name: jobs_import_currently_paused
+      labeled_name: 'jobs{name: import, status: currently_paused}'
       description: Number of import jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -4692,6 +4876,7 @@ layers:
       derivative: NONE
     - name: jobs.import.currently_running
       exported_name: jobs_import_currently_running
+      labeled_name: 'jobs{type: import, status: currently_running}'
       description: Number of import jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -4700,6 +4885,7 @@ layers:
       derivative: NONE
     - name: jobs.import.expired_pts_records
       exported_name: jobs_import_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: import}'
       description: Number of expired protected timestamp records owned by import jobs
       y_axis_label: records
       type: COUNTER
@@ -4708,6 +4894,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.import.fail_or_cancel_completed
       exported_name: jobs_import_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: import, status: completed}'
       description: Number of import jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4716,6 +4903,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.import.fail_or_cancel_failed
       exported_name: jobs_import_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: import, status: failed}'
       description: Number of import jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4724,6 +4912,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.import.fail_or_cancel_retry_error
       exported_name: jobs_import_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: import, status: retry_error}'
       description: Number of import jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4732,6 +4921,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.import.protected_age_sec
       exported_name: jobs_import_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: import}'
       description: The age of the oldest PTS record protected by import jobs
       y_axis_label: seconds
       type: GAUGE
@@ -4740,6 +4930,7 @@ layers:
       derivative: NONE
     - name: jobs.import.protected_record_count
       exported_name: jobs_import_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: import}'
       description: Number of protected timestamp records held by import jobs
       y_axis_label: records
       type: GAUGE
@@ -4748,6 +4939,7 @@ layers:
       derivative: NONE
     - name: jobs.import.resume_completed
       exported_name: jobs_import_resume_completed
+      labeled_name: 'jobs.resume{name: import, status: completed}'
       description: Number of import jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -4756,6 +4948,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.import.resume_failed
       exported_name: jobs_import_resume_failed
+      labeled_name: 'jobs.resume{name: import, status: failed}'
       description: Number of import jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -4764,6 +4957,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.import.resume_retry_error
       exported_name: jobs_import_resume_retry_error
+      labeled_name: 'jobs.resume{name: import, status: retry_error}'
       description: Number of import jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -4772,6 +4966,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.import_rollback.currently_idle
       exported_name: jobs_import_rollback_currently_idle
+      labeled_name: 'jobs{type: import_rollback, status: currently_idle}'
       description: Number of import_rollback jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -4780,6 +4975,7 @@ layers:
       derivative: NONE
     - name: jobs.import_rollback.currently_paused
       exported_name: jobs_import_rollback_currently_paused
+      labeled_name: 'jobs{name: import_rollback, status: currently_paused}'
       description: Number of import_rollback jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -4788,6 +4984,7 @@ layers:
       derivative: NONE
     - name: jobs.import_rollback.currently_running
       exported_name: jobs_import_rollback_currently_running
+      labeled_name: 'jobs{type: import_rollback, status: currently_running}'
       description: Number of import_rollback jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -4796,6 +4993,7 @@ layers:
       derivative: NONE
     - name: jobs.import_rollback.expired_pts_records
       exported_name: jobs_import_rollback_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: import_rollback}'
       description: Number of expired protected timestamp records owned by import_rollback jobs
       y_axis_label: records
       type: COUNTER
@@ -4804,6 +5002,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.import_rollback.fail_or_cancel_completed
       exported_name: jobs_import_rollback_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: import_rollback, status: completed}'
       description: Number of import_rollback jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4812,6 +5011,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.import_rollback.fail_or_cancel_failed
       exported_name: jobs_import_rollback_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: import_rollback, status: failed}'
       description: Number of import_rollback jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4820,6 +5020,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.import_rollback.fail_or_cancel_retry_error
       exported_name: jobs_import_rollback_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: import_rollback, status: retry_error}'
       description: Number of import_rollback jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4828,6 +5029,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.import_rollback.protected_age_sec
       exported_name: jobs_import_rollback_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: import_rollback}'
       description: The age of the oldest PTS record protected by import_rollback jobs
       y_axis_label: seconds
       type: GAUGE
@@ -4836,6 +5038,7 @@ layers:
       derivative: NONE
     - name: jobs.import_rollback.protected_record_count
       exported_name: jobs_import_rollback_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: import_rollback}'
       description: Number of protected timestamp records held by import_rollback jobs
       y_axis_label: records
       type: GAUGE
@@ -4844,6 +5047,7 @@ layers:
       derivative: NONE
     - name: jobs.import_rollback.resume_completed
       exported_name: jobs_import_rollback_resume_completed
+      labeled_name: 'jobs.resume{name: import_rollback, status: completed}'
       description: Number of import_rollback jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -4852,6 +5056,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.import_rollback.resume_failed
       exported_name: jobs_import_rollback_resume_failed
+      labeled_name: 'jobs.resume{name: import_rollback, status: failed}'
       description: Number of import_rollback jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -4860,6 +5065,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.import_rollback.resume_retry_error
       exported_name: jobs_import_rollback_resume_retry_error
+      labeled_name: 'jobs.resume{name: import_rollback, status: retry_error}'
       description: Number of import_rollback jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -4868,6 +5074,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.key_visualizer.currently_idle
       exported_name: jobs_key_visualizer_currently_idle
+      labeled_name: 'jobs{type: key_visualizer, status: currently_idle}'
       description: Number of key_visualizer jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -4876,6 +5083,7 @@ layers:
       derivative: NONE
     - name: jobs.key_visualizer.currently_paused
       exported_name: jobs_key_visualizer_currently_paused
+      labeled_name: 'jobs{name: key_visualizer, status: currently_paused}'
       description: Number of key_visualizer jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -4884,6 +5092,7 @@ layers:
       derivative: NONE
     - name: jobs.key_visualizer.currently_running
       exported_name: jobs_key_visualizer_currently_running
+      labeled_name: 'jobs{type: key_visualizer, status: currently_running}'
       description: Number of key_visualizer jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -4892,6 +5101,7 @@ layers:
       derivative: NONE
     - name: jobs.key_visualizer.expired_pts_records
       exported_name: jobs_key_visualizer_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: key_visualizer}'
       description: Number of expired protected timestamp records owned by key_visualizer jobs
       y_axis_label: records
       type: COUNTER
@@ -4900,6 +5110,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.key_visualizer.fail_or_cancel_completed
       exported_name: jobs_key_visualizer_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: key_visualizer, status: completed}'
       description: Number of key_visualizer jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4908,6 +5119,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.key_visualizer.fail_or_cancel_failed
       exported_name: jobs_key_visualizer_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: key_visualizer, status: failed}'
       description: Number of key_visualizer jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4916,6 +5128,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.key_visualizer.fail_or_cancel_retry_error
       exported_name: jobs_key_visualizer_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: key_visualizer, status: retry_error}'
       description: Number of key_visualizer jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -4924,6 +5137,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.key_visualizer.protected_age_sec
       exported_name: jobs_key_visualizer_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: key_visualizer}'
       description: The age of the oldest PTS record protected by key_visualizer jobs
       y_axis_label: seconds
       type: GAUGE
@@ -4932,6 +5146,7 @@ layers:
       derivative: NONE
     - name: jobs.key_visualizer.protected_record_count
       exported_name: jobs_key_visualizer_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: key_visualizer}'
       description: Number of protected timestamp records held by key_visualizer jobs
       y_axis_label: records
       type: GAUGE
@@ -4940,6 +5155,7 @@ layers:
       derivative: NONE
     - name: jobs.key_visualizer.resume_completed
       exported_name: jobs_key_visualizer_resume_completed
+      labeled_name: 'jobs.resume{name: key_visualizer, status: completed}'
       description: Number of key_visualizer jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -4948,6 +5164,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.key_visualizer.resume_failed
       exported_name: jobs_key_visualizer_resume_failed
+      labeled_name: 'jobs.resume{name: key_visualizer, status: failed}'
       description: Number of key_visualizer jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -4956,6 +5173,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.key_visualizer.resume_retry_error
       exported_name: jobs_key_visualizer_resume_retry_error
+      labeled_name: 'jobs.resume{name: key_visualizer, status: retry_error}'
       description: Number of key_visualizer jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -4964,6 +5182,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.logical_replication.currently_idle
       exported_name: jobs_logical_replication_currently_idle
+      labeled_name: 'jobs{type: logical_replication, status: currently_idle}'
       description: Number of logical_replication jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -4972,6 +5191,7 @@ layers:
       derivative: NONE
     - name: jobs.logical_replication.currently_paused
       exported_name: jobs_logical_replication_currently_paused
+      labeled_name: 'jobs{name: logical_replication, status: currently_paused}'
       description: Number of logical_replication jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -4980,6 +5200,7 @@ layers:
       derivative: NONE
     - name: jobs.logical_replication.currently_running
       exported_name: jobs_logical_replication_currently_running
+      labeled_name: 'jobs{type: logical_replication, status: currently_running}'
       description: Number of logical_replication jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -4988,6 +5209,7 @@ layers:
       derivative: NONE
     - name: jobs.logical_replication.expired_pts_records
       exported_name: jobs_logical_replication_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: logical_replication}'
       description: Number of expired protected timestamp records owned by logical_replication jobs
       y_axis_label: records
       type: COUNTER
@@ -4996,6 +5218,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.logical_replication.fail_or_cancel_completed
       exported_name: jobs_logical_replication_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: logical_replication, status: completed}'
       description: Number of logical_replication jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5004,6 +5227,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.logical_replication.fail_or_cancel_failed
       exported_name: jobs_logical_replication_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: logical_replication, status: failed}'
       description: Number of logical_replication jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5012,6 +5236,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.logical_replication.fail_or_cancel_retry_error
       exported_name: jobs_logical_replication_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: logical_replication, status: retry_error}'
       description: Number of logical_replication jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5020,6 +5245,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.logical_replication.protected_age_sec
       exported_name: jobs_logical_replication_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: logical_replication}'
       description: The age of the oldest PTS record protected by logical_replication jobs
       y_axis_label: seconds
       type: GAUGE
@@ -5028,6 +5254,7 @@ layers:
       derivative: NONE
     - name: jobs.logical_replication.protected_record_count
       exported_name: jobs_logical_replication_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: logical_replication}'
       description: Number of protected timestamp records held by logical_replication jobs
       y_axis_label: records
       type: GAUGE
@@ -5036,6 +5263,7 @@ layers:
       derivative: NONE
     - name: jobs.logical_replication.resume_completed
       exported_name: jobs_logical_replication_resume_completed
+      labeled_name: 'jobs.resume{name: logical_replication, status: completed}'
       description: Number of logical_replication jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -5044,6 +5272,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.logical_replication.resume_failed
       exported_name: jobs_logical_replication_resume_failed
+      labeled_name: 'jobs.resume{name: logical_replication, status: failed}'
       description: Number of logical_replication jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -5052,6 +5281,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.logical_replication.resume_retry_error
       exported_name: jobs_logical_replication_resume_retry_error
+      labeled_name: 'jobs.resume{name: logical_replication, status: retry_error}'
       description: Number of logical_replication jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -5068,6 +5298,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.migration.currently_idle
       exported_name: jobs_migration_currently_idle
+      labeled_name: 'jobs{type: migration, status: currently_idle}'
       description: Number of migration jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -5076,6 +5307,7 @@ layers:
       derivative: NONE
     - name: jobs.migration.currently_paused
       exported_name: jobs_migration_currently_paused
+      labeled_name: 'jobs{name: migration, status: currently_paused}'
       description: Number of migration jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -5084,6 +5316,7 @@ layers:
       derivative: NONE
     - name: jobs.migration.currently_running
       exported_name: jobs_migration_currently_running
+      labeled_name: 'jobs{type: migration, status: currently_running}'
       description: Number of migration jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -5092,6 +5325,7 @@ layers:
       derivative: NONE
     - name: jobs.migration.expired_pts_records
       exported_name: jobs_migration_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: migration}'
       description: Number of expired protected timestamp records owned by migration jobs
       y_axis_label: records
       type: COUNTER
@@ -5100,6 +5334,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.migration.fail_or_cancel_completed
       exported_name: jobs_migration_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: migration, status: completed}'
       description: Number of migration jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5108,6 +5343,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.migration.fail_or_cancel_failed
       exported_name: jobs_migration_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: migration, status: failed}'
       description: Number of migration jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5116,6 +5352,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.migration.fail_or_cancel_retry_error
       exported_name: jobs_migration_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: migration, status: retry_error}'
       description: Number of migration jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5124,6 +5361,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.migration.protected_age_sec
       exported_name: jobs_migration_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: migration}'
       description: The age of the oldest PTS record protected by migration jobs
       y_axis_label: seconds
       type: GAUGE
@@ -5132,6 +5370,7 @@ layers:
       derivative: NONE
     - name: jobs.migration.protected_record_count
       exported_name: jobs_migration_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: migration}'
       description: Number of protected timestamp records held by migration jobs
       y_axis_label: records
       type: GAUGE
@@ -5140,6 +5379,7 @@ layers:
       derivative: NONE
     - name: jobs.migration.resume_completed
       exported_name: jobs_migration_resume_completed
+      labeled_name: 'jobs.resume{name: migration, status: completed}'
       description: Number of migration jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -5148,6 +5388,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.migration.resume_failed
       exported_name: jobs_migration_resume_failed
+      labeled_name: 'jobs.resume{name: migration, status: failed}'
       description: Number of migration jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -5156,6 +5397,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.migration.resume_retry_error
       exported_name: jobs_migration_resume_retry_error
+      labeled_name: 'jobs.resume{name: migration, status: retry_error}'
       description: Number of migration jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -5164,6 +5406,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.mvcc_statistics_update.currently_idle
       exported_name: jobs_mvcc_statistics_update_currently_idle
+      labeled_name: 'jobs{type: mvcc_statistics_update, status: currently_idle}'
       description: Number of mvcc_statistics_update jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -5172,6 +5415,7 @@ layers:
       derivative: NONE
     - name: jobs.mvcc_statistics_update.currently_paused
       exported_name: jobs_mvcc_statistics_update_currently_paused
+      labeled_name: 'jobs{name: mvcc_statistics_update, status: currently_paused}'
       description: Number of mvcc_statistics_update jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -5180,6 +5424,7 @@ layers:
       derivative: NONE
     - name: jobs.mvcc_statistics_update.currently_running
       exported_name: jobs_mvcc_statistics_update_currently_running
+      labeled_name: 'jobs{type: mvcc_statistics_update, status: currently_running}'
       description: Number of mvcc_statistics_update jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -5188,6 +5433,7 @@ layers:
       derivative: NONE
     - name: jobs.mvcc_statistics_update.expired_pts_records
       exported_name: jobs_mvcc_statistics_update_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: mvcc_statistics_update}'
       description: Number of expired protected timestamp records owned by mvcc_statistics_update jobs
       y_axis_label: records
       type: COUNTER
@@ -5196,6 +5442,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.mvcc_statistics_update.fail_or_cancel_completed
       exported_name: jobs_mvcc_statistics_update_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: mvcc_statistics_update, status: completed}'
       description: Number of mvcc_statistics_update jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5204,6 +5451,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.mvcc_statistics_update.fail_or_cancel_failed
       exported_name: jobs_mvcc_statistics_update_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: mvcc_statistics_update, status: failed}'
       description: Number of mvcc_statistics_update jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5212,6 +5460,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.mvcc_statistics_update.fail_or_cancel_retry_error
       exported_name: jobs_mvcc_statistics_update_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: mvcc_statistics_update, status: retry_error}'
       description: Number of mvcc_statistics_update jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5220,6 +5469,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.mvcc_statistics_update.protected_age_sec
       exported_name: jobs_mvcc_statistics_update_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: mvcc_statistics_update}'
       description: The age of the oldest PTS record protected by mvcc_statistics_update jobs
       y_axis_label: seconds
       type: GAUGE
@@ -5228,6 +5478,7 @@ layers:
       derivative: NONE
     - name: jobs.mvcc_statistics_update.protected_record_count
       exported_name: jobs_mvcc_statistics_update_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: mvcc_statistics_update}'
       description: Number of protected timestamp records held by mvcc_statistics_update jobs
       y_axis_label: records
       type: GAUGE
@@ -5236,6 +5487,7 @@ layers:
       derivative: NONE
     - name: jobs.mvcc_statistics_update.resume_completed
       exported_name: jobs_mvcc_statistics_update_resume_completed
+      labeled_name: 'jobs.resume{name: mvcc_statistics_update, status: completed}'
       description: Number of mvcc_statistics_update jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -5244,6 +5496,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.mvcc_statistics_update.resume_failed
       exported_name: jobs_mvcc_statistics_update_resume_failed
+      labeled_name: 'jobs.resume{name: mvcc_statistics_update, status: failed}'
       description: Number of mvcc_statistics_update jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -5252,6 +5505,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.mvcc_statistics_update.resume_retry_error
       exported_name: jobs_mvcc_statistics_update_resume_retry_error
+      labeled_name: 'jobs.resume{name: mvcc_statistics_update, status: retry_error}'
       description: Number of mvcc_statistics_update jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -5260,6 +5514,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.new_schema_change.currently_idle
       exported_name: jobs_new_schema_change_currently_idle
+      labeled_name: 'jobs{type: new_schema_change, status: currently_idle}'
       description: Number of new_schema_change jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -5268,6 +5523,7 @@ layers:
       derivative: NONE
     - name: jobs.new_schema_change.currently_paused
       exported_name: jobs_new_schema_change_currently_paused
+      labeled_name: 'jobs{name: new_schema_change, status: currently_paused}'
       description: Number of new_schema_change jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -5276,6 +5532,7 @@ layers:
       derivative: NONE
     - name: jobs.new_schema_change.currently_running
       exported_name: jobs_new_schema_change_currently_running
+      labeled_name: 'jobs{type: new_schema_change, status: currently_running}'
       description: Number of new_schema_change jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -5284,6 +5541,7 @@ layers:
       derivative: NONE
     - name: jobs.new_schema_change.expired_pts_records
       exported_name: jobs_new_schema_change_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: new_schema_change}'
       description: Number of expired protected timestamp records owned by new_schema_change jobs
       y_axis_label: records
       type: COUNTER
@@ -5292,6 +5550,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.new_schema_change.fail_or_cancel_completed
       exported_name: jobs_new_schema_change_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: new_schema_change, status: completed}'
       description: Number of new_schema_change jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5300,6 +5559,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.new_schema_change.fail_or_cancel_failed
       exported_name: jobs_new_schema_change_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: new_schema_change, status: failed}'
       description: Number of new_schema_change jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5308,6 +5568,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.new_schema_change.fail_or_cancel_retry_error
       exported_name: jobs_new_schema_change_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: new_schema_change, status: retry_error}'
       description: Number of new_schema_change jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5316,6 +5577,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.new_schema_change.protected_age_sec
       exported_name: jobs_new_schema_change_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: new_schema_change}'
       description: The age of the oldest PTS record protected by new_schema_change jobs
       y_axis_label: seconds
       type: GAUGE
@@ -5324,6 +5586,7 @@ layers:
       derivative: NONE
     - name: jobs.new_schema_change.protected_record_count
       exported_name: jobs_new_schema_change_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: new_schema_change}'
       description: Number of protected timestamp records held by new_schema_change jobs
       y_axis_label: records
       type: GAUGE
@@ -5332,6 +5595,7 @@ layers:
       derivative: NONE
     - name: jobs.new_schema_change.resume_completed
       exported_name: jobs_new_schema_change_resume_completed
+      labeled_name: 'jobs.resume{name: new_schema_change, status: completed}'
       description: Number of new_schema_change jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -5340,6 +5604,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.new_schema_change.resume_failed
       exported_name: jobs_new_schema_change_resume_failed
+      labeled_name: 'jobs.resume{name: new_schema_change, status: failed}'
       description: Number of new_schema_change jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -5348,6 +5613,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.new_schema_change.resume_retry_error
       exported_name: jobs_new_schema_change_resume_retry_error
+      labeled_name: 'jobs.resume{name: new_schema_change, status: retry_error}'
       description: Number of new_schema_change jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -5356,6 +5622,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.poll_jobs_stats.currently_idle
       exported_name: jobs_poll_jobs_stats_currently_idle
+      labeled_name: 'jobs{type: poll_jobs_stats, status: currently_idle}'
       description: Number of poll_jobs_stats jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -5364,6 +5631,7 @@ layers:
       derivative: NONE
     - name: jobs.poll_jobs_stats.currently_paused
       exported_name: jobs_poll_jobs_stats_currently_paused
+      labeled_name: 'jobs{name: poll_jobs_stats, status: currently_paused}'
       description: Number of poll_jobs_stats jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -5372,6 +5640,7 @@ layers:
       derivative: NONE
     - name: jobs.poll_jobs_stats.currently_running
       exported_name: jobs_poll_jobs_stats_currently_running
+      labeled_name: 'jobs{type: poll_jobs_stats, status: currently_running}'
       description: Number of poll_jobs_stats jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -5380,6 +5649,7 @@ layers:
       derivative: NONE
     - name: jobs.poll_jobs_stats.expired_pts_records
       exported_name: jobs_poll_jobs_stats_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: poll_jobs_stats}'
       description: Number of expired protected timestamp records owned by poll_jobs_stats jobs
       y_axis_label: records
       type: COUNTER
@@ -5388,6 +5658,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.poll_jobs_stats.fail_or_cancel_completed
       exported_name: jobs_poll_jobs_stats_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: poll_jobs_stats, status: completed}'
       description: Number of poll_jobs_stats jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5396,6 +5667,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.poll_jobs_stats.fail_or_cancel_failed
       exported_name: jobs_poll_jobs_stats_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: poll_jobs_stats, status: failed}'
       description: Number of poll_jobs_stats jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5404,6 +5676,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.poll_jobs_stats.fail_or_cancel_retry_error
       exported_name: jobs_poll_jobs_stats_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: poll_jobs_stats, status: retry_error}'
       description: Number of poll_jobs_stats jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5412,6 +5685,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.poll_jobs_stats.protected_age_sec
       exported_name: jobs_poll_jobs_stats_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: poll_jobs_stats}'
       description: The age of the oldest PTS record protected by poll_jobs_stats jobs
       y_axis_label: seconds
       type: GAUGE
@@ -5420,6 +5694,7 @@ layers:
       derivative: NONE
     - name: jobs.poll_jobs_stats.protected_record_count
       exported_name: jobs_poll_jobs_stats_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: poll_jobs_stats}'
       description: Number of protected timestamp records held by poll_jobs_stats jobs
       y_axis_label: records
       type: GAUGE
@@ -5428,6 +5703,7 @@ layers:
       derivative: NONE
     - name: jobs.poll_jobs_stats.resume_completed
       exported_name: jobs_poll_jobs_stats_resume_completed
+      labeled_name: 'jobs.resume{name: poll_jobs_stats, status: completed}'
       description: Number of poll_jobs_stats jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -5436,6 +5712,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.poll_jobs_stats.resume_failed
       exported_name: jobs_poll_jobs_stats_resume_failed
+      labeled_name: 'jobs.resume{name: poll_jobs_stats, status: failed}'
       description: Number of poll_jobs_stats jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -5444,6 +5721,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.poll_jobs_stats.resume_retry_error
       exported_name: jobs_poll_jobs_stats_resume_retry_error
+      labeled_name: 'jobs.resume{name: poll_jobs_stats, status: retry_error}'
       description: Number of poll_jobs_stats jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -5452,6 +5730,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.replication_stream_ingestion.currently_idle
       exported_name: jobs_replication_stream_ingestion_currently_idle
+      labeled_name: 'jobs{type: replication_stream_ingestion, status: currently_idle}'
       description: Number of replication_stream_ingestion jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -5460,6 +5739,7 @@ layers:
       derivative: NONE
     - name: jobs.replication_stream_ingestion.currently_paused
       exported_name: jobs_replication_stream_ingestion_currently_paused
+      labeled_name: 'jobs{name: replication_stream_ingestion, status: currently_paused}'
       description: Number of replication_stream_ingestion jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -5468,6 +5748,7 @@ layers:
       derivative: NONE
     - name: jobs.replication_stream_ingestion.currently_running
       exported_name: jobs_replication_stream_ingestion_currently_running
+      labeled_name: 'jobs{type: replication_stream_ingestion, status: currently_running}'
       description: Number of replication_stream_ingestion jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -5476,6 +5757,7 @@ layers:
       derivative: NONE
     - name: jobs.replication_stream_ingestion.expired_pts_records
       exported_name: jobs_replication_stream_ingestion_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: replication_stream_ingestion}'
       description: Number of expired protected timestamp records owned by replication_stream_ingestion jobs
       y_axis_label: records
       type: COUNTER
@@ -5484,6 +5766,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.replication_stream_ingestion.fail_or_cancel_completed
       exported_name: jobs_replication_stream_ingestion_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: replication_stream_ingestion, status: completed}'
       description: Number of replication_stream_ingestion jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5492,6 +5775,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.replication_stream_ingestion.fail_or_cancel_failed
       exported_name: jobs_replication_stream_ingestion_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: replication_stream_ingestion, status: failed}'
       description: Number of replication_stream_ingestion jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5500,6 +5784,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.replication_stream_ingestion.fail_or_cancel_retry_error
       exported_name: jobs_replication_stream_ingestion_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: replication_stream_ingestion, status: retry_error}'
       description: Number of replication_stream_ingestion jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5508,6 +5793,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.replication_stream_ingestion.protected_age_sec
       exported_name: jobs_replication_stream_ingestion_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: replication_stream_ingestion}'
       description: The age of the oldest PTS record protected by replication_stream_ingestion jobs
       y_axis_label: seconds
       type: GAUGE
@@ -5516,6 +5802,7 @@ layers:
       derivative: NONE
     - name: jobs.replication_stream_ingestion.protected_record_count
       exported_name: jobs_replication_stream_ingestion_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: replication_stream_ingestion}'
       description: Number of protected timestamp records held by replication_stream_ingestion jobs
       y_axis_label: records
       type: GAUGE
@@ -5524,6 +5811,7 @@ layers:
       derivative: NONE
     - name: jobs.replication_stream_ingestion.resume_completed
       exported_name: jobs_replication_stream_ingestion_resume_completed
+      labeled_name: 'jobs.resume{name: replication_stream_ingestion, status: completed}'
       description: Number of replication_stream_ingestion jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -5532,6 +5820,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.replication_stream_ingestion.resume_failed
       exported_name: jobs_replication_stream_ingestion_resume_failed
+      labeled_name: 'jobs.resume{name: replication_stream_ingestion, status: failed}'
       description: Number of replication_stream_ingestion jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -5540,6 +5829,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.replication_stream_ingestion.resume_retry_error
       exported_name: jobs_replication_stream_ingestion_resume_retry_error
+      labeled_name: 'jobs.resume{name: replication_stream_ingestion, status: retry_error}'
       description: Number of replication_stream_ingestion jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -5548,6 +5838,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.replication_stream_producer.currently_idle
       exported_name: jobs_replication_stream_producer_currently_idle
+      labeled_name: 'jobs{type: replication_stream_producer, status: currently_idle}'
       description: Number of replication_stream_producer jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -5556,6 +5847,7 @@ layers:
       derivative: NONE
     - name: jobs.replication_stream_producer.currently_paused
       exported_name: jobs_replication_stream_producer_currently_paused
+      labeled_name: 'jobs{name: replication_stream_producer, status: currently_paused}'
       description: Number of replication_stream_producer jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -5564,6 +5856,7 @@ layers:
       derivative: NONE
     - name: jobs.replication_stream_producer.currently_running
       exported_name: jobs_replication_stream_producer_currently_running
+      labeled_name: 'jobs{type: replication_stream_producer, status: currently_running}'
       description: Number of replication_stream_producer jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -5572,6 +5865,7 @@ layers:
       derivative: NONE
     - name: jobs.replication_stream_producer.expired_pts_records
       exported_name: jobs_replication_stream_producer_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: replication_stream_producer}'
       description: Number of expired protected timestamp records owned by replication_stream_producer jobs
       y_axis_label: records
       type: COUNTER
@@ -5580,6 +5874,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.replication_stream_producer.fail_or_cancel_completed
       exported_name: jobs_replication_stream_producer_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: replication_stream_producer, status: completed}'
       description: Number of replication_stream_producer jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5588,6 +5883,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.replication_stream_producer.fail_or_cancel_failed
       exported_name: jobs_replication_stream_producer_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: replication_stream_producer, status: failed}'
       description: Number of replication_stream_producer jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5596,6 +5892,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.replication_stream_producer.fail_or_cancel_retry_error
       exported_name: jobs_replication_stream_producer_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: replication_stream_producer, status: retry_error}'
       description: Number of replication_stream_producer jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5604,6 +5901,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.replication_stream_producer.protected_age_sec
       exported_name: jobs_replication_stream_producer_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: replication_stream_producer}'
       description: The age of the oldest PTS record protected by replication_stream_producer jobs
       y_axis_label: seconds
       type: GAUGE
@@ -5612,6 +5910,7 @@ layers:
       derivative: NONE
     - name: jobs.replication_stream_producer.protected_record_count
       exported_name: jobs_replication_stream_producer_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: replication_stream_producer}'
       description: Number of protected timestamp records held by replication_stream_producer jobs
       y_axis_label: records
       type: GAUGE
@@ -5620,6 +5919,7 @@ layers:
       derivative: NONE
     - name: jobs.replication_stream_producer.resume_completed
       exported_name: jobs_replication_stream_producer_resume_completed
+      labeled_name: 'jobs.resume{name: replication_stream_producer, status: completed}'
       description: Number of replication_stream_producer jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -5628,6 +5928,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.replication_stream_producer.resume_failed
       exported_name: jobs_replication_stream_producer_resume_failed
+      labeled_name: 'jobs.resume{name: replication_stream_producer, status: failed}'
       description: Number of replication_stream_producer jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -5636,6 +5937,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.replication_stream_producer.resume_retry_error
       exported_name: jobs_replication_stream_producer_resume_retry_error
+      labeled_name: 'jobs.resume{name: replication_stream_producer, status: retry_error}'
       description: Number of replication_stream_producer jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -5644,6 +5946,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.restore.currently_idle
       exported_name: jobs_restore_currently_idle
+      labeled_name: 'jobs{type: restore, status: currently_idle}'
       description: Number of restore jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -5652,6 +5955,7 @@ layers:
       derivative: NONE
     - name: jobs.restore.currently_paused
       exported_name: jobs_restore_currently_paused
+      labeled_name: 'jobs{name: restore, status: currently_paused}'
       description: Number of restore jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -5660,6 +5964,7 @@ layers:
       derivative: NONE
     - name: jobs.restore.currently_running
       exported_name: jobs_restore_currently_running
+      labeled_name: 'jobs{type: restore, status: currently_running}'
       description: Number of restore jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -5668,6 +5973,7 @@ layers:
       derivative: NONE
     - name: jobs.restore.expired_pts_records
       exported_name: jobs_restore_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: restore}'
       description: Number of expired protected timestamp records owned by restore jobs
       y_axis_label: records
       type: COUNTER
@@ -5676,6 +5982,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.restore.fail_or_cancel_completed
       exported_name: jobs_restore_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: restore, status: completed}'
       description: Number of restore jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5684,6 +5991,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.restore.fail_or_cancel_failed
       exported_name: jobs_restore_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: restore, status: failed}'
       description: Number of restore jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5692,6 +6000,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.restore.fail_or_cancel_retry_error
       exported_name: jobs_restore_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: restore, status: retry_error}'
       description: Number of restore jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5700,6 +6009,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.restore.protected_age_sec
       exported_name: jobs_restore_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: restore}'
       description: The age of the oldest PTS record protected by restore jobs
       y_axis_label: seconds
       type: GAUGE
@@ -5708,6 +6018,7 @@ layers:
       derivative: NONE
     - name: jobs.restore.protected_record_count
       exported_name: jobs_restore_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: restore}'
       description: Number of protected timestamp records held by restore jobs
       y_axis_label: records
       type: GAUGE
@@ -5716,6 +6027,7 @@ layers:
       derivative: NONE
     - name: jobs.restore.resume_completed
       exported_name: jobs_restore_resume_completed
+      labeled_name: 'jobs.resume{name: restore, status: completed}'
       description: Number of restore jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -5724,6 +6036,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.restore.resume_failed
       exported_name: jobs_restore_resume_failed
+      labeled_name: 'jobs.resume{name: restore, status: failed}'
       description: Number of restore jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -5732,6 +6045,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.restore.resume_retry_error
       exported_name: jobs_restore_resume_retry_error
+      labeled_name: 'jobs.resume{name: restore, status: retry_error}'
       description: Number of restore jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -5748,6 +6062,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.row_level_ttl.currently_idle
       exported_name: jobs_row_level_ttl_currently_idle
+      labeled_name: 'jobs{type: row_level_ttl, status: currently_idle}'
       description: Number of row_level_ttl jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -5756,6 +6071,7 @@ layers:
       derivative: NONE
     - name: jobs.row_level_ttl.expired_pts_records
       exported_name: jobs_row_level_ttl_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: row_level_ttl}'
       description: Number of expired protected timestamp records owned by row_level_ttl jobs
       y_axis_label: records
       type: COUNTER
@@ -5764,6 +6080,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.row_level_ttl.fail_or_cancel_completed
       exported_name: jobs_row_level_ttl_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: row_level_ttl, status: completed}'
       description: Number of row_level_ttl jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5772,6 +6089,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.row_level_ttl.fail_or_cancel_failed
       exported_name: jobs_row_level_ttl_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: row_level_ttl, status: failed}'
       description: Number of row_level_ttl jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5780,6 +6098,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.row_level_ttl.fail_or_cancel_retry_error
       exported_name: jobs_row_level_ttl_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: row_level_ttl, status: retry_error}'
       description: Number of row_level_ttl jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5796,6 +6115,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.row_level_ttl.protected_age_sec
       exported_name: jobs_row_level_ttl_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: row_level_ttl}'
       description: The age of the oldest PTS record protected by row_level_ttl jobs
       y_axis_label: seconds
       type: GAUGE
@@ -5804,6 +6124,7 @@ layers:
       derivative: NONE
     - name: jobs.row_level_ttl.protected_record_count
       exported_name: jobs_row_level_ttl_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: row_level_ttl}'
       description: Number of protected timestamp records held by row_level_ttl jobs
       y_axis_label: records
       type: GAUGE
@@ -5812,6 +6133,7 @@ layers:
       derivative: NONE
     - name: jobs.row_level_ttl.resume_retry_error
       exported_name: jobs_row_level_ttl_resume_retry_error
+      labeled_name: 'jobs.resume{name: row_level_ttl, status: retry_error}'
       description: Number of row_level_ttl jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -5828,6 +6150,7 @@ layers:
       derivative: NONE
     - name: jobs.schema_change.currently_idle
       exported_name: jobs_schema_change_currently_idle
+      labeled_name: 'jobs{type: schema_change, status: currently_idle}'
       description: Number of schema_change jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -5836,6 +6159,7 @@ layers:
       derivative: NONE
     - name: jobs.schema_change.currently_paused
       exported_name: jobs_schema_change_currently_paused
+      labeled_name: 'jobs{name: schema_change, status: currently_paused}'
       description: Number of schema_change jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -5844,6 +6168,7 @@ layers:
       derivative: NONE
     - name: jobs.schema_change.currently_running
       exported_name: jobs_schema_change_currently_running
+      labeled_name: 'jobs{type: schema_change, status: currently_running}'
       description: Number of schema_change jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -5852,6 +6177,7 @@ layers:
       derivative: NONE
     - name: jobs.schema_change.expired_pts_records
       exported_name: jobs_schema_change_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: schema_change}'
       description: Number of expired protected timestamp records owned by schema_change jobs
       y_axis_label: records
       type: COUNTER
@@ -5860,6 +6186,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.schema_change.fail_or_cancel_completed
       exported_name: jobs_schema_change_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: schema_change, status: completed}'
       description: Number of schema_change jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5868,6 +6195,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.schema_change.fail_or_cancel_failed
       exported_name: jobs_schema_change_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: schema_change, status: failed}'
       description: Number of schema_change jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5876,6 +6204,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.schema_change.fail_or_cancel_retry_error
       exported_name: jobs_schema_change_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: schema_change, status: retry_error}'
       description: Number of schema_change jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5884,6 +6213,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.schema_change.protected_age_sec
       exported_name: jobs_schema_change_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: schema_change}'
       description: The age of the oldest PTS record protected by schema_change jobs
       y_axis_label: seconds
       type: GAUGE
@@ -5892,6 +6222,7 @@ layers:
       derivative: NONE
     - name: jobs.schema_change.protected_record_count
       exported_name: jobs_schema_change_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: schema_change}'
       description: Number of protected timestamp records held by schema_change jobs
       y_axis_label: records
       type: GAUGE
@@ -5900,6 +6231,7 @@ layers:
       derivative: NONE
     - name: jobs.schema_change.resume_completed
       exported_name: jobs_schema_change_resume_completed
+      labeled_name: 'jobs.resume{name: schema_change, status: completed}'
       description: Number of schema_change jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -5908,6 +6240,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.schema_change.resume_failed
       exported_name: jobs_schema_change_resume_failed
+      labeled_name: 'jobs.resume{name: schema_change, status: failed}'
       description: Number of schema_change jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -5916,6 +6249,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.schema_change.resume_retry_error
       exported_name: jobs_schema_change_resume_retry_error
+      labeled_name: 'jobs.resume{name: schema_change, status: retry_error}'
       description: Number of schema_change jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -5924,6 +6258,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.schema_change_gc.currently_idle
       exported_name: jobs_schema_change_gc_currently_idle
+      labeled_name: 'jobs{type: schema_change_gc, status: currently_idle}'
       description: Number of schema_change_gc jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -5932,6 +6267,7 @@ layers:
       derivative: NONE
     - name: jobs.schema_change_gc.currently_paused
       exported_name: jobs_schema_change_gc_currently_paused
+      labeled_name: 'jobs{name: schema_change_gc, status: currently_paused}'
       description: Number of schema_change_gc jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -5940,6 +6276,7 @@ layers:
       derivative: NONE
     - name: jobs.schema_change_gc.currently_running
       exported_name: jobs_schema_change_gc_currently_running
+      labeled_name: 'jobs{type: schema_change_gc, status: currently_running}'
       description: Number of schema_change_gc jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -5948,6 +6285,7 @@ layers:
       derivative: NONE
     - name: jobs.schema_change_gc.expired_pts_records
       exported_name: jobs_schema_change_gc_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: schema_change_gc}'
       description: Number of expired protected timestamp records owned by schema_change_gc jobs
       y_axis_label: records
       type: COUNTER
@@ -5956,6 +6294,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.schema_change_gc.fail_or_cancel_completed
       exported_name: jobs_schema_change_gc_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: schema_change_gc, status: completed}'
       description: Number of schema_change_gc jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5964,6 +6303,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.schema_change_gc.fail_or_cancel_failed
       exported_name: jobs_schema_change_gc_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: schema_change_gc, status: failed}'
       description: Number of schema_change_gc jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5972,6 +6312,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.schema_change_gc.fail_or_cancel_retry_error
       exported_name: jobs_schema_change_gc_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: schema_change_gc, status: retry_error}'
       description: Number of schema_change_gc jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -5980,6 +6321,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.schema_change_gc.protected_age_sec
       exported_name: jobs_schema_change_gc_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: schema_change_gc}'
       description: The age of the oldest PTS record protected by schema_change_gc jobs
       y_axis_label: seconds
       type: GAUGE
@@ -5988,6 +6330,7 @@ layers:
       derivative: NONE
     - name: jobs.schema_change_gc.protected_record_count
       exported_name: jobs_schema_change_gc_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: schema_change_gc}'
       description: Number of protected timestamp records held by schema_change_gc jobs
       y_axis_label: records
       type: GAUGE
@@ -5996,6 +6339,7 @@ layers:
       derivative: NONE
     - name: jobs.schema_change_gc.resume_completed
       exported_name: jobs_schema_change_gc_resume_completed
+      labeled_name: 'jobs.resume{name: schema_change_gc, status: completed}'
       description: Number of schema_change_gc jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -6004,6 +6348,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.schema_change_gc.resume_failed
       exported_name: jobs_schema_change_gc_resume_failed
+      labeled_name: 'jobs.resume{name: schema_change_gc, status: failed}'
       description: Number of schema_change_gc jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -6012,6 +6357,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.schema_change_gc.resume_retry_error
       exported_name: jobs_schema_change_gc_resume_retry_error
+      labeled_name: 'jobs.resume{name: schema_change_gc, status: retry_error}'
       description: Number of schema_change_gc jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -6020,6 +6366,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.sql_activity_flush.currently_idle
       exported_name: jobs_sql_activity_flush_currently_idle
+      labeled_name: 'jobs{type: sql_activity_flush, status: currently_idle}'
       description: Number of sql_activity_flush jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -6028,6 +6375,7 @@ layers:
       derivative: NONE
     - name: jobs.sql_activity_flush.currently_paused
       exported_name: jobs_sql_activity_flush_currently_paused
+      labeled_name: 'jobs{name: sql_activity_flush, status: currently_paused}'
       description: Number of sql_activity_flush jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -6036,6 +6384,7 @@ layers:
       derivative: NONE
     - name: jobs.sql_activity_flush.currently_running
       exported_name: jobs_sql_activity_flush_currently_running
+      labeled_name: 'jobs{type: sql_activity_flush, status: currently_running}'
       description: Number of sql_activity_flush jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -6044,6 +6393,7 @@ layers:
       derivative: NONE
     - name: jobs.sql_activity_flush.expired_pts_records
       exported_name: jobs_sql_activity_flush_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: sql_activity_flush}'
       description: Number of expired protected timestamp records owned by sql_activity_flush jobs
       y_axis_label: records
       type: COUNTER
@@ -6052,6 +6402,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.sql_activity_flush.fail_or_cancel_completed
       exported_name: jobs_sql_activity_flush_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: sql_activity_flush, status: completed}'
       description: Number of sql_activity_flush jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -6060,6 +6411,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.sql_activity_flush.fail_or_cancel_failed
       exported_name: jobs_sql_activity_flush_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: sql_activity_flush, status: failed}'
       description: Number of sql_activity_flush jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -6068,6 +6420,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.sql_activity_flush.fail_or_cancel_retry_error
       exported_name: jobs_sql_activity_flush_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: sql_activity_flush, status: retry_error}'
       description: Number of sql_activity_flush jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -6076,6 +6429,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.sql_activity_flush.protected_age_sec
       exported_name: jobs_sql_activity_flush_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: sql_activity_flush}'
       description: The age of the oldest PTS record protected by sql_activity_flush jobs
       y_axis_label: seconds
       type: GAUGE
@@ -6084,6 +6438,7 @@ layers:
       derivative: NONE
     - name: jobs.sql_activity_flush.protected_record_count
       exported_name: jobs_sql_activity_flush_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: sql_activity_flush}'
       description: Number of protected timestamp records held by sql_activity_flush jobs
       y_axis_label: records
       type: GAUGE
@@ -6092,6 +6447,7 @@ layers:
       derivative: NONE
     - name: jobs.sql_activity_flush.resume_completed
       exported_name: jobs_sql_activity_flush_resume_completed
+      labeled_name: 'jobs.resume{name: sql_activity_flush, status: completed}'
       description: Number of sql_activity_flush jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -6100,6 +6456,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.sql_activity_flush.resume_failed
       exported_name: jobs_sql_activity_flush_resume_failed
+      labeled_name: 'jobs.resume{name: sql_activity_flush, status: failed}'
       description: Number of sql_activity_flush jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -6108,6 +6465,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.sql_activity_flush.resume_retry_error
       exported_name: jobs_sql_activity_flush_resume_retry_error
+      labeled_name: 'jobs.resume{name: sql_activity_flush, status: retry_error}'
       description: Number of sql_activity_flush jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -6116,6 +6474,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.standby_read_ts_poller.currently_idle
       exported_name: jobs_standby_read_ts_poller_currently_idle
+      labeled_name: 'jobs{type: standby_read_ts_poller, status: currently_idle}'
       description: Number of standby_read_ts_poller jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -6124,6 +6483,7 @@ layers:
       derivative: NONE
     - name: jobs.standby_read_ts_poller.currently_paused
       exported_name: jobs_standby_read_ts_poller_currently_paused
+      labeled_name: 'jobs{name: standby_read_ts_poller, status: currently_paused}'
       description: Number of standby_read_ts_poller jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -6132,6 +6492,7 @@ layers:
       derivative: NONE
     - name: jobs.standby_read_ts_poller.currently_running
       exported_name: jobs_standby_read_ts_poller_currently_running
+      labeled_name: 'jobs{type: standby_read_ts_poller, status: currently_running}'
       description: Number of standby_read_ts_poller jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -6140,6 +6501,7 @@ layers:
       derivative: NONE
     - name: jobs.standby_read_ts_poller.expired_pts_records
       exported_name: jobs_standby_read_ts_poller_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: standby_read_ts_poller}'
       description: Number of expired protected timestamp records owned by standby_read_ts_poller jobs
       y_axis_label: records
       type: COUNTER
@@ -6148,6 +6510,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.standby_read_ts_poller.fail_or_cancel_completed
       exported_name: jobs_standby_read_ts_poller_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: standby_read_ts_poller, status: completed}'
       description: Number of standby_read_ts_poller jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -6156,6 +6519,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.standby_read_ts_poller.fail_or_cancel_failed
       exported_name: jobs_standby_read_ts_poller_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: standby_read_ts_poller, status: failed}'
       description: Number of standby_read_ts_poller jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -6164,6 +6528,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.standby_read_ts_poller.fail_or_cancel_retry_error
       exported_name: jobs_standby_read_ts_poller_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: standby_read_ts_poller, status: retry_error}'
       description: Number of standby_read_ts_poller jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -6172,6 +6537,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.standby_read_ts_poller.protected_age_sec
       exported_name: jobs_standby_read_ts_poller_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: standby_read_ts_poller}'
       description: The age of the oldest PTS record protected by standby_read_ts_poller jobs
       y_axis_label: seconds
       type: GAUGE
@@ -6180,6 +6546,7 @@ layers:
       derivative: NONE
     - name: jobs.standby_read_ts_poller.protected_record_count
       exported_name: jobs_standby_read_ts_poller_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: standby_read_ts_poller}'
       description: Number of protected timestamp records held by standby_read_ts_poller jobs
       y_axis_label: records
       type: GAUGE
@@ -6188,6 +6555,7 @@ layers:
       derivative: NONE
     - name: jobs.standby_read_ts_poller.resume_completed
       exported_name: jobs_standby_read_ts_poller_resume_completed
+      labeled_name: 'jobs.resume{name: standby_read_ts_poller, status: completed}'
       description: Number of standby_read_ts_poller jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -6196,6 +6564,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.standby_read_ts_poller.resume_failed
       exported_name: jobs_standby_read_ts_poller_resume_failed
+      labeled_name: 'jobs.resume{name: standby_read_ts_poller, status: failed}'
       description: Number of standby_read_ts_poller jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -6204,6 +6573,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.standby_read_ts_poller.resume_retry_error
       exported_name: jobs_standby_read_ts_poller_resume_retry_error
+      labeled_name: 'jobs.resume{name: standby_read_ts_poller, status: retry_error}'
       description: Number of standby_read_ts_poller jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -6212,6 +6582,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.typedesc_schema_change.currently_idle
       exported_name: jobs_typedesc_schema_change_currently_idle
+      labeled_name: 'jobs{type: typedesc_schema_change, status: currently_idle}'
       description: Number of typedesc_schema_change jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -6220,6 +6591,7 @@ layers:
       derivative: NONE
     - name: jobs.typedesc_schema_change.currently_paused
       exported_name: jobs_typedesc_schema_change_currently_paused
+      labeled_name: 'jobs{name: typedesc_schema_change, status: currently_paused}'
       description: Number of typedesc_schema_change jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -6228,6 +6600,7 @@ layers:
       derivative: NONE
     - name: jobs.typedesc_schema_change.currently_running
       exported_name: jobs_typedesc_schema_change_currently_running
+      labeled_name: 'jobs{type: typedesc_schema_change, status: currently_running}'
       description: Number of typedesc_schema_change jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -6236,6 +6609,7 @@ layers:
       derivative: NONE
     - name: jobs.typedesc_schema_change.expired_pts_records
       exported_name: jobs_typedesc_schema_change_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: typedesc_schema_change}'
       description: Number of expired protected timestamp records owned by typedesc_schema_change jobs
       y_axis_label: records
       type: COUNTER
@@ -6244,6 +6618,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.typedesc_schema_change.fail_or_cancel_completed
       exported_name: jobs_typedesc_schema_change_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: typedesc_schema_change, status: completed}'
       description: Number of typedesc_schema_change jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -6252,6 +6627,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.typedesc_schema_change.fail_or_cancel_failed
       exported_name: jobs_typedesc_schema_change_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: typedesc_schema_change, status: failed}'
       description: Number of typedesc_schema_change jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -6260,6 +6636,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.typedesc_schema_change.fail_or_cancel_retry_error
       exported_name: jobs_typedesc_schema_change_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: typedesc_schema_change, status: retry_error}'
       description: Number of typedesc_schema_change jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -6268,6 +6645,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.typedesc_schema_change.protected_age_sec
       exported_name: jobs_typedesc_schema_change_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: typedesc_schema_change}'
       description: The age of the oldest PTS record protected by typedesc_schema_change jobs
       y_axis_label: seconds
       type: GAUGE
@@ -6276,6 +6654,7 @@ layers:
       derivative: NONE
     - name: jobs.typedesc_schema_change.protected_record_count
       exported_name: jobs_typedesc_schema_change_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: typedesc_schema_change}'
       description: Number of protected timestamp records held by typedesc_schema_change jobs
       y_axis_label: records
       type: GAUGE
@@ -6284,6 +6663,7 @@ layers:
       derivative: NONE
     - name: jobs.typedesc_schema_change.resume_completed
       exported_name: jobs_typedesc_schema_change_resume_completed
+      labeled_name: 'jobs.resume{name: typedesc_schema_change, status: completed}'
       description: Number of typedesc_schema_change jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -6292,6 +6672,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.typedesc_schema_change.resume_failed
       exported_name: jobs_typedesc_schema_change_resume_failed
+      labeled_name: 'jobs.resume{name: typedesc_schema_change, status: failed}'
       description: Number of typedesc_schema_change jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -6300,6 +6681,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.typedesc_schema_change.resume_retry_error
       exported_name: jobs_typedesc_schema_change_resume_retry_error
+      labeled_name: 'jobs.resume{name: typedesc_schema_change, status: retry_error}'
       description: Number of typedesc_schema_change jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -6308,6 +6690,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.update_table_metadata_cache.currently_idle
       exported_name: jobs_update_table_metadata_cache_currently_idle
+      labeled_name: 'jobs{type: update_table_metadata_cache, status: currently_idle}'
       description: Number of update_table_metadata_cache jobs currently considered Idle and can be freely shut down
       y_axis_label: jobs
       type: GAUGE
@@ -6316,6 +6699,7 @@ layers:
       derivative: NONE
     - name: jobs.update_table_metadata_cache.currently_paused
       exported_name: jobs_update_table_metadata_cache_currently_paused
+      labeled_name: 'jobs{name: update_table_metadata_cache, status: currently_paused}'
       description: Number of update_table_metadata_cache jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -6324,6 +6708,7 @@ layers:
       derivative: NONE
     - name: jobs.update_table_metadata_cache.currently_running
       exported_name: jobs_update_table_metadata_cache_currently_running
+      labeled_name: 'jobs{type: update_table_metadata_cache, status: currently_running}'
       description: Number of update_table_metadata_cache jobs currently running in Resume or OnFailOrCancel state
       y_axis_label: jobs
       type: GAUGE
@@ -6332,6 +6717,7 @@ layers:
       derivative: NONE
     - name: jobs.update_table_metadata_cache.expired_pts_records
       exported_name: jobs_update_table_metadata_cache_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: update_table_metadata_cache}'
       description: Number of expired protected timestamp records owned by update_table_metadata_cache jobs
       y_axis_label: records
       type: COUNTER
@@ -6340,6 +6726,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.update_table_metadata_cache.fail_or_cancel_completed
       exported_name: jobs_update_table_metadata_cache_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: update_table_metadata_cache, status: completed}'
       description: Number of update_table_metadata_cache jobs which successfully completed their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -6348,6 +6735,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.update_table_metadata_cache.fail_or_cancel_failed
       exported_name: jobs_update_table_metadata_cache_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: update_table_metadata_cache, status: failed}'
       description: Number of update_table_metadata_cache jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -6356,6 +6744,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.update_table_metadata_cache.fail_or_cancel_retry_error
       exported_name: jobs_update_table_metadata_cache_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: update_table_metadata_cache, status: retry_error}'
       description: Number of update_table_metadata_cache jobs which failed with a retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
@@ -6364,6 +6753,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.update_table_metadata_cache.protected_age_sec
       exported_name: jobs_update_table_metadata_cache_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: update_table_metadata_cache}'
       description: The age of the oldest PTS record protected by update_table_metadata_cache jobs
       y_axis_label: seconds
       type: GAUGE
@@ -6372,6 +6762,7 @@ layers:
       derivative: NONE
     - name: jobs.update_table_metadata_cache.protected_record_count
       exported_name: jobs_update_table_metadata_cache_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: update_table_metadata_cache}'
       description: Number of protected timestamp records held by update_table_metadata_cache jobs
       y_axis_label: records
       type: GAUGE
@@ -6380,6 +6771,7 @@ layers:
       derivative: NONE
     - name: jobs.update_table_metadata_cache.resume_completed
       exported_name: jobs_update_table_metadata_cache_resume_completed
+      labeled_name: 'jobs.resume{name: update_table_metadata_cache, status: completed}'
       description: Number of update_table_metadata_cache jobs which successfully resumed to completion
       y_axis_label: jobs
       type: COUNTER
@@ -6388,6 +6780,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.update_table_metadata_cache.resume_failed
       exported_name: jobs_update_table_metadata_cache_resume_failed
+      labeled_name: 'jobs.resume{name: update_table_metadata_cache, status: failed}'
       description: Number of update_table_metadata_cache jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -6396,6 +6789,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.update_table_metadata_cache.resume_retry_error
       exported_name: jobs_update_table_metadata_cache_resume_retry_error
+      labeled_name: 'jobs.resume{name: update_table_metadata_cache, status: retry_error}'
       description: Number of update_table_metadata_cache jobs which failed with a retriable error
       y_axis_label: jobs
       type: COUNTER
@@ -6880,6 +7274,7 @@ layers:
       derivative: NONE
     - name: schedules.BACKUP.protected_age_sec
       exported_name: schedules_BACKUP_protected_age_sec
+      labeled_name: 'schedules.protected_age_sec{name: BACKUP}'
       description: The age of the oldest PTS record protected by BACKUP schedules
       y_axis_label: Seconds
       type: GAUGE
@@ -6888,6 +7283,7 @@ layers:
       derivative: NONE
     - name: schedules.BACKUP.protected_record_count
       exported_name: schedules_BACKUP_protected_record_count
+      labeled_name: 'schedules.protected_record_count{name: BACKUP}'
       description: Number of PTS records held by BACKUP schedules
       y_axis_label: Records
       type: GAUGE
@@ -6896,6 +7292,7 @@ layers:
       derivative: NONE
     - name: schedules.BACKUP.started
       exported_name: schedules_BACKUP_started
+      labeled_name: 'schedules{name: BACKUP, status: started}'
       description: Number of BACKUP jobs started
       y_axis_label: Jobs
       type: COUNTER
@@ -6904,6 +7301,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: schedules.BACKUP.succeeded
       exported_name: schedules_BACKUP_succeeded
+      labeled_name: 'schedules{name: BACKUP, status: succeeded}'
       description: Number of BACKUP jobs succeeded
       y_axis_label: Jobs
       type: COUNTER
@@ -6912,6 +7310,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: schedules.CHANGEFEED.failed
       exported_name: schedules_CHANGEFEED_failed
+      labeled_name: 'schedules{name: CHANGEFEED, status: failed}'
       description: Number of CHANGEFEED jobs failed
       y_axis_label: Jobs
       type: COUNTER
@@ -6920,6 +7319,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: schedules.CHANGEFEED.started
       exported_name: schedules_CHANGEFEED_started
+      labeled_name: 'schedules{name: CHANGEFEED, status: started}'
       description: Number of CHANGEFEED jobs started
       y_axis_label: Jobs
       type: COUNTER
@@ -6928,6 +7328,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: schedules.CHANGEFEED.succeeded
       exported_name: schedules_CHANGEFEED_succeeded
+      labeled_name: 'schedules{name: CHANGEFEED, status: succeeded}'
       description: Number of CHANGEFEED jobs succeeded
       y_axis_label: Jobs
       type: COUNTER
@@ -6976,6 +7377,7 @@ layers:
       derivative: NONE
     - name: schedules.scheduled-row-level-ttl-executor.started
       exported_name: schedules_scheduled_row_level_ttl_executor_started
+      labeled_name: 'schedules{name: scheduled-row-level-ttl-executor, status: started}'
       description: Number of scheduled-row-level-ttl-executor jobs started
       y_axis_label: Jobs
       type: COUNTER
@@ -6984,6 +7386,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: schedules.scheduled-row-level-ttl-executor.succeeded
       exported_name: schedules_scheduled_row_level_ttl_executor_succeeded
+      labeled_name: 'schedules{name: scheduled-row-level-ttl-executor, status: succeeded}'
       description: Number of scheduled-row-level-ttl-executor jobs succeeded
       y_axis_label: Jobs
       type: COUNTER
@@ -6992,6 +7395,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: schedules.scheduled-schema-telemetry-executor.failed
       exported_name: schedules_scheduled_schema_telemetry_executor_failed
+      labeled_name: 'schedules{name: scheduled-schema-telemetry-executor, status: failed}'
       description: Number of scheduled-schema-telemetry-executor jobs failed
       y_axis_label: Jobs
       type: COUNTER
@@ -7000,6 +7404,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: schedules.scheduled-schema-telemetry-executor.started
       exported_name: schedules_scheduled_schema_telemetry_executor_started
+      labeled_name: 'schedules{name: scheduled-schema-telemetry-executor, status: started}'
       description: Number of scheduled-schema-telemetry-executor jobs started
       y_axis_label: Jobs
       type: COUNTER
@@ -7008,6 +7413,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: schedules.scheduled-schema-telemetry-executor.succeeded
       exported_name: schedules_scheduled_schema_telemetry_executor_succeeded
+      labeled_name: 'schedules{name: scheduled-schema-telemetry-executor, status: succeeded}'
       description: Number of scheduled-schema-telemetry-executor jobs succeeded
       y_axis_label: Jobs
       type: COUNTER
@@ -7016,6 +7422,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: schedules.scheduled-sql-stats-compaction-executor.failed
       exported_name: schedules_scheduled_sql_stats_compaction_executor_failed
+      labeled_name: 'schedules{name: scheduled-sql-stats-compaction-executor, status: failed}'
       description: Number of scheduled-sql-stats-compaction-executor jobs failed
       y_axis_label: Jobs
       type: COUNTER
@@ -7024,6 +7431,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: schedules.scheduled-sql-stats-compaction-executor.started
       exported_name: schedules_scheduled_sql_stats_compaction_executor_started
+      labeled_name: 'schedules{name: scheduled-sql-stats-compaction-executor, status: started}'
       description: Number of scheduled-sql-stats-compaction-executor jobs started
       y_axis_label: Jobs
       type: COUNTER
@@ -7032,6 +7440,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: schedules.scheduled-sql-stats-compaction-executor.succeeded
       exported_name: schedules_scheduled_sql_stats_compaction_executor_succeeded
+      labeled_name: 'schedules{name: scheduled-sql-stats-compaction-executor, status: succeeded}'
       description: Number of scheduled-sql-stats-compaction-executor jobs succeeded
       y_axis_label: Jobs
       type: COUNTER
@@ -7992,6 +8401,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.misc.started.count
       exported_name: sql_misc_started_count
+      labeled_name: sql.misc.renamed.special
       description: Number of other SQL statements started
       y_axis_label: SQL Statements
       type: COUNTER
@@ -8000,6 +8410,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.misc.started.count.internal
       exported_name: sql_misc_started_count_internal
+      labeled_name: 'sql.misc.renamed.special{query_internal: true}'
       description: Number of other SQL statements started (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
