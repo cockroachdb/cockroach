@@ -4298,3 +4298,33 @@ statement ok
 DROP FUNCTION g;
 
 subtest end
+
+subtest regression_146889
+
+statement ok
+CREATE TABLE parent146889 (k INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE child146889 (ref INT REFERENCES parent146889(k) ON DELETE CASCADE)
+
+statement ok
+INSERT INTO parent146889 VALUES (1);
+INSERT INTO child146889 VALUES (1);
+
+statement ok
+CREATE FUNCTION f146889() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', (SELECT count(*) FROM parent146889);
+    RETURN NULL;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER t AFTER DELETE ON parent146889 FOR EACH ROW EXECUTE FUNCTION f146889();
+
+query T noticetrace
+DELETE FROM parent146889 WHERE k = 1;
+----
+NOTICE: 0
+
+subtest end
