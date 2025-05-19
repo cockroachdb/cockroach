@@ -866,11 +866,13 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 	// update to the leaseholder so that it will eventually begin to progress
 	// again. Or, if the closed timestamp has been lagging by more than the
 	// cancel threshold for a while, cancel the rangefeed.
-	if signal := r.raftMu.rangefeedCTLagObserver.observeClosedTimestampUpdate(ctx,
+	signal := r.raftMu.rangefeedCTLagObserver.observeClosedTimestampUpdate(ctx,
 		closedTS.GoTime(),
 		r.Clock().PhysicalTime(),
 		&r.store.cfg.Settings.SV,
-	); signal.exceedsNudgeLagThreshold {
+	)
+	exceedsSlowLagThresh = signal.exceedsNudgeLagThreshold
+	if exceedsSlowLagThresh {
 		m := r.store.metrics.RangeFeedMetrics
 		expensiveLog := m.RangeFeedSlowClosedTimestampLogN.ShouldLog()
 		if expensiveLog {
