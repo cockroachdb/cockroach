@@ -286,22 +286,21 @@ var reqMethodToCap = map[kvpb.Method]methodCapability{
 
 	// TODO(knz,arul): Verify with the relevant teams whether secondary
 	// tenants have legitimate access to any of those.
-	kvpb.AdminMerge:                    onlySystemTenant,
-	kvpb.AdminVerifyProtectedTimestamp: onlySystemTenant,
-	kvpb.ComputeChecksum:               onlySystemTenant,
-	kvpb.GC:                            onlySystemTenant,
-	kvpb.Merge:                         onlySystemTenant,
-	kvpb.Migrate:                       onlySystemTenant,
-	kvpb.Probe:                         onlySystemTenant,
-	kvpb.QueryResolvedTimestamp:        onlySystemTenant,
-	kvpb.RecomputeStats:                onlySystemTenant,
-	kvpb.RequestLease:                  onlySystemTenant,
-	kvpb.Subsume:                       onlySystemTenant,
-	kvpb.TransferLease:                 onlySystemTenant,
-	kvpb.TruncateLog:                   onlySystemTenant,
-	kvpb.WriteBatch:                    onlySystemTenant,
-	kvpb.LinkExternalSSTable:           onlySystemTenant,
-	kvpb.Excise:                        onlySystemTenant,
+	kvpb.AdminMerge:             onlySystemTenant,
+	kvpb.ComputeChecksum:        onlySystemTenant,
+	kvpb.GC:                     onlySystemTenant,
+	kvpb.Merge:                  onlySystemTenant,
+	kvpb.Migrate:                onlySystemTenant,
+	kvpb.Probe:                  onlySystemTenant,
+	kvpb.QueryResolvedTimestamp: onlySystemTenant,
+	kvpb.RecomputeStats:         onlySystemTenant,
+	kvpb.RequestLease:           onlySystemTenant,
+	kvpb.Subsume:                onlySystemTenant,
+	kvpb.TransferLease:          onlySystemTenant,
+	kvpb.TruncateLog:            onlySystemTenant,
+	kvpb.WriteBatch:             onlySystemTenant,
+	kvpb.LinkExternalSSTable:    onlySystemTenant,
+	kvpb.Excise:                 onlySystemTenant,
 }
 
 // BindReader implements the tenantcapabilities.Authorizer interface.
