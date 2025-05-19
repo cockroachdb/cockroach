@@ -1095,6 +1095,22 @@ func (w *tpcc) Ops(
 			return err
 		})
 	}
+	go func() {
+		t := time.NewTicker(time.Second)
+		for {
+			select {
+			case <-t.C:
+				for i, db := range dbs {
+					log.Infof(ctx, "Querying DB %d\n", i)
+					for _, pool := range db.Pools {
+						log.Infof(ctx, "Stat %#v\n", pool.Stat())
+					}
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 	if err := group.Wait(); err != nil {
 		return workload.QueryLoad{}, err
 	}
