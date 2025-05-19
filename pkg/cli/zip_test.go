@@ -165,7 +165,7 @@ func TestZip(t *testing.T) {
 	})
 	defer c.Cleanup()
 
-	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s " + os.DevNull)
+	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s --validate-zip-file=false " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +211,7 @@ func TestZipQueryFallback(t *testing.T) {
 	})
 	defer c.Cleanup()
 
-	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s " + os.DevNull)
+	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s --validate-zip-file=false " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +242,7 @@ func TestZipRedacted(t *testing.T) {
 	})
 	defer c.Cleanup()
 
-	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s --redact " + os.DevNull)
+	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s --redact --validate-zip-file=false " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,7 +291,7 @@ func TestZipIncludeGoroutineStacks(t *testing.T) {
 				}},
 			})
 			defer c.Cleanup()
-			cmd := "debug zip --concurrency=1 --cpu-profile-duration=1s "
+			cmd := "debug zip --concurrency=1 --cpu-profile-duration=1s --validate-zip-file=false "
 			if !tc.includeStacks {
 				cmd = cmd + "--include-goroutine-stacks=false "
 			}
@@ -332,7 +332,7 @@ func TestZipIncludeRangeInfo(t *testing.T) {
 	})
 	defer c.Cleanup()
 
-	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s --include-range-info " + os.DevNull)
+	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s --include-range-info --validate-zip-file=false " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -367,7 +367,7 @@ func TestZipExcludeRangeInfo(t *testing.T) {
 	defer c.Cleanup()
 
 	out, err := c.RunWithCapture(
-		"debug zip --concurrency=1 --cpu-profile-duration=1s --include-range-info=false " + os.DevNull)
+		"debug zip --concurrency=1 --cpu-profile-duration=1s --include-range-info=false --validate-zip-file=false " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -420,7 +420,7 @@ func TestConcurrentZip(t *testing.T) {
 	defer func(prevStderr *os.File) { stderr = prevStderr }(stderr)
 	stderr = os.Stdout
 
-	out, err := c.RunWithCapture("debug zip --timeout=30s --cpu-profile-duration=0s " + os.DevNull)
+	out, err := c.RunWithCapture("debug zip --timeout=30s --cpu-profile-duration=0s --validate-zip-file=false " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -733,7 +733,7 @@ func TestPartialZip(t *testing.T) {
 	defer func(prevStderr *os.File) { stderr = prevStderr }(stderr)
 	stderr = os.Stdout
 
-	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=0s " + os.DevNull)
+	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=0s --validate-zip-file=false " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -748,7 +748,8 @@ func TestPartialZip(t *testing.T) {
 		})
 
 	// Now do it again and exclude the down node explicitly.
-	out, err = c.RunWithCapture("debug zip " + os.DevNull + " --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0")
+	out, err = c.RunWithCapture("debug zip " + os.DevNull + " --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0" +
+		"  --validate-zip-file=false")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -783,7 +784,7 @@ func TestPartialZip(t *testing.T) {
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "zip", "partial2"),
 		func(t *testing.T, td *datadriven.TestData) string {
 			f := func() string {
-				out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=0 " + os.DevNull)
+				out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=0  --validate-zip-file=false " + os.DevNull)
 				if err != nil {
 					t.Fatal(err)
 				}

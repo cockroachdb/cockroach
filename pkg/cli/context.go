@@ -372,6 +372,10 @@ type zipContext struct {
 
 	// The log/heap/etc files to include.
 	files fileSelection
+
+	// validateZipFile indicates whether the generated zip file should be validated
+	// post debug zip file generation.
+	validateZipFile bool
 }
 
 // setZipContextDefaults set the default values in zipCtx.  This
@@ -394,6 +398,7 @@ func setZipContextDefaults() {
 	zipCtx.includeRunningJobTraces = true
 	zipCtx.cpuProfDuration = 5 * time.Second
 	zipCtx.concurrency = 15
+	zipCtx.validateZipFile = true
 
 	// File selection covers the last 48 hours by default.
 	// We add 24 hours to now for the end timestamp to ensure
