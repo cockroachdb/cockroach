@@ -901,6 +901,32 @@ bytes preserved during flushes and compactions over the lifetime of the process.
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaStoragePointDeletionsBytes = metric.Metadata{
+		Name: "storage.point_deletions.bytes",
+		Help: `Estimated file bytes that will be saved by compacting all point deletions.
+
+This is dependent on table stats collection, so can be very incomplete until
+storage.initial_stats_complete becomes true.
+`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaStorageRangeDeletionsBytes = metric.Metadata{
+		Name: "storage.range_deletions.bytes",
+		Help: `Estimated file bytes that will be saved by compacting all range deletions.
+
+This is dependent on table stats collection, so can be very incomplete until
+storage.initial_stats_complete becomes true.
+`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaInitialStatsComplete = metric.Metadata{
+		Name:        "storage.initial_stats_complete",
+		Help:        "Set to 1 when initial table stats collection is complete.",
+		Measurement: "Boolean",
+		Unit:        metric.Unit_COUNT,
+	}
 	// TODO(sumeer): remove, since can fire due to delete-only compactions.
 	metaStorageSingleDelInvariantViolationCount = metric.Metadata{
 		Name:        "storage.single-delete.invariant-violation",
@@ -2858,6 +2884,9 @@ type StoreMetrics struct {
 	StorageCompactionsCancelledBytes  *metric.Counter
 	StorageCompactionsDuration        *metric.Counter
 	StorageWriteAmplification         *metric.GaugeFloat64
+	StoragePointDeletionsBytes        *metric.Gauge
+	StorageRangeDeletionsBytes        *metric.Gauge
+	StorageInitialStatsComplete       *metric.Gauge
 	IterBlockBytes                    *metric.Counter
 	IterBlockBytesInCache             *metric.Counter
 	IterBlockReadDuration             *metric.Counter
@@ -3597,6 +3626,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		StorageCompactionsCancelledBytes:  metric.NewCounter(metaStorageCompactionsCancelledBytes),
 		StorageCompactionsDuration:        metric.NewCounter(metaStorageCompactionsDuration),
 		StorageWriteAmplification:         metric.NewGaugeFloat64(metaStorageWriteAmplification),
+		StoragePointDeletionsBytes:        metric.NewGauge(metaStoragePointDeletionsBytes),
+		StorageRangeDeletionsBytes:        metric.NewGauge(metaStorageRangeDeletionsBytes),
+		StorageInitialStatsComplete:       metric.NewGauge(metaInitialStatsComplete),
 		FlushableIngestCount:              metric.NewCounter(metaFlushableIngestCount),
 		FlushableIngestTableCount:         metric.NewCounter(metaFlushableIngestTableCount),
 		FlushableIngestTableSize:          metric.NewCounter(metaFlushableIngestTableBytes),
@@ -4091,6 +4123,13 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 		totalWriteAmp += stats.WriteAmp()
 	}
 	sm.StorageWriteAmplification.Update(totalWriteAmp)
+	sm.StoragePointDeletionsBytes.Update(int64(m.Table.Garbage.PointDeletionsBytesEstimate))
+	sm.StorageRangeDeletionsBytes.Update(int64(m.Table.Garbage.RangeDeletionsBytesEstimate))
+	statsComplete := int64(0)
+	if m.Table.InitialStatsCollectionComplete {
+		statsComplete = 1
+	}
+	sm.StorageInitialStatsComplete.Update(statsComplete)
 }
 
 // updateCrossLocalityMetricsOnSnapshotSent updates cross-locality related store
