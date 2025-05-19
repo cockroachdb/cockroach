@@ -188,8 +188,7 @@ ORDER BY table_name
 				i int8 primary key,
 				s string
 			`,
-			with: `WITH sstsize = '10B'`,
-			typ:  "CSV",
+			typ: "CSV",
 			data: `1,0000000000
 1,0000000001`,
 			err: "duplicate key",
@@ -206,7 +205,6 @@ ORDER BY table_name
 				family (i, b),
 				family (s, c)
 			`,
-			with: `WITH sstsize = '1B'`,
 			typ:  "CSV",
 			data: `5,STRING,7,9`,
 			query: map[string][][]string{
@@ -238,13 +236,6 @@ ORDER BY table_name
 			data:     `\x0`,
 			rejected: `\x0` + "\n",
 			err:      "odd length hex string",
-		},
-		{
-			name:   "oversample",
-			create: `i int8`,
-			with:   `WITH oversample = '100'`,
-			typ:    "CSV",
-			data:   "1",
 		},
 		{
 			name:   "new line characters",
@@ -1353,7 +1344,6 @@ COPY public.t (a, b) FROM stdin;
 				} else {
 					q = fmt.Sprintf(`IMPORT %s ($1) %s`, tc.typ, tc.with)
 				}
-				t.Log(q, srv.URL, "\nFile contents:\n", tc.data)
 				mockRecorder.dataString = tc.data
 				mockRecorder.rejectedString = ""
 				if !saveRejected || tc.rejected == "" {
@@ -2245,20 +2235,19 @@ func TestImportCSVStmt(t *testing.T) {
 		err         string
 	}{
 		{
+			"basic",
+			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
+			`IMPORT INTO t CSV DATA (%s)`,
+			testFiles.files,
+			``,
+			"",
+		},
+		{
 			"query-opts",
 			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
 			`IMPORT INTO t CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif='', skip = '2'`,
 			testFiles.filesWithOpts,
 			` WITH OPTIONS (comment = '#', delimiter = '|', "nullif" = '', skip = '2')`,
-			"",
-		},
-		{
-			// Force some SST splits.
-			"file-sstsize",
-			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
-			`IMPORT INTO t CSV DATA (%s) WITH sstsize = '10K'`,
-			testFiles.files,
-			` WITH OPTIONS (sstsize = '10K')`,
 			"",
 		},
 		{
@@ -2477,18 +2466,6 @@ func TestImportCSVStmt(t *testing.T) {
 			}
 			if result != expectedNulls {
 				t.Fatalf("expected %d rows, got %d", expectedNulls, result)
-			}
-
-			// Verify sstsize created > 1 SST files.
-			if tc.name == "schema-in-file-sstsize-dist" {
-				pattern := filepath.Join(baseDir, fmt.Sprintf("%d", i), "*.sst")
-				matches, err := filepath.Glob(pattern)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if len(matches) < 2 {
-					t.Fatal("expected > 1 SST files")
-				}
 			}
 		})
 	}
@@ -3076,14 +3053,6 @@ func TestImportIntoCSV(t *testing.T) {
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif='', skip = '2'`,
 			testFiles.filesWithOpts,
 			` WITH OPTIONS (comment = '#', delimiter = '|', "nullif" = '', skip = '2')`,
-			"",
-		},
-		{
-			// Force some SST splits.
-			"import-into-sstsize",
-			`IMPORT INTO t (a, b) CSV DATA (%s) WITH sstsize = '10K'`,
-			testFiles.files,
-			` WITH OPTIONS (sstsize = '10K')`,
 			"",
 		},
 		{
@@ -5355,8 +5324,9 @@ func TestImportWorkerFailure(t *testing.T) {
 		urls[i] = fmt.Sprintf("'%s/%d'", srv.URL, i)
 	}
 	csvURLs := strings.Join(urls, ", ")
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '1B'`)
 	sqlDB.Exec(t, `CREATE TABLE t (i INT8 PRIMARY KEY)`)
-	query := fmt.Sprintf(`IMPORT INTO t CSV DATA (%s) WITH sstsize = '1B'`, csvURLs)
+	query := fmt.Sprintf(`IMPORT INTO t CSV DATA (%s)`, csvURLs)
 
 	errCh := make(chan error)
 	go func() {
