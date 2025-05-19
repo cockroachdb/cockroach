@@ -43,6 +43,10 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+// we need to do a better job with incomplete traces
+// should save the beginning and end
+// should add something to the trace indicating incompleteness
+
 const (
 
 	// maxRecordedSpansPerTrace limits the number of spans per recording, keeping
