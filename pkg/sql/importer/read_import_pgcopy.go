@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/errors"
 )
 
@@ -62,9 +61,6 @@ func newPgCopyReader(
 		},
 		opts: opts,
 	}, nil
-}
-
-func (d *pgCopyReader) start(ctx ctxgroup.Group) {
 }
 
 func (d *pgCopyReader) readFiles(

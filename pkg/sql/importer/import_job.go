@@ -95,7 +95,8 @@ var _ jobs.Resumer = &importResumer{}
 var processorsPerNode = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"bulkio.import.processors_per_node",
-	"number of input processors to run on each sql instance", 1,
+	"number of input processors to run on each sql instance",
+	1,
 	settings.PositiveInt,
 )
 
