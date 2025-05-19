@@ -701,8 +701,6 @@ message ImportDetails {
   repeated string uris = 2 [(gogoproto.customname) = "URIs"];
   roachpb.IOFileFormat format = 3 [(gogoproto.nullable) = false];
 
-  int64 sst_size = 4 [(gogoproto.customname) = "SSTSize"];
-  int64 oversample = 9;
   bool skip_fks = 10 [(gogoproto.customname) = "SkipFKs"];
 
   // walltime is the time at which an import job will write KVs.
@@ -711,35 +709,12 @@ message ImportDetails {
     (gogoproto.customname) = "ParentID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
   ];
-  string backup_path = 7;
-
-  // samples is a sampling of cockroach KV keys generated from the input data.
-  // It is populated with the sampling phase's results. These must be
-  // used if a job is resumed to guarantee that AddSSTable will not attempt
-  // to add ranges with an old split point within them.
-  repeated bytes samples = 8;
-
-  // ingest_directly means the Import job directly ingests the data as readers
-  // produce it instead of sampling it and then setting up a distsql shuffle and
-  // sort that produced sorted, non-overlapping data to ingest. When ingesting
-  // directly, many other fields like samples, oversample, sst_size are ignored.
-  bool ingest_directly = 11;
 
   bool prepare_complete = 12;
   bool schemas_published = 24;
   bool tables_published = 13;
 
   bool parse_bundle_schema = 14;
-
-  // ProtectedTimestampRecord is the ID of the protected timestamp record
-  // corresponding to this job. While the job ought to clean up the record
-  // when it enters a terminal state, there may be cases where it cannot or
-  // does not run the code to do so. To deal with this there is a background
-  // reconciliation loop to ensure that protected timestamps are cleaned up.
-  bytes protected_timestamp_record = 22 [
-    (gogoproto.customname) = "ProtectedTimestampRecord",
-    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
-  ];
 
   // DefaultIntSize is the integer type that a "naked" int will be resolved
   // to during the import. This is set based on the session variable DefaultIntSize
@@ -751,6 +726,8 @@ message ImportDetails {
   string database_primary_region = 27 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"
   ];
+
+  reserved 4, 7, 8, 9, 11, 22;
 
   // next val: 28
 }
