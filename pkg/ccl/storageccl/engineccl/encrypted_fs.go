@@ -297,7 +297,7 @@ func newEncryptedEnv(
 	readOnly bool,
 	options *storageconfig.EncryptionOptions,
 ) (*fs.EncryptionEnv, error) {
-	if options.KeySource != storageconfig.EncryptionKeySource_KeyFiles {
+	if options.KeySource != storageconfig.EncryptionKeyFromFiles {
 		return nil, fmt.Errorf("unknown encryption key source: %d", options.KeySource)
 	}
 	storeKeyManager := &StoreKeyManager{
