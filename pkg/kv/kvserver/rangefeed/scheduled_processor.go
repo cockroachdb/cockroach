@@ -825,14 +825,9 @@ func (p *ScheduledProcessor) publishDeleteRange(
 }
 
 func (p *ScheduledProcessor) CollectAllRangefeedStats() []rangefeedpb.Rangefeed {
-	if p == nil {
-		return nil
-	}
-	var info []rangefeedpb.Rangefeed
-	p.enqueueRequest(func(ctx context.Context) {
-		info = p.reg.CollectAllStats(ctx)
+	return runRequest(p, func(ctx context.Context, p *ScheduledProcessor) []rangefeedpb.Rangefeed {
+		return p.reg.CollectAllStats(ctx)
 	})
-	return info
 }
 
 func (p *ScheduledProcessor) publishSSTable(
