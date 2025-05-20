@@ -1742,6 +1742,7 @@ GO_TARGETS = [
     "//pkg/security/password:password",
     "//pkg/security/password:password_test",
     "//pkg/security/pprompt:pprompt",
+    "//pkg/security/provisioning:provisioning",
     "//pkg/security/securityassets:securityassets",
     "//pkg/security/securitytest:securitytest",
     "//pkg/security/sessionrevival:sessionrevival",

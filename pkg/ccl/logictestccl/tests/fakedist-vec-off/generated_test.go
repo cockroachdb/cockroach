@@ -208,6 +208,13 @@ func TestCCLLogic_procedure_plpgsql(
 	runCCLLogicTest(t, "procedure_plpgsql")
 }
 
+func TestCCLLogic_provisioning_source(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "provisioning_source")
+}
+
 func TestCCLLogic_read_committed(
 	t *testing.T,
 ) {

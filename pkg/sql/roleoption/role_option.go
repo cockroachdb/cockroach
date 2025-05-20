@@ -11,7 +11,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
+	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -230,6 +232,22 @@ func MakeListFromKVOptions(
 				}
 				if err := distinguishedname.ValidateDN(s); err != nil {
 					return pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+				}
+				return nil
+			}
+		case PROVISIONINGSOURCE:
+			roleOptions[i].Validate = func(settings *cluster.Settings, u username.SQLUsername, s string) error {
+				if !settings.Version.IsActive(ctx, clusterversion.V25_3) {
+					return pgerror.Newf(pgcode.FeatureNotSupported, "PROVISIONING_SOURCE role option is only supported after v25.3 upgrade is finalized")
+				}
+				if err := base.CheckEnterpriseEnabled(settings, "PROVISIONING_SOURCE role option"); err != nil {
+					return err
+				}
+				if u.IsRootUser() {
+					return pgerror.Newf(pgcode.InvalidParameterValue, "role %q cannot have a PROVISIONING_SOURCE", u)
+				}
+				if validationErr := provisioning.ValidateSource(s); validationErr != nil {
+					return pgerror.WithCandidateCode(validationErr, pgcode.InvalidParameterValue)
 				}
 				return nil
 			}
