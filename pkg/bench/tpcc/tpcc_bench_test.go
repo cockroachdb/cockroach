@@ -43,6 +43,14 @@ import (
 // with --store-dir will generate a new store directory at the specified path.
 // The combination of the two flags is how you bootstrap such a path initially.
 //
+// For example, generate the store directory with:
+//
+//	./dev bench pkg/bench/tpcc -f BenchmarkTPCC --test-args '--generate-store-dir --store-dir=/tmp/benchtpcc'
+//
+// Reuse the store directory with:
+//
+//	./dev bench pkg/bench/tpcc -f BenchmarkTPCC --test-args '--store-dir=/tmp/benchtpcc'
+//
 // TODO(ajwerner): Consider moving this all to CCL to leverage the import data
 // loader.
 func BenchmarkTPCC(b *testing.B) {
