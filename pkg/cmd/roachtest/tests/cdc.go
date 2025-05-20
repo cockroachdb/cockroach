@@ -1211,10 +1211,14 @@ func runCDCFineGrainedCheckpointingBenchmark(
 		t.Fatalf("too many range delays provided")
 	}
 
-	ips, err := c.ExternalIP(ctx, t.L(), c.Node(c.Spec().NodeCount))
+	// Use the coordinator node's (node 1) external IP for the webhook sink.
+	// Running the webhook server on any node other than the coordinator can cause networking issues
+	// that prevent the changefeed from reaching the sink reliably.
+	ips, err := c.ExternalIP(ctx, t.L(), c.Node(1))
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.L().Printf("using %s as sink (external IP on coordinator node)", ips[0])
 	sinkURL := fmt.Sprintf("https://%s:%d", ips[0], debug.WebhookServerPort)
 	sink := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
 	if err != nil {
@@ -1308,7 +1312,7 @@ func runCDCFineGrainedCheckpointingBenchmark(
 	// Run the sink server.
 	m.Go(func(ctx context.Context) error {
 		t.L().Printf("starting up sink server at %s...", sinkURL)
-		err := c.RunE(ctx, option.WithNodes(c.Node(c.Spec().NodeCount)),
+		err := c.RunE(ctx, option.WithNodes(c.Node(1)),
 			fmt.Sprintf("./cockroach workload debug webhook-server-slow %d %s", params.transientErrorFrequency.Milliseconds(), strings.Join(delayStrings, " ")))
 		if err != nil {
 			return err
@@ -1374,12 +1378,16 @@ func runCDCFineGrainedCheckpointingBenchmark(
 
 	var dupes int
 	testutils.SucceedsWithin(t, func() error {
+		t.L().Printf("fetching uniques and dupes from sink...")
 		unique, err := get("/unique")
 		if err != nil {
+			t.L().Printf("error getting unique count: %v", err)
 			return err
 		}
+		t.L().Printf("sink got %d unique", unique)
 		dupes, err = get("/dupes")
 		if err != nil {
+			t.L().Printf("error getting dupes count: %v", err)
 			return err
 		}
 		t.L().Printf("sink got %d unique, %d dupes", unique, dupes)
