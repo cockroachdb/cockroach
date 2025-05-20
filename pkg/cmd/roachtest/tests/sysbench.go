@@ -282,8 +282,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 			// Wait for 30 seconds to give a chance to the workload to start, and then
 			// collect CPU, mutex diffs, allocs diffs profiles.
 			time.Sleep(30 * time.Second)
-			collectSysbenchProfiles(t, ctx, c)
-			m.Wait()
+			collectSysbenchProfiles(t, m, c, time.Second*30 /* duration */)
 		}
 
 		return nil
@@ -623,50 +622,30 @@ func exportSysbenchResults(
 	return nil
 }
 
-func collectSysbenchProfiles(t test.Test, ctx context.Context, c cluster.Cluster) {
-	var cpuProfiles []*profile.Profile
-	var allocsProfiles []*profile.Profile
-	var mutexProfiles []*profile.Profile
-
-	m := t.NewGroup(task.WithContext(ctx))
-	m.Go(
-		func(ctx context.Context, l *logger.Logger) error {
-			var err error
-			cpuProfiles, err = roachtestutil.GetProfile(ctx, c, l, "cpu",
-				time.Second*30 /* duration */, c.CRDBNodes())
-			return err
-		},
-	)
-
-	m.Go(
-		func(ctx context.Context, l *logger.Logger) error {
-			var err error
-			allocsProfiles, err = roachtestutil.GetProfile(ctx, c, l, "allocs",
-				time.Second*30 /* duration */, c.CRDBNodes())
-			return err
-		},
-	)
-
-	m.Go(
-		func(ctx context.Context, l *logger.Logger) error {
-			var err error
-			mutexProfiles, err = roachtestutil.GetProfile(ctx, c, l, "mutex",
-				time.Second*30 /* duration */, c.CRDBNodes())
-			return err
-		},
-	)
+// collectSysbenchProfiles collects cpu, mutex, and allocs profiles from the
+// cluster `c` for the duration specified.
+func collectSysbenchProfiles(t test.Test, m task.Group, c cluster.Cluster, duration time.Duration) {
+	profiles := map[string][]*profile.Profile{"cpu": {}, "allocs": {}, "mutex": {}}
+	mergedProfiles := map[string]*profile.Profile{"cpu": {}, "allocs": {}, "mutex": {}}
+	for typ := range profiles {
+		m.Go(
+			func(ctx context.Context, l *logger.Logger) error {
+				var err error
+				profiles[typ], err = roachtestutil.GetProfile(ctx, c, l, typ,
+					duration, c.CRDBNodes())
+				return err
+			},
+		)
+	}
 
 	m.Wait()
 
-	// Merge the CPU profiles into one profile that contains all the nodes.
-	cpuMerged, err := profile.Merge(cpuProfiles)
-	require.NoError(t, err)
-
-	allocsMerged, err := profile.Merge(allocsProfiles)
-	require.NoError(t, err)
-
-	mutexMerged, err := profile.Merge(mutexProfiles)
-	require.NoError(t, err)
+	// Merge the profiles.
+	for typ := range mergedProfiles {
+		var err error
+		mergedProfiles[typ], err = profile.Merge(profiles[typ])
+		require.NoError(t, err)
+	}
 
 	// Create the profiles directory in the artifacts directory.
 	profilesDir := filepath.Join(t.ArtifactsDir(), "profiles")
@@ -676,19 +655,21 @@ func collectSysbenchProfiles(t test.Test, ctx context.Context, c cluster.Cluster
 	exportProfile := func(profile *profile.Profile, filename string) {
 		buf := bytes.Buffer{}
 		require.NoError(t, profile.Write(&buf))
-		err = os.WriteFile(filepath.Join(profilesDir, filename), buf.Bytes(), 0644)
+		err := os.WriteFile(filepath.Join(profilesDir, filename), buf.Bytes(), 0644)
 		require.NoError(t, err)
 	}
 
+	// Export individual profiles.
 	for i := range len(c.CRDBNodes()) {
-		exportProfile(cpuProfiles[i], fmt.Sprintf("n%d.cpu30s.pb.gz", i+1))
-		exportProfile(mutexProfiles[i], fmt.Sprintf("n%d.mutex30s.pb.gz", i+1))
-		exportProfile(allocsProfiles[i], fmt.Sprintf("n%d.allocs30s.pb.gz", i+1))
+		for typ := range profiles {
+			exportProfile(profiles[typ][i], fmt.Sprintf("n%d.%s%s.pb.gz", i+1, typ, duration))
+		}
 	}
 
-	exportProfile(cpuMerged, "merged.cpu.pb.gz")
-	exportProfile(mutexMerged, "merged.mutex.pb.gz")
-	exportProfile(allocsMerged, "merged.allocs.pb.gz")
+	// Export merged profiles.
+	for typ := range mergedProfiles {
+		exportProfile(mergedProfiles[typ], fmt.Sprintf("merged.%s.pb.gz", typ))
+	}
 }
 
 // Add sysbenchMetrics to the openmetricsMap
