@@ -7,6 +7,7 @@ package scbuildstmt
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -128,22 +129,52 @@ func CreateTrigger(b BuildCtx, n *tree.CreateTrigger) {
 		FuncBody:  b.ReplaceSeqTypeNamesInStatements(n.FuncBody, catpb.Function_PLPGSQL),
 		FuncArgs:  n.FuncArgs,
 	})
-	// It is possible for the trigger function to reference the table on which the
-	// trigger is defined. In that case, we need to remove the table from the list
-	// of referenced relations to avoid a circular dependency.
-	relIDs := refProvider.ReferencedRelationIDs().Ordered()
-	for i, id := range relIDs {
-		if id == tableID {
-			relIDs = append(relIDs[:i], relIDs[i+1:]...)
-			break
-		}
-	}
 	b.Add(&scpb.TriggerDeps{
-		TableID:         tableID,
-		TriggerID:       triggerID,
-		UsesRelationIDs: relIDs,
-		UsesTypeIDs:     refProvider.ReferencedTypes().Ordered(),
-		UsesRoutineIDs:  refProvider.ReferencedRoutines().Ordered(),
+		TableID:        tableID,
+		TriggerID:      triggerID,
+		UsesRelations:  buildRelationDeps(tableID, refProvider),
+		UsesTypeIDs:    refProvider.ReferencedTypes().Ordered(),
+		UsesRoutineIDs: refProvider.ReferencedRoutines().Ordered(),
 	})
 	b.LogEventForExistingTarget(trigger)
+}
+
+// buildRelationDeps builds the list of relations that the trigger depends on.
+// The list of relations is built by iterating over all table's dependencies.
+func buildRelationDeps(
+	tableID descpb.ID, refProvider ReferenceProvider,
+) []scpb.TriggerDeps_RelationReference {
+	usesRelations := make([]scpb.TriggerDeps_RelationReference, 0)
+	if err := refProvider.ForEachTableReference(func(tblID descpb.ID, idxID descpb.IndexID, colIDs descpb.ColumnIDs) error {
+		// It is possible for the trigger function to reference the table on which the
+		// trigger is defined. In that case, we need to remove the table from the list
+		// of referenced relations to avoid a circular dependency.
+		if tblID == tableID {
+			return nil
+		}
+		usesRelations = append(usesRelations, scpb.TriggerDeps_RelationReference{
+			ID:        tblID,
+			IndexID:   idxID,
+			ColumnIDs: colIDs,
+		})
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+	if err := refProvider.ForEachViewReference(func(viewID descpb.ID, colIDs descpb.ColumnIDs) error {
+		usesRelations = append(usesRelations, scpb.TriggerDeps_RelationReference{
+			ID:        viewID,
+			ColumnIDs: colIDs,
+		})
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+	seqIDs := refProvider.ReferencedSequences().Ordered()
+	for _, seqID := range seqIDs {
+		usesRelations = append(usesRelations, scpb.TriggerDeps_RelationReference{
+			ID: seqID,
+		})
+	}
+	return usesRelations
 }

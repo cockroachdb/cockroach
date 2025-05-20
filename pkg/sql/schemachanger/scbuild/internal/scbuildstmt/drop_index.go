@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -149,6 +150,9 @@ func dropSecondaryIndex(
 		// If expression index, also drop the expression column if no other index is
 		// using the expression column.
 		dropAdditionallyForExpressionIndex(next, sie)
+
+		// This handles if the index is referenced in a trigger.
+		maybeDropTriggers(b, sie.TableID, sie.IndexID, indexName.Index.String(), dropBehavior)
 	}
 	// Finally, drop all elements associated with this index.
 	tblElts := b.QueryByID(sie.TableID)
@@ -358,6 +362,40 @@ func maybeDropAdditionallyForShardedIndex(
 	tn := tree.MakeTableNameFromPrefix(b.NamePrefix(tbl), tree.Name(ns.Name))
 	shardCol := shardColElms.FilterColumn().MustGetOneElement()
 	dropColumn(b, &tn, tbl, stmt, stmt, shardCol, shardColElms, dropBehavior)
+}
+
+// maybeDropTriggers attempts to drop all triggers that depend on the index
+// being dropped, but only if the drop behavior is CASCADE. It panics if any
+// dependent trigger exists and the drop behavior is not CASCADE.
+func maybeDropTriggers(
+	b BuildCtx,
+	tableID catid.DescID,
+	indexID catid.IndexID,
+	indexName string,
+	behavior tree.DropBehavior,
+) {
+	undroppedBackrefs(b, tableID).ForEach(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		switch elt := e.(type) {
+		case *scpb.TriggerDeps:
+			for _, ref := range elt.UsesRelations {
+				if ref.ID == tableID && ref.IndexID == indexID {
+					if behavior == tree.DropCascade {
+						panic(unimplemented.NewWithIssuef(
+							146667, "DROP INDEX cascade is not supported with triggers"))
+					}
+					tableElts := b.QueryByID(elt.TableID)
+					tableName := tableElts.FilterNamespace().MustGetOneElement()
+					triggerName := tableElts.FilterTriggerName().Filter(
+						func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TriggerName) bool {
+							return e.TriggerID == elt.TriggerID
+						}).MustGetOneElement()
+					panic(sqlerrors.NewDependentObjectErrorf(
+						"cannot drop index %q because trigger %q on table %q depends on it",
+						indexName, triggerName.Name, tableName.Name))
+				}
+			}
+		}
+	})
 }
 
 // dropAdditionallyForExpressionIndex attempts to drop the additional
