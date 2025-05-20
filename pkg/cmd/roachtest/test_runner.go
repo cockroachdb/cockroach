@@ -1615,6 +1615,11 @@ func (r *testRunner) postTestAssertions(
 func (r *testRunner) teardownTest(
 	ctx context.Context, t *testImpl, c *clusterImpl, timedOut bool,
 ) error {
+	// Check for rare conditions (such as storage durability crashes) at this
+	// point. This may still mark the test as failed (so that we enter artifacts
+	// collection below).
+	r.maybeSaveClusterDueToInvariantProblems(ctx, t, c)
+
 	if timedOut || t.Failed() || roachtestflags.AlwaysCollectArtifacts {
 		err := r.collectArtifacts(ctx, t, c, timedOut, time.Hour)
 		if err != nil {
@@ -1667,6 +1672,43 @@ func (r *testRunner) teardownTest(
 		getCpuProfileArtifacts(ctx, c, t)
 	}
 	return nil
+}
+
+// maybeSaveClusterDueToInvariantProblems detects rare conditions (such as
+// storage durability crashes) on the cluster and if one is detected,
+// unconditionally preserves the cluster for future debugging. It also creates
+// volume snapshots so that the durable state close to the incident is
+// preserved.
+func (r *testRunner) maybeSaveClusterDueToInvariantProblems(
+	ctx context.Context, t *testImpl, c *clusterImpl,
+) {
+	if len(c.Nodes()) == 0 {
+		return // test only
+	}
+	dets, err := c.RunWithDetails(ctx, t.L(), option.WithNodes(c.All()),
+		"([ -d logs ] && grep -RE '^F.*raft' logs) || true",
+	)
+	for _, det := range dets {
+		err = errors.CombineErrors(err, det.Err)
+	}
+	if err != nil {
+		t.L().Printf(
+			"failed to check whether to save cluster due to invariant problems: %s",
+			err,
+		)
+		return
+	}
+
+	for _, det := range dets {
+		if det.Stdout != "" {
+			_ = c.Extend(ctx, 7*24*time.Hour, t.L())
+			snapName := "invariant-problem-" + c.Name() + "-" + strconv.Itoa(rand.Int())
+			_, _ = c.CreateSnapshot(ctx, snapName)
+			c.Save(ctx, "invariant problem - snap name "+snapName, t.L())
+			t.Error("invariant problem - snap name " + snapName + ":\n" + det.Stdout)
+			return
+		}
+	}
 }
 
 func (r *testRunner) collectArtifacts(
