@@ -14,41 +14,32 @@ import (
 )
 
 type cmd struct {
-	name string
-	impl func(t *testing.T)
+	name    string
+	impl    func(t *testing.T)
+	envVars []string
 }
 
-func newCmd(name string, impl func(t *testing.T)) *cmd {
-	return &cmd{
+func makeCmd(name string, impl func(t *testing.T)) cmd {
+	return cmd{
 		name: name,
 		impl: impl,
-	}
+	}.withEnv(allowInternalTestEnvVar, true)
 }
 
-func (c *cmd) exec(env cmdEnv, args ...string) (_ *exec.Cmd, stdout *bytes.Buffer) {
+func (c cmd) withEnv(k string, v any) cmd {
+	c.envVars = append(c.envVars, fmt.Sprintf("%s=%v", k, v))
+	return c
+}
+
+func (c cmd) exec(args ...string) (_ *exec.Cmd, stdout *bytes.Buffer) {
 	cmd := exec.Command(os.Args[0], "--test.run=^"+c.name+"$", "--test.v")
 	if len(args) > 0 {
 		cmd.Args = append(cmd.Args, "--")
 		cmd.Args = append(cmd.Args, args...)
 	}
 	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, fmt.Sprintf("%s=t", allowInternalTestEnvVar))
-	cmd.Env = append(cmd.Env, env.toStrings()...)
+	cmd.Env = append(cmd.Env, c.envVars...)
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	return cmd, &buf
-}
-
-type envVar struct {
-	k string
-	v interface{}
-}
-
-type cmdEnv []envVar
-
-func (ce cmdEnv) toStrings() (ret []string) {
-	for _, v := range ce {
-		ret = append(ret, fmt.Sprintf("%s=%v", v.k, v.v))
-	}
-	return ret
 }

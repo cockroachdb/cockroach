@@ -43,9 +43,9 @@ var (
 	benchmarkN        = envutil.EnvOrDefaultInt(nEnvVar, -1)
 	allowInternalTest = envutil.EnvOrDefaultBool(allowInternalTestEnvVar, false)
 
-	cloneEngine      = newCmd("TestInternalCloneEngine", TestInternalCloneEngine)
-	runClient        = newCmd("TestInternalRunClient", TestInternalRunClient)
-	generateStoreDir = newCmd("TestInternalGenerateStoreDir", TestInternalGenerateStoreDir)
+	cloneEngine      = makeCmd("TestInternalCloneEngine", TestInternalCloneEngine)
+	runClient        = makeCmd("TestInternalRunClient", TestInternalRunClient)
+	generateStoreDir = makeCmd("TestInternalGenerateStoreDir", TestInternalGenerateStoreDir)
 )
 
 func TestInternalCloneEngine(t *testing.T) {
