@@ -11,6 +11,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -81,7 +82,17 @@ func matchLike(ctx *Context, left, right tree.Datum, caseInsensitive bool) (tree
 	if left == tree.DNull || right == tree.DNull {
 		return tree.DNull, nil
 	}
-	s, pattern := string(tree.MustBeDString(left)), string(tree.MustBeDString(right))
+	var s, pattern string
+	var err error
+	s, err = getStringFromDatum(left)
+	if err != nil {
+		return tree.DBoolFalse, err
+	}
+	pattern, err = getStringFromDatum(right)
+	if err != nil {
+		return tree.DBoolFalse, err
+	}
+
 	if len(s) == 0 {
 		// An empty string only matches with an empty pattern or a pattern
 		// consisting only of '%'. To match PostgreSQL's behavior, we have a
@@ -111,6 +122,18 @@ func matchLike(ctx *Context, left, right tree.Datum, caseInsensitive bool) (tree
 	}
 	matches, err := like(s)
 	return tree.MakeDBool(tree.DBool(matches)), err
+}
+
+func getStringFromDatum(datum tree.Datum) (string, error) {
+	switch d := datum.(type) {
+	case *tree.DCollatedString:
+		if !d.Deterministic {
+			return "", pgerror.Newf(pgcode.FeatureNotSupported, "collation %s is not deterministic", lex.NormalizeLocaleName(d.Locale))
+		}
+		return d.Contents, nil
+	default:
+		return string(tree.MustBeDString(d)), nil
+	}
 }
 
 func matchRegexpWithKey(ctx *Context, str tree.Datum, key tree.RegexpCacheKey) (tree.Datum, error) {

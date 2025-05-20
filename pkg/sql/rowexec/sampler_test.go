@@ -308,7 +308,7 @@ func TestSamplerSketch(t *testing.T) {
 			},
 			cardinalities: []int{3, 2, 3},
 			numNulls:      []int{1, 1, 1},
-			size:          []int{352, 352, 704},
+			size:          []int{384, 384, 768},
 			keySize:       []int{89, 89, 178},
 			valueSize:     []int{21, 21, 42},
 		},
