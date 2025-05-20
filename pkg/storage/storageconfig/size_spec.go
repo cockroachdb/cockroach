@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package storagepb
+package storageconfig
 
 import (
 	"bytes"
@@ -17,6 +17,18 @@ import (
 	humanize "github.com/dustin/go-humanize"
 	"github.com/spf13/pflag"
 )
+
+// SizeSpec is used to specify an on-disk size in bytes, either as an absolute
+// value or as a percentage of the total disk capacity.
+type SizeSpec struct {
+	// Capacity is how much space on the file system to use. if 0 then use the
+	// entire disk.
+	// TODO(radu): rename.
+	Capacity int64
+	// Percent can only be set if capacity is 0. If it is set then capacity is
+	// computed based on the space on this percent of the disk.
+	Percent float64
+}
 
 // fractionRegex is the regular expression that recognizes whether
 // the specified size is a fraction of the total available space.
