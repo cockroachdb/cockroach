@@ -299,6 +299,8 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 	store2, err := Load(data)
 	require.NoError(t, err)
 
+	require.NotNil(t, store2.rootQuantizer)
+	require.NotNil(t, store2.quantizer)
 	require.Len(t, store2.mu.partitions, 2)
 	require.Equal(t, qkey10, store2.mu.partitions[qkey10].key)
 	require.Equal(t, uint64(1), store2.mu.partitions[qkey10].lock.created)
