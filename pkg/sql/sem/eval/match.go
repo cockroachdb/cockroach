@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/errors"
 )
 
@@ -81,7 +82,17 @@ func matchLike(ctx *Context, left, right tree.Datum, caseInsensitive bool) (tree
 	if left == tree.DNull || right == tree.DNull {
 		return tree.DNull, nil
 	}
-	s, pattern := string(tree.MustBeDString(left)), string(tree.MustBeDString(right))
+	var s, pattern string
+	var err error
+	s, err = getStringFromDatum(left)
+	if err != nil {
+		return tree.DBoolFalse, err
+	}
+	pattern, err = getStringFromDatum(right)
+	if err != nil {
+		return tree.DBoolFalse, err
+	}
+
 	if len(s) == 0 {
 		// An empty string only matches with an empty pattern or a pattern
 		// consisting only of '%'. To match PostgreSQL's behavior, we have a
@@ -111,6 +122,22 @@ func matchLike(ctx *Context, left, right tree.Datum, caseInsensitive bool) (tree
 	}
 	matches, err := like(s)
 	return tree.MakeDBool(tree.DBool(matches)), err
+}
+
+func getStringFromDatum(datum tree.Datum) (string, error) {
+	switch d := datum.(type) {
+	case *tree.DCollatedString:
+		isDeterministic, err := collatedstring.IsDeterministicCollation(d.Locale)
+		if err != nil {
+			return "", pgerror.Wrapf(err, pgcode.InvalidParameterValue, "collation %s is not a valid collation", d.Locale)
+		}
+		if !isDeterministic {
+			return "", pgerror.Newf(pgcode.InvalidParameterValue, "collation %s is not deterministic", d.Locale)
+		}
+		return d.Contents, nil
+	default:
+		return string(tree.MustBeDString(d)), nil
+	}
 }
 
 func matchRegexpWithKey(ctx *Context, str tree.Datum, key tree.RegexpCacheKey) (tree.Datum, error) {
