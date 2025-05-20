@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -30,91 +31,100 @@ const databaseName = "tpcc"
 // Environment variables used to communicate configuration from the benchmark
 // to the client subprocess.
 const (
-	internalTestEnvVar = "COCKROACH_INTERNAL_TEST"
-	pgurlEnvVar        = "COCKROACH_PGURL"
-	nEnvVar            = "COCKROACH_N"
-	storeDirEnvVar     = "COCKROACH_STORE_DIR"
-	srcEngineEnvVar    = "COCKROACH_SRC_ENGINE"
-	dstEngineEnvVar    = "COCKROACH_DST_ENGINE"
+	allowInternalTestEnvVar = "COCKROACH_INTERNAL_TEST"
+	pgurlEnvVar             = "COCKROACH_PGURL"
+	nEnvVar                 = "COCKROACH_N"
+	storeDirEnvVar          = "COCKROACH_STORE_DIR"
+	srcEngineEnvVar         = "COCKROACH_SRC_ENGINE"
+	dstEngineEnvVar         = "COCKROACH_DST_ENGINE"
 )
 
 var (
-	benchmarkN = envutil.EnvOrDefaultInt(nEnvVar, -1)
+	benchmarkN        = envutil.EnvOrDefaultInt(nEnvVar, -1)
+	allowInternalTest = envutil.EnvOrDefaultBool(allowInternalTestEnvVar, false)
+
+	cloneEngine      = newCmd("TestInternalCloneEngine", TestInternalCloneEngine)
+	runClient        = newCmd("TestInternalRunClient", TestInternalRunClient)
+	generateStoreDir = newCmd("TestInternalGenerateStoreDir", TestInternalGenerateStoreDir)
 )
 
-func TestInternalCloneEngine(t *testing.T)      { internalCommand(t) }
-func TestInternalRunClient(t *testing.T)        { internalCommand(t) }
-func TestInternalGenerateStoreDir(t *testing.T) { internalCommand(t) }
+func TestInternalCloneEngine(t *testing.T) {
+	if !allowInternalTest {
+		skip.IgnoreLint(t)
+	}
 
-var (
-	commands = map[string]*cmd{}
+	src, ok := envutil.EnvString(srcEngineEnvVar, 0)
+	require.True(t, ok)
+	dst, ok := envutil.EnvString(dstEngineEnvVar, 0)
+	require.True(t, ok)
+	_, err := vfs.Clone(vfs.Default, vfs.Default, src, dst)
+	require.NoError(t, err)
+}
 
-	generateStoreDir = registerCmd("GenerateStoreDir", func(t *testing.T) {
-		ctx := context.Background()
-		storeDir, ok := envutil.EnvString(storeDirEnvVar, 0)
-		require.True(t, ok)
+func TestInternalRunClient(t *testing.T) {
+	if !allowInternalTest {
+		skip.IgnoreLint(t)
+	}
 
-		srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{{Path: storeDir}},
-		})
-		defer srv.Stopper().Stop(ctx)
+	require.Positive(t, benchmarkN)
 
-		// Make the generation faster.
-		logstore.DisableSyncRaftLog.Override(context.Background(), &srv.SystemLayer().ClusterSettings().SV, true)
+	pgURL, ok := envutil.EnvString(pgurlEnvVar, 0)
+	require.True(t, ok)
+	ql := makeQueryLoad(t, pgURL)
+	defer func() { _ = ql.Close(context.Background()) }()
+	require.True(t, ok)
 
-		tdb := sqlutils.MakeSQLRunner(db)
-		tdb.Exec(t, "CREATE DATABASE "+databaseName)
-		tdb.Exec(t, "USE "+databaseName)
-		tpcc, err := workload.Get("tpcc")
+	// Send a signal to the parent process and wait for an ack before
+	// running queries.
+	var s synchronizer
+	s.init(os.Getppid())
+	s.notifyAndWait(t)
+
+	for i := 0; i < benchmarkN; i++ {
+		require.NoError(t, ql.WorkerFns[0](context.Background()))
+	}
+
+	// Notify the parent process that the benchmark has completed.
+	s.notify(t)
+}
+
+func TestInternalGenerateStoreDir(t *testing.T) {
+	if !allowInternalTest {
+		skip.IgnoreLint(t)
+	}
+
+	ctx := context.Background()
+	storeDir, ok := envutil.EnvString(storeDirEnvVar, 0)
+	require.True(t, ok)
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		StoreSpecs: []base.StoreSpec{{Path: storeDir}},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	// Make the generation faster.
+	logstore.DisableSyncRaftLog.Override(context.Background(), &srv.SystemLayer().ClusterSettings().SV, true)
+
+	tdb := sqlutils.MakeSQLRunner(db)
+	tdb.Exec(t, "CREATE DATABASE "+databaseName)
+	tdb.Exec(t, "USE "+databaseName)
+	tpcc, err := workload.Get("tpcc")
+	require.NoError(t, err)
+	gen := tpcc.New().(interface {
+		workload.Flagser
+		workload.Hookser
+		workload.Generator
+	})
+	require.NoError(t, gen.Flags().Parse([]string{
+		"--db=" + databaseName,
+	}))
+	require.NoError(t, gen.Hooks().Validate())
+	{
+		var l workloadsql.InsertsDataLoader
+		_, err := workloadsql.Setup(ctx, db, gen, l)
 		require.NoError(t, err)
-		gen := tpcc.New().(interface {
-			workload.Flagser
-			workload.Hookser
-			workload.Generator
-		})
-		require.NoError(t, gen.Flags().Parse([]string{
-			"--db=" + databaseName,
-		}))
-		require.NoError(t, gen.Hooks().Validate())
-		{
-			var l workloadsql.InsertsDataLoader
-			_, err := workloadsql.Setup(ctx, db, gen, l)
-			require.NoError(t, err)
-		}
-	})
-
-	cloneEngine = registerCmd("CloneEngine", func(t *testing.T) {
-		src, ok := envutil.EnvString(srcEngineEnvVar, 0)
-		require.True(t, ok)
-		dst, ok := envutil.EnvString(dstEngineEnvVar, 0)
-		require.True(t, ok)
-		_, err := vfs.Clone(vfs.Default, vfs.Default, src, dst)
-		require.NoError(t, err)
-	})
-
-	runClient = registerCmd("RunClient", func(t *testing.T) {
-		require.Positive(t, benchmarkN)
-
-		pgURL, ok := envutil.EnvString(pgurlEnvVar, 0)
-		require.True(t, ok)
-		ql := makeQueryLoad(t, pgURL)
-		defer func() { _ = ql.Close(context.Background()) }()
-		require.True(t, ok)
-
-		// Send a signal to the parent process and wait for an ack before
-		// running queries.
-		var s synchronizer
-		s.init(os.Getppid())
-		s.notifyAndWait(t)
-
-		for i := 0; i < benchmarkN; i++ {
-			require.NoError(t, ql.WorkerFns[0](context.Background()))
-		}
-
-		// Notify the parent process that the benchmark has completed.
-		s.notify(t)
-	})
-)
+	}
+}
 
 func makeQueryLoad(t *testing.T, pgURL string) workload.QueryLoad {
 	tpcc, err := workload.Get("tpcc")
