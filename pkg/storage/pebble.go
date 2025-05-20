@@ -1809,7 +1809,7 @@ func (p *Pebble) GetEnvStats() (*fs.EnvStats, error) {
 		stats.TotalBytes += uint64(l.TablesSize)
 	}
 
-	sstSizes := make(map[pebble.FileNum]uint64)
+	sstSizes := make(map[pebble.TableNum]uint64)
 	sstInfos, err := p.db.SSTables()
 	if err != nil {
 		return nil, err
@@ -1842,7 +1842,7 @@ func (p *Pebble) GetEnvStats() (*fs.EnvStats, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "parsing filename %q", errors.Safe(filename))
 		}
-		stats.ActiveKeyBytes += sstSizes[pebble.FileNum(u)]
+		stats.ActiveKeyBytes += sstSizes[pebble.TableNum(u)]
 	}
 
 	// Ensure that encryption percentage does not exceed 100%.
