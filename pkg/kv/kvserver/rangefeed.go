@@ -11,15 +11,15 @@ type InspectAllRangefeeds interface {
 var _ InspectAllRangefeeds = (*Stores)(nil)
 
 func (ss *Stores) InspectAllRangefeeds() (*rangefeedpb.InspectStoreRangefeedsResponse, error) {
-	sspf := rangefeedpb.InspectStoreRangefeedsResponse{}
+	resp := rangefeedpb.InspectStoreRangefeedsResponse{}
 	err := ss.VisitStores(
 		func(s *Store) error {
 			// Every store should return an rangefeedInfoPerStore.
-			sspf.RangefeedInfoPerStore = append(sspf.RangefeedInfoPerStore, s.VisitRangefeeds())
+			resp.RangefeedInfoPerStore = append(resp.RangefeedInfoPerStore, s.VisitRangefeeds())
 			return nil
 		},
 	)
-	return &sspf, err
+	return &resp, err
 }
 
 // replica (processor per replica)
