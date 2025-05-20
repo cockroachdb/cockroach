@@ -81,7 +81,17 @@ func matchLike(ctx *Context, left, right tree.Datum, caseInsensitive bool) (tree
 	if left == tree.DNull || right == tree.DNull {
 		return tree.DNull, nil
 	}
-	s, pattern := string(tree.MustBeDString(left)), string(tree.MustBeDString(right))
+	var s, pattern string
+	var err error
+	s, err = matchStringFromDatum(left)
+	if err != nil {
+		return tree.DBoolFalse, err
+	}
+	pattern, err = matchStringFromDatum(right)
+	if err != nil {
+		return tree.DBoolFalse, err
+	}
+
 	if len(s) == 0 {
 		// An empty string only matches with an empty pattern or a pattern
 		// consisting only of '%'. To match PostgreSQL's behavior, we have a
@@ -111,6 +121,18 @@ func matchLike(ctx *Context, left, right tree.Datum, caseInsensitive bool) (tree
 	}
 	matches, err := like(s)
 	return tree.MakeDBool(tree.DBool(matches)), err
+}
+
+func matchStringFromDatum(datum tree.Datum) (string, error) {
+	switch d := datum.(type) {
+	case *tree.DCollatedString:
+		if !d.Deterministic {
+			return "", pgerror.New(pgcode.FeatureNotSupported, "nondeterministic collations are not supported for LIKE")
+		}
+		return d.Contents, nil
+	default:
+		return string(tree.MustBeDString(d)), nil
+	}
 }
 
 func matchRegexpWithKey(ctx *Context, str tree.Datum, key tree.RegexpCacheKey) (tree.Datum, error) {

@@ -1,9 +1,22 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "collatedstring",
     srcs = ["collatedstring.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/collatedstring",
     visibility = ["//visibility:public"],
-    deps = ["@org_golang_x_text//collate"],
+    deps = [
+        "@org_golang_x_text//collate",
+        "@org_golang_x_text//language",
+    ],
+)
+
+go_test(
+    name = "collatedstring_test",
+    srcs = ["collatedstring_test.go"],
+    embed = [":collatedstring"],
+    deps = [
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_text//language",
+    ],
 )
