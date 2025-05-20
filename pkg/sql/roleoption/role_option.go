@@ -11,7 +11,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
+	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -233,6 +235,19 @@ func MakeListFromKVOptions(
 				}
 				return nil
 			}
+		case PROVISIONINGSOURCE:
+			roleOptions[i].Validate = func(settings *cluster.Settings, u username.SQLUsername, s string) error {
+				if !settings.Version.IsActive(ctx, clusterversion.V25_3) {
+					return pgerror.Newf(pgcode.FeatureNotSupported, "PROVISIONING_SOURCE role option is only supported after v25.3 upgrade is finalized")
+				}
+				if u.IsRootUser() {
+					return pgerror.Newf(pgcode.InvalidParameterValue, "role %q cannot have a PROVISIONING_SOURCE", u)
+				}
+				if validationErr := provisioning.ValidateSource(s); validationErr != nil {
+					return pgerror.WithCandidateCode(validationErr, pgcode.InvalidParameterValue)
+				}
+				return nil
+			}
 		}
 	}
 
@@ -332,7 +347,9 @@ func (rol List) CheckRoleOptionConflicts() error {
 		(roleOptionBits&REPLICATION.Mask() != 0 &&
 			roleOptionBits&NOREPLICATION.Mask() != 0) ||
 		(roleOptionBits&BYPASSRLS.Mask() != 0 &&
-			roleOptionBits&NOBYPASSRLS.Mask() != 0) {
+			roleOptionBits&NOBYPASSRLS.Mask() != 0) ||
+		(roleOptionBits&PROVISIONINGSOURCE.Mask() != 0 &&
+			roleOptionBits&NOSQLLOGIN.Mask() != 0) {
 		return pgerror.Newf(pgcode.Syntax, "conflicting role options")
 	}
 	return nil

@@ -47,9 +47,10 @@ func TestValidRoles(t *testing.T) {
 		require.Equal(t, false, hasRole)
 
 		// Skip PASSWORD and SUBJECT/PROVISIONING_SOURCE options. Since PASSWORD
-		// still resides in system.users and SUBJECT, PROVISIONING_SOURCE are an
-		// enterprise features that is tested separately.
-		if name == "PASSWORD" || name == "SUBJECT" || name == "PROVISIONING_SOURCE" {
+		// still resides in system.users and SUBJECT, PROVISIONING_SOURCE need
+		// validations for the value to be assigned to them and so are tested
+		// separately in logictests.
+		if name == "PASSWORD" || name == "SUBJECT" {
 			continue
 		}
 		// Add the role and check if the role was added (or in the cases of roles starting
