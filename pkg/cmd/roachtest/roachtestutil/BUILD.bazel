@@ -26,6 +26,7 @@ go_library(
         "//pkg/cmd/roachtest/test",
         "//pkg/kv/kvpb",
         "//pkg/roachprod/config",
+        "//pkg/roachprod/failureinjection/failures",
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/testutils",
