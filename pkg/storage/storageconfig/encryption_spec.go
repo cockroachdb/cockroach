@@ -33,11 +33,11 @@ type EncryptionKeyFiles struct {
 	OldKey     string
 }
 
+// EncryptionKeySource is an enum identifying the source of the encryption key.
 type EncryptionKeySource int32
 
 const (
-	// Plain key files.
-	EncryptionKeySource_KeyFiles EncryptionKeySource = 0
+	EncryptionKeyFromFiles EncryptionKeySource = 0
 )
 
 // DefaultRotationPeriod is the rotation period used if not specified.
@@ -79,7 +79,7 @@ func NewStoreEncryptionSpec(value string) (StoreEncryptionSpec, error) {
 	es := StoreEncryptionSpec{
 		Path: "",
 		Options: EncryptionOptions{
-			KeySource:             EncryptionKeySource_KeyFiles,
+			KeySource:             EncryptionKeyFromFiles,
 			KeyFiles:              &EncryptionKeyFiles{},
 			DataKeyRotationPeriod: int64(DefaultRotationPeriod / time.Second),
 		},

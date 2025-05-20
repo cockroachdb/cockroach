@@ -15,23 +15,24 @@ import (
 type WALFailoverMode int32
 
 const (
-	// DEFAULT leaves the WAL failover configuration unspecified. Today this is
-	// interpreted as DISABLED but future releases may default to another
-	// mode.
-	WALFailoverMode_DEFAULT WALFailoverMode = 0
-	// DISABLED leaves WAL failover disabled. Commits to the storage engine
-	// observe the latency of a store's primary WAL directly.
-	WALFailoverMode_DISABLED WALFailoverMode = 1
-	// AMONG_STORES enables WAL failover among multiple stores within a node. This
-	// setting has no effect if the node has a single store. When a storage engine
-	// observes high latency writing to its WAL, it may transparently failover to
-	// an arbitrary, predetermined other store's data directory. If successful in
-	// syncing log entries to the other store's volume, the batch commit latency
-	// is insulated from the effects of momentary disk stalls.
-	WALFailoverMode_AMONG_STORES WALFailoverMode = 2
-	// EXPLICIT_PATH enables WAL failover for a single-store node to an explicitly
-	// specified path.
-	WALFailoverMode_EXPLICIT_PATH WALFailoverMode = 3
+	// WALFailoverDefaultMode leaves the WAL failover configuration unspecified.
+	// Today this is interpreted as WALFailoverDisabled but future releases may
+	// default to another mode.
+	WALFailoverDefaultMode WALFailoverMode = 0
+	// WALFailoverDisabled leaves WAL failover disabled. Commits to the storage
+	// engine observe the latency of a store's primary WAL directly.
+	WALFailoverDisabled WALFailoverMode = 1
+	// WALFailoverAmongStores enables WAL failover among multiple stores within a
+	// node. This setting has no effect if the node has a single store. When a
+	// storage engine observes high latency writing to its WAL, it may
+	// transparently failover to an arbitrary, predetermined other store's data
+	// directory. If successful in syncing log entries to the other store's
+	// volume, the batch commit latency is insulated from the effects of momentary
+	// disk stalls.
+	WALFailoverAmongStores WALFailoverMode = 2
+	// WALFailoverToExplicitPath enables WAL failover for a single-store node to
+	// an explicitly specified path.
+	WALFailoverToExplicitPath WALFailoverMode = 3
 )
 
 // ExternalPath is a path with encryption options.
@@ -49,14 +50,14 @@ type WALFailover struct {
 	Mode WALFailoverMode
 	// Path is the non-store path to which WALs should be written when failing
 	// over. It must be nonempty if and only if Mode ==
-	// WALFailoverMode_EXPLICIT_PATH.
+	// WALFailoverToExplicitPath.
 	Path ExternalPath
 	// PrevPath is the previously used non-store path. It may be set with Mode ==
-	// WALFailoverMode_EXPLICIT_PATH (when changing the secondary path) or
-	// WALFailoverMode_DISABLED (when disabling WAL failover after it was
-	// previously enabled with WALFailoverMode_EXPLICIT_PATH). It must be empty
-	// for other modes. If Mode is WALFailoverMode_DISABLED and previously WAL
-	// failover was enabled using WALFailoverMode_AMONG_STORES, then PrevPath must
+	// WALFailoverToExplicitPath (when changing the secondary path) or
+	// WALFailoverDisabled (when disabling WAL failover after it was
+	// previously enabled with WALFailoverToExplicitPath). It must be empty
+	// for other modes. If Mode is WALFailoverDisabled and previously WAL
+	// failover was enabled using WALFailoverAmongStores, then PrevPath must
 	// not be set.
 	PrevPath ExternalPath
 }
@@ -72,17 +73,17 @@ func (c *WALFailover) String() string {
 // SafeFormat implements the redact.SafeFormatter interface.
 func (c *WALFailover) SafeFormat(p redact.SafePrinter, _ rune) {
 	switch c.Mode {
-	case WALFailoverMode_DEFAULT:
+	case WALFailoverDefaultMode:
 		// Empty
-	case WALFailoverMode_DISABLED:
+	case WALFailoverDisabled:
 		p.SafeString("disabled")
 		if c.PrevPath.IsSet() {
 			p.SafeString(",prev_path=")
 			p.SafeString(redact.SafeString(c.PrevPath.Path))
 		}
-	case WALFailoverMode_AMONG_STORES:
+	case WALFailoverAmongStores:
 		p.SafeString("among-stores")
-	case WALFailoverMode_EXPLICIT_PATH:
+	case WALFailoverToExplicitPath:
 		p.SafeString("path=")
 		p.SafeString(redact.SafeString(c.Path.Path))
 		if c.PrevPath.IsSet() {
@@ -98,7 +99,7 @@ func (c *WALFailover) SafeFormat(p redact.SafePrinter, _ rune) {
 func (c *WALFailover) Set(s string) error {
 	switch {
 	case strings.HasPrefix(s, "disabled"):
-		c.Mode = WALFailoverMode_DISABLED
+		c.Mode = WALFailoverDisabled
 		var ok bool
 		c.Path.Path, c.PrevPath.Path, ok = parseWALFailoverPathFields(strings.TrimPrefix(s, "disabled"))
 		if !ok || c.Path.IsSet() {
@@ -106,9 +107,9 @@ func (c *WALFailover) Set(s string) error {
 				"expect disabled[,prev_path=<prev_path>]", s)
 		}
 	case s == "among-stores":
-		c.Mode = WALFailoverMode_AMONG_STORES
+		c.Mode = WALFailoverAmongStores
 	case strings.HasPrefix(s, "path="):
-		c.Mode = WALFailoverMode_EXPLICIT_PATH
+		c.Mode = WALFailoverToExplicitPath
 		var ok bool
 		c.Path.Path, c.PrevPath.Path, ok = parseWALFailoverPathFields(s)
 		if !ok || !c.Path.IsSet() {
