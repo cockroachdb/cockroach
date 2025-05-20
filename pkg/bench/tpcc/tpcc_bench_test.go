@@ -59,7 +59,7 @@ func BenchmarkTPCC(b *testing.B) {
 
 	_, engPath, cleanup := maybeGenerateStoreDir(b)
 	defer cleanup()
-	baseOptions := options{
+	baseOptions := [...]option{
 		serverArgs(func(
 			b testing.TB,
 		) (_ base.TestServerArgs, cleanup func()) {
@@ -80,17 +80,26 @@ func BenchmarkTPCC(b *testing.B) {
 		}),
 	}
 
-	for _, opts := range []options{
-		{workloadFlag("mix", "newOrder=1")},
-		{workloadFlag("mix", "payment=1")},
-		{workloadFlag("mix", "orderStatus=1")},
-		{workloadFlag("mix", "delivery=1")},
-		{workloadFlag("mix", "stockLevel=1")},
-		{workloadFlag("mix", "newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1")},
-	} {
-		b.Run(opts.String(), func(b *testing.B) {
-			newBenchmark(append(opts, baseOptions...)).run(b)
+	for _, impl := range []string{"literal", "optimized"} {
+		b.Run(impl, func(b *testing.B) {
+			implOpts := baseOptions[:]
+			if impl == "literal" {
+				implOpts = append(implOpts, workloadFlag("literal-implementation", "true"))
+			}
+			for _, opts := range []options{
+				{workloadFlag("mix", "newOrder=1")},
+				{workloadFlag("mix", "payment=1")},
+				{workloadFlag("mix", "orderStatus=1")},
+				{workloadFlag("mix", "delivery=1")},
+				{workloadFlag("mix", "stockLevel=1")},
+				{workloadFlag("mix", "newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1")},
+			} {
+				b.Run(opts.String(), func(b *testing.B) {
+					newBenchmark(append(opts, implOpts...)).run(b)
+				})
+			}
 		})
+
 	}
 }
 
