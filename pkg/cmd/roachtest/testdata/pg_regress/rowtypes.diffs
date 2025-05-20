@@ -255,7 +255,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowtypes.out --la
 -LINE 1: select ROW('ABC','DEF') ~~ ROW('DEF','ABC') as fail;
 -                                ^
 -HINT:  Row comparison operators must be associated with btree operator families.
-+ERROR:  unsupported unary operator: ~ <tuple{string, string}>
++ERROR:  unsupported comparison operator: <tuple> LIKE <tuple>
  -- Comparisons of ROW() expressions can cope with some type mismatches
  select ROW(1,2) = ROW(1,2::int8);
   ?column? 

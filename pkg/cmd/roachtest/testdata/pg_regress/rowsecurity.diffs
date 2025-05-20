@@ -5057,22 +5057,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security = on;
  CREATE TABLE r1 (a int PRIMARY KEY);
  CREATE POLICY p1 ON r1 FOR SELECT USING (a < 20);
-@@ -4273,12 +3155,13 @@
- ALTER TABLE r1 FORCE ROW LEVEL SECURITY;
- -- Works fine
- UPDATE r1 SET a = 30;
-+ERROR:  new row violates row-level security policy for table "r1"
- -- Show updated rows
- ALTER TABLE r1 NO FORCE ROW LEVEL SECURITY;
- TABLE r1;
-  a  
- ----
-- 30
-+ 10
- (1 row)
- 
- -- reset value in r1 for test with RETURNING
-@@ -4308,28 +3191,31 @@
+@@ -4308,28 +3190,31 @@
  ERROR:  new row violates row-level security policy for table "r1"
  DROP TABLE r1;
  -- Check dependency handling
@@ -5107,7 +5092,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  (1 row)
  
  -- Should return one
-@@ -4338,7 +3224,7 @@
+@@ -4338,7 +3223,7 @@
  					 AND refobjid = (SELECT oid FROM pg_authid WHERE rolname = 'regress_rls_carol');
   ?column? 
  ----------
@@ -5116,7 +5101,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  (1 row)
  
  -- Should return zero
-@@ -4351,15 +3237,19 @@
+@@ -4351,15 +3236,19 @@
  (1 row)
  
  -- DROP OWNED BY testing
@@ -5138,7 +5123,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE POLICY p1 ON dob_t1 TO regress_rls_dob_role1,regress_rls_dob_role2 USING (true);
  DROP OWNED BY regress_rls_dob_role1;
  DROP POLICY p1 ON dob_t1; -- should succeed
-@@ -4367,14 +3257,15 @@
+@@ -4367,14 +3256,15 @@
  CREATE POLICY p1 ON dob_t1 TO regress_rls_dob_role1,regress_rls_dob_role1 USING (true);
  DROP OWNED BY regress_rls_dob_role1;
  DROP POLICY p1 ON dob_t1; -- should fail, already gone
@@ -5155,7 +5140,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  DROP USER regress_rls_dob_role1;
  DROP USER regress_rls_dob_role2;
  -- Bug #15708: view + table with RLS should check policies as view owner
-@@ -4384,81 +3275,97 @@
+@@ -4384,81 +3274,97 @@
  INSERT INTO rls_tbl VALUES (10);
  ALTER TABLE rls_tbl ENABLE ROW LEVEL SECURITY;
  CREATE POLICY p1 ON rls_tbl USING (EXISTS (SELECT 1 FROM ref_tbl));
@@ -5287,7 +5272,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- CVE-2023-2455: inlining an SRF may introduce an RLS dependency
  create table rls_t (c text);
  insert into rls_t values ('invisible to bob');
-@@ -4489,39 +3396,8 @@
+@@ -4489,39 +3395,8 @@
  --
  -- Clean up objects
  --
