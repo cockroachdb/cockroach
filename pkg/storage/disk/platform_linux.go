@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/vfs"
@@ -83,27 +84,43 @@ func deviceIDFromFileInfo(finfo fs.FileInfo, path string) DeviceID {
 	// Per /usr/include/linux/major.h and Documentation/admin-guide/devices.rst:
 	switch major {
 	case 0: // UNNAMED_MAJOR
+
 		// Perform additional lookups for unknown device types
 		var statfs sysutil.StatfsT
 		if err := sysutil.Statfs(path, &statfs); err != nil {
-			log.Warningf(ctx, "unable statfs(2) path %q: %v", path, err)
-		} else {
-			fsType := statfs.Type
-			switch strconv.FormatInt(fsType, 16) {
-			case "2fc12fc1": // ZFS_SUPER_MAGIC from include/sys/fs/zfs.h
-				if major, minor, err = deviceIDForZFS(path); err != nil {
-					log.Warningf(ctx, "unable to find device ID for %q: %v", path, err)
-				}
-			default:
-				log.Warningf(ctx, "unsupported file system type %q for path %q", fsType, path)
-			}
+			maybeShoutf(ctx, severity.WARNING, "unable to statfs(2) path %q (%d:%d): %v", path, major, minor, err)
+			return DeviceID{major, minor}
 		}
-	case 259: //BLOCK_EXT_MAJOR=259
-		// noop
-	}
 
-	if major == 0 {
-		log.Warningf(ctx, "unsupported device type %q", path)
+		fsType := strconv.FormatInt(statfs.Type, 16)
+		switch fsType {
+		case "2fc12fc1": // ZFS_SUPER_MAGIC from include/sys/fs/zfs.h
+			major, minor, err := deviceIDForZFS(path)
+			if err != nil {
+				maybeShoutf(ctx, severity.WARNING, "zfs: unable to find device ID for %q: %v", path, err)
+			} else {
+				maybeShoutf(ctx, severity.WARNING, "zfs: mapping %q to diskstats device %d:%d", path, major, minor)
+			}
+
+			id := DeviceID{
+				major: major,
+				minor: minor,
+			}
+			return id
+
+		default:
+			maybeShoutf(ctx, severity.WARNING, "unsupported file system type %q for path (%d:%d) %q", fsType, major, minor, path)
+		}
+
+	case 259: // BLOCK_EXT_MAJOR=259
+
+		// NOTE: Major device 259 is the happy path for ext4 filesystems: no
+		// additional handling is required.
+
+		maybeShoutf(ctx, severity.INFO, "ext: mapping %q to diskstats device %d:%d", path, major, minor)
+
+	default:
+		maybeShoutf(ctx, severity.WARNING, "unsupported device type %d:%d for store at %q", major, minor, path)
 	}
 
 	id := DeviceID{
@@ -177,7 +194,7 @@ func getZPoolDevice(poolName _ZPoolName) (string, error) {
 			if devPart == "" {
 				devPart = stripDevicePartition(fields[0])
 			} else {
-				log.Warningf(ctx, "unsupported configuration: multiple devices (i.e. %q, %q) detected for zpool %q", devPart, fields[0], string(poolName))
+				maybeShoutf(ctx, severity.WARNING, "unsupported configuration: multiple devices (i.e. %q, %q) detected for zpool %q", devPart, fields[0], string(poolName))
 			}
 		}
 	}
@@ -188,17 +205,20 @@ func getZPoolDevice(poolName _ZPoolName) (string, error) {
 	return "", fmt.Errorf("no device found for zpool %q", poolName)
 }
 
+var (
+	nvmePartitionRegex = regexp.MustCompile(`^(nvme\d+n\d+)(p\d+)?$`)
+	scsiPartitionRegex = regexp.MustCompile(`^(ram|loop|fd|(h|s|v|xv)d[a-z])(\d+)?$`)
+)
+
 // stripDevicePartition removes partition suffix from a device path.
 func stripDevicePartition(devicePath string) string {
 	base := filepath.Base(devicePath)
 
-	var nvmePartitionRegex = regexp.MustCompile(`^(nvme\d+n\d+)(p\d+)?$`)
 	nvmeMatches := nvmePartitionRegex.FindStringSubmatch(base)
 	if len(nvmeMatches) == 3 {
 		return nvmeMatches[1]
 	}
 
-	var scsiPartitionRegex = regexp.MustCompile(`^(/dev/sd.*?)(\d+)$`)
 	scsiMatches := scsiPartitionRegex.FindStringSubmatch(base)
 	if len(scsiMatches) == 3 {
 		return scsiMatches[1]
@@ -230,4 +250,39 @@ func getDeviceID(devPath string) (uint32, uint32, error) {
 	}
 
 	return maj, min, nil
+}
+
+// maybeShoutf is intended to be called a limited number of times (on the order
+// of magnitude of the number of stores configured for a single node) and spawn
+// one go routine per log message.  At the time maybeShoutf() is invoked, it's
+// not guaranteed that logging has been initialized.  maybeShoutf() allows for
+// logging of useful information without panicing the process during bootstrap.
+// In the common case, log.IsActive() wires up logging, but this isn't
+// guaranteed to happen.
+func maybeShoutf(ctx context.Context, sev log.Severity, format string, args ...interface{}) {
+	if active, _ := log.IsActive(); active {
+		log.Ops.Shoutf(ctx, sev, format, args...)
+		return
+	}
+
+	// Logging has 15min to come up before we give up
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Minute)
+	defer cancel()
+
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if active, _ := log.IsActive(); active {
+					log.Ops.Shoutf(ctx, sev, format, args...)
+					return
+				}
+			}
+		}
+	}()
 }
