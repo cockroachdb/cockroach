@@ -1109,6 +1109,12 @@ func (c *clusterImpl) Save(ctx context.Context, msg string, l *logger.Logger) {
 	c.destroyState.mu.Unlock()
 }
 
+func (c *clusterImpl) saved() bool {
+	c.destroyState.mu.Lock()
+	defer c.destroyState.mu.Unlock()
+	return c.destroyState.mu.saved
+}
+
 var errClusterNotFound = errors.New("cluster not found")
 
 // validateCluster takes a cluster and checks that the reality corresponds to

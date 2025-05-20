@@ -987,10 +987,12 @@ func (r *testRunner) runWorker(
 					// Continue with a fresh cluster.
 					c = nil
 				case NoDebug:
-					// On any test failure or error, we destroy the cluster. We could be
-					// more selective, but this sounds safer.
-					l.PrintfCtx(ctx, "destroying cluster %s because: %s", c, failureMsg)
-					c.Destroy(context.Background(), closeLogger, l)
+					if !c.saved() {
+						// On any test failure or error, we destroy the cluster. We could be
+						// more selective, but this sounds safer.
+						l.PrintfCtx(ctx, "destroying cluster %s because: %s", c, failureMsg)
+						c.Destroy(context.Background(), closeLogger, l)
+					}
 					c = nil
 				}
 			}
