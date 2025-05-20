@@ -3975,6 +3975,18 @@ func (b *Builder) buildVectorSearch(
 	}
 	targetNeighborCount := uint64(search.TargetNeighborCount)
 
+	// Verify that the query vector and vector column have the same dimensions.
+	resolvedQueryVector, ok := queryVector.(*tree.DPGVector)
+	if !ok {
+		return execPlan{}, colOrdMap{}, errors.AssertionFailedf("expected vector type, got %T", queryVector)
+	}
+	queryVectorLen := int32(len(resolvedQueryVector.T))
+	vectorColumnType := index.VectorColumn().DatumType()
+	if queryVectorLen != vectorColumnType.Width() {
+		return execPlan{}, colOrdMap{}, pgerror.Newf(pgcode.DataException,
+			"different vector dimensions %d and %d", queryVectorLen, vectorColumnType.Width())
+	}
+
 	var res execPlan
 	res.root, err = b.factory.ConstructVectorSearch(
 		table, index, outColOrds, search.PrefixConstraint, queryVector, targetNeighborCount,
