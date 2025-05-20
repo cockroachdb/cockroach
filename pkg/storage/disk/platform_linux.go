@@ -135,13 +135,16 @@ func deviceIDFromFileInfo(finfo fs.FileInfo, path string) DeviceID {
 type _ZPoolName string
 
 func deviceIDForZFS(path string) (uint32, uint32, error) {
-	zpoolName, err := getZFSPoolName(path)
+	zpoolName, err := zfsGetPoolName(path)
 	if err != nil {
 		return 0, 0, errors.Newf("unable to find the zpool for %q: %v", path, err) // nolint:errwrap
 	}
 
-	devName, err := getZPoolDevice(zpoolName)
-	if err != nil {
+	// If there are multiple devices for a zpool, an error is returned along with
+	// a device name.  Continue resolving the device's major:minor numbers,
+	// despite the multiple drives.
+	devName, err := zpoolGetDevice(zpoolName)
+	if err != nil && devName == "" {
 		return 0, 0, errors.Newf("unable to find the device for pool %q: %v", zpoolName, err) // nolint:errwrap
 	}
 
@@ -153,15 +156,19 @@ func deviceIDForZFS(path string) (uint32, uint32, error) {
 	return major, minor, nil
 }
 
-func getZFSPoolName(path string) (_ZPoolName, error) {
+func zfsGetPoolName(path string) (_ZPoolName, error) {
 	out, err := exec.Command("df", "--no-sync", "--output=source,fstype", path).Output()
 	if err != nil {
 		return "", errors.Newf("unable to exec df(1): %v", err) // nolint:errwrap
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	return zfsParseDF(out)
+}
+
+func zfsParseDF(df []byte) (_ZPoolName, error) {
+	lines := strings.Split(strings.TrimSpace(string(df)), "\n")
 	if len(lines) < 2 {
-		return "", fmt.Errorf("unexpected df(1) output: %q", out)
+		return "", fmt.Errorf("unexpected df(1) output: %q", df)
 	}
 
 	fields := strings.Fields(lines[1])
@@ -179,7 +186,7 @@ func getZFSPoolName(path string) (_ZPoolName, error) {
 	return _ZPoolName(poolName), nil
 }
 
-func getZPoolDevice(poolName _ZPoolName) (string, error) {
+func zpoolGetDevice(poolName _ZPoolName) (string, error) {
 	ctx := context.TODO()
 
 	out, err := exec.Command("zpool", "status", "-pPL", string(poolName)).Output()
@@ -187,24 +194,34 @@ func getZPoolDevice(poolName _ZPoolName) (string, error) {
 		return "", errors.Newf("unable to find the devices attached to pool %q: %v", poolName, err) // nolint:errwrap
 	}
 
-	scanner := bufio.NewScanner(bytes.NewReader(out))
-	var devPart string
+	return zpoolParseStatus(ctx, poolName, out)
+}
+
+func zpoolParseStatus(ctx context.Context, poolName _ZPoolName, output []byte) (string, error) {
+	scanner := bufio.NewScanner(bytes.NewReader(output))
+	var devName string
+	var devCount int
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		fields := strings.Fields(line)
 		if len(fields) >= 2 && fields[1] == "ONLINE" && strings.HasPrefix(fields[0], "/dev/") {
-			if devPart == "" {
-				devPart = stripDevicePartition(fields[0])
+			devCount++
+			if devName == "" {
+				devName = stripDevicePartition(fields[0])
 			} else {
-				maybeWarnf(ctx, "unsupported configuration: multiple devices (i.e. %q, %q) detected for zpool %q", devPart, fields[0], string(poolName))
+				maybeWarnf(ctx, "unsupported configuration: multiple devices (i.e. %q, %q) detected for zpool %q", devName, fields[0], string(poolName))
 			}
 		}
 	}
-	if devPart != "" {
-		return devPart, nil
-	}
 
-	return "", fmt.Errorf("no device found for zpool %q", poolName)
+	switch {
+	case devCount == 1:
+		return devName, nil
+	case devCount > 1:
+		return devName, errors.Newf("unsupported configuration: %d devices detected for zpool %q", devCount, string(poolName))
+	default:
+		return "", fmt.Errorf("no device found for zpool %q", poolName)
+	}
 }
 
 var (
@@ -222,7 +239,7 @@ func stripDevicePartition(devicePath string) string {
 	}
 
 	scsiMatches := scsiPartitionRegex.FindStringSubmatch(base)
-	if len(scsiMatches) == 3 {
+	if len(scsiMatches) >= 3 {
 		return scsiMatches[1]
 	}
 
@@ -239,6 +256,10 @@ func getDeviceID(devPath string) (uint32, uint32, error) {
 		return 0, 0, errors.Newf("unable to read %q: %v", devFilePath, err) // nolint:errwrap
 	}
 
+	return parseDeviceID(devFilePath, data)
+}
+
+func parseDeviceID(devFilePath string, data []byte) (uint32, uint32, error) {
 	devStr := strings.TrimSpace(string(data))
 	parts := strings.Split(devStr, ":")
 	if len(parts) != 2 {
@@ -246,7 +267,7 @@ func getDeviceID(devPath string) (uint32, uint32, error) {
 	}
 
 	var maj, min uint32
-	_, err = fmt.Sscanf(devStr, "%d:%d", &maj, &min)
+	_, err := fmt.Sscanf(devStr, "%d:%d", &maj, &min)
 	if err != nil {
 		return 0, 0, errors.Newf("failed parsing device numbers: %v", err) // nolint:errwrap
 	}
