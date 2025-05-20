@@ -55,10 +55,13 @@ func BenchmarkTPCC(b *testing.B) {
 			b testing.TB,
 		) (_ base.TestServerArgs, cleanup func()) {
 			td, cleanup := testutils.TempDir(b)
-			require.NoError(b, cloneEngine.exec(cmdEnv{
+			cmd, stdout := cloneEngine.exec(cmdEnv{
 				{srcEngineEnvVar, engPath},
 				{dstEngineEnvVar, td},
-			}).Run())
+			})
+			if err := cmd.Run(); err != nil {
+				b.Fatalf("failed to clone engine: %s\n%s", err, stdout.String())
+			}
 			return base.TestServerArgs{
 				StoreSpecs: []base.StoreSpec{{Path: td}},
 			}, cleanup
@@ -149,11 +152,13 @@ func (bm *benchmark) startCockroach(b testing.TB) {
 }
 
 func (bm *benchmark) startClient(b *testing.B) (pid int, wait func() error) {
-	cmd := runClient.exec(cmdEnv{
+	cmd, stdout := runClient.exec(cmdEnv{
 		{nEnvVar, b.N},
 		{pgurlEnvVar, bm.pgURL},
 	}, bm.workloadFlags...)
-	require.NoError(b, cmd.Start())
+	if err := cmd.Start(); err != nil {
+		b.Fatalf("failed to start client: %s\n%s", err, stdout.String())
+	}
 	bm.closers = append(bm.closers,
 		func() { _ = cmd.Process.Kill(); _ = cmd.Wait() },
 	)
