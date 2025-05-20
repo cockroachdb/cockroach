@@ -19,7 +19,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -84,27 +83,46 @@ func deviceIDFromFileInfo(finfo fs.FileInfo, path string) DeviceID {
 	// Per /usr/include/linux/major.h and Documentation/admin-guide/devices.rst:
 	switch major {
 	case 0: // UNNAMED_MAJOR
+
 		// Perform additional lookups for unknown device types
 		var statfs sysutil.StatfsT
-		if err := sysutil.Statfs(path, &statfs); err != nil {
-			log.Warningf(ctx, "unable statfs(2) path %q: %v", path, err)
-		} else {
-			fsType := statfs.Type
-			switch strconv.FormatInt(fsType, 16) {
-			case "2fc12fc1": // ZFS_SUPER_MAGIC from include/sys/fs/zfs.h
-				if major, minor, err = deviceIDForZFS(path); err != nil {
-					log.Warningf(ctx, "unable to find device ID for %q: %v", path, err)
-				}
-			default:
-				log.Warningf(ctx, "unsupported file system type %q for path %q", fsType, path)
-			}
+		err := sysutil.Statfs(path, &statfs)
+		if err != nil {
+			maybeWarnf(ctx, "unable to statfs(2) path %q (%d:%d): %v", path, major, minor, err)
+			return DeviceID{major, minor}
 		}
-	case 259: //BLOCK_EXT_MAJOR=259
-		// noop
-	}
 
-	if major == 0 {
-		log.Warningf(ctx, "unsupported device type %q", path)
+		switch statfs.Type {
+		case 0x2fc12fc1: // ZFS_SUPER_MAGIC from include/sys/fs/zfs.h
+			major, minor, err = deviceIDForZFS(path)
+			if err != nil {
+				maybeWarnf(ctx, "zfs: unable to find device ID for %q: %v", path, err)
+			} else {
+				maybeInfof(ctx, "zfs: mapping %q to diskstats device %d:%d", path, major, minor)
+			}
+
+			id := DeviceID{
+				major: major,
+				minor: minor,
+			}
+			return id
+
+		case 0x58465342: // XFS_SUPER_MAGIC	from linux/magic.h "XFSB"
+			maybeWarnf(ctx, "xfs: unable to find device ID for %q: %v", path, err)
+
+		default:
+			maybeWarnf(ctx, "unsupported file system type %x for path (%d:%d) %q", statfs.Type, major, minor, path)
+		}
+
+	case 259: // BLOCK_EXT_MAJOR=259
+
+		// NOTE: Major device 259 is the happy path for ext4 and xfs filesystems: no
+		// additional handling is required.
+
+		maybeInfof(ctx, "mapping %q to diskstats device %d:%d", path, major, minor)
+
+	default:
+		maybeWarnf(ctx, "unsupported device type %d:%d for store at %q", major, minor, path)
 	}
 
 	id := DeviceID{
@@ -178,7 +196,7 @@ func getZPoolDevice(poolName _ZPoolName) (string, error) {
 			if devPart == "" {
 				devPart = stripDevicePartition(fields[0])
 			} else {
-				log.Warningf(ctx, "unsupported configuration: multiple devices (i.e. %q, %q) detected for zpool %q", devPart, fields[0], string(poolName))
+				maybeWarnf(ctx, "unsupported configuration: multiple devices (i.e. %q, %q) detected for zpool %q", devPart, fields[0], string(poolName))
 			}
 		}
 	}
@@ -189,17 +207,20 @@ func getZPoolDevice(poolName _ZPoolName) (string, error) {
 	return "", fmt.Errorf("no device found for zpool %q", poolName)
 }
 
+var (
+	nvmePartitionRegex = regexp.MustCompile(`^(nvme\d+n\d+)(p\d+)?$`)
+	scsiPartitionRegex = regexp.MustCompile(`^(ram|loop|fd|(h|s|v|xv)d[a-z])(\d+)?$`)
+)
+
 // stripDevicePartition removes partition suffix from a device path.
 func stripDevicePartition(devicePath string) string {
 	base := filepath.Base(devicePath)
 
-	var nvmePartitionRegex = regexp.MustCompile(`^(nvme\d+n\d+)(p\d+)?$`)
 	nvmeMatches := nvmePartitionRegex.FindStringSubmatch(base)
 	if len(nvmeMatches) == 3 {
 		return nvmeMatches[1]
 	}
 
-	var scsiPartitionRegex = regexp.MustCompile(`^(/dev/sd.*?)(\d+)$`)
 	scsiMatches := scsiPartitionRegex.FindStringSubmatch(base)
 	if len(scsiMatches) == 3 {
 		return scsiMatches[1]
@@ -231,4 +252,20 @@ func getDeviceID(devPath string) (uint32, uint32, error) {
 	}
 
 	return maj, min, nil
+}
+
+// maybeWarnf is a convenience function to prevent panicing during bootstrap
+// from using logging before it is setup.
+func maybeWarnf(ctx context.Context, format string, args ...interface{}) {
+	if active, _ := log.IsActive(); active {
+		log.Ops.WarningfDepth(ctx, 1, format, args...)
+	}
+}
+
+// maybeInfof is a convenience function to prevent panicing during bootstrap
+// from using logging before it is setup.
+func maybeInfof(ctx context.Context, format string, args ...interface{}) {
+	if active, _ := log.IsActive(); active {
+		log.Ops.InfofDepth(ctx, 1, format, args...)
+	}
 }
