@@ -1211,7 +1211,7 @@ func runCDCFineGrainedCheckpointingBenchmark(
 		t.Fatalf("too many range delays provided")
 	}
 
-	ips, err := c.ExternalIP(ctx, t.L(), c.Node(c.Spec().NodeCount))
+	ips, err := c.InternalIP(ctx, t.L(), c.Node(c.Spec().NodeCount))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1374,12 +1374,16 @@ func runCDCFineGrainedCheckpointingBenchmark(
 
 	var dupes int
 	testutils.SucceedsWithin(t, func() error {
+		t.L().Printf("fetching uniques and dupes from sink...")
 		unique, err := get("/unique")
 		if err != nil {
+			t.L().Printf("error getting unique count: %v", err)
 			return err
 		}
+		t.L().Printf("sink got %d unique", unique)
 		dupes, err = get("/dupes")
 		if err != nil {
+			t.L().Printf("error getting dupes count: %v", err)
 			return err
 		}
 		t.L().Printf("sink got %d unique, %d dupes", unique, dupes)
