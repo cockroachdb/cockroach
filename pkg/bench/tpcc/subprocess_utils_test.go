@@ -10,12 +10,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 	"testing"
-
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/stretchr/testify/require"
 )
 
 type cmd struct {
@@ -23,40 +18,25 @@ type cmd struct {
 	impl func(t *testing.T)
 }
 
+func newCmd(name string, impl func(t *testing.T)) *cmd {
+	return &cmd{
+		name: name,
+		impl: impl,
+	}
+}
+
 func (c *cmd) exec(env cmdEnv, args ...string) (_ *exec.Cmd, stdout *bytes.Buffer) {
-	cmd := exec.Command(os.Args[0],
-		"--test.run=^TestInternal"+c.name+"$",
-		"--test.v")
+	cmd := exec.Command(os.Args[0], "--test.run=^"+c.name+"$", "--test.v")
 	if len(args) > 0 {
 		cmd.Args = append(cmd.Args, "--")
 		cmd.Args = append(cmd.Args, args...)
 	}
 	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, fmt.Sprintf("%s=t", internalTestEnvVar))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("%s=t", allowInternalTestEnvVar))
 	cmd.Env = append(cmd.Env, env.toStrings()...)
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	return cmd, &buf
-}
-
-var isInternalTest = envutil.EnvOrDefaultBool(internalTestEnvVar, false)
-
-func internalCommand(t *testing.T) {
-	if !isInternalTest {
-		skip.IgnoreLint(t)
-	}
-	f, ok := commands[strings.TrimPrefix(t.Name(), "TestInternal")]
-	require.True(t, ok)
-	f.impl(t)
-}
-
-func registerCmd(name string, impl func(t *testing.T)) *cmd {
-	c := &cmd{
-		name: name,
-		impl: impl,
-	}
-	commands[name] = c
-	return c
 }
 
 type envVar struct {
