@@ -1,0 +1,7 @@
+create_virtual_cluster_stmt ::=
+	'CREATE' 'VIRTUAL' 'CLUSTER' virtual_cluster_spec
+	| 'CREATE' 'VIRTUAL' 'CLUSTER' 'IF' 'NOT' 'EXISTS' virtual_cluster_spec
+	| 'CREATE' 'VIRTUAL' 'CLUSTER' virtual_cluster_spec 'FROM' 'REPLICATION' 'OF' primary_virtual_cluster 'ON' primary_connection_string 'WITH' replication_options
+	| 'CREATE' 'VIRTUAL' 'CLUSTER' virtual_cluster_spec 'FROM' 'REPLICATION' 'OF' primary_virtual_cluster 'ON' primary_connection_string 
+	| 'CREATE' 'VIRTUAL' 'CLUSTER' 'IF' 'NOT' 'EXISTS' virtual_cluster_spec 'FROM' 'REPLICATION' 'OF' primary_virtual_cluster 'ON' primary_connection_string 'WITH' replication_options
+	| 'CREATE' 'VIRTUAL' 'CLUSTER' 'IF' 'NOT' 'EXISTS' virtual_cluster_spec 'FROM' 'REPLICATION' 'OF' primary_virtual_cluster 'ON' primary_connection_string 

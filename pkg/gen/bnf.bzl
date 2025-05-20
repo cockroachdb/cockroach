@@ -122,6 +122,7 @@ BNF_SRCS = [
     "//docs/generated/sql/bnf:create_trigger.bnf",
     "//docs/generated/sql/bnf:create_type.bnf",
     "//docs/generated/sql/bnf:create_view_stmt.bnf",
+    "//docs/generated/sql/bnf:create_virtual_cluster.bnf",
     "//docs/generated/sql/bnf:deallocate_stmt.bnf",
     "//docs/generated/sql/bnf:declare_cursor_stmt.bnf",
     "//docs/generated/sql/bnf:default_value_column_level.bnf",

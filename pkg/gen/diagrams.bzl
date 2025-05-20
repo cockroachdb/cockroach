@@ -122,6 +122,7 @@ DIAGRAMS_SRCS = [
     "//docs/generated/sql/bnf:create_trigger.html",
     "//docs/generated/sql/bnf:create_type.html",
     "//docs/generated/sql/bnf:create_view.html",
+    "//docs/generated/sql/bnf:create_virtual_cluster.html",
     "//docs/generated/sql/bnf:deallocate.html",
     "//docs/generated/sql/bnf:declare_cursor.html",
     "//docs/generated/sql/bnf:default_value_column_level.html",

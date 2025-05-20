@@ -906,6 +906,16 @@ var specs = []stmtSpec{
 		inline: []string{"opt_column_list"},
 	},
 	{
+		name:   "create_virtual_cluster",
+		stmt:   "create_virtual_cluster_stmt",
+		inline: []string{"opt_with_replication_options", "virtual_cluster"},
+		exclude: []*regexp.Regexp{
+			regexp.MustCompile("'WITH' 'OPTIONS'"),
+		},
+		replace: map[string]string{"'OF' d_expr": "'OF' primary_virtual_cluster", "'ON' d_expr": "'ON' primary_connection_string", "replication_options_list": "replication_options"},
+		unlink:  []string{"primary_virtual_cluster", "primary_connection_string", "replication_options"},
+	},
+	{
 		name:   "create_role_stmt",
 		inline: []string{"role_or_group_or_user", "opt_role_options"},
 		replace: map[string]string{

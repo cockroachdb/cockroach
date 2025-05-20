@@ -4920,14 +4920,12 @@ logical_replication_create_table_options:
 create_virtual_cluster_stmt:
   CREATE virtual_cluster virtual_cluster_spec
   {
-    /* SKIP DOC */
     $$.val = &tree.CreateTenant{
       TenantSpec: $3.tenantSpec(),
     }
   }
 | CREATE virtual_cluster IF NOT EXISTS virtual_cluster_spec
   {
-    /* SKIP DOC */
     $$.val = &tree.CreateTenant{
       IfNotExists: true,
       TenantSpec: $6.tenantSpec(),
@@ -4935,7 +4933,6 @@ create_virtual_cluster_stmt:
   }
 | CREATE virtual_cluster virtual_cluster_spec FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
   {
-    /* SKIP DOC */
     $$.val = &tree.CreateTenantFromReplication{
       TenantSpec: $3.tenantSpec(),
       ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $7.expr()},
@@ -4945,7 +4942,6 @@ create_virtual_cluster_stmt:
   }
 | CREATE virtual_cluster IF NOT EXISTS virtual_cluster_spec FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
   {
-    /* SKIP DOC */
     $$.val = &tree.CreateTenantFromReplication{
       IfNotExists: true,
       TenantSpec: $6.tenantSpec(),
