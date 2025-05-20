@@ -89,7 +89,7 @@ func (s *testState) estimateDistances(t *testing.T, d *datadriven.TestData) stri
 	}
 
 	addVectors := func(
-		quantizer quantize.Quantizer, vectors vector.Set,
+		quantizer quantize.Quantizer, centroid vector.T, vectors vector.Set,
 	) (quantizedSet quantize.QuantizedVectorSet, distances, errorBounds []float32) {
 		// Quantize all vectors at once.
 		quantizedSet = quantizer.Quantize(&s.Workspace, vectors)
@@ -100,7 +100,7 @@ func (s *testState) estimateDistances(t *testing.T, d *datadriven.TestData) stri
 
 		// Now add the vectors one-by-one and ensure that distances and error
 		// bounds stay the same.
-		quantizedSet = quantizer.NewQuantizedVectorSet(vectors.Count, quantizedSet.GetCentroid())
+		quantizedSet = quantizer.NewQuantizedVectorSet(vectors.Count, centroid)
 		for i := range vectors.Count {
 			quantizer.QuantizeInSet(&s.Workspace, quantizedSet, vectors.Slice(i, 1))
 		}
@@ -116,9 +116,17 @@ func (s *testState) estimateDistances(t *testing.T, d *datadriven.TestData) stri
 
 	var buf bytes.Buffer
 	doTest := func(metric vecdist.Metric, prec int) {
+		centroid := vectors.Centroid(make(vector.T, vectors.Dims))
+		if metric == vecdist.InnerProduct || metric == vecdist.Cosine {
+			// Use spherical centroid for inner product and cosine distances,
+			// which is the mean centroid, but normalized.
+			num32.Normalize(centroid)
+		}
+
 		// Test UnQuantizer.
 		unQuantizer := quantize.NewUnQuantizer(len(queryVector), metric)
-		unQuantizedSet, exact, errorBounds := addVectors(unQuantizer, vectors)
+		quantizedSet, exact, errorBounds := addVectors(unQuantizer, centroid, vectors)
+		unQuantizedSet := quantizedSet.(*quantize.UnQuantizedVectorSet)
 		for _, error := range errorBounds {
 			// ErrorBounds should always be zero for UnQuantizer.
 			require.Zero(t, error)
@@ -126,17 +134,17 @@ func (s *testState) estimateDistances(t *testing.T, d *datadriven.TestData) stri
 
 		// Test RaBitQuantizer.
 		rabitQ := quantize.NewRaBitQuantizer(len(queryVector), 42, metric)
-		rabitQSet, estimated, errorBounds := addVectors(rabitQ, vectors)
+		quantizedSet, estimated, errorBounds := addVectors(rabitQ, centroid, vectors)
+		rabitQSet := quantizedSet.(*quantize.RaBitQuantizedVectorSet)
 
-		// UnQuantizer and RaBitQuantizer should have calculated same centroid.
-		require.Equal(t, unQuantizedSet.GetCentroid(), rabitQSet.GetCentroid())
+		require.Equal(t, unQuantizedSet.GetCount(), rabitQSet.GetCount())
 
 		buf.WriteString("  Query = ")
 		utils.WriteVector(&buf, queryVector, 4)
 		buf.WriteByte('\n')
 
 		buf.WriteString("  Centroid = ")
-		utils.WriteVector(&buf, rabitQSet.GetCentroid(), 4)
+		utils.WriteVector(&buf, rabitQSet.Centroid, 4)
 		buf.WriteByte('\n')
 
 		for i := range vectors.Count {

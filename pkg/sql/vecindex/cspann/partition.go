@@ -127,7 +127,7 @@ func (p *Partition) QuantizedSet() quantize.QuantizedVectorSet {
 // Centroid is the full-sized centroid vector for this partition.
 // NOTE: The centroid is immutable and therefore this method is thread-safe.
 func (p *Partition) Centroid() vector.T {
-	return p.quantizedSet.GetCentroid()
+	return p.metadata.Centroid
 }
 
 // ChildKeys point to the location of the full-size vectors that are quantized
@@ -271,7 +271,7 @@ func (p *Partition) Find(childKey ChildKey) int {
 // vectors that were cleared. The centroid stays the same.
 func (p *Partition) Clear() int {
 	count := len(p.childKeys)
-	p.quantizedSet.Clear(p.quantizedSet.GetCentroid())
+	p.quantizedSet.Clear(p.metadata.Centroid)
 	clear(p.childKeys)
 	p.childKeys = p.childKeys[:0]
 	clear(p.valueBytes)

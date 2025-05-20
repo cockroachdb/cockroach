@@ -49,18 +49,9 @@ func (q *UnQuantizer) Quantize(w *workspace.T, vectors vector.Set) QuantizedVect
 	}
 
 	unquantizedSet := &UnQuantizedVectorSet{
-		Centroid: make(vector.T, q.dims),
-		Vectors:  vector.MakeSet(q.dims),
+		Vectors: vector.MakeSet(q.dims),
 	}
-	if vectors.Count != 0 {
-		unquantizedSet.AddSet(vectors)
-		vectors.Centroid(unquantizedSet.Centroid)
-		if q.distanceMetric == vecdist.InnerProduct || q.distanceMetric == vecdist.Cosine {
-			// Use spherical centroid for inner product and cosine distances,
-			// which is the mean centroid, but normalized.
-			num32.Normalize(unquantizedSet.Centroid)
-		}
-	}
+	unquantizedSet.AddSet(vectors)
 	return unquantizedSet
 }
 
@@ -84,8 +75,7 @@ func (q *UnQuantizer) NewQuantizedVectorSet(capacity int, centroid vector.T) Qua
 
 	dataBuffer := make([]float32, 0, capacity*q.GetDims())
 	unquantizedSet := &UnQuantizedVectorSet{
-		Centroid: centroid,
-		Vectors:  vector.MakeSetFromRawData(dataBuffer, q.GetDims()),
+		Vectors: vector.MakeSetFromRawData(dataBuffer, q.GetDims()),
 	}
 	return unquantizedSet
 }
