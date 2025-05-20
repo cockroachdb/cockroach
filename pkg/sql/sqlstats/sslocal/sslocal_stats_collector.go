@@ -174,6 +174,9 @@ func (s *StatsCollector) EndTransaction(
 
 	for _, stmt := range s.stmtBuf {
 		stmt.TransactionFingerprintID = transactionFingerprintID
+		if s.sendInsights && s.statsIngester != nil {
+			s.statsIngester.IngestStatement(stmt)
+		}
 		if err := s.flushTarget.RecordStatement(ctx, stmt); err != nil {
 			discardedStats++
 		}
@@ -217,10 +220,6 @@ func (s *StatsCollector) shouldObserveInsights() bool {
 func (s *StatsCollector) RecordStatement(
 	ctx context.Context, value *sqlstats.RecordedStmtStats,
 ) error {
-	if s.sendInsights && s.statsIngester != nil {
-		s.statsIngester.IngestStatement(value)
-	}
-
 	// TODO(xinhaoz): This isn't the best place to set this, but we'll clean this up
 	// when we refactor the stats collection code to send the stats to an ingester.
 	s.stmtFingerprintID = value.FingerprintID
