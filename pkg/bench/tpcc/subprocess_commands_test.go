@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
@@ -55,7 +54,6 @@ var (
 		storeDir, ok := envutil.EnvString(storeDirEnvVar, 0)
 		require.True(t, ok)
 
-		defer log.Scope(t).Close(t)
 		srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{{Path: storeDir}},
 		})

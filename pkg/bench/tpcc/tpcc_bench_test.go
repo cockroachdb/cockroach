@@ -55,6 +55,7 @@ import (
 // loader.
 func BenchmarkTPCC(b *testing.B) {
 	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
 
 	_, engPath, cleanup := maybeGenerateStoreDir(b)
 	defer cleanup()
@@ -88,7 +89,6 @@ func BenchmarkTPCC(b *testing.B) {
 		{workloadFlag("mix", "newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1")},
 	} {
 		b.Run(opts.String(), func(b *testing.B) {
-			defer log.Scope(b).Close(b)
 			newBenchmark(append(opts, baseOptions...)).run(b)
 		})
 	}
@@ -110,6 +110,7 @@ func newBenchmark(opts ...options) *benchmark {
 
 func (bm *benchmark) run(b *testing.B) {
 	defer bm.close()
+
 	bm.startCockroach(b)
 	pid, wait := bm.startClient(b)
 
