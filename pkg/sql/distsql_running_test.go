@@ -502,6 +502,9 @@ func TestDistSQLReceiverReportsContention(t *testing.T) {
 		// Otherwise, we're subject to flakes when internal queries experience contention.
 		_, err := db.Exec("SET CLUSTER SETTING sql.txn_stats.sample_rate = 0")
 		require.NoError(t, err)
+		// Also disable auto stats just in case.
+		_, err = db.Exec("SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
+		require.NoError(t, err)
 
 		sqlutils.CreateTable(
 			t, db, "test", "x INT PRIMARY KEY", 1, sqlutils.ToRowFn(sqlutils.RowIdxFn),
