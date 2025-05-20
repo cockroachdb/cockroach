@@ -64,10 +64,10 @@ func BenchmarkTPCC(b *testing.B) {
 			b testing.TB,
 		) (_ base.TestServerArgs, cleanup func()) {
 			td, cleanup := testutils.TempDir(b)
-			cmd, stdout := cloneEngine.exec(cmdEnv{
-				{srcEngineEnvVar, engPath},
-				{dstEngineEnvVar, td},
-			})
+			cmd, stdout := cloneEngine.
+				withEnv(srcEngineEnvVar, engPath).
+				withEnv(dstEngineEnvVar, td).
+				exec()
 			if err := cmd.Run(); err != nil {
 				b.Fatalf("failed to clone engine: %s\n%s", err, stdout.String())
 			}
@@ -162,10 +162,10 @@ func (bm *benchmark) startCockroach(b testing.TB) {
 }
 
 func (bm *benchmark) startClient(b *testing.B) (pid int, wait func() error) {
-	cmd, stdout := runClient.exec(cmdEnv{
-		{nEnvVar, b.N},
-		{pgurlEnvVar, bm.pgURL},
-	}, bm.workloadFlags...)
+	cmd, stdout := runClient.
+		withEnv(nEnvVar, b.N).
+		withEnv(pgurlEnvVar, bm.pgURL).
+		exec(bm.workloadFlags...)
 	if err := cmd.Start(); err != nil {
 		b.Fatalf("failed to start client: %s\n%s", err, stdout.String())
 	}
