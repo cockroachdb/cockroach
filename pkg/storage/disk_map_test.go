@@ -252,7 +252,7 @@ func TestPebbleMapClose(t *testing.T) {
 
 	// Verify we have a single sstable.
 	var buf bytes.Buffer
-	fileNums := map[pebble.FileNum]bool{}
+	tableNums := map[pebble.TableNum]bool{}
 	sstInfos, err := e.db.SSTables()
 	if err != nil {
 		t.Fatal(err)
@@ -262,7 +262,7 @@ func TestPebbleMapClose(t *testing.T) {
 			sm := bytes.TrimPrefix(sst.Smallest.UserKey, diskMap.prefix)
 			la := bytes.TrimPrefix(sst.Largest.UserKey, diskMap.prefix)
 			fmt.Fprintf(&buf, "%d: %s - %s\n", l, sm, la)
-			fileNums[sst.FileNum] = true
+			tableNums[sst.FileNum] = true
 		}
 	}
 	const expected = "6: a - z\n"
@@ -297,7 +297,7 @@ func TestPebbleMapClose(t *testing.T) {
 
 			fmt.Fprintf(&lsmBuf, "L%d:\n", l)
 			for _, sst := range ssts {
-				if fileNums[sst.FileNum] {
+				if tableNums[sst.FileNum] {
 					fmt.Fprintf(&stillExistBuf, "%s\n", sst.FileNum)
 				}
 				fmt.Fprintf(&lsmBuf, "  %s: %d bytes, %x (%s) - %x (%s)\n", sst.FileNum, sst.Size,
