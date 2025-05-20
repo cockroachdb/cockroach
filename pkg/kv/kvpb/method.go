@@ -155,9 +155,6 @@ const (
 	Subsume
 	// RangeStats returns the MVCC statistics for a range.
 	RangeStats
-	// AdminVerifyProtectedTimestamp determines whether the specified protection
-	// record will be respected by this Range.
-	AdminVerifyProtectedTimestamp
 	// QueryResolvedTimestamp requests the resolved timestamp of the key span it
 	// is issued over.
 	QueryResolvedTimestamp

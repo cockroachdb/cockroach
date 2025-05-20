@@ -4304,23 +4304,3 @@ func (r *Replica) adminScatter(
 		ReplicasScatteredBytes: stats.Total() * int64(numReplicasMoved),
 	}, nil
 }
-
-// TODO(arul): AdminVerifyProtectedTimestampRequest can entirely go away in
-// 22.2.
-func (r *Replica) adminVerifyProtectedTimestamp(
-	ctx context.Context, _ kvpb.AdminVerifyProtectedTimestampRequest,
-) (resp kvpb.AdminVerifyProtectedTimestampResponse, err error) {
-	// AdminVerifyProtectedTimestampRequest is not supported starting from the
-	// 22.1 release. We expect nodes running a 22.1 binary to still service this
-	// request in a {21.2, 22.1} mixed version cluster. This can happen if the
-	// request is initiated on a 21.2 node and the leaseholder of the range it is
-	// trying to verify is on a 22.1 node.
-	//
-	// We simply return true without attempting to verify in such a case. This
-	// ensures upstream jobs (backups) don't fail as a result. It is okay to
-	// return true regardless even if the PTS record being verified does not apply
-	// as the failure mode is non-destructive. Infact, this is the reason we're
-	// no longer supporting Verification past 22.1.
-	resp.Verified = true
-	return resp, nil
-}

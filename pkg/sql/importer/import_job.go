@@ -100,6 +100,14 @@ var processorsPerNode = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
+var initialSplitsPerProcessor = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"bulkio.import.initial_splits_per_processor",
+	"number of initial splits each import processor with enough data will create",
+	3,
+	settings.NonNegativeInt,
+)
+
 var performConstraintValidation = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"bulkio.import.constraint_validation.unsafe.enabled",
@@ -306,9 +314,12 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	}
 
 	procsPerNode := int(processorsPerNode.Get(&p.ExecCfg().Settings.SV))
+	initialSplitsPerProc := int(initialSplitsPerProcessor.Get(&p.ExecCfg().Settings.SV))
 
-	res, err := ingestWithRetry(ctx, p, r.job, tables, typeDescs, files, format, details.Walltime,
-		r.testingKnobs, procsPerNode)
+	res, err := ingestWithRetry(
+		ctx, p, r.job, tables, typeDescs, files, format, details.Walltime,
+		r.testingKnobs, procsPerNode, initialSplitsPerProc,
+	)
 	if err != nil {
 		return err
 	}
@@ -1273,6 +1284,7 @@ func ingestWithRetry(
 	walltime int64,
 	testingKnobs importTestingKnobs,
 	procsPerNode int,
+	initialSplitsPerProc int,
 ) (kvpb.BulkOpSummary, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "importer.ingestWithRetry")
 	defer sp.Finish()
@@ -1294,7 +1306,7 @@ func ingestWithRetry(
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		for {
 			res, err = distImport(
-				ctx, execCtx, job, tables, typeDescs, from, format, walltime, testingKnobs, procsPerNode,
+				ctx, execCtx, job, tables, typeDescs, from, format, walltime, testingKnobs, procsPerNode, initialSplitsPerProc,
 			)
 			// If we got a re-planning error, then do at least one more attempt
 			// regardless of the retry duration.
