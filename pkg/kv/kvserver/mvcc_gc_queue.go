@@ -260,7 +260,7 @@ func (mgcq *mvccGCQueue) shouldQueue(
 		log.VErrEventf(ctx, 2, "failed to load span config: %v", err)
 		return false, 0
 	}
-	canGC, _, gcTimestamp, oldThreshold, newThreshold, err := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
+	canGC, gcTimestamp, oldThreshold, newThreshold, err := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
 	if err != nil {
 		log.VErrEventf(ctx, 2, "failed to check protected timestamp for gc: %v", err)
 		return false, 0
@@ -672,7 +672,7 @@ func (mgcq *mvccGCQueue) process(
 	// Consult the protected timestamp state to determine whether we can GC and
 	// the timestamp which can be used to calculate the score and updated GC
 	// threshold.
-	canGC, cacheTimestamp, gcTimestamp, oldThreshold, newThreshold, err := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
+	canGC, gcTimestamp, oldThreshold, newThreshold, err := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
 	if err != nil {
 		return false, err
 	}
@@ -689,12 +689,6 @@ func (mgcq *mvccGCQueue) process(
 	}
 	r := makeMVCCGCQueueScore(ctx, repl, gcTimestamp, lastGC, conf.TTL(), canAdvanceGCThreshold)
 	log.VEventf(ctx, 2, "processing replica %s with score %s", repl.String(), r)
-	// Synchronize the new GC threshold decision with concurrent
-	// AdminVerifyProtectedTimestamp requests.
-	if err := repl.markPendingGC(cacheTimestamp, newThreshold); err != nil {
-		log.VEventf(ctx, 1, "not gc'ing replica %v due to pending protection: %v", repl, err)
-		return false, nil
-	}
 	// Update the last processed timestamp.
 	if err := repl.setQueueLastProcessed(ctx, mgcq.name, repl.store.Clock().Now()); err != nil {
 		log.VErrEventf(ctx, 2, "failed to update last processed time: %v", err)

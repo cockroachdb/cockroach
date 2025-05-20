@@ -632,24 +632,6 @@ func (r *AdminScatterResponse) combine(_ context.Context, c combinable, _ *Batch
 
 var _ combinable = &AdminScatterResponse{}
 
-func (avptr *AdminVerifyProtectedTimestampResponse) combine(
-	_ context.Context, c combinable, _ *BatchRequest,
-) error {
-	other := c.(*AdminVerifyProtectedTimestampResponse)
-	if avptr != nil {
-		avptr.DeprecatedFailedRanges = append(avptr.DeprecatedFailedRanges,
-			other.DeprecatedFailedRanges...)
-		avptr.VerificationFailedRanges = append(avptr.VerificationFailedRanges,
-			other.VerificationFailedRanges...)
-		if err := avptr.ResponseHeader.combine(other.Header()); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-var _ combinable = &AdminVerifyProtectedTimestampResponse{}
-
 // combine implements the combinable interface.
 func (r *QueryResolvedTimestampResponse) combine(
 	_ context.Context, c combinable, _ *BatchRequest,
@@ -1005,11 +987,6 @@ func (*SubsumeRequest) Method() Method { return Subsume }
 func (*RangeStatsRequest) Method() Method { return RangeStats }
 
 // Method implements the Request interface.
-func (*AdminVerifyProtectedTimestampRequest) Method() Method {
-	return AdminVerifyProtectedTimestamp
-}
-
-// Method implements the Request interface.
 func (*QueryResolvedTimestampRequest) Method() Method { return QueryResolvedTimestamp }
 
 // Method implements the Request interface.
@@ -1290,12 +1267,6 @@ func (r *SubsumeRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (r *RangeStatsRequest) ShallowCopy() Request {
-	shallowCopy := *r
-	return &shallowCopy
-}
-
-// ShallowCopy implements the Request interface.
-func (r *AdminVerifyProtectedTimestampRequest) ShallowCopy() Request {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -1588,12 +1559,6 @@ func (r *SubsumeResponse) ShallowCopy() Response {
 
 // ShallowCopy implements the Response interface.
 func (r *RangeStatsResponse) ShallowCopy() Response {
-	shallowCopy := *r
-	return &shallowCopy
-}
-
-// ShallowCopy implements the Response interface.
-func (r *AdminVerifyProtectedTimestampResponse) ShallowCopy() Response {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -2112,8 +2077,7 @@ func (*CheckConsistencyRequest) flags() flag { return isAdmin | isRange | isAlon
 func (*ExportRequest) flags() flag {
 	return isRead | isRange | updatesTSCache | bypassesReplicaCircuitBreaker
 }
-func (*AdminScatterRequest) flags() flag                  { return isAdmin | isRange | isAlone }
-func (*AdminVerifyProtectedTimestampRequest) flags() flag { return isAdmin | isRange | isAlone }
+func (*AdminScatterRequest) flags() flag { return isAdmin | isRange | isAlone }
 func (r *AddSSTableRequest) flags() flag {
 	flags := isWrite | isRange | isAlone | isUnsplittable | canBackpressure | bypassesReplicaCircuitBreaker
 	if r.SSTTimestampToRequestTimestamp.IsSet() {

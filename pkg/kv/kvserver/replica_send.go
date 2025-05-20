@@ -989,11 +989,6 @@ func (r *Replica) executeAdminBatch(
 		pErr = kvpb.NewError(err)
 		resp = &reply
 
-	case *kvpb.AdminVerifyProtectedTimestampRequest:
-		reply, err := r.adminVerifyProtectedTimestamp(ctx, *tArgs)
-		pErr = kvpb.NewError(err)
-		resp = &reply
-
 	default:
 		return nil, kvpb.NewErrorf("unrecognized admin command: %T", args)
 	}
