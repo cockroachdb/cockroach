@@ -462,18 +462,21 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	var ops workload.QueryLoad
 	prepareStart := timeutil.Now()
 	log.Infof(ctx, "creating load generator...")
-	// We set up a timer that cancels this context after prepareTimeout,
-	// but we'll collect the stacks before we do, so that they can be
-	// logged.
+
 	prepareCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stacksCh := make(chan []byte, 1)
-	const prepareTimeout = 90 * time.Minute
-	defer time.AfterFunc(prepareTimeout, func() {
-		stacksCh <- allstacks.Get()
-		cancel()
-	}).Stop()
+
 	if prepareErr := func(ctx context.Context) error {
+		// We set up a timer that cancels this context after prepareTimeout,
+		// but we'll collect the stacks before we do, so that they can be
+		// logged.
+		const prepareTimeout = 90 * time.Minute
+		defer time.AfterFunc(prepareTimeout, func() {
+			stacksCh <- allstacks.Get()
+			cancel()
+		}).Stop()
+
 		retry := retry.StartWithCtx(ctx, retry.Options{})
 		var err error
 		for retry.Next() {
