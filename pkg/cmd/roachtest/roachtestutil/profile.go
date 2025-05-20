@@ -417,19 +417,19 @@ func GetProfile(
 
 	// profileWg is used to wait for all the profiles to be collected.
 	profileWg := sync.WaitGroup{}
-	for _, nodeId := range nodes {
+	for i, nodeId := range nodes {
 		profileWg.Add(1)
-		go func(nodeID int) {
+		go func(nodeID int, sliceIdx int) {
 			defer profileWg.Done()
 			var err error
-			profiles[nodeID-1], err = getProfileSingleNode(ctx, cluster, logger, profileType,
+			profiles[sliceIdx], err = getProfileSingleNode(ctx, cluster, logger, profileType,
 				nodeID, duration)
 
 			if err != nil {
 				logger.Printf("error getting profile for node %d: %s", nodeID, err)
-				errors[nodeID-1] = err
+				errors[sliceIdx] = err
 			}
-		}(nodeId)
+		}(nodeId, i)
 	}
 	profileWg.Wait()
 
