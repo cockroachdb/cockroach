@@ -66,6 +66,10 @@ func (l InsertsDataLoader) InitialDataLoad(
 		batchEnd := min(currentTable+maxTableBatchSize, len(tables))
 		nextBatch := tables[currentTable:batchEnd]
 		if err := crdb.ExecuteTx(ctx, db, &gosql.TxOptions{}, func(tx *gosql.Tx) error {
+			// Run the operations in a single txn so they complete more quickly.
+			if _, err := tx.Exec("SET LOCAL autocommit_before_ddl = false"); err != nil {
+				return err
+			}
 			currentDatabase := ""
 			for _, table := range nextBatch {
 				// Switch databases if one is explicitly specified for multi-region
