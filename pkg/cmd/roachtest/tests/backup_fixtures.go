@@ -31,15 +31,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type BackupFixture interface {
+	Kind() string
+	// The database that is backed up.
+	DatabaseName() string
+}
+
 type TpccFixture struct {
 	Name                   string
 	ImportWarehouses       int
 	WorkloadWarehouses     int
-	MinutesPerIncremental  int
 	IncrementalChainLength int
 	CompactionThreshold    int
 	CompactionWindow       int
 	RestoredSizeEstimate   string
+}
+
+var _ BackupFixture = TpccFixture{}
+
+func (f TpccFixture) Kind() string {
+	return f.Name
+}
+
+func (f TpccFixture) DatabaseName() string {
+	return "tpcc"
 }
 
 // TinyFixture is a TPCC fixture that is intended for smoke tests, local
@@ -109,12 +124,6 @@ type backupFixtureSpecs struct {
 }
 
 const scheduleLabel = "tpcc_backup"
-
-// fixtureFromMasterVersion should be used in the backupSpecs version field to
-// create a fixture using the bleeding edge of master. In the backup fixture
-// path on external storage, the {version} subdirectory will be equal to this
-// value.
-const fixtureFromMasterVersion = "latest"
 
 func CreateScheduleStatement(uri url.URL) string {
 	// This backup schedule will first run a full backup immediately and then the
@@ -357,9 +366,10 @@ func fixtureDirectory() string {
 	return version.Format("roachtest/v%X.%Y")
 }
 
-func newFixtureRegistry(ctx context.Context, t test.Test, c cluster.Cluster) *blobfixture.Registry {
+// GetFixtureRegistry returns the backup fixture registry for the given cloud provider.
+func GetFixtureRegistry(ctx context.Context, t test.Test, cloud spec.Cloud) *blobfixture.Registry {
 	var uri url.URL
-	switch c.Cloud() {
+	switch cloud {
 	case spec.AWS:
 		uri = url.URL{
 			Scheme:   "s3",
@@ -377,7 +387,7 @@ func newFixtureRegistry(ctx context.Context, t test.Test, c cluster.Cluster) *bl
 			RawQuery: "AUTH=implicit",
 		}
 	default:
-		t.Fatalf("fixtures not supported on %s", c.Cloud())
+		t.Fatalf("fixtures not supported on %s", cloud)
 	}
 
 	uri.Path = path.Join(uri.Path, fixtureDirectory())
@@ -449,7 +459,7 @@ func registerBackupFixtures(r registry.Registry) {
 			Suites:            bf.suites,
 			Skip:              bf.skip,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				registry := newFixtureRegistry(ctx, t, c)
+				registry := GetFixtureRegistry(ctx, t, c.Cloud())
 
 				handle, err := registry.Create(ctx, bf.fixture.Name, t.L())
 				require.NoError(t, err)
@@ -489,7 +499,7 @@ func registerBlobFixtureGC(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// TODO(jeffswenson): ideally we would run the GC on the scheduled node
 			// so that it is close to the fixture repository.
-			registry := newFixtureRegistry(ctx, t, c)
+			registry := GetFixtureRegistry(ctx, t, c.Cloud())
 			require.NoError(t, registry.GC(ctx, t.L()))
 		},
 	})
