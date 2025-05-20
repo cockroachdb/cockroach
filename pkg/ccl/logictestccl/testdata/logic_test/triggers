@@ -4328,3 +4328,174 @@ DELETE FROM parent146889 WHERE k = 1;
 NOTICE: 0
 
 subtest end
+
+subtest dependency_142370
+
+statement ok
+create table t1(n int primary key, j int, k int);
+
+statement ok
+create index i1 on t1(k ASC);
+
+statement ok
+create index i2 on t1(k DESC);
+
+statement ok
+create table other(n int primary key, j int, k int);
+
+statement ok
+create index i1 on other(k ASC);
+
+statement ok
+create index i2 on other(k DESC);
+
+statement ok
+CREATE FUNCTION f1 ()
+RETURNS VOID
+LANGUAGE SQL
+AS $$
+  SELECT 1
+$$;
+
+statement ok
+CREATE TYPE e AS ENUM('a');
+
+statement ok
+CREATE OR REPLACE FUNCTION audit_changes()
+                                RETURNS TRIGGER AS $$
+                                BEGIN
+                                 SELECT f1();
+                                 SELECT *, 'a'::e FROM t1@i1 WHERE j=32;
+                                 SELECT *, 'a'::e FROM t1@i2 WHERE j=32;
+                                 SELECT *, 'a'::e FROM other@i1 WHERE j=32;
+                                 SELECT *, 'a'::e FROM other@i2 WHERE j=32;
+                                 RETURN NULL;
+                                END;
+                                $$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER audit_trigger AFTER INSERT OR UPDATE OR DELETE ON t1 FOR EACH ROW EXECUTE FUNCTION audit_changes();
+
+statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
+alter table t1 drop column j;
+
+statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
+alter table other drop column j;
+
+statement error pq: cannot alter type of column "j" because trigger "audit_trigger" on table "t1" depends on it
+alter table t1 alter column j set data type text;
+
+statement error pq: cannot alter type of column "j" because trigger "audit_trigger" on table "t1" depends on it
+alter table other alter column j set data type text;
+
+# TODO(142370): This should be blocked because the trigger references the table,
+# but we currently don't detect self-dependencies.
+statement ok
+drop index t1@i1;
+
+statement error pq: cannot drop index "i1" because trigger "audit_trigger" on table "t1" depends on it
+drop index other@i1;
+
+statement error pq: unimplemented: DROP INDEX cascade is not supported with triggers
+drop index other@i1 cascade;
+
+statement error pq: cannot drop function "f1" because other objects \(\[test.public.t1\]\) still depend on it
+DROP FUNCTION f1;
+
+statement error pq: unimplemented: drop function cascade not supported
+DROP FUNCTION f1 CASCADE;
+
+statement error pq: cannot drop type "e" because other objects \(\[test.public.t1\]\) still depend on it
+DROP TYPE e;
+
+statement error pq: unimplemented: DROP TYPE CASCADE is not yet supported
+DROP TYPE e CASCADE;
+
+statement error pq: cannot drop table other because other objects depend on it
+DROP TABLE other;
+
+# Verify the trigger still works
+# TODO(142370): this fails for now because we were allowed to drop the index earlier.
+statement error pq: while building trigger expression: index "i1" not found
+INSERT INTO t1 VALUES (0,0,0);
+
+statement ok
+create index i1 on t1(k);
+
+# This test doesn't run with the legacy schema config because CREATE/DROP
+# trigger isn't implemented there. We enable legacy to run DDL to verify
+# the dependencies.
+let $use_decl_sc
+SHOW use_declarative_schema_changer
+
+statement ok
+set use_declarative_schema_changer = 'off';
+
+# Disable schema locking to ensure that errors from it do not interfere
+# with dependency checking.
+statement ok
+ALTER TABLE t1 SET (schema_locked = false);
+
+statement ok
+ALTER TABLE other SET (schema_locked = false);
+
+skipif config local-mixed-24.3
+statement error pq: ALTER COLUMN TYPE is only implemented in the declarative schema changer
+alter table t1 alter column j set data type text;
+
+statement error pq: cannot alter type of column "j" because table "t1" depends on it
+alter table other alter column j set data type text;
+
+# TODO(142370): allowed because we don't pick up self-dependencies yet
+statement ok
+alter table t1 drop column j;
+
+statement error pq: cannot drop column "j" because table "t1" depends on it
+alter table other drop column j;
+
+# TODO(142370): allowed because we don't pick up self-dependencies yet
+statement ok
+drop index t1@i1;
+
+statement error pq: index "i1" does not exist
+drop index t1@i1 CASCADE;
+
+statement error pq: cannot drop index "i1" because table "t1" depends on it
+drop index other@i1;
+
+statement error pq: cannot drop function "f1" because other objects \(\[test.public.t1\]\) still depend on it
+DROP FUNCTION f1;
+
+statement error pq: unimplemented: drop function cascade not supported
+DROP FUNCTION f1 CASCADE;
+
+statement error pq: cannot drop type "e" because other objects \(\[test.public.t1\]\) still depend on it
+DROP TYPE e;
+
+statement error pq: unimplemented: DROP TYPE CASCADE is not yet supported
+DROP TYPE e CASCADE;
+
+statement error pq: cannot drop relation "other" because table "t1" depends on it
+DROP TABLE other;
+
+statement ok
+set use_declarative_schema_changer = $use_decl_sc;
+
+# Verify the trigger still works
+# TODO(142370): this fails because we were wrongly allowed to drop index i1 earlier
+statement error pq: while building trigger expression: index "i1" not found
+INSERT INTO t1(n,k) VALUES (1,1);
+
+statement ok
+DROP TABLE other CASCADE;
+
+statement error pq: relation "t1" does not exist
+DROP TRIGGER audit_trigger ON t1;
+
+statement ok
+DROP TYPE e;
+
+statement ok
+DROP FUNCTION f1;
+
+subtest end
