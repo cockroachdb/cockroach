@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -236,9 +236,9 @@ func TestPebbleEncryption(t *testing.T) {
 	keyFile128 := "111111111111111111111111111111111234567890123456"
 	writeToFile(t, stickyRegistry.Get(stickyVFSID), "16.key", []byte(keyFile128))
 
-	encOptions := &storagepb.EncryptionOptions{
-		KeySource: storagepb.EncryptionKeySource_KeyFiles,
-		KeyFiles: &storagepb.EncryptionKeyFiles{
+	encOptions := &storageconfig.EncryptionOptions{
+		KeySource: storageconfig.EncryptionKeyFromFiles,
+		KeyFiles: &storageconfig.EncryptionKeyFiles{
 			CurrentKey: "16.key",
 			OldKey:     "plain",
 		},
@@ -252,7 +252,7 @@ func TestPebbleEncryption(t *testing.T) {
 			base.StoreSpec{
 				InMemory:          true,
 				Attributes:        roachpb.Attributes{},
-				Size:              storagepb.SizeSpec{Capacity: 512 << 20},
+				Size:              storageconfig.SizeSpec{Capacity: 512 << 20},
 				EncryptionOptions: encOptions,
 				StickyVFSID:       stickyVFSID,
 			},
@@ -301,7 +301,7 @@ func TestPebbleEncryption(t *testing.T) {
 			base.StoreSpec{
 				InMemory:          true,
 				Attributes:        roachpb.Attributes{},
-				Size:              storagepb.SizeSpec{Capacity: 512 << 20},
+				Size:              storageconfig.SizeSpec{Capacity: 512 << 20},
 				EncryptionOptions: encOptions,
 				StickyVFSID:       stickyVFSID,
 			},
@@ -373,9 +373,9 @@ func TestPebbleEncryption2(t *testing.T) {
 	addKeyAndValidate := func(
 		key string, val string, encKeyFile string, oldEncFileKey string,
 	) {
-		encOptions := &storagepb.EncryptionOptions{
-			KeySource: storagepb.EncryptionKeySource_KeyFiles,
-			KeyFiles: &storagepb.EncryptionKeyFiles{
+		encOptions := &storageconfig.EncryptionOptions{
+			KeySource: storageconfig.EncryptionKeyFromFiles,
+			KeyFiles: &storageconfig.EncryptionKeyFiles{
 				CurrentKey: encKeyFile,
 				OldKey:     oldEncFileKey,
 			},
@@ -389,7 +389,7 @@ func TestPebbleEncryption2(t *testing.T) {
 			base.StoreSpec{
 				InMemory:          true,
 				Attributes:        roachpb.Attributes{},
-				Size:              storagepb.SizeSpec{Capacity: 512 << 20},
+				Size:              storageconfig.SizeSpec{Capacity: 512 << 20},
 				EncryptionOptions: encOptions,
 				StickyVFSID:       stickyVFSID,
 			},
@@ -506,7 +506,7 @@ func (ptfs *plainTestFS) syncDir(t *testing.T) {}
 type encryptedTestFS struct {
 	// The base strict FS which is wrapped for error injection and encryption.
 	mem        *vfs.MemFS
-	encOptions *storagepb.EncryptionOptions
+	encOptions *storageconfig.EncryptionOptions
 	errorProb  float64
 	errorRand  *rand.Rand
 
@@ -561,9 +561,9 @@ func makeEncryptedTestFS(t *testing.T, errorProb float64, errorRand *rand.Rand) 
 	require.NoError(t, dir.Sync())
 	require.NoError(t, dir.Close())
 
-	var encOptions storagepb.EncryptionOptions
-	encOptions.KeySource = storagepb.EncryptionKeySource_KeyFiles
-	encOptions.KeyFiles = &storagepb.EncryptionKeyFiles{
+	var encOptions storageconfig.EncryptionOptions
+	encOptions.KeySource = storageconfig.EncryptionKeyFromFiles
+	encOptions.KeyFiles = &storageconfig.EncryptionKeyFiles{
 		CurrentKey: "16.key",
 		OldKey:     "plain",
 	}

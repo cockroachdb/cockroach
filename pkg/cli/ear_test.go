@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -44,7 +44,7 @@ func TestDecrypt(t *testing.T) {
 
 	// Spin up a new encrypted store.
 	encSpecStr := fmt.Sprintf("path=%s,key=%s,old-key=plain", dir, keyPath)
-	encSpec, err := storagepb.NewStoreEncryptionSpec(encSpecStr)
+	encSpec, err := storageconfig.NewStoreEncryptionSpec(encSpecStr)
 	require.NoError(t, err)
 	encOpts := &encSpec.Options
 
@@ -126,7 +126,7 @@ func TestList(t *testing.T) {
 
 	// Spin up a new encrypted store.
 	encSpecStr := fmt.Sprintf("path=%s,key=%s,old-key=plain", dir, keyPath)
-	encSpec, err := storagepb.NewStoreEncryptionSpec(encSpecStr)
+	encSpec, err := storageconfig.NewStoreEncryptionSpec(encSpecStr)
 	require.NoError(t, err)
 	encOpts := &encSpec.Options
 	env, err := fs.InitEnv(ctx, vfs.Default, dir, fs.EnvConfig{EncryptionOptions: encOpts}, nil /* statsCollector */)

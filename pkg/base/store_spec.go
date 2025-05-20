@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -93,8 +93,8 @@ func newStoreProvisionedRateSpec(
 // to the --store flag.
 type StoreSpec struct {
 	Path        string
-	Size        storagepb.SizeSpec
-	BallastSize *storagepb.SizeSpec
+	Size        storageconfig.SizeSpec
+	BallastSize *storageconfig.SizeSpec
 	InMemory    bool
 	Attributes  roachpb.Attributes
 	// StickyVFSID is a unique identifier associated with a given store which
@@ -109,7 +109,7 @@ type StoreSpec struct {
 	// flush_split_bytes=4096
 	PebbleOptions string
 	// EncryptionOptions is set if encryption is enabled.
-	EncryptionOptions *storagepb.EncryptionOptions
+	EncryptionOptions *storageconfig.EncryptionOptions
 	// ProvisionedRateSpec is optional.
 	ProvisionedRateSpec ProvisionedRateSpec
 }
@@ -232,11 +232,11 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 			var minBytesAllowed int64 = MinimumStoreSize
 			var minPercent float64 = 1
 			var maxPercent float64 = 100
-			ss.Size, err = storagepb.NewSizeSpec(
+			ss.Size, err = storageconfig.NewSizeSpec(
 				"store",
 				value,
-				&storagepb.IntInterval{Min: &minBytesAllowed},
-				&storagepb.FloatInterval{Min: &minPercent, Max: &maxPercent},
+				&storageconfig.IntInterval{Min: &minBytesAllowed},
+				&storageconfig.FloatInterval{Min: &minPercent, Max: &maxPercent},
 			)
 			if err != nil {
 				return StoreSpec{}, err
@@ -245,11 +245,11 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 			var minBytesAllowed int64
 			var minPercent float64 = 0
 			var maxPercent float64 = 50
-			ballastSize, err := storagepb.NewSizeSpec(
+			ballastSize, err := storageconfig.NewSizeSpec(
 				"ballast",
 				value,
-				&storagepb.IntInterval{Min: &minBytesAllowed},
-				&storagepb.FloatInterval{Min: &minPercent, Max: &maxPercent},
+				&storageconfig.IntInterval{Min: &minBytesAllowed},
+				&storageconfig.FloatInterval{Min: &minPercent, Max: &maxPercent},
 			)
 			if err != nil {
 				return StoreSpec{}, err
@@ -450,8 +450,8 @@ func (ssl *StoreSpecList) Set(value string) error {
 // unmatched EncryptionSpec causes an error.
 func PopulateWithEncryptionOpts(
 	storeSpecs StoreSpecList,
-	walFailoverConfig *storagepb.WALFailover,
-	encryptionSpecs storagepb.EncryptionSpecList,
+	walFailoverConfig *storageconfig.WALFailover,
+	encryptionSpecs storageconfig.EncryptionSpecList,
 ) error {
 	for _, es := range encryptionSpecs.Specs {
 		var storeMatched bool
@@ -489,7 +489,7 @@ func PopulateWithEncryptionOpts(
 // encryption options if the path matches. The ExternalPath must not already have
 // an encryption setting.
 func maybeSetExternalPathEncryption(
-	externalPath *storagepb.ExternalPath, es storagepb.StoreEncryptionSpec,
+	externalPath *storageconfig.ExternalPath, es storageconfig.StoreEncryptionSpec,
 ) (found bool, err error) {
 	if !externalPath.IsSet() || !es.PathMatches(externalPath.Path) {
 		return false, nil
