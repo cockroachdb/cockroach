@@ -8,8 +8,7 @@ package tpcc
 import (
 	"context"
 	"flag"
-	"net/http"
-	"strings"
+	"os"
 	"testing"
 	"time"
 
@@ -35,7 +34,6 @@ const (
 	internalTestEnvVar = "COCKROACH_INTERNAL_TEST"
 	pgurlEnvVar        = "COCKROACH_PGURL"
 	nEnvVar            = "COCKROACH_N"
-	eventEnvVar        = "COCKROACH_STATUS_SERVER_ADDR"
 	storeDirEnvVar     = "COCKROACH_STORE_DIR"
 	srcEngineEnvVar    = "COCKROACH_SRC_ENGINE"
 	dstEngineEnvVar    = "COCKROACH_DST_ENGINE"
@@ -50,7 +48,8 @@ func TestInternalRunClient(t *testing.T)        { internalCommand(t) }
 func TestInternalGenerateStoreDir(t *testing.T) { internalCommand(t) }
 
 var (
-	commands         = map[string]*cmd{}
+	commands = map[string]*cmd{}
+
 	generateStoreDir = registerCmd("GenerateStoreDir", func(t *testing.T) {
 		ctx := context.Background()
 		storeDir, ok := envutil.EnvString(storeDirEnvVar, 0)
@@ -85,6 +84,7 @@ var (
 			require.NoError(t, err)
 		}
 	})
+
 	cloneEngine = registerCmd("CloneEngine", func(t *testing.T) {
 		src, ok := envutil.EnvString(srcEngineEnvVar, 0)
 		require.True(t, ok)
@@ -93,6 +93,7 @@ var (
 		_, err := vfs.Clone(vfs.Default, vfs.Default, src, dst)
 		require.NoError(t, err)
 	})
+
 	runClient = registerCmd("RunClient", func(t *testing.T) {
 		require.Positive(t, benchmarkN)
 
@@ -100,13 +101,20 @@ var (
 		require.True(t, ok)
 		ql := makeQueryLoad(t, pgURL)
 		defer func() { _ = ql.Close(context.Background()) }()
-		eventAddr, ok := envutil.EnvString(eventEnvVar, 0)
 		require.True(t, ok)
-		sendEvent(t, eventAddr, runStartEvent)
+
+		// Send a signal to the parent process and wait for an ack before
+		// running queries.
+		var s synchronizer
+		s.init(os.Getppid())
+		s.notifyAndWait(t)
+
 		for i := 0; i < benchmarkN; i++ {
 			require.NoError(t, ql.WorkerFns[0](context.Background()))
 		}
-		sendEvent(t, eventAddr, runDoneEvent)
+
+		// Notify the parent process that the benchmark has completed.
+		s.notify(t)
 	})
 )
 
@@ -134,17 +142,4 @@ func makeQueryLoad(t *testing.T, pgURL string) workload.QueryLoad {
 	ql, err := wl.Ops(ctx, []string{pgURL}, reg)
 	require.NoError(t, err)
 	return ql
-}
-
-// These event strings are used to synchronize the client process with the
-// benchmark process.
-const (
-	runStartEvent = "run start"
-	runDoneEvent  = "run done"
-)
-
-func sendEvent(t *testing.T, statusAddr, evName string) {
-	resp, err := http.Post(statusAddr, "", strings.NewReader(evName))
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, resp.StatusCode, evName)
 }

@@ -13,10 +13,10 @@ package tpcc
 
 import (
 	"context"
-	"io"
-	"net"
-	"net/http"
 	"net/url"
+	"os"
+	"os/signal"
+	"syscall"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -85,43 +85,35 @@ func BenchmarkTPCC(b *testing.B) {
 
 type benchmark struct {
 	benchmarkConfig
-
-	pgURL    string
-	eventURL string
-
+	pgURL   string
 	closers []func()
-	closed  chan struct{}
-	eventCh chan event
 }
 
 func newBenchmark(opts ...options) *benchmark {
-	bm := benchmark{
-		eventCh: make(chan event),
-		closed:  make(chan struct{}),
-	}
+	var bm benchmark
 	for _, opt := range opts {
 		opt.apply(&bm.benchmarkConfig)
 	}
-	bm.closers = append(bm.closers, func() { close(bm.closed) })
 	return &bm
 }
 
 func (bm *benchmark) run(b *testing.B) {
 	defer bm.close()
 	bm.startCockroach(b)
-	bm.startEventServer(b)
-	wait := bm.startClient(b)
-	{
-		ev := bm.getEvent(b, runStartEvent)
-		b.Log("running benchmark")
-		b.ResetTimer()
-		close(ev)
-	}
-	{
-		doneEv := bm.getEvent(b, runDoneEvent)
-		b.StopTimer()
-		close(doneEv)
-	}
+	pid, wait := bm.startClient(b)
+
+	var s synchronizer
+	s.init(pid)
+
+	// Reset the timer when the client starts running queries.
+	s.wait()
+	b.ResetTimer()
+	s.notify(b)
+
+	// Stop the timer when the client stops running queries.
+	s.wait()
+	b.StopTimer()
+
 	require.NoError(b, wait())
 }
 
@@ -156,57 +148,40 @@ func (bm *benchmark) startCockroach(b testing.TB) {
 	bm.closers = append(bm.closers, cleanup)
 }
 
-func (bm *benchmark) startEventServer(b testing.TB) {
-	l, err := net.Listen("tcp", "localhost:0")
-	require.NoError(b, err)
-	bm.closers = append(bm.closers, func() { _ = l.Close() })
-	bm.eventURL = "http://" + l.Addr().String()
-	go func() { _ = http.Serve(l, bm) }()
-}
-
-func (bm *benchmark) startClient(b *testing.B) (wait func() error) {
+func (bm *benchmark) startClient(b *testing.B) (pid int, wait func() error) {
 	cmd := runClient.exec(cmdEnv{
 		{nEnvVar, b.N},
 		{pgurlEnvVar, bm.pgURL},
-		{eventEnvVar, bm.eventURL},
 	}, bm.workloadFlags...)
 	require.NoError(b, cmd.Start())
 	bm.closers = append(bm.closers,
 		func() { _ = cmd.Process.Kill(); _ = cmd.Wait() },
 	)
-	return cmd.Wait
+	return cmd.Process.Pid, cmd.Wait
 }
 
-// event is passed to the benchmark's eventCh when an HTTP request
-// comes in on the event server. The request blocks until the channel
-// is closed.
-type event struct {
-	name string
-	done chan struct{}
+type synchronizer struct {
+	pid    int // the PID of the process to coordinate with
+	waitCh chan os.Signal
 }
 
-func (bm *benchmark) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	data, err := io.ReadAll(r.Body)
-	if err != nil {
-		bm.addEvent(err.Error())
-		w.WriteHeader(500)
-		return
+func (c *synchronizer) init(pid int) {
+	c.pid = pid
+	c.waitCh = make(chan os.Signal, 1)
+	signal.Notify(c.waitCh, syscall.SIGUSR1)
+}
+
+func (c synchronizer) notify(t testing.TB) {
+	if err := syscall.Kill(c.pid, syscall.SIGUSR1); err != nil {
+		t.Fatalf("failed to notify process %d: %s", c.pid, err)
 	}
-	<-bm.addEvent(string(data))
 }
 
-func (bm *benchmark) addEvent(name string) <-chan struct{} {
-	ev := event{name: name, done: make(chan struct{})}
-	select {
-	case bm.eventCh <- ev:
-	case <-bm.closed:
-		close(ev.done)
-	}
-	return ev.done
+func (c synchronizer) wait() {
+	<-c.waitCh
 }
 
-func (bm *benchmark) getEvent(b *testing.B, evName string) chan<- struct{} {
-	ev := <-bm.eventCh
-	require.Equal(b, evName, ev.name)
-	return ev.done
+func (c synchronizer) notifyAndWait(t testing.TB) {
+	c.notify(t)
+	c.wait()
 }
