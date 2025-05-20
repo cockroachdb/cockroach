@@ -20,11 +20,12 @@ environment:
   STORE_COUNT: 2
   COCKROACH_VERSION: v25.1.1
 
-  TPCC_WAREHOUSES: 6000
-  TPCC_ACTIVE_WAREHOUSES: 6000
+  TPCC_WAREHOUSES: 5000
+  TPCC_ACTIVE_WAREHOUSES: 5000
   DB_NAME: cct_tpcc
   RUN_DURATION: 12h
-  MAX_CONN_LIFETIME: 3m
+  MAX_CONN_LIFETIME: 5m
+  CONNS: 1800
 
   # GCP Cloud Storage bucket for storing backups
   BUCKET_US_EAST_1: cockroach-drt-backup-us-east1
@@ -100,7 +101,7 @@ targets:
           - $CLUSTER:1
           - --
           - -e
-          - "SET CLUSTER SETTING server.shutdown.connections.timeout = '200s'"
+          - "SET CLUSTER SETTING server.shutdown.connections.timeout = '330s'"
       - command: sql
         args:
           - $CLUSTER:1
@@ -215,6 +216,7 @@ targets:
           ramp: 5m
           wait: true
           max-conn-lifetime: $MAX_CONN_LIFETIME
+          conns: $CONNS
       - script: "pkg/cmd/drtprod/scripts/pua_operations.sh"
         wait: 10
   - target_name: "Data Import"
