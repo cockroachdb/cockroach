@@ -2009,7 +2009,7 @@ func (t *logicTest) setup(
 		skip.UnderRace(t.t(), "test uses a different binary, so the race detector doesn't work")
 		skip.UnderStress(t.t(), "test takes a long time and downloads release artifacts")
 		if !bazel.BuiltWithBazel() {
-			skip.IgnoreLint(t.t(), "cockroach-go/testserver can only be uzed in bazel builds")
+			skip.IgnoreLint(t.t(), "cockroach-go/testserver can only be used in bazel builds")
 		}
 		if runtime.GOARCH == "s390x" {
 			skip.IgnoreLint(t.t(), "cockroach-go/testserver is not operational on s390x")
