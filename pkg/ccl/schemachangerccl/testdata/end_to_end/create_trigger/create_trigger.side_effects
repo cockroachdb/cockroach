@@ -39,7 +39,6 @@ upsert descriptor #104
   -  schemaLocked: true
   +  triggers:
   +  - actionTime: BEFORE
-  +    dependsOn: []
   +    dependsOnRoutines:
   +    - 105
   +    enabled: true
@@ -129,7 +128,6 @@ upsert descriptor #104
   -  schemaLocked: true
   +  triggers:
   +  - actionTime: BEFORE
-  +    dependsOn: []
   +    dependsOnRoutines:
   +    - 105
   +    enabled: true
