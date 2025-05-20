@@ -10,13 +10,20 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+type ConnectionInfo struct {
+	Secure         bool
+	LocalCertsPath string
+}
+
 type failureSpec struct {
-	makeFailureFunc func(clusterName string, l *logger.Logger, secure bool) (FailureMode, error)
+	makeFailureFunc func(clusterName string, l *logger.Logger, connectionInfo ConnectionInfo) (FailureMode, error)
 	args            FailureArgs
 }
 type FailureRegistry struct {
+	syncutil.Mutex
 	failures map[string]failureSpec
 }
 
@@ -31,12 +38,14 @@ func (r *FailureRegistry) Register() {
 	registerDmsetupDiskStall(r)
 	registerIPTablesPartitionFailure(r)
 	registerNetworkLatencyFailure(r)
+	registerNoopFailure(r)
+	registerNodeKillFailure(r)
 }
 
 func (r *FailureRegistry) add(
 	failureName string,
 	args FailureArgs,
-	makeFailureFunc func(clusterName string, l *logger.Logger, secure bool) (FailureMode, error),
+	makeFailureFunc func(clusterName string, l *logger.Logger, connectionInfo ConnectionInfo) (FailureMode, error),
 ) {
 	if _, ok := r.failures[failureName]; ok {
 		panic(fmt.Sprintf("failure %s already exists", failureName))
@@ -64,12 +73,24 @@ func (r *FailureRegistry) List(regex string) []string {
 	return matches
 }
 
-func (r *FailureRegistry) GetFailureMode(
-	clusterName, failureName string, l *logger.Logger, secure bool,
-) (FailureMode, error) {
+func (r *FailureRegistry) GetFailer(
+	clusterName, failureName string, l *logger.Logger, connectionInfo ConnectionInfo,
+) (*Failer, error) {
+	r.Lock()
 	spec, ok := r.failures[failureName]
+	r.Unlock()
 	if !ok {
 		return nil, fmt.Errorf("unknown failure %s", failureName)
 	}
-	return spec.makeFailureFunc(clusterName, l, secure)
+
+	failureMode, err := spec.makeFailureFunc(clusterName, l, connectionInfo)
+	if err != nil {
+		return nil, err
+	}
+
+	failer := &Failer{
+		FailureMode: failureMode,
+		state:       uninitialized,
+	}
+	return failer, nil
 }
