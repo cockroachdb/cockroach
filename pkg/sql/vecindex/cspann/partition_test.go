@@ -55,7 +55,7 @@ func TestPartition(t *testing.T) {
 		quantizedSet := quantizer.Quantize(&workspace, vectors)
 		childKeys := []ChildKey{childKey10, childKey20, childKey30}
 		valueBytes := []ValueBytes{valueBytes10, valueBytes20, valueBytes30}
-		metadata := MakeReadyPartitionMetadata(1, quantizedSet.GetCentroid())
+		metadata := MakeReadyPartitionMetadata(1, vectors.Centroid(make(vector.T, vectors.Dims)))
 		return NewPartition(metadata, quantizer, quantizedSet, childKeys, valueBytes)
 	}
 

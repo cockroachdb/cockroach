@@ -74,7 +74,7 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 					}
 					metadata := cspann.PartitionMetadata{
 						Level:    level,
-						Centroid: quantizedSet.GetCentroid(),
+						Centroid: set.Centroid(make(vector.T, set.Dims)),
 					}
 					metadata.StateDetails.MakeSplitting(10, 20)
 					originalPartition := cspann.NewPartition(metadata, quantizer, quantizedSet, childKeys, valueBytes)
@@ -146,7 +146,7 @@ func testingAssertPartitionsEqual(t *testing.T, l, r *cspann.Partition) {
 	require.Equal(t, l.ChildKeys(), r.ChildKeys(), "childKeys do not match")
 	require.Equal(t, l.ValueBytes(), r.ValueBytes(), "valueBytes do not match")
 	q1, q2 := l.QuantizedSet(), r.QuantizedSet()
-	require.Equal(t, q1.GetCentroid(), q2.GetCentroid(), "centroids do not match")
+	require.Equal(t, l.Centroid(), r.Centroid(), "centroids do not match")
 	require.Equal(t, q1.GetCount(), q2.GetCount(), "counts do not match")
 	switch leftSet := q1.(type) {
 	case *quantize.UnQuantizedVectorSet:

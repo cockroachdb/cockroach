@@ -695,9 +695,11 @@ func Load(data []byte) (*Store, error) {
 
 		var quantizer quantize.Quantizer
 		var quantizedSet quantize.QuantizedVectorSet
+		var centroid vector.T
 		if partitionProto.RaBitQ != nil {
 			quantizer = raBitQuantizer
 			quantizedSet = partitionProto.RaBitQ
+			centroid = partitionProto.RaBitQ.Centroid
 		} else {
 			quantizer = unquantizer
 			quantizedSet = partitionProto.UnQuantized
@@ -705,7 +707,7 @@ func Load(data []byte) (*Store, error) {
 
 		metadata := cspann.PartitionMetadata{
 			Level:    partitionProto.Metadata.Level,
-			Centroid: quantizedSet.GetCentroid(),
+			Centroid: centroid,
 			StateDetails: cspann.PartitionStateDetails{
 				State:   partitionProto.Metadata.State,
 				Target1: partitionProto.Metadata.Target1,
