@@ -45,8 +45,11 @@ func maybeGenerateStoreDir(b testing.TB) (_ vfs.FS, storeDir string, cleanup fun
 		}()
 	}
 
-	require.NoError(b, generateStoreDir.exec(cmdEnv{
+	cmd, stdout := generateStoreDir.exec(cmdEnv{
 		{storeDirEnvVar, storeDir},
-	}).Run())
+	})
+	if err := cmd.Run(); err != nil {
+		b.Fatalf("failed to generate store dir: %s\n%s", err, stdout.String())
+	}
 	return vfs.Default, storeDir, cleanup
 }

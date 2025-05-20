@@ -6,6 +6,7 @@
 package tpcc
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -22,7 +23,7 @@ type cmd struct {
 	impl func(t *testing.T)
 }
 
-func (c *cmd) exec(env cmdEnv, args ...string) *exec.Cmd {
+func (c *cmd) exec(env cmdEnv, args ...string) (_ *exec.Cmd, stdout *bytes.Buffer) {
 	cmd := exec.Command(os.Args[0],
 		"--test.run=^TestInternal"+c.name+"$",
 		"--test.v")
@@ -33,7 +34,9 @@ func (c *cmd) exec(env cmdEnv, args ...string) *exec.Cmd {
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, fmt.Sprintf("%s=t", internalTestEnvVar))
 	cmd.Env = append(cmd.Env, env.toStrings()...)
-	return cmd
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	return cmd, &buf
 }
 
 var isInternalTest = envutil.EnvOrDefaultBool(internalTestEnvVar, false)
