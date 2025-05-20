@@ -7657,20 +7657,13 @@ var crdbInternalActiveServerRangeFeedsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.active_server_range_feeds (
 	id INT,
-	tags STRING,
-	start_after DECIMAL,
-	diff BOOL,
-	node_id INT,
-	range_id INT,
-	created TIMESTAMPTZ,
-	range_start STRING,
-	range_end STRING,
-	resolved DECIMAL,
-	resolved_age INTERVAL,
-	last_event TIMESTAMPTZ,
-	catchup BOOL,
-	num_errs INT,
-	last_err STRING
+	store_id INT,
+	consumer_id INT,
+	stream_id INT,
+	span_start STRING,
+	span_end STRING,
+	resolved_ts DECIMAL,
+	catchup_ts DECIMAL
 );`,
 
 	populate: func(ctx context.Context, p *planner, d catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -7686,7 +7679,24 @@ CREATE TABLE crdb_internal.active_server_range_feeds (
 		if err != nil {
 			return err
 		}
-		return populateRangefeedResponse(resp, addRow)
+
+		for _, rips := range resp.RangefeedInfoPerStore {
+			for _, r := range rips.Rangefeed {
+				if err := addRow(
+					tree.NewDInt(tree.DInt(rips.NodeID)),
+					tree.NewDInt(tree.DInt(rips.StoreID)),
+					tree.NewDInt(tree.DInt(r.ConsumerID)),
+					tree.NewDInt(tree.DInt(r.StreamID)),
+					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, r.Span.Key)),
+					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, r.Span.EndKey)),
+					eval.TimestampToDecimalDatum(r.ResolvedTS),
+					eval.TimestampToDecimalDatum(r.CatchUpTS),
+				); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	},
 }
 
@@ -10056,22 +10066,6 @@ func populateStoreLivenessSupportResponse(
 				tree.NewDInt(tree.DInt(ss.Target.StoreID)),
 				tree.NewDInt(tree.DInt(ss.Epoch)),
 				eval.TimestampToInexactDTimestamp(ss.Expiration),
-			); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func populateRangefeedResponse(
-	resp *rangefeedpb.InspectStoreRangefeedsResponse, addRow func(...tree.Datum) error,
-) error {
-	for _, ssps := range resp.RangefeedInfoPerStore {
-		for _, ss := range ssps.Rangefeed {
-			if err := addRow(
-				tree.NewDInt(tree.DInt(ssps.NodeID)),
-				tree.NewDInt(tree.DInt(ss.ConsumerID)),
 			); err != nil {
 				return err
 			}
