@@ -8,7 +8,6 @@ package quantize
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -24,12 +23,11 @@ func TestUnQuantizerSimple(t *testing.T) {
 	// Quantize empty set.
 	vectors := vector.MakeSet(2)
 	quantizedSet := quantizer.Quantize(&workspace, vectors)
-	require.Equal(t, vector.T{0, 0}, quantizedSet.GetCentroid())
+	require.Equal(t, 0, quantizedSet.GetCount())
 
 	// Add 3 vectors and verify centroid and centroid distances.
 	vectors = vector.MakeSetFromRawData([]float32{5, 2, 1, 2, 6, 5}, 2)
 	quantizedSet = quantizer.Quantize(&workspace, vectors)
-	require.Equal(t, vector.T{4, 3}, quantizedSet.GetCentroid())
 
 	// Add 2 more vectors to existing set.
 	vectors = vector.MakeSetFromRawData([]float32{4, 3, 6, 5}, 2)
@@ -43,7 +41,6 @@ func TestUnQuantizerSimple(t *testing.T) {
 		&workspace, quantizedSet, vector.T{1, 1}, distances, errorBounds)
 	require.Equal(t, []float32{17, 1, 41, 13, 41}, distances)
 	require.Equal(t, []float32{0, 0, 0, 0, 0}, errorBounds)
-	require.Equal(t, vector.T{4, 3}, quantizedSet.GetCentroid())
 
 	// Query vector is centroid.
 	quantizer.EstimateDistances(
@@ -67,7 +64,6 @@ func TestUnQuantizerSimple(t *testing.T) {
 	quantizedSet.ReplaceWithLast(0)
 	quantizedSet.ReplaceWithLast(0)
 	require.Equal(t, 0, quantizedSet.GetCount())
-	require.Equal(t, vector.T{4, 3}, quantizedSet.GetCentroid())
 	distances = distances[:0]
 	errorBounds = errorBounds[:0]
 	quantizer.EstimateDistances(
@@ -76,7 +72,6 @@ func TestUnQuantizerSimple(t *testing.T) {
 	// Empty quantized set.
 	vectors = vector.MakeSet(2)
 	quantizedSet = quantizer.Quantize(&workspace, vectors)
-	require.Equal(t, vector.T{0, 0}, quantizedSet.GetCentroid())
 
 	// Add single vector to quantized set.
 	vectors = vector.T{4, 4}.AsSet()
@@ -93,7 +88,6 @@ func TestUnQuantizerSimple(t *testing.T) {
 	quantizer = NewUnQuantizer(2, vecdist.InnerProduct)
 	vectors = vector.MakeSetFromRawData([]float32{5, 2, 1, 2, 6, 5}, 2)
 	quantizedSet = quantizer.Quantize(&workspace, vectors)
-	require.Equal(t, vector.T{0.8, 0.6}, quantizedSet.GetCentroid())
 
 	distances = distances[:3]
 	errorBounds = errorBounds[:3]
@@ -106,7 +100,6 @@ func TestUnQuantizerSimple(t *testing.T) {
 	quantizer = NewUnQuantizer(2, vecdist.Cosine)
 	vectors = vector.MakeSetFromRawData([]float32{-1, 0, 0, 1, 0.70710678, 0.70710678}, 2)
 	quantizedSet = quantizer.Quantize(&workspace, vectors)
-	require.Equal(t, []float32{-0.1691, 0.9856}, testutils.RoundFloats(quantizedSet.GetCentroid(), 4))
 
 	distances = distances[:3]
 	errorBounds = errorBounds[:3]
