@@ -4,6 +4,7 @@ go_library(
     name = "sslocal",
     srcs = [
         "cluster_settings.go",
+        "doc.go",
         "sql_stats.go",
         "sql_stats_ingestor.go",
         "sslocal_iterator.go",

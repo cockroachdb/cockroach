@@ -315,11 +315,6 @@ func (i *SQLStatsIngester) flushBuffer(
 		return
 	}
 
-	// Set the transaction fingerprint ID for each statement.
-	for _, s := range *statements {
-		s.TransactionFingerprintID = transaction.FingerprintID
-	}
-
 	for _, sink := range i.sinks {
 		sink.ObserveTransaction(ctx, transaction, *statements)
 	}
