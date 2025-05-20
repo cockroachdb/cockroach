@@ -67,7 +67,7 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
       Deps:
         TableID: 104
         TriggerID: 1
-        UsesRelationIDs: []
+        UsesRelations: []
         UsesRoutineIDs:
         - 105
     *scop.AddTriggerBackReferencesInRoutines
@@ -143,7 +143,7 @@ PreCommitPhase stage 2 of 2 with 8 MutationType ops
       Deps:
         TableID: 104
         TriggerID: 1
-        UsesRelationIDs: []
+        UsesRelations: []
         UsesRoutineIDs:
         - 105
     *scop.AddTriggerBackReferencesInRoutines
