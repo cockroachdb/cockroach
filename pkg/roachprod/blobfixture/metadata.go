@@ -87,7 +87,7 @@ type fixtureToDelete struct {
 // successor and the successor was made ready more than 24 hours ago. The 24
 // hour wait is to ensure no tests are in the middle of using the fixture.
 //
-// GC decisions are made soly based on the metadata. There is no attempt to
+// GC decisions are made solely based on the metadata. There is no attempt to
 // examine actual live data in object storage. This ensures the GC will only
 // delete data that is managed by the fixture registry, so its safe to mix
 // manually managed and non-managed fixtures. This decision may be worth
