@@ -5972,9 +5972,29 @@ SELECT
 					msg += strconv.Itoa(len(msg) / len(foo))
 				case "contextCanceled":
 					panic(context.Canceled)
+				case "stackOverflow":
+					var recurse func(int) int
+					recurse = func(i int) int {
+						if i < 0 {
+							return i
+						}
+						return recurse(i+1) + recurse(i+2) // avoid TCO
+					}
+					return tree.NewDInt(tree.DInt(recurse(0))), nil
+				case "oom":
+					var mem [][]byte
+					for range 1024 * 1024 {
+						block := make([]byte, 128*1024*1024) // 128 MiB
+						for j := range 32 * 1024 {
+							block[j*4*1024] = byte(j) // touch each 4 KiB page
+						}
+						mem = append(mem, block)
+					}
+					return tree.NewDInt(tree.DInt(len(mem))), nil
 				default:
 					return nil, errors.Newf(
-						"expected mode to be one of: internalAssertion, indexOutOfRange, divideByZero, contextCanceled",
+						"expected mode to be one of: internalAssertion, indexOutOfRange, divideByZero, " +
+							"contextCanceled, stackOverflow, oom",
 					)
 				}
 				// This code is unreachable.
