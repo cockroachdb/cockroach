@@ -350,6 +350,7 @@ func TestMultiRegionTenantRegions(t *testing.T) {
 
 	// Shorten the sqlliveness TTL to speed up the test.
 	tenEast1SQLDB.Exec(t, "SET CLUSTER SETTING server.sqlliveness.ttl = '5s'")
+	tenEast1SQLDB.Exec(t, "SET CLUSTER SETTING server.sqlliveness.heartbeat = '1s'")
 
 	// Update system database with regions.
 	checkRegions := func(t *testing.T, regions ...string) {
