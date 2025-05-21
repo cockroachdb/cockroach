@@ -10,7 +10,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -33,22 +36,21 @@ func (c cmd) withEnv(k string, v any) cmd {
 	return c
 }
 
-func (c cmd) exec(args ...string) (_ *exec.Cmd, output *synchronizedBuffer) {
-	cmd := exec.Command(os.Args[0], "--test.run=^"+c.name+"$", "--test.v")
+func (c cmd) exec(args ...string) (ec *exec.Cmd, output *synchronizedBuffer) {
+	ec = exec.Command(os.Args[0], "--test.run=^"+c.name+"$", "--test.v")
 	if len(args) > 0 {
 	}
 	for i, arg := range args {
 		if i == 0 {
-			cmd.Args = append(cmd.Args, "--")
+			ec.Args = append(ec.Args, "--")
 		}
-		cmd.Args = append(cmd.Args, "--"+arg)
+		ec.Args = append(ec.Args, "--"+arg)
 	}
-	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, c.envVars...)
-	var buf synchronizedBuffer
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
-	return cmd, &buf
+	ec.Env = os.Environ()
+	ec.Env = append(ec.Env, c.envVars...)
+	output = new(synchronizedBuffer)
+	ec.Stdout, ec.Stderr = output, output
+	return ec, output
 }
 
 type synchronizedBuffer struct {
@@ -66,4 +68,34 @@ func (b *synchronizedBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
+}
+
+type synchronizer struct {
+	pid    int // the PID of the process to coordinate with
+	waitCh chan os.Signal
+}
+
+func (s *synchronizer) init(pid int) {
+	s.pid = pid
+	s.waitCh = make(chan os.Signal, 1)
+	signal.Notify(s.waitCh, syscall.SIGUSR1)
+}
+
+func (s synchronizer) notify(t testing.TB) {
+	if err := syscall.Kill(s.pid, syscall.SIGUSR1); err != nil {
+		t.Fatalf("failed to notify process %d: %s", s.pid, err)
+	}
+}
+
+func (s synchronizer) wait() {
+	<-s.waitCh
+}
+
+func (c synchronizer) waitWithTimeout() (timedOut bool) {
+	select {
+	case <-c.waitCh:
+		return false
+	case <-time.After(5 * time.Second):
+		return true
+	}
 }
