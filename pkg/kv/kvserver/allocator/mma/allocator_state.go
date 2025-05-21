@@ -584,10 +584,15 @@ func sortTargetCandidateSetAndPick(
 	overrideToIgnoreLoadNoChangeAndHigher bool,
 	rng *rand.Rand,
 ) roachpb.StoreID {
+	var b strings.Builder
+	for i := range cands.candidates {
+		fmt.Fprintf(&b, " s%v(%v)", cands.candidates[i].StoreID, cands.candidates[i].storeLoadSummary)
+	}
 	if loadThreshold <= loadNoChange {
 		panic("loadThreshold must be > loadNoChange")
 	} else {
-		log.Infof(ctx, "sortTargetCandidateSetAndPick: loadThreshold=%v", loadThreshold)
+		log.Infof(ctx, "sortTargetCandidateSetAndPick: loadThreshold=%v cands%s", loadThreshold,
+			b.String())
 	}
 	slices.SortFunc(cands.candidates, func(a, b candidateInfo) int {
 		if diversityScoresAlmostEqual(a.diversityScore, b.diversityScore) {
@@ -701,7 +706,7 @@ func sortTargetCandidateSetAndPick(
 		return 0
 	}
 	cands.candidates = cands.candidates[:j]
-	var b strings.Builder
+	b.Reset()
 	for i := range cands.candidates {
 		fmt.Fprintf(&b, " s%v(%v)", cands.candidates[i].StoreID, cands.candidates[i].sls)
 	}
