@@ -68,21 +68,22 @@ func TestInternalRunClient(t *testing.T) {
 	}
 
 	require.Positive(t, benchmarkN)
+	ctx := context.Background()
 
 	pgURL, ok := envutil.EnvString(pgurlEnvVar, 0)
 	require.True(t, ok)
 	ql := makeQueryLoad(t, pgURL)
-	defer func() { _ = ql.Close(context.Background()) }()
+	defer func() { _ = ql.Close(ctx) }()
 	require.True(t, ok)
 
-	conn, err := pgx.Connect(context.Background(), pgURL)
+	conn, err := pgx.Connect(ctx, pgURL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = conn.Close(context.Background()) }()
+	defer func() { _ = conn.Close(ctx) }()
 
 	// Verify the TPC-C database exists.
-	if _, err := conn.Exec(context.Background(), "USE "+databaseName); err != nil {
+	if _, err := conn.Exec(ctx, "USE "+databaseName); err != nil {
 		t.Fatal(databaseName + " database does not exist")
 	}
 
@@ -96,7 +97,7 @@ func TestInternalRunClient(t *testing.T) {
 	}
 
 	for i := 0; i < benchmarkN; i++ {
-		require.NoError(t, ql.WorkerFns[0](context.Background()))
+		require.NoError(t, ql.WorkerFns[0](ctx))
 	}
 
 	// Notify the parent process that the benchmark has completed.
@@ -118,7 +119,7 @@ func TestInternalGenerateStoreDir(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 
 	// Make the generation faster.
-	logstore.DisableSyncRaftLog.Override(context.Background(), &srv.SystemLayer().ClusterSettings().SV, true)
+	logstore.DisableSyncRaftLog.Override(ctx, &srv.SystemLayer().ClusterSettings().SV, true)
 
 	tdb := sqlutils.MakeSQLRunner(db)
 	tdb.Exec(t, "CREATE DATABASE "+databaseName)

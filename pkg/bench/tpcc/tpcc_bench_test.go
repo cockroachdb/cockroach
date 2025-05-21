@@ -113,6 +113,8 @@ func run(b *testing.B, storeDir string, workloadFlags []string) {
 }
 
 func startCockroach(b testing.TB, storeDir string) (pgURL string, closeServer func()) {
+	ctx := context.Background()
+
 	// Clone the store dir.
 	td, engCleanup := testutils.TempDir(b)
 	c, output := cloneEngine.
@@ -127,7 +129,7 @@ func startCockroach(b testing.TB, storeDir string) (pgURL string, closeServer fu
 	s := serverutils.StartServerOnly(b, base.TestServerArgs{
 		StoreSpecs: []base.StoreSpec{{Path: td}},
 	})
-	logstore.DisableSyncRaftLog.Override(context.Background(), &s.SystemLayer().ClusterSettings().SV, true)
+	logstore.DisableSyncRaftLog.Override(ctx, &s.SystemLayer().ClusterSettings().SV, true)
 
 	// Generate a PG URL.
 	u, urlCleanup, err := pgurlutils.PGUrlE(
@@ -140,7 +142,7 @@ func startCockroach(b testing.TB, storeDir string) (pgURL string, closeServer fu
 
 	return u.String(), func() {
 		engCleanup()
-		s.Stopper().Stop(context.Background())
+		s.Stopper().Stop(ctx)
 		urlCleanup()
 	}
 }
