@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/google/pprof/profile"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 type profileOptions struct {
@@ -327,6 +327,9 @@ func getProfileWithTimeout(
 	var latestError error
 	for {
 		select {
+		case <-ctx.Done():
+			return nil, errors.Wrapf(errors.CombineErrors(latestError, ctx.Err()),
+				"failed to get profile from %s after %s", url, timeout)
 		case <-timer.C:
 			return nil, errors.Wrapf(errors.CombineErrors(latestError, errors.New("timed out")),
 				"failed to get profile from %s after %s", url, timeout)
@@ -400,7 +403,7 @@ func getProfileSingleNode(
 }
 
 // GetProfile collect profiles for all the nodes received in the function
-// parameters. It returns a slice of profiles and an error if any of the
+// parameters. It returns a slice of profiles or an error if any of the
 // profiles failed to collect. Each entry in the slices is in the same order as
 // the nodes received.
 // Supported profile types are: {"cpu", "allocs", "mutex", "heap"}.
@@ -413,31 +416,30 @@ func GetProfile(
 	nodes option.NodeListOption,
 ) ([]*profile.Profile, error) {
 	profiles := make([]*profile.Profile, len(nodes))
-	errors := make([]error, len(nodes))
 
-	// profileWg is used to wait for all the profiles to be collected.
-	profileWg := sync.WaitGroup{}
+	// Create a cancelable context and errgroup for concurrent profile collection.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	g, ctx := errgroup.WithContext(ctx)
+
 	for i, nodeId := range nodes {
-		profileWg.Add(1)
-		go func(nodeID int, sliceIdx int) {
-			defer profileWg.Done()
+		g.Go(func() error {
 			var err error
-			profiles[sliceIdx], err = getProfileSingleNode(ctx, cluster, logger, profileType,
-				nodeID, duration)
+			profiles[i], err = getProfileSingleNode(ctx, cluster, logger, profileType,
+				nodeId, duration)
 
 			if err != nil {
-				logger.Printf("error getting profile for node %d: %s", nodeID, err)
-				errors[sliceIdx] = err
+				logger.Printf("error getting profile for node %d: %s", nodeId, err)
+				cancel() // Cancel context on first error
+				return err
 			}
-		}(nodeId, i)
+			return nil
+		})
 	}
-	profileWg.Wait()
 
-	// Return an error if any of the profiles failed to collect.
-	for _, err := range errors {
-		if err != nil {
-			return nil, err
-		}
+	// Wait for all profiles to complete or first error
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 
 	return profiles, nil

@@ -273,7 +273,8 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 						opts.cmd(useHAProxy)+" run")
 
 					if msg, crashed := detectSysbenchCrash(result); crashed {
-						t.Skipf("%s; skipping test", msg)
+						t.L().Printf("%s; sysbench run to collect profiles failed", msg)
+						return nil
 					}
 					return err
 				},
@@ -282,7 +283,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 			// Wait for 30 seconds to give a chance to the workload to start, and then
 			// collect CPU, mutex diffs, allocs diffs profiles.
 			time.Sleep(30 * time.Second)
-			collectSysbenchProfiles(t, m, c, time.Second*30 /* duration */)
+			collectSysbenchProfiles(t, m, c, 30*time.Second /* duration */)
 		}
 
 		return nil
