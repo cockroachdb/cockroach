@@ -13,9 +13,9 @@ go_test(
         "main_test.go",
         "subprocess_commands_test.go",
         "subprocess_utils_test.go",
-        "tpcc_bench_generate_data_test.go",
         "tpcc_bench_test.go",
     ],
+    data = glob(["testdata/**"]),
     embed = [":tpcc"],
     deps = [
         "//pkg/base",
@@ -24,6 +24,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/pgurlutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
