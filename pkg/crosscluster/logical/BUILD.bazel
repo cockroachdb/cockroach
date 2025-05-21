@@ -161,6 +161,7 @@ go_test(
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
         "//pkg/sql/stats",
         "//pkg/testutils",
         "//pkg/testutils/jobutils",
