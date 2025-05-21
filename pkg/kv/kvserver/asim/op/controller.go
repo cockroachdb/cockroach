@@ -247,6 +247,7 @@ func (c *controller) processChangeReplicas(
 	// instantly and processChangeReplicas is called over multiple ticks.
 	if (cro.complete != time.Time{}) && !tick.Before(cro.complete) {
 		cro.done = true
+		return nil
 	}
 
 	change := state.ReplicaChange{
@@ -254,11 +255,10 @@ func (c *controller) processChangeReplicas(
 		Author:  c.storeID,
 		Changes: cro.changes,
 	}
-	targets := kvserver.SynthesizeTargetsByChangeType(cro.changes)
-	if len(targets.VoterAdditions) > 0 || len(targets.NonVoterAdditions) > 0 {
-		change.Wait = c.settings.ReplicaChangeDelayFn()(rng.Size(), true /* use range size */)
-	}
 
+	targets := kvserver.SynthesizeTargetsByChangeType(cro.changes)
+	change.Wait = c.settings.ReplicaChangeDelayFn()(rng.Size(),
+		len(targets.VoterAdditions) > 0 || len(targets.NonVoterAdditions) > 0)
 	completeAt, ok := c.changer.Push(tick, &change)
 	if !ok {
 		return errors.Newf("tick %d: Changer did not accept change for range %d", tick, cro.rangeID)

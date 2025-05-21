@@ -185,6 +185,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 		} else {
 			panic(fmt.Sprintf("unexpected pending change type: %v", curChange))
 		}
+		log.VInfof(ctx, 1, "dispatching operation for pendingChange=%v", curChange)
 		msr.as.MMAPreApply(
 			s.RangeUsageInfo(state.RangeID(curChange.RangeID), msr.localStoreID),
 			curChange,
