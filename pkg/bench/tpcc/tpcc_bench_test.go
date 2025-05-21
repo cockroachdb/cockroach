@@ -12,12 +12,15 @@
 package tpcc
 
 import (
+	"bytes"
 	"context"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
@@ -121,13 +124,15 @@ func (bm *benchmark) run(b *testing.B) {
 	defer bm.close()
 
 	bm.startCockroach(b)
-	pid, wait := bm.startClient(b)
+	cmd, stdout := bm.startClient(b)
 
 	var s synchronizer
-	s.init(pid)
+	s.init(cmd.Process.Pid)
 
 	// Reset the timer when the client starts running queries.
-	s.wait()
+	if timedOut := s.waitWithTimeout(); timedOut {
+		b.Fatalf("waiting on client timed-out:\n%s", stdout.String())
+	}
 	b.ResetTimer()
 	s.notify(b)
 
@@ -136,7 +141,9 @@ func (bm *benchmark) run(b *testing.B) {
 	b.StopTimer()
 	s.notify(b)
 
-	require.NoError(b, wait())
+	if err := cmd.Wait(); err != nil {
+		b.Fatalf("client failed: %s\n%s\n%s", err, stdout.String(), stdout.String())
+	}
 }
 
 func (bm *benchmark) close() {
@@ -170,7 +177,7 @@ func (bm *benchmark) startCockroach(b testing.TB) {
 	bm.closers = append(bm.closers, cleanup)
 }
 
-func (bm *benchmark) startClient(b *testing.B) (pid int, wait func() error) {
+func (bm *benchmark) startClient(b *testing.B) (_ *exec.Cmd, stdout *bytes.Buffer) {
 	cmd, stdout := runClient.
 		withEnv(nEnvVar, b.N).
 		withEnv(pgurlEnvVar, bm.pgURL).
@@ -181,7 +188,7 @@ func (bm *benchmark) startClient(b *testing.B) (pid int, wait func() error) {
 	bm.closers = append(bm.closers,
 		func() { _ = cmd.Process.Kill(); _ = cmd.Wait() },
 	)
-	return cmd.Process.Pid, cmd.Wait
+	return cmd, stdout
 }
 
 type synchronizer struct {
@@ -205,7 +212,11 @@ func (c synchronizer) wait() {
 	<-c.waitCh
 }
 
-func (c synchronizer) notifyAndWait(t testing.TB) {
-	c.notify(t)
-	c.wait()
+func (c synchronizer) waitWithTimeout() (timedOut bool) {
+	select {
+	case <-c.waitCh:
+		return false
+	case <-time.After(5 * time.Second):
+		return true
+	}
 }
