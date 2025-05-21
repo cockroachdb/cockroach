@@ -530,7 +530,7 @@ func (p *planner) removeDependents(
 ) (droppedViews []string, err error) {
 	for _, descId := range depsToDrop.Ordered() {
 		depDesc, err := p.getDescForCascade(
-			ctx, typeName, objName, tableDesc.ParentID, descId, dropBehavior,
+			ctx, typeName, objName, tableDesc.ParentID, descId, tableDesc.ID, dropBehavior,
 		)
 		if err != nil {
 			return nil, err
