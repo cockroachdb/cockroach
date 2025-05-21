@@ -10,10 +10,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"os/signal"
-	"syscall"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
@@ -145,34 +142,4 @@ func startClient(
 		b.Fatalf("failed to start client: %s\n%s", err, output.String())
 	}
 	return c, output
-}
-
-type synchronizer struct {
-	pid    int // the PID of the process to coordinate with
-	waitCh chan os.Signal
-}
-
-func (c *synchronizer) init(pid int) {
-	c.pid = pid
-	c.waitCh = make(chan os.Signal, 1)
-	signal.Notify(c.waitCh, syscall.SIGUSR1)
-}
-
-func (c synchronizer) notify(t testing.TB) {
-	if err := syscall.Kill(c.pid, syscall.SIGUSR1); err != nil {
-		t.Fatalf("failed to notify process %d: %s", c.pid, err)
-	}
-}
-
-func (c synchronizer) wait() {
-	<-c.waitCh
-}
-
-func (c synchronizer) waitWithTimeout() (timedOut bool) {
-	select {
-	case <-c.waitCh:
-		return false
-	case <-time.After(5 * time.Second):
-		return true
-	}
 }
