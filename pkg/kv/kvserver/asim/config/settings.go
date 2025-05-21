@@ -11,7 +11,7 @@ const (
 	defaultTickInteval             = 500 * time.Millisecond
 	defaultMetricsInterval         = 10 * time.Second
 	defaultReplicaChangeBaseDelay  = 100 * time.Millisecond
-	defaultRebalancingSnapshotRate = 16 << 20 // 16MiB/s
+	defaultRebalancingSnapshotRate = 32 << 20 // 32MiB/s
 	defaultSplitQueueDelay         = 100 * time.Millisecond
 	defaultRangeSizeSplitThreshold = 512 << 20 // 512MiB
 	defaultRangeRebalanceThreshold = 0.05
