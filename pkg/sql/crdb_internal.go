@@ -6663,10 +6663,13 @@ func makeClusterDatabasePrivilegesFromDescriptor(
 		for _, u := range privs {
 			userNameStr := tree.NewDString(u.User.Normalized())
 			for _, priv := range u.Privileges {
+				lockedPrivDesc := &catpb.LockedPrivilegeDescriptor{
+					PrivilegeDescriptor: *db.GetPrivileges(),
+				}
 				// We use this function to check for the grant option so that the
 				// object owner also gets is_grantable=true.
 				isGrantable, err := p.CheckGrantOptionsForUser(
-					ctx, db.GetPrivileges(), db, []privilege.Kind{priv.Kind}, u.User,
+					ctx, lockedPrivDesc, db, []privilege.Kind{priv.Kind}, u.User,
 				)
 				if err != nil {
 					return err

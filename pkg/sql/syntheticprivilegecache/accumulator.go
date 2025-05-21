@@ -83,6 +83,8 @@ func (s *accumulator) addRow(path, user tree.DString, privArr, grantOptionArr *t
 }
 
 // finish returns the privilege descriptor.
-func (s *accumulator) finish() *catpb.PrivilegeDescriptor {
-	return s.desc
+func (s *accumulator) finish() *catpb.LockedPrivilegeDescriptor {
+	return &catpb.LockedPrivilegeDescriptor{
+		PrivilegeDescriptor: *s.desc,
+	}
 }
