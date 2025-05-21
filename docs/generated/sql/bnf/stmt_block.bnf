@@ -4566,8 +4566,10 @@ rowsfrom_list ::=
 	( rowsfrom_item ) ( ( ',' rowsfrom_item ) )*
 
 func_alias_clause ::=
-	'AS' table_alias_name opt_col_def_list
-	| table_alias_name opt_col_def_list
+	alias_clause
+	| 'AS' '(' col_def_list ')'
+	| 'AS' table_alias_name '(' col_def_list ')'
+	| table_alias_name '(' col_def_list ')'
 
 opt_asc_desc ::=
 	'ASC'
@@ -4864,8 +4866,8 @@ join_outer ::=
 rowsfrom_item ::=
 	func_expr_windowless opt_func_alias_clause
 
-opt_col_def_list ::=
-	'(' col_def_list ')'
+col_def_list ::=
+	( col_def ) ( ( ',' col_def ) )*
 
 group_by_item ::=
 	a_expr
@@ -5029,8 +5031,8 @@ create_as_col_qualification_elem ::=
 create_as_params ::=
 	( create_as_param ) ( ( ',' create_as_param ) )*
 
-col_def_list ::=
-	( col_def ) ( ( ',' col_def ) )*
+col_def ::=
+	name typename
 
 char_aliases ::=
 	'CHAR'
@@ -5087,10 +5089,6 @@ opt_partition_by ::=
 
 create_as_param ::=
 	column_name
-
-col_def ::=
-	name
-	| name typename
 
 col_qualification_elem ::=
 	'NOT' 'NULL'
