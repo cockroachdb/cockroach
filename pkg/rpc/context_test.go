@@ -1554,7 +1554,7 @@ func TestGRPCDialClass(t *testing.T) {
 	sys2 := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, SystemClass)
 	require.True(t, sys1 == sys2, "expected connections dialed with the same "+
 		"class to the same target to be the same")
-	for _, c := range []*Connection{def2, sys2} {
+	for _, c := range []*GRPCConnection{def2, sys2} {
 		require.Nil(t, c.Health(), "expected connections to be healthy")
 	}
 }
@@ -1969,8 +1969,8 @@ func TestVerifyDialback(t *testing.T) {
 		})
 	}
 
-	mkConn := func() *Connection {
-		c := &Connection{
+	mkConn := func() *GRPCConnection {
+		c := &GRPCConnection{
 			breakerSignalFn: func() circuit.Signal {
 				return &neverTripSignal{}
 			},
@@ -2005,7 +2005,7 @@ func TestVerifyDialback(t *testing.T) {
 			func(t *testing.T, mockRPCCtx *MockDialbacker, sv *settings.Values) {
 
 				mockRPCCtx.EXPECT().GRPCDialNode("1.1.1.1", roachpb.NodeID(2), roachpb.Locality{}, SystemClass).
-					DoAndReturn(func(string, roachpb.NodeID, roachpb.Locality, ConnectionClass) *Connection {
+					DoAndReturn(func(string, roachpb.NodeID, roachpb.Locality, ConnectionClass) *GRPCConnection {
 						healthyConn := mkConn()
 						close(healthyConn.connFuture.ready)
 						return healthyConn
@@ -2024,7 +2024,7 @@ func TestVerifyDialback(t *testing.T) {
 		// If reverse system class connection is not healthy, non-blocking dial attempt
 		// interprets this as success.
 		mockRPCCtx.EXPECT().GRPCDialNode("1.1.1.1", roachpb.NodeID(2), roachpb.Locality{}, SystemClass).
-			DoAndReturn(func(string, roachpb.NodeID, roachpb.Locality, ConnectionClass) *Connection {
+			DoAndReturn(func(string, roachpb.NodeID, roachpb.Locality, ConnectionClass) *GRPCConnection {
 				tmpConn := mkConn()
 				assert.Equal(t, ErrNotHeartbeated, tmpConn.Health())
 				return tmpConn
@@ -2042,7 +2042,7 @@ func TestVerifyDialback(t *testing.T) {
 			// If reverse system class connection is not healthy, blocking dial attempt
 			// will do a one-off dialback.
 			mockRPCCtx.EXPECT().GRPCDialNode("1.1.1.1", roachpb.NodeID(2), roachpb.Locality{}, SystemClass).
-				DoAndReturn(func(string, roachpb.NodeID, roachpb.Locality, ConnectionClass) *Connection {
+				DoAndReturn(func(string, roachpb.NodeID, roachpb.Locality, ConnectionClass) *GRPCConnection {
 					tmpConn := mkConn()
 					assert.Equal(t, ErrNotHeartbeated, tmpConn.Health())
 					return tmpConn
@@ -2078,7 +2078,7 @@ func TestVerifyDialback(t *testing.T) {
 		req := ping(PingRequest_BLOCKING)
 		req.OriginNodeID = 0
 		mockRPCCtx.EXPECT().GRPCUnvalidatedDial("1.1.1.1", roachpb.Locality{}).
-			DoAndReturn(func(string, roachpb.Locality) *Connection {
+			DoAndReturn(func(string, roachpb.Locality) *GRPCConnection {
 				tmpConn := mkConn()
 				assert.Equal(t, ErrNotHeartbeated, tmpConn.Health())
 				return tmpConn

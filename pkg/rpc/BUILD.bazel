@@ -17,6 +17,7 @@ go_library(
         "context_testutils.go",
         "drpc.go",
         "errors.go",
+        "grpc.go",
         "heartbeat.go",
         "keepalive.go",
         "metrics.go",
@@ -101,22 +102,6 @@ go_library(
     ],
 )
 
-gomock(
-    name = "mock_rpc",
-    out = "mocks_generated_test.go",
-    interfaces = [
-        "BatchStreamClient",
-        "Dialbacker",
-    ],
-    library = ":rpc",
-    package = "rpc",
-    self_package = "github.com/cockroachdb/cockroach/pkg/rpc",
-    visibility = [
-        ":__pkg__",
-        "//pkg/gen:__pkg__",
-    ],
-)
-
 go_test(
     name = "rpc_test",
     size = "small",
@@ -132,10 +117,15 @@ go_test(
         "main_test.go",
         "metrics_test.go",
         "peer_test.go",
+        # TODO(server): mock tests here were originally generated with
+        # github.com/golang/mock, but since that project is archived and has
+        # no support for generics, they are replaced with standard tests for
+        # now. Explore github.com/uber-go/mock offers generics support and
+        # restore these to auto-generated mocks.
+        "rpc_mock_test.go",
         "snappy_test.go",
         "stream_pool_test.go",
         "tls_test.go",
-        ":mock_rpc",  # keep
     ],
     data = glob(["testdata/**"]),
     embed = [":rpc"],
@@ -152,6 +142,7 @@ go_test(
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer",
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
+        "//pkg/rpc/rpcpb",
         "//pkg/security",
         "//pkg/security/certnames",
         "//pkg/security/securityassets",
