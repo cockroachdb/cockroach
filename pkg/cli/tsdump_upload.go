@@ -9,6 +9,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
@@ -65,6 +66,11 @@ var (
 		" These failures can be due to transietnt network errors. If any of these metrics are critical for your investigation," +
 		" please re-upload the Tsdump:\n%s\n"
 	datadogLogsURLFormat = "https://us5.datadoghq.com/logs?query=cluster_label:%s+upload_id:%s"
+
+	translateMetricType = map[string]int{
+		"GAUGE":   DatadogSeriesTypeGauge,
+		"COUNTER": DatadogSeriesTypeCounter,
+	}
 )
 
 // DatadogPoint is a single metric point in Datadog format
@@ -123,6 +129,7 @@ type datadogWriter struct {
 	threshold      int
 	uploadTime     time.Time
 	storeToNodeMap map[string]string
+	metricTypeMap  map[string]string
 }
 
 func makeDatadogWriter(
@@ -132,8 +139,19 @@ func makeDatadogWriter(
 	threshold int,
 	doRequest func(req *http.Request) error,
 ) *datadogWriter {
-
 	currentTime := getCurrentTime()
+
+	var metricTypeMap map[string]string
+	if init {
+		// we only need to load the metric types map when the command is
+		// datadogInit. It's ok to keep it nil otherwise.
+		var err error
+		metricTypeMap, err = loadMetricTypesMap(context.Background())
+		if err != nil {
+			fmt.Printf(
+				"error loading metric types map: %v\nThis may lead to some metrics not behaving correctly on Datadog.\n", err)
+		}
+	}
 
 	return &datadogWriter{
 		targetURL:      targetURL,
@@ -145,6 +163,7 @@ func makeDatadogWriter(
 		threshold:      threshold,
 		uploadTime:     currentTime,
 		storeToNodeMap: make(map[string]string),
+		metricTypeMap:  metricTypeMap,
 	}
 }
 
@@ -194,7 +213,7 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*DatadogSeries, error) {
 	series := &DatadogSeries{
 		Metric: name,
 		Tags:   []string{},
-		Type:   DatadogSeriesTypeUnknown,
+		Type:   d.resolveMetricType(name),
 		Points: make([]DatadogPoint, idata.SampleCount()),
 	}
 
@@ -236,6 +255,41 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*DatadogSeries, error) {
 	return series, nil
 }
 
+func (d *datadogWriter) resolveMetricType(metricName string) int {
+	if !d.init {
+		// in this is not datadogInit command, we don't need to resolve the metric
+		// type. We can just return DatadogSeriesTypeUnknown. Datadog only expects
+		// us to send the type information only once.
+		return DatadogSeriesTypeUnknown
+	}
+
+	typeLookupKey := strings.TrimPrefix(metricName, "cr.store.")
+	typeLookupKey = strings.TrimPrefix(typeLookupKey, "cr.node.")
+	metricType := d.metricTypeMap[typeLookupKey]
+	if t, ok := translateMetricType[metricType]; ok {
+		return t
+	}
+
+	if strings.HasSuffix(metricName, "-count") {
+		return DatadogSeriesTypeCounter
+	}
+
+	if strings.HasSuffix(metricName, "-avg") ||
+		strings.HasSuffix(metricName, "-max") ||
+		strings.HasSuffix(metricName, "-sum") ||
+		strings.HasSuffix(metricName, "-p50") ||
+		strings.HasSuffix(metricName, "-p75") ||
+		strings.HasSuffix(metricName, "-p90") ||
+		strings.HasSuffix(metricName, "-p99") ||
+		strings.HasSuffix(metricName, "-p99.9") ||
+		strings.HasSuffix(metricName, "-p99.99") ||
+		strings.HasSuffix(metricName, "-p99.999") {
+		return DatadogSeriesTypeGauge
+	}
+
+	return DatadogSeriesTypeUnknown
+}
+
 var printLock syncutil.Mutex
 
 func (d *datadogWriter) emitDataDogMetrics(data []DatadogSeries) ([]string, error) {
@@ -256,7 +310,7 @@ func (d *datadogWriter) emitDataDogMetrics(data []DatadogSeries) ([]string, erro
 		for i := 0; i < len(data); i++ {
 			data[i].Points = []DatadogPoint{{
 				Value:     0,
-				Timestamp: timeutil.Now().Unix(),
+				Timestamp: getCurrentTime().Unix(),
 			}}
 		}
 	}
@@ -587,4 +641,22 @@ func fileSize(file *os.File) int64 {
 		return 0
 	}
 	return info.Size()
+}
+
+func loadMetricTypesMap(ctx context.Context) (map[string]string, error) {
+	metricLayers, err := generateMetricList(ctx, true /* skipFiltering */)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to generate metric list")
+	}
+
+	metricTypeMap := make(map[string]string)
+	for _, metric := range metricLayers {
+		for _, catagory := range metric.Categories {
+			for _, m := range catagory.Metrics {
+				metricTypeMap[m.Name] = m.Type
+			}
+		}
+	}
+
+	return metricTypeMap, nil
 }
