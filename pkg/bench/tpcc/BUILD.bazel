@@ -10,10 +10,10 @@ go_library(
 go_test(
     name = "tpcc_test",
     srcs = [
+        "bench_test.go",
+        "internal_test.go",
         "main_test.go",
-        "subprocess_commands_test.go",
-        "subprocess_utils_test.go",
-        "tpcc_bench_test.go",
+        "utils_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":tpcc"],
