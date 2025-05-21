@@ -42,7 +42,6 @@ type benchmarkConfig struct {
 	workloadFlags []string
 	argsGenerator serverArgs
 	setupServer   []func(b testing.TB, s serverutils.TestServerInterface)
-	setupStmts    []string
 }
 
 type workloadFlagOption struct{ name, value string }
@@ -66,20 +65,6 @@ func (s serverArgs) apply(cfg *benchmarkConfig) {
 }
 
 func (s serverArgs) String() string { return "generator" }
-
-type setupStmtOption string
-
-func (s setupStmtOption) apply(cfg *benchmarkConfig) {
-	cfg.setupStmts = append(cfg.setupStmts, string(s))
-}
-
-func setupStmt(stmt string) option {
-	return setupStmtOption(stmt)
-}
-
-var _ = setupStmt // silence unused linter
-
-func (s setupStmtOption) String() string { return string(s) }
 
 func setupServer(fn func(tb testing.TB, s serverutils.TestServerInterface)) option {
 	return setupServerOption{fn}
