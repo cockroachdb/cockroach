@@ -63,20 +63,20 @@ func BenchmarkTPCC(b *testing.B) {
 
 	for _, impl := range []string{"literal", "optimized"} {
 		b.Run(impl, func(b *testing.B) {
-			var baseOpts []option
+			var baseFlag string
 			if impl == "literal" {
-				baseOpts = append(baseOpts, workloadFlag("literal-implementation", "true"))
+				baseFlag = workloadFlag("literal-implementation", "true")
 			}
-			for _, opts := range []options{
-				{workloadFlag("mix", "newOrder=1")},
-				{workloadFlag("mix", "payment=1")},
-				{workloadFlag("mix", "orderStatus=1")},
-				{workloadFlag("mix", "delivery=1")},
-				{workloadFlag("mix", "stockLevel=1")},
-				{workloadFlag("mix", "newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1")},
+			for _, mixFlag := range []string{
+				workloadFlag("mix", "newOrder=1"),
+				workloadFlag("mix", "payment=1"),
+				workloadFlag("mix", "orderStatus=1"),
+				workloadFlag("mix", "delivery=1"),
+				workloadFlag("mix", "stockLevel=1"),
+				workloadFlag("mix", "newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1"),
 			} {
-				b.Run(opts.String(), func(b *testing.B) {
-					newBenchmark(append(opts, baseOpts...)).run(b, storeDir)
+				b.Run(mixFlag, func(b *testing.B) {
+					run(b, storeDir, []string{baseFlag, mixFlag})
 				})
 			}
 		})
@@ -84,23 +84,14 @@ func BenchmarkTPCC(b *testing.B) {
 	}
 }
 
-type benchmark struct {
-	benchmarkConfig
-	pgURL string
+func workloadFlag(name, value string) string {
+	return name + "=" + value
 }
 
-func newBenchmark(opts ...options) *benchmark {
-	var bm benchmark
-	for _, opt := range opts {
-		opt.apply(&bm.benchmarkConfig)
-	}
-	return &bm
-}
-
-func (bm *benchmark) run(b *testing.B, storeDir string) {
-	closeServer := bm.startCockroach(b, storeDir)
+func run(b *testing.B, storeDir string, workloadFlags []string) {
+	pgURL, closeServer := startCockroach(b, storeDir)
 	defer closeServer()
-	c, output := bm.startClient(b)
+	c, output := startClient(b, pgURL, workloadFlags)
 
 	var s synchronizer
 	s.init(c.Process.Pid)
@@ -121,7 +112,7 @@ func (bm *benchmark) run(b *testing.B, storeDir string) {
 	}
 }
 
-func (bm *benchmark) startCockroach(b testing.TB, storeDir string) (closeServer func()) {
+func startCockroach(b testing.TB, storeDir string) (pgURL string, closeServer func()) {
 	// Clone the store dir.
 	td, engCleanup := testutils.TempDir(b)
 	c, output := cloneEngine.
@@ -138,28 +129,29 @@ func (bm *benchmark) startCockroach(b testing.TB, storeDir string) (closeServer 
 	})
 	logstore.DisableSyncRaftLog.Override(context.Background(), &s.SystemLayer().ClusterSettings().SV, true)
 
-	// Set the PG URL.
-	pgURL, urlCleanup, err := pgurlutils.PGUrlE(
+	// Generate a PG URL.
+	u, urlCleanup, err := pgurlutils.PGUrlE(
 		s.AdvSQLAddr(), b.TempDir(), url.User("root"),
 	)
 	if err != nil {
 		b.Fatalf("failed to create pgurl: %s", err)
 	}
-	pgURL.Path = databaseName
-	bm.pgURL = pgURL.String()
+	u.Path = databaseName
 
-	return func() {
+	return u.String(), func() {
 		engCleanup()
 		s.Stopper().Stop(context.Background())
 		urlCleanup()
 	}
 }
 
-func (bm *benchmark) startClient(b *testing.B) (c *exec.Cmd, output *synchronizedBuffer) {
+func startClient(
+	b *testing.B, pgURL string, workloadFlags []string,
+) (c *exec.Cmd, output *synchronizedBuffer) {
 	c, output = runClient.
 		withEnv(nEnvVar, b.N).
-		withEnv(pgurlEnvVar, bm.pgURL).
-		exec(bm.workloadFlags...)
+		withEnv(pgurlEnvVar, pgURL).
+		exec(workloadFlags...)
 	if err := c.Start(); err != nil {
 		b.Fatalf("failed to start client: %s\n%s", err, output.String())
 	}
