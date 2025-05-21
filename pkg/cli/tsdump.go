@@ -110,6 +110,10 @@ will then convert it to the --format requested in the current invocation.
 				return errors.New("no input file provided")
 			}
 
+			if err := loadMetricTypesMap(ctx); err != nil {
+				return errors.Wrap(err, "failed to load metric types map")
+			}
+
 			targetURL, err := getDatadogTargetURL(debugTimeSeriesDumpOpts.ddSite)
 			if err != nil {
 				return err
@@ -657,5 +661,22 @@ func (m *tsDumpFormat) Set(s string) error {
 	default:
 		return fmt.Errorf("invalid value for --format: %s", s)
 	}
+	return nil
+}
+
+func loadMetricTypesMap(ctx context.Context) error {
+	metricLayers, err := generateMetricList(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to generate metric list")
+	}
+
+	for _, metric := range metricLayers {
+		for _, cata := range metric.Categories {
+			for _, m := range cata.Metrics {
+				metricTypeMap[m.Name] = m.Type
+			}
+		}
+	}
+
 	return nil
 }

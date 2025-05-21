@@ -8,6 +8,7 @@ package cli
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"io"
 	"math/rand"
@@ -169,6 +170,7 @@ func parseDDInput(t *testing.T, input string, w *datadogWriter) {
 			}
 			data = &DatadogSeries{
 				Metric: metricName,
+				Type:   resolveMetricType(metricName),
 			}
 			source = nameValueTimestamp[1]
 			data.Tags = append(data.Tags, fmt.Sprintf("%s:%s", storeNodeKey, nameValueTimestamp[1]))
@@ -193,6 +195,7 @@ func TestTsDumpFormatsDataDriven(t *testing.T) {
 		return time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC)
 	})()
 
+	require.NoError(t, loadMetricTypesMap(context.Background()))
 	datadriven.Walk(t, "testdata/tsdump", func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var w tsWriter
