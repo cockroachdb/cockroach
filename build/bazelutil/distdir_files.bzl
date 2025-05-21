@@ -1227,7 +1227,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/google-starlark-go-e043a3d.tar.gz": "a35c6468e0e0921833a63290161ff903295eaaf5915200bbce272cbc8dfd1c1c",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/googleapis-83c3605afb5a39952bf0a0809875d41cf2a558ca.zip": "ba694861340e792fd31cb77274eacaf6e4ca8bda97707898f41d8bebfd8a4984",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/platforms-0.0.10.tar.gz": "218efe8ee736d26a3572663b374a253c012b716d8af0c07e842e82f238a0a7ee",
-    "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_java-981f06c3d2bd10225e85209904090eb7b5fb26bd.tar.gz": "f5a3e477e579231fca27bf202bb0e8fbe4fc6339d63b38ccb87c2760b533d1c3",
+    "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_java-7.12.5.tar.gz": "17b18cb4f92ab7b94aa343ce78531b73960b1bed2ba166e5b02c9fdf0b0ac270",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_license-1.0.0.tar.gz": "26d4021f6898e23b82ef953078389dd49ac2b5618ac564ade4ef87cced147b38",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_oci-v1.4.0.tar.gz": "21a7d14f6ddfcb8ca7c5fc9ffa667c937ce4622c7d2b3e17aea1ffbc90c96bed",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_pkg-0.7.0.tar.gz": "8a298e832762eda1830597d64fe7db58178aa84cd5926d76d5b744d6558941c2",
