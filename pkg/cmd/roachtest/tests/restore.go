@@ -320,7 +320,7 @@ func registerRestore(r registry.Registry) {
 			backup:   backupSpecs{cloud: spec.GCE, fixture: SmallFixture},
 			timeout:  1 * time.Hour,
 			suites:   registry.Suites(registry.Nightly),
-			skip: "ad hoc testing for now",
+			skip:     "ad hoc testing for now",
 			setUpStmts: []string{
 				// Create max 64 MB ranges instead.
 				"SET CLUSTER SETTING backup.restore_span.target_size = '32 MiB'",
@@ -429,6 +429,15 @@ func registerRestore(r registry.Registry) {
 						if err != nil {
 							return errors.Wrapf(err, "error executing setup stmt [%s]", stmt)
 						}
+					}
+
+					if err := roachtestutil.WaitForReplication(ctx, t.L(), db, 3, roachtestutil.AtLeastReplicationFactor); err != nil {
+						return err
+					}
+					if err := waitForRebalance(
+						ctx, t.L(), db, 10, 60, /* stableSeconds */
+					); err != nil {
+						return err
 					}
 
 					t.Status(`running restore`)
