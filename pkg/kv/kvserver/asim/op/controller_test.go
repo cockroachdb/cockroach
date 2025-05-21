@@ -139,7 +139,6 @@ func TestLeaseTransferOp(t *testing.T) {
 func TestRelocateRangeOp(t *testing.T) {
 	settings := config.DefaultSimulationSettings()
 	start := settings.StartTime
-	settings.ReplicaAddRate = 1
 	settings.ReplicaChangeBaseDelay = 5 * time.Second
 	settings.StateExchangeInterval = 1 * time.Second
 	settings.StateExchangeDelay = 0
