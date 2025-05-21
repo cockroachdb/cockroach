@@ -87,7 +87,7 @@ func (n *renameIndexNode) startExec(params runParams) error {
 			continue
 		}
 		return p.dependentError(
-			ctx, "index", n.n.Index.Index.String(), tableDesc.ParentID, tableRef.ID, "rename",
+			ctx, "index", n.n.Index.Index.String(), tableDesc.ParentID, tableRef.ID, tableDesc.ID, "rename",
 		)
 	}
 

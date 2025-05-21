@@ -205,18 +205,18 @@ func (p *planner) canRemoveDependentViewGeneric(
 	objName string,
 	targetID descpb.ID,
 	parentID descpb.ID,
-	viewDesc *tabledesc.Mutable,
+	desc *tabledesc.Mutable,
 	behavior tree.DropBehavior,
 ) error {
 	if behavior != tree.DropCascade {
-		return p.dependentRelationError(ctx, typeName, objName, parentID, viewDesc, "drop")
+		return p.dependentRelationError(ctx, typeName, objName, parentID, desc, targetID, "drop")
 	}
 
 	// Check if any of the relation's triggers list the dependent object as a dependency.
 	// If so, we do not support cascading drops in the presence of such triggers,
 	// and must error out explicitly. This is a current limitation.
-	for i := range viewDesc.Triggers {
-		trigger := &viewDesc.Triggers[i]
+	for i := range desc.Triggers {
+		trigger := &desc.Triggers[i]
 		for _, id := range trigger.DependsOn {
 			if id == targetID {
 				return unimplemented.NewWithIssuef(
@@ -225,12 +225,12 @@ func (p *planner) canRemoveDependentViewGeneric(
 		}
 	}
 
-	if err := p.CheckPrivilege(ctx, viewDesc, privilege.DROP); err != nil {
+	if err := p.CheckPrivilege(ctx, desc, privilege.DROP); err != nil {
 		return err
 	}
-	// If this view is depended on by other views, we have to check them as well.
-	for _, ref := range viewDesc.DependedOnBy {
-		if err := p.canRemoveDependentFromTable(ctx, viewDesc, ref, behavior); err != nil {
+	// If this relation is depended on by other relations, we have to check them as well.
+	for _, ref := range desc.DependedOnBy {
+		if err := p.canRemoveDependentFromTable(ctx, desc, ref, behavior); err != nil {
 			return err
 		}
 	}
@@ -319,7 +319,7 @@ func (p *planner) dropViewImpl(
 		dependedOnBy := append([]descpb.TableDescriptor_Reference(nil), viewDesc.DependedOnBy...)
 		for _, ref := range dependedOnBy {
 			depDesc, err := p.getDescForCascade(
-				ctx, string(viewDesc.DescriptorType()), viewDesc.Name, viewDesc.ParentID, ref.ID, behavior,
+				ctx, string(viewDesc.DescriptorType()), viewDesc.Name, viewDesc.ParentID, ref.ID, viewDesc.ID, behavior,
 			)
 			if err != nil {
 				return cascadeDroppedViews, err
@@ -367,7 +367,7 @@ func (p *planner) getDescForCascade(
 	ctx context.Context,
 	typeName string,
 	objName string,
-	parentID, descID descpb.ID,
+	parentID, descID, targetID descpb.ID,
 	behavior tree.DropBehavior,
 ) (catalog.MutableDescriptor, error) {
 	desc, err := p.Descriptors().MutableByID(p.txn).Desc(ctx, descID)
@@ -376,7 +376,7 @@ func (p *planner) getDescForCascade(
 		return nil, errors.Wrapf(err, "error resolving dependent ID %d", descID)
 	}
 	if behavior != tree.DropCascade {
-		return nil, p.dependentError(ctx, typeName, objName, parentID, descID, "drop")
+		return nil, p.dependentError(ctx, typeName, objName, parentID, descID, targetID, "drop")
 	}
 	return desc, nil
 }

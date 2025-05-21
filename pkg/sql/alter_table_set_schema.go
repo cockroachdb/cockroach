@@ -79,7 +79,7 @@ func (p *planner) AlterTableSetSchema(
 		if !dependent.ByID {
 			return nil, p.dependentError(
 				ctx, string(tableDesc.DescriptorType()), tableDesc.Name,
-				tableDesc.ParentID, dependent.ID, "set schema on",
+				tableDesc.ParentID, dependent.ID, tableDesc.ID, "set schema on",
 			)
 		}
 	}

@@ -50,7 +50,7 @@ func AlterColumnType(
 		}
 		if found {
 			return params.p.dependentError(
-				ctx, objType, col.GetName(), tableDesc.ParentID, tableRef.ID, op,
+				ctx, objType, col.GetName(), tableDesc.ParentID, tableRef.ID, tableDesc.ID, op,
 			)
 		}
 	}
