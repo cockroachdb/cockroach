@@ -1376,10 +1376,12 @@ func runCDCFineGrainedCheckpointingBenchmark(
 	testutils.SucceedsWithin(t, func() error {
 		unique, err := get("/unique")
 		if err != nil {
+			t.L().Errorf("error getting unique count: %v", err)
 			return err
 		}
 		dupes, err = get("/dupes")
 		if err != nil {
+			t.L().Errorf("error getting dupes count: %v", err)
 			return err
 		}
 		t.L().Printf("sink got %d unique, %d dupes", unique, dupes)
@@ -1696,7 +1698,7 @@ func registerCDC(r registry.Registry) {
 		Owner:            registry.OwnerCDC,
 		Benchmark:        true,
 		Cluster:          r.MakeClusterSpec(4),
-		CompatibleClouds: registry.AllClouds,
+		CompatibleClouds: registry.AllExceptAzure,
 		Suites:           registry.Suites(registry.Nightly),
 		Timeout:          30 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
