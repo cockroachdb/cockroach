@@ -3689,6 +3689,79 @@ message JoinNodeResponse {
   roachpb.Version active_version = 4;
 }
 
+// DistSender defines a subset of the Internal service RPCs, specifically for
+// DRPC usage within the DistSender subsystem.
+//
+// During the gRPC to DRPC migration:
+// - gRPC clients will continue to use the full 'Internal' service client.
+// - DRPC clients targeting DistSender functionalities will use clients
+//   generated from this 'DistSender' service.
+// - The 'RestrictedInternalClient' interface ensures that components like
+//   DistSender can operate with either the gRPC 'Internal' client or this new
+//   DRPC 'DistSender' client.
+//
+// TODO: Remove these methods from the 'Internal' service once the DRPC
+// migration for DistSender is complete, making this service the sole
+// definition.
+service DistSender {
+  rpc Batch(BatchRequest) returns (BatchResponse) {}
+
+  rpc MuxRangeFeed(stream RangeFeedRequest) returns (stream MuxRangeFeedEvent) {}
+}
+
+// BatchStream provides the specific RPC for the stream pool implementation.
+// It is not intended for direct client consumption.
+//
+// Rationale for this specific service:
+// - Isolates the stream pooling mechanism's specific RPC.
+// - The `BatchStreamPoolClient` (used when stream pooling is enabled)
+//   consumes this service to provide a unary 'Batch' method interface,
+//   abstracting away the streaming complexity.
+//
+// TODO: Remove these methods from the 'Internal' service once the DRPC
+// migration for tenant connector is complete.
+service BatchStream {
+  // BatchStream is a streaming variant of Batch. There is a 1:1 correspondence
+  // between requests and responses. The method is used to facilitate pooling of
+  // gRPC streams to avoid the overhead of creating and discarding a new stream
+  // for each unary Batch RPC invocation. See rpc.BatchStreamPool.
+  rpc BatchStream(stream BatchRequest) returns (stream BatchResponse) {}
+}
+
+// TenantConnector groups RPCs specific to tenant connectors.
+//
+// TODO: Remove these methods from the 'Internal' service once the DRPC
+// migration for tenant connector is complete.
+service TenantConnector {
+  rpc RangeLookup(RangeLookupRequest) returns (RangeLookupResponse) {}
+
+  rpc GossipSubscription(GossipSubscriptionRequest) returns (stream GossipSubscriptionEvent) {}
+
+  // TenantSettings is used by tenants to obtain and stay up to date with tenant
+  // setting overrides.
+  rpc TenantSettings(TenantSettingsRequest) returns (stream TenantSettingsEvent) {}
+
+  // GetSpanConfigs is used to fetch the span configurations over a given
+  // keyspan.
+  rpc GetSpanConfigs(GetSpanConfigsRequest) returns (GetSpanConfigsResponse) {}
+
+  // GetAllSystemSpanConfigsThatApply is used to fetch all system span
+  // configurations that apply over a tenant's ranges.
+  rpc GetAllSystemSpanConfigsThatApply(GetAllSystemSpanConfigsThatApplyRequest) returns (GetAllSystemSpanConfigsThatApplyResponse) {}
+
+  // UpdateSpanConfigs is used to update the span configurations over given
+  // keyspans.
+  rpc UpdateSpanConfigs(UpdateSpanConfigsRequest) returns (UpdateSpanConfigsResponse) {}
+
+  // SpanConfigConformance is used to determine whether ranges backing the given
+  // keyspans conform to span configs that apply over them.
+  rpc SpanConfigConformance(SpanConfigConformanceRequest) returns (SpanConfigConformanceResponse) {}
+
+  // GetRangeDescriptors is used by tenants to get range descriptors for their
+  // own ranges.
+  rpc GetRangeDescriptors(GetRangeDescriptorsRequest) returns (stream GetRangeDescriptorsResponse) {}
+}
+
 // Batch and RangeFeed service implemented by nodes for KV API requests.
 service Internal {
   rpc Batch (BatchRequest) returns (BatchResponse) {}
