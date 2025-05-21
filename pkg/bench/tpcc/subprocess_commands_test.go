@@ -78,7 +78,10 @@ func TestInternalRunClient(t *testing.T) {
 	// running queries.
 	var s synchronizer
 	s.init(os.Getppid())
-	s.notifyAndWait(t)
+	s.notify(t)
+	if timedOut := s.waitWithTimeout(); timedOut {
+		t.Fatalf("waiting on parent process timed-out")
+	}
 
 	for i := 0; i < benchmarkN; i++ {
 		require.NoError(t, ql.WorkerFns[0](context.Background()))
