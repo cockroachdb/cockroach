@@ -155,6 +155,7 @@ func TestCPUTimeEndToEnd(t *testing.T) {
 
 	skip.UnderStress(t, "multinode cluster setup times out under stress")
 	skip.UnderRace(t, "multinode cluster setup times out under race")
+	skip.UnderDeadlock(t, "lock verification can timeout")
 
 	if !grunning.Supported {
 		return
