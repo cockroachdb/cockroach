@@ -50,6 +50,7 @@ This behavior can be overridden with --test-args='-test.cpu N'`,
 	benchCmd.Flags().Bool(benchMemFlag, true, "print memory allocations for benchmarks")
 	benchCmd.Flags().Bool(streamOutputFlag, true, "stream bench output during run")
 	benchCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to go test binary")
+	benchCmd.Flags().Bool(rewriteFlag, false, "rewrite benchmarking assets (only applicable to certain benchmarks)")
 	benchCmd.Flags().Bool(runSepProcessTenantFlag, false, "run separate process tenant benchmarks (these may freeze due to tenant limits)")
 
 	return benchCmd
@@ -70,6 +71,7 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 		benchMem            = mustGetFlagBool(cmd, benchMemFlag)
 		streamOutput        = mustGetFlagBool(cmd, streamOutputFlag)
 		testArgs            = mustGetFlagString(cmd, testArgsFlag)
+		rewrite             = mustGetFlagBool(cmd, rewriteFlag)
 		runSepProcessTenant = mustGetFlagBool(cmd, runSepProcessTenantFlag)
 	)
 
@@ -151,6 +153,18 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 	args = append(args, d.getGoTestEnvArgs()...)
 	args = append(args, d.getTestOutputArgs(verbose, showLogs, streamOutput)...)
 	args = append(args, additionalBazelArgs...)
+	if rewrite {
+		workspace, err := d.getWorkspace(ctx)
+		if err != nil {
+			return err
+		}
+		args = append(args, fmt.Sprintf("--test_env=COCKROACH_WORKSPACE=%s", workspace))
+		args = append(args, "--test_arg", "-rewrite")
+		for _, testTarget := range testTargets {
+			dir := getDirectoryFromTarget(testTarget)
+			args = append(args, fmt.Sprintf("--sandbox_writable_path=%s", filepath.Join(workspace, dir)))
+		}
+	}
 	logCommand("bazel", args...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 }
