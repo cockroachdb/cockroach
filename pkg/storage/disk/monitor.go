@@ -321,5 +321,5 @@ func getDeviceIDFromPath(fs vfs.FS, path string) (DeviceID, error) {
 	if err != nil {
 		return DeviceID{}, errors.Wrapf(err, "fstat(%s)", path)
 	}
-	return deviceIDFromFileInfo(finfo), nil
+	return deviceIDFromFileInfo(finfo, path), nil
 }
