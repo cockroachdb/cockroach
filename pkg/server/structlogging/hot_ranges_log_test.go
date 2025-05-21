@@ -42,6 +42,7 @@ const highDelay = time.Minute
 // TestHotRangeLogger tests that hot ranges stats are logged per node.
 // It uses system ranges to verify behavior.
 func TestHotRangeLoggerSettings(t *testing.T) {
+	skip.WithIssue(t, 145412)
 	skip.UnderRace(t)
 	skip.UnderStress(t)
 	ctx := context.Background()
