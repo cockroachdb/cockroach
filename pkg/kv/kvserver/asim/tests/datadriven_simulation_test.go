@@ -65,7 +65,7 @@ import (
 //     number of nodes per region.
 //
 //   - "gen_ranges" [ranges=<int>] [placement_type=(even|skewed|weighted)]
-//     [repl_factor=<int>] [min_key=<int>] [max_key=<int>] [range_bytes=<int>]
+//     [repl_factor=<int>] [min_key=<int>] [max_key=<int>] [bytes=<int>]
 //     [add_to_existing<bool>] [lease_weights=<float>] [replica_weights=<float>]
 //     Initialize the range generator parameters. On the next call to eval, the
 //     range generator is called to assign an ranges and their replica
