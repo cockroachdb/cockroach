@@ -1224,7 +1224,7 @@ func runCDCFineGrainedCheckpointingBenchmark(
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 	m := c.NewMonitor(ctx, c.All())
 
-	db := c.Conn(ctx, t.L(), 1)
+	db := c.Conn(ctx, t.L(), c.Spec().NodeCount)
 
 	startTime := timeutil.Now()
 
@@ -1376,10 +1376,12 @@ func runCDCFineGrainedCheckpointingBenchmark(
 	testutils.SucceedsWithin(t, func() error {
 		unique, err := get("/unique")
 		if err != nil {
+			t.L().Printf("error getting unique count: %v", err)
 			return err
 		}
 		dupes, err = get("/dupes")
 		if err != nil {
+			t.L().Printf("error getting dupes count: %v", err)
 			return err
 		}
 		t.L().Printf("sink got %d unique, %d dupes", unique, dupes)
