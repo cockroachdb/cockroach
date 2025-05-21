@@ -8,7 +8,6 @@ package kvstorage
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
@@ -16,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -113,15 +111,14 @@ func CreateUninitializedReplica(
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
 ) error {
+	sl := stateloader.Make(rangeID)
 	// Before creating the replica, see if there is a tombstone which would
 	// indicate that this replica has been removed.
-	tombstoneKey := keys.RangeTombstoneKey(rangeID)
-	var tombstone kvserverpb.RangeTombstone
-	if ok, err := storage.MVCCGetProto(
-		ctx, eng, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
-	); err != nil {
+	// TODO(pav-kv): should also check that there is no existing replica, i.e.
+	// ReplicaID load should find nothing.
+	if ts, err := sl.LoadRangeTombstone(ctx, eng); err != nil {
 		return err
-	} else if ok && replicaID < tombstone.NextReplicaID {
+	} else if replicaID < ts.NextReplicaID {
 		return &kvpb.RaftGroupDeletedError{}
 	}
 
@@ -137,7 +134,6 @@ func CreateUninitializedReplica(
 	//   the Term and Vote values for that older replica in the context of
 	//   this newer replica is harmless since it just limits the votes for
 	//   this replica.
-	sl := stateloader.Make(rangeID)
 	if err := sl.SetRaftReplicaID(ctx, eng, replicaID); err != nil {
 		return err
 	}

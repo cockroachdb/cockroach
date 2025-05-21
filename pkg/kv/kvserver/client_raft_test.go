@@ -3226,16 +3226,10 @@ func TestRaftRemoveRace(t *testing.T) {
 		tc.AddVotersOrFatal(t, key, tc.Target(2))
 
 		// Verify the tombstone key does not exist. See #12130.
-		tombstoneKey := keys.RangeTombstoneKey(desc.RangeID)
-		var tombstone kvserverpb.RangeTombstone
-		if ok, err := storage.MVCCGetProto(
-			ctx, tc.GetFirstStoreFromServer(t, 2).TODOEngine(), tombstoneKey,
-			hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
-		); err != nil {
-			t.Fatal(err)
-		} else if ok {
-			t.Fatal("tombstone should not exist")
-		}
+		ts, err := stateloader.Make(desc.RangeID).LoadRangeTombstone(
+			ctx, tc.GetFirstStoreFromServer(t, 2).StateEngine())
+		require.NoError(t, err)
+		require.Equal(t, kvserverpb.RangeTombstone{}, ts)
 	}
 }
 
@@ -5315,13 +5309,9 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		}
 		ensureNoTombstone := func(t *testing.T, store *kvserver.Store, rangeID roachpb.RangeID) {
 			t.Helper()
-			var tombstone kvserverpb.RangeTombstone
-			tombstoneKey := keys.RangeTombstoneKey(rangeID)
-			ok, err := storage.MVCCGetProto(
-				ctx, store.TODOEngine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
-			)
+			ts, err := stateloader.Make(rangeID).LoadRangeTombstone(ctx, store.StateEngine())
 			require.NoError(t, err)
-			require.False(t, ok)
+			require.Zero(t, ts.NextReplicaID)
 		}
 		getHardState := func(
 			t *testing.T, store *kvserver.Store, rangeID roachpb.RangeID,
