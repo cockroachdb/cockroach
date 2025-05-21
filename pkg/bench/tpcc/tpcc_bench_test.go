@@ -15,9 +15,11 @@ import (
 	"context"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
@@ -121,13 +123,15 @@ func (bm *benchmark) run(b *testing.B) {
 	defer bm.close()
 
 	bm.startCockroach(b)
-	pid, wait := bm.startClient(b)
+	c, output := bm.startClient(b)
 
 	var s synchronizer
-	s.init(pid)
+	s.init(c.Process.Pid)
 
 	// Reset the timer when the client starts running queries.
-	s.wait()
+	if timedOut := s.waitWithTimeout(); timedOut {
+		b.Fatalf("waiting on client timed-out:\n%s", output.String())
+	}
 	b.ResetTimer()
 	s.notify(b)
 
@@ -135,7 +139,9 @@ func (bm *benchmark) run(b *testing.B) {
 	s.wait()
 	b.StopTimer()
 
-	require.NoError(b, wait())
+	if err := c.Wait(); err != nil {
+		b.Fatalf("client failed: %s\n%s\n%s", err, output.String(), output.String())
+	}
 }
 
 func (bm *benchmark) close() {
@@ -169,18 +175,18 @@ func (bm *benchmark) startCockroach(b testing.TB) {
 	bm.closers = append(bm.closers, cleanup)
 }
 
-func (bm *benchmark) startClient(b *testing.B) (pid int, wait func() error) {
-	cmd, output := runClient.
+func (bm *benchmark) startClient(b *testing.B) (c *exec.Cmd, output *synchronizedBuffer) {
+	c, output = runClient.
 		withEnv(nEnvVar, b.N).
 		withEnv(pgurlEnvVar, bm.pgURL).
 		exec(bm.workloadFlags...)
-	if err := cmd.Start(); err != nil {
+	if err := c.Start(); err != nil {
 		b.Fatalf("failed to start client: %s\n%s", err, output.String())
 	}
 	bm.closers = append(bm.closers,
-		func() { _ = cmd.Process.Kill(); _ = cmd.Wait() },
+		func() { _ = c.Process.Kill(); _ = c.Wait() },
 	)
-	return cmd.Process.Pid, cmd.Wait
+	return c, output
 }
 
 type synchronizer struct {
@@ -204,7 +210,11 @@ func (c synchronizer) wait() {
 	<-c.waitCh
 }
 
-func (c synchronizer) notifyAndWait(t testing.TB) {
-	c.notify(t)
-	c.wait()
+func (c synchronizer) waitWithTimeout() (timedOut bool) {
+	select {
+	case <-c.waitCh:
+		return false
+	case <-time.After(5 * time.Second):
+		return true
+	}
 }
