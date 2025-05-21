@@ -478,20 +478,21 @@ func loadSummaryForDimension(
 	if capacity != UnknownCapacity {
 		fractionUsed = float64(load) / float64(capacity)
 	}
-	const (
-		meanFractionSlow         = 0.1
-		meanFractionSlowByteSize = 0.25
-		meanFractionLow          = -0.1
-		meanFractionNoChange     = 0.05
-	)
-	fractionSlow := meanFractionSlow
+	summaryUpperBound := overloadUrgent
 	// Be less aggressive about the ByteSize dimension when the fractionUsed is
 	// low. Rebalancing along too many dimensions results in more thrashing due
 	// to concurrent rebalancing actions by many leaseholders.
-	if dim == ByteSize && capacity != UnknownCapacity && fractionUsed < 0.4 {
-		fractionSlow = meanFractionSlowByteSize
+	if dim == ByteSize && capacity != UnknownCapacity && fractionUsed < 0.5 {
+		summaryUpperBound = loadNormal
 	}
-	if fractionAbove > fractionSlow {
+	// TODO(sumeer): consider adding a summaryUpperBound for small
+	// WriteBandwidth values too.
+	const (
+		meanFractionSlow     = 0.1
+		meanFractionLow      = -0.1
+		meanFractionNoChange = 0.05
+	)
+	if fractionAbove > meanFractionSlow {
 		loadSummary = overloadSlow
 	} else if fractionAbove < meanFractionLow {
 		loadSummary = loadLow
@@ -509,24 +510,24 @@ func loadSummaryForDimension(
 		// on balancing towards the mean usage.
 		if fractionUsed > 0.9 {
 			if meanUtil < fractionUsed {
-				return overloadUrgent
+				return min(summaryUpperBound, overloadUrgent)
 			}
-			return overloadSlow
+			return min(summaryUpperBound, overloadSlow)
 		}
 		// INVARIANT: fractionUsed <= 0.9
 		if fractionUsed > 0.75 {
 			if meanUtil < fractionUsed {
-				return overloadSlow
+				return min(summaryUpperBound, overloadSlow)
 			} else {
-				return loadSummary
+				return min(summaryUpperBound, loadSummary)
 			}
 		}
 		// INVARIANT: fractionUsed <= 0.75
 		if fractionUsed > meanUtil*1.05 {
-			return max(loadSummary, loadNoChange)
+			return min(summaryUpperBound, max(loadSummary, loadNoChange))
 		}
 	}
-	return loadSummary
+	return min(summaryUpperBound, loadSummary)
 }
 
 func highDiskSpaceUtilization(load LoadValue, capacity LoadValue) bool {
