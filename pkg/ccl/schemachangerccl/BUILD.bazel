@@ -3,14 +3,34 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "schemachangerccl",
-    srcs = ["doc.go"],
+    testonly = 1,
+    srcs = [
+        "doc.go",
+        "multiregion_testcluster_factory.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/schemachangerccl",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl/multiregionccl/multiregionccltestutils",
+        "//pkg/jobs",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/schemachanger/scexec",
+        "//pkg/sql/schemachanger/sctest",
+        "//pkg/testutils/serverutils",
+    ],
 )
 
 filegroup(
     name = "end_to_end_ccl_testdata_definitions",
     srcs = glob(["testdata/end_to_end/*/*.definition"]),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "end_to_end_ccl_testdata",
+    srcs = glob(["testdata/end_to_end/**"]),
     visibility = ["//visibility:public"],
 )
 
@@ -32,13 +52,9 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl",
-        "//pkg/ccl/multiregionccl/multiregionccltestutils",
-        "//pkg/jobs",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/sql",
-        "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/sctest",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
@@ -60,10 +76,6 @@ sctest_gen(
     suffix = "_ccl",
     test_data = [":end_to_end_ccl_testdata_definitions"],
     tests = [
-        "BackupRollbacks",
-        "BackupRollbacksMixedVersion",
-        "BackupSuccess",
-        "BackupSuccessMixedVersion",
         "EndToEndSideEffects",
         "ExecuteWithDMLInjection",
         "GenerateSchemaChangeCorpus",
