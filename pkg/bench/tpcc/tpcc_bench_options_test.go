@@ -8,10 +8,6 @@ package tpcc
 import (
 	"fmt"
 	"strings"
-	"testing"
-
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 )
 
 type option interface {
@@ -40,8 +36,6 @@ func (o options) apply(cfg *benchmarkConfig) {
 
 type benchmarkConfig struct {
 	workloadFlags []string
-	argsGenerator serverArgs
-	setupServer   []func(b testing.TB, s serverutils.TestServerInterface)
 }
 
 type workloadFlagOption struct{ name, value string }
@@ -57,25 +51,3 @@ func (w workloadFlagOption) String() string {
 func workloadFlag(name, value string) option {
 	return workloadFlagOption{name: name, value: value}
 }
-
-type serverArgs func(b testing.TB) (_ base.TestServerArgs, cleanup func())
-
-func (s serverArgs) apply(cfg *benchmarkConfig) {
-	cfg.argsGenerator = s
-}
-
-func (s serverArgs) String() string { return "generator" }
-
-func setupServer(fn func(tb testing.TB, s serverutils.TestServerInterface)) option {
-	return setupServerOption{fn}
-}
-
-type setupServerOption struct {
-	fn func(tb testing.TB, s serverutils.TestServerInterface)
-}
-
-func (s setupServerOption) apply(cfg *benchmarkConfig) {
-	cfg.setupServer = append(cfg.setupServer, s.fn)
-}
-
-func (s setupServerOption) String() string { return "setup server" }
