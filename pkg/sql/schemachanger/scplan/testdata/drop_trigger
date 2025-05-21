@@ -13,7 +13,7 @@ CREATE TRIGGER t1_tg_2 AFTER INSERT OR UPDATE ON defaultdb.t1 FOR EACH ROW EXECU
 ops
 DROP TRIGGER t1_tg ON defaultdb.t1;
 ----
-StatementPhase stage 1 of 1 with 2 MutationType ops
+StatementPhase stage 1 of 1 with 3 MutationType ops
   transitions:
     [[Trigger:{DescID: 104, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[TriggerDeps:{DescID: 104, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -22,6 +22,12 @@ StatementPhase stage 1 of 1 with 2 MutationType ops
       Trigger:
         TableID: 104
         TriggerID: 1
+    *scop.UpdateTableBackReferencesInRelations
+      RelationReferences:
+      - id: 104
+        columnids: []
+        indexid: 0
+      TableID: 104
     *scop.RemoveTriggerBackReferencesInRoutines
       BackReferencedTableID: 104
       BackReferencedTriggerID: 1
@@ -34,7 +40,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 2 MutationType ops
+PreCommitPhase stage 2 of 2 with 3 MutationType ops
   transitions:
     [[Trigger:{DescID: 104, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[TriggerDeps:{DescID: 104, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -43,6 +49,12 @@ PreCommitPhase stage 2 of 2 with 2 MutationType ops
       Trigger:
         TableID: 104
         TriggerID: 1
+    *scop.UpdateTableBackReferencesInRelations
+      RelationReferences:
+      - id: 104
+        columnids: []
+        indexid: 0
+      TableID: 104
     *scop.RemoveTriggerBackReferencesInRoutines
       BackReferencedTableID: 104
       BackReferencedTriggerID: 1

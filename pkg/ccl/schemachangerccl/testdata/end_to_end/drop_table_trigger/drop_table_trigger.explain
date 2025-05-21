@@ -50,7 +50,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │         │    ├── PUBLIC → ABSENT  TriggerFunctionCall:{DescID: 104 (t-), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT  TriggerDeps:{DescID: 104 (t-), TriggerID: 1}
  │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 104 (t-)}
- │         └── 52 Mutation operations
+ │         └── 53 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":104}
  │              ├── RemoveObjectParent {"ObjectID":104,"ParentSchemaID":101}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":104}
@@ -74,6 +74,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi...","TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven...","TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerFunc...","TriggerID":1}
+ │              ├── UpdateTableBackReferencesInRelations {"TableID":104}
  │              ├── RemoveTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"t","SchemaID":101}}
@@ -194,7 +195,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │         │    ├── PUBLIC → ABSENT  TriggerFunctionCall:{DescID: 104 (t-), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT  TriggerDeps:{DescID: 104 (t-), TriggerID: 1}
  │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 104 (t-)}
- │         └── 55 Mutation operations
+ │         └── 56 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":104}
  │              ├── RemoveObjectParent {"ObjectID":104,"ParentSchemaID":101}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":104}
@@ -218,6 +219,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi...","TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven...","TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerFunc...","TriggerID":1}
+ │              ├── UpdateTableBackReferencesInRelations {"TableID":104}
  │              ├── RemoveTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"t","SchemaID":101}}

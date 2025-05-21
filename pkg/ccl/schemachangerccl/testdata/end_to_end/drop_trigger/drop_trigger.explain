@@ -10,8 +10,9 @@ Schema change plan for DROP TRIGGER ‹tr› ON ‹defaultdb›.‹t›;
  │         ├── 2 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT Trigger:{DescID: 104 (t), TriggerID: 1}
  │         │    └── PUBLIC → ABSENT TriggerDeps:{DescID: 104 (t), TriggerID: 1}
- │         └── 2 Mutation operations
+ │         └── 3 Mutation operations
  │              ├── RemoveTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
+ │              ├── UpdateTableBackReferencesInRelations {"TableID":104}
  │              └── RemoveTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}
  └── PreCommitPhase
       ├── Stage 1 of 2 in PreCommitPhase
@@ -24,6 +25,7 @@ Schema change plan for DROP TRIGGER ‹tr› ON ‹defaultdb›.‹t›;
            ├── 2 elements transitioning toward ABSENT
            │    ├── PUBLIC → ABSENT Trigger:{DescID: 104 (t), TriggerID: 1}
            │    └── PUBLIC → ABSENT TriggerDeps:{DescID: 104 (t), TriggerID: 1}
-           └── 2 Mutation operations
+           └── 3 Mutation operations
                 ├── RemoveTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
+                ├── UpdateTableBackReferencesInRelations {"TableID":104}
                 └── RemoveTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}

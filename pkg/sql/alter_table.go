@@ -1928,7 +1928,7 @@ func dropColumnImpl(
 			continue
 		}
 		err := params.p.canRemoveDependent(
-			params.ctx, "column", string(t.Column), tableDesc.ParentID, ref, t.DropBehavior,
+			params.ctx, "column", string(t.Column), tableDesc.ID, tableDesc.ParentID, ref, t.DropBehavior,
 		)
 		if err != nil {
 			return nil, err

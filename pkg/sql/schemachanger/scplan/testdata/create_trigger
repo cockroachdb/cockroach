@@ -11,7 +11,7 @@ $$;
 ops
 CREATE TRIGGER t1_tg BEFORE INSERT OR UPDATE OR DELETE ON defaultdb.t1 FOR EACH ROW EXECUTE FUNCTION g();
 ----
-StatementPhase stage 1 of 1 with 8 MutationType ops
+StatementPhase stage 1 of 1 with 9 MutationType ops
   transitions:
     [[Trigger:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
     [[TriggerName:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
@@ -67,9 +67,18 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
       Deps:
         TableID: 104
         TriggerID: 1
-        UsesRelations: []
+        UsesRelations:
+        - id: 104
+          columnids: []
+          indexid: 0
         UsesRoutineIDs:
         - 105
+    *scop.UpdateTableBackReferencesInRelations
+      RelationReferences:
+      - id: 104
+        columnids: []
+        indexid: 0
+      TableID: 104
     *scop.AddTriggerBackReferencesInRoutines
       BackReferencedTableID: 104
       BackReferencedTriggerID: 1
@@ -87,7 +96,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 8 MutationType ops
+PreCommitPhase stage 2 of 2 with 9 MutationType ops
   transitions:
     [[Trigger:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
     [[TriggerName:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
@@ -143,9 +152,18 @@ PreCommitPhase stage 2 of 2 with 8 MutationType ops
       Deps:
         TableID: 104
         TriggerID: 1
-        UsesRelations: []
+        UsesRelations:
+        - id: 104
+          columnids: []
+          indexid: 0
         UsesRoutineIDs:
         - 105
+    *scop.UpdateTableBackReferencesInRelations
+      RelationReferences:
+      - id: 104
+        columnids: []
+        indexid: 0
+      TableID: 104
     *scop.AddTriggerBackReferencesInRoutines
       BackReferencedTableID: 104
       BackReferencedTriggerID: 1

@@ -4379,8 +4379,14 @@ CREATE TRIGGER audit_trigger AFTER INSERT OR UPDATE OR DELETE ON t1 FOR EACH ROW
 statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table t1 drop column j;
 
+statement error pq: unimplemented: ALTER TABLE DROP COLUMN cascade not supported with triggers
+alter table other drop column j cascade;
+
 statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table other drop column j;
+
+statement error pq: unimplemented: ALTER TABLE DROP COLUMN cascade not supported with triggers
+alter table other drop column j cascade;
 
 statement error pq: cannot alter type of column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table t1 alter column j set data type text;
@@ -4388,9 +4394,7 @@ alter table t1 alter column j set data type text;
 statement error pq: cannot alter type of column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table other alter column j set data type text;
 
-# TODO(142370): This should be blocked because the trigger references the table,
-# but we currently don't detect self-dependencies.
-statement ok
+statement error pq: cannot drop index "i1" because trigger "audit_trigger" on table "t1" depends on it
 drop index t1@i1;
 
 statement error pq: cannot drop index "i1" because trigger "audit_trigger" on table "t1" depends on it
@@ -4415,12 +4419,8 @@ statement error pq: cannot drop table other because other objects depend on it
 DROP TABLE other;
 
 # Verify the trigger still works
-# TODO(142370): this fails for now because we were allowed to drop the index earlier.
-statement error pq: while building trigger expression: index "i1" not found
-INSERT INTO t1 VALUES (0,0,0);
-
 statement ok
-create index i1 on t1(k);
+INSERT INTO t1 VALUES (0,0,0);
 
 # This test doesn't run with the legacy schema config because CREATE/DROP
 # trigger isn't implemented there. We enable legacy to run DDL to verify
@@ -4439,29 +4439,41 @@ ALTER TABLE t1 SET (schema_locked = false);
 statement ok
 ALTER TABLE other SET (schema_locked = false);
 
-skipif config local-mixed-24.3
-statement error pq: ALTER COLUMN TYPE is only implemented in the declarative schema changer
+statement error pq: cannot alter type of column "j" because table "t1" depends on it
 alter table t1 alter column j set data type text;
 
 statement error pq: cannot alter type of column "j" because table "t1" depends on it
 alter table other alter column j set data type text;
 
-# TODO(142370): allowed because we don't pick up self-dependencies yet
-statement ok
+statement error pq: cannot rename column "j" because table "t1" depends on it
+alter table t1 rename column j to j2;
+
+statement error pq: cannot rename column "j" because table "t1" depends on it
+alter table other rename column j to j2;
+
+statement error pq: cannot drop column "j" because table "t1" depends on it
 alter table t1 drop column j;
+
+statement error pq: unimplemented: drop column cascade is not supported with triggers
+alter table t1 drop column j cascade;
 
 statement error pq: cannot drop column "j" because table "t1" depends on it
 alter table other drop column j;
 
-# TODO(142370): allowed because we don't pick up self-dependencies yet
-statement ok
+statement error pq: unimplemented: drop column cascade is not supported with triggers
+alter table other drop column j cascade;
+
+statement error pq: cannot drop index "i1" because table "t1" depends on it
 drop index t1@i1;
 
-statement error pq: index "i1" does not exist
+statement error pq: unimplemented: drop index cascade is not supported with triggers
 drop index t1@i1 CASCADE;
 
 statement error pq: cannot drop index "i1" because table "t1" depends on it
 drop index other@i1;
+
+statement error pq: unimplemented: drop index cascade is not supported with triggers
+drop index other@i1 CASCADE;
 
 statement error pq: cannot drop function "f1" because other objects \(\[test.public.t1\]\) still depend on it
 DROP FUNCTION f1;
@@ -4482,8 +4494,7 @@ statement ok
 set use_declarative_schema_changer = $use_decl_sc;
 
 # Verify the trigger still works
-# TODO(142370): this fails because we were wrongly allowed to drop index i1 earlier
-statement error pq: while building trigger expression: index "i1" not found
+statement ok
 INSERT INTO t1(n,k) VALUES (1,1);
 
 statement ok
