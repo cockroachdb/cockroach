@@ -174,6 +174,7 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes >400s under race")
+	skip.UnderDeadlock(t, "skipping as per issue #146428")
 
 	var chunkSize int64 = 100
 	var maxValue = 4000
