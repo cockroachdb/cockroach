@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -230,6 +231,45 @@ func (p *PrivilegeDescriptor) CheckGrantOptions(
 	}
 
 	return true
+}
+
+// Grant adds new privileges to this descriptor for a given list of users.
+func (p *LockedPrivilegeDescriptor) Grant(
+	user username.SQLUsername, privList privilege.List, withGrantOption bool,
+) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	userPriv := p.FindOrCreateUser(user)
+	if privilege.ALL.IsSetIn(userPriv.WithGrantOption) && privilege.ALL.IsSetIn(userPriv.Privileges) {
+		// User already has 'ALL' privilege: no-op.
+		// If userPriv.WithGrantOption has ALL, then userPriv.Privileges must also have ALL.
+		// It is possible however for userPriv.Privileges to have ALL but userPriv.WithGrantOption to not have ALL
+		return
+	}
+
+	if privilege.ALL.IsSetIn(userPriv.Privileges) && !withGrantOption {
+		// A user can hold all privileges but not all grant options.
+		// If a user holds all privileges but withGrantOption is False,
+		// there is nothing left to be done
+		return
+	}
+
+	bits := privList.ToBitField()
+	if privilege.ALL.IsSetIn(bits) {
+		// Granting 'ALL' privilege: overwrite.
+		// TODO(marc): the grammar does not allow it, but we should
+		// check if other privileges are being specified and error out.
+		userPriv.Privileges = privilege.ALL.Mask()
+		if withGrantOption {
+			userPriv.WithGrantOption = privilege.ALL.Mask()
+		}
+		return
+	}
+
+	if withGrantOption {
+		userPriv.WithGrantOption |= bits
+	}
+	userPriv.Privileges |= bits
 }
 
 // Grant adds new privileges to this descriptor for a given list of users.
@@ -504,6 +544,29 @@ func (p PrivilegeDescriptor) Show(
 	return ret, nil
 }
 
+func (p *LockedPrivilegeDescriptor) CheckPrivilege(
+	user username.SQLUsername, priv privilege.Kind,
+) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.Owner() == user {
+		return true
+	}
+	userPriv, ok := p.FindUser(user)
+	if !ok {
+		// User "node" has all privileges.
+		return user.IsNodeUser()
+	}
+
+	if privilege.ALL.IsSetIn(userPriv.Privileges) && priv != privilege.NOSQLLOGIN {
+		// Since NOSQLLOGIN is a "negative" privilege, it's ignored for the ALL
+		// check. It's poor UX for someone with ALL privileges to not be able to
+		// log in.
+		return true
+	}
+	return priv.IsSetIn(userPriv.Privileges)
+}
+
 // CheckPrivilege returns true if 'user' has 'privilege' on this descriptor.
 func (p PrivilegeDescriptor) CheckPrivilege(user username.SQLUsername, priv privilege.Kind) bool {
 	if p.Owner() == user {
@@ -580,4 +643,53 @@ func privilegeObject(
 		return fmt.Sprintf("system %s %q", objectType, objectName)
 	}
 	return fmt.Sprintf("%s %q", objectType, objectName)
+}
+
+type LockedPrivilegeDescriptor struct {
+	PrivilegeDescriptor
+	mu syncutil.RWMutex
+}
+
+type PrivilegeDescriptorInterface interface {
+	Owner() username.SQLUsername
+	FindOrCreateUser(user username.SQLUsername) *UserPrivileges
+	RemoveUser(user username.SQLUsername)
+	CheckGrantOptions(
+		user username.SQLUsername, privList privilege.List,
+	) bool
+	Grant(
+		user username.SQLUsername, privList privilege.List, withGrantOption bool,
+	)
+	Revoke(
+		user username.SQLUsername,
+		privList privilege.List,
+		objectType privilege.ObjectType,
+		grantOptionFor bool,
+	) error
+	ValidateSuperuserPrivileges(
+		parentID catid.DescID,
+		objectType privilege.ObjectType,
+		objectName string,
+		allowedSuperuserPrivileges privilege.List,
+	) error
+	Validate(
+		parentID catid.DescID,
+		objectType privilege.ObjectType,
+		objectName string,
+		allowedSuperuserPrivileges privilege.List,
+	) error
+	IsValidPrivilegesForObjectType(
+		objectType privilege.ObjectType,
+	) (bool, UserPrivileges, uint64, error)
+	Show(
+		objectType privilege.ObjectType, showImplicitOwnerPrivs bool,
+	) ([]UserPrivilege, error)
+	CheckPrivilege(user username.SQLUsername, priv privilege.Kind) bool
+	AnyPrivilege(user username.SQLUsername) bool
+	HasAllPrivileges(
+		user username.SQLUsername, objectType privilege.ObjectType,
+	) (bool, error)
+	SetOwner(owner username.SQLUsername)
+	SetVersion(version PrivilegeDescVersion)
+	FindUser(user username.SQLUsername) (*UserPrivileges, bool)
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -135,8 +136,11 @@ func (p *planner) HasAnyPrivilegeForSpecifier(
 		}
 
 		if priv.GrantOption {
+			lockedDesc := &catpb.LockedPrivilegeDescriptor{
+				PrivilegeDescriptor: *desc.GetPrivileges(),
+			}
 			isGrantable, err := p.CheckGrantOptionsForUser(
-				ctx, desc.GetPrivileges(), desc, []privilege.Kind{priv.Kind}, user,
+				ctx, lockedDesc, desc, []privilege.Kind{priv.Kind}, user,
 			)
 			if err != nil {
 				return eval.HasNoPrivilege, err

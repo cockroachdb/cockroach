@@ -36,7 +36,7 @@ import (
 type Cache struct {
 	settings       *cluster.Settings
 	db             *kv.DB
-	c              *cacheutil.Cache[string, catpb.PrivilegeDescriptor]
+	c              *cacheutil.Cache[string, *catpb.LockedPrivilegeDescriptor]
 	virtualSchemas catalog.VirtualSchemas
 	ief            descs.DB
 	warmed         chan struct{}
@@ -56,7 +56,7 @@ func New(
 		settings:       settings,
 		stopper:        stopper,
 		db:             db,
-		c:              cacheutil.NewCache[string, catpb.PrivilegeDescriptor](account, stopper, 1),
+		c:              cacheutil.NewCache[string, *catpb.LockedPrivilegeDescriptor](account, stopper, 1),
 		virtualSchemas: virtualSchemas,
 		ief:            ief,
 		warmed:         make(chan struct{}),
@@ -65,7 +65,7 @@ func New(
 
 func (c *Cache) Get(
 	ctx context.Context, txn isql.Txn, col *descs.Collection, spo syntheticprivilege.Object,
-) (*catpb.PrivilegeDescriptor, error) {
+) (*catpb.LockedPrivilegeDescriptor, error) {
 	_, desc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), syntheticprivilege.SystemPrivilegesTableName)
 	if err != nil {
 		return nil, err
@@ -75,7 +75,7 @@ func (c *Cache) Get(
 	}
 	found, privileges, retErr := c.getFromCache(ctx, desc.GetVersion(), spo.GetPath())
 	if found {
-		return &privileges, retErr
+		return privileges, retErr
 	}
 
 	// Before we launch a goroutine to go fetch this descriptor, make sure that
@@ -91,18 +91,19 @@ func (c *Cache) Get(
 			}
 			entrySize := int64(len(spo.GetPath())) + computePrivDescSize(privDesc)
 			// Only write back to the cache if the table version is committed.
-			c.c.MaybeWriteBackToCache(ctx, []descpb.DescriptorVersion{desc.GetVersion()}, spo.GetPath(), *privDesc, entrySize)
+			c.c.MaybeWriteBackToCache(ctx, []descpb.DescriptorVersion{desc.GetVersion()}, spo.GetPath(), privDesc, entrySize)
 			return privDesc, nil
 		})
 	if err != nil {
 		return nil, err
 	}
-	return privDesc, nil
+
+	return *privDesc, nil
 }
 
 func (c *Cache) getFromCache(
 	ctx context.Context, version descpb.DescriptorVersion, path string,
-) (bool, catpb.PrivilegeDescriptor, error) {
+) (bool, *catpb.LockedPrivilegeDescriptor, error) {
 	c.c.Lock()
 	defer c.c.Unlock()
 	if isEligibleForCache := c.c.ClearCacheIfStaleLocked(
@@ -113,7 +114,7 @@ func (c *Cache) getFromCache(
 			return true, val, nil
 		}
 	}
-	return false, catpb.PrivilegeDescriptor{}, nil
+	return false, &catpb.LockedPrivilegeDescriptor{}, nil
 }
 
 // synthesizePrivilegeDescriptorFromSystemPrivilegesTable reads from the
@@ -122,7 +123,7 @@ func (c *Cache) getFromCache(
 // resolve the PrivilegeDescriptor from the cache.
 func (c *Cache) readFromStorage(
 	ctx context.Context, txn isql.Txn, spo syntheticprivilege.Object,
-) (_ *catpb.PrivilegeDescriptor, retErr error) {
+) (_ *catpb.LockedPrivilegeDescriptor, retErr error) {
 
 	query := fmt.Sprintf(
 		`SELECT username, privileges, grant_options FROM system.%s WHERE path = $1`,
@@ -278,12 +279,15 @@ func (c *Cache) start(ctx context.Context) error {
 				SchemaName: scName,
 				TableName:  sc.Desc().GetName(),
 			}
-			privDesc := vtablePriv.GetFallbackPrivileges()
+
+			privDesc := &catpb.LockedPrivilegeDescriptor{
+				PrivilegeDescriptor: *vtablePriv.GetFallbackPrivileges(),
+			}
 			if accum, ok := vtablePathToPrivilegeAccumulator[vtablePriv.GetPath()]; ok {
 				privDesc = accum.finish()
 			}
 			entrySize := int64(len(vtablePriv.GetPath())) + computePrivDescSize(privDesc)
-			c.c.MaybeWriteBackToCache(ctx, tableVersions, vtablePriv.GetPath(), *privDesc, entrySize)
+			c.c.MaybeWriteBackToCache(ctx, tableVersions, vtablePriv.GetPath(), privDesc, entrySize)
 		})
 	}
 	return nil
@@ -300,12 +304,25 @@ func (c *Cache) waitForWarmed(ctx context.Context) error {
 
 // computePrivDescSize computes the size in bytes required by the data in this
 // descriptor.
-func computePrivDescSize(privDesc *catpb.PrivilegeDescriptor) int64 {
-	privDescSize := int(unsafe.Sizeof(*privDesc))
-	privDescSize += len(privDesc.OwnerProto)
-	for _, u := range privDesc.Users {
-		privDescSize += int(unsafe.Sizeof(u))
-		privDescSize += len(u.UserProto)
+func computePrivDescSize(privDescInterface catpb.PrivilegeDescriptorInterface) int64 {
+	var privDescSize int64
+
+	switch privDesc := privDescInterface.(type) {
+	case *catpb.PrivilegeDescriptor:
+		privDescSize := int(unsafe.Sizeof(*privDesc))
+		privDescSize += len(privDesc.OwnerProto)
+		for _, u := range privDesc.Users {
+			privDescSize += int(unsafe.Sizeof(u))
+			privDescSize += len(u.UserProto)
+		}
+	case *catpb.LockedPrivilegeDescriptor:
+		privDescSize := int(unsafe.Sizeof(*privDesc))
+		privDescSize += len(privDesc.OwnerProto)
+		for _, u := range privDesc.Users {
+			privDescSize += int(unsafe.Sizeof(u))
+			privDescSize += len(u.UserProto)
+		}
 	}
-	return int64(privDescSize)
+
+	return privDescSize
 }

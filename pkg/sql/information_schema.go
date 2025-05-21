@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -408,11 +409,23 @@ https://www.postgresql.org/docs/9.5/infoschema-column-privileges.html`,
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(sc.GetName())
 			columndata := privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE} // privileges for column level granularity
-			privDesc, err := p.getPrivilegeDescriptor(ctx, table)
+			privDescInterface, err := p.getPrivilegeDescriptor(ctx, table)
 			if err != nil {
 				return err
 			}
-			for _, u := range privDesc.Users {
+
+			// Handle both PrivilegeDescriptor and LockedPrivilegeDescriptor types
+			var users []catpb.UserPrivileges
+			switch privDesc := privDescInterface.(type) {
+			case *catpb.LockedPrivilegeDescriptor:
+				users = privDesc.Users
+			case *catpb.PrivilegeDescriptor:
+				users = privDesc.Users
+			default:
+				return errors.AssertionFailedf("unexpected privilege descriptor type: %T", privDescInterface)
+			}
+
+			for _, u := range users {
 				for _, priv := range columndata {
 					if priv.Mask()&u.Privileges != 0 {
 						for _, cd := range table.PublicColumns() {
@@ -1203,10 +1216,13 @@ var informationSchemaTypePrivilegesTable = virtualSchemaTable{
 					for _, u := range privs {
 						userNameStr := tree.NewDString(u.User.Normalized())
 						for _, priv := range u.Privileges {
+							lockedPrivDesc := &catpb.LockedPrivilegeDescriptor{
+								PrivilegeDescriptor: *typeDesc.GetPrivileges(),
+							}
 							// We use this function to check for the grant option so that the
 							// object owner also gets is_grantable=true.
 							isGrantable, err := p.CheckGrantOptionsForUser(
-								ctx, typeDesc.GetPrivileges(), typeDesc, []privilege.Kind{priv.Kind}, u.User,
+								ctx, lockedPrivDesc, typeDesc, []privilege.Kind{priv.Kind}, u.User,
 							)
 							if err != nil {
 								return err
@@ -1249,10 +1265,13 @@ var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 					for _, u := range privs {
 						userNameStr := tree.NewDString(u.User.Normalized())
 						for _, priv := range u.Privileges {
+							lockedPrivDesc := &catpb.LockedPrivilegeDescriptor{
+								PrivilegeDescriptor: *sc.GetPrivileges(),
+							}
 							// We use this function to check for the grant option so that the
 							// object owner also gets is_grantable=true.
 							isGrantable, err := p.CheckGrantOptionsForUser(
-								ctx, sc.GetPrivileges(), sc, []privilege.Kind{priv.Kind}, u.User,
+								ctx, lockedPrivDesc, sc, []privilege.Kind{priv.Kind}, u.User,
 							)
 							if err != nil {
 								return err
@@ -1627,9 +1646,25 @@ func populateTablePrivileges(
 					if err != nil {
 						return err
 					}
-					isGrantable, err := p.CheckGrantOptionsForUser(
-						ctx, privs, table, []privilege.Kind{priv.Kind}, u.User,
-					)
+
+					// Handle both PrivilegeDescriptor and LockedPrivilegeDescriptor types
+					var isGrantable bool
+					switch privDesc := privs.(type) {
+					case *catpb.LockedPrivilegeDescriptor:
+						isGrantable, err = p.CheckGrantOptionsForUser(
+							ctx, privDesc, table, []privilege.Kind{priv.Kind}, u.User,
+						)
+					case *catpb.PrivilegeDescriptor:
+						// For regular PrivilegeDescriptor, we need to wrap it in LockedPrivilegeDescriptor
+						lockedPrivDesc := &catpb.LockedPrivilegeDescriptor{
+							PrivilegeDescriptor: *privDesc,
+						}
+						isGrantable, err = p.CheckGrantOptionsForUser(
+							ctx, lockedPrivDesc, table, []privilege.Kind{priv.Kind}, u.User,
+						)
+					default:
+						return errors.AssertionFailedf("unexpected privilege descriptor type: %T", privs)
+					}
 					if err != nil {
 						return err
 					}
@@ -1918,10 +1953,13 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 					for _, u := range privs {
 						userNameStr := tree.NewDString(u.User.Normalized())
 						for _, priv := range u.Privileges {
+							lockedPrivDesc := &catpb.LockedPrivilegeDescriptor{
+								PrivilegeDescriptor: *fn.GetPrivileges(),
+							}
 							// We use this function to check for the grant option so that the
 							// object owner also gets is_grantable=true.
 							isGrantable, err := p.CheckGrantOptionsForUser(
-								ctx, fn.GetPrivileges(), sc, []privilege.Kind{priv.Kind}, u.User,
+								ctx, lockedPrivDesc, sc, []privilege.Kind{priv.Kind}, u.User,
 							)
 							if err != nil {
 								return err

@@ -267,8 +267,11 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 					}
 				}
 			}
+			lockedDescriptor := &catpb.LockedPrivilegeDescriptor{
+				PrivilegeDescriptor: *descriptor.GetPrivileges(),
+			}
 
-			err := p.MustCheckGrantOptionsForUser(ctx, descriptor.GetPrivileges(), descriptor, n.desiredprivs, p.User(), n.isGrant)
+			err := p.MustCheckGrantOptionsForUser(ctx, lockedDescriptor, descriptor, n.desiredprivs, p.User(), n.isGrant)
 			if err != nil {
 				return err
 			}
