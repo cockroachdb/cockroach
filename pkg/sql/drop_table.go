@@ -235,6 +235,11 @@ func (p *planner) dropTableImpl(
 	if catalog.HasConcurrentDeclarativeSchemaChange(tableDesc) {
 		return nil, scerrors.ConcurrentSchemaChangeError(tableDesc)
 	}
+	// Early out if the table is already dropped. This can happen during a cascade
+	// with a trigger.
+	if tableDesc.Dropped() {
+		return droppedViews, nil
+	}
 	// Remove foreign key back references from tables that this table has foreign
 	// keys to.
 	// Copy out the set of outbound fks as it may be overwritten in the loop.
@@ -311,9 +316,25 @@ func (p *planner) dropTableImpl(
 
 		switch t := depDesc.(type) {
 		case *tabledesc.Mutable:
-			cascadedViews, err := p.dropViewImpl(ctx, t, !droppingParent, "dropping dependent view", tree.DropCascade)
-			if err != nil {
-				return droppedViews, err
+			var cascadedViews []string
+			if t.IsTable() {
+				// We can cascade and drop another table if there is a trigger that uses
+				// the table we are dropping, and the trigger is defined on another table.
+				// We should only get in here for DROP DATABASE or SCHEMA.
+				//if !droppingParent {
+				//	return droppedViews,
+				//		errors.AssertionFailedf("drop %q cascades drop to another table %q, but not dropping database or schema",
+				//			tableDesc.Name, t.Name)
+				//}
+				cascadedViews, err = p.dropTableImpl(ctx, t, !droppingParent, "dropping dependent table", tree.DropCascade)
+				if err != nil {
+					return droppedViews, err
+				}
+			} else {
+				cascadedViews, err = p.dropViewImpl(ctx, t, !droppingParent, "dropping dependent view", tree.DropCascade)
+				if err != nil {
+					return droppedViews, err
+				}
 			}
 
 			qualifiedView, err := p.getQualifiedTableName(ctx, t)

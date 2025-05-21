@@ -42,7 +42,7 @@ CREATE TRIGGER foo BEFORE INSERT OR UPDATE ON shipments FOR EACH ROW EXECUTE FUN
 ops
 DROP TABLE defaultdb.shipments CASCADE;
 ----
-StatementPhase stage 1 of 1 with 141 MutationType ops
+StatementPhase stage 1 of 1 with 142 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -449,6 +449,12 @@ StatementPhase stage 1 of 1 with 141 MutationType ops
       DescID: 109
       ElementType: scpb.TriggerFunctionCall
       TriggerID: 1
+    *scop.UpdateTableBackReferencesInRelations
+      RelationReferences:
+      - id: 109
+        columnids: []
+        indexid: 0
+      TableID: 109
     *scop.UpdateTableBackReferencesInTypes
       BackReferencedTableID: 109
       TypeIDs:
@@ -751,7 +757,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 152 MutationType ops
+PreCommitPhase stage 2 of 2 with 153 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -1158,6 +1164,12 @@ PreCommitPhase stage 2 of 2 with 152 MutationType ops
       DescID: 109
       ElementType: scpb.TriggerFunctionCall
       TriggerID: 1
+    *scop.UpdateTableBackReferencesInRelations
+      RelationReferences:
+      - id: 109
+        columnids: []
+        indexid: 0
+      TableID: 109
     *scop.UpdateTableBackReferencesInTypes
       BackReferencedTableID: 109
       TypeIDs:
