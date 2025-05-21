@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"
@@ -154,16 +153,13 @@ func (bm *benchmark) startCockroach(b testing.TB) {
 	args, cleanup := bm.argsGenerator(b)
 	bm.closers = append(bm.closers, cleanup)
 
-	s, db, _ := serverutils.StartServer(b, args)
+	s, _, _ := serverutils.StartServer(b, args)
 	bm.closers = append(bm.closers, func() {
 		s.Stopper().Stop(context.Background())
 	})
 
 	for _, fn := range bm.setupServer {
 		fn(b, s)
-	}
-	for _, stmt := range bm.setupStmts {
-		sqlutils.MakeSQLRunner(db).Exec(b, stmt)
 	}
 
 	pgURL, cleanup, err := pgurlutils.PGUrlE(
