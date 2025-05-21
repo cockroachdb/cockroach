@@ -22,13 +22,14 @@ Schema change plan for rolling back CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR
       │    │    ├── PUBLIC → ABSENT TriggerEvents:{DescID: 104 (t), TriggerID: 1}
       │    │    ├── PUBLIC → ABSENT TriggerFunctionCall:{DescID: 104 (t), TriggerID: 1}
       │    │    └── PUBLIC → ABSENT TriggerDeps:{DescID: 104 (t), TriggerID: 1}
-      │    └── 10 Mutation operations
+      │    └── 11 Mutation operations
       │         ├── RemoveTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
       │         ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerName","TriggerID":1}
       │         ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEnab...","TriggerID":1}
       │         ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi...","TriggerID":1}
       │         ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven...","TriggerID":1}
       │         ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerFunc...","TriggerID":1}
+      │         ├── UpdateTableBackReferencesInRelations {"TableID":104}
       │         ├── RemoveTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
