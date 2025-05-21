@@ -986,65 +986,6 @@ func testTxnCoordSenderTxnUpdatedOnError(t *testing.T, isoLevel isolation.Level)
 	}
 }
 
-// TestWTOBitTerminatedOnErrorResponses is a regression test for #85711. It
-// ensures that when batch request errors have the WTO bit set, subsequent
-// request don't carry that bit (something that's asserted on in client-side
-// interceptors).
-func TestWTOBitTerminatedOnErrorResponses(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-
-	keyA := roachpb.Key("a")
-	keyB := roachpb.Key("b")
-
-	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-
-	// Split to ensure batch requests get split through the distsender.
-	require.NoError(t, db.AdminSplit(
-		ctx,
-		keyB,             /* splitKey */
-		hlc.MaxTimestamp, /* expirationTime */
-	))
-
-	// Write a key that the txn-al CPut below doesn't expect, failing the batch
-	// request.
-	require.NoError(t, db.Put(ctx, keyB, []byte("b-unexpected")))
-
-	txn := db.NewTxn(ctx, "root")
-
-	// Read a key to pin the read timestamp. We'll use it to trigger to WTO
-	// error below.
-	b0 := txn.NewBatch()
-	b0.Get(keyB)
-	require.NoError(t, txn.Run(ctx, b0))
-
-	// Write to keyA out-of-band to induce a WTO condition in the txn-al Put
-	// below.
-	require.NoError(t, db.Put(ctx, keyA, "a-unexpected"))
-
-	// Send a batch (as part of a leaf txn) that will be split into two
-	// sub-batches: [Put(a), CPut(b, nil)]. Put(a) should observe the WTO bit
-	// set in the batch response, whereas the CPut induces an error response.
-	// Since these are two separate requests, the error response is combined
-	// with the batch request such that the error itself has the WTO bit set. In
-	// #85711 we observed that the bit was not terminated on the client side,
-	// and subsequent requests were issued with the WTO bit set, which tripped
-	// up assertions.
-	b1 := txn.NewBatch()
-	b1.Put(keyA, "a")
-	b1.CPut(keyB, "b", nil /* expValue */)
-	require.True(t, testutils.IsError(txn.Run(ctx, b1), "unexpected value"))
-	require.False(t, txn.TestingCloneTxn().WriteTooOld) // WTO bit is terminated
-
-	b2 := txn.NewBatch()
-	b2.Put(keyB, "b")
-	require.NoError(t, txn.Run(ctx, b2))
-	require.False(t, txn.TestingCloneTxn().WriteTooOld) // WTO bit is terminated
-	require.NoError(t, txn.Commit(ctx))
-}
-
 // TestTxnMultipleCoord checks that multiple txn coordinators can be
 // used for reads by a single transaction, and their state can be combined.
 func TestTxnMultipleCoord(t *testing.T) {

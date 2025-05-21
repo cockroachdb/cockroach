@@ -14,7 +14,7 @@ put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 
 put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20 Replicated Intent []}
 put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=25 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=25} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=25} lock=true stat=PENDING rts=50.000000000,0 gul=0,0
 meta: "k"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=25} ts=50.000000000,0 del=false klen=12 vlen=19 ih={{15 {localTs=15.000000000,0}/BYTES/a}{20 {localTs=20.000000000,0}/BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/50.000000000,0 -> {localTs=25.000000000,0}/BYTES/c
 
@@ -32,7 +32,7 @@ get: "k" -> /BYTES/b @50.000000000,0
 resolve_intent: "k" -> resolved key = true
 get: "k" -> /BYTES/b @50.000000000,0
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=25} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=25} lock=true stat=PENDING rts=50.000000000,0 gul=0,0 isn=1
 meta: "k"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=19 ih={{15 {localTs=15.000000000,0}/BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/50.000000000,0 -> {localTs=20.000000000,0}/BYTES/b
 
@@ -47,5 +47,5 @@ with t=A
 ----
 resolve_intent: "k" -> resolved key = true
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=25} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=25} lock=true stat=PENDING rts=50.000000000,0 gul=0,0 isn=1
 data: "k"/50.000000000,0 -> {localTs=15.000000000,0}/BYTES/a

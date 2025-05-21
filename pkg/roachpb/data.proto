@@ -133,7 +133,7 @@ message SplitTrigger {
   // UseEstimatesBecauseExternalBytesArePresent is true if we should consider estimating MVCC
   // stats when calculating them in the splitTrigger.
   bool use_estimates_because_external_bytes_are_present = 7;
-  
+
   // ManualSplit indicates that this split is manually triggered via an AdminSplitRequest by a sql client.
   bool manualSplit = 8;
 }
@@ -449,35 +449,7 @@ message Transaction {
   // slice should be treated as immutable and all updates should be performed
   // on a copy of the slice.
   repeated ObservedTimestamp observed_timestamps = 8 [(gogoproto.nullable) = false];
-  // If set, a write performed by the transaction could not be performed at the
-  // transaction's read timestamp because a newer value was present. Had our
-  // write been performed, it would have overwritten the other value even though
-  // that value might not have been read by a previous read in the transaction
-  // (i.e. lost update anomaly). The write is still performed, but this flag is
-  // set and the txn's write timestamp is bumped, so the client will not be able
-  // to commit without performing a refresh.
-  //
-  // Since 20.1, errors do not carry this flag; only successful BatchResponses
-  // do. When possible, such a BatchResponse is preferred to a WriteTooOldError
-  // because the former leaves intents behind to act as locks.
-  //
-  // On the client, the txnSpanRefresher terminates this flag by refreshing
-  // eagerly when the flag is set. If the key that generated the write too old
-  // condition had been previously read by the transaction, a refresh of the
-  // transaction's read span will surely fail. The client is not currently smart
-  // enough to avoid hopeless refreshes, though.
-  //
-  // Historically, this field was also important for SNAPSHOT transactions which
-  // could commit in other situations when the write timestamp is bumped, but
-  // not when this flag is set (since lost updates cannot be tolerated even in
-  // SNAPSHOT). In SERIALIZABLE isolation, transactions generally don't commit
-  // with a bumped write timestamp, so this flag is only telling us that a
-  // refresh is less likely to succeed than in other cases where
-  // ReadTimestamp != WriteTimestamp.
-  //
-  // TODO(nvanbenschoten): this flag is no longer assigned by v23.2 nodes.
-  // Remove it when compatibility with v23.1 nodes is no longer a concern.
-  bool write_too_old = 12;
+
   // Set of spans that the transaction has acquired locks within. These are
   // spans which must be resolved on txn completion. Note that these spans
   // may be condensed to cover aggregate spans if the keys locked by the
@@ -493,6 +465,7 @@ message Transaction {
   // treated as immutable and all updates should be performed on a copy
   // of the slice.
   repeated Span lock_spans = 11 [(gogoproto.nullable) = false];
+
   // Set of in-flight intent writes that have been issued by the transaction but
   // which may not have succeeded yet. If any in-flight writes are provided, a
   // committing EndTxn request will move a PENDING transaction to the STAGING
@@ -534,7 +507,7 @@ message Transaction {
   // choose which writes are exported on a per-transaction basis.
   bool omit_in_rangefeeds = 20;
 
-  reserved 3, 6, 9, 13, 14;
+  reserved 3, 6, 9, 12, 13, 14;
 }
 
 // A TransactionRecord message contains the subset of the fields in a

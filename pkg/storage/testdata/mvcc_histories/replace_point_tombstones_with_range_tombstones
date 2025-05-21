@@ -49,7 +49,7 @@ put: lock acquisition = {f id=00000001 key=/Min iso=Serializable pri=0.00000000 
 del: "g": found key false
 del: lock acquisition = {g id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 gul=0,0
 rangekey: {h-o}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
 data: "b"/1.000000000,0 -> /BYTES/b1
 data: "c"/1.000000000,0 -> /<empty>
@@ -149,7 +149,7 @@ put: lock acquisition = {f id=00000002 key=/Min iso=Serializable pri=0.00000000 
 del: "g": found key false
 del: lock acquisition = {g id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 gul=0,0
 rangekey: {h-o}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
 data: "b"/1.000000000,0 -> /BYTES/b1
 data: "c"/1.000000000,0 -> /<empty>

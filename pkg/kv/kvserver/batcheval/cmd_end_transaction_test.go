@@ -63,46 +63,30 @@ func TestIsEndTxnTriggeringRetryError(t *testing.T) {
 
 	tests := []struct {
 		txnIsoLevel             isolation.Level
-		txnWriteTooOld          bool
 		txnWriteTimestampPushed bool
 		txnExceedingDeadline    bool
 
 		expRetry  bool
 		expReason kvpb.TransactionRetryReason
 	}{
-		{isolation.Serializable, false, false, false, false, 0},
-		{isolation.Serializable, false, false, true, true, kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED},
-		{isolation.Serializable, false, true, false, true, kvpb.RETRY_SERIALIZABLE},
-		{isolation.Serializable, false, true, true, true, kvpb.RETRY_SERIALIZABLE},
-		{isolation.Serializable, true, false, false, true, kvpb.RETRY_WRITE_TOO_OLD},
-		{isolation.Serializable, true, false, true, true, kvpb.RETRY_WRITE_TOO_OLD},
-		{isolation.Serializable, true, true, false, true, kvpb.RETRY_WRITE_TOO_OLD},
-		{isolation.Serializable, true, true, true, true, kvpb.RETRY_WRITE_TOO_OLD},
-		{isolation.Snapshot, false, false, false, false, 0},
-		{isolation.Snapshot, false, false, true, true, kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED},
-		{isolation.Snapshot, false, true, false, false, 0},
-		{isolation.Snapshot, false, true, true, true, kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED},
-		{isolation.Snapshot, true, false, false, true, kvpb.RETRY_WRITE_TOO_OLD},
-		{isolation.Snapshot, true, false, true, true, kvpb.RETRY_WRITE_TOO_OLD},
-		{isolation.Snapshot, true, true, false, true, kvpb.RETRY_WRITE_TOO_OLD},
-		{isolation.Snapshot, true, true, true, true, kvpb.RETRY_WRITE_TOO_OLD},
-		{isolation.ReadCommitted, false, false, false, false, 0},
-		{isolation.ReadCommitted, false, false, true, true, kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED},
-		{isolation.ReadCommitted, false, true, false, false, 0},
-		{isolation.ReadCommitted, false, true, true, true, kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED},
-		{isolation.ReadCommitted, true, false, false, true, kvpb.RETRY_WRITE_TOO_OLD},
-		{isolation.ReadCommitted, true, false, true, true, kvpb.RETRY_WRITE_TOO_OLD},
-		{isolation.ReadCommitted, true, true, false, true, kvpb.RETRY_WRITE_TOO_OLD},
-		{isolation.ReadCommitted, true, true, true, true, kvpb.RETRY_WRITE_TOO_OLD},
+		{isolation.Serializable, false, false, false, 0},
+		{isolation.Serializable, false, true, true, kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED},
+		{isolation.Serializable, true, false, true, kvpb.RETRY_SERIALIZABLE},
+		{isolation.Serializable, true, true, true, kvpb.RETRY_SERIALIZABLE},
+		{isolation.Snapshot, false, false, false, 0},
+		{isolation.Snapshot, false, true, true, kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED},
+		{isolation.Snapshot, true, false, false, 0},
+		{isolation.Snapshot, true, true, true, kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED},
+		{isolation.ReadCommitted, false, false, false, 0},
+		{isolation.ReadCommitted, false, true, true, kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED},
+		{isolation.ReadCommitted, true, false, false, 0},
+		{isolation.ReadCommitted, true, true, true, kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED},
 	}
 	for _, tt := range tests {
-		name := fmt.Sprintf("iso=%s/wto=%t/pushed=%t/deadline=%t",
-			tt.txnIsoLevel, tt.txnWriteTooOld, tt.txnWriteTimestampPushed, tt.txnExceedingDeadline)
+		name := fmt.Sprintf("iso=%s/pushed=%t/deadline=%t",
+			tt.txnIsoLevel, tt.txnWriteTimestampPushed, tt.txnExceedingDeadline)
 		t.Run(name, func(t *testing.T) {
 			txn := roachpb.MakeTransaction("test", nil, tt.txnIsoLevel, 0, hlc.Timestamp{WallTime: 10}, 0, 1, 0, false /* omitInRangefeeds */)
-			if tt.txnWriteTooOld {
-				txn.WriteTooOld = true
-			}
 			if tt.txnWriteTimestampPushed {
 				txn.WriteTimestamp = txn.WriteTimestamp.Add(1, 0)
 			}
@@ -580,59 +564,6 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			}(),
 		},
 		{
-			// The transaction has run into a WriteTooOld error during its
-			// lifetime. The stage will be rejected.
-			name: "record missing, can create, try stage after write too old",
-			// Replica state.
-			existingTxn:  nil,
-			canCreateTxn: true,
-			// Request state.
-			headerTxn: func() *roachpb.Transaction {
-				clone := txn.Clone()
-				clone.WriteTooOld = true
-				return clone
-			}(),
-			commit:         true,
-			inFlightWrites: writes,
-			// Expected result.
-			expError: "TransactionRetryError: retry txn (RETRY_WRITE_TOO_OLD)",
-		},
-		{
-			// The transaction has run into a WriteTooOld error during its
-			// lifetime. The commit will be rejected.
-			name: "record missing, can create, try commit after write too old",
-			// Replica state.
-			existingTxn:  nil,
-			canCreateTxn: true,
-			// Request state.
-			headerTxn: func() *roachpb.Transaction {
-				clone := txn.Clone()
-				clone.WriteTooOld = true
-				return clone
-			}(),
-			commit: true,
-			// Expected result.
-			expError: "TransactionRetryError: retry txn (RETRY_WRITE_TOO_OLD)",
-		},
-		{
-			// The transaction has run into a WriteTooOld error during its
-			// lifetime. The prepare will be rejected.
-			name: "record missing, can create, try prepare after write too old",
-			// Replica state.
-			existingTxn:  nil,
-			canCreateTxn: true,
-			// Request state.
-			headerTxn: func() *roachpb.Transaction {
-				clone := txn.Clone()
-				clone.WriteTooOld = true
-				return clone
-			}(),
-			commit:  true,
-			prepare: true,
-			// Expected result.
-			expError: "TransactionRetryError: retry txn (RETRY_WRITE_TOO_OLD)",
-		},
-		{
 			// Standard case where a transaction is rolled back. The record
 			// already exists because it has been heartbeated.
 			name: "record pending, try rollback",
@@ -880,56 +811,6 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 				record.WriteTimestamp.Forward(ts2)
 				return &record
 			}(),
-		},
-		{
-			// The transaction has run into a WriteTooOld error during its
-			// lifetime. The stage will be rejected.
-			name: "record pending, try stage after write too old",
-			// Replica state.
-			existingTxn: pendingRecord,
-			// Request state.
-			headerTxn: func() *roachpb.Transaction {
-				clone := txn.Clone()
-				clone.WriteTooOld = true
-				return clone
-			}(),
-			commit:         true,
-			inFlightWrites: writes,
-			// Expected result.
-			expError: "TransactionRetryError: retry txn (RETRY_WRITE_TOO_OLD)",
-		},
-		{
-			// The transaction has run into a WriteTooOld error during its
-			// lifetime. The commit will be rejected.
-			name: "record pending, try commit after write too old",
-			// Replica state.
-			existingTxn: pendingRecord,
-			// Request state.
-			headerTxn: func() *roachpb.Transaction {
-				clone := txn.Clone()
-				clone.WriteTooOld = true
-				return clone
-			}(),
-			commit: true,
-			// Expected result.
-			expError: "TransactionRetryError: retry txn (RETRY_WRITE_TOO_OLD)",
-		},
-		{
-			// The transaction has run into a WriteTooOld error during its
-			// lifetime. The prepare will be rejected.
-			name: "record pending, try prepare after write too old",
-			// Replica state.
-			existingTxn: pendingRecord,
-			// Request state.
-			headerTxn: func() *roachpb.Transaction {
-				clone := txn.Clone()
-				clone.WriteTooOld = true
-				return clone
-			}(),
-			commit:  true,
-			prepare: true,
-			// Expected result.
-			expError: "TransactionRetryError: retry txn (RETRY_WRITE_TOO_OLD)",
 		},
 		{
 			// Standard case where a transaction is rolled back after it has

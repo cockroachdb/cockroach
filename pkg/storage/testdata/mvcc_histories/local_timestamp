@@ -291,7 +291,7 @@ stats: key_count=+1 key_bytes=+16 val_count=+1 val_bytes=+67 live_count=+1 live_
 put: lock acquisition = {k12 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
 stats: key_count=+1 key_bytes=+16 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+83 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 gul=0,0
 meta: "k1"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k1"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
 meta: "k10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -324,7 +324,7 @@ with t=A
   txn_advance ts=30
 ----
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=20.000000000,0 gul=0,0
 
 run stats ok
 with t=A localTs=20
@@ -457,7 +457,7 @@ stats: val_bytes=-73 live_bytes=-73 intent_count=-1 intent_bytes=-32 lock_count=
 resolve_intent: "k12" -> resolved key = true
 stats: val_bytes=-86 live_bytes=-86 intent_count=-1 intent_bytes=-32 lock_count=-1 lock_age=-70
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=20.000000000,0 gul=0,0
 data: "k10"/40.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
 data: "k11"/40.000000000,0 -> {localTs=30.000000000,0}/BYTES/v2
 data: "k12"/40.000000000,0 -> /BYTES/v2
