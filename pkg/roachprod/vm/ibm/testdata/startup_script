@@ -93,10 +93,14 @@ if [ -e /mnt/data1/.roachprod-initialized ]; then
 	exit 0
 fi
 
+
+
+
 # Uninstall some packages to prevent them running cronjobs and similar jobs in parallel
 systemctl stop unattended-upgrades
 sudo rm -rf /var/log/unattended-upgrades
 apt-get purge -y unattended-upgrades
+
 
 
 

@@ -160,6 +160,7 @@ fi
 # Initialize disks and write fstab entries.
 setup_disks true
 
+{{ template "unattended_upgrades" . }}
 {{ template "ulimits" . }}
 {{ template "tcpdump" . }}
 {{ template "keepalives" . }}

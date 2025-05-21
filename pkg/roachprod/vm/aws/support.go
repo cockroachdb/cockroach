@@ -147,6 +147,7 @@ function setup_disks() {
 }
 
 {{ template "head_utils" . }}
+{{ template "unattended_upgrades" . }}
 {{ template "apt_packages" . }}
 
 # Initialize disks.
