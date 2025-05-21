@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,6 +74,17 @@ func TestInternalRunClient(t *testing.T) {
 	ql := makeQueryLoad(t, pgURL)
 	defer func() { _ = ql.Close(context.Background()) }()
 	require.True(t, ok)
+
+	conn, err := pgx.Connect(context.Background(), pgURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close(context.Background()) }()
+
+	// Verify the TPC-C database exists.
+	if _, err := conn.Exec(context.Background(), "USE "+databaseName); err != nil {
+		t.Fatal(databaseName + " database does not exist")
+	}
 
 	// Send a signal to the parent process and wait for an ack before
 	// running queries.
