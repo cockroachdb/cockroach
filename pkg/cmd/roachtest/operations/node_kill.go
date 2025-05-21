@@ -102,13 +102,11 @@ func runNodeKill(
 	}
 
 	// Schedule the cleanup instead of returning it
-	go func() {
-		cleanup := cleanupNodeKill{
-			nodes:    node,
-			downtime: downtime,
-		}
-		cleanup.Cleanup(ctx, o, c)
-	}()
+	cleanup := cleanupNodeKill{
+		nodes:    node,
+		downtime: downtime,
+	}
+	cleanup.Cleanup(ctx, o, c)
 
 	// return nil to avoid the hardcoded 5s + random [0s, 24h] wait
 	return nil
