@@ -3867,7 +3867,7 @@ func TestReplicaTombstone(t *testing.T) {
 				repl, err := store.GetReplica(desc.RangeID)
 				require.NoError(t, err)
 				require.NoError(t, store.ManualReplicaGC(repl))
-				tombstone := waitForTombstone(t, store.TODOEngine(), rangeID)
+				tombstone := waitForTombstone(t, store.StateEngine(), rangeID)
 				require.Equal(t, roachpb.ReplicaID(4), tombstone.NextReplicaID)
 			})
 			// This case also detects the tombstone for nodes which processed the merge.
@@ -4135,14 +4135,14 @@ func TestReplicaTombstone(t *testing.T) {
 					if err != nil {
 						return err
 					}
-					tombstoneKey := keys.RangeTombstoneKey(rhsDesc.RangeID)
-					ok, err := storage.MVCCGetProto(
-						context.Background(), store.TODOEngine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
+					ts, err := stateloader.Make(rhsDesc.RangeID).LoadRangeTombstone(
+						context.Background(), store.StateEngine(),
 					)
 					require.NoError(t, err)
-					if !ok {
+					if ts.NextReplicaID == 0 {
 						return errors.New("no tombstone found")
 					}
+					tombstone = ts
 					return nil
 				})
 				require.Equal(t, roachpb.ReplicaID(math.MaxInt32), tombstone.NextReplicaID)
