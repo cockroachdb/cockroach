@@ -86,8 +86,7 @@ func BenchmarkTPCC(b *testing.B) {
 
 type benchmark struct {
 	benchmarkConfig
-	pgURL   string
-	closers []func()
+	pgURL string
 }
 
 func newBenchmark(opts ...options) *benchmark {
@@ -99,8 +98,6 @@ func newBenchmark(opts ...options) *benchmark {
 }
 
 func (bm *benchmark) run(b *testing.B, storeDir string) {
-	defer bm.close()
-
 	closeServer := bm.startCockroach(b, storeDir)
 	defer closeServer()
 	c, output := bm.startClient(b)
@@ -121,12 +118,6 @@ func (bm *benchmark) run(b *testing.B, storeDir string) {
 
 	if err := c.Wait(); err != nil {
 		b.Fatalf("client failed: %s\n%s\n%s", err, output.String(), output.String())
-	}
-}
-
-func (bm *benchmark) close() {
-	for i := len(bm.closers) - 1; i >= 0; i-- {
-		bm.closers[i]()
 	}
 }
 
@@ -172,9 +163,6 @@ func (bm *benchmark) startClient(b *testing.B) (c *exec.Cmd, output *synchronize
 	if err := c.Start(); err != nil {
 		b.Fatalf("failed to start client: %s\n%s", err, output.String())
 	}
-	bm.closers = append(bm.closers,
-		func() { _ = c.Process.Kill(); _ = c.Wait() },
-	)
 	return c, output
 }
 
