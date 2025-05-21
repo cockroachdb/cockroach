@@ -774,35 +774,6 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		return tc, rangeID
 	}
 
-	waitForInitialCheckpointAcrossSpan := func(
-		t *testing.T, stream *testStream, streamErrC <-chan error, span roachpb.Span,
-	) {
-		t.Helper()
-		var events []*kvpb.RangeFeedEvent
-		testutils.SucceedsSoon(t, func() error {
-			if len(streamErrC) > 0 {
-				// Break if the error channel is already populated.
-				return nil
-			}
-			events = stream.Events()
-			if len(events) < 1 {
-				return errors.Errorf("too few events: %v", events)
-			}
-			return nil
-		})
-		if len(streamErrC) > 0 {
-			t.Fatalf("unexpected error from stream: %v", <-streamErrC)
-		}
-
-		var lastTS hlc.Timestamp
-		for _, evt := range events {
-			require.NotNil(t, evt.Checkpoint, "expected only checkpoint events")
-			require.Equal(t, span, evt.Checkpoint.Span)
-			require.True(t, evt.Checkpoint.ResolvedTS.After(lastTS) || evt.Checkpoint.ResolvedTS.Equal(lastTS), "unexpected resolved timestamp regression")
-			lastTS = evt.Checkpoint.ResolvedTS
-		}
-	}
-
 	assertRangefeedRetryErr := func(
 		t *testing.T, pErr error, expReason kvpb.RangeFeedRetryError_Reason,
 	) {
@@ -818,6 +789,35 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		if rfErr.Reason != expReason {
 			t.Fatalf("got incorrect RangeFeedRetryError reason for RangeFeed: %v; expecting %v",
 				rfErr.Reason, expReason)
+		}
+	}
+
+	waitForInitialCheckpointAcrossSpan := func(
+		t *testing.T, stream *testStream, streamErrC <-chan error, span roachpb.Span, allowedError *kvpb.RangeFeedRetryError_Reason,
+	) {
+		t.Helper()
+		var events []*kvpb.RangeFeedEvent
+		testutils.SucceedsSoon(t, func() error {
+			if len(streamErrC) > 0 {
+				if allowedError == nil {
+					t.Fatalf("unexpected error from stream: %v", <-streamErrC)
+				}
+				streamErr := <-streamErrC
+				assertRangefeedRetryErr(t, streamErr, *allowedError)
+			}
+			events = stream.Events()
+			if len(events) < 1 {
+				return errors.Errorf("too few events: %v", events)
+			}
+			return nil
+		})
+
+		var lastTS hlc.Timestamp
+		for _, evt := range events {
+			require.NotNil(t, evt.Checkpoint, "expected only checkpoint events")
+			require.Equal(t, span, evt.Checkpoint.Span)
+			require.True(t, evt.Checkpoint.ResolvedTS.After(lastTS) || evt.Checkpoint.ResolvedTS.Equal(lastTS), "unexpected resolved timestamp regression")
+			lastTS = evt.Checkpoint.ResolvedTS
 		}
 	}
 
@@ -848,7 +848,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		}()
 
 		// Wait for the first checkpoint event.
-		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan)
+		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan, nil)
 
 		// Remove the replica from the range.
 		tc.RemoveVotersOrFatal(t, startKey, tc.Target(removeStore))
@@ -883,7 +883,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		}()
 
 		// Wait for the first checkpoint event.
-		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan)
+		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan, nil)
 
 		// Split the range.
 		tc.SplitRangeOrFatal(t, mkKey("m"))
@@ -944,8 +944,8 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		}()
 
 		// Wait for the first checkpoint event on each stream.
-		waitForInitialCheckpointAcrossSpan(t, streamLeft, streamLeftErrC, rangefeedLeftSpan)
-		waitForInitialCheckpointAcrossSpan(t, streamRight, streamRightErrC, rangefeedRightSpan)
+		waitForInitialCheckpointAcrossSpan(t, streamLeft, streamLeftErrC, rangefeedLeftSpan, nil)
+		waitForInitialCheckpointAcrossSpan(t, streamRight, streamRightErrC, rangefeedRightSpan, nil)
 
 		// Merge the ranges back together
 		mergeArgs := adminMergeArgs(startKey)
@@ -1002,7 +1002,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		}()
 
 		// Wait for the first checkpoint event.
-		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan)
+		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan, nil)
 
 		// Force the leader off the replica on partitionedStore. If it's the
 		// leader, this test will fall over when it cuts the replica off from
@@ -1094,6 +1094,21 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 					conf.RangefeedEnabled = false
 					return conf
 				},
+				// This test has been failing with REASON_LOGICAL_OPS_MISSING (#146566)
+				// coming from waitForInitialCheckpointAcrossSpan, which could indicate
+				// that some other request to this range is racing with the enabling of
+				// the rangefeed and hitting an error in handleLogicalOpLogRaftMuLocked.
+				// To help debug this, we intercept all requests to this range. If the
+				// test stops flaking, we can remove this filter; it's not needed for
+				// the test functionality.
+				TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+					for _, req := range ba.Requests {
+						if req.GetInner().Header().Key.Equal(startKey) {
+							log.Infof(ctx, "intercepting request %+v", req.GetInner())
+						}
+					}
+					return nil
+				},
 			},
 		}
 		tc, _ := setup(t, knobs)
@@ -1104,9 +1119,12 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// Split the range so that the RHS is not a system range and thus will
-		// respect the rangefeed_enabled cluster setting.
+		// Split off a small range to ensure it's not a system range and thus will
+		// respect the rangefeed_enabled cluster setting. It also helps ensure no
+		// one else writes to it.
 		tc.SplitRangeOrFatal(t, startKey)
+		endKey := startKey.Next()
+		tc.SplitRangeOrFatal(t, endKey)
 
 		rightRangeID := store.LookupReplica(roachpb.RKey(startKey)).RangeID
 
@@ -1114,7 +1132,6 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		stream := newTestStream()
 		streamErrC := make(chan error, 1)
 
-		endKey := keys.ScratchRangeMax
 		rangefeedSpan := roachpb.Span{Key: startKey, EndKey: endKey}
 		go func() {
 			req := kvpb.RangeFeedRequest{
@@ -1129,8 +1146,12 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 			streamErrC <- waitRangeFeed(t, store, &req, stream)
 		}()
 
-		// Wait for the first checkpoint event.
-		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan)
+		// Wait for the first checkpoint event. It's possible to get a
+		// REASON_LOGICAL_OPS_MISSING error here if an earlier proposal raced in
+		// with enabling the rangefeed. See the comment in
+		// handleLogicalOpLogRaftMuLocked.
+		allowedError := kvpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING
+		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan, &allowedError)
 
 		// Disable rangefeeds, which stops logical op logs from being provided
 		// with Raft commands.
@@ -1225,7 +1246,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		}()
 
 		// Wait for the first checkpoint event.
-		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan)
+		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan, nil)
 	})
 	t.Run("multiple-origin-ids", func(t *testing.T) {
 		tc, rangeID := setup(t, base.TestingKnobs{})
