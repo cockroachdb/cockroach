@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -135,13 +136,21 @@ func descInSlice(descID descpb.ID, td []toDelete) bool {
 	return false
 }
 
+// canRemoveDependent determines whether a dependent object (identified via a reference)
+// can be safely removed when dropping a target object, based on the specified drop behavior.
+//
+// The target object is identified by targetID and lives in the database with parentID.
+// The dependent is identified by the reference descriptor and may be a view, function,
+// or other supported object type.
 func (p *planner) canRemoveDependent(
 	ctx context.Context,
 	typeName string,
 	objName string,
+	targetID descpb.ID,
 	parentID descpb.ID,
 	ref descpb.TableDescriptor_Reference,
 	behavior tree.DropBehavior,
+	blockOnTriggerDependency bool,
 ) error {
 	desc, err := p.Descriptors().MutableByID(p.txn).Desc(ctx, ref.ID)
 	if err != nil {
@@ -150,7 +159,7 @@ func (p *planner) canRemoveDependent(
 
 	switch t := desc.(type) {
 	case *tabledesc.Mutable:
-		return p.canRemoveDependentViewGeneric(ctx, typeName, objName, parentID, t, behavior)
+		return p.canRemoveDependentViewGeneric(ctx, typeName, objName, targetID, parentID, t, behavior, blockOnTriggerDependency)
 	case *funcdesc.Mutable:
 		return p.canRemoveDependentFunctionGeneric(ctx, typeName, objName, t, behavior)
 	default:
@@ -179,19 +188,48 @@ func (p *planner) canRemoveDependentFromTable(
 		p.trackDependency[ref.ID] = false
 	}()
 
-	return p.canRemoveDependent(ctx, string(from.DescriptorType()), from.Name, from.ParentID, ref, behavior)
+	// TODO(146722): we pass false for blockOnTriggerDependency to allow proceeding
+	// even if a table has a trigger-based dependency. This is needed when we're
+	// here as part of dropping a database.
+	return p.canRemoveDependent(ctx, string(from.DescriptorType()), from.Name, from.GetID(), from.ParentID,
+		ref, behavior, false /* blockOnTriggerDependency */)
 }
 
+// canRemoveDependentViewGeneric checks whether a relation (typically a view) that
+// depends on a target object can be removed when the target is being dropped,
+// honoring the specified drop behavior.
+//
+// The target object is identified by targetID, and it resides in the database
+// identified by parentID. The relation descriptor (desc) represents the dependent
+// view or relation.
+//
+// If blockOnTriggerDependency is true, the check will fail if the relation has a
+// trigger that depends on the target.
 func (p *planner) canRemoveDependentViewGeneric(
 	ctx context.Context,
 	typeName string,
 	objName string,
+	targetID descpb.ID,
 	parentID descpb.ID,
 	viewDesc *tabledesc.Mutable,
 	behavior tree.DropBehavior,
+	blockOnTriggerDependency bool,
 ) error {
 	if behavior != tree.DropCascade {
 		return p.dependentRelationError(ctx, typeName, objName, parentID, viewDesc, "drop")
+	}
+
+	// In general, drop cascade is only support with triggers for drop table/database.
+	if blockOnTriggerDependency {
+		for i := range viewDesc.Triggers {
+			trigger := &viewDesc.Triggers[i]
+			for _, id := range trigger.DependsOn {
+				if id == targetID {
+					return unimplemented.NewWithIssuef(
+						146667, "drop %s cascade is not supported with triggers", typeName)
+				}
+			}
+		}
 	}
 
 	if err := p.CheckPrivilege(ctx, viewDesc, privilege.DROP); err != nil {

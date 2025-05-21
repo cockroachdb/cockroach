@@ -23,7 +23,7 @@ Schema change plan for CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON �
  │         │    └── ABSENT → PUBLIC TriggerDeps:{DescID: 104 (t), TriggerID: 1}
  │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (t)}
- │         └── 9 Mutation operations
+ │         └── 10 Mutation operations
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── AddTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
  │              ├── SetTriggerName {"Name":{"Name":"tr","TableID":104,"TriggerID":1}}
@@ -32,6 +32,7 @@ Schema change plan for CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON �
  │              ├── SetTriggerEvents {"Events":{"TableID":104,"TriggerID":1}}
  │              ├── SetTriggerFunctionCall {"FunctionCall":{"FuncBody":"BEGIN\nRAISE NOTI...","FuncID":105,"TableID":104,"TriggerID":1}}
  │              ├── SetTriggerForwardReferences {"Deps":{"TableID":104,"TriggerID":1}}
+ │              ├── UpdateTableBackReferencesInRelations {"TableID":104}
  │              └── AddTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
@@ -58,7 +59,7 @@ Schema change plan for CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON �
  │         │    └── ABSENT → PUBLIC TriggerDeps:{DescID: 104 (t), TriggerID: 1}
  │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (t)}
- │         └── 12 Mutation operations
+ │         └── 13 Mutation operations
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── AddTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
  │              ├── SetTriggerName {"Name":{"Name":"tr","TableID":104,"TriggerID":1}}
@@ -67,6 +68,7 @@ Schema change plan for CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON �
  │              ├── SetTriggerEvents {"Events":{"TableID":104,"TriggerID":1}}
  │              ├── SetTriggerFunctionCall {"FunctionCall":{"FuncBody":"BEGIN\nRAISE NOTI...","FuncID":105,"TableID":104,"TriggerID":1}}
  │              ├── SetTriggerForwardReferences {"Deps":{"TableID":104,"TriggerID":1}}
+ │              ├── UpdateTableBackReferencesInRelations {"TableID":104}
  │              ├── AddTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
