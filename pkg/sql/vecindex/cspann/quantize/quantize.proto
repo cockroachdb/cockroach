@@ -64,15 +64,6 @@ message RaBitQuantizedVectorSet {
 message UnQuantizedVectorSet {
   option (gogoproto.equal) = true;
 
-  // Centroid is the average of vectors in the set, representing its "center of
-  // mass". Note that the centroid is computed when a vector set is created and
-  // is not updated when vectors are added or removed.
-  // NOTE: By default, this is the mean centroid for the L2Squared distance
-  // metric, but is the spherical centroid for InnerProduct and Cosine metrics.
-  // The spherical centroid is simply the mean centroid, but normalized.
-  // NOTE: The centroid should be treated as immutable.
-  repeated float centroid = 1;
-  reserved 2; // CentroidDistances
   // Vectors is the set of original full-size vectors.
-  cockroach.util.vector.Set vectors = 3 [(gogoproto.nullable) = false];
+  cockroach.util.vector.Set vectors = 1 [(gogoproto.nullable) = false];
 }

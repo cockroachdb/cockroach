@@ -16,13 +16,11 @@ func TestUnQuantizedVectorSet(t *testing.T) {
 	quantizedSet := UnQuantizedVectorSet{
 		Vectors: vector.MakeSet(2),
 	}
-	quantizedSet.Centroid = []float32{4, 2}
 
 	// Add vectors.
 	vectors := vector.MakeSetFromRawData([]float32{1, 2, 3, 4, 5, 6}, 2)
 	quantizedSet.AddSet(vectors)
 	require.Equal(t, 3, quantizedSet.GetCount())
-	require.Equal(t, vector.T{4, 2}, quantizedSet.GetCentroid())
 
 	vectors = vector.MakeSetFromRawData([]float32{7, 8, 9, 10}, 2)
 	quantizedSet.AddSet(vectors)
@@ -38,6 +36,5 @@ func TestUnQuantizedVectorSet(t *testing.T) {
 	require.Equal(t, 4, quantizedSet.GetCount())
 
 	// Check that clone is unaffected.
-	require.Equal(t, []float32{4, 2}, cloned.Centroid)
 	require.Equal(t, vector.Set{Dims: 2, Count: 4, Data: []float32{0, 0, 9, 10, 5, 6, 7, 8}}, cloned.Vectors)
 }

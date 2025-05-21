@@ -114,11 +114,6 @@ func (vs *RaBitQuantizedVectorSet) GetCount() int {
 	return len(vs.CodeCounts)
 }
 
-// GetCentroid implements the QuantizedVectorSet interface.
-func (vs *RaBitQuantizedVectorSet) GetCentroid() vector.T {
-	return vs.Centroid
-}
-
 // ReplaceWithLast implements the QuantizedVectorSet interface.
 func (vs *RaBitQuantizedVectorSet) ReplaceWithLast(offset int) {
 	lastOffset := len(vs.CodeCounts) - 1

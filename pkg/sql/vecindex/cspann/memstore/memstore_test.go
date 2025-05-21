@@ -253,7 +253,6 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 		cspann.MakeReadyPartitionMetadata(1, centroid),
 		unquantizer,
 		&quantize.UnQuantizedVectorSet{
-			Centroid: centroid,
 			Vectors: vector.Set{
 				Dims:  2,
 				Count: 3,
@@ -270,7 +269,6 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 		cspann.MakeReadyPartitionMetadata(2, centroid),
 		raBitQuantizer,
 		&quantize.UnQuantizedVectorSet{
-			Centroid: centroid,
 			Vectors: vector.Set{
 				Dims:  2,
 				Count: 3,
