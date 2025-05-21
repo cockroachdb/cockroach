@@ -8,8 +8,10 @@ package kvcoord
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"slices"
 	"sort"
+	"strings"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
@@ -247,6 +249,12 @@ func (twb *txnWriteBuffer) SendLocked(
 	transformedBa, rr, pErr := twb.applyTransformations(ctx, ba)
 	if pErr != nil {
 		return nil, pErr
+	}
+
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		if summary := rr.Summary(); summary != "" {
+			log.VEventf(ctx, 2, "txn write buffer modified the batch; %s", summary)
+		}
 	}
 
 	if len(transformedBa.Requests) == 0 {
@@ -1193,6 +1201,40 @@ type requestRecords []requestRecord
 
 func (rr requestRecords) Empty() bool {
 	return len(rr) == 0
+}
+
+// Summary returns a string summarizing the modifications made to the original
+// batch that generated this set of request records. An empty string indicates
+// that the original batch was not modified.
+func (rr requestRecords) Summary() string {
+	fullyBuffered := make(map[kvpb.Method]int)
+	transformed := make(map[kvpb.Method]int)
+	for _, rec := range rr {
+		if rec.stripped {
+			fullyBuffered[rec.origRequest.Method()]++
+		} else if rec.transformed {
+			transformed[rec.origRequest.Method()]++
+		}
+	}
+	if len(fullyBuffered) == 0 && len(transformed) == 0 {
+		return ""
+	}
+	b := &strings.Builder{}
+	sep := ""
+	if len(fullyBuffered) > 0 {
+		b.WriteString("fully buffered:")
+		for method, count := range fullyBuffered {
+			fmt.Fprintf(b, " %s:%d", method, count)
+		}
+		sep = "; "
+	}
+	if len(transformed) > 0 {
+		fmt.Fprintf(b, "%stransformed:", sep)
+		for method, count := range transformed {
+			fmt.Fprintf(b, " %s:%d", method, count)
+		}
+	}
+	return b.String()
 }
 
 // addToBuffer adds a write to the given key to the buffer.
