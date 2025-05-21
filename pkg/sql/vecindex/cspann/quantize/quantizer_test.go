@@ -117,11 +117,6 @@ func (s *testState) estimateDistances(t *testing.T, d *datadriven.TestData) stri
 	var buf bytes.Buffer
 	doTest := func(metric vecdist.Metric, prec int) {
 		centroid := vectors.Centroid(make(vector.T, vectors.Dims))
-		if metric == vecdist.InnerProduct || metric == vecdist.Cosine {
-			// Use spherical centroid for inner product and cosine distances,
-			// which is the mean centroid, but normalized.
-			num32.Normalize(centroid)
-		}
 
 		// Test UnQuantizer.
 		unQuantizer := quantize.NewUnQuantizer(len(queryVector), metric)

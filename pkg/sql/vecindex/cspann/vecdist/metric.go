@@ -6,6 +6,8 @@
 package vecdist
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
@@ -13,6 +15,8 @@ import (
 
 // Metric specifies which distance function a quantizer should use.
 type Metric int
+
+//go:generate stringer -type=Metric
 
 const (
 	// L2Squared specifies squared Euclidean distance between two vectors, defined
@@ -55,6 +59,9 @@ const (
 // For the cosine case, the vectors are expected to already be normalized:
 //
 //	Cosine      : 1 - (1/sqrt(5) * 4/5 + 2/sqrt(5) * 3/5) = 0.1056
+//
+// NOTE: If the vectors are not normalized, then Cosine will return undefined
+// results.
 func Measure(metric Metric, vec1, vec2 vector.T) float32 {
 	switch metric {
 	case L2Squared:
@@ -73,4 +80,20 @@ func Measure(metric Metric, vec1, vec2 vector.T) float32 {
 	}
 
 	panic(errors.AssertionFailedf("unknown distance function %d", metric))
+}
+
+// ParseMetric parses a string into a Metric value. The input is
+// case-insensitive. Returns an error if the string does not match a known
+// metric.
+func ParseMetric(s string) (Metric, error) {
+	switch strings.ToLower(s) {
+	case "l2squared", "l2-squared":
+		return L2Squared, nil
+	case "innerproduct", "inner-product":
+		return InnerProduct, nil
+	case "cosine":
+		return Cosine, nil
+	default:
+		return 0, errors.Newf("unknown metric: %q", s)
+	}
 }

@@ -2,8 +2,17 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "utils",
-    srcs = ["format.go"],
+    srcs = [
+        "format.go",
+        "validate.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/util/vector"],
+    deps = [
+        "//pkg/util/buildutil",
+        "//pkg/util/num32",
+        "//pkg/util/vector",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_gonum_v1_gonum//floats/scalar",
+    ],
 )
