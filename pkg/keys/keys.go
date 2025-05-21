@@ -140,6 +140,16 @@ func DecodeStoreLivenessSupportForKey(key roachpb.Key) (roachpb.NodeID, roachpb.
 	return nodeID, storeID, nil
 }
 
+// StoreWAGPrefix returns the key prefix for WAG nodes.
+func StoreWAGPrefix() roachpb.Key {
+	return MakeStoreKey(localStoreWAGNodeSuffix, nil)
+}
+
+// StoreWAGNodeKey returns the key for a WAG node at the given index.
+func StoreWAGNodeKey(index uint64) roachpb.Key {
+	return MakeStoreKey(localStoreWAGNodeSuffix, encoding.EncodeUint64Ascending(nil, index))
+}
+
 // StoreCachedSettingsKey returns a store-local key for store's cached settings.
 func StoreCachedSettingsKey(settingKey roachpb.Key) roachpb.Key {
 	return MakeStoreKey(localStoreCachedSettingsSuffix, encoding.EncodeBytesAscending(nil, settingKey))
