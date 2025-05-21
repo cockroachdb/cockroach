@@ -925,7 +925,7 @@ statement ok
 CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION trigger_func();
 
 # Relations are referenced by name, so renaming the table is not allowed.
-statement error pgcode 2BP01 cannot rename relation "t" because table "xy" depends on it
+statement error pgcode 2BP01 cannot rename relation "t" because trigger "foo" on table "xy" depends on it
 ALTER TABLE t RENAME TO t2;
 
 # Sequences are remapped to their IDs, so renaming is allowed.
@@ -4505,37 +4505,37 @@ ALTER TABLE t1 SET (schema_locked = false);
 statement ok
 ALTER TABLE other SET (schema_locked = false);
 
-statement error pq: cannot alter type of column "j" because table "t1" depends on it
+statement error pq: cannot alter type of column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table t1 alter column j set data type text;
 
-statement error pq: cannot alter type of column "j" because table "t1" depends on it
+statement error pq: cannot alter type of column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table other alter column j set data type text;
 
-statement error pq: cannot rename column "j" because table "t1" depends on it
+statement error pq: cannot rename column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table t1 rename column j to j2;
 
-statement error pq: cannot rename column "j" because table "t1" depends on it
+statement error pq: cannot rename column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table other rename column j to j2;
 
-statement error pq: cannot drop column "j" because table "t1" depends on it
+statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table t1 drop column j;
 
 statement error pq: unimplemented: drop column cascade is not supported with triggers
 alter table t1 drop column j cascade;
 
-statement error pq: cannot drop column "j" because table "t1" depends on it
+statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table other drop column j;
 
 statement error pq: unimplemented: drop column cascade is not supported with triggers
 alter table other drop column j cascade;
 
-statement error pq: cannot drop index "i1" because table "t1" depends on it
+statement error pq: cannot drop index "i1" because trigger "audit_trigger" on table "t1" depends on it
 drop index t1@i1;
 
 statement error pq: unimplemented: drop index cascade is not supported with triggers
 drop index t1@i1 CASCADE;
 
-statement error pq: cannot drop index "i1" because table "t1" depends on it
+statement error pq: cannot drop index "i1" because trigger "audit_trigger" on table "t1" depends on it
 drop index other@i1;
 
 statement error pq: unimplemented: drop index cascade is not supported with triggers
@@ -4553,7 +4553,7 @@ DROP TYPE e;
 statement error pq: unimplemented: DROP TYPE CASCADE is not yet supported
 DROP TYPE e CASCADE;
 
-statement error pq: cannot drop relation "other" because table "t1" depends on it
+statement error pq: cannot drop relation "other" because trigger "audit_trigger" on table "t1" depends on it
 DROP TABLE other;
 
 statement ok

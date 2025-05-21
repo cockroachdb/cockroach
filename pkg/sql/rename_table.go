@@ -83,7 +83,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		if !dependent.ByID {
 			return nil, p.dependentError(
 				ctx, string(tableDesc.DescriptorType()), oldTn.String(),
-				tableDesc.ParentID, dependent.ID, "rename",
+				tableDesc.ParentID, dependent.ID, tableDesc.ID, "rename",
 			)
 		}
 	}
@@ -259,18 +259,32 @@ func (n *renameTableNode) Next(runParams) (bool, error) { return false, nil }
 func (n *renameTableNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *renameTableNode) Close(context.Context)        {}
 
+// dependentError returns an error indicating that an operation on a target object
+// (e.g., rename or drop) cannot proceed because it is depended on by another object.
+//
+// The dependent object is identified by dependentID, and the target object is the one
+// being operated on. parentID refers to the database containing the target. The function
+// dispatches to a specific error formatter based on the dependent's descriptor type.
+//
 // TODO(a-robinson): Support renaming objects depended on by views once we have
 // a better encoding for view queries (#10083).
 func (p *planner) dependentError(
-	ctx context.Context, typeName string, objName string, parentID descpb.ID, id descpb.ID, op string,
+	ctx context.Context,
+	typeName string,
+	objName string,
+	parentID descpb.ID,
+	dependentID descpb.ID,
+	targetID descpb.ID,
+	op string,
 ) error {
-	desc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Desc(ctx, id)
+	desc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Desc(ctx, dependentID)
 	if err != nil {
 		return err
 	}
 	switch desc.DescriptorType() {
 	case catalog.Table:
-		return p.dependentRelationError(ctx, typeName, objName, parentID, desc.(catalog.TableDescriptor), op)
+		return p.dependentRelationError(ctx, redact.SafeString(typeName), objName, parentID, desc.(catalog.TableDescriptor),
+			targetID, redact.SafeString(op))
 	case catalog.Function:
 		return p.dependentFunctionError(typeName, objName, desc.(catalog.FunctionDescriptor), op)
 	default:
@@ -289,23 +303,38 @@ func (p *planner) dependentFunctionError(
 
 func (p *planner) dependentRelationError(
 	ctx context.Context,
-	typeName, objName string,
+	typeName redact.SafeString,
+	objName string,
 	parentID descpb.ID,
 	desc catalog.TableDescriptor,
-	op string,
+	targetID descpb.ID,
+	op redact.SafeString,
 ) error {
-	viewName := desc.GetName()
+	// Check if any triggers on the table depend on the target object.
+	for i := range desc.GetTriggers() {
+		trigger := &desc.GetTriggers()[i]
+		for _, id := range trigger.DependsOn {
+			if id == targetID {
+				return sqlerrors.NewDependentObjectErrorf(
+					"cannot %s %s %q because trigger %q on table %q depends on it",
+					op, typeName, objName, trigger.Name, desc.GetName(),
+				)
+			}
+		}
+	}
+
+	relationName := desc.GetName()
 	if desc.GetParentID() != parentID {
 		viewFQName, err := p.getQualifiedTableName(ctx, desc)
 		if err != nil {
 			log.Warningf(ctx, "unable to retrieve name of relation %d: %v", desc.GetID(), err)
 			return sqlerrors.NewDependentObjectErrorf(
 				"cannot %s %s %q because a %s depends on it",
-				redact.SafeString(op), redact.SafeString(typeName), objName, redact.SafeString(desc.GetObjectTypeString()))
+				op, typeName, objName, redact.SafeString(desc.GetObjectTypeString()))
 		}
-		viewName = viewFQName.FQString()
+		relationName = viewFQName.FQString()
 	}
-	return sqlerrors.NewDependentBlocksOpError(op, typeName, objName, desc.GetObjectTypeString(), viewName)
+	return sqlerrors.NewDependentBlocksOpError(string(op), string(typeName), objName, desc.GetObjectTypeString(), relationName)
 }
 
 // checkForCrossDbReferences validates if any cross DB references
