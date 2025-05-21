@@ -3,12 +3,6 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-// Package tpcc is a benchmark suite to exercise the transactions of tpcc
-// in a benchmarking setting.
-//
-// We love to optimize our benchmarks, but some of them are too simplistic.
-// Hopefully optimizing these queries with a tight iteration cycle will better
-// reflect real world workloads.
 package tpcc
 
 import (
@@ -23,43 +17,36 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testfixtures"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 )
 
-// BenchmarkTPCC runs a benchmark of different mixes of TPCC queries against
-// a single warehouse. It runs the client side of the workload in a subprocess
-// to filter out the client overhead.
+// BenchmarkTPCC runs TPC-C transactions against a single warehouse. It runs the
+// client side of the workload in a subprocess so that the client overhead is
+// not included in CPU and heap profiles.
 //
-// Without any special flags, the benchmark will load the data for the single
-// warehouse once in a temp dir and will then copy the store directory for
-// that warehouse to an in-memory store for each sub-benchmark. The --store-dir
-// flag can be used to specify the path to such a store dir to enable faster
-// iteration re-running the test. The --generate-store-dir flag, when combined
-// with --store-dir will generate a new store directory at the specified path.
-// The combination of the two flags is how you bootstrap such a path initially.
-//
-// For example, generate the store directory with:
-//
-//	./dev bench pkg/bench/tpcc -f BenchmarkTPCC --test-args '--generate-store-dir --store-dir=/tmp/benchtpcc'
-//
-// Reuse the store directory with:
-//
-//	./dev bench pkg/bench/tpcc -f BenchmarkTPCC --test-args '--store-dir=/tmp/benchtpcc'
-//
-// TODO(ajwerner): Consider moving this all to CCL to leverage the import data
-// loader.
+// The benchmark will generate the schema and table data for a single warehouse,
+// using a reusable store directory. In future runs the cockroach server will
+// clone and use the store directory, rather than regenerating the schema and
+// data. This enables faster iteration when re-running the benchmark.
 func BenchmarkTPCC(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
 
-	// Generate TPCC data if necessary.
-	_, storeDir, cleanup := maybeGenerateStoreDir(b)
-	defer cleanup()
+	// Reuse or generate TPCC data.
+	storeName := "bench_tpcc_store_" + storage.MinimumSupportedFormatVersion.String()
+	storeDir := testfixtures.ReuseOrGenerate(b, storeName, func(dir string) {
+		c, output := generateStoreDir.withEnv(storeDirEnvVar, dir).exec()
+		if err := c.Run(); err != nil {
+			b.Fatalf("failed to generate store dir: %s\n%s", err, output.String())
+		}
+	})
 
 	for _, impl := range []string{"literal", "optimized"} {
 		b.Run(impl, func(b *testing.B) {
