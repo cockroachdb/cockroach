@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 type dropViewNode struct {
@@ -144,7 +145,7 @@ func descInSlice(descID descpb.ID, td []toDelete) bool {
 // or other supported object type.
 func (p *planner) canRemoveDependent(
 	ctx context.Context,
-	typeName string,
+	typeName redact.SafeString,
 	objName string,
 	targetID descpb.ID,
 	parentID descpb.ID,
@@ -161,7 +162,7 @@ func (p *planner) canRemoveDependent(
 	case *tabledesc.Mutable:
 		return p.canRemoveDependentViewGeneric(ctx, typeName, objName, targetID, parentID, t, behavior, blockOnTriggerDependency)
 	case *funcdesc.Mutable:
-		return p.canRemoveDependentFunctionGeneric(ctx, typeName, objName, t, behavior)
+		return p.canRemoveDependentFunctionGeneric(ctx, string(typeName), objName, t, behavior)
 	default:
 		return errors.AssertionFailedf(
 			"unexpected dependent %s %s on %s %s",
@@ -190,7 +191,7 @@ func (p *planner) canRemoveDependentFromTable(
 
 	// TODO(146722): when dropping the database, we pass false for blockOnTriggerDependency
 	// to allow it to proceed even if a table has a trigger-based dependency.
-	return p.canRemoveDependent(ctx, string(from.DescriptorType()), from.Name, from.GetID(), from.ParentID, ref, behavior, false)
+	return p.canRemoveDependent(ctx, redact.SafeString(from.DescriptorType()), from.Name, from.GetID(), from.ParentID, ref, behavior, false)
 }
 
 // canRemoveDependentViewGeneric checks whether a relation (typically a view) that
@@ -205,22 +206,22 @@ func (p *planner) canRemoveDependentFromTable(
 // trigger that depends on the target.
 func (p *planner) canRemoveDependentViewGeneric(
 	ctx context.Context,
-	typeName string,
+	typeName redact.SafeString,
 	objName string,
 	targetID descpb.ID,
 	parentID descpb.ID,
-	viewDesc *tabledesc.Mutable,
+	desc *tabledesc.Mutable,
 	behavior tree.DropBehavior,
 	blockOnTriggerDependency bool,
 ) error {
 	if behavior != tree.DropCascade {
-		return p.dependentRelationError(ctx, typeName, objName, parentID, viewDesc, "drop")
+		return p.dependentRelationError(ctx, typeName, objName, parentID, desc, targetID, "drop")
 	}
 
 	// In general, drop cascade is only support with triggers for drop table/database.
 	if blockOnTriggerDependency {
-		for i := range viewDesc.Triggers {
-			trigger := &viewDesc.Triggers[i]
+		for i := range desc.Triggers {
+			trigger := &desc.Triggers[i]
 			for _, id := range trigger.DependsOn {
 				if id == targetID {
 					return unimplemented.NewWithIssuef(
@@ -230,12 +231,12 @@ func (p *planner) canRemoveDependentViewGeneric(
 		}
 	}
 
-	if err := p.CheckPrivilege(ctx, viewDesc, privilege.DROP); err != nil {
+	if err := p.CheckPrivilege(ctx, desc, privilege.DROP); err != nil {
 		return err
 	}
-	// If this view is depended on by other views, we have to check them as well.
-	for _, ref := range viewDesc.DependedOnBy {
-		if err := p.canRemoveDependentFromTable(ctx, viewDesc, ref, behavior); err != nil {
+	// If this relation is depended on by other relations, we have to check them as well.
+	for _, ref := range desc.DependedOnBy {
+		if err := p.canRemoveDependentFromTable(ctx, desc, ref, behavior); err != nil {
 			return err
 		}
 	}
@@ -324,7 +325,7 @@ func (p *planner) dropViewImpl(
 		dependedOnBy := append([]descpb.TableDescriptor_Reference(nil), viewDesc.DependedOnBy...)
 		for _, ref := range dependedOnBy {
 			depDesc, err := p.getDescForCascade(
-				ctx, string(viewDesc.DescriptorType()), viewDesc.Name, viewDesc.ParentID, ref.ID, behavior,
+				ctx, string(viewDesc.DescriptorType()), viewDesc.Name, viewDesc.ParentID, ref.ID, viewDesc.ID, behavior,
 			)
 			if err != nil {
 				return cascadeDroppedViews, err
@@ -372,7 +373,7 @@ func (p *planner) getDescForCascade(
 	ctx context.Context,
 	typeName string,
 	objName string,
-	parentID, descID descpb.ID,
+	parentID, descID, targetID descpb.ID,
 	behavior tree.DropBehavior,
 ) (catalog.MutableDescriptor, error) {
 	desc, err := p.Descriptors().MutableByID(p.txn).Desc(ctx, descID)
@@ -381,7 +382,7 @@ func (p *planner) getDescForCascade(
 		return nil, errors.Wrapf(err, "error resolving dependent ID %d", descID)
 	}
 	if behavior != tree.DropCascade {
-		return nil, p.dependentError(ctx, typeName, objName, parentID, descID, "drop")
+		return nil, p.dependentError(ctx, typeName, objName, parentID, descID, targetID, "drop")
 	}
 	return desc, nil
 }
