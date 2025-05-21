@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"
-	"github.com/stretchr/testify/require"
 )
 
 // BenchmarkTPCC runs a benchmark of different mixes of TPCC queries against
@@ -58,34 +57,15 @@ func BenchmarkTPCC(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
 
-	_, engPath, cleanup := maybeGenerateStoreDir(b)
+	// Generate TPCC data if necessary.
+	_, storeDir, cleanup := maybeGenerateStoreDir(b)
 	defer cleanup()
-	baseOptions := [...]option{
-		serverArgs(func(
-			b testing.TB,
-		) (_ base.TestServerArgs, cleanup func()) {
-			td, cleanup := testutils.TempDir(b)
-			cmd, output := cloneEngine.
-				withEnv(srcEngineEnvVar, engPath).
-				withEnv(dstEngineEnvVar, td).
-				exec()
-			if err := cmd.Run(); err != nil {
-				b.Fatalf("failed to clone engine: %s\n%s", err, output.String())
-			}
-			return base.TestServerArgs{
-				StoreSpecs: []base.StoreSpec{{Path: td}},
-			}, cleanup
-		}),
-		setupServer(func(tb testing.TB, s serverutils.TestServerInterface) {
-			logstore.DisableSyncRaftLog.Override(context.Background(), &s.SystemLayer().ClusterSettings().SV, true)
-		}),
-	}
 
 	for _, impl := range []string{"literal", "optimized"} {
 		b.Run(impl, func(b *testing.B) {
-			implOpts := baseOptions[:]
+			var baseOpts []option
 			if impl == "literal" {
-				implOpts = append(implOpts, workloadFlag("literal-implementation", "true"))
+				baseOpts = append(baseOpts, workloadFlag("literal-implementation", "true"))
 			}
 			for _, opts := range []options{
 				{workloadFlag("mix", "newOrder=1")},
@@ -96,7 +76,7 @@ func BenchmarkTPCC(b *testing.B) {
 				{workloadFlag("mix", "newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1")},
 			} {
 				b.Run(opts.String(), func(b *testing.B) {
-					newBenchmark(append(opts, implOpts...)).run(b)
+					newBenchmark(append(opts, baseOpts...)).run(b, storeDir)
 				})
 			}
 		})
@@ -118,10 +98,11 @@ func newBenchmark(opts ...options) *benchmark {
 	return &bm
 }
 
-func (bm *benchmark) run(b *testing.B) {
+func (bm *benchmark) run(b *testing.B, storeDir string) {
 	defer bm.close()
 
-	bm.startCockroach(b)
+	closeServer := bm.startCockroach(b, storeDir)
+	defer closeServer()
 	c, output := bm.startClient(b)
 
 	var s synchronizer
@@ -149,26 +130,38 @@ func (bm *benchmark) close() {
 	}
 }
 
-func (bm *benchmark) startCockroach(b testing.TB) {
-	args, cleanup := bm.argsGenerator(b)
-	bm.closers = append(bm.closers, cleanup)
-
-	s, _, _ := serverutils.StartServer(b, args)
-	bm.closers = append(bm.closers, func() {
-		s.Stopper().Stop(context.Background())
-	})
-
-	for _, fn := range bm.setupServer {
-		fn(b, s)
+func (bm *benchmark) startCockroach(b testing.TB, storeDir string) (closeServer func()) {
+	// Clone the store dir.
+	td, engCleanup := testutils.TempDir(b)
+	c, output := cloneEngine.
+		withEnv(srcEngineEnvVar, storeDir).
+		withEnv(dstEngineEnvVar, td).
+		exec()
+	if err := c.Run(); err != nil {
+		b.Fatalf("failed to clone engine: %s\n%s", err, output.String())
 	}
 
-	pgURL, cleanup, err := pgurlutils.PGUrlE(
+	// Start the server.
+	s := serverutils.StartServerOnly(b, base.TestServerArgs{
+		StoreSpecs: []base.StoreSpec{{Path: td}},
+	})
+	logstore.DisableSyncRaftLog.Override(context.Background(), &s.SystemLayer().ClusterSettings().SV, true)
+
+	// Set the PG URL.
+	pgURL, urlCleanup, err := pgurlutils.PGUrlE(
 		s.AdvSQLAddr(), b.TempDir(), url.User("root"),
 	)
-	require.NoError(b, err)
+	if err != nil {
+		b.Fatalf("failed to create pgurl: %s", err)
+	}
 	pgURL.Path = databaseName
 	bm.pgURL = pgURL.String()
-	bm.closers = append(bm.closers, cleanup)
+
+	return func() {
+		engCleanup()
+		s.Stopper().Stop(context.Background())
+		urlCleanup()
+	}
 }
 
 func (bm *benchmark) startClient(b *testing.B) (c *exec.Cmd, output *synchronizedBuffer) {
