@@ -452,6 +452,25 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 		// context.
 		return nil, false
 	}
+	if typ.Family() == types.CollatedStringFamily && s.disableNondeterministicLimits {
+		// 'concat_agg' and 'string_agg' functions can produce non-deterministic
+		// results for collated strings. The general issue is described in a
+		// comment within makeOrderByWithAllCols, but it appears that in some
+		// cases the skip in there doesn't work. One hypothesis is that this is
+		// due to not having the final type when the skip is attempted (and
+		// CollatedString and String types share the same oid). This block
+		// attempts to harden that skip by explicitly not generating these
+		// functions for collated strings.
+		//
+		// However, we might not have the final type in this block as well, in
+		// which case we would need to either completely skip these aggregates,
+		// or teach the unsortedMatricesDiff helpers to do SQL comparison as
+		// opposed to a text one.
+		switch fn.def.Name {
+		case "concat_agg", "string_agg":
+			return nil, false
+		}
+	}
 
 	args := make(tree.TypedExprs, 0)
 	for _, argTyp := range fn.overload.Types.Types() {
