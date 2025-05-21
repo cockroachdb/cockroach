@@ -312,6 +312,7 @@ func TestLockTableBasic(t *testing.T) {
 				if d.HasArg("skip-locked") {
 					waitPolicy = lock.WaitPolicy_SkipLocked
 				}
+				updateRetainedTxn := !d.HasArg("no-update-retained-txn")
 				var maxLockWaitQueueLength int
 				if d.HasArg("max-lock-wait-queue-length") {
 					d.ScanArgs(t, "max-lock-wait-queue-length", &maxLockWaitQueueLength)
@@ -331,11 +332,17 @@ func TestLockTableBasic(t *testing.T) {
 				if txnMeta != nil {
 					// Update the transaction's timestamp, if necessary. The transaction
 					// may have needed to move its timestamp for any number of reasons.
-					txnMeta.WriteTimestamp = ts
+					if updateRetainedTxn {
+						txnMeta.WriteTimestamp = ts
+					}
 					ba.Txn = &roachpb.Transaction{
 						TxnMeta:       *txnMeta,
 						ReadTimestamp: ts,
 					}
+					if !updateRetainedTxn {
+						ba.Txn.WriteTimestamp = ts
+					}
+
 					req.Txn = ba.Txn
 				}
 				requestsByName[reqName] = req
@@ -449,7 +456,21 @@ func TestLockTableBasic(t *testing.T) {
 					return err.Error()
 				}
 				return lt.String()
-
+			case "update-txn-not-observed":
+				var txnName string
+				d.ScanArgs(t, "txn", &txnName)
+				txnMeta, ok := txnsByName[txnName]
+				if !ok {
+					d.Fatalf(t, "unknown txn %s", txnName)
+				}
+				ts := scanTimestamp(t, d)
+				var epoch int
+				d.ScanArgs(t, "epoch", &epoch)
+				txnMeta = &enginepb.TxnMeta{ID: txnMeta.ID, Sequence: txnMeta.Sequence}
+				txnMeta.Epoch = enginepb.TxnEpoch(epoch)
+				txnMeta.WriteTimestamp = ts
+				txnsByName[txnName] = txnMeta
+				return ""
 			case "add-discovered":
 				var reqName string
 				d.ScanArgs(t, "r", &reqName)
