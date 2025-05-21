@@ -2,12 +2,17 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "wag",
-    srcs = ["wag.go"],
+    srcs = [
+        "store.go",
+        "wag.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/keys",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/logstore",
         "//pkg/roachpb",
+        "//pkg/storage",
     ],
 )

@@ -212,6 +212,7 @@ var _ = [...]interface{}{
 	StoreGossipKey,                   // "goss"
 	StoreHLCUpperBoundKey,            // "hlcu"
 	StoreIdentKey,                    // "iden"
+	StoreWAGIndexKey,                 // "iwag"
 	StoreUnsafeReplicaRecoveryKey,    // "loqr"
 	StoreNodeTombstoneKey,            // "ntmb"
 	StoreLivenessRequesterMetaKey,    // "slrm"
