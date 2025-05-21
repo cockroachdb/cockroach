@@ -72,12 +72,6 @@ func (og *operationGenerator) tableHasRows(
 	return og.scanBool(ctx, tx, fmt.Sprintf(`SELECT EXISTS (SELECT * FROM %s)`, tableName.String()))
 }
 
-func (og *operationGenerator) scanInt(
-	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
-) (i int, err error) {
-	return Scan[int](ctx, og, tx, query, args...)
-}
-
 func (og *operationGenerator) scanBool(
 	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
 ) (b bool, err error) {
@@ -1030,66 +1024,6 @@ func (og *operationGenerator) constraintExists(
 	return og.scanBool(ctx, tx, `SELECT EXISTS(
 		SELECT * FROM information_schema.table_constraints WHERE table_name = $1 AND constraint_name = $2
 	 )`, string(tableName), string(constraintName))
-}
-
-func (og *operationGenerator) rowsSatisfyFkConstraint(
-	ctx context.Context,
-	tx pgx.Tx,
-	parentTable *tree.TableName,
-	parentColumn *column,
-	childTable *tree.TableName,
-	childColumn *column,
-) (bool, error) {
-	// Self referential foreign key constraints are acceptable.
-	selfReferential, err := og.scanBool(ctx, tx,
-		`SELECT $1:::REGCLASS=$2:::REGCLASS`,
-		parentTable.String(), childTable.String())
-	if err != nil {
-		return false, err
-	}
-	if selfReferential && parentColumn.name == childColumn.name {
-		return true, nil
-	}
-
-	// Validate the parent table has rows.
-	childRows, err := og.scanInt(ctx, tx,
-		fmt.Sprintf(`
-SELECT count(*) FROM %s
-		`, childTable.String()),
-	)
-	if err != nil {
-		return false, err
-	}
-
-	// If child table is empty then no violation can exist.
-	if childRows == 0 {
-		return true, nil
-	}
-
-	q := fmt.Sprintf(`
-	  SELECT count(*)
-	    FROM %s as t1
-		  LEFT JOIN %s as t2
-				     ON t1.%s = t2.%s
-			WHERE t2.%s IS NOT NULL
-`, childTable.String(), parentTable.String(), childColumn.name.String(), parentColumn.name.String(), parentColumn.name.String())
-
-	joinTx, err := tx.Begin(ctx)
-	if err != nil {
-		return false, err
-	}
-	numJoinRows, err := og.scanInt(ctx, joinTx, q)
-	if err != nil {
-		rbkErr := joinTx.Rollback(ctx)
-		// UndefinedFunction errors mean that the column type is not comparable.
-		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) &&
-			((pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedFunction) ||
-				(pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedColumn)) {
-			return false, rbkErr
-		}
-		return false, errors.WithSecondaryError(err, rbkErr)
-	}
-	return numJoinRows == childRows, joinTx.Commit(ctx)
 }
 
 var (
