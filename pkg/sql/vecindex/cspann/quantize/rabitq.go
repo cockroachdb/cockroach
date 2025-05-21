@@ -390,8 +390,9 @@ func (q *RaBitQuantizer) quantizeHelper(
 
 	// L2Squared doesn't use this, so don't store it.
 	if q.distanceMetric != vecdist.L2Squared {
+		centroidDotProducts := qs.CentroidDotProducts[oldCount:]
 		for i := range count {
-			qs.CentroidDotProducts[i] = num32.Dot(vectors.At(i), qs.Centroid)
+			centroidDotProducts[i] = num32.Dot(vectors.At(i), qs.Centroid)
 		}
 	}
 

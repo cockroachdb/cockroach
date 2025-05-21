@@ -72,7 +72,7 @@ func ValidatePartitionsEqual(t *testing.T, l, r *cspann.Partition) {
 	require.Equal(t, l.Level(), r.Level(), "levels do not match")
 	require.Equal(t, l.ChildKeys(), r.ChildKeys(), "childKeys do not match")
 	require.Equal(t, l.ValueBytes(), r.ValueBytes(), "valueBytes do not match")
-	require.Equal(t, q1.GetCentroid(), q2.GetCentroid(), "centroids do not match")
+	require.Equal(t, l.Centroid, r.Centroid, "centroids do not match")
 	require.Equal(t, q1.GetCount(), q2.GetCount(), "counts do not match")
 	if eq, ok := q1.(equaler); ok {
 		require.True(t, eq.Equal(q2))
