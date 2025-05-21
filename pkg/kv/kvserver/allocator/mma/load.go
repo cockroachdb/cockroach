@@ -453,7 +453,7 @@ func (ls loadSummary) SafeFormat(w redact.SafePrinter, _ rune) {
 
 // Computes the loadSummary for a particular load dimension.
 func loadSummaryForDimension(
-	load LoadValue, capacity LoadValue, meanLoad LoadValue, meanUtil float64,
+	dim LoadDimension, load LoadValue, capacity LoadValue, meanLoad LoadValue, meanUtil float64,
 ) loadSummary {
 	loadSummary := loadLow
 	// Heuristics: this is all very rough and subject to revision. There are two
@@ -474,11 +474,28 @@ func loadSummaryForDimension(
 	// consider how far we are from the mean. The mean isn't very useful when
 	// there are heterogeneous nodes/stores.
 	fractionAbove := float64(load)/float64(meanLoad) - 1.0
-	if fractionAbove > 0.1 {
+	var fractionUsed float64
+	if capacity != UnknownCapacity {
+		fractionUsed = float64(load) / float64(capacity)
+	}
+	const (
+		meanFractionSlow         = 0.1
+		meanFractionSlowByteSize = 0.25
+		meanFractionLow          = -0.1
+		meanFractionNoChange     = 0.05
+	)
+	fractionSlow := meanFractionSlow
+	// Be less aggressive about the ByteSize dimension when the fractionUsed is
+	// low. Rebalancing along too many dimensions results in more thrashing due
+	// to concurrent rebalancing actions by many leaseholders.
+	if dim == ByteSize && capacity != UnknownCapacity && fractionUsed < 0.4 {
+		fractionSlow = meanFractionSlowByteSize
+	}
+	if fractionAbove > fractionSlow {
 		loadSummary = overloadSlow
-	} else if fractionAbove < -0.1 {
+	} else if fractionAbove < meanFractionLow {
 		loadSummary = loadLow
-	} else if fractionAbove >= 0.05 {
+	} else if fractionAbove >= meanFractionNoChange {
 		loadSummary = loadNoChange
 	} else {
 		loadSummary = loadNormal
@@ -490,7 +507,6 @@ func loadSummaryForDimension(
 		// towards underload. The idea is that the former allows us to identify
 		// overload due to heterogeneity, while we primarily still want to focus
 		// on balancing towards the mean usage.
-		fractionUsed := float64(load) / float64(capacity)
 		if fractionUsed > 0.9 {
 			if meanUtil < fractionUsed {
 				return overloadUrgent
