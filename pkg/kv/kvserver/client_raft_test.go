@@ -5486,7 +5486,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			// raft message when the other nodes split and then after the above call
 			// it will find out about its new replica ID and write a tombstone for the
 			// old one.
-			waitForTombstone(t, tc.GetFirstStoreFromServer(t, 0).TODOEngine(), rhsID)
+			waitForTombstone(t, tc.GetFirstStoreFromServer(t, 0).StateEngine(), rhsID)
 			lhsPartition.deactivate()
 			tc.WaitForValues(t, keyA, []int64{8, 8, 8})
 			hs := getHardState(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
@@ -5538,7 +5538,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			// raft message when the other nodes split and then after the above call
 			// it will find out about its new replica ID and write a tombstone for the
 			// old one.
-			waitForTombstone(t, tc.GetFirstStoreFromServer(t, 0).TODOEngine(), rhsID)
+			waitForTombstone(t, tc.GetFirstStoreFromServer(t, 0).StateEngine(), rhsID)
 
 			// We do all of this incrementing to ensure that nobody will ever
 			// succeed in sending a message the new RHS replica after we restart
