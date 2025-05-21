@@ -83,10 +83,6 @@ func optimizePuts(
 			if maybeAddPut(t.Key) {
 				continue
 			}
-		case *kvpb.InitPutRequest:
-			if maybeAddPut(t.Key) {
-				continue
-			}
 		}
 		firstUnoptimizedIndex = i
 		break
@@ -184,10 +180,6 @@ func optimizePuts(
 				shallow.Blind = true
 				reqs[i].MustSetInner(&shallow)
 			case *kvpb.ConditionalPutRequest:
-				shallow := *t
-				shallow.Blind = true
-				reqs[i].MustSetInner(&shallow)
-			case *kvpb.InitPutRequest:
 				shallow := *t
 				shallow.Blind = true
 				reqs[i].MustSetInner(&shallow)

@@ -17,7 +17,6 @@ go_library(
         "cmd_get.go",
         "cmd_heartbeat_txn.go",
         "cmd_increment.go",
-        "cmd_init_put.go",
         "cmd_is_span_empty.go",
         "cmd_lease.go",
         "cmd_lease_info.go",

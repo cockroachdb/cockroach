@@ -247,7 +247,6 @@ var reqMethodToCap = map[kvpb.Method]methodCapability{
 	kvpb.Get:                noCapCheckNeeded,
 	kvpb.HeartbeatTxn:       noCapCheckNeeded,
 	kvpb.Increment:          noCapCheckNeeded,
-	kvpb.InitPut:            noCapCheckNeeded,
 	kvpb.IsSpanEmpty:        noCapCheckNeeded,
 	kvpb.LeaseInfo:          noCapCheckNeeded,
 	kvpb.PushTxn:            noCapCheckNeeded,

@@ -1978,17 +1978,6 @@ func TestTxnWriteBufferBatchRequestValidation(t *testing.T) {
 			},
 		},
 		{
-			name: "batch with InitPut",
-			ba: func() *kvpb.BatchRequest {
-				b := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
-				b.Add(&kvpb.InitPutRequest{
-					RequestHeader: kvpb.RequestHeader{Key: keyA, Sequence: txn.Sequence},
-					Value:         roachpb.Value{},
-				})
-				return b
-			},
-		},
-		{
 			name: "batch with ReturnRawMVCCValues Scan",
 			ba: func() *kvpb.BatchRequest {
 				b := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
