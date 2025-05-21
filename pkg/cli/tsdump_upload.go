@@ -65,7 +65,14 @@ var (
 		" These failures can be due to transietnt network errors. If any of these metrics are critical for your investigation," +
 		" please re-upload the Tsdump:\n%s\n"
 	datadogLogsURLFormat = "https://us5.datadoghq.com/logs?query=cluster_label:%s+upload_id:%s"
+
+	translateMetricType = map[string]int{
+		"GAUGE":   DatadogSeriesTypeGauge,
+		"COUNTER": DatadogSeriesTypeCounter,
+	}
 )
+
+var metricTypeMap = make(map[string]string)
 
 // DatadogPoint is a single metric point in Datadog format
 type DatadogPoint struct {
@@ -194,7 +201,7 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*DatadogSeries, error) {
 	series := &DatadogSeries{
 		Metric: name,
 		Tags:   []string{},
-		Type:   DatadogSeriesTypeUnknown,
+		Type:   resolveMetricType(name),
 		Points: make([]DatadogPoint, idata.SampleCount()),
 	}
 
@@ -234,6 +241,34 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*DatadogSeries, error) {
 
 	}
 	return series, nil
+}
+
+func resolveMetricType(metricName string) int {
+	typeLookupKey := strings.TrimPrefix(metricName, "cr.store.")
+	typeLookupKey = strings.TrimPrefix(typeLookupKey, "cr.node.")
+	metricType := metricTypeMap[typeLookupKey]
+	if t, ok := translateMetricType[metricType]; ok {
+		return t
+	}
+
+	if strings.HasSuffix(metricName, "-count") {
+		return DatadogSeriesTypeCounter
+	}
+
+	if strings.HasSuffix(metricName, "-avg") ||
+		strings.HasSuffix(metricName, "-max") ||
+		strings.HasSuffix(metricName, "-sum") ||
+		strings.HasSuffix(metricName, "-p50") ||
+		strings.HasSuffix(metricName, "-p75") ||
+		strings.HasSuffix(metricName, "-p90") ||
+		strings.HasSuffix(metricName, "-p99") ||
+		strings.HasSuffix(metricName, "-p99.9") ||
+		strings.HasSuffix(metricName, "-p99.99") ||
+		strings.HasSuffix(metricName, "-p99.999") {
+		return DatadogSeriesTypeGauge
+	}
+
+	return DatadogSeriesTypeUnknown
 }
 
 var printLock syncutil.Mutex
