@@ -19,7 +19,7 @@ with t=A k=a
 put: lock acquisition = {a id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0 Replicated Intent []}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+61 live_count=+1 live_bytes=+75 intent_count=+1 intent_bytes=+22 lock_count=+1 lock_age=+89
 >> at end:
-txn: "A" meta={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=11.000000000,0 gul=0,0
 meta: "a"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=12 vlen=10 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/11.000000000,0 -> /BYTES/first
 stats: key_count=1 key_bytes=14 val_count=1 val_bytes=61 live_count=1 live_bytes=75 intent_count=1 intent_bytes=22 lock_count=1 lock_age=89
@@ -33,7 +33,7 @@ with t=A k=a
 >> put v=first t=A k=a
 stats: no change
 >> at end:
-txn: "A" meta={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=11.000000000,0 gul=0,0
 meta: "a"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=12 vlen=10 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/11.000000000,0 -> /BYTES/first
 stats: key_count=1 key_bytes=14 val_count=1 val_bytes=61 live_count=1 live_bytes=75 intent_count=1 intent_bytes=22 lock_count=1 lock_age=89
@@ -58,7 +58,7 @@ with t=B k=k
 initput: lock acquisition = {k id=00000002 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0 Replicated Intent []}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+50 live_count=+1 live_bytes=+64 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+100
 >> at end:
-txn: "B" meta={id=00000002 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0} lock=true stat=PENDING rts=0,1 wto=false gul=0,0
+txn: "B" meta={id=00000002 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0} lock=true stat=PENDING rts=0,1 gul=0,0
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
 meta: "k"/0,0 -> txn={id=00000002 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0} ts=0,1 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k"/0,1 -> /BYTES/k1
@@ -85,7 +85,7 @@ with t=C k=k
 cput: lock acquisition = {k id=00000003 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,2 min=0,0 seq=0 Replicated Intent []}
 stats: key_bytes=+12 val_count=+1 val_bytes=+50 live_bytes=+43 gc_bytes_age=+1900 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+100
 >> at end:
-txn: "C" meta={id=00000003 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,2 min=0,0 seq=0} lock=true stat=PENDING rts=0,2 wto=false gul=0,0
+txn: "C" meta={id=00000003 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,2 min=0,0 seq=0} lock=true stat=PENDING rts=0,2 gul=0,0
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
 meta: "k"/0,0 -> txn={id=00000003 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,2 min=0,0 seq=0} ts=0,2 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k"/0,2 -> /BYTES/k2
@@ -127,7 +127,7 @@ with t=D k=k
 put: lock acquisition = {k id=00000004 key="k" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0 Replicated Intent []}
 stats: key_bytes=+12 val_count=+1 val_bytes=+58 live_bytes=+51 gc_bytes_age=+1843 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+97
 >> at end:
-txn: "D" meta={id=00000004 key="k" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
+txn: "D" meta={id=00000004 key="k" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 gul=0,0
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
 meta: "k"/0,0 -> txn={id=00000004 key="k" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k"/3.000000000,0 -> /BYTES/k3
@@ -143,7 +143,7 @@ with t=D k=k
 >> put v=k3 ambiguousReplay t=D k=k
 stats: no change
 >> at end:
-txn: "D" meta={id=00000004 key="k" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,1 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
+txn: "D" meta={id=00000004 key="k" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,1 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 gul=0,0
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
 meta: "k"/0,0 -> txn={id=00000004 key="k" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k"/3.000000000,0 -> /BYTES/k3
@@ -179,7 +179,7 @@ del: lock acquisition = {k id=00000005 key="k" iso=Serializable pri=0.00000000 e
 resolve_intent: "k" -> resolved key = true
 stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+3168
 >> at end:
-txn: "E" meta={id=00000005 key="k" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=4.000000000,0 wto=false gul=0,0
+txn: "E" meta={id=00000005 key="k" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=4.000000000,0 gul=0,0
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
 data: "k"/4.000000000,0 -> /<empty>
 data: "k"/3.000000000,0 -> /BYTES/k3
@@ -220,7 +220,7 @@ with t=F k=k
 put: lock acquisition = {k id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 Replicated Intent []}
 stats: key_bytes=+12 val_count=+1 val_bytes=+58 live_count=+1 live_bytes=+72 gc_bytes_age=-192 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+95
 >> at end:
-txn: "F" meta={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+txn: "F" meta={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 gul=0,0
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
 meta: "k"/0,0 -> txn={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k"/5.000000000,0 -> /BYTES/k5
@@ -241,7 +241,7 @@ del: "k": found key true
 del: lock acquisition = {k id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=1 Replicated Intent []}
 stats: val_bytes=+6 live_count=-1 live_bytes=-72 gc_bytes_age=+7410 intent_bytes=-7
 >> at end:
-txn: "F" meta={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+txn: "F" meta={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=5.000000000,0 gul=0,0
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
 meta: "k"/0,0 -> txn={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=1} ts=5.000000000,0 del=true klen=12 vlen=0 ih={{0 /BYTES/k5}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/5.000000000,0 -> /<empty>
@@ -260,7 +260,7 @@ with t=F k=k
 >> put v=k5 ambiguousReplay t=F k=k
 stats: no change
 >> at end:
-txn: "F" meta={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+txn: "F" meta={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 gul=0,0
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
 meta: "k"/0,0 -> txn={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=1} ts=5.000000000,0 del=true klen=12 vlen=0 ih={{0 /BYTES/k5}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/5.000000000,0 -> /<empty>
@@ -279,7 +279,7 @@ with t=F k=k
 >> del ambiguousReplay t=F k=k
 stats: no change
 >> at end:
-txn: "F" meta={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,1 min=0,0 seq=1} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+txn: "F" meta={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,1 min=0,0 seq=1} lock=true stat=PENDING rts=5.000000000,0 gul=0,0
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
 meta: "k"/0,0 -> txn={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=1} ts=5.000000000,0 del=true klen=12 vlen=0 ih={{0 /BYTES/k5}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/5.000000000,0 -> /<empty>
@@ -328,7 +328,7 @@ del_range: returned "a"
 del_range: returned "k"
 stats: key_bytes=+24 val_count=+2 val_bytes=+106 live_count=-2 live_bytes=-58 gc_bytes_age=+16544 intent_count=+2 intent_bytes=+24 lock_count=+2 lock_age=+176
 >> at end:
-txn: "G" meta={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,1 min=0,0 seq=0} lock=true stat=PENDING rts=12.000000000,1 wto=false gul=0,0
+txn: "G" meta={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,1 min=0,0 seq=0} lock=true stat=PENDING rts=12.000000000,1 gul=0,0
 meta: "a"/0,0 -> txn={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,1 min=0,0 seq=0} ts=12.000000000,1 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/12.000000000,1 -> /<empty>
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
@@ -353,7 +353,7 @@ del_range: returned "a"
 del_range: returned "k"
 stats: no change
 >> at end:
-txn: "G" meta={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,2 min=0,0 seq=0} lock=true stat=PENDING rts=12.000000000,1 wto=false gul=0,0
+txn: "G" meta={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,2 min=0,0 seq=0} lock=true stat=PENDING rts=12.000000000,1 gul=0,0
 meta: "a"/0,0 -> txn={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,1 min=0,0 seq=0} ts=12.000000000,1 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/12.000000000,1 -> /<empty>
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
@@ -375,7 +375,7 @@ with t=G k=k
 >> del_range k=a end=z ambiguousReplay returnKeys t=G k=k
 stats: no change
 >> at end:
-txn: "G" meta={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,3 min=0,0 seq=0} lock=true stat=PENDING rts=12.000000000,1 wto=false gul=0,0
+txn: "G" meta={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,3 min=0,0 seq=0} lock=true stat=PENDING rts=12.000000000,1 gul=0,0
 meta: "a"/0,0 -> txn={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,1 min=0,0 seq=0} ts=12.000000000,1 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/12.000000000,1 -> /<empty>
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first

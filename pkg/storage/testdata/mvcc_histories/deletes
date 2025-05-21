@@ -99,7 +99,7 @@ with t=A
 ----
 del: "a": found key false
 >> at end:
-txn: "A" meta={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=43.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=43.000000000,0 gul=0,0
 data: "a"/48.000000000,0 -> /<empty>
 data: "a"/47.000000000,0 -> /<empty>
 data: "a"/46.000000000,0 -> /BYTES/abc
@@ -128,7 +128,7 @@ with t=A
 ----
 del: "a": found key false
 >> at end:
-txn: "A" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=44.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=44.000000000,0 gul=0,0
 data: "a"/48.000000000,0 -> /<empty>
 data: "a"/47.000000000,0 -> /<empty>
 data: "a"/46.000000000,0 -> /BYTES/abc
@@ -157,7 +157,7 @@ with t=A
 ----
 del: "a": found key false
 >> at end:
-txn: "A" meta={id=00000006 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=46.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000006 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=46.000000000,0 gul=0,0
 data: "a"/48.000000000,0 -> /<empty>
 data: "a"/47.000000000,0 -> /<empty>
 data: "a"/46.000000000,0 -> /BYTES/abc
@@ -186,7 +186,7 @@ with t=A
 ----
 del: "a": found key false
 >> at end:
-txn: "A" meta={id=00000007 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=47.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000007 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=47.000000000,0 gul=0,0
 data: "a"/48.000000000,0 -> /<empty>
 data: "a"/47.000000000,0 -> /<empty>
 data: "a"/46.000000000,0 -> /BYTES/abc
@@ -216,7 +216,7 @@ with t=A
 del: "a": found key false
 del: lock acquisition = {a id=00000008 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000008 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=49.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000008 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=49.000000000,0 gul=0,0
 meta: "a"/0,0 -> txn={id=00000008 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} ts=50.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/50.000000000,0 -> /<empty>
 data: "a"/48.000000000,0 -> /<empty>

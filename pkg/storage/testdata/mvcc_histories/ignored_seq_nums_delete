@@ -30,7 +30,7 @@ stats: val_bytes=+4 live_count=-1 live_bytes=-70 gc_bytes_age=+6586 intent_bytes
 resolve_intent: "k" -> resolved key = true
 stats: val_bytes=-54 live_count=+1 live_bytes=+20 gc_bytes_age=-6586 intent_count=-1 intent_bytes=-12 lock_count=-1 lock_age=-89
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=11.000000000,0 gul=0,0 isn=1
 data: "k"/11.000000000,0 -> /BYTES/a
 stats: key_count=1 key_bytes=14 val_count=1 val_bytes=6 live_count=1 live_bytes=20
 
@@ -71,7 +71,7 @@ stats: val_bytes=+10 live_count=+1 live_bytes=+74 gc_bytes_age=-5696 intent_byte
 resolve_intent: "k" -> resolved key = true
 stats: val_bytes=-60 live_count=-1 live_bytes=-74 gc_bytes_age=+1246 intent_count=-1 intent_bytes=-18 lock_count=-1 lock_age=-89
 >> at end:
-txn: "A" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=11.000000000,0 gul=0,0 isn=1
 data: "k"/11.000000000,0 -> /<empty>
 stats: key_count=1 key_bytes=14 val_count=1 gc_bytes_age=1246
 
@@ -113,7 +113,7 @@ stats: val_bytes=+4 gc_bytes_age=+356
 resolve_intent: "k" -> resolved key = true
 stats: val_bytes=-54 gc_bytes_age=-4806 intent_count=-1 intent_bytes=-12 lock_count=-1 lock_age=-89
 >> at end:
-txn: "A" meta={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=11.000000000,0 gul=0,0 isn=1
 data: "k"/11.000000000,0 -> /<empty>
 stats: key_count=1 key_bytes=14 val_count=1 gc_bytes_age=1246
 
@@ -164,7 +164,7 @@ stats: val_bytes=+12 live_bytes=+12
 resolve_intent: "k" -> resolved key = true
 stats: val_bytes=-78 live_bytes=-78 intent_count=-1 intent_bytes=-18 lock_count=-1 lock_age=-89
 >> at end:
-txn: "A" meta={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=50} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=50} lock=true stat=PENDING rts=11.000000000,0 gul=0,0 isn=1
 data: "k"/11.000000000,0 -> /BYTES/c
 stats: key_count=1 key_bytes=14 val_count=1 val_bytes=6 live_count=1 live_bytes=20
 

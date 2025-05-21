@@ -225,62 +225,13 @@ func (sr *txnSpanRefresher) maybeCondenseRefreshSpans(
 func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 	ctx context.Context, ba *kvpb.BatchRequest, maxRefreshAttempts int,
 ) (*kvpb.BatchResponse, *kvpb.Error) {
-	if ba.Txn.WriteTooOld {
-		// The WriteTooOld flag is not supposed to be set on requests. It's only set
-		// by the server and it's terminated by this interceptor on the client.
-		log.Fatalf(ctx, "unexpected WriteTooOld request. ba: %s (txn: %s)",
-			ba.String(), ba.Txn.String())
-	}
 	br, pErr := sr.wrapped.SendLocked(ctx, ba)
-
-	// We might receive errors with the WriteTooOld flag set. This interceptor
-	// wants to always terminate that flag. In the case of an error, we can just
-	// ignore it.
-	if pErr != nil && pErr.GetTxn() != nil {
-		pErr.GetTxn().WriteTooOld = false
-	}
 
 	// Check for server-side refresh.
 	if err := sr.forwardRefreshTimestampOnResponse(ba, br, pErr); err != nil {
 		return nil, kvpb.NewError(err)
 	}
 
-	if pErr == nil && br.Txn.WriteTooOld {
-		// If the transaction is no longer pending, terminate the WriteTooOld flag
-		// without hitting the logic below. It's not clear that this can happen in
-		// practice, but it's better to be safe.
-		if br.Txn.Status != roachpb.PENDING {
-			br.Txn = br.Txn.Clone()
-			br.Txn.WriteTooOld = false
-			return br, nil
-		}
-		// If we got a response with the WriteTooOld flag set, then we pretend that
-		// we got a WriteTooOldError, which will cause us to attempt to refresh and
-		// propagate the error if we failed. When it can, the server prefers to
-		// return the WriteTooOld flag, rather than a WriteTooOldError because, in
-		// the former case, it can leave intents behind. We like refreshing eagerly
-		// when the WriteTooOld flag is set because it's likely that the refresh
-		// will fail (if we previously read the key that's now causing a WTO, then
-		// the refresh will surely fail).
-		// TODO(andrei): Implement a more discerning policy based on whether we've
-		// read that key before.
-		//
-		// If the refresh fails, we could continue running the transaction even
-		// though it will not be able to commit, in order for it to lay down more
-		// intents. Not doing so, though, gives the SQL a chance to auto-retry.
-		// TODO(andrei): Implement a more discerning policy based on whether
-		// auto-retries are still possible.
-		//
-		// For the refresh, we have two options: either refresh everything read
-		// *before* this batch, and then retry this batch, or refresh the current
-		// batch's reads too and then, if successful, there'd be nothing to retry.
-		// We take the former option by setting br = nil below to minimized the
-		// chances that the refresh fails.
-		bumpedTxn := br.Txn.Clone()
-		bumpedTxn.WriteTooOld = false
-		pErr = kvpb.NewErrorWithTxn(kvpb.NewTransactionRetryError(kvpb.RETRY_WRITE_TOO_OLD, "WriteTooOld flag converted to WriteTooOldError"), bumpedTxn)
-		br = nil
-	}
 	if pErr != nil {
 		if maxRefreshAttempts > 0 {
 			br, pErr = sr.maybeRefreshAndRetrySend(ctx, ba, pErr, maxRefreshAttempts)
@@ -536,10 +487,6 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptively(
 func newRetryErrorOnFailedPreemptiveRefresh(
 	txn *roachpb.Transaction, pErr *kvpb.Error,
 ) *kvpb.Error {
-	reason := kvpb.RETRY_SERIALIZABLE
-	if txn.WriteTooOld {
-		reason = kvpb.RETRY_WRITE_TOO_OLD
-	}
 	var conflictingTxn *enginepb.TxnMeta
 	msg := redact.StringBuilder{}
 	msg.SafeString("failed preemptive refresh")
@@ -558,7 +505,7 @@ func newRetryErrorOnFailedPreemptiveRefresh(
 			msg.Printf(" - unknown error: %s", pErr)
 		}
 	}
-	retryErr := kvpb.NewTransactionRetryError(reason, msg.RedactableString(), kvpb.WithConflictingTxn(conflictingTxn))
+	retryErr := kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, msg.RedactableString(), kvpb.WithConflictingTxn(conflictingTxn))
 	return kvpb.NewErrorWithTxn(retryErr, txn)
 }
 

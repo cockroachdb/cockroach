@@ -1995,8 +1995,7 @@ func (rsr *ReverseScanRequest) flags() flag {
 }
 
 // EndTxn updates the timestamp cache to prevent replays.
-// Replays for the same transaction key and timestamp will have
-// Txn.WriteTooOld=true and must retry on EndTxn.
+// Replays for the same transaction key and timestamp must retry on EndTxn.
 func (*EndTxnRequest) flags() flag              { return isWrite | isTxn | isAlone | updatesTSCache }
 func (*AdminSplitRequest) flags() flag          { return isAdmin | isAlone }
 func (*AdminUnsplitRequest) flags() flag        { return isAdmin | isAlone }
