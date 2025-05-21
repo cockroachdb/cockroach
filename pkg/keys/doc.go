@@ -219,6 +219,7 @@ var _ = [...]interface{}{
 	StoreLivenessSupporterMetaKey,    // "slsm"
 	StoreCachedSettingsKey,           // "stng"
 	StoreLastUpKey,                   // "uptm"
+	StoreWAGNodeKey,                  // "wagn"
 
 	//   5. Range lock keys for all replicated locks. All range locks share
 	//   LocalRangeLockTablePrefix. Locks can be acquired on global keys and on
