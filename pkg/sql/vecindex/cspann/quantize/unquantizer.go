@@ -6,6 +6,7 @@
 package quantize
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -45,7 +46,7 @@ func (q *UnQuantizer) GetDistanceMetric() vecdist.Metric {
 // Quantize implements the Quantizer interface.
 func (q *UnQuantizer) Quantize(w *workspace.T, vectors vector.Set) QuantizedVectorSet {
 	if buildutil.CrdbTestBuild && q.distanceMetric == vecdist.Cosine {
-		validateUnitVectors(vectors)
+		utils.ValidateUnitVectors(vectors)
 	}
 
 	unquantizedSet := &UnQuantizedVectorSet{
@@ -60,7 +61,7 @@ func (q *UnQuantizer) QuantizeInSet(
 	w *workspace.T, quantizedSet QuantizedVectorSet, vectors vector.Set,
 ) {
 	if buildutil.CrdbTestBuild && q.distanceMetric == vecdist.Cosine {
-		validateUnitVectors(vectors)
+		utils.ValidateUnitVectors(vectors)
 	}
 
 	unquantizedSet := quantizedSet.(*UnQuantizedVectorSet)
@@ -69,10 +70,6 @@ func (q *UnQuantizer) QuantizeInSet(
 
 // NewQuantizedVectorSet implements the Quantizer interface
 func (q *UnQuantizer) NewQuantizedVectorSet(capacity int, centroid vector.T) QuantizedVectorSet {
-	if buildutil.CrdbTestBuild && q.distanceMetric == vecdist.Cosine {
-		validateUnitVector(centroid)
-	}
-
 	dataBuffer := make([]float32, 0, capacity*q.GetDims())
 	unquantizedSet := &UnQuantizedVectorSet{
 		Vectors: vector.MakeSetFromRawData(dataBuffer, q.GetDims()),
@@ -89,7 +86,7 @@ func (q *UnQuantizer) EstimateDistances(
 	errorBounds []float32,
 ) {
 	if buildutil.CrdbTestBuild && q.distanceMetric == vecdist.Cosine {
-		validateUnitVector(queryVector)
+		utils.ValidateUnitVector(queryVector)
 	}
 
 	unquantizedSet := quantizedSet.(*UnQuantizedVectorSet)
