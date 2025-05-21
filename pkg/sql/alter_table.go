@@ -839,7 +839,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 			depViewRenameError := func(objType string, refTableID descpb.ID) error {
 				return params.p.dependentError(params.ctx,
-					objType, tree.ErrString(&t.NewName), n.tableDesc.ParentID, refTableID, "rename",
+					objType, tree.ErrString(&t.NewName), n.tableDesc.ParentID, refTableID, n.tableDesc.ID, "rename",
 				)
 			}
 
