@@ -36,8 +36,12 @@ func (c cmd) withEnv(k string, v any) cmd {
 func (c cmd) exec(args ...string) (_ *exec.Cmd, output *synchronizedBuffer) {
 	cmd := exec.Command(os.Args[0], "--test.run=^"+c.name+"$", "--test.v")
 	if len(args) > 0 {
-		cmd.Args = append(cmd.Args, "--")
-		cmd.Args = append(cmd.Args, args...)
+	}
+	for i, arg := range args {
+		if i == 0 {
+			cmd.Args = append(cmd.Args, "--")
+		}
+		cmd.Args = append(cmd.Args, "--"+arg)
 	}
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, c.envVars...)

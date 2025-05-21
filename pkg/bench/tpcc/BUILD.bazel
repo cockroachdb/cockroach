@@ -14,7 +14,6 @@ go_test(
         "subprocess_commands_test.go",
         "subprocess_utils_test.go",
         "tpcc_bench_generate_data_test.go",
-        "tpcc_bench_options_test.go",
         "tpcc_bench_test.go",
     ],
     embed = [":tpcc"],
