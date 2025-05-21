@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/goexectrace"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 var jemallocPurgeOverhead = settings.RegisterIntSetting(
@@ -56,6 +57,26 @@ type sampleEnvironmentCfg struct {
 	cgoMemTarget          uint64
 }
 
+func NewCoalescedFlightRecorder(
+	tags *logtags.Buffer, dir string,
+) *goexectrace.CoalescedFlightRecorder {
+	cfr := goexectrace.NewCoalescedFlightRecorder(goexectrace.CoalescedFlightRecorderOptions{
+		UniqueFileName: func() string {
+			return filepath.Join(dir, profiler.UniqueExecutionTracerFileName())
+		},
+		CreateFile: func(s string) (io.Writer, error) {
+			f, err := os.Create(s)
+			return f, err
+		},
+		IdleDuration: 10 * time.Second,
+		Warningf: func(format string, args ...interface{}) {
+			ctx := logtags.WithTags(context.Background(), tags)
+			log.Warningf(ctx, format, args...)
+		},
+	})
+	return cfr
+}
+
 // startSampleEnvironment starts a periodic loop that samples the environment and,
 // when appropriate, creates goroutine and/or heap dumps.
 //
@@ -68,23 +89,23 @@ func startSampleEnvironment(
 	runtimeSampler *status.RuntimeStatSampler,
 	sessionRegistry *sql.SessionRegistry,
 	rootMemMonitor *mon.BytesMonitor,
+	cfr *goexectrace.CoalescedFlightRecorder,
 ) error {
 	metricsSampleInterval := base.DefaultMetricsSampleInterval
 	if p, ok := srvCfg.TestingKnobs.Server.(*TestingKnobs); ok && p.EnvironmentSampleInterval != time.Duration(0) {
 		metricsSampleInterval = p.EnvironmentSampleInterval
 	}
 	cfg := sampleEnvironmentCfg{
-		st:                    srvCfg.Settings,
-		stopper:               stopper,
-		minSampleInterval:     metricsSampleInterval,
-		goroutineDumpDirName:  srvCfg.GoroutineDumpDirName,
-		heapProfileDirName:    srvCfg.HeapProfileDirName,
-		cpuProfileDirName:     srvCfg.CPUProfileDirName,
-		executionTraceDirName: srvCfg.ExecutionTraceDirName,
-		runtime:               runtimeSampler,
-		sessionRegistry:       sessionRegistry,
-		rootMemMonitor:        rootMemMonitor,
-		cgoMemTarget:          max(uint64(pebbleCacheSize), 128*1024*1024),
+		st:                   srvCfg.Settings,
+		stopper:              stopper,
+		minSampleInterval:    metricsSampleInterval,
+		goroutineDumpDirName: srvCfg.GoroutineDumpDirName,
+		heapProfileDirName:   srvCfg.HeapProfileDirName,
+		cpuProfileDirName:    srvCfg.CPUProfileDirName,
+		runtime:              runtimeSampler,
+		sessionRegistry:      sessionRegistry,
+		rootMemMonitor:       rootMemMonitor,
+		cgoMemTarget:         max(uint64(pebbleCacheSize), 128*1024*1024),
 	}
 	// Immediately record summaries once on server startup.
 
@@ -157,26 +178,12 @@ func startSampleEnvironment(
 			if err != nil {
 				log.Warningf(ctx, "failed to start cpu profiler worker: %v", err)
 			}
-			// TODO(tbg): add execution trace profiler here.
 		}
 	}
 
-	if cfg.executionTraceDirName != "" {
+	if cfr != nil {
 		// The execution tracer gets its own loop, so that it can spin more tightly
 		// and record "continuous" CPU traces.
-		cfr := goexectrace.NewCoalescedFlightRecorder(goexectrace.CoalescedFlightRecorderOptions{
-			UniqueFileName: func() string {
-				return filepath.Join(cfg.executionTraceDirName, profiler.UniqueExecutionTracerFileName())
-			},
-			CreateFile: func(s string) (io.Writer, error) {
-				f, err := os.Create(s)
-				return f, err
-			},
-			IdleDuration: 10 * time.Second,
-			Warningf: func(format string, args ...interface{}) {
-				log.Warningf(ctx, format, args...)
-			},
-		})
 		execTracer, err := profiler.NewExecutionTracer(cfg.st, cfr)
 		if err != nil {
 			return err
