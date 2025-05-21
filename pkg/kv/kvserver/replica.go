@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/goexectrace"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -1024,6 +1025,11 @@ type Replica struct {
 		// lastTickTimestamp records the timestamp captured before the last tick of
 		// this replica.
 		lastTickTimestamp hlc.ClockTimestamp
+
+		// The next two fields allow the Replica to dump the execution trace flight
+		// recorder on certain events.
+		execTraceHandle          goexectrace.FlightRecorderHandle
+		execTraceExpLeaseWatcher *time.Timer // via AfterFunc
 	}
 
 	// LeaderlessWatcher is used to signal when a replica is leaderless for a long
