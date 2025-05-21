@@ -1360,15 +1360,6 @@ func cPutArgs(key roachpb.Key, value, expValue []byte) kvpb.ConditionalPutReques
 	return *req.(*kvpb.ConditionalPutRequest)
 }
 
-func iPutArgs(key roachpb.Key, value []byte) kvpb.InitPutRequest {
-	return kvpb.InitPutRequest{
-		RequestHeader: kvpb.RequestHeader{
-			Key: key,
-		},
-		Value: roachpb.MakeValueFromBytes(value),
-	}
-}
-
 func deleteArgs(key roachpb.Key) kvpb.DeleteRequest {
 	return kvpb.DeleteRequest{
 		RequestHeader: kvpb.RequestHeader{
@@ -1602,11 +1593,9 @@ func TestOptimizePuts(t *testing.T) {
 
 	pArgs := make([]kvpb.PutRequest, optimizePutThreshold)
 	cpArgs := make([]kvpb.ConditionalPutRequest, optimizePutThreshold)
-	ipArgs := make([]kvpb.InitPutRequest, optimizePutThreshold)
 	for i := 0; i < optimizePutThreshold; i++ {
 		pArgs[i] = putArgs([]byte(fmt.Sprintf("%02d", i)), []byte("1"))
 		cpArgs[i] = cPutArgs([]byte(fmt.Sprintf("%02d", i)), []byte("1"), []byte("0"))
-		ipArgs[i] = iPutArgs([]byte(fmt.Sprintf("%02d", i)), []byte("1"))
 	}
 	incArgs := incrementArgs([]byte("inc"), 1)
 
@@ -1656,21 +1645,11 @@ func TestOptimizePuts(t *testing.T) {
 				true, true, true, true, true, true, true, true, true, true,
 			},
 		},
-		// Existing key at "0", ten init puts.
-		{
-			roachpb.Key("0"), nil,
-			[]kvpb.Request{
-				&ipArgs[0], &ipArgs[1], &ipArgs[2], &ipArgs[3], &ipArgs[4], &ipArgs[5], &ipArgs[6], &ipArgs[7], &ipArgs[8], &ipArgs[9],
-			},
-			[]bool{
-				true, true, true, true, true, true, true, true, true, true,
-			},
-		},
 		// Existing key at 11, mixed put types.
 		{
 			roachpb.Key("11"), nil,
 			[]kvpb.Request{
-				&pArgs[0], &cpArgs[1], &pArgs[2], &cpArgs[3], &ipArgs[4], &ipArgs[5], &pArgs[6], &cpArgs[7], &pArgs[8], &ipArgs[9],
+				&pArgs[0], &cpArgs[1], &pArgs[2], &cpArgs[3], &pArgs[4], &cpArgs[5], &pArgs[6], &cpArgs[7], &pArgs[8], &cpArgs[9],
 			},
 			[]bool{
 				true, true, true, true, true, true, true, true, true, true,
@@ -1752,7 +1731,7 @@ func TestOptimizePuts(t *testing.T) {
 		{
 			nil, nil,
 			[]kvpb.Request{
-				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9], &ipArgs[9],
+				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9], &cpArgs[9],
 			},
 			[]bool{
 				true, true, true, true, true, true, true, true, true, true, false,
@@ -1840,9 +1819,6 @@ func TestOptimizePuts(t *testing.T) {
 				blind = append(blind, t.Blind)
 				t.Blind = false
 			case *kvpb.ConditionalPutRequest:
-				blind = append(blind, t.Blind)
-				t.Blind = false
-			case *kvpb.InitPutRequest:
 				blind = append(blind, t.Blind)
 				t.Blind = false
 			default:
@@ -3224,99 +3200,6 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	}
 }
 
-func TestInitPutUpdatesTSCacheOnError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
-	cfg.TestingKnobs.DontPushOnLockConflictError = true
-	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
-
-	// InitPut args to write "0". Should succeed.
-	key := []byte("a")
-	value := []byte("0")
-	ipArgs1 := iPutArgs(key, value)
-	_, pErr := tc.SendWrapped(&ipArgs1)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-
-	// Set clock to time 2s and do other init puts.
-	t1 := makeTS(1*time.Second.Nanoseconds(), 0)
-	t2 := makeTS(2*time.Second.Nanoseconds(), 0)
-	t2Next := t2.Next()
-	tc.manualClock.MustAdvanceTo(t2.GoTime())
-
-	// InitPut args to write "1" to same key. Should fail.
-	ipArgs2 := iPutArgs(key, []byte("1"))
-	_, pErr = tc.SendWrappedWith(kvpb.Header{Timestamp: t2}, &ipArgs2)
-	if cfErr, ok := pErr.GetDetail().(*kvpb.ConditionFailedError); !ok {
-		t.Errorf("expected ConditionFailedError; got %v", pErr)
-	} else if valueBytes, err := cfErr.ActualValue.GetBytes(); err != nil {
-		t.Fatal(err)
-	} else if cfErr.ActualValue == nil || !bytes.Equal(valueBytes, value) {
-		t.Errorf("expected value %q; got %+v", value, valueBytes)
-	}
-
-	// Try a transactional init put at a lower timestamp and
-	// ensure it is pushed.
-	txnEarly := newTransaction("test", key, 1, tc.Clock())
-	txnEarly.ReadTimestamp, txnEarly.WriteTimestamp = t1, t1
-	resp, pErr := tc.SendWrappedWith(kvpb.Header{Txn: txnEarly}, &ipArgs1)
-	if pErr != nil {
-		t.Fatal(pErr)
-	} else if respTS := resp.Header().Txn.WriteTimestamp; respTS != t2Next {
-		t.Errorf("expected write timestamp to upgrade to %s; got %s", t2Next, respTS)
-	}
-
-	// Try an init put at a later timestamp which will fail
-	// because there's now a transaction intent. This failure
-	// will not update the timestamp cache.
-	t3 := makeTS(3*time.Second.Nanoseconds(), 0)
-	tc.manualClock.MustAdvanceTo(t3.GoTime())
-	_, pErr = tc.SendWrapped(&ipArgs2)
-	if _, ok := pErr.GetDetail().(*kvpb.LockConflictError); !ok {
-		t.Errorf("expected LockConflictError; got %v", pErr)
-	}
-
-	// Abort the intent and try a transactional init put at a later
-	// timestamp. This should succeed and should not update the
-	// timestamp cache.
-	abortIntent := func(s roachpb.Span, abortTxn *roachpb.Transaction) {
-		if _, pErr = tc.SendWrapped(&kvpb.ResolveIntentRequest{
-			RequestHeader: kvpb.RequestHeaderFromSpan(s),
-			IntentTxn:     abortTxn.TxnMeta,
-			Status:        roachpb.ABORTED,
-		}); pErr != nil {
-			t.Fatal(pErr)
-		}
-	}
-	abortIntent(ipArgs1.Span(), txnEarly)
-	txnLater := *txnEarly
-	txnLater.ReadTimestamp, txnLater.WriteTimestamp = t3, t3
-	resp, pErr = tc.SendWrappedWith(kvpb.Header{Txn: &txnLater}, &ipArgs1)
-	if pErr != nil {
-		t.Fatal(pErr)
-	} else if respTS := resp.Header().Txn.WriteTimestamp; respTS != t3 {
-		t.Errorf("expected write timestamp to be %s; got %s", t3, respTS)
-	}
-
-	// Abort the intent again and try to write again to ensure the timestamp
-	// cache wasn't updated by the second (successful), third (unsuccessful),
-	// or fourth (successful) init put. Only the init put that hit a
-	// ConditionFailedError should update the timestamp cache.
-	abortIntent(ipArgs1.Span(), &txnLater)
-	resp, pErr = tc.SendWrappedWith(kvpb.Header{Txn: txnEarly}, &ipArgs1)
-	if pErr != nil {
-		t.Fatal(pErr)
-	} else if respTS := resp.Header().Txn.WriteTimestamp; respTS != t2Next {
-		t.Errorf("expected write timestamp to upgrade to %s; got %s", t2Next, respTS)
-	}
-}
-
 // TestReplicaNoTSCacheInconsistent verifies that the timestamp cache
 // is not affected by inconsistent reads.
 func TestReplicaNoTSCacheInconsistent(t *testing.T) {
@@ -3676,26 +3559,6 @@ func TestReplicaTxnIdempotency(t *testing.T) {
 			validate: func(txn *roachpb.Transaction, key []byte) error {
 				return firstErr(
 					keyAtSeqHasVal(txn, key, 1, byteVal(val2)),
-					keyAtSeqHasVal(txn, key, 2, byteVal(val1)),
-					keyAtSeqHasVal(txn, key, 3, byteVal(val1)),
-				)
-			},
-		},
-		{
-			name: "reissued initput",
-			afterTxnStart: func(txn *roachpb.Transaction, key []byte) error {
-				args := iPutArgs(key, val1)
-				args.Sequence = 2
-				return runWithTxn(txn, &args)
-			},
-			run: func(txn *roachpb.Transaction, key []byte) error {
-				args := iPutArgs(key, val1)
-				args.Sequence = 2
-				return runWithTxn(txn, &args)
-			},
-			validate: func(txn *roachpb.Transaction, key []byte) error {
-				return firstErr(
-					keyAtSeqHasVal(txn, key, 1, nil),
 					keyAtSeqHasVal(txn, key, 2, byteVal(val1)),
 					keyAtSeqHasVal(txn, key, 3, byteVal(val1)),
 				)
@@ -10543,24 +10406,6 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				return
 			},
 		},
-		{
-			name: "serverside-refresh of write too old on initput",
-			setupFn: func() (hlc.Timestamp, error) {
-				// Note there are two different version of the value, but a
-				// non-txnal cput will evaluate the most recent version and
-				// avoid a condition failed error.
-				_, _ = put("b-iput", "put1")
-				return put("b-iput", "put2")
-			},
-			batchFn: func(ts hlc.Timestamp) (ba *kvpb.BatchRequest, expTS hlc.Timestamp) {
-				ba = &kvpb.BatchRequest{}
-				ba.Timestamp = ts.Prev()
-				expTS = ts.Next()
-				iput := iPutArgs(roachpb.Key("b-iput"), []byte("put2"))
-				ba.Add(&iput)
-				return
-			},
-		},
 		// Serverside-refresh will not be allowed because the request contains
 		// a read-only request that acquires read-latches. We cannot bump the
 		// request's timestamp without re-acquiring latches, so we don't even
@@ -10613,22 +10458,6 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			},
 			expErr: "write for key .* at timestamp .* too old",
 		},
-		// Non-1PC serializable txn initput will fail with write too old error.
-		{
-			name: "no serverside-refresh of write too old on non-1PC txn initput",
-			setupFn: func() (hlc.Timestamp, error) {
-				return put("c-iput", "put")
-			},
-			batchFn: func(ts hlc.Timestamp) (ba *kvpb.BatchRequest, expTS hlc.Timestamp) {
-				ba = &kvpb.BatchRequest{}
-				ba.Txn = newTxn("c-iput", ts.Prev())
-				iput := iPutArgs(roachpb.Key("c-iput"), []byte("iput"))
-				ba.Add(&iput)
-				assignSeqNumsForReqs(ba.Txn, &iput)
-				return
-			},
-			expErr: "write for key .* at timestamp .* too old",
-		},
 		// Non-1PC serializable txn locking scan will fail with write too old error.
 		{
 			name: "no serverside-refresh of write too old on non-1PC txn locking scan",
@@ -10661,29 +10490,6 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				cput := cPutArgs(roachpb.Key("c-cput"), []byte("iput"), []byte("put"))
 				ba.Add(&cput)
 				assignSeqNumsForReqs(ba.Txn, &cput)
-				return
-			},
-		},
-		// This test tests a scenario where an InitPut would fail at its original
-		// timestamp, but it succeeds when evaluated at a bumped timestamp after a
-		// server-side refresh.
-		{
-			name: "serverside-refresh of write too old on non-1PC txn initput without prior reads",
-			setupFn: func() (hlc.Timestamp, error) {
-				// Note there are two different version of the value, but a
-				// non-txnal cput will evaluate the most recent version and
-				// avoid a condition failed error.
-				_, _ = put("c-iput", "put1")
-				return put("c-iput", "put2")
-			},
-			batchFn: func(ts hlc.Timestamp) (ba *kvpb.BatchRequest, expTS hlc.Timestamp) {
-				expTS = ts.Next()
-				ba = &kvpb.BatchRequest{}
-				ba.Txn = newTxn("c-iput", ts.Prev())
-				ba.CanForwardReadTimestamp = true
-				iput := iPutArgs(roachpb.Key("c-iput"), []byte("put2"))
-				ba.Add(&iput)
-				assignSeqNumsForReqs(ba.Txn, &iput)
 				return
 			},
 		},

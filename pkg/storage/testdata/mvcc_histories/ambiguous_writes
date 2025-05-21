@@ -52,10 +52,10 @@ data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
 run stats ok
 with t=B k=k
   txn_begin ts=0,1
-  initput k=k ts=0,1 v=k1 ambiguousReplay
+  put k=k ts=0,1 v=k1 ambiguousReplay
 ----
->> initput k=k ts=0,1 v=k1 ambiguousReplay t=B k=k
-initput: lock acquisition = {k id=00000002 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0 Replicated Intent []}
+>> put k=k ts=0,1 v=k1 ambiguousReplay t=B k=k
+put: lock acquisition = {k id=00000002 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0 Replicated Intent []}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+50 live_count=+1 live_bytes=+64 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+100
 >> at end:
 txn: "B" meta={id=00000002 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0} lock=true stat=PENDING rts=0,1 gul=0,0

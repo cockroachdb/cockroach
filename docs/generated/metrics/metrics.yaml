@@ -2990,18 +2990,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: distsender.rpc.initput.sent
-      exported_name: distsender_rpc_initput_sent
-      description: |-
-        Number of InitPut requests processed.
-
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
-      y_axis_label: RPCs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.isspanempty.sent
       exported_name: distsender_rpc_isspanempty_sent
       description: |-
@@ -15833,14 +15821,6 @@ layers:
     - name: rpc.method.increment.recv
       exported_name: rpc_method_increment_recv
       description: Number of Increment requests processed
-      y_axis_label: RPCs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: rpc.method.initput.recv
-      exported_name: rpc_method_initput_recv
-      description: Number of InitPut requests processed
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT

@@ -2658,10 +2658,10 @@ func mvccPutInternal(
 			// NB: even if metaTimestamp is less than writeTimestamp, we can't
 			// avoid the WriteTooOld error if metaTimestamp is equal to or
 			// greater than readTimestamp. This is because certain operations
-			// like ConditionalPuts and InitPuts avoid ever needing refreshes
-			// by ensuring that they propagate WriteTooOld errors immediately
-			// instead of allowing their transactions to continue and be retried
-			// before committing.
+			// like ConditionalPuts avoid ever needing refreshes by ensuring
+			// that they propagate WriteTooOld errors immediately instead of
+			// allowing their transactions to continue and be retried before
+			// committing.
 			writeTimestamp.Forward(metaTimestamp.Next())
 			writeTooOldErr := kvpb.NewWriteTooOldError(readTimestamp, writeTimestamp, key)
 			return false, roachpb.LockAcquisition{}, writeTooOldErr
@@ -3055,101 +3055,6 @@ func mvccConditionalPutUsingIter(
 	}
 
 	return mvccPutUsingIter(ctx, writer, iter, ltScanner, key, timestamp, noValue, valueFn, opts.MVCCWriteOptions)
-}
-
-// MVCCInitPut sets the value for a specified key if the key doesn't exist. It
-// returns a ConditionFailedError when the write fails or if the key exists with
-// an existing value that is different from the supplied value. If
-// failOnTombstones is set to true, tombstones count as mismatched values and
-// will cause a ConditionFailedError.
-//
-// Note that, when writing transactionally, the txn's timestamps
-// dictate the timestamp of the operation, and the timestamp parameter is
-// confusing and redundant. See the comment on mvccPutInternal for details.
-func MVCCInitPut(
-	ctx context.Context,
-	rw ReadWriter,
-	key roachpb.Key,
-	timestamp hlc.Timestamp,
-	value roachpb.Value,
-	failOnTombstones bool,
-	opts MVCCWriteOptions,
-) (roachpb.LockAcquisition, error) {
-	iter, err := newMVCCIterator(
-		ctx, rw, timestamp, false /* rangeKeyMasking */, true, /* noInterleavedIntents */
-		IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
-			Prefix:       true,
-			ReadCategory: opts.Category,
-		},
-	)
-	if err != nil {
-		return roachpb.LockAcquisition{}, err
-	}
-	defer iter.Close()
-
-	inlinePut := timestamp.IsEmpty()
-	var ltScanner *lockTableKeyScanner
-	if !inlinePut {
-		ltScanner, err = newLockTableKeyScanner(
-			ctx, rw, opts.TxnID(), lock.Intent, opts.MaxLockConflicts, opts.TargetLockConflictBytes, opts.Category)
-		if err != nil {
-			return roachpb.LockAcquisition{}, err
-		}
-		defer ltScanner.close()
-	}
-
-	return mvccInitPutUsingIter(ctx, rw, iter, ltScanner, key, timestamp, value, failOnTombstones, opts)
-}
-
-// MVCCBlindInitPut is a fast-path of MVCCInitPut. See the MVCCInitPut
-// comments for details of the semantics. MVCCBlindInitPut skips
-// retrieving the existing metadata for the key requiring the caller
-// to guarantee no version for the key currently exist.
-//
-// Note that, when writing transactionally, the txn's timestamps
-// dictate the timestamp of the operation, and the timestamp parameter is
-// confusing and redundant. See the comment on mvccPutInternal for details.
-func MVCCBlindInitPut(
-	ctx context.Context,
-	w Writer,
-	key roachpb.Key,
-	timestamp hlc.Timestamp,
-	value roachpb.Value,
-	failOnTombstones bool,
-	opts MVCCWriteOptions,
-) (roachpb.LockAcquisition, error) {
-	return mvccInitPutUsingIter(
-		ctx, w, nil, nil, key, timestamp, value, failOnTombstones, opts)
-}
-
-func mvccInitPutUsingIter(
-	ctx context.Context,
-	w Writer,
-	iter MVCCIterator,
-	ltScanner *lockTableKeyScanner,
-	key roachpb.Key,
-	timestamp hlc.Timestamp,
-	value roachpb.Value,
-	failOnTombstones bool,
-	opts MVCCWriteOptions,
-) (roachpb.LockAcquisition, error) {
-	valueFn := func(existVal optionalValue) (roachpb.Value, error) {
-		if failOnTombstones && existVal.IsTombstone() {
-			// We found a tombstone and failOnTombstones is true: fail.
-			return roachpb.Value{}, &kvpb.ConditionFailedError{
-				ActualValue: existVal.ToPointer(),
-			}
-		}
-		if existVal.IsPresent() && !existVal.Value.EqualTagAndData(value) {
-			// The existing value does not match the supplied value.
-			return roachpb.Value{}, &kvpb.ConditionFailedError{
-				ActualValue: existVal.ToPointer(),
-			}
-		}
-		return value, nil
-	}
-	return mvccPutUsingIter(ctx, w, iter, ltScanner, key, timestamp, noValue, valueFn, opts)
 }
 
 // mvccKeyFormatter is an fmt.Formatter for MVCC Keys.

@@ -271,13 +271,6 @@ func (r *Replica) updateTimestampCache(
 			if _, ok := pErr.GetDetail().(*kvpb.ConditionFailedError); ok {
 				addToTSCache(start, end, ts, txnID)
 			}
-		case *kvpb.InitPutRequest:
-			// InitPut only updates on ConditionFailedErrors. On other errors,
-			// no information is returned. On successful writes, the intent
-			// already protects against writes underneath the read.
-			if _, ok := pErr.GetDetail().(*kvpb.ConditionFailedError); ok {
-				addToTSCache(start, end, ts, txnID)
-			}
 		case *kvpb.GetRequest:
 			if !beforeEval && resp.(*kvpb.GetResponse).ResumeSpan != nil {
 				// The request did not evaluate. Ignore it.

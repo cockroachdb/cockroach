@@ -81,13 +81,6 @@ data: "k1"/5.000000000,0 -> /BYTES/v1
 error: (*kvpb.LockConflictError:) conflicting locks on "k1", "k1"
 
 run error
-initput t=D k=k1 v=v2 maxLockConflicts=2
-----
->> at end:
-data: "k1"/5.000000000,0 -> /BYTES/v1
-error: (*kvpb.LockConflictError:) conflicting locks on "k1", "k1"
-
-run error
 del t=D k=k1 maxLockConflicts=2
 ----
 >> at end:

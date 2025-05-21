@@ -1331,60 +1331,6 @@ func runMVCCBlindConditionalPut(ctx context.Context, b *testing.B, emk engineMak
 	b.StopTimer()
 }
 
-func runMVCCInitPut(ctx context.Context, b *testing.B, emk engineMaker, valueSize int) {
-	rng, _ := randutil.NewTestRand()
-	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
-	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
-
-	eng := emk(b, fmt.Sprintf("iput_%d", valueSize))
-	defer eng.Close()
-
-	b.SetBytes(int64(valueSize))
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
-		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		batch := eng.NewBatch()
-		if _, err := MVCCInitPut(ctx, batch, key, ts, value, false, MVCCWriteOptions{}); err != nil {
-			b.Fatalf("failed put: %+v", err)
-		}
-		if err := batch.Commit(true); err != nil {
-			b.Fatalf("failed commit: %v", err)
-		}
-		batch.Close()
-	}
-
-	b.StopTimer()
-}
-
-func runMVCCBlindInitPut(ctx context.Context, b *testing.B, emk engineMaker, valueSize int) {
-	rng, _ := randutil.NewTestRand()
-	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
-	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
-
-	eng := emk(b, fmt.Sprintf("iput_%d", valueSize))
-	defer eng.Close()
-
-	b.SetBytes(int64(valueSize))
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
-		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		wb := eng.NewWriteBatch()
-		if _, err := MVCCBlindInitPut(ctx, wb, key, ts, value, false, MVCCWriteOptions{}); err != nil {
-			b.Fatalf("failed put: %+v", err)
-		}
-		if err := wb.Commit(true); err != nil {
-			b.Fatalf("failed commit: %v", err)
-		}
-		wb.Close()
-	}
-
-	b.StopTimer()
-}
-
 func runMVCCBatchPut(ctx context.Context, b *testing.B, emk engineMaker, valueSize, batchSize int) {
 	rng, _ := randutil.NewTestRand()
 	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
@@ -2585,38 +2531,6 @@ func BenchmarkMVCCBlindConditionalPut(b *testing.B) {
 		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
 			ctx := context.Background()
 			runMVCCBlindConditionalPut(ctx, b, setupMVCCInMemPebble, valueSize)
-		})
-	}
-}
-
-func BenchmarkMVCCInitPut(b *testing.B) {
-	defer log.Scope(b).Close(b)
-
-	valueSizes := []int{10, 100, 1000, 10000}
-	if testing.Short() {
-		valueSizes = []int{10, 10000}
-	}
-
-	for _, valueSize := range valueSizes {
-		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-			ctx := context.Background()
-			runMVCCInitPut(ctx, b, setupMVCCInMemPebble, valueSize)
-		})
-	}
-}
-
-func BenchmarkMVCCBlindInitPut(b *testing.B) {
-	defer log.Scope(b).Close(b)
-
-	valueSizes := []int{10, 100, 1000, 10000}
-	if testing.Short() {
-		valueSizes = []int{10, 10000}
-	}
-
-	for _, valueSize := range valueSizes {
-		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-			ctx := context.Background()
-			runMVCCBlindInitPut(ctx, b, setupMVCCInMemPebble, valueSize)
 		})
 	}
 }
