@@ -183,8 +183,7 @@ func TestBatchHandlerExhaustive(t *testing.T) {
 	if uniqueConstraint {
 		runner.Exec(t, `ALTER TABLE test_table ADD CONSTRAINT unique_value UNIQUE (value)`)
 	}
-	// TODO(jeffswenson): enable this metamorphic option after fixing #146465.
-	if false && addAndRemoveColumn {
+	if addAndRemoveColumn {
 		runner.Exec(t, `ALTER TABLE test_table ADD COLUMN temp_col INT`)
 		runner.Exec(t, `ALTER TABLE test_table DROP COLUMN temp_col`)
 	}
