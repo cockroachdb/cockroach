@@ -199,6 +199,7 @@ go_library(
         "tpchbench.go",
         "tpchvec.go",
         "ts_util.go",
+        "ttl_restart.go",
         "typeorm.go",
         "unoptimized_query_oracle.go",
         "validate_system_schema_after_version_upgrade.go",
