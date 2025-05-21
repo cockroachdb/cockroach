@@ -7,8 +7,10 @@ go_test(
     srcs = [
         "main_test.go",
         ":test_gen",  # keep
+        ":test_gen_multiregion",  # keep
     ],
     data = [
+        "//pkg/ccl/schemachangerccl:end_to_end_ccl_testdata",
         "//pkg/sql/schemachanger:end_to_end_testdata",
     ],
     exec_properties = {"test.Pool": "heavy"},
@@ -16,6 +18,7 @@ go_test(
     tags = ["cpu:3"],
     deps = [
         "//pkg/ccl",
+        "//pkg/ccl/schemachangerccl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
@@ -38,6 +41,26 @@ sctest_gen(
     test_data = [
         "//pkg/sql/schemachanger:end_to_end_testdata_definitions",
     ],
+    tests = [
+        "BackupRollbacks",
+        "BackupRollbacksMixedVersion",
+        "BackupSuccess",
+        "BackupSuccessMixedVersion",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+sctest_gen(
+    name = "test_gen_multiregion",
+    out = "backup_multiregion_generated_test.go",
+    ccl = True,
+    new_cluster_factory = "MultiRegionTestClusterFactory{}",
+    package = "sctestbackupccl",
+    suffix = "_multiregion",
+    test_data = ["//pkg/ccl/schemachangerccl:end_to_end_ccl_testdata_definitions"],
     tests = [
         "BackupRollbacks",
         "BackupRollbacksMixedVersion",
