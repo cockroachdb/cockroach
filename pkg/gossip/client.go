@@ -103,7 +103,7 @@ func (c *client) startLocked(
 			// asynchronous from the caller's perspective, so the only effect of
 			// `WithBlock` here is blocking shutdown - at the time of this writing,
 			// that ends ups up making `kv` tests take twice as long.
-			var connection *rpc.Connection
+			var connection *rpc.GRPCConnection
 			if c.peerID != 0 {
 				connection = rpcCtx.GRPCDialNode(c.addr.String(), c.peerID, c.locality, rpc.SystemClass)
 			} else {
