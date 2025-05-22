@@ -6,66 +6,60 @@
 package tpcc
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/stretchr/testify/require"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 type cmd struct {
-	name string
-	impl func(t *testing.T)
+	name    string
+	impl    func(t *testing.T)
+	envVars []string
 }
 
-func (c *cmd) exec(env cmdEnv, args ...string) *exec.Cmd {
-	cmd := exec.Command(os.Args[0],
-		"--test.run=^TestInternal"+c.name+"$",
-		"--test.v")
+func makeCmd(name string, impl func(t *testing.T)) cmd {
+	return cmd{
+		name: name,
+		impl: impl,
+	}.withEnv(allowInternalTestEnvVar, true)
+}
+
+func (c cmd) withEnv(k string, v any) cmd {
+	c.envVars = append(c.envVars, fmt.Sprintf("%s=%v", k, v))
+	return c
+}
+
+func (c cmd) exec(args ...string) (_ *exec.Cmd, output *synchronizedBuffer) {
+	cmd := exec.Command(os.Args[0], "--test.run=^"+c.name+"$", "--test.v")
 	if len(args) > 0 {
 		cmd.Args = append(cmd.Args, "--")
 		cmd.Args = append(cmd.Args, args...)
 	}
 	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, fmt.Sprintf("%s=t", internalTestEnvVar))
-	cmd.Env = append(cmd.Env, env.toStrings()...)
-	return cmd
+	cmd.Env = append(cmd.Env, c.envVars...)
+	var buf synchronizedBuffer
+	cmd.Stdout = &buf
+	cmd.Stderr = &buf
+	return cmd, &buf
 }
 
-var isInternalTest = envutil.EnvOrDefaultBool(internalTestEnvVar, false)
-
-func internalCommand(t *testing.T) {
-	if !isInternalTest {
-		skip.IgnoreLint(t)
-	}
-	f, ok := commands[strings.TrimPrefix(t.Name(), "TestInternal")]
-	require.True(t, ok)
-	f.impl(t)
+type synchronizedBuffer struct {
+	mu  syncutil.Mutex
+	buf bytes.Buffer
 }
 
-func registerCmd(name string, impl func(t *testing.T)) *cmd {
-	c := &cmd{
-		name: name,
-		impl: impl,
-	}
-	commands[name] = c
-	return c
+func (b *synchronizedBuffer) Write(p []byte) (n int, err error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
 }
 
-type envVar struct {
-	k string
-	v interface{}
-}
-
-type cmdEnv []envVar
-
-func (ce cmdEnv) toStrings() (ret []string) {
-	for _, v := range ce {
-		ret = append(ret, fmt.Sprintf("%s=%v", v.k, v.v))
-	}
-	return ret
+func (b *synchronizedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
