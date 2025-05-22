@@ -6,3 +6,47 @@ PREPARE p AS SELECT $1::INT
 
 statement error pgcode 0A000 cannot evaluate function in this context
 EXECUTE p(f())
+
+statement ok
+DEALLOCATE p;
+
+# Ensure that stable folding does not affect plans stored in the plan cache.
+subtest regression_147186
+
+statement ok
+CREATE FUNCTION f147186() RETURNS INT LANGUAGE SQL AS $$ SELECT CAST(current_setting('foo.bar') AS INT) $$;
+
+statement ok
+CREATE TABLE t147186 (a INT, b INT DEFAULT f147186());
+
+statement ok
+PREPARE p AS INSERT INTO t147186 (a) VALUES ($1);
+
+statement ok
+SET foo.bar = '100';
+
+statement ok
+EXECUTE p(1);
+
+query II rowsort
+SELECT a, b FROM t147186;
+----
+1  100
+
+statement ok
+SET foo.bar = '200';
+
+statement ok
+EXECUTE p(2);
+
+# The second row should reflect the custom var change.
+query II rowsort
+SELECT a, b FROM t147186;
+----
+1  100
+2  200
+
+statement ok
+DEALLOCATE p;
+
+subtest end
