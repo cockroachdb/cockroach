@@ -286,7 +286,7 @@ func (b *SpillingBuffer) GetVecWithTuple(
 		var ok bool
 		b.numDequeued += b.dequeueScratch.Length()
 		if ok, err = b.diskQueue.Dequeue(ctx, b.dequeueScratch); err != nil {
-			colexecerror.InternalError(err)
+			HandleErrorFromDiskQueue(err)
 		}
 		if !ok || b.dequeueScratch.Length() == 0 {
 			colexecerror.InternalError(
@@ -303,7 +303,7 @@ func (b *SpillingBuffer) Length() int {
 func (b *SpillingBuffer) closeSpillingQueue(ctx context.Context) {
 	if b.diskQueue != nil {
 		if err := b.diskQueue.Close(ctx); err != nil {
-			colexecerror.InternalError(err)
+			HandleErrorFromDiskQueue(err)
 		}
 		if b.fdSemaphore != nil {
 			b.fdSemaphore.Release(numSpillingBufferFDs)
