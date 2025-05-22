@@ -186,9 +186,7 @@ func (s *neverTripSignal) IsTripped() bool {
 // that it will latch onto (or start) an existing connection attempt even if
 // previous attempts have not succeeded. This may be preferable to Connect
 // if the caller is already certain that a peer is available.
-func (c *Connection[Conn]) ConnectNoBreaker(
-	ctx context.Context,
-) (Conn, drpcpool.Conn, error) {
+func (c *Connection[Conn]) ConnectNoBreaker(ctx context.Context) (Conn, drpcpool.Conn, error) {
 	// For ConnectNoBreaker we don't use the default Signal but pass a dummy one
 	// that never trips. (The probe tears down the Conn on quiesce so we don't rely
 	// on the Signal for that).

@@ -1991,7 +1991,9 @@ func (rpcCtx *Context) grpcDialRaw(
 // node ID between client and server. This function should only be
 // used with the gossip client and CLI commands which can talk to any
 // node. This method implies a SystemClass.
-func (rpcCtx *Context) GRPCUnvalidatedDial(target string, locality roachpb.Locality) *GRPCConnection {
+func (rpcCtx *Context) GRPCUnvalidatedDial(
+	target string, locality roachpb.Locality,
+) *GRPCConnection {
 	return rpcCtx.grpcDialNodeInternal(target, 0, locality, SystemClass)
 }
 
