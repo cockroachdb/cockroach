@@ -1,4 +1,4 @@
-gen_cluster nodes=9 node_cpu_rate_capacity=50000
+gen_cluster nodes=9 node_cpu_rate_capacity=5000000000
 ----
 
 # The placement will be skewed, s.t. n1/s1, n2/s2 and n3/s3 will have all the
@@ -9,7 +9,8 @@ gen_ranges ranges=36 min_key=1 max_key=10000 placement_type=replica_placement by
 ----
 {s1,s2,s3}:1
 
-gen_load rate=1000 rw_ratio=0.95 min_block=100 max_block=100 request_cpu_per_access=100 raft_cpu_per_write=10 min_key=1 max_key=10000
+# 5ms of request CPU per access and 500µs of raft CPU per write @ 1000/s.
+gen_load rate=1000 rw_ratio=0.95 min_block=100 max_block=100 request_cpu_per_access=5000000 raft_cpu_per_write=500000 min_key=1 max_key=10000
 ----
 
 # Almost empty workload, which generates no CPU and small amount of writes
@@ -66,26 +67,26 @@ plot stat=cpu sample=1  show_last_value=true show_initial_value=true
 ----
 ----
 
- 100500 ┤╭──╮
-  93800 ┤│  ╰╮
-  87100 ┤│   │
-  80400 ┤│   ╰───╮
-  73700 ┤│       ╰──╮
-  67000 ┤│          ╰───╮
-  60300 ┤│              ╰───╮
-  53600 ┤│                  │
-  46900 ┤│                  ╰──────╮
-  40200 ┤│                         ╰───╮
-  33500 ┤│                             ╰──╮
-  26800 ┤│                                ╰───╮
-  20100 ┤│                                    ╰─────────╮
-  13400 ┤│                  ╭───────────────────────────────────────────────────────────
-   6700 ┤│  ╭───╭───╭───────╯─────────────────────╯────────╯
-      0 ┼───────────╯──────╯╯──────╯  ╰╯  ╰╯
-                                               cpu
+ 5025000000 ┤╭──╮
+ 4690000000 ┤│  ╰╮
+ 4355000000 ┤│   │
+ 4020000000 ┤│   ╰───╮
+ 3685000000 ┤│       ╰──╮
+ 3350000000 ┤│          ╰───╮
+ 3015000000 ┤│              ╰───╮
+ 2680000000 ┤│                  │
+ 2345000000 ┤│                  ╰──────╮
+ 2010000000 ┤│                         ╰───╮
+ 1675000000 ┤│                             ╰──╮
+ 1340000000 ┤│                                ╰───╮
+ 1005000000 ┤│                                    ╰─────────╮
+  670000000 ┤│                  ╭───────────────────────────────────────────────────────────
+  335000000 ┤│  ╭───╭───╭───────╯─────────────────────╯────────╯
+          0 ┼───────────╯──────╯╯──────╯  ╰╯  ╰╯
+                                                   cpu
 
 initial store values: [s1=0 s2=0 s3=0 s4=0 s5=0 s6=0 s7=0 s8=0 s9=0]
-last store values: [s1=11195 s2=11241 s3=11226 s4=11246 s5=11256 s6=11315 s7=11484 s8=11247 s9=11190]
+last store values: [s1=559798574 s2=562072646 s3=561338269 s4=562324611 s5=562820842 s6=565763787 s7=574215109 s8=562394792 s9=559549250]
 ----
 ----
 
