@@ -46,6 +46,7 @@ type replicaLogStorage struct {
 	// points to Replica.raftMu, and shares its semantics and locking order.
 	raftMu struct {
 		*syncutil.Mutex
+		loader logstore.StateLoader
 		// bytesAccount accounts bytes used by various Raft components, like entries
 		// to be applied. Currently, it only tracks bytes used by committed entries
 		// being applied to the state machine.

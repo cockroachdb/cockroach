@@ -229,11 +229,12 @@ func newUninitializedReplicaWithoutRaftGroup(
 	}
 	r.logStorage.mu.RWMutex = (*syncutil.RWMutex)(&r.mu.ReplicaMutex)
 	r.logStorage.raftMu.Mutex = &r.raftMu.Mutex
+	r.logStorage.raftMu.loader = logstore.NewStateLoader(rangeID)
 	r.logStorage.ls = &logstore.LogStore{
 		RangeID:     rangeID,
 		Engine:      store.LogEngine(),
 		Sideload:    sideloaded,
-		StateLoader: r.raftMu.stateLoader.StateLoader,
+		StateLoader: r.logStorage.raftMu.loader,
 		// NOTE: use the same SyncWaiter loop for all raft log writes performed by a
 		// given range ID, to ensure that callbacks are processed in order.
 		SyncWaiter: store.syncWaiters[int(rangeID)%len(store.syncWaiters)],

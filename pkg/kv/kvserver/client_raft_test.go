@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	raft "github.com/cockroachdb/cockroach/pkg/raft"
@@ -5316,7 +5317,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		getHardState := func(
 			t *testing.T, store *kvserver.Store, rangeID roachpb.RangeID,
 		) raftpb.HardState {
-			hs, err := stateloader.Make(rangeID).LoadHardState(ctx, store.TODOEngine())
+			hs, err := logstore.NewStateLoader(rangeID).LoadHardState(ctx, store.LogEngine())
 			require.NoError(t, err)
 			return hs
 		}

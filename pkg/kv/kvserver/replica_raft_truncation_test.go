@@ -39,7 +39,6 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "truncated_state"), func(t *testing.T, path string) {
 		const rangeID = 12
 		loader := logstore.NewStateLoader(rangeID)
-		prefixBuf := &loader.RangeIDPrefixBuf
 		eng := storage.NewDefaultInMemForTesting()
 		defer eng.Close()
 
@@ -93,7 +92,7 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 						binary.BigEndian.PutUint64(meta.RawBytes, uint64(idx))
 						value, err := protoutil.Marshal(&meta)
 						require.NoError(t, err)
-						require.NoError(t, eng.PutUnversioned(prefixBuf.RaftLogKey(idx), value))
+						require.NoError(t, eng.PutUnversioned(loader.RaftLogKey(idx), value))
 					}
 				}
 
@@ -112,8 +111,8 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 
 				// Find the first untruncated log entry (the log head).
 				res, err := storage.MVCCScan(ctx, eng,
-					prefixBuf.RaftLogPrefix().Clone(),
-					prefixBuf.RaftLogPrefix().PrefixEnd(),
+					loader.RaftLogPrefix().Clone(),
+					loader.RaftLogPrefix().PrefixEnd(),
 					hlc.Timestamp{},
 					storage.MVCCScanOptions{MaxKeys: 1})
 				require.NoError(t, err)
