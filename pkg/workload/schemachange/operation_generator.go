@@ -898,15 +898,6 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	if err != nil {
 		return nil, err
 	}
-	// If we are intentionally using an invalid child type, then it doesn't make
-	// sense to validate if the rows validate the constraint.
-	rowsSatisfyConstraint := true
-	if !fetchInvalidChild {
-		rowsSatisfyConstraint, err = og.rowsSatisfyFkConstraint(ctx, tx, parentTable, parentColumn, childTable, childColumn)
-		if err != nil {
-			return nil, err
-		}
-	}
 
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
@@ -923,7 +914,6 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	// separate job validating the constraint, we can't at transaction time predict,
 	// perfectly if an error is expected. We can confirm post transaction with a time
 	// travel query.
-	_ = rowsSatisfyConstraint
 	stmt.potentialExecErrors.add(pgcode.ForeignKeyViolation)
 	og.potentialCommitErrors.add(pgcode.ForeignKeyViolation)
 
@@ -3623,22 +3613,12 @@ func (og *operationGenerator) randParentColumnForFkRelation(
 	var typName string
 	var nullable string
 
-	nestedTxn, err := tx.Begin(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	err = nestedTxn.QueryRow(ctx, fmt.Sprintf(`
+	err := tx.QueryRow(ctx, fmt.Sprintf(`
 	SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable FROM (
 		%s
 	)`, subQuery.String())).Scan(&tableSchema, &tableName, &columnName, &typName, &nullable)
 	if err != nil {
-		if rbErr := nestedTxn.Rollback(ctx); rbErr != nil {
-			err = errors.CombineErrors(rbErr, err)
-		}
 		return nil, nil, err
-	}
-	if err = nestedTxn.Commit(ctx); err != nil {
-		return nil, nil, errors.WithStack(err)
 	}
 
 	columnToReturn := column{
