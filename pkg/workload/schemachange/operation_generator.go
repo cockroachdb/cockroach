@@ -5276,27 +5276,16 @@ func (og *operationGenerator) alterPolicy(ctx context.Context, tx pgx.Tx) (*opSt
 // randUser returns a real username from the database.
 // It returns an error if no user is found.
 func (og *operationGenerator) randUser(ctx context.Context, tx pgx.Tx) (string, error) {
-	query := "SELECT username FROM [SHOW USERS] ORDER BY random() LIMIT 1"
-	rows, err := tx.Query(ctx, query)
-	if rows.Err() != nil {
-		return "", rows.Err()
-	}
-
-	if err != nil {
+	if err := og.setSeedInDB(ctx, tx); err != nil {
 		return "", err
 	}
-	defer rows.Close()
+	query := "SELECT username FROM [SHOW USERS] ORDER BY random() LIMIT 1"
+	row := tx.QueryRow(ctx, query)
 
 	var realUser string
-	if rows.Next() {
-		if err := rows.Scan(&realUser); err != nil {
-			return "", err
-		}
-		og.LogMessage(fmt.Sprintf("Found real user: '%s'", realUser))
-		return realUser, nil
+	if err := row.Scan(&realUser); err != nil {
+		return "", err
 	}
-
-	// This should never happen in a valid CockroachDB instance.
-	// There should always be at least one user.
-	return "", errors.New("no users found in the database")
+	og.LogMessage(fmt.Sprintf("Found real user: '%s'", realUser))
+	return realUser, nil
 }
