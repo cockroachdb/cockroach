@@ -569,7 +569,9 @@ type candidateSet struct {
 // want more ranges to go to it. One refinement we can try is to make the
 // summary more fine-grained, and increment a count of times this store has
 // tried to shed this range and failed, and widen the scope of what we pick
-// from after some failures.
+// from after some failures. Another refinement is to initially prefer
+// candidates that are the lowest along the dimension that the overloaded
+// store is trying to shed.
 //
 // TODO(sumeer): implement that refinement after some initial
 // experimentation and learnings.
@@ -639,11 +641,19 @@ func sortTargetCandidateSetAndPick(
 	// lowestLoad is the load of the set of candidates with the lowest load,
 	// among which we will later pick. If the set is found to be empty in the
 	// following loop, the lowestLoad is updated.
+	//
+	// Consider the series of sets of candidates that have the same sls. The
+	// only reason we will consider a set later than the first one is if the
+	// earlier sets get fully discarded solely because of nls >= loadThreshold
+	// and have no pending changes.
 	lowestLoad := cands.candidates[0].sls
-	discardedCandsAtOrBeforeLowestLoadHadPendingChanges := false
+	discardedCandsHadNoPendingChanges := true
 	for _, cand := range cands.candidates {
+		if cand.sls >= loadThreshold {
+			break
+		}
 		if cand.sls > lowestLoad {
-			if j == 0 {
+			if j == 0 && discardedCandsHadNoPendingChanges {
 				// This is the lowestLoad set being considered now.
 				lowestLoad = cand.sls
 			} else {
@@ -651,11 +661,11 @@ func sortTargetCandidateSetAndPick(
 				break
 			}
 		}
-		if cand.sls >= loadThreshold || cand.nls >= loadThreshold ||
-			cand.maxFractionPending >= maxFractionPendingThreshold {
+		if cand.nls >= loadThreshold || cand.maxFractionPending >= maxFractionPendingThreshold {
 			// Discard this candidate.
-			discardedCandsAtOrBeforeLowestLoadHadPendingChanges =
-				discardedCandsAtOrBeforeLowestLoadHadPendingChanges || (cand.maxFractionPending > epsilon)
+			if cand.maxFractionPending > epsilon && discardedCandsHadNoPendingChanges {
+				discardedCandsHadNoPendingChanges = false
+			}
 			log.Infof(ctx,
 				"store %v not a candidate sls=%v", cand.StoreID, cand.storeLoadSummary)
 			continue
@@ -679,13 +689,12 @@ func sortTargetCandidateSetAndPick(
 	// and then see if we can transfer to those. Note that we used the condition
 	// cand.maxFractionPending>epsilon and not
 	// cand.maxFractionPending>=maxFractionPendingThreshold when setting
-	// discardedCandsAtOrBeforeLowestLoadHadPendingChanges. This is an
-	// additional conservative choice, since pending added work is slightly
-	// inflated in size, and we want to have a true picture of all of these
-	// potential candidates before we start using the ones with load >=
-	// loadNoChange.
+	// discardedCandsHadNoPendingChanges. This is an additional conservative
+	// choice, since pending added work is slightly inflated in size, and we
+	// want to have a true picture of all of these potential candidates before
+	// we start using the ones with load >= loadNoChange.
 	if lowestLoad >= loadNoChange &&
-		(discardedCandsAtOrBeforeLowestLoadHadPendingChanges || overrideToIgnoreLoadNoChangeAndHigher) {
+		(!discardedCandsHadNoPendingChanges || overrideToIgnoreLoadNoChangeAndHigher) {
 		return 0
 	}
 	// Candidates have equal load value and sorted by non-decreasing
