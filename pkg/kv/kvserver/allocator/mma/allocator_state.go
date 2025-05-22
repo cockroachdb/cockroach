@@ -225,7 +225,7 @@ func (a *allocatorState) rebalanceStores(
 				means.stores = candsPL
 				computeMeansForStoreSet(a.cs, &means, scratchNodes)
 				sls := a.cs.computeLoadSummary(store.StoreID, &means.storeLoad, &means.nodeLoad)
-				log.Infof(ctx, "range %v store %v sls=%v means %v store %v", rangeID, store.StoreID,
+				log.Infof(ctx, "(lease-transfer) range %v store %v sls=%v means %v store %v", rangeID, store.StoreID,
 					sls, means.storeLoad.load, ss.adjusted.load)
 				if sls.dimSummary[CPURate] < overloadSlow {
 					// This store is not cpu overloaded relative to these candidates for
@@ -364,6 +364,8 @@ func (a *allocatorState) rebalanceStores(
 				// fixed first.
 				continue
 			}
+			log.Infof(ctx, "(replica-transfer) range %v store %v %v",
+				rangeID, store.StoreID, ss.adjusted.load)
 			disj[0] = conj
 			storesToExcludeForRange = append(storesToExcludeForRange[:0], storesToExclude...)
 			// Also exclude all stores on nodes that have existing replicas.
@@ -629,6 +631,7 @@ func sortTargetCandidateSetAndPick(
 		}
 	}
 	if j == 0 {
+		log.Infof(ctx, "sortTargetCandidateSetAndPick: no candidates due to disk space util")
 		return 0
 	}
 	// Every candidate in [0:j] has same diversity and is sorted by increasing
@@ -674,6 +677,7 @@ func sortTargetCandidateSetAndPick(
 		j++
 	}
 	if j == 0 {
+		log.Infof(ctx, "sortTargetCandidateSetAndPick: no candidates due to load")
 		return 0
 	}
 	cands.candidates = cands.candidates[:j]
@@ -695,6 +699,7 @@ func sortTargetCandidateSetAndPick(
 	// we start using the ones with load >= loadNoChange.
 	if lowestLoad >= loadNoChange &&
 		(!discardedCandsHadNoPendingChanges || overrideToIgnoreLoadNoChangeAndHigher) {
+		log.Infof(ctx, "sortTargetCandidateSetAndPick: no candidates due to loadNoChange")
 		return 0
 	}
 	// Candidates have equal load value and sorted by non-decreasing
@@ -712,6 +717,7 @@ func sortTargetCandidateSetAndPick(
 		j++
 	}
 	if j == 0 {
+		log.Infof(ctx, "sortTargetCandidateSetAndPick: no candidates due to lease preference")
 		return 0
 	}
 	cands.candidates = cands.candidates[:j]
