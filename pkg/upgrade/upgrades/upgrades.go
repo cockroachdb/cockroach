@@ -59,11 +59,11 @@ var upgrades = []upgradebase.Upgrade{
 		bootstrapCluster,
 		upgrade.RestoreActionNotRequired("initialization runs before restore")),
 
-	newFirstUpgrade(clusterversion.V25_1_Start.Version()),
+	newFirstUpgrade(clusterversion.TODO_Delete_V25_1_Start.Version()),
 
 	upgrade.NewTenantUpgrade(
 		"add new jobs tables",
-		clusterversion.V25_1_AddJobsTables.Version(),
+		clusterversion.TODO_Delete_V25_1_AddJobsTables.Version(),
 		upgrade.NoPrecondition,
 		addJobsTables,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the new field"),
@@ -71,21 +71,21 @@ var upgrades = []upgradebase.Upgrade{
 
 	upgrade.NewTenantUpgrade(
 		"create prepared_transactions table",
-		clusterversion.V25_1_PreparedTransactionsTable.Version(),
+		clusterversion.TODO_Delete_V25_1_PreparedTransactionsTable.Version(),
 		upgrade.NoPrecondition,
 		createPreparedTransactionsTable,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
 	),
 	upgrade.NewTenantUpgrade(
 		"add new jobs tables",
-		clusterversion.V25_1_AddJobsColumns.Version(),
+		clusterversion.TODO_Delete_V25_1_AddJobsColumns.Version(),
 		upgrade.NoPrecondition,
 		addJobsColumns,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the new field"),
 	),
 	upgrade.NewTenantUpgrade(
 		"backfill new jobs tables",
-		clusterversion.V25_1_JobsBackfill.Version(),
+		clusterversion.TODO_Delete_V25_1_JobsBackfill.Version(),
 		upgrade.NoPrecondition,
 		backfillJobsTablesAndColumns,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore jobs tables"),

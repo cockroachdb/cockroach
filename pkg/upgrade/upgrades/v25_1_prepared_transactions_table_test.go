@@ -45,7 +45,7 @@ func TestPreparedTransactionsTable(t *testing.T) {
 	require.True(t, s.ExecutorConfig().(sql.ExecutorConfig).Codec.ForSystemTenant())
 	_, err := sqlDB.Exec("SELECT * FROM system.prepared_transactions")
 	require.Error(t, err, "system.prepared_transactions rates columns should not exist")
-	upgrades.Upgrade(t, sqlDB, clusterversion.V25_1_PreparedTransactionsTable, nil, false)
+	upgrades.Upgrade(t, sqlDB, clusterversion.TODO_Delete_V25_1_PreparedTransactionsTable, nil, false)
 	_, err = sqlDB.Exec("SELECT * FROM system.prepared_transactions")
 	require.NoError(t, err, "system.prepared_transactions rates columns should exist")
 }
