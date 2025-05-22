@@ -110,6 +110,7 @@ func TestRunGenerativeSplitAndScatterContextCancel(t *testing.T) {
 	kr, err := MakeKeyRewriterFromRekeys(keys.SystemSQLCodec, tableRekeys, nil, false)
 	require.NoError(t, err)
 
+	baseSplitScatter := makeSplitAndScatterer(flowCtx.Cfg.DB.KV(), kr)
 	chunkSplitScatterers := []splitAndScatterer{makeSplitAndScatterer(flowCtx.Cfg.DB.KV(), kr)}
 	chunkEntrySpliterScatterers := []splitAndScatterer{makeSplitAndScatterer(flowCtx.Cfg.DB.KV(), kr)}
 
@@ -119,7 +120,7 @@ func TestRunGenerativeSplitAndScatterContextCancel(t *testing.T) {
 
 	// Large enough so doneScatterCh never blocks.
 	doneScatterCh := make(chan entryNode, 1000)
-	err = runGenerativeSplitAndScatter(ctx, &flowCtx, &spec, chunkSplitScatterers, chunkEntrySpliterScatterers, doneScatterCh, &cache)
+	err = runGenerativeSplitAndScatter(ctx, &flowCtx, &spec, baseSplitScatter, chunkSplitScatterers, chunkEntrySpliterScatterers, doneScatterCh, &cache)
 
 	require.Error(t, err, "context canceled")
 }
@@ -183,6 +184,8 @@ func TestRunGenerativeSplitAndScatterRandomizedDestOnFailScatter(t *testing.T) {
 		}},
 	)
 
+	baseSplitScatterer := &scatterAlwaysFailsSplitScatterer{}
+
 	// These split and scatterers will always fail the scatter and return 0 as the
 	// chunk destination.
 	chunkSplitScatterers := []splitAndScatterer{
@@ -200,7 +203,7 @@ func TestRunGenerativeSplitAndScatterRandomizedDestOnFailScatter(t *testing.T) {
 
 	// Large enough so doneScatterCh never blocks.
 	doneScatterCh := make(chan entryNode, 1000)
-	err := runGenerativeSplitAndScatter(ctx, &flowCtx, &spec, chunkSplitScatterers, chunkSplitScatterers, doneScatterCh, &cache)
+	err := runGenerativeSplitAndScatter(ctx, &flowCtx, &spec, baseSplitScatterer, chunkSplitScatterers, chunkSplitScatterers, doneScatterCh, &cache)
 	require.NoError(t, err)
 
 	close(doneScatterCh)
@@ -232,6 +235,7 @@ func TestRunGenerativeSplitAndScatterRandomizedDestOnFailScatter(t *testing.T) {
 	// one point).
 	spec.ChunkSize = 2
 	require.Error(t, runGenerativeSplitAndScatter(ctx, &flowCtx, &spec,
+		&scatterAlwaysFailsSplitScatterer{},
 		[]splitAndScatterer{&scatterAlwaysFailsSplitScatterer{}},
 		[]splitAndScatterer{&scatterAlwaysFailsSplitScatterer{err: errors.New("injected")}},
 		make(chan entryNode, 1000),

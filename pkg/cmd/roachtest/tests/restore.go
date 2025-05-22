@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -314,6 +315,18 @@ func registerRestore(r registry.Registry) {
 			suites:   registry.Suites(registry.Nightly),
 		},
 		{
+			// Benchmarks a wide cluster to test split and scatter perf on a multi store cluster that uses local ssds.
+			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 16, cpus: 4, storesPerNode: 4, useLocalSSD: true}),
+			backup:   backupSpecs{cloud: spec.GCE, fixture: SmallFixture},
+			timeout:  1 * time.Hour,
+			suites:   registry.Suites(registry.Nightly),
+			skip:     "ad hoc testing for now",
+			setUpStmts: []string{
+				// Create max 64 MB ranges instead.
+				"SET CLUSTER SETTING backup.restore_span.target_size = '32 MiB'",
+				"ALTER RANGE default CONFIGURE ZONE USING range_min_bytes = 16777216, range_max_bytes = 67108864, num_replicas = 3"},
+		},
+		{
 			// Benchmarks if per node throughput remains constant if the number of
 			// nodes doubles relative to default.
 			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 8}),
@@ -418,6 +431,15 @@ func registerRestore(r registry.Registry) {
 						}
 					}
 
+					if err := roachtestutil.WaitForReplication(ctx, t.L(), db, 3, roachtestutil.AtLeastReplicationFactor); err != nil {
+						return err
+					}
+					if err := waitForRebalance(
+						ctx, t.L(), db, 10, 60, /* stableSeconds */
+					); err != nil {
+						return err
+					}
+
 					t.Status(`running restore`)
 					metricCollector := rd.initRestorePerfMetrics(ctx, durationGauge)
 					if err := rd.run(ctx, "DATABASE "+rd.sp.backup.fixture.DatabaseName()); err != nil {
@@ -449,12 +471,17 @@ type hardwareSpecs struct {
 	// nodes is the number of crdb nodes in the restore.
 	nodes int
 
+	storesPerNode int
+
 	// addWorkloadNode is true if workload node should also get spun up
 	workloadNode bool
 
 	// volumeSize indicates the size of per node block storage (pd-ssd for gcs,
-	// ebs for aws). If zero, local ssd's are used.
+	// ebs for aws).
 	volumeSize int
+
+	useLocalSSD bool
+
 	// ebsThroughput is the min provisioned throughput of the EBS volume, in MB/s.
 	// TODO(pavelkalinnikov): support provisioning throughput not only on EBS.
 	ebsThroughput int
@@ -473,6 +500,25 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry) spec.ClusterSpec {
 	if hw.volumeSize != 0 {
 		clusterOpts = append(clusterOpts, spec.VolumeSize(hw.volumeSize))
 	}
+	if hw.ebsThroughput != 0 {
+		clusterOpts = append(clusterOpts, spec.AWSVolumeThroughput(hw.ebsThroughput))
+	}
+
+	if hw.useLocalSSD {
+		clusterOpts = append(clusterOpts, spec.PreferLocalSSD())
+		if hw.volumeSize != 0 || hw.ebsThroughput != 0 {
+			panic("cannot set volume size or ebs throughput and use local SSD")
+		}
+	}
+
+	if hw.storesPerNode != 0 {
+		if !hw.useLocalSSD {
+			panic("cannot set stores per node and not use local SSD")
+		}
+		clusterOpts = append(clusterOpts, spec.SSD(hw.storesPerNode))
+		clusterOpts = append(clusterOpts, spec.Arch(vm.ArchAMD64))
+	}
+
 	if hw.mem != spec.Auto {
 		clusterOpts = append(clusterOpts, spec.Mem(hw.mem))
 	}
@@ -493,9 +539,7 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry) spec.ClusterSpec {
 		clusterOpts = append(clusterOpts, spec.AWSZones(strings.Join(hw.zones, ",")))
 		clusterOpts = append(clusterOpts, spec.Geo())
 	}
-	if hw.ebsThroughput != 0 {
-		clusterOpts = append(clusterOpts, spec.AWSVolumeThroughput(hw.ebsThroughput))
-	}
+
 	s := r.MakeClusterSpec(hw.nodes+addWorkloadNode, clusterOpts...)
 
 	return s
@@ -505,6 +549,9 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry) spec.ClusterSpec {
 func (hw hardwareSpecs) String() string {
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("/nodes=%d", hw.nodes))
+	if hw.storesPerNode != 0 {
+		builder.WriteString(fmt.Sprintf("/stores=%d", hw.storesPerNode))
+	}
 	builder.WriteString(fmt.Sprintf("/cpus=%d", hw.cpus))
 	if hw.mem != spec.Auto {
 		builder.WriteString(fmt.Sprintf("/%smem", hw.mem))
@@ -540,14 +587,22 @@ func makeHardwareSpecs(override hardwareSpecs) hardwareSpecs {
 	if override.nodes != 0 {
 		specs.nodes = override.nodes
 	}
+	if override.storesPerNode != 0 {
+		specs.storesPerNode = override.storesPerNode
+	}
 	if override.mem != spec.Auto {
 		specs.mem = override.mem
 	}
+	specs.useLocalSSD = override.useLocalSSD
 	if override.volumeSize != 0 {
 		specs.volumeSize = override.volumeSize
 	}
 	if override.ebsThroughput != 0 {
 		specs.ebsThroughput = override.ebsThroughput
+	}
+	if specs.useLocalSSD {
+		specs.volumeSize = 0
+		specs.ebsThroughput = 0
 	}
 	specs.zones = override.zones
 	specs.workloadNode = override.workloadNode
@@ -711,6 +766,9 @@ func (rd *restoreDriver) defaultClusterSettings() []install.ClusterSettingOption
 func (rd *restoreDriver) roachprodOpts() option.StartOpts {
 	opts := option.NewStartOpts(option.NoBackupSchedule)
 	opts.RoachprodOpts.ExtraArgs = append(opts.RoachprodOpts.ExtraArgs, rd.sp.extraArgs...)
+	if rd.c.Spec().SSDs > 1 && !rd.c.Spec().RAID0 {
+		opts.RoachprodOpts.StoreCount = rd.c.Spec().SSDs
+	}
 	return opts
 }
 
