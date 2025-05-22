@@ -848,12 +848,8 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 			// for the requests that were not evaluated (see fillSkippedResponses).
 			// For these requests, we neither proved nor disproved the existence of
 			// their intent, so we ignore the response.
-			//
-			// TODO(nvanbenschoten): we only need to check FoundIntent, but this field
-			// was not set before v23.2, so for now, we check both fields. Remove this
-			// in the future.
 			qiResp := resp.(*kvpb.QueryIntentResponse)
-			if qiResp.FoundIntent || qiResp.FoundUnpushedIntent {
+			if qiResp.FoundIntent {
 				tp.ifWrites.remove(qiReq.Key, qiReq.Txn.Sequence, qiReq.Strength)
 				// Move to lock footprint.
 				tp.lockFootprint.insert(roachpb.Span{Key: qiReq.Key})
