@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -249,7 +250,8 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 			}
 			require.Equal(t, expectedSize, ls.shMu.size)
 			require.Equal(t, accurate, ls.shMu.sizeTrusted)
-			truncState, err := r.mu.stateLoader.LoadRaftTruncatedState(context.Background(), tc.engine)
+			truncState, err := logstore.NewStateLoader(r.RangeID).LoadRaftTruncatedState(
+				context.Background(), tc.engine)
 			require.NoError(t, err)
 			require.Equal(t, ls.shMu.trunc.Index, truncState.Index)
 		}()
