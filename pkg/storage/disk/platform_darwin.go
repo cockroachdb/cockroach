@@ -26,7 +26,7 @@ func newStatsCollector(fs vfs.FS) (*darwinCollector, error) {
 	return &darwinCollector{}, nil
 }
 
-func deviceIDFromFileInfo(finfo fs.FileInfo) DeviceID {
+func deviceIDFromFileInfo(finfo fs.FileInfo, path string) DeviceID {
 	statInfo := finfo.Sys().(*sysutil.StatT)
 	id := DeviceID{
 		major: unix.Major(uint64(statInfo.Dev)),
