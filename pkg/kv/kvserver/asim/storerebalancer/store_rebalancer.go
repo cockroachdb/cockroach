@@ -129,14 +129,15 @@ func (s simRebalanceObjectiveProvider) Objective() kvserver.LBRebalancingObjecti
 }
 
 func (src *storeRebalancerControl) scorerOptions() *allocatorimpl.LoadScorerOptions {
+	dim := kvserver.LBRebalancingObjective(src.settings.LBRebalancingObjective).ToDimension()
 	return &allocatorimpl.LoadScorerOptions{
 		IOOverloadOptions:            src.allocator.IOOverloadOptions(),
 		DiskOptions:                  src.allocator.DiskOptions(),
 		Deterministic:                true,
-		LoadDims:                     []load.Dimension{load.Queries},
-		LoadThreshold:                allocatorimpl.MakeQPSOnlyDim(src.settings.LBRebalanceQPSThreshold),
-		MinLoadThreshold:             allocatorimpl.LoadMinThresholds(load.Queries),
-		MinRequiredRebalanceLoadDiff: allocatorimpl.MakeQPSOnlyDim(src.settings.LBMinRequiredQPSDiff),
+		LoadDims:                     []load.Dimension{dim},
+		LoadThreshold:                allocatorimpl.LoadThresholds(&src.settings.ST.SV, dim),
+		MinLoadThreshold:             allocatorimpl.LoadMinThresholds(dim),
+		MinRequiredRebalanceLoadDiff: allocatorimpl.LoadRebalanceRequiredMinDiff(&src.settings.ST.SV, dim),
 	}
 }
 
@@ -154,7 +155,7 @@ func (src *storeRebalancerControl) checkPendingTicket() (done bool, _ error) {
 }
 
 func (src *storeRebalancerControl) Tick(ctx context.Context, tick time.Time, state state.State) {
-	src.sr.AddLogTag("tick", tick)
+	src.sr.AddLogTag("tick", tick.Sub(src.settings.StartTime))
 	ctx = src.sr.ResetAndAnnotateCtx(ctx)
 	switch src.rebalancerState.phase {
 	case rebalancerSleeping:
