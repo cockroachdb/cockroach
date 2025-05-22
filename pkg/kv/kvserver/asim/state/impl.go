@@ -424,7 +424,7 @@ func (s *state) AddNode() Node {
 	s.nodeSeqGen++
 	nodeID := s.nodeSeqGen
 	mmAllocator := mma.NewAllocatorState(s.clock, rand.New(rand.NewSource(s.settings.Seed)))
-	sp, _ := NewStorePool(s.NodeCountFn(), s.NodeLivenessFn(), hlc.NewClockForTesting(s.clock))
+	sp := NewStorePool(s.NodeCountFn(), s.NodeLivenessFn(), hlc.NewClockForTesting(s.clock), s.settings.ST)
 	node := &node{
 		nodeID:      nodeID,
 		desc:        roachpb.NodeDescriptor{NodeID: roachpb.NodeID(nodeID)},
@@ -1444,7 +1444,6 @@ type store struct {
 
 	allocator allocatorimpl.Allocator
 	storepool *storepool.StorePool
-	settings  *cluster.Settings
 	replicas  map[RangeID]ReplicaID
 }
 
