@@ -1538,11 +1538,6 @@ func (cs *clusterState) canShedAndAddLoad(
 		(targetSummary < loadNoChange ||
 			(targetSLS.maxFractionPending < epsilon && targetSLS.sls <= srcSLS.sls &&
 				targetSLS.nls <= srcSLS.nls))
-	// We already filtered out stores >= loadNoChange before attempting to add
-	// this load, so we could allow everyone <= loadNoChange now, since those
-	// equal to loadNoChange must be due to this addition. But loadNoChange
-	// implies this addition is going above the mean, so don't allow that.
-	// canAddLoad := targetSLS.sls < loadNoChange && targetSLS.nls < loadNoChange
 	log.Infof(ctx, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
 		targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
 	return canAddLoad
