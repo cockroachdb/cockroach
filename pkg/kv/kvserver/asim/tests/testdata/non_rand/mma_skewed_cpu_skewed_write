@@ -1,7 +1,8 @@
 # TODO(sumeer): this test cannot equalize both cpu and write bandwidth because
 # the highest cpu node has the lowest write bandwidth and vice versa, so
 # neither can shed to the other.
-# - Look at the logs to confirm.
+# - Look at the logs to confirm. 1, 2, 3, 6 are the overloaded ones, with 6 overloaded due to writes.
+#   s1 has ranges with s2, s3, so can't shed to them.
 # - Changing tempOverrideToIgnoreLoadNoChangeAndHigher to false improves the
 #   behavior, so prioritize fixing that.
 # - The previous bullet is insufficient. Think more about this problem.
