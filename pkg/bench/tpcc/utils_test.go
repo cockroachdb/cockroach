@@ -36,18 +36,16 @@ func (c cmd) withEnv(k string, v any) cmd {
 	return c
 }
 
+// exec executes the command in a subprocess. The args should be in the form
+// "--arg=value". It returns the command, which has not yet been executed, and a
+// buffer where the STDOUT and STDERR of the subprocess will be written.
 func (c cmd) exec(args ...string) (ec *exec.Cmd, output *synchronizedBuffer) {
 	ec = exec.Command(os.Args[0], "--test.run=^"+c.name+"$", "--test.v")
 	if len(args) > 0 {
+		ec.Args = append(ec.Args, "--")
 	}
-	for i, arg := range args {
-		if i == 0 {
-			ec.Args = append(ec.Args, "--")
-		}
-		ec.Args = append(ec.Args, "--"+arg)
-	}
-	ec.Env = os.Environ()
-	ec.Env = append(ec.Env, c.envVars...)
+	ec.Args = append(ec.Args, args...)
+	ec.Env = append(os.Environ(), c.envVars...)
 	output = new(synchronizedBuffer)
 	ec.Stdout, ec.Stderr = output, output
 	return ec, output
