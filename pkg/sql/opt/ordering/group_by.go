@@ -23,12 +23,9 @@ func scalarGroupByBuildChildReqOrdering(
 
 func groupByCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
 	// GroupBy may require a certain ordering of its input, but can also pass
-	// through a stronger ordering on the grouping and pass-through columns.
-	//
-	// Note that an ordering on non-grouping columns is not actually useful, but
-	// we handle it anyway since ordering simplification rules can be disabled.
+	// through a stronger ordering on the grouping columns.
 	groupBy := expr.(*memo.GroupByExpr)
-	return required.CanProjectCols(groupBy.Input.Relational().OutputCols) &&
+	return required.CanProjectCols(groupBy.GroupingCols) &&
 		required.Intersects(&groupBy.Ordering)
 }
 
