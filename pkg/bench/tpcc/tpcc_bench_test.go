@@ -13,10 +13,10 @@ package tpcc
 
 import (
 	"context"
-	"io"
-	"net"
-	"net/http"
 	"net/url"
+	"os"
+	"os/signal"
+	"syscall"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -43,22 +43,34 @@ import (
 // with --store-dir will generate a new store directory at the specified path.
 // The combination of the two flags is how you bootstrap such a path initially.
 //
+// For example, generate the store directory with:
+//
+//	./dev bench pkg/bench/tpcc -f BenchmarkTPCC --test-args '--generate-store-dir --store-dir=/tmp/benchtpcc'
+//
+// Reuse the store directory with:
+//
+//	./dev bench pkg/bench/tpcc -f BenchmarkTPCC --test-args '--store-dir=/tmp/benchtpcc'
+//
 // TODO(ajwerner): Consider moving this all to CCL to leverage the import data
 // loader.
 func BenchmarkTPCC(b *testing.B) {
 	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
 
 	_, engPath, cleanup := maybeGenerateStoreDir(b)
 	defer cleanup()
-	baseOptions := options{
+	baseOptions := [...]option{
 		serverArgs(func(
 			b testing.TB,
 		) (_ base.TestServerArgs, cleanup func()) {
 			td, cleanup := testutils.TempDir(b)
-			require.NoError(b, cloneEngine.exec(cmdEnv{
-				{srcEngineEnvVar, engPath},
-				{dstEngineEnvVar, td},
-			}).Run())
+			cmd, output := cloneEngine.
+				withEnv(srcEngineEnvVar, engPath).
+				withEnv(dstEngineEnvVar, td).
+				exec()
+			if err := cmd.Run(); err != nil {
+				b.Fatalf("failed to clone engine: %s\n%s", err, output.String())
+			}
 			return base.TestServerArgs{
 				StoreSpecs: []base.StoreSpec{{Path: td}},
 			}, cleanup
@@ -68,60 +80,61 @@ func BenchmarkTPCC(b *testing.B) {
 		}),
 	}
 
-	for _, opts := range []options{
-		{workloadFlag("mix", "newOrder=1")},
-		{workloadFlag("mix", "payment=1")},
-		{workloadFlag("mix", "orderStatus=1")},
-		{workloadFlag("mix", "delivery=1")},
-		{workloadFlag("mix", "stockLevel=1")},
-		{workloadFlag("mix", "newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1")},
-	} {
-		b.Run(opts.String(), func(b *testing.B) {
-			defer log.Scope(b).Close(b)
-			newBenchmark(append(opts, baseOptions...)).run(b)
+	for _, impl := range []string{"literal", "optimized"} {
+		b.Run(impl, func(b *testing.B) {
+			implOpts := baseOptions[:]
+			if impl == "literal" {
+				implOpts = append(implOpts, workloadFlag("literal-implementation", "true"))
+			}
+			for _, opts := range []options{
+				{workloadFlag("mix", "newOrder=1")},
+				{workloadFlag("mix", "payment=1")},
+				{workloadFlag("mix", "orderStatus=1")},
+				{workloadFlag("mix", "delivery=1")},
+				{workloadFlag("mix", "stockLevel=1")},
+				{workloadFlag("mix", "newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1")},
+			} {
+				b.Run(opts.String(), func(b *testing.B) {
+					newBenchmark(append(opts, implOpts...)).run(b)
+				})
+			}
 		})
+
 	}
 }
 
 type benchmark struct {
 	benchmarkConfig
-
-	pgURL    string
-	eventURL string
-
+	pgURL   string
 	closers []func()
-	closed  chan struct{}
-	eventCh chan event
 }
 
 func newBenchmark(opts ...options) *benchmark {
-	bm := benchmark{
-		eventCh: make(chan event),
-		closed:  make(chan struct{}),
-	}
+	var bm benchmark
 	for _, opt := range opts {
 		opt.apply(&bm.benchmarkConfig)
 	}
-	bm.closers = append(bm.closers, func() { close(bm.closed) })
 	return &bm
 }
 
 func (bm *benchmark) run(b *testing.B) {
 	defer bm.close()
+
 	bm.startCockroach(b)
-	bm.startEventServer(b)
-	wait := bm.startClient(b)
-	{
-		ev := bm.getEvent(b, runStartEvent)
-		b.Log("running benchmark")
-		b.ResetTimer()
-		close(ev)
-	}
-	{
-		doneEv := bm.getEvent(b, runDoneEvent)
-		b.StopTimer()
-		close(doneEv)
-	}
+	pid, wait := bm.startClient(b)
+
+	var s synchronizer
+	s.init(pid)
+
+	// Reset the timer when the client starts running queries.
+	s.wait()
+	b.ResetTimer()
+	s.notify(b)
+
+	// Stop the timer when the client stops running queries.
+	s.wait()
+	b.StopTimer()
+
 	require.NoError(b, wait())
 }
 
@@ -156,57 +169,42 @@ func (bm *benchmark) startCockroach(b testing.TB) {
 	bm.closers = append(bm.closers, cleanup)
 }
 
-func (bm *benchmark) startEventServer(b testing.TB) {
-	l, err := net.Listen("tcp", "localhost:0")
-	require.NoError(b, err)
-	bm.closers = append(bm.closers, func() { _ = l.Close() })
-	bm.eventURL = "http://" + l.Addr().String()
-	go func() { _ = http.Serve(l, bm) }()
-}
-
-func (bm *benchmark) startClient(b *testing.B) (wait func() error) {
-	cmd := runClient.exec(cmdEnv{
-		{nEnvVar, b.N},
-		{pgurlEnvVar, bm.pgURL},
-		{eventEnvVar, bm.eventURL},
-	}, bm.workloadFlags...)
-	require.NoError(b, cmd.Start())
+func (bm *benchmark) startClient(b *testing.B) (pid int, wait func() error) {
+	cmd, output := runClient.
+		withEnv(nEnvVar, b.N).
+		withEnv(pgurlEnvVar, bm.pgURL).
+		exec(bm.workloadFlags...)
+	if err := cmd.Start(); err != nil {
+		b.Fatalf("failed to start client: %s\n%s", err, output.String())
+	}
 	bm.closers = append(bm.closers,
 		func() { _ = cmd.Process.Kill(); _ = cmd.Wait() },
 	)
-	return cmd.Wait
+	return cmd.Process.Pid, cmd.Wait
 }
 
-// event is passed to the benchmark's eventCh when an HTTP request
-// comes in on the event server. The request blocks until the channel
-// is closed.
-type event struct {
-	name string
-	done chan struct{}
+type synchronizer struct {
+	pid    int // the PID of the process to coordinate with
+	waitCh chan os.Signal
 }
 
-func (bm *benchmark) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	data, err := io.ReadAll(r.Body)
-	if err != nil {
-		bm.addEvent(err.Error())
-		w.WriteHeader(500)
-		return
+func (c *synchronizer) init(pid int) {
+	c.pid = pid
+	c.waitCh = make(chan os.Signal, 1)
+	signal.Notify(c.waitCh, syscall.SIGUSR1)
+}
+
+func (c synchronizer) notify(t testing.TB) {
+	if err := syscall.Kill(c.pid, syscall.SIGUSR1); err != nil {
+		t.Fatalf("failed to notify process %d: %s", c.pid, err)
 	}
-	<-bm.addEvent(string(data))
 }
 
-func (bm *benchmark) addEvent(name string) <-chan struct{} {
-	ev := event{name: name, done: make(chan struct{})}
-	select {
-	case bm.eventCh <- ev:
-	case <-bm.closed:
-		close(ev.done)
-	}
-	return ev.done
+func (c synchronizer) wait() {
+	<-c.waitCh
 }
 
-func (bm *benchmark) getEvent(b *testing.B, evName string) chan<- struct{} {
-	ev := <-bm.eventCh
-	require.Equal(b, evName, ev.name)
-	return ev.done
+func (c synchronizer) notifyAndWait(t testing.TB) {
+	c.notify(t)
+	c.wait()
 }
