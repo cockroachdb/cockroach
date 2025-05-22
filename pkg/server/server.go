@@ -1990,10 +1990,6 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 			return err
 		}
 	}
-	// Start garbage collecting system events.
-	if err := startSystemLogsGC(workersCtx, s.sqlServer); err != nil {
-		return err
-	}
 
 	// Connect the HTTP endpoints. This also wraps the privileged HTTP
 	// endpoints served by gwMux by the HTTP cookie authentication
@@ -2051,6 +2047,11 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		); err != nil {
 			return err
 		}
+	}
+
+	// Start garbage collecting system events.
+	if err := startSystemLogsGC(workersCtx, s.sqlServer); err != nil {
+		return err
 	}
 
 	// Initialize the external storage builders configuration params now that the
