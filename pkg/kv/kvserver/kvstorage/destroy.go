@@ -9,7 +9,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -103,7 +102,7 @@ func DestroyReplica(
 	nextReplicaID roachpb.ReplicaID,
 	opts ClearRangeDataOptions,
 ) error {
-	diskReplicaID, err := logstore.NewStateLoader(rangeID).LoadRaftReplicaID(ctx, reader)
+	diskReplicaID, err := stateloader.Make(rangeID).LoadRaftReplicaID(ctx, reader)
 	if err != nil {
 		return err
 	}

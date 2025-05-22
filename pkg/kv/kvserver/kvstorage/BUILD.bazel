@@ -44,7 +44,7 @@ go_test(
     deps = [
         "//pkg/clusterversion",
         "//pkg/keys",
-        "//pkg/kv/kvserver/logstore",
+        "//pkg/kv/kvserver/stateloader",
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
