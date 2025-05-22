@@ -372,17 +372,17 @@ func (rsl StateLoader) SetForceFlushIndex(
 // LoadRaftReplicaID loads the RaftReplicaID.
 func (rsl StateLoader) LoadRaftReplicaID(
 	ctx context.Context, reader storage.Reader,
-) (*kvserverpb.RaftReplicaID, error) {
+) (kvserverpb.RaftReplicaID, error) {
 	var replicaID kvserverpb.RaftReplicaID
-	found, err := storage.MVCCGetProto(ctx, reader, rsl.RaftReplicaIDKey(),
-		hlc.Timestamp{}, &replicaID, storage.MVCCGetOptions{ReadCategory: fs.ReplicationReadCategory})
-	if err != nil {
-		return nil, err
+	if found, err := storage.MVCCGetProto(
+		ctx, reader, rsl.RaftReplicaIDKey(), hlc.Timestamp{}, &replicaID,
+		storage.MVCCGetOptions{ReadCategory: fs.ReplicationReadCategory},
+	); err != nil {
+		return kvserverpb.RaftReplicaID{}, err
+	} else if !found {
+		return kvserverpb.RaftReplicaID{}, errors.AssertionFailedf("no replicaID persisted")
 	}
-	if !found {
-		return nil, errors.AssertionFailedf("no replicaID persisted")
-	}
-	return &replicaID, nil
+	return replicaID, nil
 }
 
 // SetRaftReplicaID overwrites the RaftReplicaID.
