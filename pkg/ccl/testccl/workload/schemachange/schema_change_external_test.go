@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/schemachange"
@@ -35,6 +36,7 @@ func TestWorkload(t *testing.T) {
 	skip.UnderDeadlock(t, "test connections can be too slow under expensive configs")
 	skip.UnderRace(t, "test connections can be too slow under expensive configs")
 
+	rng, _ := randutil.NewTestRand()
 	scope := log.Scope(t)
 	defer scope.Close(t)
 	dir := scope.GetDirectory()
@@ -69,31 +71,78 @@ func TestWorkload(t *testing.T) {
 		require.NoError(t, os.WriteFile(fmt.Sprintf("%s/%s.rows", dir, name), []byte(sqlutils.MatrixToStr(mat)), 0666))
 	}
 
-	// Grab a backup, dump the namespace and descriptor tables upon failure.
-	defer func() {
-		if !t.Failed() {
-			return
+	// Reusable validation function.
+	findInvalidObjects := func() {
+		t.Helper()
+		var (
+			id           int
+			databaseName string
+			schemaName   string
+			objName      string
+			objError     string
+		)
+		numInvalidObjects := 0
+		rows, err := tdb.DB.QueryContext(ctx, `SELECT id, database_name, schema_name, obj_name, error FROM "".crdb_internal.invalid_objects`)
+		if err != nil {
+			t.Fatal(err)
 		}
-		// Dump namespace and descriptor in their raw format. This is useful for
-		// processing results with some degree of scripting.
-		dumpRows("namespace", tdb.Query(t, `SELECT * FROM system.namespace`))
-		dumpRows("descriptor", tdb.Query(t, "SELECT id, encode(descriptor, 'hex') FROM system.descriptor"))
-		// Dump out a more human readable version of the above as well to allow for
-		// easy debugging by hand.
-		// NB: A LEFT JOIN is used here because not all descriptors (looking at you
-		// functions) have namespace entries.
-		dumpRows("ns-desc-json", tdb.Query(t, `
-			SELECT
-				"parentID",
-				"parentSchemaID",
-				descriptor.id,
-				name,
-				crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)
-				FROM system.descriptor
-				LEFT JOIN system.namespace ON namespace.id = descriptor.id
-		`))
-		tdb.Exec(t, "BACKUP DATABASE schemachange INTO 'nodelocal://1/backup'")
-		t.Logf("backup, tracing data, and system table dumps in %s", dir)
+		for rows.Next() {
+			numInvalidObjects++
+			if err := rows.Scan(&id, &databaseName, &schemaName, &objName, &objError); err != nil {
+				t.Fatal(err)
+			}
+			t.Logf(
+				"invalid object found: id: %d, database_name: %s, schema_name: %s, obj_name: %s, error: %s",
+				id, databaseName, schemaName, objName, objError,
+			)
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+		if numInvalidObjects > 0 {
+			t.Errorf("found %d invalid objects", numInvalidObjects)
+		}
+	}
+
+	defer func() {
+		// Run validation before dropping the database.
+		findInvalidObjects()
+
+		// Only take a backup if the test failed.
+		if t.Failed() {
+			// Dump namespace and descriptor in their raw format. This is useful for
+			// processing results with some degree of scripting.
+			dumpRows("namespace", tdb.Query(t, `SELECT * FROM system.namespace`))
+			dumpRows("descriptor", tdb.Query(t, "SELECT id, encode(descriptor, 'hex') FROM system.descriptor"))
+			// Dump out a more human readable version of the above as well to allow for
+			// easy debugging by hand.
+			// NB: A LEFT JOIN is used here because not all descriptors (looking at you
+			// functions) have namespace entries.
+			dumpRows("ns-desc-json", tdb.Query(t, `
+				SELECT
+					"parentID",
+					"parentSchemaID",
+					descriptor.id,
+					name,
+					crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)
+					FROM system.descriptor
+					LEFT JOIN system.namespace ON namespace.id = descriptor.id
+			`))
+			tdb.Exec(t, "BACKUP DATABASE schemachange INTO 'nodelocal://1/backup'")
+			t.Logf("backup, tracing data, and system table dumps in %s", dir)
+		}
+
+		// Drop the database and run validation again. Test DROP DATABASE behavior
+		// with legacy schema changer 50% of the time.
+		schemaChangerSetting := "on"
+		if rng.Float32() < 0.5 {
+			schemaChangerSetting = "off"
+		}
+		t.Logf("running DROP with use_declarative_schema_changer = %s", schemaChangerSetting)
+		tdb.Exec(t, "SET use_declarative_schema_changer = $1", schemaChangerSetting)
+		tdb.Exec(t, "DROP DATABASE schemachange CASCADE")
+		tdb.Exec(t, "RESET use_declarative_schema_changer")
+		findInvalidObjects()
 	}()
 
 	pgURL, cleanup := sqlutils.PGUrl(t, tc.Server(0).AdvSQLAddr(), t.Name(), url.User("testuser"))
