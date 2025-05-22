@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -130,9 +129,6 @@ func TestInternalGenerateStoreDir(t *testing.T) {
 		StoreSpecs: []base.StoreSpec{{Path: storeDir}},
 	})
 	defer srv.Stopper().Stop(ctx)
-
-	// Make the generation faster.
-	logstore.DisableSyncRaftLog.Override(ctx, &srv.SystemLayer().ClusterSettings().SV, true)
 
 	tdb := sqlutils.MakeSQLRunner(db)
 	tdb.Exec(t, "CREATE DATABASE "+databaseName)

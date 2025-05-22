@@ -8,12 +8,10 @@ package tpcc
 import (
 	"context"
 	"net/url"
-	"os"
 	"os/exec"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
@@ -113,7 +111,6 @@ func startCockroach(b testing.TB, storeDir string) (pgURL string, closeServer fu
 	s := serverutils.StartServerOnly(b, base.TestServerArgs{
 		StoreSpecs: []base.StoreSpec{{Path: td}},
 	})
-	logstore.DisableSyncRaftLog.Override(ctx, &s.SystemLayer().ClusterSettings().SV, true)
 
 	// Generate a PG URL.
 	u, urlCleanup, err := pgurlutils.PGUrlE(
