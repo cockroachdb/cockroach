@@ -264,7 +264,13 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 
 		t.Status("running 75 second workload to collect profiles")
 		{
-			m := t.NewGroup(task.WithContext(ctx))
+			// Create the profiles directory in the artifacts directory.
+			profilesDir := filepath.Join(t.ArtifactsDir(), "profiles")
+			require.NoError(t, os.MkdirAll(profilesDir, 0755))
+
+			// Start a short sysbench test in order to collect the profiles from an
+			// active cluster.
+			m := t.NewErrorGroup(task.WithContext(ctx))
 			m.Go(
 				func(ctx context.Context, l *logger.Logger) error {
 					opts := opts
@@ -274,7 +280,6 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 
 					if msg, crashed := detectSysbenchCrash(result); crashed {
 						t.L().Printf("%s; sysbench run to collect profiles failed", msg)
-						return nil
 					}
 					return err
 				},
@@ -283,7 +288,33 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 			// Wait for 30 seconds to give a chance to the workload to start, and then
 			// collect CPU, mutex diffs, allocs diffs profiles.
 			time.Sleep(30 * time.Second)
-			collectSysbenchProfiles(t, m, c, 30*time.Second /* duration */)
+			collectionDuration := 30 * time.Second
+			profiles, err := collectSysbenchProfiles(m, c, collectionDuration, profilesDir)
+
+			// If there is an error generating one or more profiles, we need to clean
+			// up the profiles directory and return the error to avoid leaving
+			// potentially corrupt profiles in the directory.
+			if err != nil {
+				require.NoError(t, os.RemoveAll(profilesDir))
+				return err
+			}
+
+			// If there is a problem executing the workload, or , we need to clean up the directory and return the error.
+			if err := m.WaitE(); err != nil {
+				require.NoError(t, os.RemoveAll(profilesDir))
+				return err
+			}
+
+			// At this point we know that the workload has not crashed, and we have
+			// collected all the individual profiles. We can now merge and export
+			// them. If exporting or merging fails for some reason, we clean up the
+			// profiles directory and return the error to avoid leaving potentially
+			// corrupt profiles.
+			if err := mergeAndExportSysbenchProfiles(c, collectionDuration, profiles,
+				profilesDir); err != nil {
+				require.NoError(t, os.RemoveAll(profilesDir))
+				return err
+			}
 		}
 
 		return nil
@@ -624,10 +655,24 @@ func exportSysbenchResults(
 }
 
 // collectSysbenchProfiles collects cpu, mutex, and allocs profiles from the
-// cluster `c` for the duration specified.
-func collectSysbenchProfiles(t test.Test, m task.Group, c cluster.Cluster, duration time.Duration) {
+// cluster `c` for the duration specified. It returns a map of profiles for each
+// type and for each node. It returns an error if any of the profiles couldn't
+// be collected.
+//
+// Example of returned map:
+//
+//	{
+//	  "cpu":    [node1Profile, node2Profile, node3Profile],
+//	  "allocs": [node1Profile, node2Profile, node3Profile],
+//	  "mutex":  [node1Profile, node2Profile, node3Profile],
+//	}
+//
+// where each profile is a *profile.Profile and the slice indices correspond to
+// the node indices in c.CRDBNodes().
+func collectSysbenchProfiles(
+	m task.ErrorGroup, c cluster.Cluster, duration time.Duration, profilesDir string,
+) (map[string][]*profile.Profile, error) {
 	profiles := map[string][]*profile.Profile{"cpu": {}, "allocs": {}, "mutex": {}}
-	mergedProfiles := map[string]*profile.Profile{"cpu": {}, "allocs": {}, "mutex": {}}
 	for typ := range profiles {
 		m.Go(
 			func(ctx context.Context, l *logger.Logger) error {
@@ -639,38 +684,47 @@ func collectSysbenchProfiles(t test.Test, m task.Group, c cluster.Cluster, durat
 		)
 	}
 
-	m.Wait()
+	return profiles, nil
+}
 
+// mergeAndExportSysbenchProfiles accepts a map of individual profiles of each
+// node of different types (cpu, allocs, mutex), and exports them to the
+// specified directory. Also, it merges them and exports the merged profiles
+// to the same directory.
+func mergeAndExportSysbenchProfiles(
+	c cluster.Cluster,
+	duration time.Duration,
+	profiles map[string][]*profile.Profile,
+	profilesDir string,
+) error {
 	// Merge the profiles.
+	mergedProfiles := map[string]*profile.Profile{"cpu": {}, "allocs": {}, "mutex": {}}
 	for typ := range mergedProfiles {
 		var err error
-		mergedProfiles[typ], err = profile.Merge(profiles[typ])
-		require.NoError(t, err)
-	}
-
-	// Create the profiles directory in the artifacts directory.
-	profilesDir := filepath.Join(t.ArtifactsDir(), "profiles")
-	require.NoError(t, os.MkdirAll(profilesDir, 0755))
-
-	// exportProfile exports a profile to the artifacts' directory.
-	exportProfile := func(profile *profile.Profile, filename string) {
-		buf := bytes.Buffer{}
-		require.NoError(t, profile.Write(&buf))
-		err := os.WriteFile(filepath.Join(profilesDir, filename), buf.Bytes(), 0644)
-		require.NoError(t, err)
-	}
-
-	// Export individual profiles.
-	for i := range len(c.CRDBNodes()) {
-		for typ := range profiles {
-			exportProfile(profiles[typ][i], fmt.Sprintf("n%d.%s%s.pb.gz", i+1, typ, duration))
+		if mergedProfiles[typ], err = profile.Merge(profiles[typ]); err != nil {
+			return errors.Wrapf(err, "failed to merge profiles type: %s", typ)
 		}
 	}
 
-	// Export merged profiles.
+	// Export the merged profiles.
 	for typ := range mergedProfiles {
-		exportProfile(mergedProfiles[typ], fmt.Sprintf("merged.%s.pb.gz", typ))
+		if err := roachtestutil.ExportProfile(mergedProfiles[typ], profilesDir,
+			fmt.Sprintf("merged.%s.pb.gz", typ)); err != nil {
+			return errors.Wrapf(err, "failed to export merged profiles: %s", typ)
+		}
 	}
+
+	// Export the individual profiles as well.
+	for i := range len(c.CRDBNodes()) {
+		for typ := range profiles {
+			if err := roachtestutil.ExportProfile(profiles[typ][i], profilesDir,
+				fmt.Sprintf("n%d.%s%s.pb.gz", i+1, typ, duration)); err != nil {
+				return errors.Wrapf(err, "failed to export individual profile type: %s", typ)
+			}
+		}
+	}
+
+	return nil
 }
 
 // Add sysbenchMetrics to the openmetricsMap
