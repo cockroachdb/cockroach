@@ -3753,7 +3753,7 @@ func TestReplicaTombstone(t *testing.T) {
 					unreliableRaftHandlerFuncs: funcs,
 				})
 				tc.RemoveVotersOrFatal(t, key, tc.Target(1))
-				tombstone := waitForTombstone(t, store.TODOEngine(), rangeID)
+				tombstone := waitForTombstone(t, store.StateEngine(), rangeID)
 				require.Equal(t, roachpb.ReplicaID(3), tombstone.NextReplicaID)
 			})
 			t.Run("(2) ReplicaTooOldError", func(t *testing.T) {
@@ -3828,7 +3828,7 @@ func TestReplicaTombstone(t *testing.T) {
 				// Wait until we're sure that the replica has seen ReplicaTooOld,
 				// then go look for the tombstone.
 				<-sawTooOld
-				tombstone := waitForTombstone(t, store.TODOEngine(), rangeID)
+				tombstone := waitForTombstone(t, store.StateEngine(), rangeID)
 				require.Equal(t, roachpb.ReplicaID(4), tombstone.NextReplicaID)
 			})
 			t.Run("(3) ReplicaGCQueue", func(t *testing.T) {
@@ -3867,7 +3867,7 @@ func TestReplicaTombstone(t *testing.T) {
 				repl, err := store.GetReplica(desc.RangeID)
 				require.NoError(t, err)
 				require.NoError(t, store.ManualReplicaGC(repl))
-				tombstone := waitForTombstone(t, store.TODOEngine(), rangeID)
+				tombstone := waitForTombstone(t, store.StateEngine(), rangeID)
 				require.Equal(t, roachpb.ReplicaID(4), tombstone.NextReplicaID)
 			})
 			// This case also detects the tombstone for nodes which processed the merge.
@@ -3917,11 +3917,11 @@ func TestReplicaTombstone(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, store.ManualReplicaGC(repl))
 				// Verify the tombstone generated from replica GC of a merged range.
-				tombstone := waitForTombstone(t, store.TODOEngine(), rangeID)
+				tombstone := waitForTombstone(t, store.StateEngine(), rangeID)
 				require.Equal(t, roachpb.ReplicaID(math.MaxInt32), tombstone.NextReplicaID)
 				// Verify the tombstone generated from processing a merge trigger.
 				store3, _ := getFirstStoreReplica(t, tc.Server(0), key)
-				tombstone = waitForTombstone(t, store3.TODOEngine(), rangeID)
+				tombstone = waitForTombstone(t, store3.StateEngine(), rangeID)
 				require.Equal(t, roachpb.ReplicaID(math.MaxInt32), tombstone.NextReplicaID)
 			})
 			t.Run("(4) (4.1) raft messages to newer replicaID ", func(t *testing.T) {
@@ -4027,7 +4027,7 @@ func TestReplicaTombstone(t *testing.T) {
 					ctx, key, tc.LookupRangeOrFatal(t, key), kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(2)),
 				)
 				require.Regexp(t, "boom", err)
-				tombstone := waitForTombstone(t, store.TODOEngine(), rangeID)
+				tombstone := waitForTombstone(t, store.StateEngine(), rangeID)
 				require.Equal(t, roachpb.ReplicaID(4), tombstone.NextReplicaID)
 				// Try adding it again and again block the snapshot until a heartbeat
 				// at a higher ID has been sent. This is case (4.1) where a raft message
@@ -4047,7 +4047,7 @@ func TestReplicaTombstone(t *testing.T) {
 				require.Regexp(t, "boom", err)
 				// We will start out reading the old tombstone so keep retrying.
 				testutils.SucceedsSoon(t, func() error {
-					tombstone = waitForTombstone(t, store.TODOEngine(), rangeID)
+					tombstone = waitForTombstone(t, store.StateEngine(), rangeID)
 					if tombstone.NextReplicaID != 5 {
 						return errors.Errorf("read tombstone with NextReplicaID %d, want %d",
 							tombstone.NextReplicaID, 5)
@@ -4135,14 +4135,14 @@ func TestReplicaTombstone(t *testing.T) {
 					if err != nil {
 						return err
 					}
-					tombstoneKey := keys.RangeTombstoneKey(rhsDesc.RangeID)
-					ok, err := storage.MVCCGetProto(
-						context.Background(), store.TODOEngine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
+					ts, err := stateloader.Make(rhsDesc.RangeID).LoadRangeTombstone(
+						context.Background(), store.StateEngine(),
 					)
 					require.NoError(t, err)
-					if !ok {
+					if ts.NextReplicaID == 0 {
 						return errors.New("no tombstone found")
 					}
+					tombstone = ts
 					return nil
 				})
 				require.Equal(t, roachpb.ReplicaID(math.MaxInt32), tombstone.NextReplicaID)
