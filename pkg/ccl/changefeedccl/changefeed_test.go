@@ -2367,7 +2367,6 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	rnd, _ := randutil.NewPseudoRand()
 
 	s, db, stopServer := startTestFullServer(t, feedTestOptions{})
 	defer stopServer()
@@ -2383,6 +2382,9 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
   INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000);
   ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(1, 1000, 50));
   `)
+
+	fooDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "d", "foo")
+	tableSpan := fooDesc.PrimaryIndexSpan(s.Codec())
 
 	// Checkpoint progress frequently, allow a large enough checkpoint, and
 	// reduce the lag threshold to allow lag checkpointing to trigger
@@ -2403,25 +2405,29 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	// Rangefeed will skip some of the checkpoints to simulate lagging spans.
 	var laggingSpans roachpb.SpanGroup
 	nonLaggingSpans := make(map[string]int)
-	var numLagging, numNonLagging int
-	knobs.FeedKnobs.ShouldSkipCheckpoint = func(checkpoint *kvpb.RangeFeedCheckpoint) bool {
+	var numSpans int
+	knobs.FeedKnobs.ShouldSkipCheckpoint = func(checkpoint *kvpb.RangeFeedCheckpoint) (skip bool) {
+		// Skip spans for the whole table.
+		if checkpoint.Span.Equal(tableSpan) {
+			return true
+		}
 		// Skip spans that we already picked to be lagging.
 		if laggingSpans.Encloses(checkpoint.Span) {
-			return true /* skip */
+			return true
 		}
-		// Skip additional updates for some non-lagging spans so that we can
-		// have more than one timestamp in the checkpoint.
+		// Skip additional updates for every 3rd non-lagging span so that we have
+		// a few spans lagging at a second timestamp above the cursor.
 		if i, ok := nonLaggingSpans[checkpoint.Span.String()]; ok {
 			return i%3 == 0
 		}
-		// Ensure we have a few spans that are lagging at the cursor.
-		if numLagging == 0 || (numLagging < 5 && rnd.Int()%3 == 0) {
+		numSpans++
+		// Skip updates for every 3rd span so that we have a few spans lagging
+		// at the cursor.
+		if numSpans%3 == 0 {
 			laggingSpans.Add(checkpoint.Span)
-			numLagging++
-			return true /* skip */
+			return true
 		}
-		nonLaggingSpans[checkpoint.Span.String()] = numNonLagging
-		numNonLagging++
+		nonLaggingSpans[checkpoint.Span.String()] = len(nonLaggingSpans) + 1
 		return false
 	}
 
@@ -2470,10 +2476,16 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 		}
 	}
 
-	var rangefeedStarted bool
+	var rangefeedStartedOnce bool
 	var incorrectCheckpointErr error
 	knobs.FeedKnobs.OnRangeFeedStart = func(spans []kvcoord.SpanTimePair) {
-		rangefeedStarted = true
+		// We only need to check the first rangefeed restart since
+		// any additional restarts (likely due to transient errors)
+		// may be using newer span-level checkpoints than the one
+		// we saved after the last pause.
+		if rangefeedStartedOnce {
+			return
+		}
 
 		setErr := func(stp kvcoord.SpanTimePair, expectedTS hlc.Timestamp) {
 			incorrectCheckpointErr = errors.Newf(
@@ -2495,6 +2507,8 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 				}
 			}
 		}
+
+		rangefeedStartedOnce = true
 	}
 	knobs.FeedKnobs.ShouldSkipCheckpoint = nil
 
@@ -2514,7 +2528,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	waitForJobState(sqlDB, t, jobID, jobs.StatePaused)
 	// Verify the rangefeed started. This guards against the testing knob
 	// not being called, which was happening in earlier versions of the code.
-	require.True(t, rangefeedStarted)
+	require.True(t, rangefeedStartedOnce)
 	// Verify we didn't see incorrect timestamps when resuming.
 	require.NoError(t, incorrectCheckpointErr)
 }
