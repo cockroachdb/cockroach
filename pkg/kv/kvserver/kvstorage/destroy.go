@@ -8,13 +8,12 @@ package kvstorage
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -115,33 +114,18 @@ func DestroyReplica(
 		return err
 	}
 
-	// Save a tombstone to ensure that replica IDs never get reused.
-	//
-	// TODO(tbg): put this on `stateloader.StateLoader` and consolidate the
-	// other read of the range tombstone key (in uninited replica creation
-	// as well).
-
-	tombstoneKey := keys.RangeTombstoneKey(rangeID)
-
-	// Assert that the provided tombstone moves the existing one strictly forward.
-	// Failure to do so indicates that something is going wrong in the replica
-	// lifecycle.
-	{
-		var tombstone kvserverpb.RangeTombstone
-		if _, err := storage.MVCCGetProto(
-			ctx, reader, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
-		); err != nil {
-			return err
-		}
-		if tombstone.NextReplicaID >= nextReplicaID {
-			return errors.AssertionFailedf(
-				"cannot rewind tombstone from %d to %d", tombstone.NextReplicaID, nextReplicaID,
-			)
-		}
+	// Save a tombstone to ensure that replica IDs never get reused. Assert that
+	// the provided tombstone moves the existing one strictly forward. Failure to
+	// do so indicates that something is going wrong in the replica lifecycle.
+	sl := stateloader.Make(rangeID)
+	ts, err := sl.LoadRangeTombstone(ctx, reader)
+	if err != nil {
+		return err
+	} else if ts.NextReplicaID >= nextReplicaID {
+		return errors.AssertionFailedf(
+			"cannot rewind tombstone from %d to %d", ts.NextReplicaID, nextReplicaID)
 	}
-
-	tombstone := kvserverpb.RangeTombstone{NextReplicaID: nextReplicaID}
-	// "Blind" because ms == nil and timestamp.IsEmpty().
-	return storage.MVCCBlindPutProto(ctx, writer, tombstoneKey,
-		hlc.Timestamp{}, &tombstone, storage.MVCCWriteOptions{})
+	return sl.SetRangeTombstone(ctx, writer, kvserverpb.RangeTombstone{
+		NextReplicaID: nextReplicaID, // NB: nextReplicaID > 0
+	})
 }
