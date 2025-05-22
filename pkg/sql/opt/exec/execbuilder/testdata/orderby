@@ -1324,3 +1324,59 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t@b_idx
               spans: FULL SCAN
+
+# Regression test for dropping the required ordering in the presence of
+# unsimplified group-by ordering (#146900).
+statement ok
+CREATE TABLE t_146900 (
+  c0 INT,
+  c1 INT NOT NULL,
+  c2 BIT(7),
+  PRIMARY KEY (c0 ASC),
+  INDEX (c2 DESC)
+);
+
+query T
+EXPLAIN SELECT
+  t1.c0,
+  t1.c2
+FROM
+  t_146900 AS t1 JOIN t_146900 AS t2 ON (t1.c2) = (t2.c2) AND (t1.c0) = (t2.c0)
+GROUP BY
+  t1.c0, t2.c0, t1.c2, t2.c2
+HAVING
+  every(true::BOOL)::BOOL
+ORDER BY
+  t1.c2 DESC
+LIMIT
+  10:::INT8;
+----
+distribution: local
+vectorized: true
+·
+• top-k
+│ order: -any_not_null
+│ k: 10
+│
+└── • filter
+    │ filter: bool_and
+    │
+    └── • group (hash)
+        │ group by: c0
+        │
+        └── • render
+            │
+            └── • merge join
+                │ equality: (c2, c0) = (c2, c0)
+                │ left cols are key
+                │ right cols are key
+                │
+                ├── • scan
+                │     missing stats
+                │     table: t_146900@t_146900_c2_idx
+                │     spans: FULL SCAN
+                │
+                └── • scan
+                      missing stats
+                      table: t_146900@t_146900_c2_idx
+                      spans: FULL SCAN
