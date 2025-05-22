@@ -142,8 +142,7 @@ targets:
       - command: stage
         args:
           - $WORKLOAD_CLUSTER
-          - release
-          - $COCKROACH_VERSION
+          - cockroach
       - command: stage
         args:
           - $WORKLOAD_CLUSTER
