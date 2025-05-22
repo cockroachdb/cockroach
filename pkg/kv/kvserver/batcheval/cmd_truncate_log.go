@@ -133,7 +133,7 @@ func TruncateLog(
 	var pd result.Result
 	pd.Replicated.SetRaftTruncatedState(tState,
 		cArgs.EvalCtx.ClusterSettings().Version.IsActive(
-			ctx, clusterversion.V25_1_MoveRaftTruncatedState),
+			ctx, clusterversion.TODO_Delete_V25_1_MoveRaftTruncatedState),
 	)
 	pd.Replicated.RaftLogDelta = ms.SysBytes
 	pd.Replicated.RaftExpectedFirstIndex = firstIndex
