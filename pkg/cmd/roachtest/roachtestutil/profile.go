@@ -417,9 +417,7 @@ func GetProfile(
 ) ([]*profile.Profile, error) {
 	profiles := make([]*profile.Profile, len(nodes))
 
-	// Create a cancelable context and errgroup for concurrent profile collection.
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	// Create an error group to manage concurrent profile collection.
 	g, ctx := errgroup.WithContext(ctx)
 
 	for i, nodeId := range nodes {
@@ -430,8 +428,7 @@ func GetProfile(
 
 			if err != nil {
 				logger.Printf("error getting profile for node %d: %s", nodeId, err)
-				cancel() // Cancel context on first error
-				return err
+				return errors.Wrapf(err, "getting profile for n%d", nodeId)
 			}
 			return nil
 		})
@@ -443,4 +440,13 @@ func GetProfile(
 	}
 
 	return profiles, nil
+}
+
+// ExportProfile exports a profile to specified destination directory.
+func ExportProfile(profile *profile.Profile, destinationDir string, filename string) error {
+	buf := bytes.Buffer{}
+	if err := profile.Write(&buf); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(destinationDir, filename), buf.Bytes(), 0644)
 }
