@@ -1215,6 +1215,7 @@ func runCDCFineGrainedCheckpointingBenchmark(
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.L().Printf("using %s as sink (external IP)", ips[0])
 	sinkURL := fmt.Sprintf("https://%s:%d", ips[0], debug.WebhookServerPort)
 	sink := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
 	if err != nil {
@@ -1374,12 +1375,16 @@ func runCDCFineGrainedCheckpointingBenchmark(
 
 	var dupes int
 	testutils.SucceedsWithin(t, func() error {
+		t.L().Printf("fetching uniques and dupes from sink...")
 		unique, err := get("/unique")
 		if err != nil {
+			t.L().Printf("error getting unique count: %v", err)
 			return err
 		}
+		t.L().Printf("sink got %d unique", unique)
 		dupes, err = get("/dupes")
 		if err != nil {
+			t.L().Printf("error getting dupes count: %v", err)
 			return err
 		}
 		t.L().Printf("sink got %d unique, %d dupes", unique, dupes)

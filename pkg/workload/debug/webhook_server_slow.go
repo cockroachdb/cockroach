@@ -94,6 +94,7 @@ func webhookServerSlow(cmd *cobra.Command, args []string) error {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("received message request: %s", r.URL.Path)
 		var req struct {
 			Length  int `json:"length"`
 			Payload []struct {
@@ -169,6 +170,7 @@ func webhookServerSlow(cmd *cobra.Command, args []string) error {
 		}
 	})
 	mux.HandleFunc("/reset", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("received reset request: %s", r.URL.Path)
 		func() {
 			mu.Lock()
 			defer mu.Unlock()
@@ -179,18 +181,21 @@ func webhookServerSlow(cmd *cobra.Command, args []string) error {
 		log.Printf("reset")
 	})
 	mux.HandleFunc("/unique", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("received unique request: %s", r.URL.Path)
 		mu.Lock()
 		defer mu.Unlock()
 		l := len(serverState.seen)
 		fmt.Fprintf(w, "%d", l)
 	})
 	mux.HandleFunc("/dupes", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("received dupes request: %s", r.URL.Path)
 		mu.Lock()
 		defer mu.Unlock()
 		fmt.Fprintf(w, "%d", serverState.dupes)
 	})
 
 	mux.HandleFunc("/exit", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("received exit request: %s", r.URL.Path)
 		w.WriteHeader(http.StatusOK)
 		go func() {
 			time.Sleep(time.Millisecond * 5)
