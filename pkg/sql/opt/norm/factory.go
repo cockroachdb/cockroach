@@ -382,9 +382,20 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 				}
 				recursiveRoutines[t.Def] = struct{}{}
 			}
-			for i := range t.Def.Body {
-				t.Def.Body[i] = f.CopyAndReplaceDefault(t.Def.Body[i], replaceFn).(memo.RelExpr)
+			// Copy the arguments, if any.
+			var newArgs memo.ScalarListExpr
+			if t.Args != nil {
+				copiedArgs := f.CopyAndReplaceDefault(&t.Args, replaceFn).(*memo.ScalarListExpr)
+				newArgs = *copiedArgs
 			}
+			// Make sure to copy the slice that stores the body statements, rather
+			// than mutating the original.
+			newDef := *t.Def
+			newDef.Body = make([]memo.RelExpr, len(t.Def.Body))
+			for i := range t.Def.Body {
+				newDef.Body[i] = f.CopyAndReplaceDefault(t.Def.Body[i], replaceFn).(memo.RelExpr)
+			}
+			return f.ConstructUDFCall(newArgs, &memo.UDFCallPrivate{Def: &newDef})
 		case *memo.RecursiveCTEExpr:
 			// A recursive CTE may have the stats change on its Initial expression
 			// after placeholder assignment, if that happens we need to
