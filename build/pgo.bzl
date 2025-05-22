@@ -12,6 +12,6 @@ pgo_profile = repository_rule(
     implementation = _impl,
     attrs = {
         "url": attr.string(mandatory=True),
-        "sha256": attr.string(mandatory=True),
+        "sha256": attr.string(mandatory=False),
     },
 )
