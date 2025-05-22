@@ -64,7 +64,7 @@ func (ex *connExecutor) execPrepareTransactionInOpenStateInternal(
 ) error {
 	// TODO(nvanbenschoten): Remove this logic when mixed-version support with
 	// v24.3 is no longer necessary.
-	if !ex.planner.EvalContext().Settings.Version.IsActive(ctx, clusterversion.V25_1_PreparedTransactionsTable) {
+	if !ex.planner.EvalContext().Settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V25_1_PreparedTransactionsTable) {
 		return pgerror.Newf(pgcode.FeatureNotSupported, "PREPARE TRANSACTION unsupported in mixed-version cluster")
 	}
 
@@ -215,7 +215,7 @@ func (p *planner) endPreparedTxnNode(globalID *tree.StrVal, commit bool) *endPre
 func (f *endPreparedTxnNode) startExec(params runParams) error {
 	// TODO(nvanbenschoten): Remove this logic when mixed-version support with
 	// v24.3 is no longer necessary.
-	if !params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.V25_1_PreparedTransactionsTable) {
+	if !params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.TODO_Delete_V25_1_PreparedTransactionsTable) {
 		return pgerror.Newf(pgcode.FeatureNotSupported, "%s unsupported in mixed-version cluster", f.stmtName())
 	}
 
