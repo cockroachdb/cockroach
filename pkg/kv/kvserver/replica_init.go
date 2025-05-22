@@ -150,7 +150,6 @@ func newUninitializedReplicaWithoutRaftGroup(
 	r.cachedClosedTimestampPolicy.Store(new(ctpb.RangeClosedTimestampPolicy))
 
 	r.mu.pendingLeaseRequest = makePendingLeaseRequest(r)
-	r.mu.stateLoader = stateloader.Make(rangeID)
 	r.mu.quiescent = true
 	r.mu.conf = store.cfg.DefaultSpanConfig
 
