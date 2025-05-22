@@ -37,6 +37,9 @@ type BuildOptions struct {
 
 	// Channel represents the telemetry channel
 	Channel string
+
+	// TelemetryDisabled is a flag to disable telemetry.
+	TelemetryDisabled bool
 }
 
 // ChannelFromPlatform retrurns the telemetry channel used for a particular platform.
@@ -159,21 +162,24 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 		buildArgs = append(buildArgs, "//c-deps:libgeos")
 	}
 	targetTriple := TargetTripleFromPlatform(platform)
-	var stampCommand string
 	if platform == PlatformWindows {
 		buildArgs = append(buildArgs, "--enable_runfiles")
 	}
+	var stampCommand string
 	if opts.Release {
 		if opts.BuildTag == "" {
-			stampCommand = fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s %s release", targetTriple, opts.Channel)
+			stampCommand = fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh -t %s -c %s -b release", targetTriple, opts.Channel)
 		} else {
-			stampCommand = fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s %s release %s", targetTriple, opts.Channel, opts.BuildTag)
+			stampCommand = fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh -t %s -c %s -b release -g %s", targetTriple, opts.Channel, opts.BuildTag)
 		}
 	} else {
 		if opts.BuildTag != "" {
 			return errors.Newf("BuildTag cannot be set for non-Release builds")
 		}
-		stampCommand = fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s %s", targetTriple, opts.Channel)
+		stampCommand = fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh -t %s -c %s", targetTriple, opts.Channel)
+	}
+	if opts.TelemetryDisabled {
+		stampCommand = fmt.Sprintf("%s -d true", stampCommand)
 	}
 	buildArgs = append(buildArgs, stampCommand)
 	configs := []string{"-c", "opt", "--config=force_build_cdeps", "--config=pgo", fmt.Sprintf("--config=%s", CrossConfigFromPlatform(platform))}
