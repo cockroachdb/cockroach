@@ -45,9 +45,9 @@ func maybeGenerateStoreDir(b testing.TB) (_ vfs.FS, storeDir string, cleanup fun
 		}()
 	}
 
-	cmd, stdout := generateStoreDir.withEnv(storeDirEnvVar, storeDir).exec()
+	cmd, output := generateStoreDir.withEnv(storeDirEnvVar, storeDir).exec()
 	if err := cmd.Run(); err != nil {
-		b.Fatalf("failed to generate store dir: %s\n%s", err, stdout.String())
+		b.Fatalf("failed to generate store dir: %s\n%s", err, output.String())
 	}
 	return vfs.Default, storeDir, cleanup
 }
