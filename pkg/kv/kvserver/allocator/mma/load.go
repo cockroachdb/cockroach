@@ -516,14 +516,19 @@ func loadSummaryForDimension(
 		}
 		// INVARIANT: fractionUsed <= 0.9
 		if fractionUsed > 0.75 {
+			if meanUtil*1.5 < fractionUsed {
+				return min(summaryUpperBound, overloadUrgent)
+			}
 			if meanUtil < fractionUsed {
 				return min(summaryUpperBound, overloadSlow)
-			} else {
-				return min(summaryUpperBound, loadSummary)
 			}
+			return min(summaryUpperBound, loadSummary)
 		}
 		// INVARIANT: fractionUsed <= 0.75
-		if fractionUsed > meanUtil*1.05 {
+		if meanUtil*1.75 < fractionUsed {
+			return min(summaryUpperBound, overloadSlow)
+		}
+		if meanUtil*1.05 < fractionUsed {
 			return min(summaryUpperBound, max(loadSummary, loadNoChange))
 		}
 	}
