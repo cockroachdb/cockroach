@@ -295,13 +295,13 @@ func registerRestore(r registry.Registry) {
 		},
 		{
 			hardware: makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */}),
-			backup:   backupSpecs{cloud: spec.AWS, fixture: MediumFixture},
+			backup:   backupSpecs{cloud: spec.AWS, fixture: SmallFixture},
 			timeout:  1 * time.Hour,
 			suites:   registry.Suites(registry.Nightly),
 		},
 		{
 			hardware: makeHardwareSpecs(hardwareSpecs{}),
-			backup:   backupSpecs{cloud: spec.GCE, fixture: MediumFixture},
+			backup:   backupSpecs{cloud: spec.GCE, fixture: SmallFixture},
 			timeout:  1 * time.Hour,
 			suites:   registry.Suites(registry.Nightly),
 		},
@@ -309,7 +309,7 @@ func registerRestore(r registry.Registry) {
 			// Benchmarks using a low memory per core ratio - we don't expect ideal
 			// performance but nodes should not OOM.
 			hardware: makeHardwareSpecs(hardwareSpecs{mem: spec.Low}),
-			backup:   backupSpecs{cloud: spec.GCE, fixture: MediumFixture},
+			backup:   backupSpecs{cloud: spec.GCE, fixture: SmallFixture},
 			timeout:  1 * time.Hour,
 			suites:   registry.Suites(registry.Nightly),
 		},
@@ -317,7 +317,7 @@ func registerRestore(r registry.Registry) {
 			// Benchmarks if per node throughput remains constant if the number of
 			// nodes doubles relative to default.
 			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 8}),
-			backup:   backupSpecs{cloud: spec.GCE, fixture: MediumFixture},
+			backup:   backupSpecs{cloud: spec.GCE, fixture: SmallFixture},
 			timeout:  1 * time.Hour,
 			suites:   registry.Suites(registry.Nightly),
 		},
@@ -327,7 +327,7 @@ func registerRestore(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{
 				nodes: 9, ebsThroughput: 250, /* MB/s */
 				zones: []string{"us-east-2b", "us-west-2b", "eu-west-1b"}}), // These zones are AWS-specific.
-			backup:  backupSpecs{cloud: spec.AWS, fixture: MediumFixture},
+			backup:  backupSpecs{cloud: spec.AWS, fixture: SmallFixture},
 			timeout: 90 * time.Minute,
 			suites:  registry.Suites(registry.Nightly),
 		},
@@ -335,7 +335,7 @@ func registerRestore(r registry.Registry) {
 			// Benchmarks if per node throughput doubles if the vcpu count doubles
 			// relative to default.
 			hardware: makeHardwareSpecs(hardwareSpecs{cpus: 16}),
-			backup:   backupSpecs{cloud: spec.GCE, fixture: MediumFixture},
+			backup:   backupSpecs{cloud: spec.GCE, fixture: SmallFixture},
 			timeout:  1 * time.Hour,
 			suites:   registry.Suites(registry.Nightly),
 		},
@@ -346,7 +346,7 @@ func registerRestore(r registry.Registry) {
 			timeout:  24 * time.Hour,
 			suites:   registry.Suites(registry.Weekly),
 		},
-		// Following three tests are just used to benchmark classic restore against
+		// Following two tests are just used to benchmark classic restore against
 		// OR with the exact same fixtures and hardware.
 		{
 			hardware:       makeHardwareSpecs(hardwareSpecs{}),
@@ -354,14 +354,6 @@ func registerRestore(r registry.Registry) {
 			timeout:        1 * time.Hour,
 			suites:         registry.Suites(registry.Nightly),
 			fullBackupOnly: true,
-			skip:           "used for adhoc benchmarking against OR",
-		},
-		{
-			hardware:       makeHardwareSpecs(hardwareSpecs{}),
-			backup:         backupSpecs{cloud: spec.GCE, fixture: SmallFixture},
-			fullBackupOnly: false,
-			timeout:        1 * time.Hour,
-			suites:         registry.Suites(registry.Nightly),
 			skip:           "used for adhoc benchmarking against OR",
 		},
 		{
