@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -74,6 +75,14 @@ var (
 			"such changefeeds will continue to replicate all TTL deletes)",
 		false,
 		settings.WithPublic,
+	)
+	processorConcurrencyOverride = settings.RegisterIntSetting(
+		settings.ApplicationLevel,
+		"sql.ttl.processor_concurrency",
+		"override for the TTL job processor concurrency (0 means use default based on GOMAXPROCS, "+
+			"and any value greater than GOMAXPROCS will be capped at GOMAXPROCS)",
+		0,
+		settings.NonNegativeInt,
 	)
 )
 
@@ -159,6 +168,18 @@ func GetChangefeedReplicationDisabled(
 	return changefeedReplicationDisabled.Get(settingsValues)
 }
 
+// GetProcessorConcurrency returns the concurrency to use for TTL job processors.
+// If the cluster setting is 0 (default), it will return the provided default value.
+// If the cluster setting is greater than 0, it will return the minimum of the
+// cluster setting and the default value.
+func GetProcessorConcurrency(settingsValues *settings.Values, defaultConcurrency int64) int64 {
+	override := processorConcurrencyOverride.Get(settingsValues)
+	if override > 0 {
+		return min(override, defaultConcurrency)
+	}
+	return defaultConcurrency
+}
+
 // BuildScheduleLabel returns a string value intended for use as the
 // schedule_name/label column for the scheduled job created by row level TTL.
 func BuildScheduleLabel(tbl *tabledesc.Mutable) string {
@@ -169,6 +190,7 @@ func BuildSelectQuery(
 	relationName string,
 	pkColNames []string,
 	pkColDirs []catenumpb.IndexColumn_Direction,
+	pkColTypes []*types.T,
 	aostDuration time.Duration,
 	ttlExpr catpb.Expression,
 	numStartQueryBounds, numEndQueryBounds int,
@@ -217,6 +239,8 @@ func BuildSelectQuery(
 					buf.WriteString(pkColNames[j])
 					buf.WriteString(" = $")
 					buf.WriteString(strconv.Itoa(j + placeholderOffset))
+					buf.WriteString("::")
+					buf.WriteString(pkColTypes[j].SQLStringFullyQualified())
 					buf.WriteString(" AND ")
 				}
 				buf.WriteString(pkColNames[i])
@@ -227,6 +251,8 @@ func BuildSelectQuery(
 				}
 				buf.WriteString(" $")
 				buf.WriteString(strconv.Itoa(i + placeholderOffset))
+				buf.WriteString("::")
+				buf.WriteString(pkColTypes[i].SQLStringFullyQualified())
 				buf.WriteString(")")
 				if !isLast {
 					buf.WriteString(" OR")

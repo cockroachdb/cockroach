@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -91,7 +92,7 @@ func (sr *SQLRunner) ExecWithMessage(
 	helperOrNoop(t)()
 	r, err := sr.DB.ExecContext(context.Background(), query, args...)
 	if err != nil {
-		t.Fatalf("%serror executing query=%q args=%q: %s", fmtMessage(message), query, args, err)
+		t.Fatalf("%serror executing query=%q args=%q: %s", fmtMessage(message), query, args, pgerror.FullError(err))
 	}
 	return r
 }
@@ -103,7 +104,7 @@ func (sr *SQLRunner) ExecMultiple(t Fataler, queries ...string) {
 	for _, query := range queries {
 		_, err := sr.DB.ExecContext(context.Background(), query)
 		if err != nil {
-			t.Fatalf("error executing '%s': %s", query, err)
+			t.Fatalf("error executing '%s': %s", query, pgerror.FullError(err))
 		}
 	}
 }
@@ -242,6 +243,24 @@ func (sr *SQLRunner) ExpectErrWithTimeout(
 	if err != nil {
 		t.Fatalf("failed assert error: %s", err)
 	}
+}
+
+// ExpectErrWithRetry wraps ExpectErr with a timeout and retry on a specific error.
+func (sr *SQLRunner) ExpectErrWithRetry(
+	t Fataler, errRE string, query string, retryableErrorRE string, args ...interface{},
+) {
+	helperOrNoop(t)()
+	var err error
+
+	retryOpts := retry.Options{MaxRetries: 5}
+	err = retryOpts.DoWithRetryable(context.Background(), func(ctx context.Context) (bool, error) {
+		_, err = sr.DB.ExecContext(context.Background(), query, args...)
+		if testutils.IsError(err, retryableErrorRE) {
+			return true, err
+		}
+		return false, err
+	})
+	sr.expectErr(t, query, err, errRE)
 }
 
 // Query is a wrapper around gosql.Query that kills the test on error.

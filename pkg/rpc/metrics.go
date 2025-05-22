@@ -7,19 +7,27 @@ package rpc
 
 import (
 	"context"
+	"net/http"
 	"strings"
 
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	prometheusgo "github.com/prometheus/client_model/go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
+
+// gwRequestKey is a field set on the context to indicate a request
+// is coming from gRPC gateway.
+const gwRequestKey = "gw-request"
 
 var (
 	// The below gauges store the current state of running heartbeat loops.
@@ -35,6 +43,9 @@ var (
 		Help:        "Gauge of current connections in a healthy state (i.e. bidirectionally connected and heartbeating)",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
+		Essential:   true,
+		Category:    metric.Metadata_NETWORKING,
+		HowToUse:    `See Description.`,
 	}
 
 	metaConnectionUnhealthy = metric.Metadata{
@@ -42,6 +53,9 @@ var (
 		Help:        "Gauge of current connections in an unhealthy state (not bidirectionally connected or heartbeating)",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
+		Essential:   true,
+		Category:    metric.Metadata_NETWORKING,
+		HowToUse:    `If the value of this metric is greater than 0, this could indicate a network partition.`,
 	}
 
 	metaConnectionInactive = metric.Metadata{
@@ -63,6 +77,9 @@ the constituent parts of this metric are available on a per-peer basis and one c
 for how long a given peer has been connected`,
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Essential:   true,
+		Category:    metric.Metadata_NETWORKING,
+		HowToUse:    `This can be useful for monitoring the stability and health of connections within your CockroachDB cluster.`,
 	}
 
 	metaConnectionUnhealthyNanos = metric.Metadata{
@@ -74,6 +91,9 @@ the constituent parts of this metric are available on a per-peer basis and one c
 for how long a given peer has been unreachable`,
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Essential:   true,
+		Category:    metric.Metadata_NETWORKING,
+		HowToUse:    `If this duration is greater than 0, this could indicate how long a network partition has been occurring.`,
 	}
 
 	metaConnectionHeartbeats = metric.Metadata{
@@ -81,6 +101,9 @@ for how long a given peer has been unreachable`,
 		Help:        `Counter of successful heartbeats.`,
 		Measurement: "Heartbeats",
 		Unit:        metric.Unit_COUNT,
+		Essential:   true,
+		Category:    metric.Metadata_NETWORKING,
+		HowToUse:    `See Description.`,
 	}
 
 	metaConnectionFailures = metric.Metadata{
@@ -95,6 +118,9 @@ Decommissioned peers are excluded.
 `,
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
+		Essential:   true,
+		Category:    metric.Metadata_NETWORKING,
+		HowToUse:    `See Description.`,
 	}
 
 	metaConnectionAvgRoundTripLatency = metric.Metadata{
@@ -112,6 +138,9 @@ This metric does not track failed connection. A failed connection's contribution
 is reset to zero.
 `,
 		Measurement: "Latency",
+		Essential:   true,
+		Category:    metric.Metadata_NETWORKING,
+		HowToUse:    `This metric is helpful in understanding general network issues outside of CockroachDB that could be impacting the user’s workload.`,
 	}
 	metaConnectionConnected = metric.Metadata{
 		Name: "rpc.connection.connected",
@@ -402,4 +431,34 @@ func NewRequestMetricsInterceptor(
 		}, float64(duration.Nanoseconds()))
 		return resp, err
 	}
+}
+
+// MarkGatewayRequest returns a grpc metadata object that contains the
+// gwRequestKey field. This is used by the gRPC gateway that forwards HTTP
+// requests to their respective gRPC handlers. See gatewayRequestRecoveryInterceptor below.
+func MarkGatewayRequest(ctx context.Context, r *http.Request) metadata.MD {
+	return metadata.Pairs(gwRequestKey, "true")
+}
+
+// gatewayRequestRecoveryInterceptor recovers from panics in gRPC handlers that
+// are invoked due to DB console requests. For these requests, we do not want
+// an uncaught panic to crash the node.
+func gatewayRequestRecoveryInterceptor(
+	ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
+) (resp interface{}, err error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if ok {
+		val := md.Get(gwRequestKey)
+		if len(val) > 0 {
+			defer func() {
+				if p := recover(); p != nil {
+					logcrash.ReportPanic(ctx, nil, p, 1 /* depth */)
+					// The gRPC gateway will put this message in the HTTP response to the client.
+					err = errors.New("an unexpected error occurred")
+				}
+			}()
+		}
+	}
+	resp, err = handler(ctx, req)
+	return resp, err
 }

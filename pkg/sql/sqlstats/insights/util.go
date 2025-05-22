@@ -9,11 +9,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlcommenter"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/redact"
 )
 
-func MakeTxnInsight(value sqlstats.RecordedTxnStats) *Transaction {
+func makeTxnInsight(value *sqlstats.RecordedTxnStats) *Transaction {
 	var retryReason string
 	if value.AutoRetryReason != nil {
 		retryReason = value.AutoRetryReason.Error()
@@ -59,7 +60,7 @@ func MakeTxnInsight(value sqlstats.RecordedTxnStats) *Transaction {
 	return insight
 }
 
-func MakeStmtInsight(value sqlstats.RecordedStmtStats) *Statement {
+func makeStmtInsight(value *sqlstats.RecordedStmtStats) *Statement {
 	var autoRetryReason string
 	if value.AutoRetryReason != nil {
 		autoRetryReason = value.AutoRetryReason.Error()
@@ -101,6 +102,7 @@ func MakeStmtInsight(value sqlstats.RecordedStmtStats) *Statement {
 		CPUSQLNanos:          cpuSQLNanos,
 		ErrorCode:            errorCode,
 		ErrorMsg:             errorMsg,
+		QueryTags:            toSqlCommentTags(value.QueryTags),
 	}
 
 	return insight
@@ -112,4 +114,15 @@ func getInsightStatus(statementError error) Statement_Status {
 	}
 
 	return Statement_Failed
+}
+
+func toSqlCommentTags(sqlCommentsTags []sqlcommenter.QueryTag) []*QueryTag {
+	commenterTags := make([]*QueryTag, 0, len(sqlCommentsTags))
+	for _, tag := range sqlCommentsTags {
+		commenterTags = append(commenterTags, &QueryTag{
+			Name:  tag.Key,
+			Value: string(tag.Value),
+		})
+	}
+	return commenterTags
 }

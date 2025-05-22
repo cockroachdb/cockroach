@@ -101,6 +101,32 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this job"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"set new ui.default_timezone setting to ui.display_timezone value",
+		clusterversion.V25_2_SetUiDefaultTimezoneSetting.Version(),
+		upgrade.NoPrecondition,
+		setUiDefaultTimezone,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this setting"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"add 'username' column to stmt diagnostics requests table",
+		clusterversion.V25_2_AddUsernameToStmtDiagRequest.Version(),
+		upgrade.NoPrecondition,
+		stmtDiagAddUsernameMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column"),
+	),
+
+	newFirstUpgrade(clusterversion.V25_3_Start.Version()),
+
+	upgrade.NewTenantUpgrade(
+		"add 'payload' column to system.eventlog table and add new index on eventType column",
+		clusterversion.V25_3_AddEventLogColumnAndIndex.Version(),
+		upgrade.NoPrecondition,
+		eventLogTableMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column or index"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

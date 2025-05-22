@@ -10,14 +10,19 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER CO
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 1 element transitioning toward TRANSIENT_ABSENT
  │         │    └── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 104 (t), IndexID: 1 (t_pkey), ConstraintID: 2, ReferencedColumnIDs: [2]}
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT     TableSchemaLocked:{DescID: 104 (t)}
  │         ├── 1 element transitioning toward ABSENT
  │         │    └── PUBLIC → ABSENT     ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j), TypeName: "STRING"}
- │         └── 1 Mutation operation
+ │         └── 2 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
  │              └── AddCheckConstraint {"CheckExpr":"(CAST(CAST(j AS ...","ConstraintID":2,"TableID":104,"Validity":2}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
  │    │    │    └── WRITE_ONLY → ABSENT CheckConstraint:{DescID: 104 (t), IndexID: 1 (t_pkey), ConstraintID: 2, ReferencedColumnIDs: [2]}
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT     → PUBLIC TableSchemaLocked:{DescID: 104 (t)}
  │    │    ├── 1 element transitioning toward ABSENT
  │    │    │    └── ABSENT     → PUBLIC ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j), TypeName: "STRING"}
  │    │    └── 1 Mutation operation
@@ -25,7 +30,10 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER CO
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 1 element transitioning toward TRANSIENT_ABSENT
  │         │    └── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 104 (t), IndexID: 1 (t_pkey), ConstraintID: 2, ReferencedColumnIDs: [2]}
- │         └── 3 Mutation operations
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT     TableSchemaLocked:{DescID: 104 (t)}
+ │         └── 4 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── AddCheckConstraint {"CheckExpr":"(CAST(CAST(j AS ...","ConstraintID":2,"TableID":104,"Validity":2}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
@@ -58,7 +66,10 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER CO
       └── Stage 3 of 3 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward TRANSIENT_ABSENT
            │    └── TRANSIENT_VALIDATED → TRANSIENT_ABSENT CheckConstraint:{DescID: 104 (t), IndexID: 1 (t_pkey), ConstraintID: 2, ReferencedColumnIDs: [2]}
-           └── 3 Mutation operations
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT              → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+           └── 4 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
                 ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

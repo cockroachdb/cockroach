@@ -19,9 +19,13 @@ SET application_name = world
 statement ok
 SELECT 2
 
-query B rowsort
+statement ok
+RESET application_name
+
+query B rowsort,retry
 SELECT count > 0 FROM crdb_internal.node_statement_statistics WHERE application_name IN ('hello', 'world')
 ----
+true
 true
 true
 true
@@ -44,7 +48,7 @@ SELECT 1
 statement ok
 SET application_name = ''
 
-query TB
+query TB retry
 SELECT key, count >= 1 FROM crdb_internal.node_statement_statistics WHERE application_name = 'hello' AND key LIKE 'SELECT%' ORDER BY key
 ----
 SELECT _     true
@@ -61,7 +65,7 @@ select 1, 2; select 1, 2, 3; select 'ok'
 statement ok
 SET application_name = ''
 
-query TTTB
+query TTTB retry
 SELECT statement_id, txn_fingerprint_id, key, implicit_txn FROM crdb_internal.node_statement_statistics WHERE application_name = 'multi_stmts_test' ORDER BY key, txn_fingerprint_id
 ----
 10543509969653713415  11423158778792053189  SELECT _                  true
@@ -151,7 +155,7 @@ SET application_name = '';
 statement ok
 RESET distsql
 
-query TT colnames
+query TT colnames,retry
 SELECT key,flags
 FROM test.crdb_internal.node_statement_statistics
 WHERE application_name = 'valuetest' ORDER BY key, flags
@@ -223,7 +227,10 @@ SELECT z FROM test where y=2;
 statement ok
 SELECT x FROM test where y=1;
 
-query TTTB colnames
+statement ok
+RESET application_name
+
+query TTTB colnames,retry
 SELECT statement_id, txn_fingerprint_id, key, implicit_txn
   FROM crdb_internal.node_statement_statistics
  WHERE application_name = 'implicit_txn_test'
@@ -234,8 +241,10 @@ statement_id          txn_fingerprint_id    key                             impl
 10408858296841757952  13478531408983698331  SELECT x FROM test WHERE y = _  false
 10408858296841757964  4544145443417805523   SELECT x FROM test WHERE y = _  true
 10543509969653713419  646847662919799570    SELECT _                        false
+12572515814643342375  79149212088773624     RESET application_name          true
 15907252083884073594  8332314834087515557   SELECT z FROM test WHERE y = _  true
 3710577796014427302   13478531408983698331  SELECT x, z FROM test           false
+
 
 # Test throttling of storing statistics per application
 
@@ -269,23 +278,21 @@ SET application_name = throttle_test
 statement ok
 BEGIN; SELECT 1; SELECT 1, 2; SELECT 1, 2, 3; COMMIT
 
-statement ok
-BEGIN
-
-query TTI
-SELECT * FROM app_stmts_view ORDER BY 2
-----
-10543509969653713419  SELECT _        1
-5745311157220589902  SELECT _, _     1
-5153809228704478461  SELECT _, _, _  1
-
-query TTI
-SELECT * FROM txn_fingerprint_view
-----
-7184384531886178123  {10543509969653713419,5745311157220589902,5153809228704478461}  1
 
 statement ok
-COMMIT
+RESET application_name
+
+# Check that we have 3 fingerprints.
+query TI retry
+SELECT key, count FROM crdb_internal.node_statement_statistics
+WHERE application_name = 'throttle_test' AND key LIKE 'SELECT%' ORDER BY key
+----
+SELECT _            1
+SELECT _, _         1
+SELECT _, _, _      1
+
+statement ok
+SET application_name = throttle_test
 
 # Change the limit for unique fingerprint.
 statement ok
@@ -294,53 +301,35 @@ SET CLUSTER SETTING sql.metrics.max_mem_stmt_fingerprints = 0
 statement ok
 SET CLUSTER SETTING sql.metrics.max_mem_txn_fingerprints = 0
 
-# We now have two additional statement fingerprints because of the two queries we ran against the crdb_internal view
-# prior to setting the fingerprint limit to 0.
-query TTI
-SELECT * FROM app_stmts_view ORDER BY 2
-----
-7849245716382231737  SELECT * FROM app_stmts_view ORDER BY _  1
-18313404398542206079    SELECT * FROM txn_fingerprint_view       1
-10543509969653713419  SELECT _                                 1
-5745311157220589902  SELECT _, _                              1
-5153809228704478461  SELECT _, _, _                           1
-
-query TTI rowsort
-SELECT * FROM txn_fingerprint_view
-----
-7184384531886178123   {10543509969653713419,5745311157220589902,5153809228704478461}  1
-18258640834625550893  {7849245716382231737,18313404398542206079}                         1
 
 # Run more fingerprints to ensure that we are still updating our existing fingerprint but not creating more
 # fingerprints.
+
+# New transaction - should not be recorded.
+statement ok
+BEGIN; SELECT 1; SELECT 1, 3; SELECT 1, 2, 3, 4; COMMIT
+
+
+# Existing transaction - recorded in existing entry.
 statement ok
 BEGIN; SELECT 1; SELECT 1, 3; SELECT 1, 2, 3; COMMIT
 
 statement ok
-BEGIN; SELECT 1; SELECT 1, 3; SELECT 1, 2, 3, 4; COMMIT
+RESET application_name
+
+query TI retry
+SELECT key, count FROM crdb_internal.node_statement_statistics
+WHERE application_name = 'throttle_test' AND key LIKE 'SELECT%' ORDER BY key
+----
+SELECT _            2
+SELECT _, _         2
+SELECT _, _, _      2
 
 statement ok
-BEGIN
+SET application_name = throttle_test
 
-query TTI
-SELECT * FROM app_stmts_view ORDER BY 2
-----
-7849245716382231737  SELECT * FROM app_stmts_view ORDER BY _  1
-18313404398542206079    SELECT * FROM txn_fingerprint_view       1
-10543509969653713419  SELECT _                                 2
-5745311157220589902  SELECT _, _                              2
-5153809228704478461  SELECT _, _, _                           2
 
-query TTI rowsort
-SELECT * FROM txn_fingerprint_view
-----
-7184384531886178123   {10543509969653713419,5745311157220589902,5153809228704478461}  2
-18258640834625550893  {7849245716382231737,18313404398542206079}                         1
-
-statement ok
-COMMIT
-
-# Reset cluster setting for fingerprint limit.
+# Reset cluster setting for fingerprint limit. New fingerprints should be recorded again.
 statement ok
 RESET CLUSTER SETTING sql.metrics.max_mem_stmt_fingerprints
 
@@ -350,45 +339,36 @@ RESET CLUSTER SETTING sql.metrics.max_mem_txn_fingerprints
 statement ok
 BEGIN; SELECT 1; SELECT 1, 3; SELECT 1, 2, 3, 4; COMMIT
 
-statement ok
-BEGIN
-
-query TTI
-SELECT * FROM app_stmts_view ORDER BY 2
-----
-7849245716382231737  SELECT * FROM app_stmts_view ORDER BY _                                2
-18313404398542206079    SELECT * FROM txn_fingerprint_view                                     2
-10543509969653713419  SELECT _                                                               2
-10543509969653713419  SELECT _                                                               1
-5745311157220589902  SELECT _, _                                                            2
-5745311157220589902  SELECT _, _                                                            1
-5153809228704478461  SELECT _, _, _                                                         2
-5323573557126703672  SELECT _, _, _, _                                                      1
-8979787910399768568   SET CLUSTER SETTING "sql.metrics.max_mem_stmt_fingerprints" = DEFAULT  1
-17515881800496300282   SET CLUSTER SETTING "sql.metrics.max_mem_txn_fingerprints" = DEFAULT   1
-
-query TTI rowsort
-SELECT * FROM txn_fingerprint_view
-----
-7184384531886178123   {10543509969653713419,5745311157220589902,5153809228704478461}  2
-7913717851072930190   {10543509969653713419,5745311157220589902,5323573557126703672}  1
-18258640834625550893  {7849245716382231737,18313404398542206079}                         2
-
-statement ok
-COMMIT
 
 statement ok
 BEGIN; SELECT count(1) AS wombat1; COMMIT
 
-query T
-SELECT metadata->>'querySummary' FROM crdb_internal.statement_statistics WHERE metadata->>'query' LIKE '%wombat1%'
-----
-SELECT count(_) AS wom...
+statement ok
+BEGIN; SELECT count(1) AS wombat2; COMMIT
+
 
 statement ok
-SELECT count(1) AS wombat2
+RESET application_name
 
-query T
-SELECT metadata->>'querySummary' FROM crdb_internal.statement_statistics WHERE metadata->>'query' LIKE '%wombat2%'
+query TTI retry
+SELECT * FROM app_stmts_view ORDER BY 2
 ----
-SELECT count(_) AS wom...
+12572515814643342375  RESET application_name                                                 3
+10543509969653713419  SELECT _                                                               2
+10543509969653713419  SELECT _                                                               1
+5745311157220589902   SELECT _, _                                                            2
+5745311157220589902   SELECT _, _                                                            1
+5153809228704478461   SELECT _, _, _                                                         2
+5323573557126703672   SELECT _, _, _, _                                                      1
+1284200566828503222   SELECT count(_) AS wombat1                                             1
+431703347292518239    SELECT count(_) AS wombat2                                             1
+8979787910399768568   SET CLUSTER SETTING "sql.metrics.max_mem_stmt_fingerprints" = DEFAULT  1
+17515881800496300282  SET CLUSTER SETTING "sql.metrics.max_mem_txn_fingerprints" = DEFAULT   1
+
+query TTI
+SELECT * FROM txn_fingerprint_view ORDER BY 1
+----
+12294275735240441984  {431703347292518239}                                            1
+13741002326085904233  {1284200566828503222}                                           1
+7184384531886178123   {10543509969653713419,5745311157220589902,5153809228704478461}  2
+7913717851072930190   {10543509969653713419,5745311157220589902,5323573557126703672}  1

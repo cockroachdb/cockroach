@@ -80,7 +80,7 @@ write *eventpb.CreateIndex to event log:
     tag: CREATE INDEX
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 7 MutationType ops
+## StatementPhase stage 1 of 1 with 8 MutationType ops
 upsert descriptor #104
   ...
      id: 104
@@ -148,7 +148,9 @@ upsert descriptor #104
      nextMutationId: 1
      parentId: 100
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -157,7 +159,7 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 22 MutationType ops
+## PreCommitPhase stage 2 of 2 with 23 MutationType ops
 upsert descriptor #105
   -
   +function:
@@ -329,7 +331,9 @@ upsert descriptor #104
      nextMutationId: 1
      parentId: 100
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -464,46 +468,14 @@ begin transaction #9
 validate forward indexes [2] in table #104
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 1 with 10 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 10 MutationType ops
 upsert descriptor #104
   ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  -  declarativeSchemaChangerState:
-  -    authorization:
-  -      userName: root
-  -    currentStatuses: <redacted>
-  -    jobId: "1"
-  -    nameMapping:
-  -      columns:
-  -        "1": a
-  -        "2": b
-  -        "4294967292": crdb_internal_origin_timestamp
-  -        "4294967293": crdb_internal_origin_id
-  -        "4294967294": tableoid
-  -        "4294967295": crdb_internal_mvcc_timestamp
-  -      families:
-  -        "0": primary
-  -      id: 104
-  -      indexes:
-  -        "1": t_pkey
-  -        "2": idx
-  -      name: t
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹1›;$$"
-  -        statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT 1 $$"
-  -        statementTag: CREATE FUNCTION
-  -    - statement:
-  -        redactedStatement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹b›)
-  -        statement: CREATE UNIQUE INDEX idx ON t (b)
-  -        statementTag: CREATE INDEX
-  -      statementRank: 1
+           statementTag: CREATE INDEX
+         statementRank: 1
   -    revertible: true
-  -    targetRanks: <redacted>
-  -    targets: <redacted>
-     families:
-     - columnIds:
+       targetRanks: <redacted>
+       targets: <redacted>
   ...
      formatVersion: 3
      id: 104
@@ -593,6 +565,75 @@ upsert descriptor #104
   -  version: "6"
   +  version: "7"
 upsert descriptor #105
+  ...
+           statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT 1 $$"
+           statementTag: CREATE FUNCTION
+  -    revertible: true
+       targetRanks: <redacted>
+       targets: <redacted>
+  ...
+         oid: 20
+         width: 64
+  -  state: ADD
+  -  version: "5"
+  +  version: "6"
+     volatility: VOLATILE
+persist all catalog changes to storage
+adding table for stats refresh: 104
+create job #2 (non-cancelable: true): "GC for CREATE UNIQUE INDEX idx ON defaultdb.public.t (b)"
+  descriptor IDs: [104]
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 1 MutationType op pending"
+set schema change job #1 to non-cancellable
+commit transaction #10
+notified job registry to adopt jobs: [2]
+begin transaction #11
+## PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": a
+  -        "2": b
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "1": t_pkey
+  -        "2": idx
+  -      name: t
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹1›;$$"
+  -        statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT 1 $$"
+  -        statementTag: CREATE FUNCTION
+  -    - statement:
+  -        redactedStatement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹b›)
+  -        statement: CREATE UNIQUE INDEX idx ON t (b)
+  -        statementTag: CREATE INDEX
+  -      statementRank: 1
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "7"
+  +  version: "8"
+upsert descriptor #105
    function:
   -  declarativeSchemaChangerState:
   -    authorization:
@@ -607,7 +648,6 @@ upsert descriptor #105
   -        redactedStatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹1›;$$"
   -        statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT 1 $$"
   -        statementTag: CREATE FUNCTION
-  -    revertible: true
   -    targetRanks: <redacted>
   -    targets: <redacted>
      functionBody: SELECT 1;
@@ -615,14 +655,10 @@ upsert descriptor #105
   ...
          oid: 20
          width: 64
-  -  state: ADD
-  -  version: "5"
-  +  version: "6"
+  -  version: "6"
+  +  version: "7"
      volatility: VOLATILE
 persist all catalog changes to storage
-adding table for stats refresh: 104
-create job #2 (non-cancelable: true): "GC for CREATE UNIQUE INDEX idx ON defaultdb.public.t (b)"
-  descriptor IDs: [104]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
@@ -632,6 +668,5 @@ write *eventpb.FinishSchemaChange to event log:
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 105
-commit transaction #10
-notified job registry to adopt jobs: [2]
+commit transaction #11
 # end PostCommitPhase

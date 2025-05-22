@@ -47,10 +47,6 @@ import (
 type execFactory struct {
 	ctx     context.Context
 	planner *planner
-	// alloc is allocated lazily the first time it is needed and shared among
-	// all mutation planNodes created by the factory. It should not be accessed
-	// directly - use getDatumAlloc() instead.
-	alloc *tree.DatumAlloc
 	// isExplain is true if this factory is used to build a statement inside
 	// EXPLAIN or EXPLAIN ANALYZE.
 	isExplain bool
@@ -68,13 +64,6 @@ func newExecFactory(ctx context.Context, p *planner) *execFactory {
 // Ctx implements the Factory interface.
 func (ef *execFactory) Ctx() context.Context {
 	return ef.ctx
-}
-
-func (ef *execFactory) getDatumAlloc() *tree.DatumAlloc {
-	if ef.alloc == nil {
-		ef.alloc = &tree.DatumAlloc{}
-	}
-	return ef.alloc
 }
 
 // ConstructValues is part of the exec.Factory interface.
@@ -194,7 +183,12 @@ func generateScanSpans(
 	if params.InvertedConstraint != nil {
 		return sb.SpansFromInvertedSpans(ctx, params.InvertedConstraint, params.IndexConstraint, nil /* scratch */)
 	}
-	splitter := span.MakeSplitter(tabDesc, index, params.NeededCols)
+	var splitter span.Splitter
+	if params.Locking.MustLockAllRequestedColumnFamilies() {
+		splitter = span.MakeSplitterForSideEffect(tabDesc, index, params.NeededCols)
+	} else {
+		splitter = span.MakeSplitter(tabDesc, index, params.NeededCols)
+	}
 	return sb.SpansFromConstraint(params.IndexConstraint, splitter)
 }
 
@@ -1273,7 +1267,7 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 	ie := ef.planner.extendedEvalCtx.ExecCfg.InternalDB.NewInternalExecutor(
 		ef.planner.SessionData(),
 	)
-	c := makeStmtEnvCollector(ef.ctx, ef.planner, ie.(*InternalExecutor))
+	c := makeStmtEnvCollector(ef.ctx, ef.planner, ie.(*InternalExecutor), "" /* requesterUsername */)
 
 	// Show the version of Cockroach running.
 	if err := c.PrintVersion(&out.buf); err != nil {
@@ -1421,18 +1415,14 @@ func (ef *execFactory) ConstructInsert(
 	cols := makeColList(table, insertColOrdSet)
 
 	// Create the table inserter, which does the bulk of the work.
-	internal := ef.planner.SessionData().Internal
 	ri, err := row.MakeInserter(
-		ef.ctx,
-		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
 		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
 		cols,
-		ef.getDatumAlloc(),
+		ef.planner.SessionData(),
 		&ef.planner.ExecCfg().Settings.SV,
-		internal,
-		ef.planner.ExecCfg().GetRowMetrics(internal),
+		ef.planner.ExecCfg().GetRowMetrics(ef.planner.SessionData().Internal),
 	)
 	if err != nil {
 		return nil, err
@@ -1498,18 +1488,14 @@ func (ef *execFactory) ConstructInsertFastPath(
 	cols := makeColList(table, insertColOrdSet)
 
 	// Create the table inserter, which does the bulk of the work.
-	internal := ef.planner.SessionData().Internal
 	ri, err := row.MakeInserter(
-		ef.ctx,
-		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
 		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
 		cols,
-		ef.getDatumAlloc(),
+		ef.planner.SessionData(),
 		&ef.planner.ExecCfg().Settings.SV,
-		internal,
-		ef.planner.ExecCfg().GetRowMetrics(internal),
+		ef.planner.ExecCfg().GetRowMetrics(ef.planner.SessionData().Internal),
 	)
 	if err != nil {
 		return nil, err
@@ -1604,10 +1590,7 @@ func (ef *execFactory) ConstructUpdate(
 	updateCols := makeColList(table, updateColOrdSet)
 
 	// Create the table updater, which does the bulk of the work.
-	internal := ef.planner.SessionData().Internal
 	ru, err := row.MakeUpdater(
-		ef.ctx,
-		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
 		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
@@ -1615,10 +1598,9 @@ func (ef *execFactory) ConstructUpdate(
 		updateCols,
 		fetchCols,
 		row.UpdaterDefault,
-		ef.getDatumAlloc(),
+		ef.planner.SessionData(),
 		&ef.planner.ExecCfg().Settings.SV,
-		internal,
-		ef.planner.ExecCfg().GetRowMetrics(internal),
+		ef.planner.ExecCfg().GetRowMetrics(ef.planner.SessionData().Internal),
 	)
 	if err != nil {
 		return nil, err
@@ -1697,18 +1679,14 @@ func (ef *execFactory) ConstructUpsert(
 	updateCols := makeColList(table, updateColOrdSet)
 
 	// Create the table inserter, which does the bulk of the insert-related work.
-	internal := ef.planner.SessionData().Internal
 	ri, err := row.MakeInserter(
-		ef.ctx,
-		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
 		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
 		insertCols,
-		ef.getDatumAlloc(),
+		ef.planner.SessionData(),
 		&ef.planner.ExecCfg().Settings.SV,
-		internal,
-		ef.planner.ExecCfg().GetRowMetrics(internal),
+		ef.planner.ExecCfg().GetRowMetrics(ef.planner.SessionData().Internal),
 	)
 	if err != nil {
 		return nil, err
@@ -1716,8 +1694,6 @@ func (ef *execFactory) ConstructUpsert(
 
 	// Create the table updater, which does the bulk of the update-related work.
 	ru, err := row.MakeUpdater(
-		ef.ctx,
-		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
 		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
@@ -1725,10 +1701,9 @@ func (ef *execFactory) ConstructUpsert(
 		updateCols,
 		fetchCols,
 		row.UpdaterDefault,
-		ef.getDatumAlloc(),
+		ef.planner.SessionData(),
 		&ef.planner.ExecCfg().Settings.SV,
-		internal,
-		ef.planner.ExecCfg().GetRowMetrics(internal),
+		ef.planner.ExecCfg().GetRowMetrics(ef.planner.SessionData().Internal),
 	)
 	if err != nil {
 		return nil, err
@@ -1797,15 +1772,14 @@ func (ef *execFactory) ConstructDelete(
 	fetchCols := makeColList(table, fetchColOrdSet)
 
 	// Create the table deleter, which does the bulk of the work.
-	internal := ef.planner.SessionData().Internal
 	rd := row.MakeDeleter(
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
 		ordinalsToIndexes(table, lockedIndexes),
 		fetchCols,
+		ef.planner.SessionData(),
 		&ef.planner.ExecCfg().Settings.SV,
-		internal,
-		ef.planner.ExecCfg().GetRowMetrics(internal),
+		ef.planner.ExecCfg().GetRowMetrics(ef.planner.SessionData().Internal),
 	)
 
 	// Now make a delete node. We use a pool.
@@ -1813,7 +1787,7 @@ func (ef *execFactory) ConstructDelete(
 	*del = deleteNode{
 		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
 		run: deleteRun{
-			td:             tableDeleter{rd: rd, alloc: ef.getDatumAlloc()},
+			td:             tableDeleter{rd: rd},
 			numPassthrough: len(passthrough),
 		},
 	}
@@ -1880,7 +1854,7 @@ func (ef *execFactory) ConstructVectorSearch(
 	table cat.Table,
 	index cat.Index,
 	outCols exec.TableColumnOrdinalSet,
-	prefixKey constraint.Key,
+	prefixConstraint *constraint.Constraint,
 	queryVector tree.TypedExpr,
 	targetNeighborCount uint64,
 ) (exec.Node, error) {
@@ -1889,10 +1863,12 @@ func (ef *execFactory) ConstructVectorSearch(
 	cols := makeColList(table, outCols)
 	resultCols := colinfo.ResultColumnsFromColumns(tabDesc.GetID(), cols)
 
-	// Encode the prefix values as a roachpb.Key.
+	// Encode the prefix constraint as a list of roachpb.Keys.
 	var sb span.Builder
-	sb.Init(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, indexDesc)
-	encPrefixKey, _, err := sb.EncodeConstraintKey(prefixKey)
+	sb.InitAllowingExternalRowData(
+		ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, indexDesc,
+	)
+	prefixKeys, err := sb.KeysFromVectorPrefixConstraint(ef.ctx, prefixConstraint)
 	if err != nil {
 		return nil, err
 	}
@@ -1900,7 +1876,7 @@ func (ef *execFactory) ConstructVectorSearch(
 		vectorSearchPlanningInfo: vectorSearchPlanningInfo{
 			table:               tabDesc,
 			index:               indexDesc,
-			prefixKey:           encPrefixKey,
+			prefixKeys:          prefixKeys,
 			queryVector:         queryVector,
 			targetNeighborCount: targetNeighborCount,
 			cols:                cols,
@@ -1998,7 +1974,7 @@ func (ef *execFactory) ConstructCreateView(
 		return nil, err
 	}
 
-	planDeps, typeDepSet, _, err := toPlanDependencies(deps, typeDeps, intsets.Fast{} /* funcDeps */)
+	planDeps, typeDepSet, funcDepSet, err := toPlanDependencies(deps, typeDeps, intsets.Fast{} /* funcDeps */)
 	if err != nil {
 		return nil, err
 	}
@@ -2010,6 +1986,7 @@ func (ef *execFactory) ConstructCreateView(
 		columns:    columns,
 		planDeps:   planDeps,
 		typeDeps:   typeDepSet,
+		funcDeps:   funcDepSet,
 	}, nil
 }
 

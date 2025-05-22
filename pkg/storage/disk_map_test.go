@@ -246,7 +246,7 @@ func TestPebbleMapClose(t *testing.T) {
 	startKey := diskMap.makeKey([]byte{'a'})
 	startKeyCopy := make([]byte, len(startKey))
 	copy(startKeyCopy, startKey)
-	if err := e.db.Compact(startKeyCopy, diskMap.makeKey([]byte{'z'}), false /* parallel */); err != nil {
+	if err := e.db.Compact(ctx, startKeyCopy, diskMap.makeKey([]byte{'z'}), false /* parallel */); err != nil {
 		t.Fatal(err)
 	}
 

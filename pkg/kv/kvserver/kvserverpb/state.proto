@@ -42,6 +42,8 @@ message ReplicaState {
   // (*Replica).setDesc* methods.
   roachpb.RangeDescriptor desc = 3;
   // The latest range lease.
+  // The pointer may change, but the referenced Lease struct itself must be
+  // treated as immutable; it is leaked out of the lock.
   //
   // Note that this message is both sent over the network and used to model
   // replica state in memory. In memory (Replica.mu.state), the lease is never

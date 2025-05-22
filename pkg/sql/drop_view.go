@@ -191,7 +191,7 @@ func (p *planner) canRemoveDependentViewGeneric(
 	behavior tree.DropBehavior,
 ) error {
 	if behavior != tree.DropCascade {
-		return p.dependentViewError(ctx, typeName, objName, parentID, viewDesc, "drop")
+		return p.dependentRelationError(ctx, typeName, objName, parentID, viewDesc, "drop")
 	}
 
 	if err := p.CheckPrivilege(ctx, viewDesc, privilege.DROP); err != nil {

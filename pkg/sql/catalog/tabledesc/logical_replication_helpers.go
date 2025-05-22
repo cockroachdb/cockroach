@@ -23,11 +23,11 @@ import (
 // descriptor is a valid target for logical replication and is equivalent to the
 // source table.
 func CheckLogicalReplicationCompatibility(
-	src, dst *descpb.TableDescriptor, skipTableEquivalenceCheck bool,
+	src, dst *descpb.TableDescriptor, skipTableEquivalenceCheck bool, requireKvWriterCompatible bool,
 ) error {
 	const cannotLDRMsg = "cannot create logical replication stream"
 	if !skipTableEquivalenceCheck {
-		if err := checkSrcDstColsMatch(src, dst); err != nil {
+		if err := checkSrcDstColsMatch(src, dst, requireKvWriterCompatible); err != nil {
 			return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
 		}
 	}
@@ -39,7 +39,7 @@ func CheckLogicalReplicationCompatibility(
 		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
 	}
 
-	if err := checkExpressionEvaluation(dst); err != nil {
+	if err := checkExpressionEvaluation(dst, requireKvWriterCompatible); err != nil {
 		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
 	}
 	if err := checkUniqueWithoutIndex(dst); err != nil {
@@ -87,11 +87,13 @@ func checkOutboundReferences(dst *descpb.TableDescriptor) error {
 // expressions. The writer expects to receive the full set of columns, even the
 // computed ones, along with a list of columns that we've already determined
 // should be updated.
-func checkExpressionEvaluation(dst *descpb.TableDescriptor) error {
+func checkExpressionEvaluation(dst *descpb.TableDescriptor, requireKVCompatible bool) error {
 	// Disallow partial indexes.
-	for _, idx := range dst.Indexes {
-		if idx.IsPartial() {
-			return errors.Newf("table %s has a partial index %s", dst.Name, idx.Name)
+	if requireKVCompatible {
+		for _, idx := range dst.Indexes {
+			if idx.IsPartial() {
+				return errors.Newf("table %s has a partial index %s", dst.Name, idx.Name)
+			}
 		}
 	}
 
@@ -180,7 +182,12 @@ func checkColumnFamilies(dst *descpb.TableDescriptor) error {
 // All column names and types must match with the source table’s columns. The KV
 // and SQL write path ingestion side logic assumes that src and dst columns
 // match. If they don’t, the LDR job will DLQ these rows and move on.
-func checkSrcDstColsMatch(src *descpb.TableDescriptor, dst *descpb.TableDescriptor) error {
+//
+// If requireKvWriterCompatible is true, we also check that the column IDs
+// match.
+func checkSrcDstColsMatch(
+	src *descpb.TableDescriptor, dst *descpb.TableDescriptor, requireKvWriterCompatible bool,
+) error {
 	if len(src.Columns) != len(dst.Columns) {
 		return errors.Newf(
 			"destination table %s has %d columns, but the source table %s has %d columns",
@@ -209,6 +216,12 @@ func checkSrcDstColsMatch(src *descpb.TableDescriptor, dst *descpb.TableDescript
 			return errors.Wrapf(err,
 				"destination table %s column %s has type %s, but the source table %s has type %s",
 				dst.Name, dstCol.Name, dstCol.Type.SQLStringForError(), src.Name, srcCol.Type.SQLStringForError(),
+			)
+		}
+
+		if requireKvWriterCompatible && srcCol.ID != dstCol.ID {
+			return errors.Newf("destination table %s column %s has ID %d, but the source table %s has ID %d. To circumvent this check, unset logical_replication.consumer.immediate_mode_writer from 'legacy-kv'",
+				dst.Name, dstCol.Name, dstCol.ID, src.Name, srcCol.ID,
 			)
 		}
 	}

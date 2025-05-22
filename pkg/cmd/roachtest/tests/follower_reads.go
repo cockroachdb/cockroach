@@ -56,7 +56,7 @@ func registerFollowerReads(r registry.Registry) {
 				6, /* nodeCount */
 				spec.CPU(4),
 				spec.Geo(),
-				spec.GCEZones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b"),
+				spec.GCEZones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,europe-west2-b,europe-west2-b"),
 			),
 			CompatibleClouds: registry.OnlyGCE,
 			Suites:           registry.Suites(registry.Nightly),
@@ -98,7 +98,7 @@ func registerFollowerReads(r registry.Registry) {
 
 				rng, _ := randutil.NewPseudoRand()
 				data := initFollowerReadsDB(ctx, t, t.L(), c, connFunc, connFunc, rng, topology)
-				runFollowerReadsTest(ctx, t, t.L(), c, rng, topology, rc, data)
+				runFollowerReadsTest(ctx, t, t.L(), c, connFunc, connFunc, rng, topology, rc, data)
 			},
 		})
 	}
@@ -206,6 +206,7 @@ func runFollowerReadsTest(
 	t test.Test,
 	l *logger.Logger,
 	c cluster.Cluster,
+	connectFunc, systemConnectFunc func(int) *gosql.DB,
 	rng *rand.Rand,
 	topology topologySpec,
 	rc readConsistency,
@@ -217,9 +218,21 @@ func runFollowerReadsTest(
 	// levels in the mixed-version variant of this test than they are on master.
 	isoLevels := []string{"read committed", "snapshot", "serializable"}
 	require.NoError(t, func() error {
-		db := c.Conn(ctx, l, 1)
-		defer db.Close()
-		err := enableIsolationLevels(ctx, t, db)
+		db := connectFunc(1)
+		systemDB := systemConnectFunc(1)
+		err := enableClosedTsAutoTune(ctx, rng, systemDB, t)
+		if err != nil && strings.Contains(err.Error(), "unknown cluster setting") {
+			// Versions v25.1 and earlier do not support these cluster settings and
+			// should ignore them. The cluster will continue operating normally, with
+			// old-version nodes ignoring the settings and newer-version nodes
+			// continuing to run. Auto-tuning of closed timestamps should only start
+			// taking effect when the entire cluster has been upgraded to v25.2.
+			err = nil
+		}
+		if err != nil {
+			return err
+		}
+		err = enableIsolationLevels(ctx, t, db)
 		if err != nil && strings.Contains(err.Error(), "unknown cluster setting") {
 			// v23.1 and below does not have these cluster settings. That's fine, as
 			// all isolation levels will be transparently promoted to "serializable".
@@ -1059,7 +1072,7 @@ func runFollowerReadsMixedVersionTest(
 
 	runFollowerReads := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
 		ensureUpreplicationAndPlacement(ctx, t, l, topology, h.Connect(1))
-		runFollowerReadsTest(ctx, t, l, c, r, topology, rc, data)
+		runFollowerReadsTest(ctx, t, l, c, h.Connect, h.System.Connect, r, topology, rc, data)
 		return nil
 	}
 
@@ -1079,4 +1092,21 @@ func enableTenantMultiRegion(l *logger.Logger, r *rand.Rand, h *mixedversion.Hel
 	const setting = "sql.multi_region.allow_abstractions_for_secondary_tenants.enabled"
 	err := setTenantSetting(l, r, h, setting, true)
 	return errors.Wrapf(err, "setting %s", setting)
+}
+
+// enableClosedTsAutoTune metamorphically enables closed timestamp auto-tuning.
+func enableClosedTsAutoTune(ctx context.Context, rng *rand.Rand, db *gosql.DB, t test.Test) error {
+	if rng.Intn(2) == 0 {
+		for _, cmd := range []string{
+			`SET CLUSTER SETTING kv.closed_timestamp.lead_for_global_reads_auto_tune.enabled = 'true';`,
+			`SET CLUSTER SETTING kv.closed_timestamp.policy_refresh_interval = '5s';`,
+			`SET CLUSTER SETTING kv.closed_timestamp.policy_latency_refresh_interval = '4s';`,
+		} {
+			if _, err := db.ExecContext(ctx, cmd); err != nil {
+				return err
+			}
+		}
+		t.L().Printf("metamorphically enabled closed timestamp auto-tuning")
+	}
+	return nil
 }

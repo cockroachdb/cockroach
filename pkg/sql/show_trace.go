@@ -158,7 +158,6 @@ var kvMsgRegexp = regexp.MustCompile(
 		"^fetched: ",
 		"^CPut ",
 		"^Put ",
-		"^InitPut ",
 		"^DelRange ",
 		"^ClearRange ",
 		"^Del ",

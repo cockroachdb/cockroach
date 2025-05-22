@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -22,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
@@ -105,7 +108,7 @@ func undroppedElements(b BuildCtx, id catid.DescID) ElementResultSet {
 			}
 			// Ignore any other elements with undefined targets.
 			return false
-		case scpb.ToAbsent, scpb.Transient:
+		case scpb.ToAbsent, scpb.TransientAbsent:
 			// If the target is already ABSENT or TRANSIENT then the element is going
 			// away anyway and so it doesn't need to have a target set for this DROP.
 			return false
@@ -440,7 +443,7 @@ func absentTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element)
 }
 
 func transientTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
-	return target == scpb.Transient
+	return target == scpb.TransientAbsent
 }
 
 func validTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
@@ -969,22 +972,30 @@ func shouldSkipValidatingConstraint(
 	return skip, err
 }
 
-// panicIfSchemaChangeIsDisallowed panics if a schema change is not allowed on
-// this table. A schema change is disallowed if one of the following is true:
-//   - The schema_locked table storage parameter is true, and this statement is
-//     not modifying the value of schema_locked.
+// checkTableSchemaChangePrerequisites checks any pre-requisites before a table
+// schema change is allowed. This function panics if a schema change is not
+// allowed on this table. A schema change is disallowed if one of the following
+// is true:
 //   - The table is referenced by logical data replication jobs, and the statement
 //     is not in the allow list of LDR schema changes.
-func panicIfSchemaChangeIsDisallowed(tableElements ElementResultSet, n tree.Statement) {
-	_, _, schemaLocked := scpb.FindTableSchemaLocked(tableElements)
+//   - schema_locked if the current version does not support transient drops
+//     of the lock.
+//
+// If the table in question is schema_locked, this logic removes the schema_locked
+// in a transient manner, allowing it to restore after the schema change.
+func checkTableSchemaChangePrerequisites(
+	b BuildCtx, tableElements ElementResultSet, n tree.Statement,
+) {
+	schemaLocked := tableElements.FilterTableSchemaLocked().MustGetZeroOrOneElement()
 	if schemaLocked != nil && !tree.IsSetOrResetSchemaLocked(n) {
-		_, _, ns := scpb.FindNamespace(tableElements)
-		if ns == nil {
-			panic(errors.AssertionFailedf("programming error: Namespace element not found"))
+		// Before 25.2 we don't support auto-unsetting schema locked.
+		if !b.ClusterSettings().Version.IsActive(b, clusterversion.V25_2) {
+			ns := tableElements.FilterNamespace().MustGetOneElement()
+			panic(sqlerrors.NewSchemaChangeOnLockedTableErr(ns.Name))
 		}
-		panic(sqlerrors.NewSchemaChangeOnLockedTableErr(ns.Name))
+		// Unset schema_locked for the user.
+		b.DropTransient(schemaLocked)
 	}
-
 	_, _, ldrJobIDs := scpb.FindLDRJobIDs(tableElements)
 	if ldrJobIDs != nil && len(ldrJobIDs.JobIDs) > 0 {
 		var virtualColNames []string
@@ -997,7 +1008,9 @@ func panicIfSchemaChangeIsDisallowed(tableElements ElementResultSet, n tree.Stat
 			}).MustGetOneElement()
 			virtualColNames = append(virtualColNames, col.Name)
 		})
-		if !tree.IsAllowedLDRSchemaChange(n, virtualColNames) {
+
+		kvWriterEnabled := sqlclustersettings.LDRWriterType(sqlclustersettings.LDRImmediateModeWriter.Get(&b.ClusterSettings().SV))
+		if !tree.IsAllowedLDRSchemaChange(n, virtualColNames, kvWriterEnabled == sqlclustersettings.LDRWriterTypeLegacyKV) {
 			_, _, ns := scpb.FindNamespace(tableElements)
 			if ns == nil {
 				panic(errors.AssertionFailedf("programming error: Namespace element not found"))
@@ -1656,21 +1669,49 @@ func shouldRestrictAccessToSystemInterface(
 	return nil
 }
 
-func MaybeCreateOrResolveTemporarySchema(b BuildCtx) ElementResultSet {
+// resolveTemporaryStatus checks for the pg_temp naming convention from
+// Postgres, where qualifying an object name with pg_temp is equivalent to
+// explicitly specifying TEMP/TEMPORARY in the CREATE syntax.
+// resolveTemporaryStatus returns true if either(or both) of these conditions
+// are true.
+func resolveTemporaryStatus(name tree.ObjectNamePrefix, persistence tree.Persistence) bool {
+	// An explicit schema can only be provided in the CREATE TEMP statement
+	// iff it is pg_temp.
+	if persistence.IsTemporary() && name.ExplicitSchema && name.SchemaName != catconstants.PgTempSchemaName {
+		panic(pgerror.New(pgcode.InvalidTableDefinition, "cannot create temporary relation in non-temporary schema"))
+	}
+	return name.SchemaName == catconstants.PgTempSchemaName || persistence.IsTemporary()
+}
+
+// MaybeCreateOrResolveTemporarySchema attempts to resolve an existing temporary
+// schema for the current session. If one doesn't exist, it creates a new
+// temporary schema. It returns the database elements and schema elements for
+// the temporary schema. This function will panic if temporary tables are not
+// enabled.
+func MaybeCreateOrResolveTemporarySchema(
+	b BuildCtx,
+) (dbElts ElementResultSet, schemaElts ElementResultSet) {
+	if !b.EvalCtx().SessionData().TempTablesEnabled {
+		panic(errors.WithTelemetry(
+			pgerror.WithCandidateCode(
+				errors.WithHint(
+					errors.WithIssueLink(
+						errors.Newf("temporary tables are only supported experimentally"),
+						errors.IssueLink{IssueURL: build.MakeIssueURL(46260)},
+					),
+					"You can enable temporary tables by running `SET experimental_enable_temp_tables = 'on'`.",
+				),
+				pgcode.ExperimentalFeature,
+			),
+			"sql.schema.temp_tables_disabled",
+		))
+	}
 	// Attempt to resolve the existing temporary schema first.
 	schemaName := b.TemporarySchemaName()
 	prefix := tree.ObjectNamePrefix{
 		SchemaName:     tree.Name(schemaName),
 		ExplicitSchema: true,
 	}
-	schemaElts := b.ResolveSchema(prefix, ResolveParams{IsExistenceOptional: true,
-		RequireOwnership:  false,
-		RequiredPrivilege: 0})
-	if schemaElts != nil {
-		return schemaElts
-	}
-	// Temporary schema didn't resolve, so lets create a new one.
-	descID := b.GenerateUniqueDescID()
 	tempSchemaName := &tree.ObjectNamePrefix{
 		SchemaName:     tree.Name(schemaName),
 		ExplicitSchema: true,
@@ -1678,23 +1719,31 @@ func MaybeCreateOrResolveTemporarySchema(b BuildCtx) ElementResultSet {
 	// Resolve the current database, which will contain this new temporary schema
 	// in the namespace table.
 	b.ResolveDatabasePrefix(tempSchemaName)
-	dbElts := b.ResolveDatabase(tree.Name(tempSchemaName.Catalog()), ResolveParams{RequiredPrivilege: privilege.CREATE})
+	dbElts = b.ResolveDatabase(tree.Name(tempSchemaName.Catalog()), ResolveParams{RequiredPrivilege: privilege.CREATE})
 	dbElem := dbElts.FilterDatabase().MustGetOneElement()
+	schemaElts = b.ResolveSchema(prefix, ResolveParams{IsExistenceOptional: true,
+		RequireOwnership:  false,
+		RequiredPrivilege: 0})
+	if schemaElts != nil {
+		return dbElts, schemaElts
+	}
+	// Temporary schema didn't resolve, so lets create a new one.
+	schemaDescID := b.GenerateUniqueDescID()
 	b.Add(&scpb.Schema{
-		SchemaID:    descID,
+		SchemaID:    schemaDescID,
 		IsTemporary: true,
 	})
 	b.Add(&scpb.SchemaParent{
-		SchemaID:         descID,
+		SchemaID:         schemaDescID,
 		ParentDatabaseID: dbElem.DatabaseID,
 	})
 	b.Add(&scpb.Namespace{
 		DatabaseID:   dbElem.DatabaseID,
 		SchemaID:     0,
-		DescriptorID: descID,
+		DescriptorID: schemaDescID,
 		Name:         schemaName,
 	})
-	return b.QueryByID(descID)
+	return dbElts, b.QueryByID(schemaDescID)
 }
 
 func newTypeT(t *types.T) scpb.TypeT {

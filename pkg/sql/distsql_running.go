@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 var settingDistSQLNumRunners = settings.RegisterIntSetting(
@@ -467,8 +468,13 @@ func (dsp *DistSQLPlanner) setupFlows(
 		// In distributed plans populate some extra state.
 		setupReq.EvalContext = execinfrapb.MakeEvalContext(evalCtx)
 		if jobTag, ok := logtags.FromContext(ctx).GetTag("job"); ok {
-			setupReq.JobTag = jobTag.ValueStr()
+			setupReq.JobTag = redact.SafeString(jobTag.ValueStr())
 		}
+	}
+	if evalCtx.SessionData().PropagateAdmissionHeaderToLeafTransactions && localState.Txn != nil {
+		// Propagate the admission control header so that leaf transactions
+		// correctly inherit it.
+		setupReq.LeafTxnAdmissionHeader = localState.Txn.AdmissionHeader()
 	}
 
 	var isVectorized bool
@@ -2219,7 +2225,7 @@ func (dsp *DistSQLPlanner) PlanAndRunPostQueries(
 			}
 
 			// The cascading query is allowed to autocommit only if it is the last
-			// cascade and there are no check queries to run.
+			// cascade and there are no check queries or after-triggers to run.
 			//
 			// Note that even if it's the last cascade, we still might not be able
 			// to autocommit in case there are more checks to run during or after
@@ -2228,7 +2234,7 @@ func (dsp *DistSQLPlanner) PlanAndRunPostQueries(
 			// other words, allowAutoCommit = true here means that the plan _might_
 			// autocommit but doesn't guarantee that.
 			allowAutoCommit := planner.autoCommit
-			if len(plan.checkPlans) > 0 || cascadesIdx < len(plan.cascades)-1 {
+			if len(plan.checkPlans) > 0 || len(plan.triggers) > 0 || cascadesIdx < len(plan.cascades)-1 {
 				allowAutoCommit = false
 			}
 			evalCtx := evalCtxFactory(false /* usedConcurrently */)

@@ -523,3 +523,63 @@ statement ok
 RESET plpgsql_use_strict_into;
 
 subtest end
+
+# Ordinal parameter references should reflect updates made by
+# SELECT INTO statements.
+subtest regression_143887
+
+statement ok
+DROP FUNCTION f(INT);
+CREATE FUNCTION f(x INT) RETURNS INT AS $$
+  BEGIN
+    RAISE NOTICE '% = %', x, $1;
+    SELECT $1 + 1 INTO x;
+    RAISE NOTICE '% = %', x, $1;
+    IF x IS NOT NULL THEN
+      SELECT $1 + 100 INTO x;
+      RAISE NOTICE '% = %', x, $1;
+    END IF;
+    RAISE NOTICE '% = %', x, $1;
+    RETURN x + $1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f(0);
+----
+NOTICE: 0 = 0
+NOTICE: 1 = 1
+NOTICE: 101 = 101
+NOTICE: 101 = 101
+
+query I
+SELECT f(0);
+----
+202
+
+statement ok
+DROP FUNCTION f(INT);
+
+statement ok
+CREATE FUNCTION f(foo xy) RETURNS INT AS $$
+  BEGIN
+    SELECT 1, 2 INTO foo;
+    RAISE NOTICE '% = %', foo, $1;
+    RETURN (foo).x + ($1).x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f((100, 200));
+----
+NOTICE: (1,2) = (1,2)
+
+query I
+SELECT f((100, 200));
+----
+2
+
+statement ok
+DROP FUNCTION f(xy);
+
+subtest end

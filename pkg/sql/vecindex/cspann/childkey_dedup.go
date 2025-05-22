@@ -15,10 +15,10 @@ import (
 // hashKeyFunc is a function type for hashing KeyBytes.
 type hashKeyFunc func(KeyBytes) uint64
 
-// childKeyDeDup provides de-duplication for ChildKey values. It supports both
+// ChildKeyDeDup provides de-duplication for ChildKey values. It supports both
 // PartitionKey and KeyBytes child keys efficiently without making unnecessary
 // allocations.
-type childKeyDeDup struct {
+type ChildKeyDeDup struct {
 	// initialCapacity is used to initialize the size of the data structures used
 	// by the de-duplicator.
 	initialCapacity int
@@ -39,17 +39,22 @@ type childKeyDeDup struct {
 }
 
 // Init initializes the de-duplicator.
-func (dd *childKeyDeDup) Init(capacity int) {
+func (dd *ChildKeyDeDup) Init(capacity int) {
 	dd.initialCapacity = capacity
 	dd.seed = maphash.MakeSeed()
 	dd.hashKeyBytes = dd.defaultHashKeyBytes
 	dd.Clear()
 }
 
+// Count returns the number of keys in the de-duplicator.
+func (dd *ChildKeyDeDup) Count() int {
+	return len(dd.partitionKeys) + len(dd.keyBytesMap)
+}
+
 // TryAdd attempts to add a child key to the deduplication set. It returns true
 // if the key was added (wasn't a duplicate), or false if the key already exists
 // (is a duplicate).
-func (dd *childKeyDeDup) TryAdd(childKey ChildKey) bool {
+func (dd *ChildKeyDeDup) TryAdd(childKey ChildKey) bool {
 	// Handle PartitionKey case - simple map lookup.
 	if childKey.PartitionKey != 0 {
 		// Lazily initialize the partitionKeys map.
@@ -102,19 +107,19 @@ func (dd *childKeyDeDup) TryAdd(childKey ChildKey) bool {
 }
 
 // Clear removes all entries from the deduplication set.
-func (dd *childKeyDeDup) Clear() {
+func (dd *ChildKeyDeDup) Clear() {
 	// Reset all the data structures.
 	clear(dd.partitionKeys)
 	clear(dd.keyBytesMap)
 }
 
 // defaultHashKeyBytes is the default implementation of hashKeyBytes.
-func (dd *childKeyDeDup) defaultHashKeyBytes(key KeyBytes) uint64 {
+func (dd *ChildKeyDeDup) defaultHashKeyBytes(key KeyBytes) uint64 {
 	return maphash.Bytes(dd.seed, key)
 }
 
 // rehash creates a new hash from an existing hash to resolve collisions.
-func (dd *childKeyDeDup) rehash(hash uint64) uint64 {
+func (dd *ChildKeyDeDup) rehash(hash uint64) uint64 {
 	// These constants are large 64-bit primes.
 	hash ^= 0xc3a5c85c97cb3127
 	hash ^= hash >> 33

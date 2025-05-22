@@ -479,27 +479,6 @@ func TestLogic_create_as(
 	runLogicTest(t, "create_as")
 }
 
-func TestLogic_create_index(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "create_index")
-}
-
-func TestLogic_create_statements(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "create_statements")
-}
-
-func TestLogic_create_table(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "create_table")
-}
-
 func TestLogic_cross_join(
 	t *testing.T,
 ) {
@@ -575,6 +554,13 @@ func TestLogic_dependencies(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "dependencies")
+}
+
+func TestLogic_direct_columnar_scans(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "direct_columnar_scans")
 }
 
 func TestLogic_discard(
@@ -799,13 +785,6 @@ func TestLogic_export(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "export")
-}
-
-func TestLogic_expression_index(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "expression_index")
 }
 
 func TestLogic_external_connection_privileges(
@@ -1303,13 +1282,6 @@ func TestLogic_parallel_stmts_compat(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "parallel_stmts_compat")
-}
-
-func TestLogic_partial_index(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "partial_index")
 }
 
 func TestLogic_partial_txn_commit(
@@ -2493,13 +2465,6 @@ func TestLogic_values(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "values")
-}
-
-func TestLogic_vector_index(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "vector_index")
 }
 
 func TestLogic_vectorize_agg(

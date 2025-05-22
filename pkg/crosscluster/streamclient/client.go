@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
@@ -271,11 +272,13 @@ type options struct {
 }
 
 func (o *options) appName() string {
-	const appNameBase = "repstream"
+	// NOTE: use an internal app name prefix so that the sql.*.internal metrics
+	// are used instead of the user facing metrics. The logic responsible for
+	// picking the metric family lives in conn_executor.go:SetupConn.
 	if o.streamID != 0 {
-		return fmt.Sprintf("%s job id=%d", appNameBase, o.streamID)
+		return fmt.Sprintf("%s repstream job id=%d", catconstants.InternalAppNamePrefix, o.streamID)
 	} else {
-		return appNameBase
+		return fmt.Sprintf("%s repstream", catconstants.InternalAppNamePrefix)
 	}
 }
 

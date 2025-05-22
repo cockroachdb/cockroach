@@ -293,7 +293,7 @@ type CloudSet struct {
 }
 
 // AllClouds contains all clouds.
-var AllClouds = Clouds(spec.Local, spec.GCE, spec.AWS, spec.Azure)
+var AllClouds = Clouds(spec.Local, spec.GCE, spec.AWS, spec.Azure, spec.IBM)
 
 // AllExceptLocal contains all clouds except Local.
 var AllExceptLocal = AllClouds.NoLocal()
@@ -304,6 +304,9 @@ var AllExceptAWS = AllClouds.NoAWS()
 // AllExceptAzure contains all clouds except Azure.
 var AllExceptAzure = AllClouds.NoAzure()
 
+// AllExceptIBM contains all clouds except IBM.
+var AllExceptIBM = AllClouds.NoIBM()
+
 // OnlyAWS contains only the AWS cloud.
 var OnlyAWS = Clouds(spec.AWS)
 
@@ -313,6 +316,9 @@ var OnlyGCE = Clouds(spec.GCE)
 // OnlyAzure contains only the Azure cloud.
 var OnlyAzure = Clouds(spec.Azure)
 
+// OnlyIBM contains only the IBM cloud.
+var OnlyIBM = Clouds(spec.IBM)
+
 // OnlyLocal contains only the Local cloud.
 var OnlyLocal = Clouds(spec.Local)
 
@@ -320,7 +326,7 @@ var OnlyLocal = Clouds(spec.Local)
 var CloudsWithServiceRegistration = Clouds(spec.Local, spec.GCE)
 
 // Clouds creates a CloudSet for the given clouds. Cloud names must be one of:
-// spec.Local, spec.GCE, spec.AWS, spec.Azure.
+// spec.Local, spec.GCE, spec.AWS, spec.Azure, spec.IBM.
 func Clouds(clouds ...spec.Cloud) CloudSet {
 	return CloudSet{m: addToSet(nil, clouds...)}
 }
@@ -338,6 +344,11 @@ func (cs CloudSet) NoAWS() CloudSet {
 // NoAzure removes the Azure cloud and returns the new set.
 func (cs CloudSet) NoAzure() CloudSet {
 	return CloudSet{m: removeFromSet(cs.m, spec.Azure)}
+}
+
+// NoIBM removes the IBM cloud and returns the new set.
+func (cs CloudSet) NoIBM() CloudSet {
+	return CloudSet{m: removeFromSet(cs.m, spec.IBM)}
 }
 
 // Remove removes all clouds passed in and returns the new set.

@@ -60,6 +60,30 @@ project
       └── filters
            └── c1:1 > 0
 
+# Introduce a contradiction with the policy expression to verify that
+# the optimizer eliminates the scan.
+build
+SELECT c1 FROM T1 where c1 < 0;
+----
+project
+ ├── columns: c1:1!null
+ └── select
+      ├── columns: c1:1!null c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      ├── select
+      │    ├── columns: c1:1!null c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      │    ├── scan t1
+      │    │    └── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      │    └── filters
+      │         └── c1:1 > 0
+      └── filters
+           └── c1:1 < 0
+
+opt
+SELECT c1 FROM T1 where c1 < 0;
+----
+values
+ └── columns: c1:1!null
+
 exec-ddl
 DROP POLICY p1 on t1;
 ----
@@ -131,6 +155,350 @@ update t1
       │         └── c1:7 * 2 [as=c1_new:13]
       └── projections
            └── ((c1_new:13 % 2) = 0) AND (c1_new:13 < 100) [as=rls:14]
+
+# Verify that UPDATE applies SELECT policies if columns are referenced in SET or
+# WHERE, or if a RETURNING clause is present (regardless of column references).
+
+build
+UPDATE T1 SET c1 = 2 WHERE true;
+----
+update t1
+ ├── columns: <none>
+ ├── fetch columns: c1:7 c2:8 c3:9 rowid:10
+ ├── update-mapping:
+ │    └── c1_new:13 => c1:1
+ ├── check columns: rls:14
+ └── project
+      ├── columns: rls:14!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 c1_new:13!null
+      ├── project
+      │    ├── columns: c1_new:13!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    ├── select
+      │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    ├── select
+      │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    ├── scan t1
+      │    │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── filters
+      │    │    │         └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
+      │    │    └── filters
+      │    │         └── true
+      │    └── projections
+      │         └── 2 [as=c1_new:13]
+      └── projections
+           └── c1_new:13 < 100 [as=rls:14]
+
+build
+UPDATE T1 SET c1 = 2 WHERE true RETURNING 'foo';
+----
+project
+ ├── columns: "?column?":14!null
+ ├── update t1
+ │    ├── columns: c1:1!null c2:2 c3:3 rowid:4!null
+ │    ├── fetch columns: c1:7 c2:8 c3:9 rowid:10
+ │    ├── update-mapping:
+ │    │    └── c1_new:13 => c1:1
+ │    ├── return-mapping:
+ │    │    ├── c1_new:13 => c1:1
+ │    │    ├── c2:8 => c2:2
+ │    │    ├── c3:9 => c3:3
+ │    │    └── rowid:10 => rowid:4
+ │    ├── check columns: rls:15
+ │    └── project
+ │         ├── columns: rls:15!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 c1_new:13!null
+ │         ├── project
+ │         │    ├── columns: c1_new:13!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+ │         │    ├── select
+ │         │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+ │         │    │    ├── select
+ │         │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+ │         │    │    │    ├── scan t1
+ │         │    │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+ │         │    │    │    │    └── flags: avoid-full-scan
+ │         │    │    │    └── filters
+ │         │    │    │         └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
+ │         │    │    └── filters
+ │         │    │         └── true
+ │         │    └── projections
+ │         │         └── 2 [as=c1_new:13]
+ │         └── projections
+ │              └── c1_new:13 < 100 [as=rls:15]
+ └── projections
+      └── 'foo' [as="?column?":14]
+
+build
+UPDATE T1 SET c1 = c1 + 1 WHERE true;
+----
+update t1
+ ├── columns: <none>
+ ├── fetch columns: c1:7 c2:8 c3:9 rowid:10
+ ├── update-mapping:
+ │    └── c1_new:13 => c1:1
+ ├── check columns: rls:14
+ └── project
+      ├── columns: rls:14!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 c1_new:13!null
+      ├── project
+      │    ├── columns: c1_new:13!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    ├── select
+      │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    ├── select
+      │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    ├── scan t1
+      │    │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── filters
+      │    │    │         └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
+      │    │    └── filters
+      │    │         └── true
+      │    └── projections
+      │         └── c1:7 + 1 [as=c1_new:13]
+      └── projections
+           └── ((c1_new:13 % 2) = 0) AND (c1_new:13 < 100) [as=rls:14]
+
+build
+UPDATE T1 SET c1 = 2 WHERE c1 > 0;
+----
+update t1
+ ├── columns: <none>
+ ├── fetch columns: c1:7 c2:8 c3:9 rowid:10
+ ├── update-mapping:
+ │    └── c1_new:13 => c1:1
+ ├── check columns: rls:14
+ └── project
+      ├── columns: rls:14!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 c1_new:13!null
+      ├── project
+      │    ├── columns: c1_new:13!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    ├── select
+      │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    ├── select
+      │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    ├── scan t1
+      │    │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── filters
+      │    │    │         └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
+      │    │    └── filters
+      │    │         └── c1:7 > 0
+      │    └── projections
+      │         └── 2 [as=c1_new:13]
+      └── projections
+           └── ((c1_new:13 % 2) = 0) AND (c1_new:13 < 100) [as=rls:14]
+
+build
+UPDATE T1 SET c1 = 2 WHERE true RETURNING c1;
+----
+project
+ ├── columns: c1:1!null
+ └── update t1
+      ├── columns: c1:1!null c2:2 c3:3 rowid:4!null
+      ├── fetch columns: c1:7 c2:8 c3:9 rowid:10
+      ├── update-mapping:
+      │    └── c1_new:13 => c1:1
+      ├── return-mapping:
+      │    ├── c1_new:13 => c1:1
+      │    ├── c2:8 => c2:2
+      │    ├── c3:9 => c3:3
+      │    └── rowid:10 => rowid:4
+      ├── check columns: rls:14
+      └── project
+           ├── columns: rls:14!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 c1_new:13!null
+           ├── project
+           │    ├── columns: c1_new:13!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+           │    ├── select
+           │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+           │    │    ├── select
+           │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+           │    │    │    ├── scan t1
+           │    │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+           │    │    │    │    └── flags: avoid-full-scan
+           │    │    │    └── filters
+           │    │    │         └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
+           │    │    └── filters
+           │    │         └── true
+           │    └── projections
+           │         └── 2 [as=c1_new:13]
+           └── projections
+                └── ((c1_new:13 % 2) = 0) AND (c1_new:13 < 100) [as=rls:14]
+
+exec-ddl
+CREATE TABLE other (k INT PRIMARY KEY, a INT);
+----
+
+# Ensure that column references to the 'other' table in the SET expression
+# do not result in the SELECT policy being applied.
+build
+UPDATE T1 SET c1 = other.a FROM other WHERE true;
+----
+update t1
+ ├── columns: <none>
+ ├── fetch columns: c1:7 c2:8 c3:9 rowid:10
+ ├── passthrough columns: k:13 a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+ ├── update-mapping:
+ │    └── a:14 => c1:1
+ ├── check columns: rls:17
+ └── project
+      ├── columns: rls:17 c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12 k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+      ├── distinct-on
+      │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12 k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+      │    ├── grouping columns: rowid:10!null
+      │    ├── select
+      │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12 k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+      │    │    ├── inner-join (cross)
+      │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12 k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12
+      │    │    │    │    ├── scan t1
+      │    │    │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12
+      │    │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    └── filters
+      │    │    │    │         └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
+      │    │    │    ├── scan other
+      │    │    │    │    └── columns: k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+      │    │    │    └── filters (true)
+      │    │    └── filters
+      │    │         └── true
+      │    └── aggregations
+      │         ├── first-agg [as=c1:7]
+      │         │    └── c1:7
+      │         ├── first-agg [as=c2:8]
+      │         │    └── c2:8
+      │         ├── first-agg [as=c3:9]
+      │         │    └── c3:9
+      │         ├── first-agg [as=t1.crdb_internal_mvcc_timestamp:11]
+      │         │    └── t1.crdb_internal_mvcc_timestamp:11
+      │         ├── first-agg [as=t1.tableoid:12]
+      │         │    └── t1.tableoid:12
+      │         ├── first-agg [as=k:13]
+      │         │    └── k:13
+      │         ├── first-agg [as=a:14]
+      │         │    └── a:14
+      │         ├── first-agg [as=other.crdb_internal_mvcc_timestamp:15]
+      │         │    └── other.crdb_internal_mvcc_timestamp:15
+      │         └── first-agg [as=other.tableoid:16]
+      │              └── other.tableoid:16
+      └── projections
+           └── a:14 < 100 [as=rls:17]
+
+# Ensure that column references to the 'other' table in the WHERE clause
+# do not result in the SELECT policy being applied.
+build
+UPDATE T1 SET c1 = -2 FROM other WHERE other.k = 1;
+----
+update t1
+ ├── columns: <none>
+ ├── fetch columns: c1:7 c2:8 c3:9 rowid:10
+ ├── passthrough columns: k:13 a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+ ├── update-mapping:
+ │    └── c1_new:17 => c1:1
+ ├── check columns: rls:18
+ └── project
+      ├── columns: rls:18!null c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12 k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16 c1_new:17!null
+      ├── project
+      │    ├── columns: c1_new:17!null c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12 k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+      │    ├── distinct-on
+      │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12 k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+      │    │    ├── grouping columns: rowid:10!null
+      │    │    ├── select
+      │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12 k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+      │    │    │    ├── inner-join (cross)
+      │    │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12 k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+      │    │    │    │    ├── select
+      │    │    │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12
+      │    │    │    │    │    ├── scan t1
+      │    │    │    │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12
+      │    │    │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    │    └── filters
+      │    │    │    │    │         └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
+      │    │    │    │    ├── scan other
+      │    │    │    │    │    └── columns: k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+      │    │    │    │    └── filters (true)
+      │    │    │    └── filters
+      │    │    │         └── k:13 = 1
+      │    │    └── aggregations
+      │    │         ├── first-agg [as=c1:7]
+      │    │         │    └── c1:7
+      │    │         ├── first-agg [as=c2:8]
+      │    │         │    └── c2:8
+      │    │         ├── first-agg [as=c3:9]
+      │    │         │    └── c3:9
+      │    │         ├── first-agg [as=t1.crdb_internal_mvcc_timestamp:11]
+      │    │         │    └── t1.crdb_internal_mvcc_timestamp:11
+      │    │         ├── first-agg [as=t1.tableoid:12]
+      │    │         │    └── t1.tableoid:12
+      │    │         ├── first-agg [as=k:13]
+      │    │         │    └── k:13
+      │    │         ├── first-agg [as=a:14]
+      │    │         │    └── a:14
+      │    │         ├── first-agg [as=other.crdb_internal_mvcc_timestamp:15]
+      │    │         │    └── other.crdb_internal_mvcc_timestamp:15
+      │    │         └── first-agg [as=other.tableoid:16]
+      │    │              └── other.tableoid:16
+      │    └── projections
+      │         └── -2 [as=c1_new:17]
+      └── projections
+           └── c1_new:17 < 100 [as=rls:18]
+
+# Ensure that column references to the 'other' table in the RETURNING clause
+# do not result in the SELECT policy being applied.
+build
+UPDATE T1 SET c1 = -20 FROM other RETURNING other.k;
+----
+project
+ ├── columns: k:13
+ └── update t1
+      ├── columns: c1:1!null c2:2 c3:3 rowid:4!null k:13 a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+      ├── fetch columns: c1:7 c2:8 c3:9 rowid:10
+      ├── passthrough columns: k:13 a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+      ├── update-mapping:
+      │    └── c1_new:17 => c1:1
+      ├── return-mapping:
+      │    ├── c1_new:17 => c1:1
+      │    ├── c2:8 => c2:2
+      │    ├── c3:9 => c3:3
+      │    └── rowid:10 => rowid:4
+      ├── check columns: rls:18
+      └── project
+           ├── columns: rls:18!null c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12 k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16 c1_new:17!null
+           ├── project
+           │    ├── columns: c1_new:17!null c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12 k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+           │    ├── distinct-on
+           │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12 k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+           │    │    ├── grouping columns: rowid:10!null
+           │    │    ├── inner-join (cross)
+           │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12 k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+           │    │    │    ├── select
+           │    │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12
+           │    │    │    │    ├── scan t1
+           │    │    │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12
+           │    │    │    │    │    └── flags: avoid-full-scan
+           │    │    │    │    └── filters
+           │    │    │    │         └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
+           │    │    │    ├── scan other
+           │    │    │    │    └── columns: k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+           │    │    │    └── filters (true)
+           │    │    └── aggregations
+           │    │         ├── first-agg [as=c1:7]
+           │    │         │    └── c1:7
+           │    │         ├── first-agg [as=c2:8]
+           │    │         │    └── c2:8
+           │    │         ├── first-agg [as=c3:9]
+           │    │         │    └── c3:9
+           │    │         ├── first-agg [as=t1.crdb_internal_mvcc_timestamp:11]
+           │    │         │    └── t1.crdb_internal_mvcc_timestamp:11
+           │    │         ├── first-agg [as=t1.tableoid:12]
+           │    │         │    └── t1.tableoid:12
+           │    │         ├── first-agg [as=k:13]
+           │    │         │    └── k:13
+           │    │         ├── first-agg [as=a:14]
+           │    │         │    └── a:14
+           │    │         ├── first-agg [as=other.crdb_internal_mvcc_timestamp:15]
+           │    │         │    └── other.crdb_internal_mvcc_timestamp:15
+           │    │         └── first-agg [as=other.tableoid:16]
+           │    │              └── other.tableoid:16
+           │    └── projections
+           │         └── -20 [as=c1_new:17]
+           └── projections
+                └── c1_new:17 < 100 [as=rls:18]
 
 # Verify a DELETE won't use policies for UPDATE.
 
@@ -361,7 +729,7 @@ update t1
       │    └── projections
       │         └── 'new val' [as=c2_new:13]
       └── projections
-           └── (true OR ((c2_new:13 = 'Hello, World') OR (c3:9 = '2024-12-24'))) AND ((c2_new:13 = 'Hello, World') OR (c3:9 = '2024-12-24')) [as=rls:14]
+           └── (c2_new:13 = 'Hello, World') OR (c3:9 = '2024-12-24') [as=rls:14]
 
 # Verify insert and update code path when no policy applies to role.
 
@@ -417,7 +785,7 @@ update t1
       │    └── projections
       │         └── 'new val' [as=c2_new:13]
       └── projections
-           └── true AND false [as=rls:14]
+           └── false [as=rls:14]
 
 # Verify that an INSERT ... SELECT statement applies the RLS check constraint
 # and uses different policies for the SELECT and INSERT portions of the query.
@@ -461,6 +829,172 @@ insert t1
       │         └── unique_rowid() [as=rowid_default:13]
       └── projections
            └── char_length(c2:8) < 10 [as=rls:14]
+
+# Apply SELECT policies on inserted rows if the RETURNING clause exists and
+# references any columns.
+# - Case 1: No RETURNING clause — SELECT policies are not needed.
+# - Case 2: RETURNING clause references columns — SELECT policies are required.
+# - Case 3: RETURNING clause does not reference columns — SELECT policies are not needed.
+
+build
+INSERT INTO t1(c1) VALUES (10);
+----
+insert t1
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => c1:1
+ │    ├── c2_default:8 => c2:2
+ │    ├── c3_default:9 => c3:3
+ │    └── rowid_default:10 => rowid:4
+ ├── check columns: rls:11
+ └── project
+      ├── columns: rls:11 column1:7!null c2_default:8 c3_default:9 rowid_default:10
+      ├── project
+      │    ├── columns: c2_default:8 c3_default:9 rowid_default:10 column1:7!null
+      │    ├── values
+      │    │    ├── columns: column1:7!null
+      │    │    └── (10,)
+      │    └── projections
+      │         ├── NULL::STRING [as=c2_default:8]
+      │         ├── NULL::DATE [as=c3_default:9]
+      │         └── unique_rowid() [as=rowid_default:10]
+      └── projections
+           └── char_length(c2_default:8) < 10 [as=rls:11]
+
+build
+INSERT INTO t1(c1) VALUES (10) RETURNING c1, c2;
+----
+project
+ ├── columns: c1:1!null c2:2
+ └── insert t1
+      ├── columns: c1:1!null c2:2 c3:3 rowid:4!null
+      ├── insert-mapping:
+      │    ├── column1:7 => c1:1
+      │    ├── c2_default:8 => c2:2
+      │    ├── c3_default:9 => c3:3
+      │    └── rowid_default:10 => rowid:4
+      ├── return-mapping:
+      │    ├── column1:7 => c1:1
+      │    ├── c2_default:8 => c2:2
+      │    ├── c3_default:9 => c3:3
+      │    └── rowid_default:10 => rowid:4
+      ├── check columns: rls:11
+      └── project
+           ├── columns: rls:11 column1:7!null c2_default:8 c3_default:9 rowid_default:10
+           ├── project
+           │    ├── columns: c2_default:8 c3_default:9 rowid_default:10 column1:7!null
+           │    ├── values
+           │    │    ├── columns: column1:7!null
+           │    │    └── (10,)
+           │    └── projections
+           │         ├── NULL::STRING [as=c2_default:8]
+           │         ├── NULL::DATE [as=c3_default:9]
+           │         └── unique_rowid() [as=rowid_default:10]
+           └── projections
+                └── (c3_default:9 IN ('2013-06-02', '1988-07-01')) AND (char_length(c2_default:8) < 10) [as=rls:11]
+
+build
+INSERT INTO t1(c1) VALUES (10) RETURNING (select 1);
+----
+project
+ ├── columns: "?column?":12
+ ├── insert t1
+ │    ├── columns: c1:1!null c2:2 c3:3 rowid:4!null
+ │    ├── insert-mapping:
+ │    │    ├── column1:7 => c1:1
+ │    │    ├── c2_default:8 => c2:2
+ │    │    ├── c3_default:9 => c3:3
+ │    │    └── rowid_default:10 => rowid:4
+ │    ├── return-mapping:
+ │    │    ├── column1:7 => c1:1
+ │    │    ├── c2_default:8 => c2:2
+ │    │    ├── c3_default:9 => c3:3
+ │    │    └── rowid_default:10 => rowid:4
+ │    ├── check columns: rls:13
+ │    └── project
+ │         ├── columns: rls:13 column1:7!null c2_default:8 c3_default:9 rowid_default:10
+ │         ├── project
+ │         │    ├── columns: c2_default:8 c3_default:9 rowid_default:10 column1:7!null
+ │         │    ├── values
+ │         │    │    ├── columns: column1:7!null
+ │         │    │    └── (10,)
+ │         │    └── projections
+ │         │         ├── NULL::STRING [as=c2_default:8]
+ │         │         ├── NULL::DATE [as=c3_default:9]
+ │         │         └── unique_rowid() [as=rowid_default:10]
+ │         └── projections
+ │              └── char_length(c2_default:8) < 10 [as=rls:13]
+ └── projections
+      └── subquery [as="?column?":12]
+           └── max1-row
+                ├── columns: "?column?":11!null
+                └── project
+                     ├── columns: "?column?":11!null
+                     ├── values
+                     │    └── ()
+                     └── projections
+                          └── 1 [as="?column?":11]
+
+# The RETURNING clause references a column, but not one in the target table, so
+# the SELECT policy should not apply with the function is called.
+exec-ddl
+CREATE FUNCTION insert_zero_into_t1(n INT) RETURNS INT AS $$
+  INSERT INTO t1 VALUES (0) RETURNING n;
+$$ LANGUAGE SQL
+----
+
+build format=show-scalars
+SELECT insert_zero_into_t1(10)
+----
+project
+ ├── columns: insert_zero_into_t1:14
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: insert_zero_into_t1 [as=insert_zero_into_t1:14]
+           ├── args
+           │    └── const: 10
+           ├── params: n:1
+           └── body
+                └── limit
+                     ├── columns: n:12
+                     ├── project
+                     │    ├── columns: n:12
+                     │    ├── insert t1
+                     │    │    ├── columns: c1:2!null c2:3 c3:4 rowid:5!null
+                     │    │    ├── insert-mapping:
+                     │    │    │    ├── column1:8 => c1:2
+                     │    │    │    ├── c2_default:9 => c2:3
+                     │    │    │    ├── c3_default:10 => c3:4
+                     │    │    │    └── rowid_default:11 => rowid:5
+                     │    │    ├── return-mapping:
+                     │    │    │    ├── column1:8 => c1:2
+                     │    │    │    ├── c2_default:9 => c2:3
+                     │    │    │    ├── c3_default:10 => c3:4
+                     │    │    │    └── rowid_default:11 => rowid:5
+                     │    │    ├── check columns: rls:13
+                     │    │    └── project
+                     │    │         ├── columns: rls:13 column1:8!null c2_default:9 c3_default:10 rowid_default:11
+                     │    │         ├── project
+                     │    │         │    ├── columns: c2_default:9 c3_default:10 rowid_default:11 column1:8!null
+                     │    │         │    ├── values
+                     │    │         │    │    ├── columns: column1:8!null
+                     │    │         │    │    └── tuple
+                     │    │         │    │         └── const: 0
+                     │    │         │    └── projections
+                     │    │         │         ├── cast: STRING [as=c2_default:9]
+                     │    │         │         │    └── null
+                     │    │         │         ├── cast: DATE [as=c3_default:10]
+                     │    │         │         │    └── null
+                     │    │         │         └── function: unique_rowid [as=rowid_default:11]
+                     │    │         └── projections
+                     │    │              └── lt [as=rls:13]
+                     │    │                   ├── function: char_length
+                     │    │                   │    └── variable: c2_default:9
+                     │    │                   └── const: 10
+                     │    └── projections
+                     │         └── variable: n:1 [as=n:12]
+                     └── const: 1
 
 exec-ddl
 DROP POLICY p_select on t1;
@@ -538,10 +1072,9 @@ DROP POLICY p_update on t1;
 ----
 
 # Verify an upsert operation.
-# TODO(141998): There is more work needed to enforce the proper policies for upsert.
 
 exec-ddl
-CREATE TABLE t1_explicit_pk (C1 INT NOT NULL PRIMARY KEY, C2 TEXT, C3 DATE);
+CREATE TABLE t1_explicit_pk (C1 INT NOT NULL PRIMARY KEY, C2 TEXT, C3 TEXT);
 ----
 
 exec-ddl
@@ -549,30 +1082,59 @@ ALTER TABLE t1_explicit_pk ENABLE ROW LEVEL SECURITY;
 ----
 
 exec-ddl
-CREATE POLICY p_insert ON t1_explicit_pk FOR INSERT WITH CHECK (c3 != '2023-05-02');
+CREATE POLICY p_select ON t1_explicit_pk FOR SELECT USING (c2 = '(c2) p_select policy')
 ----
 
 exec-ddl
-CREATE POLICY p_update ON t1_explicit_pk FOR UPDATE WITH CHECK (c3 >= '2000-01-01');
+CREATE POLICY p_insert ON t1_explicit_pk FOR INSERT WITH CHECK (c3 = '(c3) p_insert policy')
+----
+
+exec-ddl
+CREATE POLICY p_update ON t1_explicit_pk FOR UPDATE USING (c3 = '(c3) USING p_update policy') WITH CHECK (c3 != '(c3) WITH CHECK p_update policy');
 ----
 
 build
 UPSERT INTO t1_explicit_pk VALUES (1, 'first', '2010-08-08');
 ----
 upsert t1_explicit_pk
+ ├── arbiter indexes: t1_explicit_pk_pkey
  ├── columns: <none>
- ├── upsert-mapping:
+ ├── canary column: c1:9
+ ├── fetch columns: c1:9 c2:10 c3:11
+ ├── insert-mapping:
  │    ├── column1:6 => c1:1
  │    ├── column2:7 => c2:2
  │    └── column3:8 => c3:3
- ├── check columns: rls:9
+ ├── update-mapping:
+ │    ├── column2:7 => c2:2
+ │    └── column3:8 => c3:3
+ ├── check columns: rls:15
  └── project
-      ├── columns: rls:9!null column1:6!null column2:7!null column3:8!null
-      ├── values
-      │    ├── columns: column1:6!null column2:7!null column3:8!null
-      │    └── (1, 'first', '2010-08-08')
+      ├── columns: rls:15 column1:6!null column2:7!null column3:8!null c1:9 c2:10 c3:11 crdb_internal_mvcc_timestamp:12 tableoid:13 upsert_c1:14
+      ├── project
+      │    ├── columns: upsert_c1:14 column1:6!null column2:7!null column3:8!null c1:9 c2:10 c3:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null c1:9 c2:10 c3:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    ├── grouping columns: column1:6!null
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    └── (1, 'first', '2010-08-08')
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column2:7]
+      │    │    │         │    └── column2:7
+      │    │    │         └── first-agg [as=column3:8]
+      │    │    │              └── column3:8
+      │    │    ├── scan t1_explicit_pk
+      │    │    │    ├── columns: c1:9!null c2:10 c3:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │    │    └── filters
+      │    │         └── column1:6 = c1:9
+      │    └── projections
+      │         └── CASE WHEN c1:9 IS NULL THEN column1:6 ELSE c1:9 END [as=upsert_c1:14]
       └── projections
-           └── column3:8 != '2023-05-02' [as=rls:9]
+           └── ((NOT (c1:9 IS NULL)) AND ((c2:10 = '(c2) p_select policy') AND ((c3:11 = '(c3) USING p_update policy') AND ((column2:7 = '(c2) p_select policy') AND (column3:8 != '(c3) WITH CHECK p_update policy'))))) OR ((c1:9 IS NULL) AND ((column2:7 = '(c2) p_select policy') AND (column3:8 = '(c3) p_insert policy'))) [as=rls:15]
 
 build
 INSERT INTO t1_explicit_pk VALUES (2, 'second', '2008-11-19') ON CONFLICT DO NOTHING;
@@ -606,7 +1168,7 @@ insert t1_explicit_pk
       │         └── first-agg [as=column3:8]
       │              └── column3:8
       └── projections
-           └── column3:8 != '2023-05-02' [as=rls:14]
+           └── (column2:7 = '(c2) p_select policy') AND (column3:8 = '(c3) p_insert policy') [as=rls:14]
 
 build
 INSERT INTO t1_explicit_pk VALUES (2, 'second', '2008-11-19') ON CONFLICT (c1) DO UPDATE SET c2 = 'updated';
@@ -654,7 +1216,66 @@ upsert t1_explicit_pk
       │         ├── CASE WHEN c1:9 IS NULL THEN column2:7 ELSE c2_new:14 END [as=upsert_c2:16]
       │         └── CASE WHEN c1:9 IS NULL THEN column3:8 ELSE c3:11 END [as=upsert_c3:17]
       └── projections
-           └── upsert_c3:17 != '2023-05-02' [as=rls:18]
+           └── ((NOT (c1:9 IS NULL)) AND ((c2:10 = '(c2) p_select policy') AND ((c3:11 = '(c3) USING p_update policy') AND ((upsert_c2:16 = '(c2) p_select policy') AND (upsert_c3:17 != '(c3) WITH CHECK p_update policy'))))) OR ((c1:9 IS NULL) AND ((upsert_c2:16 = '(c2) p_select policy') AND (upsert_c3:17 = '(c3) p_insert policy'))) [as=rls:18]
+
+# Recreate the update policy so that the USING expression is false and only the
+# WITH CHECK expression is set. This should cause the rls check to always be
+# false for conflicts.
+exec-ddl
+DROP POLICY p_update ON t1_explicit_pk;
+----
+
+exec-ddl
+CREATE POLICY p_update ON t1_explicit_pk FOR UPDATE WITH CHECK (c3 != '(c3) WITH CHECK p_update policy');
+----
+
+build
+INSERT INTO t1_explicit_pk VALUES (2, 'second', '2008-11-19') ON CONFLICT (c1) DO UPDATE SET c2 = 'updated';
+----
+upsert t1_explicit_pk
+ ├── arbiter indexes: t1_explicit_pk_pkey
+ ├── columns: <none>
+ ├── canary column: c1:9
+ ├── fetch columns: c1:9 c2:10 c3:11
+ ├── insert-mapping:
+ │    ├── column1:6 => c1:1
+ │    ├── column2:7 => c2:2
+ │    └── column3:8 => c3:3
+ ├── update-mapping:
+ │    └── upsert_c2:16 => c2:2
+ ├── check columns: rls:18
+ └── project
+      ├── columns: rls:18 column1:6!null column2:7!null column3:8!null c1:9 c2:10 c3:11 crdb_internal_mvcc_timestamp:12 tableoid:13 c2_new:14!null upsert_c1:15 upsert_c2:16!null upsert_c3:17
+      ├── project
+      │    ├── columns: upsert_c1:15 upsert_c2:16!null upsert_c3:17 column1:6!null column2:7!null column3:8!null c1:9 c2:10 c3:11 crdb_internal_mvcc_timestamp:12 tableoid:13 c2_new:14!null
+      │    ├── project
+      │    │    ├── columns: c2_new:14!null column1:6!null column2:7!null column3:8!null c1:9 c2:10 c3:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    ├── left-join (hash)
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null c1:9 c2:10 c3:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    │    ├── ensure-upsert-distinct-on
+      │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    ├── grouping columns: column1:6!null
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    │    └── (2, 'second', '2008-11-19')
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [as=column2:7]
+      │    │    │    │         │    └── column2:7
+      │    │    │    │         └── first-agg [as=column3:8]
+      │    │    │    │              └── column3:8
+      │    │    │    ├── scan t1_explicit_pk
+      │    │    │    │    ├── columns: c1:9!null c2:10 c3:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │    │    │    └── filters
+      │    │    │         └── column1:6 = c1:9
+      │    │    └── projections
+      │    │         └── 'updated' [as=c2_new:14]
+      │    └── projections
+      │         ├── CASE WHEN c1:9 IS NULL THEN column1:6 ELSE c1:9 END [as=upsert_c1:15]
+      │         ├── CASE WHEN c1:9 IS NULL THEN column2:7 ELSE c2_new:14 END [as=upsert_c2:16]
+      │         └── CASE WHEN c1:9 IS NULL THEN column3:8 ELSE c3:11 END [as=upsert_c3:17]
+      └── projections
+           └── ((NOT (c1:9 IS NULL)) AND ((c2:10 = '(c2) p_select policy') AND (false AND ((upsert_c2:16 = '(c2) p_select policy') AND (upsert_c3:17 != '(c3) WITH CHECK p_update policy'))))) OR ((c1:9 IS NULL) AND ((upsert_c2:16 = '(c2) p_select policy') AND (upsert_c3:17 = '(c3) p_insert policy'))) [as=rls:18]
 
 exec-ddl
 DROP POLICY p_insert ON t1_explicit_pk;
@@ -702,7 +1323,7 @@ project
       │    ├── scan t1_explicit_pk
       │    │    └── columns: c1:1!null c2:2 c3:3 crdb_internal_mvcc_timestamp:4 tableoid:5
       │    └── filters
-      │         └── (((((c1:1 = 1) OR (c1:1 = 2)) OR (c1:1 = 3)) OR (c1:1 = 4)) AND ((c1:1 % 2) = 0)) AND ((c1:1 % 3) = 0)
+      │         └── ((((((c2:2 = '(c2) p_select policy') OR (c1:1 = 1)) OR (c1:1 = 2)) OR (c1:1 = 3)) OR (c1:1 = 4)) AND ((c1:1 % 2) = 0)) AND ((c1:1 % 3) = 0)
       └── filters
            └── c3:3 >= '2025-01-01'
 
@@ -725,7 +1346,7 @@ insert t1_explicit_pk
            └── (((((column1:6 = 1) OR (column1:6 = 2)) OR (column1:6 = 3)) OR (column1:6 = 4)) AND ((column1:6 % 2) = 0)) AND ((column1:6 % 3) = 0) [as=rls:9]
 
 build
-UPDATE t1_explicit_pk SET c3 = now() WHERE c1 = 18;
+UPDATE t1_explicit_pk SET c3 = 'updated value' WHERE c1 = 18;
 ----
 update t1_explicit_pk
  ├── columns: <none>
@@ -734,9 +1355,9 @@ update t1_explicit_pk
  │    └── c3_new:11 => c3:3
  ├── check columns: rls:12
  └── project
-      ├── columns: rls:12!null c1:6!null c2:7 c3:8 crdb_internal_mvcc_timestamp:9 tableoid:10 c3_new:11
+      ├── columns: rls:12 c1:6!null c2:7 c3:8 crdb_internal_mvcc_timestamp:9 tableoid:10 c3_new:11!null
       ├── project
-      │    ├── columns: c3_new:11 c1:6!null c2:7 c3:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── columns: c3_new:11!null c1:6!null c2:7 c3:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    ├── select
       │    │    ├── columns: c1:6!null c2:7 c3:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    │    ├── select
@@ -745,13 +1366,13 @@ update t1_explicit_pk
       │    │    │    │    ├── columns: c1:6!null c2:7 c3:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    │    │    │    └── flags: avoid-full-scan
       │    │    │    └── filters
-      │    │    │         └── ((((((c1:6 = 1) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0)) AND ((((((c1:6 = 1) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0))
+      │    │    │         └── (((((((c2:7 = '(c2) p_select policy') OR (c1:6 = 1)) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0)) AND ((((((c1:6 = 1) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0))
       │    │    └── filters
       │    │         └── c1:6 = 18
       │    └── projections
-      │         └── now() [as=c3_new:11]
+      │         └── 'updated value' [as=c3_new:11]
       └── projections
-           └── ((((((c1:6 = 1) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0)) AND ((((((c1:6 = 1) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0)) [as=rls:12]
+           └── (((((((c2:7 = '(c2) p_select policy') OR (c1:6 = 1)) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0)) AND ((((((c1:6 = 1) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0)) [as=rls:12]
 
 # Show that the owner, who is not admin, is exempt from policies unless FORCE
 # option is set.
@@ -851,3 +1472,550 @@ insert t1
       │         └── unique_rowid() [as=rowid_default:10]
       └── projections
            └── c3_default:9 >= '2025-01-01' [as=rls:11]
+
+# Tests for when stored virtual column is used in an RLS expression
+
+exec-ddl
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  v INT AS (c + 1) VIRTUAL
+);
+----
+
+exec-ddl
+ALTER TABLE t ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+----
+
+exec-ddl
+CREATE POLICY select_policy
+ON t
+FOR SELECT
+TO fred
+USING (v > 0);
+----
+
+exec-ddl
+CREATE POLICY insert_policy
+ON t
+FOR INSERT
+TO fred
+USING (v > 1);
+----
+
+exec-ddl
+CREATE POLICY update_policy
+ON t
+FOR UPDATE
+TO fred
+USING (v > 5);
+----
+
+build
+SELECT * FROM t
+----
+project
+ ├── columns: k:1!null a:2 b:3 c:4 v:5!null
+ └── select
+      ├── columns: k:1!null a:2 b:3 c:4 v:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+      ├── project
+      │    ├── columns: v:5 k:1!null a:2 b:3 c:4 crdb_internal_mvcc_timestamp:6 tableoid:7
+      │    ├── scan t
+      │    │    ├── columns: k:1!null a:2 b:3 c:4 crdb_internal_mvcc_timestamp:6 tableoid:7
+      │    │    └── computed column expressions
+      │    │         └── v:5
+      │    │              └── c:4 + 1
+      │    └── projections
+      │         └── c:4 + 1 [as=v:5]
+      └── filters
+           └── v:5 > 0
+
+# Do a SELECT that doesn't reference the virtual column.
+build
+SELECT k, c FROM t WHERE a IS NULL;
+----
+project
+ ├── columns: k:1!null c:4
+ └── select
+      ├── columns: k:1!null a:2 b:3 c:4 v:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+      ├── select
+      │    ├── columns: k:1!null a:2 b:3 c:4 v:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+      │    ├── project
+      │    │    ├── columns: v:5 k:1!null a:2 b:3 c:4 crdb_internal_mvcc_timestamp:6 tableoid:7
+      │    │    ├── scan t
+      │    │    │    ├── columns: k:1!null a:2 b:3 c:4 crdb_internal_mvcc_timestamp:6 tableoid:7
+      │    │    │    └── computed column expressions
+      │    │    │         └── v:5
+      │    │    │              └── c:4 + 1
+      │    │    └── projections
+      │    │         └── c:4 + 1 [as=v:5]
+      │    └── filters
+      │         └── v:5 > 0
+      └── filters
+           └── a:2 IS NULL
+
+build
+INSERT INTO t VALUES (1,2,3,4);
+----
+insert t
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => k:1
+ │    ├── column2:9 => a:2
+ │    ├── column3:10 => b:3
+ │    ├── column4:11 => c:4
+ │    └── v_comp:12 => v:5
+ ├── check columns: rls:13
+ └── project
+      ├── columns: rls:13!null column1:8!null column2:9!null column3:10!null column4:11!null v_comp:12!null
+      ├── project
+      │    ├── columns: v_comp:12!null column1:8!null column2:9!null column3:10!null column4:11!null
+      │    ├── values
+      │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null
+      │    │    └── (1, 2, 3, 4)
+      │    └── projections
+      │         └── column4:11 + 1 [as=v_comp:12]
+      └── projections
+           └── v_comp:12 > 1 [as=rls:13]
+
+build
+UPDATE t SET c = -10 WHERE k = 1;
+----
+update t
+ ├── columns: <none>
+ ├── fetch columns: k:8 a:9 b:10 c:11 v:12
+ ├── update-mapping:
+ │    ├── c_new:15 => c:4
+ │    └── v_comp:16 => v:5
+ ├── check columns: rls:17
+ └── project
+      ├── columns: rls:17!null k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14 c_new:15!null v_comp:16!null
+      ├── project
+      │    ├── columns: v_comp:16!null k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14 c_new:15!null
+      │    ├── project
+      │    │    ├── columns: c_new:15!null k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    ├── select
+      │    │    │    ├── columns: k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: v:12 k:8!null a:9 b:10 c:11 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │    │    ├── scan t
+      │    │    │    │    │    │    ├── columns: k:8!null a:9 b:10 c:11 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    │    │    └── v:12
+      │    │    │    │    │    │    │         └── c:11 + 1
+      │    │    │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── c:11 + 1 [as=v:12]
+      │    │    │    │    └── filters
+      │    │    │    │         └── (v:12 > 0) AND (v:12 > 5)
+      │    │    │    └── filters
+      │    │    │         └── k:8 = 1
+      │    │    └── projections
+      │    │         └── -10 [as=c_new:15]
+      │    └── projections
+      │         └── c_new:15 + 1 [as=v_comp:16]
+      └── projections
+           └── (v_comp:16 > 0) AND (v_comp:16 > 5) [as=rls:17]
+
+# Tests for when computed stored column is used in an RLS expression
+
+exec-ddl
+DROP TABLE t
+----
+
+exec-ddl
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  v INT AS (c + 1) STORED
+);
+----
+
+exec-ddl
+ALTER TABLE t ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+----
+
+exec-ddl
+CREATE POLICY select_policy
+ON t
+FOR SELECT
+TO fred
+USING (v > 0);
+----
+
+exec-ddl
+CREATE POLICY insert_policy
+ON t
+FOR INSERT
+TO fred
+USING (v > 1);
+----
+
+exec-ddl
+CREATE POLICY update_policy
+ON t
+FOR UPDATE
+TO fred
+USING (v > 5);
+----
+
+build
+SELECT * FROM t
+----
+project
+ ├── columns: k:1!null a:2 b:3 c:4 v:5!null
+ └── select
+      ├── columns: k:1!null a:2 b:3 c:4 v:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+      ├── scan t
+      │    ├── columns: k:1!null a:2 b:3 c:4 v:5 crdb_internal_mvcc_timestamp:6 tableoid:7
+      │    └── computed column expressions
+      │         └── v:5
+      │              └── c:4 + 1
+      └── filters
+           └── v:5 > 0
+
+# Do a SELECT that doesn't reference the stored column.
+build
+SELECT k, c FROM t WHERE a IS NULL;
+----
+project
+ ├── columns: k:1!null c:4
+ └── select
+      ├── columns: k:1!null a:2 b:3 c:4 v:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+      ├── select
+      │    ├── columns: k:1!null a:2 b:3 c:4 v:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+      │    ├── scan t
+      │    │    ├── columns: k:1!null a:2 b:3 c:4 v:5 crdb_internal_mvcc_timestamp:6 tableoid:7
+      │    │    └── computed column expressions
+      │    │         └── v:5
+      │    │              └── c:4 + 1
+      │    └── filters
+      │         └── v:5 > 0
+      └── filters
+           └── a:2 IS NULL
+
+build
+INSERT INTO t VALUES (1,2,3,4);
+----
+insert t
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => k:1
+ │    ├── column2:9 => a:2
+ │    ├── column3:10 => b:3
+ │    ├── column4:11 => c:4
+ │    └── v_comp:12 => v:5
+ ├── check columns: rls:13
+ └── project
+      ├── columns: rls:13!null column1:8!null column2:9!null column3:10!null column4:11!null v_comp:12!null
+      ├── project
+      │    ├── columns: v_comp:12!null column1:8!null column2:9!null column3:10!null column4:11!null
+      │    ├── values
+      │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null
+      │    │    └── (1, 2, 3, 4)
+      │    └── projections
+      │         └── column4:11 + 1 [as=v_comp:12]
+      └── projections
+           └── v_comp:12 > 1 [as=rls:13]
+
+build
+UPDATE t SET c = -10 WHERE k = 1;
+----
+update t
+ ├── columns: <none>
+ ├── fetch columns: k:8 a:9 b:10 c:11 v:12
+ ├── update-mapping:
+ │    ├── c_new:15 => c:4
+ │    └── v_comp:16 => v:5
+ ├── check columns: rls:17
+ └── project
+      ├── columns: rls:17!null k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14 c_new:15!null v_comp:16!null
+      ├── project
+      │    ├── columns: v_comp:16!null k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14 c_new:15!null
+      │    ├── project
+      │    │    ├── columns: c_new:15!null k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    ├── select
+      │    │    │    ├── columns: k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │    ├── scan t
+      │    │    │    │    │    ├── columns: k:8!null a:9 b:10 c:11 v:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    │    └── v:12
+      │    │    │    │    │    │         └── c:11 + 1
+      │    │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    └── filters
+      │    │    │    │         └── (v:12 > 0) AND (v:12 > 5)
+      │    │    │    └── filters
+      │    │    │         └── k:8 = 1
+      │    │    └── projections
+      │    │         └── -10 [as=c_new:15]
+      │    └── projections
+      │         └── c_new:15 + 1 [as=v_comp:16]
+      └── projections
+           └── (v_comp:16 > 0) AND (v_comp:16 > 5) [as=rls:17]
+
+# Tests that verify FK maintenance operations are exempt from RLS checks on the
+# referencing table.
+
+exec-ddl
+CREATE TABLE customers (
+    id INT PRIMARY KEY,
+    name TEXT
+);
+----
+
+exec-ddl
+CREATE TABLE orders (
+    id INT PRIMARY KEY,
+    customer_id INT REFERENCES customers(id) ON UPDATE CASCADE ON DELETE SET NULL
+);
+----
+
+exec-ddl
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+----
+
+# Validate that without any RLS policies, direct reads from orders are denied.
+build
+SELECT id, customer_id FROM orders
+----
+project
+ ├── columns: id:1!null customer_id:2
+ └── select
+      ├── columns: id:1!null customer_id:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan orders
+      │    └── columns: id:1!null customer_id:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── filters
+           └── false
+
+# Update the customer ID. This should cascade the update to orders, bypassing
+# RLS on orders.
+build-post-queries
+UPDATE customers SET id = 2 WHERE id = 1 RETURNING id, name
+----
+root
+ ├── update customers
+ │    ├── columns: id:1!null name:2
+ │    ├── fetch columns: id:5 name:6
+ │    ├── update-mapping:
+ │    │    └── id_new:9 => id:1
+ │    ├── return-mapping:
+ │    │    ├── id_new:9 => id:1
+ │    │    └── name:6 => name:2
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── orders_customer_id_fkey
+ │    └── project
+ │         ├── columns: id_new:9!null id:5!null name:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         ├── select
+ │         │    ├── columns: id:5!null name:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    ├── scan customers
+ │         │    │    ├── columns: id:5!null name:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    │    └── flags: avoid-full-scan
+ │         │    └── filters
+ │         │         └── id:5 = 1
+ │         └── projections
+ │              └── 2 [as=id_new:9]
+ └── cascade
+      └── update orders
+           ├── columns: <none>
+           ├── fetch columns: orders.id:14 orders.customer_id:15
+           ├── update-mapping:
+           │    └── customer_id_new:19 => orders.customer_id:11
+           ├── check columns: rls:20
+           ├── input binding: &2
+           ├── project
+           │    ├── columns: rls:20!null orders.id:14!null orders.customer_id:15!null customer_id_old:18!null customer_id_new:19!null
+           │    ├── inner-join (hash)
+           │    │    ├── columns: orders.id:14!null orders.customer_id:15!null customer_id_old:18!null customer_id_new:19!null
+           │    │    ├── scan orders
+           │    │    │    ├── columns: orders.id:14!null orders.customer_id:15
+           │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+           │    │    ├── select
+           │    │    │    ├── columns: customer_id_old:18!null customer_id_new:19!null
+           │    │    │    ├── with-scan &1
+           │    │    │    │    ├── columns: customer_id_old:18!null customer_id_new:19!null
+           │    │    │    │    └── mapping:
+           │    │    │    │         ├──  customers.id:5 => customer_id_old:18
+           │    │    │    │         └──  id_new:9 => customer_id_new:19
+           │    │    │    └── filters
+           │    │    │         └── customer_id_old:18 IS DISTINCT FROM customer_id_new:19
+           │    │    └── filters
+           │    │         └── orders.customer_id:15 = customer_id_old:18
+           │    └── projections
+           │         └── true [as=rls:20]
+           └── f-k-checks
+                └── f-k-checks-item: orders(customer_id) -> customers(id)
+                     └── anti-join (hash)
+                          ├── columns: customer_id:21!null
+                          ├── with-scan &2
+                          │    ├── columns: customer_id:21!null
+                          │    └── mapping:
+                          │         └──  customer_id_new:19 => customer_id:21
+                          ├── scan customers
+                          │    ├── columns: customers.id:22!null
+                          │    └── flags: avoid-full-scan disabled not visible index feature
+                          └── filters
+                               └── customer_id:21 = customers.id:22
+
+# Delete the customer. This should set customer_id in orders to NULL, bypassing
+# RLS on orders.
+build-post-queries
+DELETE FROM customers WHERE id = 2 RETURNING id, name
+----
+root
+ ├── delete customers
+ │    ├── columns: id:1!null name:2
+ │    ├── fetch columns: id:5 name:6
+ │    ├── return-mapping:
+ │    │    ├── id:5 => id:1
+ │    │    └── name:6 => name:2
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── orders_customer_id_fkey
+ │    └── select
+ │         ├── columns: id:5!null name:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         ├── scan customers
+ │         │    ├── columns: id:5!null name:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── id:5 = 2
+ └── cascade
+      └── update orders
+           ├── columns: <none>
+           ├── fetch columns: orders.id:13 customer_id:14
+           ├── update-mapping:
+           │    └── customer_id_new:18 => customer_id:10
+           ├── check columns: rls:19
+           └── project
+                ├── columns: rls:19!null orders.id:13!null customer_id:14 customer_id_new:18
+                ├── project
+                │    ├── columns: customer_id_new:18 orders.id:13!null customer_id:14
+                │    ├── semi-join (hash)
+                │    │    ├── columns: orders.id:13!null customer_id:14
+                │    │    ├── scan orders
+                │    │    │    ├── columns: orders.id:13!null customer_id:14
+                │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    │    ├── with-scan &1
+                │    │    │    ├── columns: id:17!null
+                │    │    │    └── mapping:
+                │    │    │         └──  customers.id:5 => id:17
+                │    │    └── filters
+                │    │         └── customer_id:14 = id:17
+                │    └── projections
+                │         └── NULL::INT8 [as=customer_id_new:18]
+                └── projections
+                     └── true [as=rls:19]
+
+# Repeat the operations but using different actions for ON UPDATE and ON DELETE
+exec-ddl
+DROP TABLE orders
+----
+
+exec-ddl
+CREATE TABLE orders (
+    id INT PRIMARY KEY,
+    customer_id INT REFERENCES customers(id) ON UPDATE SET NULL ON DELETE CASCADE
+);
+----
+
+exec-ddl
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+----
+
+build-post-queries
+UPDATE customers SET id = 2 WHERE id = 1 RETURNING id, name
+----
+root
+ ├── update customers
+ │    ├── columns: id:1!null name:2
+ │    ├── fetch columns: id:5 name:6
+ │    ├── update-mapping:
+ │    │    └── id_new:9 => id:1
+ │    ├── return-mapping:
+ │    │    ├── id_new:9 => id:1
+ │    │    └── name:6 => name:2
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── orders_customer_id_fkey
+ │    └── project
+ │         ├── columns: id_new:9!null id:5!null name:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         ├── select
+ │         │    ├── columns: id:5!null name:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    ├── scan customers
+ │         │    │    ├── columns: id:5!null name:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    │    └── flags: avoid-full-scan
+ │         │    └── filters
+ │         │         └── id:5 = 1
+ │         └── projections
+ │              └── 2 [as=id_new:9]
+ └── cascade
+      └── update orders
+           ├── columns: <none>
+           ├── fetch columns: orders.id:14 customer_id:15
+           ├── update-mapping:
+           │    └── customer_id_new:20 => customer_id:11
+           ├── check columns: rls:21
+           └── project
+                ├── columns: rls:21!null orders.id:14!null customer_id:15!null customer_id_old:18!null customer_id_new:19!null customer_id_new:20
+                ├── project
+                │    ├── columns: customer_id_new:20 orders.id:14!null customer_id:15!null customer_id_old:18!null customer_id_new:19!null
+                │    ├── inner-join (hash)
+                │    │    ├── columns: orders.id:14!null customer_id:15!null customer_id_old:18!null customer_id_new:19!null
+                │    │    ├── scan orders
+                │    │    │    ├── columns: orders.id:14!null customer_id:15
+                │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    │    ├── select
+                │    │    │    ├── columns: customer_id_old:18!null customer_id_new:19!null
+                │    │    │    ├── with-scan &1
+                │    │    │    │    ├── columns: customer_id_old:18!null customer_id_new:19!null
+                │    │    │    │    └── mapping:
+                │    │    │    │         ├──  customers.id:5 => customer_id_old:18
+                │    │    │    │         └──  id_new:9 => customer_id_new:19
+                │    │    │    └── filters
+                │    │    │         └── customer_id_old:18 IS DISTINCT FROM customer_id_new:19
+                │    │    └── filters
+                │    │         └── customer_id:15 = customer_id_old:18
+                │    └── projections
+                │         └── NULL::INT8 [as=customer_id_new:20]
+                └── projections
+                     └── true [as=rls:21]
+
+build-post-queries
+DELETE FROM customers WHERE id = 2 RETURNING id, name
+----
+root
+ ├── delete customers
+ │    ├── columns: id:1!null name:2
+ │    ├── fetch columns: id:5 name:6
+ │    ├── return-mapping:
+ │    │    ├── id:5 => id:1
+ │    │    └── name:6 => name:2
+ │    ├── cascades
+ │    │    └── orders_customer_id_fkey
+ │    └── select
+ │         ├── columns: id:5!null name:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         ├── scan customers
+ │         │    ├── columns: id:5!null name:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── id:5 = 2
+ └── cascade
+      └── delete orders
+           ├── columns: <none>
+           ├── fetch columns: orders.id:13 customer_id:14
+           └── select
+                ├── columns: orders.id:13!null customer_id:14!null
+                ├── scan orders
+                │    ├── columns: orders.id:13!null customer_id:14
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     ├── customer_id:14 = 2
+                     └── customer_id:14 IS DISTINCT FROM CAST(NULL AS INT8)

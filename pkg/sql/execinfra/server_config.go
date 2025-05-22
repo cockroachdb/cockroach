@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -156,8 +157,7 @@ type ServerConfig struct {
 	ExternalStorageFromURI cloud.ExternalStorageFromURIFactory
 
 	// ProtectedTimestampProvider maintains the state of the protected timestamp
-	// subsystem. It is queried during the GC process and in the handling of
-	// AdminVerifyProtectedTimestampRequest.
+	// subsystem. It is queried during the GC process.
 	ProtectedTimestampProvider protectedts.Provider
 
 	DistSender *kvcoord.DistSender
@@ -259,6 +259,10 @@ type TestingKnobs struct {
 	// indexes.
 	IndexBackfillProgressReportInterval time.Duration
 
+	// RunDuringReencodeVectorIndexEntry is called during vector index entry backfill to
+	// simulate a transaction error.
+	RunDuringReencodeVectorIndexEntry func(txn *kv.Txn) error
+
 	// ForceDiskSpill forces any processors/operators that can fall back to disk
 	// to fall back to disk immediately.
 	//
@@ -337,6 +341,10 @@ type TestingKnobs struct {
 	// will be assigned to the gateway before we start assigning partitions to
 	// other nodes.
 	MinimumNumberOfGatewayPartitions int
+
+	// TableReaderStartScanCb, when non-nil, will be called whenever the
+	// TableReader processor starts its scan.
+	TableReaderStartScanCb func()
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

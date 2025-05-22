@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -52,6 +53,8 @@ type BatchEncoder struct {
 	// Cache of lastColID to support column delta encoding.
 	lastColIDs []catid.ColumnID
 
+	useCPutsOnNonUniqueIndexes bool
+
 	// Slice of keys we can reuse across each call to Prepare and between each
 	// column family.
 	keys []roachpb.Key
@@ -76,6 +79,7 @@ type BatchEncoder struct {
 func MakeEncoder(
 	codec keys.SQLCodec,
 	desc catalog.TableDescriptor,
+	sd *sessiondata.SessionData,
 	sv *settings.Values,
 	b coldata.Batch,
 	insCols []catalog.Column,
@@ -83,11 +87,17 @@ func MakeEncoder(
 	partialIndexes map[descpb.IndexID][]bool,
 	memoryUsageCheck func() error,
 ) BatchEncoder {
-	rh := row.NewRowHelper(codec, desc, desc.WritableNonPrimaryIndexes(), nil /* uniqueWithTombstoneIndexes */, sv, false /*internal*/, metrics)
+	rh := row.NewRowHelper(codec, desc, desc.WritableNonPrimaryIndexes(), nil /* uniqueWithTombstoneIndexes */, sd, sv, metrics)
 	rh.Init()
 	colMap := row.ColIDtoRowIndexFromCols(insCols)
-	return BatchEncoder{rh: &rh, b: b, colMap: colMap,
-		partialIndexes: partialIndexes, memoryUsageCheck: memoryUsageCheck}
+	return BatchEncoder{
+		rh:                         &rh,
+		b:                          b,
+		colMap:                     colMap,
+		partialIndexes:             partialIndexes,
+		useCPutsOnNonUniqueIndexes: sd.UseCPutsOnNonUniqueIndexes,
+		memoryUsageCheck:           memoryUsageCheck,
+	}
 }
 
 // PrepareBatch encodes a subset of rows from the batch to the given row.Putter.
@@ -500,7 +510,7 @@ func (b *BatchEncoder) encodeSecondaryIndexNoFamilies(ind catalog.Index, kys []r
 	if err := b.writeColumnValues(kys, values, ind, cols); err != nil {
 		return err
 	}
-	if ind.IsUnique() {
+	if ind.IsUnique() || b.useCPutsOnNonUniqueIndexes {
 		b.p.CPutBytesEmpty(kys, values)
 	} else {
 		b.p.PutBytes(kys, values)
@@ -566,13 +576,13 @@ func (b *BatchEncoder) encodeSecondaryIndexWithFamilies(
 		// include encoded primary key columns. For other families,
 		// use the tuple encoding for the value.
 		if familyID == 0 {
-			if ind.IsUnique() {
+			if ind.IsUnique() || b.useCPutsOnNonUniqueIndexes {
 				b.p.CPutBytesEmpty(kys, values)
 			} else {
 				b.p.PutBytes(kys, values)
 			}
 		} else {
-			if ind.IsUnique() {
+			if ind.IsUnique() || b.useCPutsOnNonUniqueIndexes {
 				b.p.CPutTuplesEmpty(kys, values)
 			} else {
 				b.p.PutTuples(kys, values)

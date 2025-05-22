@@ -10,32 +10,14 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 func (d *delegator) delegateShowPolicies(stmt *tree.ShowPolicies) (tree.Statement, error) {
 	query := `
 			SELECT 
-			p.polname AS name,
-			CASE p.polcmd::text
-					WHEN '*' THEN 'ALL'
-					WHEN 'a' THEN 'INSERT'
-					WHEN 'w' THEN 'UPDATE'
-					WHEN 'd' THEN 'DELETE'
-					WHEN 'r' THEN 'SELECT'
-			END AS cmd,
-			CASE p.polpermissive
-					WHEN true THEN 'permissive'
-					ELSE 'restrictive'
-			END AS type,
-			array_agg(
-					CASE 
-							WHEN role_id.uid = 0 THEN 'public'
-							ELSE r.rolname
-					END
-					ORDER BY r.rolname
-			) AS roles,
-			COALESCE(p.polqual::text, '') AS using_expr,
-			COALESCE(p.polwithcheck::text, '') AS with_check_expr
-			FROM pg_policy p
-			LEFT JOIN LATERAL unnest(p.polroles) AS role_id(uid) ON true
-			LEFT JOIN pg_catalog.pg_roles r ON r.oid = role_id.uid
-			WHERE p.polrelid = %[6]d
-			GROUP BY p.polname, p.polcmd, p.polpermissive, p.polqual, p.polwithcheck`
+			policyname AS name,
+			cmd,
+			permissive AS type,
+			roles,
+			COALESCE(qual, '') AS using_expr,
+			COALESCE(with_check, '') AS with_check_expr
+			FROM pg_catalog.pg_policies
+			WHERE schemaname = %[5]s AND tablename = %[2]s`
 
 	return d.showTableDetails(stmt.Table, query)
 }

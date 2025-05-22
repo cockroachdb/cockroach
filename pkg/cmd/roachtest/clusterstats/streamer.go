@@ -118,7 +118,6 @@ func (css *clusterStatStreamer) Run(
 			return css.err()
 		case <-statsTimer.C:
 			eventBuffer := make([]StatEvent, 0, 1)
-			statsTimer.Read = true
 			for _, stat := range css.registered {
 				values, err := css.statCollector.CollectPoint(ctx, l, queryTime, stat.Query)
 				if err != nil {

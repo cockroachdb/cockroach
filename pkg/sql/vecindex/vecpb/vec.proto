@@ -16,6 +16,31 @@ option (gogoproto.goproto_getters_all) = false;
 // neither of which should change after the index is created.
 message Config {
   option (gogoproto.equal) = true;
+  // Dims is the width of vectors in the index (i.e. number of dimensions).
   int32 dims = 1;
+  // Seed initializes the pseudo-random generator used to randomly perturb
+  // vectors, in order to mitigate the impact of skewed input data
+  // distributions. This seed stays constant for the lifetime of the index.
   int64 seed = 2;
+  // BuildBeamSize specifies the default breadth of searches used when inserting
+  // into, deleting from, or updating the index. This is typically quite a bit
+  // smaller than the beam sizes used during read-only search, since it's not
+  // critical for vectors to be in exactly the nearest partition - close enough
+  // is good enough.
+  int32 build_beam_size = 3;
+  // MinPartitionSize is the lowest number of vectors that a partition can have
+  // without being merged away.
+  int32 min_partition_size = 4;
+  // MaxPartitionSize is the highest number of vectors that a partition can have
+  // without being split.
+  int32 max_partition_size = 5;
+  // IsDeterministic means that background fixup operations on the index are
+  // deterministic, as explained in the DeterministicFixupsSetting comment. This
+  // is set to true when the DeterministicFixupsSetting is true at index
+  // creation time.
+  bool is_deterministic = 6;
+  // RotAlgorithm specifies the type of random orthogonal transformation to
+  // apply to vectors before indexing and search. It must be one of the
+  // cspann.RotAlgorithm enum values.
+  int32 rot_algorithm = 7;
 }

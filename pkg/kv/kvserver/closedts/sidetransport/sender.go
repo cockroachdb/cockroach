@@ -18,9 +18,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/policyrefresher"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -132,6 +134,7 @@ type leaseholder struct {
 // Replica represents a *Replica object, but with only the capabilities needed
 // by the closed timestamp side transport to accomplish its job.
 type Replica interface {
+	policyrefresher.Replica
 	// Accessors.
 	StoreID() roachpb.StoreID
 	GetRangeID() roachpb.RangeID
@@ -254,7 +257,6 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 				}
 				select {
 				case <-timer.C:
-					timer.Read = true
 					s.publish(ctx)
 				case <-confCh:
 					// Loop around to use the updated timer.
@@ -304,6 +306,17 @@ func (s *Sender) UnregisterLeaseholder(
 	}
 }
 
+// maxClosedTimestampPolicy returns the distinct number of closed timestamp
+// policies for which the side transport should send updates.
+func (s *Sender) maxClosedTimestampPolicy() int {
+	if s.st.Version.IsActive(context.TODO(), clusterversion.V25_2) {
+		return int(ctpb.MAX_CLOSED_TIMESTAMP_POLICY)
+	}
+	// If the cluster is not fully upgraded, only look at closed timestamps
+	// policies without considering locality info.
+	return int(roachpb.MAX_CLOSED_TIMESTAMP_POLICY)
+}
+
 func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	s.trackedMu.Lock()
 	defer s.trackedMu.Unlock()
@@ -312,7 +325,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	// TODO(wenyihu6): a cluster version check is needed here once we add new
 	// policies to ctpb.RangeClosedTimestampPolicies that do not have a
 	// corresponding roachpb.RangeClosedTimestampPolicy.
-	numPolicies := int(roachpb.MAX_CLOSED_TIMESTAMP_POLICY)
+	numPolicies := s.maxClosedTimestampPolicy()
 	s.trackedMu.lastClosed = make(map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp, numPolicies)
 	msg := &ctpb.Update{
 		NodeID:           s.nodeID,
@@ -472,6 +485,18 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 
 	// Return the publication time, for tests.
 	return now
+}
+
+// GetLeaseholders returns a slice of all replicas that are currently
+// leaseholders on this node.
+func (s *Sender) GetLeaseholders() []policyrefresher.Replica {
+	s.leaseholdersMu.Lock()
+	defer s.leaseholdersMu.Unlock()
+	leaseholders := make([]policyrefresher.Replica, 0, len(s.leaseholdersMu.leaseholders))
+	for _, lh := range s.leaseholdersMu.leaseholders {
+		leaseholders = append(leaseholders, lh.Replica)
+	}
+	return leaseholders
 }
 
 // GetSnapshot generates an update that contains all the sender's state (as

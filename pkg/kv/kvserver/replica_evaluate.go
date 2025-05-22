@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 	"github.com/kr/pretty"
 )
 
@@ -79,10 +80,6 @@ func optimizePuts(
 				continue
 			}
 		case *kvpb.ConditionalPutRequest:
-			if maybeAddPut(t.Key) {
-				continue
-			}
-		case *kvpb.InitPutRequest:
 			if maybeAddPut(t.Key) {
 				continue
 			}
@@ -186,10 +183,6 @@ func optimizePuts(
 				shallow := *t
 				shallow.Blind = true
 				reqs[i].MustSetInner(&shallow)
-			case *kvpb.InitPutRequest:
-				shallow := *t
-				shallow.Blind = true
-				reqs[i].MustSetInner(&shallow)
 			default:
 				log.Fatalf(ctx, "unexpected non-put request: %s", t)
 			}
@@ -214,15 +207,6 @@ func evaluateBatch(
 	evalPath batchEvalPath,
 	omitInRangefeeds bool, // only relevant for transactional writes
 ) (_ *kvpb.BatchResponse, _ result.Result, retErr *kvpb.Error) {
-	defer func() {
-		// Ensure that errors don't carry the WriteTooOld flag set. The client
-		// handles non-error responses with the WriteTooOld flag set, and errors
-		// with this flag set confuse it.
-		if retErr != nil && retErr.GetTxn() != nil {
-			retErr.GetTxn().WriteTooOld = false
-		}
-	}()
-
 	// NB: Don't mutate BatchRequest directly.
 	baReqs := ba.Requests
 
@@ -324,13 +308,14 @@ func evaluateBatch(
 		// If a unittest filter was installed, check for an injected error; otherwise, continue.
 		if filter := rec.EvalKnobs().TestingEvalFilter; filter != nil {
 			filterArgs := kvserverbase.FilterArgs{
-				Ctx:     ctx,
-				CmdID:   idKey,
-				Index:   index,
-				Sid:     rec.StoreID(),
-				Req:     args,
-				Version: rec.ClusterSettings().Version.ActiveVersionOrEmpty(ctx).Version,
-				Hdr:     baHeader,
+				Ctx:          ctx,
+				CmdID:        idKey,
+				Index:        index,
+				Sid:          rec.StoreID(),
+				Req:          args,
+				Version:      rec.ClusterSettings().Version.ActiveVersionOrEmpty(ctx).Version,
+				Hdr:          baHeader,
+				AdmissionHdr: ba.AdmissionHeader,
 			}
 			if pErr := filter(filterArgs); pErr != nil {
 				if pErr.GetTxn() == nil {
@@ -356,13 +341,14 @@ func evaluateBatch(
 
 		if filter := rec.EvalKnobs().TestingPostEvalFilter; filter != nil {
 			filterArgs := kvserverbase.FilterArgs{
-				Ctx:   ctx,
-				CmdID: idKey,
-				Index: index,
-				Sid:   rec.StoreID(),
-				Req:   args,
-				Hdr:   baHeader,
-				Err:   err,
+				Ctx:          ctx,
+				CmdID:        idKey,
+				Index:        index,
+				Sid:          rec.StoreID(),
+				Req:          args,
+				Hdr:          baHeader,
+				AdmissionHdr: ba.AdmissionHeader,
+				Err:          err,
 			}
 			if pErr := filter(filterArgs); pErr != nil {
 				if pErr.GetTxn() == nil {
@@ -559,6 +545,15 @@ func evaluateCommand(
 		}
 		log.VEventf(ctx, 2, "evaluated %s command %s, txn=%v : resp=%s, err=%v",
 			args.Method(), trunc(args.String()), h.Txn, resp, err)
+	}
+
+	// If there is a pebble data corruption error, we want to serialize it by
+	// returning the KV error PebbleCorruptionError. This way, the error can be
+	// extracted by KV clients.
+	if err != nil {
+		if info := pebble.ExtractDataCorruptionInfo(err); info != nil {
+			err = kvpb.NewPebbleCorruptionError(rec.StoreID(), info)
+		}
 	}
 	return pd, err
 }

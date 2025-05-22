@@ -397,15 +397,6 @@ var (
 			"workloads, such as TPC-C, on the cluster",
 	})
 
-	SideEyeApiToken string = ""
-	_                      = registerRunFlag(&SideEyeApiToken, FlagInfo{
-		Name: "side-eye-token",
-		Usage: `The API token to use for configuring the Side-Eye agents running on the
-						created clusters. If empty, the Side-Eye agents will not be started.
-						When set, app.side-eye.io can be used to monitor running clusters and also
-						timing out tests will get a snapshot before their clusters are destroyed.`,
-	})
-
 	PreferLocalSSD bool = true
 	_                   = registerRunFlag(&PreferLocalSSD, FlagInfo{
 		Name:  "local-ssd",

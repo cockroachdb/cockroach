@@ -93,3 +93,19 @@ func (l Locking) IsLocking() bool {
 func (l Locking) IsNoOp() bool {
 	return l == Locking{}
 }
+
+// MustLockAllRequestedColumnFamilies returns true if the locking semantics
+// require actually acquiring locks on all requested column families. If this
+// returns false, then locking is best-effort, and it's ok to skip over some
+// requested column families.
+func (l Locking) MustLockAllRequestedColumnFamilies() bool {
+	// If durability = guaranteed, then we've promised that locks will be held
+	// until transaction commit. It's important in this case to actually acquire
+	// all the requested locks.
+	return (l.Strength != tree.ForNone && l.Durability == tree.LockDurabilityGuaranteed) ||
+		// If this read is using SKIP LOCKED or NOWAIT then we want to be sure to
+		// check all requested column families for locks. Otherwise we might assume
+		// there are no locks and subsequently hit an unexpected write-write
+		// conflict later in the same transaction.
+		l.WaitPolicy != tree.LockWaitBlock
+}

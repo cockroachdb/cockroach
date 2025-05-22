@@ -3556,7 +3556,7 @@ WHERE
 index-join t117979
  ├── columns: id:1 links:2
  ├── immutable
- ├── stats: [rows=111.1111]
+ ├── stats: [rows=111.111]
  ├── cost: 810.262222
  ├── key: (1)
  ├── fd: (1)-->(2)
@@ -3567,7 +3567,7 @@ index-join t117979
       ├── inverted constraint: /7/1
       │    └── spans: ["str1", "str1"]
       ├── flags: force-index=idx_links
-      ├── stats: [rows=111.1111, distinct(7)=100, null(7)=0]
+      ├── stats: [rows=111.111, distinct(7)=100, null(7)=0]
       ├── cost: 135.797778
       ├── key: (1)
       └── distribution: test

@@ -475,6 +475,9 @@ ElementState:
 - TableLocalityGlobal:
     tableId: 110
   Status: PUBLIC
+- TableSchemaLocked:
+    tableId: 110
+  Status: PUBLIC
 - TableZoneConfig:
     seqNum: 0
     tableId: 110
@@ -872,6 +875,9 @@ ElementState:
 - TableLocalitySecondaryRegion:
     regionEnumTypeId: 106
     regionName: us-east2
+    tableId: 109
+  Status: PUBLIC
+- TableSchemaLocked:
     tableId: 109
   Status: PUBLIC
 - TableZoneConfig:
@@ -1569,6 +1575,9 @@ ElementState:
     tableId: 108
   Status: PUBLIC
 - TablePartitioning:
+    tableId: 108
+  Status: PUBLIC
+- TableSchemaLocked:
     tableId: 108
   Status: PUBLIC
 - TableZoneConfig:

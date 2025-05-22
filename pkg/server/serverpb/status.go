@@ -46,6 +46,7 @@ type SQLStatusServer interface {
 	TenantServiceStatus(context.Context, *TenantServiceStatusRequest) (*TenantServiceStatusResponse, error)
 	UpdateTableMetadataCache(context.Context, *UpdateTableMetadataCacheRequest) (*UpdateTableMetadataCacheResponse, error)
 	GetUpdateTableMetadataCacheSignal() chan struct{}
+	DrainSqlStats(context.Context, *DrainSqlStatsRequest) (*DrainStatsResponse, error)
 }
 
 // OptionalNodesStatusServer is a StatusServer that is only optionally present
@@ -93,6 +94,7 @@ type TenantStatusServer interface {
 	DownloadSpan(ctx context.Context, request *DownloadSpanRequest) (*DownloadSpanResponse, error)
 	NetworkConnectivity(context.Context, *NetworkConnectivityRequest) (*NetworkConnectivityResponse, error)
 	Gossip(context.Context, *GossipRequest) (*gossip.InfoStatus, error)
+	EngineStats(context.Context, *EngineStatsRequest) (*EngineStatsResponse, error)
 }
 
 // OptionalNodesStatusServer returns the wrapped NodesStatusServer, if it is

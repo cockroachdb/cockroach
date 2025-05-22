@@ -703,7 +703,6 @@ func TestLint(t *testing.T) {
 					":!acceptance/test_acceptance.go",           // For COCKROACH_RUN_ACCEPTANCE
 					":!compose/compare/compare/compare_test.go", // For COCKROACH_RUN_COMPOSE_COMPARE
 					":!compose/compose_test.go",                 // For COCKROACH_RUN_COMPOSE
-					":!testutils/sideeye/sideeye.go",            // For SIDE_EYE_API_TOKEN
 				},
 			},
 		} {
@@ -2090,8 +2089,6 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`pkg/cmd/mirror/go/mirror.go`),
 			// As above, the bazel build tag has an impact here.
 			stream.GrepNot(`pkg/testutils/docker/single_node_docker_test.go`),
-			// TODO(#143614): remove uses of this package.
-			stream.GrepNot(`"golang.org/x/exp/rand" is deprecated`),
 		}
 		for analyzerName, config := range nogoConfig {
 			if !staticcheckCheckNameRe.MatchString(analyzerName) {

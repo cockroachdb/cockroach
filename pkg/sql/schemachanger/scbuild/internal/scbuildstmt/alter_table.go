@@ -123,7 +123,7 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 		panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			"table %q is being dropped, try again later", n.Table.Object()))
 	}
-	panicIfSchemaChangeIsDisallowed(elts, n)
+	checkTableSchemaChangePrerequisites(b, elts, n)
 	tn.ObjectNamePrefix = b.NamePrefix(tbl)
 	b.SetUnresolvedNameAnnotation(n.Table, &tn)
 	b.IncrementSchemaChangeAlterCounter("table")
@@ -241,7 +241,17 @@ func maybeRewriteIndexAndConstraintID(
 			}
 			return nil
 		})
+		// If there are references to the indexID in the subzones,
+		// then we should rewrite.
+		if zoneConfig, ok := e.(*scpb.TableZoneConfig); ok {
+			for subzoneIdx := range zoneConfig.ZoneConfig.Subzones {
+				if zoneConfig.ZoneConfig.Subzones[subzoneIdx].IndexID == uint32(indexID) {
+					zoneConfig.ZoneConfig.Subzones[subzoneIdx].IndexID = uint32(actualIndexID)
+				}
+			}
+		}
 	})
+
 	return true
 }
 

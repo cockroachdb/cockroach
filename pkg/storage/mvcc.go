@@ -101,51 +101,63 @@ var TargetBytesPerLockConflictError = settings.RegisterIntSetting(
 	settings.WithName("storage.mvcc.target_bytes_per_lock_conflict_error"),
 )
 
-// getMaxConcurrentCompactions wraps the maxConcurrentCompactions env var in a
-// func that may be installed on Options.MaxConcurrentCompactions. It also
-// imposes a floor on the max, so that an engine is always created with at least
-// 1 slot for a compactions.
-//
-// NB: This function inspects the environment every time it's called. This is
-// okay, because Engine construction in NewPebble will invoke it and store the
-// value on the Engine itself.
-func getMaxConcurrentCompactions() int {
-	n := envutil.EnvOrDefaultInt(
-		"COCKROACH_CONCURRENT_COMPACTIONS", func() int {
-			// The old COCKROACH_ROCKSDB_CONCURRENCY environment variable was never
-			// documented, but customers were told about it and use today in
-			// production. We don't want to break them, so if the new env var
-			// is unset but COCKROACH_ROCKSDB_CONCURRENCY is set, use the old env
-			// var's value. This old env var has a wart in that it's expressed as a
-			// number of concurrency slots to make available to both flushes and
-			// compactions (a vestige of the corresponding RocksDB option's
-			// mechanics). We need to adjust it to be in terms of just compaction
-			// concurrency by subtracting the flushing routine's dedicated slot.
-			//
-			// TODO(jackson): Should envutil expose its `getEnv` internal func for
-			// cases like this where we actually want to know whether it's present
-			// or not; not just fallback to a default?
-			if oldV := envutil.EnvOrDefaultInt("COCKROACH_ROCKSDB_CONCURRENCY", 0); oldV > 0 {
-				return oldV - 1
-			}
+var defaultMaxConcurrentCompactions = getDefaultMaxConcurrentCompactions()
 
-			// By default use up to min(numCPU-1, 3) threads for background
-			// compactions per store (reserving the final process for flushes).
-			const max = 3
-			if n := runtime.GOMAXPROCS(0); n-1 < max {
-				return n - 1
-			}
-			return max
-		}())
-	if n < 1 {
-		return 1
+// By default, we use up to min(GOMAXPROCS-1, 3) threads for background
+// compactions per store (reserving the final process for flushes).
+func getDefaultMaxConcurrentCompactions() int {
+	const def = 3
+	if n := runtime.GOMAXPROCS(0); n-1 < def {
+		return max(n-1, 1)
 	}
-	return n
+	return def
+}
+
+// envMaxConcurrentCompactions is not zero if this node has an env var override
+// for the concurrency.
+var envMaxConcurrentCompactions = getMaxConcurrentCompactionsFromEnv()
+
+func getMaxConcurrentCompactionsFromEnv() int {
+	if v := envutil.EnvOrDefaultInt("COCKROACH_CONCURRENT_COMPACTIONS", 0); v > 0 {
+		return v
+	}
+	// The old COCKROACH_ROCKSDB_CONCURRENCY environment variable was never
+	// documented, but customers were told about it and use today in
+	// production. We don't want to break them, so if the new env var
+	// is unset but COCKROACH_ROCKSDB_CONCURRENCY is set, use the old env
+	// var's value. This old env var has a wart in that it's expressed as a
+	// number of concurrency slots to make available to both flushes and
+	// compactions (a vestige of the corresponding RocksDB option's
+	// mechanics). We need to adjust it to be in terms of just compaction
+	// concurrency by subtracting the flushing routine's dedicated slot.
+	if oldV := envutil.EnvOrDefaultInt("COCKROACH_ROCKSDB_CONCURRENCY", 0); oldV > 0 {
+		return max(oldV-1, 1)
+	}
+	return 0
+}
+
+// determineMaxConcurrentCompactions determines the upper limit on compaction
+// concurrency.
+//
+// Normally, we use the default limit of min(3, numCPU-1). This limit can be
+// changed via an environment variable or via a cluster setting. If both of
+// those are used, the maximum of them is taken.
+func determineMaxConcurrentCompactions(defaultValue int, envValue int, clusterSetting int) int {
+	if envValue > 0 {
+		if clusterSetting > 0 {
+			return max(envValue, clusterSetting)
+		}
+		return envValue
+	}
+	if clusterSetting > 0 {
+		return clusterSetting
+	}
+	return defaultValue
 }
 
 // l0SubLevelCompactionConcurrency is the sub-level threshold at which to
 // allow an increase in compaction concurrency. The maximum is still
-// controlled by pebble.Options.MaxConcurrentCompactions. The default of 2
+// controlled by pebble.Options.CompactionConcurrencyRange. The default of 2
 // allows an additional compaction (so total 1 + 1 = 2 compactions) when the
 // sub-level count is 2, and increments concurrency by 1 whenever sub-level
 // count increases by 2 (so 1 + 2 = 3 compactions) when sub-level count is 4,
@@ -411,13 +423,11 @@ func (v *optionalValue) ToPointer() *roachpb.Value {
 	return &cpy
 }
 
-func (v *optionalValue) checkOriginTimestamp(originTimestamp hlc.Timestamp) error {
+func (v *optionalValue) isOriginTimestampWinner(
+	proposedTS hlc.Timestamp, inclusive bool,
+) (bool, hlc.Timestamp) {
 	if !v.exists {
-		return nil
-	}
-
-	if !originTimestamp.IsSet() {
-		return nil
+		return true, hlc.Timestamp{}
 	}
 
 	existTS := v.Value.Timestamp
@@ -425,33 +435,7 @@ func (v *optionalValue) checkOriginTimestamp(originTimestamp hlc.Timestamp) erro
 		existTS = v.MVCCValueHeader.OriginTimestamp
 	}
 
-	// TODO(jeffswenson): add support for handling ties. The KV LDR writer
-	// originally had a ShouldWinOriginTimestampTie field, but it was removed
-	// due to an issue with replays. ShouldWinOriginTimestampTie was set
-	// unconditionally if the replicating cluster had a larger origin cluster
-	// id.
-	//
-	// There are two problems with this:
-	// 1. When replaying replicated writes, the replicated writes will win LWW
-	// vs themselves, which is undesirable because it writes duplicate KVs which
-	// is slow and wastes storage until the duplicate KVs are cleaned up by GC.
-	// 2. It doesn't implement semantics correctly in the case of three way
-	// replication.
-	//
-	// For now, LDR is going to ignore the possibility of ties. A tie will only
-	// occur if there are racing updates to the same row in two different
-	// clusters at the same nanosecond.
-	//
-	// The proper fix for this is to pass the source cluster and local cluster
-	// id to checkOriginTimestamp. That lets us correctly implement cross
-	// cluster ties while allowing a replicated write to lose ties against
-	// itself.
-	if originTimestamp.LessEq(existTS) {
-		return &kvpb.ConditionFailedError{
-			OriginTimestampOlderThan: existTS,
-		}
-	}
-	return nil
+	return existTS.Less(proposedTS) || (inclusive && existTS.Equal(proposedTS)), existTS
 }
 
 // isSysLocal returns whether the key is system-local.
@@ -1956,7 +1940,6 @@ func MVCCPut(
 	// key we can utilize a blind put to avoid reading any existing value.
 	var iter MVCCIterator
 	var ltScanner *lockTableKeyScanner
-	var valueFn func(existVal optionalValue) (roachpb.Value, error)
 	blind := opts.Stats == nil && timestamp.IsEmpty()
 	if !blind {
 		var err error
@@ -1982,16 +1965,8 @@ func MVCCPut(
 			}
 			defer ltScanner.close()
 		}
-		if !opts.OriginTimestamp.IsEmpty() {
-			valueFn = func(existVal optionalValue) (roachpb.Value, error) {
-				if err := existVal.checkOriginTimestamp(opts.OriginTimestamp); err != nil {
-					return roachpb.Value{}, err
-				}
-				return value, nil
-			}
-		}
 	}
-	return mvccPutUsingIter(ctx, rw, iter, ltScanner, key, timestamp, value, valueFn, opts)
+	return mvccPutUsingIter(ctx, rw, iter, ltScanner, key, timestamp, value, nil, opts)
 }
 
 // MVCCBlindPut is a fast-path of MVCCPut. See the MVCCPut comments for details
@@ -2057,18 +2032,9 @@ func MVCCDelete(
 	buf := newPutBuffer()
 	defer buf.release()
 
-	var valueFn func(existVal optionalValue) (roachpb.Value, error)
-	if !opts.OriginTimestamp.IsEmpty() {
-		valueFn = func(existVal optionalValue) (roachpb.Value, error) {
-			if err := existVal.checkOriginTimestamp(opts.OriginTimestamp); err != nil {
-				return roachpb.Value{}, err
-			}
-			return noValue, nil
-		}
-	}
 	// TODO(yuzefovich): can we avoid the put if the key does not exist?
 	return mvccPutInternal(
-		ctx, rw, iter, ltScanner, key, timestamp, noValue, buf, valueFn, opts)
+		ctx, rw, iter, ltScanner, key, timestamp, noValue, buf, nil, opts)
 }
 
 var noValue = roachpb.Value{}
@@ -2692,10 +2658,10 @@ func mvccPutInternal(
 			// NB: even if metaTimestamp is less than writeTimestamp, we can't
 			// avoid the WriteTooOld error if metaTimestamp is equal to or
 			// greater than readTimestamp. This is because certain operations
-			// like ConditionalPuts and InitPuts avoid ever needing refreshes
-			// by ensuring that they propagate WriteTooOld errors immediately
-			// instead of allowing their transactions to continue and be retried
-			// before committing.
+			// like ConditionalPuts avoid ever needing refreshes by ensuring
+			// that they propagate WriteTooOld errors immediately instead of
+			// allowing their transactions to continue and be retried before
+			// committing.
 			writeTimestamp.Forward(metaTimestamp.Next())
 			writeTooOldErr := kvpb.NewWriteTooOldError(readTimestamp, writeTimestamp, key)
 			return false, roachpb.LockAcquisition{}, writeTooOldErr
@@ -2940,6 +2906,12 @@ type ConditionalPutWriteOptions struct {
 	MVCCWriteOptions
 
 	AllowIfDoesNotExist CPutMissingBehavior
+	// OriginTimestamp, if set, indicates that the caller wants to put the
+	// value only if any existing key is older than this timestamp.
+	//
+	// See the comment on the OriginTimestamp field of
+	// kvpb.ConditionalPutRequest for more details.
+	OriginTimestamp hlc.Timestamp
 }
 
 // MVCCConditionalPut sets the value for a specified key only if the expected
@@ -3046,115 +3018,43 @@ func mvccConditionalPutUsingIter(
 		}
 	}
 
-	valueFn := func(actualValue optionalValue) (roachpb.Value, error) {
-		if err := actualValue.checkOriginTimestamp(opts.OriginTimestamp); err != nil {
-			return roachpb.Value{}, err
-		}
-		if err := maybeConditionFailedError(expBytes, actualValue, bool(opts.AllowIfDoesNotExist)); err != nil {
-			if !opts.OriginTimestamp.IsEmpty() {
-				err.HadNewerOriginTimestamp = true
+	var valueFn func(existVal optionalValue) (roachpb.Value, error)
+	if opts.OriginTimestamp.IsEmpty() {
+		valueFn = func(actualValue optionalValue) (roachpb.Value, error) {
+			if err := maybeConditionFailedError(expBytes, actualValue, bool(opts.AllowIfDoesNotExist)); err != nil {
+				return roachpb.Value{}, err
 			}
-			return roachpb.Value{}, err
+			return value, nil
 		}
-		return value, nil
+	} else {
+		valueFn = func(existVal optionalValue) (roachpb.Value, error) {
+			originTSWinner, existTS := existVal.isOriginTimestampWinner(opts.OriginTimestamp, false)
+			if !originTSWinner {
+				return roachpb.Value{}, &kvpb.ConditionFailedError{
+					OriginTimestampOlderThan: existTS,
+				}
+			}
+
+			// We are the OriginTimestamp comparison winner. We
+			// check the expected bytes because a mismatch implies
+			// that the caller may have produced other commands with
+			// outdated data.
+			if err := maybeConditionFailedError(expBytes, existVal, false); err != nil {
+				err.HadNewerOriginTimestamp = true
+				return roachpb.Value{}, err
+			}
+			return value, nil
+		}
+
+		// TODO(ssd): We set the OriginTimestamp on our write
+		// options to the originTimestamp passed to us. We
+		// don't assert they are the same yet because it is
+		// still unclear how exactly we want to manage this in
+		// the long run.
+		opts.MVCCWriteOptions.OriginTimestamp = opts.OriginTimestamp
 	}
 
 	return mvccPutUsingIter(ctx, writer, iter, ltScanner, key, timestamp, noValue, valueFn, opts.MVCCWriteOptions)
-}
-
-// MVCCInitPut sets the value for a specified key if the key doesn't exist. It
-// returns a ConditionFailedError when the write fails or if the key exists with
-// an existing value that is different from the supplied value. If
-// failOnTombstones is set to true, tombstones count as mismatched values and
-// will cause a ConditionFailedError.
-//
-// Note that, when writing transactionally, the txn's timestamps
-// dictate the timestamp of the operation, and the timestamp parameter is
-// confusing and redundant. See the comment on mvccPutInternal for details.
-func MVCCInitPut(
-	ctx context.Context,
-	rw ReadWriter,
-	key roachpb.Key,
-	timestamp hlc.Timestamp,
-	value roachpb.Value,
-	failOnTombstones bool,
-	opts MVCCWriteOptions,
-) (roachpb.LockAcquisition, error) {
-	iter, err := newMVCCIterator(
-		ctx, rw, timestamp, false /* rangeKeyMasking */, true, /* noInterleavedIntents */
-		IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
-			Prefix:       true,
-			ReadCategory: opts.Category,
-		},
-	)
-	if err != nil {
-		return roachpb.LockAcquisition{}, err
-	}
-	defer iter.Close()
-
-	inlinePut := timestamp.IsEmpty()
-	var ltScanner *lockTableKeyScanner
-	if !inlinePut {
-		ltScanner, err = newLockTableKeyScanner(
-			ctx, rw, opts.TxnID(), lock.Intent, opts.MaxLockConflicts, opts.TargetLockConflictBytes, opts.Category)
-		if err != nil {
-			return roachpb.LockAcquisition{}, err
-		}
-		defer ltScanner.close()
-	}
-
-	return mvccInitPutUsingIter(ctx, rw, iter, ltScanner, key, timestamp, value, failOnTombstones, opts)
-}
-
-// MVCCBlindInitPut is a fast-path of MVCCInitPut. See the MVCCInitPut
-// comments for details of the semantics. MVCCBlindInitPut skips
-// retrieving the existing metadata for the key requiring the caller
-// to guarantee no version for the key currently exist.
-//
-// Note that, when writing transactionally, the txn's timestamps
-// dictate the timestamp of the operation, and the timestamp parameter is
-// confusing and redundant. See the comment on mvccPutInternal for details.
-func MVCCBlindInitPut(
-	ctx context.Context,
-	w Writer,
-	key roachpb.Key,
-	timestamp hlc.Timestamp,
-	value roachpb.Value,
-	failOnTombstones bool,
-	opts MVCCWriteOptions,
-) (roachpb.LockAcquisition, error) {
-	return mvccInitPutUsingIter(
-		ctx, w, nil, nil, key, timestamp, value, failOnTombstones, opts)
-}
-
-func mvccInitPutUsingIter(
-	ctx context.Context,
-	w Writer,
-	iter MVCCIterator,
-	ltScanner *lockTableKeyScanner,
-	key roachpb.Key,
-	timestamp hlc.Timestamp,
-	value roachpb.Value,
-	failOnTombstones bool,
-	opts MVCCWriteOptions,
-) (roachpb.LockAcquisition, error) {
-	valueFn := func(existVal optionalValue) (roachpb.Value, error) {
-		if failOnTombstones && existVal.IsTombstone() {
-			// We found a tombstone and failOnTombstones is true: fail.
-			return roachpb.Value{}, &kvpb.ConditionFailedError{
-				ActualValue: existVal.ToPointer(),
-			}
-		}
-		if existVal.IsPresent() && !existVal.Value.EqualTagAndData(value) {
-			// The existing value does not match the supplied value.
-			return roachpb.Value{}, &kvpb.ConditionFailedError{
-				ActualValue: existVal.ToPointer(),
-			}
-		}
-		return value, nil
-	}
-	return mvccPutUsingIter(ctx, w, iter, ltScanner, key, timestamp, noValue, valueFn, opts)
 }
 
 // mvccKeyFormatter is an fmt.Formatter for MVCC Keys.
@@ -3778,21 +3678,11 @@ func MVCCDeleteRange(
 	buf := newPutBuffer()
 	defer buf.release()
 
-	var valueFn func(existVal optionalValue) (roachpb.Value, error)
-	if !opts.OriginTimestamp.IsEmpty() {
-		valueFn = func(existVal optionalValue) (roachpb.Value, error) {
-			if err := existVal.checkOriginTimestamp(opts.OriginTimestamp); err != nil {
-				return roachpb.Value{}, err
-			}
-			return noValue, nil
-		}
-	}
-
 	var keys []roachpb.Key
 	var acqs []roachpb.LockAcquisition
 	for i, kv := range res.KVs {
 		_, acq, err := mvccPutInternal(
-			ctx, rw, iter, ltScanner, kv.Key, timestamp, noValue, buf, valueFn, opts,
+			ctx, rw, iter, ltScanner, kv.Key, timestamp, noValue, buf, nil, opts,
 		)
 		if err != nil {
 			return nil, nil, 0, nil, err
@@ -6317,6 +6207,18 @@ func MVCCVerifyLock(
 		return true, nil
 	}
 	return false, nil
+}
+
+var didUpdate bool
+
+func ApproximateLockTableSize(acq *roachpb.LockAcquisition) int64 {
+	keySize := int64(len(acq.Key)) + engineKeyVersionLockTableLen
+	metaSize := int64((&enginepb.MVCCMetadata{
+		Txn:                 &acq.Txn,
+		Timestamp:           acq.Txn.WriteTimestamp.ToLegacyTimestamp(),
+		TxnDidNotUpdateMeta: &didUpdate,
+	}).Size())
+	return keySize + metaSize
 }
 
 // mvccReleaseLockInternal releases a lock at the specified key and strength and

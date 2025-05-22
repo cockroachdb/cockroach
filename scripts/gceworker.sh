@@ -30,6 +30,10 @@ if [[ "${cmd}" ]]; then
 	shift
 fi
 
+function get_ip() {
+	gcloud compute instances describe --format="value(networkInterfaces[0].accessConfigs[0].natIP)" "${NAME}"
+}
+
 function user_domain_suffix() {
 	gcloud auth list --limit 1 --filter="status:ACTIVE account:@cockroachlabs.com" --format="value(account)" | sed 's/[@\.\-]/_/g'
 }
@@ -57,7 +61,7 @@ EOF
 }
 
 function refresh_ssh_config() {
-	IP=$($0 ip)
+	IP=$(get_ip)
 	if ! grep -q "${FQNAME}" ~/.ssh/config; then
 		USER_DOMAIN_SUFFIX="$(user_domain_suffix)"
 		echo "No alias found for ${FQNAME} in ~/.ssh/config. Creating one for ${USER_DOMAIN_SUFFIX} now with the instance external ip."
@@ -249,7 +253,7 @@ put)
 	gcloud compute scp --recurse ${lpath} "${to}"
 	;;
 ip)
-	gcloud compute instances describe --format="value(networkInterfaces[0].accessConfigs[0].natIP)" "${NAME}"
+	echo "$(get_ip)"
 	;;
 sync)
 	if ! hash unison 2>/dev/null; then
@@ -300,8 +304,17 @@ vscode)
 status)
 	gcloud compute instances describe ${NAME} --format="table(name,status,lastStartTimestamp,lastStopTimestamp)"
 	;;
+update-hosts)
+	NEW_IP="$(get_ip)"
+	HOSTS_FILE="/etc/hosts"
+
+	# Step 1: Remove any existing gceworker line.
+	sudo sed -i '' "/${NAME}\.local/d" "${HOSTS_FILE}"
+	# Step 2: Insert the new line at the end unconditionally
+	echo "${NEW_IP} ${NAME}.local" | sudo tee -a ${HOSTS_FILE} > /dev/null
+	;;
 *)
-	echo "$0: unknown command: ${cmd}, use one of create, start, stop, resume, suspend, delete, status, ssh, get, put, or sync"
+	echo "$0: unknown command: ${cmd}, use one of create, start, stop, resume, suspend, delete, status, ssh, get, put, sync, or update-hosts"
 	exit 1
 	;;
 esac

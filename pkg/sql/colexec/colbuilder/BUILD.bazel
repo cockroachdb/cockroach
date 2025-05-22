@@ -12,6 +12,7 @@ go_library(
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/col/typeconv",
+        "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/settings",
         "//pkg/sql/catalog/descpb",

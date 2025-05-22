@@ -64,11 +64,6 @@ type replicaAppBatch struct {
 	// sideloaded storage file. Such commands may apply side effects only after
 	// their application to state machine is synced.
 	changeTruncatesSideloadedFiles bool
-	// truncatedSideloadedSize is set when changeTruncatesSideloadedFiles is true,
-	// and contains the total size of the removed sideloaded entry files.
-	// TODO(pav-kv): make a type for the truncation-related parameters.
-	// Potentially, can use the pendingTruncation type here.
-	truncatedSideloadedSize int64
 
 	start                   time.Time // time at NewBatch()
 	followerStoreWriteBytes kvadmission.FollowerStoreWriteBytes
@@ -153,7 +148,7 @@ func (b *replicaAppBatch) Stage(
 	if err := b.ab.runPostAddTriggers(ctx, &cmd.ReplicatedCmd, postAddEnv{
 		st:          b.r.store.cfg.Settings,
 		eng:         b.r.store.TODOEngine(),
-		sideloaded:  b.r.raftMu.sideloaded,
+		sideloaded:  b.r.logStorage.ls.Sideload,
 		bulkLimiter: b.r.store.limiters.BulkIOWriteRate,
 	}); err != nil {
 		return nil, err
@@ -454,7 +449,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 
 		// Delete all of the Replica's data. We're going to delete the hard state too.
 		// We've set the replica's in-mem status to reflect the pending destruction
-		// above, and preDestroyRaftMuLocked will also add a range tombstone to the
+		// above, and DestroyReplica will also add a range tombstone to the
 		// batch, so that when we commit it, the removal is finalized.
 		if err := kvstorage.DestroyReplica(ctx, b.r.RangeID, b.batch, b.batch, change.NextReplicaID(), kvstorage.ClearRangeDataOptions{
 			ClearReplicatedBySpan:      span,
@@ -518,6 +513,13 @@ func (b *replicaAppBatch) stageTruncation(
 	); err != nil {
 		return errors.Wrap(err, "unable to handle truncated state")
 	}
+
+	pt := pendingTruncation{
+		RaftTruncatedState: *truncatedState,
+		expectedFirstIndex: res.RaftExpectedFirstIndex,
+		logDeltaBytes:      res.RaftLogDelta,
+		isDeltaTrusted:     true,
+	}
 	// Determine if there are any sideloaded entries that will be removed as a
 	// side effect, and the total size of these entries.
 	//
@@ -527,14 +529,17 @@ func (b *replicaAppBatch) stageTruncation(
 	// usage of changeTruncatesSideloadedFiles flag at the other end.
 	//
 	// The size computation feeds into maintaining the log size in memory.
-	if entries, size, err := b.r.raftMu.sideloaded.Stats(ctx, kvpb.RaftSpan{
+	if entries, size, err := b.r.logStorage.ls.Sideload.Stats(ctx, kvpb.RaftSpan{
 		After: b.truncState.Index, Last: truncatedState.Index,
 	}); err != nil {
 		return errors.Wrap(err, "failed searching for sideloaded entries")
 	} else if entries != 0 {
 		b.changeTruncatesSideloadedFiles = true
-		b.truncatedSideloadedSize = size
+		pt.logDeltaBytes -= size
+		pt.hasSideloaded = true // unused, but set for "completeness"
 	}
+
+	b.r.stagePendingTruncationRaftMuLocked(pt)
 	return nil
 }
 

@@ -8,6 +8,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -107,6 +109,14 @@ func (n *createTypeNode) startExec(params runParams) error {
 func resolveNewTypeName(
 	ctx context.Context, p *planner, name *tree.UnresolvedObjectName,
 ) (*tree.TypeName, catalog.DatabaseDescriptor, error) {
+	// Check that we are not creating in a temporary schema. To support this,
+	// we'd need to update the type descriptor to have an IsTemporary flag, and
+	// the temporary object cleaner would need to handle these.
+	if name.HasExplicitSchema() && strings.HasPrefix(name.Schema(), catconstants.PgTempSchemaName) {
+		return nil, nil, pgerror.Newf(pgcode.InvalidSchemaName,
+			"cannot create type %q in temporary schema", name.Object(),
+		)
+	}
 	// Resolve the target schema and database.
 	db, _, prefix, err := p.ResolveTargetObject(ctx, name)
 	if err != nil {
@@ -391,6 +401,10 @@ func CreateEnumTypeDesc(
 	}).BuildCreatedMutableType(), nil
 }
 
+var jsonpathInCompositeErr = unimplemented.NewWithIssueDetailf(
+	144910, "", "jsonpath cannot be used in a composite type",
+)
+
 // createCompositeTypeDesc creates a new composite type descriptor.
 func createCompositeTypeDesc(
 	params runParams,
@@ -416,6 +430,10 @@ func createCompositeTypeDesc(
 		}
 		if typ.Identical(types.Trigger) {
 			return nil, tree.CannotAcceptTriggerErr
+		}
+		if typ.Oid() == oidext.T_jsonpath || typ.Oid() == oidext.T__jsonpath {
+			// TODO(#144910): this is unsupported for now, out of caution.
+			return nil, jsonpathInCompositeErr
 		}
 		if err = tree.CheckUnsupportedType(params.ctx, &params.p.semaCtx, typ); err != nil {
 			return nil, err

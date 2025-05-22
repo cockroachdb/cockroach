@@ -297,11 +297,27 @@ func restore(
 		return emptyRowCount, nil
 	}
 
+	job := resumer.job
+	details := job.Details().(jobspb.RestoreDetails)
+
+	if details.OnlineImpl() {
+		var linkPhaseComplete bool
+		if err := execCtx.ExecCfg().InternalDB.Txn(restoreCtx, func(ctx context.Context, txn isql.Txn) error {
+			jobInfo := jobs.InfoStorageForJob(txn, resumer.job.ID())
+			_, ok, err := jobInfo.Get(ctx, "get-link-complete-key", linkCompleteKey)
+			linkPhaseComplete = ok
+			return err
+		}); err != nil {
+			log.Warningf(restoreCtx, "failed to get checkpoint for link phase %v", err)
+		}
+		if linkPhaseComplete {
+			return emptyRowCount, nil
+		}
+	}
+
 	// If we've already migrated some of the system tables we're about to
 	// restore, this implies that a previous attempt restored all of this data.
 	// We want to avoid restoring again since we'll be shadowing migrated keys.
-	job := resumer.job
-	details := job.Details().(jobspb.RestoreDetails)
 	if alreadyMigrated := checkForMigratedData(details, dataToRestore); alreadyMigrated {
 		return emptyRowCount, nil
 	}
@@ -334,11 +350,11 @@ func restore(
 	defer introducedSpanFrontier.Release()
 
 	targetSize := targetRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV)
-	if details.ExperimentalOnline {
+	if details.OnlineImpl() {
 		targetSize = targetOnlineRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV)
 	}
 	maxFileCount := maxFileCount.Get(&execCtx.ExecCfg().Settings.SV)
-	if details.ExperimentalOnline {
+	if details.OnlineImpl() {
 		// Online Restore does not need to limit the number of files per restore
 		// span entry as the files are never opened when processing the span. The
 		// span is only used to create split points.
@@ -433,7 +449,7 @@ func restore(
 	}
 
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
-	if !details.ExperimentalOnline {
+	if !details.OnlineImpl() {
 		// Online restore tracks progress by pinging requestFinishedCh instead
 		generativeCheckpointLoop := func(ctx context.Context) error {
 			defer close(requestFinishedCh)
@@ -470,7 +486,6 @@ func restore(
 				}
 				timer.Reset(replanFrequency.Get(&execCtx.ExecCfg().Settings.SV))
 			case <-timer.C:
-				timer.Read = true
 				// Replan the restore job if it has been 10 minutes since the last
 				// processor completed working.
 				return errors.Mark(laggingRestoreProcErr, retryableRestoreProcError)
@@ -479,7 +494,7 @@ func restore(
 	}
 
 	resumeClusterVersion := execCtx.ExecCfg().Settings.Version.ActiveVersion(restoreCtx).Version
-	if clusterversion.V24_3.Version().LessEq(resumeClusterVersion) && !details.ExperimentalOnline {
+	if clusterversion.V24_3.Version().LessEq(resumeClusterVersion) && !details.OnlineImpl() {
 		tasks = append(tasks, countCompletedProcLoop)
 	}
 
@@ -506,7 +521,7 @@ func restore(
 	tasks = append(tasks, tracingAggLoop)
 
 	runRestore := func(ctx context.Context) error {
-		if details.ExperimentalOnline {
+		if details.OnlineImpl() {
 			log.Warningf(ctx, "EXPERIMENTAL ONLINE RESTORE being used")
 			approxRows, approxDataSize, err := sendAddRemoteSSTs(
 				ctx,
@@ -936,12 +951,7 @@ func createImportingDescriptors(
 	sqlDescs []catalog.Descriptor,
 	r *restoreResumer,
 	manifest backuppb.BackupManifest,
-) (
-	dataToPreRestore *restorationDataBase,
-	preValidation *restorationDataBase,
-	trackedRestore *mainRestorationData,
-	err error,
-) {
+) (preRestore restorationData, preValid restorationData, mainRestore restorationData, err error) {
 	details := r.job.Details().(jobspb.RestoreDetails)
 	const kvTrace = false
 
@@ -997,7 +1007,7 @@ func createImportingDescriptors(
 			}
 
 			if backedUpDescriptorWithInProgressImportInto(desc) {
-				if details.ExperimentalOnline && !epochBasedInProgressImport(desc) {
+				if details.OnlineImpl() && !epochBasedInProgressImport(desc) {
 					return nil, nil, nil, errors.Newf("table %s (id %d) in restoring backup has an in-progress import, but online restore cannot be run on a table with an in progress import", desc.GetName(), desc.GetID())
 				}
 			} else {
@@ -1048,11 +1058,11 @@ func createImportingDescriptors(
 
 	// We get the spans of the restoring tables _as they appear in the backup_,
 	// that is, in the 'old' keyspace, before we reassign the table IDs.
-	preRestoreSpans, err := spansForAllRestoreTableIndexes(backupCodec, preRestoreTables, nil, details.SchemaOnly, details.ExperimentalOnline)
+	preRestoreSpans, err := spansForAllRestoreTableIndexes(backupCodec, preRestoreTables, nil, details.SchemaOnly, details.OnlineImpl())
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	postRestoreSpans, err := spansForAllRestoreTableIndexes(backupCodec, postRestoreTables, nil, details.SchemaOnly, details.ExperimentalOnline)
+	postRestoreSpans, err := spansForAllRestoreTableIndexes(backupCodec, postRestoreTables, nil, details.SchemaOnly, details.OnlineImpl())
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -1060,7 +1070,7 @@ func createImportingDescriptors(
 	if details.VerifyData {
 		// verifySpans contains the spans that should be read and checksum'd during a
 		// verify_backup_table_data RESTORE
-		verifySpans, err = spansForAllRestoreTableIndexes(backupCodec, postRestoreTables, nil, false, details.ExperimentalOnline)
+		verifySpans, err = spansForAllRestoreTableIndexes(backupCodec, postRestoreTables, nil, false, details.OnlineImpl())
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -1390,7 +1400,7 @@ func createImportingDescriptors(
 					if err != nil {
 						return err
 					}
-					typDesc.AddReferencingDescriptorID(table.GetID())
+					_ = typDesc.AddReferencingDescriptorID(table.GetID())
 					if err := descsCol.WriteDescToBatch(
 						ctx, kvTrace, typDesc, b,
 					); err != nil {
@@ -1569,14 +1579,14 @@ func createImportingDescriptors(
 		pkIDs[kvpb.BulkOpSummaryID(uint64(tbl.GetID()), uint64(tbl.GetPrimaryIndexID()))] = true
 	}
 
-	dataToPreRestore = &restorationDataBase{
+	dataToPreRestore := &restorationDataBase{
 		spans:        preRestoreSpans,
 		tableRekeys:  rekeys,
 		tenantRekeys: tenantRekeys,
 		pkIDs:        pkIDs,
 	}
 
-	trackedRestore = &mainRestorationData{
+	trackedRestore := &mainRestorationData{
 		restorationDataBase{
 			spans:        postRestoreSpans,
 			tableRekeys:  rekeys,
@@ -1585,7 +1595,7 @@ func createImportingDescriptors(
 		},
 	}
 
-	preValidation = &restorationDataBase{}
+	preValidation := &restorationDataBase{}
 	// During a RESTORE with verify_backup_table_data data, progress on
 	// verifySpans should be the source of job progress (as it will take the most time); therefore,
 	// wrap them in a mainRestoration struct and unwrap postRestoreSpans
@@ -1625,6 +1635,17 @@ func createImportingDescriptors(
 				trackedRestore.systemTables = append(trackedRestore.systemTables, table)
 			}
 		}
+	}
+	for _, tenant := range details.Tenants {
+		to, err := roachpb.MakeTenantID(tenant.ID)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		from := to
+		if details.PreRewriteTenantId != nil {
+			from = *details.PreRewriteTenantId
+		}
+		trackedRestore.addTenant(from, to)
 	}
 	return dataToPreRestore, preValidation, trackedRestore, nil
 }
@@ -1816,6 +1837,21 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		return err
 	}
 
+	if details.OnlineImpl() && len(details.DownloadSpans) == 0 {
+		// Persist the download spans before the link phase begins as OnFailOrCancel
+		// could use them if called.
+		downloadSpans, err := getDownloadSpans(p.ExecCfg().Codec, preData, mainData)
+		if err != nil {
+			return err
+		}
+		// Ensure we have the latest copy of the job details.
+		details = r.job.Details().(jobspb.RestoreDetails)
+		details.DownloadSpans = downloadSpans
+		if err := r.job.NoTxn().SetDetails(ctx, details); err != nil {
+			return errors.Wrap(err, "updating job details with download spans")
+		}
+	}
+
 	// Refresh the job details since they may have been updated when creating the
 	// importing descriptors.
 	details = r.job.Details().(jobspb.RestoreDetails)
@@ -1839,7 +1875,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			err.Error())
 	}
 
-	if len(details.TableDescs) == 0 && len(details.Tenants) == 0 && len(details.TypeDescs) == 0 {
+	if len(details.TableDescs) == 0 && len(details.Tenants) == 0 {
 		// We have no tables to restore (we are restoring an empty DB).
 		// Since we have already created any new databases that we needed,
 		// we can return without importing any data.
@@ -1866,26 +1902,11 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 				return err
 			}
 		}
-		if err := r.maybeWriteDownloadJob(ctx, p.ExecCfg(), preData, mainData); err != nil {
-			return err
-		}
 		emitRestoreJobEvent(ctx, p, jobs.StateSucceeded, r.job)
 		return nil
 	}
 
-	for _, tenant := range details.Tenants {
-		to, err := roachpb.MakeTenantID(tenant.ID)
-		if err != nil {
-			return err
-		}
-		from := to
-		if details.PreRewriteTenantId != nil {
-			from = *details.PreRewriteTenantId
-		}
-		mainData.addTenant(from, to)
-	}
-
-	_, err = protectRestoreTargets(ctx, p.ExecCfg(), r.job, details, mainData.tenantRekeys)
+	_, err = protectRestoreTargets(ctx, p.ExecCfg(), r.job, details, mainData.getTenantRekeys())
 	if err != nil {
 		return err
 	}
@@ -1896,6 +1917,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	}
 
 	var resTotal roachpb.RowCount
+
+	// TODO(msbutler): add a progress field to skip running a restore flow if it
+	// has already complete. This ensures we skip the link phase if we resume an
+	// online restore job that blocks on the download job.
 
 	if !preData.isEmpty() {
 		res, err := restoreWithRetry(
@@ -1917,7 +1942,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 
 		if details.DescriptorCoverage == tree.AllDescriptors {
 			if err := r.restoreSystemTables(
-				ctx, p.ExecCfg().InternalDB, preData.systemTables,
+				ctx, p.ExecCfg().InternalDB, preData.getSystemTables(),
 			); err != nil {
 				return err
 			}
@@ -1982,6 +2007,27 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		return errors.Wrap(err, "inserting table statistics")
 	}
 
+	if details.OnlineImpl() {
+		if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			jobInfo := jobs.InfoStorageForJob(txn, r.job.ID())
+			return jobInfo.Write(ctx, linkCompleteKey, []byte{})
+		}); err != nil {
+			log.Warningf(ctx, "failed to checkpoint link flow %v", err)
+		}
+	}
+
+	if details.ExperimentalCopy {
+		if len(details.DownloadSpans) == 0 && !details.SchemaOnly {
+			return errors.AssertionFailedf("download spans should have been persisted to job details")
+		}
+		// TODO(msbutler): ideally doDownloadFiles would not depend on job details
+		// and is instead passed an execCfg and the download spans and anything else
+		// it needs. If that occured, we would not need to update details above.
+		if err := r.doDownloadFiles(ctx, p); err != nil {
+			return err
+		}
+	}
+
 	publishDescriptors := func(ctx context.Context, txn descs.Txn) (err error) {
 		return r.publishDescriptors(
 			ctx, p.ExecCfg().JobRegistry, p.ExecCfg().JobsKnobs(), txn, p.User(),
@@ -2012,7 +2058,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// jobs, they become accessible to the user, and may start executing. We
 		// need this to happen after the descriptors have been marked public.
 		if err := r.restoreSystemTables(
-			ctx, p.ExecCfg().InternalDB, mainData.systemTables,
+			ctx, p.ExecCfg().InternalDB, mainData.getSystemTables(),
 		); err != nil {
 			return err
 		}
@@ -2023,7 +2069,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			return err
 		}
 	} else if isSystemUserRestore(details) {
-		if err := r.restoreSystemUsers(ctx, p.ExecCfg().InternalDB, mainData.systemTables); err != nil {
+		if err := r.restoreSystemUsers(ctx, p.ExecCfg().InternalDB, mainData.getSystemTables()); err != nil {
 			return err
 		}
 		details = r.job.Details().(jobspb.RestoreDetails)
@@ -2058,12 +2104,12 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	if err := r.execCfg.ProtectedTimestampManager.Unprotect(ctx, r.job); err != nil {
 		log.Errorf(ctx, "failed to release protected timestamp: %v", err)
 	}
-	if !details.ExperimentalOnline {
+	if !details.OnlineImpl() {
 		r.notifyStatsRefresherOfNewTables()
 	}
 
 	r.restoreStats = resTotal
-	if err := r.maybeWriteDownloadJob(ctx, p.ExecCfg(), preData, mainData); err != nil {
+	if err := r.maybeWriteDownloadJob(ctx, p.ExecCfg()); err != nil {
 		return err
 	}
 
@@ -2169,7 +2215,7 @@ func (r *restoreResumer) ReportResults(ctx context.Context, resultsCh chan<- tre
 		return ctx.Err()
 	case resultsCh <- func() tree.Datums {
 		details := r.job.Details().(jobspb.RestoreDetails)
-		if details.ExperimentalOnline {
+		if details.OnlineImpl() {
 			return tree.Datums{
 				tree.NewDInt(tree.DInt(r.job.ID())),
 				tree.NewDInt(tree.DInt(len(details.TableDescs))),
@@ -2440,7 +2486,7 @@ func (r *restoreResumer) publishDescriptors(
 			return err
 		}
 
-		if details.ExperimentalOnline && epochBasedInProgressImport(desc) {
+		if details.OnlineImpl() && epochBasedInProgressImport(desc) {
 			if err := createImportRollbackJob(ctx,
 				r.execCfg.JobRegistry, txn, r.job.Payload().UsernameProto.Decode(), mutTable,
 			); err != nil {
@@ -2481,7 +2527,7 @@ func (r *restoreResumer) publishDescriptors(
 	b := txn.KV().NewBatch()
 	if err := all.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		d := desc.(catalog.MutableDescriptor)
-		if details.ExperimentalOnline && epochBasedInProgressImport(desc) {
+		if details.OnlineImpl() && epochBasedInProgressImport(desc) {
 			log.Infof(ctx, "table %q (%d) with in-progress IMPORT remaining offline", desc.GetName(), desc.GetID())
 		} else {
 			d.SetPublic()
@@ -2520,7 +2566,7 @@ func (r *restoreResumer) publishDescriptors(
 	details.SchemaDescs = newSchemas
 	details.DatabaseDescs = newDBs
 	details.FunctionDescs = newFunctions
-	if details.ExperimentalOnline {
+	if details.OnlineImpl() {
 		details.PostDownloadTableAutoStatsSettings = tableAutoStatsSettings
 	}
 	if err := r.job.WithTxn(txn).SetDetails(ctx, details); err != nil {
@@ -2610,9 +2656,8 @@ func (r *restoreResumer) OnFailOrCancel(
 
 	details := r.job.Details().(jobspb.RestoreDetails)
 
-	// If this is a download-only job, there's no cleanup to do on cancel.
-	if len(details.DownloadSpans) > 0 {
-		return nil
+	if err := r.maybeCleanupFailedOnlineRestore(ctx, p, details); err != nil {
+		return err
 	}
 
 	// Emit to the event log that the job has started reverting.
@@ -3072,7 +3117,7 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 				}
 				existing := desc.(*typedesc.Mutable)
 				existing.MaybeIncrementVersion()
-				existing.RemoveReferencingDescriptorID(tbl.ID)
+				_ = existing.RemoveReferencingDescriptorID(tbl.ID)
 			}
 		}
 	}

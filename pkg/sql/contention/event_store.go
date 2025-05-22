@@ -214,7 +214,6 @@ func (s *eventStore) startResolver(ctx context.Context, stopper *stop.Stopper) {
 
 			select {
 			case <-timer.C:
-				timer.Read = true
 				if err := s.flushAndResolve(ctx); err != nil {
 					if log.V(1) {
 						log.Warningf(ctx, "unexpected error encountered when performing "+

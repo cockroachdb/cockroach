@@ -67,7 +67,6 @@ go_library(
         "@com_github_cockroachdb_version//:version",
         "@com_github_datadog_datadog_api_client_go_v2//api/datadog",
         "@com_github_datadog_datadog_api_client_go_v2//api/datadogV1",
-        "@com_github_dataexmachina_dev_side_eye_go//sideeyeclient",
         "@com_github_lib_pq//:pq",
         "@com_github_petermattis_goid//:goid",
         "@com_github_prometheus_client_golang//prometheus",

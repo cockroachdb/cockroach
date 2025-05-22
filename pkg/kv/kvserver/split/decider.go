@@ -9,7 +9,8 @@ package split
 
 import (
 	"context"
-	"math/rand"
+	"math"
+	"math/rand/v2"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -26,6 +27,11 @@ const minPerSecondSampleDuration = time.Second
 type PopularKey struct {
 	Key       roachpb.Key
 	Frequency float64
+}
+
+type SplitStatistics struct {
+	AccessDirection float64
+	PopularKey      PopularKey
 }
 
 type LoadBasedSplitter interface {
@@ -76,9 +82,9 @@ type RandSource interface {
 	// interval [0.0,1.0) from the RandSource.
 	Float64() float64
 
-	// Intn returns, as an int, a non-negative pseudo-random number in the
+	// IntN returns, as an int, a non-negative pseudo-random number in the
 	// half-open interval [0,n).
-	Intn(n int) int
+	IntN(n int) int
 }
 
 // globalRandSource implements the RandSource interface.
@@ -90,10 +96,10 @@ func (g globalRandSource) Float64() float64 {
 	return rand.Float64()
 }
 
-// Intn returns, as an int, a non-negative pseudo-random number in the
+// IntN returns, as an int, a non-negative pseudo-random number in the
 // half-open interval [0,n).
-func (g globalRandSource) Intn(n int) int {
-	return rand.Intn(n)
+func (g globalRandSource) IntN(n int) int {
+	return rand.IntN(n)
 }
 
 // GlobalRandSource returns an implementation of the RandSource interface that
@@ -135,8 +141,9 @@ func GlobalRandSource() RandSource {
 
 // LoadSplitterMetrics consists of metrics for load-based splitter split key.
 type LoadSplitterMetrics struct {
-	PopularKeyCount *metric.Counter
-	NoSplitKeyCount *metric.Counter
+	PopularKeyCount     *metric.Counter
+	NoSplitKeyCount     *metric.Counter
+	ClearDirectionCount *metric.Counter
 }
 
 // Decider tracks the latest load and if certain conditions are met, records
@@ -278,6 +285,13 @@ func (d *Decider) recordLocked(
 						if popularKeyFrequency >= splitKeyThreshold {
 							d.loadSplitterMetrics.PopularKeyCount.Inc(1)
 						}
+						accessDirection := d.mu.splitFinder.AccessDirection()
+						direction := directionStr(accessDirection)
+						log.KvDistribution.Infof(ctx, "%s, access balance between left and right for sampled keys: %s-biased %d%%",
+							causeMsg, direction, int(math.Abs(accessDirection)*100))
+						if math.Abs(accessDirection) >= clearDirectionThreshold {
+							d.loadSplitterMetrics.ClearDirectionCount.Inc(1)
+						}
 						d.loadSplitterMetrics.NoSplitKeyCount.Inc(1)
 					}
 				}
@@ -357,6 +371,21 @@ func (d *Decider) MaybeSplitKey(ctx context.Context, now time.Time) roachpb.Key 
 		key = d.mu.splitFinder.Key()
 	}
 	return key
+}
+
+// SplitStatistics gets the split stats of the current replica if load-based
+// splitting has been engaged.
+func (d *Decider) SplitStatistics() *SplitStatistics {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if d.mu.splitFinder != nil {
+		return &SplitStatistics{
+			AccessDirection: d.mu.splitFinder.AccessDirection(),
+			PopularKey:      d.mu.splitFinder.PopularKey(),
+		}
+	}
+	return nil
 }
 
 // Reset deactivates any current attempt at determining a split key. The method
@@ -521,4 +550,17 @@ func (t *maxStatTracker) max(now time.Time, minRetention time.Duration) (float64
 func (t *maxStatTracker) windowWidth() time.Duration {
 	// NB: -1 because during a rotation, only len(t.windows)-1 windows survive.
 	return t.minRetention / time.Duration(len(t.windows)-1)
+}
+
+// Returns the absolute percentage and direction of accesses
+// as a string to be used in a log statement.
+func directionStr(direction float64) string {
+	dstr := "right"
+	if direction == 0 {
+		dstr = "even"
+	}
+	if direction < 0 {
+		dstr = "left"
+	}
+	return dstr
 }

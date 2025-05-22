@@ -127,7 +127,12 @@ type RestoreOptions struct {
 	UnsafeRestoreIncompatibleVersion bool
 	ExecutionLocality                Expr
 	ExperimentalOnline               bool
+	ExperimentalCopy                 bool
 	RemoveRegions                    bool
+}
+
+func (opts *RestoreOptions) OnlineImpl() bool {
+	return opts.ExperimentalCopy || opts.ExperimentalOnline
 }
 
 var _ NodeFormatter = &RestoreOptions{}
@@ -488,6 +493,11 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("experimental deferred copy")
 	}
 
+	if o.ExperimentalCopy {
+		maybeAddSep()
+		ctx.WriteString("experimental copy")
+	}
+
 	if o.RemoveRegions {
 		maybeAddSep()
 		ctx.WriteString("remove_regions")
@@ -633,6 +643,14 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		o.ExperimentalOnline = other.ExperimentalOnline
 	}
 
+	if o.ExperimentalCopy {
+		if other.ExperimentalCopy {
+			return errors.New("experimental copy specified multiple times")
+		}
+	} else {
+		o.ExperimentalCopy = other.ExperimentalCopy
+	}
+
 	if o.RemoveRegions {
 		if other.RemoveRegions {
 			return errors.New("remove_regions specified multiple times")
@@ -666,6 +684,7 @@ func (o RestoreOptions) IsDefault() bool {
 		o.UnsafeRestoreIncompatibleVersion == options.UnsafeRestoreIncompatibleVersion &&
 		o.ExecutionLocality == options.ExecutionLocality &&
 		o.ExperimentalOnline == options.ExperimentalOnline &&
+		o.ExperimentalCopy == options.ExperimentalCopy &&
 		o.RemoveRegions == options.RemoveRegions
 }
 

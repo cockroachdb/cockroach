@@ -94,6 +94,10 @@ type Builder struct {
 	// rather than scans.
 	withExprs []builtWithExpr
 
+	// routineResultBuffers allows expressions within the body of a set-returning
+	// PL/pgSQL function to add to the result set during execution.
+	routineResultBuffers map[memo.RoutineResultBufferID]tree.RoutineResultWriter
+
 	// allowAutoCommit is passed through to factory methods for mutation
 	// operators. It allows execution to commit the transaction as part of the
 	// mutation itself. See canAutoCommit().
@@ -103,7 +107,8 @@ type Builder struct {
 	// for EXPLAIN.
 	initialAllowAutoCommit bool
 
-	allowInsertFastPath bool
+	allowInsertFastPath      bool
+	allowDeleteRangeFastPath bool
 
 	// forceForUpdateLocking, if set, is the table ID of the table being mutated
 	// that should be locked using forUpdateLocking in mutation's input
@@ -277,6 +282,7 @@ func New(
 		b.allowAutoCommit = b.allowAutoCommit && !prohibitAutoCommit
 		b.initialAllowAutoCommit = b.allowAutoCommit
 		b.allowInsertFastPath = sd.InsertFastPath
+		b.allowDeleteRangeFastPath = sd.OptimizerUseDeleteRangeFastPath
 	}
 	return b
 }

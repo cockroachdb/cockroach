@@ -27,12 +27,10 @@ import (
 )
 
 var isLocalMsg = [...]bool{
-	pb.MsgHup:               true,
-	pb.MsgBeat:              true,
-	pb.MsgUnreachable:       true,
-	pb.MsgSnapStatus:        true,
-	pb.MsgStorageAppend:     true,
-	pb.MsgStorageAppendResp: true,
+	pb.MsgHup:         true,
+	pb.MsgBeat:        true,
+	pb.MsgUnreachable: true,
+	pb.MsgSnapStatus:  true,
 }
 
 var isResponseMsg = [...]bool{
@@ -41,7 +39,6 @@ var isResponseMsg = [...]bool{
 	pb.MsgHeartbeatResp:     true,
 	pb.MsgUnreachable:       true,
 	pb.MsgPreVoteResp:       true,
-	pb.MsgStorageAppendResp: true,
 	pb.MsgFortifyLeaderResp: true,
 }
 
@@ -91,10 +88,6 @@ func IsMsgFromLeader(msgt pb.MessageType) bool {
 
 func IsMsgIndicatingLeader(msgt pb.MessageType) bool {
 	return isMsgInArray(msgt, isMsgIndicatingLeader[:])
-}
-
-func IsLocalMsgTarget(id pb.PeerID) bool {
-	return id == LocalAppendThread
 }
 
 // senderHasMsgTerm returns true if the message type is one that should have
@@ -165,8 +158,8 @@ func DescribeReady(rd Ready, f EntryFormatter) string {
 		buf.WriteString("Entries:\n")
 		fmt.Fprint(&buf, DescribeEntries(rd.Entries, f))
 	}
-	if !IsEmptySnap(rd.Snapshot) {
-		fmt.Fprintf(&buf, "Snapshot %s\n", DescribeSnapshot(rd.Snapshot))
+	if rd.Snapshot != nil {
+		fmt.Fprintf(&buf, "Snapshot %s\n", DescribeSnapshot(*rd.Snapshot))
 	}
 	if !rd.Committed.Empty() {
 		fmt.Fprintf(&buf, "Committed: %s\n", rd.Committed)
@@ -174,6 +167,13 @@ func DescribeReady(rd Ready, f EntryFormatter) string {
 	if len(rd.Messages) > 0 {
 		buf.WriteString("Messages:\n")
 		for _, msg := range rd.Messages {
+			fmt.Fprint(&buf, DescribeMessage(msg, f))
+			buf.WriteByte('\n')
+		}
+	}
+	if len(rd.Responses) > 0 {
+		buf.WriteString("OnSync:\n")
+		for _, msg := range rd.Responses {
 			fmt.Fprint(&buf, DescribeMessage(msg, f))
 			buf.WriteByte('\n')
 		}
@@ -188,27 +188,19 @@ func DescribeReady(rd Ready, f EntryFormatter) string {
 // of entry data. Nil is a valid EntryFormatter and will use a default format.
 type EntryFormatter func([]byte) string
 
+var emptyEntryFormatter EntryFormatter = func([]byte) string { return "" }
+
 // DescribeMessage returns a concise human-readable description of a
 // Message for debugging.
 func DescribeMessage(m pb.Message, f EntryFormatter) string {
-	return describeMessageWithIndent("", m, f)
-}
-
-func describeMessageWithIndent(indent string, m pb.Message, f EntryFormatter) string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s%s->%s %v Term:%d Log:%d/%d", indent,
+	fmt.Fprintf(&buf, "%s->%s %v Term:%d Log:%d/%d",
 		describeTarget(m.From), describeTarget(m.To), m.Type, m.Term, m.LogTerm, m.Index)
 	if m.Reject {
 		fmt.Fprintf(&buf, " Rejected (Hint: %d)", m.RejectHint)
 	}
 	if m.Commit != 0 {
 		fmt.Fprintf(&buf, " Commit:%d", m.Commit)
-	}
-	if m.Vote != 0 {
-		fmt.Fprintf(&buf, " Vote:%d", m.Vote)
-	}
-	if m.Lead != 0 {
-		fmt.Fprintf(&buf, " Lead:%d", m.Lead)
 	}
 	if m.LeadEpoch != 0 {
 		fmt.Fprintf(&buf, " LeadEpoch:%d", m.LeadEpoch)
@@ -218,21 +210,13 @@ func describeMessageWithIndent(indent string, m pb.Message, f EntryFormatter) st
 	} else if ln > 1 {
 		fmt.Fprint(&buf, " Entries:[")
 		for _, e := range m.Entries {
-			fmt.Fprintf(&buf, "\n%s  ", indent)
+			fmt.Fprintf(&buf, "\n  ")
 			buf.WriteString(DescribeEntry(e, f))
 		}
-		fmt.Fprintf(&buf, "\n%s]", indent)
+		fmt.Fprintf(&buf, "\n]")
 	}
-	if s := m.Snapshot; s != nil && !IsEmptySnap(*s) {
-		fmt.Fprintf(&buf, "\n%s  Snapshot: %s", indent, DescribeSnapshot(*s))
-	}
-	if len(m.Responses) > 0 {
-		fmt.Fprintf(&buf, " Responses:[")
-		for _, m := range m.Responses {
-			buf.WriteString("\n")
-			buf.WriteString(describeMessageWithIndent(indent+"  ", m, f))
-		}
-		fmt.Fprintf(&buf, "\n%s]", indent)
+	if s := m.Snapshot; s != nil {
+		fmt.Fprintf(&buf, "\n  Snapshot: %s", DescribeSnapshot(*s))
 	}
 	return buf.String()
 }
@@ -242,14 +226,10 @@ func DescribeTarget(id pb.PeerID) string {
 }
 
 func describeTarget(id pb.PeerID) string {
-	switch id {
-	case None:
+	if id == None {
 		return "None"
-	case LocalAppendThread:
-		return "AppendThread"
-	default:
-		return fmt.Sprintf("%x", id)
 	}
+	return fmt.Sprintf("%x", id)
 }
 
 // DescribeEntry returns a concise human-readable description of an

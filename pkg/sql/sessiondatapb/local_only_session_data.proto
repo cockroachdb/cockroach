@@ -621,7 +621,55 @@ message LocalOnlySessionData {
   // defaults to false in order to avoid registering a large number of
   // uninformative latch wait events.
   bool register_latch_wait_contention_events = 159;
-
+  // UseCPutsOnNonUniqueIndexes, when true, indicates that CPuts should be used
+  // when writing new KVs into the non-unique indexes. It is an escape hatch in
+  // case our thinking that we don't need the CPut in such a scenario is wrong.
+  //
+  // This will have impact regardless of the buffered writes.
+  bool use_cputs_on_non_unique_indexes = 160 [(gogoproto.customname) = "UseCPutsOnNonUniqueIndexes"];
+  // BufferedWritesUseLockingOnNonUniqueIndexes, when true, indicates that
+  // locking Puts and Dels should be used when writing into the non-unique
+  // indexes.
+  //
+  // This will only have impact when BufferedWritesEnabled is set.
+  bool buffered_writes_use_locking_on_non_unique_indexes = 161;
+  // OptimizerUseLockElisionMultipleFamilies, when true, indicates that the lock
+  // eliding optimization should be enabled for tables with multiple column
+  // families.
+  //
+  // This will only have impact when BufferedWritesEnabled is set.
+  bool optimizer_use_lock_elision_multiple_families = 162;
+  // OptimizerEnableLockElision, when false, indicates that the lock eliding
+  // optimization should be disabled for tables with any number of column
+  // families. It takes precedence over OptimizerUseLockElisionMultipleFamilies.
+  //
+  // This will only have impact when BufferedWritesEnabled is set.
+  bool optimizer_enable_lock_elision = 163;
+  // OptimizerUseDeleteRangeFastPath, when true, indicates that the optimizer
+  // should try to use the delete range fast-path when possible.
+  bool optimizer_use_delete_range_fast_path = 164;
+  // AllowCreateTriggerFunctionWithArgvReferences, when true, allows triggers to
+  // be created with trigger functions that use the TG_ARGV parameter even
+  // though it currently doesn't have Postgres-compatible 0-based indexing
+  // behavior.
+  bool allow_create_trigger_function_with_argv_references = 165;
+  // CreateTableWithSchemaLocked, when true will create tables as schema_locked
+  // by default.
+  bool create_table_with_schema_locked = 166;
+  // UsePre_25_2VariadicBuiltins, when true, will treat variadic builtins with a
+  // types.Any variadic argument as types.AnyElement (the pre-25.2 behavior)
+  bool use_pre_25_2_variadic_builtins = 167;
+  // VectorSearchBeamSize controls the number of candidates examined during
+  // vector index searches. It represents the number of vector partitions that
+  // are considered at each level of the search tree. Higher values increase
+  // search accuracy but require more processing resources.
+  int32 vector_search_beam_size = 168;
+  // PropagateAdmissionHeaderToLeafTransactions, when true, causes leaf
+  // transactions to inherit the admission header from the root transaction.
+  bool propagate_admission_header_to_leaf_transactions = 169;
+  // OptimizerUseExistsFilterHoistRule, when true, causes the optimizer to apply
+  // the HoistUnboundFilterFromExistsSubquery rule to EXISTS conditions.
+  bool optimizer_use_exists_filter_hoist_rule = 170;
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //

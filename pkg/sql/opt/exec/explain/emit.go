@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	humanize "github.com/dustin/go-humanize"
@@ -488,6 +489,13 @@ func omitStats(n *Node) bool {
 }
 
 func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context, n *Node) error {
+	timeIfNonZero := func(d optional.Duration, key string) {
+		if d.HasValue() {
+			if t := string(humanizeutil.Duration(d.Value())); t != "0µs" {
+				e.ob.AddField(key, t)
+			}
+		}
+	}
 	var actualRowCount uint64
 	var hasActualRowCount bool
 	if stats, ok := n.annotations[exec.ExecutionStatsID]; ok && !omitStats(n) {
@@ -519,15 +527,9 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		if s.KVTime.HasValue() {
 			e.ob.AddField("KV time", string(humanizeutil.Duration(s.KVTime.Value())))
 		}
-		if s.KVContentionTime.HasValue() {
-			e.ob.AddField("KV contention time", string(humanizeutil.Duration(s.KVContentionTime.Value())))
-		}
-		if s.KVLockWaitTime.HasValue() {
-			e.ob.AddField("KV lock wait time", string(humanizeutil.Duration(s.KVLockWaitTime.Value())))
-		}
-		if s.KVLatchWaitTime.HasValue() {
-			e.ob.AddField("KV latch wait time", string(humanizeutil.Duration(s.KVLatchWaitTime.Value())))
-		}
+		timeIfNonZero(s.KVContentionTime, "KV contention time")
+		timeIfNonZero(s.KVLockWaitTime, "KV lock wait time")
+		timeIfNonZero(s.KVLatchWaitTime, "KV latch wait time")
 		if s.KVRowsRead.HasValue() {
 			e.ob.AddField("KV rows decoded", string(humanizeutil.Count(s.KVRowsRead.Value())))
 		}
@@ -546,6 +548,9 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		}
 		if s.KVBatchRequestsIssued.HasValue() {
 			e.ob.AddField("KV gRPC calls", string(humanizeutil.Count(s.KVBatchRequestsIssued.Value())))
+		}
+		if s.ExecTime.HasValue() {
+			e.ob.AddField("execution time", string(humanizeutil.Duration(s.ExecTime.Value())))
 		}
 		if s.MaxAllocatedMem.HasValue() {
 			e.ob.AddField("estimated max memory allocated", humanize.IBytes(s.MaxAllocatedMem.Value()))
@@ -735,12 +740,8 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 
 	case limitOp:
 		a := n.args.(*limitArgs)
-		if a.Limit != nil {
-			ob.Expr("count", a.Limit, nil /* columns */)
-		}
-		if a.Offset != nil {
-			ob.Expr("offset", a.Offset, nil /* columns */)
-		}
+		ob.Expr("count", a.Limit, nil /* columns */)
+		ob.Expr("offset", a.Offset, nil /* columns */)
 
 	case sortOp:
 		a := n.args.(*sortArgs)
@@ -843,9 +844,7 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 
 	case applyJoinOp:
 		a := n.args.(*applyJoinArgs)
-		if a.OnCond != nil {
-			ob.Expr("pred", a.OnCond, appendColumns(a.Left.Columns(), a.RightColumns...))
-		}
+		ob.Expr("pred", a.OnCond, appendColumns(a.Left.Columns(), a.RightColumns...))
 
 	case lookupJoinOp:
 		a := n.args.(*lookupJoinArgs)
@@ -942,10 +941,15 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		a := n.args.(*vectorSearchArgs)
 		e.emitTableAndIndex("table", a.Table, a.Index, "" /* suffix */)
 		ob.Attr("target count", a.TargetNeighborCount)
-		if ob.flags.Verbose {
-			if !a.PrefixKey.IsEmpty() {
-				ob.Attr("prefix key", a.PrefixKey)
+		if a.PrefixConstraint != nil {
+			params := exec.ScanParams{
+				NeededCols:      a.OutCols,
+				IndexConstraint: a.PrefixConstraint,
 			}
+			e.emitSpans("prefix spans", a.Table, a.Index, params)
+		}
+		if ob.flags.Verbose {
+			// Vectors can have many dimensions, so don't print them unless verbose.
 			ob.Expr("query vector", a.QueryVector, nil /* varColumns */)
 		}
 
@@ -1412,6 +1416,8 @@ func (e *emitter) emitPolicies(ob *OutputBuilder, table cat.Table, n *Node) {
 
 	if applied.PoliciesSkippedForRole {
 		ob.AddField("policies", "exempt for role")
+	} else if applied.PoliciesFilteredAllRows {
+		ob.AddField("policies", "applied (filtered all rows)")
 	} else if applied.Policies.Len() == 0 {
 		ob.AddField("policies", "row-level security enabled, no policies applied.")
 	} else {

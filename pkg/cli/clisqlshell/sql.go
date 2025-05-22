@@ -2169,8 +2169,12 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 			// shell.
 		} else {
 			traceType := ""
+			compact := ""
 			if strings.Contains(c.iCtx.autoTrace, "kv") {
 				traceType = "kv"
+			}
+			if strings.Contains(c.iCtx.autoTrace, "compact") {
+				compact = "COMPACT"
 			}
 			if err := c.runWithInterruptableCtx(func(ctx context.Context) error {
 				defer c.maybeFlushOutput()
@@ -2179,7 +2183,7 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 					c.iCtx.queryOutput, // query output
 					c.iCtx.stdout,      // timings
 					c.iCtx.stderr,      // errors
-					clisqlclient.MakeQuery(fmt.Sprintf("SHOW %s TRACE FOR SESSION", traceType)))
+					clisqlclient.MakeQuery(fmt.Sprintf("SHOW %s %s TRACE FOR SESSION", compact, traceType)))
 			}); err != nil {
 				clierror.OutputError(c.iCtx.stderr, err, true /*showSeverity*/, false /*verbose*/)
 				if c.exitErr == nil {
@@ -2268,14 +2272,14 @@ func (c *cliState) doRunShell(state cliStateEnum, cmdIn, cmdOut, cmdErr *os.File
 		}
 		switch state {
 		case cliStart:
-			//nolint:deferloop TODO(#137605)
+			//nolint:deferloop
 			defer func() {
 				if err := c.closeOutputFile(); err != nil {
 					fmt.Fprintf(cmdErr, "warning: closing output file: %v\n", err)
 				}
 			}()
 			cleanupFn, err := c.configurePreShellDefaults(cmdIn, cmdOut, cmdErr)
-			//nolint:deferloop TODO(#137605)
+			//nolint:deferloop
 			defer cleanupFn()
 			if err != nil {
 				return err

@@ -7,14 +7,19 @@ package logical
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"slices"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -47,6 +52,34 @@ func TestReplicationStatements(t *testing.T) {
 		)
 	}
 
+	prepareStatement := func(t *testing.T, db *gosql.DB, columnTypes []*types.T, statement statements.Statement[tree.Statement]) {
+		t.Helper()
+
+		var types []tree.ResolvableTypeReference
+		for _, typ := range columnTypes {
+			types = append(types, typ)
+		}
+
+		p := tree.Prepare{
+			Name:      tree.Name(fmt.Sprintf("stmt_%d", rand.Int())),
+			Types:     types,
+			Statement: statement.AST,
+		}
+
+		asSql := tree.Serialize(&p)
+		_, err := db.Exec(asSql)
+		require.NoError(t, err)
+	}
+
+	getTypes := func(desc catalog.TableDescriptor) []*types.T {
+		columns := getColumnSchema(desc)
+		types := make([]*types.T, len(columns))
+		for i, col := range columns {
+			types[i] = col.column.GetType()
+		}
+		return types
+	}
+
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
@@ -65,11 +98,9 @@ func TestReplicationStatements(t *testing.T) {
 				insertStmt, err := newInsertStatement(desc)
 				require.NoError(t, err)
 
-				// Test preparing the statement to ensure it is valid SQL.
-				_, err = sqlDB.Exec(fmt.Sprintf("PREPARE stmt_%d AS %s", rand.Int(), insertStmt.String()))
-				require.NoError(t, err)
+				prepareStatement(t, sqlDB, getTypes(desc), insertStmt)
 
-				return insertStmt.String()
+				return insertStmt.SQL
 			case "show-update":
 				var tableName string
 				d.ScanArgs(t, "table", &tableName)
@@ -79,25 +110,47 @@ func TestReplicationStatements(t *testing.T) {
 				updateStmt, err := newUpdateStatement(desc)
 				require.NoError(t, err)
 
-				// Test preparing the statement to ensure it is valid SQL.
-				_, err = sqlDB.Exec(fmt.Sprintf("PREPARE stmt_%d AS %s", rand.Int(), updateStmt.String()))
-				require.NoError(t, err)
+				// update expects previous and current values to be passed as
+				// parameters.
+				types := slices.Concat(getTypes(desc), getTypes(desc))
+				prepareStatement(t, sqlDB, types, updateStmt)
 
-				return updateStmt.String()
+				return updateStmt.SQL
 			case "show-delete":
 				var tableName string
 				d.ScanArgs(t, "table", &tableName)
 
 				desc := getTableDesc(tableName)
 
+				// delete expects previous and current values to be passed as
+				// parameters.
 				deleteStmt, err := newDeleteStatement(desc)
 				require.NoError(t, err)
 
-				// Test preparing the statement to ensure it is valid SQL.
-				_, err = sqlDB.Exec(fmt.Sprintf("PREPARE stmt_%d AS %s", rand.Int(), deleteStmt.String()))
+				types := slices.Concat(getTypes(desc), getTypes(desc))
+				prepareStatement(t, sqlDB, types, deleteStmt)
+
+				return deleteStmt.SQL
+			case "show-select":
+				var tableName string
+				d.ScanArgs(t, "table", &tableName)
+
+				desc := getTableDesc(tableName)
+
+				stmt, err := newBulkSelectStatement(desc)
 				require.NoError(t, err)
 
-				return deleteStmt.String()
+				allColumns := getColumnSchema(desc)
+				var primaryKeyTypes []*types.T
+				for _, col := range allColumns {
+					if col.isPrimaryKey {
+						primaryKeyTypes = append(primaryKeyTypes, types.MakeArray(col.column.GetType()))
+					}
+				}
+
+				prepareStatement(t, sqlDB, primaryKeyTypes, stmt)
+
+				return stmt.SQL
 			default:
 				return "unknown command: " + d.Cmd
 			}

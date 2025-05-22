@@ -16,11 +16,11 @@ import (
 
 const (
 	// rulesVersion version of elements that can be appended to rel rule names.
-	rulesVersion = "-25.2"
+	rulesVersion = "-25.3"
 )
 
 // rulesVersionKey version of elements used by this rule set.
-var rulesVersionKey = clusterversion.V25_2
+var rulesVersionKey = clusterversion.V25_3
 
 // descriptorIsNotBeingDropped creates a clause which leads to the outer clause
 // failing to unify if the passed element is part of a descriptor and
@@ -89,7 +89,7 @@ func isSubjectTo2VersionInvariant(e scpb.Element) bool {
 	}
 	switch e.(type) {
 	case *scpb.CheckConstraint, *scpb.UniqueWithoutIndexConstraint, *scpb.ForeignKeyConstraint,
-		*scpb.ColumnNotNull:
+		*scpb.ColumnNotNull, *scpb.TableSchemaLocked:
 		return true
 	}
 	return false
@@ -113,6 +113,11 @@ func isIndexColumn(e scpb.Element) bool {
 
 func isColumn(e scpb.Element) bool {
 	_, ok := e.(*scpb.Column)
+	return ok
+}
+
+func isTableSchemaLocked(e scpb.Element) bool {
+	_, ok := e.(*scpb.TableSchemaLocked)
 	return ok
 }
 
@@ -358,6 +363,14 @@ func isDescriptorParentReference(e scpb.Element) bool {
 func isOwner(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.Owner:
+		return true
+	}
+	return false
+}
+
+func isSchemaLocked(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.TableSchemaLocked:
 		return true
 	}
 	return false

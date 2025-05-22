@@ -49,6 +49,11 @@ if [ -e /mnt/data1/.roachprod-initialized ]; then
 	exit 0
 fi
 
+# Uninstall some packages to prevent them running cronjobs and similar jobs in parallel
+systemctl stop unattended-upgrades
+sudo rm -rf /var/log/unattended-upgrades
+apt-get purge -y unattended-upgrades
+
 
 
 sudo apt-get update -q
@@ -95,11 +100,6 @@ EOF
 sysctl --system  # reload sysctl settings
 
 
-
-# Uninstall some packages to prevent them running cronjobs and similar jobs in parallel
-systemctl stop unattended-upgrades
-sudo rm -rf /var/log/unattended-upgrades
-apt-get purge -y unattended-upgrades
 
 
 systemctl stop cron
@@ -207,6 +207,7 @@ sudo sh -c 'echo "PubkeyAcceptedAlgorithms +ssh-rsa" >> /etc/ssh/sshd_config'
 
 
 sudo sed -i 's/#LoginGraceTime .*/LoginGraceTime 0/g' /etc/ssh/sshd_config
+sudo sed -i 's/TCPKeepAlive no/TCPKeepAlive yes/g' /etc/ssh/sshd_config
 
 sudo service sshd restart
 sudo service ssh restart

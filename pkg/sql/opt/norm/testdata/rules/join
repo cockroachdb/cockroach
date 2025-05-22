@@ -267,21 +267,17 @@ inner-join (cross)
 norm expect=DetectJoinContradiction expect-not=SimplifyJoinFilters
 SELECT * FROM a LEFT JOIN b ON k<1 AND k>2
 ----
-left-join (cross)
+project
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8 y:9
- ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  ├── key: (1)
- ├── fd: (1)-->(2-5,8,9)
+ ├── fd: ()-->(8,9), (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── values
- │    ├── columns: x:8!null y:9!null
- │    ├── cardinality: [0 - 0]
- │    ├── key: ()
- │    └── fd: ()-->(8,9)
- └── filters (true)
+ └── projections
+      ├── CAST(NULL AS INT8) [as=x:8]
+      └── CAST(NULL AS INT8) [as=y:9]
 
 # --------------------------------------------------
 # DetectJoinContradiction
@@ -299,21 +295,17 @@ values
 norm expect=DetectJoinContradiction
 SELECT * FROM a LEFT JOIN b ON (k<1 AND k>2) OR (k<4 AND k>5)
 ----
-left-join (cross)
+project
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8 y:9
- ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  ├── key: (1)
- ├── fd: (1)-->(2-5,8,9)
+ ├── fd: ()-->(8,9), (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── values
- │    ├── columns: x:8!null y:9!null
- │    ├── cardinality: [0 - 0]
- │    ├── key: ()
- │    └── fd: ()-->(8,9)
- └── filters (true)
+ └── projections
+      ├── CAST(NULL AS INT8) [as=x:8]
+      └── CAST(NULL AS INT8) [as=y:9]
 
 norm expect=DetectJoinContradiction
 SELECT * FROM a INNER JOIN xy ON NULL
@@ -392,7 +384,7 @@ left-join (hash)
       └── i:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
 
 # Semi-join case.
-norm expect=PushFilterIntoJoinLeft
+norm expect=PushFilterIntoJoinLeft disable=HoistUnboundFilterFromExistsSubquery
 SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE x=k AND s='foo')
 ----
 semi-join (hash)
@@ -1201,7 +1193,7 @@ inner-join (cross)
 
 # Regression for issue 28818. Try to trigger undetectable cycle between the
 # PushFilterIntoJoinLeftAndRight and TryDecorrelateSelect rules.
-norm
+norm disable=HoistUnboundJoinFilterFromExistsSubquery
 SELECT 1
 FROM a
 WHERE EXISTS (
@@ -2511,6 +2503,71 @@ left-join (hash)
  └── filters
       └── y:2 = k:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
 
+
+# --------------------------------------------------
+# SimplifyLeftJoinWithZeroRowsRight
+# --------------------------------------------------
+
+norm expect=SimplifyLeftJoinWithZeroRowsRight
+SELECT a.*, b_empty.* FROM a LEFT JOIN (SELECT * FROM b LIMIT 0) AS b_empty ON a.k = b_empty.x
+----
+project
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8 y:9
+ ├── key: (1)
+ ├── fd: ()-->(8,9), (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── projections
+      ├── CAST(NULL AS INT8) [as=x:8]
+      └── CAST(NULL AS INT8) [as=y:9]
+
+norm expect=SimplifyLeftJoinWithZeroRowsRight
+SELECT a.*, vals.* FROM a LEFT JOIN (VALUES (1, 2) LIMIT 0) AS vals(x, y) ON a.k = vals.x
+----
+project
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8 y:9
+ ├── key: (1)
+ ├── fd: ()-->(8,9), (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── projections
+      ├── CAST(NULL AS INT8) [as=column1:8]
+      └── CAST(NULL AS INT8) [as=column2:9]
+
+# No-op case because the join is an inner-join.
+norm expect-not=SimplifyLeftJoinWithZeroRowsRight
+SELECT a.*, b_empty.* FROM a INNER JOIN (SELECT * FROM b LIMIT 0) AS b_empty ON a.k = b_empty.x
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null x:8!null y:9!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5,8,9)
+
+# No-op case because the right input does not have zero rows.
+norm expect-not=SimplifyLeftJoinWithZeroRowsRight
+SELECT a.*, b.* FROM a LEFT JOIN b ON a.k = b.x
+----
+left-join (hash)
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8 y:9
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5,8,9), (8)-->(9)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── scan b
+ │    ├── columns: x:8!null y:9
+ │    ├── key: (8)
+ │    └── fd: (8)-->(9)
+ └── filters
+      └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+
 # --------------------------------------------------
 # EliminateSemiJoin
 # --------------------------------------------------
@@ -2877,6 +2934,56 @@ project
  │    └── filters (true)
  └── projections
       └── c.y:6 [as=k:10, outer=(6)]
+
+# Regression test for #142531 - do not hoist outer-column references from the
+# right input of a left-join.
+exec-ddl
+CREATE TABLE table_142531 (col1_1 INT NOT NULL);
+----
+
+norm expect-not=HoistJoinProjectRight
+SELECT (SELECT t.col1_1 FROM table_142531 WHERE (NOT EXISTS (SELECT (0)))) FROM table_142531 AS t;
+----
+project
+ ├── columns: col1_1:13
+ ├── ensure-distinct-on
+ │    ├── columns: t.rowid:2!null col1_1:12
+ │    ├── grouping columns: t.rowid:2!null
+ │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── key: (2)
+ │    ├── fd: (2)-->(12)
+ │    ├── left-join-apply
+ │    │    ├── columns: t.col1_1:1!null t.rowid:2!null col1_1:12
+ │    │    ├── fd: (2)-->(1)
+ │    │    ├── scan table_142531 [as=t]
+ │    │    │    ├── columns: t.col1_1:1!null t.rowid:2!null
+ │    │    │    ├── key: (2)
+ │    │    │    └── fd: (2)-->(1)
+ │    │    ├── project
+ │    │    │    ├── columns: col1_1:12
+ │    │    │    ├── outer: (1)
+ │    │    │    ├── fd: ()-->(12)
+ │    │    │    ├── select
+ │    │    │    │    ├── scan table_142531
+ │    │    │    │    └── filters
+ │    │    │    │         └── not [subquery]
+ │    │    │    │              └── coalesce
+ │    │    │    │                   ├── subquery
+ │    │    │    │                   │    └── values
+ │    │    │    │                   │         ├── columns: column11:11!null
+ │    │    │    │                   │         ├── cardinality: [1 - 1]
+ │    │    │    │                   │         ├── key: ()
+ │    │    │    │                   │         ├── fd: ()-->(11)
+ │    │    │    │                   │         └── (true,)
+ │    │    │    │                   └── false
+ │    │    │    └── projections
+ │    │    │         └── t.col1_1:1 [as=col1_1:12, outer=(1)]
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         └── const-agg [as=col1_1:12, outer=(12)]
+ │              └── col1_1:12
+ └── projections
+      └── col1_1:12 [as=col1_1:13, outer=(12)]
 
 # --------------------------------------------------
 # HoistJoinProjectLeft

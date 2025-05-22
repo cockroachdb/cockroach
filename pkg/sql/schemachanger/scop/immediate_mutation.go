@@ -38,6 +38,7 @@ type NotImplementedForPublicObjects struct {
 	immediateMutationOp
 	ElementType string
 	DescID      catid.DescID
+	TriggerID   catid.TriggerID
 }
 
 // UndoAllInTxnImmediateMutationOpSideEffects undoes the side effects of all
@@ -1012,10 +1013,14 @@ type UpdateFunctionRelationReferences struct {
 	FunctionReferences []descpb.ID
 }
 
+// UpdateTableBackReferencesInRelations updates the DependedOnBy metadata in
+// relation descriptors (e.g., tableDesc) for triggers. It handles both adding
+// and removing dependencies. The function relies on forward references being
+// set beforehand to determine whether a back-reference should be added or removed.
 type UpdateTableBackReferencesInRelations struct {
 	immediateMutationOp
-	TableID     descpb.ID
-	RelationIDs []descpb.ID
+	TableID            descpb.ID
+	RelationReferences []scpb.TriggerDeps_RelationReference
 }
 
 type SetObjectParentID struct {
@@ -1166,4 +1171,11 @@ type MarkRecreatedIndexesAsVisible struct {
 	immediateMutationOp
 	TableID           descpb.ID
 	IndexVisibilities map[descpb.IndexID]float64
+}
+
+// SetTableSchemaLocked is used to toggle a table schema as locked.
+type SetTableSchemaLocked struct {
+	immediateMutationOp
+	TableID descpb.ID
+	Locked  bool
 }

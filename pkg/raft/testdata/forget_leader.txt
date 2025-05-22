@@ -123,6 +123,8 @@ stabilize
   Messages:
   1->2 MsgFortifyLeader Term:1 Log:0/0
   1->4 MsgFortifyLeader Term:1 Log:0/0
+  OnSync:
+  1->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
 > 2 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:11 Lead:0 LeadEpoch:0
@@ -136,12 +138,12 @@ stabilize
 > 2 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:2
-  Messages:
+  OnSync:
   2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
 > 4 handling Ready
   Ready:
   HardState Term:1 Commit:11 Lead:1 LeadEpoch:2
-  Messages:
+  OnSync:
   4->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
 > 1 receiving messages
   2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2

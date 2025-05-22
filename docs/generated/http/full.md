@@ -3598,6 +3598,9 @@ of ranges currently considered “hot” by the node(s).
 | page_size | [int32](#cockroach.server.serverpb.HotRangesRequest-int32) |  |  | [reserved](#support-status) |
 | page_token | [string](#cockroach.server.serverpb.HotRangesRequest-string) |  |  | [reserved](#support-status) |
 | tenant_id | [string](#cockroach.server.serverpb.HotRangesRequest-string) |  |  | [reserved](#support-status) |
+| nodes | [string](#cockroach.server.serverpb.HotRangesRequest-string) | repeated |  | [reserved](#support-status) |
+| per_node_limit | [int32](#cockroach.server.serverpb.HotRangesRequest-int32) |  | per_node_limit indicates the maximum number of hot ranges to return for each node. If left empty, the default is 128. | [reserved](#support-status) |
+| stats_only | [bool](#cockroach.server.serverpb.HotRangesRequest-bool) |  | stats_only indicates whether to return only the stats for the hot ranges, without pulling descriptor information. | [reserved](#support-status) |
 
 
 
@@ -3646,6 +3649,7 @@ HotRange message describes a single hot range, ie its QPS, node ID it belongs to
 | databases | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) | repeated | Databases for the range. | [reserved](#support-status) |
 | tables | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) | repeated | Tables for the range | [reserved](#support-status) |
 | indexes | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) | repeated | Indexes for the range | [reserved](#support-status) |
+| desc | [cockroach.roachpb.RangeDescriptor](#cockroach.server.serverpb.HotRangesResponseV2-cockroach.roachpb.RangeDescriptor) |  | Range Descriptor for the range | [reserved](#support-status) |
 
 
 
@@ -4541,7 +4545,7 @@ Support status: [reserved](#support-status)
 | statement_diagnostics_id | [int64](#cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse-int64) |  |  | [reserved](#support-status) |
 | requested_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
 | min_execution_latency | [google.protobuf.Duration](#cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse-google.protobuf.Duration) |  |  | [reserved](#support-status) |
-| expires_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse-google.protobuf.Timestamp) |  | TODO(yuzefovich): should we populate plan_gist, anti_plan_gist, and redacted fields? | [reserved](#support-status) |
+| expires_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse-google.protobuf.Timestamp) |  | TODO(yuzefovich): should we populate plan_gist, anti_plan_gist, redacted, and username fields? | [reserved](#support-status) |
 
 
 
@@ -4645,7 +4649,7 @@ Support status: [reserved](#support-status)
 | statement_diagnostics_id | [int64](#cockroach.server.serverpb.StatementDiagnosticsReportsResponse-int64) |  |  | [reserved](#support-status) |
 | requested_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementDiagnosticsReportsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
 | min_execution_latency | [google.protobuf.Duration](#cockroach.server.serverpb.StatementDiagnosticsReportsResponse-google.protobuf.Duration) |  |  | [reserved](#support-status) |
-| expires_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementDiagnosticsReportsResponse-google.protobuf.Timestamp) |  | TODO(yuzefovich): should we populate plan_gist, anti_plan_gist, and redacted fields? | [reserved](#support-status) |
+| expires_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementDiagnosticsReportsResponse-google.protobuf.Timestamp) |  | TODO(yuzefovich): should we populate plan_gist, anti_plan_gist, redacted, and username fields? | [reserved](#support-status) |
 
 
 
@@ -4847,6 +4851,52 @@ Request object for issuing a SQL stats reset request.
 
 Response object returned by ResetSQLStats.
 
+
+
+
+
+
+
+
+## DrainSqlStats
+
+
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [string](#cockroach.server.serverpb.DrainSqlStatsRequest-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| statements | [cockroach.sql.CollectedStatementStatistics](#cockroach.server.serverpb.DrainStatsResponse-cockroach.sql.CollectedStatementStatistics) | repeated |  | [reserved](#support-status) |
+| transactions | [cockroach.sql.CollectedTransactionStatistics](#cockroach.server.serverpb.DrainStatsResponse-cockroach.sql.CollectedTransactionStatistics) | repeated |  | [reserved](#support-status) |
+| fingerprint_count | [int64](#cockroach.server.serverpb.DrainStatsResponse-int64) |  |  | [reserved](#support-status) |
 
 
 

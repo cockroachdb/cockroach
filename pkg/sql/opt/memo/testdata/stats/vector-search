@@ -107,17 +107,20 @@ top-k
       ├── stats: [rows=2]
       ├── key: (1)
       ├── fd: (1)-->(2), (2)-->(5)
-      ├── index-join t
+      ├── inner-join (lookup t)
       │    ├── columns: x:1(int!null) v:2(vector)
+      │    ├── key columns: [1] = [1]
+      │    ├── lookup columns are key
       │    ├── stats: [rows=2]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
-      │    └── vector-search t@t_v_idx,vector
-      │         ├── columns: x:1(int!null)
-      │         ├── target nearest neighbors: 1
-      │         ├── stats: [rows=2]
-      │         ├── key: (1)
-      │         └── '[1,2,3]' [type=vector]
+      │    ├── vector-search t@t_v_idx,vector
+      │    │    ├── columns: x:1(int!null)
+      │    │    ├── target nearest neighbors: 1
+      │    │    ├── stats: [rows=2]
+      │    │    ├── key: (1)
+      │    │    └── '[1,2,3]' [type=vector]
+      │    └── filters (true)
       └── projections
            └── v:2 <-> '[1,2,3]' [as=column5:5, type=float, outer=(2), immutable]
 
@@ -140,17 +143,20 @@ top-k
       ├── stats: [rows=10]
       ├── key: (1)
       ├── fd: (1)-->(2), (2)-->(5)
-      ├── index-join t
+      ├── inner-join (lookup t)
       │    ├── columns: x:1(int!null) v:2(vector)
+      │    ├── key columns: [1] = [1]
+      │    ├── lookup columns are key
       │    ├── stats: [rows=10]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
-      │    └── vector-search t@t_v_idx,vector
-      │         ├── columns: x:1(int!null)
-      │         ├── target nearest neighbors: 5
-      │         ├── stats: [rows=10]
-      │         ├── key: (1)
-      │         └── '[1,2,3]' [type=vector]
+      │    ├── vector-search t@t_v_idx,vector
+      │    │    ├── columns: x:1(int!null)
+      │    │    ├── target nearest neighbors: 5
+      │    │    ├── stats: [rows=10]
+      │    │    ├── key: (1)
+      │    │    └── '[1,2,3]' [type=vector]
+      │    └── filters (true)
       └── projections
            └── v:2 <-> '[1,2,3]' [as=column5:5, type=float, outer=(2), immutable]
 
@@ -174,16 +180,19 @@ top-k
       ├── stats: [rows=1000]
       ├── key: (1)
       ├── fd: (1)-->(2), (2)-->(5)
-      ├── index-join t
+      ├── inner-join (lookup t)
       │    ├── columns: x:1(int!null) v:2(vector)
+      │    ├── key columns: [1] = [1]
+      │    ├── lookup columns are key
       │    ├── stats: [rows=1000]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
-      │    └── vector-search t@t_v_idx,vector
-      │         ├── columns: x:1(int!null)
-      │         ├── target nearest neighbors: 10000
-      │         ├── stats: [rows=1000]
-      │         ├── key: (1)
-      │         └── '[1,2,3]' [type=vector]
+      │    ├── vector-search t@t_v_idx,vector
+      │    │    ├── columns: x:1(int!null)
+      │    │    ├── target nearest neighbors: 10000
+      │    │    ├── stats: [rows=1000]
+      │    │    ├── key: (1)
+      │    │    └── '[1,2,3]' [type=vector]
+      │    └── filters (true)
       └── projections
            └── v:2 <-> '[1,2,3]' [as=column5:5, type=float, outer=(2), immutable]

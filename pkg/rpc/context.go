@@ -115,7 +115,7 @@ func NewServerEx(
 		if err != nil {
 			return nil, nil, sii, err
 		}
-		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(tlsConfig)))
+		grpcOpts = append(grpcOpts, grpc.Creds(newTLSCipherRestrictCred(tlsConfig)))
 	}
 
 	// These interceptors will be called in the order in which they appear, i.e.
@@ -148,6 +148,9 @@ func NewServerEx(
 	if o.metricsInterceptor != nil {
 		unaryInterceptor = append(unaryInterceptor, grpc.UnaryServerInterceptor(o.metricsInterceptor))
 	}
+
+	// Recover from any uncaught panics caused by DB Console requests.
+	unaryInterceptor = append(unaryInterceptor, grpc.UnaryServerInterceptor(gatewayRequestRecoveryInterceptor))
 
 	if !rpcCtx.ContextOptions.Insecure {
 		a := kvAuth{

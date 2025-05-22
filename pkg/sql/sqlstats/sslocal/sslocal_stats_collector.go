@@ -13,11 +13,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 )
 
-type bufferedStmtStats []sqlstats.RecordedStmtStats
+type bufferedStmtStats []*sqlstats.RecordedStmtStats
 
 // StatsCollector is used to collect statistics for transactions and
 // statements for the entire lifetime of a session. It must be closed
@@ -63,10 +62,6 @@ type StatsCollector struct {
 	// this value will be 0.
 	stmtFingerprintID appstatspb.StmtFingerprintID
 
-	// Allows StatsCollector to send statement and transaction stats to the
-	// insights system. Set to nil to disable persistence of insights.
-	insightsWriter *insights.ConcurrentBufferIngester
-
 	// phaseTimes tracks session-level phase times.
 	phaseTimes sessionphase.Times
 
@@ -92,6 +87,8 @@ type StatsCollector struct {
 	// fingerprint counters tracked per server.
 	uniqueServerCounts *ssmemstorage.SQLStatsAtomicCounters
 
+	statsIngester *SQLStatsIngester
+
 	st    *cluster.Settings
 	knobs *sqlstats.TestingKnobs
 }
@@ -100,7 +97,7 @@ type StatsCollector struct {
 func NewStatsCollector(
 	st *cluster.Settings,
 	appStats *ssmemstorage.Container,
-	insights *insights.ConcurrentBufferIngester,
+	ingester *SQLStatsIngester,
 	phaseTime *sessionphase.Times,
 	uniqueServerCounts *ssmemstorage.SQLStatsAtomicCounters,
 	underOuterTxn bool,
@@ -110,9 +107,9 @@ func NewStatsCollector(
 		flushTarget:                appStats,
 		stmtBuf:                    make(bufferedStmtStats, 0, 1),
 		writeDirectlyToFlushTarget: underOuterTxn,
-		insightsWriter:             insights,
 		phaseTimes:                 *phaseTime,
 		uniqueServerCounts:         uniqueServerCounts,
+		statsIngester:              ingester,
 		st:                         st,
 		knobs:                      knobs,
 	}
@@ -149,8 +146,8 @@ func (s *StatsCollector) Reset(appStats *ssmemstorage.Container, phaseTime *sess
 // that owns this stats collector.
 func (s *StatsCollector) Close(_ctx context.Context, sessionID clusterunique.ID) {
 	s.stmtBuf = nil
-	if s.insightsWriter != nil {
-		s.insightsWriter.ClearSession(sessionID)
+	if s.statsIngester != nil {
+		s.statsIngester.ClearSession(sessionID)
 	}
 }
 
@@ -218,22 +215,19 @@ func (s *StatsCollector) shouldObserveInsights() bool {
 
 // RecordStatement records the statistics of a statement.
 func (s *StatsCollector) RecordStatement(
-	ctx context.Context, value sqlstats.RecordedStmtStats,
+	ctx context.Context, value *sqlstats.RecordedStmtStats,
 ) error {
-	if s.sendInsights && s.insightsWriter != nil {
-		insight := insights.MakeStmtInsight(value)
-		s.insightsWriter.ObserveStatement(value.SessionID, insight)
+	if s.sendInsights && s.statsIngester != nil {
+		s.statsIngester.IngestStatement(value)
 	}
 
 	// TODO(xinhaoz): This isn't the best place to set this, but we'll clean this up
 	// when we refactor the stats collection code to send the stats to an ingester.
 	s.stmtFingerprintID = value.FingerprintID
-
 	if s.writeDirectlyToFlushTarget {
 		err := s.flushTarget.RecordStatement(ctx, value)
 		return err
 	}
-
 	s.stmtBuf = append(s.stmtBuf, value)
 	return nil
 }
@@ -241,17 +235,17 @@ func (s *StatsCollector) RecordStatement(
 // RecordTransaction records the statistics of a transaction.
 // Transaction stats are always recorded directly on the flushTarget.
 func (s *StatsCollector) RecordTransaction(
-	ctx context.Context, value sqlstats.RecordedTxnStats,
+	ctx context.Context, value *sqlstats.RecordedTxnStats,
 ) error {
-	if s.sendInsights && s.insightsWriter != nil {
-		insight := insights.MakeTxnInsight(value)
-		s.insightsWriter.ObserveTransaction(value.SessionID, insight)
+	if s.sendInsights && s.statsIngester != nil {
+		s.statsIngester.IngestTransaction(value)
 	}
 
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	if !sqlstats.TxnStatsEnable.Get(&s.st.SV) {
 		return nil
 	}
+
 	// Do not collect transaction statistics if the stats collection latency
 	// threshold is set, since our transaction UI relies on having stats for every
 	// statement in the transaction.
@@ -267,8 +261,7 @@ func (s *StatsCollector) RecordTransaction(
 // property is part of the statement fingerprint ID, we need to update the
 // fingerprint ID of all the statements in the current transaction.
 func (s *StatsCollector) UpgradeToExplicitTransaction() {
-	for i := range s.stmtBuf {
-		stmt := &s.stmtBuf[i]
+	for _, stmt := range s.stmtBuf {
 		// Recalculate stmt fingerprint id.
 		stmt.ImplicitTxn = false
 		stmt.FingerprintID = appstatspb.ConstructStatementFingerprintID(stmt.Query, false /* implicit */, stmt.Database)

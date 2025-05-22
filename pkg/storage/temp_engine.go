@@ -30,8 +30,8 @@ func NewTempEngine(
 }
 
 type pebbleTempEngine struct {
-	db        *pebble.DB
-	closeFunc func()
+	db  *pebble.DB
+	env *fs.Env
 }
 
 // Close implements the diskmap.Factory interface.
@@ -39,7 +39,7 @@ func (r *pebbleTempEngine) Close() {
 	if err := r.db.Close(); err != nil {
 		log.Fatalf(context.TODO(), "%v", err)
 	}
-	r.closeFunc()
+	r.env.Close()
 }
 
 // NewSortedDiskMap implements the diskmap.Factory interface.
@@ -110,6 +110,7 @@ func newPebbleTempEngine(
 			cfg.opts.KeySchema = ""
 			cfg.opts.DisableWAL = true
 			cfg.opts.Experimental.UserKeyCategories = pebble.UserKeyCategories{}
+			cfg.opts.Experimental.SpanPolicyFunc = nil
 			cfg.opts.BlockPropertyCollectors = nil
 			cfg.opts.EnableSQLRowSpillMetrics = true
 			cfg.DiskWriteStatsCollector = statsCollector
@@ -124,7 +125,7 @@ func newPebbleTempEngine(
 	// temp stores so this cannot error out.
 	_ = p.SetStoreID(ctx, base.TempStoreID)
 	return &pebbleTempEngine{
-		db:        p.db,
-		closeFunc: env.Close,
+		db:  p.db,
+		env: env,
 	}, env, nil
 }

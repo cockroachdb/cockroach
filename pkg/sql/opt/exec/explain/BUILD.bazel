@@ -41,6 +41,7 @@ go_library(
         "//pkg/util/errorutil",
         "//pkg/util/humanizeutil",
         "//pkg/util/intsets",
+        "//pkg/util/optional",
         "//pkg/util/timeutil",
         "//pkg/util/treeprinter",
         "@com_github_cockroachdb_errors//:errors",
@@ -51,7 +52,7 @@ go_library(
 
 go_test(
     name = "explain_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "explain_factory_test.go",
         "main_test.go",

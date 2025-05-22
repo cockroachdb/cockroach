@@ -1,3 +1,7 @@
+# TODO(#144279): remove this.
+statement ok
+SET kv_transaction_buffered_writes_enabled = false;
+
 statement ok
 ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO PUBLIC;
 ALTER DEFAULT PRIVILEGES GRANT USAGE ON TYPES TO PUBLIC;

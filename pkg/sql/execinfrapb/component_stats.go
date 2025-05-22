@@ -116,6 +116,14 @@ func printNodeIDs(nodeIDs []int32) redact.SafeString {
 
 // formatStats calls fn for each statistic that is set. value can be nil.
 func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) {
+	timeIfNonZero := func(d optional.Duration, suffix string) {
+		if d.HasValue() {
+			if t := humanizeutil.Duration(d.Value()); t != "0µs" {
+				fn(suffix, t)
+			}
+		}
+	}
+
 	// Network Rx stats.
 	if s.NetRx.Latency.HasValue() {
 		fn("network latency", humanizeutil.Duration(s.NetRx.Latency.Value()))
@@ -185,15 +193,9 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 	if s.KV.KVTime.HasValue() {
 		fn("KV time", humanizeutil.Duration(s.KV.KVTime.Value()))
 	}
-	if s.KV.ContentionTime.HasValue() {
-		fn("KV contention time", humanizeutil.Duration(s.KV.ContentionTime.Value()))
-	}
-	if s.KV.LockWaitTime.HasValue() {
-		fn("KV lock wait time", humanizeutil.Duration(s.KV.LockWaitTime.Value()))
-	}
-	if s.KV.LatchWaitTime.HasValue() {
-		fn("KV latch wait time", humanizeutil.Duration(s.KV.LatchWaitTime.Value()))
-	}
+	timeIfNonZero(s.KV.ContentionTime, "KV contention time")
+	timeIfNonZero(s.KV.LockWaitTime, "KV lock wait time")
+	timeIfNonZero(s.KV.LatchWaitTime, "KV latch wait time")
 	if s.KV.TuplesRead.HasValue() {
 		fn("KV rows decoded", humanizeutil.Count(s.KV.TuplesRead.Value()))
 	}

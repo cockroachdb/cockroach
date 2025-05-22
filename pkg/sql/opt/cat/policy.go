@@ -6,6 +6,8 @@
 package cat
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -27,6 +29,9 @@ const (
 	PolicyScopeUpdate
 	// PolicyScopeDelete indicates that the policy applies to DELETE operations.
 	PolicyScopeDelete
+	// PolicyScopeUpsert is used to indicate it's an INSERT ... ON CONFLICT
+	// statement.
+	PolicyScopeUpsert
 	// PolicyScopeExempt indicates that the operation is exempt from row-level security policies.
 	PolicyScopeExempt
 )
@@ -58,7 +63,7 @@ type Policy struct {
 	Command catpb.PolicyCommand
 	// roles are the roles the applies to. If the policy applies to all roles (aka
 	// public), this will be nil.
-	roles map[string]struct{}
+	roles map[username.SQLUsername]struct{}
 }
 
 // Policies contains the policies for a single table.
@@ -73,7 +78,7 @@ func (p *Policy) InitRoles(roleNames []string) {
 		p.roles = nil
 		return
 	}
-	roles := make(map[string]struct{})
+	roles := make(map[username.SQLUsername]struct{})
 	for _, r := range roleNames {
 		if r == username.PublicRole {
 			// If the public role is defined, there is no need to check the
@@ -82,17 +87,23 @@ func (p *Policy) InitRoles(roleNames []string) {
 			roles = nil
 			break
 		}
-		roles[r] = struct{}{}
+		roleUsername := username.MakeSQLUsernameFromPreNormalizedString(r)
+		roles[roleUsername] = struct{}{}
 	}
 	p.roles = roles
 }
 
-// AppliesToRole checks whether the policy applies to the give role.
-func (p *Policy) AppliesToRole(user username.SQLUsername) bool {
+// AppliesToRole checks whether the policy applies to the given role.
+func (p *Policy) AppliesToRole(ctx context.Context, cat Catalog, user username.SQLUsername) bool {
 	// If no roles are specified, assume the policy applies to all users (public role).
 	if p.roles == nil {
 		return true
 	}
-	_, found := p.roles[user.Normalized()]
-	return found
+
+	// Check if the user belongs to any of the roles in the policy
+	belongs, err := cat.UserIsMemberOfAnyRole(ctx, user, p.roles)
+	if err != nil {
+		panic(err)
+	}
+	return belongs
 }

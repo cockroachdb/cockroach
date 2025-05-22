@@ -312,7 +312,6 @@ func (s *samplerProcessor) mainLoop(
 					timer.Reset(wait)
 					select {
 					case <-timer.C:
-						timer.Read = true
 						break
 					case <-s.FlowCtx.Stopper().ShouldQuiesce():
 						break

@@ -121,7 +121,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 			d.deleteSpans(params, b, spans)
 			log.VEventf(ctx, 2, "fast delete: processing %d spans", len(spans))
 			if err := params.p.txn.Run(ctx, b); err != nil {
-				return row.ConvertBatchError(ctx, d.desc, b)
+				return row.ConvertBatchError(ctx, d.desc, b, false /* alwaysConvertCondFailed */)
 			}
 
 			spans = spans[:0]
@@ -144,7 +144,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		d.deleteSpans(params, b, spans)
 		log.VEventf(ctx, 2, "fast delete: processing %d spans and committing", len(spans))
 		if err := params.p.txn.CommitInBatch(ctx, b); err != nil {
-			return row.ConvertBatchError(ctx, d.desc, b)
+			return row.ConvertBatchError(ctx, d.desc, b, false /* alwaysConvertCondFailed */)
 		}
 		if resumeSpans, err := d.processResults(b.Results, nil /* resumeSpans */); err != nil {
 			return err
@@ -181,10 +181,6 @@ func (d *deleteRangeNode) deleteSpans(params runParams, b *kv.Batch, spans roach
 			if traceKV {
 				log.VEventf(ctx, 2, "DelRange %s - %s", span.Key, span.EndKey)
 			}
-			// TODO(yuzefovich): decide what we do with DeleteRange requests. If
-			// we won't buffer them, then we don't need to make any changes; if
-			// we do buffer them in the interceptor, we'll need to set
-			// to-be-added MustAcquireExclusiveLock flag too.
 			b.DelRange(span.Key, span.EndKey, true /* returnKeys */)
 		}
 	}

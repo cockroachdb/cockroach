@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/redact"
 )
 
 // Config is a configuration struct for the persisted SQL stats subsystem.
@@ -39,6 +41,7 @@ type Config struct {
 	ClusterID               func() uuid.UUID
 	SQLIDContainer          *base.SQLIDContainer
 	JobRegistry             *jobs.Registry
+	FanoutServer            serverpb.SQLStatusServer
 
 	// Metrics.
 	FlushesSuccessful       *metric.Counter
@@ -134,11 +137,6 @@ func (s *PersistedSQLStats) SetFlushDoneSignalCh(sigCh chan<- struct{}) {
 	s.flushDoneMu.signalCh = sigCh
 }
 
-// GetController returns the controller of the PersistedSQLStats.
-func (s *PersistedSQLStats) GetController(server serverpb.SQLStatusServer) *Controller {
-	return NewController(s, server, s.cfg.DB)
-}
-
 func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper *stop.Stopper) {
 	s.tasksDoneWG.Add(1)
 	err := stopper.RunAsyncTask(ctx, "sql-stats-worker", func(ctx context.Context) {
@@ -163,7 +161,6 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 
 			select {
 			case <-timer.C:
-				timer.Read = true
 			case <-resetIntervalChanged:
 				// In this case, we would restart the loop without performing any flush
 				// and recalculate the flush interval in the for-loop's post statement.
@@ -251,4 +248,55 @@ func (s *PersistedSQLStats) jitterInterval(interval time.Duration) time.Duration
 
 	jitteredInterval := time.Duration(frac * float64(interval.Nanoseconds()))
 	return jitteredInterval
+}
+
+// CreateSQLStatsCompactionSchedule implements the tree.SQLStatsController
+// interface.
+func (s *PersistedSQLStats) CreateSQLStatsCompactionSchedule(ctx context.Context) error {
+	return s.cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		_, err := CreateSQLStatsCompactionScheduleIfNotYetExist(ctx, txn, s.cfg.Settings, s.cfg.ClusterID())
+		return err
+	})
+}
+
+func (s *PersistedSQLStats) ResetClusterSQLStats(ctx context.Context) error {
+	// Reset the in-memory stats on all nodes.
+	req := &serverpb.ResetSQLStatsRequest{}
+	if _, err := s.cfg.FanoutServer.ResetSQLStats(ctx, req); err != nil {
+		// Failure to flush in-memory stats is not fatal. We should still
+		// try to reset the persisted stats.
+		log.Warningf(ctx, "error resetting in-memory sql stats: %s", err)
+	}
+
+	// Reset persisted stats by truncating tables.
+	if err := s.resetSysTableStats(ctx, "system.statement_statistics"); err != nil {
+		return err
+	}
+
+	if err := s.resetSysTableStats(ctx, "system.transaction_statistics"); err != nil {
+		return err
+	}
+
+	return s.ResetActivityTables(ctx)
+}
+
+// ResetActivityTables implements the tree.SQLStatsController interface. This
+// method resets the {statement|transaction}_activity system tables.
+func (s *PersistedSQLStats) ResetActivityTables(ctx context.Context) error {
+	if err := s.resetSysTableStats(ctx, "system.statement_activity"); err != nil {
+		return err
+	}
+
+	return s.resetSysTableStats(ctx, "system.transaction_activity")
+}
+
+func (s *PersistedSQLStats) resetSysTableStats(ctx context.Context, tableName string) (err error) {
+	ex := s.cfg.DB.Executor()
+	_, err = ex.ExecEx(
+		ctx,
+		redact.Sprintf("reset-%s", tableName),
+		nil, /* txn */
+		sessiondata.NodeUserSessionDataOverride,
+		"TRUNCATE "+tableName)
+	return err
 }

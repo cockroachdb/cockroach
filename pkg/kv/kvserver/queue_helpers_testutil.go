@@ -8,6 +8,7 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -91,6 +92,23 @@ func (s *Store) ForceRaftSnapshotQueueProcess() error {
 // ForceConsistencyQueueProcess runs all the ranges through the consistency
 // queue.
 func (s *Store) ForceConsistencyQueueProcess() error {
+	var errorResettingTimestamp error
+	// Reset the consistency checker last processed timestamp. This is to ensure
+	// that the consistency checker actually runs on all replicas. This is
+	// especially important now that new replicas start with their consistency
+	// checker last processed timestamp set to "now".
+	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
+		if err := repl.setQueueLastProcessed(
+			context.Background(), "consistencyChecker", hlc.Timestamp{}); err != nil {
+			errorResettingTimestamp = err
+		}
+		return true
+	})
+
+	if errorResettingTimestamp != nil {
+		return errorResettingTimestamp
+	}
+
 	return forceScanAndProcess(context.TODO(), s, s.consistencyQueue.baseQueue)
 }
 

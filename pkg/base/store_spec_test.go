@@ -14,7 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -219,8 +219,8 @@ target_file_size=2097152`
 // StoreSpec aliases base.StoreSpec for convenience.
 type StoreSpec = base.StoreSpec
 
-// SizeSpec aliases storagepb.SizeSpec for convenience.
-type SizeSpec = storagepb.SizeSpec
+// SizeSpec aliases storageconfig.SizeSpec for convenience.
+type SizeSpec = storageconfig.SizeSpec
 
 func TestStoreSpecListPreventedStartupMessage(t *testing.T) {
 	defer leaktest.AfterTest(t)()

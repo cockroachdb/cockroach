@@ -317,6 +317,7 @@ func TestCrashReportingSafeError(t *testing.T) {
 			errStr = fileref.ReplaceAllString(errStr, "...$2:NN")
 			errStr = strings.ReplaceAll(errStr, "asm_arm64.s", "asm_amd64.s")
 			errStr = strings.ReplaceAll(errStr, "asm_ppc64x.s", "asm_amd64.s")
+			errStr = strings.ReplaceAll(errStr, "asm_s390x.s", "asm_amd64.s")
 			if errStr != test.expErr {
 				diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
 					A:        difflib.SplitLines(test.expErr),

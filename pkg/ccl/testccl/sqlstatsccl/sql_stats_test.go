@@ -7,7 +7,6 @@ package sqlstatsccl_test
 
 import (
 	"context"
-	gosql "database/sql"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -19,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -85,40 +85,45 @@ func TestSQLStatsRegions(t *testing.T) {
 
 	tdb := sqlutils.MakeSQLRunner(host.ServerConn(0))
 	tdb.Exec(t, `ALTER RANGE meta configure zone using constraints = '{"+region=gcp-us-west1": 1, "+region=gcp-us-central1": 1, "+region=gcp-us-east1": 1}';`)
+	tdbObs := sqlutils.MakeSQLRunner(host.ServerConn(0))
 
 	// Create secondary tenants
-	var tenantDbs []*gosql.DB
+	var tenants []serverutils.ApplicationLayerInterface
 	for _, server := range host.Servers {
-		_, tenantDb := serverutils.StartTenant(t, server, base.TestTenantArgs{
+		tenant, _ := serverutils.StartTenant(t, server, base.TestTenantArgs{
 			TenantID: roachpb.MustMakeTenantID(11),
 			Locality: server.Locality(),
 		})
-		tenantDbs = append(tenantDbs, tenantDb)
+		tenants = append(tenants, tenant)
 	}
 
 	systemDbName := "testDbSystem"
 	createMultiRegionDbAndTable(t, tdb, regionNames, systemDbName)
-	tenantRunner := sqlutils.MakeSQLRunner(tenantDbs[1])
+	tenantRunner := sqlutils.MakeSQLRunner(tenants[1].SQLConn(t))
 	tenantDbName := "testDbTenant"
 	createMultiRegionDbAndTable(t, tenantRunner, regionNames, tenantDbName)
+	tenantRunnerObs := sqlutils.MakeSQLRunner(tenants[1].SQLConn(t))
 
 	testCases := []struct {
-		name   string
-		dbName string
-		db     *sqlutils.SQLRunner
+		name    string
+		dbName  string
+		db      *sqlutils.SQLRunner
+		obsConn *sqlutils.SQLRunner
 	}{{
 		// This test runs against the system tenant, opening a database
 		// connection to the first node in the cluster.
-		name:   "system tenant",
-		dbName: systemDbName,
-		db:     tdb,
+		name:    "system tenant",
+		dbName:  systemDbName,
+		db:      tdb,
+		obsConn: tdbObs,
 	}, {
 		// This test runs against a secondary tenant, launching a SQL instance
 		// for each node in the underlying cluster and returning a database
 		// connection to the first one.
-		name:   "secondary tenant",
-		dbName: tenantDbName,
-		db:     tenantRunner,
+		name:    "secondary tenant",
+		dbName:  tenantDbName,
+		db:      tenantRunner,
+		obsConn: tenantRunnerObs,
 	}}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -162,7 +167,11 @@ func TestSQLStatsRegions(t *testing.T) {
 				// Select from the table and see what statement statistics were written.
 				db.Exec(t, "SET application_name = $1", t.Name())
 				db.Exec(t, "SELECT * FROM test")
-				row := db.QueryRow(t, `
+				sqlstatstestutil.WaitForStatementEntriesAtLeast(t, tc.obsConn, 1, sqlstatstestutil.StatementFilter{
+					App: t.Name(),
+				})
+
+				row := tc.obsConn.QueryRow(t, `
 				SELECT statistics->>'statistics'
 				  FROM crdb_internal.statement_statistics
 				 WHERE app_name = $1`, t.Name())

@@ -1,0 +1,74 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+load("//pkg/sql/schemachanger/sctest/sctestgen:gen.bzl", "sctest_gen")
+
+go_test(
+    name = "sctestbackupccl_test",
+    size = "enormous",
+    srcs = [
+        "main_test.go",
+        ":test_gen",  # keep
+        ":test_gen_multiregion",  # keep
+    ],
+    data = [
+        "//pkg/ccl/schemachangerccl:end_to_end_ccl_testdata",
+        "//pkg/sql/schemachanger:end_to_end_testdata",
+    ],
+    exec_properties = {"test.Pool": "heavy"},
+    shard_count = 48,
+    tags = ["cpu:3"],
+    deps = [
+        "//pkg/ccl",
+        "//pkg/ccl/schemachangerccl",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/schemachanger/sctest",  # keep
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",  # keep
+        "//pkg/util/log",  # keep
+        "//pkg/util/randutil",
+    ],
+)
+
+sctest_gen(
+    name = "test_gen",
+    out = "backup_base_generated_test.go",
+    ccl = True,
+    new_cluster_factory = "sctest.SingleNodeTestClusterFactory{}",
+    package = "sctestbackupccl",
+    suffix = "_base",
+    test_data = [
+        "//pkg/sql/schemachanger:end_to_end_testdata_definitions",
+    ],
+    tests = [
+        "BackupRollbacks",
+        "BackupRollbacksMixedVersion",
+        "BackupSuccess",
+        "BackupSuccessMixedVersion",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+sctest_gen(
+    name = "test_gen_multiregion",
+    out = "backup_multiregion_generated_test.go",
+    ccl = True,
+    new_cluster_factory = "MultiRegionTestClusterFactory{}",
+    package = "sctestbackupccl",
+    suffix = "_multiregion",
+    test_data = ["//pkg/ccl/schemachangerccl:end_to_end_ccl_testdata_definitions"],
+    tests = [
+        "BackupRollbacks",
+        "BackupRollbacksMixedVersion",
+        "BackupSuccess",
+        "BackupSuccessMixedVersion",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)

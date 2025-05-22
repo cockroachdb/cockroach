@@ -3200,30 +3200,31 @@ func TestLeaseDescriptorRangeFeedFailure(t *testing.T) {
 	var srv serverutils.TestClusterInterface
 	var enableAfterStageKnob atomic.Bool
 	var rangeFeedResetChan chan struct{}
+	grp := ctxgroup.WithContext(ctx)
 	srv = serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Settings: settings,
 			Knobs: base.TestingKnobs{
 				SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 					BeforeStage: func(p scplan.Plan, stageIdx int) error {
-						// Once this stage completes, we can "resume" the range feed,
-						// so the update is detected.
-						if p.Params.ExecutionPhase == scop.PostCommitPhase &&
-							enableAfterStageKnob.Load() &&
-							strings.Contains(p.Statements[0].Statement, "ALTER TABLE t1 ADD COLUMN j INT DEFAULT 64") {
-							rangeFeedResetChan = srv.ApplicationLayer(1).LeaseManager().(*lease.Manager).TestingSetDisableRangeFeedCheckpointFn(true)
+						// Skip if the knob is disabled
+						if !enableAfterStageKnob.Load() ||
+							!strings.Contains(p.Statements[0].Statement, "ALTER TABLE t1 ADD COLUMN j INT8 DEFAULT 64") ||
+							p.Params.ExecutionPhase != scop.PostCommitPhase {
+							return nil
 						}
-						return nil
-					},
-					AfterStage: func(p scplan.Plan, stageIdx int) error {
 						// Once this stage completes, we can "resume" the range feed,
 						// so the update is detected.
-						if p.Params.ExecutionPhase == scop.PostCommitPhase &&
-							enableAfterStageKnob.Load() &&
-							strings.Contains(p.Statements[0].Statement, "ALTER TABLE t1 ADD COLUMN j INT DEFAULT 64") {
-							<-rangeFeedResetChan
-							srv.ApplicationLayer(1).LeaseManager().(*lease.Manager).TestingSetDisableRangeFeedCheckpointFn(false)
+						if stageIdx == 0 {
+							rangeFeedResetChan = srv.ApplicationLayer(1).LeaseManager().(*lease.Manager).TestingSetDisableRangeFeedCheckpointFn(true)
 							enableAfterStageKnob.Swap(false)
+							grp.Go(func() error {
+								// Once this channel is closed we know for certain the range feed has
+								// recovered. Allow updates so that descriptors are refreshed and purged.
+								<-rangeFeedResetChan
+								srv.ApplicationLayer(1).LeaseManager().(*lease.Manager).TestingSetDisableRangeFeedCheckpointFn(false)
+								return nil
+							})
 						}
 						return nil
 					},
@@ -3260,6 +3261,8 @@ func TestLeaseDescriptorRangeFeedFailure(t *testing.T) {
 			t.Fatal("no error encountered")
 		}
 	}
+	require.NoError(t, grp.Wait())
+	require.Falsef(t, enableAfterStageKnob.Load(), "testing knob was not hit")
 }
 
 // TestLeaseTableWriteFailure is used to ensure that sqlliveness heart-beating

@@ -435,7 +435,7 @@ func TestUpdateLastUpdateTimesUsingStoreLiveness(t *testing.T) {
 			// Also see updateLastUpdateTimesUsingStoreLivenessRLocked which is the
 			// method being tested here.
 			DisableUpdateLastUpdateTimesMapOnRaftGroupStep: func(r *kvserver.Replica) bool {
-				return r.SupportFromEnabled()
+				return r.SupportFromEnabled(r.DescRLocked())
 			},
 		},
 	}
@@ -544,6 +544,11 @@ func TestLeaseQueueRaceReplicateQueue(t *testing.T) {
 func TestLeaseQueueShedsOnIOOverload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// The SucceedsSoon has been observed to occasionally time out in both
+	// deadlock and race builds.
+	skip.UnderDuressWithIssue(t, 138903)
+
 	ctx := context.Background()
 
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})

@@ -24,8 +24,6 @@ grants 4GB or more of RAM to containers. On some systems, the default
 configuration limits containers to 2GB memory usage and this can be insufficient
 to build/link a CockroachDB executable.
 
-There is a FIPS analogue to this image as well.
-
 ### Deployment
 
 The deploy image is a downsized image containing a minimal environment for
@@ -75,6 +73,10 @@ do so:
 
 # Updating the golang version
 
+The Go upgrade process is documented [here](https://cockroachlabs.atlassian.net/wiki/spaces/devinf/pages/4193714322/CockroachDB+Go+upgrade+policy+and+process).
+This checklist is meant to be followed by the dev-inf team member that
+performs the upgrade and constructs the draft PR.
+
 Please copy this checklist into the relevant commit message and perform these
 steps:
 
@@ -87,7 +89,8 @@ steps:
 * [ ] Adjust `--@io_bazel_rules_go//go/toolchain:sdk_version` in [.bazelrc](../.bazelrc).
 * [ ] Bump the version in `WORKSPACE` under `go_download_sdk`. You may need to bump [rules_go](https://github.com/bazelbuild/rules_go/releases). Also edit the filenames listed in `sdks` and update all the hashes to match what you built in the step above.
 * [ ] Bump the version in `WORKSPACE` under `go_download_sdk` for the FIPS version of Go (`go_sdk_fips`).
-* [ ] Run `./dev generate bazel` to refresh `distdir_files.bzl`, then `bazel fetch @distdir//:archives` to ensure you've updated all hashes to the correct value.
+* [ ] Upgrade golang.org/x packages; these are maintained by the Go project and it's reasonable to upgrade them when doing our Go upgrade. Run `grep -e '^\tgolang.org/x' go.mod | grep -v vcs | grep -v image | grep -v typeparams | cut -w -f2 | sed 's/$/@latest/' | xargs go get`. (Note: we don't upgrade certain libraries that are not linked into CRDB, hence the `grep -v`.)
+* [ ] Run `./dev generate bazel --mirror`, then `bazel fetch @distdir//:archives` to ensure you've updated all hashes to the correct value.
 * [ ] Bump the go version in `go.mod`.
 * [ ] Bump the default installed version of Go in `bootstrap-debian.sh` ([source](./bootstrap/bootstrap-debian.sh)).
 * [ ] Replace other mentions of the older version of go (grep for `golang:<old_version>` and `go<old_version>`).
@@ -104,9 +107,8 @@ the following steps:
 - Edit `build/bazelbuilder/Dockerfile` as desired.
 - Build the image by triggering the `Build and Push Bazel Builder Image` build in TeamCity. The generated image will be published to `us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel`.
 - Update `build/.bazelbuilderversion` with the new tag and commit all your changes.
-- Build the FIPS image by triggering the `Build and Push FIPS Bazel Builder Image` build in TeamCity. The generated image will be published to `us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel-fips`.
-- Update `build/.bazelbuilderversion-fips` with the new tag and commit all your changes.
-- Ensure the "Bazel CI" job passes on your PR before merging.
+- In `build/toolchains/BUILD.bazel`, update the Docker image with the correct hashes for `x86_64` and `arm64` respectively. In the `container-image` for the `cross_linux` and `cross_linux_arm` `platform()`s in that file, update the SHA256 hashes to match whatever is in the manifest for the newly generated Docker image. You can check for the new hashes in the artifact registry in GCP ([example link](https://console.cloud.google.com/artifacts/docker/crl-ci-images/us-east1/cockroach/bazel/sha256:733f2353da58a9f910a397b1b9e367ef0a74f3bde4e80552bfcebf0e20f67954;tab=manifest?project=crl-ci-images) -- but make sure to check the manifest for the newly built image!)
+- Ensure the "GitHub Actions Essential CI" job passes on your PR before merging.
 
 #  Dependencies
 

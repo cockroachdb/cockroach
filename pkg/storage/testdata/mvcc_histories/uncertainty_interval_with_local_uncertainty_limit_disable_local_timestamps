@@ -81,7 +81,7 @@ with k=k5
 ----
 put: lock acquisition = {k5 id=00000001 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000001 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 gul=0,0
 data: "k1"/20.000000000,0 -> /BYTES/v2
 data: "k1"/10.000000000,0 -> /BYTES/v1
 data: "k2"/20.000000000,0 -> /BYTES/v4
@@ -102,7 +102,7 @@ with k=k6
 ----
 put: lock acquisition = {k6 id=00000002 key="k6" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "B" meta={id=00000002 key="k6" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
+txn: "B" meta={id=00000002 key="k6" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 gul=0,0
 data: "k1"/20.000000000,0 -> /BYTES/v2
 data: "k1"/10.000000000,0 -> /BYTES/v1
 data: "k2"/20.000000000,0 -> /BYTES/v4
@@ -126,7 +126,7 @@ with k=k7
 ----
 put: lock acquisition = {k7 id=00000003 key="k7" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "C" meta={id=00000003 key="k7" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
+txn: "C" meta={id=00000003 key="k7" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 gul=0,0
 data: "k1"/20.000000000,0 -> /BYTES/v2
 data: "k1"/10.000000000,0 -> /BYTES/v1
 data: "k2"/20.000000000,0 -> /BYTES/v4
@@ -153,7 +153,7 @@ with k=k8
 ----
 put: lock acquisition = {k8 id=00000004 key="k8" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "D" meta={id=00000004 key="k8" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
+txn: "D" meta={id=00000004 key="k8" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 gul=0,0
 data: "k1"/20.000000000,0 -> /BYTES/v2
 data: "k1"/10.000000000,0 -> /BYTES/v1
 data: "k2"/20.000000000,0 -> /BYTES/v4
@@ -192,7 +192,7 @@ run ok
 txn_begin t=txn1 ts=5,0 globalUncertaintyLimit=10,0
 ----
 >> at end:
-txn: "txn1" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=10.000000000,0
+txn: "txn1" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 gul=10.000000000,0
 
 run ok
 get t=txn1 k=k1 localUncertaintyLimit=5,0
@@ -279,7 +279,7 @@ run ok
 txn_begin t=txn2 ts=5,0 globalUncertaintyLimit=15,0
 ----
 >> at end:
-txn: "txn2" meta={id=00000006 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=15.000000000,0
+txn: "txn2" meta={id=00000006 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 gul=15.000000000,0
 
 run ok
 get t=txn2 k=k1 localUncertaintyLimit=5,0
@@ -366,7 +366,7 @@ run ok
 txn_begin t=txn3 ts=5,0 globalUncertaintyLimit=20,0
 ----
 >> at end:
-txn: "txn3" meta={id=00000007 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=20.000000000,0
+txn: "txn3" meta={id=00000007 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 gul=20.000000000,0
 
 run ok
 get t=txn3 k=k1 localUncertaintyLimit=5,0
@@ -453,7 +453,7 @@ run ok
 txn_begin t=txn4 ts=5,0 globalUncertaintyLimit=25,0
 ----
 >> at end:
-txn: "txn4" meta={id=00000008 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=25.000000000,0
+txn: "txn4" meta={id=00000008 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 gul=25.000000000,0
 
 run ok
 get t=txn4 k=k1 localUncertaintyLimit=5,0
@@ -540,7 +540,7 @@ run ok
 txn_begin t=txn5 ts=5,0 globalUncertaintyLimit=15,0
 ----
 >> at end:
-txn: "txn5" meta={id=00000009 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=15.000000000,0
+txn: "txn5" meta={id=00000009 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 gul=15.000000000,0
 
 run error
 get t=txn5 k=k1 localUncertaintyLimit=10,0
@@ -643,7 +643,7 @@ run ok
 txn_begin t=txn6 ts=5,0 globalUncertaintyLimit=20,0
 ----
 >> at end:
-txn: "txn6" meta={id=0000000a key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=20.000000000,0
+txn: "txn6" meta={id=0000000a key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 gul=20.000000000,0
 
 run error
 get t=txn6 k=k1 localUncertaintyLimit=10,0
@@ -746,7 +746,7 @@ run ok
 txn_begin t=txn7 ts=5,0 globalUncertaintyLimit=25,0
 ----
 >> at end:
-txn: "txn7" meta={id=0000000b key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=25.000000000,0
+txn: "txn7" meta={id=0000000b key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 gul=25.000000000,0
 
 run error
 get t=txn7 k=k1 localUncertaintyLimit=10,0
@@ -849,7 +849,7 @@ run ok
 txn_begin t=txn8 ts=5,0 globalUncertaintyLimit=20,0
 ----
 >> at end:
-txn: "txn8" meta={id=0000000c key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=20.000000000,0
+txn: "txn8" meta={id=0000000c key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 gul=20.000000000,0
 
 run error
 get t=txn8 k=k1 localUncertaintyLimit=15,0
@@ -952,7 +952,7 @@ run ok
 txn_begin t=txn9 ts=5,0 globalUncertaintyLimit=25,0
 ----
 >> at end:
-txn: "txn9" meta={id=0000000d key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=25.000000000,0
+txn: "txn9" meta={id=0000000d key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 gul=25.000000000,0
 
 run error
 get t=txn9 k=k1 localUncertaintyLimit=15,0
@@ -1055,7 +1055,7 @@ run ok
 txn_begin t=txn10 ts=5,0 globalUncertaintyLimit=25,0
 ----
 >> at end:
-txn: "txn10" meta={id=0000000e key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=25.000000000,0
+txn: "txn10" meta={id=0000000e key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 gul=25.000000000,0
 
 run error
 get t=txn10 k=k1 localUncertaintyLimit=20,0
@@ -1158,7 +1158,7 @@ run ok
 txn_begin t=txn11 ts=10,0 globalUncertaintyLimit=15,0
 ----
 >> at end:
-txn: "txn11" meta={id=0000000f key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=15.000000000,0
+txn: "txn11" meta={id=0000000f key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 gul=15.000000000,0
 
 run ok
 get t=txn11 k=k1 localUncertaintyLimit=10,0
@@ -1245,7 +1245,7 @@ run ok
 txn_begin t=txn12 ts=10,0 globalUncertaintyLimit=20,0
 ----
 >> at end:
-txn: "txn12" meta={id=00000010 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=20.000000000,0
+txn: "txn12" meta={id=00000010 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 gul=20.000000000,0
 
 run ok
 get t=txn12 k=k1 localUncertaintyLimit=10,0
@@ -1332,7 +1332,7 @@ run ok
 txn_begin t=txn13 ts=10,0 globalUncertaintyLimit=25,0
 ----
 >> at end:
-txn: "txn13" meta={id=00000011 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=25.000000000,0
+txn: "txn13" meta={id=00000011 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 gul=25.000000000,0
 
 run ok
 get t=txn13 k=k1 localUncertaintyLimit=10,0
@@ -1419,7 +1419,7 @@ run ok
 txn_begin t=txn14 ts=10,0 globalUncertaintyLimit=20,0
 ----
 >> at end:
-txn: "txn14" meta={id=00000012 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=20.000000000,0
+txn: "txn14" meta={id=00000012 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 gul=20.000000000,0
 
 run ok
 get t=txn14 k=k1 localUncertaintyLimit=15,0
@@ -1506,7 +1506,7 @@ run ok
 txn_begin t=txn15 ts=10,0 globalUncertaintyLimit=25,0
 ----
 >> at end:
-txn: "txn15" meta={id=00000013 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=25.000000000,0
+txn: "txn15" meta={id=00000013 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 gul=25.000000000,0
 
 run ok
 get t=txn15 k=k1 localUncertaintyLimit=15,0
@@ -1593,7 +1593,7 @@ run ok
 txn_begin t=txn16 ts=10,0 globalUncertaintyLimit=25,0
 ----
 >> at end:
-txn: "txn16" meta={id=00000014 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=25.000000000,0
+txn: "txn16" meta={id=00000014 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 gul=25.000000000,0
 
 run error
 get t=txn16 k=k1 localUncertaintyLimit=20,0
@@ -1696,7 +1696,7 @@ run ok
 txn_begin t=txn17 ts=15,0 globalUncertaintyLimit=20,0
 ----
 >> at end:
-txn: "txn17" meta={id=00000015 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=15.000000000,0 wto=false gul=20.000000000,0
+txn: "txn17" meta={id=00000015 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=15.000000000,0 gul=20.000000000,0
 
 run ok
 get t=txn17 k=k1 localUncertaintyLimit=15,0
@@ -1783,7 +1783,7 @@ run ok
 txn_begin t=txn18 ts=15,0 globalUncertaintyLimit=25,0
 ----
 >> at end:
-txn: "txn18" meta={id=00000016 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=15.000000000,0 wto=false gul=25.000000000,0
+txn: "txn18" meta={id=00000016 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=15.000000000,0 gul=25.000000000,0
 
 run ok
 get t=txn18 k=k1 localUncertaintyLimit=15,0
@@ -1870,7 +1870,7 @@ run ok
 txn_begin t=txn19 ts=15,0 globalUncertaintyLimit=25,0
 ----
 >> at end:
-txn: "txn19" meta={id=00000017 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=15.000000000,0 wto=false gul=25.000000000,0
+txn: "txn19" meta={id=00000017 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=15.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=15.000000000,0 gul=25.000000000,0
 
 run error
 get t=txn19 k=k1 localUncertaintyLimit=20,0
@@ -1973,7 +1973,7 @@ run ok
 txn_begin t=txn20 ts=20,0 globalUncertaintyLimit=25,0
 ----
 >> at end:
-txn: "txn20" meta={id=00000018 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=25.000000000,0
+txn: "txn20" meta={id=00000018 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 gul=25.000000000,0
 
 run ok
 get t=txn20 k=k1 localUncertaintyLimit=20,0

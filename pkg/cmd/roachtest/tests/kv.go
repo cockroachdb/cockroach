@@ -760,12 +760,12 @@ func registerKVSplits(r registry.Registry) {
 		{false, 60_000, registry.LeaderLeases, 2 * time.Hour, nil},
 		// Leader leases with quiescence don't quite match epoch leases with
 		// quiescence because in leader leases only the followers ever quiesce.
-		{true, 90_000, registry.LeaderLeases, 2 * time.Hour, nil},
+		{true, 80_000, registry.LeaderLeases, 2 * time.Hour, nil},
 		// With some additional tuning, leader leases can do even better. The extended interval allow
 		// for more flexibility in extending store liveness support, and prevent support withdrawals at
 		// higher CPU utilization when goroutine scheduling latency is high.
 		{
-			true, 120_000, registry.LeaderLeases, 2 * time.Hour,
+			true, 100_000, registry.LeaderLeases, 2 * time.Hour,
 			[]string{
 				"COCKROACH_STORE_LIVENESS_SUPPORT_EXPIRY_INTERVAL=1s",
 				"COCKROACH_STORE_LIVENESS_HEARTBEAT_INTERVAL=3s",
@@ -794,6 +794,9 @@ func registerKVSplits(r registry.Registry) {
 				settings := install.MakeClusterSettings()
 				settings.Env = append(settings.Env, "COCKROACH_MEMPROF_INTERVAL=1m", "COCKROACH_DISABLE_QUIESCENCE="+strconv.FormatBool(!item.quiesce))
 				settings.Env = append(settings.Env, item.envVars...)
+				if !item.quiesce {
+					settings.ClusterSettings["kv.raft.store_liveness.quiescence.enabled"] = "false"
+				}
 				startOpts := option.NewStartOpts(option.NoBackupSchedule)
 				startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--cache=256MiB")
 				c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())

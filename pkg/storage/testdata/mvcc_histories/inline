@@ -50,21 +50,6 @@ meta: "i2"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline2b
 meta: "i3"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline3 mergeTs=<nil> txnDidNotUpdateMeta=false
 
 run error
-initput k=i3 v=inline3b
-----
->> at end:
-meta: "i2"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline2b mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i3"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline3 mergeTs=<nil> txnDidNotUpdateMeta=false
-error: (*kvpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\000\003inline3" timestamp:<> 
-
-run ok
-initput k=i3 v=inline3
-----
->> at end:
-meta: "i2"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline2b mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i3"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline3 mergeTs=<nil> txnDidNotUpdateMeta=false
-
-run error
 increment k=i3
 ----
 >> at end:

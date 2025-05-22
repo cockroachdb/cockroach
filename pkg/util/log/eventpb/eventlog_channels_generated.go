@@ -62,6 +62,9 @@ func (m *DebugRecoverReplica) LoggingChannel() logpb.Channel { return logpb.Chan
 func (m *DebugSendKvBatch) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *HotRangesStats) LoggingChannel() logpb.Channel { return logpb.Channel_HEALTH }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *RuntimeStats) LoggingChannel() logpb.Channel { return logpb.Channel_HEALTH }
 
 // LoggingChannel implements the EventPayload interface.
@@ -360,9 +363,6 @@ func (m *StoreStats) LoggingChannel() logpb.Channel { return logpb.Channel_TELEM
 
 // LoggingChannel implements the EventPayload interface.
 func (m *CapturedIndexUsageStats) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }
-
-// LoggingChannel implements the EventPayload interface.
-func (m *HotRangesStats) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *MVCCIteratorStats) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }

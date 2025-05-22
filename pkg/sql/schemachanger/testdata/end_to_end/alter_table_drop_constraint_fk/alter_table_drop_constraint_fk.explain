@@ -8,36 +8,52 @@ EXPLAIN (DDL) ALTER TABLE t1 DROP CONSTRAINT t1_i_fkey;
 Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t1› DROP CONSTRAINT ‹t1_i_fkey›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT    TableSchemaLocked:{DescID: 105 (t1)}
  │         ├── 2 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → VALIDATED ForeignKeyConstraint:{DescID: 105 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey-), ReferencedColumnIDs: [1], ReferencedDescID: 104 (t2)}
  │         │    └── PUBLIC → ABSENT    ConstraintWithoutIndexName:{DescID: 105 (t1), Name: "t1_i_fkey", ConstraintID: 2 (t1_i_fkey-)}
- │         └── 2 Mutation operations
+ │         └── 3 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":105}
  │              ├── MakePublicForeignKeyConstraintValidated {"ConstraintID":2,"TableID":105}
  │              └── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":105}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT    → PUBLIC TableSchemaLocked:{DescID: 105 (t1)}
  │    │    ├── 2 elements transitioning toward ABSENT
  │    │    │    ├── VALIDATED → PUBLIC ForeignKeyConstraint:{DescID: 105 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey-), ReferencedColumnIDs: [1], ReferencedDescID: 104 (t2)}
  │    │    │    └── ABSENT    → PUBLIC ConstraintWithoutIndexName:{DescID: 105 (t1), Name: "t1_i_fkey", ConstraintID: 2 (t1_i_fkey-)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT    TableSchemaLocked:{DescID: 105 (t1)}
  │         ├── 2 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → VALIDATED ForeignKeyConstraint:{DescID: 105 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey-), ReferencedColumnIDs: [1], ReferencedDescID: 104 (t2)}
  │         │    └── PUBLIC → ABSENT    ConstraintWithoutIndexName:{DescID: 105 (t1), Name: "t1_i_fkey", ConstraintID: 2 (t1_i_fkey-)}
- │         └── 5 Mutation operations
+ │         └── 6 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":105}
  │              ├── MakePublicForeignKeyConstraintValidated {"ConstraintID":2,"TableID":105}
  │              ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":105}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
  └── PostCommitNonRevertiblePhase
-      └── Stage 1 of 1 in PostCommitNonRevertiblePhase
-           ├── 1 element transitioning toward ABSENT
-           │    └── VALIDATED → ABSENT ForeignKeyConstraint:{DescID: 105 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey-), ReferencedColumnIDs: [1], ReferencedDescID: 104 (t2)}
-           └── 5 Mutation operations
-                ├── RemoveForeignKeyBackReference {"OriginConstraintID":2,"OriginTableID":105,"ReferencedTableID":104}
-                ├── RemoveForeignKeyConstraint {"ConstraintID":2,"TableID":105}
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 1 element transitioning toward ABSENT
+      │    │    └── VALIDATED → ABSENT ForeignKeyConstraint:{DescID: 105 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey-), ReferencedColumnIDs: [1], ReferencedDescID: 104 (t2)}
+      │    └── 5 Mutation operations
+      │         ├── RemoveForeignKeyBackReference {"OriginConstraintID":2,"OriginTableID":105,"ReferencedTableID":104}
+      │         ├── RemoveForeignKeyConstraint {"ConstraintID":2,"TableID":105}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 105 (t1)}
+           └── 4 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":105}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

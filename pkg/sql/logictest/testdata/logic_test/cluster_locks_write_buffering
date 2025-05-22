@@ -1,0 +1,453 @@
+# LogicTest: local-read-committed
+
+statement ok
+SET kv_transaction_buffered_writes_enabled = true;
+
+# This test uses local-read-committed so that it can also test locking behavior
+# with READ COMMITTED transactions. However, we'll use a default of SERIALIZABLE
+# for all transactions.
+statement ok
+SET default_transaction_isolation = 'SERIALIZABLE'
+
+# Create a table, write a row, lock it, then switch users.
+statement ok
+CREATE TABLE t (k STRING PRIMARY KEY, v STRING, FAMILY (k,v))
+
+statement ok
+GRANT ALL ON t TO testuser
+
+statement ok
+INSERT INTO t VALUES ('a', 'val1'), ('b', 'val2'), ('c', 'val3'), ('l', 'val4'), ('m', 'val5'), ('p', 'val6'), ('s', 'val7'), ('t', 'val8'), ('z', 'val9')
+
+query TTT colnames,nosort
+ALTER TABLE t SPLIT AT VALUES ('d'), ('r')
+----
+key                   pretty  split_enforced_until
+[242 137 18 100 0 1]  /"d"    2262-04-11 23:47:16.854776 +0000 +0000
+[242 137 18 114 0 1]  /"r"    2262-04-11 23:47:16.854776 +0000 +0000
+
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t WITH DETAILS]
+----
+start_key           end_key       replicas  lease_holder
+<before:/Table/72>  …/1/"d"       {1}       1
+…/1/"d"             …/1/"r"       {1}       1
+…/1/"r"             <after:/Max>  {1}       1
+
+# Also create an additional user with VIEWACTIVITYREDACTED, with only permissions on t
+statement ok
+CREATE USER testuser2 WITH VIEWACTIVITYREDACTED
+
+statement ok
+GRANT ALL ON t TO testuser2
+
+statement ok
+CREATE TABLE t2 (k STRING PRIMARY KEY, v STRING, FAMILY (k,v))
+
+statement ok
+INSERT INTO t2 VALUES ('a', 'val1'), ('b', 'val2')
+
+# Start txn1 where we acquire replicated locks
+statement ok
+BEGIN PRIORITY HIGH
+
+statement ok
+UPDATE t SET v = '_updated' WHERE k >= 'b' AND k < 'x'
+
+let $root_session
+SHOW session_id
+
+user testuser
+
+statement ok
+SET kv_transaction_buffered_writes_enabled = true;
+
+statement ok
+SET default_transaction_isolation = 'SERIALIZABLE'
+
+let $testuser_session
+SHOW session_id
+
+statement ok
+BEGIN
+
+# switch back to root, collect data needed for validation
+user root
+
+let $txn1
+SELECT txns.id FROM crdb_internal.cluster_transactions txns WHERE txns.session_id = '$root_session'
+
+let $txn2
+SELECT txns.id FROM crdb_internal.cluster_transactions txns WHERE txns.session_id = '$testuser_session'
+
+let $r1
+SELECT range_id FROM [SHOW RANGES FROM TABLE t] WHERE end_key LIKE '%/"d"'
+
+let $r2
+SELECT range_id FROM [SHOW RANGES FROM TABLE t] WHERE end_key LIKE '%/"r"'
+
+let $r3
+SELECT range_id FROM [SHOW RANGES FROM TABLE t] WHERE end_key LIKE '%Max%'
+
+user testuser
+
+query TT async,rowsort readReq
+SELECT * FROM t
+----
+a   val1
+b   _updated
+c   _updated
+l   _updated
+m   _updated
+p   _updated
+s   _updated
+t   _updated
+z   val9
+
+user root
+
+query TTT colnames,retry
+SELECT user_name, query, phase FROM crdb_internal.cluster_queries WHERE txn_id='$txn2'
+----
+user_name   query             phase
+testuser    SELECT * FROM t   executing
+
+# looking at each range and transaction separately, validate the expected results in the lock table
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r1 AND txn_id='$txn1'
+----
+database_name  schema_name  table_name  lock_key_pretty     lock_strength  durability    isolation_level  granted  contended
+test           public       t           /Table/106/1/"b"/0  Exclusive      Unreplicated  SERIALIZABLE     true     true
+test           public       t           /Table/106/1/"c"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+
+query TTTTTTTBB colnames
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r1 AND txn_id='$txn2'
+----
+database_name  schema_name  table_name  lock_key_pretty     lock_strength  durability    isolation_level  granted  contended
+test           public       t           /Table/106/1/"b"/0  None           Unreplicated  SERIALIZABLE     false    true
+
+# since SQL incorporates limits which disables parallel batches, the select from txn2 will not reach subsequent ranges.
+
+query TTTTTTTBB colnames,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r2 AND txn_id='$txn1'
+----
+database_name  schema_name  table_name  lock_key_pretty     lock_strength  durability    isolation_level  granted  contended
+test           public       t           /Table/106/1/"l"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+test           public       t           /Table/106/1/"m"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+test           public       t           /Table/106/1/"p"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+
+query TTTTTTTBB colnames
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r2 AND txn_id='$txn2'
+----
+database_name schema_name table_name  lock_key_pretty     lock_strength   durability   isolation_level   granted contended
+
+query TTTTTTTBB colnames,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r3 AND txn_id='$txn1'
+----
+database_name  schema_name  table_name  lock_key_pretty     lock_strength  durability    isolation_level  granted  contended
+test           public       t           /Table/106/1/"s"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+test           public       t           /Table/106/1/"t"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+
+query TTTTTTTBB colnames
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r3 AND txn_id='$txn2'
+----
+database_name schema_name table_name  lock_key_pretty     lock_strength   durability   isolation_level   granted contended
+
+# check that we can't see keys, potentially revealing PII, with VIEWACTIVITYREDACTED
+user testuser2
+
+query TTTTTTTBB colnames,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r1 AND txn_id='$txn1'
+----
+database_name  schema_name  table_name  lock_key_pretty  lock_strength  durability    isolation_level  granted  contended
+test           public       t           ·                Exclusive      Unreplicated  SERIALIZABLE     true     true
+test           public       t           ·                Exclusive      Unreplicated  SERIALIZABLE     true     false
+
+user root
+
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name='test'
+----
+database_name  schema_name  table_name  lock_key_pretty     lock_strength  durability    isolation_level  granted  contended
+test           public       t           /Table/106/1/"b"/0  Exclusive      Unreplicated  SERIALIZABLE     true     true
+test           public       t           /Table/106/1/"b"/0  None           Unreplicated  SERIALIZABLE     false    true
+test           public       t           /Table/106/1/"c"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+test           public       t           /Table/106/1/"l"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+test           public       t           /Table/106/1/"m"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+test           public       t           /Table/106/1/"p"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+test           public       t           /Table/106/1/"s"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+test           public       t           /Table/106/1/"t"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE table_id='t'::regclass::oid::int
+----
+database_name  schema_name  table_name  lock_key_pretty     lock_strength  durability    isolation_level  granted  contended
+test           public       t           /Table/106/1/"b"/0  Exclusive      Unreplicated  SERIALIZABLE     true     true
+test           public       t           /Table/106/1/"b"/0  None           Unreplicated  SERIALIZABLE     false    true
+test           public       t           /Table/106/1/"c"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+test           public       t           /Table/106/1/"l"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+test           public       t           /Table/106/1/"m"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+test           public       t           /Table/106/1/"p"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+test           public       t           /Table/106/1/"s"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+test           public       t           /Table/106/1/"t"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE contended=true AND lock_key_pretty LIKE '/Table/106%'
+----
+database_name  schema_name  table_name  lock_key_pretty     lock_strength  durability    isolation_level  granted  contended
+test           public       t           /Table/106/1/"b"/0  Exclusive      Unreplicated  SERIALIZABLE     true     true
+test           public       t           /Table/106/1/"b"/0  None           Unreplicated  SERIALIZABLE     false    true
+
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE contended=false AND lock_key_pretty LIKE '/Table/106%'
+----
+database_name  schema_name  table_name  lock_key_pretty     lock_strength  durability    isolation_level  granted  contended
+test           public       t           /Table/106/1/"c"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+test           public       t           /Table/106/1/"l"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+test           public       t           /Table/106/1/"m"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+test           public       t           /Table/106/1/"p"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+test           public       t           /Table/106/1/"s"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+test           public       t           /Table/106/1/"t"/0  Exclusive      Unreplicated  SERIALIZABLE     true     false
+
+query I
+SELECT count(*) FROM crdb_internal.cluster_locks WHERE table_name = 't'
+----
+8
+
+statement ok
+COMMIT
+
+query I retry
+SELECT count(*) FROM crdb_internal.cluster_locks WHERE table_name = 't'
+----
+0
+
+user testuser
+
+awaitquery readReq
+
+statement ok
+COMMIT
+
+user root
+
+# start txn3
+statement ok
+BEGIN
+
+user testuser
+
+# start txn4
+statement ok
+BEGIN
+
+user root
+
+query TT rowsort
+SELECT * FROM t FOR UPDATE
+----
+a   val1
+b   _updated
+c   _updated
+l   _updated
+m   _updated
+p   _updated
+s   _updated
+t   _updated
+z   val9
+
+let $txn3
+SELECT txns.id FROM crdb_internal.cluster_transactions txns WHERE txns.session_id = '$root_session'
+
+let $txn4
+SELECT txns.id FROM crdb_internal.cluster_transactions txns WHERE txns.session_id = '$testuser_session'
+
+user testuser
+
+statement async deleteReq count 7
+DELETE FROM t WHERE k >= 'b' AND k < 'x'
+
+user root
+
+query TTT colnames,retry
+SELECT user_name, query, phase FROM crdb_internal.cluster_queries WHERE txn_id='$txn4'
+----
+user_name   query                                         phase
+testuser    DELETE FROM t WHERE (k >= 'b') AND (k < 'x')  executing
+
+# looking at each range and transaction separately, validate the expected results in the lock table
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r1 AND txn_id='$txn3'
+----
+database_name schema_name table_name  lock_key_pretty     lock_strength   durability     isolation_level   granted contended
+test          public      t           /Table/106/1/"a"/0  Exclusive       Unreplicated   SERIALIZABLE      true    false
+test          public      t           /Table/106/1/"b"/0  Exclusive       Unreplicated   SERIALIZABLE      true    true
+test          public      t           /Table/106/1/"c"/0  Exclusive       Unreplicated   SERIALIZABLE      true    false
+
+query TTTTTTTBB colnames
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r1 AND txn_id='$txn4'
+----
+database_name schema_name table_name  lock_key_pretty     lock_strength   durability    isolation_level   granted contended
+test          public      t           /Table/106/1/"b"/0  Exclusive       Unreplicated  SERIALIZABLE      false   true
+
+query TTTTTTTBB colnames,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r2 AND txn_id='$txn3'
+----
+database_name schema_name table_name  lock_key_pretty     lock_strength   durability     isolation_level   granted contended
+test          public      t           /Table/106/1/"l"/0  Exclusive       Unreplicated   SERIALIZABLE      true    false
+test          public      t           /Table/106/1/"m"/0  Exclusive       Unreplicated   SERIALIZABLE      true    false
+test          public      t           /Table/106/1/"p"/0  Exclusive       Unreplicated   SERIALIZABLE      true    false
+
+query TTTTTTTBB colnames
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r2 AND txn_id='$txn4'
+----
+database_name schema_name table_name  lock_key_pretty     lock_strength   durability     isolation_level   granted contended
+
+query TTTTTTTBB colnames,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r3 AND txn_id='$txn3'
+----
+database_name schema_name table_name  lock_key_pretty     lock_strength   durability     isolation_level   granted contended
+test          public      t           /Table/106/1/"s"/0  Exclusive       Unreplicated   SERIALIZABLE      true    false
+test          public      t           /Table/106/1/"t"/0  Exclusive       Unreplicated   SERIALIZABLE      true    false
+test          public      t           /Table/106/1/"z"/0  Exclusive       Unreplicated   SERIALIZABLE      true    false
+
+query TTTTTTTBB colnames
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r3 AND txn_id='$txn4'
+----
+database_name schema_name table_name  lock_key_pretty     lock_strength   durability     isolation_level   granted contended
+
+query I
+SELECT count(*) FROM crdb_internal.cluster_locks WHERE table_name = 't'
+----
+10
+
+statement ok
+ROLLBACK
+
+user testuser
+
+awaitstatement deleteReq
+
+statement ok
+COMMIT
+
+user root
+
+query I retry
+SELECT count(*) FROM crdb_internal.cluster_locks WHERE table_name = 't'
+----
+0
+
+# validate that only locks on keys in privileged tables can be seen
+statement ok
+BEGIN
+
+query TT rowsort
+SELECT * FROM t FOR UPDATE
+----
+a   val1
+z   val9
+
+query TT rowsort
+SELECT * FROM t2 FOR UPDATE
+----
+a   val1
+b   val2
+
+query I retry
+SELECT count(*) FROM crdb_internal.cluster_locks WHERE table_name IN ('t','t2')
+----
+4
+
+user testuser
+
+query error pq: user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
+
+user testuser2
+
+query TTTTTTTBB colnames,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE table_name IN ('t', 't2')
+----
+database_name schema_name table_name  lock_key_pretty     lock_strength   durability     isolation_level   granted contended
+test          public      t           ·                   Exclusive       Unreplicated   SERIALIZABLE      true    false
+test          public      t           ·                   Exclusive       Unreplicated   SERIALIZABLE      true    false
+
+user root
+
+statement ok
+ROLLBACK
+
+query I retry
+SELECT count(*) FROM crdb_internal.cluster_locks WHERE table_name IN ('t','t2')
+----
+0
+
+# Test with different isolation levels.
+
+statement ok
+SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
+SELECT * FROM t WHERE k = 'a' FOR UPDATE;
+
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+statement async iso1
+SELECT * FROM t WHERE k = 'a' FOR UPDATE;
+
+user root
+
+query TTTTTTTBB colnames,rowsort,retry
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, regexp_replace(isolation_level, 'READ COMMITTED', 'READ_COMMITTED') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE table_name = 't'
+----
+database_name  schema_name  table_name  lock_key_pretty     lock_strength  durability  isolation_level  granted  contended
+test           public       t           /Table/106/1/"a"/0  Exclusive      Replicated  READ_COMMITTED   true     true
+test           public       t           /Table/106/1/"a"/0  Exclusive      Replicated  SERIALIZABLE     false    true
+
+statement ok
+COMMIT
+
+user testuser
+
+awaitstatement iso1
+
+statement ok
+COMMIT
+
+user root
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+SELECT * FROM t WHERE k = 'a' FOR UPDATE;
+
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
+
+statement async iso2
+SELECT * FROM t WHERE k = 'a' FOR UPDATE;
+
+user root
+
+query TTTTTTTBB colnames,rowsort,retry
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, regexp_replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE table_name = 't'
+----
+database_name  schema_name  table_name  lock_key_pretty     lock_strength  durability  isolation_level  granted  contended
+test           public       t           /Table/106/1/"a"/0  Exclusive      Replicated  REPEATABLE_READ  true     true
+test           public       t           /Table/106/1/"a"/0  Exclusive      Replicated  READ_COMMITTED   false    true
+
+statement ok
+COMMIT
+
+user testuser
+
+awaitstatement iso2
+
+statement ok
+COMMIT

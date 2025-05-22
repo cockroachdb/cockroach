@@ -860,7 +860,7 @@ define VectorSearch {
     Table cat.Table
     Index cat.Index
     OutCols exec.TableColumnOrdinalSet
-    PrefixKey constraint.Key
+    PrefixConstraint *constraint.Constraint
     QueryVector tree.TypedExpr
     TargetNeighborCount uint64
 }

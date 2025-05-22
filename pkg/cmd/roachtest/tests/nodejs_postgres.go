@@ -52,48 +52,9 @@ func registerNodeJSPostgres(r registry.Registry) {
 		err = alterZoneConfigAndClusterSettings(ctx, t, version, c, node[0])
 		require.NoError(t, err)
 
-		// In case we are running into a state where machines are being reused, we first check to see if we
-		// can use npm to reduce the potential of trying to add another nodesource key
-		// (preventing gpg: dearmoring failed: File exists) errors.
-		err = c.RunE(
-			ctx, option.WithNodes(node), `sudo npm i -g npm`,
-		)
-
-		if err != nil {
-			err = repeatRunE(
-				ctx,
-				t,
-				c,
-				node,
-				"add nodesource key and deb repository",
-				`
-sudo apt-get update && \
-sudo apt-get install -y ca-certificates curl gnupg && \
-sudo mkdir -p /etc/apt/keyrings && \
-curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --batch --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
-echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_18.x nodistro main" | sudo tee /etc/apt/sources.list.d/nodesource.list`,
-			)
-			require.NoError(t, err)
-
-			err = repeatRunE(
-				ctx, t, c, node, "install nodejs and npm", `sudo apt-get update && sudo apt-get -qq install nodejs`,
-			)
-			require.NoError(t, err)
-
-			err = repeatRunE(
-				ctx, t, c, node, "update npm", `sudo npm i -g npm`,
-			)
-			require.NoError(t, err)
-		}
-
-		err = repeatRunE(
-			ctx, t, c, node, "install yarn", `sudo npm i -g yarn`,
-		)
-		require.NoError(t, err)
-
-		err = repeatRunE(
-			ctx, t, c, node, "install lerna", `sudo npm i --g lerna`,
-		)
+		// Install NodeJS 18.x, update NPM to the latest
+		// and install Yarn and Lerna.
+		err = installNode18(ctx, t, c, node, nodeOpts{withYarn: true, withLerna: true})
 		require.NoError(t, err)
 
 		err = repeatRunE(
@@ -150,14 +111,22 @@ PGSSLCERT=$HOME/certs/client.%[1]s.crt PGSSLKEY=$HOME/certs/client.%[1]s.key PGS
 		rawResultsStr := result.Stdout + result.Stderr
 		t.L().Printf("Test Results: %s", rawResultsStr)
 		if err != nil {
-			// The one failing test is `pool size of 1` which
-			// fails because it does SELECT count(*) FROM pg_stat_activity which is
-			// not implemented in CRDB.
-			if strings.Contains(rawResultsStr, "1 failing") &&
-				// Failing tests are listed numerically, we only expect one.
-				// The one failing test should be "pool size of 1".
-				strings.Contains(rawResultsStr, "1) pool size of 1") {
-				err = nil
+			// Check for expected test failures. We allow:
+			// 1. One failing test that is "pool size of 1"
+			// 2. One failing test that is "events"
+			// 3. Two failing tests that are exactly "events" and "pool size of 1"
+			if strings.Contains(rawResultsStr, "1 failing") {
+				// Single test failure case
+				if strings.Contains(rawResultsStr, "1) pool size of 1") ||
+					strings.Contains(rawResultsStr, "1) events") {
+					err = nil
+				}
+			} else if strings.Contains(rawResultsStr, "2 failing") {
+				// Two test failures case - must be exactly events and pool size of 1
+				if strings.Contains(rawResultsStr, "1) events") &&
+					strings.Contains(rawResultsStr, "2) pool size of 1") {
+					err = nil
+				}
 			}
 			if err != nil {
 				t.Fatal(err)

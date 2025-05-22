@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
 
 // cachedProtectedTimestampState is used to cache information about the state
@@ -101,13 +100,11 @@ func (r *Replica) readProtectedTimestampsRLocked(
 // calculation is used later.
 //
 // In the case that GC can proceed, four timestamps are returned: The timestamp
-// corresponding to the state of the cache used to make the determination (used
-// for markPendingGC when actually performing GC), the timestamp used as the
-// basis to calculate the new gc threshold (used for scoring and reporting), the
-// old gc threshold, and the new gc threshold.
+// used as the basis to calculate the new gc threshold (used for scoring and
+// reporting), the old gc threshold, and the new gc threshold.
 func (r *Replica) checkProtectedTimestampsForGC(
 	ctx context.Context, gcTTL time.Duration,
-) (canGC bool, cacheTimestamp, gcTimestamp, oldThreshold, newThreshold hlc.Timestamp, _ error) {
+) (canGC bool, gcTimestamp, oldThreshold, newThreshold hlc.Timestamp, _ error) {
 
 	// We may be reading the protected timestamp cache while we're holding
 	// the Replica.mu for reading. If we do so and find newer state in the cache
@@ -129,7 +126,7 @@ func (r *Replica) checkProtectedTimestampsForGC(
 	var err error
 	read, err = r.readProtectedTimestampsRLocked(ctx)
 	if err != nil {
-		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, err
+		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, err
 	}
 
 	if read.readAt.IsEmpty() {
@@ -139,13 +136,13 @@ func (r *Replica) checkProtectedTimestampsForGC(
 		// yet.
 		log.VEventf(ctx, 1,
 			"not gc'ing replica %v because protected timestamp information is unavailable", r)
-		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, nil
+		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, nil
 	}
 
 	if read.readAt.Less(lease.Start.ToTimestamp()) {
 		log.VEventf(ctx, 1, "not gc'ing replica %v because current lease %v started after record was"+
 			" read %v", r, lease, read.readAt)
-		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, nil
+		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, nil
 	}
 
 	gcTimestamp = read.readAt
@@ -160,24 +157,5 @@ func (r *Replica) checkProtectedTimestampsForGC(
 
 	newThreshold = gc.CalculateThreshold(gcTimestamp, gcTTL)
 
-	return true, read.readAt, gcTimestamp, oldThreshold, newThreshold, nil
-}
-
-// markPendingGC is called just prior to sending the GC request to increase the
-// GC threshold during MVCC GC queue processing. This method synchronizes such
-// requests with the processing of AdminVerifyProtectedTimestamp requests. Such
-// synchronization is important to prevent races where the protected timestamp
-// state is read from a stale point in time and then concurrently, a
-// verification request arrives which applies under a later cache state and then
-// the gc queue, acting on older cache state, attempts to set the gc threshold
-// above a successfully verified record.
-func (r *Replica) markPendingGC(readAt, newThreshold hlc.Timestamp) error {
-	r.protectedTimestampMu.Lock()
-	defer r.protectedTimestampMu.Unlock()
-	if readAt.Less(r.protectedTimestampMu.minStateReadTimestamp) {
-		return errors.Errorf("cannot set gc threshold to %v because read at %v < min %v",
-			newThreshold, readAt, r.protectedTimestampMu.minStateReadTimestamp)
-	}
-	r.protectedTimestampMu.pendingGCThreshold = newThreshold
-	return nil
+	return true, gcTimestamp, oldThreshold, newThreshold, nil
 }

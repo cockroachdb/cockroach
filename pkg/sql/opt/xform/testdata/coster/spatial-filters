@@ -132,13 +132,13 @@ WHERE st_distance(geog, st_makepoint(1.0, 1.0)::geography) < 200;
 project
  ├── columns: id:1!null
  ├── immutable
- ├── stats: [rows=166666.7]
+ ├── stats: [rows=166667]
  ├── cost: 1036695.34
  ├── key: (1)
  └── select
       ├── columns: id:1!null geog:4
       ├── immutable
-      ├── stats: [rows=166666.7]
+      ├── stats: [rows=166667]
       ├── cost: 1035028.65
       ├── key: (1)
       ├── fd: (1)-->(4)
@@ -158,13 +158,13 @@ WHERE st_distance(geog, st_makepoint(a, 1.0)::geography) < 200;
 project
  ├── columns: id:1!null
  ├── immutable
- ├── stats: [rows=166666.7]
+ ├── stats: [rows=166667]
  ├── cost: 1541695.44
  ├── key: (1)
  └── select
       ├── columns: id:1!null a:2 geog:4
       ├── immutable
-      ├── stats: [rows=166666.7]
+      ├── stats: [rows=166667]
       ├── cost: 1540028.75
       ├── key: (1)
       ├── fd: (1)-->(2,4)
@@ -184,13 +184,13 @@ WHERE st_intersects(st_makepoint(a, 1.0)::geometry, st_geomfromtext('SRID=4326;P
 project
  ├── columns: id:1!null
  ├── immutable
- ├── stats: [rows=166666.7]
+ ├── stats: [rows=166667]
  ├── cost: 1536695.34
  ├── key: (1)
  └── select
       ├── columns: id:1!null a:2
       ├── immutable
-      ├── stats: [rows=166666.7]
+      ├── stats: [rows=166667]
       ├── cost: 1535028.65
       ├── key: (1)
       ├── fd: (1)-->(2)
@@ -273,7 +273,7 @@ WHERE st_area(g.geog) > st_area(x.geog);
 project
  ├── columns: id:1!null a:2 b:3 geog:4 id:7!null a:8 b:9 geog:10
  ├── immutable
- ├── stats: [rows=166666.7]
+ ├── stats: [rows=166667]
  ├── cost: 1116724.4
  ├── key: (7)
  ├── fd: (1)-->(2-4), (7)-->(8-10), (1)==(7), (7)==(1)
@@ -282,7 +282,7 @@ project
       ├── left ordering: +1
       ├── right ordering: +7
       ├── immutable
-      ├── stats: [rows=166666.7, distinct(1)=166667, null(1)=0, distinct(7)=166667, null(7)=0, distinct(13)=50000, null(13)=0, distinct(14)=50000, null(14)=0]
+      ├── stats: [rows=166667, distinct(1)=166667, null(1)=0, distinct(7)=166667, null(7)=0, distinct(13)=50000, null(13)=0, distinct(14)=50000, null(14)=0]
       ├── cost: 1115057.71
       ├── key: (7)
       ├── fd: (1)-->(2-4), (4)-->(13), (7)-->(8-10), (10)-->(14), (1)==(7), (7)==(1)

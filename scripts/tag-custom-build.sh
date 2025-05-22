@@ -26,6 +26,10 @@
 #
 #      ./scripts/tag-custom-build.sh "$SHA"
 #
+#    Use the --jj flag to get the current SHA from jj instead of git:
+#
+#      ./scripts/tag-custom-build.sh --jj
+#
 # Note the Tag Name and Build ID (printed at the end of the script output).
 #
 # Verify the SHA on the GitHub page for the tag (it should open automatically
@@ -40,10 +44,44 @@
 
 set -euo pipefail
 
+use_jj=false
+
+# Parse command line options
+while getopts ":j-:" opt; do
+  case $opt in
+    j)
+      use_jj=true
+      ;;
+    -)
+      case "${OPTARG}" in
+        jj)
+          use_jj=true
+          ;;
+        *)
+          echo "Invalid option: --${OPTARG}" >&2
+          exit 1
+          ;;
+      esac
+      ;;
+    \?)
+      echo "Invalid option: -$OPTARG" >&2
+      exit 1
+      ;;
+  esac
+done
+
+# Shift past the processed options
+shift $((OPTIND-1))
+
+# Get SHA from positional parameter if provided
 SHA="${1-}"
 
 if [ -z "$SHA" ] ; then
-    SHA="$(git rev-parse HEAD)"
+    if [ "$use_jj" = true ] ; then
+        SHA="$(jj log -r@ -n1 --template commit_id --no-graph)"
+    else
+        SHA="$(git rev-parse HEAD)"
+    fi
 fi
 
 # Ensure all the latest tags are downloaded locally
@@ -52,8 +90,7 @@ git fetch -t
 ID="$(git describe --tags --match=v[0-9]* "$SHA")"
 TAG="custombuild-$ID"
 
-git tag "$TAG" "$SHA"
-git push git@github.com:cockroachdb/cockroach.git "$TAG"
+git push git@github.com:cockroachdb/cockroach.git "$SHA:refs/tags/$TAG"
 
 TAG_URL="https://github.com/cockroachdb/cockroach/releases/tag/${TAG}"
 TEAMCITY_URL="https://teamcity.cockroachdb.com/buildConfiguration/Internal_Cockroach_Release_Customized_MakeAndPublishCustomizedBuild?mode=builds&branch=${TAG}"
@@ -86,6 +123,7 @@ The binaries will be available at:
   https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.linux-amd64.tgz
   https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.linux-amd64-fips.tgz
   https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.linux-arm64.tgz
+  https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.darwin-11.0-arm64.tgz
   https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.darwin-10.9-amd64.tgz
   https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.windows-6.2-amd64.zip
 

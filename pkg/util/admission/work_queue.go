@@ -130,43 +130,30 @@ var epochLIFOEpochDuration = settings.RegisterDurationSetting(
 	"admission.epoch_lifo.epoch_duration",
 	"the duration of an epoch, for epoch-LIFO admission control ordering",
 	epochLength,
-	settings.WithValidateDuration(func(v time.Duration) error {
-		if v < time.Millisecond {
-			return errors.Errorf("epoch-LIFO: epoch duration is too small")
-		}
-		return nil
-	}), settings.WithPublic)
+	settings.DurationWithMinimum(time.Millisecond),
+	settings.WithPublic)
 
 var epochLIFOEpochClosingDeltaDuration = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"admission.epoch_lifo.epoch_closing_delta_duration",
 	"the delta duration before closing an epoch, for epoch-LIFO admission control ordering",
 	epochClosingDelta,
-	settings.WithValidateDuration(func(v time.Duration) error {
-		if v < time.Millisecond {
-			return errors.Errorf("epoch-LIFO: epoch closing delta is too small")
-		}
-		return nil
-	}), settings.WithPublic)
+	settings.DurationWithMinimum(time.Millisecond),
+	settings.WithPublic)
 
 var epochLIFOQueueDelayThresholdToSwitchToLIFO = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"admission.epoch_lifo.queue_delay_threshold_to_switch_to_lifo",
 	"the queue delay encountered by a (tenant,priority) for switching to epoch-LIFO ordering",
 	maxQueueDelayToSwitchToLifo,
-	settings.WithValidateDuration(func(v time.Duration) error {
-		if v < time.Millisecond {
-			return errors.Errorf("epoch-LIFO: queue delay threshold is too small")
-		}
-		return nil
-	}), settings.WithPublic)
+	settings.DurationWithMinimum(time.Millisecond),
+	settings.WithPublic)
 
 var rangeSequencerGCThreshold = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"admission.replication_control.range_sequencer_gc_threshold",
 	"the inactive duration for a range sequencer after it's garbage collected",
 	5*time.Minute,
-	settings.NonNegativeDuration,
 )
 
 // WorkInfo provides information that is used to order work within an WorkQueue.
@@ -1751,6 +1738,24 @@ var (
 		Measurement: "Wait time Duration",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	kvWaitDurationsMeta = metric.Metadata{
+		Name:        "admission.wait_durations.",
+		Help:        "Wait time durations for requests that waited",
+		Measurement: "Wait time Duration",
+		Unit:        metric.Unit_NANOSECONDS,
+		Essential:   true,
+		Category:    metric.Metadata_OVERLOAD,
+		HowToUse:    "This metric shows if CPU utilization-based admission control feature is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.",
+	}
+	kvStoresWaitDurationsMeta = metric.Metadata{
+		Name:        "admission.wait_durations.",
+		Help:        "Wait time durations for requests that waited",
+		Measurement: "Wait time Duration",
+		Unit:        metric.Unit_NANOSECONDS,
+		Essential:   true,
+		Category:    metric.Metadata_OVERLOAD,
+		HowToUse:    "This metric shows if I/O utilization-based admission control feature is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.",
+	}
 	waitQueueLengthMeta = metric.Metadata{
 		Name:        "admission.wait_queue_length.",
 		Help:        "Length of wait queue",
@@ -1879,13 +1884,20 @@ func makeWorkQueueMetrics(
 }
 
 func makeWorkQueueMetricsSingle(name string) *workQueueMetricsSingle {
+	wdm := waitDurationsMeta
+	if name == KVWork.String() {
+		wdm = kvWaitDurationsMeta
+	} else if name == fmt.Sprintf("%s-stores", KVWork.String()) {
+		wdm = kvStoresWaitDurationsMeta
+	}
+
 	return &workQueueMetricsSingle{
 		Requested: metric.NewCounter(addName(name, requestedMeta)),
 		Admitted:  metric.NewCounter(addName(name, admittedMeta)),
 		Errored:   metric.NewCounter(addName(name, erroredMeta)),
 		WaitDurations: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePreferHdrLatency,
-			Metadata:     addName(name, waitDurationsMeta),
+			Metadata:     addName(name, wdm),
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.IOLatencyBuckets,
 		}),

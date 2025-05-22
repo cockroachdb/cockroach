@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
 )
 
@@ -555,6 +556,12 @@ func EndTxn(
 			ctx, cArgs.EvalCtx, readWriter.(storage.Batch), ms, args, reply.Txn,
 		)
 		if err != nil {
+			// Commit triggers might fail in a way the doesn't mean that the replica
+			// is corrupted. In this case, we need to reset the reply to avoid
+			// returning to the client that the txn is committed. If that happened,
+			// the client throws an error due to a sanity check regarding a failed txn
+			// shouldn't be committed.
+			reply.Reset()
 			return result.Result{}, err
 		}
 		if err := txnResult.MergeAndDestroy(triggerResult); err != nil {
@@ -578,11 +585,6 @@ func IsEndTxnExceedingDeadline(commitTS hlc.Timestamp, deadline hlc.Timestamp) b
 func IsEndTxnTriggeringRetryError(
 	txn *roachpb.Transaction, deadline hlc.Timestamp,
 ) (retry bool, reason kvpb.TransactionRetryReason, extraMsg redact.RedactableString) {
-	if txn.WriteTooOld {
-		// If we saw any WriteTooOldErrors, we must restart to avoid lost
-		// update anomalies.
-		return true, kvpb.RETRY_WRITE_TOO_OLD, ""
-	}
 	if !txn.IsoLevel.ToleratesWriteSkew() && txn.WriteTimestamp != txn.ReadTimestamp {
 		// Return a transaction retry error if the commit timestamp isn't equal to
 		// the txn timestamp.
@@ -842,6 +844,11 @@ func RunCommitTrigger(
 	args *kvpb.EndTxnRequest,
 	txn *roachpb.Transaction,
 ) (result.Result, error) {
+	if fn := rec.EvalKnobs().CommitTriggerError; fn != nil {
+		if err := fn(); err != nil {
+			return result.Result{}, err
+		}
+	}
 	ct := args.InternalCommitTrigger
 	if ct == nil {
 		return result.Result{}, nil
@@ -868,7 +875,18 @@ func RunCommitTrigger(
 			ctx, rec, batch, *ms, ct.SplitTrigger, txn.WriteTimestamp,
 		)
 		if err != nil {
-			return result.Result{}, kvpb.MaybeWrapReplicaCorruptionError(ctx, err)
+			if info := pebble.ExtractDataCorruptionInfo(err); info != nil {
+				// We want to handle the data corruption error here because it's possible
+				// that a file that an external SSTable references got deleted. We want to
+				// fail the split and propagate the error, but we don't want to crash the
+				// process. An excise command could be used to get out of this data
+				// corruption.
+				return result.Result{}, err
+			} else {
+				// Otherwise, failing the split is a critical error. We should crash
+				// the process and report a replica corruption.
+				return result.Result{}, kvpb.MaybeWrapReplicaCorruptionError(ctx, err)
+			}
 		}
 		*ms = newMS
 		return res, nil
@@ -876,7 +894,18 @@ func RunCommitTrigger(
 	if mt := ct.GetMergeTrigger(); mt != nil {
 		res, err := mergeTrigger(ctx, rec, batch, ms, mt, txn.WriteTimestamp)
 		if err != nil {
-			return result.Result{}, kvpb.MaybeWrapReplicaCorruptionError(ctx, err)
+			if info := pebble.ExtractDataCorruptionInfo(err); info != nil {
+				// We want to handle the data corruption error here because it's
+				// possible that a file that an external SSTable references got deleted.
+				// We want to fail the merge and propagate the error, but we don't want
+				// to crash the process. An excise command could be used to get out of
+				// this data corruption.
+				return result.Result{}, err
+			} else {
+				// Otherwise, failing the merge is a critical error. We should crash
+				// the process and report a replica corruption.
+				return result.Result{}, kvpb.MaybeWrapReplicaCorruptionError(ctx, err)
+			}
 		}
 		return res, nil
 	}
@@ -1303,6 +1332,25 @@ func splitTriggerHelper(
 		gc.TxnCleanupThreshold.Get(&rec.ClusterSettings().SV),
 	); err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, err
+	}
+
+	// Copy the last consistency checker run timestamp from the LHS to the RHS.
+	// This avoids running the consistency checker on the RHS immediately after
+	// the split.
+	lastTS := hlc.Timestamp{}
+	if _, err := storage.MVCCGetProto(ctx, batch,
+		keys.QueueLastProcessedKey(split.LeftDesc.StartKey, "consistencyChecker"),
+		hlc.Timestamp{}, &lastTS, storage.MVCCGetOptions{}); err != nil {
+		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
+			"unable to fetch the last consistency checker run for LHS")
+	}
+
+	if err := storage.MVCCPutProto(ctx, batch,
+		keys.QueueLastProcessedKey(split.RightDesc.StartKey, "consistencyChecker"),
+		hlc.Timestamp{}, &lastTS,
+		storage.MVCCWriteOptions{Stats: h.AbsPostSplitRight(), Category: fs.BatchEvalReadCategory}); err != nil {
+		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
+			"unable to copy the last consistency checker run to RHS")
 	}
 
 	// Note: we don't copy the queue last processed times. This means

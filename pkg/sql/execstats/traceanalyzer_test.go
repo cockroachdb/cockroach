@@ -161,7 +161,7 @@ func TestTraceAnalyzer(t *testing.T) {
 			// The stats don't count the actual bytes, but they are a synthetic value
 			// based on the number of tuples. In this test 21 tuples flow over the
 			// network.
-			require.Equal(t, int64(21*8), queryLevelStats.NetworkBytesSent)
+			require.Equal(t, int64(21*8), queryLevelStats.DistSQLNetworkBytesSent)
 
 			// Soft check that MaxMemUsage is set to a non-zero value. The actual
 			// value differs between test runs due to metamorphic randomization.
@@ -176,7 +176,7 @@ func TestTraceAnalyzer(t *testing.T) {
 
 			// For tests, network messages is a synthetic value based on the number of
 			// network tuples. In this test 21 tuples flow over the network.
-			require.Equal(t, int64(21/2), queryLevelStats.NetworkMessages)
+			require.Equal(t, int64(21/2), queryLevelStats.DistSQLNetworkMessages)
 		})
 	}
 }
@@ -233,14 +233,14 @@ func TestTraceAnalyzerProcessStats(t *testing.T) {
 func TestQueryLevelStatsAccumulate(t *testing.T) {
 	aEvent := kvpb.ContentionEvent{Duration: 7 * time.Second}
 	a := execstats.QueryLevelStats{
-		NetworkBytesSent:                   1,
+		DistSQLNetworkBytesSent:            1,
 		MaxMemUsage:                        2,
 		KVBytesRead:                        3,
 		KVPairsRead:                        4,
 		KVRowsRead:                         4,
 		KVBatchRequestsIssued:              4,
 		KVTime:                             5 * time.Second,
-		NetworkMessages:                    6,
+		DistSQLNetworkMessages:             6,
 		ContentionTime:                     7 * time.Second,
 		LockWaitTime:                       4 * time.Second,
 		LatchWaitTime:                      3 * time.Second,
@@ -269,14 +269,14 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 	}
 	bEvent := kvpb.ContentionEvent{Duration: 14 * time.Second}
 	b := execstats.QueryLevelStats{
-		NetworkBytesSent:                   8,
+		DistSQLNetworkBytesSent:            8,
 		MaxMemUsage:                        9,
 		KVBytesRead:                        10,
 		KVPairsRead:                        11,
 		KVRowsRead:                         11,
 		KVBatchRequestsIssued:              11,
 		KVTime:                             12 * time.Second,
-		NetworkMessages:                    13,
+		DistSQLNetworkMessages:             13,
 		ContentionTime:                     14 * time.Second,
 		LockWaitTime:                       10 * time.Second,
 		LatchWaitTime:                      4 * time.Second,
@@ -304,14 +304,14 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		ClientTime:                         2 * time.Second,
 	}
 	expected := execstats.QueryLevelStats{
-		NetworkBytesSent:                   9,
+		DistSQLNetworkBytesSent:            9,
 		MaxMemUsage:                        9,
 		KVBytesRead:                        13,
 		KVPairsRead:                        15,
 		KVRowsRead:                         15,
 		KVBatchRequestsIssued:              15,
 		KVTime:                             17 * time.Second,
-		NetworkMessages:                    19,
+		DistSQLNetworkMessages:             19,
 		ContentionTime:                     21 * time.Second,
 		LockWaitTime:                       14 * time.Second,
 		LatchWaitTime:                      7 * time.Second,

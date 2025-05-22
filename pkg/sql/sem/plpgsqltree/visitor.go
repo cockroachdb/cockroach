@@ -190,6 +190,26 @@ func (v *SQLStmtVisitor) Visit(stmt Statement) (newStmt Statement, recurse bool)
 			cpy.Expr = e
 			newStmt = cpy
 		}
+	case *ReturnNext:
+		e, v.Err = v.visitExpr(t.Expr)
+		if v.Err != nil {
+			return stmt, false
+		}
+		if t.Expr != e {
+			cpy := t.CopyNode()
+			cpy.Expr = e
+			newStmt = cpy
+		}
+	case *ReturnQuery:
+		s, v.Err = v.visitStmt(t.SqlStmt)
+		if v.Err != nil {
+			return stmt, false
+		}
+		if t.SqlStmt != s {
+			cpy := t.CopyNode()
+			cpy.SqlStmt = s
+			newStmt = cpy
+		}
 	case *Raise:
 		for i, p := range t.Params {
 			e, v.Err = v.visitExpr(p)
@@ -287,8 +307,7 @@ func (v *SQLStmtVisitor) Visit(stmt Statement) (newStmt Statement, recurse bool)
 			}
 		}
 
-	case *ForEachArray, *ReturnNext,
-		*ReturnQuery, *Perform:
+	case *ForEachArray, *Perform:
 		panic(unimp.New("plpgsql visitor", "Unimplemented PLpgSQL visitor"))
 	}
 	if v.Err != nil {

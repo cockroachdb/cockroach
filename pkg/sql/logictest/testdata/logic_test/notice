@@ -63,5 +63,5 @@ UNLISTEN temp
 ----
 NOTICE: unimplemented: CRDB does not support LISTEN, making UNLISTEN a no-op
 HINT: You have attempted to use a feature that is not yet implemented.
-See: https://go.crdb.dev/issue-v/41522/v25.2
+See: https://go.crdb.dev/issue-v/41522/dev
 SQLSTATE: 0A000

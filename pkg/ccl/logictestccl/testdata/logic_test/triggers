@@ -925,7 +925,7 @@ statement ok
 CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION trigger_func();
 
 # Relations are referenced by name, so renaming the table is not allowed.
-statement error pgcode 2BP01 cannot rename relation "t" because view "xy" depends on it
+statement error pgcode 2BP01 cannot rename relation "t" because table "xy" depends on it
 ALTER TABLE t RENAME TO t2;
 
 # Sequences are remapped to their IDs, so renaming is allowed.
@@ -4016,7 +4016,7 @@ CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
 
 # Verify we log to the event log.
 query T retry
-select "eventType" from system.eventlog order by timestamp desc limit 1;
+select "eventType" from system.eventlog WHERE "eventType" <> 'finish_schema_change' order by timestamp desc limit 1;
 ----
 create_trigger
 
@@ -4037,7 +4037,7 @@ statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
 
 # ==============================================================================
-# Test that descriptor backreferences are cleaned up
+# Test that descriptor backreferences are cleaned up.
 # ==============================================================================
 
 subtest ensure_back_ref_cleanup
@@ -4085,6 +4085,104 @@ DROP FUNCTION update_listing_balance ;
 # Sanity to verify the dependency no longer exists.
 statement ok
 drop table listings_balance cascade;
+
+# ==============================================================================
+# Test trigger arguments.
+# ==============================================================================
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'NEW: %', NEW;
+    RAISE NOTICE 'OLD: %', OLD;
+    RAISE NOTICE 'TG_NAME: %', TG_NAME;
+    RAISE NOTICE 'TG_WHEN: %', TG_WHEN;
+    RAISE NOTICE 'TG_LEVEL: %', TG_LEVEL;
+    RAISE NOTICE 'TG_OP: %', TG_OP;
+    RAISE NOTICE 'TG_RELID: %', TG_RELID;
+    RAISE NOTICE 'TG_RELNAME: %', TG_RELNAME;
+    RAISE NOTICE 'TG_TABLE_NAME: %', TG_TABLE_NAME;
+    RAISE NOTICE 'TG_TABLE_SCHEMA: %', TG_TABLE_SCHEMA;
+    RAISE NOTICE 'TG_NARGS: %', TG_NARGS;
+    -- TODO(#135311): uncomment this when we support TG_ARGV.
+    --RAISE NOTICE 'TG_ARGV: %s', TG_ARGV;
+    RETURN NEW;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE ON xy FOR EACH ROW WHEN ((NEW).x = 1) EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT OR UPDATE ON xy FOR EACH ROW WHEN ((NEW).x = 1) EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 2);
+----
+NOTICE: NEW: (1,2)
+NOTICE: OLD: <NULL>
+NOTICE: TG_NAME: foo
+NOTICE: TG_WHEN: BEFORE
+NOTICE: TG_LEVEL: ROW
+NOTICE: TG_OP: INSERT
+NOTICE: TG_RELID: 106
+NOTICE: TG_RELNAME: xy
+NOTICE: TG_TABLE_NAME: xy
+NOTICE: TG_TABLE_SCHEMA: public
+NOTICE: TG_NARGS: 0
+NOTICE: NEW: (1,2)
+NOTICE: OLD: <NULL>
+NOTICE: TG_NAME: bar
+NOTICE: TG_WHEN: AFTER
+NOTICE: TG_LEVEL: ROW
+NOTICE: TG_OP: INSERT
+NOTICE: TG_RELID: 106
+NOTICE: TG_RELNAME: xy
+NOTICE: TG_TABLE_NAME: xy
+NOTICE: TG_TABLE_SCHEMA: public
+NOTICE: TG_NARGS: 0
+
+query T noticetrace
+UPDATE xy SET y = 3 WHERE x = 1;
+----
+NOTICE: NEW: (1,3)
+NOTICE: OLD: (1,2)
+NOTICE: TG_NAME: foo
+NOTICE: TG_WHEN: BEFORE
+NOTICE: TG_LEVEL: ROW
+NOTICE: TG_OP: UPDATE
+NOTICE: TG_RELID: 106
+NOTICE: TG_RELNAME: xy
+NOTICE: TG_TABLE_NAME: xy
+NOTICE: TG_TABLE_SCHEMA: public
+NOTICE: TG_NARGS: 0
+NOTICE: NEW: (1,3)
+NOTICE: OLD: (1,2)
+NOTICE: TG_NAME: bar
+NOTICE: TG_WHEN: AFTER
+NOTICE: TG_LEVEL: ROW
+NOTICE: TG_OP: UPDATE
+NOTICE: TG_RELID: 106
+NOTICE: TG_RELNAME: xy
+NOTICE: TG_TABLE_NAME: xy
+NOTICE: TG_TABLE_SCHEMA: public
+NOTICE: TG_NARGS: 0
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP TRIGGER bar ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DELETE FROM xy WHERE true;
+
+# ==============================================================================
+# Regression tests.
+# ==============================================================================
 
 # Test that CREATE and DROP TRIGGER work when sent in a statement batch.
 
@@ -4148,5 +4246,256 @@ SELECT id, a, b FROM tab_141810 ORDER BY id
 2  NULL  NULL
 3  1     2
 4  NULL  NULL
+
+subtest end
+
+# Until #135311 can be fixed, disallow TG_ARGV references by default. There is
+# a setting to allow them if necessary.
+subtest regression_135311
+
+statement ok
+DROP FUNCTION IF EXISTS g;
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'g()';
+    RAISE NOTICE 'TG_ARGV[1]: %', TG_ARGV[1];
+    RETURN NEW;
+  END
+$$;
+
+statement error pgcode 0A000 pq: unimplemented: referencing the TG_ARGV trigger function parameter is not yet supported
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g('foo', 'bar');
+
+statement ok
+SET allow_create_trigger_function_with_argv_references = true;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g('foo', 'bar');
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 2);
+----
+NOTICE: g()
+NOTICE: TG_ARGV[1]: foo
+
+statement ok
+RESET allow_create_trigger_function_with_argv_references;
+
+# The setting only disallows creating the trigger - not executing it if it was
+# already created.
+query T noticetrace
+INSERT INTO xy VALUES (3, 4);
+----
+NOTICE: g()
+NOTICE: TG_ARGV[1]: foo
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+subtest end
+
+subtest regression_146889
+
+statement ok
+CREATE TABLE parent146889 (k INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE child146889 (ref INT REFERENCES parent146889(k) ON DELETE CASCADE)
+
+statement ok
+INSERT INTO parent146889 VALUES (1);
+INSERT INTO child146889 VALUES (1);
+
+statement ok
+CREATE FUNCTION f146889() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', (SELECT count(*) FROM parent146889);
+    RETURN NULL;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER t AFTER DELETE ON parent146889 FOR EACH ROW EXECUTE FUNCTION f146889();
+
+query T noticetrace
+DELETE FROM parent146889 WHERE k = 1;
+----
+NOTICE: 0
+
+subtest end
+
+subtest dependency_142370
+
+statement ok
+create table t1(n int primary key, j int, k int);
+
+statement ok
+create index i1 on t1(k ASC);
+
+statement ok
+create index i2 on t1(k DESC);
+
+statement ok
+create table other(n int primary key, j int, k int);
+
+statement ok
+create index i1 on other(k ASC);
+
+statement ok
+create index i2 on other(k DESC);
+
+statement ok
+CREATE FUNCTION f1 ()
+RETURNS VOID
+LANGUAGE SQL
+AS $$
+  SELECT 1
+$$;
+
+statement ok
+CREATE TYPE e AS ENUM('a');
+
+statement ok
+CREATE OR REPLACE FUNCTION audit_changes()
+                                RETURNS TRIGGER AS $$
+                                BEGIN
+                                 SELECT f1();
+                                 SELECT *, 'a'::e FROM t1@i1 WHERE j=32;
+                                 SELECT *, 'a'::e FROM t1@i2 WHERE j=32;
+                                 SELECT *, 'a'::e FROM other@i1 WHERE j=32;
+                                 SELECT *, 'a'::e FROM other@i2 WHERE j=32;
+                                 RETURN NULL;
+                                END;
+                                $$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER audit_trigger AFTER INSERT OR UPDATE OR DELETE ON t1 FOR EACH ROW EXECUTE FUNCTION audit_changes();
+
+statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
+alter table t1 drop column j;
+
+statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
+alter table other drop column j;
+
+statement error pq: cannot alter type of column "j" because trigger "audit_trigger" on table "t1" depends on it
+alter table t1 alter column j set data type text;
+
+statement error pq: cannot alter type of column "j" because trigger "audit_trigger" on table "t1" depends on it
+alter table other alter column j set data type text;
+
+# TODO(142370): This should be blocked because the trigger references the table,
+# but we currently don't detect self-dependencies.
+statement ok
+drop index t1@i1;
+
+statement error pq: cannot drop index "i1" because trigger "audit_trigger" on table "t1" depends on it
+drop index other@i1;
+
+statement error pq: unimplemented: DROP INDEX cascade is not supported with triggers
+drop index other@i1 cascade;
+
+statement error pq: cannot drop function "f1" because other objects \(\[test.public.t1\]\) still depend on it
+DROP FUNCTION f1;
+
+statement error pq: unimplemented: drop function cascade not supported
+DROP FUNCTION f1 CASCADE;
+
+statement error pq: cannot drop type "e" because other objects \(\[test.public.t1\]\) still depend on it
+DROP TYPE e;
+
+statement error pq: unimplemented: DROP TYPE CASCADE is not yet supported
+DROP TYPE e CASCADE;
+
+statement error pq: cannot drop table other because other objects depend on it
+DROP TABLE other;
+
+# Verify the trigger still works
+# TODO(142370): this fails for now because we were allowed to drop the index earlier.
+statement error pq: while building trigger expression: index "i1" not found
+INSERT INTO t1 VALUES (0,0,0);
+
+statement ok
+create index i1 on t1(k);
+
+# This test doesn't run with the legacy schema config because CREATE/DROP
+# trigger isn't implemented there. We enable legacy to run DDL to verify
+# the dependencies.
+let $use_decl_sc
+SHOW use_declarative_schema_changer
+
+statement ok
+set use_declarative_schema_changer = 'off';
+
+# Disable schema locking to ensure that errors from it do not interfere
+# with dependency checking.
+statement ok
+ALTER TABLE t1 SET (schema_locked = false);
+
+statement ok
+ALTER TABLE other SET (schema_locked = false);
+
+skipif config local-mixed-24.3
+statement error pq: ALTER COLUMN TYPE is only implemented in the declarative schema changer
+alter table t1 alter column j set data type text;
+
+statement error pq: cannot alter type of column "j" because table "t1" depends on it
+alter table other alter column j set data type text;
+
+# TODO(142370): allowed because we don't pick up self-dependencies yet
+statement ok
+alter table t1 drop column j;
+
+statement error pq: cannot drop column "j" because table "t1" depends on it
+alter table other drop column j;
+
+# TODO(142370): allowed because we don't pick up self-dependencies yet
+statement ok
+drop index t1@i1;
+
+statement error pq: index "i1" does not exist
+drop index t1@i1 CASCADE;
+
+statement error pq: cannot drop index "i1" because table "t1" depends on it
+drop index other@i1;
+
+statement error pq: cannot drop function "f1" because other objects \(\[test.public.t1\]\) still depend on it
+DROP FUNCTION f1;
+
+statement error pq: unimplemented: drop function cascade not supported
+DROP FUNCTION f1 CASCADE;
+
+statement error pq: cannot drop type "e" because other objects \(\[test.public.t1\]\) still depend on it
+DROP TYPE e;
+
+statement error pq: unimplemented: DROP TYPE CASCADE is not yet supported
+DROP TYPE e CASCADE;
+
+statement error pq: cannot drop relation "other" because table "t1" depends on it
+DROP TABLE other;
+
+statement ok
+set use_declarative_schema_changer = $use_decl_sc;
+
+# Verify the trigger still works
+# TODO(142370): this fails because we were wrongly allowed to drop index i1 earlier
+statement error pq: while building trigger expression: index "i1" not found
+INSERT INTO t1(n,k) VALUES (1,1);
+
+statement ok
+DROP TABLE other CASCADE;
+
+statement error pq: relation "t1" does not exist
+DROP TRIGGER audit_trigger ON t1;
+
+statement ok
+DROP TYPE e;
+
+statement ok
+DROP FUNCTION f1;
 
 subtest end

@@ -207,9 +207,9 @@ func TestBatchRequestSummary(t *testing.T) {
 		},
 		{
 			reqs: []Request{
-				&CheckConsistencyRequest{}, &InitPutRequest{}, &TruncateLogRequest{},
+				&CheckConsistencyRequest{}, &TruncateLogRequest{},
 			},
-			expected: "1 TruncLog, 1 ChkConsistency, 1 InitPut",
+			expected: "1 TruncLog, 1 ChkConsistency",
 		},
 	}
 	for i, tc := range testCases {
@@ -381,12 +381,6 @@ func TestLockSpanIterate(t *testing.T) {
 			expSpans: []roachpb.Span{spanA},
 		},
 		{
-			name:     "initput",
-			req:      &InitPutRequest{RequestHeader: pointHeader},
-			resp:     &InitPutResponse{},
-			expSpans: []roachpb.Span{spanA},
-		},
-		{
 			name:     "increment",
 			req:      &IncrementRequest{RequestHeader: pointHeader},
 			resp:     &IncrementResponse{},
@@ -462,7 +456,6 @@ func TestRefreshSpanIterate(t *testing.T) {
 	}{
 		{&ConditionalPutRequest{}, &ConditionalPutResponse{}, sp("a", ""), roachpb.Span{}},
 		{&PutRequest{}, &PutResponse{}, sp("a-put", ""), roachpb.Span{}},
-		{&InitPutRequest{}, &InitPutResponse{}, sp("a-initput", ""), roachpb.Span{}},
 		{&IncrementRequest{}, &IncrementResponse{}, sp("a-inc", ""), roachpb.Span{}},
 		{&ScanRequest{}, &ScanResponse{}, sp("a", "c"), sp("b", "c")},
 		{&GetRequest{}, &GetResponse{}, sp("b", ""), roachpb.Span{}},
@@ -485,7 +478,7 @@ func TestRefreshSpanIterate(t *testing.T) {
 	}
 	require.NoError(t, ba.RefreshSpanIterate(&br, fn))
 	// The conditional put and init put are not considered read spans.
-	expReadSpans := []roachpb.Span{testCases[4].span, testCases[5].span, testCases[6].span, testCases[7].span}
+	expReadSpans := []roachpb.Span{testCases[3].span, testCases[4].span, testCases[5].span, testCases[6].span}
 	require.Equal(t, expReadSpans, readSpans)
 
 	// Batch responses with ResumeSpans.
@@ -671,12 +664,6 @@ func TestResponseKeyIterate(t *testing.T) {
 			req:    &ConditionalPutRequest{},
 			resp:   &ConditionalPutResponse{},
 			expErr: "cannot iterate over response keys of ConditionalPut request",
-		},
-		{
-			name:   "initput",
-			req:    &InitPutRequest{},
-			resp:   &InitPutResponse{},
-			expErr: "cannot iterate over response keys of InitPut request",
 		},
 		{
 			name:   "increment",

@@ -55,6 +55,10 @@ func (b *Benchmark) sanitizedName() string {
 	return sanitizeRe.ReplaceAllString(strings.TrimPrefix(b.Name, "Benchmark"), "_")
 }
 
+func (b *Benchmark) markerName(status Status) string {
+	return b.sanitizedName() + "." + strings.ToUpper(status.String())
+}
+
 func (b *Benchmark) binaryName() string {
 	return b.sanitizedPackageName()
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -350,7 +351,20 @@ func runAllocationBench(
 	// worst/best case outcomes.
 	result, sampleStddev := findMinDistanceClusterStatRun(t, samples)
 	for tag, value := range sampleStddev {
-		result.Total[fmt.Sprintf("std_%s", tag)] = value
+		metricName := fmt.Sprintf("std_%s", tag)
+		result.Total[metricName] = value
+
+		// Populate BenchmarkMetrics with metadata if it's initialized
+		// (it will be initialized only when OpenMetrics is enabled)
+		if result.BenchmarkMetrics != nil {
+			result.BenchmarkMetrics[metricName] = roachtestutil.AggregatedMetric{
+				Name:             metricName,
+				Value:            roachtestutil.MetricPoint(value),
+				Unit:             "stddev",
+				IsHigherBetter:   false, // Lower standard deviation is better
+				AdditionalLabels: nil,
+			}
+		}
 	}
 	if result == nil {
 		t.L().PrintfCtx(ctx, "no samples found for allocation bench run, won't put any artifacts")
@@ -395,28 +409,46 @@ func runAllocationBenchSample(
 		true, /* dryRun */
 		startTime, endTime,
 		joinSummaryQueries(resourceMinMaxSummary, overloadMaxSummary, rebalanceCostSummary),
-		func(stats map[string]clusterstats.StatSummary) (string, float64) {
+		func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
 			ret, name := 0.0, "cpu(%)"
 			if stat, ok := stats[cpuStat.Query]; ok {
 				ret = roundFraction(arithmeticMean(stat.Value), 1, 2)
 			}
-			return name, ret
+			return &roachtestutil.AggregatedMetric{
+				Name:             name,
+				Value:            roachtestutil.MetricPoint(ret),
+				Unit:             "percent",
+				IsHigherBetter:   false,
+				AdditionalLabels: nil,
+			}
 		},
-		func(stats map[string]clusterstats.StatSummary) (string, float64) {
+		func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
 			ret, name := 0.0, "write(%)"
 			if stat, ok := stats[ioWriteStat.Query]; ok {
 				ret = roundFraction(arithmeticMean(stat.Value), 1, 2)
 			}
-			return name, ret
+			return &roachtestutil.AggregatedMetric{
+				Name:             name,
+				Value:            roachtestutil.MetricPoint(ret),
+				Unit:             "percent",
+				IsHigherBetter:   false,
+				AdditionalLabels: nil,
+			}
 		},
-		func(stats map[string]clusterstats.StatSummary) (string, float64) {
+		func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
 			rebalanceMb := 0.0
 			values := stats[rebalanceSnapshotSentStat.Query].Value
 			if len(values) > 0 {
 				startMB, endMB := values[0], values[len(values)-1]
 				rebalanceMb = roundFraction(endMB-startMB, 1024, 2)
 			}
-			return "cost(gb)", rebalanceMb
+			return &roachtestutil.AggregatedMetric{
+				Name:             "cost(gb)",
+				Value:            roachtestutil.MetricPoint(rebalanceMb),
+				Unit:             "GB",
+				IsHigherBetter:   false,
+				AdditionalLabels: nil,
+			}
 		},
 	)
 }

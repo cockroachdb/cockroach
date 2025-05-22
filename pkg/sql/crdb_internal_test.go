@@ -175,10 +175,10 @@ func TestGossipAlertsTable(t *testing.T) {
 
 	if err := s.StorageLayer().GossipI().(*gossip.Gossip).AddInfoProto(gossip.MakeNodeHealthAlertKey(456), &statuspb.HealthCheckResult{
 		Alerts: []statuspb.HealthAlert{{
-			StoreID:     123,
-			Category:    statuspb.HealthAlert_METRICS,
-			Description: "foo",
-			Value:       100.0,
+			StoreID:         123,
+			Category:        statuspb.HealthAlert_METRICS,
+			SafeDescription: "foo",
+			Value:           100.0,
 		}},
 	}, time.Hour); err != nil {
 		t.Fatal(err)
@@ -931,6 +931,19 @@ func TestTxnContentionEventsTableMultiTenant(t *testing.T) {
 func causeContention(
 	t *testing.T, conn *gosql.DB, table string, insertValue string, updateValue string,
 ) {
+	// Given the schema of the table we expect to experience the contention on
+	// the non-unique secondary index. By default, with write buffering we no
+	// longer acquire the lock on those, so we need to tweak the session
+	// variable.
+	if _, err := conn.Exec("SET use_cputs_on_non_unique_indexes = true"); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if _, err := conn.Exec("RESET use_cputs_on_non_unique_indexes"); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
 	// Create a new connection, and then in a go routine have it start a
 	// transaction, update a row, sleep for a time, and then complete the
 	// transaction. With original connection attempt to update the same row

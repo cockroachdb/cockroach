@@ -1039,14 +1039,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/subselect.out --l
  select * from
    (select 9 as x, unnest(array[1,2,3,11,12,13]) as u) ss
    where tattle(x, u);
-@@ -1632,26 +1404,21 @@
+@@ -1632,26 +1404,35 @@
      end loop;
  end;
  $$;
-+ERROR:  unimplemented: set-returning PL/pgSQL functions are not yet supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/105240/_version_
- select * from explain_sq_limit();
+-select * from explain_sq_limit();
 -                        explain_sq_limit                        
 -----------------------------------------------------------------
 - Limit (actual rows=3 loops=1)
@@ -1056,7 +1053,24 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/subselect.out --l
 -               Sort Method: top-N heapsort  Memory: xxx
 -               ->  Seq Scan on sq_limit (actual rows=8 loops=1)
 -(6 rows)
--
++ERROR:  at or near "in": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++declare ln text;
++begin
++    for ln in
++           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
+ 
++We appreciate your feedback.
++
++select * from explain_sq_limit();
 +ERROR:  unknown function: explain_sq_limit()
  select * from (select pk,c2 from sq_limit order by c1,pk) as x limit 3;
   pk | c2 
@@ -1072,7 +1086,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/subselect.out --l
  drop table sq_limit;
  --
  -- Ensure that backward scan direction isn't propagated into
-@@ -1661,14 +1428,13 @@
+@@ -1661,14 +1442,13 @@
  declare c1 scroll cursor for
   select * from generate_series(1,4) i
    where i <> all (values (2),(3));
@@ -1092,7 +1106,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/subselect.out --l
  commit;
  --
  -- Tests for CTE inlining behavior
-@@ -1677,112 +1443,64 @@
+@@ -1677,112 +1457,64 @@
  explain (verbose, costs off)
  with x as (select * from (select f1 from subselect_tbl) ss)
  select * from x where f1 = 1;
@@ -1240,7 +1254,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/subselect.out --l
  -- Multiply-referenced CTEs can't be inlined if they contain outer self-refs
  explain (verbose, costs off)
  with recursive x(a) as
-@@ -1792,26 +1510,11 @@
+@@ -1792,26 +1524,11 @@
      select z.a || z1.a as a from z cross join z as z1
      where length(z.a || z1.a) < 5))
  select * from x;
@@ -1272,7 +1286,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/subselect.out --l
  with recursive x(a) as
    ((values ('a'), ('b'))
     union all
-@@ -1824,24 +1527,24 @@
+@@ -1824,24 +1541,24 @@
   a
   b
   aa
@@ -1313,7 +1327,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/subselect.out --l
   bbbb
  (22 rows)
  
-@@ -1853,19 +1556,11 @@
+@@ -1853,19 +1570,11 @@
      select z.a || z.a as a from z
      where length(z.a || z.a) < 5))
  select * from x;
@@ -1338,7 +1352,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/subselect.out --l
  with recursive x(a) as
    ((values ('a'), ('b'))
     union all
-@@ -1887,42 +1582,35 @@
+@@ -1887,42 +1596,35 @@
  explain (verbose, costs off)
  with x as (select * from int4_tbl)
  select * from (with y as (select * from x) select * from y) ss;

@@ -35,7 +35,7 @@ CREATE TRIGGER tr BEFORE INSERT OR UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION f(
 - [[TriggerFunctionCall:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
   {funcArgs: [], funcBody: "DECLARE\nfoo @100106 := 'a';\nBEGIN\nINSERT INTO defaultdb.public.ab VALUES ((new).x, (new).y);\nRAISE NOTICE '% %', public.g(), nextval(108:::REGCLASS);\nRETURN new;\nEND;\n", funcId: 110, tableId: 104, triggerId: 1}
 - [[TriggerDeps:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
-  {tableId: 104, triggerId: 1, usesRelationIds: [105, 108], usesRoutineIds: [109, 110], usesTypeIds: [106, 107]}
+  {tableId: 104, triggerId: 1, usesRelations: [{columnIds: [1, 2], id: 105}, {id: 108}], usesRoutineIds: [109, 110], usesTypeIds: [106, 107]}
 
 # TODO(#126362, #135655): uncomment this test case.
 # build

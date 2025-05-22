@@ -17,6 +17,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -140,6 +141,7 @@ func buildStatementBundle(
 	db *kv.DB,
 	p *planner,
 	ie *InternalExecutor,
+	requesterUsername string,
 	stmtRawSQL string,
 	plan *planTop,
 	planString string,
@@ -152,7 +154,7 @@ func buildStatementBundle(
 	if plan == nil {
 		return diagnosticsBundle{collectionErr: errors.AssertionFailedf("execution terminated early")}
 	}
-	b, err := makeStmtBundleBuilder(explainFlags, db, p, ie, stmtRawSQL, plan, trace, placeholders, sv)
+	b, err := makeStmtBundleBuilder(explainFlags, db, p, ie, requesterUsername, stmtRawSQL, plan, trace, placeholders, sv)
 	if err != nil {
 		return diagnosticsBundle{collectionErr: err}
 	}
@@ -209,9 +211,10 @@ func (bundle *diagnosticsBundle) insert(
 type stmtBundleBuilder struct {
 	flags explain.Flags
 
-	db *kv.DB
-	p  *planner
-	ie *InternalExecutor
+	db                *kv.DB
+	p                 *planner
+	ie                *InternalExecutor
+	requesterUsername string
 
 	stmt         string
 	plan         *planTop
@@ -230,6 +233,7 @@ func makeStmtBundleBuilder(
 	db *kv.DB,
 	p *planner,
 	ie *InternalExecutor,
+	requesterUsername string,
 	stmtRawSQL string,
 	plan *planTop,
 	trace tracingpb.Recording,
@@ -237,7 +241,8 @@ func makeStmtBundleBuilder(
 	sv *settings.Values,
 ) (stmtBundleBuilder, error) {
 	b := stmtBundleBuilder{
-		flags: flags, db: db, p: p, ie: ie, plan: plan, trace: trace, placeholders: placeholders, sv: sv,
+		flags: flags, db: db, p: p, ie: ie, requesterUsername: requesterUsername,
+		plan: plan, trace: trace, placeholders: placeholders, sv: sv,
 	}
 	err := b.buildPrettyStatement(stmtRawSQL)
 	if err != nil {
@@ -545,12 +550,15 @@ var stmtBundleIncludeAllFKReferences = settings.RegisterBoolSetting(
 )
 
 func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
-	c := makeStmtEnvCollector(ctx, b.p, b.ie)
+	c := makeStmtEnvCollector(ctx, b.p, b.ie, b.requesterUsername)
 
 	var buf bytes.Buffer
 	if err := c.PrintVersion(&buf); err != nil {
 		b.printError(fmt.Sprintf("-- error getting version: %v", err), &buf)
 	}
+	fmt.Fprintf(&buf, "\n")
+
+	c.PrintUser(&buf)
 	fmt.Fprintf(&buf, "\n")
 
 	// Show the values of session variables and cluster settings that have
@@ -927,10 +935,19 @@ type stmtEnvCollector struct {
 	ctx context.Context
 	p   *planner
 	ie  *InternalExecutor
+	ieo sessiondata.InternalExecutorOverride
 }
 
-func makeStmtEnvCollector(ctx context.Context, p *planner, ie *InternalExecutor) stmtEnvCollector {
-	return stmtEnvCollector{ctx: ctx, p: p, ie: ie}
+func makeStmtEnvCollector(
+	ctx context.Context, p *planner, ie *InternalExecutor, requesterUsername string,
+) stmtEnvCollector {
+	ieo := sessiondata.NoSessionDataOverride
+	if requesterUsername != "" {
+		ieo = sessiondata.InternalExecutorOverride{
+			User: username.MakeSQLUsernameFromPreNormalizedString(requesterUsername),
+		}
+	}
+	return stmtEnvCollector{ctx: ctx, p: p, ie: ie, ieo: ieo}
 }
 
 // query is a helper to run a query that returns a single string value. It
@@ -950,7 +967,7 @@ func (c *stmtEnvCollector) queryEx(query string, numCols int, emptyOk bool) ([]s
 		c.ctx,
 		"stmtEnvCollector",
 		nil, /* txn */
-		sessiondata.NoSessionDataOverride,
+		c.ieo,
 		query,
 	)
 	if err != nil {
@@ -1008,6 +1025,12 @@ func (c *stmtEnvCollector) PrintVersion(w io.Writer) error {
 	}
 	fmt.Fprintf(w, "-- Version: %s\n", version)
 	return err
+}
+
+func (c *stmtEnvCollector) PrintUser(w io.Writer) {
+	// Show the connected user. If the bundle includes a statement for a table
+	// with RLS enabled, this helps to explain why certain policies were enforced.
+	fmt.Fprintf(w, "-- User: %s\n", c.p.User())
 }
 
 // makeSingleLine replaces all control characters with a single space. This is
@@ -1098,20 +1121,22 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values
 		// We'll skip this variable only if its value matches both of the
 		// defaults.
 		skip := value == binaryDefault && value == clusterDefault
-		if buildutil.CrdbTestBuild {
+		commentOut := false // If skip is true, should we leave a commented out version of the var?
+		switch varName {
+		case "direct_columnar_scans_enabled":
 			// In test builds we might randomize some setting defaults, so
 			// we need to ignore them to make the tests deterministic.
-			switch varName {
-			case "direct_columnar_scans_enabled":
-				// This variable's default is randomized in test builds.
+			skip = buildutil.CrdbTestBuild
+		case "role":
+			// If a role is set, we comment it out in env.sql. Otherwise, running
+			// 'debug sb recreate' will fail with a non-existent user/role error.
+			if !skip {
 				skip = true
+				commentOut = true
 			}
 		}
 		// Use the "binary default" as the value that we will set to.
 		defaultValue := binaryDefault
-		if skip && !all {
-			continue
-		}
 		if _, ok := sessionVarNeedsEscaping[varName]; ok || anyWhitespace.MatchString(value) {
 			value = lexbase.EscapeSQLString(value)
 		}
@@ -1119,6 +1144,14 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values
 			// Need a special case for empty strings to make the SET statement
 			// parsable.
 			value = "''"
+		}
+		if skip && !all {
+			if commentOut {
+				// When commenting it out, keep the SET command mostly intact
+				// so it can be easily uncommented later if needed.
+				fmt.Fprintf(w, "-- SET %s = %s; -- skip\n", varName, value)
+			}
+			continue
 		}
 		fmt.Fprintf(w, "SET %s = %s;  -- default value: %s\n", varName, value, defaultValue)
 	}
@@ -1140,7 +1173,7 @@ func (c *stmtEnvCollector) PrintClusterSettings(w io.Writer, all bool) error {
 		c.ctx,
 		"stmtEnvCollector",
 		nil, /* txn */
-		sessiondata.NoSessionDataOverride,
+		c.ieo,
 		fmt.Sprintf(`SELECT variable, value, default_value FROM crdb_internal.cluster_settings%s`, suffix),
 	)
 	if err != nil {

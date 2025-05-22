@@ -805,7 +805,7 @@ regional_by_row_as  CREATE TABLE public.regional_by_row_as (
                       CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                       INDEX regional_by_row_as_i_idx (i ASC),
                       FAMILY fam_0_cr_pk_i (cr, pk, i, crdb_region)
-                    ) LOCALITY REGIONAL BY ROW
+                    ) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT ZONE_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row_as]
@@ -2149,6 +2149,18 @@ subtest end
 # to/from a regional by row table.
 subtest add_drop_column_regional_by_row_zone_configs
 
+# For this subtest, we don't want the old zone configs to be GC'd. The logictest
+# framework customizes this setting, so we preserve the old value.
+let $old_gc_job_wait_for_gc_interval
+SHOW CLUSTER SETTING sql.gc_job.wait_for_gc.interval
+
+user host-cluster-root
+
+statement ok
+SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1m'
+
+user root
+
 statement ok
 CREATE DATABASE db2 PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE ZONE FAILURE
 
@@ -2449,5 +2461,12 @@ ORDER By subzone_span;
 
 statement ok
 RESET database
+
+user host-cluster-root
+
+statement ok
+SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '$old_gc_job_wait_for_gc_interval'
+
+user root
 
 subtest end

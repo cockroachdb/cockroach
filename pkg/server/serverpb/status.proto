@@ -1383,6 +1383,22 @@ message HotRangesRequest {
     (gogoproto.customname) = "TenantID",
     (gogoproto.nullable) = true
   ];
+  repeated string nodes = 5 [
+    (gogoproto.customname) = "Nodes",
+    (gogoproto.nullable) = true
+  ];
+  // per_node_limit indicates the maximum number of hot ranges
+  // to return for each node. If left empty, the default is 128.
+  int32 per_node_limit = 6 [
+    (gogoproto.customname) = "PerNodeLimit",
+    (gogoproto.nullable) = true
+  ];
+  // stats_only indicates whether to return only the stats
+  // for the hot ranges, without pulling descriptor information.
+  bool stats_only = 7 [
+    (gogoproto.customname) = "StatsOnly",
+    (gogoproto.nullable) = true
+  ];
 }
 
 // HotRangesResponseV2 is a response payload returned by `HotRangesV2` service.
@@ -1444,6 +1460,8 @@ message HotRangesResponseV2 {
     repeated string tables = 17;
     // Indexes for the range
     repeated string indexes = 18;
+    // Range Descriptor for the range
+    cockroach.roachpb.RangeDescriptor desc = 19;
 
     // previously used for database, table, and index name
     reserved 4 to 6;
@@ -1597,6 +1615,16 @@ message StatementsRequest {
   int64 start = 3 [(gogoproto.nullable) = true];
   int64 end = 4 [(gogoproto.nullable) = true];
   FetchMode fetch_mode = 5;
+}
+
+message DrainSqlStatsRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+}
+
+message DrainStatsResponse {
+  repeated cockroach.sql.CollectedStatementStatistics statements = 1;
+  repeated cockroach.sql.CollectedTransactionStatistics transactions = 2;
+  int64 fingerprint_count = 3;
 }
 
 message StatementsResponse {
@@ -1770,8 +1798,8 @@ message StatementDiagnosticsReport {
     [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
   google.protobuf.Timestamp expires_at = 7
     [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
-  // TODO(yuzefovich): should we populate plan_gist, anti_plan_gist, and
-  // redacted fields?
+  // TODO(yuzefovich): should we populate plan_gist, anti_plan_gist, redacted,
+  // and username fields?
 }
 
 message CreateStatementDiagnosticsReportRequest {
@@ -2566,6 +2594,8 @@ service Status {
       post: "/_status/resetsqlstats"
       body: "*"
     };
+  }
+  rpc DrainSqlStats(DrainSqlStatsRequest) returns (DrainStatsResponse) {
   }
 
   rpc IndexUsageStatistics(IndexUsageStatisticsRequest) returns (IndexUsageStatisticsResponse) {

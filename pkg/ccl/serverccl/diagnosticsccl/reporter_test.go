@@ -26,10 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/cloudinfo"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -68,7 +70,7 @@ func TestTenantReport(t *testing.T) {
 	setupCluster(t, tenantDB)
 
 	// Clear the SQL stat pool before getting diagnostics.
-	rt.server.SQLServer().(*sql.Server).GetSQLStatsController().ResetLocalSQLStats(ctx)
+	require.NoError(t, rt.server.SQLServer().(*sql.Server).GetLocalSQLStatsProvider().Reset(ctx))
 	reporter.ReportDiagnostics(ctx)
 
 	require.Equal(t, 1, rt.diagServer.NumRequests())
@@ -151,6 +153,8 @@ func TestServerReport(t *testing.T) {
 	// We want to ensure that non-reportable settings, sensitive
 	// settings, and all string settings are redacted. Below we override
 	// one of each.
+	_, err := rt.serverDB.Exec(`SET application_name = 'test'`)
+	require.NoError(t, err)
 	schemaAndQueriesForTest := []string{
 		`CREATE TABLE diagnostics_test_table (diagnostics_test_id int)`,
 		`ALTER TABLE diagnostics_test_table ADD COLUMN diagnostics_test_name string`,
@@ -160,6 +164,10 @@ func TestServerReport(t *testing.T) {
 		_, err := rt.serverDB.Exec(s)
 		require.NoError(t, err)
 	}
+
+	conn := sqlutils.MakeSQLRunner(rt.serverDB)
+	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, conn, len(schemaAndQueriesForTest),
+		sqlstatstestutil.StatementFilter{App: "test"})
 
 	expectedUsageReports := 0
 
@@ -171,7 +179,7 @@ func TestServerReport(t *testing.T) {
 
 		node := rt.server.MetricsRecorder().GenerateNodeStatus(ctx)
 		// Clear the SQL stat pool before getting diagnostics.
-		rt.server.SQLServer().(*sql.Server).GetSQLStatsController().ResetLocalSQLStats(ctx)
+		require.NoError(t, rt.server.SQLServer().(*sql.Server).GetLocalSQLStatsProvider().Reset(ctx))
 		rt.server.DiagnosticsReporter().(*diagnostics.Reporter).ReportDiagnostics(ctx)
 
 		keyCounts := make(map[roachpb.StoreID]int64)
@@ -493,9 +501,15 @@ func TestUsageQuantization(t *testing.T) {
 	}
 
 	ts := s.ApplicationLayer()
+	obsConn := sqlutils.MakeSQLRunner(ts.SQLConn(t))
+
+	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, obsConn, 1, sqlstatstestutil.StatementFilter{
+		Query:     "SHOW application_name",
+		ExecCount: 10010,
+	})
 
 	// Flush the SQL stat pool.
-	ts.SQLServer().(*sql.Server).GetSQLStatsController().ResetLocalSQLStats(ctx)
+	require.NoError(t, ts.SQLServer().(*sql.Server).GetLocalSQLStatsProvider().Reset(ctx))
 
 	// Collect a round of statistics.
 	ts.DiagnosticsReporter().(*diagnostics.Reporter).ReportDiagnostics(ctx)

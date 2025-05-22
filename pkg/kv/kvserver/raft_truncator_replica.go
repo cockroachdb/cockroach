@@ -26,11 +26,15 @@ func (r *raftTruncatorReplica) getRangeID() roachpb.RangeID {
 func (r *raftTruncatorReplica) getTruncatedState() kvserverpb.RaftTruncatedState {
 	r.mu.Lock() // TODO(pav-kv): not needed if raftMu is held.
 	defer r.mu.Unlock()
-	return r.shMu.raftTruncState
+	return (*Replica)(r).asLogStorage().shMu.trunc
 }
 
-func (r *raftTruncatorReplica) handleTruncationResult(ctx context.Context, pt pendingTruncation) {
-	(*Replica)(r).handleTruncatedStateResultRaftMuLocked(ctx, pt)
+func (r *raftTruncatorReplica) stagePendingTruncation(_ context.Context, pt pendingTruncation) {
+	(*Replica)(r).stagePendingTruncationRaftMuLocked(pt)
+}
+
+func (r *raftTruncatorReplica) finalizeTruncation(ctx context.Context) {
+	(*Replica)(r).finalizeTruncationRaftMuLocked(ctx)
 }
 
 func (r *raftTruncatorReplica) getPendingTruncs() *pendingLogTruncations {
@@ -40,7 +44,7 @@ func (r *raftTruncatorReplica) getPendingTruncs() *pendingLogTruncations {
 func (r *raftTruncatorReplica) sideloadedStats(
 	ctx context.Context, span kvpb.RaftSpan,
 ) (entries uint64, freed int64, err error) {
-	return r.raftMu.sideloaded.Stats(ctx, span)
+	return r.logStorage.ls.Sideload.Stats(ctx, span)
 }
 
 func (r *raftTruncatorReplica) getStateLoader() stateloader.StateLoader {

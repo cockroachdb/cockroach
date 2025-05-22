@@ -10,7 +10,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -47,12 +46,6 @@ func New(
 	)
 }
 
-// GetController returns a sqlstats.Controller responsible for the current
-// SQLStats.
-func (s *SQLStats) GetController(server serverpb.SQLStatusServer) *Controller {
-	return NewController(s, server)
-}
-
 func (s *SQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
 	// We run a periodic async job to clean up the in-memory stats.
 	_ = stopper.RunAsyncTask(ctx, "sql-stats-clearer", func(ctx context.Context) {
@@ -79,7 +72,6 @@ func (s *SQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
 				case <-stopper.ShouldQuiesce():
 					return
 				case <-timer.C:
-					timer.Read = true
 				}
 			}
 		}

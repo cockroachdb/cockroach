@@ -390,14 +390,17 @@ func testInternalExecutorAppNameInitialization(
 	}
 
 	// Now check that it was properly registered in statistics.
-	if row, err := ie.QueryRow(context.Background(), "find-query", nil,
-		"SELECT application_name FROM crdb_internal.node_statement_statistics WHERE key LIKE 'SELECT' || ' pg_sleep(%'"); err != nil {
-		t.Fatal(err)
-	} else if row == nil {
-		t.Fatalf("expected 1 query, got 0")
-	} else if appName := string(*row[0].(*tree.DString)); appName != expectedAppName {
-		t.Fatalf("unexpected app name: expected %q, got %q", expectedAppName, appName)
-	}
+	testutils.SucceedsSoon(t, func() error {
+		if row, err := ie.QueryRow(context.Background(), "find-query", nil,
+			"SELECT application_name FROM crdb_internal.node_statement_statistics WHERE key LIKE 'SELECT' || ' pg_sleep(%'"); err != nil {
+			t.Fatal(err)
+		} else if row == nil {
+			return fmt.Errorf("expected 1 query got 0")
+		} else if appName := string(*row[0].(*tree.DString)); appName != expectedAppName {
+			return fmt.Errorf("unexpected app name: expected %q, got %q", expectedAppName, appName)
+		}
+		return nil
+	})
 }
 
 // Test that, when executing inside a higher-level txn, the internal executor
@@ -487,7 +490,7 @@ func TestInternalExecutorInLeafTxnDoesNotPanic(t *testing.T) {
 
 	ltis, err := rootTxn.GetLeafTxnInputState(ctx)
 	require.NoError(t, err)
-	leafTxn := kv.NewLeafTxn(ctx, kvDB, roachpb.NodeID(1), ltis)
+	leafTxn := kv.NewLeafTxn(ctx, kvDB, roachpb.NodeID(1), ltis, nil /* header */)
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 	_, err = ie.ExecEx(
@@ -745,7 +748,7 @@ func TestInternalExecutorSyntheticDesc(t *testing.T) {
 	blah INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
-)`,
+);`,
 					string(*createStatement))
 				return nil
 			}))
@@ -767,7 +770,7 @@ func TestInternalExecutorSyntheticDesc(t *testing.T) {
 	blah INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
-)`,
+);`,
 							string(*createStatement))
 						return nil
 					})

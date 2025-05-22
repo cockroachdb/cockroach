@@ -124,5 +124,6 @@ func (mb *mutationBuilder) buildDelete(returning *tree.ReturningExprs) {
 		mb.outScope.expr, mb.uniqueChecks, mb.fkChecks, private,
 	)
 
-	mb.buildReturning(returning)
+	returningInScope, returningOutScope := mb.buildReturningScopes(returning, nil /* colRefs */)
+	mb.buildReturning(returning, returningInScope, returningOutScope)
 }

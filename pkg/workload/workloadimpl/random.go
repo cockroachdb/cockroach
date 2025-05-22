@@ -7,8 +7,7 @@ package workloadimpl
 
 import (
 	"math"
-
-	"golang.org/x/exp/rand"
+	"math/rand/v2"
 )
 
 // RandStringFast is a non-specialized random string generator with an even

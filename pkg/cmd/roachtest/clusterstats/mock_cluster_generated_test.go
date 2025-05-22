@@ -145,20 +145,6 @@ func (mr *MockClusterMockRecorder) CRDBNodes() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CRDBNodes", reflect.TypeOf((*MockCluster)(nil).CRDBNodes))
 }
 
-// CaptureSideEyeSnapshot mocks base method.
-func (m *MockCluster) CaptureSideEyeSnapshot(arg0 context.Context) string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CaptureSideEyeSnapshot", arg0)
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// CaptureSideEyeSnapshot indicates an expected call of CaptureSideEyeSnapshot.
-func (mr *MockClusterMockRecorder) CaptureSideEyeSnapshot(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CaptureSideEyeSnapshot", reflect.TypeOf((*MockCluster)(nil).CaptureSideEyeSnapshot), arg0)
-}
-
 // Cloud mocks base method.
 func (m *MockCluster) Cloud() spec.Cloud {
 	m.ctrl.T.Helper()
@@ -614,6 +600,20 @@ func (m *MockCluster) Nodes(arg0 ...int) option.NodeListOption {
 func (mr *MockClusterMockRecorder) Nodes(arg0 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Nodes", reflect.TypeOf((*MockCluster)(nil).Nodes), arg0...)
+}
+
+// PopulateEtcHosts mocks base method.
+func (m *MockCluster) PopulateEtcHosts(arg0 context.Context, arg1 *logger.Logger) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PopulateEtcHosts", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// PopulateEtcHosts indicates an expected call of PopulateEtcHosts.
+func (mr *MockClusterMockRecorder) PopulateEtcHosts(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PopulateEtcHosts", reflect.TypeOf((*MockCluster)(nil).PopulateEtcHosts), arg0, arg1)
 }
 
 // Put mocks base method.

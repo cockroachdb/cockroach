@@ -44,4 +44,4 @@ var PollInterval = settings.RegisterDurationSetting(
 	"kv.protectedts.poll_interval",
 	// TODO(ajwerner): better description.
 	"the interval at which the protectedts subsystem state is polled",
-	2*time.Minute, settings.NonNegativeDuration)
+	2*time.Minute)

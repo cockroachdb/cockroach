@@ -9,9 +9,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/generated.out --l
 -(0 rows)
 +  attrelid  |         attname          | attgenerated 
 +------------+--------------------------+--------------
-+ 3550979019 | crdb_internal_idx_expr   | v
-+  549341432 | crdb_internal_idx_expr   | v
-+  549341438 | crdb_internal_idx_expr_1 | v
++  601088728 | crdb_internal_idx_expr   | v
++ 1634682172 | crdb_internal_idx_expr   | v
++ 1634682170 | crdb_internal_idx_expr_1 | v
 +(3 rows)
  
  CREATE TABLE gtest0 (a int PRIMARY KEY, b int GENERATED ALWAYS AS (55) STORED);

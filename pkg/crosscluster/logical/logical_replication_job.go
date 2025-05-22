@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -56,8 +57,7 @@ var (
 		settings.ApplicationLevel,
 		"logical_replication.consumer.job_checkpoint_frequency",
 		"controls the frequency with which the job updates their progress; if 0, disabled",
-		10*time.Second,
-		settings.NonNegativeDuration)
+		10*time.Second)
 
 	// heartbeatFrequency controls frequency the stream replication
 	// destination cluster sends heartbeat to the source cluster to keep
@@ -68,7 +68,6 @@ var (
 		"controls frequency the stream replication destination cluster sends heartbeat "+
 			"to the source cluster to keep the stream alive",
 		30*time.Second,
-		settings.NonNegativeDuration,
 	)
 )
 
@@ -510,7 +509,10 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 	if defaultFnID := payload.DefaultConflictResolution.FunctionId; defaultFnID != 0 {
 		defaultFnOID = catid.FuncIDToOID(catid.DescID(defaultFnID))
 	}
-
+	writer, err := getWriterType(ctx, payload.Mode, execCfg.Settings)
+	if err != nil {
+		return nil, nil, info, err
+	}
 	crossClusterResolver := crosscluster.MakeCrossClusterTypeResolver(plan.SourceTypes)
 	tableMetadataByDestID := make(map[int32]execinfrapb.TableReplicationMetadata)
 	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, descriptors *descs.Collection) error {
@@ -534,6 +536,10 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 			scDesc, err := descriptors.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Schema(ctx, dstTableDesc.GetParentSchemaID())
 			if err != nil {
 				return errors.Wrapf(err, "failed to look up schema descriptor for table %d", pair.DstDescriptorID)
+			}
+
+			if err := tabledesc.CheckLogicalReplicationCompatibility(&srcTableDesc, dstTableDesc.TableDesc(), payload.SkipSchemaCheck || payload.CreateTable, writer == sqlclustersettings.LDRWriterTypeLegacyKV); err != nil {
+				return err
 			}
 
 			var fnOID oid.Oid
@@ -590,6 +596,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		payload.Discard,
 		payload.Mode,
 		payload.MetricsLabel,
+		writer,
 	)
 	if err != nil {
 		return nil, nil, info, err

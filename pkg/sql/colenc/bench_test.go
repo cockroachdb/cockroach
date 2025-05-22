@@ -124,8 +124,10 @@ func BenchmarkTCPHLineItem(b *testing.B) {
 	}
 	cb.SetLength(numRows)
 	desc := desctestutils.TestingGetTableDescriptor(kvdb, s.Codec(), "defaultdb", "public", "lineitem")
-	enc := colenc.MakeEncoder(s.Codec(), desc, &st.SV, cb, desc.PublicColumns(),
-		nil /*metrics*/, nil /*partialIndexMap*/, func() error { return nil })
+	enc := colenc.MakeEncoder(
+		s.Codec(), desc, evalCtx.SessionData(), &st.SV, cb, desc.PublicColumns(),
+		nil /* metrics */, nil /* partialIndexMap */, func() error { return nil },
+	)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		err = enc.PrepareBatch(ctx, &noopPutter{}, 0, cb.Length())

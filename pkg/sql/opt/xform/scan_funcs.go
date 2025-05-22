@@ -514,7 +514,7 @@ func (c *CustomFuncs) IsRegionalByRowTableScanOrSelect(input memo.RelExpr) bool 
 // region without bounded staleness. Bounded staleness would allow local
 // replicas to be used for the scan.
 func (c *CustomFuncs) IsSelectFromRemoteTableRowsOnly(input memo.RelExpr) bool {
-	scanExpr, inputFilters, ok := c.getfilteredCanonicalScan(input)
+	scanExpr, inputFilters, ok := c.GetFilteredCanonicalScan(input)
 	if !ok {
 		return false
 	}

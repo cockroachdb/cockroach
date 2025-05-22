@@ -36,7 +36,7 @@ txn_begin t=A ts=10,0
 txn_begin t=B ts=11,0
 ----
 >> at end:
-txn: "B" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
+txn: "B" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=11.000000000,0 gul=0,0
 
 run stats ok
 with t=A
@@ -59,7 +59,7 @@ stats: lock_count=+1 lock_bytes=+69 lock_age=+90
 put: lock acquisition = {k4 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10 Replicated Intent []}
 stats: key_bytes=+12 val_count=+1 val_bytes=+60 live_bytes=+53 gc_bytes_age=+1710 intent_count=+1 intent_bytes=+22 lock_count=+1 lock_age=+90
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} lock=true stat=PENDING rts=10.000000000,0 gul=0,0
 data: "k1"/5.000000000,0 -> /BYTES/v1
 data: "k2"/5.000000000,0 -> /BYTES/v2
 data: "k3"/5.000000000,0 -> /BYTES/v3
@@ -99,7 +99,7 @@ found: true
 found: false
 found: false
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} lock=true stat=PENDING rts=10.000000000,0 gul=0,0
 
 # A different transaction shouldn't be able to verify TxnA's locks.
 run stats ok
@@ -154,7 +154,7 @@ found: true
 found: false
 found: false
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=15} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=15} lock=true stat=PENDING rts=10.000000000,0 gul=0,0
 
 # Lower:
 run stats ok
@@ -182,7 +182,7 @@ found: true
 found: false
 found: false
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=5} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=5} lock=true stat=PENDING rts=10.000000000,0 gul=0,0
 
 # Ensure if a lock is held at a sequence number that's ignored it'll be
 # considered not found.
@@ -212,7 +212,7 @@ found: false
 found: false
 found: false
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=5} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=5} lock=true stat=PENDING rts=10.000000000,0 gul=0,0 isn=1
 
 # Test that if a lock is held at a sequence number that's ignored, but it's also
 # held at a lock strength that's stronger at a sequence number that's not
@@ -233,7 +233,7 @@ with t=A
   acquire_lock k=k7 str=shared
 ----
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=10.000000000,0 gul=0,0 isn=1
 lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -255,7 +255,7 @@ found: true
 found: true
 found: false
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=10.000000000,0 gul=0,0 isn=1
 
 # Test that the intent history is consulted when verifying locks.
 run ok
@@ -271,7 +271,7 @@ put: lock acquisition = {k8 id=00000001 key=/Min iso=Serializable pri=0.00000000
 put: lock acquisition = {k8 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=25 Replicated Intent [{5 15}]}
 put: lock acquisition = {k8 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=30 Replicated Intent [{5 15}]}
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=10.000000000,0 gul=0,0 isn=1
 data: "k1"/5.000000000,0 -> /BYTES/v1
 data: "k2"/5.000000000,0 -> /BYTES/v2
 data: "k3"/5.000000000,0 -> /BYTES/v3
@@ -312,4 +312,4 @@ found: true
 found: false
 found: false
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=3
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=10.000000000,0 gul=0,0 isn=3

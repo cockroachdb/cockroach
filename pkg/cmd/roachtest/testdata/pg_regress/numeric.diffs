@@ -283,7 +283,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  WITH v(x) AS
    (VALUES('1'::numeric),('4.2'),('inf'),('nan'))
  SELECT x,
-@@ -894,108 +786,51 @@
+@@ -894,108 +786,43 @@
    log10(x),
    ln(x)
  FROM v;
@@ -400,22 +400,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
 +ERROR:  VALUES types string and decimal cannot be matched
  SELECT power('0'::numeric, '-1');
 -ERROR:  zero raised to a negative power is undefined
-+  power   
-+----------
-+ Infinity
-+(1 row)
-+
++ERROR:  power(): zero raised to a negative power is undefined
  SELECT power('0'::numeric, '-inf');
 -ERROR:  zero raised to a negative power is undefined
-+  power   
-+----------
-+ Infinity
-+(1 row)
-+
++ERROR:  power(): zero raised to a negative power is undefined
  SELECT power('-1'::numeric, 'inf');
   power 
  -------
-@@ -1003,31 +838,39 @@
+@@ -1003,21 +830,21 @@
  (1 row)
  
  SELECT power('-2'::numeric, '3');
@@ -429,11 +421,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  
  SELECT power('-2'::numeric, '3.3');
 -ERROR:  a negative number raised to a non-integer power yields a complex result
-+ power 
-+-------
-+   NaN
-+(1 row)
-+
++ERROR:  power(): a negative number raised to a non-integer power yields a complex result
  SELECT power('-2'::numeric, '-1');
 -        power        
 ----------------------
@@ -445,73 +433,20 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  
  SELECT power('-2'::numeric, '-1.5');
 -ERROR:  a negative number raised to a non-integer power yields a complex result
--SELECT power('-2'::numeric, 'inf');
--  power   
------------
-- Infinity
-+ power 
-+-------
-+   NaN
- (1 row)
- 
--SELECT power('-2'::numeric, '-inf');
-+SELECT power('-2'::numeric, 'inf');
-  power 
- -------
--     0
-+     1
-+(1 row)
-+
-+SELECT power('-2'::numeric, '-inf');
-+         power         
-+-----------------------
-+ 1.0000000000000000000
- (1 row)
- 
- SELECT power('inf'::numeric, '-2');
-@@ -1055,7 +898,11 @@
++ERROR:  power(): a negative number raised to a non-integer power yields a complex result
+ SELECT power('-2'::numeric, 'inf');
+   power   
+ ----------
+@@ -1055,7 +882,7 @@
  (1 row)
  
  SELECT power('-inf'::numeric, '4.5');
 -ERROR:  a negative number raised to a non-integer power yields a complex result
-+ power 
-+-------
-+   NaN
-+(1 row)
-+
++ERROR:  power(): a negative number raised to a non-integer power yields a complex result
  SELECT power('-inf'::numeric, '-2');
   power 
  -------
-@@ -1065,7 +912,7 @@
- SELECT power('-inf'::numeric, '-3');
-  power 
- -------
--     0
-+    -0
- (1 row)
- 
- SELECT power('-inf'::numeric, '0');
-@@ -1075,15 +922,15 @@
- (1 row)
- 
- SELECT power('-inf'::numeric, 'inf');
--  power   
------------
-- Infinity
-+ power 
-+-------
-+   NaN
- (1 row)
- 
- SELECT power('-inf'::numeric, '-inf');
-  power 
- -------
--     0
-+   NaN
- (1 row)
- 
- -- ******************************
-@@ -1109,15 +956,15 @@
+@@ -1109,15 +936,15 @@
  (1 row)
  
  SELECT STDDEV(val) FROM num_data;
@@ -533,7 +468,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  (1 row)
  
  -- Check for appropriate rounding and overflow
-@@ -1125,38 +972,34 @@
+@@ -1125,38 +952,34 @@
  INSERT INTO fract_only VALUES (1, '0.0');
  INSERT INTO fract_only VALUES (2, '0.1');
  INSERT INTO fract_only VALUES (3, '1.0');	-- should fail
@@ -587,7 +522,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  SELECT (-9223372036854775808.4)::int8; -- ok
           int8         
  ----------------------
-@@ -1170,9 +1013,9 @@
+@@ -1170,9 +993,9 @@
  (1 row)
  
  SELECT 9223372036854775807.5::int8; -- should fail
@@ -599,7 +534,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  SELECT (-2147483648.4)::int4; -- ok
      int4     
  -------------
-@@ -1186,9 +1029,9 @@
+@@ -1186,9 +1009,9 @@
  (1 row)
  
  SELECT 2147483647.5::int4; -- should fail
@@ -611,7 +546,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  SELECT (-32768.4)::int2; -- ok
    int2  
  --------
-@@ -1202,7 +1045,7 @@
+@@ -1202,7 +1025,7 @@
  (1 row)
  
  SELECT 32767.5::int2; -- should fail
@@ -620,7 +555,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  -- Check inf/nan conversion behavior
  SELECT 'NaN'::float8::numeric;
   numeric 
-@@ -1283,23 +1126,23 @@
+@@ -1283,23 +1106,23 @@
  (1 row)
  
  SELECT 'NaN'::numeric::int2;
@@ -653,7 +588,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  -- Simple check that ceil(), floor(), and round() work correctly
  CREATE TABLE ceil_floor_round (a numeric);
  INSERT INTO ceil_floor_round VALUES ('-5.5');
-@@ -1317,7 +1160,7 @@
+@@ -1317,7 +1140,7 @@
         9.5 |   10 |      10 |     9 |    10
   9.4999999 |   10 |      10 |     9 |     9
         0.0 |    0 |       0 |     0 |     0
@@ -662,7 +597,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
   -0.000001 |    0 |       0 |    -1 |     0
  (7 rows)
  
-@@ -1331,44 +1174,51 @@
+@@ -1331,44 +1154,47 @@
  	round((1.5 * 10 ^ i)::numeric, -i),
  	round((2.5 * 10 ^ i)::numeric, -i)
  FROM generate_series(-5,5) AS t(i);
@@ -720,18 +655,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
 +HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
  SELECT width_bucket('NaN', 3.0, 4.0, 888);
 -ERROR:  operand, lower bound, and upper bound cannot be NaN
-+     width_bucket     
-+----------------------
-+ -9223372036854775808
-+(1 row)
-+
++ERROR:  width_bucket(): operand, lower bound, and upper bound cannot be NaN
  SELECT width_bucket(0::float8, 'NaN', 4.0::float8, 888);
 -ERROR:  operand, lower bound, and upper bound cannot be NaN
 +ERROR:  unknown signature: width_bucket(float, string, float, int)
 +HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
  SELECT width_bucket(2.0, 3.0, '-inf', 888);
 -ERROR:  lower and upper bounds must be finite
-+ERROR:  width_bucket(): operand, lower bound, and upper bound cannot be infinity
++ERROR:  width_bucket(): lower and upper bounds must be finite
  SELECT width_bucket(0::float8, '-inf', 4.0::float8, 888);
 -ERROR:  lower and upper bounds must be finite
 +ERROR:  unknown signature: width_bucket(float, string, float, int)
@@ -739,7 +670,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  -- normal operation
  CREATE TABLE width_bucket_test (operand_num numeric, operand_f8 float8);
  COPY width_bucket_test (operand_num) FROM stdin;
-@@ -1386,118 +1236,58 @@
+@@ -1386,35 +1212,14 @@
      width_bucket(operand_num, -25, 25, 10) AS wb_5,
      width_bucket(operand_f8, -25, 25, 10) AS wb_5f
      FROM width_bucket_test;
@@ -772,18 +703,16 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  -- finite bucket bounds, but allow an infinite operand
  SELECT width_bucket(0.0::numeric, 'Infinity'::numeric, 5, 10); -- error
 -ERROR:  lower and upper bounds must be finite
-+ERROR:  width_bucket(): operand, lower bound, and upper bound cannot be infinity
++ERROR:  width_bucket(): lower and upper bounds must be finite
  SELECT width_bucket(0.0::numeric, 5, '-Infinity'::numeric, 20); -- error
 -ERROR:  lower and upper bounds must be finite
-+ERROR:  width_bucket(): operand, lower bound, and upper bound cannot be infinity
++ERROR:  width_bucket(): lower and upper bounds must be finite
  SELECT width_bucket('Infinity'::numeric, 1, 10, 10),
         width_bucket('-Infinity'::numeric, 1, 10, 10);
-- width_bucket | width_bucket 
----------------+--------------
--           11 |            0
--(1 row)
--
-+ERROR:  width_bucket(): operand, lower bound, and upper bound cannot be infinity
+  width_bucket | width_bucket 
+@@ -1423,81 +1228,46 @@
+ (1 row)
+ 
  SELECT width_bucket(0.0::float8, 'Infinity'::float8, 5, 10); -- error
 -ERROR:  lower and upper bounds must be finite
 +ERROR:  unknown signature: width_bucket(float, float, int, int)
@@ -879,7 +808,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  -- Check cases that could trigger overflow or underflow within the calculation
  SELECT oper, low, high, cnt, width_bucket(oper, low, high, cnt)
  FROM
-@@ -1516,379 +1306,90 @@
+@@ -1516,379 +1286,90 @@
      (0, 0, 1, 2147483647),
      (1, 1, 0, 2147483647)
    ) as sample(oper, low, high, cnt);
@@ -1310,7 +1239,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  WITH v(val) AS
    (VALUES('0'::numeric),('-4.2'),('4.2e9'),('1.2e-5'),('inf'),('-inf'),('nan'))
  SELECT val,
-@@ -1896,49 +1397,15 @@
+@@ -1896,49 +1377,15 @@
    to_char(val::float8, '9.999EEEE') as float8,
    to_char(val::float4, '9.999EEEE') as float4
  FROM v;
@@ -1363,7 +1292,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  WITH v(val) AS
    (VALUES('0'::numeric),('-4.2'),('4.2e9'),('1.2e-5'),('inf'),('-inf'),('nan'))
  SELECT val,
-@@ -1946,17 +1413,7 @@
+@@ -1946,17 +1393,7 @@
    to_char(val::float8, 'MI9999999999.99') as float8,
    to_char(val::float4, 'MI9999999999.99') as float4
  FROM v;
@@ -1382,7 +1311,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  WITH v(val) AS
    (VALUES('0'::numeric),('-4.2'),('4.2e9'),('1.2e-5'),('inf'),('-inf'),('nan'))
  SELECT val,
-@@ -1964,237 +1421,100 @@
+@@ -1964,237 +1401,100 @@
    to_char(val::float8, 'MI99.99') as float8,
    to_char(val::float4, 'MI99.99') as float4
  FROM v;
@@ -1674,7 +1603,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  RESET lc_numeric;
  --
  -- Input syntax
-@@ -2215,203 +1535,117 @@
+@@ -2215,203 +1515,117 @@
  INSERT INTO num_input_test(n1) VALUES (' +inFinity ');
  INSERT INTO num_input_test(n1) VALUES (' -INFINITY ');
  INSERT INTO num_input_test(n1) VALUES ('12_000_000_000');
@@ -1940,7 +1869,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  --
  -- Test precision and scale typemods
  --
-@@ -2422,59 +1656,56 @@
+@@ -2422,59 +1636,56 @@
    thousandths numeric(3, 3),
    millionths numeric(3, 6)
  );
@@ -2031,7 +1960,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  --
  -- Test some corner cases for multiplication
  --
-@@ -2503,11 +1734,7 @@
+@@ -2503,11 +1714,7 @@
  (1 row)
  
  select trim_scale((0.1 - 2e-16383) * (0.1 - 3e-16383));
@@ -2044,7 +1973,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  --
  -- Test some corner cases for division
  --
-@@ -2560,9 +1787,9 @@
+@@ -2560,9 +1767,9 @@
  (1 row)
  
  select 70.0 / 70 ;
@@ -2057,7 +1986,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  (1 row)
  
  select 12345678901234567890 % 123;
-@@ -2572,9 +1799,9 @@
+@@ -2572,9 +1779,9 @@
  (1 row)
  
  select 12345678901234567890 / 123;
@@ -2070,7 +1999,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  (1 row)
  
  select div(12345678901234567890, 123);
-@@ -2593,239 +1820,183 @@
+@@ -2593,239 +1800,183 @@
  -- Test some corner cases for square root
  --
  select sqrt(1.000000000000003::numeric);
@@ -2361,7 +2290,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
 - 1.0000000000000000
 + ?column? 
 +----------
-+      NaN
++        1
  (1 row)
  
  select (-12.34) ^ 0.0;
@@ -2392,38 +2321,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  (1 row)
  
  -- NaNs
-@@ -2838,7 +2009,7 @@
- select 'NaN'::numeric ^ 0;
-  ?column? 
- ----------
--        1
-+      NaN
- (1 row)
- 
- select 'NaN'::numeric ^ 1;
-@@ -2856,44 +2027,52 @@
- select 1 ^ 'NaN'::numeric;
-  ?column? 
- ----------
--        1
-+      NaN
- (1 row)
- 
- -- invalid inputs
- select 0.0 ^ (-12.34);
--ERROR:  zero raised to a negative power is undefined
-+ ?column? 
-+----------
-+ Infinity
-+(1 row)
-+
- select (-12.34) ^ 1.2;
--ERROR:  a negative number raised to a non-integer power yields a complex result
-+ ?column? 
-+----------
-+      NaN
-+(1 row)
-+
+@@ -2866,34 +2017,34 @@
+ ERROR:  a negative number raised to a non-integer power yields a complex result
  -- cases that used to generate inaccurate results
  select 32.1 ^ 9.8;
 -      ?column?      
@@ -2472,7 +2371,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  (1 row)
  
  --
-@@ -2901,21 +2080,21 @@
+@@ -2901,21 +2052,21 @@
  --
  -- special cases
  select exp(0.0);
@@ -2503,7 +2402,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  (1 row)
  
  select exp('nan'::numeric);
-@@ -2937,200 +2116,147 @@
+@@ -2937,200 +2088,147 @@
  (1 row)
  
  select coalesce(nullif(exp(-5000::numeric), 0), 0) as rounds_to_zero;
@@ -2775,7 +2674,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  (1 row)
  
  --
-@@ -3138,46 +2264,44 @@
+@@ -3138,46 +2236,44 @@
  --
  -- invalid inputs
  select log(-12.34);
@@ -2842,7 +2741,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  (1 row)
  
  --
-@@ -3185,243 +2309,115 @@
+@@ -3185,243 +2281,115 @@
  --
  -- invalid inputs
  select log(-12.34, 56.78);
@@ -3136,7 +3035,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  --
  -- Tests for SUM()
  --
-@@ -3446,47 +2442,100 @@
+@@ -3446,47 +2414,100 @@
  INSERT INTO num_variance VALUES (3e-500);
  INSERT INTO num_variance VALUES (-3e-500);
  INSERT INTO num_variance VALUES (4e-500 - 1e-16383);
@@ -3253,7 +3152,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  DROP TABLE num_variance;
  --
  -- Tests for GCD()
-@@ -3502,19 +2551,7 @@
+@@ -3502,19 +2523,7 @@
               ('inf', '42'),
               ('inf', 'inf')
       ) AS v(a, b);
@@ -3274,7 +3173,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  --
  -- Tests for LCM()
  --
-@@ -3530,71 +2567,40 @@
+@@ -3530,71 +2539,40 @@
               ('inf', '42'),
               ('inf', 'inf')
       ) AS v(a, b);

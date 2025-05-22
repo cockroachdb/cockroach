@@ -53,7 +53,8 @@ type Node struct {
 	// storage writes, using asyncWrites == false is unnecessary.
 	asyncWrites bool
 
-	AppendWork []pb.Message // []MsgStorageAppend
+	AppendWork []raft.StorageAppend
+	AppendAcks []raft.StorageAppendAck
 	ApplyWork  pb.LogSpan
 	History    []pb.Snapshot
 }

@@ -27,10 +27,12 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 	// This test requires us to come back and change the stmts in executeSupportedDDLs to be those
 	// supported in the "previous" major release.
 	r.Add(registry.TestSpec{
-		Name:             "declarative_schema_changer/job-compatibility-mixed-version-V242-V243",
-		Owner:            registry.OwnerSQLFoundations,
-		Cluster:          r.MakeClusterSpec(4),
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:    "declarative_schema_changer/job-compatibility-mixed-version-V242-V243",
+		Owner:   registry.OwnerSQLFoundations,
+		Cluster: r.MakeClusterSpec(4),
+		// Disabled on IBM because s390x is only built on master and mixed-version
+		// is impossible to test as of 05/2025.
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runDeclarativeSchemaChangerJobCompatibilityInMixedVersion(ctx, t, c)
@@ -55,6 +57,11 @@ func setShortJobIntervalsStep(
 func setShortGCTTLInSystemZoneConfig(
 	ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper,
 ) error {
+	// Ensure the system database has a longer TTL interval, which is needed to avoid
+	// flakes on system database queries for upgrades.
+	if err := h.Exec(r, "ALTER DATABASE system CONFIGURE ZONE USING gc.ttlseconds=60;"); err != nil {
+		return err
+	}
 	return h.Exec(r, "ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 1;")
 }
 
@@ -86,7 +93,7 @@ func executeSupportedDDLs(
 	// here because these connnections are managed by the mixedversion
 	// framework, which already closes them at the end of the test.
 	testUtils, err := newCommonTestUtils(
-		ctx, t, c, connectFunc, helper.DefaultService().Descriptor.Nodes, false, false,
+		ctx, t, c, connectFunc, helper.DefaultService().Descriptor.Nodes,
 	)
 	if err != nil {
 		return err

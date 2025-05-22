@@ -2605,3 +2605,49 @@ vectorized: true
 
 statement ok
 RESET optimizer_plan_lookup_joins_with_reverse_scans
+
+# Make sure the admission control priority is correctly set for leaf txns.
+subtest regression_144421
+
+statement ok
+SET default_transaction_quality_of_service=background
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT small.a, large.c FROM small INNER LOOKUP JOIN large ON small.a = large.b
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE MESSAGE LIKE 'initializing leaf txn%';
+----
+initializing leaf txn admission control header with priority: user-low-pri
+initializing leaf txn admission control header with priority: user-low-pri
+
+# Turning off admission header propagation should result in the old behavior.
+statement ok
+SET propagate_admission_header_to_leaf_transactions = false;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT small.a, large.c FROM small INNER LOOKUP JOIN large ON small.a = large.b
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE MESSAGE LIKE 'initializing leaf txn%';
+----
+
+statement ok
+RESET propagate_admission_header_to_leaf_transactions;
+
+statement ok
+RESET default_transaction_quality_of_service
+
+subtest end

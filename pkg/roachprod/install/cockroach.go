@@ -386,7 +386,7 @@ func (c *SyncedCluster) fetchVersion(
 	ctx context.Context, l *logger.Logger, startOpts StartOpts,
 ) (*version.Version, error) {
 	node := c.Nodes[0]
-	runVersionCmd := cockroachNodeBinary(c, node) + " version --build-tag"
+	runVersionCmd := SuppressMetamorphicConstantsEnvVar() + " " + cockroachNodeBinary(c, node) + " version --build-tag"
 
 	result, err := c.runCmdOnSingleNode(ctx, l, node, runVersionCmd, defaultCmdOpts("run-cockroach-version"))
 	if err != nil {
@@ -864,7 +864,10 @@ func (c *SyncedCluster) generateStartCmd(
 		EnvVars: append(append([]string{
 			fmt.Sprintf("ROACHPROD=%s", c.roachprodEnvValue(node)),
 			"GOTRACEBACK=crash",
+			// N.B. disable telemetry (see `TelemetryOptOut`).
 			"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1",
+			// N.B. set crash reporting URL (see `crashReportURL()`) to the empty string to disable Sentry crash reports.
+			"COCKROACH_CRASH_REPORTS=",
 		}, c.Env...), getEnvVars()...),
 		Binary:              cockroachNodeBinary(c, node),
 		Args:                args,

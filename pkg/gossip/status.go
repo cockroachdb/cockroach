@@ -26,6 +26,8 @@ type Metrics struct {
 	BytesSent                   *metric.Counter
 	InfosReceived               *metric.Counter
 	InfosSent                   *metric.Counter
+	MessagesSent                *metric.Counter
+	MessagesReceived            *metric.Counter
 	CallbacksProcessed          *metric.Counter
 	CallbacksPending            *metric.Gauge
 	CallbacksProcessingDuration metric.IHistogram
@@ -39,6 +41,8 @@ func makeMetrics() Metrics {
 		BytesSent:          metric.NewCounter(MetaBytesSent),
 		InfosReceived:      metric.NewCounter(MetaInfosReceived),
 		InfosSent:          metric.NewCounter(MetaInfosSent),
+		MessagesReceived:   metric.NewCounter(MetaMessagesReceived),
+		MessagesSent:       metric.NewCounter(MetaMessagesSent),
 		CallbacksProcessed: metric.NewCounter(MetaCallbacksProcessed),
 		CallbacksPending:   metric.NewGauge(MetaCallbacksPending),
 		CallbacksProcessingDuration: metric.NewHistogram(metric.HistogramOptions{
@@ -63,11 +67,13 @@ func (m Metrics) String() string {
 // Snapshot returns a snapshot of the metrics.
 func (m Metrics) Snapshot() MetricSnap {
 	return MetricSnap{
-		ConnsRefused:  m.ConnectionsRefused.Count(),
-		BytesReceived: m.BytesReceived.Count(),
-		BytesSent:     m.BytesSent.Count(),
-		InfosReceived: m.InfosReceived.Count(),
-		InfosSent:     m.InfosSent.Count(),
+		ConnsRefused:     m.ConnectionsRefused.Count(),
+		BytesReceived:    m.BytesReceived.Count(),
+		BytesSent:        m.BytesSent.Count(),
+		InfosReceived:    m.InfosReceived.Count(),
+		InfosSent:        m.InfosSent.Count(),
+		MessagesReceived: m.MessagesReceived.Count(),
+		MessagesSent:     m.MessagesSent.Count(),
 	}
 }
 
@@ -77,7 +83,8 @@ func (m MetricSnap) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (m MetricSnap) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("infos %d/%d sent/received, bytes %dB/%dB sent/received",
+	w.Printf("messages %d/%d sent/received, infos %d/%d sent/received, bytes %dB/%dB sent/received",
+		m.MessagesSent, m.MessagesReceived,
 		m.InfosSent, m.InfosReceived,
 		m.BytesSent, m.BytesReceived)
 	if m.ConnsRefused > 0 {

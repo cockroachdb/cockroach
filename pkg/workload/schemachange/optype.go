@@ -88,6 +88,10 @@ const (
 	alterFunctionRename    // ALTER FUNCTION <function> RENAME TO <name>
 	alterFunctionSetSchema // ALTER FUNCTION <function> SET SCHEMA <schema>
 
+	// ALTER POLICY ...
+
+	alterPolicy // ALTER POLICY <policy> ON <table> <def>
+
 	// ALTER TABLE <table> ...
 
 	alterTableAddColumn               // ALTER TABLE <table> ADD [COLUMN] <column> <type>
@@ -101,6 +105,7 @@ const (
 	alterTableDropConstraint          // ALTER TABLE <table> DROP CONSTRAINT <constraint>
 	alterTableDropNotNull             // ALTER TABLE <table> ALTER [COLUMN] <column> DROP NOT NULL
 	alterTableDropStored              // ALTER TABLE <table> ALTER [COLUMN] <column> DROP STORED
+	alterTableRLS                     // ALTER TABLE <table> [ENABLE|DISABLE|FORCE|NO FORCE] ROW LEVEL SECURITY
 	alterTableLocality                // ALTER TABLE <table> LOCALITY <locality>
 	alterTableRenameColumn            // ALTER TABLE <table> RENAME [COLUMN] <column> TO <column>
 	alterTableSetColumnDefault        // ALTER TABLE <table> ALTER [COLUMN] <column> SET DEFAULT <expr>
@@ -115,6 +120,7 @@ const (
 	createTypeEnum      // CREATE TYPE <type> ENUM AS <def>
 	createTypeComposite // CREATE TYPE <type> AS <def>
 	createIndex         // CREATE INDEX <index> ON <table> <def>
+	createPolicy        // CREATE POLICY <policy> ON <table> <def>
 	createSchema        // CREATE SCHEMA <schema>
 	createSequence      // CREATE SEQUENCE <sequence> <def>
 	createTable         // CREATE TABLE <table> <def>
@@ -130,6 +136,7 @@ const (
 
 	dropFunction // DROP FUNCTION <function>
 	dropIndex    // DROP INDEX <index>@<table>
+	dropPolicy   // DROP POLICY [IF EXISTS] <policy> ON <table>
 	dropSchema   // DROP SCHEMA <schema>
 	dropSequence // DROP SEQUENCE <sequence>
 	dropTable    // DROP TABLE <table>
@@ -213,6 +220,7 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	alterDatabaseSurvivalGoal:         (*operationGenerator).survive,
 	alterFunctionRename:               (*operationGenerator).alterFunctionRename,
 	alterFunctionSetSchema:            (*operationGenerator).alterFunctionSetSchema,
+	alterPolicy:                       (*operationGenerator).alterPolicy,
 	alterTableAddColumn:               (*operationGenerator).addColumn,
 	alterTableAddConstraint:           (*operationGenerator).addConstraint,
 	alterTableAddConstraintForeignKey: (*operationGenerator).addForeignKeyConstraint,
@@ -224,6 +232,7 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	alterTableDropConstraint:          (*operationGenerator).dropConstraint,
 	alterTableDropNotNull:             (*operationGenerator).dropColumnNotNull,
 	alterTableDropStored:              (*operationGenerator).dropColumnStored,
+	alterTableRLS:                     (*operationGenerator).alterTableRLS,
 	alterTableLocality:                (*operationGenerator).alterTableLocality,
 	alterTableRenameColumn:            (*operationGenerator).renameColumn,
 	alterTableSetColumnDefault:        (*operationGenerator).setColumnDefault,
@@ -232,6 +241,7 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	commentOn:                         (*operationGenerator).commentOn,
 	createFunction:                    (*operationGenerator).createFunction,
 	createIndex:                       (*operationGenerator).createIndex,
+	createPolicy:                      (*operationGenerator).createPolicy,
 	createSchema:                      (*operationGenerator).createSchema,
 	createSequence:                    (*operationGenerator).createSequence,
 	createTable:                       (*operationGenerator).createTable,
@@ -241,6 +251,7 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	createView:                        (*operationGenerator).createView,
 	dropFunction:                      (*operationGenerator).dropFunction,
 	dropIndex:                         (*operationGenerator).dropIndex,
+	dropPolicy:                        (*operationGenerator).dropPolicy,
 	dropSchema:                        (*operationGenerator).dropSchema,
 	dropSequence:                      (*operationGenerator).dropSequence,
 	dropTable:                         (*operationGenerator).dropTable,
@@ -265,6 +276,7 @@ var opWeights = []int{
 	alterDatabaseSurvivalGoal:         0, // Disabled and tracked with #83831
 	alterFunctionRename:               1,
 	alterFunctionSetSchema:            1,
+	alterPolicy:                       1,
 	alterTableAddColumn:               1,
 	alterTableAddConstraintForeignKey: 1,
 	alterTableAddConstraintUnique:     1,
@@ -275,6 +287,7 @@ var opWeights = []int{
 	alterTableDropConstraint:          1,
 	alterTableDropNotNull:             1,
 	alterTableDropStored:              1,
+	alterTableRLS:                     1,
 	alterTableLocality:                1,
 	alterTableRenameColumn:            1,
 	alterTableSetColumnDefault:        1,
@@ -283,6 +296,7 @@ var opWeights = []int{
 	commentOn:                         1,
 	createFunction:                    1,
 	createIndex:                       1,
+	createPolicy:                      1,
 	createSchema:                      1,
 	createSequence:                    1,
 	createTable:                       10,
@@ -292,6 +306,7 @@ var opWeights = []int{
 	createView:                        1,
 	dropFunction:                      1,
 	dropIndex:                         1,
+	dropPolicy:                        1,
 	dropSchema:                        1,
 	dropSequence:                      1,
 	dropTable:                         1,
@@ -311,6 +326,7 @@ var opDeclarativeVersion = map[opType]clusterversion.Key{
 	selectStmt: clusterversion.MinSupported,
 	validate:   clusterversion.MinSupported,
 
+	alterPolicy:                       clusterversion.V25_2,
 	alterTableAddColumn:               clusterversion.MinSupported,
 	alterTableAddConstraintForeignKey: clusterversion.MinSupported,
 	alterTableAddConstraintUnique:     clusterversion.MinSupported,
@@ -318,14 +334,17 @@ var opDeclarativeVersion = map[opType]clusterversion.Key{
 	alterTableDropColumn:              clusterversion.MinSupported,
 	alterTableDropConstraint:          clusterversion.MinSupported,
 	alterTableDropNotNull:             clusterversion.MinSupported,
+	alterTableRLS:                     clusterversion.V25_2,
 	alterTypeDropValue:                clusterversion.MinSupported,
 	commentOn:                         clusterversion.MinSupported,
-	createIndex:                       clusterversion.MinSupported,
 	createFunction:                    clusterversion.MinSupported,
+	createIndex:                       clusterversion.MinSupported,
+	createPolicy:                      clusterversion.V25_2,
 	createSchema:                      clusterversion.MinSupported,
 	createSequence:                    clusterversion.MinSupported,
-	dropIndex:                         clusterversion.MinSupported,
 	dropFunction:                      clusterversion.MinSupported,
+	dropIndex:                         clusterversion.MinSupported,
+	dropPolicy:                        clusterversion.V25_2,
 	dropSchema:                        clusterversion.MinSupported,
 	dropSequence:                      clusterversion.MinSupported,
 	dropTable:                         clusterversion.MinSupported,

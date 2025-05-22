@@ -247,83 +247,83 @@ WHERE t1.b IN (
 )
 ORDER BY t1.a ASC;
 ----
-sort
- ├── columns: "?column?":23(int!null)  [hidden: t1.a:1(int!null)]
+project
+ ├── columns: "?column?":24(int!null)  [hidden: t1.a:1(int!null)]
  ├── key: (1)
- ├── fd: ()-->(23)
- ├── ordering: +1 opt(23) [actual: +1]
- ├── prune: (1,23)
- ├── interesting orderings: (+1 opt(23))
- └── project
-      ├── columns: "?column?":23(int!null) t1.a:1(int!null)
-      ├── key: (1)
-      ├── fd: ()-->(23)
-      ├── prune: (1,23)
-      ├── interesting orderings: (+1 opt(23))
-      ├── semi-join (cross)
-      │    ├── columns: t1.a:1(int!null) t1.b:2(int!null)
-      │    ├── key: (1)
-      │    ├── fd: ()-->(2)
-      │    ├── prune: (1)
-      │    ├── interesting orderings: (+1 opt(2))
-      │    ├── select
-      │    │    ├── columns: t1.a:1(int!null) t1.b:2(int!null)
-      │    │    ├── key: (1)
-      │    │    ├── fd: ()-->(2)
-      │    │    ├── prune: (1)
-      │    │    ├── interesting orderings: (+1 opt(2))
-      │    │    ├── scan t65038 [as=t1]
-      │    │    │    ├── columns: t1.a:1(int!null) t1.b:2(int)
-      │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(2)
-      │    │    │    ├── prune: (1,2)
-      │    │    │    └── interesting orderings: (+1)
-      │    │    └── filters
-      │    │         └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-      │    │              ├── variable: t1.b:2 [type=int]
-      │    │              └── const: 1 [type=int]
-      │    ├── top-k
-      │    │    ├── columns: t2.a:11(int!null) t2.b:12(int!null) t2.c:13(int!null) t3.a:16(int!null) t3.b:17(int!null) t3.c:18(int!null)
-      │    │    ├── internal-ordering: +(12|17)
-      │    │    ├── k: 1
-      │    │    ├── cardinality: [0 - 1]
-      │    │    ├── key: ()
-      │    │    ├── fd: ()-->(11-13,16-18), (11)==(16), (16)==(11), (13)==(18), (18)==(13), (12)==(17), (17)==(12)
-      │    │    ├── interesting orderings: (+(12|17))
-      │    │    └── inner-join (cross)
-      │    │         ├── columns: t2.a:11(int!null) t2.b:12(int!null) t2.c:13(int!null) t3.a:16(int!null) t3.b:17(int!null) t3.c:18(int!null)
-      │    │         ├── fd: (11)-->(12,13), (16)-->(17,18), (11)==(16), (16)==(11), (13)==(18), (18)==(13), (12)==(17), (17)==(12)
-      │    │         ├── interesting orderings: (+11) (+16)
-      │    │         ├── scan t65038
-      │    │         │    └── unfiltered-cols: (6-10)
-      │    │         ├── inner-join (merge)
-      │    │         │    ├── columns: t2.a:11(int!null) t2.b:12(int!null) t2.c:13(int!null) t3.a:16(int!null) t3.b:17(int!null) t3.c:18(int!null)
-      │    │         │    ├── left ordering: +11,+12,+13
-      │    │         │    ├── right ordering: +16,+17,+18
-      │    │         │    ├── key: (16)
-      │    │         │    ├── fd: (11)-->(12,13), (16)-->(17,18), (11)==(16), (16)==(11), (13)==(18), (18)==(13), (12)==(17), (17)==(12)
-      │    │         │    ├── interesting orderings: (+11) (+16)
-      │    │         │    ├── scan t65038 [as=t2]
-      │    │         │    │    ├── columns: t2.a:11(int!null) t2.b:12(int) t2.c:13(int)
-      │    │         │    │    ├── key: (11)
-      │    │         │    │    ├── fd: (11)-->(12,13)
-      │    │         │    │    ├── ordering: +11
-      │    │         │    │    ├── prune: (11-13)
-      │    │         │    │    ├── interesting orderings: (+11)
-      │    │         │    │    └── unfiltered-cols: (11-15)
-      │    │         │    ├── scan t65038 [as=t3]
-      │    │         │    │    ├── columns: t3.a:16(int!null) t3.b:17(int) t3.c:18(int)
-      │    │         │    │    ├── key: (16)
-      │    │         │    │    ├── fd: (16)-->(17,18)
-      │    │         │    │    ├── ordering: +16
-      │    │         │    │    ├── prune: (16-18)
-      │    │         │    │    ├── interesting orderings: (+16)
-      │    │         │    │    └── unfiltered-cols: (16-20)
-      │    │         │    └── filters (true)
-      │    │         └── filters (true)
-      │    └── filters (true)
-      └── projections
-           └── const: 1 [as="?column?":23, type=int]
+ ├── fd: ()-->(24)
+ ├── ordering: +1 opt(24) [actual: +1]
+ ├── prune: (1,24)
+ ├── interesting orderings: (+1 opt(24))
+ ├── select
+ │    ├── columns: t1.a:1(int!null) t1.b:2(int!null)
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2)
+ │    ├── ordering: +1 opt(2) [actual: +1]
+ │    ├── prune: (1)
+ │    ├── interesting orderings: (+1 opt(2))
+ │    ├── scan t65038 [as=t1]
+ │    │    ├── columns: t1.a:1(int!null) t1.b:2(int)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── ordering: +1
+ │    │    ├── prune: (1,2)
+ │    │    └── interesting orderings: (+1)
+ │    └── filters
+ │         ├── coalesce [type=bool, subquery]
+ │         │    ├── subquery [type=bool]
+ │         │    │    └── project
+ │         │    │         ├── columns: column23:23(bool!null)
+ │         │    │         ├── cardinality: [0 - 1]
+ │         │    │         ├── key: ()
+ │         │    │         ├── fd: ()-->(23)
+ │         │    │         ├── prune: (23)
+ │         │    │         ├── top-k
+ │         │    │         │    ├── columns: t2.a:11(int!null) t2.b:12(int!null) t2.c:13(int!null) t3.a:16(int!null) t3.b:17(int!null) t3.c:18(int!null)
+ │         │    │         │    ├── internal-ordering: +(12|17)
+ │         │    │         │    ├── k: 1
+ │         │    │         │    ├── cardinality: [0 - 1]
+ │         │    │         │    ├── key: ()
+ │         │    │         │    ├── fd: ()-->(11-13,16-18), (11)==(16), (16)==(11), (13)==(18), (18)==(13), (12)==(17), (17)==(12)
+ │         │    │         │    ├── interesting orderings: (+(12|17))
+ │         │    │         │    └── inner-join (cross)
+ │         │    │         │         ├── columns: t2.a:11(int!null) t2.b:12(int!null) t2.c:13(int!null) t3.a:16(int!null) t3.b:17(int!null) t3.c:18(int!null)
+ │         │    │         │         ├── fd: (11)-->(12,13), (16)-->(17,18), (11)==(16), (16)==(11), (13)==(18), (18)==(13), (12)==(17), (17)==(12)
+ │         │    │         │         ├── interesting orderings: (+11) (+16)
+ │         │    │         │         ├── scan t65038
+ │         │    │         │         │    └── unfiltered-cols: (6-10)
+ │         │    │         │         ├── inner-join (merge)
+ │         │    │         │         │    ├── columns: t2.a:11(int!null) t2.b:12(int!null) t2.c:13(int!null) t3.a:16(int!null) t3.b:17(int!null) t3.c:18(int!null)
+ │         │    │         │         │    ├── left ordering: +11,+12,+13
+ │         │    │         │         │    ├── right ordering: +16,+17,+18
+ │         │    │         │         │    ├── key: (16)
+ │         │    │         │         │    ├── fd: (11)-->(12,13), (16)-->(17,18), (11)==(16), (16)==(11), (13)==(18), (18)==(13), (12)==(17), (17)==(12)
+ │         │    │         │         │    ├── interesting orderings: (+11) (+16)
+ │         │    │         │         │    ├── scan t65038 [as=t2]
+ │         │    │         │         │    │    ├── columns: t2.a:11(int!null) t2.b:12(int) t2.c:13(int)
+ │         │    │         │         │    │    ├── key: (11)
+ │         │    │         │         │    │    ├── fd: (11)-->(12,13)
+ │         │    │         │         │    │    ├── ordering: +11
+ │         │    │         │         │    │    ├── prune: (11-13)
+ │         │    │         │         │    │    ├── interesting orderings: (+11)
+ │         │    │         │         │    │    └── unfiltered-cols: (11-15)
+ │         │    │         │         │    ├── scan t65038 [as=t3]
+ │         │    │         │         │    │    ├── columns: t3.a:16(int!null) t3.b:17(int) t3.c:18(int)
+ │         │    │         │         │    │    ├── key: (16)
+ │         │    │         │         │    │    ├── fd: (16)-->(17,18)
+ │         │    │         │         │    │    ├── ordering: +16
+ │         │    │         │         │    │    ├── prune: (16-18)
+ │         │    │         │         │    │    ├── interesting orderings: (+16)
+ │         │    │         │         │    │    └── unfiltered-cols: (16-20)
+ │         │    │         │         │    └── filters (true)
+ │         │    │         │         └── filters (true)
+ │         │    │         └── projections
+ │         │    │              └── true [as=column23:23, type=bool]
+ │         │    └── false [type=bool]
+ │         └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+ │              ├── variable: t1.b:2 [type=int]
+ │              └── const: 1 [type=int]
+ └── projections
+      └── const: 1 [as="?column?":24, type=int]
 
 opt
 SELECT * FROM xyzs ORDER BY y DESC LIMIT 10

@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/blobfixture"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -29,13 +31,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type BackupFixture interface {
+	Kind() string
+	// The database that is backed up.
+	DatabaseName() string
+}
+
 type TpccFixture struct {
 	Name                   string
 	ImportWarehouses       int
 	WorkloadWarehouses     int
-	MinutesPerIncremental  int
 	IncrementalChainLength int
+	CompactionThreshold    int
+	CompactionWindow       int
 	RestoredSizeEstimate   string
+}
+
+var _ BackupFixture = TpccFixture{}
+
+func (f TpccFixture) Kind() string {
+	return f.Name
+}
+
+func (f TpccFixture) DatabaseName() string {
+	return "tpcc"
 }
 
 // TinyFixture is a TPCC fixture that is intended for smoke tests, local
@@ -45,6 +64,8 @@ var TinyFixture = TpccFixture{
 	ImportWarehouses:       10,
 	WorkloadWarehouses:     10,
 	IncrementalChainLength: 4,
+	CompactionThreshold:    4,
+	CompactionWindow:       3,
 	RestoredSizeEstimate:   "700MiB",
 }
 
@@ -55,6 +76,8 @@ var SmallFixture = TpccFixture{
 	ImportWarehouses:       5000,
 	WorkloadWarehouses:     1000,
 	IncrementalChainLength: 48,
+	CompactionThreshold:    4,
+	CompactionWindow:       3,
 	RestoredSizeEstimate:   "350GiB",
 }
 
@@ -65,6 +88,8 @@ var MediumFixture = TpccFixture{
 	ImportWarehouses:       30000,
 	WorkloadWarehouses:     5000,
 	IncrementalChainLength: 400,
+	CompactionThreshold:    4,
+	CompactionWindow:       3,
 	RestoredSizeEstimate:   "2TiB",
 }
 
@@ -77,6 +102,8 @@ var LargeFixture = TpccFixture{
 	ImportWarehouses:       300000,
 	WorkloadWarehouses:     7500,
 	IncrementalChainLength: 400,
+	CompactionThreshold:    4,
+	CompactionWindow:       3,
 	RestoredSizeEstimate:   "20TiB",
 }
 
@@ -97,12 +124,6 @@ type backupFixtureSpecs struct {
 }
 
 const scheduleLabel = "tpcc_backup"
-
-// fixtureFromMasterVersion should be used in the backupSpecs version field to
-// create a fixture using the bleeding edge of master. In the backup fixture
-// path on external storage, the {version} subdirectory will be equal to this
-// value.
-const fixtureFromMasterVersion = "latest"
 
 func CreateScheduleStatement(uri url.URL) string {
 	// This backup schedule will first run a full backup immediately and then the
@@ -205,37 +226,136 @@ func (bd *backupDriver) runWorkload(ctx context.Context) (func(), error) {
 // scheduleBackups begins the backup schedule.
 func (bd *backupDriver) scheduleBackups(ctx context.Context) {
 	bd.t.L().Printf("creating backup schedule", bd.sp.fixture.WorkloadWarehouses)
-
-	createScheduleStatement := CreateScheduleStatement(bd.registry.URI(bd.fixture.DataPath))
 	conn := bd.c.Conn(ctx, bd.t.L(), 1)
+	defer conn.Close()
+	if bd.sp.fixture.CompactionThreshold > 0 {
+		bd.t.L().Printf(
+			"enabling compaction with threshold %d and window size %d",
+			bd.sp.fixture.CompactionThreshold, bd.sp.fixture.CompactionWindow,
+		)
+		_, err := conn.Exec(fmt.Sprintf(
+			"SET CLUSTER SETTING backup.compaction.threshold = %d", bd.sp.fixture.CompactionThreshold,
+		))
+		require.NoError(bd.t, err)
+		_, err = conn.Exec(fmt.Sprintf(
+			"SET CLUSTER SETTING backup.compaction.window_size = %d", bd.sp.fixture.CompactionWindow,
+		))
+		require.NoError(bd.t, err)
+	}
+	createScheduleStatement := CreateScheduleStatement(bd.registry.URI(bd.fixture.DataPath))
 	_, err := conn.Exec(createScheduleStatement)
 	require.NoError(bd.t, err)
 }
 
 // monitorBackups pauses the schedule once the target number of backups in the
 // chain have been taken.
-func (bd *backupDriver) monitorBackups(ctx context.Context) {
-	sql := sqlutils.MakeSQLRunner(bd.c.Conn(ctx, bd.t.L(), 1))
+func (bd *backupDriver) monitorBackups(ctx context.Context) error {
+	conn := bd.c.Conn(ctx, bd.t.L(), 1)
+	defer conn.Close()
+	sql := sqlutils.MakeSQLRunner(conn)
 	fixtureURI := bd.registry.URI(bd.fixture.DataPath)
-	for {
+	const (
+		WaitingFirstFull = iota
+		RunningIncrementals
+		WaitingCompactions
+		Done
+	)
+	state := WaitingFirstFull
+	for state != Done {
 		time.Sleep(1 * time.Minute)
-		var activeScheduleCount int
-		scheduleCountQuery := fmt.Sprintf(`SELECT count(*) FROM [SHOW SCHEDULES] WHERE label='%s' AND schedule_status='ACTIVE'`, scheduleLabel)
-		sql.QueryRow(bd.t, scheduleCountQuery).Scan(&activeScheduleCount)
-		if activeScheduleCount < 2 {
-			bd.t.L().Printf(`First full backup still running`)
-			continue
+		compSuccess, compRunning, compFailed, err := bd.compactionJobStates(sql)
+		if err != nil {
+			return err
 		}
-		var backupCount int
-		backupCountQuery := fmt.Sprintf(`SELECT count(DISTINCT end_time) FROM [SHOW BACKUP FROM LATEST IN '%s']`, fixtureURI.String())
-		sql.QueryRow(bd.t, backupCountQuery).Scan(&backupCount)
-		bd.t.L().Printf(`%d scheduled backups taken`, backupCount)
-		if backupCount >= bd.sp.fixture.IncrementalChainLength {
-			pauseSchedulesQuery := fmt.Sprintf(`PAUSE SCHEDULES WITH x AS (SHOW SCHEDULES) SELECT id FROM x WHERE label = '%s'`, scheduleLabel)
-			sql.Exec(bd.t, pauseSchedulesQuery)
-			break
+		switch state {
+		case WaitingFirstFull:
+			var activeScheduleCount int
+			scheduleCountQuery := fmt.Sprintf(
+				`SELECT count(*) FROM [SHOW SCHEDULES] WHERE label='%s' AND schedule_status='ACTIVE'`, scheduleLabel,
+			)
+			sql.QueryRow(bd.t, scheduleCountQuery).Scan(&activeScheduleCount)
+			if activeScheduleCount < 2 {
+				bd.t.L().Printf(`First full backup still running`)
+			} else {
+				state = RunningIncrementals
+			}
+		case RunningIncrementals:
+			var backupCount int
+			backupCountQuery := fmt.Sprintf(
+				`SELECT count(DISTINCT end_time) FROM [SHOW BACKUP FROM LATEST IN '%s']`, fixtureURI.String(),
+			)
+			sql.QueryRow(bd.t, backupCountQuery).Scan(&backupCount)
+			bd.t.L().Printf(`%d scheduled backups taken`, backupCount)
+
+			if bd.sp.fixture.CompactionThreshold > 0 {
+				bd.t.L().Printf("%d compaction jobs succeeded, %d running", len(compSuccess), len(compRunning))
+				if len(compFailed) > 0 {
+					return errors.Newf("compaction jobs with ids %v failed", compFailed)
+				}
+			}
+
+			if backupCount >= bd.sp.fixture.IncrementalChainLength {
+				pauseSchedulesQuery := fmt.Sprintf(
+					`PAUSE SCHEDULES WITH x AS (SHOW SCHEDULES) SELECT id FROM x WHERE label = '%s'`, scheduleLabel,
+				)
+				sql.Exec(bd.t, pauseSchedulesQuery)
+				if len(compRunning) > 0 {
+					state = WaitingCompactions
+				} else {
+					state = Done
+				}
+			}
+		case WaitingCompactions:
+			if len(compFailed) > 0 {
+				return errors.Newf("compaction jobs with ids %v failed", compFailed)
+			} else if len(compRunning) > 0 {
+				bd.t.L().Printf("waiting for %d compaction jobs to finish", len(compRunning))
+			} else {
+				state = Done
+			}
 		}
 	}
+	return nil
+}
+
+// compactionJobStates returns the state of the compaction jobs, returning
+// the IDs of the jobs that succeeded, are running, and failed.
+func (bd *backupDriver) compactionJobStates(
+	sql *sqlutils.SQLRunner,
+) ([]jobspb.JobID, []jobspb.JobID, []jobspb.JobID, error) {
+	if bd.sp.fixture.CompactionThreshold == 0 {
+		return nil, nil, nil, nil
+	}
+	type Job struct {
+		jobID  jobspb.JobID
+		status jobs.State
+	}
+	compactionQuery := `SELECT job_id, status FROM [SHOW JOBS] WHERE job_type = 'BACKUP' AND
+	description ILIKE 'COMPACT BACKUPS%'`
+	rows := sql.Query(bd.t, compactionQuery)
+	defer rows.Close()
+	var compJobs []Job
+	for rows.Next() {
+		var job Job
+		if err := rows.Scan(&job.jobID, &job.status); err != nil {
+			return nil, nil, nil, errors.Wrapf(err, "error scanning compaction job")
+		}
+		compJobs = append(compJobs, job)
+	}
+	var successes, running, failures []jobspb.JobID
+	for _, job := range compJobs {
+		switch job.status {
+		case jobs.StateSucceeded:
+			successes = append(successes, job.jobID)
+		case jobs.StateRunning:
+			running = append(running, job.jobID)
+		case jobs.StateFailed:
+			failures = append(failures, job.jobID)
+		default:
+			bd.t.L().Printf(`unexpected compaction job %d in state %s`, job.jobID, job.status)
+		}
+	}
+	return successes, running, failures, nil
 }
 
 func fixtureDirectory() string {
@@ -246,9 +366,10 @@ func fixtureDirectory() string {
 	return version.Format("roachtest/v%X.%Y")
 }
 
-func newFixtureRegistry(ctx context.Context, t test.Test, c cluster.Cluster) *blobfixture.Registry {
+// GetFixtureRegistry returns the backup fixture registry for the given cloud provider.
+func GetFixtureRegistry(ctx context.Context, t test.Test, cloud spec.Cloud) *blobfixture.Registry {
 	var uri url.URL
-	switch c.Cloud() {
+	switch cloud {
 	case spec.AWS:
 		uri = url.URL{
 			Scheme:   "s3",
@@ -266,7 +387,7 @@ func newFixtureRegistry(ctx context.Context, t test.Test, c cluster.Cluster) *bl
 			RawQuery: "AUTH=implicit",
 		}
 	default:
-		t.Fatalf("fixtures not supported on %s", c.Cloud())
+		t.Fatalf("fixtures not supported on %s", cloud)
 	}
 
 	uri.Path = path.Join(uri.Path, fixtureDirectory())
@@ -338,7 +459,7 @@ func registerBackupFixtures(r registry.Registry) {
 			Suites:            bf.suites,
 			Skip:              bf.skip,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				registry := newFixtureRegistry(ctx, t, c)
+				registry := GetFixtureRegistry(ctx, t, c.Cloud())
 
 				handle, err := registry.Create(ctx, bf.fixture.Name, t.L())
 				require.NoError(t, err)
@@ -357,7 +478,7 @@ func registerBackupFixtures(r registry.Registry) {
 				require.NoError(t, err)
 
 				bd.scheduleBackups(ctx)
-				bd.monitorBackups(ctx)
+				require.NoError(t, bd.monitorBackups(ctx))
 
 				stopWorkload()
 
@@ -378,7 +499,7 @@ func registerBlobFixtureGC(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// TODO(jeffswenson): ideally we would run the GC on the scheduled node
 			// so that it is close to the fixture repository.
-			registry := newFixtureRegistry(ctx, t, c)
+			registry := GetFixtureRegistry(ctx, t, c.Cloud())
 			require.NoError(t, registry.GC(ctx, t.L()))
 		},
 	})

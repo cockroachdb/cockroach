@@ -1,0 +1,299 @@
+echo
+----
+----
+#!/usr/bin/env bash
+
+# Script for setting up an IBM machine for roachprod use.
+
+function setup_disks() {
+	mount_prefix="/mnt/data"
+	use_multiple_disks=''
+
+
+	mount_opts="defaults,nofail"
+	
+
+
+	# List the attached data disks
+	disks=()
+	for d in $(find /dev/disk/by-id/ -type l -not -name *cloud-init* -not -name *part* -exec readlink -f {} \;); do
+		mounted="no"
+
+		# Check if the disk is already mounted; skip if so.
+
+		if mount | grep -q ${d}; then
+			mounted="yes"
+		fi
+
+
+		if [ "$mounted" = "no" ]; then
+			disks+=("${d}")
+			echo "Disk ${d} is not mounted, mounting it"
+		else
+			echo "Disk ${d} is already mounted, skipping"
+		fi
+	done
+
+	if [ "${#disks[@]}" -eq "0" ]; then
+		mountpoint="${mount_prefix}1"
+		echo "No disks mounted, creating ${mountpoint}"
+		mkdir -p ${mountpoint}
+		chmod 777 ${mountpoint}
+	elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
+		disknum=1
+		for disk in "${disks[@]}"
+		do
+			mountpoint="${mount_prefix}${disknum}"
+			disknum=$(( disknum + 1 ))
+			echo "Mounting ${disk} at ${mountpoint}"
+			mkdir -p ${mountpoint}
+
+			mkfs.ext4 -F ${disk}
+			mount -o ${mount_opts} ${disk} ${mountpoint}
+			echo "${disk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
+			tune2fs -m 0 ${disk}
+
+			chmod 777 ${mountpoint}
+		done
+	else
+		mountpoint="${mount_prefix}1"
+		echo "${#disks[@]} disks mounted, creating ${mountpoint} using RAID 0"
+		mkdir -p ${mountpoint}
+
+		raiddisk="/dev/md0"
+		mdadm --create ${raiddisk} --level=0 --raid-devices=${#disks[@]} "${disks[@]}"
+		mkfs.ext4 -F ${raiddisk}
+		mount -o ${mount_opts} ${raiddisk} ${mountpoint}
+		echo "${raiddisk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
+		tune2fs -m 0 ${raiddisk}
+
+		chmod 777 ${mountpoint}
+	fi
+
+	# Print the block device and FS usage output. This is useful for debugging.
+	lsblk
+	df -h
+
+	sudo touch /mnt/data1/.roachprod-initialized
+}
+
+
+
+# ensure any failure fails the entire script
+set -eux
+
+# Redirect output to stdout/err and a log file
+exec &> >(tee -a /var/log/roachprod_startup.log)
+
+# Log the startup of the script with a timestamp
+echo "startup script starting: $(date -u)"
+
+if [ -e /mnt/data1/.roachprod-initialized ]; then
+	echo "Already initialized, exiting."
+	exit 0
+fi
+
+# Uninstall some packages to prevent them running cronjobs and similar jobs in parallel
+systemctl stop unattended-upgrades
+sudo rm -rf /var/log/unattended-upgrades
+apt-get purge -y unattended-upgrades
+
+
+
+sudo apt-get update -q
+sudo apt-get install -qy --no-install-recommends mdadm
+
+
+# Initialize disks.
+setup_disks
+
+
+
+# increase the default maximum number of open file descriptors for
+# root and non-root users. Load generators running a lot of concurrent
+# workers bump into this often.
+sudo sh -c 'echo "root - nofile 1048576\n* - nofile 1048576" > /etc/security/limits.d/10-roachprod-nofiles.conf'
+
+
+
+# N.B. Ubuntu 22.04 changed the location of tcpdump to /usr/bin. Since existing tooling, e.g.,
+# jepsen uses /usr/sbin, we create a symlink.
+# See https://ubuntu.pkgs.org/22.04/ubuntu-main-amd64/tcpdump_4.99.1-3build2_amd64.deb.html
+# FIPS is still on Ubuntu 20.04 however, so don't create if using FIPS.
+
+sudo ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
+
+
+
+
+# Send TCP keepalives every minute since GCE will terminate idle connections
+# after 10m. Note that keepalives still need to be requested by the application
+# with the SO_KEEPALIVE socket option.
+cat <<EOF > /etc/sysctl.d/99-roachprod-tcp-keepalive.conf
+net.ipv4.tcp_keepalive_time=60
+net.ipv4.tcp_keepalive_intvl=60
+net.ipv4.tcp_keepalive_probes=5
+EOF
+
+sysctl --system  # reload sysctl settings
+
+
+
+
+systemctl stop cron
+systemctl mask cron
+
+
+
+
+sudo apt-get install -qy chrony
+
+# Override the chrony config. In particular,
+# log aggressively when clock is adjusted (0.01s)
+# and exclusively use google's time servers.
+sudo cat <<EOF > /etc/chrony/chrony.conf
+keyfile /etc/chrony/chrony.keys
+commandkey 1
+driftfile /var/lib/chrony/chrony.drift
+log tracking measurements statistics
+logdir /var/log/chrony
+maxupdateskew 100.0
+dumponexit
+dumpdir /var/lib/chrony
+logchange 0.01
+hwclockfile /etc/adjtime
+rtcsync
+server time.adn.networklayer.com prefer iburst
+makestep 0.1 3
+EOF
+
+sudo /etc/init.d/chrony restart
+sudo chronyc -a waitsync 30 0.01 | sudo tee -a /root/chrony.log
+
+
+
+for timer in apt-daily-upgrade.timer apt-daily.timer e2scrub_all.timer fstrim.timer man-db.timer e2scrub_all.timer ; do
+	systemctl mask $timer
+done
+
+for service in apport.service atd.service; do
+	if systemctl is-active --quiet $service; then
+		systemctl stop $service
+	fi
+	systemctl mask $service
+done
+
+
+
+# Enable core dumps, do this last, something above resets /proc/sys/kernel/core_pattern
+# to just "core".
+cat <<EOF > /etc/security/limits.d/core_unlimited.conf
+* soft core unlimited
+* hard core unlimited
+root soft core unlimited
+root hard core unlimited
+EOF
+
+cat <<'EOF' > /bin/gzip_core.sh
+#!/bin/sh
+exec /bin/gzip -f - > /mnt/data1/cores/core.$1.$2.$3.$4.gz
+EOF
+chmod +x /bin/gzip_core.sh
+
+CORE_PATTERN="|/bin/gzip_core.sh %e %p %h %t"
+echo "$CORE_PATTERN" > /proc/sys/kernel/core_pattern
+sed -i'~' 's/enabled=1/enabled=0/' /etc/default/apport
+sed -i'~' '/.*kernel\\.core_pattern.*/c\\' /etc/sysctl.conf
+echo "kernel.core_pattern=$CORE_PATTERN" >> /etc/sysctl.conf
+
+sysctl --system  # reload sysctl settings
+
+
+
+# set hostname according to the name used by roachprod. There's host
+# validation logic that relies on this -- see comment on cluster_synced.go
+
+sudo hostnamectl set-hostname vm_name
+
+
+
+
+
+
+
+
+# sshguard can prevent frequent ssh connections to the same host. Disable it.
+if systemctl is-active --quiet sshguard; then
+	systemctl stop sshguard
+fi
+systemctl mask sshguard
+
+# increase the number of concurrent unauthenticated connections to the sshd
+# daemon. See https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Load_Balancing.
+# By default, only 10 unauthenticated connections are permitted before sshd
+# starts randomly dropping connections.
+sudo sh -c 'echo "MaxStartups 64:30:128" >> /etc/ssh/sshd_config'
+
+# Crank up the logging for issues such as:
+# https://github.com/cockroachdb/cockroach/issues/36929
+sudo sed -i'' 's/LogLevel.*$/LogLevel DEBUG3/' /etc/ssh/sshd_config
+
+# FIPS is still on Ubuntu 20.04 however, so don't enable if using FIPS.
+
+sudo sh -c 'echo "PubkeyAcceptedAlgorithms +ssh-rsa" >> /etc/ssh/sshd_config'
+
+
+sudo sed -i 's/#LoginGraceTime .*/LoginGraceTime 0/g' /etc/ssh/sshd_config
+sudo sed -i 's/TCPKeepAlive no/TCPKeepAlive yes/g' /etc/ssh/sshd_config
+
+sudo service sshd restart
+sudo service ssh restart
+
+
+
+# Add and start node_exporter, only authorize scrapping from internal network.
+export ARCH=$(dpkg --print-architecture)
+export DEFAULT_USER_HOME="/home/$(id -nu 1000)"
+mkdir -p ${DEFAULT_USER_HOME}/node_exporter && curl -fsSL \
+	https://storage.googleapis.com/cockroach-test-artifacts/prometheus/node_exporter-1.2.2.linux-${ARCH}.tar.gz |
+	tar zxv --strip-components 1 -C ${DEFAULT_USER_HOME}/node_exporter \
+	&& chown -R 1000:1000 ${DEFAULT_USER_HOME}/node_exporter
+
+export SCRAPING_PUBLIC_IPS=$(dig +short prometheus.testeng.crdb.io | awk '{printf "%s%s",sep,$0; sep=","} END {print ""}')
+sudo iptables -A INPUT -s 127.0.0.1,10.0.0.0/8,${SCRAPING_PUBLIC_IPS} -p tcp --dport 0 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 0 -j DROP
+(
+	cd ${DEFAULT_USER_HOME}/node_exporter && \
+	sudo systemd-run --unit node_exporter --same-dir \
+		./node_exporter --collector.systemd --collector.interrupts --collector.processes \
+		--web.listen-address=":0" \
+		--web.telemetry-path="/metrics"
+)
+
+
+
+# Add and start ebpf_exporter, only authorize scrapping from internal network.
+export ARCH=$(dpkg --print-architecture)
+export DEFAULT_USER_HOME="/home/$(id -nu 1000)"
+mkdir -p ${DEFAULT_USER_HOME}/ebpf_exporter && curl -fsSL \
+	https://storage.googleapis.com/cockroach-test-artifacts/prometheus/ebpf_exporter-2.4.2.linux-${ARCH}.tar.gz |
+	tar zxv --strip-components 1 -C ${DEFAULT_USER_HOME}/ebpf_exporter \
+	&& chown -R 1000:1000 ${DEFAULT_USER_HOME}/ebpf_exporter
+
+export SCRAPING_PUBLIC_IPS=$(dig +short prometheus.testeng.crdb.io | awk '{printf "%s%s",sep,$0; sep=","} END {print ""}')
+sudo iptables -A INPUT -s 127.0.0.1,10.0.0.0/8,${SCRAPING_PUBLIC_IPS} -p tcp --dport 0 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 0 -j DROP
+(
+	cd ${DEFAULT_USER_HOME}/ebpf_exporter && \
+	sudo systemd-run --unit ebpf_exporter --same-dir \
+		./ebpf_exporter \
+		--config.dir=examples \
+		--config.names=biolatency,timers,sched-trace,syscalls,uprobe \
+		--web.listen-address=":0" \
+		--web.telemetry-path="/metrics"
+)
+
+
+sudo touch /.roachprod-initialized
+----
+----

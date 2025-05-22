@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/cockroachkvs"
 	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
@@ -688,54 +690,10 @@ func (fs *errorFS) Create(name string, category vfs.DiskWriteCategory) (vfs.File
 	return fs.FS.Create(name, category)
 }
 
-func TestPebbleMVCCIntervalMapper(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	m := pebbleIntervalMapper{}
-	aKey := roachpb.Key("a")
-	uuid := uuid.Must(uuid.FromString("6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
-
-	for _, tc := range []struct {
-		userKey  []byte
-		expected sstable.BlockInterval
-	}{
-		{
-			userKey: func() []byte {
-				ek, _ := LockTableKey{aKey, lock.Intent, uuid}.ToEngineKey(nil)
-				return ek.Encode()
-			}(),
-			// Lock keys are not MVCC keys.
-			expected: sstable.BlockInterval{},
-		},
-		{
-			userKey:  EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 2, Logical: 1}}),
-			expected: sstable.BlockInterval{Lower: 2, Upper: 3},
-		},
-		{
-			userKey:  EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 22, Logical: 1}}),
-			expected: sstable.BlockInterval{Lower: 22, Upper: 23},
-		},
-		{
-			userKey:  EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 25}}),
-			expected: sstable.BlockInterval{Lower: 25, Upper: 26},
-		},
-	} {
-		i, err := m.MapPointKey(sstable.InternalKey{UserKey: tc.userKey}, nil)
-		require.NoError(t, err)
-		require.Equal(t, tc.expected, i)
-	}
-	// An invalid key (malformed sentinel) results in an error.
-	key := EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 2, Logical: 1}})
-	sentinelPos := len(key) - 1 - int(key[len(key)-1])
-	key[sentinelPos] = '\xff'
-	_, err := m.MapPointKey(sstable.InternalKey{UserKey: key}, nil)
-	require.Error(t, err)
-}
-
 func TestPebbleMVCCBlockIntervalSuffixReplacer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	r := MVCCBlockIntervalSuffixReplacer{}
+	r := cockroachkvs.MVCCBlockIntervalSuffixReplacer{}
 	suffix := mvccencoding.EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 42, Logical: 1})
 	before := sstable.BlockInterval{Lower: 10, Upper: 15}
 	after, err := r.ApplySuffixReplacement(before, suffix)
@@ -1343,7 +1301,7 @@ func TestIncompatibleVersion(t *testing.T) {
 	version := roachpb.Version{Major: 21, Minor: 1}
 	b, err := protoutil.Marshal(&version)
 	require.NoError(t, err)
-	require.NoError(t, fs.SafeWriteToFile(memFS, "", MinVersionFilename, b, fs.UnspecifiedWriteCategory))
+	require.NoError(t, safeWriteToUnencryptedFile(memFS, "", MinVersionFilename, b, fs.UnspecifiedWriteCategory))
 
 	env = mustInitTestEnv(t, memFS, "")
 	_, err = Open(ctx, env, cluster.MakeTestingClusterSettings())
@@ -1548,69 +1506,86 @@ func TestCompactionConcurrencyEnvVars(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	type testCase struct {
+		cockroachConcurrentCompactions string
+		cockroachRocksDBConcurrency    string
+		want                           int
+	}
+	cases := []testCase{
+		// Default.
+		{want: 0},
+		{cockroachConcurrentCompactions: "5", want: 5},
+		{cockroachConcurrentCompactions: "1", want: 1},
+		{cockroachConcurrentCompactions: "0", want: 0},
+		// COCKROACH_ROCKSDB_CONCURRENCY is deprecated but we still support it. Note
+		// that for this env var, the compaction concurrency is the value minus 1.
+		{cockroachRocksDBConcurrency: "5", want: 4},
+		{cockroachRocksDBConcurrency: "2", want: 1},
+		{cockroachRocksDBConcurrency: "1", want: 1},
+		{cockroachRocksDBConcurrency: "0", want: 0},
+		// The non-deprecated var takes precedence.
+		{cockroachConcurrentCompactions: "10", cockroachRocksDBConcurrency: "5", want: 10},
+	}
+	for _, tc := range cases {
+		t.Run(fmt.Sprintf("old=%q,new=%q", tc.cockroachRocksDBConcurrency, tc.cockroachConcurrentCompactions),
+			func(t *testing.T) {
+				if tc.cockroachRocksDBConcurrency == "" {
+					defer envutil.TestUnsetEnv(t, "COCKROACH_ROCKSDB_CONCURRENCY")()
+				} else {
+					defer envutil.TestSetEnv(t, "COCKROACH_ROCKSDB_CONCURRENCY", tc.cockroachRocksDBConcurrency)()
+				}
+				if tc.cockroachConcurrentCompactions == "" {
+					defer envutil.TestUnsetEnv(t, "COCKROACH_CONCURRENT_COMPACTIONS")()
+				} else {
+					defer envutil.TestSetEnv(t, "COCKROACH_CONCURRENT_COMPACTIONS", tc.cockroachConcurrentCompactions)()
+				}
+				require.Equal(t, tc.want, getMaxConcurrentCompactionsFromEnv())
+			})
+	}
+}
+
+func TestDetermineMaxConcurrentCompactions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	maxProcsBefore := runtime.GOMAXPROCS(0)
 	defer runtime.GOMAXPROCS(maxProcsBefore)
 
 	type testCase struct {
-		maxProcs             int
-		rocksDBConcurrency   string
-		cockroachConcurrency string
-		want                 int
+		maxProcs       int
+		envValue       int
+		clusterSetting int
+		want           int
 	}
 	cases := []testCase{
-		// Defaults
-		{32, "", "", 3},
-		{4, "", "", 3},
-		{3, "", "", 2},
-		{2, "", "", 1},
-		{1, "", "", 1},
-		// Old COCKROACH_ROCKSDB_CONCURRENCY env var is set. The user-provided
-		// value includes 1 slot for flushes, so resulting compaction
-		// concurrency is n-1.
-		{32, "4", "", 3},
-		{4, "4", "", 3},
-		{2, "4", "", 3},
-		{1, "4", "", 3},
-		{32, "8", "", 7},
-		{4, "8", "", 7},
-		{2, "8", "", 7},
-		{1, "8", "", 7},
-		// New COCKROACH_CONCURRENT_COMPACTIONS env var is set.
-		{32, "", "4", 4},
-		{4, "", "4", 4},
-		{2, "", "4", 4},
-		{1, "", "4", 4},
-		{32, "", "8", 8},
-		{4, "", "8", 8},
-		{2, "", "8", 8},
-		{1, "", "8", 8},
-		// Both settings are set; COCKROACH_CONCURRENT_COMPACTIONS supersedes
-		// COCKROACH_ROCKSDB_CONCURRENCY.
-		{32, "8", "4", 4},
-		{4, "1", "4", 4},
-		{2, "2", "4", 4},
-		{1, "5", "4", 4},
-		{32, "1", "8", 8},
-		{4, "2", "8", 8},
-		{2, "4", "8", 8},
-		{1, "1", "8", 8},
+		// Defaults.
+		{maxProcs: 32, want: 3},
+		{maxProcs: 8, want: 3},
+		{maxProcs: 4, want: 3},
+		{maxProcs: 2, want: 1},
+		{maxProcs: 1, want: 1},
+		// Env value override.
+		{maxProcs: 32, envValue: 10, want: 10},
+		{maxProcs: 1, envValue: 10, want: 10},
+		// Cluster setting override.
+		{maxProcs: 32, clusterSetting: 10, want: 10},
+		{maxProcs: 1, clusterSetting: 10, want: 10},
+		// Env value and cluster setting override.
+		{maxProcs: 32, envValue: 15, clusterSetting: 10, want: 15},
+		{maxProcs: 32, envValue: 10, clusterSetting: 15, want: 15},
+		{maxProcs: 1, envValue: 15, clusterSetting: 10, want: 15},
+		{maxProcs: 1, envValue: 10, clusterSetting: 15, want: 15},
 	}
 	for _, tc := range cases {
-		t.Run(fmt.Sprintf("GOMAXPROCS=%d,old=%q,new=%q", tc.maxProcs, tc.rocksDBConcurrency, tc.cockroachConcurrency),
+		t.Run(fmt.Sprintf("GOMAXPROCS=%d,env=%d,setting=%d", tc.maxProcs, tc.envValue, tc.clusterSetting),
 			func(t *testing.T) {
 				runtime.GOMAXPROCS(tc.maxProcs)
-
-				if tc.rocksDBConcurrency == "" {
-					defer envutil.TestUnsetEnv(t, "COCKROACH_ROCKSDB_CONCURRENCY")()
-				} else {
-					defer envutil.TestSetEnv(t, "COCKROACH_ROCKSDB_CONCURRENCY", tc.rocksDBConcurrency)()
-				}
-				if tc.cockroachConcurrency == "" {
-					defer envutil.TestUnsetEnv(t, "COCKROACH_CONCURRENT_COMPACTIONS")()
-				} else {
-					defer envutil.TestSetEnv(t, "COCKROACH_CONCURRENT_COMPACTIONS", tc.cockroachConcurrency)()
-				}
-				require.Equal(t, tc.want, getMaxConcurrentCompactions())
+				actual := determineMaxConcurrentCompactions(
+					getDefaultMaxConcurrentCompactions(),
+					tc.envValue,
+					tc.clusterSetting,
+				)
+				require.Equal(t, tc.want, actual)
 			})
 	}
 }
@@ -1706,4 +1681,80 @@ func TestPebbleLoggingSlowReads(t *testing.T) {
 		slowCount := testFunc(t, "block")
 		require.Less(t, 0, slowCount)
 	})
+}
+
+func TestPebbleSetCompactionConcurrency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	settings := cluster.MakeTestingClusterSettings()
+	p, err := Open(ctx, InMemory(), settings, CacheSize(1<<20 /* 1 MiB */), MaxConcurrentCompactions(4))
+	require.NoError(t, err)
+	defer p.Close()
+
+	require.Equal(t, "1 4", fmt.Sprint(p.cfg.opts.CompactionConcurrencyRange()))
+
+	p.SetCompactionConcurrency(10)
+	require.Equal(t, "10 10", fmt.Sprint(p.cfg.opts.CompactionConcurrencyRange()))
+
+	p.SetCompactionConcurrency(0)
+	require.Equal(t, "1 4", fmt.Sprint(p.cfg.opts.CompactionConcurrencyRange()))
+}
+
+func TestPebbleCompactCancellation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	mem := vfs.NewMem()
+	bfs := &fs.BlockingWriteFSForTesting{FS: mem}
+	e, err := fs.InitEnv(ctx, bfs, "" /* dir */, fs.EnvConfig{}, nil /* statsCollector */)
+	require.NoError(t, err)
+	db, err := Open(
+		ctx, e, cluster.MakeClusterSettings(), CacheSize(1024), MaxConcurrentCompactions(1),
+		func(cfg *engineConfig) error {
+			cfg.opts.DisableAutomaticCompactions = true
+			return nil
+		})
+	require.NoError(t, err)
+	defer db.Close()
+	// Flush 2 sstables to L0.
+	require.NoError(t, db.PutEngineKey(EngineKey{Key: []byte("a")}, []byte("a")))
+	require.NoError(t, db.Flush())
+	require.NoError(t, db.PutEngineKey(EngineKey{Key: []byte("a")}, []byte("a")))
+	require.NoError(t, db.Flush())
+	// Block writes to the engine.
+	bfs.Block()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	// Start a manual compaction that will start and block.
+	go func() {
+		require.NoError(t, db.Compact(ctx))
+		wg.Done()
+	}()
+	// Start 2 manual compactions with cancellable contexts, that will not start
+	// since only 1 concurrent compaction is allowed.
+	var cancelWG sync.WaitGroup
+	cancelWG.Add(1)
+	cctx, cancel := context.WithCancel(ctx)
+	go func() {
+		require.Error(t, db.Compact(cctx))
+		cancelWG.Done()
+	}()
+	cancelWG.Add(1)
+	go func() {
+		require.Error(t, db.CompactRange(cctx, []byte("a"), []byte("b")))
+		cancelWG.Done()
+	}()
+	// Cancel the compactions and wait for the cancellation to be observed.
+	cancel()
+	waitedTooLongTimer := time.AfterFunc(30*time.Second, func() {
+		t.Fatal("timed out waiting for cancellation to be observed")
+	})
+	cancelWG.Wait()
+	waitedTooLongTimer.Stop()
+	// Unblock the first compaction and wait for it to complete.
+	bfs.WaitForBlockAndUnblock()
+	wg.Wait()
 }

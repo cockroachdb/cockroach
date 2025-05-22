@@ -30,7 +30,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/importer",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/base",
         "//pkg/cloud",
         "//pkg/clusterversion",
         "//pkg/col/coldata",
@@ -46,7 +45,6 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverbase",
-        "//pkg/kv/kvserver/protectedts",
         "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/server/telemetry",
@@ -88,6 +86,7 @@ go_library(
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlclustersettings",

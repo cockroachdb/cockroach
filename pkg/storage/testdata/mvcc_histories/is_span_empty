@@ -20,7 +20,7 @@ del_range_ts k=d end=f ts=2
 del: "b": found key false
 put: lock acquisition = {c id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 gul=0,0
 rangekey: {d-f}/[2.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /BYTES/a4
 data: "a"/2.000000000,0 -> /BYTES/a2

@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -98,6 +99,19 @@ func (s *Suite) binURL(revision Revision, benchmark *Benchmark) string {
 		Bucket, s.revisionSHA(revision), benchmark.binaryName())
 }
 
+func (s *Suite) changeDetected() bool {
+	for _, status := range []Status{Regressed} {
+		for _, benchmark := range suite.Benchmarks {
+			markerFile := path.Join(s.artifactsDir(New), benchmark.markerName(status))
+			_, err := os.Stat(markerFile)
+			if err == nil {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func makeRunCommand() *cobra.Command {
 	cmdFunc := func(cmd *cobra.Command, commandLine []string) error {
 		if err := config.loadSuite(); err != nil {
@@ -116,6 +130,7 @@ func makeRunCommand() *cobra.Command {
 }
 
 func makeCompareCommand() *cobra.Command {
+	post := false
 	cmdFunc := func(cmd *cobra.Command, commandLine []string) error {
 		if err := config.loadSuite(); err != nil {
 			return err
@@ -124,10 +139,56 @@ func makeCompareCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
+		summaryText, err := results.githubSummary()
+		if err != nil {
+			return err
+		}
+		if err = writeToFile(config.GitHubSummaryPath, summaryText); err != nil {
+			return err
+		}
 		if err = results.writeJSONSummary(config.SummaryPath); err != nil {
 			return err
 		}
-		return results.writeGitHubSummary(config.GitHubSummaryPath)
+
+		// If the `PerfLabel` is present on the PR, or a change was detected, we
+		// post a comment to GitHub. If a change was detected, we also add the
+		// label to the PR, if it is not already present.
+		if post {
+			github, err := NewGithubConfig()
+			if err != nil {
+				return err
+			}
+			hasLabel, err := github.hasLabel(PerfLabel)
+			if err != nil {
+				return err
+			}
+			if hasLabel || suite.changeDetected() {
+				skipPermissionError := func(err error, action string) error {
+					if err == nil {
+						return nil
+					}
+					// If this is a permission error, we don't want to fail the build. This
+					// can happen if the GitHub token has read-only access, for example when
+					// testing the pull_request trigger from a fork.
+					if strings.Contains(err.Error(), "403") {
+						log.Printf("WARNING: Skipped %s, because GitHub token does not have write access to the repository", action)
+						return nil
+					}
+					return err
+				}
+				err = github.postComment(summaryText)
+				if skipPermissionError(err, "posting a comment") != nil {
+					return err
+				}
+				if !hasLabel {
+					err = github.addLabel(PerfLabel)
+					if skipPermissionError(err, "adding a label") != nil {
+						return err
+					}
+				}
+			}
+		}
+		return nil
 	}
 	cmd := &cobra.Command{
 		Use:   "compare",
@@ -136,31 +197,8 @@ func makeCompareCommand() *cobra.Command {
 		RunE:  cmdFunc,
 	}
 	cmd.Flags().StringVar(&config.SummaryPath, "summary", config.SummaryPath, "path to write comparison results to (JSON)")
+	cmd.Flags().BoolVar(&post, "post", false, "post the comparison results to GitHub")
 	return cmd
-}
-
-func makePostCommand() (*cobra.Command, error) {
-	repo := "cockroachdb/cockroach"
-	var prNumber int
-	cmdFunc := func(cmd *cobra.Command, commandLine []string) error {
-		summaryText, err := os.ReadFile(config.GitHubSummaryPath)
-		if err != nil {
-			return err
-		}
-		return post(string(summaryText), repo, prNumber)
-	}
-	cmd := &cobra.Command{
-		Use:   "post",
-		Short: "post creates or updates a microbench-ci summary comment on a GitHub PR",
-		Args:  cobra.ExactArgs(0),
-		RunE:  cmdFunc,
-	}
-	cmd.Flags().StringVar(&repo, "repo", repo, "repository")
-	cmd.Flags().IntVar(&prNumber, "pr-number", 0, "PR number")
-	if err := cmd.MarkFlagRequired("pr-number"); err != nil {
-		return nil, err
-	}
-	return cmd, nil
 }
 
 func run() error {
@@ -173,33 +211,24 @@ func run() error {
 
 	runCmd := makeRunCommand()
 	compareCmd := makeCompareCommand()
-	postCmd, err := makePostCommand()
-	if err != nil {
-		return err
-	}
 
 	for _, c := range []*cobra.Command{runCmd, compareCmd} {
 		c.Flags().StringVar(&config.WorkingDir, "working-dir", config.WorkingDir, "directory to store or load artifacts from")
 		c.Flags().StringVar(&config.BenchmarkConfigPath, "config", config.BenchmarkConfigPath, "suite configuration file")
 		c.Flags().StringVar(&config.Old, "old", "", "old commit")
 		c.Flags().StringVar(&config.New, "new", "", "new commit")
-		if err = c.MarkFlagRequired("old"); err != nil {
+		if err := c.MarkFlagRequired("old"); err != nil {
 			return err
 		}
-		if err = c.MarkFlagRequired("new"); err != nil {
+		if err := c.MarkFlagRequired("new"); err != nil {
 			return err
 		}
 	}
-
-	for _, c := range []*cobra.Command{postCmd, compareCmd} {
-		c.Flags().StringVar(&config.GitHubSummaryPath, "github-summary", config.GitHubSummaryPath, "path to write comparison results to (GitHub Markdown)")
-	}
-
+	compareCmd.Flags().StringVar(&config.GitHubSummaryPath, "github-summary", config.GitHubSummaryPath, "path to write comparison results to (GitHub Markdown)")
 	compareCmd.Flags().StringVar(&config.BuildID, "build-id", config.BuildID, "GitHub build ID to identify this run")
 
 	cmd.AddCommand(runCmd)
 	cmd.AddCommand(compareCmd)
-	cmd.AddCommand(postCmd)
 
 	return cmd.Execute()
 }
@@ -210,4 +239,15 @@ func main() {
 		log.Printf("ERROR: %+v", err)
 		os.Exit(1)
 	}
+}
+
+// writeToFile writes a string to a file.
+func writeToFile(path string, text string) error {
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	_, err = file.WriteString(text)
+	return err
 }

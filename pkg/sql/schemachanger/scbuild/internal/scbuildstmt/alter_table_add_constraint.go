@@ -85,7 +85,12 @@ func alterTableAddPrimaryKey(
 	if getPrimaryIndexDefaultRowIDColumn(
 		b, tbl.TableID, oldPrimaryIndex.IndexID,
 	) == nil {
-		panic(scerrors.NotImplementedError(t))
+		// If the constraint already exists then nothing to do here.
+		if oldPrimaryIndex != nil && d.IfNotExists {
+			return
+		}
+		panic(pgerror.Newf(pgcode.InvalidColumnDefinition,
+			"multiple primary keys for table %q are not allowed", tn.Object()))
 	}
 	alterPrimaryKey(b, tn, tbl, stmt, alterPrimaryKeySpec{
 		n:             t,
@@ -281,7 +286,7 @@ func alterTableAddForeignKey(
 			"and is no longer supported."))
 	}
 	// Disallow schema change if the FK references a table whose schema is locked.
-	panicIfSchemaChangeIsDisallowed(b.QueryByID(referencedTableID), stmt)
+	checkTableSchemaChangePrerequisites(b, b.QueryByID(referencedTableID), stmt)
 
 	// 6. Check that temporary tables can only reference temporary tables, or,
 	// permanent tables can only reference permanent tables.

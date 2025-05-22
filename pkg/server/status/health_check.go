@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/redact"
 )
 
 type threshold struct {
@@ -167,10 +168,10 @@ func (h *HealthChecker) CheckHealth(
 	for storeID, storeDiff := range diffs {
 		for name, value := range storeDiff {
 			alerts = append(alerts, statuspb.HealthAlert{
-				StoreID:     storeID,
-				Category:    statuspb.HealthAlert_METRICS,
-				Description: name,
-				Value:       value,
+				StoreID:         storeID,
+				Category:        statuspb.HealthAlert_METRICS,
+				SafeDescription: redact.SafeString(name), // metrics names are not PII
+				Value:           value,
 			})
 		}
 	}

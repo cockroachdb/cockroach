@@ -108,19 +108,23 @@ const IdxRecAction = (props: IdxRecProps): React.ReactElement => {
       );
       break;
     case "ReplaceIndex":
-      title = "replace the index";
-      btnLAbel = "Replace Index";
+      title = "create a replacement index";
+      btnLAbel = "Create Replacement Index";
       descriptionDocs = (
         <>
-          {" "}
+          {"a "}
           <Anchor href={createIndex} target="_blank">
             CREATE INDEX
+          </Anchor>
+          {" statement. The commented-out "}
+          <Anchor href={alterIndex} target="_blank">
+            ALTER INDEX
           </Anchor>
           {" and "}
           <Anchor href={dropIndex} target="_blank">
             DROP INDEX
           </Anchor>
-          {" statements"}
+          {" statements should be copied and run manually afterward"}
         </>
       );
       break;

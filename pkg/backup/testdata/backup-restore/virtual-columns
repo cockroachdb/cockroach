@@ -47,4 +47,4 @@ d.public.tab CREATE TABLE public.tab (
 	CONSTRAINT tab_pkey PRIMARY KEY (k ASC),
 	INDEX tab_v_idx (v ASC),
 	UNIQUE INDEX tab_a_b_key (a ASC, b ASC) WHERE v > 0:::INT8
-)
+);

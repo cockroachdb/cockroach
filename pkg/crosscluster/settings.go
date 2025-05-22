@@ -29,7 +29,6 @@ var StreamReplicationMinCheckpointFrequency = settings.RegisterDurationSetting(
 	"controls minimum frequency the stream replication source cluster sends checkpoints "+
 		"to the destination cluster",
 	10*time.Second,
-	settings.NonNegativeDuration,
 	settings.WithName("physical_replication.producer.min_checkpoint_frequency"),
 )
 
@@ -41,7 +40,6 @@ var StreamReplicationConsumerHeartbeatFrequency = settings.RegisterDurationSetti
 	"controls frequency the stream replication destination cluster sends heartbeat "+
 		"to the source cluster to keep the stream alive",
 	30*time.Second,
-	settings.NonNegativeDuration,
 	settings.WithName("physical_replication.consumer.heartbeat_frequency"),
 )
 
@@ -52,7 +50,6 @@ var JobCheckpointFrequency = settings.RegisterDurationSetting(
 	"stream_replication.job_checkpoint_frequency",
 	"controls the frequency with which partitions update their progress; if 0, disabled",
 	10*time.Second,
-	settings.NonNegativeDuration,
 	settings.WithName("physical_replication.consumer.job_checkpoint_frequency"),
 )
 
@@ -88,7 +85,6 @@ var InterNodeLag = settings.RegisterDurationSetting(
 	"physical_replication.consumer.node_lag_replanning_threshold",
 	"the maximum difference in lag tolerated across two destination nodes; if 0, disabled",
 	5*time.Minute,
-	settings.NonNegativeDuration,
 )
 
 // DumpFrontierEntries controls the frequency at which we persist the entries in
@@ -101,7 +97,6 @@ var DumpFrontierEntries = settings.RegisterDurationSetting(
 	"physical_replication.consumer.dump_frontier_entries_frequency",
 	"controls the frequency with which the frontier entries are persisted; if 0, disabled",
 	0,
-	settings.NonNegativeDuration,
 )
 
 // ReplicateSpanConfigsEnabled controls whether we replicate span

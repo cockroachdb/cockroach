@@ -59,6 +59,10 @@ func (s *Store) StoreLivenessTransport() *storeliveness.Transport {
 	return s.cfg.StoreLiveness.Transport
 }
 
+func (s *Store) StorePool() *storepool.StorePool {
+	return s.cfg.StorePool
+}
+
 func (s *Store) FindTargetAndTransferLease(
 	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, conf *roachpb.SpanConfig,
 ) (bool, error) {
@@ -445,25 +449,25 @@ func (r *Replica) ShouldBackpressureWrites(_ context.Context) bool {
 }
 
 // GetRaftLogSize returns the approximate raft log size and whether it is
-// trustworthy.. See r.mu.raftLogSize for details.
+// trustworthy. See replicaLogStorage.shMu.size for details.
 func (r *Replica) GetRaftLogSize() (int64, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.shMu.raftLogSize, r.shMu.raftLogSizeTrusted
+	ls := r.asLogStorage()
+	return ls.shMu.size, ls.shMu.sizeTrusted
 }
 
-// GetCachedLastTerm returns the cached last term value. May return
-// invalidLastTerm if the cache is not set.
+// GetCachedLastTerm returns the term of the last log entry.
 func (r *Replica) GetCachedLastTerm() kvpb.RaftTerm {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.shMu.lastTermNotDurable
+	return r.asLogStorage().shMu.last.Term
 }
 
 // SideloadedRaftMuLocked returns r.raftMu.sideloaded. Requires a previous call
 // to RaftLock() or some other guarantee that r.raftMu is held.
 func (r *Replica) SideloadedRaftMuLocked() logstore.SideloadStorage {
-	return r.raftMu.sideloaded
+	return r.logStorage.ls.Sideload
 }
 
 // LargestPreviousMaxRangeSizeBytes returns the in-memory value used to mitigate
@@ -599,7 +603,8 @@ func (r *Replica) ReadCachedProtectedTS() (readAt, earliestProtectionTimestamp h
 func (r *Replica) ClosedTimestampPolicy() roachpb.RangeClosedTimestampPolicy {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return toClientClosedTsPolicy(r.closedTimestampPolicyRLocked())
+	return toClientClosedTsPolicy(closedTimestampPolicy(r.descRLocked(),
+		*r.cachedClosedTimestampPolicy.Load()))
 }
 
 // TripBreaker synchronously trips the breaker.
@@ -697,10 +702,9 @@ func NewRangefeedTxnPusher(
 	}
 }
 
-// SupportFromEnabled exports (replicaRLockedStoreLiveness).SupportFromEnabled
-// for testing purposes.
-func (r *Replica) SupportFromEnabled() bool {
-	return (*replicaRLockedStoreLiveness)(r).SupportFromEnabled()
+// descRLocked exports (*Replica).descRLocked() for testing purposes.
+func (r *Replica) DescRLocked() *roachpb.RangeDescriptor {
+	return r.descRLocked()
 }
 
 // RaftFortificationEnabledForRangeID exports raftFortificationEnabledForRangeID

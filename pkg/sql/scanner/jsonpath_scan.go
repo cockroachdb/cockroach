@@ -18,12 +18,12 @@ type JSONPathScanner struct {
 // Scan scans the next token and populates its information into lval.
 // This scan function contains rules for jsonpath.
 func (s *JSONPathScanner) Scan(lval ScanSymType) {
-	ch, skipWhiteSpace := s.scanSetup(lval)
+	ch, skipWhiteSpace := s.scanSetup(lval, false /* allowComments */)
 	if skipWhiteSpace {
 		return
 	}
 
-	// TODO(normanchenn): We still need to handle $.Xe where X is any digit.
+	// TODO(#144258): We still need to handle $.Xc where X is any digit and c is any character.
 	switch ch {
 	case '$':
 		// Root path ($)
@@ -57,7 +57,7 @@ func (s *JSONPathScanner) Scan(lval ScanSymType) {
 		// With allowEscapes == false,
 		//  - String literal input "^\\$" is scanned as "^\\\\$" (two escaped backslashes)
 		if s.scanString(lval, identQuote, true /* allowEscapes */, true /* requireUTF8 */) {
-			lval.SetID(lexbase.STRING)
+			lval.SetID(lexbase.STR)
 		}
 		return
 	case '=':
@@ -108,6 +108,13 @@ func (s *JSONPathScanner) Scan(lval ScanSymType) {
 	case '@':
 		lval.SetID(lexbase.CURRENT)
 		return
+	case '*':
+		if s.peek() == '*' { // **
+			s.pos++
+			lval.SetID(lexbase.ANY)
+			return
+		}
+		return
 	default:
 		if sqllexbase.IsDigit(ch) {
 			s.scanNumber(lval, ch)
@@ -129,7 +136,7 @@ func isIdentMiddle(ch int) bool {
 
 // scanIdent is similar to Scanner.scanIdent, but uses Jsonpath tokens.
 func (s *JSONPathScanner) scanIdent(lval ScanSymType) {
-	// TODO(normanchenn): Allow any case for specific identifiers (strict, lax, to)
+	// TODO(#144255): Allow any case for specific identifiers (strict, lax, to)
 	s.normalizeIdent(lval, isIdentMiddle, false /* toLower */)
 	lval.SetID(lexbase.GetKeywordID(lval.Str()))
 }

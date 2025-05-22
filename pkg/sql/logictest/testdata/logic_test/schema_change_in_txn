@@ -1,3 +1,5 @@
+# LogicTest: !local-schema-locked
+
 # Skip the rest of the test if a retry occurs. They can happen and are fine
 # but there's no way to encapsulate that in logictests.
 skip_on_retry
@@ -283,7 +285,7 @@ b  CREATE TABLE public.b (
      CONSTRAINT b_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.parent(id),
      INDEX foo (parent_id ASC),
      UNIQUE INDEX bar (parent_id ASC)
-   )
+   );
 
 # table b is not visible to the transaction #17949
 statement error pgcode 55000 table "b" is being added

@@ -41,7 +41,7 @@ WHERE z > 1.0
 with &1
  ├── columns: x:12(string!null) y:13(int!null) z:14(float!null)
  ├── volatile, mutations
- ├── stats: [rows=66.51058, distinct(14)=43.4214, null(14)=0]
+ ├── stats: [rows=66.5106, distinct(14)=43.4214, null(14)=0]
  ├── fd: ()-->(12), (13)-->(14)
  ├── insert xyz
  │    ├── columns: xyz.x:1(string!null) xyz.y:2(int!null) xyz.z:3(float)
@@ -77,7 +77,7 @@ with &1
  │                   └── b:7 = 'foo' [type=bool, outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
  └── select
       ├── columns: x:12(string!null) y:13(int!null) z:14(float!null)
-      ├── stats: [rows=66.51058, distinct(14)=43.4214, null(14)=0]
+      ├── stats: [rows=66.5106, distinct(14)=43.4214, null(14)=0]
       ├── fd: ()-->(12), (13)-->(14)
       ├── with-scan &1
       │    ├── columns: x:12(string!null) y:13(int!null) z:14(float)

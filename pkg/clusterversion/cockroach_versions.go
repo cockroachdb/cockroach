@@ -227,6 +227,17 @@ const (
 
 	V25_2_AddSqlActivityFlushJob
 
+	V25_2_SetUiDefaultTimezoneSetting
+
+	V25_2_AddUsernameToStmtDiagRequest
+
+	// V25_2 is CockroachDB v25.2. It's used for all v25.2.x patch releases.
+	V25_2
+
+	V25_3_Start
+
+	V25_3_AddEventLogColumnAndIndex
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -278,8 +289,16 @@ var versionTable = [numKeys]roachpb.Version{
 	V25_1: {Major: 25, Minor: 1, Internal: 0},
 
 	// v25.2 versions. Internal versions must be even.
-	V25_2_Start:                  {Major: 25, Minor: 1, Internal: 2},
-	V25_2_AddSqlActivityFlushJob: {Major: 25, Minor: 1, Internal: 4},
+	V25_2_Start:                        {Major: 25, Minor: 1, Internal: 2},
+	V25_2_AddSqlActivityFlushJob:       {Major: 25, Minor: 1, Internal: 4},
+	V25_2_SetUiDefaultTimezoneSetting:  {Major: 25, Minor: 1, Internal: 6},
+	V25_2_AddUsernameToStmtDiagRequest: {Major: 25, Minor: 1, Internal: 8},
+
+	V25_2: {Major: 25, Minor: 2, Internal: 0},
+
+	V25_3_Start: {Major: 25, Minor: 2, Internal: 2},
+
+	V25_3_AddEventLogColumnAndIndex: {Major: 25, Minor: 2, Internal: 4},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
@@ -296,15 +315,15 @@ const MinSupported Key = V24_3
 
 // PreviousRelease is the logical cluster version of the previous release (which must
 // have at least an RC build published).
-const PreviousRelease Key = V25_1
+const PreviousRelease Key = V25_2
 
-// V25_2 is a placeholder that will eventually be replaced by the actual 25.2
+// V25_3 is a placeholder that will eventually be replaced by the actual 25.3
 // version Key, but in the meantime it points to the latest Key. The placeholder
 // is defined so that it can be referenced in code that simply wants to check if
-// a cluster is running 24.3 and has completed all associated migrations; most
+// a cluster is running 25.3 and has completed all associated migrations; most
 // version gates can use this instead of defining their own version key if they
-// only need to check that the cluster has upgraded to 25.2.
-const V25_2 = Latest
+// only need to check that the cluster has upgraded to 25.3.
+const V25_3 = Latest
 
 // DevelopmentBranch must be true on the main development branch but should be
 // set to false on a release branch once the set of versions becomes append-only

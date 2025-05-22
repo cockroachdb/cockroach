@@ -47,6 +47,7 @@ const (
 	splitKeyMinCounter         = 100              // min aggregate counters before consideration
 	splitKeyThreshold          = 0.25             // 25% difference between left/right counters
 	splitKeyContainedThreshold = 0.50             // too many spanning queries over split point
+	clearDirectionThreshold    = 0.80             // 80% accesses left or right
 )
 
 type sample struct {
@@ -98,7 +99,7 @@ func (f *UnweightedFinder) Record(span roachpb.Span, weight float64) {
 	f.count++
 	if count < splitKeySampleSize {
 		idx = count
-	} else if idx = f.randSource.Intn(count); idx >= splitKeySampleSize {
+	} else if idx = f.randSource.IntN(count); idx >= splitKeySampleSize {
 		// Increment all existing keys' counters.
 		for i := range f.samples {
 			if span.ProperlyContainsKey(f.samples[i].key) {

@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"slices"
 	"sync"
 	"time"
 
@@ -178,6 +179,9 @@ type FixupProcessor struct {
 		// fixups. Only once the channel is closed will they begin processing.
 		// This is used for testing.
 		suspended chan struct{}
+		// discardFixups, if true, causes the processor to discard any queued
+		// fixups rather than processing them. This is used for testing.
+		discardFixups bool
 		// waitForFixups broadcasts to any waiters when all fixups are processed.
 		// This is used for testing.
 		waitForFixups sync.Cond
@@ -212,6 +216,12 @@ func (fp *FixupProcessor) Init(
 
 	fp.mu.pendingFixups = make(map[fixupKey]bool, maxFixups)
 	fp.mu.waitForFixups.L = &fp.mu
+
+	if index.options.IsDeterministic {
+		// A deterministic index should be suspended until an explicit call to
+		// Process is called.
+		fp.Suspend()
+	}
 }
 
 // OnSuccessfulSplit sets a callback function that's invoked when a partition is
@@ -284,9 +294,11 @@ func (fp *FixupProcessor) DelayInsertOrDelete(ctx context.Context) error {
 
 // AddDeleteVector enqueues a vector deletion fixup for later processing.
 func (fp *FixupProcessor) AddDeleteVector(
-	ctx context.Context, partitionKey PartitionKey, vectorKey KeyBytes,
+	ctx context.Context, treeKey TreeKey, partitionKey PartitionKey, vectorKey KeyBytes,
 ) {
 	fp.addFixup(ctx, fixup{
+		// Clone the tree key, since we don't own the memory.
+		TreeKey:      slices.Clone(treeKey),
 		Type:         vectorDeleteFixup,
 		PartitionKey: partitionKey,
 		VectorKey:    vectorKey,
@@ -302,7 +314,8 @@ func (fp *FixupProcessor) AddSplit(
 	singleStep bool,
 ) {
 	fp.addFixup(ctx, fixup{
-		TreeKey:            treeKey,
+		// Clone the tree key, since we don't own the memory.
+		TreeKey:            slices.Clone(treeKey),
 		Type:               splitFixup,
 		ParentPartitionKey: parentPartitionKey,
 		PartitionKey:       partitionKey,
@@ -319,7 +332,8 @@ func (fp *FixupProcessor) AddMerge(
 	singleStep bool,
 ) {
 	fp.addFixup(ctx, fixup{
-		TreeKey:            treeKey,
+		// Clone the tree key, since we don't own the memory.
+		TreeKey:            slices.Clone(treeKey),
 		Type:               mergeFixup,
 		ParentPartitionKey: parentPartitionKey,
 		PartitionKey:       partitionKey,
@@ -344,9 +358,11 @@ func (fp *FixupProcessor) Suspend() {
 // workers. If background workers have been suspended, they are temporarily
 // allowed to run until all fixups have been processed. This is useful for
 // testing.
-func (fp *FixupProcessor) Process() {
+func (fp *FixupProcessor) Process(discard bool) {
 	fp.mu.Lock()
 	defer fp.mu.Unlock()
+
+	fp.mu.discardFixups = discard
 
 	suspended := fp.mu.suspended
 	if suspended != nil {
@@ -355,10 +371,13 @@ func (fp *FixupProcessor) Process() {
 		fp.mu.suspended = nil
 	}
 
-	// Wait for all fixups to be processed.
+	// Wait for all fixups to be processed. Note that this uses a sync.Cond, which
+	// will unlock the mutex while waiting.
 	for len(fp.mu.pendingFixups) > 0 {
 		fp.mu.waitForFixups.Wait()
 	}
+
+	fp.mu.discardFixups = false
 
 	// Re-suspend the fixup processor if it was suspended.
 	if suspended != nil {
@@ -370,6 +389,12 @@ func (fp *FixupProcessor) Process() {
 // already a duplicate fixup that's pending. It also starts a background worker
 // to process the fixup, if needed and allowed.
 func (fp *FixupProcessor) addFixup(ctx context.Context, fixup fixup) {
+	if fp.index.options.ReadOnly {
+		// Don't enqueue fixups if the index is read-only.
+		log.VEvent(ctx, 2, "discarding fixup because index is read-only")
+		return
+	}
+
 	fp.mu.Lock()
 	defer fp.mu.Unlock()
 
@@ -431,33 +456,46 @@ func (fp *FixupProcessor) addFixup(ctx context.Context, fixup fixup) {
 // a background worker. It blocks until there is a fixup available (ok=true) or
 // until the processor shuts down (ok=false).
 func (fp *FixupProcessor) nextFixup(ctx context.Context) (next fixup, ok bool) {
-	select {
-	case next = <-fp.fixups:
-		// Within the scope of the mutex, increment running workers and check
-		// whether processor is suspended.
-		suspended := func() chan struct{} {
-			fp.mu.Lock()
-			defer fp.mu.Unlock()
-			fp.mu.runningWorkers++
-			return fp.mu.suspended
-		}()
-		if suspended != nil {
-			// Can't process the fixup until the processor is resumed, so wait
-			// until that happens.
-			select {
-			case <-suspended:
-				break
+	for {
+		select {
+		case next = <-fp.fixups:
+			// Within the scope of the mutex, increment running workers and check
+			// whether processor is suspended.
+			discard, suspended := func() (bool, chan struct{}) {
+				fp.mu.Lock()
+				defer fp.mu.Unlock()
+				fp.mu.runningWorkers++
+				return fp.mu.discardFixups, fp.mu.suspended
+			}()
+			if suspended != nil {
+				// Can't process the fixup until the processor is resumed, so wait
+				// until that happens.
+				select {
+				case <-suspended:
+					break
 
-			case <-ctx.Done():
-				return fixup{}, false
+				case <-ctx.Done():
+					return fixup{}, false
+				}
+
+				// Re-check the discard flag, in case it was set.
+				discard = func() bool {
+					fp.mu.Lock()
+					defer fp.mu.Unlock()
+					return fp.mu.discardFixups
+				}()
 			}
+
+			if discard {
+				fp.removeFixup(next)
+				continue
+			}
+			return next, true
+
+		case <-ctx.Done():
+			// Context was canceled, abort.
+			return fixup{}, false
 		}
-
-		return next, true
-
-	case <-ctx.Done():
-		// Context was canceled, abort.
-		return fixup{}, false
 	}
 }
 

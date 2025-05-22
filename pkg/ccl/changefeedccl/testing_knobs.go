@@ -8,6 +8,7 @@ package changefeedccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -111,6 +112,10 @@ type TestingKnobs struct {
 
 	// OverrideCursorAge is used to change how old a cursor is. Returns time in nanoseconds.
 	OverrideCursorAge func() int64
+
+	// MakeKVFeedToAggregatorBufferKnobs is used to make a fresh set of testing knobs
+	// to pass to the constructor of the kv feed to change aggregator buffer.
+	MakeKVFeedToAggregatorBufferKnobs func() kvevent.BlockingBufferTestingKnobs
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

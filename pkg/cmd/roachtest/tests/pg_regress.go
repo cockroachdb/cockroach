@@ -442,10 +442,22 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if err != nil {
 			t.L().Printf("Failed to read %s: %s", tmpFilePath, err)
 		}
-		issueURI := regexp.MustCompile(`https:\/\/go\.crdb\.dev\/issue-v\/(\d+)\/[^\/|^\s]+`)
+		issueURI := regexp.MustCompile(`https://go\.crdb\.dev/issue-v/(\d+)/[^/|^\s]+`)
 		actualB = issueURI.ReplaceAll(actualB, []byte("https://go.crdb.dev/issue-v/$1/_version_"))
-		docsURI := regexp.MustCompile(`https:\/\/www\.cockroachlabs.com\/docs\/[^\/|^\s]+`)
+		docsURI := regexp.MustCompile(`https://www\.cockroachlabs.com/docs/[^/|^\s]+`)
 		actualB = docsURI.ReplaceAll(actualB, []byte("https://www.cockroachlabs.com/docs/_version_"))
+
+		// Remove table ID from some errors (to reduce the diff churn).
+		for _, re := range []*regexp.Regexp{
+			regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: unimplemented: primary key dropped without subsequent addition of new primary key in same transaction*)`),
+			regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: duplicate constraint name: *)`),
+			regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: duplicate column name: *)`),
+			regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: conflicting NULL/NOT NULL declarations for column *)`),
+			regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: table must contain at least*)`),
+		} {
+			actualB = re.ReplaceAll(actualB, []byte("$1$2"))
+		}
+
 		err = os.WriteFile(diffFilePath, actualB, 0644)
 		if err != nil {
 			t.L().Printf("Failed to write %s: %s", diffFilePath, err)
@@ -843,6 +855,8 @@ index 1b2d434683..d371fe3f63 100644
 	// pg_catalog.pg_am vtable.
 	// TODO(#123706): remove the patch to comment out a query against
 	// pg_catalog.pg_attribute vtable.
+	// TODO(#146255): remove the patch to include ORDER BY clause for the query
+	// with "Text conversion routines must be provided." comment in pg_regress.
 	{"type_sanity.sql", `diff --git a/src/test/regress/sql/type_sanity.sql b/src/test/regress/sql/type_sanity.sql
 index 79ec410a6c..417d3dcdb2 100644
 --- a/src/test/regress/sql/type_sanity.sql
@@ -867,7 +881,17 @@ index 79ec410a6c..417d3dcdb2 100644
 
  -- Look for "toastable" types that aren'"'"'t varlena.
 
-@@ -288,7 +290,8 @@ WHERE t1.typelem = t2.oid AND NOT
+@@ -91,7 +93,8 @@ WHERE t1.typtype = 'r' AND
+
+ SELECT t1.oid, t1.typname
+ FROM pg_type as t1
+-WHERE (t1.typinput = 0 OR t1.typoutput = 0);
++WHERE (t1.typinput = 0 OR t1.typoutput = 0)
++ORDER BY t1.oid;
+
+ -- Check for bogus typinput routines
+
+@@ -288,7 +291,8 @@ WHERE t1.typelem = t2.oid AND NOT
 
  SELECT t1.oid, t1.typname, t2.oid, t2.typname
  FROM pg_type AS t1, pg_type AS t2
@@ -1127,9 +1151,7 @@ index a460f82fb7..a9f7b99b84 100644
    VALUES ('"'"'test'"'"', DEFAULT), ('"'"'More'"'"', 11), (upper('"'"'more'"'"'), 7+9)
 `},
 	// Serial is non-deterministic.
-	// TODO(#114846): Enable array_to_set function calls when internal
-	// error is fixed.
-	// TODO(#118702): Remove the patch around getrngfunc9 when
+	// TODO(#114676): Remove the patch around getrngfunc9 when
 	// the internal error is fixed.
 	{"rangefuncs.sql", `diff --git a/src/test/regress/sql/rangefuncs.sql b/src/test/regress/sql/rangefuncs.sql
 index 63351e1412..07d3216a9d 100644
@@ -1154,24 +1176,6 @@ index 63351e1412..07d3216a9d 100644
  
  create function insert_tt(text) returns int as
  $$ insert into tt(data) values($1) returning f1 $$
-@@ -537,7 +538,7 @@ select array_to_set(array['"'"'one'"'"', '"'"'two'"'"']);
- select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 int,f2 text);
- select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']); -- fail
- -- after-the-fact coercion of the columns is now possible, too
--select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 numeric(4,2),f2 text);
-+-- select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 numeric(4,2),f2 text);
- -- and if it doesn'"'"'t work, you get a compile-time not run-time error
- select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 point,f2 text);
- 
-@@ -553,7 +554,7 @@ $$ language sql immutable;
- 
- select array_to_set(array['"'"'one'"'"', '"'"'two'"'"']);
- select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 int,f2 text);
--select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 numeric(4,2),f2 text);
-+-- select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 numeric(4,2),f2 text);
- select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 point,f2 text);
- explain (verbose, costs off)
-   select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 numeric(4,2),f2 text);
 `},
 	// Serial is non-deterministic and non-monotonic in CRDB, so we modify the tests for serial slightly
 	// to only print non-serial columns.
@@ -1424,26 +1428,7 @@ index 2c0f87a651..26bd75bbf0 100644
  
  -- **************** pg_class ****************
 `},
-	// TODO(#114858): Remove this patch when the internal error is fixed.
-	{"stats.sql", `diff --git a/src/test/regress/sql/stats.sql b/src/test/regress/sql/stats.sql
-index 1e21e55c6d..a2b6cce79e 100644
---- a/src/test/regress/sql/stats.sql
-+++ b/src/test/regress/sql/stats.sql
-@@ -131,8 +131,8 @@ COMMIT;
- ---
- CREATE FUNCTION stats_test_func1() RETURNS VOID LANGUAGE plpgsql AS $$BEGIN END;$$;
- SELECT '"'"'stats_test_func1()'"'"'::regprocedure::oid AS stats_test_func1_oid \gset
--CREATE FUNCTION stats_test_func2() RETURNS VOID LANGUAGE plpgsql AS $$BEGIN END;$$;
--SELECT '"'"'stats_test_func2()'"'"'::regprocedure::oid AS stats_test_func2_oid \gset
-+-- CREATE FUNCTION stats_test_func2() RETURNS VOID LANGUAGE plpgsql AS $$BEGIN END;$$;
-+-- SELECT '"'"'stats_test_func2()'"'"'::regprocedure::oid AS stats_test_func2_oid \gset
- 
- -- test that stats are accumulated
- BEGIN;
-`},
-	// TODO(#114849): Remove the patch around void_return_expr when the
-	// internal error is fixed.
-	// TODO(#118702): Remove the patch around wslot_slotlink_view when
+	// TODO(#114676): Remove the patch around wslot_slotlink_view when
 	// the internal error is fixed.
 	{"plpgsql.sql", `diff --git a/src/test/regress/sql/plpgsql.sql b/src/test/regress/sql/plpgsql.sql
 index 924d524094..eb7bc0cf87 100644
@@ -1546,15 +1531,6 @@ index 924d524094..eb7bc0cf87 100644
  
  
  
-@@ -2171,7 +2171,7 @@ begin
-     perform 2+2;
- end;$$ language plpgsql;
- 
--select void_return_expr();
-+-- select void_return_expr();
- 
- -- but ordinary functions are not
- create function missing_return_expr() returns int as $$
 @@ -2191,25 +2191,25 @@ drop function missing_return_expr();
  create table eifoo (i integer, y integer);
  create type eitype as (i integer, y integer);

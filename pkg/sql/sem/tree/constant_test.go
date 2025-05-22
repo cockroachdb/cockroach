@@ -726,7 +726,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 					continue
 				}
 
-				// TODO(normanchenn): Skip JsonpathFamily for now, since it will resolve to a
+				// TODO(#22513): Skip JsonpathFamily for now, since it will resolve to a
 				// string but in the future we don't want to.
 				if availType.Family() == types.JsonpathFamily {
 					continue

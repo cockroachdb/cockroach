@@ -73,6 +73,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1004,6 +1005,7 @@ func TestChangefeedMultiTable(t *testing.T) {
 func TestChangefeedCursor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	require.NoError(t, log.SetVModule("event_processing=3,blocking_buffer=2"))
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -1355,6 +1357,7 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 					"cannot subtract infinite dates",
 					"regexp compilation failed",
 					"invalid regular expression",
+					"invalid escape string",
 					"error parsing GeoJSON",
 					"error parsing EWKT",
 					"geometry type is unsupported",
@@ -1822,7 +1825,9 @@ func TestNoStopAfterNonTargetColumnDrop(t *testing.T) {
 		}
 	}
 
-	cdcTest(t, testFn)
+	runWithAndWithoutRegression141453(t, testFn, func(t *testing.T, testFn cdcTestFn) {
+		cdcTest(t, testFn)
+	})
 }
 
 func TestChangefeedProjectionDelete(t *testing.T) {
@@ -2062,7 +2067,9 @@ func TestChangefeedColumnDropsOnTheSameTableWithMultipleFamilies(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn)
+	runWithAndWithoutRegression141453(t, testFn, func(t *testing.T, testFn cdcTestFn) {
+		cdcTest(t, testFn)
+	})
 }
 
 func TestNoStopAfterNonTargetAddColumnWithBackfill(t *testing.T) {
@@ -2106,7 +2113,9 @@ func TestNoStopAfterNonTargetAddColumnWithBackfill(t *testing.T) {
 		}
 	}
 
-	cdcTest(t, testFn)
+	runWithAndWithoutRegression141453(t, testFn, func(t *testing.T, testFn cdcTestFn) {
+		cdcTest(t, testFn)
+	})
 }
 
 func TestChangefeedExternalIODisabled(t *testing.T) {
@@ -2994,7 +3003,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 
 	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
 
-	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
 		// Expected semantics:
@@ -3025,7 +3034,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 				`add_column_def: [2]->{"after": {"a": 2}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE add_column_def ADD COLUMN b STRING DEFAULT 'd'`)
-			ts := schematestutils.FetchDescVersionModificationTime(t, s.TestServer.Server, `d`, `public`, `add_column_def`, 7)
+			ts := schematestutils.FetchDescVersionModificationTime(t, s.Server, `d`, `public`, `add_column_def`, 7)
 			assertPayloads(t, addColumnDef, []string{
 				fmt.Sprintf(`add_column_def: [1]->{"after": {"a": 1, "b": "d"}, "updated": "%s"}`,
 					ts.AsOfSystemTime()),
@@ -3045,7 +3054,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 				`add_col_comp: [2]->{"after": {"a": 2, "b": 7}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE add_col_comp ADD COLUMN c INT AS (a + 10) STORED`)
-			ts := schematestutils.FetchDescVersionModificationTime(t, s.TestServer.Server, `d`, `public`, `add_col_comp`, 7)
+			ts := schematestutils.FetchDescVersionModificationTime(t, s.Server, `d`, `public`, `add_col_comp`, 7)
 			assertPayloads(t, addColComp, []string{
 				fmt.Sprintf(`add_col_comp: [1]->{"after": {"a": 1, "b": 6, "c": 11}, "updated": "%s"}`,
 					ts.AsOfSystemTime()),
@@ -3065,7 +3074,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 				`drop_column: [2]->{"after": {"a": 2, "b": "2"}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE drop_column DROP COLUMN b`)
-			ts := schematestutils.FetchDescVersionModificationTime(t, s.TestServer.Server, `d`, `public`, `drop_column`, 2)
+			ts := schematestutils.FetchDescVersionModificationTime(t, s.Server, `d`, `public`, `drop_column`, 2)
 
 			// Backfill for DROP COLUMN b.
 			assertPayloads(t, dropColumn, []string{
@@ -3118,9 +3127,9 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 			// the 7th step (version 15). Finally, when adding column d, it goes from 17->25 ith the schema change
 			// being visible at the 7th step (version 23).
 			// TODO(#142936): Investigate if this descriptor version hardcoding is sound.
-			dropTS := schematestutils.FetchDescVersionModificationTime(t, s.TestServer.Server, `d`, `public`, `multiple_alters`, 2)
-			addTS := schematestutils.FetchDescVersionModificationTime(t, s.TestServer.Server, `d`, `public`, `multiple_alters`, 15)
-			addTS2 := schematestutils.FetchDescVersionModificationTime(t, s.TestServer.Server, `d`, `public`, `multiple_alters`, 23)
+			dropTS := schematestutils.FetchDescVersionModificationTime(t, s.Server, `d`, `public`, `multiple_alters`, 2)
+			addTS := schematestutils.FetchDescVersionModificationTime(t, s.Server, `d`, `public`, `multiple_alters`, 15)
+			addTS2 := schematestutils.FetchDescVersionModificationTime(t, s.Server, `d`, `public`, `multiple_alters`, 23)
 
 			assertPayloads(t, multipleAlters, []string{
 				fmt.Sprintf(`multiple_alters: [1]->{"after": {"a": 1}, "updated": "%s"}`, dropTS.AsOfSystemTime()),
@@ -3133,7 +3142,9 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 		})
 	}
 
-	cdcTestWithSystem(t, testFn)
+	runWithAndWithoutRegression141453(t, testFn, func(t *testing.T, testFn cdcTestFn) {
+		cdcTest(t, testFn)
+	})
 
 	log.FlushFiles()
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
@@ -3377,8 +3388,6 @@ func TestChangefeedSingleColumnFamilySchemaChanges(t *testing.T) {
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
-		_ = maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB)
-
 		// Table with 2 column families.
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, FAMILY most (a,b), FAMILY rest (c))`)
 		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog', 'cat')`)
@@ -3405,9 +3414,11 @@ func TestChangefeedSingleColumnFamilySchemaChanges(t *testing.T) {
 		waitForSchemaChange(t, sqlDB, `ALTER TABLE foo DROP column c`)
 		requireErrorSoon(context.Background(), t, fooRest,
 			regexp.MustCompile(`CHANGEFEED targeting nonexistent or removed column family rest of table foo`))
-
 	}
-	cdcTest(t, testFn)
+
+	runWithAndWithoutRegression141453(t, testFn, func(t *testing.T, testFn cdcTestFn) {
+		cdcTest(t, testFn)
+	}, withMaybeUseLegacySchemaChanger())
 }
 
 func TestChangefeedEachColumnFamilySchemaChanges(t *testing.T) {
@@ -3418,8 +3429,6 @@ func TestChangefeedEachColumnFamilySchemaChanges(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-
-		_ = maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB)
 
 		// Table with 2 column families.
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, FAMILY f1 (a,b), FAMILY f2 (c))`)
@@ -3447,7 +3456,10 @@ func TestChangefeedEachColumnFamilySchemaChanges(t *testing.T) {
 			`foo.f3: [0]->{"after": {"e": "hello"}}`,
 		})
 	}
-	cdcTest(t, testFn)
+
+	runWithAndWithoutRegression141453(t, testFn, func(t *testing.T, testFn cdcTestFn) {
+		cdcTest(t, testFn)
+	}, withMaybeUseLegacySchemaChanger())
 }
 
 func TestCoreChangefeedRequiresSelectPrivilege(t *testing.T) {
@@ -3968,9 +3980,9 @@ func TestChangefeedEnriched(t *testing.T) {
 	// Create an enriched source provider with no data. The contents of source
 	// will be tested in another test, we just want to make sure the structure &
 	// schema is right here.
-	esp, err := newEnrichedSourceProvider(changefeedbase.EncodingOptions{}, enrichedSourceData{})
+	esp, err := newEnrichedSourceProvider(changefeedbase.EncodingOptions{}, getTestingEnrichedSourceData())
 	require.NoError(t, err)
-	source, err := esp.GetJSON(cdcevent.Row{})
+	source, err := esp.GetJSON(cdcevent.TestingMakeEventRowFromEncDatums([]rowenc.EncDatum{}, nil, 0, false), eventContext{})
 	require.NoError(t, err)
 
 	var sourceMap map[string]any
@@ -4183,6 +4195,99 @@ func TestChangefeedEnriched(t *testing.T) {
 	}
 }
 
+// TestChangefeedsParallelEnriched tests that multiple changefeeds can run in
+// parallel with the enriched envelope. It is most useful under race, to ensure
+// that there is no accidental data races in the encoders and source providers.
+func TestChangefeedsParallelEnriched(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	const numFeeds = 10
+	const maxIterations = 1_000_000_000
+	const maxRows = 100
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		db := sqlutils.MakeSQLRunner(s.DB)
+		db.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		ctx, cancel := context.WithCancel(ctx)
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			db := sqlutils.MakeSQLRunner(s.Server.SQLConn(t))
+			var i int
+			for i = 0; i < maxIterations && ctx.Err() == nil; i++ {
+				db.Exec(t, `UPSERT INTO d.foo VALUES ($1, $2)`, i%maxRows, fmt.Sprintf("hello %d", i))
+			}
+		}()
+
+		opts := `envelope='enriched'`
+
+		_, isKafka := f.(*kafkaFeedFactory)
+		useAvro := isKafka && rand.Intn(2) == 0
+		if useAvro {
+			t.Logf("using avro")
+			opts += `, format='avro'`
+		}
+		var feeds []cdctest.TestFeed
+		for range numFeeds {
+			feed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH %s`, opts))
+			feeds = append(feeds, feed)
+		}
+
+		// consume from the feeds
+		for _, feed := range feeds {
+			feed := feed
+			msgCount := 0
+
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for ctx.Err() == nil {
+					_, err := feed.Next()
+					if err != nil {
+						if errors.Is(err, context.Canceled) {
+							t.Errorf("error reading from feed: %v", err)
+						}
+						break
+					}
+					msgCount++
+				}
+				assert.GreaterOrEqual(t, msgCount, 0)
+			}()
+		}
+
+		// let the feeds run for a few seconds
+		select {
+		case <-time.After(5 * time.Second):
+		case <-ctx.Done():
+			t.Fatalf("%v", ctx.Err())
+		}
+
+		cancel()
+
+		for _, feed := range feeds {
+			closeFeed(t, feed)
+		}
+
+		doneWaiting := make(chan struct{})
+		go func() {
+			defer close(doneWaiting)
+			wg.Wait()
+		}()
+		select {
+		case <-doneWaiting:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out waiting for goroutines to finish")
+		}
+	}
+	// Sinkless testfeeds have some weird shutdown behaviours, so exclude them for now.
+	cdcTest(t, testFn, feedTestRestrictSinks("kafka", "pubsub", "webhook"))
+}
+
 func TestChangefeedEnrichedAvro(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -4244,7 +4349,7 @@ func TestChangefeedEnrichedWithDiff(t *testing.T) {
 		assertion func(topic string) []string
 	}{
 		{
-			name: "json with diff", options: []string{"diff", "format=json"}, sinks: []string{"kafka", "pubsub", "sinkless", "webhook"},
+			name: "json with diff", options: []string{"diff", "format=json"}, sinks: []string{"kafka", "pubsub", "sinkless", "webhook", "cloudstorage"},
 			assertion: func(topic string) []string {
 				return []string{
 					fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "dog"}, "before": null, "op": "c"}`, topic),
@@ -4315,41 +4420,11 @@ func TestChangefeedEnrichedWithDiff(t *testing.T) {
 		})
 	}
 }
-
-func TestChangefeedEnrichedSourceWithData(t *testing.T) {
+func TestChangefeedEnrichedSourceWithDataAvro(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	cases := []struct {
-		name            string
-		format          string
-		expectedMessage string
-		supportedSinks  []string
-	}{
-		{
-			name:            "json",
-			format:          "json",
-			expectedMessage: `foo: {"i": 0}->{"after": {"i": 0}, "op": "c"}`,
-			supportedSinks:  []string{"kafka", "pubsub", "sinkless"},
-		},
-		{
-			// TODO(#139660): the webhook sink forces topic_in_value, but
-			// this is not supported by the enriched envelope type. We should adapt
-			// the test framework to account for this.
-			name:            "json-webhook",
-			format:          "json",
-			expectedMessage: `: {"i": 0}->{"after": {"i": 0}, "op": "c"}`,
-			supportedSinks:  []string{"webhook"},
-		},
-		{
-			name:            "avro",
-			format:          "avro",
-			expectedMessage: `foo: {"i":{"long":0}}->{"after": {"foo": {"i": {"long": 0}}}, "op": {"string": "c"}}`,
-			supportedSinks:  []string{"kafka"},
-		},
-	}
-
-	for _, testCase := range cases {
+	testutils.RunTrueAndFalse(t, "ts_{ns,hlc}", func(t *testing.T, withUpdated bool) {
 		testutils.RunTrueAndFalse(t, "mvcc_ts", func(t *testing.T, withMVCCTS bool) {
 			clusterName := "clusterName123"
 			dbVersion := "v999.0.0"
@@ -4362,9 +4437,12 @@ func TestChangefeedEnrichedSourceWithData(t *testing.T) {
 
 					sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY)`)
 					sqlDB.Exec(t, `INSERT INTO foo values (0)`)
-					stmt := fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', format=%s`, testCase.format)
+					stmt := `CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', format=avro`
 					if withMVCCTS {
 						stmt += ", mvcc_timestamp"
+					}
+					if withUpdated {
+						stmt += ", updated"
 					}
 					testFeed := feed(t, f, stmt)
 					defer closeFeed(t, testFeed)
@@ -4379,12 +4457,124 @@ func TestChangefeedEnrichedSourceWithData(t *testing.T) {
 
 					sourceAssertion = func(actualSource map[string]any) {
 						var nodeID any
-						if testCase.format == "avro" {
-							actualSourceValue := actualSource["source"].(map[string]any)
-							nodeID = actualSourceValue["node_id"].(map[string]any)["string"]
-						} else {
-							nodeID = actualSource["node_id"]
+						actualSourceValue := actualSource["source"].(map[string]any)
+						nodeID = actualSourceValue["node_id"].(map[string]any)["string"]
+
+						require.NotNil(t, nodeID)
+
+						sourceNodeLocality := fmt.Sprintf(`region=%s`, testServerRegion)
+
+						const dummyMvccTimestamp = "1234567890.0001"
+						jobIDStr := strconv.FormatInt(jobID, 10)
+
+						dummyUpdatedTSNS := 12345678900001000
+						dummyUpdatedTSHLC :=
+							hlc.Timestamp{WallTime: int64(dummyUpdatedTSNS), Logical: 0}.AsOfSystemTime()
+
+						var assertion string
+						assertionMap := map[string]any{
+							"source": map[string]any{
+								"changefeed_sink": map[string]any{"string": sink},
+								"cluster_id":      map[string]any{"string": clusterID},
+								"cluster_name":    map[string]any{"string": clusterName},
+								"database_name":   map[string]any{"string": "d"},
+								"db_version":      map[string]any{"string": dbVersion},
+								"job_id":          map[string]any{"string": jobIDStr},
+								// Note that the field is still present in the avro schema, so it appears here as nil.
+								"mvcc_timestamp":       nil,
+								"node_id":              map[string]any{"string": nodeID},
+								"origin":               map[string]any{"string": "cockroachdb"},
+								"node_name":            map[string]any{"string": nodeName},
+								"primary_keys":         map[string]any{"array": []any{"i"}},
+								"schema_name":          map[string]any{"string": "public"},
+								"source_node_locality": map[string]any{"string": sourceNodeLocality},
+								"table_name":           map[string]any{"string": "foo"},
+								"ts_ns":                nil,
+								"ts_hlc":               nil,
+							},
 						}
+						if withMVCCTS {
+							mvccTsMap := actualSource["source"].(map[string]any)["mvcc_timestamp"].(map[string]any)
+							assertReasonableMVCCTimestamp(t, mvccTsMap["string"].(string))
+
+							mvccTsMap["string"] = dummyMvccTimestamp
+							assertionMap["source"].(map[string]any)["mvcc_timestamp"] = map[string]any{"string": dummyMvccTimestamp}
+						}
+						if withUpdated {
+							tsnsMap := actualSource["source"].(map[string]any)["ts_ns"].(map[string]any)
+							tsns := tsnsMap["long"].(gojson.Number)
+							tsnsInt, err := tsns.Int64()
+							require.NoError(t, err)
+							tsnsString := tsns.String()
+							assertReasonableMVCCTimestamp(t, tsnsString)
+							tsnsMap["long"] = dummyUpdatedTSNS
+							assertionMap["source"].(map[string]any)["ts_ns"] = map[string]any{"long": dummyUpdatedTSNS}
+
+							tshlcMap := actualSource["source"].(map[string]any)["ts_hlc"].(map[string]any)
+							assertEqualTSNSHLCWalltime(t, tsnsInt, tshlcMap["string"].(string))
+
+							tshlcMap["string"] = dummyUpdatedTSHLC
+							assertionMap["source"].(map[string]any)["ts_hlc"] = map[string]any{"string": dummyUpdatedTSHLC}
+						}
+						assertion = toJSON(t, assertionMap)
+
+						value, err := reformatJSON(actualSource)
+						require.NoError(t, err)
+						require.JSONEq(t, assertion, string(value))
+					}
+
+					assertPayloadsEnriched(t, testFeed, []string{`foo: {"i":{"long":0}}->{"after": {"foo": {"i": {"long": 0}}}, "op": {"string": "c"}}`}, sourceAssertion)
+				}
+			}
+			testLocality := roachpb.Locality{
+				Tiers: []roachpb.Tier{{
+					Key:   "region",
+					Value: testServerRegion,
+				}}}
+			cdcTest(t, mkTestFn("kafka"), feedTestForceSink("kafka"), feedTestUseClusterName(clusterName),
+				feedTestUseLocality(testLocality))
+
+		})
+	})
+}
+
+func TestChangefeedEnrichedSourceWithDataJSON(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "ts_{ns,hlc}", func(t *testing.T, withUpdated bool) {
+		testutils.RunTrueAndFalse(t, "mvcc_ts", func(t *testing.T, withMVCCTS bool) {
+			clusterName := "clusterName123"
+			dbVersion := "v999.0.0"
+			defer build.TestingOverrideVersion(dbVersion)()
+			mkTestFn := func(sink string) func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				return func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+					clusterID := s.Server.ExecutorConfig().(sql.ExecutorConfig).NodeInfo.LogicalClusterID().String()
+
+					sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+					sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY)`)
+					sqlDB.Exec(t, `INSERT INTO foo values (0)`)
+					stmt := `CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', format=json`
+					if withMVCCTS {
+						stmt += ", mvcc_timestamp"
+					}
+					if withUpdated {
+						stmt += ", updated"
+					}
+					testFeed := feed(t, f, stmt)
+					defer closeFeed(t, testFeed)
+
+					var jobID int64
+					var nodeName string
+					var sourceAssertion func(actualSource map[string]any)
+					if ef, ok := testFeed.(cdctest.EnterpriseTestFeed); ok {
+						jobID = int64(ef.JobID())
+					}
+					sqlDB.QueryRow(t, `SELECT value FROM crdb_internal.node_runtime_info where component = 'DB' and field = 'Host'`).Scan(&nodeName)
+
+					sourceAssertion = func(actualSource map[string]any) {
+						nodeID := actualSource["node_id"]
 						require.NotNil(t, nodeID)
 
 						sourceNodeLocality := fmt.Sprintf(`region=%s`, testServerRegion)
@@ -4397,59 +4587,53 @@ func TestChangefeedEnrichedSourceWithData(t *testing.T) {
 						const dummyMvccTimestamp = "1234567890.0001"
 						jobIDStr := strconv.FormatInt(jobID, 10)
 
-						var assertion string
-						if testCase.format == "avro" {
-							assertionMap := map[string]any{
-								"source": map[string]any{
-									"cluster_id":   map[string]any{"string": clusterID},
-									"cluster_name": map[string]any{"string": clusterName},
-									"db_version":   map[string]any{"string": dbVersion},
-									"job_id":       map[string]any{"string": jobIDStr},
-									// Note that the field is still present in the avro schema, so it appears here as nil.
-									"mvcc_timestamp":       nil,
-									"node_id":              map[string]any{"string": nodeID},
-									"node_name":            map[string]any{"string": nodeName},
-									"changefeed_sink":      map[string]any{"string": sink},
-									"source_node_locality": map[string]any{"string": sourceNodeLocality},
-								},
-							}
-							if withMVCCTS {
-								mvccTsMap := actualSource["source"].(map[string]any)["mvcc_timestamp"].(map[string]any)
-								assertReasonableMVCCTimestamp(t, mvccTsMap["string"].(string))
+						dummyUpdatedTSNS := 12345678900001000
+						dummyUpdatedTSHLC :=
+							hlc.Timestamp{WallTime: int64(dummyUpdatedTSNS), Logical: 0}.AsOfSystemTime()
 
-								mvccTsMap["string"] = dummyMvccTimestamp
-								assertionMap["source"].(map[string]any)["mvcc_timestamp"] = map[string]any{"string": dummyMvccTimestamp}
-							}
-							assertion = toJSON(t, assertionMap)
-						} else {
-							assertionMap := map[string]any{
-								"cluster_id":           clusterID,
-								"cluster_name":         clusterName,
-								"db_version":           dbVersion,
-								"job_id":               jobIDStr,
-								"node_id":              nodeID,
-								"node_name":            nodeName,
-								"changefeed_sink":      sink,
-								"source_node_locality": sourceNodeLocality,
-							}
-							if withMVCCTS {
-								assertReasonableMVCCTimestamp(t, actualSource["mvcc_timestamp"].(string))
-								actualSource["mvcc_timestamp"] = dummyMvccTimestamp
-								assertionMap["mvcc_timestamp"] = dummyMvccTimestamp
-							}
-							assertion = toJSON(t, assertionMap)
+						var assertion string
+						assertionMap := map[string]any{
+							"cluster_id":           clusterID,
+							"cluster_name":         clusterName,
+							"db_version":           dbVersion,
+							"job_id":               jobIDStr,
+							"node_id":              nodeID,
+							"node_name":            nodeName,
+							"origin":               "cockroachdb",
+							"changefeed_sink":      sink,
+							"source_node_locality": sourceNodeLocality,
+							"database_name":        "d",
+							"schema_name":          "public",
+							"table_name":           "foo",
+							"primary_keys":         []any{"i"},
 						}
+						if withMVCCTS {
+							assertReasonableMVCCTimestamp(t, actualSource["mvcc_timestamp"].(string))
+							actualSource["mvcc_timestamp"] = dummyMvccTimestamp
+							assertionMap["mvcc_timestamp"] = dummyMvccTimestamp
+						}
+						if withUpdated {
+							tsns := actualSource["ts_ns"].(gojson.Number)
+							tsnsInt, err := tsns.Int64()
+							require.NoError(t, err)
+							assertReasonableMVCCTimestamp(t, tsns.String())
+							actualSource["ts_ns"] = dummyUpdatedTSNS
+							assertionMap["ts_ns"] = dummyUpdatedTSNS
+							assertEqualTSNSHLCWalltime(t, tsnsInt, actualSource["ts_hlc"].(string))
+							actualSource["ts_hlc"] = dummyUpdatedTSHLC
+							assertionMap["ts_hlc"] = dummyUpdatedTSHLC
+						}
+						assertion = toJSON(t, assertionMap)
 
 						value, err := reformatJSON(actualSource)
 						require.NoError(t, err)
 						require.JSONEq(t, assertion, string(value))
 					}
 
-					assertPayloadsEnriched(t, testFeed, []string{testCase.expectedMessage}, sourceAssertion)
+					assertPayloadsEnriched(t, testFeed, []string{`foo: {"i": 0}->{"after": {"i": 0}, "op": "c"}`}, sourceAssertion)
 				}
 			}
-
-			for _, sink := range testCase.supportedSinks {
+			for _, sink := range []string{"kafka", "pubsub", "sinkless", "cloudstorage"} {
 				testLocality := roachpb.Locality{
 					Tiers: []roachpb.Tier{{
 						Key:   "region",
@@ -4458,6 +4642,275 @@ func TestChangefeedEnrichedSourceWithData(t *testing.T) {
 				cdcTest(t, mkTestFn(sink), feedTestForceSink(sink), feedTestUseClusterName(clusterName),
 					feedTestUseLocality(testLocality))
 			}
+		})
+	})
+}
+
+// TODO(#139660): the webhook sink forces topic_in_value, but
+// this is not supported by the enriched envelope type. We should adapt
+// the test framework to account for this.
+func TestChangefeedEnrichedSourceWithDataJSONWebhook(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "ts_{ns,hlc}", func(t *testing.T, withUpdated bool) {
+		testutils.RunTrueAndFalse(t, "mvcc_ts", func(t *testing.T, withMVCCTS bool) {
+			clusterName := "clusterName123"
+			dbVersion := "v999.0.0"
+			defer build.TestingOverrideVersion(dbVersion)()
+			mkTestFn := func(sink string) func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				return func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+					clusterID := s.Server.ExecutorConfig().(sql.ExecutorConfig).NodeInfo.LogicalClusterID().String()
+
+					sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+					sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY)`)
+					sqlDB.Exec(t, `INSERT INTO foo values (0)`)
+					stmt := `CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', format=json`
+					if withMVCCTS {
+						stmt += ", mvcc_timestamp"
+					}
+					if withUpdated {
+						stmt += ", updated"
+					}
+					testFeed := feed(t, f, stmt)
+					defer closeFeed(t, testFeed)
+
+					var jobID int64
+					var nodeName string
+					var sourceAssertion func(actualSource map[string]any)
+					if ef, ok := testFeed.(cdctest.EnterpriseTestFeed); ok {
+						jobID = int64(ef.JobID())
+					}
+					sqlDB.QueryRow(t, `SELECT value FROM crdb_internal.node_runtime_info where component = 'DB' and field = 'Host'`).Scan(&nodeName)
+
+					sourceAssertion = func(actualSource map[string]any) {
+						nodeID := actualSource["node_id"]
+						require.NotNil(t, nodeID)
+
+						sourceNodeLocality := fmt.Sprintf(`region=%s`, testServerRegion)
+
+						const dummyMvccTimestamp = "1234567890.0001"
+						jobIDStr := strconv.FormatInt(jobID, 10)
+
+						dummyUpdatedTSNS := 12345678900001000
+						dummyUpdatedTSHLC :=
+							hlc.Timestamp{WallTime: int64(dummyUpdatedTSNS), Logical: 0}.AsOfSystemTime()
+
+						var assertion string
+						assertionMap := map[string]any{
+							"cluster_id":           clusterID,
+							"cluster_name":         clusterName,
+							"db_version":           dbVersion,
+							"job_id":               jobIDStr,
+							"node_id":              nodeID,
+							"node_name":            nodeName,
+							"origin":               "cockroachdb",
+							"changefeed_sink":      sink,
+							"source_node_locality": sourceNodeLocality,
+							"database_name":        "d",
+							"schema_name":          "public",
+							"table_name":           "foo",
+							"primary_keys":         []any{"i"},
+						}
+						if withMVCCTS {
+							assertReasonableMVCCTimestamp(t, actualSource["mvcc_timestamp"].(string))
+							actualSource["mvcc_timestamp"] = dummyMvccTimestamp
+							assertionMap["mvcc_timestamp"] = dummyMvccTimestamp
+						}
+						if withUpdated {
+							tsns := actualSource["ts_ns"].(gojson.Number)
+							tsnsInt, err := tsns.Int64()
+							require.NoError(t, err)
+							assertReasonableMVCCTimestamp(t, tsns.String())
+							actualSource["ts_ns"] = dummyUpdatedTSNS
+							assertionMap["ts_ns"] = dummyUpdatedTSNS
+							assertEqualTSNSHLCWalltime(t, tsnsInt, actualSource["ts_hlc"].(string))
+							actualSource["ts_hlc"] = dummyUpdatedTSHLC
+							assertionMap["ts_hlc"] = dummyUpdatedTSHLC
+						}
+						assertion = toJSON(t, assertionMap)
+
+						value, err := reformatJSON(actualSource)
+						require.NoError(t, err)
+						require.JSONEq(t, assertion, string(value))
+					}
+
+					assertPayloadsEnriched(t, testFeed, []string{`: {"i": 0}->{"after": {"i": 0}, "op": "c"}`}, sourceAssertion)
+				}
+			}
+			testLocality := roachpb.Locality{
+				Tiers: []roachpb.Tier{{
+					Key:   "region",
+					Value: testServerRegion,
+				}}}
+			cdcTest(t, mkTestFn("webhook"), feedTestForceSink("webhook"), feedTestUseClusterName(clusterName),
+				feedTestUseLocality(testLocality))
+		})
+	})
+}
+
+func TestChangefeedEnrichedSourceSchemaInfo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cases := []struct {
+		name                          string
+		format                        string
+		expectedRow                   string
+		expectedRowsAfterSchemaChange []string
+	}{
+		{
+			name:        "json",
+			format:      "json",
+			expectedRow: `foo: {"a": 1, "b": "key1"}->{"after": {"a": 1, "b": "key1", "c": 100}, "op": "c"}`,
+			expectedRowsAfterSchemaChange: []string{
+				`foo: {"a": 1, "b": "key1"}->{"after": {"a": 1, "b": "key1", "c": 100, "d": "new_col"}, "op": "u"}`,
+				`foo: {"a": 2, "b": "key2"}->{"after": {"a": 2, "b": "key2", "c": 200, "d": "new_value"}, "op": "c"}`,
+			},
+		},
+		{
+			name:        "avro",
+			format:      "avro",
+			expectedRow: `foo: {"a":{"long":1},"b":{"string":"key1"}}->{"after": {"foo": {"a": {"long": 1}, "b": {"string": "key1"}, "c": {"long": 100}}}, "op": {"string": "c"}}`,
+			expectedRowsAfterSchemaChange: []string{
+				`foo: {"a":{"long":1},"b":{"string":"key1"}}->{"after": {"foo": {"a": {"long": 1}, "b": {"string": "key1"}, "c": {"long": 100}, "d": {"string": "new_col"}}}, "op": {"string": "u"}}`,
+				`foo: {"a":{"long":2},"b":{"string":"key2"}}->{"after": {"foo": {"a": {"long": 2}, "b": {"string": "key2"}, "c": {"long": 200}, "d": {"string": "new_value"}}}, "op": {"string": "c"}}`,
+			},
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+				sqlDB.Exec(t, `CREATE TABLE foo (a INT, b STRING, c INT, PRIMARY KEY (a, b))`)
+				sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'key1', 100)`)
+
+				stmt := fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', format=%s`, testCase.format)
+				foo := feed(t, f, stmt)
+				defer closeFeed(t, foo)
+
+				sourceAssertion := func(actualSource map[string]any) {
+					if testCase.format == "avro" {
+						actualSourceValue := actualSource["source"].(map[string]any)
+						require.Equal(t, map[string]any{"string": "foo"}, actualSourceValue["table_name"])
+						require.Equal(t, map[string]any{"string": "public"}, actualSourceValue["schema_name"])
+						require.Equal(t, map[string]any{"string": "d"}, actualSourceValue["database_name"])
+						require.Equal(t, map[string]any{"array": []any{"a", "b"}}, actualSourceValue["primary_keys"])
+					} else {
+						require.Equal(t, "foo", actualSource["table_name"])
+						require.Equal(t, "public", actualSource["schema_name"])
+						require.Equal(t, "d", actualSource["database_name"])
+						require.Equal(t, []any{"a", "b"}, actualSource["primary_keys"])
+					}
+				}
+				assertPayloadsEnriched(t, foo, []string{testCase.expectedRow}, sourceAssertion)
+
+				sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN d STRING DEFAULT 'new_col'`)
+				sqlDB.Exec(t, `INSERT INTO foo VALUES (2, 'key2', 200, 'new_value')`)
+
+				sourceAssertionAfterSchemaChange := func(actualSource map[string]any) {
+					if testCase.format == "avro" {
+						actualSourceValue := actualSource["source"].(map[string]any)
+						require.Equal(t, map[string]any{"string": "foo"}, actualSourceValue["table_name"])
+						require.Equal(t, map[string]any{"string": "public"}, actualSourceValue["schema_name"])
+						require.Equal(t, map[string]any{"string": "d"}, actualSourceValue["database_name"])
+						require.Equal(t, map[string]any{"array": []any{"a", "b"}}, actualSourceValue["primary_keys"])
+					} else {
+						require.Equal(t, "foo", actualSource["table_name"])
+						require.Equal(t, "public", actualSource["schema_name"])
+						require.Equal(t, "d", actualSource["database_name"])
+						require.Equal(t, []any{"a", "b"}, actualSource["primary_keys"])
+					}
+				}
+				assertPayloadsEnriched(t, foo, testCase.expectedRowsAfterSchemaChange, sourceAssertionAfterSchemaChange)
+			}
+
+			cdcTest(t, testFn, feedTestForceSink("kafka"))
+		})
+	}
+}
+
+func TestChangefeedEnrichedSourceSchemaInfoOnPrimaryKeyChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cases := []struct {
+		name             string
+		format           string
+		expectedRow      string
+		expectedRowAfter string
+	}{
+		{
+			name:             "json",
+			format:           "json",
+			expectedRow:      `foo: {"a": 1}->{"after": {"a": 1, "b": "initial"}, "op": "c"}`,
+			expectedRowAfter: `foo: {"b": "new_key"}->{"after": {"a": 2, "b": "new_key"}, "op": "c"}`,
+		},
+		{
+			name:             "avro",
+			format:           "avro",
+			expectedRow:      `foo: {"a":{"long":1}}->{"after": {"foo": {"a": {"long": 1}, "b": {"string": "initial"}}}, "op": {"string": "c"}}`,
+			expectedRowAfter: `foo: {"b":{"string":"new_key"}}->{"after": {"foo": {"a": {"long": 2}, "b": {"string": "new_key"}}}, "op": {"string": "c"}}`,
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+				sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+				sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'initial')`)
+
+				stmt := fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', format=%s`, testCase.format)
+				foo := feed(t, f, stmt)
+				defer closeFeed(t, foo)
+
+				sourceAssertion := func(actualSource map[string]any) {
+					if testCase.format == "avro" {
+						actualSourceValue := actualSource["source"].(map[string]any)
+						require.Equal(t, map[string]any{"string": "foo"}, actualSourceValue["table_name"])
+						require.Equal(t, map[string]any{"string": "public"}, actualSourceValue["schema_name"])
+						require.Equal(t, map[string]any{"string": "d"}, actualSourceValue["database_name"])
+						require.Equal(t, map[string]any{"array": []any{"a"}}, actualSourceValue["primary_keys"])
+					} else {
+						require.Equal(t, "foo", actualSource["table_name"])
+						require.Equal(t, "public", actualSource["schema_name"])
+						require.Equal(t, "d", actualSource["database_name"])
+						require.Equal(t, []any{"a"}, actualSource["primary_keys"])
+					}
+				}
+				if testCase.format == "json" {
+					assertPayloadsEnriched(t, foo, []string{testCase.expectedRow}, sourceAssertion)
+				} else {
+					assertPayloadsEnriched(t, foo, []string{testCase.expectedRow}, sourceAssertion)
+				}
+
+				sqlDB.Exec(t, `ALTER TABLE foo ALTER COLUMN b SET NOT NULL`)
+				sqlDB.Exec(t, `ALTER TABLE foo ALTER PRIMARY KEY USING COLUMNS (b)`)
+				sqlDB.Exec(t, `INSERT INTO foo VALUES (2, 'new_key')`)
+
+				sourceAssertionAfterPKChange := func(actualSource map[string]any) {
+					if testCase.format == "avro" {
+						actualSourceValue := actualSource["source"].(map[string]any)
+						require.Equal(t, map[string]any{"string": "foo"}, actualSourceValue["table_name"])
+						require.Equal(t, map[string]any{"string": "public"}, actualSourceValue["schema_name"])
+						require.Equal(t, map[string]any{"string": "d"}, actualSourceValue["database_name"])
+						require.Equal(t, map[string]any{"array": []any{"b"}}, actualSourceValue["primary_keys"])
+					} else {
+						require.Equal(t, "foo", actualSource["table_name"])
+						require.Equal(t, "public", actualSource["schema_name"])
+						require.Equal(t, "d", actualSource["database_name"])
+						require.Equal(t, []any{"b"}, actualSource["primary_keys"])
+					}
+				}
+				assertPayloadsEnriched(t, foo, []string{testCase.expectedRowAfter}, sourceAssertionAfterPKChange)
+			}
+
+			cdcTest(t, testFn, feedTestForceSink("kafka"))
 		})
 	}
 }
@@ -4743,7 +5196,7 @@ func TestChangefeedFailOnTableOffline(t *testing.T) {
 		// Start an import job which will immediately pause after ingestion
 		sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';")
 		go func() {
-			sqlDB.ExpectErrWithTimeout(t, `pause point`, `IMPORT INTO for_import CSV DATA ($1);`, dataSrv.URL)
+			sqlDB.ExpectErrWithRetry(t, `pause point`, `IMPORT INTO for_import CSV DATA ($1);`, `result is ambiguous`, dataSrv.URL)
 		}()
 		sqlDB.CheckQueryResultsRetry(
 			t,
@@ -5721,9 +6174,11 @@ func TestChangefeedJobUpdateFailsIfNotClaimed(t *testing.T) {
 		// another node.
 		sqlDB.Exec(t, `UPDATE system.jobs SET claim_session_id = NULL WHERE id = $1`, jobID)
 
-		timeout := 5 * time.Second
+		timeout := (5 * time.Second) + changefeedbase.Quantize.Get(&s.Server.ClusterSettings().SV)
+
 		if util.RaceEnabled {
-			timeout = 30 * time.Second
+			// Timeout should be at least 30s to allow for race conditions.
+			timeout += 25 * time.Second
 		}
 		// Expect that the distflow fails since it can't
 		// update the checkpoint.
@@ -6107,7 +6562,7 @@ func TestChangefeedErrors(t *testing.T) {
 	)
 
 	sqlDB.ExpectErrWithTimeout(
-		t, `request timestamp .* too far in future`,
+		t, `timestamp '.*' is in the future`,
 		`EXPERIMENTAL CHANGEFEED FOR foo WITH cursor=$1`, timeutil.Now().Add(time.Hour),
 	)
 
@@ -6663,7 +7118,7 @@ func TestChangefeedErrors(t *testing.T) {
 	)
 	sqlDB.ExpectErrWithTimeout(
 		t, `this sink is incompatible with envelope=enriched`,
-		`CREATE CHANGEFEED FOR foo INTO 'nodelocal://.' WITH envelope=enriched`,
+		`CREATE CHANGEFEED FOR foo INTO 'pulsar://.' WITH envelope=enriched`,
 	)
 	sqlDB.ExpectErrWithTimeout(
 		t, `enriched_properties is only usable with envelope=enriched`,
@@ -7101,6 +7556,7 @@ func TestChangefeedContinuousTelemetry(t *testing.T) {
 
 type testTelemetryLogger struct {
 	telemetryLogger
+	id                      int32
 	afterIncEmittedCounters func(numMessages int, numBytes int)
 }
 
@@ -7109,6 +7565,18 @@ var _ telemetryLogger = (*testTelemetryLogger)(nil)
 func (t *testTelemetryLogger) incEmittedCounters(numMessages int, numBytes int) {
 	t.telemetryLogger.incEmittedCounters(numMessages, numBytes)
 	t.afterIncEmittedCounters(numMessages, numBytes)
+}
+
+func (t *testTelemetryLogger) maybeFlushLogs() {
+	if t.id == 1 {
+		t.telemetryLogger.maybeFlushLogs()
+	}
+}
+
+func (t *testTelemetryLogger) close() {
+	if t.id == 1 {
+		t.telemetryLogger.close()
+	}
 }
 
 func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
@@ -7131,6 +7599,7 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 			}
 			return nil
 		}
+		var numPeriodicTelemetryLogger atomic.Int32
 		// Synchronization to prevent a race between the changefeed closing
 		// and the telemetry logger getting emitted counts after messages
 		// have been emitted to the sink.
@@ -7143,6 +7612,7 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 						seen.Store(true)
 					}
 				},
+				id: numPeriodicTelemetryLogger.Add(1),
 			}
 		}
 
@@ -7171,7 +7641,14 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 
 		// Close the changefeed and ensure logs were created after closing.
 		require.NoError(t, foo.Close())
-		verifyLogsWithEmittedBytesAndMessages(t, jobID, afterFirstLog.UnixNano(), interval.Nanoseconds(), true /* closing */)
+
+		if numPeriodicTelemetryLogger.Load() > 1 {
+			t.Log("transient error")
+		}
+
+		verifyLogsWithEmittedBytesAndMessages(
+			t, jobID, afterFirstLog.UnixNano(), interval.Nanoseconds(), true, /* closing */
+		)
 	}
 
 	cdcTest(t, testFn)
@@ -7499,7 +7976,7 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 
 		// Even though checkpointing was disabled, when we drain, an attempt is
 		// made to persist up-to-date checkpoint.
-		require.NoError(t, jf.TickHighWaterMark(beforeInsert))
+		require.NoError(t, jf.WaitForHighWaterMark(beforeInsert))
 
 		// Let the retry proceed.
 		ctx, cancel = context.WithTimeout(context.Background(), time.Second*60)
@@ -8457,6 +8934,20 @@ func TestFlushJitter(t *testing.T) {
 			flushFrequency:        100 * time.Millisecond,
 			jitter:                0.1,
 			expectedFlushDuration: 100 * time.Millisecond,
+			expectedErr:           false,
+		},
+		// Expect actual jitter to be 0 since flushFrequency * jitter < 1.
+		{
+			flushFrequency:        1,
+			jitter:                0.1,
+			expectedFlushDuration: 1,
+			expectedErr:           false,
+		},
+		// Expect actual jitter to be 0 since flushFrequency * jitter < 1.
+		{
+			flushFrequency:        10,
+			jitter:                0.01,
+			expectedFlushDuration: 10,
 			expectedErr:           false,
 		},
 	} {
@@ -9865,7 +10356,9 @@ func TestSchemachangeDoesNotBreakSinklessFeed(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("sinkless"))
+	runWithAndWithoutRegression141453(t, testFn, func(t *testing.T, testFn cdcTestFn) {
+		cdcTest(t, testFn, feedTestForceSink("sinkless"))
+	})
 }
 
 func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
@@ -10662,21 +11155,21 @@ func TestChangefeedHeadersJSONVals(t *testing.T) {
 		expected       cdctest.Headers
 		warn           string
 	}{
-		// {
-		// 	name:           "empty",
-		// 	headersJSONStr: `'{}'`,
-		// 	expected:       cdctest.Headers{},
-		// },
-		// {
-		// 	name:           "flat primitives - happy path",
-		// 	headersJSONStr: `'{"a": "b", "c": "d", "e": 42, "f": false}'`,
-		// 	expected: cdctest.Headers{
-		// 		{K: "a", V: []byte("b")},
-		// 		{K: "c", V: []byte("d")},
-		// 		{K: "e", V: []byte("42")},
-		// 		{K: "f", V: []byte("false")},
-		// 	},
-		// },
+		{
+			name:           "empty",
+			headersJSONStr: `'{}'`,
+			expected:       cdctest.Headers{},
+		},
+		{
+			name:           "flat primitives - happy path",
+			headersJSONStr: `'{"a": "b", "c": "d", "e": 42, "f": false}'`,
+			expected: cdctest.Headers{
+				{K: "a", V: []byte("b")},
+				{K: "c", V: []byte("d")},
+				{K: "e", V: []byte("42")},
+				{K: "f", V: []byte("false")},
+			},
+		},
 		{
 			name:           "some bad some good",
 			headersJSONStr: `'{"a": "b", "c": 1, "d": true, "e": null, "f": [1, 2, 3], "g": {"h": "i"}}'`,
@@ -10976,7 +11469,11 @@ func TestCDCQuerySelectSingleRow(t *testing.T) {
 		}
 		cfKnobs := knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
 		cfKnobs.HandleDistChangefeedError = func(err error) error {
-			errCh <- err
+			// Only capture the first error -- that's enough for the test.
+			select {
+			case errCh <- err:
+			default:
+			}
 			return err
 		}
 	}
@@ -11018,4 +11515,107 @@ func assertReasonableMVCCTimestamp(t *testing.T, ts string) {
 	epochNanos := parseTimeToHLC(t, ts).WallTime
 	now := timeutil.Now()
 	require.GreaterOrEqual(t, epochNanos, now.Add(-1*time.Hour).UnixNano())
+}
+
+func assertEqualTSNSHLCWalltime(t *testing.T, tsns int64, tshlc string) {
+	tsHLCWallTimeNano := parseTimeToHLC(t, tshlc).WallTime
+	require.EqualValues(t, tsns, tsHLCWallTimeNano)
+}
+
+// TestChangefeedAsSelectForEmptyTable verifies that a changefeed
+// yields a proper user error on an empty table and in the same
+// allows hidden columns to be selected.
+func TestChangefeedAsSelectForEmptyTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE empty()`)
+		sqlDB.Exec(t, `INSERT INTO empty DEFAULT VALUES`)
+		// Should fail when no columns are selected.
+		// Use expectErrCreatingFeed which handles sinkless feeds correctly by
+		// attempting to read from the feed if no error occurs at creation time
+		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED AS SELECT * FROM empty`, `SELECT yields no columns`)
+
+		// Should succeed when a rowid column is explicitly selected.
+		feed, err := f.Feed(`CREATE CHANGEFEED AS SELECT rowid FROM empty`)
+		require.NoError(t, err)
+		defer closeFeed(t, feed)
+	}
+
+	cdcTest(t, testFn)
+}
+
+func TestChangefeedMVCCTimestampWithQueries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (key INT PRIMARY KEY);`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1);`)
+
+		feed, err := f.Feed(`CREATE CHANGEFEED WITH mvcc_timestamp, format=json, envelope=bare AS SELECT * FROM foo`)
+		require.NoError(t, err)
+		defer closeFeed(t, feed)
+
+		msgs, err := readNextMessages(ctx, feed, 1)
+		require.NoError(t, err)
+
+		var m map[string]any
+		require.NoError(t, gojson.Unmarshal(msgs[0].Value, &m))
+		ts := m["__crdb__"].(map[string]any)["mvcc_timestamp"].(string)
+		assertReasonableMVCCTimestamp(t, ts)
+	}
+
+	cdcTest(t, testFn)
+}
+
+func TestCloudstorageParallelCompression(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// This test only provides value under race, as it's explicitly testing for
+	// data races between feeds.
+	skip.UnlessUnderRace(t)
+
+	const numFeedsEach = 10
+
+	testutils.RunValues(t, "compression", []string{"zstd", "gzip"}, func(t *testing.T, compression string) {
+		s, cleanup := makeServer(t)
+		defer cleanup()
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT);`)
+		sqlDB.Exec(t, `INSERT INTO foo (a) SELECT * FROM generate_series(1, 5000);`)
+
+		t.Logf("inserted into table")
+
+		var jobIDs []int
+		for i := range numFeedsEach {
+			var jobID int
+			sqlDB.QueryRow(t, fmt.Sprintf(`CREATE CHANGEFEED FOR foo INTO 'nodelocal://1/%d-testout' WITH compression='%s', initial_scan='only', format='parquet';`, i, compression)).Scan(&jobID)
+			jobIDs = append(jobIDs, jobID)
+		}
+
+		t.Logf("created changefeeds")
+
+		const duration = 3 * time.Minute
+		const checkStatusInterval = 10 * time.Second
+
+		for start := timeutil.Now(); timeutil.Since(start) < duration; {
+			// Check the statuses of the jobs.
+			for _, jobID := range jobIDs {
+				var status string
+				sqlDB.QueryRow(t, `SELECT status FROM [SHOW JOBS] WHERE job_id = $1`, jobID).Scan(&status)
+				if status != "succeeded" && status != "running" {
+					t.Fatalf("job %d entered unknown state: %s", jobID, status)
+				}
+			}
+			time.Sleep(checkStatusInterval)
+		}
+	})
 }

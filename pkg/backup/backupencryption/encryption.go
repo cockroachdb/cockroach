@@ -176,14 +176,10 @@ func ValidateKMSURIsAgainstFullBackup(
 			return nil, err
 		}
 
-		//nolint:deferloop TODO(#137605)
-		defer func() {
-			_ = kms.Close()
-		}()
-
 		// Depending on the KMS specific implementation, this may or may not contact
 		// the remote KMS.
 		id := kms.MasterKeyID()
+		_ = kms.Close()
 
 		encryptedDataKey, err := kmsMasterKeyIDToDataKey.getEncryptedDataKey(PlaintextMasterKeyID(id))
 		if err != nil {
@@ -208,7 +204,7 @@ func ValidateKMSURIsAgainstFullBackup(
 func MakeNewEncryptionOptions(
 	ctx context.Context, encryptionParams *jobspb.BackupEncryptionOptions, kmsEnv cloud.KMSEnv,
 ) (*jobspb.BackupEncryptionOptions, *jobspb.EncryptionInfo, error) {
-	if encryptionParams == nil || encryptionParams.Mode == jobspb.EncryptionMode_None {
+	if !encryptionParams.IsEncrypted() {
 		return nil, nil, nil
 	}
 	var encryptionOptions *jobspb.BackupEncryptionOptions
@@ -336,7 +332,9 @@ func WriteNewEncryptionInfoToBackup(
 
 // GetEncryptionFromBase retrieves the encryption options of the base backup. It
 // is expected that incremental backups use the same encryption options as the
-// base backups.
+// base backups. The encryptionParams input is expected not to have a key set
+// and to simply have the user supplied fields. The output will only have the
+// key set.
 func GetEncryptionFromBase(
 	ctx context.Context,
 	user username.SQLUsername,
@@ -345,7 +343,7 @@ func GetEncryptionFromBase(
 	encryptionParams *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) (*jobspb.BackupEncryptionOptions, error) {
-	if encryptionParams == nil || encryptionParams.Mode == jobspb.EncryptionMode_None {
+	if !encryptionParams.IsEncrypted() {
 		return nil, nil
 	}
 	exportStore, err := makeCloudStorage(ctx, baseBackupURI, user)
@@ -363,9 +361,14 @@ func GetEncryptionFromBaseStore(
 	encryptionParams *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) (*jobspb.BackupEncryptionOptions, error) {
-	if encryptionParams == nil || encryptionParams.Mode == jobspb.EncryptionMode_None {
+	if !encryptionParams.IsEncrypted() {
 		return nil, nil
 	}
+
+	if encryptionParams.HasKey() {
+		return nil, errors.New("encryption options already have a key")
+	}
+
 	opts, err := ReadEncryptionOptions(ctx, baseStore)
 	if err != nil {
 		return nil, err
@@ -457,10 +460,8 @@ func ReadEncryptionOptions(
 		if err != nil {
 			return nil, errors.Wrap(err, encryptionReadErrorMsg)
 		}
-		//nolint:deferloop TODO(#137605)
-		defer r.Close(ctx)
-
 		encInfoBytes, err := ioctx.ReadAll(ctx, r)
+		_ = r.Close(ctx)
 		if err != nil {
 			return nil, errors.Wrap(err, encryptionReadErrorMsg)
 		}

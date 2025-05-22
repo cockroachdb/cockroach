@@ -90,18 +90,10 @@ GRANT EXECUTE ON FUNCTION test_priv_f1(), test_priv_f2(int), test_priv_sc1.test_
 query TTTTTTTTTT colnames
 SELECT * FROM information_schema.role_routine_grants
 WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
+AND grantee = 'udf_test_user'
 ORDER BY grantee, routine_name
 ----
 grantor  grantee        specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     admin          test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     admin          test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     admin          test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     public         test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         NO
-NULL     public         test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         NO
-NULL     public         test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
-NULL     root           test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     root           test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     root           test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
 NULL     udf_test_user  test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         YES
 NULL     udf_test_user  test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         YES
 NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
@@ -132,18 +124,10 @@ REVOKE GRANT OPTION FOR EXECUTE ON FUNCTION test_priv_f1(), test_priv_f2(int), t
 query TTTTTTTTTT colnames
 SELECT * FROM information_schema.role_routine_grants
 WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
+AND grantee = 'udf_test_user'
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee        specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     admin          test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     admin          test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     admin          test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     public         test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         NO
-NULL     public         test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         NO
-NULL     public         test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
-NULL     root           test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     root           test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     root           test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
 NULL     udf_test_user  test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         NO
 NULL     udf_test_user  test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         NO
 NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
@@ -174,18 +158,10 @@ REVOKE EXECUTE ON FUNCTION test_priv_f1(), test_priv_f2(int), test_priv_sc1.test
 query TTTTTTTTTT colnames
 SELECT * FROM information_schema.role_routine_grants
 WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
+AND grantee = 'udf_test_user'
 ORDER BY grantee, routine_name
 ----
-grantor  grantee  specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     admin    test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     admin    test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     admin    test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     public   test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         NO
-NULL     public   test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         NO
-NULL     public   test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
-NULL     root     test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     root     test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     root     test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
+grantor  grantee  specific_catalog  specific_schema  specific_name  routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
 
 query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
@@ -208,18 +184,10 @@ GRANT EXECUTE ON ALL PROCEDURES IN SCHEMA public, test_priv_sc1 TO udf_test_user
 query TTTTTTTTTT colnames
 SELECT * FROM information_schema.role_routine_grants
 WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
+AND grantee = 'udf_test_user'
 ORDER BY grantee, routine_name;
 ----
-grantor  grantee  specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     admin    test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     admin    test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     admin    test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     public   test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         NO
-NULL     public   test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         NO
-NULL     public   test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
-NULL     root     test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     root     test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     root     test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
+grantor  grantee  specific_catalog  specific_schema  specific_name  routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
 
 statement ok
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public, test_priv_sc1 TO udf_test_user WITH GRANT OPTION;
@@ -227,18 +195,10 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public, test_priv_sc1 TO udf_test_user 
 query TTTTTTTTTT colnames
 SELECT * FROM information_schema.role_routine_grants
 WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
+AND grantee = 'udf_test_user'
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee        specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     admin          test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     admin          test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     admin          test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     public         test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         NO
-NULL     public         test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         NO
-NULL     public         test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
-NULL     root           test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     root           test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     root           test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
 NULL     udf_test_user  test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         YES
 NULL     udf_test_user  test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         YES
 NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
@@ -267,18 +227,10 @@ REVOKE GRANT OPTION FOR EXECUTE ON ALL PROCEDURES in schema public, test_priv_sc
 query TTTTTTTTTT colnames
 SELECT * FROM information_schema.role_routine_grants
 WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
+AND grantee = 'udf_test_user'
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee        specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     admin          test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     admin          test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     admin          test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     public         test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         NO
-NULL     public         test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         NO
-NULL     public         test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
-NULL     root           test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     root           test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     root           test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
 NULL     udf_test_user  test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         YES
 NULL     udf_test_user  test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         YES
 NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
@@ -289,18 +241,10 @@ REVOKE GRANT OPTION FOR EXECUTE ON ALL FUNCTIONS in schema public, test_priv_sc1
 query TTTTTTTTTT colnames
 SELECT * FROM information_schema.role_routine_grants
 WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
+AND grantee = 'udf_test_user'
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee        specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     admin          test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     admin          test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     admin          test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     public         test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         NO
-NULL     public         test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         NO
-NULL     public         test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
-NULL     root           test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     root           test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     root           test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
 NULL     udf_test_user  test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         NO
 NULL     udf_test_user  test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         NO
 NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
@@ -328,18 +272,10 @@ REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public, test_priv_sc1 FROM udf_test_us
 query TTTTTTTTTT colnames
 SELECT * FROM information_schema.role_routine_grants
 WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
+AND grantee = 'udf_test_user'
 ORDER BY grantee, routine_name;
 ----
-grantor  grantee  specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     admin    test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     admin    test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     admin    test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     public   test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         NO
-NULL     public   test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         NO
-NULL     public   test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
-NULL     root     test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     root     test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     root     test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
+grantor  grantee  specific_catalog  specific_schema  specific_name  routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
 
 query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
@@ -372,12 +308,10 @@ CREATE FUNCTION test_priv_f1() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 query TTTTTTTTTT colnames
 SELECT * FROM information_schema.role_routine_grants
 WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
+AND grantee = 'udf_test_user'
 ORDER BY grantee, routine_name;
 ----
-grantor  grantee  specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     admin    test              public           test_priv_f1_100110  test             public          test_priv_f1  ALL             YES
-NULL     public   test              public           test_priv_f1_100110  test             public          test_priv_f1  EXECUTE         NO
-NULL     root     test              public           test_priv_f1_100110  test             public          test_priv_f1  ALL             YES
+grantor  grantee  specific_catalog  specific_schema  specific_name  routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
 
 query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1
@@ -398,18 +332,10 @@ CREATE FUNCTION test_priv_sc1.test_priv_f3() RETURNS INT LANGUAGE SQL AS $$ SELE
 query TTTTTTTTTT colnames
 SELECT * FROM information_schema.role_routine_grants
 WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
+AND grantee = 'udf_test_user'
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee        specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     admin          test              public           test_priv_f1_100110  test             public          test_priv_f1  ALL             YES
-NULL     admin          test              public           test_priv_f2_100111  test             public          test_priv_f2  ALL             YES
-NULL     admin          test              test_priv_sc1    test_priv_f3_100112  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     public         test              public           test_priv_f1_100110  test             public          test_priv_f1  EXECUTE         NO
-NULL     public         test              public           test_priv_f2_100111  test             public          test_priv_f2  EXECUTE         NO
-NULL     public         test              test_priv_sc1    test_priv_f3_100112  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
-NULL     root           test              public           test_priv_f1_100110  test             public          test_priv_f1  ALL             YES
-NULL     root           test              public           test_priv_f2_100111  test             public          test_priv_f2  ALL             YES
-NULL     root           test              test_priv_sc1    test_priv_f3_100112  test             test_priv_sc1   test_priv_f3  ALL             YES
 NULL     udf_test_user  test              public           test_priv_f2_100111  test             public          test_priv_f2  EXECUTE         YES
 NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100112  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 

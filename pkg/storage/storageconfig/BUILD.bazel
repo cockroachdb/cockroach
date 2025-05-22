@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "storageconfig",
+    srcs = [
+        "encryption_spec.go",
+        "node.go",
+        "size_spec.go",
+        "wal_failover.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/storage/storageconfig",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cli/cliflags",
+        "//pkg/util/humanizeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_dustin_go_humanize//:go-humanize",
+        "@com_github_spf13_pflag//:pflag",
+    ],
+)
+
+go_test(
+    name = "storageconfig_test",
+    srcs = ["encryption_spec_test.go"],
+    embed = [":storageconfig"],
+    deps = ["//pkg/util/leaktest"],
+)

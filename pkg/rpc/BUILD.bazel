@@ -5,7 +5,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test", "gomock")
 go_library(
     name = "rpc",
     srcs = [
-        "addjoin.go",
         "auth.go",
         "auth_tenant.go",
         "client.go",
@@ -210,7 +209,10 @@ proto_library(
 
 go_proto_library(
     name = "rpc_go_proto",
-    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler"],
+    compilers = [
+        "//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
+        "//pkg/cmd/protoc-gen-go-drpc:protoc-gen-go-drpc_compiler",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/rpc",
     proto = ":rpc_proto",
     visibility = ["//visibility:public"],

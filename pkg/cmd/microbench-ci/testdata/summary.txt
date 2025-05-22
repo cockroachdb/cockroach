@@ -109,16 +109,6 @@ gcloud storage cp gs://cockroach-microbench-ci/artifacts/abcdef123//\* old/
 
 </details>
 
-<details><summary>Legend</summary>
-
-- ⚪ **Neutral:** No significant performance change.
-- 🔴 **Regression:** Likely performance regression, requiring investigation.
-- 🟢 **Improvement:** Likely performance gain.
-
-</details>
-
-No regressions detected!
-
 _built with commit: [qwerty456](https://github.com/cockroachdb/cockroach/commit/qwerty456)_
 ----
 ----
@@ -130,17 +120,22 @@ tree
 /abcdef123
 /abcdef123/artifacts
 /abcdef123/artifacts/cleaned_Sysbench_SQL_3node_oltp_read_write.log
-/abcdef123/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged.prof
-/abcdef123/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged.prof
-/abcdef123/artifacts/mutex_Sysbench_SQL_3node_oltp_read_write_merged.prof
+/abcdef123/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged_1.prof
+/abcdef123/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged_2.prof
+/abcdef123/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged_1.prof
+/abcdef123/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged_2.prof
+/abcdef123/artifacts/mutex_Sysbench_SQL_3node_oltp_read_write_merged_1.prof
+/abcdef123/artifacts/mutex_Sysbench_SQL_3node_oltp_read_write_merged_2.prof
 /abcdef123/artifacts/raw_Sysbench_SQL_3node_oltp_read_write.log
-/github-summary.md
 /qwerty456
 /qwerty456/artifacts
 /qwerty456/artifacts/cleaned_Sysbench_SQL_3node_oltp_read_write.log
-/qwerty456/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged.prof
-/qwerty456/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged.prof
-/qwerty456/artifacts/mutex_Sysbench_SQL_3node_oltp_read_write_merged.prof
+/qwerty456/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged_1.prof
+/qwerty456/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged_2.prof
+/qwerty456/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged_1.prof
+/qwerty456/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged_2.prof
+/qwerty456/artifacts/mutex_Sysbench_SQL_3node_oltp_read_write_merged_1.prof
+/qwerty456/artifacts/mutex_Sysbench_SQL_3node_oltp_read_write_merged_2.prof
 /qwerty456/artifacts/raw_Sysbench_SQL_3node_oltp_read_write.log
 /suite.yml
 /summary.json

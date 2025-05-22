@@ -6,7 +6,9 @@
 package quantize
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
@@ -16,15 +18,18 @@ import (
 //
 // All methods in UnQuantizer are thread-safe.
 type UnQuantizer struct {
+	// dims is the dimensionality of vectors expected by the UnQuantizer.
 	dims int
+	// distanceMetric determines which distance function to use.
+	distanceMetric vecdist.Metric
 }
 
 var _ Quantizer = (*UnQuantizer)(nil)
 
 // NewUnQuantizer returns a new instance of the UnQuantizer that stores vectors
-// with the given number of dimensions.
-func NewUnQuantizer(dims int) Quantizer {
-	return &UnQuantizer{dims: dims}
+// with the given number of dimensions and distance metric.
+func NewUnQuantizer(dims int, distanceMetric vecdist.Metric) Quantizer {
+	return &UnQuantizer{dims: dims, distanceMetric: distanceMetric}
 }
 
 // GetDims implements the Quantizer interface.
@@ -32,16 +37,21 @@ func (q *UnQuantizer) GetDims() int {
 	return q.dims
 }
 
+// GetDistanceMetric implements the Quantizer interface.
+func (q *UnQuantizer) GetDistanceMetric() vecdist.Metric {
+	return q.distanceMetric
+}
+
 // Quantize implements the Quantizer interface.
 func (q *UnQuantizer) Quantize(w *workspace.T, vectors vector.Set) QuantizedVectorSet {
+	if buildutil.CrdbTestBuild && q.distanceMetric == vecdist.Cosine {
+		validateUnitVectors(vectors)
+	}
+
 	unquantizedSet := &UnQuantizedVectorSet{
-		Centroid: make(vector.T, q.dims),
-		Vectors:  vector.MakeSet(q.dims),
+		Vectors: vector.MakeSet(q.dims),
 	}
-	if vectors.Count != 0 {
-		vectors.Centroid(unquantizedSet.Centroid)
-		unquantizedSet.AddSet(vectors)
-	}
+	unquantizedSet.AddSet(vectors)
 	return unquantizedSet
 }
 
@@ -49,30 +59,46 @@ func (q *UnQuantizer) Quantize(w *workspace.T, vectors vector.Set) QuantizedVect
 func (q *UnQuantizer) QuantizeInSet(
 	w *workspace.T, quantizedSet QuantizedVectorSet, vectors vector.Set,
 ) {
+	if buildutil.CrdbTestBuild && q.distanceMetric == vecdist.Cosine {
+		validateUnitVectors(vectors)
+	}
+
 	unquantizedSet := quantizedSet.(*UnQuantizedVectorSet)
 	unquantizedSet.AddSet(vectors)
 }
 
 // NewQuantizedVectorSet implements the Quantizer interface
 func (q *UnQuantizer) NewQuantizedVectorSet(capacity int, centroid vector.T) QuantizedVectorSet {
+	if buildutil.CrdbTestBuild && q.distanceMetric == vecdist.Cosine {
+		validateUnitVector(centroid)
+	}
+
 	dataBuffer := make([]float32, 0, capacity*q.GetDims())
 	unquantizedSet := &UnQuantizedVectorSet{
-		Centroid: centroid,
-		Vectors:  vector.MakeSetFromRawData(dataBuffer, q.GetDims()),
+		Vectors: vector.MakeSetFromRawData(dataBuffer, q.GetDims()),
 	}
 	return unquantizedSet
 }
 
-// EstimateSquaredDistances implements the Quantizer interface.
-func (q *UnQuantizer) EstimateSquaredDistances(
+// EstimateDistances implements the Quantizer interface.
+func (q *UnQuantizer) EstimateDistances(
 	w *workspace.T,
 	quantizedSet QuantizedVectorSet,
 	queryVector vector.T,
-	squaredDistances []float32,
+	distances []float32,
 	errorBounds []float32,
 ) {
-	// Distances are exact, so error bounds are always zero.
+	if buildutil.CrdbTestBuild && q.distanceMetric == vecdist.Cosine {
+		validateUnitVector(queryVector)
+	}
+
 	unquantizedSet := quantizedSet.(*UnQuantizedVectorSet)
-	unquantizedSet.ComputeSquaredDistances(queryVector, squaredDistances)
+
+	for i := range unquantizedSet.Vectors.Count {
+		dataVector := unquantizedSet.Vectors.At(i)
+		distances[i] = vecdist.Measure(q.distanceMetric, queryVector, dataVector)
+	}
+
+	// Distances are exact, so error bounds are always zero.
 	num32.Zero(errorBounds)
 }

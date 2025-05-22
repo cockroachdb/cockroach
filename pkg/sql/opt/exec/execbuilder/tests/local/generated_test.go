@@ -113,6 +113,13 @@ func TestExecBuild_call(
 	runExecBuildLogicTest(t, "call")
 }
 
+func TestExecBuild_call_plpgsql(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "call_plpgsql")
+}
+
 func TestExecBuild_cascade(
 	t *testing.T,
 ) {
@@ -428,13 +435,6 @@ func TestExecBuild_not_visible_index(
 	runExecBuildLogicTest(t, "not_visible_index")
 }
 
-func TestExecBuild_observability(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runExecBuildLogicTest(t, "observability")
-}
-
 func TestExecBuild_orderby(
 	t *testing.T,
 ) {
@@ -622,6 +622,13 @@ func TestExecBuild_tpch_vec(
 ) {
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "tpch_vec")
+}
+
+func TestExecBuild_triggers(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "triggers")
 }
 
 func TestExecBuild_trigram_index(

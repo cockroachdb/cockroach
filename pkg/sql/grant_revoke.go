@@ -498,6 +498,10 @@ func (p *planner) getGrantOnObject(
 	case targets.AllTablesInSchema:
 		incIAMFunc(sqltelemetry.OnAllTablesInSchema)
 		return privilege.Table, nil
+	case targets.AllFunctionsInSchema && targets.AllProceduresInSchema:
+		incIAMFunc(sqltelemetry.OnAllFunctionsInSchema)
+		incIAMFunc(sqltelemetry.OnAllProceduresInSchema)
+		return privilege.Routine, nil
 	case targets.AllFunctionsInSchema:
 		incIAMFunc(sqltelemetry.OnAllFunctionsInSchema)
 		return privilege.Routine, nil

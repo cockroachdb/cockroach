@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -199,9 +200,15 @@ var (
 	}
 
 	benchMarkFn = func(totalKey string, totalValue float64) func(
-		summaries map[string]StatSummary) (string, float64) {
-		return func(summaries map[string]StatSummary) (string, float64) {
-			return totalKey, totalValue
+		summaries map[string]StatSummary) *roachtestutil.AggregatedMetric {
+		return func(summaries map[string]StatSummary) *roachtestutil.AggregatedMetric {
+			return &roachtestutil.AggregatedMetric{
+				Name:             totalKey,
+				Value:            roachtestutil.MetricPoint(totalValue),
+				Unit:             "count",
+				IsHigherBetter:   true,
+				AdditionalLabels: nil,
+			}
 		}
 	}
 )
@@ -347,13 +354,21 @@ func TestExport(t *testing.T) {
 			benchMarkFn("t3", 404),
 		)
 		require.Nil(t, err)
-		require.Equal(t, ClusterStatRun{
-			Stats: map[string]StatSummary{
-				fooStat.Query: makeExpectedTs(fooTS, fooAggQuery, 5, "1", "2", "3"),
-				barStat.Query: makeExpectedTs(barTS, barAggQuery, 5, "1", "2", "3"),
-			},
-			Total: map[string]float64{"t1": 203, "t3": 404},
-		}, *testRun)
+
+		// Compare individual fields instead of the whole struct
+		require.Equal(t, map[string]float64{"t1": 203, "t3": 404}, testRun.Total)
+		require.Equal(t, map[string]StatSummary{
+			fooStat.Query: makeExpectedTs(fooTS, fooAggQuery, 5, "1", "2", "3"),
+			barStat.Query: makeExpectedTs(barTS, barAggQuery, 5, "1", "2", "3"),
+		}, testRun.Stats)
+
+		// Verify BenchmarkMetrics
+		require.NotNil(t, testRun.BenchmarkMetrics)
+		require.Len(t, testRun.BenchmarkMetrics, 2)
+		require.Contains(t, testRun.BenchmarkMetrics, "t1")
+		require.Contains(t, testRun.BenchmarkMetrics, "t3")
+		require.Equal(t, float64(203), float64(testRun.BenchmarkMetrics["t1"].Value))
+		require.Equal(t, float64(404), float64(testRun.BenchmarkMetrics["t3"].Value))
 	})
 	t.Run("multi tag, multi stat, 5 ticks with openmetrics false", func(t *testing.T) {
 		c := getClusterStatCollector(ctx, ctrl, []expectPromRangeQuery{

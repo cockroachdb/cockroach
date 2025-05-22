@@ -303,7 +303,7 @@ func (ob *OutputBuilder) AddVectorized(value bool) {
 	ob.AddFlakyTopLevelField(DeflakeVectorized, "vectorized", fmt.Sprintf("%t", value))
 }
 
-// AddGeneric adds a top-level generic field, if value is true. Cannot be called
+// AddPlanType adds a top-level generic field, if value is true. Cannot be called
 // while inside a node.
 func (ob *OutputBuilder) AddPlanType(generic, optimized bool) {
 	switch {
@@ -416,11 +416,11 @@ func (ob *OutputBuilder) AddMaxMemUsage(bytes int64) {
 	)
 }
 
-// AddNetworkStats adds a top-level field for network statistics.
-func (ob *OutputBuilder) AddNetworkStats(messages, bytes int64) {
+// AddDistSQLNetworkStats adds a top-level field for DistSQL network statistics.
+func (ob *OutputBuilder) AddDistSQLNetworkStats(messages, bytes int64) {
 	ob.AddFlakyTopLevelField(
 		DeflakeVolatile,
-		"network usage",
+		"DistSQL network usage",
 		fmt.Sprintf("%s (%s messages)", humanizeutil.IBytes(bytes), humanizeutil.Count(uint64(messages))),
 	)
 }

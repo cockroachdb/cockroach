@@ -40,9 +40,9 @@ type NetworkPartitionArgs struct {
 	// where not all packets are dropped.
 	Partitions []NetworkPartition
 
-	// List of nodes to drop iptables rules for when restoring. If empty, all nodes
+	// List of nodes to drop iptables rules for when recovering. If empty, all nodes
 	// will have their rules dropped.
-	NodesToRestore install.Nodes
+	NodesToRecover install.Nodes
 }
 
 type IPTablesPartitionFailure struct {
@@ -138,13 +138,13 @@ func (f *IPTablesPartitionFailure) Inject(
 			switch partition.Type {
 			case Bidirectional:
 				cmd = constructIPTablesRule(bidirectionalPartitionCmd, destinationNode, true /* addRule */)
-				l.Printf("Dropping packets between nodes %d and node %d with cmd: %s", partition.Source, destinationNode, cmd)
+				l.Printf("Dropping packets between nodes %d and node %d", partition.Source, destinationNode)
 			case Incoming:
 				cmd = constructIPTablesRule(asymmetricInputPartitionCmd, destinationNode, true /* addRule */)
-				l.Printf("Dropping packets from node %d to nodes %d with cmd: %s", destinationNode, partition.Source, cmd)
+				l.Printf("Dropping packets from node %d to nodes %d", destinationNode, partition.Source)
 			case Outgoing:
 				cmd = constructIPTablesRule(asymmetricOutputPartitionCmd, destinationNode, true /* addRule */)
-				l.Printf("Dropping packets from nodes %d to node %d with cmd: %s", partition.Source, destinationNode, cmd)
+				l.Printf("Dropping packets from nodes %d to node %d", partition.Source, destinationNode)
 			default:
 				panic("unhandled default case")
 			}
@@ -156,7 +156,7 @@ func (f *IPTablesPartitionFailure) Inject(
 	return nil
 }
 
-func (f *IPTablesPartitionFailure) Restore(
+func (f *IPTablesPartitionFailure) Recover(
 	ctx context.Context, l *logger.Logger, args FailureArgs,
 ) error {
 	partitions := args.(NetworkPartitionArgs).Partitions
@@ -166,13 +166,13 @@ func (f *IPTablesPartitionFailure) Restore(
 			switch partition.Type {
 			case Bidirectional:
 				cmd = constructIPTablesRule(bidirectionalPartitionCmd, destinationNode, false /* addRule */)
-				l.Printf("Resuming packets between nodes %d and node %d with cmd: %s", partition.Source, destinationNode, cmd)
+				l.Printf("Resuming packets between nodes %d and node %d", partition.Source, destinationNode)
 			case Incoming:
 				cmd = constructIPTablesRule(asymmetricInputPartitionCmd, destinationNode, false /* addRule */)
-				l.Printf("Resuming packets from node %d to nodes %d with cmd: %s", destinationNode, partition.Source, cmd)
+				l.Printf("Resuming packets from node %d to nodes %d", destinationNode, partition.Source)
 			case Outgoing:
 				cmd = constructIPTablesRule(asymmetricOutputPartitionCmd, destinationNode, false /* addRule */)
-				l.Printf("Resuming packets from nodes %d to node %d with cmd: %s", partition.Source, destinationNode, cmd)
+				l.Printf("Resuming packets from nodes %d to node %d", partition.Source, destinationNode)
 			default:
 				panic("unhandled default case")
 			}
@@ -197,7 +197,7 @@ func (f *IPTablesPartitionFailure) WaitForFailureToPropagate(
 	return nil
 }
 
-func (f *IPTablesPartitionFailure) WaitForFailureToRestore(
+func (f *IPTablesPartitionFailure) WaitForFailureToRecover(
 	_ context.Context, _ *logger.Logger, _ FailureArgs,
 ) error {
 	// TODO(Darryl): Monitor cluster (e.g. for replica convergence) and block until it's stable.

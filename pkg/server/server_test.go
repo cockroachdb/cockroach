@@ -110,7 +110,7 @@ func TestHealthCheck(t *testing.T) {
 		store.Metrics().UnavailableRangeCount.Update(100)
 		result := recorder.CheckHealth(ctx, *recorder.GenerateNodeStatus(ctx))
 		expAlerts := []statuspb.HealthAlert{
-			{StoreID: 1, Category: statuspb.HealthAlert_METRICS, Description: "ranges.unavailable", Value: 100.0},
+			{StoreID: 1, Category: statuspb.HealthAlert_METRICS, SafeDescription: "ranges.unavailable", Value: 100.0},
 		}
 		if !reflect.DeepEqual(expAlerts, result.Alerts) {
 			return errors.Newf("expected %+v, got %+v", expAlerts, result.Alerts)

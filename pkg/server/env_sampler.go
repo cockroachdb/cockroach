@@ -37,7 +37,6 @@ var jemallocPurgePeriod = settings.RegisterDurationSettingWithExplicitUnit(
 	"server.jemalloc_purge_period",
 	"minimum amount of time that must pass between two jemalloc dirty page purges (0 disables purging)",
 	2*time.Minute,
-	settings.NonNegativeDuration,
 )
 
 type sampleEnvironmentCfg struct {
@@ -168,7 +167,6 @@ func startSampleEnvironment(
 				case <-cfg.stopper.ShouldQuiesce():
 					return
 				case <-timer.C:
-					timer.Read = true
 					timer.Reset(cfg.minSampleInterval)
 
 					cgoStats := status.GetCGoMemStats(ctx)

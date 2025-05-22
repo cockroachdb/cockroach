@@ -143,17 +143,19 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	// make it safer.
 	b.r = r
 	b.applyStats = &sm.applyStats
+	// TODO(#144627): most commands do not need to read. Use NewWriteBatch because
+	// it is more efficient. If there are exceptions, sparingly use NewReader or
+	// NewBatch (if it needs to read its own writes, which is unlikely).
 	b.batch = r.store.TODOEngine().NewBatch()
 	r.mu.RLock()
 	b.state = r.shMu.state
-	b.truncState = r.shMu.raftTruncState
+	b.truncState = r.asLogStorage().shMu.trunc
 	b.state.Stats = &sm.stats
 	*b.state.Stats = *r.shMu.state.Stats
 	b.closedTimestampSetter = r.mu.closedTimestampSetter
 	r.mu.RUnlock()
 	b.changeRemovesReplica = false
 	b.changeTruncatesSideloadedFiles = false
-	b.truncatedSideloadedSize = 0
 	// TODO(pav-kv): what about b.ab and b.followerStoreWriteBytes?
 	b.start = timeutil.Now()
 	return b
@@ -313,16 +315,8 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 
 	// TODO(#93248): the strongly coupled truncation code will be removed once the
 	// loosely coupled truncations are the default.
-	if truncState := rResult.GetRaftTruncatedState(); truncState != nil {
-		// The size delta in the proposal is accurate, but does not account for the
-		// sideloaded entries, so we fix it up.
-		sm.r.handleTruncatedStateResultRaftMuLocked(ctx, pendingTruncation{
-			RaftTruncatedState: *truncState,
-			expectedFirstIndex: rResult.RaftExpectedFirstIndex,
-			logDeltaBytes:      rResult.RaftLogDelta - sm.batch.truncatedSideloadedSize,
-			isDeltaTrusted:     true,
-			hasSideloaded:      false, // unused, but listed here for completeness
-		})
+	if rResult.GetRaftTruncatedState() != nil {
+		sm.r.finalizeTruncationRaftMuLocked(ctx)
 		rResult.DiscardRaftTruncation()
 	}
 

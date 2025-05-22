@@ -697,7 +697,6 @@ func (q *Queue) waitForPush(
 	for {
 		select {
 		case <-slowTimer.C:
-			slowTimer.Read = true
 			metrics.PusherSlow.Inc(1)
 			log.Warningf(ctx, "pusher %s: have been waiting %.2fs for pushee %s",
 				req.PusherTxn.ID.Short(),
@@ -741,7 +740,6 @@ func (q *Queue) waitForPush(
 
 		case <-pusheeTxnTimer.C:
 			log.VEvent(ctx, 2, "querying pushee")
-			pusheeTxnTimer.Read = true
 			// Periodically check whether the pushee txn has been abandoned.
 			updatedPushee, _, pErr := q.queryTxnStatus(
 				ctx, req.PusheeTxn, false, nil,

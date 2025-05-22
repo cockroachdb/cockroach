@@ -47,7 +47,6 @@ var ReporterInterval = settings.RegisterDurationSetting(
 	"the frequency for generating the replication_constraint_stats, replication_stats_report and "+
 		"replication_critical_localities reports (set to 0 to disable)",
 	time.Minute,
-	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 // Reporter periodically produces a couple of reports on the cluster's data
@@ -163,7 +162,6 @@ func (stats *Reporter) Start(ctx context.Context, stopper *stop.Stopper) {
 			// update to the frequency setting.
 			select {
 			case <-timerCh:
-				timer.Read = true
 			case <-changeCh:
 			case <-ctx.Done():
 				return

@@ -1,7 +1,7 @@
 diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath_encoding_2.out --label=/mnt/data1/postgres/src/test/regress/results/jsonpath_encoding.out /mnt/data1/postgres/src/test/regress/expected/jsonpath_encoding_2.out /mnt/data1/postgres/src/test/regress/results/jsonpath_encoding.out
 --- /mnt/data1/postgres/src/test/regress/expected/jsonpath_encoding_2.out
 +++ /mnt/data1/postgres/src/test/regress/results/jsonpath_encoding.out
-@@ -7,3 +7,183 @@
+@@ -7,3 +7,182 @@
         AS skip_test \gset
  \if :skip_test
  \quit
@@ -15,173 +15,172 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath_encoding
 +-- checks for double-quoted values
 +-- basic unicode input
 +SELECT '"\u"'::jsonpath;		-- ERROR, incomplete escape
-+ERROR:  could not parse "\"\\u\"" as type jsonpath: at or near "\u": syntax error
++ERROR:  could not parse "\"\\u\"" as type jsonpath: lexical error: invalid syntax
 +DETAIL:  source SQL:
 +"\u"
 +^
 +SELECT '"\u00"'::jsonpath;		-- ERROR, incomplete escape
-+ERROR:  could not parse "\"\\u00\"" as type jsonpath: at or near "\u00": syntax error
++ERROR:  could not parse "\"\\u00\"" as type jsonpath: lexical error: invalid syntax
 +DETAIL:  source SQL:
 +"\u00"
 +^
 +SELECT '"\u000g"'::jsonpath;	-- ERROR, g is not a hex digit
-+ERROR:  could not parse "\"\\u000g\"" as type jsonpath: at or near "\u000g": syntax error
++ERROR:  could not parse "\"\\u000g\"" as type jsonpath: lexical error: invalid syntax
 +DETAIL:  source SQL:
 +"\u000g"
 +^
 +SELECT '"\u0000"'::jsonpath;	-- OK, legal escape
-+ERROR:  could not parse "\"\\u0000\"" as type jsonpath: at or near "\u0000": syntax error
-+DETAIL:  source SQL:
-+"\u0000"
-+^
++ jsonpath 
++----------
++ "\u0000"
++(1 row)
++
 +SELECT '"\uaBcD"'::jsonpath;	-- OK, uppercase and lower case both OK
-+ERROR:  could not parse "\"\\uaBcD\"" as type jsonpath: at or near "\uaBcD": syntax error
-+DETAIL:  source SQL:
-+"\uaBcD"
-+^
++ jsonpath 
++----------
++ "ꯍ"
++(1 row)
++
 +-- handling of unicode surrogate pairs
 +select '"\ud83d\ude04\ud83d\udc36"'::jsonpath as correct_in_utf8;
-+ERROR:  could not parse "\"\\ud83d\\ude04\\ud83d\\udc36\"" as type jsonpath: at or near "\ud83d\ude04\ud83d\udc36": syntax error
++ERROR:  could not parse "\"\\ud83d\\ude04\\ud83d\\udc36\"" as type jsonpath: lexical error: invalid syntax
 +DETAIL:  source SQL:
 +"\ud83d\ude04\ud83d\udc36"
 +^
 +select '"\ud83d\ud83d"'::jsonpath; -- 2 high surrogates in a row
-+ERROR:  could not parse "\"\\ud83d\\ud83d\"" as type jsonpath: at or near "\ud83d\ud83d": syntax error
++ERROR:  could not parse "\"\\ud83d\\ud83d\"" as type jsonpath: lexical error: invalid syntax
 +DETAIL:  source SQL:
 +"\ud83d\ud83d"
 +^
 +select '"\ude04\ud83d"'::jsonpath; -- surrogates in wrong order
-+ERROR:  could not parse "\"\\ude04\\ud83d\"" as type jsonpath: at or near "\ude04\ud83d": syntax error
++ERROR:  could not parse "\"\\ude04\\ud83d\"" as type jsonpath: lexical error: invalid syntax
 +DETAIL:  source SQL:
 +"\ude04\ud83d"
 +^
 +select '"\ud83dX"'::jsonpath; -- orphan high surrogate
-+ERROR:  could not parse "\"\\ud83dX\"" as type jsonpath: at or near "\ud83dX": syntax error
++ERROR:  could not parse "\"\\ud83dX\"" as type jsonpath: lexical error: invalid syntax
 +DETAIL:  source SQL:
 +"\ud83dX"
 +^
 +select '"\ude04X"'::jsonpath; -- orphan low surrogate
-+ERROR:  could not parse "\"\\ude04X\"" as type jsonpath: at or near "\ude04X": syntax error
++ERROR:  could not parse "\"\\ude04X\"" as type jsonpath: lexical error: invalid syntax
 +DETAIL:  source SQL:
 +"\ude04X"
 +^
 +--handling of simple unicode escapes
 +select '"the Copyright \u00a9 sign"'::jsonpath as correct_in_utf8;
-+ERROR:  could not parse "\"the Copyright \\u00a9 sign\"" as type jsonpath: at or near "the Copyright \u00a9 sign": syntax error
-+DETAIL:  source SQL:
-+"the Copyright \u00a9 sign"
-+^
++    correct_in_utf8     
++------------------------
++ "the Copyright © sign"
++(1 row)
++
 +select '"dollar \u0024 character"'::jsonpath as correct_everywhere;
-+ERROR:  could not parse "\"dollar \\u0024 character\"" as type jsonpath: at or near "dollar \u0024 character": syntax error
-+DETAIL:  source SQL:
-+"dollar \u0024 character"
-+^
++  correct_everywhere  
++----------------------
++ "dollar $ character"
++(1 row)
++
 +select '"dollar \\u0024 character"'::jsonpath as not_an_escape;
-+ERROR:  could not parse "\"dollar \\\\u0024 character\"" as type jsonpath: at or near "dollar \\u0024 character": syntax error
-+DETAIL:  source SQL:
-+"dollar \\u0024 character"
-+^
++       not_an_escape        
++----------------------------
++ "dollar \\u0024 character"
++(1 row)
++
 +select '"null \u0000 escape"'::jsonpath as not_unescaped;
-+ERROR:  could not parse "\"null \\u0000 escape\"" as type jsonpath: at or near "null \u0000 escape": syntax error
-+DETAIL:  source SQL:
-+"null \u0000 escape"
-+^
++    not_unescaped     
++----------------------
++ "null \u0000 escape"
++(1 row)
++
 +select '"null \\u0000 escape"'::jsonpath as not_an_escape;
-+ERROR:  could not parse "\"null \\\\u0000 escape\"" as type jsonpath: at or near "null \\u0000 escape": syntax error
-+DETAIL:  source SQL:
-+"null \\u0000 escape"
-+^
++     not_an_escape     
++-----------------------
++ "null \\u0000 escape"
++(1 row)
++
 +-- checks for quoted key names
 +-- basic unicode input
 +SELECT '$."\u"'::jsonpath;		-- ERROR, incomplete escape
++ERROR:  could not parse "$.\"\\u\"" as type jsonpath: lexical error: invalid syntax
++DETAIL:  source SQL:
++$."\u"
++  ^
++SELECT '$."\u00"'::jsonpath;	-- ERROR, incomplete escape
++ERROR:  could not parse "$.\"\\u00\"" as type jsonpath: lexical error: invalid syntax
++DETAIL:  source SQL:
++$."\u00"
++  ^
++SELECT '$."\u000g"'::jsonpath;	-- ERROR, g is not a hex digit
++ERROR:  could not parse "$.\"\\u000g\"" as type jsonpath: lexical error: invalid syntax
++DETAIL:  source SQL:
++$."\u000g"
++  ^
++SELECT '$."\u0000"'::jsonpath;	-- OK, legal escape
 + jsonpath 
 +----------
-+ $."\\u"
-+(1 row)
-+
-+SELECT '$."\u00"'::jsonpath;	-- ERROR, incomplete escape
-+ jsonpath  
-+-----------
-+ $."\\u00"
-+(1 row)
-+
-+SELECT '$."\u000g"'::jsonpath;	-- ERROR, g is not a hex digit
-+  jsonpath   
-+-------------
-+ $."\\u000g"
-+(1 row)
-+
-+SELECT '$."\u0000"'::jsonpath;	-- OK, legal escape
-+  jsonpath   
-+-------------
-+ $."\\u0000"
++ $."\x00"
 +(1 row)
 +
 +SELECT '$."\uaBcD"'::jsonpath;	-- OK, uppercase and lower case both OK
-+  jsonpath   
-+-------------
-+ $."\\uaBcD"
++ jsonpath 
++----------
++ $."ꯍ"
 +(1 row)
 +
 +-- handling of unicode surrogate pairs
 +select '$."\ud83d\ude04\ud83d\udc36"'::jsonpath as correct_in_utf8;
-+         correct_in_utf8          
-+----------------------------------
-+ $."\\ud83d\\ude04\\ud83d\\udc36"
-+(1 row)
-+
++ERROR:  could not parse "$.\"\\ud83d\\ude04\\ud83d\\udc36\"" as type jsonpath: lexical error: invalid syntax
++DETAIL:  source SQL:
++$."\ud83d\ude04\ud83d\udc36"
++  ^
 +select '$."\ud83d\ud83d"'::jsonpath; -- 2 high surrogates in a row
-+      jsonpath      
-+--------------------
-+ $."\\ud83d\\ud83d"
-+(1 row)
-+
++ERROR:  could not parse "$.\"\\ud83d\\ud83d\"" as type jsonpath: lexical error: invalid syntax
++DETAIL:  source SQL:
++$."\ud83d\ud83d"
++  ^
 +select '$."\ude04\ud83d"'::jsonpath; -- surrogates in wrong order
-+      jsonpath      
-+--------------------
-+ $."\\ude04\\ud83d"
-+(1 row)
-+
++ERROR:  could not parse "$.\"\\ude04\\ud83d\"" as type jsonpath: lexical error: invalid syntax
++DETAIL:  source SQL:
++$."\ude04\ud83d"
++  ^
 +select '$."\ud83dX"'::jsonpath; -- orphan high surrogate
-+   jsonpath   
-+--------------
-+ $."\\ud83dX"
-+(1 row)
-+
++ERROR:  could not parse "$.\"\\ud83dX\"" as type jsonpath: lexical error: invalid syntax
++DETAIL:  source SQL:
++$."\ud83dX"
++  ^
 +select '$."\ude04X"'::jsonpath; -- orphan low surrogate
-+   jsonpath   
-+--------------
-+ $."\\ude04X"
-+(1 row)
-+
++ERROR:  could not parse "$.\"\\ude04X\"" as type jsonpath: lexical error: invalid syntax
++DETAIL:  source SQL:
++$."\ude04X"
++  ^
 +--handling of simple unicode escapes
 +select '$."the Copyright \u00a9 sign"'::jsonpath as correct_in_utf8;
-+        correct_in_utf8         
-+--------------------------------
-+ $."the Copyright \\u00a9 sign"
++     correct_in_utf8      
++--------------------------
++ $."the Copyright © sign"
 +(1 row)
 +
 +select '$."dollar \u0024 character"'::jsonpath as correct_everywhere;
-+      correct_everywhere      
++   correct_everywhere   
++------------------------
++ $."dollar $ character"
++(1 row)
++
++select '$."dollar \\u0024 character"'::jsonpath as not_an_escape;
++        not_an_escape         
 +------------------------------
 + $."dollar \\u0024 character"
 +(1 row)
 +
-+select '$."dollar \\u0024 character"'::jsonpath as not_an_escape;
-+         not_an_escape          
-+--------------------------------
-+ $."dollar \\\\u0024 character"
-+(1 row)
-+
 +select '$."null \u0000 escape"'::jsonpath as not_unescaped;
-+      not_unescaped      
-+-------------------------
-+ $."null \\u0000 escape"
++    not_unescaped     
++----------------------
++ $."null \x00 escape"
 +(1 row)
 +
 +select '$."null \\u0000 escape"'::jsonpath as not_an_escape;
-+       not_an_escape       
-+---------------------------
-+ $."null \\\\u0000 escape"
++      not_an_escape      
++-------------------------
++ $."null \\u0000 escape"
 +(1 row)
 +

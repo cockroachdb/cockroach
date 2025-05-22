@@ -4,7 +4,7 @@ SET CLUSTER SETTING sql.defaults.experimental_temporary_tables.enabled=true;
 /* test */
 EXPLAIN (DDL) CREATE TEMPORARY SEQUENCE sq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
 ----
-Schema change plan for CREATE TEMPORARY SEQUENCE ‹defaultdb›.‹public›.‹sq1› MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
+Schema change plan for CREATE TEMPORARY SEQUENCE ‹defaultdb›.‹pg_temp_123_456›.‹sq1› MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 18 elements transitioning toward PUBLIC

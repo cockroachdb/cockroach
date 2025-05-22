@@ -307,7 +307,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"is_virtual",
 			"is_temporary",
 			"crdb_internal.hide_sql_constants(create_statement) as create_statement",
-			"crdb_internal.hide_sql_constants(alter_statements) as alter_statements",
+			"crdb_internal.hide_sql_constants(fk_statements) as fk_statements",
 			"crdb_internal.hide_sql_constants(create_nofks) as create_nofks",
 			"crdb_internal.redact(create_redactable) as create_redactable",
 		},
@@ -1125,7 +1125,6 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 //   - system.join_tokens: avoid downloading secret join keys.
 //   - system.comments: avoid downloading noise from SQL schema.
 //   - system.ui: avoid downloading noise from UI customizations.
-//   - system.zones: the contents of crdb_internal.zones is easier to use.
 //   - system.statement_bundle_chunks: avoid downloading a large table that's
 //     hard to interpret currently.
 //   - system.statement_statistics: historical data, usually too much to
@@ -1457,6 +1456,7 @@ var zipSystemTables = DebugZipTableRegistry{
 			"plan_gist",
 			"anti_plan_gist",
 			"redacted",
+			"username",
 		},
 	},
 	// statement_statistics can have over 100k rows in just the last hour.
@@ -1603,5 +1603,12 @@ limit 5000;`,
 			"active",
 			"info",
 		},
+	},
+	"system.zones": {
+		customQueryRedacted: `SELECT "id" FROM system.zones;`,
+		customQueryUnredacted: `SELECT 
+			"id", 
+			crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config)
+			FROM system.zones;`,
 	},
 }

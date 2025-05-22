@@ -26,7 +26,7 @@ import (
 
 var webhookServerCmd = &cobra.Command{
 	Use:   "webhook-server",
-	Short: "webhook-server opens an http server on 3000 to which cdc's webhook can emit a table with a numeric unique 'id' column",
+	Short: "webhook-server opens an http server on 9707 to which cdc's webhook can emit a table with a numeric unique 'id' column",
 	RunE:  webhookServer,
 	Args:  cobra.NoArgs,
 }
@@ -65,7 +65,7 @@ func webhookServer(cmd *cobra.Command, args []string) error {
 			defer mu.Unlock()
 			before = len(seen)
 			after = before
-			// TODO(cdc): add check for ordering guarantees using resolved timestamps and event timestamps
+			// TODO(#146097): add check for ordering guarantees using resolved timestamps and event timestamps
 			for _, i := range req.Payload {
 				if _, ok := seen[i.After.ID]; !ok {
 					seen[i.After.ID] = struct{}{}

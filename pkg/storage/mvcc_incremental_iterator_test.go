@@ -1291,7 +1291,7 @@ func TestMVCCIncrementalIteratorIntentDeletion(t *testing.T) {
 	_, err = MVCCPut(ctx, db, kC, txnC1.ReadTimestamp, vC1, MVCCWriteOptions{Txn: txnC1})
 	require.NoError(t, err)
 	require.NoError(t, db.Flush())
-	require.NoError(t, db.Compact())
+	require.NoError(t, db.Compact(ctx))
 	_, _, _, _, err = MVCCResolveWriteIntent(ctx, db, nil, intent(txnA1), MVCCResolveWriteIntentOptions{})
 	require.NoError(t, err)
 	_, _, _, _, err = MVCCResolveWriteIntent(ctx, db, nil, intent(txnB1), MVCCResolveWriteIntentOptions{})
@@ -1654,7 +1654,7 @@ func BenchmarkMVCCIncrementalIteratorForOldData(b *testing.B) {
 		if err := eng.Flush(); err != nil {
 			b.Fatal(err)
 		}
-		if err := eng.Compact(); err != nil {
+		if err := eng.Compact(context.Background()); err != nil {
 			b.Fatal(err)
 		}
 	}

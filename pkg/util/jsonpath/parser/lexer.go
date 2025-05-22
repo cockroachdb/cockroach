@@ -98,7 +98,8 @@ func (l *lexer) setErr(err error) {
 }
 
 func (l *lexer) Unimplemented(feature string) {
-	l.lastError = unimp.New(feature, "this syntax")
+	// Link to meta-issue for unimplemented JSONPath features.
+	l.lastError = unimp.NewWithIssuef(22513, "this syntax: %s", feature)
 	lastTok := l.lastToken()
 	l.lastError = parser.PopulateErrorDetails(lastTok.id, lastTok.str, lastTok.pos, l.lastError, l.in)
 	l.lastError = &tree.UnsupportedError{

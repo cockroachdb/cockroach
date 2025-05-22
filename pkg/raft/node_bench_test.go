@@ -31,7 +31,7 @@ func BenchmarkOneNode(b *testing.B) {
 	require.NoError(b, rn.Campaign())
 	rd := rn.Ready()
 	require.NoError(b, s.Append(rd.Entries))
-	rn.AdvanceHack(rd)
+	rn.AckAppend(rd.Ack())
 
 	var mu sync.Mutex
 	propose := func() {
@@ -52,7 +52,7 @@ func BenchmarkOneNode(b *testing.B) {
 		func() {
 			mu.Lock()
 			defer mu.Unlock()
-			rn.AdvanceHack(rd)
+			rn.AckAppend(rd.Ack())
 		}()
 		return rd.HardState.Commit != uint64(b.N+1)
 	}
