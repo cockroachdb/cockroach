@@ -4499,3 +4499,192 @@ statement ok
 DROP FUNCTION f1;
 
 subtest end
+
+# ==============================================================================
+# Test information_schema.triggers
+# ==============================================================================
+
+subtest information_schema_triggers
+
+# Create test tables and trigger functions
+statement ok
+CREATE TABLE test_triggers (
+    id INT PRIMARY KEY,
+    name TEXT,
+    value INT
+);
+
+statement ok
+CREATE TABLE audit_log (
+    id SERIAL PRIMARY KEY,
+    table_name TEXT,
+    operation TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+statement ok
+CREATE FUNCTION trigger_func1() RETURNS TRIGGER AS $$
+  BEGIN
+    INSERT INTO audit_log (table_name, operation)
+    VALUES (TG_TABLE_NAME, TG_OP);
+    RETURN NEW;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE FUNCTION trigger_func2() RETURNS TRIGGER AS $$
+  BEGIN
+    RAISE NOTICE 'Trigger fired';
+    RETURN NEW;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER after_insert_row
+AFTER INSERT ON test_triggers
+FOR EACH ROW
+EXECUTE FUNCTION trigger_func1();
+
+statement ok
+CREATE TRIGGER before_update_row
+BEFORE UPDATE ON test_triggers
+FOR EACH ROW
+WHEN ((NEW).value > 100)
+EXECUTE FUNCTION trigger_func2();
+
+statement ok
+CREATE TRIGGER after_delete_row
+AFTER DELETE ON test_triggers
+FOR EACH ROW
+EXECUTE FUNCTION trigger_func1();
+
+query TTTTTTITTTTT colnames
+SELECT 
+    trigger_catalog,
+    trigger_schema,
+    trigger_name,
+    event_manipulation,
+    event_object_schema,
+    event_object_table,
+    action_order,
+    action_orientation,
+    action_timing,
+    action_reference_old_table,
+    action_reference_new_table,
+    created
+FROM information_schema.triggers
+WHERE event_object_table = 'test_triggers'
+ORDER BY trigger_name;
+----
+trigger_catalog  trigger_schema  trigger_name       event_manipulation  event_object_schema  event_object_table  action_order  action_orientation  action_timing  action_reference_old_table  action_reference_new_table  created
+test             public          after_delete_row   DELETE              public               test_triggers       NULL          ROW                 AFTER          NULL                        NULL                        NULL
+test             public          after_insert_row   INSERT              public               test_triggers       NULL          ROW                 AFTER          NULL                        NULL                        NULL
+test             public          before_update_row  UPDATE              public               test_triggers       NULL          ROW                 BEFORE         NULL                        NULL                        NULL
+
+# Test trigger with WHEN condition.
+query TTT colnames
+SELECT 
+    trigger_name,
+    action_condition,
+    action_statement
+FROM information_schema.triggers
+WHERE trigger_name = 'before_update_row';
+----
+trigger_name       action_condition     action_statement
+before_update_row  ((new).value > 100)  EXECUTE FUNCTION trigger_func2()
+
+# Create trigger with transition tables.
+statement ok
+CREATE FUNCTION trigger_func3() RETURNS TRIGGER AS $$
+  BEGIN
+    RETURN NULL;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+# TODO(sql-queries): Enable tests for statement-level triggers when supported.
+# statement ok
+# CREATE TRIGGER after_update_transition
+# AFTER UPDATE ON test_triggers
+# REFERENCING OLD TABLE AS old_data NEW TABLE AS new_data
+# FOR EACH STATEMENT
+# EXECUTE FUNCTION trigger_func3();
+
+# TODO(sql-queries): Enable tests for statement-level triggers when supported.
+# query TTTTT colnames
+# SELECT 
+#     trigger_name,
+#     action_orientation,
+#     action_reference_old_table,
+#     action_reference_new_table,
+#     action_reference_old_row
+# FROM information_schema.triggers
+# WHERE trigger_name = 'after_update_transition';
+# ----
+# trigger_name             action_orientation  action_reference_old_table  action_reference_new_table  action_reference_old_row
+# after_update_transition  STATEMENT           old_data                    new_data                    NULL
+
+# Test multiple event types (create a trigger for multiple events).
+statement ok
+CREATE TRIGGER multi_event_trigger
+BEFORE INSERT OR UPDATE OR DELETE ON test_triggers
+FOR EACH ROW
+EXECUTE FUNCTION trigger_func1();
+
+# Each event should appear as a separate row.
+query TTT colnames
+SELECT 
+    trigger_name,
+    event_manipulation,
+    action_timing
+FROM information_schema.triggers
+WHERE trigger_name = 'multi_event_trigger'
+ORDER BY event_manipulation;
+----
+trigger_name         event_manipulation  action_timing
+multi_event_trigger  DELETE              BEFORE
+multi_event_trigger  INSERT              BEFORE
+multi_event_trigger  UPDATE              BEFORE
+
+# Create a schema and add a trigger there.
+statement ok
+CREATE SCHEMA other_schema;
+
+statement ok
+CREATE TABLE other_schema.test_table (id INT PRIMARY KEY, data TEXT);
+
+statement ok
+CREATE TRIGGER other_schema_trigger
+AFTER INSERT ON other_schema.test_table
+FOR EACH ROW
+EXECUTE FUNCTION trigger_func1();
+
+query TI colnames
+SELECT 
+    trigger_schema,
+    count(*) AS trigger_count
+FROM information_schema.triggers
+WHERE trigger_catalog = 'test'
+GROUP BY trigger_schema
+ORDER BY trigger_schema;
+----
+trigger_schema  trigger_count
+other_schema    1
+public          7
+
+# Clean up
+statement ok
+DROP TABLE test_triggers CASCADE;
+
+statement ok
+DROP TABLE other_schema.test_table CASCADE;
+
+statement ok
+DROP SCHEMA other_schema;
+
+statement ok
+DROP TABLE audit_log CASCADE;
+
+statement ok
+DROP FUNCTION trigger_func1, trigger_func2, trigger_func3;
+
+subtest end
