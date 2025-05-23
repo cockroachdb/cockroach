@@ -14,7 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
@@ -154,8 +154,7 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 			},
 		}
 
-		require.NoError(t,
-			logstore.NewStateLoader(desc.RangeID).SetRaftReplicaID(ctx, store.TODOEngine(), replicaID))
+		require.NoError(t, stateloader.Make(desc.RangeID).SetRaftReplicaID(ctx, store.TODOEngine(), replicaID))
 		replica, err := loadInitializedReplicaForTesting(ctx, store, desc, replicaID)
 		if err != nil {
 			t.Fatalf("unexpected error when creating replica: %+v", err)
