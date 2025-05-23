@@ -12,7 +12,6 @@ type Import struct {
 	IntoCols   NameList
 	FileFormat string
 	Files      Exprs
-	Bundle     bool
 	Options    KVOptions
 }
 

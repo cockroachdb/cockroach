@@ -376,38 +376,10 @@ type inputConverter interface {
 // mapped specifically to a particular data column.
 func formatHasNamedColumns(format roachpb.IOFileFormat_FileFormat) bool {
 	switch format {
-	case roachpb.IOFileFormat_Avro,
-		roachpb.IOFileFormat_Mysqldump,
-		roachpb.IOFileFormat_PgDump:
+	case roachpb.IOFileFormat_Avro:
 		return true
 	}
 	return false
-}
-
-func isMultiTableFormat(format roachpb.IOFileFormat_FileFormat) bool {
-	switch format {
-	case roachpb.IOFileFormat_Mysqldump,
-		roachpb.IOFileFormat_PgDump:
-		return true
-	}
-	return false
-}
-
-func makeRowErr(row int64, code pgcode.Code, format string, args ...interface{}) error {
-	err := pgerror.NewWithDepthf(1, code, format, args...)
-	err = errors.WrapWithDepthf(1, err, "row %d", row)
-	return err
-}
-
-func wrapRowErr(err error, row int64, code pgcode.Code, format string, args ...interface{}) error {
-	if format != "" || len(args) > 0 {
-		err = errors.WrapWithDepthf(1, err, format, args...)
-	}
-	err = errors.WrapWithDepthf(1, err, "row %d", row)
-	if code != pgcode.Uncategorized {
-		err = pgerror.WithCandidateCode(err, code)
-	}
-	return err
 }
 
 // importRowError is an error type describing malformed import data.
