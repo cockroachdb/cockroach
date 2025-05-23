@@ -128,7 +128,6 @@ func getTableInfo(
 }
 
 func (t *ttlProcessor) work(ctx context.Context) error {
-
 	ttlSpec := t.ttlSpec
 	flowCtx := t.FlowCtx
 	serverCfg := flowCtx.Cfg
@@ -138,6 +137,10 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	tableID := details.TableID
 	cutoff := details.Cutoff
 	ttlExpr := ttlSpec.TTLExpr
+
+	// Note: the ttl-restart test depends on this message to know what nodes are
+	// involved in a TTL job.
+	log.Infof(ctx, "TTL processor started processorID=%d tableID=%d", t.ProcessorID, tableID)
 
 	selectRateLimit := ttlSpec.SelectRateLimit
 	// Default 0 value to "unlimited" in case job started on node <= v23.2.
