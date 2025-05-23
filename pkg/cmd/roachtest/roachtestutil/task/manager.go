@@ -25,6 +25,7 @@ type (
 		Tasker
 		GroupProvider
 		Terminate(*logger.Logger)
+		Cancel()
 		CompletedEvents() <-chan Event
 	}
 
@@ -105,6 +106,11 @@ func (m *manager) Terminate(l *logger.Logger) {
 	}()
 
 	WaitForChannel(doneCh, "tasks", l)
+}
+
+// Cancel will cancel all tasks started by the manager.
+func (m *manager) Cancel() {
+	m.group.cancelAll()
 }
 
 // CompletedEvents returns a channel that will receive events for all tasks
