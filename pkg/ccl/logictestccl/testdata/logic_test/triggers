@@ -4501,12 +4501,12 @@ DROP FUNCTION f1;
 subtest end
 
 # ==============================================================================
-# Test information_schema.triggers
+# Test information_schema.triggers and pg_catalog.pg_trigger
 # ==============================================================================
 
-subtest information_schema_triggers
+subtest trigger_introspection
 
-# Create test tables and trigger functions
+# Create test tables and trigger functions.
 statement ok
 CREATE TABLE test_triggers (
     id INT PRIMARY KEY,
@@ -4601,27 +4601,40 @@ CREATE FUNCTION trigger_func3() RETURNS TRIGGER AS $$
   END;
 $$ LANGUAGE PLpgSQL;
 
-# TODO(sql-queries): Enable tests for statement-level triggers when supported.
-# statement ok
-# CREATE TRIGGER after_update_transition
-# AFTER UPDATE ON test_triggers
-# REFERENCING OLD TABLE AS old_data NEW TABLE AS new_data
-# FOR EACH STATEMENT
-# EXECUTE FUNCTION trigger_func3();
+# TODO(#126362, #135655): Enable tests for statement-level triggers when supported.
+statement error statement-level triggers are not yet supported
+CREATE TRIGGER after_update_transition
+AFTER UPDATE ON test_triggers
+REFERENCING OLD TABLE AS old_data NEW TABLE AS new_data
+FOR EACH STATEMENT
+EXECUTE FUNCTION trigger_func3();
 
-# TODO(sql-queries): Enable tests for statement-level triggers when supported.
-# query TTTTT colnames
-# SELECT 
-#     trigger_name,
-#     action_orientation,
-#     action_reference_old_table,
-#     action_reference_new_table,
-#     action_reference_old_row
-# FROM information_schema.triggers
-# WHERE trigger_name = 'after_update_transition';
-# ----
+# TODO(#126362, #135655): Enable tests for statement-level triggers when supported.
+# The expected results are:
 # trigger_name             action_orientation  action_reference_old_table  action_reference_new_table  action_reference_old_row
 # after_update_transition  STATEMENT           old_data                    new_data                    NULL
+query TTTTT colnames
+SELECT
+    trigger_name,
+    action_orientation,
+    action_reference_old_table,
+    action_reference_new_table,
+    action_reference_old_row
+FROM information_schema.triggers
+WHERE trigger_name = 'after_update_transition';
+----
+trigger_name  action_orientation  action_reference_old_table  action_reference_new_table  action_reference_old_row
+
+# TODO(#126362, #135655): Populate tgoldtable and tgnewtable.
+# The expected results are:
+# tgname                   tgoldtable  tgnewtable
+# after_update_transition  old_data    new_data
+query TTT colnames
+SELECT tgname, tgoldtable, tgnewtable
+FROM pg_catalog.pg_trigger
+WHERE tgname = 'after_update_transition';
+----
+tgname  tgoldtable  tgnewtable
 
 # Test multiple event types (create a trigger for multiple events).
 statement ok
@@ -4670,6 +4683,125 @@ ORDER BY trigger_schema;
 trigger_schema  trigger_count
 other_schema    1
 public          7
+
+# Create a trigger with arguments to test tgnargs and tgargs.
+statement ok
+CREATE TRIGGER trigger_with_args
+AFTER INSERT ON test_triggers
+FOR EACH ROW
+EXECUTE FUNCTION trigger_func1('arg1', 'arg2', 'test value with spaces');
+
+# Test pg_catalog.pg_trigger.
+query TIBITTT colnames
+SELECT 
+    tgname,
+    tgtype,
+    tgfoid > 0 AS has_func_oid,
+    tgnargs,
+    tgenabled,
+    tgoldtable,
+    tgnewtable
+FROM pg_catalog.pg_trigger
+WHERE tgrelid = 'test_triggers'::regclass
+ORDER BY tgname;
+----
+tgname              tgtype  has_func_oid  tgnargs  tgenabled  tgoldtable  tgnewtable
+after_delete_row    9       true          0        A          NULL        NULL
+after_insert_row    5       true          0        A          NULL        NULL
+before_update_row   19      true          0        A          NULL        NULL
+multi_event_trigger 31      true          0        A          NULL        NULL
+trigger_with_args   5       true          3        A          NULL        NULL
+
+# Test INSTEAD OF triggers (not yet implemented)
+statement error pgcode 42809 "test_triggers" is a table\nDETAIL: Tables cannot have INSTEAD OF triggers.
+CREATE TRIGGER instead_of_trigger INSTEAD OF INSERT ON test_triggers
+FOR EACH ROW EXECUTE FUNCTION trigger_func1();
+
+statement error pgcode 42809 "test_triggers" is a table\nDETAIL: Tables cannot have INSTEAD OF triggers.
+CREATE TRIGGER instead_of_update_trigger INSTEAD OF UPDATE ON test_triggers
+FOR EACH ROW EXECUTE FUNCTION trigger_func1();
+
+statement error pgcode 42809 "test_triggers" is a table\nDETAIL: Tables cannot have INSTEAD OF triggers.
+CREATE TRIGGER instead_of_delete_trigger INSTEAD OF DELETE ON test_triggers
+FOR EACH ROW EXECUTE FUNCTION trigger_func1();
+
+# Test TRUNCATE triggers (not yet implemented)
+statement error statement-level triggers are not yet supported
+CREATE TRIGGER truncate_trigger AFTER TRUNCATE ON test_triggers
+FOR EACH STATEMENT EXECUTE FUNCTION trigger_func1();
+
+statement error statement-level triggers are not yet supported
+CREATE TRIGGER before_truncate_trigger BEFORE TRUNCATE ON test_triggers
+FOR EACH STATEMENT EXECUTE FUNCTION trigger_func1();
+
+# Test tgtype bitmap calculation
+# Bit 0: FOR EACH ROW (1) or FOR EACH STATEMENT (0)
+# Bit 1: BEFORE (2) or AFTER (0)
+# Bits 2-4: INSERT (4), DELETE (8), UPDATE (16)
+# TODO(#126363, #135657): Add tests for INSTEAD OF and TRUNCATE triggers here when supported.
+query TBBBBBBB colnames
+SELECT 
+    tgname,
+    (tgtype::INT & 1) > 0 AS is_row_level,
+    (tgtype::INT & 2) > 0 AS is_before,
+    (tgtype::INT & 4) > 0 AS has_insert,
+    (tgtype::INT & 8) > 0 AS has_delete,
+    (tgtype::INT & 16) > 0 AS has_update,
+    (tgtype::INT & 32) > 0 AS has_instead,
+    (tgtype::INT & 64) > 0 AS has_truncate
+FROM pg_catalog.pg_trigger
+WHERE tgrelid = 'test_triggers'::regclass
+ORDER BY tgname;
+----
+tgname               is_row_level  is_before  has_insert  has_delete  has_update  has_instead  has_truncate
+after_delete_row     true          false      false       true        false       false        false
+after_insert_row     true          false      true        false       false       false        false
+before_update_row    true          true       false       false       true        false        false
+multi_event_trigger  true          true       true        true        true        false        false
+trigger_with_args    true          false      true        false       false       false        false
+
+# Check trigger arguments and column attributes.
+# TODO(#135656): Populate the tgattr column.
+query TITT colnames
+SELECT 
+    tgname,
+    tgnargs,
+    encode(tgargs, 'escape') AS tgargs,
+    tgattr
+FROM pg_catalog.pg_trigger
+WHERE tgrelid = 'test_triggers'::regclass
+ORDER BY tgname;
+----
+tgname               tgnargs  tgargs                                      tgattr
+after_delete_row     0        ·                                           ·
+after_insert_row     0        ·                                           ·
+before_update_row    0        ·                                           ·
+multi_event_trigger  0        ·                                           ·
+trigger_with_args    3        arg1\000arg2\000test value with spaces\000  ·
+
+# Test trigger with WHEN condition.
+query TTT colnames
+SELECT 
+    tgname,
+    tgqual,
+    tgattr
+FROM pg_catalog.pg_trigger
+WHERE tgrelid = 'test_triggers'::regclass AND tgqual IS NOT NULL;
+----
+tgname             tgqual               tgattr
+before_update_row  ((new).value > 100)  ·
+
+# Test cross-schema trigger.
+query TTT colnames
+SELECT 
+    tgname,
+    tgrelid::regclass::text AS table_name,
+    tgfoid::regproc::text AS trigger_func_name
+FROM pg_catalog.pg_trigger
+WHERE tgrelid = 'other_schema.test_table'::regclass;
+----
+tgname                table_name  trigger_func_name
+other_schema_trigger  test_table  trigger_func1
 
 # Clean up
 statement ok
