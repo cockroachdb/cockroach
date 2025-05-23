@@ -1537,7 +1537,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	canAddLoad := !targetSLS.highDiskSpaceUtilization &&
 		(targetSummary < loadNoChange ||
 			(targetSLS.maxFractionPending < epsilon && targetSLS.sls <= srcSLS.sls &&
-				targetSLS.nls <= srcSLS.nls))
+				targetSLS.nls <= targetSLS.sls))
 	log.Infof(ctx, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
 		targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
 	return canAddLoad
