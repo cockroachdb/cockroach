@@ -327,6 +327,7 @@ go_library(
         "@com_github_codahale_hdrhistogram//:hdrhistogram",
         "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_google_go_cmp//cmp",
+        "@com_github_google_pprof//profile",
         "@com_github_ibm_sarama//:sarama",
         "@com_github_jackc_pgtype//:pgtype",
         "@com_github_jackc_pgx_v5//:pgx",
