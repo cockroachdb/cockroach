@@ -70,6 +70,7 @@ go_library(
         "//pkg/sql/memsize",
         "//pkg/sql/row",
         "//pkg/sql/rowenc",
+        "//pkg/sql/sem/builtins",  # keep
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",

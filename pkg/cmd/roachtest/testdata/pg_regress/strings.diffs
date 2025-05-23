@@ -339,12 +339,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
  --
  -- test conversions between various string types
  -- E021-10 implicit casting among the character data types
-@@ -435,96 +386,99 @@
- (1 row)
- 
- SELECT SUBSTRING('string' FROM -10 FOR -2147483646) AS "error";
--ERROR:  negative substring length not allowed
-+ERROR:  negative substring length -2147483646 not allowed
+@@ -438,93 +389,96 @@
+ ERROR:  negative substring length not allowed
  -- T581 regular expression substring (with SQL's bizarre regexp syntax)
  SELECT SUBSTRING('abcdefg' SIMILAR 'a#"(b_d)#"%' ESCAPE '#') AS "bcd";
 - bcd 
@@ -1226,15 +1222,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
  insert into toasttest values(repeat('1234567890',10000));
  insert into toasttest values(repeat('1234567890',10000));
  -- If the starting position is zero or less, then return from the start of the string
-@@ -1843,7 +1504,7 @@
- 
- -- If the length is less than zero, an ERROR is thrown.
- SELECT substr(f1, 5, -1) from toasttest;
--ERROR:  negative substring length not allowed
-+ERROR:  negative substring length -1 not allowed
- -- If no third argument (length) is provided, the length to the end of the
- -- string is assumed.
- SELECT substr(f1, 99995) from toasttest;
 @@ -1874,13 +1535,12 @@
  -- expect >0 blocks
  SELECT pg_relation_size(reltoastrelid) = 0 AS is_empty
@@ -1278,15 +1265,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
  insert into toasttest values(decode(repeat('1234567890',10000),'escape'));
  insert into toasttest values(decode(repeat('1234567890',10000),'escape'));
  -- If the starting position is zero or less, then return from the start of the string
-@@ -1920,7 +1581,7 @@
- 
- -- If the length is less than zero, an ERROR is thrown.
- SELECT substr(f1, 5, -1) from toasttest;
--ERROR:  negative substring length not allowed
-+ERROR:  negative byte subarray length -1 not allowed
- -- If no third argument (length) is provided, the length to the end of the
- -- string is assumed.
- SELECT substr(f1, 99995) from toasttest;
 @@ -2148,51 +1809,51 @@
  --
  SET bytea_output TO hex;
@@ -1536,12 +1514,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
  SELECT repeat('Pg', 4);
    repeat  
  ----------
-@@ -2506,61 +2151,34 @@
- (1 row)
- 
+@@ -2508,59 +2153,32 @@
  SELECT SUBSTRING('string'::bytea FROM -10 FOR -2147483646) AS "error";
--ERROR:  negative substring length not allowed
-+ERROR:  negative byte subarray length -2147483646 not allowed
+ ERROR:  negative substring length not allowed
  SELECT trim(E'\\000'::bytea from E'\\000Tom\\000'::bytea);
 - btrim 
 --------
