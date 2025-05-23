@@ -1490,6 +1490,9 @@ func (cs *clusterState) getNodeReportedLoad(nodeID roachpb.NodeID) *NodeLoad {
 // will not get worse.
 //
 // It does not change any state between the call and return.
+//
+// overloadDim, if not set to NumLoadDimensions, represents the dimension that
+// is overloaded in the source.
 func (cs *clusterState) canShedAndAddLoad(
 	ctx context.Context,
 	srcSS *storeState,
@@ -1497,6 +1500,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	delta LoadVector,
 	means *meansForStoreSet,
 	onlyConsiderTargetCPUSummary bool,
+	overloadedDim LoadDimension,
 ) bool {
 	targetNS := cs.nodes[targetSS.NodeID]
 	// Add the delta.
@@ -1522,6 +1526,12 @@ func (cs *clusterState) canShedAndAddLoad(
 	// stricter and expect targetSS to be better than loadNoChange -- this will
 	// delay making a potentially non-ideal choice of targetSS until it has no
 	// pending changes.
+	//
+	// The target's aggregate summary or overload dimension summary must have
+	// been < loadNoChange. And the source must have been > loadNoChange. It is
+	// possible that both are overloadSlow in aggregate. We want to make sure
+	// that this exchange doesn't make the target summaries worse than the
+	// source's summaries, both in aggregate, and in the dimension being shed.
 	var targetSummary loadSummary
 	if onlyConsiderTargetCPUSummary {
 		targetSummary = targetSLS.dimSummary[CPURate]
@@ -1534,10 +1544,24 @@ func (cs *clusterState) canShedAndAddLoad(
 			targetSummary = targetSLS.nls
 		}
 	}
-	canAddLoad := !targetSLS.highDiskSpaceUtilization &&
+	overloadedDimPermitsChange := true
+	if overloadedDim != NumLoadDimensions {
+		overloadedDimPermitsChange =
+			targetSLS.dimSummary[overloadedDim] <= srcSLS.dimSummary[overloadedDim]
+	}
+	canAddLoad := !targetSLS.highDiskSpaceUtilization && overloadedDimPermitsChange &&
 		(targetSummary < loadNoChange ||
 			(targetSLS.maxFractionPending < epsilon && targetSLS.sls <= srcSLS.sls &&
-				targetSLS.nls <= targetSLS.sls))
+				// NB: targetSLS.nls <= targetSLS.sls is not a typo, in that we are
+				// comparing targetSLS with itself. The nls only captures node-level
+				// CPU, so if a store that is overloaded wrt WriteBandwidth wants to
+				// shed to a store that is overloaded wrt CPURate, we need to permit
+				// that. However, the nls of the former will be less than the that of
+				// the latter. By looking at the nls of the target here, we are making
+				// sure that it is no worse than the sls of the target, since if it
+				// is, the node is overloaded wrt CPU due to some other store on that
+				// node, and we should be shedding that load first.
+				overloadedDimPermitsChange && targetSLS.nls <= targetSLS.sls))
 	log.Infof(ctx, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
 		targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
 	return canAddLoad
