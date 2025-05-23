@@ -423,5 +423,11 @@ var _ base.ModuleTestingKnobs = &TestingKnobs{}
 
 func init() {
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_azure,
-		parseAzureURL, makeAzureStorage, cloud.RedactedParams(AzureAccountKeyParam), scheme, deprecatedScheme, deprecatedExternalConnectionScheme)
+		parseAzureURL,
+		makeAzureStorage,
+		cloud.RedactedParams(AzureAccountKeyParam, AzureClientSecretParam),
+		scheme,
+		deprecatedScheme,
+		deprecatedExternalConnectionScheme,
+	)
 }
