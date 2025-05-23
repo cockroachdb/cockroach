@@ -3598,6 +3598,7 @@ of ranges currently considered “hot” by the node(s).
 | page_size | [int32](#cockroach.server.serverpb.HotRangesRequest-int32) |  |  | [reserved](#support-status) |
 | page_token | [string](#cockroach.server.serverpb.HotRangesRequest-string) |  |  | [reserved](#support-status) |
 | tenant_id | [string](#cockroach.server.serverpb.HotRangesRequest-string) |  |  | [reserved](#support-status) |
+| nodes | [string](#cockroach.server.serverpb.HotRangesRequest-string) | repeated |  | [reserved](#support-status) |
 
 
 
