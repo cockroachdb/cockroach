@@ -49,6 +49,7 @@ go_test(
         "linux_parse_test.go",
         "monitor_test.go",
         "monitor_tracer_test.go",
+        "platform_linux_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":disk"],
