@@ -521,6 +521,28 @@ func DisableMutators(names ...string) CustomOption {
 	}
 }
 
+// DisableAllMutators will disable all available mutators.
+func DisableAllMutators() CustomOption {
+	return func(opts *testOptions) {
+		names := []string{}
+		for _, m := range planMutators {
+			names = append(names, m.Name())
+		}
+		DisableMutators(names...)(opts)
+	}
+}
+
+// DisableAllClusterSettingMutators will disable all available cluster setting mutators.
+func DisableAllClusterSettingMutators() CustomOption {
+	return func(opts *testOptions) {
+		names := []string{}
+		for _, m := range clusterSettingMutators {
+			names = append(names, m.Name())
+		}
+		DisableMutators(names...)(opts)
+	}
+}
+
 // WithTag allows callers give the mixedversion test instance a
 // `tag`. The tag is used as prefix in the log messages emitted by
 // this upgrade test. This is only useful when running multiple
