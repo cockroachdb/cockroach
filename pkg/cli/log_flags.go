@@ -86,7 +86,7 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 	// flag) is passed without argument, see below.
 	commandSpecificDefaultLegacyStderrOverride := severity.INFO
 
-	if isDemoCmd(cmd) || cmd == genMetricListCmd {
+	if isDemoCmd(cmd) || cmd == genMetricListCmd || cmd == debugTimeSeriesDumpCmd {
 		// `cockroach demo` and `cockroach gen metric-list` are special:
 		// they start a server, but without
 		// disk and interactively. We don't want to litter the console
