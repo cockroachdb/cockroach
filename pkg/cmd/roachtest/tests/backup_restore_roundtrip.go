@@ -114,40 +114,23 @@ func backupRestoreRoundTrip(
 	m := c.NewMonitor(ctx, c.CRDBNodes())
 
 	m.Go(func(ctx context.Context) error {
-		connectFunc := func(node int) (*gosql.DB, error) {
-			conn, err := c.ConnE(ctx, t.L(), node)
-			if err != nil {
-				return nil, fmt.Errorf("failed to connect to node %d: %w", node, err)
-			}
-
-			return conn, err
-		}
-		// TODO (msbutler): enable compaction for online restore test once inc layer limit is increased.
-		testUtils, err := newCommonTestUtils(ctx, t, c, connectFunc, c.CRDBNodes(), withMock(sp.mock), withOnlineRestore(sp.onlineRestore), withCompaction(!sp.onlineRestore))
+		testUtils, err := setupBackupRestoreTestUtils(
+			ctx, t, c, m, testRNG,
+			withMock(sp.mock), withOnlineRestore(sp.onlineRestore), withCompaction(!sp.onlineRestore),
+		)
 		if err != nil {
 			return err
 		}
 		defer testUtils.CloseConnections()
 
 		dbs := []string{"bank", "tpcc", schemaChangeDB}
-		runBackgroundWorkload, err := startBackgroundWorkloads(ctx, t.L(), c, m, testRNG, c.CRDBNodes(), c.WorkloadNode(), testUtils, dbs)
+		d, runBackgroundWorkload, _, err := createDriversForBackupRestore(
+			ctx, t, c, m, testRNG, testUtils, dbs,
+		)
 		if err != nil {
 			return err
 		}
-		tables, err := testUtils.loadTablesForDBs(ctx, t.L(), testRNG, dbs...)
-		if err != nil {
-			return err
-		}
-		d, err := newBackupRestoreTestDriver(ctx, t, c, testUtils, c.CRDBNodes(), dbs, tables)
-		if err != nil {
-			return err
-		}
-		if err := testUtils.setShortJobIntervals(ctx, testRNG); err != nil {
-			return err
-		}
-		if err := testUtils.setClusterSettings(ctx, t.L(), c, testRNG); err != nil {
-			return err
-		}
+
 		if sp.metamorphicRangeSize {
 			if err := testUtils.setMaxRangeSizeAndDependentSettings(ctx, t, testRNG, dbs); err != nil {
 				return err
@@ -199,7 +182,7 @@ func backupRestoreRoundTrip(
 
 			t.L().Printf("verifying backup %d", i+1)
 			// Verify content in backups.
-			err = collection.verifyBackupCollection(ctx, t.L(), testRNG, d, true /* checkFiles */, true /* internalSystemJobs */)
+			err = d.verifyBackupCollection(ctx, t.L(), testRNG, collection, true /* checkFiles */, true /* internalSystemJobs */)
 			if err != nil {
 				return err
 			}
@@ -220,8 +203,8 @@ func backupRestoreRoundTrip(
 	m.Wait()
 }
 
-// startBackgroundWorkloads starts a TPCC, bank, and a system table workload in
-// the background.
+// startBackgroundWorkloads returns a function that starts a TPCC, bank, and a
+// system table workload in the background.
 func startBackgroundWorkloads(
 	ctx context.Context,
 	l *logger.Logger,
@@ -361,7 +344,6 @@ func (u *CommonTestUtils) CloseConnections() {
 }
 
 func workloadWithCancel(m cluster.Monitor, fn func(ctx context.Context) error) func() {
-
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 		err := fn(ctx)
 		if ctx.Err() != nil {
@@ -371,4 +353,66 @@ func workloadWithCancel(m cluster.Monitor, fn func(ctx context.Context) error) f
 		return err
 	})
 	return cancelWorkload
+}
+
+// setupBackupRestoreTestUtils sets up a CommonTestUtils instance for backup and
+// restore tests and initializes some useful settings.
+func setupBackupRestoreTestUtils(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	m cluster.Monitor,
+	rng *rand.Rand,
+	testOpts ...commonTestOption,
+) (*CommonTestUtils, error) {
+	connectFunc := func(node int) (*gosql.DB, error) {
+		conn, err := c.ConnE(ctx, t.L(), node)
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to node %d: %w", node, err)
+		}
+
+		return conn, err
+	}
+	// TODO (msbutler): enable compaction for online restore test once inc layer limit is increased.
+	testUtils, err := newCommonTestUtils(ctx, t, c, connectFunc, c.CRDBNodes(), testOpts...)
+	if err != nil {
+		return nil, err
+	}
+	if err := testUtils.setShortJobIntervals(ctx, rng); err != nil {
+		return nil, err
+	}
+	if err := testUtils.setClusterSettings(ctx, t.L(), c, rng); err != nil {
+		return nil, err
+	}
+	return testUtils, err
+}
+
+// createDriversForBackupRestore creates a BackupRestoreTestDriver for backup
+// and restore tests, a handler to trigger background workloads, and the tables
+// that are used in the test. The tables are mapped to the databases that were
+// passed in.
+func createDriversForBackupRestore(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	m cluster.Monitor,
+	rng *rand.Rand,
+	testUtils *CommonTestUtils,
+	dbs []string,
+) (*BackupRestoreTestDriver, func() (func(), error), [][]string, error) {
+	runBackgroundWorkload, err := startBackgroundWorkloads(
+		ctx, t.L(), c, m, rng, c.CRDBNodes(), c.WorkloadNode(), testUtils, dbs,
+	)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	tables, err := testUtils.loadTablesForDBs(ctx, t.L(), rng, dbs...)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	d, err := newBackupRestoreTestDriver(ctx, t, c, testUtils, c.CRDBNodes(), dbs, tables)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return d, runBackgroundWorkload, tables, nil
 }
