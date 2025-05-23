@@ -247,20 +247,19 @@ func makeInputConverter(
 	db *kv.DB,
 ) (inputConverter, error) {
 	injectTimeIntoEvalCtx(evalCtx, spec.WalltimeNanos)
-	var singleTable catalog.TableDescriptor
-	var singleTableTargetCols tree.NameList
-	if len(spec.Tables) == 1 {
-		for _, table := range spec.Tables {
-			singleTable = tabledesc.NewBuilder(table.Desc).BuildImmutableTable()
-			singleTableTargetCols = make(tree.NameList, len(table.TargetCols))
-			for i, colName := range table.TargetCols {
-				singleTableTargetCols[i] = tree.Name(colName)
-			}
-		}
+
+	if len(spec.Tables) != 1 {
+		return nil, errors.Errorf("%s only supports reading a single, pre-specified table", spec.Format.Format.String())
 	}
 
-	if format := spec.Format.Format; singleTable == nil && !isMultiTableFormat(format) {
-		return nil, errors.Errorf("%s only supports reading a single, pre-specified table", format.String())
+	var singleTable catalog.TableDescriptor
+	var singleTableTargetCols tree.NameList
+	for _, table := range spec.Tables {
+		singleTable = tabledesc.NewBuilder(table.Desc).BuildImmutableTable()
+		singleTableTargetCols = make(tree.NameList, len(table.TargetCols))
+		for i, colName := range table.TargetCols {
+			singleTableTargetCols[i] = tree.Name(colName)
+		}
 	}
 
 	if singleTable != nil {
@@ -308,15 +307,9 @@ func makeInputConverter(
 		return newMysqloutfileReader(
 			semaCtx, spec.Format.MysqlOut, kvCh, spec.WalltimeNanos,
 			readerParallelism, singleTable, singleTableTargetCols, evalCtx, db)
-	case roachpb.IOFileFormat_Mysqldump:
-		return newMysqldumpReader(ctx, semaCtx, kvCh, spec.WalltimeNanos, spec.Tables, evalCtx,
-			spec.Format.MysqlDump, db)
 	case roachpb.IOFileFormat_PgCopy:
 		return newPgCopyReader(semaCtx, spec.Format.PgCopy, kvCh, spec.WalltimeNanos,
 			readerParallelism, singleTable, singleTableTargetCols, evalCtx, db)
-	case roachpb.IOFileFormat_PgDump:
-		return newPgDumpReader(ctx, semaCtx, int64(spec.Progress.JobID), kvCh, spec.Format.PgDump,
-			spec.WalltimeNanos, spec.Tables, evalCtx, db)
 	case roachpb.IOFileFormat_Avro:
 		return newAvroInputReader(
 			semaCtx, kvCh, singleTable, spec.Format.Avro, spec.WalltimeNanos,
