@@ -13,12 +13,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testfixtures"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 )
 
@@ -66,8 +66,8 @@ func BenchmarkTPCC(b *testing.B) {
 }
 
 func run(b *testing.B, storeDir string, workloadFlags []string) {
-	pgURL, closeServer := startCockroach(b, storeDir)
-	defer closeServer()
+	server, pgURL := startCockroach(b, storeDir)
+	defer server.Stopper().Stop(context.Background())
 	c, output := startClient(b, pgURL, workloadFlags)
 
 	var s synchronizer
@@ -89,11 +89,11 @@ func run(b *testing.B, storeDir string, workloadFlags []string) {
 	}
 }
 
-func startCockroach(b testing.TB, storeDir string) (pgURL string, closeServer func()) {
-	ctx := context.Background()
-
+func startCockroach(
+	b testing.TB, storeDir string,
+) (server serverutils.TestServerInterface, pgURL string) {
 	// Clone the store dir.
-	td, engCleanup := testutils.TempDir(b)
+	td := b.TempDir()
 	c, output := cloneEngine.
 		withEnv(srcEngineEnvVar, storeDir).
 		withEnv(dstEngineEnvVar, td).
@@ -115,12 +115,9 @@ func startCockroach(b testing.TB, storeDir string) (pgURL string, closeServer fu
 		b.Fatalf("failed to create pgurl: %s", err)
 	}
 	u.Path = databaseName
+	s.Stopper().AddCloser(stop.CloserFn(urlCleanup))
 
-	return u.String(), func() {
-		engCleanup()
-		s.Stopper().Stop(ctx)
-		urlCleanup()
-	}
+	return s, u.String()
 }
 
 func startClient(
