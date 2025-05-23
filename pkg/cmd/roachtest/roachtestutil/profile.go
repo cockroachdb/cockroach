@@ -24,7 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	"github.com/google/pprof/profile"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 type profileOptions struct {
@@ -303,4 +306,147 @@ func MeasureQPS(
 		afterOps := totalOpsCompleted()
 		return float64(afterOps-beforeOps) / duration.Seconds()
 	}
+}
+
+// getProfileWithTimeout is a helper function that receives an HTTP client and a
+// profile request URL, and returns the profile data. It keeps trying until
+// it succeeds or the timeout is reached.
+func getProfileWithTimeout(
+	ctx context.Context,
+	logger *logger.Logger,
+	client *RoachtestHTTPClient,
+	url string,
+	timeout time.Duration,
+) (*profile.Profile, error) {
+	logger.Printf("getting profile using URL: %s", url)
+
+	// Set up a timer to limit the time spent trying to get the profile.
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	var latestError error
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, errors.Wrapf(errors.CombineErrors(latestError, ctx.Err()),
+				"failed to get profile from %s after %s", url, timeout)
+		case <-timer.C:
+			return nil, errors.Wrapf(errors.CombineErrors(latestError, errors.New("timed out")),
+				"failed to get profile from %s after %s", url, timeout)
+		default:
+		}
+
+		// Request the profile.
+		resp, err := client.Get(ctx, url)
+		if err != nil {
+			latestError = err
+			resp.Body.Close()
+			continue
+		}
+
+		var buf bytes.Buffer
+		_, err = io.Copy(&buf, resp.Body)
+		if err != nil {
+			latestError = err
+			resp.Body.Close()
+			continue
+		}
+
+		// Parse the profile data. This ensures that the data is valid and not
+		// corrupt.
+		prof, err := profile.ParseData(buf.Bytes())
+		if err != nil {
+			latestError = err
+			resp.Body.Close()
+			continue
+		}
+
+		resp.Body.Close()
+		return prof, nil
+	}
+}
+
+// getProfileSingleNode returns the specified profile for a single node. If
+// taking the profile fails, we will keep retrying for 15 seconds.
+// Supported profile types are: {"cpu", "allocs", "mutex", "heap"}.
+func getProfileSingleNode(
+	ctx context.Context,
+	cluster cluster.Cluster,
+	logger *logger.Logger,
+	profileType string,
+	nodeID int,
+	duration time.Duration,
+) (*profile.Profile, error) {
+	var actualProfileType string
+	switch profileType {
+	case "cpu":
+		// It's unfortunate that the CPU profile endpoint is called "profile".
+		actualProfileType = "profile"
+	case "allocs":
+		actualProfileType = "allocs"
+	case "mutex":
+		actualProfileType = "mutex"
+	case "heap":
+		actualProfileType = "heap"
+	default:
+		return nil, errors.Newf("invalid profile type %s", profileType)
+	}
+	adminUIAddrs, err := cluster.ExternalAdminUIAddr(ctx, logger, cluster.Node(nodeID))
+	if err != nil {
+		return nil, err
+	}
+	// Use a long enough HTTP timeout that is larger than the profile duration.
+	client := DefaultHTTPClient(cluster, logger, HTTPTimeout(2*duration))
+	url := fmt.Sprintf("https://%s/debug/pprof/%s?seconds=%d", adminUIAddrs[0],
+		actualProfileType, int(duration.Seconds()))
+	return getProfileWithTimeout(ctx, logger, client, url, 15*time.Second /* timeout */)
+}
+
+// GetProfile collect profiles for all the nodes received in the function
+// parameters. It returns a slice of profiles or an error if any of the
+// profiles failed to collect. Each entry in the slices is in the same order as
+// the nodes received.
+// Supported profile types are: {"cpu", "allocs", "mutex", "heap"}.
+func GetProfile(
+	ctx context.Context,
+	cluster cluster.Cluster,
+	logger *logger.Logger,
+	profileType string,
+	duration time.Duration,
+	nodes option.NodeListOption,
+) ([]*profile.Profile, error) {
+	profiles := make([]*profile.Profile, len(nodes))
+
+	// Create an error group to manage concurrent profile collection.
+	g, ctx := errgroup.WithContext(ctx)
+
+	for i, nodeId := range nodes {
+		g.Go(func() error {
+			var err error
+			profiles[i], err = getProfileSingleNode(ctx, cluster, logger, profileType,
+				nodeId, duration)
+
+			if err != nil {
+				logger.Printf("error getting profile for node %d: %s", nodeId, err)
+				return errors.Wrapf(err, "getting profile for n%d", nodeId)
+			}
+			return nil
+		})
+	}
+
+	// Wait for all profiles to complete or first error
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	return profiles, nil
+}
+
+// ExportProfile exports a profile to specified destination directory.
+func ExportProfile(profile *profile.Profile, destinationDir string, filename string) error {
+	buf := bytes.Buffer{}
+	if err := profile.Write(&buf); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(destinationDir, filename), buf.Bytes(), 0644)
 }
