@@ -1,0 +1,2 @@
+create_external_connection_stmt ::=
+	'CREATE' 'EXTERNAL' 'CONNECTION' connection_name 'AS' connection_uri
