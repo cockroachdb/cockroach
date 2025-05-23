@@ -582,7 +582,7 @@ Hel
 Th
 
 # Regression test for #44625.
-statement error negative substring length -1 not allowed
+statement error negative substring length not allowed
 SELECT substring(x, 0, -1) FROM builtin_test
 
 # Regression test for #44881 (non-Int64 argument types).

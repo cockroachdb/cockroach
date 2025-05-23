@@ -286,7 +286,7 @@ SELECT substr('12345', -2, 77)
 ----
 12345
 
-statement error negative substring length -1 not allowed
+statement error negative substring length not allowed
 SELECT substr('12345', 2, -1)
 
 query T
@@ -357,7 +357,7 @@ SELECT substring(B'10001000' FOR 4 FROM 0), substring(B'10001000' FROM 0 FOR 4),
 ----
 100 100 1000
 
-query error negative bit subarray length -1 not allowed
+query error negative substring length not allowed
 SELECT substring('11100011'::bit(10), 4, -1)
 
 # Adding testcases for substring against byte array.
@@ -397,7 +397,7 @@ SELECT substring(b'abc' FOR 3 FROM 1), substring(b'abc' FROM 1 FOR 3), substring
 ----
 abc abc abc
 
-query error negative byte subarray length -1 not allowed
+query error negative substring length not allowed
 SELECT substring('11100011'::bytea, 4, -1)
 
 query TTTTT
