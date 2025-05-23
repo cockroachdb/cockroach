@@ -23,7 +23,7 @@ go_library(
         "//pkg/util/stop",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
-        "@io_storj_drpc//drpcpool",
+        "@io_storj_drpc//:drpc",
         "@org_golang_google_grpc//:grpc",
     ],
 )

@@ -94,8 +94,10 @@ func newDRPCServer(_ context.Context, rpcCtx *Context) (*DRPCServer, error) {
 	}, nil
 }
 
-func dialDRPC(rpcCtx *Context) func(ctx context.Context, target string) (drpcpool.Conn, error) {
-	return func(ctx context.Context, target string) (drpcpool.Conn, error) {
+func dialDRPC(
+	rpcCtx *Context,
+) func(ctx context.Context, target string, _ ConnectionClass) (drpc.Conn, error) {
+	return func(ctx context.Context, target string, _ ConnectionClass) (drpc.Conn, error) {
 		// TODO(server): could use connection class instead of empty key here.
 		pool := drpcpool.New[struct{}, drpcpool.Conn](drpcpool.Options{
 			Expiration: defaultDRPCConnIdleTimeout,
@@ -151,7 +153,7 @@ func dialDRPC(rpcCtx *Context) func(ctx context.Context, target string) (drpcpoo
 }
 
 type closeEntirePoolConn struct {
-	drpcpool.Conn
+	drpc.Conn
 	pool *drpcpool.Pool[struct{}, drpcpool.Conn]
 }
 

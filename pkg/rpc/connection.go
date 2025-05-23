@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
-	"storj.io/drpc/drpcpool"
+	"storj.io/drpc"
 )
 
 // rpcConn defines a lightweight interface that both grpc.ClientConn and drpc.Conn
@@ -108,7 +108,7 @@ func newConnectionToNodeID[Conn rpcConn](
 // block but fall back to defErr in this case.
 func (c *Connection[Conn]) waitOrDefault(
 	ctx context.Context, defErr error, sig circuit.Signal,
-) (Conn, drpcpool.Conn, error) {
+) (Conn, drpc.Conn, error) {
 	// Check the circuit breaker first. If it is already tripped now, we
 	// want it to take precedence over connFuture below (which is closed in
 	// the common case of a connection going bad after having been healthy
@@ -164,7 +164,7 @@ func (c *Connection[Conn]) Connect(ctx context.Context) (Conn, error) {
 // returns underlying drpc connection after it has been validated.
 // TODO(server): remove this once the code is consolidated to use generic
 // Connection and Pool for drpc.Conn.
-func (c *Connection[Conn]) ConnectEx(ctx context.Context) (Conn, drpcpool.Conn, error) {
+func (c *Connection[Conn]) ConnectEx(ctx context.Context) (Conn, drpc.Conn, error) {
 	return c.waitOrDefault(ctx, nil /* defErr */, c.breakerSignalFn())
 }
 
@@ -186,7 +186,7 @@ func (s *neverTripSignal) IsTripped() bool {
 // that it will latch onto (or start) an existing connection attempt even if
 // previous attempts have not succeeded. This may be preferable to Connect
 // if the caller is already certain that a peer is available.
-func (c *Connection[Conn]) ConnectNoBreaker(ctx context.Context) (Conn, drpcpool.Conn, error) {
+func (c *Connection[Conn]) ConnectNoBreaker(ctx context.Context) (Conn, drpc.Conn, error) {
 	// For ConnectNoBreaker we don't use the default Signal but pass a dummy one
 	// that never trips. (The probe tears down the Conn on quiesce so we don't rely
 	// on the Signal for that).
@@ -235,7 +235,7 @@ func (c *Connection[Conn]) DRPCBatchStreamPool() *DRPCBatchStreamPool {
 type connFuture[Conn rpcConn] struct {
 	ready chan struct{}
 	cc    Conn
-	dc    drpcpool.Conn
+	dc    drpc.Conn
 	err   error
 }
 
@@ -264,7 +264,7 @@ func (s *connFuture[Conn]) Conn() Conn {
 }
 
 // DRPCConn must only be called after C() has been closed.
-func (s *connFuture[Conn]) DRPCConn() drpcpool.Conn {
+func (s *connFuture[Conn]) DRPCConn() drpc.Conn {
 	if s.err != nil {
 		return nil
 	}
@@ -282,7 +282,7 @@ func (s *connFuture[Conn]) Resolved() bool {
 
 // Resolve is idempotent. Only the first call has any effect.
 // Not thread safe.
-func (s *connFuture[Conn]) Resolve(cc Conn, dc drpcpool.Conn, err error) {
+func (s *connFuture[Conn]) Resolve(cc Conn, dc drpc.Conn, err error) {
 	select {
 	case <-s.ready:
 		// Already resolved, noop.
