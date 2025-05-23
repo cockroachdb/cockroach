@@ -3695,39 +3695,24 @@ service RangeFeed {
 }
 
 // TODO: add comment
-service Batch {
+service KVBatch {
   rpc Batch(BatchRequest) returns (BatchResponse) {}
-}
-
-// BatchStream provides the specific RPC for the stream pool implementation.
-// It is not intended for direct client consumption.
-//
-// Rationale for this specific service:
-// - Isolates the stream pooling mechanism's specific RPC.
-// - The `BatchStreamPoolClient` (used when stream pooling is enabled)
-//   consumes this service to provide a unary 'Batch' method interface,
-//   abstracting away the streaming complexity.
-//
-// TODO: Remove these methods from the 'Internal' service once the DRPC
-// migration for tenant connector is complete.
-service BatchStream {
-  // BatchStream is a streaming variant of Batch. There is a 1:1 correspondence
-  // between requests and responses. The method is used to facilitate pooling of
-  // gRPC streams to avoid the overhead of creating and discarding a new stream
-  // for each unary Batch RPC invocation. See rpc.BatchStreamPool.
   rpc BatchStream(stream BatchRequest) returns (stream BatchResponse) {}
 }
 
-// TODO: **do better** job with naming/split here. We can split it further as
-// service TenantSettings and service GossipSubscription.
-//
 // TODO: add comment
-service SystemTenant {
+service TenantService {
   // TenantSettings is used by tenants to obtain and stay up to date with tenant
   // setting overrides.
   rpc TenantSettings(TenantSettingsRequest) returns (stream TenantSettingsEvent) {}
 
   rpc GossipSubscription(GossipSubscriptionRequest) returns (stream GossipSubscriptionEvent) {}
+
+  rpc RangeLookup(RangeLookupRequest) returns (RangeLookupResponse) {}
+
+  // GetRangeDescriptors is used by tenants to get range descriptors for their
+  // own ranges.
+  rpc GetRangeDescriptors(GetRangeDescriptorsRequest) returns (stream GetRangeDescriptorsResponse) {}
 }
 
 // TODO: add comment
@@ -3738,23 +3723,14 @@ service TenantUsage {
 }
 
 // TODO: add comment
-service Node {
+service Cluster {
   // Join a bootstrapped cluster. If the target node is itself not part of a
   // bootstrapped cluster, an appropriate error is returned.
   rpc Join (JoinNodeRequest) returns (JoinNodeResponse) {}
 }
 
 // TODO: add comment
-service Range {
-  rpc RangeLookup(RangeLookupRequest) returns (RangeLookupResponse) {}
-
-  // GetRangeDescriptors is used by tenants to get range descriptors for their
-  // own ranges.
-  rpc GetRangeDescriptors(GetRangeDescriptorsRequest) returns (stream GetRangeDescriptorsResponse) {}
-}
-
-// TODO: add comment
-service SpanConfig {
+service TenantSpanConfig {
   // GetSpanConfigs is used to fetch the span configurations over a given
   // keyspan.
   rpc GetSpanConfigs(GetSpanConfigsRequest) returns (GetSpanConfigsResponse) {}
