@@ -759,11 +759,12 @@ CREATE TABLE pg_catalog.pg_tablespace (
 )`
 
 // PGCatalogTrigger describes the schema of the pg_catalog.pg_trigger table.
-// https://www.postgresql.org/docs/9.5/catalog-pg-trigger.html,
+// https://www.postgresql.org/docs/16/catalog-pg-trigger.html
 const PGCatalogTrigger = `
 CREATE TABLE pg_catalog.pg_trigger (
 	oid OID,
 	tgrelid OID,
+	tgparentid OID,
 	tgname NAME,
 	tgfoid OID,
 	tgtype INT2,
@@ -779,8 +780,7 @@ CREATE TABLE pg_catalog.pg_trigger (
 	tgargs BYTEA,
 	tgqual TEXT,
 	tgoldtable NAME,
-	tgnewtable NAME,
-	tgparentid OID
+	tgnewtable NAME
 )`
 
 // PGCatalogType describes the schema of the pg_catalog.pg_type table.
