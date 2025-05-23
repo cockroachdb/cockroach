@@ -729,7 +729,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		p.maybeLogStatement(
 			ctx,
 			ex.executorType,
-			int(ex.state.mu.autoRetryCounter),
+			int(ex.state.mu.autoRetryCounter)+p.autoRetryStmtCounter,
 			int(ex.extraTxnState.txnCounter.Load()),
 			rowsAffected,
 			ex.state.mu.stmtCount,
@@ -1081,6 +1081,12 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	if ex.state.mu.autoRetryReason != nil {
 		p.autoRetryCounter = int(ex.state.mu.autoRetryCounter)
+		ex.sessionTracing.TraceRetryInformation(
+			ctx, "transaction", int(ex.state.mu.autoRetryCounter), ex.state.mu.autoRetryReason,
+		)
+		if ex.server.cfg.TestingKnobs.OnTxnRetry != nil {
+			ex.server.cfg.TestingKnobs.OnTxnRetry(ex.state.mu.autoRetryReason, p.EvalContext())
+		}
 	}
 
 	if ex.executorType != executorTypeInternal &&
@@ -1746,7 +1752,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		p.maybeLogStatement(
 			ctx,
 			ex.executorType,
-			int(ex.state.mu.autoRetryCounter),
+			int(ex.state.mu.autoRetryCounter)+p.autoRetryStmtCounter,
 			int(ex.extraTxnState.txnCounter.Load()),
 			rowsAffected,
 			ex.state.mu.stmtCount,
@@ -2133,6 +2139,12 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 
 	if ex.state.mu.autoRetryReason != nil {
 		p.autoRetryCounter = int(ex.state.mu.autoRetryCounter)
+		ex.sessionTracing.TraceRetryInformation(
+			ctx, "transaction", int(ex.state.mu.autoRetryCounter), ex.state.mu.autoRetryReason,
+		)
+		if ex.server.cfg.TestingKnobs.OnTxnRetry != nil {
+			ex.server.cfg.TestingKnobs.OnTxnRetry(ex.state.mu.autoRetryReason, p.EvalContext())
+		}
 	}
 
 	if ex.executorType != executorTypeInternal &&
@@ -2717,6 +2729,11 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 
 	maxRetries := int(ex.sessionData().MaxRetriesForReadCommitted)
 	for attemptNum := 0; ; attemptNum++ {
+		if attemptNum > 0 {
+			ex.sessionTracing.TraceRetryInformation(
+				ctx, "statement", p.autoRetryStmtCounter, p.autoRetryStmtReason,
+			)
+		}
 		bufferPos := res.BufferedResultsLen()
 		if err = ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
 			return err
@@ -2772,8 +2789,8 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		if err := ex.state.mu.txn.Step(ctx, false /* allowReadTimestampStep */); err != nil {
 			return err
 		}
-		ex.state.mu.autoRetryCounter++
-		ex.state.mu.autoRetryReason = txnRetryErr
+		p.autoRetryStmtCounter++
+		p.autoRetryStmtReason = maybeRetriableErr
 	}
 	return nil
 }
@@ -2781,8 +2798,8 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 // dispatchToExecutionEngine executes the statement, writes the result to res
 // and returns an event for the connection's state machine.
 //
-// If an error is returned, the connection needs to stop processing queries.`
-// Query execution errors are written to res; they are not returned; it is`
+// If an error is returned, the connection needs to stop processing queries.
+// Query execution errors are written to res; they are not returned; it is
 // expected that the caller will inspect res and react to query errors by
 // producing an appropriate state machine event.
 func (ex *connExecutor) dispatchToExecutionEngine(
@@ -3001,10 +3018,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		planner.curPlan.flags.Set(planFlagPartiallyDistributed)
 	}
 
-	ex.sessionTracing.TraceRetryInformation(ctx, int(ex.state.mu.autoRetryCounter), ex.state.mu.autoRetryReason)
-	if ex.server.cfg.TestingKnobs.OnTxnRetry != nil && ex.state.mu.autoRetryReason != nil {
-		ex.server.cfg.TestingKnobs.OnTxnRetry(ex.state.mu.autoRetryReason, planner.EvalContext())
-	}
 	distribute := DistributionType(LocalDistribution)
 	if distributePlan.WillDistribute() {
 		distribute = FullDistribution
@@ -3047,15 +3060,16 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(func(ctx context.Context) {
 			populateQueryLevelStats(ctx, &curPlanner, ex.server.cfg, ppInfo.dispatchToExecutionEngine.queryStats, &ex.cpuStatsCollector)
 			ppInfo.dispatchToExecutionEngine.stmtFingerprintID = ex.recordStatementSummary(
-				ctx, &curPlanner,
-				int(ex.state.mu.autoRetryCounter), ppInfo.dispatchToExecutionEngine.rowsAffected, ppInfo.curRes.ErrAllowReleased(), *ppInfo.dispatchToExecutionEngine.queryStats,
+				ctx, &curPlanner, int(ex.state.mu.autoRetryCounter), planner.autoRetryStmtCounter,
+				ppInfo.dispatchToExecutionEngine.rowsAffected, ppInfo.curRes.ErrAllowReleased(),
+				*ppInfo.dispatchToExecutionEngine.queryStats,
 			)
 		})
 	} else {
 		populateQueryLevelStats(ctx, planner, ex.server.cfg, &stats, &ex.cpuStatsCollector)
 		ex.recordStatementSummary(
-			ctx, planner,
-			int(ex.state.mu.autoRetryCounter), res.RowsAffected(), res.Err(), stats,
+			ctx, planner, int(ex.state.mu.autoRetryCounter), planner.autoRetryStmtCounter,
+			res.RowsAffected(), res.Err(), stats,
 		)
 	}
 

@@ -66,7 +66,6 @@ SET tracing = off
 query T nosort
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%executing after % retries%'
 ----
-executing after 0 retries, last retry reason: <nil>
 
 statement ok
 SET tracing = on
@@ -82,7 +81,6 @@ SET tracing = off
 query T nosort
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%executing after % retries%'
 ----
-executing after 0 retries, last retry reason: <nil>
-executing after 1 retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
-executing after 2 retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
-executing after 3 retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+executing after 1 transaction retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+executing after 2 transaction retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+executing after 3 transaction retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
