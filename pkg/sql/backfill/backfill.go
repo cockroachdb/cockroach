@@ -889,7 +889,7 @@ func (ib *IndexBackfiller) initIndexes(
 			return err
 		}
 
-		vecIndex, err := vecIndexManager.GetWithDesc(ctx, desc, idx)
+		vecIndex, err := vecIndexManager.Get(ctx, desc.GetID(), idx.GetID())
 		if err != nil {
 			return err
 		}
