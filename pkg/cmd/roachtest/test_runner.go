@@ -1394,6 +1394,13 @@ func (r *testRunner) runTest(
 		if err := c.AddGrafanaAnnotation(ctx, t.L(), grafana.AddAnnotationRequest{Text: annotationText}); err != nil {
 			t.L().Printf(errors.Wrap(err, "error adding annotation for test end").Error())
 		}
+		// Terminate tasks to ensure that any stray tasks are cleaned up.
+		// Tasks can only be safely terminated after the test has returned. If
+		// we terminate the manager before test code has finished executing, the
+		// test could try to initiate new tasks resulting in undefined behavior.
+		t.L().Printf("terminating stray tasks")
+		t.taskManager.Terminate(t.L())
+
 	case <-time.After(timeout):
 		// NB: We're adding the timeout failure intentionally without cancelling the context
 		// to capture as much state as possible during artifact collection.
@@ -1402,6 +1409,10 @@ func (r *testRunner) runTest(
 		// We suppress other failures from being surfaced to the top as the timeout is always going
 		// to be the main error and subsequent errors (i.e. context cancelled) add noise.
 		t.suppressFailures()
+
+		// Cancel tasks to ensure that any stray tasks are cleaned up.
+		t.taskManager.Cancel()
+
 		timedOut = true
 	}
 
@@ -1610,12 +1621,6 @@ func (r *testRunner) postTestAssertions(
 func (r *testRunner) teardownTest(
 	ctx context.Context, t *testImpl, c *clusterImpl, timedOut bool,
 ) error {
-	defer func() {
-		// Terminate tasks to ensure that any stray tasks are cleaned up.
-		t.L().Printf("terminating tasks")
-		t.taskManager.Terminate(t.L())
-	}()
-
 	if timedOut || t.Failed() || roachtestflags.AlwaysCollectArtifacts {
 		err := r.collectArtifacts(ctx, t, c, timedOut, time.Hour)
 		if err != nil {
