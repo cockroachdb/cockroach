@@ -11,8 +11,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -27,7 +27,7 @@ type prepareSnapApplyInput struct {
 
 	st       *cluster.Settings
 	todoEng  storage.Engine
-	logSL    *logstore.StateLoader
+	sl       stateloader.StateLoader
 	writeSST func(context.Context, []byte) error
 
 	truncState    kvserverpb.RaftTruncatedState
@@ -46,7 +46,7 @@ func prepareSnapApply(
 ) {
 	// Step 1: Write unreplicated SST
 	unreplicatedSSTFile, clearedUnreplicatedSpan, err := writeUnreplicatedSST(
-		ctx, input.id, input.st, input.truncState, input.hardState, input.logSL,
+		ctx, input.id, input.st, input.truncState, input.hardState, input.sl,
 	)
 	if err != nil {
 		return roachpb.Span{}, nil, err
@@ -76,7 +76,7 @@ func writeUnreplicatedSST(
 	st *cluster.Settings,
 	ts kvserverpb.RaftTruncatedState,
 	hs raftpb.HardState,
-	sl *logstore.StateLoader,
+	sl stateloader.StateLoader,
 ) (_ *storage.MemObject, clearedSpan roachpb.Span, _ error) {
 	unreplicatedSSTFile := &storage.MemObject{}
 	unreplicatedSST := storage.MakeIngestionSSTWriter(
@@ -107,7 +107,7 @@ func rewriteRaftState(
 	id storage.FullReplicaID,
 	hs raftpb.HardState,
 	ts kvserverpb.RaftTruncatedState,
-	sl *logstore.StateLoader,
+	sl stateloader.StateLoader,
 	w storage.Writer,
 ) (clearedSpan roachpb.Span, _ error) {
 	// Clearing the unreplicated state.

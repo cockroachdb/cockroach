@@ -14,7 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -64,7 +64,7 @@ func (e *env) handleNewReplica(
 	skipRaftReplicaID bool,
 	k, ek roachpb.RKey,
 ) *roachpb.RangeDescriptor {
-	sl := logstore.NewStateLoader(id.RangeID)
+	sl := stateloader.Make(id.RangeID)
 	require.NoError(t, sl.SetHardState(ctx, e.eng, raftpb.HardState{}))
 	if !skipRaftReplicaID && id.ReplicaID != 0 {
 		require.NoError(t, sl.SetRaftReplicaID(ctx, e.eng, id.ReplicaID))

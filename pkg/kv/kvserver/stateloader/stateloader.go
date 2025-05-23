@@ -369,6 +369,38 @@ func (rsl StateLoader) SetForceFlushIndex(
 		hlc.Timestamp{}, ffIndex, storage.MVCCWriteOptions{Stats: ms})
 }
 
+// LoadRaftReplicaID loads the RaftReplicaID.
+func (rsl StateLoader) LoadRaftReplicaID(
+	ctx context.Context, reader storage.Reader,
+) (kvserverpb.RaftReplicaID, error) {
+	var replicaID kvserverpb.RaftReplicaID
+	if found, err := storage.MVCCGetProto(
+		ctx, reader, rsl.RaftReplicaIDKey(), hlc.Timestamp{}, &replicaID,
+		storage.MVCCGetOptions{ReadCategory: fs.ReplicationReadCategory},
+	); err != nil {
+		return kvserverpb.RaftReplicaID{}, err
+	} else if !found {
+		return kvserverpb.RaftReplicaID{}, errors.AssertionFailedf("no replicaID persisted")
+	}
+	return replicaID, nil
+}
+
+// SetRaftReplicaID overwrites the RaftReplicaID.
+func (rsl StateLoader) SetRaftReplicaID(
+	ctx context.Context, writer storage.Writer, replicaID roachpb.ReplicaID,
+) error {
+	rid := kvserverpb.RaftReplicaID{ReplicaID: replicaID}
+	// "Blind" because opts.Stats == nil and timestamp.IsEmpty().
+	return storage.MVCCBlindPutProto(
+		ctx,
+		writer,
+		rsl.RaftReplicaIDKey(),
+		hlc.Timestamp{}, /* timestamp */
+		&rid,
+		storage.MVCCWriteOptions{}, /* opts */
+	)
+}
+
 // LoadRangeTombstone loads the RangeTombstone of the range.
 func (rsl StateLoader) LoadRangeTombstone(
 	ctx context.Context, reader storage.Reader,
