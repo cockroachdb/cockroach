@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 // Cluster mediates interacting with a cockroach cluster.
@@ -53,7 +54,7 @@ type ClusterConfig struct {
 // NodeDialer abstracts connecting to other nodes in the cluster.
 type NodeDialer interface {
 	// Dial returns a grpc connection to the given node.
-	Dial(context.Context, roachpb.NodeID, rpc.ConnectionClass) (*grpc.ClientConn, error)
+	Dial(context.Context, roachpb.NodeID, rpc.ConnectionClass) (*grpc.ClientConn, drpc.Conn, error)
 }
 
 // New constructs a new Cluster with the provided dependencies.
@@ -139,7 +140,7 @@ func (c *Cluster) ForEveryNodeOrServer(
 		grp.GoCtx(func(ctx context.Context) error {
 			defer alloc.Release()
 
-			conn, err := c.c.Dialer.Dial(ctx, node.ID, rpc.DefaultClass)
+			conn, _, err := c.c.Dialer.Dial(ctx, node.ID, rpc.DefaultClass)
 			if err != nil {
 				return err
 			}

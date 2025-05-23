@@ -120,7 +120,7 @@ func (req runnerRequest) run() error {
 		physicalplan.ReleaseFlowSpec(&req.flowReq.Flow)
 	}()
 
-	conn, err := req.sqlInstanceDialer.Dial(req.ctx, roachpb.NodeID(req.sqlInstanceID), rpc.DefaultClass)
+	conn, _, err := req.sqlInstanceDialer.Dial(req.ctx, roachpb.NodeID(req.sqlInstanceID), rpc.DefaultClass)
 	if err != nil {
 		// Mark this error as special runnerDialErr so that we could retry this
 		// distributed query as local.
@@ -259,7 +259,7 @@ func (dsp *DistSQLPlanner) initCancelingWorkers(initCtx context.Context) {
 						continue
 					}
 					log.VEventf(parentCtx, 2, "worker %d is canceling at most %d flows on node %d", workerID, len(req.FlowIDs), sqlInstanceID)
-					conn, err := dsp.sqlInstanceDialer.Dial(parentCtx, roachpb.NodeID(sqlInstanceID), rpc.DefaultClass)
+					conn, _, err := dsp.sqlInstanceDialer.Dial(parentCtx, roachpb.NodeID(sqlInstanceID), rpc.DefaultClass)
 					if err != nil {
 						// We failed to dial the node, so we give up given that
 						// our cancellation is best effort. It is possible that

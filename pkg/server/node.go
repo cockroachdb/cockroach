@@ -2376,7 +2376,7 @@ func (n *Node) ResetQuorum(
 	log.Infof(ctx, "updated meta2 entry for r%d", desc.RangeID)
 
 	// Set up connection to self. Use rpc.SystemClass to avoid throttling.
-	conn, err := n.storeCfg.NodeDialer.Dial(ctx, n.Descriptor.NodeID, rpc.SystemClass)
+	conn, dconn, err := n.storeCfg.NodeDialer.Dial(ctx, n.Descriptor.NodeID, rpc.SystemClass)
 	if err != nil {
 		return nil, err
 	}
@@ -2390,6 +2390,7 @@ func (n *Node) ResetQuorum(
 		n.storeCfg.Settings,
 		n.storeCfg.Tracer(),
 		conn,
+		dconn,
 		n.storeCfg.Clock.Now(),
 		desc,
 		toReplicaDescriptor,

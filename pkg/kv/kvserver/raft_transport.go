@@ -81,7 +81,7 @@ type RaftMessageResponseStream interface {
 // Send. Note that the default implementation of grpc.Stream for server
 // responses (grpc.serverStream) is not safe for concurrent calls to Send.
 type lockedRaftMessageResponseStream struct {
-	wrapped MultiRaft_RaftMessageBatchServer
+	wrapped RPCMultiRaft_RaftMessageBatchStream
 	sendMu  syncutil.Mutex
 }
 
@@ -291,7 +291,7 @@ func NewDummyRaftTransport(
 	resolver := func(roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
 		return nil, roachpb.Locality{}, errors.New("dummy resolver")
 	}
-	return NewRaftTransport(ambient, st, nil, clock, nodedialer.New(nil, resolver), nil,
+	return NewRaftTransport(ambient, st, nil, clock, nodedialer.New(nil, resolver), nil, nil,
 		kvflowdispatch.NewDummyDispatch(), NoopStoresFlowControlIntegration{},
 		NoopRaftTransportDisconnectListener{}, nil, nil, nil,
 	)
@@ -305,6 +305,7 @@ func NewRaftTransport(
 	clock *hlc.Clock,
 	dialer *nodedialer.Dialer,
 	grpcServer *grpc.Server,
+	drpcServer *rpc.DRPCServer,
 	kvflowTokenDispatch kvflowcontrol.DispatchReader,
 	kvflowHandles kvflowcontrol.Handles,
 	disconnectListener RaftTransportDisconnectListener,
@@ -333,6 +334,9 @@ func NewRaftTransport(
 	t.initMetrics()
 	if grpcServer != nil {
 		RegisterMultiRaftServer(grpcServer, t)
+	}
+	if drpcServer != nil {
+		_ = DRPCRegisterMultiRaft(drpcServer.Mux, t.AsDRPCServer())
 	}
 	return t
 }
@@ -490,8 +494,26 @@ func newRaftMessageResponse(
 	return resp
 }
 
-// RaftMessageBatch proxies the incoming requests to the listening server interface.
+type drpcRaftTransport RaftTransport
+
+func (t *RaftTransport) AsDRPCServer() DRPCMultiRaftServer {
+	return (*drpcRaftTransport)(t)
+}
+
+func (t *drpcRaftTransport) RaftMessageBatch(
+	stream DRPCMultiRaft_RaftMessageBatchStream,
+) (lastErr error) {
+	return (*RaftTransport)(t).raftMessageBatch(stream)
+}
+
 func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer) (lastErr error) {
+	return t.raftMessageBatch(stream)
+}
+
+// RaftMessageBatch proxies the incoming requests to the listening server interface.
+func (t *RaftTransport) raftMessageBatch(
+	stream RPCMultiRaft_RaftMessageBatchStream,
+) (lastErr error) {
 	errCh := make(chan error, 1)
 
 	// Node stopping error is caught below in the select.
@@ -574,10 +596,20 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 	}
 }
 
+func (t *drpcRaftTransport) DelegateRaftSnapshot(
+	stream DRPCMultiRaft_DelegateRaftSnapshotStream,
+) error {
+	return (*RaftTransport)(t).delegateRaftSnapshot(stream)
+}
+
+func (t *RaftTransport) DelegateRaftSnapshot(stream MultiRaft_DelegateRaftSnapshotServer) error {
+	return t.delegateRaftSnapshot(stream)
+}
+
 // DelegateRaftSnapshot handles incoming delegated snapshot requests and passes
 // the request to pass off to the sender store. Errors during the snapshots
 // process are sent back as a response.
-func (t *RaftTransport) DelegateRaftSnapshot(stream MultiRaft_DelegateRaftSnapshotServer) error {
+func (t *RaftTransport) delegateRaftSnapshot(stream RPCMultiRaft_DelegateRaftSnapshotStream) error {
 	ctx, cancel := t.stopper.WithCancelOnQuiesce(stream.Context())
 	defer cancel()
 	req, err := stream.Recv()
@@ -624,8 +656,16 @@ func (t *RaftTransport) InternalDelegateRaftSnapshot(
 	return incomingMessageHandler.HandleDelegatedSnapshot(ctx, req)
 }
 
-// RaftSnapshot handles incoming streaming snapshot requests.
+func (t *drpcRaftTransport) RaftSnapshot(stream DRPCMultiRaft_RaftSnapshotStream) error {
+	return (*RaftTransport)(t).raftSnapshot(stream)
+}
+
 func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error {
+	return t.raftSnapshot(stream)
+}
+
+// RaftSnapshot handles incoming streaming snapshot requests.
+func (t *RaftTransport) raftSnapshot(stream RPCMultiRaft_RaftSnapshotStream) error {
 	ctx, cancel := t.stopper.WithCancelOnQuiesce(stream.Context())
 	defer cancel()
 	req, err := stream.Recv()
@@ -677,7 +717,7 @@ func (t *RaftTransport) StopOutgoingMessage(storeID roachpb.StoreID) {
 // lost and a new instance of processQueue will be started by the next message
 // to be sent.
 func (t *RaftTransport) processQueue(
-	q *raftSendQueue, stream MultiRaft_RaftMessageBatchClient, class rpc.ConnectionClass,
+	q *raftSendQueue, stream RPCMultiRaft_RaftMessageBatchClient, class rpc.ConnectionClass,
 ) error {
 	errCh := make(chan error, 1)
 
@@ -1053,17 +1093,20 @@ func (t *RaftTransport) startProcessNewQueue(
 			t.kvflowControl.mu.connectionTracker.markNodeDisconnected(toNodeID, class)
 			t.kvflowControl.mu.Unlock()
 		}()
-		conn, err := t.dialer.Dial(ctx, toNodeID, class)
+		conn, dconn, err := t.dialer.Dial(ctx, toNodeID, class)
 		if err != nil {
 			// DialNode already logs sufficiently, so just return.
 			return
 		}
 
-		client := NewMultiRaftClient(conn)
 		batchCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
-
-		stream, err := client.RaftMessageBatch(batchCtx) // closed via cancellation
+		var stream RPCMultiRaft_RaftMessageBatchClient
+		if rpc.ExperimentalDRPCEnabled.Get(&t.st.SV) {
+			stream, err = NewDRPCMultiRaftClient(dconn).RaftMessageBatch(batchCtx)
+		} else {
+			stream, err = NewMultiRaftClient(conn).RaftMessageBatch(batchCtx)
+		}
 		if err != nil {
 			log.Warningf(ctx, "creating batch client for node %d failed: %+v", toNodeID, err)
 			return
@@ -1206,12 +1249,16 @@ func (t *RaftTransport) SendSnapshot(
 ) (*kvserverpb.SnapshotResponse, error) {
 	nodeID := header.RaftMessageRequest.ToReplica.NodeID
 
-	conn, err := t.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
+	conn, dconn, err := t.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
 	if err != nil {
 		return nil, err
 	}
-	client := NewMultiRaftClient(conn)
-	stream, err := client.RaftSnapshot(ctx)
+	var stream RPCMultiRaft_RaftSnapshotClient
+	if rpc.ExperimentalDRPCEnabled.Get(&t.st.SV) {
+		stream, err = NewDRPCMultiRaftClient(dconn).RaftSnapshot(ctx)
+	} else {
+		stream, err = NewMultiRaftClient(conn).RaftSnapshot(ctx)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -1230,14 +1277,19 @@ func (t *RaftTransport) DelegateSnapshot(
 	ctx context.Context, req *kvserverpb.DelegateSendSnapshotRequest,
 ) (*kvserverpb.DelegateSnapshotResponse, error) {
 	nodeID := req.DelegatedSender.NodeID
-	conn, err := t.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
+	conn, dconn, err := t.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
 	if err != nil {
 		return nil, errors.Mark(err, errMarkSnapshotError)
 	}
-	client := NewMultiRaftClient(conn)
 
 	// Creates a rpc stream between the leaseholder and sender.
-	stream, err := client.DelegateRaftSnapshot(ctx)
+	var stream RPCMultiRaft_DelegateRaftSnapshotClient
+	if rpc.ExperimentalDRPCEnabled.Get(&t.st.SV) {
+		stream, err = NewDRPCMultiRaftClient(dconn).DelegateRaftSnapshot(ctx)
+	} else {
+		stream, err = NewMultiRaftClient(conn).DelegateRaftSnapshot(ctx)
+	}
+
 	if err != nil {
 		return nil, errors.Mark(err, errMarkSnapshotError)
 	}

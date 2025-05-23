@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -35,6 +36,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
+	drpc "storj.io/drpc"
 )
 
 const (
@@ -670,6 +672,7 @@ func SendEmptySnapshot(
 	st *cluster.Settings,
 	tracer *tracing.Tracer,
 	cc *grpc.ClientConn,
+	dconn drpc.Conn,
 	now hlc.Timestamp,
 	desc roachpb.RangeDescriptor,
 	to roachpb.ReplicaDescriptor,
@@ -768,8 +771,12 @@ func SendEmptySnapshot(
 		RangeSize:          ms.Total(),
 		RangeKeysInOrder:   true,
 	}
-
-	stream, err := NewMultiRaftClient(cc).RaftSnapshot(ctx)
+	var stream RPCMultiRaft_RaftSnapshotClient
+	if rpc.ExperimentalDRPCEnabled.Get(&st.SV) {
+		stream, err = NewDRPCMultiRaftClient(dconn).RaftSnapshot(ctx)
+	} else {
+		stream, err = NewMultiRaftClient(cc).RaftSnapshot(ctx)
+	}
 	if err != nil {
 		return err
 	}

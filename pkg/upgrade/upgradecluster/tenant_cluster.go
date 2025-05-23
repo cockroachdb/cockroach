@@ -234,7 +234,7 @@ func (t *TenantCluster) ForEveryNodeOrServer(
 			// test flakes due to network issues.
 			if err := retry.WithMaxAttempts(ctx, retryOpts, retryOpts.MaxRetries+1, func() error {
 				var err error
-				conn, err = t.Dialer.Dial(ctx, roachpb.NodeID(instance.InstanceID), rpc.DefaultClass)
+				conn, _, err = t.Dialer.Dial(ctx, roachpb.NodeID(instance.InstanceID), rpc.DefaultClass)
 				return err
 			}); err != nil {
 				return annotateDialError(err)

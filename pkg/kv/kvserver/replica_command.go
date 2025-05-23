@@ -1018,7 +1018,7 @@ func waitForApplication(
 	for _, repl := range replicas {
 		repl := repl // copy for goroutine
 		g.GoCtx(func(ctx context.Context) error {
-			conn, err := dialer.Dial(ctx, repl.NodeID, rpc.DefaultClass)
+			conn, _, err := dialer.Dial(ctx, repl.NodeID, rpc.DefaultClass)
 			if err != nil {
 				return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
 			}
@@ -1048,7 +1048,7 @@ func waitForReplicasInit(
 		for _, repl := range replicas {
 			repl := repl // copy for goroutine
 			g.GoCtx(func(ctx context.Context) error {
-				conn, err := dialer.Dial(ctx, repl.NodeID, rpc.DefaultClass)
+				conn, _, err := dialer.Dial(ctx, repl.NodeID, rpc.DefaultClass)
 				if err != nil {
 					return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
 				}
