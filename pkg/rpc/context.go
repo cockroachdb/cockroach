@@ -228,14 +228,14 @@ type Context struct {
 
 	localInternalClient RestrictedInternalClient
 
-	peers peerMap
+	peers peerMap[*grpc.ClientConn]
 
 	// dialbackMap is a map of currently executing dialback connections. This map
 	// is typically empty or close to empty. It only holds entries that are being
 	// verified for dialback due to failing a health check.
 	dialbackMu struct {
 		syncutil.Mutex
-		m map[roachpb.NodeID]*Connection
+		m map[roachpb.NodeID]*GRPCConnection
 	}
 
 	metrics *Metrics
@@ -564,7 +564,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	}
 
 	rpcCtx.dialbackMu.Lock()
-	rpcCtx.dialbackMu.m = map[roachpb.NodeID]*Connection{}
+	rpcCtx.dialbackMu.m = map[roachpb.NodeID]*GRPCConnection{}
 	rpcCtx.dialbackMu.Unlock()
 
 	if !opts.TenantID.IsSet() {
@@ -1991,7 +1991,9 @@ func (rpcCtx *Context) grpcDialRaw(
 // node ID between client and server. This function should only be
 // used with the gossip client and CLI commands which can talk to any
 // node. This method implies a SystemClass.
-func (rpcCtx *Context) GRPCUnvalidatedDial(target string, locality roachpb.Locality) *Connection {
+func (rpcCtx *Context) GRPCUnvalidatedDial(
+	target string, locality roachpb.Locality,
+) *GRPCConnection {
 	return rpcCtx.grpcDialNodeInternal(target, 0, locality, SystemClass)
 }
 
@@ -2007,7 +2009,7 @@ func (rpcCtx *Context) GRPCDialNode(
 	remoteNodeID roachpb.NodeID,
 	remoteLocality roachpb.Locality,
 	class ConnectionClass,
-) *Connection {
+) *GRPCConnection {
 	if remoteNodeID == 0 && !rpcCtx.TestingAllowNamedRPCToAnonymousServer {
 		log.Fatalf(
 			rpcCtx.makeDialCtx(target, remoteNodeID, class),
@@ -2028,7 +2030,7 @@ func (rpcCtx *Context) GRPCDialPod(
 	remoteInstanceID base.SQLInstanceID,
 	remoteLocality roachpb.Locality,
 	class ConnectionClass,
-) *Connection {
+) *GRPCConnection {
 	return rpcCtx.GRPCDialNode(target, roachpb.NodeID(remoteInstanceID), remoteLocality, class)
 }
 
@@ -2039,7 +2041,7 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 	remoteNodeID roachpb.NodeID,
 	remoteLocality roachpb.Locality,
 	class ConnectionClass,
-) *Connection {
+) *GRPCConnection {
 	k := peerKey{TargetAddr: target, NodeID: remoteNodeID, Class: class}
 	if p, ok := rpcCtx.peers.get(k); ok {
 		// There's a cached peer, so we have a cached connection, use it.
@@ -2059,7 +2061,7 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 	// Won race. Actually create a peer.
 
 	if conns.mu.m == nil {
-		conns.mu.m = map[peerKey]*peer{}
+		conns.mu.m = map[peerKey]*peer[*grpc.ClientConn]{}
 	}
 
 	p := rpcCtx.newPeer(k, remoteLocality)
@@ -2097,11 +2099,9 @@ func (rpcCtx *Context) NewHeartbeatService() *HeartbeatService {
 	}
 }
 
-//go:generate mockgen -destination=mocks_generated_test.go --package=. Dialbacker
-
 type Dialbacker interface {
-	GRPCUnvalidatedDial(string, roachpb.Locality) *Connection
-	GRPCDialNode(string, roachpb.NodeID, roachpb.Locality, ConnectionClass) *Connection
+	GRPCUnvalidatedDial(string, roachpb.Locality) *GRPCConnection
+	GRPCDialNode(string, roachpb.NodeID, roachpb.Locality, ConnectionClass) *GRPCConnection
 	grpcDialRaw(
 		context.Context, string, ConnectionClass, ...grpc.DialOption,
 	) (*grpc.ClientConn, error)

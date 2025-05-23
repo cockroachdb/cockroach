@@ -177,3 +177,5 @@ func (srv *drpcOffServer) Serve(_ context.Context, lis net.Listener) error {
 func (srv *drpcOffServer) Register(interface{}, drpc.Description) error {
 	return nil
 }
+
+type DRPCConnection = Connection[drpc.Conn]
