@@ -1,0 +1,1123 @@
+# --------------------------------------------------
+# Test rules applied to a single-column FK cascade.
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE parent (k INT PRIMARY KEY, v INT)
+----
+
+exec-ddl
+CREATE TABLE child (
+  a INT PRIMARY KEY,
+  b INT NOT NULL REFERENCES parent(k) ON UPDATE CASCADE ON DELETE CASCADE,
+  INDEX (b)
+)
+----
+
+opt-post-queries
+UPDATE PARENT SET k = 10 WHERE k = 1
+----
+root
+ ├── update parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: k:5 v:6
+ │    ├── update-mapping:
+ │    │    └── k_new:9 => k:1
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_b_fkey
+ │    ├── cardinality: [0 - 0]
+ │    ├── volatile, mutations
+ │    └── project
+ │         ├── columns: k_new:9!null k:5!null v:6
+ │         ├── cardinality: [0 - 1]
+ │         ├── key: ()
+ │         ├── fd: ()-->(5,6,9)
+ │         ├── scan parent
+ │         │    ├── columns: k:5!null v:6
+ │         │    ├── constraint: /5: [/1 - /1]
+ │         │    ├── flags: avoid-full-scan
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── key: ()
+ │         │    └── fd: ()-->(5,6)
+ │         └── projections
+ │              └── 10 [as=k_new:9]
+ └── cascade
+      └── update child
+           ├── columns: <none>
+           ├── fetch columns: a:14 child.b:15
+           ├── update-mapping:
+           │    └── b_new:19 => child.b:11
+           ├── input binding: &2
+           ├── cardinality: [0 - 0]
+           ├── volatile, mutations
+           ├── inner-join (lookup child@child_b_idx)
+           │    ├── columns: a:14!null child.b:15!null b_old:18!null b_new:19!null
+           │    ├── key columns: [18] = [15]
+           │    ├── key: (14)
+           │    ├── fd: ()-->(15,18,19), (15)==(18), (18)==(15)
+           │    ├── select
+           │    │    ├── columns: b_old:18!null b_new:19!null
+           │    │    ├── cardinality: [0 - 1]
+           │    │    ├── key: ()
+           │    │    ├── fd: ()-->(18,19)
+           │    │    ├── with-scan &1
+           │    │    │    ├── columns: b_old:18!null b_new:19!null
+           │    │    │    ├── mapping:
+           │    │    │    │    ├──  k:5 => b_old:18
+           │    │    │    │    └──  k_new:9 => b_new:19
+           │    │    │    ├── cardinality: [0 - 1]
+           │    │    │    ├── key: ()
+           │    │    │    └── fd: ()-->(18,19)
+           │    │    └── filters
+           │    │         └── b_old:18 IS DISTINCT FROM b_new:19 [outer=(18,19)]
+           │    └── filters (true)
+           └── f-k-checks
+                └── f-k-checks-item: child(b) -> parent(k)
+                     └── anti-join (lookup parent)
+                          ├── columns: b:20!null
+                          ├── key columns: [20] = [21]
+                          ├── lookup columns are key
+                          ├── fd: ()-->(20)
+                          ├── with-scan &2
+                          │    ├── columns: b:20!null
+                          │    ├── mapping:
+                          │    │    └──  b_new:19 => b:20
+                          │    └── fd: ()-->(20)
+                          └── filters (true)
+
+# The delete cascade fast-path is applied here, which transfers filters from
+# the parent to the child, allowing a constrained scan.
+opt-post-queries
+DELETE FROM parent WHERE k = 1
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: k:5
+ │    ├── cascades
+ │    │    └── child_b_fkey
+ │    ├── cardinality: [0 - 0]
+ │    ├── volatile, mutations
+ │    └── scan parent
+ │         ├── columns: k:5!null
+ │         ├── constraint: /5: [/1 - /1]
+ │         ├── flags: avoid-full-scan
+ │         ├── cardinality: [0 - 1]
+ │         ├── key: ()
+ │         └── fd: ()-->(5)
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: a:13 b:14
+           ├── cardinality: [0 - 0]
+           ├── volatile, mutations
+           └── scan child@child_b_idx
+                ├── columns: a:13!null b:14!null
+                ├── constraint: /14/13: [/1 - /1]
+                ├── flags: avoid-full-scan
+                ├── key: (13)
+                └── fd: ()-->(14)
+
+# Since the filter is on a non-FK column, the fast path is not applied.
+opt-post-queries
+DELETE FROM parent WHERE v = 1
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: k:5
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_b_fkey
+ │    ├── cardinality: [0 - 0]
+ │    ├── volatile, mutations
+ │    └── select
+ │         ├── columns: k:5!null v:6!null
+ │         ├── key: (5)
+ │         ├── fd: ()-->(6)
+ │         ├── scan parent
+ │         │    ├── columns: k:5!null v:6
+ │         │    ├── flags: avoid-full-scan
+ │         │    ├── key: (5)
+ │         │    └── fd: (5)-->(6)
+ │         └── filters
+ │              └── v:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: a:13 b:14
+           ├── cardinality: [0 - 0]
+           ├── volatile, mutations
+           └── project
+                ├── columns: a:13!null b:14!null
+                ├── key: (13)
+                ├── fd: (13)-->(14)
+                └── inner-join (lookup child@child_b_idx)
+                     ├── columns: a:13!null b:14!null k:17!null
+                     ├── key columns: [17] = [14]
+                     ├── key: (13)
+                     ├── fd: (13)-->(14), (14)==(17), (17)==(14)
+                     ├── with-scan &1
+                     │    ├── columns: k:17!null
+                     │    ├── mapping:
+                     │    │    └──  parent.k:5 => k:17
+                     │    └── key: (17)
+                     └── filters (true)
+
+exec-ddl
+DROP TABLE child
+----
+
+exec-ddl
+DROP TABLE parent
+----
+
+# --------------------------------------------------
+# Test rules applied to a multi-column FK cascade.
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE parent (x INT, y INT, v INT, PRIMARY KEY (x, y))
+----
+
+exec-ddl
+CREATE TABLE child1 (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  FOREIGN KEY (b, c) REFERENCES parent(x, y) ON UPDATE CASCADE ON DELETE CASCADE,
+  INDEX (b, c)
+)
+----
+
+exec-ddl
+CREATE TABLE child2 (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  FOREIGN KEY (b, c) REFERENCES parent(x, y) ON UPDATE CASCADE ON DELETE CASCADE,
+  INDEX (c, b)
+)
+----
+
+opt-post-queries
+UPDATE PARENT SET x = 10 WHERE x = 1
+----
+root
+ ├── update parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: x:6 y:7 v:8
+ │    ├── update-mapping:
+ │    │    └── x_new:11 => x:1
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    ├── child1_b_c_fkey
+ │    │    └── child2_b_c_fkey
+ │    ├── cardinality: [0 - 0]
+ │    ├── volatile, mutations
+ │    └── project
+ │         ├── columns: x_new:11!null x:6!null y:7!null v:8
+ │         ├── key: (7)
+ │         ├── fd: ()-->(6,11), (7)-->(8)
+ │         ├── scan parent
+ │         │    ├── columns: x:6!null y:7!null v:8
+ │         │    ├── constraint: /6/7: [/1 - /1]
+ │         │    ├── flags: avoid-full-scan
+ │         │    ├── key: (7)
+ │         │    └── fd: ()-->(6), (7)-->(8)
+ │         └── projections
+ │              └── 10 [as=x_new:11]
+ ├── cascade
+ │    └── update child1
+ │         ├── columns: <none>
+ │         ├── fetch columns: a:17 child1.b:18 child1.c:19
+ │         ├── update-mapping:
+ │         │    ├── b_new:23 => child1.b:13
+ │         │    └── c_new:25 => child1.c:14
+ │         ├── input binding: &2
+ │         ├── cardinality: [0 - 0]
+ │         ├── volatile, mutations
+ │         ├── inner-join (lookup child1@child1_b_c_idx)
+ │         │    ├── columns: a:17!null child1.b:18!null child1.c:19!null b_old:22!null b_new:23!null c_old:24!null c_new:25!null
+ │         │    ├── key columns: [22 24] = [18 19]
+ │         │    ├── key: (17,25)
+ │         │    ├── fd: ()-->(18,22,23), (17)-->(19), (18)==(22), (22)==(18), (19)==(24), (24)==(19)
+ │         │    ├── select
+ │         │    │    ├── columns: b_old:22!null b_new:23!null c_old:24!null c_new:25!null
+ │         │    │    ├── key: (24,25)
+ │         │    │    ├── fd: ()-->(22,23)
+ │         │    │    ├── with-scan &1
+ │         │    │    │    ├── columns: b_old:22!null b_new:23!null c_old:24!null c_new:25!null
+ │         │    │    │    ├── mapping:
+ │         │    │    │    │    ├──  x:6 => b_old:22
+ │         │    │    │    │    ├──  y:7 => c_old:24
+ │         │    │    │    │    ├──  x_new:11 => b_new:23
+ │         │    │    │    │    └──  y:7 => c_new:25
+ │         │    │    │    ├── key: (24,25)
+ │         │    │    │    └── fd: ()-->(22,23)
+ │         │    │    └── filters
+ │         │    │         └── (b_old:22 IS DISTINCT FROM b_new:23) OR (c_old:24 IS DISTINCT FROM c_new:25) [outer=(22-25)]
+ │         │    └── filters (true)
+ │         └── f-k-checks
+ │              └── f-k-checks-item: child1(b,c) -> parent(x,y)
+ │                   └── anti-join (lookup parent)
+ │                        ├── columns: b:26!null c:27!null
+ │                        ├── key columns: [26 27] = [28 29]
+ │                        ├── lookup columns are key
+ │                        ├── fd: ()-->(26)
+ │                        ├── with-scan &2
+ │                        │    ├── columns: b:26!null c:27!null
+ │                        │    ├── mapping:
+ │                        │    │    ├──  b_new:23 => b:26
+ │                        │    │    └──  c_new:25 => c:27
+ │                        │    └── fd: ()-->(26)
+ │                        └── filters (true)
+ └── cascade
+      └── update child2
+           ├── columns: <none>
+           ├── fetch columns: child2.a:38 child2.b:39 child2.c:40
+           ├── update-mapping:
+           │    ├── b_new:44 => child2.b:34
+           │    └── c_new:46 => child2.c:35
+           ├── input binding: &3
+           ├── cardinality: [0 - 0]
+           ├── volatile, mutations
+           ├── inner-join (lookup child2@child2_c_b_idx)
+           │    ├── columns: child2.a:38!null child2.b:39!null child2.c:40!null b_old:43!null b_new:44!null c_old:45!null c_new:46!null
+           │    ├── key columns: [45 43] = [40 39]
+           │    ├── key: (38,46)
+           │    ├── fd: ()-->(39,43,44), (38)-->(40), (39)==(43), (43)==(39), (40)==(45), (45)==(40)
+           │    ├── select
+           │    │    ├── columns: b_old:43!null b_new:44!null c_old:45!null c_new:46!null
+           │    │    ├── key: (45,46)
+           │    │    ├── fd: ()-->(43,44)
+           │    │    ├── with-scan &1
+           │    │    │    ├── columns: b_old:43!null b_new:44!null c_old:45!null c_new:46!null
+           │    │    │    ├── mapping:
+           │    │    │    │    ├──  x:6 => b_old:43
+           │    │    │    │    ├──  y:7 => c_old:45
+           │    │    │    │    ├──  x_new:11 => b_new:44
+           │    │    │    │    └──  y:7 => c_new:46
+           │    │    │    ├── key: (45,46)
+           │    │    │    └── fd: ()-->(43,44)
+           │    │    └── filters
+           │    │         └── (b_old:43 IS DISTINCT FROM b_new:44) OR (c_old:45 IS DISTINCT FROM c_new:46) [outer=(43-46)]
+           │    └── filters (true)
+           └── f-k-checks
+                └── f-k-checks-item: child2(b,c) -> parent(x,y)
+                     └── anti-join (lookup parent)
+                          ├── columns: b:47!null c:48!null
+                          ├── key columns: [47 48] = [49 50]
+                          ├── lookup columns are key
+                          ├── fd: ()-->(47)
+                          ├── with-scan &3
+                          │    ├── columns: b:47!null c:48!null
+                          │    ├── mapping:
+                          │    │    ├──  b_new:44 => b:47
+                          │    │    └──  c_new:46 => c:48
+                          │    └── fd: ()-->(47)
+                          └── filters (true)
+
+opt-post-queries
+UPDATE PARENT SET y = 10 WHERE x = 1
+----
+root
+ ├── update parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: x:6 y:7 v:8
+ │    ├── update-mapping:
+ │    │    └── y_new:11 => y:2
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    ├── child1_b_c_fkey
+ │    │    └── child2_b_c_fkey
+ │    ├── cardinality: [0 - 0]
+ │    ├── volatile, mutations
+ │    └── project
+ │         ├── columns: y_new:11!null x:6!null y:7!null v:8
+ │         ├── key: (7)
+ │         ├── fd: ()-->(6,11), (7)-->(8)
+ │         ├── scan parent
+ │         │    ├── columns: x:6!null y:7!null v:8
+ │         │    ├── constraint: /6/7: [/1 - /1]
+ │         │    ├── flags: avoid-full-scan
+ │         │    ├── key: (7)
+ │         │    └── fd: ()-->(6), (7)-->(8)
+ │         └── projections
+ │              └── 10 [as=y_new:11]
+ ├── cascade
+ │    └── update child1
+ │         ├── columns: <none>
+ │         ├── fetch columns: a:17 child1.b:18 child1.c:19
+ │         ├── update-mapping:
+ │         │    ├── b_new:23 => child1.b:13
+ │         │    └── c_new:25 => child1.c:14
+ │         ├── input binding: &2
+ │         ├── cardinality: [0 - 0]
+ │         ├── volatile, mutations
+ │         ├── inner-join (lookup child1@child1_b_c_idx)
+ │         │    ├── columns: a:17!null child1.b:18!null child1.c:19!null b_old:22!null b_new:23!null c_old:24!null c_new:25!null
+ │         │    ├── key columns: [22 24] = [18 19]
+ │         │    ├── key: (17)
+ │         │    ├── fd: ()-->(18,22,23,25), (17)-->(19), (18)==(22), (22)==(18), (19)==(24), (24)==(19)
+ │         │    ├── select
+ │         │    │    ├── columns: b_old:22!null b_new:23!null c_old:24!null c_new:25!null
+ │         │    │    ├── key: (24)
+ │         │    │    ├── fd: ()-->(22,23,25)
+ │         │    │    ├── with-scan &1
+ │         │    │    │    ├── columns: b_old:22!null b_new:23!null c_old:24!null c_new:25!null
+ │         │    │    │    ├── mapping:
+ │         │    │    │    │    ├──  x:6 => b_old:22
+ │         │    │    │    │    ├──  y:7 => c_old:24
+ │         │    │    │    │    ├──  x:6 => b_new:23
+ │         │    │    │    │    └──  y_new:11 => c_new:25
+ │         │    │    │    ├── key: (24)
+ │         │    │    │    └── fd: ()-->(22,23,25)
+ │         │    │    └── filters
+ │         │    │         └── (b_old:22 IS DISTINCT FROM b_new:23) OR (c_old:24 IS DISTINCT FROM c_new:25) [outer=(22-25)]
+ │         │    └── filters (true)
+ │         └── f-k-checks
+ │              └── f-k-checks-item: child1(b,c) -> parent(x,y)
+ │                   └── anti-join (lookup parent)
+ │                        ├── columns: b:26!null c:27!null
+ │                        ├── key columns: [26 27] = [28 29]
+ │                        ├── lookup columns are key
+ │                        ├── fd: ()-->(26,27)
+ │                        ├── with-scan &2
+ │                        │    ├── columns: b:26!null c:27!null
+ │                        │    ├── mapping:
+ │                        │    │    ├──  b_new:23 => b:26
+ │                        │    │    └──  c_new:25 => c:27
+ │                        │    └── fd: ()-->(26,27)
+ │                        └── filters (true)
+ └── cascade
+      └── update child2
+           ├── columns: <none>
+           ├── fetch columns: child2.a:38 child2.b:39 child2.c:40
+           ├── update-mapping:
+           │    ├── b_new:44 => child2.b:34
+           │    └── c_new:46 => child2.c:35
+           ├── input binding: &3
+           ├── cardinality: [0 - 0]
+           ├── volatile, mutations
+           ├── inner-join (lookup child2@child2_c_b_idx)
+           │    ├── columns: child2.a:38!null child2.b:39!null child2.c:40!null b_old:43!null b_new:44!null c_old:45!null c_new:46!null
+           │    ├── key columns: [45 43] = [40 39]
+           │    ├── key: (38)
+           │    ├── fd: ()-->(39,43,44,46), (38)-->(40), (39)==(43), (43)==(39), (40)==(45), (45)==(40)
+           │    ├── select
+           │    │    ├── columns: b_old:43!null b_new:44!null c_old:45!null c_new:46!null
+           │    │    ├── key: (45)
+           │    │    ├── fd: ()-->(43,44,46)
+           │    │    ├── with-scan &1
+           │    │    │    ├── columns: b_old:43!null b_new:44!null c_old:45!null c_new:46!null
+           │    │    │    ├── mapping:
+           │    │    │    │    ├──  x:6 => b_old:43
+           │    │    │    │    ├──  y:7 => c_old:45
+           │    │    │    │    ├──  x:6 => b_new:44
+           │    │    │    │    └──  y_new:11 => c_new:46
+           │    │    │    ├── key: (45)
+           │    │    │    └── fd: ()-->(43,44,46)
+           │    │    └── filters
+           │    │         └── (b_old:43 IS DISTINCT FROM b_new:44) OR (c_old:45 IS DISTINCT FROM c_new:46) [outer=(43-46)]
+           │    └── filters (true)
+           └── f-k-checks
+                └── f-k-checks-item: child2(b,c) -> parent(x,y)
+                     └── anti-join (lookup parent)
+                          ├── columns: b:47!null c:48!null
+                          ├── key columns: [47 48] = [49 50]
+                          ├── lookup columns are key
+                          ├── fd: ()-->(47,48)
+                          ├── with-scan &3
+                          │    ├── columns: b:47!null c:48!null
+                          │    ├── mapping:
+                          │    │    ├──  b_new:44 => b:47
+                          │    │    └──  c_new:46 => c:48
+                          │    └── fd: ()-->(47,48)
+                          └── filters (true)
+
+# NOTE: even though the filter requires a full-table scan on the parent table,
+# the parent rows, once identified, can be used for a lookup-join into each
+# child table.
+opt-post-queries
+UPDATE PARENT SET x = 10 WHERE y = 1
+----
+root
+ ├── update parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: x:6 y:7 v:8
+ │    ├── update-mapping:
+ │    │    └── x_new:11 => x:1
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    ├── child1_b_c_fkey
+ │    │    └── child2_b_c_fkey
+ │    ├── cardinality: [0 - 0]
+ │    ├── volatile, mutations
+ │    └── project
+ │         ├── columns: x_new:11!null x:6!null y:7!null v:8
+ │         ├── key: (6)
+ │         ├── fd: ()-->(7,11), (6)-->(8)
+ │         ├── select
+ │         │    ├── columns: x:6!null y:7!null v:8
+ │         │    ├── key: (6)
+ │         │    ├── fd: ()-->(7), (6)-->(8)
+ │         │    ├── scan parent
+ │         │    │    ├── columns: x:6!null y:7!null v:8
+ │         │    │    ├── flags: avoid-full-scan
+ │         │    │    ├── key: (6,7)
+ │         │    │    └── fd: (6,7)-->(8)
+ │         │    └── filters
+ │         │         └── y:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+ │         └── projections
+ │              └── 10 [as=x_new:11]
+ ├── cascade
+ │    └── update child1
+ │         ├── columns: <none>
+ │         ├── fetch columns: a:17 child1.b:18 child1.c:19
+ │         ├── update-mapping:
+ │         │    ├── b_new:23 => child1.b:13
+ │         │    └── c_new:25 => child1.c:14
+ │         ├── input binding: &2
+ │         ├── cardinality: [0 - 0]
+ │         ├── volatile, mutations
+ │         ├── inner-join (lookup child1@child1_b_c_idx)
+ │         │    ├── columns: a:17!null child1.b:18!null child1.c:19!null b_old:22!null b_new:23!null c_old:24!null c_new:25!null
+ │         │    ├── key columns: [22 24] = [18 19]
+ │         │    ├── key: (17)
+ │         │    ├── fd: ()-->(19,23-25), (17)-->(18), (18)==(22), (22)==(18), (19)==(24), (24)==(19)
+ │         │    ├── select
+ │         │    │    ├── columns: b_old:22!null b_new:23!null c_old:24!null c_new:25!null
+ │         │    │    ├── key: (22)
+ │         │    │    ├── fd: ()-->(23-25)
+ │         │    │    ├── with-scan &1
+ │         │    │    │    ├── columns: b_old:22!null b_new:23!null c_old:24!null c_new:25!null
+ │         │    │    │    ├── mapping:
+ │         │    │    │    │    ├──  x:6 => b_old:22
+ │         │    │    │    │    ├──  y:7 => c_old:24
+ │         │    │    │    │    ├──  x_new:11 => b_new:23
+ │         │    │    │    │    └──  y:7 => c_new:25
+ │         │    │    │    ├── key: (22)
+ │         │    │    │    └── fd: ()-->(23-25)
+ │         │    │    └── filters
+ │         │    │         └── (b_old:22 IS DISTINCT FROM b_new:23) OR (c_old:24 IS DISTINCT FROM c_new:25) [outer=(22-25)]
+ │         │    └── filters (true)
+ │         └── f-k-checks
+ │              └── f-k-checks-item: child1(b,c) -> parent(x,y)
+ │                   └── anti-join (lookup parent)
+ │                        ├── columns: b:26!null c:27!null
+ │                        ├── key columns: [26 27] = [28 29]
+ │                        ├── lookup columns are key
+ │                        ├── fd: ()-->(26,27)
+ │                        ├── with-scan &2
+ │                        │    ├── columns: b:26!null c:27!null
+ │                        │    ├── mapping:
+ │                        │    │    ├──  b_new:23 => b:26
+ │                        │    │    └──  c_new:25 => c:27
+ │                        │    └── fd: ()-->(26,27)
+ │                        └── filters (true)
+ └── cascade
+      └── update child2
+           ├── columns: <none>
+           ├── fetch columns: child2.a:38 child2.b:39 child2.c:40
+           ├── update-mapping:
+           │    ├── b_new:44 => child2.b:34
+           │    └── c_new:46 => child2.c:35
+           ├── input binding: &3
+           ├── cardinality: [0 - 0]
+           ├── volatile, mutations
+           ├── inner-join (lookup child2@child2_c_b_idx)
+           │    ├── columns: child2.a:38!null child2.b:39!null child2.c:40!null b_old:43!null b_new:44!null c_old:45!null c_new:46!null
+           │    ├── key columns: [45 43] = [40 39]
+           │    ├── key: (38)
+           │    ├── fd: ()-->(40,44-46), (38)-->(39), (39)==(43), (43)==(39), (40)==(45), (45)==(40)
+           │    ├── select
+           │    │    ├── columns: b_old:43!null b_new:44!null c_old:45!null c_new:46!null
+           │    │    ├── key: (43)
+           │    │    ├── fd: ()-->(44-46)
+           │    │    ├── with-scan &1
+           │    │    │    ├── columns: b_old:43!null b_new:44!null c_old:45!null c_new:46!null
+           │    │    │    ├── mapping:
+           │    │    │    │    ├──  x:6 => b_old:43
+           │    │    │    │    ├──  y:7 => c_old:45
+           │    │    │    │    ├──  x_new:11 => b_new:44
+           │    │    │    │    └──  y:7 => c_new:46
+           │    │    │    ├── key: (43)
+           │    │    │    └── fd: ()-->(44-46)
+           │    │    └── filters
+           │    │         └── (b_old:43 IS DISTINCT FROM b_new:44) OR (c_old:45 IS DISTINCT FROM c_new:46) [outer=(43-46)]
+           │    └── filters (true)
+           └── f-k-checks
+                └── f-k-checks-item: child2(b,c) -> parent(x,y)
+                     └── anti-join (lookup parent)
+                          ├── columns: b:47!null c:48!null
+                          ├── key columns: [47 48] = [49 50]
+                          ├── lookup columns are key
+                          ├── fd: ()-->(47,48)
+                          ├── with-scan &3
+                          │    ├── columns: b:47!null c:48!null
+                          │    ├── mapping:
+                          │    │    ├──  b_new:44 => b:47
+                          │    │    └──  c_new:46 => c:48
+                          │    └── fd: ()-->(47,48)
+                          └── filters (true)
+
+opt-post-queries
+UPDATE PARENT SET y = 10 WHERE y = 1
+----
+root
+ ├── update parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: x:6 y:7 v:8
+ │    ├── update-mapping:
+ │    │    └── y_new:11 => y:2
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    ├── child1_b_c_fkey
+ │    │    └── child2_b_c_fkey
+ │    ├── cardinality: [0 - 0]
+ │    ├── volatile, mutations
+ │    └── project
+ │         ├── columns: y_new:11!null x:6!null y:7!null v:8
+ │         ├── key: (6)
+ │         ├── fd: ()-->(7,11), (6)-->(8)
+ │         ├── select
+ │         │    ├── columns: x:6!null y:7!null v:8
+ │         │    ├── key: (6)
+ │         │    ├── fd: ()-->(7), (6)-->(8)
+ │         │    ├── scan parent
+ │         │    │    ├── columns: x:6!null y:7!null v:8
+ │         │    │    ├── flags: avoid-full-scan
+ │         │    │    ├── key: (6,7)
+ │         │    │    └── fd: (6,7)-->(8)
+ │         │    └── filters
+ │         │         └── y:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+ │         └── projections
+ │              └── 10 [as=y_new:11]
+ ├── cascade
+ │    └── update child1
+ │         ├── columns: <none>
+ │         ├── fetch columns: a:17 child1.b:18 child1.c:19
+ │         ├── update-mapping:
+ │         │    ├── b_new:23 => child1.b:13
+ │         │    └── c_new:25 => child1.c:14
+ │         ├── input binding: &2
+ │         ├── cardinality: [0 - 0]
+ │         ├── volatile, mutations
+ │         ├── inner-join (lookup child1@child1_b_c_idx)
+ │         │    ├── columns: a:17!null child1.b:18!null child1.c:19!null b_old:22!null b_new:23!null c_old:24!null c_new:25!null
+ │         │    ├── key columns: [22 24] = [18 19]
+ │         │    ├── key: (17,23)
+ │         │    ├── fd: ()-->(19,24,25), (17)-->(18), (18)==(22), (22)==(18), (19)==(24), (24)==(19)
+ │         │    ├── select
+ │         │    │    ├── columns: b_old:22!null b_new:23!null c_old:24!null c_new:25!null
+ │         │    │    ├── key: (22,23)
+ │         │    │    ├── fd: ()-->(24,25)
+ │         │    │    ├── with-scan &1
+ │         │    │    │    ├── columns: b_old:22!null b_new:23!null c_old:24!null c_new:25!null
+ │         │    │    │    ├── mapping:
+ │         │    │    │    │    ├──  x:6 => b_old:22
+ │         │    │    │    │    ├──  y:7 => c_old:24
+ │         │    │    │    │    ├──  x:6 => b_new:23
+ │         │    │    │    │    └──  y_new:11 => c_new:25
+ │         │    │    │    ├── key: (22,23)
+ │         │    │    │    └── fd: ()-->(24,25)
+ │         │    │    └── filters
+ │         │    │         └── (b_old:22 IS DISTINCT FROM b_new:23) OR (c_old:24 IS DISTINCT FROM c_new:25) [outer=(22-25)]
+ │         │    └── filters (true)
+ │         └── f-k-checks
+ │              └── f-k-checks-item: child1(b,c) -> parent(x,y)
+ │                   └── anti-join (lookup parent)
+ │                        ├── columns: b:26!null c:27!null
+ │                        ├── key columns: [26 27] = [28 29]
+ │                        ├── lookup columns are key
+ │                        ├── fd: ()-->(27)
+ │                        ├── with-scan &2
+ │                        │    ├── columns: b:26!null c:27!null
+ │                        │    ├── mapping:
+ │                        │    │    ├──  b_new:23 => b:26
+ │                        │    │    └──  c_new:25 => c:27
+ │                        │    └── fd: ()-->(27)
+ │                        └── filters (true)
+ └── cascade
+      └── update child2
+           ├── columns: <none>
+           ├── fetch columns: child2.a:38 child2.b:39 child2.c:40
+           ├── update-mapping:
+           │    ├── b_new:44 => child2.b:34
+           │    └── c_new:46 => child2.c:35
+           ├── input binding: &3
+           ├── cardinality: [0 - 0]
+           ├── volatile, mutations
+           ├── inner-join (lookup child2@child2_c_b_idx)
+           │    ├── columns: child2.a:38!null child2.b:39!null child2.c:40!null b_old:43!null b_new:44!null c_old:45!null c_new:46!null
+           │    ├── key columns: [45 43] = [40 39]
+           │    ├── key: (38,44)
+           │    ├── fd: ()-->(40,45,46), (38)-->(39), (39)==(43), (43)==(39), (40)==(45), (45)==(40)
+           │    ├── select
+           │    │    ├── columns: b_old:43!null b_new:44!null c_old:45!null c_new:46!null
+           │    │    ├── key: (43,44)
+           │    │    ├── fd: ()-->(45,46)
+           │    │    ├── with-scan &1
+           │    │    │    ├── columns: b_old:43!null b_new:44!null c_old:45!null c_new:46!null
+           │    │    │    ├── mapping:
+           │    │    │    │    ├──  x:6 => b_old:43
+           │    │    │    │    ├──  y:7 => c_old:45
+           │    │    │    │    ├──  x:6 => b_new:44
+           │    │    │    │    └──  y_new:11 => c_new:46
+           │    │    │    ├── key: (43,44)
+           │    │    │    └── fd: ()-->(45,46)
+           │    │    └── filters
+           │    │         └── (b_old:43 IS DISTINCT FROM b_new:44) OR (c_old:45 IS DISTINCT FROM c_new:46) [outer=(43-46)]
+           │    └── filters (true)
+           └── f-k-checks
+                └── f-k-checks-item: child2(b,c) -> parent(x,y)
+                     └── anti-join (lookup parent)
+                          ├── columns: b:47!null c:48!null
+                          ├── key columns: [47 48] = [49 50]
+                          ├── lookup columns are key
+                          ├── fd: ()-->(48)
+                          ├── with-scan &3
+                          │    ├── columns: b:47!null c:48!null
+                          │    ├── mapping:
+                          │    │    ├──  b_new:44 => b:47
+                          │    │    └──  c_new:46 => c:48
+                          │    └── fd: ()-->(48)
+                          └── filters (true)
+
+# TODO(146705): the plan for the child2 cascade is sub-optimal.
+opt-post-queries
+DELETE FROM parent WHERE x = 1
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: x:6 y:7
+ │    ├── cascades
+ │    │    ├── child1_b_c_fkey
+ │    │    └── child2_b_c_fkey
+ │    ├── cardinality: [0 - 0]
+ │    ├── volatile, mutations
+ │    └── scan parent
+ │         ├── columns: x:6!null y:7!null
+ │         ├── constraint: /6/7: [/1 - /1]
+ │         ├── flags: avoid-full-scan
+ │         ├── key: (7)
+ │         └── fd: ()-->(6)
+ ├── cascade
+ │    └── delete child1
+ │         ├── columns: <none>
+ │         ├── fetch columns: a:16 b:17 c:18
+ │         ├── cardinality: [0 - 0]
+ │         ├── volatile, mutations
+ │         └── scan child1@child1_b_c_idx
+ │              ├── columns: a:16!null b:17!null c:18!null
+ │              ├── constraint: /17/18/16: (/1/NULL - /1]
+ │              ├── flags: avoid-full-scan
+ │              ├── key: (16)
+ │              └── fd: ()-->(17), (16)-->(18)
+ └── cascade
+      └── delete child2
+           ├── columns: <none>
+           ├── fetch columns: child2.a:26 child2.b:27 child2.c:28
+           ├── cardinality: [0 - 0]
+           ├── volatile, mutations
+           └── select
+                ├── columns: child2.a:26!null child2.b:27!null child2.c:28!null
+                ├── key: (26)
+                ├── fd: ()-->(27), (26)-->(28)
+                ├── scan child2@child2_c_b_idx
+                │    ├── columns: child2.a:26!null child2.b:27 child2.c:28!null
+                │    ├── constraint: /28/27/26: (/NULL - ]
+                │    ├── flags: avoid-full-scan
+                │    ├── key: (26)
+                │    └── fd: (26)-->(27,28)
+                └── filters
+                     └── child2.b:27 = 1 [outer=(27), constraints=(/27: [/1 - /1]; tight), fd=()-->(27)]
+
+# TODO(146705): the plan for the child1 cascade is sub-optimal.
+opt-post-queries
+DELETE FROM parent WHERE y = 1
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: x:6 y:7
+ │    ├── cascades
+ │    │    ├── child1_b_c_fkey
+ │    │    └── child2_b_c_fkey
+ │    ├── cardinality: [0 - 0]
+ │    ├── volatile, mutations
+ │    └── select
+ │         ├── columns: x:6!null y:7!null
+ │         ├── key: (6)
+ │         ├── fd: ()-->(7)
+ │         ├── scan parent
+ │         │    ├── columns: x:6!null y:7!null
+ │         │    ├── flags: avoid-full-scan
+ │         │    └── key: (6,7)
+ │         └── filters
+ │              └── y:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+ ├── cascade
+ │    └── delete child1
+ │         ├── columns: <none>
+ │         ├── fetch columns: a:16 b:17 c:18
+ │         ├── cardinality: [0 - 0]
+ │         ├── volatile, mutations
+ │         └── select
+ │              ├── columns: a:16!null b:17!null c:18!null
+ │              ├── key: (16)
+ │              ├── fd: ()-->(18), (16)-->(17)
+ │              ├── scan child1@child1_b_c_idx
+ │              │    ├── columns: a:16!null b:17!null c:18
+ │              │    ├── constraint: /17/18/16: (/NULL - ]
+ │              │    ├── flags: avoid-full-scan
+ │              │    ├── key: (16)
+ │              │    └── fd: (16)-->(17,18)
+ │              └── filters
+ │                   └── c:18 = 1 [outer=(18), constraints=(/18: [/1 - /1]; tight), fd=()-->(18)]
+ └── cascade
+      └── delete child2
+           ├── columns: <none>
+           ├── fetch columns: child2.a:26 child2.b:27 child2.c:28
+           ├── cardinality: [0 - 0]
+           ├── volatile, mutations
+           └── scan child2@child2_c_b_idx
+                ├── columns: child2.a:26!null child2.b:27!null child2.c:28!null
+                ├── constraint: /28/27/26: (/1/NULL - /1]
+                ├── flags: avoid-full-scan
+                ├── key: (26)
+                └── fd: ()-->(28), (26)-->(27)
+
+opt-post-queries
+DELETE FROM parent WHERE v = 1
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: x:6 y:7
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    ├── child1_b_c_fkey
+ │    │    └── child2_b_c_fkey
+ │    ├── cardinality: [0 - 0]
+ │    ├── volatile, mutations
+ │    └── select
+ │         ├── columns: x:6!null y:7!null v:8!null
+ │         ├── key: (6,7)
+ │         ├── fd: ()-->(8)
+ │         ├── scan parent
+ │         │    ├── columns: x:6!null y:7!null v:8
+ │         │    ├── flags: avoid-full-scan
+ │         │    ├── key: (6,7)
+ │         │    └── fd: (6,7)-->(8)
+ │         └── filters
+ │              └── v:8 = 1 [outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
+ ├── cascade
+ │    └── delete child1
+ │         ├── columns: <none>
+ │         ├── fetch columns: a:16 b:17 c:18
+ │         ├── cardinality: [0 - 0]
+ │         ├── volatile, mutations
+ │         └── project
+ │              ├── columns: a:16!null b:17 c:18
+ │              ├── key: (16)
+ │              ├── fd: (16)-->(17,18)
+ │              └── inner-join (lookup child1@child1_b_c_idx)
+ │                   ├── columns: a:16!null b:17!null c:18!null x:21!null y:22!null
+ │                   ├── key columns: [21 22] = [17 18]
+ │                   ├── key: (16)
+ │                   ├── fd: (16)-->(17,18), (17)==(21), (21)==(17), (18)==(22), (22)==(18)
+ │                   ├── with-scan &1
+ │                   │    ├── columns: x:21!null y:22!null
+ │                   │    ├── mapping:
+ │                   │    │    ├──  parent.x:6 => x:21
+ │                   │    │    └──  parent.y:7 => y:22
+ │                   │    └── key: (21,22)
+ │                   └── filters (true)
+ └── cascade
+      └── delete child2
+           ├── columns: <none>
+           ├── fetch columns: child2.a:28 child2.b:29 child2.c:30
+           ├── cardinality: [0 - 0]
+           ├── volatile, mutations
+           └── project
+                ├── columns: child2.a:28!null child2.b:29 child2.c:30
+                ├── key: (28)
+                ├── fd: (28)-->(29,30)
+                └── inner-join (lookup child2@child2_c_b_idx)
+                     ├── columns: child2.a:28!null child2.b:29!null child2.c:30!null x:33!null y:34!null
+                     ├── key columns: [34 33] = [30 29]
+                     ├── key: (28)
+                     ├── fd: (28)-->(29,30), (29)==(33), (33)==(29), (30)==(34), (34)==(30)
+                     ├── with-scan &1
+                     │    ├── columns: x:33!null y:34!null
+                     │    ├── mapping:
+                     │    │    ├──  parent.x:6 => x:33
+                     │    │    └──  parent.y:7 => y:34
+                     │    └── key: (33,34)
+                     └── filters (true)
+
+exec-ddl
+DROP TABLE child1
+----
+
+exec-ddl
+DROP TABLE child2
+----
+
+exec-ddl
+DROP TABLE parent
+----
+
+# --------------------------------------------------
+# Test rules applied to a multi-region FK cascade.
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE parent (k INT PRIMARY KEY, v INT) LOCALITY REGIONAL BY ROW
+----
+
+exec-ddl
+CREATE TABLE child (
+  a INT PRIMARY KEY,
+  b INT NOT NULL,
+  FOREIGN KEY (crdb_region, b) REFERENCES parent(crdb_region, k) ON UPDATE CASCADE ON DELETE CASCADE,
+  INDEX (b)
+) LOCALITY REGIONAL BY ROW
+----
+
+opt-post-queries locality=(region=east)
+UPDATE PARENT SET k = 10 WHERE k = 1
+----
+root
+ ├── update parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: parent.k:6 parent.v:7 parent.crdb_region:8
+ │    ├── update-mapping:
+ │    │    └── k_new:11 => parent.k:1
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_crdb_region_b_fkey
+ │    ├── cardinality: [0 - 0]
+ │    ├── volatile, mutations
+ │    ├── project
+ │    │    ├── columns: k_new:11!null parent.k:6!null parent.v:7 parent.crdb_region:8!null
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(6-8,11)
+ │    │    ├── locality-optimized-search
+ │    │    │    ├── columns: parent.k:6!null parent.v:7 parent.crdb_region:8!null
+ │    │    │    ├── left columns: parent.k:21 parent.v:22 parent.crdb_region:23
+ │    │    │    ├── right columns: parent.k:26 parent.v:27 parent.crdb_region:28
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(6-8)
+ │    │    │    ├── scan parent
+ │    │    │    │    ├── columns: parent.k:21!null parent.v:22 parent.crdb_region:23!null
+ │    │    │    │    ├── constraint: /23/21: [/'east'/1 - /'east'/1]
+ │    │    │    │    ├── flags: avoid-full-scan
+ │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    ├── key: ()
+ │    │    │    │    └── fd: ()-->(21-23)
+ │    │    │    └── scan parent
+ │    │    │         ├── columns: parent.k:26!null parent.v:27 parent.crdb_region:28!null
+ │    │    │         ├── constraint: /28/26
+ │    │    │         │    ├── [/'central'/1 - /'central'/1]
+ │    │    │         │    └── [/'west'/1 - /'west'/1]
+ │    │    │         ├── flags: avoid-full-scan
+ │    │    │         ├── cardinality: [0 - 1]
+ │    │    │         ├── key: ()
+ │    │    │         └── fd: ()-->(26-28)
+ │    │    └── projections
+ │    │         └── 10 [as=k_new:11]
+ │    └── unique-checks
+ │         └── unique-checks-item: parent(k)
+ │              └── project
+ │                   ├── columns: k:18!null
+ │                   ├── cardinality: [0 - 1]
+ │                   ├── key: ()
+ │                   ├── fd: ()-->(18)
+ │                   └── semi-join (lookup parent)
+ │                        ├── columns: k:18!null crdb_region:20!null
+ │                        ├── lookup expression
+ │                        │    └── filters
+ │                        │         ├── parent.crdb_region:15 IN ('central', 'east', 'west') [outer=(15), constraints=(/15: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
+ │                        │         └── k:18 = parent.k:13 [outer=(13,18), constraints=(/13: (/NULL - ]; /18: (/NULL - ]), fd=(13)==(18), (18)==(13)]
+ │                        ├── cardinality: [0 - 1]
+ │                        ├── key: ()
+ │                        ├── fd: ()-->(18,20)
+ │                        ├── with-scan &1
+ │                        │    ├── columns: k:18!null crdb_region:20!null
+ │                        │    ├── mapping:
+ │                        │    │    ├──  k_new:11 => k:18
+ │                        │    │    └──  parent.crdb_region:8 => crdb_region:20
+ │                        │    ├── cardinality: [0 - 1]
+ │                        │    ├── key: ()
+ │                        │    └── fd: ()-->(18,20)
+ │                        └── filters
+ │                             └── crdb_region:20 != parent.crdb_region:15 [outer=(15,20), constraints=(/15: (/NULL - ]; /20: (/NULL - ])]
+ └── cascade
+      └── update child
+           ├── columns: <none>
+           ├── fetch columns: a:26 child.b:27 child.crdb_region:28
+           ├── update-mapping:
+           │    ├── b_new:34 => child.b:22
+           │    └── crdb_region_new:32 => child.crdb_region:23
+           ├── check columns: check1:35
+           ├── input binding: &2
+           ├── cardinality: [0 - 0]
+           ├── volatile, mutations
+           ├── project
+           │    ├── columns: check1:35!null a:26!null child.b:27!null child.crdb_region:28!null crdb_region_new:32!null b_new:34!null
+           │    ├── key: (26)
+           │    ├── fd: ()-->(27,28,32,34,35)
+           │    ├── inner-join (lookup child@child_crdb_region_b_idx)
+           │    │    ├── columns: a:26!null child.b:27!null child.crdb_region:28!null crdb_region_old:31!null crdb_region_new:32!null b_old:33!null b_new:34!null
+           │    │    ├── key columns: [31 33] = [28 27]
+           │    │    ├── key: (26)
+           │    │    ├── fd: ()-->(27,28,31-34), (28)==(31), (31)==(28), (27)==(33), (33)==(27)
+           │    │    ├── select
+           │    │    │    ├── columns: crdb_region_old:31!null crdb_region_new:32!null b_old:33!null b_new:34!null
+           │    │    │    ├── cardinality: [0 - 1]
+           │    │    │    ├── key: ()
+           │    │    │    ├── fd: ()-->(31-34)
+           │    │    │    ├── with-scan &1
+           │    │    │    │    ├── columns: crdb_region_old:31!null crdb_region_new:32!null b_old:33!null b_new:34!null
+           │    │    │    │    ├── mapping:
+           │    │    │    │    │    ├──  parent.crdb_region:8 => crdb_region_old:31
+           │    │    │    │    │    ├──  parent.k:6 => b_old:33
+           │    │    │    │    │    ├──  parent.crdb_region:8 => crdb_region_new:32
+           │    │    │    │    │    └──  k_new:11 => b_new:34
+           │    │    │    │    ├── cardinality: [0 - 1]
+           │    │    │    │    ├── key: ()
+           │    │    │    │    └── fd: ()-->(31-34)
+           │    │    │    └── filters
+           │    │    │         └── (crdb_region_old:31 IS DISTINCT FROM crdb_region_new:32) OR (b_old:33 IS DISTINCT FROM b_new:34) [outer=(31-34)]
+           │    │    └── filters (true)
+           │    └── projections
+           │         └── crdb_region_new:32 IN ('central', 'east', 'west') [as=check1:35, outer=(32)]
+           └── f-k-checks
+                └── f-k-checks-item: child(crdb_region,b) -> parent(crdb_region,k)
+                     └── anti-join (lookup parent)
+                          ├── columns: crdb_region:36!null b:37!null
+                          ├── key columns: [36 37] = [40 38]
+                          ├── lookup columns are key
+                          ├── fd: ()-->(36,37)
+                          ├── with-scan &2
+                          │    ├── columns: crdb_region:36!null b:37!null
+                          │    ├── mapping:
+                          │    │    ├──  crdb_region_new:32 => crdb_region:36
+                          │    │    └──  b_new:34 => b:37
+                          │    └── fd: ()-->(36,37)
+                          └── filters (true)
+
+# TODO(146705) the delete cascade fast-path prevents the cascade from being
+# limited to the parent row's region.
+opt-post-queries locality=(region=east)
+DELETE FROM parent WHERE k = 1
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: k:6 crdb_region:8
+ │    ├── cascades
+ │    │    └── child_crdb_region_b_fkey
+ │    ├── cardinality: [0 - 0]
+ │    ├── volatile, mutations
+ │    └── locality-optimized-search
+ │         ├── columns: k:6!null crdb_region:8!null
+ │         ├── left columns: k:11 crdb_region:13
+ │         ├── right columns: k:16 crdb_region:18
+ │         ├── cardinality: [0 - 1]
+ │         ├── key: ()
+ │         ├── fd: ()-->(6,8)
+ │         ├── scan parent
+ │         │    ├── columns: k:11!null crdb_region:13!null
+ │         │    ├── constraint: /13/11: [/'east'/1 - /'east'/1]
+ │         │    ├── flags: avoid-full-scan
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── key: ()
+ │         │    └── fd: ()-->(11,13)
+ │         └── scan parent
+ │              ├── columns: k:16!null crdb_region:18!null
+ │              ├── constraint: /18/16
+ │              │    ├── [/'central'/1 - /'central'/1]
+ │              │    └── [/'west'/1 - /'west'/1]
+ │              ├── flags: avoid-full-scan
+ │              ├── cardinality: [0 - 1]
+ │              ├── key: ()
+ │              └── fd: ()-->(16,18)
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: a:16 b:17 child.crdb_region:18
+           ├── cardinality: [0 - 0]
+           ├── volatile, mutations
+           └── scan child@child_crdb_region_b_idx
+                ├── columns: a:16!null b:17!null child.crdb_region:18!null
+                ├── constraint: /18/17/16
+                │    ├── [/'central'/1 - /'central'/1]
+                │    ├── [/'east'/1 - /'east'/1]
+                │    └── [/'west'/1 - /'west'/1]
+                ├── flags: avoid-full-scan
+                ├── key: (16)
+                └── fd: ()-->(17), (16)-->(18)
+
+opt-post-queries locality=(region=east)
+DELETE FROM parent WHERE v = 1
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: k:6 crdb_region:8
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_crdb_region_b_fkey
+ │    ├── cardinality: [0 - 0]
+ │    ├── volatile, mutations
+ │    └── select
+ │         ├── columns: k:6!null v:7!null crdb_region:8!null
+ │         ├── key: (6)
+ │         ├── fd: ()-->(7), (6)-->(8)
+ │         ├── scan parent
+ │         │    ├── columns: k:6!null v:7 crdb_region:8!null
+ │         │    ├── check constraint expressions
+ │         │    │    └── crdb_region:8 IN ('central', 'east', 'west') [outer=(8), constraints=(/8: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
+ │         │    ├── flags: avoid-full-scan
+ │         │    ├── key: (6)
+ │         │    └── fd: (6)-->(7,8)
+ │         └── filters
+ │              └── v:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: a:16 b:17 child.crdb_region:18
+           ├── cardinality: [0 - 0]
+           ├── volatile, mutations
+           └── project
+                ├── columns: a:16!null b:17!null child.crdb_region:18!null
+                ├── key: (16)
+                ├── fd: (16)-->(17,18)
+                └── inner-join (lookup child@child_crdb_region_b_idx)
+                     ├── columns: a:16!null b:17!null child.crdb_region:18!null crdb_region:21!null k:22!null
+                     ├── key columns: [21 22] = [18 17]
+                     ├── key: (16)
+                     ├── fd: (16)-->(17,18), (22)-->(21), (18)==(21), (21)==(18), (17)==(22), (22)==(17)
+                     ├── with-scan &1
+                     │    ├── columns: crdb_region:21!null k:22!null
+                     │    ├── mapping:
+                     │    │    ├──  parent.crdb_region:8 => crdb_region:21
+                     │    │    └──  parent.k:6 => k:22
+                     │    ├── key: (22)
+                     │    └── fd: (22)-->(21)
+                     └── filters (true)
+
+exec-ddl
+DROP TABLE child
+----
+
+exec-ddl
+DROP TABLE parent
+----
