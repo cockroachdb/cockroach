@@ -168,5 +168,6 @@ func RegisterTests(r registry.Registry) {
 	registerMultiRegionSystemDatabase(r)
 	registerSqlStatsMixedVersion(r)
 	registerDbConsole(r)
+	registerTTLRestart(r)
 	perturbation.RegisterTests(r)
 }
