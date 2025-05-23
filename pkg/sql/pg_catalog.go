@@ -3302,14 +3302,124 @@ https://www.postgresql.org/docs/9.5/catalog-pg-tablespace.html`,
 }
 
 var pgCatalogTriggerTable = virtualSchemaTable{
-	comment: `triggers (empty - feature does not exist)
-https://www.postgresql.org/docs/9.5/catalog-pg-trigger.html`,
+	comment: `trigger definitions
+https://www.postgresql.org/docs/16/catalog-pg-trigger.html`,
 	schema: vtable.PGCatalogTrigger,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		// Triggers are unsupported.
-		return nil
+		h := makeOidHasher()
+		opts := forEachTableDescOptions{virtualOpts: hideVirtual} /* virtual schemas have no triggers */
+		return forEachTableDesc(ctx, p, dbContext, opts,
+			func(ctx context.Context, descCtx tableDescContext) error {
+				tableOid := tableOid(descCtx.table.GetID())
+
+				triggers := descCtx.table.GetTriggers()
+				for i := range triggers {
+					trigger := &triggers[i]
+					triggerOid := h.TriggerOid(descCtx.table.GetID(), trigger.ID)
+
+					// Calculate tgtype bitmap. The bits are defined in Postgres source:
+					// https://github.com/postgres/postgres/blob/44ce4e1593b1821005b29ffaa19d9cbdd80747b2/src/include/catalog/pg_trigger.h#L92-L99
+					// Bit 0: FOR EACH ROW (set) or FOR EACH STATEMENT (unset)
+					// Bit 1: BEFORE (set) or AFTER (unset)
+					// Bits 2-4: One bit for each event type (INSERT=4, DELETE=8, UPDATE=16)
+					// Bit 5: TRUNCATE (64)
+					// Bit 6: INSTEAD OF (128)
+					const tgtypeRow = 1
+					const tgtypeBefore = 1 << 1
+					const tgtypeInsert = 1 << 2
+					const tgtypeDelete = 1 << 3
+					const tgtypeUpdate = 1 << 4
+					const tgtypeTruncate = 1 << 5
+					const tgtypeInstead = 1 << 6
+
+					tgtype := int16(0)
+
+					// Timing bits.
+					switch trigger.ActionTime {
+					case semenumpb.TriggerActionTime_BEFORE:
+						tgtype |= tgtypeBefore
+					case semenumpb.TriggerActionTime_INSTEAD_OF:
+						tgtype |= tgtypeInstead
+					}
+
+					// Row/Statement bit.
+					if trigger.ForEachRow {
+						tgtype |= tgtypeRow
+					}
+
+					// Event type bits.
+					for _, event := range trigger.Events {
+						switch event.Type {
+						case semenumpb.TriggerEventType_INSERT:
+							tgtype |= tgtypeInsert
+						case semenumpb.TriggerEventType_DELETE:
+							tgtype |= tgtypeDelete
+						case semenumpb.TriggerEventType_UPDATE:
+							tgtype |= tgtypeUpdate
+						case semenumpb.TriggerEventType_TRUNCATE:
+							tgtype |= tgtypeTruncate
+						}
+					}
+
+					// tgenabled: O = origin and local, D = disabled, R = replica, A = always
+					tgenabled := tree.NewDString("A")
+					if !trigger.Enabled {
+						tgenabled = tree.NewDString("D")
+					}
+
+					// tgargs: Function arguments as a bytea array.
+					// Format: arg1\000arg2\000...argN\000
+					var tgargs []byte
+					for _, arg := range trigger.FuncArgs {
+						tgargs = append(tgargs, []byte(arg)...)
+						tgargs = append(tgargs, 0) // null terminator
+					}
+
+					// tgattr: Column numbers for UPDATE OF - not implemented.
+					// TODO(#135656): Implement UPDATE OF column list for triggers.
+					tgattr := tree.NewDIntVectorFromDArray(tree.NewDArray(types.Int2))
+					// tgoldtable/tgnewtable: Transition table names.
+					var oldTableName, newTableName tree.Datum = tree.DNull, tree.DNull
+					if trigger.OldTransitionAlias != "" {
+						oldTableName = tree.NewDName(trigger.OldTransitionAlias)
+					}
+					if trigger.NewTransitionAlias != "" {
+						newTableName = tree.NewDName(trigger.NewTransitionAlias)
+					}
+
+					// tgqual: WHEN condition expression (internal format).
+					var tgqual tree.Datum = tree.DNull
+					if trigger.WhenExpr != "" {
+						tgqual = tree.NewDString(trigger.WhenExpr)
+					}
+
+					if err := addRow(
+						triggerOid,                  // oid
+						tableOid,                    // tgrelid
+						oidZero,                     // tgparentid (partitioning not supported)
+						tree.NewDName(trigger.Name), // tgname
+						tree.NewDOid(catid.FuncIDToOID(trigger.FuncID)), // tgfoid
+						tree.NewDInt(tree.DInt(tgtype)),                 // tgtype
+						tgenabled,                                       // tgenabled
+						tree.DBoolFalse,                                 // tgisinternal
+						oidZero,                                         // tgconstrrelid (foreign key table)
+						oidZero,                                         // tgconstrindid (constraint index)
+						oidZero,                                         // tgconstraint (constraint oid)
+						tree.DBoolFalse,                                 // tgdeferrable
+						tree.DBoolFalse,                                 // tginitdeferred
+						tree.NewDInt(tree.DInt(len(trigger.FuncArgs))), // tgnargs
+						tgattr,                              // tgattr
+						tree.NewDBytes(tree.DBytes(tgargs)), // tgargs
+						tgqual,                              // tgqual
+						oldTableName,                        // tgoldtable
+						newTableName,                        // tgnewtable
+					); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
 	},
-	unimplemented: true,
 }
 
 var (
@@ -5227,6 +5337,7 @@ const (
 	rewriteTypeTag
 	dbSchemaRoleTypeTag
 	castTypeTag
+	triggerTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -5423,6 +5534,13 @@ func (h oidHasher) CastOid(srcID oid.Oid, tgtID oid.Oid) *tree.DOid {
 	h.writeTypeTag(castTypeTag)
 	h.writeUInt32(uint32(srcID))
 	h.writeUInt32(uint32(tgtID))
+	return h.getOid()
+}
+
+func (h oidHasher) TriggerOid(tableID descpb.ID, triggerID descpb.TriggerID) *tree.DOid {
+	h.writeTypeTag(triggerTypeTag)
+	h.writeTable(tableID)
+	h.writeUInt32(uint32(triggerID))
 	return h.getOid()
 }
 
