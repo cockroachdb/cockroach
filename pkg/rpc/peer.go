@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
-	"storj.io/drpc/drpcpool"
+	"storj.io/drpc"
 )
 
 type peerStatus int
@@ -125,7 +125,7 @@ type peer[Conn rpcConn] struct {
 	heartbeatInterval    time.Duration
 	heartbeatTimeout     time.Duration
 	dial                 func(ctx context.Context, target string, class ConnectionClass) (Conn, error)
-	dialDRPC             func(ctx context.Context, target string) (drpcpool.Conn, error)
+	dialDRPC             func(ctx context.Context, target string, class ConnectionClass) (drpc.Conn, error)
 	newHeartbeatClient   heartbeatClientConstructor[Conn]
 	newBatchStreamClient streamConstructor[*kvpb.BatchRequest, *kvpb.BatchResponse, Conn]
 	newCloseNotifier     closeNotifierConstructor[Conn]
@@ -396,7 +396,7 @@ func (p *peer[Conn]) runOnce(ctx context.Context, report func(error)) error {
 	defer func() {
 		_ = cc.Close() // nolint:grpcconnclose
 	}()
-	dc, err := p.dialDRPC(ctx, p.k.TargetAddr)
+	dc, err := p.dialDRPC(ctx, p.k.TargetAddr, p.k.Class)
 	if err != nil {
 		return err
 	}
@@ -590,7 +590,7 @@ func logOnHealthy(ctx context.Context, disconnected, now time.Time) {
 }
 
 func (p *peer[Conn]) onInitialHeartbeatSucceeded(
-	ctx context.Context, now time.Time, cc Conn, dc drpcpool.Conn, report func(err error),
+	ctx context.Context, now time.Time, cc Conn, dc drpc.Conn, report func(err error),
 ) {
 	// First heartbeat succeeded. By convention we update the breaker
 	// before updating the peer. The other way is fine too, just the
