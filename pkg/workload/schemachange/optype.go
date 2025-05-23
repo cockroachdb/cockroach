@@ -127,6 +127,7 @@ const (
 	createTableAs       // CREATE TABLE <table> AS <def>
 	createView          // CREATE VIEW <view> AS <def>
 	createFunction      // CREATE FUNCTION <function> ...
+	createTrigger       // CREATE TRIGGER <trigger> {...} ON <table> EXECUTE FUNCTION <function>()
 
 	// COMMENT ON ...
 
@@ -141,6 +142,7 @@ const (
 	dropSequence // DROP SEQUENCE <sequence>
 	dropTable    // DROP TABLE <table>
 	dropView     // DROP VIEW <view>
+	//dropTrigger  // DROP TRIGGER <trigger> ON <table>
 
 	// Unimplemented operations. TODO(sql-foundations): Audit and/or implement these operations.
 	// alterDatabaseOwner
@@ -246,6 +248,7 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	createSequence:                    (*operationGenerator).createSequence,
 	createTable:                       (*operationGenerator).createTable,
 	createTableAs:                     (*operationGenerator).createTableAs,
+	createTrigger:                     (*operationGenerator).createTrigger,
 	createTypeEnum:                    (*operationGenerator).createEnum,
 	createTypeComposite:               (*operationGenerator).createCompositeType,
 	createView:                        (*operationGenerator).createView,
@@ -255,11 +258,12 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	dropSchema:                        (*operationGenerator).dropSchema,
 	dropSequence:                      (*operationGenerator).dropSequence,
 	dropTable:                         (*operationGenerator).dropTable,
-	dropView:                          (*operationGenerator).dropView,
-	renameIndex:                       (*operationGenerator).renameIndex,
-	renameSequence:                    (*operationGenerator).renameSequence,
-	renameTable:                       (*operationGenerator).renameTable,
-	renameView:                        (*operationGenerator).renameView,
+	//dropTrigger:                       (*operationGenerator).dropTrigger,
+	dropView:       (*operationGenerator).dropView,
+	renameIndex:    (*operationGenerator).renameIndex,
+	renameSequence: (*operationGenerator).renameSequence,
+	renameTable:    (*operationGenerator).renameTable,
+	renameView:     (*operationGenerator).renameView,
 }
 
 var opWeights = []int{
@@ -301,6 +305,7 @@ var opWeights = []int{
 	createSequence:                    1,
 	createTable:                       10,
 	createTableAs:                     1,
+	createTrigger:                     10,
 	createTypeEnum:                    1,
 	createTypeComposite:               1,
 	createView:                        1,
@@ -310,11 +315,12 @@ var opWeights = []int{
 	dropSchema:                        1,
 	dropSequence:                      1,
 	dropTable:                         1,
-	dropView:                          1,
-	renameIndex:                       1,
-	renameSequence:                    1,
-	renameTable:                       1,
-	renameView:                        1,
+	//dropTrigger:                       10,
+	dropView:       1,
+	renameIndex:    1,
+	renameSequence: 1,
+	renameTable:    1,
+	renameView:     1,
 }
 
 // This workload will maintain its own list of minimal supported versions for
@@ -342,11 +348,13 @@ var opDeclarativeVersion = map[opType]clusterversion.Key{
 	createPolicy:                      clusterversion.V25_2,
 	createSchema:                      clusterversion.MinSupported,
 	createSequence:                    clusterversion.MinSupported,
+	createTrigger:                     clusterversion.MinSupported,
 	dropFunction:                      clusterversion.MinSupported,
 	dropIndex:                         clusterversion.MinSupported,
 	dropPolicy:                        clusterversion.V25_2,
 	dropSchema:                        clusterversion.MinSupported,
 	dropSequence:                      clusterversion.MinSupported,
 	dropTable:                         clusterversion.MinSupported,
-	dropView:                          clusterversion.MinSupported,
+	//dropTrigger:                       clusterversion.MinSupported,
+	dropView: clusterversion.MinSupported,
 }

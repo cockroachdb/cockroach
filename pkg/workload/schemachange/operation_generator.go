@@ -4432,6 +4432,7 @@ FROM
 	})
 	opStmt.potentialExecErrors.addAll(codesWithConditions{
 		{pgcode.InvalidFunctionDefinition, hasFuncRefs},
+		{pgcode.FeatureNotSupported, true},
 	})
 
 	return opStmt, nil
@@ -5337,4 +5338,72 @@ func (og *operationGenerator) randUser(ctx context.Context, tx pgx.Tx) (string, 
 	// This should never happen in a valid CockroachDB instance.
 	// There should always be at least one user.
 	return "", errors.New("no users found in the database")
+}
+
+// createTrigger generates a CREATE TRIGGER statement.
+func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+
+	tableExists, err := og.tableExists(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	// First, ensure the trigger_log table exists
+	_, err = tx.Exec(ctx, `
+CREATE TABLE IF NOT EXISTS trigger_log (
+    changed_at TIMESTAMP DEFAULT current_timestamp
+)`)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create TRIGGER statement components
+	triggerActionTime := "BEFORE"
+	if og.randIntn(2) == 1 {
+		triggerActionTime = "AFTER"
+	}
+
+	eventTypes := []string{"INSERT", "UPDATE", "DELETE"}
+	numEvents := og.randIntn(3) + 1 // 1-3 events
+	events := make([]string, 0, numEvents)
+	eventsSet := make(map[string]bool)
+
+	for i := 0; i < numEvents; i++ {
+		eventIndex := og.randIntn(len(eventTypes))
+		event := eventTypes[eventIndex]
+		if !eventsSet[event] {
+			events = append(events, event)
+			eventsSet[event] = true
+		}
+	}
+
+	// Join events with OR
+	eventClause := strings.Join(events, " OR ")
+
+	triggerName := fmt.Sprintf("trigger_%s", og.newUniqueSeqNumSuffix())
+
+	// Build the SQL statement
+	var sqlStatement strings.Builder
+	sqlStatement.WriteString(fmt.Sprintf("CREATE TRIGGER %s %s %s ON %s FOR EACH ROW EXECUTE FUNCTION log_change_timestamp()",
+		triggerName, triggerActionTime, eventClause, tableName))
+
+	og.LogMessage(fmt.Sprintf("createTrigger: %s", sqlStatement.String()))
+
+	opStmt := makeOpStmt(OpStmtDDL)
+	opStmt.sql = sqlStatement.String()
+
+	opStmt.expectedExecErrors.addAll(codesWithConditions{
+		{code: pgcode.FeatureNotSupported, condition: !og.useDeclarativeSchemaChanger},
+		{code: pgcode.UndefinedTable, condition: !tableExists},
+	})
+
+	opStmt.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.UndefinedFunction, condition: true},
+	})
+
+	return opStmt, nil
 }
