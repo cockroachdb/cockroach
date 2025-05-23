@@ -9683,6 +9683,7 @@ show_transfer_stmt:
 // SHOW CREATE ALL SCHEMAS
 // SHOW CREATE ALL TABLES
 // SHOW CREATE ALL TYPES
+// SHOW CREATE ALL ROUTINES
 // %SeeAlso: WEBDOCS/show-create.html
 show_create_stmt:
   SHOW CREATE table_name opt_show_create_format_options
@@ -9767,6 +9768,10 @@ show_create_stmt:
 | SHOW CREATE ALL TYPES
   {
     $$.val = &tree.ShowCreateAllTypes{}
+  }
+| SHOW CREATE ALL ROUTINES
+  {
+    $$.val = &tree.ShowCreateAllRoutines{}
   }
 | SHOW CREATE error // SHOW HELP: SHOW CREATE
 
