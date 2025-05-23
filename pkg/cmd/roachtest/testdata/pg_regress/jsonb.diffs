@@ -1254,7 +1254,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  (1 row)
  
  SELECT * FROM jsonb_populate_record(NULL::jbpop,'{"a":[100,200,false],"x":43.2}') q;
-@@ -2127,499 +2173,270 @@
+@@ -2127,499 +2173,260 @@
  (1 row)
  
  SELECT * FROM jsonb_populate_record(row('x',3,'2012-12-31 15:30:56')::jbpop,'{"a":[100,200,false],"x":43.2}') q;
@@ -1727,12 +1727,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
 - 776 |  
 -(1 row)
 -
-+ERROR:  at or near "(": syntax error
-+DETAIL:  source SQL:
-+SELECT * FROM
-+  jsonb_populate_record(null::record, '{"x": 776}') AS (x int, y int)
-+                                                       ^
-+HINT:  try \h <SOURCE>
++ERROR:  anonymous records cannot be used with json{b}_populate_record{set}
  -- composite domain
  SELECT jsonb_populate_record(null::jb_ordered_pair, '{"x": 0, "y": 1}');
 - jsonb_populate_record 
@@ -1867,12 +1862,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
 - 776 |  
 -(1 row)
 -
-+ERROR:  at or near "(": syntax error
-+DETAIL:  source SQL:
-+SELECT * FROM
-+  jsonb_populate_recordset(null::record, '[{"x": 776}]') AS (x int, y int)
-+                                                            ^
-+HINT:  try \h <SOURCE>
++ERROR:  anonymous records cannot be used with json{b}_populate_record{set}
  -- empty array is a corner case
  SELECT jsonb_populate_recordset(null::record, '[]');
 -ERROR:  could not determine row type for result of jsonb_populate_recordset
@@ -1884,20 +1874,16 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  SELECT jsonb_populate_recordset(row(1,2), '[]');
   jsonb_populate_recordset 
  --------------------------
-@@ -2632,39 +2449,28 @@
+@@ -2632,39 +2439,26 @@
  
  SELECT * FROM
    jsonb_populate_recordset(null::record, '[]') AS (x int, y int);
 - x | y 
 ----+---
--(0 rows)
--
-+ERROR:  at or near "(": syntax error
-+DETAIL:  source SQL:
-+SELECT * FROM
-+  jsonb_populate_recordset(null::record, '[]') AS (x int, y int)
-+                                                  ^
-+HINT:  try \h <SOURCE>
++ jsonb_populate_recordset 
++--------------------------
+ (0 rows)
+ 
  -- composite domain
  SELECT jsonb_populate_recordset(null::jb_ordered_pair, '[{"x": 0, "y": 1}]');
 - jsonb_populate_recordset 
@@ -1937,7 +1923,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  -- jsonb_to_record and jsonb_to_recordset
  select * from jsonb_to_record('{"a":1,"b":"foo","c":"bar"}')
      as x(a int, b text, d text);
-@@ -2684,11 +2490,14 @@
+@@ -2684,11 +2478,14 @@
  select *, c is null as c_is_null
  from jsonb_to_record('{"a":1, "b":{"c":16, "d":2}, "x":8, "ca": ["1 2", 3], "ia": [[1,2],[3,4]], "r": {"a": "aaa", "b": 123}}'::jsonb)
      as t(a int, b jsonb, c text, x int, ca char(5)[], ia int[][], r jbpop);
@@ -1957,7 +1943,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  select *, c is null as c_is_null
  from jsonb_to_recordset('[{"a":1, "b":{"c":16, "d":2}, "x":8}]'::jsonb)
      as t(a int, b jsonb, c text, x int);
-@@ -2705,7 +2514,6 @@
+@@ -2705,7 +2502,6 @@
  
  select * from jsonb_to_record('{"ia": 123}') as x(ia _int4);
  ERROR:  expected JSON array
@@ -1965,7 +1951,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  select * from jsonb_to_record('{"ia": [1, "2", null, 4]}') as x(ia _int4);
        ia      
  --------------
-@@ -2713,35 +2521,32 @@
+@@ -2713,35 +2509,32 @@
  (1 row)
  
  select * from jsonb_to_record('{"ia": [[1, 2], [3, 4]]}') as x(ia _int4);
@@ -2022,7 +2008,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  select * from jsonb_to_record('{"out": {"key": 1}}') as x(out json);
      out     
  ------------
-@@ -2755,9 +2560,9 @@
+@@ -2755,9 +2548,9 @@
  (1 row)
  
  select * from jsonb_to_record('{"out": "{\"key\": 1}"}') as x(out json);
@@ -2035,7 +2021,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  (1 row)
  
  select * from jsonb_to_record('{"out": {"key": 1}}') as x(out jsonb);
-@@ -2773,9 +2578,9 @@
+@@ -2773,9 +2566,9 @@
  (1 row)
  
  select * from jsonb_to_record('{"out": "{\"key\": 1}"}') as x(out jsonb);
@@ -2048,7 +2034,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  (1 row)
  
  -- test type info caching in jsonb_populate_record()
-@@ -2788,55 +2593,75 @@
+@@ -2788,55 +2581,75 @@
  }'::jsonb
  FROM generate_series(1, 3);
  SELECT (jsonb_populate_record(NULL::jsbrec, js)).* FROM jsbpoptest;
@@ -2137,7 +2123,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  (1 row)
  
  SELECT count(*) FROM testjsonb WHERE j ? 'bar';
-@@ -2848,178 +2673,131 @@
+@@ -2848,178 +2661,131 @@
  SELECT count(*) FROM testjsonb WHERE j ?| ARRAY['public','disabled'];
   count 
  -------
@@ -2370,7 +2356,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  (1 row)
  
  SELECT count(*) FROM testjsonb WHERE j ? 'bar';
-@@ -3031,211 +2809,124 @@
+@@ -3031,211 +2797,124 @@
  SELECT count(*) FROM testjsonb WHERE j ?| ARRAY['public','disabled'];
   count 
  -------
@@ -2656,7 +2642,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  (1 row)
  
  -- type sensitive array exists - should return no rows (since "exists" only
-@@ -3250,67 +2941,78 @@
+@@ -3250,67 +2929,78 @@
  SELECT count(*) from testjsonb  WHERE j->'array' @> '5'::jsonb;
   count 
  -------
@@ -2769,7 +2755,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  (1 row)
  
  SELECT distinct * FROM (values (jsonb '{}' || ''::text),('{}')) v(j);
-@@ -3320,223 +3022,205 @@
+@@ -3320,223 +3010,205 @@
  (1 row)
  
  SET enable_sort = on;
@@ -3112,7 +3098,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  -- nested tests
  SELECT '{"ff":{"a":12,"b":16}}'::jsonb;
             jsonb            
-@@ -3694,8 +3378,24 @@
+@@ -3694,8 +3366,24 @@
  insert into nestjsonb (j) values ('[[14,2,3]]');
  insert into nestjsonb (j) values ('[1,[14,2,3]]');
  create index on nestjsonb using gin(j jsonb_path_ops);
@@ -3137,7 +3123,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  select * from nestjsonb where j @> '{"a":[[{"x":2}]]}'::jsonb;
                           j                         
  ---------------------------------------------------
-@@ -3716,7 +3416,20 @@
+@@ -3716,7 +3404,20 @@
  (2 rows)
  
  set enable_seqscan = off;
@@ -3158,7 +3144,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  select * from nestjsonb where j @> '{"a":[[{"x":2}]]}'::jsonb;
                           j                         
  ---------------------------------------------------
-@@ -3737,7 +3450,20 @@
+@@ -3737,7 +3438,20 @@
  (2 rows)
  
  reset enable_seqscan;
@@ -3179,7 +3165,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  -- nested object field / array index lookup
  SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb -> 'n';
   ?column? 
-@@ -4078,33 +3804,29 @@
+@@ -4078,33 +3792,29 @@
  (1 row)
  
  select jsonb_concat('{"d": "test", "a": [1, 2]}', '{"g": "test2", "c": {"c1":1, "c2":2}}');
@@ -3218,7 +3204,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  (1 row)
  
  select '["a", "b"]'::jsonb || '["c"]';
-@@ -4174,17 +3896,9 @@
+@@ -4174,17 +3884,9 @@
  (1 row)
  
  select '"a"'::jsonb || '{"a":1}';
@@ -3238,7 +3224,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  select '[3]'::jsonb || '{}'::jsonb;
   ?column? 
  ----------
-@@ -4204,11 +3918,7 @@
+@@ -4204,11 +3906,7 @@
  (1 row)
  
  select '3'::jsonb || '{}'::jsonb;
@@ -3251,7 +3237,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  select '["a", "b"]'::jsonb || '{"c":1}';
         ?column?       
  ----------------------
-@@ -4252,35 +3962,15 @@
+@@ -4252,35 +3950,15 @@
  (1 row)
  
  select jsonb_delete('{"a":1 , "b":2, "c":3}'::jsonb, 'a');
@@ -3292,7 +3278,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  select '{"a":1 , "b":2, "c":3}'::jsonb - 'a';
       ?column?     
  ------------------
-@@ -4402,7 +4092,7 @@
+@@ -4402,7 +4080,7 @@
  (1 row)
  
  select jsonb_set('{"n":null, "a":1, "b":[1,2], "c":{"1":2}, "d":{"1":[2,3]}}'::jsonb, '{d,NULL,0}', '[1,2,3]');
@@ -3301,7 +3287,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  select jsonb_set('{"n":null, "a":1, "b":[1,2], "c":{"1":2}, "d":{"1":[2,3]}}'::jsonb, '{n}', '{"1": 2}');
                                  jsonb_set                                
  -------------------------------------------------------------------------
-@@ -4422,7 +4112,7 @@
+@@ -4422,7 +4100,7 @@
  (1 row)
  
  select jsonb_set('{"n":null, "a":1, "b":[1,2], "c":{"1":2}, "d":{"1":[2,3]}}'::jsonb, '{d,NULL,0}', '{"1": 2}');
@@ -3310,7 +3296,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  select jsonb_set('{"n":null, "a":1, "b":[1,2], "c":{"1":2}, "d":{"1":[2,3]}}'::jsonb, '{b,-1}', '"test"');
                                  jsonb_set                                 
  --------------------------------------------------------------------------
-@@ -4436,39 +4126,27 @@
+@@ -4436,39 +4114,27 @@
  (1 row)
  
  select jsonb_delete_path('{"n":null, "a":1, "b":[1,2], "c":{"1":2}, "d":{"1":[2,3]}}', '{n}');
@@ -3357,7 +3343,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  ------------------------------------------------------------------
   {"a": 1, "b": [1, 2], "c": {"1": 2}, "d": {"1": [3]}, "n": null}
  (1 row)
-@@ -4499,21 +4177,17 @@
+@@ -4499,21 +4165,17 @@
  (1 row)
  
  select '"a"'::jsonb #- '{a}'; -- error
@@ -3384,7 +3370,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  select jsonb_set('{}','{a}','"b"', false);
   jsonb_set 
  -----------
-@@ -4601,67 +4275,49 @@
+@@ -4601,67 +4263,49 @@
  (1 row)
  
  select jsonb_set('{"a": [1, 2, 3]}', '{a, non_integer}', '"new_value"');
@@ -3477,7 +3463,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  \pset null ''
  -- jsonb_insert
  select jsonb_insert('{"a": [0,1,2]}', '{a, 1}', '"new_value"');
-@@ -4787,178 +4443,166 @@
+@@ -4787,178 +4431,166 @@
  (1 row)
  
  select jsonb_insert('{"a": {"b": "value"}}', '{a, b}', '"new_value"');
@@ -3707,7 +3693,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  select ('[1, "2", null]'::jsonb)[:];
  ERROR:  jsonb subscript does not support slices
  create TEMP TABLE test_jsonb_subscript (
-@@ -4970,54 +4614,79 @@
+@@ -4970,54 +4602,79 @@
  (2, '{"key": "value"}'); -- jsonb with data
  -- update empty jsonb
  update test_jsonb_subscript set test_json['a'] = '1' where id = 1;
@@ -3807,7 +3793,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  (1 row)
  
  select * from test_jsonb_subscript where test_json['key_doesnt_exists'] = '"value"';
-@@ -5032,198 +4701,327 @@
+@@ -5032,198 +4689,327 @@
  
  -- NULL
  update test_jsonb_subscript set test_json[NULL] = '1';
@@ -4207,7 +4193,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  -- try some things with short-header and toasted subscript values
  drop table test_jsonb_subscript;
  create temp table test_jsonb_subscript (
-@@ -5241,235 +5039,173 @@
+@@ -5241,235 +5027,173 @@
  (2 rows)
  
  update test_jsonb_subscript set test_json[id] = '"baz"';
@@ -4552,7 +4538,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  -- casts
  select 'true'::jsonb::bool;
   bool 
-@@ -5478,7 +5214,7 @@
+@@ -5478,7 +5202,7 @@
  (1 row)
  
  select '[]'::jsonb::bool;
@@ -4561,7 +4547,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  select '1.0'::jsonb::float;
   float8 
  --------
-@@ -5486,7 +5222,7 @@
+@@ -5486,7 +5210,7 @@
  (1 row)
  
  select '[1.0]'::jsonb::float;
@@ -4570,7 +4556,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  select '12345'::jsonb::int4;
   int4  
  -------
-@@ -5494,7 +5230,7 @@
+@@ -5494,7 +5218,7 @@
  (1 row)
  
  select '"hello"'::jsonb::int4;
@@ -4579,7 +4565,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  select '12345'::jsonb::numeric;
   numeric 
  ---------
-@@ -5502,7 +5238,7 @@
+@@ -5502,7 +5226,7 @@
  (1 row)
  
  select '{}'::jsonb::numeric;
