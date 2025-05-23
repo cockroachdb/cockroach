@@ -893,6 +893,34 @@ func dummyHook(context.Context, *logger.Logger, *rand.Rand, *Helper) error {
 	return nil
 }
 
+func Test_DisableAllMutators(t *testing.T) {
+	testOptions := defaultTestOptions()
+	testOverrides := []CustomOption{
+		DisableAllMutators(),
+	}
+
+	for _, fn := range testOverrides {
+		fn(&testOptions)
+	}
+
+	mvt := &Test{
+		ctx:       ctx,
+		logger:    nilLogger,
+		crdbNodes: nodes,
+		options:   testOptions,
+		_arch:     archP(vm.ArchAMD64),
+		_isLocal:  boolP(false),
+		prng:      newRand(),
+		hooks:     &testHooks{crdbNodes: nodes},
+		seed:      seed,
+	}
+
+	plan, err := mvt.plan()
+	require.NoError(t, err)
+	require.Nil(t, plan.enabledMutators)
+
+}
+
 // This is a regression test to ensure that separate process deployments
 // correctly default to using latest predecessors.
 func Test_SeparateProcessUsesLatestPred(t *testing.T) {

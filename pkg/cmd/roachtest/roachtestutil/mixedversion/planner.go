@@ -231,6 +231,22 @@ var planMutators = []mutator{
 		[]string{"snappy", "zstd"},
 		clusterSettingMinimumVersion("v24.1.0-alpha.0"),
 	),
+	// These two settings are newly introduced, so their probabilities
+	// are temporarily raised to increase testing on them specifically.
+	// The 50% matches the metamorphic probability of these settings
+	// being enabled in non mixed version tests.
+	newClusterSettingMutator(
+		"kv.transaction.write_buffering.enabled",
+		[]bool{true, false},
+		clusterSettingMinimumVersion("v25.2.0"),
+		clusterSettingProbability(0.5),
+	),
+	newClusterSettingMutator(
+		"kv.rangefeed.buffered_sender.enabled",
+		[]bool{true, false},
+		clusterSettingMinimumVersion("v25.2.0"),
+		clusterSettingProbability(0.5),
+	),
 }
 
 // Plan returns the TestPlan used to upgrade the cluster from the
