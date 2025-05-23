@@ -1,0 +1,4 @@
+frobnicate_stmt ::=
+	'FROBNICATE' 'CLUSTER'
+	| 'FROBNICATE' 'SESSION'
+	| 'FROBNICATE' 'ALL'

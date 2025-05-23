@@ -867,6 +867,13 @@ func (node *ShowCreateAllTypes) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CREATE ALL TYPES")
 }
 
+type ShowCreateAllRoutines struct{}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowCreateAllRoutines) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW CREATE ALL ROUTINES")
+}
+
 // ShowCreateSchedules represents a SHOW CREATE SCHEDULE statement.
 type ShowCreateSchedules struct {
 	ScheduleID Expr
