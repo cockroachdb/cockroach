@@ -13,6 +13,7 @@ import (
 	rpcpb "github.com/cockroachdb/cockroach/pkg/rpc/rpcpb"
 	gomock "github.com/golang/mock/gomock"
 	grpc "google.golang.org/grpc"
+	metadata "google.golang.org/grpc/metadata"
 )
 
 // MockBatchStreamClient is a mock of BatchStreamClient interface.
@@ -38,6 +39,49 @@ func (m *MockBatchStreamClient) EXPECT() *MockBatchStreamClientMockRecorder {
 	return m.recorder
 }
 
+// CloseSend mocks base method.
+func (m *MockBatchStreamClient) CloseSend() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CloseSend")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CloseSend indicates an expected call of CloseSend.
+func (mr *MockBatchStreamClientMockRecorder) CloseSend() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseSend", reflect.TypeOf((*MockBatchStreamClient)(nil).CloseSend))
+}
+
+// Context mocks base method.
+func (m *MockBatchStreamClient) Context() context.Context {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Context")
+	ret0, _ := ret[0].(context.Context)
+	return ret0
+}
+
+// Context indicates an expected call of Context.
+func (mr *MockBatchStreamClientMockRecorder) Context() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Context", reflect.TypeOf((*MockBatchStreamClient)(nil).Context))
+}
+
+// Header mocks base method.
+func (m *MockBatchStreamClient) Header() (metadata.MD, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Header")
+	ret0, _ := ret[0].(metadata.MD)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Header indicates an expected call of Header.
+func (mr *MockBatchStreamClientMockRecorder) Header() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Header", reflect.TypeOf((*MockBatchStreamClient)(nil).Header))
+}
+
 // Recv mocks base method.
 func (m *MockBatchStreamClient) Recv() (*kvpb.BatchResponse, error) {
 	m.ctrl.T.Helper()
@@ -53,6 +97,20 @@ func (mr *MockBatchStreamClientMockRecorder) Recv() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Recv", reflect.TypeOf((*MockBatchStreamClient)(nil).Recv))
 }
 
+// RecvMsg mocks base method.
+func (m *MockBatchStreamClient) RecvMsg(arg0 interface{}) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecvMsg", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RecvMsg indicates an expected call of RecvMsg.
+func (mr *MockBatchStreamClientMockRecorder) RecvMsg(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecvMsg", reflect.TypeOf((*MockBatchStreamClient)(nil).RecvMsg), arg0)
+}
+
 // Send mocks base method.
 func (m *MockBatchStreamClient) Send(arg0 *kvpb.BatchRequest) error {
 	m.ctrl.T.Helper()
@@ -65,6 +123,34 @@ func (m *MockBatchStreamClient) Send(arg0 *kvpb.BatchRequest) error {
 func (mr *MockBatchStreamClientMockRecorder) Send(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Send", reflect.TypeOf((*MockBatchStreamClient)(nil).Send), arg0)
+}
+
+// SendMsg mocks base method.
+func (m *MockBatchStreamClient) SendMsg(arg0 interface{}) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SendMsg", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SendMsg indicates an expected call of SendMsg.
+func (mr *MockBatchStreamClientMockRecorder) SendMsg(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendMsg", reflect.TypeOf((*MockBatchStreamClient)(nil).SendMsg), arg0)
+}
+
+// Trailer mocks base method.
+func (m *MockBatchStreamClient) Trailer() metadata.MD {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Trailer")
+	ret0, _ := ret[0].(metadata.MD)
+	return ret0
+}
+
+// Trailer indicates an expected call of Trailer.
+func (mr *MockBatchStreamClientMockRecorder) Trailer() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trailer", reflect.TypeOf((*MockBatchStreamClient)(nil).Trailer))
 }
 
 // MockDialbacker is a mock of Dialbacker interface.
