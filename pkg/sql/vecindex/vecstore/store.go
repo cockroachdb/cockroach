@@ -125,7 +125,7 @@ func New(
 	}
 
 	var index catalog.Index
-	for _, desc := range tableDesc.DeletableNonPrimaryIndexes() {
+	for _, desc := range tableDesc.NonPrimaryIndexes() {
 		if desc.GetID() == indexID {
 			index = desc
 			break
