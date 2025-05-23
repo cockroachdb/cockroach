@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 type allocatorState struct {
@@ -254,7 +255,7 @@ func (a *allocatorState) rebalanceStores(
 				}
 				// Have candidates.
 				targetStoreID := sortTargetCandidateSetAndPick(
-					ctx, candsSet, sls.sls, false, a.rand)
+					ctx, candsSet, sls.sls, ignoreHigherThanLoadThreshold, CPURate, a.rand)
 				if targetStoreID == 0 {
 					continue
 				}
@@ -333,6 +334,7 @@ func (a *allocatorState) rebalanceStores(
 		// Iterate over top-K ranges first and try to move them.
 		topKRanges := ss.adjusted.topKRanges[localStoreID]
 		n := topKRanges.len()
+		loadDim := topKRanges.dim
 		for i := 0; i < n; i++ {
 			rangeID := topKRanges.index(i)
 			// TODO(sumeer): the following code belongs in a closure, since we will
@@ -407,9 +409,9 @@ func (a *allocatorState) rebalanceStores(
 			// sub-optimal transfer of load from s1 => s2 unless s1 is not seeing any
 			// load shedding for some interval of time. We need a way to capture this
 			// information in a simple but effective manner.
-			const tempOverrideToIgnoreLoadNoChangeAndHigher = true
+			const tempOverrideToIgnoreLoadNoChangeAndHigher = ignoreLoadNoChangeAndHigher
 			targetStoreID := sortTargetCandidateSetAndPick(
-				ctx, cands, ssSLS.sls, tempOverrideToIgnoreLoadNoChangeAndHigher, a.rand)
+				ctx, cands, ssSLS.sls, tempOverrideToIgnoreLoadNoChangeAndHigher, loadDim, a.rand)
 			if targetStoreID == 0 {
 				continue
 			}
@@ -555,6 +557,43 @@ type candidateSet struct {
 	means      *meansForStoreSet
 }
 
+type ignoreLevel uint8
+
+const (
+	ignoreLoadNoChangeAndHigher ignoreLevel = iota
+	// NB: loadThreshold is always > loadNoChange.
+	ignoreLoadThresholdAndHigher
+	ignoreHigherThanLoadThreshold
+)
+
+// The logic in sortTargetCandidateSetAndPick related to load is a heuristic
+// motivated by the following observations:
+//
+// 1. The high level objective is mostly to move towards the mean along all
+// resource dimensions. For now, we are fuzzy on whether this should be the
+// usage mean or the utilization mean, since historically the allocated has
+// considered the former only, while mma in loadSummaryForDimension considers
+// both.
+//
+// 2. We want to minimize range movement (and to a lesser extent lease
+// movement) when moving towards the mean, so it is preferable to first move
+// to stores that are not overloaded along any dimension, since they are
+// guaranteed to not have to shed the moved load. Hence sorting based on the
+// overall store loadSummary first for the targets.
+//
+// 3. It is possible (as also demonstrated by asim tests) that with multiple
+// metrics, we can have scenarios where every store is loadNoChange or
+// overloaded along some dimension while underloaded along another dimension
+// (the latter is necessarily true if overload and underload are based on the
+// mean). We have to be able to rebalance out of such local optima. One way to
+// do so would be introduce the ability to decide changes to multiple ranges
+// at once, however this adds code complexity. Instead, we can ignore the fact
+// that the target is overall overloaded, and pick a candidate that is most
+// underloaded in the dimension that the source wants to shed. This should
+// allow the target to accept the range and later shed some other range. There
+// is the possibility that will result in more range movement until we reach
+// the goal state, but so be it.
+
 // In the set of candidates it is possible that some are overloaded, or have
 // too many pending changes. It divides them into sets with equal diversity
 // score and sorts such that the set with higher diversity score is considered
@@ -577,15 +616,19 @@ type candidateSet struct {
 //
 // TODO(sumeer): implement that refinement after some initial
 // experimentation and learnings.
-
+//
 // The caller must not exclude any candidates based on load or
-// maxFractionPending. That filtering must happen here. Only candidates <
-// loadThreshold will be considered.
+// maxFractionPending. That filtering must happen here. Depending on the value
+// of ignoreLevel, only candidates < loadThreshold may be considered.
+//
+// overloadDim, if not set to NumLoadDimensions, represents the dimension that
+// is overloaded in the source.
 func sortTargetCandidateSetAndPick(
 	ctx context.Context,
 	cands candidateSet,
 	loadThreshold loadSummary,
-	overrideToIgnoreLoadNoChangeAndHigher bool,
+	ignoreLevel ignoreLevel,
+	overloadedDim LoadDimension,
 	rng *rand.Rand,
 ) roachpb.StoreID {
 	var b strings.Builder
@@ -647,14 +690,11 @@ func sortTargetCandidateSetAndPick(
 	//
 	// Consider the series of sets of candidates that have the same sls. The
 	// only reason we will consider a set later than the first one is if the
-	// earlier sets get fully discarded solely because of nls >= loadThreshold
-	// and have no pending changes.
+	// earlier sets get fully discarded solely because of nls and have no
+	// pending changes.
 	lowestLoad := cands.candidates[0].sls
 	discardedCandsHadNoPendingChanges := true
 	for _, cand := range cands.candidates {
-		if cand.sls >= loadThreshold {
-			break
-		}
 		if cand.sls > lowestLoad {
 			if j == 0 && discardedCandsHadNoPendingChanges {
 				// This is the lowestLoad set being considered now.
@@ -664,7 +704,9 @@ func sortTargetCandidateSetAndPick(
 				break
 			}
 		}
-		if cand.nls >= loadThreshold || cand.maxFractionPending >= maxFractionPendingThreshold {
+		candDiscardedByNLS := cand.nls > loadThreshold ||
+			(cand.nls == loadThreshold && ignoreLevel != ignoreHigherThanLoadThreshold)
+		if candDiscardedByNLS || cand.maxFractionPending >= maxFractionPendingThreshold {
 			// Discard this candidate.
 			if cand.maxFractionPending > epsilon && discardedCandsHadNoPendingChanges {
 				discardedCandsHadNoPendingChanges = false
@@ -697,18 +739,23 @@ func sortTargetCandidateSetAndPick(
 	// choice, since pending added work is slightly inflated in size, and we
 	// want to have a true picture of all of these potential candidates before
 	// we start using the ones with load >= loadNoChange.
+	if lowestLoad > loadThreshold {
+		log.Infof(ctx, "sortTargetCandidateSetAndPick: no candidates due to exceeding loadThreshold")
+		return 0
+	}
+	if lowestLoad == loadThreshold && ignoreLevel != ignoreHigherThanLoadThreshold {
+		log.Infof(ctx, "sortTargetCandidateSetAndPick: no candidates due to equal to loadThreshold")
+	}
+	// < loadNoChange is fine. We need to check whether the following cases can continue.
+	// [loadNoChange, loadThreshold), or loadThreshold && ignoreHigherThanLoadThreshold.
 	if lowestLoad >= loadNoChange &&
-		(!discardedCandsHadNoPendingChanges || overrideToIgnoreLoadNoChangeAndHigher) {
+		(!discardedCandsHadNoPendingChanges || ignoreLevel == ignoreLoadNoChangeAndHigher) {
 		log.Infof(ctx, "sortTargetCandidateSetAndPick: no candidates due to loadNoChange")
 		return 0
 	}
 	// Candidates have equal load value and sorted by non-decreasing
 	// leasePreferenceIndex. Eliminate ones that have
-	// notMatchedLeasePreferenceIndex. Also eliminate ones that are >= loadNoChange,
-	// if discardedCandsAtOrBeforeLowestLoadHadPendingChanges is true, or the cand
-	// has some pending changes. The idea here is that we will only pick a candidate
-	// with load >= loadNoChange once it has no pending changes, or any candidates
-	// ordered before it also had
+	// notMatchedLeasePreferenceIndex.
 	j = 0
 	for _, cand := range cands.candidates {
 		if cand.leasePreferenceIndex == notMatchedLeasePreferencIndex {
@@ -721,14 +768,36 @@ func sortTargetCandidateSetAndPick(
 		return 0
 	}
 	cands.candidates = cands.candidates[:j]
+	if lowestLoad >= loadNoChange && overloadedDim != NumLoadDimensions {
+		// Sort candidates from lowest to highest along overloaded dimension.
+		slices.SortFunc(cands.candidates, func(a, b candidateInfo) int {
+			return cmp.Compare(a.dimSummary[overloadedDim], b.dimSummary[overloadedDim])
+		})
+		lowestOverloadedLoad := cands.candidates[0].dimSummary[overloadedDim]
+		if lowestOverloadedLoad >= loadNoChange {
+			log.Infof(ctx, "sortTargetCandidateSetAndPick: no candidates due to overloadedDim")
+			return 0
+		}
+		j = 1
+		for j < len(cands.candidates) {
+			if cands.candidates[j].dimSummary[overloadedDim] > lowestOverloadedLoad {
+				break
+			}
+			j++
+		}
+		cands.candidates = cands.candidates[:j]
+	}
 	b.Reset()
 	for i := range cands.candidates {
 		fmt.Fprintf(&b, " s%v(%v)", cands.candidates[i].StoreID, cands.candidates[i].sls)
 	}
 	j = rng.Intn(j)
 	log.Infof(ctx, "candidates:%s, picked s%v", b.String(), cands.candidates[j].StoreID)
-	if cands.candidates[j].sls >= loadNoChange && overrideToIgnoreLoadNoChangeAndHigher {
-		panic("saw higher load candidate than expected")
+	if ignoreLevel == ignoreLoadNoChangeAndHigher && cands.candidates[j].sls >= loadNoChange ||
+		ignoreLevel == ignoreLoadThresholdAndHigher && cands.candidates[j].sls >= loadThreshold ||
+		ignoreLevel == ignoreHigherThanLoadThreshold && cands.candidates[j].sls > loadThreshold {
+		panic(errors.AssertionFailedf("saw higher load %v candidate than expected, ignoreLevel=%v",
+			cands.candidates[j].sls, ignoreLevel))
 	}
 	return cands.candidates[j].StoreID
 }
