@@ -3326,3 +3326,86 @@ sort
            │    └── col4_4:5
            └── const-agg [as=col4_4:5, outer=(5)]
                 └── col4_4:5
+
+# Regression test for dropping the required ordering in the presence of
+# unsimplified group-by ordering (#146900).
+exec-ddl
+CREATE TABLE t_146900 (
+  c0 INT,
+  c1 INT NOT NULL,
+  c2 BIT(7),
+  PRIMARY KEY (c0 ASC),
+  INDEX (c2 DESC)
+);
+----
+
+opt disable=(SimplifyWindowOrdering,SimplifyGroupByOrdering,PruneRootCols)
+SELECT
+  t1.c0,
+  t1.c2
+FROM
+  t_146900 AS t1 JOIN t_146900 AS t2 ON (t1.c2) = (t2.c2) AND (t1.c0) = (t2.c0)
+GROUP BY
+  t1.c0, t2.c0, t1.c2, t2.c2
+HAVING
+  every(true::BOOL)::BOOL
+ORDER BY
+  t1.c2 DESC
+LIMIT
+  10:::INT8;
+----
+project
+ ├── columns: c0:1!null c2:3!null
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(3)
+ ├── ordering: -3
+ └── top-k
+      ├── columns: t1.c0:1!null t1.c2:3!null t2.c0:6!null every:12!null
+      ├── internal-ordering: -3 opt(12)
+      ├── k: 10
+      ├── cardinality: [0 - 10]
+      ├── key: (6)
+      ├── fd: ()-->(12), (1)-->(3), (6)-->(1,3), (1)==(6), (6)==(1)
+      ├── ordering: -3 opt(12) [actual: -3]
+      └── select
+           ├── columns: t1.c0:1!null t1.c2:3!null t2.c0:6!null every:12!null
+           ├── key: (6)
+           ├── fd: ()-->(12), (1)-->(3), (6)-->(1,3), (1)==(6), (6)==(1)
+           ├── group-by (hash)
+           │    ├── columns: t1.c0:1!null t1.c2:3!null t2.c0:6!null every:12!null
+           │    ├── grouping columns: t2.c0:6!null
+           │    ├── key: (6)
+           │    ├── fd: (1)-->(3), (6)-->(1,3,12), (1)==(6), (6)==(1)
+           │    ├── project
+           │    │    ├── columns: column11:11!null t1.c0:1!null t1.c2:3!null t2.c0:6!null
+           │    │    ├── key: (6)
+           │    │    ├── fd: ()-->(11), (1)-->(3), (6)-->(3), (1)==(6), (6)==(1)
+           │    │    ├── inner-join (merge)
+           │    │    │    ├── columns: t1.c0:1!null t1.c2:3!null t2.c0:6!null t2.c2:8!null
+           │    │    │    ├── left ordering: -3,+1
+           │    │    │    ├── right ordering: -8,+6
+           │    │    │    ├── key: (6)
+           │    │    │    ├── fd: (1)-->(3), (6)-->(8), (3)==(8), (8)==(3), (1)==(6), (6)==(1)
+           │    │    │    ├── scan t_146900@t_146900_c2_idx [as=t1]
+           │    │    │    │    ├── columns: t1.c0:1!null t1.c2:3
+           │    │    │    │    ├── key: (1)
+           │    │    │    │    ├── fd: (1)-->(3)
+           │    │    │    │    └── ordering: -3,+1
+           │    │    │    ├── scan t_146900@t_146900_c2_idx [as=t2]
+           │    │    │    │    ├── columns: t2.c0:6!null t2.c2:8
+           │    │    │    │    ├── key: (6)
+           │    │    │    │    ├── fd: (6)-->(8)
+           │    │    │    │    └── ordering: -8,+6
+           │    │    │    └── filters (true)
+           │    │    └── projections
+           │    │         └── true [as=column11:11]
+           │    └── aggregations
+           │         ├── bool-and [as=every:12, outer=(11)]
+           │         │    └── column11:11
+           │         ├── const-agg [as=t1.c0:1, outer=(1)]
+           │         │    └── t1.c0:1
+           │         └── const-agg [as=t1.c2:3, outer=(3)]
+           │              └── t1.c2:3
+           └── filters
+                └── every:12 [outer=(12), fd=()-->(12)]
