@@ -328,11 +328,6 @@ type BatchStreamPool = streamPool[*kvpb.BatchRequest, *kvpb.BatchResponse, *grpc
 //go:generate mockgen -destination=mocks_generated_test.go --package=. BatchStreamClient
 type BatchStreamClient = streamClient[*kvpb.BatchRequest, *kvpb.BatchResponse]
 
-// newBatchStream constructs a BatchStreamClient from a grpc.ClientConn.
-func newBatchStream(ctx context.Context, cc *grpc.ClientConn) (BatchStreamClient, error) {
-	return kvpb.NewInternalClient(cc).BatchStream(ctx)
-}
-
 type DRPCBatchStreamPool = streamPool[*kvpb.BatchRequest, *kvpb.BatchResponse, drpc.Conn]
 
 type DRPCBatchStreamClient = streamClient[*kvpb.BatchRequest, *kvpb.BatchResponse]
