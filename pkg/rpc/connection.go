@@ -232,7 +232,7 @@ func (c *Connection[Conn]) DRPCBatchStreamPool() *DRPCBatchStreamPool {
 	return &c.drpcBatchStreamPool
 }
 
-type connFuture[Conn any] struct {
+type connFuture[Conn rpcConn] struct {
 	ready chan struct{}
 	cc    Conn
 	dc    drpcpool.Conn

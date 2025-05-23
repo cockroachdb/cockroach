@@ -2099,13 +2099,6 @@ func (rpcCtx *Context) NewHeartbeatService() *HeartbeatService {
 	}
 }
 
-// TODO(server): mock tests here were originally generated with
-// github.com/golang/mock, but since that project is archived and has no support
-// for generics, they are replaced with standard tests for now. Explore
-// github.com/uber-go/mock offers generics support and restore these to
-// auto-generated mocks.
-//generate mockgen -destination=mocks_generated_test.go --package=. Dialbacker
-
 type Dialbacker interface {
 	GRPCUnvalidatedDial(string, roachpb.Locality) *GRPCConnection
 	GRPCDialNode(string, roachpb.NodeID, roachpb.Locality, ConnectionClass) *GRPCConnection

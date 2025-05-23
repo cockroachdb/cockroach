@@ -3,11 +3,8 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 //
-// TODO(server): mock tests here were originally generated with
-// github.com/golang/mock, but since that project is archived and has no
-// support for generics, they are replaced with standard tests for now.
-// Explore github.com/uber-go/mock offers generics support and restore
-// these to auto-generated mocks.
+// TODO(#147193): restore auto-generated RPC mock tests once gomock has support
+// for generics.
 package rpc
 
 import (

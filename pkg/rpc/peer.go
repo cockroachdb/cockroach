@@ -728,14 +728,14 @@ func (p *peer[Conn]) onHeartbeatFailed(
 	defer p.mu.Unlock()
 	ls := &p.mu.PeerSnap // "locked snap"
 
-	var cc Conn
 	if !ls.c.connFuture.Resolved() {
 		// If the initial heartbeat failed (or we got an error creating the
 		// *grpc.ClientConn), wrap the error. More importantly, resolve connFuture;
 		// someone might be waiting on it in ConnectNoBreaker who is not paying
 		// attention to the circuit breaker.
 		err = &netutil.InitialHeartbeatFailedError{WrappedErr: err}
-		ls.c.connFuture.Resolve(cc, nil /* dc */, err)
+		var nilConn Conn
+		ls.c.connFuture.Resolve(nilConn, nil /* dc */, err)
 	}
 
 	// Close down the stream pool that was bound to this connection.
