@@ -289,18 +289,23 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 			// collect CPU, mutex diffs, allocs diffs profiles.
 			time.Sleep(30 * time.Second)
 			collectionDuration := 30 * time.Second
-			profiles, err := collectSysbenchProfiles(m, c, collectionDuration, profilesDir)
 
-			// If there is an error generating one or more profiles, we need to clean
-			// up the profiles directory and return the error to avoid leaving
-			// potentially corrupt profiles in the directory.
-			if err != nil {
-				require.NoError(t, os.RemoveAll(profilesDir))
-				return err
+			// Collect the profiles.
+			profiles := map[string][]*profile.Profile{"cpu": {}, "allocs": {}, "mutex": {}}
+			for typ := range profiles {
+				m.Go(
+					func(ctx context.Context, l *logger.Logger) error {
+						var err error
+						profiles[typ], err = roachtestutil.GetProfile(ctx, c, l, typ,
+							collectionDuration, c.CRDBNodes())
+						return err
+					},
+				)
 			}
 
-			// If there is a problem executing the workload, or , we need to clean up
-			// the directory and return the error.
+			// If there is a problem executing the workload or there is a problem
+			// collecting the profiles we need to clean up the directory and return
+			// the error.
 			if err := m.WaitE(); err != nil {
 				require.NoError(t, os.RemoveAll(profilesDir))
 				return err
@@ -653,39 +658,6 @@ func exportSysbenchResults(
 	}
 
 	return nil
-}
-
-// collectSysbenchProfiles collects cpu, mutex, and allocs profiles from the
-// cluster `c` for the duration specified. It returns a map of profiles for each
-// type and for each node. It returns an error if any of the profiles couldn't
-// be collected.
-//
-// Example of returned map:
-//
-//	{
-//	  "cpu":    [node1Profile, node2Profile, node3Profile],
-//	  "allocs": [node1Profile, node2Profile, node3Profile],
-//	  "mutex":  [node1Profile, node2Profile, node3Profile],
-//	}
-//
-// where each profile is a *profile.Profile and the slice indices correspond to
-// the node indices in c.CRDBNodes().
-func collectSysbenchProfiles(
-	m task.ErrorGroup, c cluster.Cluster, duration time.Duration, profilesDir string,
-) (map[string][]*profile.Profile, error) {
-	profiles := map[string][]*profile.Profile{"cpu": {}, "allocs": {}, "mutex": {}}
-	for typ := range profiles {
-		m.Go(
-			func(ctx context.Context, l *logger.Logger) error {
-				var err error
-				profiles[typ], err = roachtestutil.GetProfile(ctx, c, l, typ,
-					duration, c.CRDBNodes())
-				return err
-			},
-		)
-	}
-
-	return profiles, nil
 }
 
 // mergeAndExportSysbenchProfiles accepts a map of individual profiles of each
