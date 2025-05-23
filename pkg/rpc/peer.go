@@ -251,9 +251,7 @@ func (rpcCtx *Context) newPeer(k peerKey, locality roachpb.Locality) *peer[*grpc
 		},
 		dialDRPC: dialDRPC(rpcCtx),
 		newHeartbeatClient: func(cc *grpc.ClientConn) rpcHeartbeatClient {
-			return &grpcHeartbeatClient{
-				c: NewHeartbeatClient(cc),
-			}
+			return &grpcHeartbeatClient{cc: cc}
 		},
 		newBatchStreamClient: func(ctx context.Context, cc *grpc.ClientConn) (BatchStreamClient, error) {
 			return kvpb.NewInternalClient(cc).BatchStream(ctx)
