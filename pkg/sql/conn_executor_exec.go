@@ -2722,6 +2722,17 @@ func (ex *connExecutor) rollbackSQLTransaction(
 func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 	ctx context.Context, p *planner, res RestrictedCommandResult,
 ) error {
+	getPausablePortalInfo := func() *portalPauseInfo {
+		if p != nil && p.pausablePortal != nil {
+			return p.pausablePortal.pauseInfo
+		}
+		return nil
+	}
+	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
+		p.autoRetryStmtReason = ppInfo.dispatchReadCommittedStmtToExecutionEngine.autoRetryStmtReason
+		p.autoRetryStmtCounter = ppInfo.dispatchReadCommittedStmtToExecutionEngine.autoRetryStmtCounter
+	}
+
 	readCommittedSavePointToken, err := ex.state.mu.txn.CreateSavepoint(ctx)
 	if err != nil {
 		return err
@@ -2796,6 +2807,10 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		}
 		p.autoRetryStmtCounter++
 		p.autoRetryStmtReason = maybeRetriableErr
+		if ppInfo := getPausablePortalInfo(); ppInfo != nil {
+			ppInfo.dispatchReadCommittedStmtToExecutionEngine.autoRetryStmtReason = p.autoRetryStmtReason
+			ppInfo.dispatchReadCommittedStmtToExecutionEngine.autoRetryStmtCounter = p.autoRetryStmtCounter
+		}
 	}
 	return nil
 }
