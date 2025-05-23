@@ -69,11 +69,9 @@ type txnState struct {
 		// bundles, and also is surfaced in the DB Console.
 		autoRetryReason error
 
-		// autoRetryCounter keeps track of the number of automatic retries that have
-		// occurred. It includes per-statement retries performed under READ
-		// COMMITTED as well as transaction retries for serialization failures under
-		// REPEATABLE READ and SERIALIZABLE. It's 0 whenever the transaction state
-		// is not stateOpen.
+		// autoRetryCounter keeps track of the number of automatic transaction
+		// retries that have occurred. It's 0 whenever the transaction state is not
+		// stateOpen.
 		autoRetryCounter int32
 
 		hasSavepoints bool

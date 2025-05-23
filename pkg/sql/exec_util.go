@@ -2861,8 +2861,12 @@ func (st *SessionTracing) TracePlanCheckEnd(ctx context.Context, err error, dist
 }
 
 // TraceRetryInformation conditionally emits a trace message for retry information.
-func (st *SessionTracing) TraceRetryInformation(ctx context.Context, retries int, err error) {
-	log.VEventfDepth(ctx, 2, 1, "executing after %d retries, last retry reason: %v", retries, err)
+func (st *SessionTracing) TraceRetryInformation(
+	ctx context.Context, retryScope string, retries int, err error,
+) {
+	log.VEventfDepth(
+		ctx, 2, 1, "executing after %d %s retries, last retry reason: %v", retries, retryScope, err,
+	)
 }
 
 // TraceExecStart conditionally emits a trace message at the moment
