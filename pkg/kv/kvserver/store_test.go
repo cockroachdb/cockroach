@@ -2785,7 +2785,8 @@ func TestStoreGCThreshold(t *testing.T) {
 		}
 		repl.mu.Lock()
 		gcThreshold := *repl.shMu.state.GCThreshold
-		pgcThreshold, err := repl.mu.stateLoader.LoadGCThreshold(context.Background(), store.TODOEngine())
+		pgcThreshold, err := stateloader.Make(repl.RangeID).LoadGCThreshold(
+			context.Background(), store.StateEngine())
 		repl.mu.Unlock()
 		if err != nil {
 			t.Fatal(err)
@@ -4121,7 +4122,8 @@ func TestStoreGetOrCreateReplicaWritesRaftReplicaID(t *testing.T) {
 		})
 	require.NoError(t, err)
 	require.True(t, created)
-	replicaID, err := repl.mu.stateLoader.LoadRaftReplicaID(ctx, tc.store.TODOEngine())
+	replicaID, err := stateloader.Make(repl.RangeID).LoadRaftReplicaID(
+		ctx, tc.store.StateEngine())
 	require.NoError(t, err)
 	require.Equal(t, kvserverpb.RaftReplicaID{ReplicaID: 7}, replicaID)
 }

@@ -448,8 +448,6 @@ type Replica struct {
 	raftMu struct {
 		syncutil.Mutex
 
-		// Note that there are two StateLoaders, in raftMu and mu,
-		// depending on which lock is being held.
 		stateLoader stateloader.StateLoader
 
 		// stateMachine is used to apply committed raft entries.
@@ -947,10 +945,6 @@ type Replica struct {
 
 		// Counts Raft messages refused due to queue congestion.
 		droppedMessages int
-
-		// Note that there are two replicaStateLoaders, in raftMu and mu,
-		// depending on which lock is being held.
-		stateLoader stateloader.StateLoader
 
 		// cachedProtectedTS provides the state of the protected timestamp
 		// subsystem as used on the request serving path to determine the effective
@@ -1984,7 +1978,7 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 			redact.Safe(pretty.Diff(loaded, ts)))
 	}
 
-	diskState, err := r.mu.stateLoader.Load(ctx, reader, r.shMu.state.Desc)
+	diskState, err := r.raftMu.stateLoader.Load(ctx, reader, r.shMu.state.Desc)
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
@@ -2041,7 +2035,7 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 			log.Fatalf(ctx, "replica's replicaID %d diverges from descriptor %+v", r.replicaID, r.shMu.state.Desc)
 		}
 	}
-	diskReplID, err := r.mu.stateLoader.LoadRaftReplicaID(ctx, reader)
+	diskReplID, err := r.raftMu.stateLoader.LoadRaftReplicaID(ctx, reader)
 	if err != nil {
 		log.Fatalf(ctx, "%s", err)
 	}
