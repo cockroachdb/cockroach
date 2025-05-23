@@ -231,6 +231,16 @@ var planMutators = []mutator{
 		[]string{"snappy", "zstd"},
 		clusterSettingMinimumVersion("v24.1.0-alpha.0"),
 	),
+	newClusterSettingMutator(
+		"kv.transaction.write_buffering.enabled",
+		[]bool{true, false},
+		clusterSettingMinimumVersion("v25.2.0"),
+	),
+	newClusterSettingMutator(
+		"kv.rangefeed.buffered_sender.enabled",
+		[]bool{true, false},
+		clusterSettingMinimumVersion("v25.2.0"),
+	),
 }
 
 // Plan returns the TestPlan used to upgrade the cluster from the
