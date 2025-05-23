@@ -39,7 +39,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/float8.out --labe
  
 +-- test smallest normalized input
 +SELECT float8send('2.2250738585072014E-308'::float8);
-+ERROR:  float8send(): unimplemented
++ERROR:  unimplemented
  -- bad input
  INSERT INTO FLOAT8_TBL(f1) VALUES ('');
 -ERROR:  invalid input syntax for type double precision: ""
