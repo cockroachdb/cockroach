@@ -17,7 +17,7 @@ Body: {"metric":{"__name__":"admission_admitted_elastic_cpu","cluster":"test-clu
 {"metric":{"__name__":"admission_admitted_elastic_cpu","cluster":"test-cluster","cluster_type":"SELF_HOSTED","instance":"2","job":"cockroachdb","node_id":"2","region":"local"},"values":[1,1,1,1,1,1],"timestamps":[17111305100,17111305200,17111305300,17111305400,17111305500,17111305600]}
 
 
-format-datadog series-threshold=1
+format-datadog-init series-threshold=1
 cr.node.admission.admitted.elastic.cpu 1 0.000000 1711130470
 cr.node.admission.admitted.elastic.cpu 1 1.000000 1711130480
 cr.node.admission.admitted.elastic.cpu 1 1.000000 1711130490
@@ -28,10 +28,70 @@ cr.node.admission.admitted.elastic.cpu 2 1.000000 1711130530
 cr.node.admission.admitted.elastic.cpu 2 1.000000 1711130540
 cr.node.admission.admitted.elastic.cpu 2 1.000000 1711130550
 cr.node.admission.admitted.elastic.cpu 2 1.000000 1711130560
+cr.store.storage.sstable.remote.bytes 1 1.000000 1711130520
+cr.store.storage.sstable.remote.count 1 1.000000 1711130530
+cr.store.storage.sstable.zombie.bytes 1 1.000000 1711130540
+cr.store.storage.wal.bytes_in 1 1.000000 1711130550
+cr.store.storage.wal.failover.write_and_sync.latency-avg 1 1.000000 1711130610
+cr.store.storage.wal.failover.write_and_sync.latency-count 1 1.000000 1711130620
+cr.store.storage.wal.failover.write_and_sync.latency-max 1 1.000000 1711130630
+cr.store.storage.wal.failover.write_and_sync.latency-p50 1 1.000000 1711130640
+cr.store.storage.wal.failover.write_and_sync.latency-p75 1 1.000000 1711130650
+cr.store.storage.wal.failover.write_and_sync.latency-p90 1 1.000000 1711130660
+cr.store.storage.wal.failover.write_and_sync.latency-p99 1 1.000000 1711130670
+cr.store.storage.wal.failover.write_and_sync.latency-p99.9 1 1.000000 1711130680
+cr.store.storage.wal.failover.write_and_sync.latency-p99.99 1 1.000000 1711130690
+cr.store.storage.wal.failover.write_and_sync.latency-p99.999 1 1.000000 1711130700
+cr.store.storage.wal.failover.write_and_sync.latency-sum 1 1.000000 1711130710
 ----
 POST: https://example.com/data
 DD-API-KEY: api-key
-Body: {"series":[{"metric":"crdb.tsdump.admission.admitted.elastic.cpu","type":0,"points":[{"timestamp":1711130470,"value":0},{"timestamp":1711130480,"value":1},{"timestamp":1711130490,"value":1},{"timestamp":1711130500,"value":1}],"resources":null,"tags":["node_id:1","cluster_type:SELF_HOSTED","cluster_label:test-cluster","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:test-cluster-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"]}]}
+Body: {"series":[{"metric":"crdb.tsdump.admission.admitted.elastic.cpu","type":0,"points":[{"timestamp":1731542400,"value":0}],"resources":null,"tags":["node_id:1","cluster_type:SELF_HOSTED","cluster_label:test-cluster","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:test-cluster-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"]}]}
 POST: https://example.com/data
 DD-API-KEY: api-key
-Body: {"series":[{"metric":"crdb.tsdump.admission.admitted.elastic.cpu","type":0,"points":[{"timestamp":1711130510,"value":1},{"timestamp":1711130520,"value":1},{"timestamp":1711130530,"value":1},{"timestamp":1711130540,"value":1},{"timestamp":1711130550,"value":1},{"timestamp":1711130560,"value":1}],"resources":null,"tags":["node_id:2","cluster_type:SELF_HOSTED","cluster_label:test-cluster","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:test-cluster-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"]}]}
+Body: {"series":[{"metric":"crdb.tsdump.admission.admitted.elastic.cpu","type":0,"points":[{"timestamp":1731542400,"value":0}],"resources":null,"tags":["node_id:2","cluster_type:SELF_HOSTED","cluster_label:test-cluster","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:test-cluster-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"]}]}
+POST: https://example.com/data
+DD-API-KEY: api-key
+Body: {"series":[{"metric":"crdb.tsdump.storage.sstable.remote.bytes","type":3,"points":[{"timestamp":1731542400,"value":0}],"resources":null,"tags":["store:1","cluster_type:SELF_HOSTED","cluster_label:test-cluster","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:test-cluster-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"]}]}
+POST: https://example.com/data
+DD-API-KEY: api-key
+Body: {"series":[{"metric":"crdb.tsdump.storage.sstable.remote.count","type":3,"points":[{"timestamp":1731542400,"value":0}],"resources":null,"tags":["store:1","cluster_type:SELF_HOSTED","cluster_label:test-cluster","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:test-cluster-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"]}]}
+POST: https://example.com/data
+DD-API-KEY: api-key
+Body: {"series":[{"metric":"crdb.tsdump.storage.sstable.zombie.bytes","type":3,"points":[{"timestamp":1731542400,"value":0}],"resources":null,"tags":["store:1","cluster_type:SELF_HOSTED","cluster_label:test-cluster","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:test-cluster-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"]}]}
+POST: https://example.com/data
+DD-API-KEY: api-key
+Body: {"series":[{"metric":"crdb.tsdump.storage.wal.bytes_in","type":1,"points":[{"timestamp":1731542400,"value":0}],"resources":null,"tags":["store:1","cluster_type:SELF_HOSTED","cluster_label:test-cluster","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:test-cluster-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"]}]}
+POST: https://example.com/data
+DD-API-KEY: api-key
+Body: {"series":[{"metric":"crdb.tsdump.storage.wal.failover.write_and_sync.latency-avg","type":3,"points":[{"timestamp":1731542400,"value":0}],"resources":null,"tags":["store:1","cluster_type:SELF_HOSTED","cluster_label:test-cluster","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:test-cluster-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"]}]}
+POST: https://example.com/data
+DD-API-KEY: api-key
+Body: {"series":[{"metric":"crdb.tsdump.storage.wal.failover.write_and_sync.latency-count","type":1,"points":[{"timestamp":1731542400,"value":0}],"resources":null,"tags":["store:1","cluster_type:SELF_HOSTED","cluster_label:test-cluster","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:test-cluster-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"]}]}
+POST: https://example.com/data
+DD-API-KEY: api-key
+Body: {"series":[{"metric":"crdb.tsdump.storage.wal.failover.write_and_sync.latency-max","type":3,"points":[{"timestamp":1731542400,"value":0}],"resources":null,"tags":["store:1","cluster_type:SELF_HOSTED","cluster_label:test-cluster","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:test-cluster-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"]}]}
+POST: https://example.com/data
+DD-API-KEY: api-key
+Body: {"series":[{"metric":"crdb.tsdump.storage.wal.failover.write_and_sync.latency-p50","type":3,"points":[{"timestamp":1731542400,"value":0}],"resources":null,"tags":["store:1","cluster_type:SELF_HOSTED","cluster_label:test-cluster","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:test-cluster-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"]}]}
+POST: https://example.com/data
+DD-API-KEY: api-key
+Body: {"series":[{"metric":"crdb.tsdump.storage.wal.failover.write_and_sync.latency-p75","type":3,"points":[{"timestamp":1731542400,"value":0}],"resources":null,"tags":["store:1","cluster_type:SELF_HOSTED","cluster_label:test-cluster","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:test-cluster-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"]}]}
+POST: https://example.com/data
+DD-API-KEY: api-key
+Body: {"series":[{"metric":"crdb.tsdump.storage.wal.failover.write_and_sync.latency-p90","type":3,"points":[{"timestamp":1731542400,"value":0}],"resources":null,"tags":["store:1","cluster_type:SELF_HOSTED","cluster_label:test-cluster","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:test-cluster-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"]}]}
+POST: https://example.com/data
+DD-API-KEY: api-key
+Body: {"series":[{"metric":"crdb.tsdump.storage.wal.failover.write_and_sync.latency-p99","type":3,"points":[{"timestamp":1731542400,"value":0}],"resources":null,"tags":["store:1","cluster_type:SELF_HOSTED","cluster_label:test-cluster","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:test-cluster-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"]}]}
+POST: https://example.com/data
+DD-API-KEY: api-key
+Body: {"series":[{"metric":"crdb.tsdump.storage.wal.failover.write_and_sync.latency-p99.9","type":3,"points":[{"timestamp":1731542400,"value":0}],"resources":null,"tags":["store:1","cluster_type:SELF_HOSTED","cluster_label:test-cluster","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:test-cluster-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"]}]}
+POST: https://example.com/data
+DD-API-KEY: api-key
+Body: {"series":[{"metric":"crdb.tsdump.storage.wal.failover.write_and_sync.latency-p99.99","type":3,"points":[{"timestamp":1731542400,"value":0}],"resources":null,"tags":["store:1","cluster_type:SELF_HOSTED","cluster_label:test-cluster","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:test-cluster-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"]}]}
+POST: https://example.com/data
+DD-API-KEY: api-key
+Body: {"series":[{"metric":"crdb.tsdump.storage.wal.failover.write_and_sync.latency-p99.999","type":3,"points":[{"timestamp":1731542400,"value":0}],"resources":null,"tags":["store:1","cluster_type:SELF_HOSTED","cluster_label:test-cluster","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:test-cluster-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"]}]}
+POST: https://example.com/data
+DD-API-KEY: api-key
+Body: {"series":[{"metric":"crdb.tsdump.storage.wal.failover.write_and_sync.latency-sum","type":3,"points":[{"timestamp":1731542400,"value":0}],"resources":null,"tags":["store:1","cluster_type:SELF_HOSTED","cluster_label:test-cluster","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:test-cluster-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"]}]}
