@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -346,6 +347,16 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 		var batchRequest *kvpb.BatchRequest
 		var br *kvpb.BatchResponse
 		send := func(ctx context.Context) error {
+			// Decorate the context with the tenant ID, if it exists.
+			tenantID, err := ba.tenantID()
+			if err != nil {
+				return err
+			}
+			if !tenantID.IsSet() {
+				tenantID = roachpb.SystemTenantID
+			}
+			ctx = roachpb.ContextWithClientTenant(ctx, tenantID)
+
 			batchRequest = ba.batchRequest(&b.cfg)
 			var pErr *kvpb.Error
 			if br, pErr = b.cfg.Sender.Send(ctx, batchRequest); pErr != nil {
@@ -612,6 +623,15 @@ func (b *batch) rangeID() roachpb.RangeID {
 		panic("rangeID cannot be called on an empty batch")
 	}
 	return b.reqs[0].rangeID
+}
+
+func (b *batch) tenantID() (id roachpb.TenantID, err error) {
+	if len(b.reqs) == 0 {
+		panic("tenantID cannot be called on an empty batch")
+	}
+	r := b.reqs[0]
+	_, id, err = keys.DecodeTenantPrefix(r.req.Header().Key)
+	return
 }
 
 func (b *batch) batchRequest(cfg *Config) *kvpb.BatchRequest {
