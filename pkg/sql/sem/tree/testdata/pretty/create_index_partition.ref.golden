@@ -16,7 +16,7 @@ CREATE INDEX foo_b_idx
 				VALUES IN (
 					'baz'
 				),
-			PARTITION default
+			PARTITION "default"
 				VALUES IN (
 					DEFAULT
 				)
@@ -34,7 +34,7 @@ CREATE INDEX foo_b_idx
 				VALUES IN (
 					'baz'
 				),
-			PARTITION default
+			PARTITION "default"
 				VALUES IN (
 					DEFAULT
 				)
@@ -50,7 +50,7 @@ CREATE INDEX foo_b_idx
 				VALUES IN (
 					'baz'
 				),
-			PARTITION default
+			PARTITION "default"
 				VALUES IN (
 					DEFAULT
 				)
@@ -64,7 +64,7 @@ CREATE INDEX foo_b_idx
 		(
 			PARTITION baz
 				VALUES IN ('baz'),
-			PARTITION default
+			PARTITION "default"
 				VALUES IN (
 					DEFAULT
 				)
@@ -78,7 +78,7 @@ CREATE INDEX foo_b_idx
 		(
 			PARTITION baz
 				VALUES IN ('baz'),
-			PARTITION default
+			PARTITION "default"
 				VALUES IN (DEFAULT)
 		)
 
@@ -89,40 +89,40 @@ CREATE INDEX foo_b_idx
 	PARTITION BY LIST (b)
 		(
 			PARTITION baz VALUES IN ('baz'),
-			PARTITION default
+			PARTITION "default"
 				VALUES IN (DEFAULT)
 		)
 
-49:
--------------------------------------------------
+51:
+---------------------------------------------------
 CREATE INDEX foo_b_idx
 	ON foo (b, c, d)
 	PARTITION BY LIST (b)
 		(
 			PARTITION baz VALUES IN ('baz'),
-			PARTITION default VALUES IN (DEFAULT)
+			PARTITION "default" VALUES IN (DEFAULT)
 		)
 
-80:
---------------------------------------------------------------------------------
+82:
+----------------------------------------------------------------------------------
 CREATE INDEX foo_b_idx
 	ON foo (b, c, d)
 	PARTITION BY LIST (b)
-		(PARTITION baz VALUES IN ('baz'), PARTITION default VALUES IN (DEFAULT))
+		(PARTITION baz VALUES IN ('baz'), PARTITION "default" VALUES IN (DEFAULT))
 
-98:
---------------------------------------------------------------------------------------------------
+100:
+----------------------------------------------------------------------------------------------------
 CREATE INDEX foo_b_idx
 	ON foo (b, c, d)
-	PARTITION BY LIST (b) (PARTITION baz VALUES IN ('baz'), PARTITION default VALUES IN (DEFAULT))
+	PARTITION BY LIST (b) (PARTITION baz VALUES IN ('baz'), PARTITION "default" VALUES IN (DEFAULT))
 
-115:
--------------------------------------------------------------------------------------------------------------------
+117:
+---------------------------------------------------------------------------------------------------------------------
 CREATE INDEX foo_b_idx
-	ON foo (b, c, d) PARTITION BY LIST (b) (PARTITION baz VALUES IN ('baz'), PARTITION default VALUES IN (DEFAULT))
+	ON foo (b, c, d) PARTITION BY LIST (b) (PARTITION baz VALUES IN ('baz'), PARTITION "default" VALUES IN (DEFAULT))
 
-134:
---------------------------------------------------------------------------------------------------------------------------------------
-CREATE INDEX foo_b_idx ON foo (b, c, d) PARTITION BY LIST (b) (PARTITION baz VALUES IN ('baz'), PARTITION default VALUES IN (DEFAULT))
+136:
+----------------------------------------------------------------------------------------------------------------------------------------
+CREATE INDEX foo_b_idx ON foo (b, c, d) PARTITION BY LIST (b) (PARTITION baz VALUES IN ('baz'), PARTITION "default" VALUES IN (DEFAULT))
 
 

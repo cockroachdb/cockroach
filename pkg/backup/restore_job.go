@@ -985,9 +985,8 @@ func createImportingDescriptors(
 	for _, desc := range sqlDescs {
 		// Decide which offline tables to include in the restore:
 		//
-		// - An offline table created by RESTORE or IMPORT PGDUMP is
-		//   fully discarded.  The table will not exist in the restoring
-		//   cluster.
+		// - An offline table created by RESTORE is fully discarded. The table
+		//   will not exist in the restoring cluster.
 		//
 		// - An offline table undergoing an IMPORT INTO in traditional
 		//   restore has all importing data elided in the restore
