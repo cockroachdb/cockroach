@@ -151,6 +151,7 @@ type SyncCallback interface {
 func newStoreEntriesBatch(eng storage.Engine) storage.Batch {
 	// Use an unindexed batch because we don't need to read our writes, and
 	// it is more efficient.
+	// TODO(pav-kv): migrate off this method to NewWriteBatch + NewReader.
 	return eng.NewUnindexedBatch()
 }
 
