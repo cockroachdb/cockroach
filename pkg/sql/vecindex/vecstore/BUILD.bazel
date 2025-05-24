@@ -57,6 +57,7 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/desctestutils",
+        "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/idxtype",
         "//pkg/sql/vecindex/cspann",

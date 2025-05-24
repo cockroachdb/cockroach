@@ -1110,6 +1110,8 @@ message VectorSearchSpec {
 
   // TargetNeighborCount is the number of nearest neighbors to search for.
   optional uint64 target_neighbor_count = 4 [(gogoproto.nullable) = false];
+
+  optional sqlbase.TableDescriptor table = 5 [(gogoproto.nullable) = false];
 }
 
 // VectorMutationSearchSpec is the specification for a vector-mutation-search
@@ -1139,4 +1141,6 @@ message VectorMutationSearchSpec {
   // IsIndexPut is true if the search is being conducted for an index put,
   // instead of an index del.
   optional bool is_index_put = 7 [(gogoproto.nullable) = false];
+
+  optional sqlbase.TableDescriptor table = 8 [(gogoproto.nullable) = false];
 }
