@@ -9,9 +9,11 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/suite"
@@ -451,6 +453,8 @@ func (suite *StoreTestSuite) TestGetFullVectors() {
 			key2 := store.InsertVector(suite.T(), treeID, vec2)
 			key3 := store.InsertVector(suite.T(), treeID, vec3)
 
+			dummykey := keys.MakeFamilyKey(encoding.EncodeVarintAscending([]byte{}, 242), 0 /* famID */)
+
 			// Start by fetching partition keys, both that exist and that do not.
 			results := []cspann.VectorWithKey{
 				{Key: cspann.ChildKey{PartitionKey: cspann.RootKey}},
@@ -467,9 +471,9 @@ func (suite *StoreTestSuite) TestGetFullVectors() {
 			// do not exist.
 			results = []cspann.VectorWithKey{
 				{Key: cspann.ChildKey{KeyBytes: key1}},
-				{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
+				{Key: cspann.ChildKey{KeyBytes: dummykey}},
 				{Key: cspann.ChildKey{KeyBytes: key2}},
-				{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
+				{Key: cspann.ChildKey{KeyBytes: dummykey}},
 				{Key: cspann.ChildKey{KeyBytes: key3}},
 			}
 			err = txn.GetFullVectors(suite.ctx, treeKey, results)
@@ -482,11 +486,11 @@ func (suite *StoreTestSuite) TestGetFullVectors() {
 
 			// Grab another set of vectors to ensure that saved state is properly reset.
 			results = []cspann.VectorWithKey{
-				{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
+				{Key: cspann.ChildKey{KeyBytes: dummykey}},
 				{Key: cspann.ChildKey{KeyBytes: key3}},
-				{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
+				{Key: cspann.ChildKey{KeyBytes: dummykey}},
 				{Key: cspann.ChildKey{KeyBytes: key2}},
-				{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
+				{Key: cspann.ChildKey{KeyBytes: dummykey}},
 				{Key: cspann.ChildKey{KeyBytes: key1}},
 			}
 			err = txn.GetFullVectors(suite.ctx, treeKey, results)

@@ -62,7 +62,7 @@ func newVectorSearchProcessor(
 	}
 	searchBeamSize := int(flowCtx.EvalCtx.SessionData().VectorSearchBeamSize)
 	maxResults := int(v.targetCount)
-	v.searcher.Init(idx, flowCtx.Txn, searchBeamSize, maxResults)
+	v.searcher.Init(flowCtx.EvalCtx, idx, flowCtx.Txn, &spec.GetFullVectorsFetchSpec, searchBeamSize, maxResults)
 	colTypes := make([]*types.T, len(v.fetchSpec.FetchedColumns))
 	for i, col := range v.fetchSpec.FetchedColumns {
 		colTypes[i] = col.Type
@@ -142,6 +142,8 @@ func (v *vectorSearchProcessor) maybeSearch() (ok bool, err error) {
 
 // processSearchResult decodes the primary key columns from the search result
 // and stores them in v.vals.
+//
+// TODO(mw5h): Replace this with a call into the store_txn's PK decoder.
 func (v *vectorSearchProcessor) processSearchResult(res *cspann.SearchResult) (err error) {
 	if v.row == nil {
 		v.row = make(rowenc.EncDatumRow, len(v.fetchSpec.FetchedColumns))
@@ -236,7 +238,7 @@ func newVectorMutationSearchProcessor(
 	if err != nil {
 		return nil, err
 	}
-	v.searcher.Init(idx, flowCtx.Txn)
+	v.searcher.Init(flowCtx.EvalCtx, idx, flowCtx.Txn, &spec.GetFullVectorsFetchSpec)
 
 	// Pass through the input columns, and add the partition column and optional
 	// quantized vector column.

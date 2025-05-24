@@ -9,10 +9,12 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/commontest",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/keys",
         "//pkg/sql/vecindex/cspann",
         "//pkg/sql/vecindex/cspann/quantize",
         "//pkg/sql/vecindex/cspann/testutils",
         "//pkg/sql/vecindex/vecpb",
+        "//pkg/util/encoding",
         "//pkg/util/vector",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
