@@ -146,10 +146,10 @@ func buildRelationDeps(
 ) []scpb.TriggerDeps_RelationReference {
 	usesRelations := make([]scpb.TriggerDeps_RelationReference, 0)
 	if err := refProvider.ForEachTableReference(func(tblID descpb.ID, idxID descpb.IndexID, colIDs descpb.ColumnIDs) error {
-		// It is possible for the trigger function to reference the table on which the
-		// trigger is defined. In that case, we need to remove the table from the list
-		// of referenced relations to avoid a circular dependency.
-		if tblID == tableID {
+		// TODO(147155): Skip self-references that have no index or column usage.
+		// This is a workaround for issue #147155, where tracking such self-references
+		// can introduce incorrect dependencies (e.g., for SELECT 1 FROM table).
+		if tableID == tblID && idxID == 0 && len(colIDs) == 0 {
 			return nil
 		}
 		usesRelations = append(usesRelations, scpb.TriggerDeps_RelationReference{
