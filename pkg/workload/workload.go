@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -341,6 +342,12 @@ func ColBatchToRows(cb coldata.Batch) [][]interface{} {
 					datums[rowIdx*numCols+colIdx] = datum
 				}
 			}
+		case types.DecimalFamily:
+			for rowIdx, datum := range col.Decimal()[:numRows] {
+				if !nulls.NullAt(rowIdx) {
+					datums[rowIdx*numCols+colIdx] = datum
+				}
+			}
 		case types.BytesFamily:
 			// HACK: workload's Table schemas are SQL schemas, but the initial data is
 			// returned as a coldata.Batch, which has a more limited set of types.
@@ -509,6 +516,8 @@ func ApproxDatumSize(x interface{}) int64 {
 		return int64(len(t))
 	case []byte:
 		return int64(len(t))
+	case apd.Decimal:
+		return int64(t.Size())
 	case time.Time:
 		return 12
 	default:
