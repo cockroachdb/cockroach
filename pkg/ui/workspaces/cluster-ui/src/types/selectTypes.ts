@@ -11,7 +11,9 @@ export type ReactSelectOption<T> = {
   value: T;
 };
 
-export type GroupedReactSelectOption<T> = {
-  label: string;
-  options: ReactSelectOption<T>[];
-};
+export type GroupedReactSelectOption<T> =
+  | {
+      label: string;
+      options: ReactSelectOption<T>[];
+    }
+  | ReactSelectOption<T>;

@@ -54,12 +54,12 @@ describe("NodeRegionsSelector", () => {
   });
 
   it("should render", () => {
-    render(<NodeRegionsSelector value={[]} onChange={() => {}} />);
+    render(<NodeRegionsSelector startingNodes={[]} onApply={() => { }} />);
     expect(screen.getByText("Nodes")).toBeTruthy();
   });
 
   it("displays correct options based on node data", async () => {
-    render(<NodeRegionsSelector value={[]} onChange={() => {}} />);
+    render(<NodeRegionsSelector startingNodes={[]} onApply={() => { }} />);
 
     const select = screen.getByText("Nodes");
     fireEvent.keyDown(select, { key: "ArrowDown" });
@@ -73,28 +73,28 @@ describe("NodeRegionsSelector", () => {
     });
   });
 
-  it("calls onChange with correct values when selecting options", async () => {
-    const value: StoreID[] = [];
-    const mockOnChange = jest.fn((selected: StoreID[]) => {
+  it("calls onApply with correct values when selecting options", async () => {
+    const value: string[] = [];
+    const mockOnChange = jest.fn((selected: string[]) => {
       value.push(...selected);
     });
-    render(<NodeRegionsSelector value={value} onChange={mockOnChange} />);
+    render(<NodeRegionsSelector startingNodes={value} onApply={mockOnChange} />);
 
-    const select = screen.getByText("Nodes");
+    const select = screen.getByText("Select Nodes");
     fireEvent.keyDown(select, { key: "ArrowDown" });
 
     await waitFor(() => {
       fireEvent.click(screen.getByText("n1"));
     });
 
-    expect(mockOnChange).toHaveBeenCalledWith([101, 102]);
+    expect(mockOnChange).toHaveBeenCalledWith(['1']);
   });
 
   it("displays selected values correctly", () => {
     render(
       <NodeRegionsSelector
-        value={[101 as StoreID, 201 as StoreID]}
-        onChange={() => {}}
+        startingNodes={['1', '2']}
+        onApply={() => { }}
       />,
     );
 
@@ -119,10 +119,10 @@ describe("NodeRegionsSelector", () => {
       } as Record<StoreID, NodeID>,
     });
 
-    render(<NodeRegionsSelector value={[]} onChange={() => {}} />);
+    render(<NodeRegionsSelector startingNodes={[]} onApply={() => { }} />);
 
-    const select = screen.getByText("Nodes");
-    fireEvent.keyDown(select, { key: "ArrowDown" });
+    const select = screen.getByText("Select Nodes");
+    fireEvent.click(select);
 
     // In the loading state, the component should still render options
     // based on the existing data
