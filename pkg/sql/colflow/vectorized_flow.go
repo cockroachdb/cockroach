@@ -1275,10 +1275,10 @@ var _ flowinfra.InboundStreamHandler = vectorizedInboundStreamHandler{}
 func (s vectorizedInboundStreamHandler) Run(
 	ctx context.Context,
 	stream execinfrapb.DistSQL_FlowStreamServer,
-	_ *execinfrapb.ProducerMessage,
+	firstMsg *execinfrapb.ProducerMessage,
 	_ *flowinfra.FlowBase,
 ) error {
-	return s.RunWithStream(ctx, stream)
+	return s.RunWithStream(ctx, stream, firstMsg.Header)
 }
 
 // Timeout is part of the flowinfra.InboundStreamHandler interface.
