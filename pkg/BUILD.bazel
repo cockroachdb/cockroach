@@ -879,7 +879,6 @@ GO_TARGETS = [
     "//pkg/bench/hashbench:hashbench_test",
     "//pkg/bench/rttanalysis:rttanalysis",
     "//pkg/bench/rttanalysis:rttanalysis_test",
-    "//pkg/bench/tpcc:tpcc",
     "//pkg/bench/tpcc:tpcc_test",
     "//pkg/bench:bench",
     "//pkg/bench:bench_test",
