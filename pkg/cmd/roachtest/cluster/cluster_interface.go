@@ -11,7 +11,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
@@ -158,6 +157,10 @@ type Cluster interface {
 	Install(
 		ctx context.Context, l *logger.Logger, nodes option.NodeListOption, software ...string,
 	) error
+	InstallGoVersion(
+		ctx context.Context, l *logger.Logger, nodes option.NodeListOption, version ...string,
+	) error
+
 	PopulateEtcHosts(ctx context.Context, l *logger.Logger) error
 
 	// Methods whose inclusion on this interface is purely historical.
@@ -174,8 +177,8 @@ type Cluster interface {
 
 	StartGrafana(ctx context.Context, l *logger.Logger, promCfg *prometheus.Config) error
 	StopGrafana(ctx context.Context, l *logger.Logger, dumpDir string) error
-	AddGrafanaAnnotation(ctx context.Context, l *logger.Logger, req grafana.AddAnnotationRequest) error
-	AddInternalGrafanaAnnotation(ctx context.Context, l *logger.Logger, req grafana.AddAnnotationRequest) error
+
+	AddGrafanaAnnotation(ctx context.Context, l *logger.Logger, opts ...option.GrafanaAnnotationOptionFunc) error
 
 	// Volume snapshot related APIs.
 	//

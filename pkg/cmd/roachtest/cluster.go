@@ -2624,6 +2624,30 @@ func (c *clusterImpl) Install(
 	return errors.Wrap(roachprod.Install(ctx, l, c.MakeNodes(nodes), software), "cluster.Install")
 }
 
+// InstallGoVersion installs a specific go version onto the node(s). If a version is
+// not specified, it defaults to the go version supported by cockroach, i.e. the one
+// in go.mod.
+func (c *clusterImpl) InstallGoVersion(
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, version ...string,
+) error {
+	var v string
+	var err error
+	switch len(version) {
+	case 0:
+		v, err = roachtestutil.GetCockroachGoVersion()
+		if err != nil {
+			return errors.Wrap(err, "Error running cluster.InstallGoVersion: unable to parse go version from go.mod")
+		}
+		l.Printf("installing go version %s", v)
+	case 1:
+		v = version[0]
+	default:
+		return errors.New("Error running cluster.InstallGoVersion: more than one version passed")
+	}
+
+	return errors.Wrap(roachprod.InstallGoVersion(ctx, l, c.MakeNodes(nodes), v), "cluster.InstallGoVersion")
+}
+
 // PopulatesEtcHosts populates the cluster's /etc/hosts file with the private IP
 // addresses of the nodes in the cluster.
 func (c *clusterImpl) PopulateEtcHosts(ctx context.Context, l *logger.Logger) error {
@@ -3016,14 +3040,40 @@ func (c *clusterImpl) StopGrafana(ctx context.Context, l *logger.Logger, dumpDir
 	return roachprod.StopGrafana(ctx, l, c.name, dumpDir)
 }
 
-// AddGrafanaAnnotation creates a grafana annotation for the centralized grafana instance.
+// AddGrafanaAnnotation creates a grafana annotation for the specified grafana instance(s).
 func (c *clusterImpl) AddGrafanaAnnotation(
+	ctx context.Context, l *logger.Logger, opts ...option.GrafanaAnnotationOptionFunc,
+) error {
+	var annotationOpts option.GrafanaAnnotationOptions
+	for _, opt := range opts {
+		annotationOpts.Apply(opt)
+	}
+	req := annotationOpts.Request
+
+	switch annotationOpts.Service {
+	case option.CentralizedGrafanaService:
+		return c.addCentralizedGrafanaAnnotation(ctx, l, req)
+	case option.InternalGrafanaService:
+		return c.addInternalGrafanaAnnotation(ctx, l, req)
+	case option.AllGrafanaServices:
+		errGroup := c.t.NewErrorGroup()
+		errGroup.Go(func(ctx context.Context, l *logger.Logger) error {
+			return c.addCentralizedGrafanaAnnotation(ctx, l, req)
+		})
+		errGroup.Go(func(ctx context.Context, l *logger.Logger) error {
+			return c.addInternalGrafanaAnnotation(ctx, l, req)
+		})
+		return errGroup.WaitE()
+	}
+	return nil
+}
+
+func (c *clusterImpl) addCentralizedGrafanaAnnotation(
 	ctx context.Context, l *logger.Logger, req grafana.AddAnnotationRequest,
 ) error {
 	if c.disableGrafanaAnnotations.Load() {
 		return nil
 	}
-
 	// If grafanaTags is empty, then grafana is not set up for this
 	// cluster. We return an annotated error and stop trying to add
 	// annotations in the future. This is to avoid logging the same
@@ -3044,15 +3094,16 @@ func (c *clusterImpl) AddGrafanaAnnotation(
 	return errors.Wrap(roachprod.AddGrafanaAnnotation(ctx, CentralizedGrafanaHost, true /* secure */, req), "error adding grafana annotation")
 }
 
-// AddInternalGrafanaAnnotation creates a grafana annotation for the internal grafana
+// addInternalGrafanaAnnotation creates a grafana annotation for the internal grafana
 // instance spun up in roachtests through StartGrafana.
-func (c *clusterImpl) AddInternalGrafanaAnnotation(
+func (c *clusterImpl) addInternalGrafanaAnnotation(
 	ctx context.Context, l *logger.Logger, req grafana.AddAnnotationRequest,
 ) error {
 	host, err := roachprod.GrafanaURL(ctx, l, c.name, false /* openInBrowser */)
 	if err != nil {
 		return err
 	}
+	req.Tags = append(req.Tags, "roachtest")
 	// The internal grafana instance does not require auth.
 	return roachprod.AddGrafanaAnnotation(ctx, host, false /* secure */, req)
 }
