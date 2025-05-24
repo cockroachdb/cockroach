@@ -7276,6 +7276,14 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_oklog_ulid_v2",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/oklog/ulid/v2",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:+9lhoxAP56we25tyYETBBY1YLA2SaoLvUFgrP2miPJU=",
+        version = "v2.1.0",
+    )
+    go_repository(
         name = "com_github_olekukonko_tablewriter",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/olekukonko/tablewriter",
@@ -8241,6 +8249,14 @@ def go_deps():
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/schollz/closestmatch/com_github_schollz_closestmatch-v2.1.0+incompatible.zip",
         ],
+    )
+    go_repository(
+        name = "com_github_sean__go_sharded_cluster_keys",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/sean-/go-sharded-cluster-keys",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:SbgHP+OnZ5zoI0h/YHuSZTQDl/8BhnC5vgkMpPVftO0=",
+        version = "v0.0.0-20250513233829-780785014d3d",
     )
     go_repository(
         name = "com_github_sean__seed",
