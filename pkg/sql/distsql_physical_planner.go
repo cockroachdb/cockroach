@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -4602,6 +4603,16 @@ func (dsp *DistSQLPlanner) planVectorSearch(
 		return err
 	}
 
+	if err := vecstore.InitGetFullVectorsFetchSpec(
+		&spec.GetFullVectorsFetchSpec,
+		planCtx.EvalContext(),
+		planInfo.table,
+		planInfo.index,
+		planInfo.table.GetPrimaryIndex(),
+	); err != nil {
+		return err
+	}
+
 	// Execute the vector search on the gateway node.
 	corePlacement := []physicalplan.ProcessorCorePlacement{{
 		SQLInstanceID: dsp.gatewaySQLInstanceID,
@@ -4671,6 +4682,16 @@ func (dsp *DistSQLPlanner) planVectorMutationSearch(
 		planInfo.table,
 		planInfo.index,
 		fetchCols,
+	); err != nil {
+		return err
+	}
+
+	if err := vecstore.InitGetFullVectorsFetchSpec(
+		&spec.GetFullVectorsFetchSpec,
+		planCtx.EvalContext(),
+		planInfo.table,
+		planInfo.index,
+		planInfo.table.GetPrimaryIndex(),
 	); err != nil {
 		return err
 	}
