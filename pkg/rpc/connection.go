@@ -287,7 +287,7 @@ func (s *connFuture[Conn]) Resolve(cc Conn, dc drpc.Conn, err error) {
 	case <-s.ready:
 		// Already resolved, noop.
 	default:
-		s.cc, s.dc, s.err = cc, dc, err
+		s.cc, s.dc, s.err = cc, dc, err // Probably here, return drpc Conn with dial options.
 		close(s.ready)
 	}
 }

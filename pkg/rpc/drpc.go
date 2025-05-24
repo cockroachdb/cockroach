@@ -110,6 +110,7 @@ func dialDRPC(
 				return nil, err
 			}
 
+			// Add something like dialOptions as part of this drpcconn.Options struct in fork.
 			opts := drpcconn.Options{
 				Manager: drpcmanager.Options{
 					Reader: drpcwire.ReaderOptions{
