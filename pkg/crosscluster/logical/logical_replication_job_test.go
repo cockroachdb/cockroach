@@ -2113,7 +2113,6 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 func TestUserPrivileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
-	skip.UnderRaceWithIssue(t, 142992)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
