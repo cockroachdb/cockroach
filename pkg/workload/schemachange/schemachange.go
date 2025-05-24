@@ -359,6 +359,54 @@ func (s *schemaChange) setClusterSettings(ctx context.Context, url string) (err 
 			return errors.WithStack(err)
 		}
 	}
+
+	// First, ensure the trigger_log table exists
+	_, err = conn.Exec(ctx, `
+CREATE TABLE IF NOT EXISTS trigger_log (
+    changed_at TIMESTAMP DEFAULT current_timestamp
+)`)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	/*	// Save the current declarative schema changer setting
+		var originalDSCValue string
+		err = conn.QueryRow(ctx, `SHOW use_declarative_schema_changer`).Scan(&originalDSCValue)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		// Temporarily disable declarative schema changer for function creation
+		_, err = conn.Exec(ctx, `SET use_declarative_schema_changer=off`)
+		if err != nil {
+			return errors.WithStack(err)
+		}*/
+
+	// Create the function with legacy schema changer
+	_, err = conn.Exec(ctx, `
+CREATE OR REPLACE FUNCTION log_change_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO trigger_log
+    VALUES (current_timestamp);
+    RETURN NULL;
+END;
+$$ LANGUAGE PLpgSQL`)
+	if err != nil {
+		/*		// Restore original setting even if function creation fails
+				_, restoreErr := conn.Exec(ctx, fmt.Sprintf(`SET use_declarative_schema_changer=%s`, originalDSCValue))
+				if restoreErr != nil {
+					return errors.CombineErrors(err, restoreErr)
+				}*/
+		return errors.WithStack(err)
+	}
+
+	/*	// Restore the original declarative schema changer setting
+		_, err = conn.Exec(ctx, fmt.Sprintf(`SET use_declarative_schema_changer=%s`, originalDSCValue))
+		if err != nil {
+			return errors.WithStack(err)
+		}*/
+
 	return nil
 }
 
