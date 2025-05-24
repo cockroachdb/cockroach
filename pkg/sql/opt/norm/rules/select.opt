@@ -448,3 +448,22 @@ $input
     )
     (RemoveFiltersItem $filter $item)
 )
+
+# NormalizeIsToEq replaces x IS NOT DISTINCT FROM y with x = y 
+# when it can be proved that neither x nor y is NULL and x and y have identical types.
+[NormalizeIsToEq, Normalize]
+(Select
+    $input:*
+    $filters:[
+        ...
+        $item:(FiltersItem
+            (Is
+                $left:* & ^(IsNullScalar $left) & ^(IsTupleScalar $left)
+                $right:* & ^(IsNullScalar $right) & ^(IsTupleScalar $right) & (IdenticalTypes $left $right)
+            )
+        )
+        ...
+    ]
+)
+=>
+(Select $input [ (FiltersItem (Eq $left $right)) ])
