@@ -32,10 +32,10 @@ const DbpediaDataset = "dbpedia-1536d-1k.gob"
 // OpenAI image embedding model.
 const LaionDataset = "laion-768d-1k.gob"
 
-// FashionDataset consists of 10K 784 dimension float32 vectors. Each vector is
+// FashionDataset consists of 1K 784 dimension float32 vectors. Each vector is
 // a 28x28 greyscale image (flattened to 784 dimensions) of clothing items, with
 // pixel values ranging from 0 to 255.
-const FashionDataset = "fashion-784d-10k.gob"
+const FashionDataset = "fashion-784d-1k.gob"
 
 // RandomDataset consists of 1K 20 dimension float32 vectors. Each vector was
 // randomly generated, with floating-point coordinates ranging between roughly
