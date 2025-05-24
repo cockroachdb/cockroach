@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
@@ -36,9 +37,9 @@ type MutationSearcher struct {
 //
 // NOTE: The index is expected to come from a call to Manager.Get, and therefore
 // using a vecstore.Store instance.
-func (s *MutationSearcher) Init(idx *cspann.Index, txn *kv.Txn) {
+func (s *MutationSearcher) Init(idx *cspann.Index, txn *kv.Txn, tableDesc catalog.TableDescriptor) {
 	s.idx = idx
-	s.txn.Init(idx.Store().(*vecstore.Store), txn)
+	s.txn.Init(idx.Store().(*vecstore.Store), txn, tableDesc)
 	s.idxCtx.Init(&s.txn)
 
 	// If the index is deterministic, then synchronously run the background worker
