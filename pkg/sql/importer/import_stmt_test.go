@@ -58,7 +58,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -2006,19 +2005,24 @@ func TestImportRowLimit(t *testing.T) {
 	})
 }
 
-func TestFailedImportGC(t *testing.T) {
+// TestFailedImport verifies that a failed import will clean up after itself
+// (meaning that the table doesn't contain garbage data that was partially
+// imported and that the table is brought online).
+func TestFailedImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t)
 
+	rng, _ := randutil.NewTestRand()
 	const nodes = 3
-
-	var forceFailure bool
-	blockGC := make(chan struct{})
+	numFiles := nodes
+	rowsPerFile := 1000
+	rowsPerRaceFile := 16
+	testFiles := makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
 
 	ctx := context.Background()
-	baseDir := datapathutils.TestDataPath(t, "pgdump")
+	baseDir := datapathutils.TestDataPath(t, "csv")
 	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		// Test fails within a test tenant. This may be because we're trying
 		// to access files in nodelocal://1, which is off node. More
@@ -2026,15 +2030,11 @@ func TestFailedImportGC(t *testing.T) {
 		DefaultTestTenant: base.TODOTestTenantDisabled,
 		SQLMemoryPoolSize: 256 << 20,
 		ExternalIODir:     baseDir,
-		Knobs: base.TestingKnobs{
-			GCJob: &sql.GCJobTestingKnobs{
-				RunBeforeResume: func(_ jobspb.JobID) error { <-blockGC; return nil },
-			},
-		},
 	}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 
+	var forceFailure bool
 	for i := 0; i < tc.NumServers(); i++ {
 		tc.Server(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
 			jobspb.TypeImport,
@@ -2051,56 +2051,25 @@ func TestFailedImportGC(t *testing.T) {
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
-	kvDB := tc.Server(0).DB()
-
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
+	sqlDB.Exec(t, "CREATE DATABASE failedimport; USE failedimport;")
+	sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+
+	expectedRows := "0"
+	if rng.Float64() < 0.5 {
+		sqlDB.Exec(t, `INSERT INTO t VALUES (-1, 'a'), (-2, 'b')`)
+		expectedRows = "2"
+	}
 
 	forceFailure = true
 	defer func() { forceFailure = false }()
-	defer gcjob.SetSmallMaxGCIntervalForTest()()
-	beforeImport, err := tree.MakeDTimestampTZ(tc.Server(0).Clock().Now().GoTime(), time.Millisecond)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	sqlDB.Exec(t, "CREATE DATABASE failedimport; USE failedimport;")
 	// Hit a failure during import.
 	sqlDB.ExpectErr(
 		t, `testing injected failure`,
-		fmt.Sprintf(`IMPORT TABLE simple FROM PGDUMP ('%s') WITH ignore_unsupported_statements`, "nodelocal://1/simple.sql"),
+		fmt.Sprintf("IMPORT INTO t (a, b) CSV DATA (%s)", strings.Join(testFiles.files, ",")),
 	)
-	// Nudge the registry to quickly adopt the job.
-	tc.Server(0).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
-
-	// In the case of the test, the ID of the table that will be cleaned up due
-	// to the failed import will be two higher than the ID of the empty database
-	// it was created in.
-	// We increment the id once for the public schema and a second time for the
-	// "MakeSimpleTableDescriptor".
-	dbID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "failedimport")
-	tableID := descpb.ID(dbID + 2)
-	var td catalog.TableDescriptor
-	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
-	if err := sql.DescsTxn(ctx, &execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
-		td, err = col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, tableID)
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
-	// Ensure that we have garbage written to the descriptor that we want to
-	// clean up.
-	tests.CheckKeyCount(t, kvDB, td.TableSpan(keys.SystemSQLCodec), 87)
-
-	// Allow GC to progress.
-	close(blockGC)
-	// Ensure that a GC job was created, and wait for it to finish.
-	doneGCQuery := fmt.Sprintf(
-		"SELECT count(*) FROM crdb_internal.jobs WHERE job_type = '%s' AND running_status = '%s' AND created > %s",
-		"SCHEMA CHANGE GC", sql.StatusWaitingForMVCCGC, beforeImport.String(),
-	)
-	sqlDB.CheckQueryResultsRetry(t, doneGCQuery, [][]string{{"1"}})
-	// Expect there are no more KVs for this span.
-	tests.CheckKeyCount(t, kvDB, td.TableSpan(keys.SystemSQLCodec), 0)
+	// Ensure that the table is online and is reverted properly.
+	sqlDB.CheckQueryResultsRetry(t, "SELECT count(*) FROM t", [][]string{{expectedRows}})
 }
 
 // TestImportIntoCSVCancel cancels a distributed import. This test
@@ -2163,10 +2132,6 @@ func TestImportIntoCSVCancel(t *testing.T) {
 	sqlDB.CheckQueryResults(t, "SELECT count(*) FROM t", [][]string{{"0"}})
 }
 
-// Verify that a failed import will clean up after itself. This means:
-//   - Delete the garbage data that it partially imported.
-//   - Delete the table descriptor for the table that was created during the
-//     import.
 func TestImportCSVStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -6538,8 +6503,12 @@ func TestCreateStatsAfterImport(t *testing.T) {
 	stats.DefaultAsOfTime = time.Microsecond
 
 	const nodes = 1
+	numFiles := nodes
+	rowsPerFile := 1000
+	rowsPerRaceFile := 16
+	testFiles := makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
 	ctx := context.Background()
-	baseDir := datapathutils.TestDataPath(t)
+	baseDir := datapathutils.TestDataPath(t, "csv")
 
 	// Disable stats collection on system tables before the cluster is started,
 	// otherwise there is a race condition where stats may be collected before we
@@ -6560,22 +6529,39 @@ func TestCreateStatsAfterImport(t *testing.T) {
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=true`)
 
-	sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported_statements", "nodelocal://1/cockroachdump/dump.sql")
+	sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+
+	emptyTableStats := [][]string{
+		{"__auto__", "{a}", "0", "0", "0"},
+		{"__auto__", "{b}", "0", "0", "0"},
+	}
+	// Wait until stats are collected on the empty table (to make the test more
+	// deterministic).
+	sqlDB.CheckQueryResultsRetry(t,
+		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
+	  FROM [SHOW STATISTICS FOR TABLE t]`,
+		emptyTableStats)
+
+	sqlDB.Exec(
+		t, fmt.Sprintf("IMPORT INTO t (a, b) CSV DATA (%s)", strings.Join(testFiles.files, ",")),
+	)
+
+	expectedStats := [][]string{
+		{"__auto__", "{a}", "1000", "1000", "0"},
+		{"__auto__", "{b}", "1000", "26", "0"},
+	}
+	if util.RaceEnabled {
+		expectedStats = [][]string{
+			{"__auto__", "{a}", "16", "16", "0"},
+			{"__auto__", "{b}", "16", "16", "0"},
+		}
+	}
 
 	// Verify that statistics have been created.
 	sqlDB.CheckQueryResultsRetry(t,
 		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
 	  FROM [SHOW STATISTICS FOR TABLE t]`,
-		[][]string{
-			{"__auto__", "{i}", "2", "2", "0"},
-			{"__auto__", "{t}", "2", "2", "0"},
-		})
-	sqlDB.CheckQueryResultsRetry(t,
-		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
-	  FROM [SHOW STATISTICS FOR TABLE a]`,
-		[][]string{
-			{"__auto__", "{i}", "1", "1", "0"},
-		})
+		append(emptyTableStats, expectedStats...))
 }
 
 func TestImportAvro(t *testing.T) {

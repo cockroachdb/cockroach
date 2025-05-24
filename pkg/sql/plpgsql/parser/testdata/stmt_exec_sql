@@ -1,34 +1,34 @@
 parse
 DECLARE
 BEGIN
-  IMPORT TABLE foo
-  FROM PGDUMP 'userfile://defaultdb.public.userfiles_root/db.sql'
+  IMPORT INTO foo
+  CSV DATA ('userfile://defaultdb.public.userfiles_root/db.sql')
   WITH max_row_size='524288';
 END
 ----
 DECLARE
 BEGIN
-IMPORT TABLE foo FROM PGDUMP '*****' WITH OPTIONS (max_row_size = '524288');
+IMPORT INTO foo CSV DATA ('*****') WITH OPTIONS (max_row_size = '524288');
 END;
  -- normalized!
 DECLARE
 BEGIN
-IMPORT TABLE foo FROM PGDUMP ('*****') WITH OPTIONS (max_row_size = ('524288'));
+IMPORT INTO foo CSV DATA (('*****')) WITH OPTIONS (max_row_size = ('524288'));
 END;
  -- fully parenthesized
 DECLARE
 BEGIN
-IMPORT TABLE foo FROM PGDUMP '_' WITH OPTIONS (max_row_size = '_');
+IMPORT INTO foo CSV DATA ('_') WITH OPTIONS (max_row_size = '_');
 END;
  -- literals removed
 DECLARE
 BEGIN
-IMPORT TABLE _ FROM PGDUMP '*****' WITH OPTIONS (_ = '524288');
+IMPORT INTO _ CSV DATA ('*****') WITH OPTIONS (_ = '524288');
 END;
  -- identifiers removed
 DECLARE
 BEGIN
-IMPORT TABLE foo FROM PGDUMP 'userfile://defaultdb.public.userfiles_root/db.sql' WITH OPTIONS (max_row_size = '524288');
+IMPORT INTO foo CSV DATA ('userfile://defaultdb.public.userfiles_root/db.sql') WITH OPTIONS (max_row_size = '524288');
 END;
  -- passwords exposed
 

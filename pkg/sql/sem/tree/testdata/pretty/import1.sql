@@ -1,1 +1,1 @@
-import table t from csv $1
+import into t csv data ($1)
