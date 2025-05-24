@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
+	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
 	"gonum.org/v1/gonum/floats/scalar"
@@ -26,16 +27,21 @@ func TestBalancedKMeans(t *testing.T) {
 		centroid vector.T,
 		offsets []uint64,
 	) float32 {
+		if distanceMetric == vecdist.Cosine || distanceMetric == vecdist.InnerProduct {
+			centroid = slices.Clone(centroid)
+			num32.Normalize(centroid)
+		}
 		var distanceSum float32
 		for _, offset := range offsets {
-			distanceSum += vecdist.Measure(distanceMetric, vectors.At(int(offset)), centroid)
+			distance := vecdist.Measure(distanceMetric, vectors.At(int(offset)), centroid)
+			distanceSum += distance
 		}
 		return distanceSum / float32(len(offsets))
 	}
 
 	workspace := &workspace.T{}
 	images := testutils.LoadDataset(t, testutils.ImagesDataset)
-	laion := testutils.LoadDataset(t, testutils.LaionDataset)
+	fashion := testutils.LoadDataset(t, testutils.FashionDataset)
 
 	testCases := []struct {
 		desc           string
@@ -46,7 +52,6 @@ func TestBalancedKMeans(t *testing.T) {
 		leftCentroid   vector.T
 		rightCentroid  vector.T
 		skipPinTest    bool
-		testUnbalanced bool
 	}{
 		{
 			desc:           "partition vector set with only 2 elements",
@@ -79,12 +84,13 @@ func TestBalancedKMeans(t *testing.T) {
 				1, 2, 3,
 				2, 5, 10,
 				4, 6, 1,
+				0, 0, 0,
 				10, 15, 20,
 				4, 7, 2,
 			}, 3),
-			leftOffsets:   []uint64{0, 2, 4},
-			rightOffsets:  []uint64{1, 3},
-			leftCentroid:  []float32{3, 5, 2},
+			leftOffsets:   []uint64{0, 2, 3, 5},
+			rightOffsets:  []uint64{1, 4},
+			leftCentroid:  []float32{2.25, 3.75, 1.5},
 			rightCentroid: []float32{6, 10, 15},
 		},
 		{
@@ -126,11 +132,29 @@ func TestBalancedKMeans(t *testing.T) {
 				1, 2, 3,
 				2, 5, -10,
 				-4, 6, 1,
+				0, 0, 0,
 				9, -14, 20,
 				5, 9, 4,
 			}, 3),
-			leftOffsets:  []uint64{1, 2},
-			rightOffsets: []uint64{0, 3, 4},
+			leftOffsets:  []uint64{0, 4, 5},
+			rightOffsets: []uint64{1, 2, 3},
+			skipPinTest:  true,
+		},
+		{
+			// Co-linear vectors are an edge case. The spherical centroids are the
+			// same, so the vectors are the same distance to both. Therefore, they are
+			// arbitrarily assigned to the left or right partition.
+			desc:           "inner product distance, co-linear vectors",
+			distanceMetric: vecdist.InnerProduct,
+			vectors: vector.MakeSetFromRawData([]float32{
+				0, 1,
+				0, 10,
+				0, 100,
+				0, 1000,
+			}, 2),
+			leftOffsets:  []uint64{0, 1},
+			rightOffsets: []uint64{2, 3},
+			skipPinTest:  true,
 		},
 		{
 			desc:           "cosine distance",
@@ -139,11 +163,12 @@ func TestBalancedKMeans(t *testing.T) {
 				1, 0, 0,
 				0.57735, 0.57735, 0.57735,
 				0, 0, 1,
+				0, 0, 0,
 				0, 1, 0,
 				0.95672, -0.06355, -0.28399,
 			}, 3),
-			leftOffsets:  []uint64{0, 4},
-			rightOffsets: []uint64{1, 2, 3},
+			leftOffsets:  []uint64{0, 5},
+			rightOffsets: []uint64{1, 2, 3, 4},
 		},
 		{
 			desc:           "high-dimensional unit vectors, Euclidean distance",
@@ -167,19 +192,10 @@ func TestBalancedKMeans(t *testing.T) {
 			skipPinTest:    true,
 		},
 		{
-			// Note that laion.Slice(0, 100) actually fails the check that vectors
-			// in the left partition are closer to the left centroid than vectors
-			// in the right partition. This is because K-means++ happens to pick
-			// bad centroids that result in > 2/3rd the vectors being closer to
-			// the right centroid. In that case, the BalancedKMeans class will
-			// deliberately move vectors to the left partition, even though they
-			// are closer to the right partition, in order to obey the balancing
-			// constraint.
-			desc:           "different dataset, InnerProduct distance",
+			desc:           "high-dimensional non-unit vectors, InnerProduct distance",
 			distanceMetric: vecdist.InnerProduct,
-			vectors:        laion.Slice(0, 100),
+			vectors:        fashion.Slice(0, 100),
 			skipPinTest:    true,
-			testUnbalanced: true,
 		},
 	}
 
@@ -216,7 +232,7 @@ func TestBalancedKMeans(t *testing.T) {
 			} else {
 				// Fallback on calculation.
 				expected := make(vector.T, tc.vectors.Dims)
-				calcPartitionCentroid(tc.distanceMetric, tc.vectors, leftOffsets, expected)
+				calcPartitionCentroid(tc.vectors, leftOffsets, expected)
 				require.InDeltaSlice(t, expected, leftCentroid, 1e-6)
 			}
 			if tc.rightCentroid != nil {
@@ -224,22 +240,24 @@ func TestBalancedKMeans(t *testing.T) {
 			} else {
 				// Fallback on calculation.
 				expected := make(vector.T, tc.vectors.Dims)
-				calcPartitionCentroid(tc.distanceMetric, tc.vectors, rightOffsets, expected)
+				calcPartitionCentroid(tc.vectors, rightOffsets, expected)
 				require.InDeltaSlice(t, expected, rightCentroid, 1e-6)
 			}
 			ratio := float64(len(leftOffsets)) / float64(len(rightOffsets))
 			require.False(t, ratio < 0.45)
 			require.False(t, ratio > 2.05)
 
-			// Ensure that distance to left centroid is less for vectors in the left
-			// partition than those in the right partition.
+			// Ensure that left vectors are closer to the left partition than to
+			// the right partition.
 			leftMean := calcMeanDistance(tc.distanceMetric, tc.vectors, leftCentroid, leftOffsets)
-			rightMean := calcMeanDistance(tc.distanceMetric, tc.vectors, leftCentroid, rightOffsets)
-			if tc.testUnbalanced {
-				require.Greater(t, leftMean, rightMean)
-			} else {
-				require.LessOrEqual(t, leftMean, rightMean)
-			}
+			rightMean := calcMeanDistance(tc.distanceMetric, tc.vectors, rightCentroid, leftOffsets)
+			require.LessOrEqual(t, leftMean, rightMean)
+
+			// Ensure that right vectors are closer to the right partition than to
+			// the left partition.
+			leftMean = calcMeanDistance(tc.distanceMetric, tc.vectors, leftCentroid, rightOffsets)
+			rightMean = calcMeanDistance(tc.distanceMetric, tc.vectors, rightCentroid, rightOffsets)
+			require.GreaterOrEqual(t, leftMean, rightMean)
 
 			if !tc.skipPinTest {
 				// Check that pinning the left centroid returns the same right centroid.
@@ -340,60 +358,6 @@ func TestMeanOfVariances(t *testing.T) {
 			mean := stat.Mean(variances, nil)
 			mean = scalar.Round(mean, 4)
 			require.Equal(t, mean, result)
-		})
-	}
-}
-
-func TestCalcPartitionCentroid(t *testing.T) {
-	testCases := []struct {
-		name           string
-		distanceMetric vecdist.Metric
-		vectors        vector.Set
-		offsets        []uint64
-		expected       vector.T
-	}{
-		{
-			name:           "L2Squared simple mean",
-			distanceMetric: vecdist.L2Squared,
-			// Only use the [1,2] and [3,4] vectors.
-			vectors:  vector.MakeSetFromRawData([]float32{1, 2, 10, 11, 3, 4, 12, 13}, 2),
-			offsets:  []uint64{0, 2},
-			expected: vector.T{2, 3},
-		},
-		{
-			name:           "Cosine normalization",
-			distanceMetric: vecdist.Cosine,
-			// Only use the [1,0] and [0,1] vectors.
-			vectors:  vector.MakeSetFromRawData([]float32{10, 11, 1, 0, 12, 13, 0, 1}, 2),
-			offsets:  []uint64{1, 3},
-			expected: vector.T{0.7071, 0.7071},
-		},
-		{
-			// The degenerate case for cosine occurs when the sum of the input
-			// vectors is the zero vector. When this happens, the norm is zero
-			// and the direction of the vector can't be determined. In that case,
-			// return the zero vector.
-			name:           "Cosine degenerate zero vector",
-			distanceMetric: vecdist.Cosine,
-			vectors:        vector.MakeSetFromRawData([]float32{0.7071, 0.7071, -0.7071, -0.7071}, 2),
-			offsets:        []uint64{0, 1},
-			expected:       vector.T{0, 0},
-		},
-		{
-			name:           "InnerProduct with 3 dimensions",
-			distanceMetric: vecdist.InnerProduct,
-			vectors:        vector.MakeSetFromRawData([]float32{-5, 2, -3, 4, 8, 6, 10, 2, -3}, 3),
-			offsets:        []uint64{0, 1, 2},
-			expected:       vector.T{0.6, 0.8, 0},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			centroid := make(vector.T, tc.vectors.Dims)
-			calcPartitionCentroid(tc.distanceMetric, tc.vectors, tc.offsets, centroid)
-			require.InDeltaSlice(
-				t, tc.expected, centroid, 1e-4, "centroid not as expected: %0.4f", centroid)
 		})
 	}
 }

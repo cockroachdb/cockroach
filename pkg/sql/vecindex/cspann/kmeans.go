@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
@@ -42,6 +43,18 @@ const allowImbalance = 33
 //
 // We should also look at the FAISS library's implementation of K-means, which
 // has provisions for dealing with empty clusters.
+//
+// For L2Squared distance, vectors are grouped by their distance from mean
+// centroids (simple averaging of each dimension). For InnerProduct and Cosine
+// distance metrics, vectors are grouped by their distance from spherical
+// centroids (mean centroid normalized to unit length). This prevents
+// high-magnitude centroids from disproportionately attracting vectors and
+// continually growing in magnitude as centroids of centroids are computed.
+// FAISS normalizes centroids when using InnerProduct distance for this reason.
+//
+// NOTE: ComputeCentroids always returns mean centroids, even for InnerProduct
+// and Cosine metrics. Spherical centroids can be derived from mean centroids
+// by normalization, but the reverse is not possible.
 type BalancedKmeans struct {
 	// MaxIterations specifies the maximum number of retries that the K-means
 	// algorithm will attempt as part of finding locally optimal partitions.
@@ -65,12 +78,14 @@ type BalancedKmeans struct {
 //
 // NOTE: The caller is responsible for allocating the input centroids with
 // dimensions equal to the dimensions of the input vector set.
+//
+// NOTE: For InnerProduct and Cosine distance metrics, clustering uses spherical
+// centroids (normalized to unit length), but ComputeCentroids still always
+// returns mean centroids. See BalancedKmeans comment for details.
 func (km *BalancedKmeans) ComputeCentroids(
 	vectors vector.Set, leftCentroid, rightCentroid vector.T, pinLeftCentroid bool,
 ) {
-	if vectors.Count < 2 {
-		panic(errors.AssertionFailedf("k-means requires at least 2 vectors"))
-	}
+	km.validateVectors(vectors)
 
 	tempOffsets := km.Workspace.AllocUint64s(vectors.Count)
 	defer km.Workspace.FreeUint64s(tempOffsets)
@@ -109,16 +124,11 @@ func (km *BalancedKmeans) ComputeCentroids(
 
 		// Calculate new centroids.
 		if !pinLeftCentroid {
-			calcPartitionCentroid(km.DistanceMetric, vectors, leftOffsets, newLeftCentroid)
+			calcPartitionCentroid(vectors, leftOffsets, newLeftCentroid)
 		}
-		calcPartitionCentroid(km.DistanceMetric, vectors, rightOffsets, newRightCentroid)
+		calcPartitionCentroid(vectors, rightOffsets, newRightCentroid)
 
 		// Check for convergence using the scikit-learn algorithm.
-		// NOTE: This uses Euclidean distance, even when using spherical centroids
-		// with Cosine or InnerProduct distances. This approach mirrors the
-		// spherecluster library. Since spherical centroids are always normalized
-		// (unit vectors), the squared Euclidean distance is 2x the Cosine or
-		// InnerProduct distance, so it's a reasonable convergence check.
 		leftCentroidShift := num32.L2SquaredDistance(leftCentroid, newLeftCentroid)
 		rightCentroidShift := num32.L2SquaredDistance(rightCentroid, newRightCentroid)
 		if leftCentroidShift+rightCentroidShift <= tolerance {
@@ -135,6 +145,10 @@ func (km *BalancedKmeans) ComputeCentroids(
 // partition, based on which partition's centroid they're closer to. It also
 // enforces a constraint that one partition will never be more than 2x as large
 // as the other.
+//
+// NOTE: For InnerProduct and Cosine distance metrics, AssignPartitions groups
+// vectors by their distance from spherical centroids (i.e. unit centroids). See
+// BalancedKmeans comment.
 func (km *BalancedKmeans) AssignPartitions(
 	vectors vector.Set, leftCentroid, rightCentroid vector.T, offsets []uint64,
 ) (leftOffsets, rightOffsets []uint64) {
@@ -142,11 +156,50 @@ func (km *BalancedKmeans) AssignPartitions(
 	tempDistances := km.Workspace.AllocFloats(count)
 	defer km.Workspace.FreeFloats(tempDistances)
 
+	// For Cosine and InnerProduct distances, compute the norms (magnitudes) of
+	// the left and right centroids. Invert the magnitude to avoid division in
+	// the loop, as well as to take care of the division-by-zero case up front.
+	spherical := km.DistanceMetric == vecdist.Cosine || km.DistanceMetric == vecdist.InnerProduct
+	var invLeftNorm, invRightNorm float32
+	if spherical {
+		invLeftNorm = num32.Norm(leftCentroid)
+		if invLeftNorm != 0 {
+			invLeftNorm = 1 / invLeftNorm
+		}
+		invRightNorm = num32.Norm(rightCentroid)
+		if invRightNorm != 0 {
+			invRightNorm = 1 / invRightNorm
+		}
+	}
+
 	// Calculate difference between distance of each vector to the left and right
 	// centroids.
 	for i := range count {
-		tempDistances[i] = vecdist.Measure(km.DistanceMetric, vectors.At(i), leftCentroid) -
-			vecdist.Measure(km.DistanceMetric, vectors.At(i), rightCentroid)
+		var leftDistance, rightDistance float32
+		if spherical {
+			// Compute the distance between the input vector and the spherical
+			// centroids. Because input vectors are expected to be normalized, Cosine
+			// distance reduces to be InnerProduct distance. InnerProduct distance
+			// is calculated like this:
+			//
+			//   sphericalCentroid = centroid / ||centroid||
+			//   -(inputVector · sphericalCentroid)
+			//
+			// That is, we convert each mean centroid to a spherical centroid by
+			// normalizing it (dividing by its norm). Then we compute the negative
+			// dot product of the spherical centroid with the input vector. However,
+			// we can use algebraic equivalencies to change the order of operations
+			// to be more efficient:
+			//
+			//   -(inputVector · centroid) / ||centroid||
+			leftDistance = -num32.Dot(vectors.At(i), leftCentroid) * invLeftNorm
+			rightDistance = -num32.Dot(vectors.At(i), rightCentroid) * invRightNorm
+		} else {
+			// For L2Squared, compute Euclidean distance to the mean centroids.
+			leftDistance = num32.L2SquaredDistance(vectors.At(i), leftCentroid)
+			rightDistance = num32.L2SquaredDistance(vectors.At(i), rightCentroid)
+		}
+		tempDistances[i] = leftDistance - rightDistance
 		offsets[i] = uint64(i)
 	}
 
@@ -201,7 +254,6 @@ func (km *BalancedKmeans) selectInitialLeftCentroid(vectors vector.Set, leftCent
 		leftOffset = rand.Intn(vectors.Count)
 	}
 	copy(leftCentroid, vectors.At(leftOffset))
-	km.maybeNormalizeCentroid(leftCentroid)
 }
 
 // selectInitialRightCentroid continues the K-means++ algorithm begun in
@@ -221,6 +273,19 @@ func (km *BalancedKmeans) selectInitialRightCentroid(
 	distanceMin := float32(math.MaxFloat32)
 	for i := range count {
 		distance := vecdist.Measure(km.DistanceMetric, vectors.At(i), leftCentroid)
+		if km.DistanceMetric == vecdist.InnerProduct {
+			// For inner product, rank vectors by their angular distance from the
+			// left centroid, ignoring their magnitudes.
+			// NOTE: Vectors have norm of one (i.e. they are unit vectors) when using
+			// Cosine distance, so no need to perform this calculation.
+			// NOTE: We don't need to normalize the left centroid because scaling
+			// its magnitude just scales distances by the same proportion -
+			// probabilities won't change.
+			norm := num32.Norm(vectors.At(i))
+			if norm != 0 {
+				distance /= norm
+			}
+		}
 		tempDistances[i] = distance
 		distanceSum += distance
 		if distance < distanceMin {
@@ -231,6 +296,9 @@ func (km *BalancedKmeans) selectInitialRightCentroid(
 	// not zero. For example, if the min distance is -10, then all distances need
 	// to be adjusted by +10 so that the min distance becomes 0.
 	distanceSum += float32(count) * -distanceMin
+	if distanceMin != 0 {
+		num32.AddConst(-distanceMin, tempDistances)
+	}
 
 	// Calculate probability of each vector becoming the right centroid, equal
 	// to its distance from the left centroid. Further vectors have a higher
@@ -238,7 +306,9 @@ func (km *BalancedKmeans) selectInitialRightCentroid(
 	// distance from itself, and so will never be selected (unless there are
 	// duplicates). However, InnerProduct can select the left centroid in rare
 	// cases.
-	num32.Scale(1/distanceSum, tempDistances)
+	if distanceSum != 0 {
+		num32.Scale(1/distanceSum, tempDistances)
+	}
 	var cum, rnd float32
 	if km.Rand != nil {
 		rnd = km.Rand.Float32()
@@ -247,14 +317,13 @@ func (km *BalancedKmeans) selectInitialRightCentroid(
 	}
 	rightOffset := 0
 	for i := range len(tempDistances) {
-		cum += tempDistances[i] + -distanceMin
+		cum += tempDistances[i]
 		if rnd < cum {
 			rightOffset = i
 			break
 		}
 	}
 	copy(rightCentroid, vectors.At(rightOffset))
-	km.maybeNormalizeCentroid(rightCentroid)
 }
 
 // calculateMeanOfVariances calculates the variance in each dimension of the
@@ -322,49 +391,35 @@ func (km *BalancedKmeans) calculateMeanOfVariances(vectors vector.Set) float32 {
 	return num32.Sum(tempVariance) / float32(vectors.Dims)
 }
 
-// maybeNormalizeCentroid normalizes the centroid (i.e. "spherical centroid") if
-// using InnerProduct distance. This prevents centroids with high magnitudes
-// from attracting vectors simply because of their magnitude. Faiss normalizes
-// centroids by default for InnerProduct.
-func (km *BalancedKmeans) maybeNormalizeCentroid(centroid vector.T) {
-	if km.DistanceMetric == vecdist.InnerProduct {
-		num32.Normalize(centroid)
+// validateVectors ensures that if the Cosine distance metric is being used,
+// that the vectors are unit vectors.
+func (km *BalancedKmeans) validateVectors(vectors vector.Set) {
+	if vectors.Count < 2 {
+		panic(errors.AssertionFailedf("k-means requires at least 2 vectors"))
+	}
+
+	switch km.DistanceMetric {
+	case vecdist.L2Squared, vecdist.InnerProduct:
+
+	case vecdist.Cosine:
+		utils.ValidateUnitVectors(vectors)
+
+	default:
+		panic(errors.AssertionFailedf("%s distance metric is not supported", km.DistanceMetric))
 	}
 }
 
-// calcPartitionCentroid calculates the centroid of a subset of the given
+// calcPartitionCentroid calculates the mean centroid of a subset of the given
 // vectors, which represents the "average" of those vectors. The subset consists
 // of vectors at the given set of offsets in the set. The result is written to
 // the provided centroid vector, which the caller is expected to allocate.
-//
-// If the distance metric is L2Squared, the Euclidean centroid is calculated:
-//
-//	centroid = sum(x_i) / N, where x_i = ith vector and N = number of vectors
-//
-// Otherwise, if the distance metric is Cosine or InnerProduct, the spherical
-// centroid is calculated, which ensures that the centroid is itself a unit
-// vector:
-//
-//	centroid = sum(x_i) / ||sum(x_i)||, where x_i = ith vector
-func calcPartitionCentroid(
-	distanceMetric vecdist.Metric, vectors vector.Set, offsets []uint64, centroid vector.T,
-) {
+func calcPartitionCentroid(vectors vector.Set, offsets []uint64, centroid vector.T) {
 	copy(centroid, vectors.At(int(offsets[0])))
 	for _, offset := range offsets[1:] {
 		num32.Add(centroid, vectors.At(int(offset)))
 	}
 
-	if distanceMetric == vecdist.L2Squared {
-		// Compute the mean vector by scaling the centroid by the inverse of N,
-		// where N is the number of input vectors.
-		num32.Scale(1/float32(len(offsets)), centroid)
-	} else {
-		// Compute the spherical centroid across the input vectors, which represents
-		// their average direction. This can be found by summing all the vectors and
-		// then normalizing the result. For Cosine distance, all vectors need to be
-		// unit vectors, including centroids. For InnerProduct distance, centroids
-		// should be unit vectors in order to avoid attracting vectors simply due to
-		// their magnitude.
-		num32.Normalize(centroid)
-	}
+	// Compute the mean vector by scaling the centroid by the inverse of N,
+	// where N is the number of input vectors.
+	num32.Scale(1/float32(len(offsets)), centroid)
 }
