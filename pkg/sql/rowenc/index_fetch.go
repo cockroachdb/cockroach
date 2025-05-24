@@ -69,14 +69,12 @@ func InitIndexFetchSpec(
 			s.MaxFamilyID = id
 		}
 	}
-
 	s.KeyAndSuffixColumns = table.IndexFetchSpecKeyAndSuffixColumns(index)
 
 	var invertedColumnID descpb.ColumnID
 	if index.GetType() == idxtype.INVERTED {
 		invertedColumnID = index.InvertedColumnID()
 	}
-
 	if cap(oldFetchedCols) >= len(fetchColumnIDs) {
 		s.FetchedColumns = oldFetchedCols[:len(fetchColumnIDs)]
 	} else {
@@ -98,7 +96,6 @@ func InitIndexFetchSpec(
 			IsNonNullable: !col.IsNullable() && col.Public(),
 		}
 	}
-
 	// In test builds, verify that we aren't trying to fetch columns that are not
 	// available in the index.
 	if buildutil.CrdbTestBuild && s.IsSecondaryIndex {
@@ -107,10 +104,9 @@ func InitIndexFetchSpec(
 		colIDs.UnionWith(index.CollectKeySuffixColumnIDs())
 		for i := range s.FetchedColumns {
 			if !colIDs.Contains(s.FetchedColumns[i].ColumnID) {
-				return errors.AssertionFailedf("requested column %s not in index", s.FetchedColumns[i].Name)
+				return errors.AssertionFailedf("requested column '%s' not in index", s.FetchedColumns[i].Name)
 			}
 		}
 	}
-
 	return nil
 }
