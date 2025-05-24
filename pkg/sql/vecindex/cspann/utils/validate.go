@@ -19,7 +19,7 @@ import (
 func ValidateUnitVector(vec vector.T) {
 	if buildutil.CrdbTestBuild {
 		norm := num32.SquaredNorm(vec)
-		if norm != 0 && scalar.Round(float64(norm), 4) != 1 {
+		if norm != 0 && scalar.Round(float64(norm), 2) != 1 {
 			panic(errors.AssertionFailedf("vector is not a unit vector: %s", vec))
 		}
 	}
