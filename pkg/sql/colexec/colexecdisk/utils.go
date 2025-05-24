@@ -10,7 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -71,7 +71,7 @@ func (p *partitionerToOperator) Next() coldata.Batch {
 		err = p.partitioner.Dequeue(p.Ctx, p.partitionIdx, p.batch)
 	})
 	if err != nil {
-		colexecerror.InternalError(err)
+		colexecutils.HandleErrorFromDiskQueue(err)
 	}
 	return p.batch
 }
