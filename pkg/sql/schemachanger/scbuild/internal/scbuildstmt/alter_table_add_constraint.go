@@ -286,7 +286,7 @@ func alterTableAddForeignKey(
 			"and is no longer supported."))
 	}
 	// Disallow schema change if the FK references a table whose schema is locked.
-	checkTableSchemaChangePrerequisites(b, b.QueryByID(referencedTableID), stmt)
+	defer checkTableSchemaChangePrerequisites(b, b.QueryByID(referencedTableID), stmt)()
 
 	// 6. Check that temporary tables can only reference temporary tables, or,
 	// permanent tables can only reference permanent tables.

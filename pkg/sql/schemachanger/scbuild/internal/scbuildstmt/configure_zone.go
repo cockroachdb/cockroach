@@ -36,9 +36,13 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 			"YAML config is deprecated and not supported in the declarative schema changer"))
 	}
 
-	zco, err := astToZoneConfigObject(b, n)
+	zco, cleanupSchemaLocked, err := astToZoneConfigObject(b, n)
 	if err != nil {
 		panic(err)
+	}
+	// Clean up the schema_locked state if no changes occur.
+	if cleanupSchemaLocked != nil {
+		defer cleanupSchemaLocked()
 	}
 
 	zs := n.ZoneSpecifier
@@ -115,7 +119,7 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 	}
 }
 
-func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject, error) {
+func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject, func(), error) {
 	zs := n.ZoneSpecifier
 
 	// We are named range.
@@ -123,19 +127,19 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 		namedZone := zonepb.NamedZone(zs.NamedZone)
 		id, found := zonepb.NamedZones[namedZone]
 		if !found {
-			return nil, pgerror.Newf(pgcode.InvalidName, "%q is not a built-in zone",
+			return nil, nil, pgerror.Newf(pgcode.InvalidName, "%q is not a built-in zone",
 				string(zs.NamedZone))
 		}
 		if n.Discard && id == keys.RootNamespaceID {
-			return nil, pgerror.Newf(pgcode.CheckViolation, "cannot remove default zone")
+			return nil, nil, pgerror.Newf(pgcode.CheckViolation, "cannot remove default zone")
 		}
-		return &namedRangeZoneConfigObj{rangeID: catid.DescID(id)}, nil
+		return &namedRangeZoneConfigObj{rangeID: catid.DescID(id)}, nil, nil
 	}
 
 	// We are a database object.
 	if zs.Database != "" {
 		dbElem := b.ResolveDatabase(zs.Database, ResolveParams{}).FilterDatabase().MustGetOneElement()
-		return &databaseZoneConfigObj{databaseID: dbElem.DatabaseID}, nil
+		return &databaseZoneConfigObj{databaseID: dbElem.DatabaseID}, nil, nil
 	}
 
 	// The rest of the cases are for table elements -- resolve the table ID now.
@@ -145,18 +149,18 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 	// expandMutableIndexName in the DSC.
 	targetsIndex := zs.TargetsIndex()
 	if targetsIndex && zs.TableOrIndex.Table.Table() == "" {
-		return nil, scerrors.NotImplementedErrorf(n, "referencing an index without a table "+
+		return nil, nil, scerrors.NotImplementedErrorf(n, "referencing an index without a table "+
 			"prefix is not supported in the DSC")
 	}
 	// If this is an ALTER ALL PARTITIONS statement, fallback to the legacy schema
 	// changer.
 	if zs.TargetsPartition() && zs.StarIndex {
-		return nil, scerrors.NotImplementedErrorf(n, "zone configurations on ALL partitions "+
+		return nil, nil, scerrors.NotImplementedErrorf(n, "zone configurations on ALL partitions "+
 			"are not supported in the DSC")
 	}
 	tblName := zs.TableOrIndex.Table.ToUnresolvedObjectName()
 	elems := b.ResolvePhysicalTable(tblName, ResolveParams{})
-	checkTableSchemaChangePrerequisites(b, elems, n)
+	cleanupSchemaLocked := checkTableSchemaChangePrerequisites(b, elems, n)
 	var tableID catid.DescID
 	elems.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		switch e := e.(type) {
@@ -171,7 +175,7 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 		}
 	})
 	if tableID == catid.InvalidDescID {
-		return nil, errors.AssertionFailedf("tableID not found for table %s", tblName)
+		return nil, nil, errors.AssertionFailedf("tableID not found for table %s", tblName)
 	}
 	dbID := b.QueryByID(tableID).FilterNamespace().MustGetOneElement().DatabaseID
 	dbzco := databaseZoneConfigObj{databaseID: dbID}
@@ -179,22 +183,22 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 
 	// We are a table object.
 	if zs.TargetsTable() && !zs.TargetsIndex() && !zs.TargetsPartition() {
-		return &tzo, nil
+		return &tzo, cleanupSchemaLocked, nil
 	}
 
 	izo := indexZoneConfigObj{tableZoneConfigObj: tzo}
 	if targetsIndex && !zs.TargetsPartition() {
-		return &izo, nil
+		return &izo, cleanupSchemaLocked, nil
 	}
 
 	// We are a partition object.
 	if zs.TargetsPartition() {
 		partObj := partitionZoneConfigObj{partitionName: string(zs.Partition),
 			indexZoneConfigObj: izo}
-		return &partObj, nil
+		return &partObj, cleanupSchemaLocked, nil
 	}
 
-	return nil, errors.AssertionFailedf("unexpected zone config object")
+	return nil, nil, errors.AssertionFailedf("unexpected zone config object")
 }
 
 func dropZoneConfigElem(
