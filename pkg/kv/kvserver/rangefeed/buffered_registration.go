@@ -86,6 +86,7 @@ func newBufferedRegistration(
 ) *bufferedRegistration {
 	br := &bufferedRegistration{
 		baseRegistration: baseRegistration{
+			consumerID:             0, // TODO(wenyihu6)
 			streamCtx:              streamCtx,
 			span:                   span,
 			catchUpTimestamp:       startTS,
@@ -115,6 +116,10 @@ func (br *bufferedRegistration) publish(
 ) {
 	br.assertEvent(ctx, event)
 	e := getPooledSharedEvent(sharedEvent{event: br.maybeStripEvent(ctx, event), alloc: alloc})
+
+	if event.Checkpoint != nil {
+		br.baseRegistration.resolvedTimestamp = event.Checkpoint.ResolvedTS
+	}
 
 	br.mu.Lock()
 	defer br.mu.Unlock()

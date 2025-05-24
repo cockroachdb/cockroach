@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed/rangefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -821,6 +822,12 @@ func (p *ScheduledProcessor) publishDeleteRange(
 		Timestamp: timestamp,
 	})
 	p.reg.PublishToOverlapping(ctx, span, &event, logicalOpMetadata{}, alloc)
+}
+
+func (p *ScheduledProcessor) CollectAllRangefeedStats() []rangefeedpb.Rangefeed {
+	return runRequest(p, func(ctx context.Context, p *ScheduledProcessor) []rangefeedpb.Rangefeed {
+		return p.reg.CollectAllStats(ctx)
+	})
 }
 
 func (p *ScheduledProcessor) publishSSTable(

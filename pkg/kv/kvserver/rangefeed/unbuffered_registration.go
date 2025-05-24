@@ -135,6 +135,10 @@ func newUnbufferedRegistration(
 func (ubr *unbufferedRegistration) publish(
 	ctx context.Context, event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
 ) {
+	if event.Checkpoint != nil {
+		ubr.baseRegistration.resolvedTimestamp = event.Checkpoint.ResolvedTS
+	}
+
 	ubr.mu.Lock()
 	defer ubr.mu.Unlock()
 	if ubr.mu.disconnected || ubr.mu.catchUpOverflowed {

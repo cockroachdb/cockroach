@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed/rangefeedpb"
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
@@ -209,6 +210,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalRegionsTable:                       crdbInternalRegionsTable,
 		catconstants.CrdbInternalDefaultPrivilegesTable:             crdbInternalDefaultPrivilegesTable,
 		catconstants.CrdbInternalActiveRangeFeedsTable:              crdbInternalActiveRangeFeedsTable,
+		catconstants.CrdbInternalServerActiveRangeFeedsTable:        crdbInternalActiveServerRangeFeedsTable,
 		catconstants.CrdbInternalTenantUsageDetailsViewID:           crdbInternalTenantUsageDetailsView,
 		catconstants.CrdbInternalPgCatalogTableIsImplementedTableID: crdbInternalPgCatalogTableIsImplementedTable,
 		catconstants.CrdbInternalShowTenantCapabilitiesCacheTableID: crdbInternalShowTenantCapabilitiesCache,
@@ -7647,6 +7649,54 @@ CREATE TABLE crdb_internal.active_range_feeds (
 				)
 			},
 		)
+	},
+}
+
+var crdbInternalActiveServerRangeFeedsTable = virtualSchemaTable{
+	comment: `node-level table listing all currently running range feeds`,
+	schema: `
+CREATE TABLE crdb_internal.active_server_range_feeds (
+	id INT,
+	store_id INT,
+	consumer_id INT,
+	stream_id INT,
+	span_start STRING,
+	span_end STRING,
+	resolved_ts DECIMAL,
+	catchup_ts DECIMAL
+);`,
+
+	populate: func(ctx context.Context, p *planner, d catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		hasRoleOption, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		if err != nil {
+			return err
+		}
+		if !hasRoleOption {
+			return noViewActivityOrViewActivityRedactedRoleError(p.User())
+		}
+
+		resp, err := p.extendedEvalCtx.ExecCfg.InspectzServer.Rangefeed(ctx, &rangefeedpb.InspectStoreRangefeedsRequest{})
+		if err != nil {
+			return err
+		}
+
+		for _, rips := range resp.RangefeedInfoPerStore {
+			for _, r := range rips.Rangefeed {
+				if err := addRow(
+					tree.NewDInt(tree.DInt(rips.NodeID)),
+					tree.NewDInt(tree.DInt(rips.StoreID)),
+					tree.NewDInt(tree.DInt(r.ConsumerID)),
+					tree.NewDInt(tree.DInt(r.StreamID)),
+					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, r.Span.Key)),
+					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, r.Span.EndKey)),
+					eval.TimestampToDecimalDatum(r.ResolvedTS),
+					eval.TimestampToDecimalDatum(r.CatchUpTS),
+				); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	},
 }
 
