@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -260,6 +261,7 @@ type replicaForTruncator interface {
 	sideloadedStats(
 		_ context.Context, _ kvpb.RaftSpan) (entries uint64, size int64, _ error)
 	getStateLoader() stateloader.StateLoader
+	getLogStateLoader() logstore.StateLoader
 	// NB: Setting the persistent raft state is via the Engine exposed by
 	// storeForTruncator.
 }
@@ -549,7 +551,7 @@ func (t *raftLogTruncator) tryEnactTruncations(
 	defer batch.Close()
 	if err := handleTruncatedStateBelowRaftPreApply(ctx, truncState,
 		pendingTruncs.mu.truncs[enactIndex].RaftTruncatedState,
-		stateLoader.StateLoader, batch,
+		r.getLogStateLoader(), batch,
 	); err != nil {
 		log.Errorf(ctx, "while attempting to truncate raft log: %+v", err)
 		pendingTruncs.reset()

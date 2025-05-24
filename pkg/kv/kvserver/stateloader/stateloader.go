@@ -8,6 +8,7 @@ package stateloader
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
@@ -34,14 +35,12 @@ import (
 // struct with a mutex, and temporary loaders may be created when
 // locking is less desirable than an allocation.
 type StateLoader struct {
-	logstore.StateLoader
+	b keys.RangeIDPrefixBuf
 }
 
 // Make creates a StateLoader.
 func Make(rangeID roachpb.RangeID) StateLoader {
-	return StateLoader{
-		StateLoader: logstore.NewStateLoader(rangeID),
-	}
+	return StateLoader{b: keys.MakeRangeIDPrefixBuf(rangeID)}
 }
 
 // Load a ReplicaState from disk. The exception is the Desc field, which is
@@ -148,7 +147,7 @@ func (rsl StateLoader) LoadLease(
 	ctx context.Context, reader storage.Reader,
 ) (roachpb.Lease, error) {
 	var lease roachpb.Lease
-	_, err := storage.MVCCGetProto(ctx, reader, rsl.RangeLeaseKey(),
+	_, err := storage.MVCCGetProto(ctx, reader, rsl.b.RangeLeaseKey(),
 		hlc.Timestamp{}, &lease, storage.MVCCGetOptions{})
 	return lease, err
 }
@@ -157,7 +156,7 @@ func (rsl StateLoader) LoadLease(
 func (rsl StateLoader) SetLease(
 	ctx context.Context, readWriter storage.ReadWriter, ms *enginepb.MVCCStats, lease roachpb.Lease,
 ) error {
-	return storage.MVCCPutProto(ctx, readWriter, rsl.RangeLeaseKey(),
+	return storage.MVCCPutProto(ctx, readWriter, rsl.b.RangeLeaseKey(),
 		hlc.Timestamp{}, &lease, storage.MVCCWriteOptions{Stats: ms})
 }
 
@@ -177,7 +176,7 @@ func (rsl StateLoader) SetLeaseBlind(
 	ms *enginepb.MVCCStats,
 	lease, prevLease roachpb.Lease,
 ) error {
-	key := rsl.RangeLeaseKey()
+	key := rsl.b.RangeLeaseKey()
 	var value, prevValue roachpb.Value
 	if err := value.SetProto(&lease); err != nil {
 		return err
@@ -197,7 +196,7 @@ func (rsl StateLoader) LoadRangeAppliedState(
 	ctx context.Context, reader storage.Reader,
 ) (*kvserverpb.RangeAppliedState, error) {
 	var as kvserverpb.RangeAppliedState
-	_, err := storage.MVCCGetProto(ctx, reader, rsl.RangeAppliedStateKey(), hlc.Timestamp{}, &as,
+	_, err := storage.MVCCGetProto(ctx, reader, rsl.b.RangeAppliedStateKey(), hlc.Timestamp{}, &as,
 		storage.MVCCGetOptions{})
 	return &as, err
 }
@@ -244,7 +243,7 @@ func (rsl StateLoader) SetRangeAppliedState(
 	// The RangeAppliedStateKey is not included in stats. This is also reflected
 	// in ComputeStats.
 	ms := (*enginepb.MVCCStats)(nil)
-	return storage.MVCCPutProto(ctx, readWriter, rsl.RangeAppliedStateKey(),
+	return storage.MVCCPutProto(ctx, readWriter, rsl.b.RangeAppliedStateKey(),
 		hlc.Timestamp{}, as, storage.MVCCWriteOptions{Stats: ms, Category: fs.ReplicationReadCategory})
 }
 
@@ -283,7 +282,7 @@ func (rsl StateLoader) LoadGCThreshold(
 	ctx context.Context, reader storage.Reader,
 ) (*hlc.Timestamp, error) {
 	var t hlc.Timestamp
-	_, err := storage.MVCCGetProto(ctx, reader, rsl.RangeGCThresholdKey(),
+	_, err := storage.MVCCGetProto(ctx, reader, rsl.b.RangeGCThresholdKey(),
 		hlc.Timestamp{}, &t, storage.MVCCGetOptions{ReadCategory: fs.MVCCGCReadCategory})
 	return &t, err
 }
@@ -298,7 +297,7 @@ func (rsl StateLoader) SetGCThreshold(
 	if threshold == nil {
 		return errors.New("cannot persist nil GCThreshold")
 	}
-	return storage.MVCCPutProto(ctx, readWriter, rsl.RangeGCThresholdKey(),
+	return storage.MVCCPutProto(ctx, readWriter, rsl.b.RangeGCThresholdKey(),
 		hlc.Timestamp{}, threshold, storage.MVCCWriteOptions{Stats: ms})
 }
 
@@ -307,7 +306,7 @@ func (rsl StateLoader) LoadGCHint(
 	ctx context.Context, reader storage.Reader,
 ) (*roachpb.GCHint, error) {
 	var h roachpb.GCHint
-	_, err := storage.MVCCGetProto(ctx, reader, rsl.RangeGCHintKey(),
+	_, err := storage.MVCCGetProto(ctx, reader, rsl.b.RangeGCHintKey(),
 		hlc.Timestamp{}, &h, storage.MVCCGetOptions{ReadCategory: fs.MVCCGCReadCategory})
 	if err != nil {
 		return nil, err
@@ -322,7 +321,7 @@ func (rsl StateLoader) SetGCHint(
 	if hint == nil {
 		return errors.New("cannot persist nil GCHint")
 	}
-	return storage.MVCCPutProto(ctx, readWriter, rsl.RangeGCHintKey(),
+	return storage.MVCCPutProto(ctx, readWriter, rsl.b.RangeGCHintKey(),
 		hlc.Timestamp{}, hint, storage.MVCCWriteOptions{Stats: ms})
 }
 
@@ -331,7 +330,7 @@ func (rsl StateLoader) LoadVersion(
 	ctx context.Context, reader storage.Reader,
 ) (roachpb.Version, error) {
 	var version roachpb.Version
-	_, err := storage.MVCCGetProto(ctx, reader, rsl.RangeVersionKey(),
+	_, err := storage.MVCCGetProto(ctx, reader, rsl.b.RangeVersionKey(),
 		hlc.Timestamp{}, &version, storage.MVCCGetOptions{})
 	return version, err
 }
@@ -343,7 +342,7 @@ func (rsl StateLoader) SetVersion(
 	ms *enginepb.MVCCStats,
 	version *roachpb.Version,
 ) error {
-	return storage.MVCCPutProto(ctx, readWriter, rsl.RangeVersionKey(),
+	return storage.MVCCPutProto(ctx, readWriter, rsl.b.RangeVersionKey(),
 		hlc.Timestamp{}, version, storage.MVCCWriteOptions{Stats: ms})
 }
 
@@ -353,7 +352,7 @@ func (rsl StateLoader) LoadRangeForceFlushIndex(
 ) (roachpb.ForceFlushIndex, error) {
 	var ffIndex roachpb.ForceFlushIndex
 	// If not found, ffIndex.Index will stay 0.
-	_, err := storage.MVCCGetProto(ctx, reader, rsl.RangeForceFlushKey(),
+	_, err := storage.MVCCGetProto(ctx, reader, rsl.b.RangeForceFlushKey(),
 		hlc.Timestamp{}, &ffIndex, storage.MVCCGetOptions{})
 	return ffIndex, err
 }
@@ -365,7 +364,7 @@ func (rsl StateLoader) SetForceFlushIndex(
 	ms *enginepb.MVCCStats,
 	ffIndex *roachpb.ForceFlushIndex,
 ) error {
-	return storage.MVCCPutProto(ctx, readWriter, rsl.RangeForceFlushKey(),
+	return storage.MVCCPutProto(ctx, readWriter, rsl.b.RangeForceFlushKey(),
 		hlc.Timestamp{}, ffIndex, storage.MVCCWriteOptions{Stats: ms})
 }
 
@@ -375,7 +374,7 @@ func (rsl StateLoader) LoadRaftReplicaID(
 ) (kvserverpb.RaftReplicaID, error) {
 	var replicaID kvserverpb.RaftReplicaID
 	if found, err := storage.MVCCGetProto(
-		ctx, reader, rsl.RaftReplicaIDKey(), hlc.Timestamp{}, &replicaID,
+		ctx, reader, rsl.b.RaftReplicaIDKey(), hlc.Timestamp{}, &replicaID,
 		storage.MVCCGetOptions{ReadCategory: fs.ReplicationReadCategory},
 	); err != nil {
 		return kvserverpb.RaftReplicaID{}, err
@@ -394,7 +393,7 @@ func (rsl StateLoader) SetRaftReplicaID(
 	return storage.MVCCBlindPutProto(
 		ctx,
 		writer,
-		rsl.RaftReplicaIDKey(),
+		rsl.b.RaftReplicaIDKey(),
 		hlc.Timestamp{}, /* timestamp */
 		&rid,
 		storage.MVCCWriteOptions{}, /* opts */
@@ -407,7 +406,7 @@ func (rsl StateLoader) LoadRangeTombstone(
 ) (kvserverpb.RangeTombstone, error) {
 	var ts kvserverpb.RangeTombstone
 	if ok, err := storage.MVCCGetProto(
-		ctx, reader, rsl.RangeTombstoneKey(), hlc.Timestamp{}, &ts, storage.MVCCGetOptions{},
+		ctx, reader, rsl.b.RangeTombstoneKey(), hlc.Timestamp{}, &ts, storage.MVCCGetOptions{},
 	); err != nil || !ok {
 		// NB: when err == nil && !ok, there is no RangeTombstone. It is valid to
 		// return RangeTombstone{} with a zero NextReplicaID, signifying that there
@@ -422,7 +421,7 @@ func (rsl StateLoader) SetRangeTombstone(
 	ctx context.Context, writer storage.Writer, ts kvserverpb.RangeTombstone,
 ) error {
 	// "Blind" because ms == nil and timestamp.IsEmpty().
-	return storage.MVCCBlindPutProto(ctx, writer, rsl.RangeTombstoneKey(),
+	return storage.MVCCBlindPutProto(ctx, writer, rsl.b.RangeTombstoneKey(),
 		hlc.Timestamp{}, &ts, storage.MVCCWriteOptions{})
 }
 
@@ -446,20 +445,20 @@ func UninitializedReplicaState(rangeID roachpb.RangeID) kvserverpb.ReplicaState 
 // and a lastIndex from pre-seeded data in the engine (typically created via
 // WriteInitialReplicaState and, on a split, perhaps the activity of an
 // uninitialized Raft group)
-func (rsl StateLoader) SynthesizeRaftState(
-	ctx context.Context, readWriter storage.ReadWriter,
+func SynthesizeRaftState(
+	ctx context.Context, log logstore.StateLoader, state StateLoader, readWriter storage.ReadWriter,
 ) error {
-	hs, err := rsl.LoadHardState(ctx, readWriter)
+	hs, err := log.LoadHardState(ctx, readWriter)
 	if err != nil {
 		return err
 	}
-	truncState, err := rsl.LoadRaftTruncatedState(ctx, readWriter)
+	truncState, err := log.LoadRaftTruncatedState(ctx, readWriter)
 	if err != nil {
 		return err
 	}
-	as, err := rsl.LoadRangeAppliedState(ctx, readWriter)
+	as, err := state.LoadRangeAppliedState(ctx, readWriter)
 	if err != nil {
 		return err
 	}
-	return rsl.SynthesizeHardState(ctx, readWriter, hs, truncState, as.RaftAppliedIndex)
+	return log.SynthesizeHardState(ctx, readWriter, hs, truncState, as.RaftAppliedIndex)
 }

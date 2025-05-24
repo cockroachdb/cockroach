@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -84,7 +85,7 @@ func splitPreApply(
 				log.Fatalf(ctx, "unexpectedly found initialized newer RHS of split: %v", rightRepl.Desc())
 			}
 			var err error
-			hs, err = rightRepl.raftMu.stateLoader.LoadHardState(ctx, readWriter)
+			hs, err = rightRepl.logStorage.raftMu.loader.LoadHardState(ctx, readWriter)
 			if err != nil {
 				log.Fatalf(ctx, "failed to load hard state for removed rhs: %v", err)
 			}
@@ -119,7 +120,7 @@ func splitPreApply(
 			// Cleared the HardState and RaftReplicaID, so rewrite them to the current
 			// values. NB: rightRepl.raftMu is still locked since HardState was read,
 			// so it can't have been rewritten in the meantime (fixed in #75918).
-			if err := rightRepl.raftMu.stateLoader.SetHardState(ctx, readWriter, hs); err != nil {
+			if err := rightRepl.logStorage.raftMu.loader.SetHardState(ctx, readWriter, hs); err != nil {
 				log.Fatalf(ctx, "failed to set hard state with 0 commit index for removed rhs: %v", err)
 			}
 			if err := rightRepl.raftMu.stateLoader.SetRaftReplicaID(
@@ -134,7 +135,9 @@ func splitPreApply(
 	// replica is initialized (combining it with existing or default
 	// Term and Vote). This is the common case.
 	rsl := stateloader.Make(split.RightDesc.RangeID)
-	if err := rsl.SynthesizeRaftState(ctx, readWriter); err != nil {
+	if err := stateloader.SynthesizeRaftState(
+		ctx, logstore.NewStateLoader(split.RightDesc.RangeID), rsl, readWriter,
+	); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
 	// Write the RaftReplicaID for the RHS to maintain the invariant that any

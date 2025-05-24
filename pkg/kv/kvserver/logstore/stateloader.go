@@ -38,14 +38,12 @@ import (
 // TODO(pavelkalinnikov): understand the split between logstore and raftlog
 // packages, reshuffle or merge them, including this StateLoader.
 type StateLoader struct {
-	keys.RangeIDPrefixBuf
+	KeyBuf
 }
 
 // NewStateLoader creates a log StateLoader for the given range.
 func NewStateLoader(rangeID roachpb.RangeID) StateLoader {
-	return StateLoader{
-		RangeIDPrefixBuf: keys.MakeRangeIDPrefixBuf(rangeID),
-	}
+	return StateLoader{KeyBuf: MakeKeyBuf(rangeID)}
 }
 
 // EntryID is an (index, term) pair identifying a raft log entry.
