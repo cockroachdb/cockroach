@@ -12,7 +12,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
@@ -33,7 +37,12 @@ type Txn struct {
 	lockDurability kvpb.KeyLockingDurabilityType
 
 	// codec is used to decode KV rows and encode vectors.
-	codec partitionCodec
+	codec     partitionCodec
+	tableDesc catalog.TableDescriptor
+	indexDesc catalog.Index
+
+	// fullVecFetchSpec is used to fetch vectors from the primary index.
+	fullVecFetchSpec *fetchpb.IndexFetchSpec
 
 	// Retained allocations to prevent excessive reallocation.
 	tmpSpans   []roachpb.Span
@@ -46,10 +55,27 @@ var _ cspann.Txn = (*Txn)(nil)
 // transaction for use with the cspann.Store API. The Init pattern is used
 // rather than New so that Txn can be embedded within larger structs and so that
 // temporary state can be reused.
-func (tx *Txn) Init(store *Store, kv *kv.Txn) {
+func (tx *Txn) Init(store *Store, kv *kv.Txn, tableDesc catalog.TableDescriptor) {
 	tx.kv = kv
 	tx.store = store
 	tx.codec = makePartitionCodec(store.rootQuantizer, store.quantizer)
+	if tx.store.TestingTableDesc != nil {
+		tx.tableDesc = tx.store.TestingTableDesc
+	} else if tableDesc != nil {
+		tx.tableDesc = tableDesc
+	} else {
+		panic("tableDesc must be provided")
+	}
+
+	for _, desc := range tableDesc.NonPrimaryIndexes() {
+		if desc.GetID() == store.indexID {
+			tx.indexDesc = desc
+			break
+		}
+	}
+	if tx.indexDesc == nil {
+		panic(errors.Errorf("indexID %d not found in table %d", store.indexID, tableDesc.GetID()))
+	}
 
 	// TODO (mw5h): This doesn't take into account session variables that control
 	// lock durability. This doesn't matter for partition maintenance operations
@@ -335,12 +361,26 @@ func (tx *Txn) getFullVectorsFromPK(ctx context.Context, refs []cspann.VectorWit
 	}
 
 	if len(tx.tmpSpans) > 0 {
+		if tx.fullVecFetchSpec == nil {
+			tx.fullVecFetchSpec = &fetchpb.IndexFetchSpec{}
+			err = rowenc.InitIndexFetchSpec(
+				tx.fullVecFetchSpec,
+				tx.store.codec,
+				tx.tableDesc,
+				tx.tableDesc.GetPrimaryIndex(),
+				[]descpb.ColumnID{tx.indexDesc.VectorColumnID()},
+			)
+			if err != nil {
+				return err
+			}
+		}
+
 		var fetcher row.Fetcher
 		var alloc tree.DatumAlloc
 		err = fetcher.Init(ctx, row.FetcherInitArgs{
 			Txn:             tx.kv,
 			Alloc:           &alloc,
-			Spec:            &tx.store.fetchSpec,
+			Spec:            tx.fullVecFetchSpec,
 			SpansCanOverlap: true,
 		})
 		if err != nil {
@@ -359,9 +399,12 @@ func (tx *Txn) getFullVectorsFromPK(ctx context.Context, refs []cspann.VectorWit
 			return err
 		}
 
+		var colIdxMap catalog.TableColMap
+		colIdxMap.Set(tx.indexDesc.VectorColumnID(), 0)
+
 		var data [1]tree.Datum
 		for {
-			ok, refIdx, err := fetcher.NextRowDecodedInto(ctx, data[:], tx.store.colIdxMap)
+			ok, refIdx, err := fetcher.NextRowDecodedInto(ctx, data[:], colIdxMap)
 			if err != nil {
 				return err
 			}

@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -62,7 +63,7 @@ func newVectorSearchProcessor(
 	}
 	searchBeamSize := int(flowCtx.EvalCtx.SessionData().VectorSearchBeamSize)
 	maxResults := int(v.targetCount)
-	v.searcher.Init(idx, flowCtx.Txn, searchBeamSize, maxResults)
+	v.searcher.Init(idx, flowCtx.Txn, tabledesc.NewBuilder(&spec.Table).BuildImmutableTable(), searchBeamSize, maxResults)
 	colTypes := make([]*types.T, len(v.fetchSpec.FetchedColumns))
 	for i, col := range v.fetchSpec.FetchedColumns {
 		colTypes[i] = col.Type
@@ -236,7 +237,7 @@ func newVectorMutationSearchProcessor(
 	if err != nil {
 		return nil, err
 	}
-	v.searcher.Init(idx, flowCtx.Txn)
+	v.searcher.Init(idx, flowCtx.Txn, tabledesc.NewBuilder(&spec.Table).BuildImmutableTable())
 
 	// Pass through the input columns, and add the partition column and optional
 	// quantized vector column.

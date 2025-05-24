@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -36,9 +37,14 @@ type Searcher struct {
 //
 // NOTE: The index is expected to come from a call to Manager.Get, and therefore
 // using a vecstore.Store instance.
-func (s *Searcher) Init(idx *cspann.Index, txn *kv.Txn, baseBeamSize, maxResults int) {
+//
+// tableDesc is expected to be leased such that its lifetime is at least as long
+// as txn.
+func (s *Searcher) Init(
+	idx *cspann.Index, txn *kv.Txn, tableDesc catalog.TableDescriptor, baseBeamSize, maxResults int,
+) {
 	s.idx = idx
-	s.txn.Init(idx.Store().(*vecstore.Store), txn)
+	s.txn.Init(idx.Store().(*vecstore.Store), txn, tableDesc)
 	s.idxCtx.Init(&s.txn)
 
 	// An index-join + top-k operation will handle the re-ranking, so we skip
