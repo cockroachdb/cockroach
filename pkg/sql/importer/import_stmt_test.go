@@ -4558,7 +4558,7 @@ func TestImportDefaultNextVal(t *testing.T) {
 				name:       "simple-nextval-with-increment-and-start",
 				create:     "a INT, b INT DEFAULT nextval('myseq'), c STRING",
 				targetCols: []string{"a", "c"},
-				// 1000 rows means we will allocate 3 chunks of 10, 100, 1000.
+				// 1000 rows means we will allocate 3 chunks of 100, 1000, 10000.
 				// The 2 inserts will add 6 more nextval calls.
 				// First insert: 100->120
 				// Import: 120->11220
@@ -4576,15 +4576,15 @@ func TestImportDefaultNextVal(t *testing.T) {
 				},
 				insertData: `(1, 'cat'), (2, 'him'), (3, 'meme')`,
 			},
-			// TODO(adityamaru): Unskip once #56387 is fixed.
-			// {
-			//	name:                      "two-nextval-same-seq",
-			//	create:                    "a INT, b INT DEFAULT nextval('myseq') + nextval('myseq'),
-			//	c STRING",
-			//	targetCols:                []string{"a", "c"},
-			//	seqToNumNextval:           map[string]int{"myseq": 1, "myseq2": 1},
-			//	expectedImportChunkAllocs: 1110,
-			// },
+			{
+				name:       "two-nextval-same-seq",
+				create:     "a INT, b INT DEFAULT nextval('myseq') + nextval('myseq'), c STRING",
+				targetCols: []string{"a", "c"},
+				seqToNumNextval: map[string]seqMetadata{
+					"myseq": {1, 1, 1116, 116},
+				},
+				insertData: `(1, 'cat'), (2, 'him'), (3, 'meme')`,
+			},
 			{
 				name:       "two-nextval-cols-same-seq",
 				create:     "a INT, b INT DEFAULT nextval('myseq'), c STRING, d INT DEFAULT nextval('myseq')",
