@@ -313,11 +313,13 @@ func (o *offlineInitialScanProcessor) close() {
 	// worker group. The client close and stopCh close above should result
 	// in exit signals being sent to all relevant goroutines.
 	if err := o.workerGroup.Wait(); err != nil {
-		log.Errorf(o.Ctx(), "error on close(): %s", err)
+		log.Errorf(o.Ctx(), "error on close(): %v", err)
 	}
 
 	if o.batcher != nil {
-		o.batcher.Close(o.Ctx())
+		if err := o.batcher.Close(o.Ctx()); err != nil {
+			log.Errorf(o.Ctx(), "error on close(): %v", err)
+		}
 	}
 
 	o.InternalClose()
@@ -377,7 +379,9 @@ func (o *offlineInitialScanProcessor) checkpoint(
 	if err := o.flushBatch(ctx); err != nil {
 		return errors.Wrap(err, "flushing batcher on checkpoint")
 	}
-	o.batcher.Reset(ctx)
+	if err := o.batcher.Reset(ctx); err != nil {
+		return errors.Wrap(err, "resetting batcher on checkpoint")
+	}
 
 	select {
 	case o.checkpointCh <- offlineCheckpoint{
@@ -409,7 +413,9 @@ func (o *offlineInitialScanProcessor) flushBatch(ctx context.Context) error {
 	if err := o.batcher.Flush(ctx); err != nil {
 		return err
 	}
-	o.batcher.Reset(ctx)
+	if err := o.batcher.Reset(ctx); err != nil {
+		return err
+	}
 	o.lastKeyAdded = roachpb.Key{}
 	return nil
 }

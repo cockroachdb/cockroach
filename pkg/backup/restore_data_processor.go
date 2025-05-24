@@ -458,7 +458,7 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 
 func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	ctx context.Context, kr *KeyRewriter, sst mergedSST,
-) (kvpb.BulkOpSummary, error) {
+) (_ kvpb.BulkOpSummary, retErr error) {
 	db := rd.FlowCtx.Cfg.DB
 	var summary kvpb.BulkOpSummary
 
@@ -519,7 +519,9 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 			return summary, err
 		}
 	}
-	defer batcher.Close(ctx)
+	defer func() {
+		retErr = errors.CombineErrors(retErr, batcher.Close(ctx))
+	}()
 
 	// Read log.V once first to avoid the vmodule mutex in the tight loop below.
 	verbose := log.V(5)
@@ -717,9 +719,9 @@ func reserveRestoreWorkerMemory(
 // implement a mock SSTBatcher used purely for job progress tracking.
 type SSTBatcherExecutor interface {
 	AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error
-	Reset(ctx context.Context)
+	Reset(ctx context.Context) error
 	Flush(ctx context.Context) error
-	Close(ctx context.Context)
+	Close(ctx context.Context) error
 	GetSummary() kvpb.BulkOpSummary
 }
 
@@ -736,7 +738,7 @@ func (b *sstBatcherNoop) AddMVCCKey(ctx context.Context, key storage.MVCCKey, va
 }
 
 // Reset resets the counter
-func (b *sstBatcherNoop) Reset(ctx context.Context) {}
+func (b *sstBatcherNoop) Reset(ctx context.Context) error { return nil }
 
 // Flush noops.
 func (b *sstBatcherNoop) Flush(ctx context.Context) error {
@@ -744,8 +746,7 @@ func (b *sstBatcherNoop) Flush(ctx context.Context) error {
 }
 
 // Close noops.
-func (b *sstBatcherNoop) Close(ctx context.Context) {
-}
+func (b *sstBatcherNoop) Close(ctx context.Context) error { return nil }
 
 // GetSummary returns this batcher's total added rows/bytes/etc.
 func (b *sstBatcherNoop) GetSummary() kvpb.BulkOpSummary {
