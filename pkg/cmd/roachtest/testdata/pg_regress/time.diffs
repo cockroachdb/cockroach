@@ -199,13 +199,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/time.out --label=
  
  SELECT EXTRACT(DAY         FROM TIME '2020-05-26 13:30:25.575401');  -- error
 -ERROR:  unit "day" not supported for type time without time zone
-+ERROR:  extract(): unsupported timespan: day
++ERROR:  unsupported timespan: day
  SELECT EXTRACT(FORTNIGHT   FROM TIME '2020-05-26 13:30:25.575401');  -- error
 -ERROR:  unit "fortnight" not recognized for type time without time zone
-+ERROR:  extract(): unsupported timespan: fortnight
++ERROR:  unsupported timespan: fortnight
  SELECT EXTRACT(TIMEZONE    FROM TIME '2020-05-26 13:30:25.575401');  -- error
 -ERROR:  unit "timezone" not supported for type time without time zone
-+ERROR:  extract(): unsupported timespan: timezone
++ERROR:  unsupported timespan: timezone
  SELECT EXTRACT(EPOCH       FROM TIME '2020-05-26 13:30:25.575401');
     extract    
  --------------

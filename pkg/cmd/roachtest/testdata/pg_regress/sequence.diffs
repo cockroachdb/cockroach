@@ -160,35 +160,35 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sequence.out --la
 -       2
 -(1 row)
 -
-+ERROR:  nextval(): relation "serialtest2_f2_seq" does not exist
++ERROR:  relation "serialtest2_f2_seq" does not exist
  SELECT nextval('serialTest2_f3_seq');
 - nextval 
 ----------
 -       2
 -(1 row)
 -
-+ERROR:  nextval(): relation "serialtest2_f3_seq" does not exist
++ERROR:  relation "serialtest2_f3_seq" does not exist
  SELECT nextval('serialTest2_f4_seq');
 - nextval 
 ----------
 -       2
 -(1 row)
 -
-+ERROR:  nextval(): relation "serialtest2_f4_seq" does not exist
++ERROR:  relation "serialtest2_f4_seq" does not exist
  SELECT nextval('serialTest2_f5_seq');
 - nextval 
 ----------
 -       2
 -(1 row)
 -
-+ERROR:  nextval(): relation "serialtest2_f5_seq" does not exist
++ERROR:  relation "serialtest2_f5_seq" does not exist
  SELECT nextval('serialTest2_f6_seq');
 - nextval 
 ----------
 -       2
 -(1 row)
 -
-+ERROR:  nextval(): relation "serialtest2_f6_seq" does not exist
++ERROR:  relation "serialtest2_f6_seq" does not exist
  -- basic sequence operations using both text and oid references
  CREATE SEQUENCE sequence_test;
  CREATE SEQUENCE IF NOT EXISTS sequence_test;
@@ -201,7 +201,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sequence.out --la
  DISCARD SEQUENCES;
  SELECT currval('sequence_test'::regclass);
 -ERROR:  currval of sequence "sequence_test" is not yet defined in this session
-+ERROR:  currval(): currval of sequence "root.public.sequence_test" is not yet defined in this session
++ERROR:  currval of sequence "root.public.sequence_test" is not yet defined in this session
  DROP SEQUENCE sequence_test;
  -- renaming sequences
  CREATE SEQUENCE foo_seq;
@@ -220,14 +220,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sequence.out --la
 -       1
 -(1 row)
 -
-+ERROR:  nextval(): relation "foo_seq_new" does not exist
++ERROR:  relation "foo_seq_new" does not exist
  SELECT nextval('foo_seq_new');
 - nextval 
 ----------
 -       2
 -(1 row)
 -
-+ERROR:  nextval(): relation "foo_seq_new" does not exist
++ERROR:  relation "foo_seq_new" does not exist
  -- log_cnt can be higher if there is a checkpoint just at the right
  -- time, so just test for the expected range
  SELECT last_value, log_cnt IN (31, 32) AS log_cnt_ok, is_called FROM foo_seq_new;
@@ -444,7 +444,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sequence.out --la
 +See: https://go.crdb.dev/issue-v/20961/_version_
  SELECT setval('sequence_test2', -100);  -- error
 -ERROR:  setval: value -100 is out of bounds for sequence "sequence_test2" (5..36)
-+ERROR:  setval(): value -100 is out of bounds for sequence "sequence_test2" (1..9223372036854775807)
++ERROR:  value -100 is out of bounds for sequence "sequence_test2" (1..9223372036854775807)
  SELECT setval('sequence_test2', 100);  -- error
 -ERROR:  setval: value 100 is out of bounds for sequence "sequence_test2" (5..36)
 + setval 
@@ -573,15 +573,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sequence.out --la
  -- Test lastval()
  CREATE SEQUENCE seq;
  SELECT nextval('seq');
-@@ -580,7 +545,7 @@
- 
- DISCARD SEQUENCES;
- SELECT lastval();
--ERROR:  lastval is not yet defined in this session
-+ERROR:  lastval(): lastval is not yet defined in this session
- CREATE SEQUENCE seq2;
- SELECT nextval('seq2');
-  nextval 
 @@ -597,212 +562,263 @@
  DROP SEQUENCE seq2;
  -- should fail
@@ -653,9 +644,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sequence.out --la
 -       1
 -(1 row)
 -
-+ERROR:  nextval(): cannot execute nextval() in a read-only transaction
- SELECT nextval('sequence_test2');  -- error
--ERROR:  cannot execute nextval() in a read-only transaction
+-SELECT nextval('sequence_test2');  -- error
+ ERROR:  cannot execute nextval() in a read-only transaction
++SELECT nextval('sequence_test2');  -- error
 +ERROR:  current transaction is aborted, commands ignored until end of transaction block
  ROLLBACK;
  START TRANSACTION READ ONLY;
@@ -665,9 +656,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sequence.out --la
 -      1
 -(1 row)
 -
-+ERROR:  setval(): cannot execute setval() in a read-only transaction
- SELECT setval('sequence_test2', 1);  -- error
--ERROR:  cannot execute setval() in a read-only transaction
+-SELECT setval('sequence_test2', 1);  -- error
+ ERROR:  cannot execute setval() in a read-only transaction
++SELECT setval('sequence_test2', 1);  -- error
 +ERROR:  current transaction is aborted, commands ignored until end of transaction block
  ROLLBACK;
  -- privileges tests

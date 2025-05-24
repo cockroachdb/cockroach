@@ -446,105 +446,105 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/float4.out --labe
 - \x1f6c1e4a
 -(1 row)
 -
-+ERROR:  float4send(): unimplemented
++ERROR:  unimplemented
  SELECT float4send('67e14'::float4);
 - float4send 
 -------------
 - \x59be6cea
 -(1 row)
 -
-+ERROR:  float4send(): unimplemented
++ERROR:  unimplemented
  SELECT float4send('985e15'::float4);
 - float4send 
 -------------
 - \x5d5ab6c4
 -(1 row)
 -
-+ERROR:  float4send(): unimplemented
++ERROR:  unimplemented
  SELECT float4send('55895e-16'::float4);
 - float4send 
 -------------
 - \x2cc4a9bd
 -(1 row)
 -
-+ERROR:  float4send(): unimplemented
++ERROR:  unimplemented
  SELECT float4send('7038531e-32'::float4);
 - float4send 
 -------------
 - \x15ae43fd
 -(1 row)
 -
-+ERROR:  float4send(): unimplemented
++ERROR:  unimplemented
  SELECT float4send('702990899e-20'::float4);
 - float4send 
 -------------
 - \x2cf757ca
 -(1 row)
 -
-+ERROR:  float4send(): unimplemented
++ERROR:  unimplemented
  SELECT float4send('3e-23'::float4);
 - float4send 
 -------------
 - \x1a111234
 -(1 row)
 -
-+ERROR:  float4send(): unimplemented
++ERROR:  unimplemented
  SELECT float4send('57e18'::float4);
 - float4send 
 -------------
 - \x6045c22c
 -(1 row)
 -
-+ERROR:  float4send(): unimplemented
++ERROR:  unimplemented
  SELECT float4send('789e-35'::float4);
 - float4send 
 -------------
 - \x0a23de70
 -(1 row)
 -
-+ERROR:  float4send(): unimplemented
++ERROR:  unimplemented
  SELECT float4send('2539e-18'::float4);
 - float4send 
 -------------
 - \x2736f449
 -(1 row)
 -
-+ERROR:  float4send(): unimplemented
++ERROR:  unimplemented
  SELECT float4send('76173e28'::float4);
 - float4send 
 -------------
 - \x7616398a
 -(1 row)
 -
-+ERROR:  float4send(): unimplemented
++ERROR:  unimplemented
  SELECT float4send('887745e-11'::float4);
 - float4send 
 -------------
 - \x3714f05c
 -(1 row)
 -
-+ERROR:  float4send(): unimplemented
++ERROR:  unimplemented
  SELECT float4send('5382571e-37'::float4);
 - float4send 
 -------------
 - \x0d2eaca7
 -(1 row)
 -
-+ERROR:  float4send(): unimplemented
++ERROR:  unimplemented
  SELECT float4send('82381273e-35'::float4);
 - float4send 
 -------------
 - \x128289d1
 -(1 row)
 -
-+ERROR:  float4send(): unimplemented
++ERROR:  unimplemented
  SELECT float4send('750486563e-38'::float4);
 - float4send 
 -------------
 - \x0f18377e
 -(1 row)
 -
-+ERROR:  float4send(): unimplemented
++ERROR:  unimplemented
  -- Test that the smallest possible normalized input value inputs
  -- correctly, either in 9-significant-digit or shortest-decimal
  -- format.
@@ -557,14 +557,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/float4.out --labe
 - \x00800000
 -(1 row)
 -
-+ERROR:  float4send(): unimplemented
++ERROR:  unimplemented
  SELECT float4send('1.1754944e-38'::float4);
 - float4send 
 -------------
 - \x00800000
 -(1 row)
 -
-+ERROR:  float4send(): unimplemented
++ERROR:  unimplemented
  -- test output (and round-trip safety) of various values.
  -- To ensure we're testing what we think we're testing, start with
  -- float values specified by bit patterns (as a useful side effect,

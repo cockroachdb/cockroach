@@ -3914,7 +3914,7 @@ statement ok
 CREATE TABLE t_98269 (i INT PRIMARY KEY);
 INSERT INTO t_98269 VALUES (0);
 
-statement error pgcode 0A000 .* cluster_logical_timestamp\(\): nil txn in cluster context
+statement error pgcode 0A000 .* nil txn in cluster context
 ALTER TABLE t_98269 ADD COLUMN j DECIMAL NOT NULL DEFAULT cluster_logical_timestamp();
 
 # In #99185, we saw test failures that result from adding a foreign key
@@ -4637,7 +4637,7 @@ subtest unimplemented_for_non_rowid_in_DSC
 statement ok
 SET serial_normalization = sql_sequence
 
-statement error .*nextval\(\): unimplemented: cannot evaluate scalar expressions containing sequence operations in this context.*
+statement error .*unimplemented: cannot evaluate scalar expressions containing sequence operations in this context.*
 alter table roach add column serial_id2 SERIAL
 
 subtest end

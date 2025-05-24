@@ -901,7 +901,7 @@ subtest end
 
 # Test inet
 
-query error pq: inet\(\): could not parse "some_invalid_value" as inet. invalid IP
+query error pq: could not parse "some_invalid_value" as inet. invalid IP
 SELECT inet('some_invalid_value')
 
 query T
