@@ -12,7 +12,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -39,6 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore/vecstorepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -476,8 +477,12 @@ type VectorIndexHelper struct {
 	numPrefixCols int
 	// vecIndex is the vector index retrieved from the vector index manager.
 	vecIndex *cspann.Index
+	// fullVecFetchSpec is the fetch spec for the full vector.
+	fullVecFetchSpec vecstorepb.GetFullVectorsFetchSpec
 	// indexPrefix are the prefix bytes for this index (/Tenant/Table/Index).
 	indexPrefix []byte
+	// evalCtx is the evaluation context used for vector operations.
+	evalCtx *eval.Context
 }
 
 // ReEncodeVector takes a rowenc.indexEntry, extracts the key values, unquantized
@@ -508,7 +513,8 @@ func (vih *VectorIndexHelper) ReEncodeVector(
 
 	// Locate a new partition for the key and re-encode the vector.
 	var searcher vecindex.MutationSearcher
-	searcher.Init(vih.vecIndex, txn)
+	searcher.Init(vih.evalCtx, vih.vecIndex, txn, &vih.fullVecFetchSpec)
+
 	if err := searcher.SearchForInsert(ctx, roachpb.Key(key.Prefix), vec); err != nil {
 		return &rowenc.IndexEntry{}, err
 	}
@@ -597,7 +603,7 @@ func (ib *IndexBackfiller) InitForLocalUse(
 ) error {
 
 	// Initialize ib.added.
-	if err := ib.initIndexes(ctx, evalCtx.Codec, desc, nil /* allowList */, 0 /*sourceIndex*/, nil); err != nil {
+	if err := ib.initIndexes(ctx, evalCtx, desc, nil /* allowList */, 0 /*sourceIndex*/, nil); err != nil {
 		return err
 	}
 
@@ -743,7 +749,14 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 	evalCtx := flowCtx.NewEvalCtx()
 
 	// Initialize ib.added.
-	if err := ib.initIndexes(ctx, evalCtx.Codec, desc, allowList, sourceIndexID, flowCtx.Cfg.VecIndexManager.(*vecindex.Manager)); err != nil {
+	if err := ib.initIndexes(
+		ctx,
+		evalCtx,
+		desc,
+		allowList,
+		sourceIndexID,
+		flowCtx.Cfg.VecIndexManager.(*vecindex.Manager),
+	); err != nil {
 		return err
 	}
 
@@ -836,7 +849,7 @@ func (ib *IndexBackfiller) initCols(desc catalog.TableDescriptor) (err error) {
 // If `allowList` is nil, we add all adding index mutations.
 func (ib *IndexBackfiller) initIndexes(
 	ctx context.Context,
-	codec keys.SQLCodec,
+	evalCtx *eval.Context,
 	desc catalog.TableDescriptor,
 	allowList []catid.IndexID,
 	sourceIndexID catid.IndexID,
@@ -865,7 +878,7 @@ func (ib *IndexBackfiller) initIndexes(
 			(allowListAsSet.Empty() || allowListAsSet.Contains(m.AsIndex().GetID())) {
 			idx := m.AsIndex()
 			ib.added = append(ib.added, idx)
-			keyPrefix := rowenc.MakeIndexKeyPrefix(codec, desc.GetID(), idx.GetID())
+			keyPrefix := rowenc.MakeIndexKeyPrefix(evalCtx.Codec, desc.GetID(), idx.GetID())
 			ib.keyPrefixes = append(ib.keyPrefixes, keyPrefix)
 		}
 	}
@@ -894,13 +907,24 @@ func (ib *IndexBackfiller) initIndexes(
 			return err
 		}
 
-		ib.VectorIndexes[idx.GetID()] = VectorIndexHelper{
+		helper := VectorIndexHelper{
 			vectorOrd:     vectorCol.Ordinal(),
 			centroid:      make(vector.T, idx.GetVecConfig().Dims),
 			numPrefixCols: idx.NumKeyColumns() - 1,
 			vecIndex:      vecIndex,
-			indexPrefix:   rowenc.MakeIndexKeyPrefix(codec, desc.GetID(), idx.GetID()),
+			indexPrefix:   rowenc.MakeIndexKeyPrefix(evalCtx.Codec, desc.GetID(), idx.GetID()),
+			evalCtx:       ib.evalCtx,
 		}
+		if err := vecstore.InitGetFullVectorsFetchSpec(
+			&helper.fullVecFetchSpec,
+			evalCtx,
+			desc,
+			idx,
+			ib.sourceIndex,
+		); err != nil {
+			return err
+		}
+		ib.VectorIndexes[idx.GetID()] = helper
 	}
 
 	return nil

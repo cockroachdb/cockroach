@@ -107,7 +107,7 @@ func InitIndexFetchSpec(
 		colIDs.UnionWith(index.CollectKeySuffixColumnIDs())
 		for i := range s.FetchedColumns {
 			if !colIDs.Contains(s.FetchedColumns[i].ColumnID) {
-				return errors.AssertionFailedf("requested column %s not in index", s.FetchedColumns[i].Name)
+				return errors.AssertionFailedf("requested column '%s' not in index", s.FetchedColumns[i].Name)
 			}
 		}
 	}
