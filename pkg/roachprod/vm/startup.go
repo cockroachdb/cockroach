@@ -98,6 +98,7 @@ var (
 		"cron_utils":            startupScriptCron,
 		"fips_utils":            startupScriptFIPS,
 		"head_utils":            startupScriptHead,
+		"unattended_upgrades":   startupScriptUnattendedUpgrades,
 		"hostname_utils":        startupScriptHostname,
 		"node_exporter":         startupScriptNodeExporter,
 		"ebpf_exporter":         startupScriptEbpfExporter,
@@ -193,11 +194,14 @@ if [ -e {{ .DisksInitializedFile }} ]; then
 	echo "Already initialized, exiting."
 	exit 0
 fi
+`
 
+const startupScriptUnattendedUpgrades = `
 # Uninstall some packages to prevent them running cronjobs and similar jobs in parallel
 systemctl stop unattended-upgrades
 sudo rm -rf /var/log/unattended-upgrades
-apt-get purge -y unattended-upgrades`
+apt-get purge -y unattended-upgrades
+`
 
 const startupScriptHostname = `
 # set hostname according to the name used by roachprod. There's host
