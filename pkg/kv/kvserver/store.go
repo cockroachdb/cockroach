@@ -8,6 +8,7 @@ package kvserver
 import (
 	"bytes"
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed/rangefeedpb"
 	"math"
 	"os"
 	"path/filepath"
@@ -2495,6 +2496,28 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 		return nil, errSpanConfigsUnavailable
 	}
 	return s.cfg.SpanConfigSubscriber, nil
+}
+
+func (s *Store) VisitRangefeeds() (res []rangefeedpb.InspectStoreRangefeedsResponse) {
+	var rangeIDs []roachpb.RangeID
+	updateRangeIDs := func() []roachpb.RangeID {
+		rangeIDs = rangeIDs[:0]
+		s.rangefeedReplicas.Lock()
+		for rangeID := range s.rangefeedReplicas.m {
+			rangeIDs = append(rangeIDs, rangeID)
+		}
+		s.rangefeedReplicas.Unlock()
+		return rangeIDs
+	}
+
+	for _, id := range updateRangeIDs() {
+		if r := s.GetReplicaIfExists(id); r != nil {
+			//cts := r.GetCurrentClosedTimestamp(ctx)
+			// populate the closed ts here
+			res = append(res, r.getRangefeedProcessor().CollectAllRangefeedStats()...)
+		}
+	}
+	return res
 }
 
 // startRangefeedUpdater periodically informs all the replicas with rangefeeds

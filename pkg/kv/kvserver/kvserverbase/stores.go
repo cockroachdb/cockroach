@@ -7,7 +7,6 @@ package kvserverbase
 
 import (
 	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
