@@ -9,6 +9,7 @@ go_library(
         "keys.go",
         "printer.go",
         "printer_fuzz.go",
+        "schema.go",
         "spans.go",
         "sql.go",
     ],
@@ -30,6 +31,7 @@ go_test(
     srcs = [
         "keys_test.go",
         "printer_test.go",
+        "schema_test.go",
         "sql_test.go",
     ],
     data = glob(["testdata/**"]),
@@ -38,6 +40,7 @@ go_test(
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/testutils",
+        "//pkg/testutils/echotest",
         "//pkg/util/bitarray",
         "//pkg/util/duration",
         "//pkg/util/encoding",
