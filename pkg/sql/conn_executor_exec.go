@@ -69,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -697,6 +698,11 @@ func (ex *connExecutor) execStmtInOpenState(
 	// some special plan initialization for logging.
 	dispatchToExecEngine := false
 
+	// autoRetryStmtCounter keeps track of the number of per-statement retries
+	// that have occurred under READ COMMITTED isolation for the current
+	// statement.
+	var autoRetryStmtCounter int
+
 	var logErr error
 	defer func() {
 		// Do not log if this is an eventTxnCommittedDueToDDL event. In that case,
@@ -729,7 +735,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		p.maybeLogStatement(
 			ctx,
 			ex.executorType,
-			int(ex.state.mu.autoRetryCounter),
+			int(ex.state.mu.autoRetryCounter)+autoRetryStmtCounter,
 			int(ex.extraTxnState.txnCounter.Load()),
 			rowsAffected,
 			ex.state.mu.stmtCount,
@@ -1079,6 +1085,15 @@ func (ex *connExecutor) execStmtInOpenState(
 		}()
 	}
 
+	if ex.state.mu.autoRetryReason != nil {
+		ex.sessionTracing.TraceRetryInformation(
+			ctx, "transaction", int(ex.state.mu.autoRetryCounter), ex.state.mu.autoRetryReason,
+		)
+		if ex.server.cfg.TestingKnobs.OnTxnRetry != nil {
+			ex.server.cfg.TestingKnobs.OnTxnRetry(ex.state.mu.autoRetryReason, p.EvalContext())
+		}
+	}
+
 	if ex.executorType != executorTypeInternal &&
 		ex.state.mu.txn.IsoLevel() == isolation.ReadCommitted &&
 		!ex.implicitTxn() {
@@ -1087,7 +1102,9 @@ func (ex *connExecutor) execStmtInOpenState(
 		// the statement's dispatchReadCommittedStmtToExecutionEngine retry loop.
 		// TODO(rafi): The above should be happening already, but find a way to
 		// test it.
-		if err := ex.dispatchReadCommittedStmtToExecutionEngine(stmtCtx, p, res); err != nil {
+		if err := ex.dispatchReadCommittedStmtToExecutionEngine(
+			stmtCtx, p, res, &autoRetryStmtCounter,
+		); err != nil {
 			stmtThresholdSpan.Finish()
 			return nil, nil, err
 		}
@@ -1699,6 +1716,11 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	// some special plan initialization for logging.
 	dispatchToExecEngine := false
 
+	// autoRetryStmtCounter keeps track of the number of per-statement retries
+	// that have occurred under READ COMMITTED isolation for the current
+	// statement.
+	var autoRetryStmtCounter int
+
 	defer processCleanupFunc(func() {
 		// Do not log if this is an eventTxnCommittedDueToDDL event. In that case,
 		// the transaction is committed, and the current statement is executed
@@ -1742,7 +1764,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		p.maybeLogStatement(
 			ctx,
 			ex.executorType,
-			int(ex.state.mu.autoRetryCounter),
+			int(ex.state.mu.autoRetryCounter)+autoRetryStmtCounter,
 			int(ex.extraTxnState.txnCounter.Load()),
 			rowsAffected,
 			ex.state.mu.stmtCount,
@@ -2127,6 +2149,15 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		}()
 	}
 
+	if ex.state.mu.autoRetryReason != nil {
+		ex.sessionTracing.TraceRetryInformation(
+			ctx, "transaction", int(ex.state.mu.autoRetryCounter), ex.state.mu.autoRetryReason,
+		)
+		if ex.server.cfg.TestingKnobs.OnTxnRetry != nil {
+			ex.server.cfg.TestingKnobs.OnTxnRetry(ex.state.mu.autoRetryReason, p.EvalContext())
+		}
+	}
+
 	if ex.executorType != executorTypeInternal &&
 		ex.state.mu.txn.IsoLevel() == isolation.ReadCommitted &&
 		!ex.implicitTxn() {
@@ -2135,7 +2166,9 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		// the statement's dispatchReadCommittedStmtToExecutionEngine retry loop.
 		// TODO(rafi): The above should be happening already, but find a way to
 		// test it.
-		if err := ex.dispatchReadCommittedStmtToExecutionEngine(stmtCtx, p, res); err != nil {
+		if err := ex.dispatchReadCommittedStmtToExecutionEngine(
+			stmtCtx, p, res, &autoRetryStmtCounter,
+		); err != nil {
 			stmtThresholdSpan.Finish()
 			return nil, nil, err
 		}
@@ -2700,20 +2733,53 @@ func (ex *connExecutor) rollbackSQLTransaction(
 // implement the retry logic in the state machine, we use the KV savepoint API
 // directly.
 func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
-	ctx context.Context, p *planner, res RestrictedCommandResult,
+	ctx context.Context, p *planner, res RestrictedCommandResult, autoRetryStmtCounter *int,
 ) error {
+	if ex.executorType == executorTypeInternal {
+		// Because we step the external read timestamp below, this is not safe to
+		// call within internal executor.
+		return errors.AssertionFailedf(
+			"call of dispatchReadCommittedStmtToExecutionEngine within internal executor",
+		)
+	}
+
+	// update per-statement retry count metric? in a defer?
+
 	readCommittedSavePointToken, err := ex.state.mu.txn.CreateSavepoint(ctx)
 	if err != nil {
 		return err
 	}
 
+	// Use retry with exponential backoff and full jitter to reduce collisions for
+	// high-contention workloads. See https://en.wikipedia.org/wiki/Exponential_backoff and
+	// https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
 	maxRetries := int(ex.sessionData().MaxRetriesForReadCommitted)
-	for attemptNum := 0; ; attemptNum++ {
+	initialBackoff := ex.sessionData().InitialBackoffOfRetriesForReadCommitted
+	useBackoff := initialBackoff > 0
+	opts := retry.Options{
+		InitialBackoff:      initialBackoff,
+		MaxBackoff:          1024 * initialBackoff,
+		Multiplier:          2.0,
+		RandomizationFactor: 1.0,
+	}
+	var maybeRetriableErr error
+	for attemptNum, r := 0, retry.StartWithCtx(ctx, opts); !useBackoff || r.Next(); attemptNum++ {
+		if attemptNum > 0 {
+			// Step both the sequence number and the external read timestamp so that
+			// we can see the results of the conflicting transactions that caused us
+			// to fail.
+			if err := ex.state.mu.txn.Step(ctx, true /* allowReadTimestampStep */); err != nil {
+				return err
+			}
+			ex.sessionTracing.TraceRetryInformation(
+				ctx, "statement", *autoRetryStmtCounter, maybeRetriableErr,
+			)
+		}
 		bufferPos := res.BufferedResultsLen()
 		if err = ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
 			return err
 		}
-		maybeRetriableErr := res.Err()
+		maybeRetriableErr = res.Err()
 		if maybeRetriableErr == nil {
 			// If there was no error, then we must release the savepoint and break.
 			if err := ex.state.mu.txn.ReleaseSavepoint(ctx, readCommittedSavePointToken); err != nil {
@@ -2761,11 +2827,13 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		if err := ex.state.mu.txn.PrepareForPartialRetry(ctx); err != nil {
 			return err
 		}
-		if err := ex.state.mu.txn.Step(ctx, false /* allowReadTimestampStep */); err != nil {
-			return err
-		}
-		ex.state.mu.autoRetryCounter++
-		ex.state.mu.autoRetryReason = txnRetryErr
+		(*autoRetryStmtCounter)++
+	}
+	// Check if we exited the loop due to cancelation.
+	select {
+	case <-ctx.Done():
+		res.SetError(cancelchecker.QueryCanceledError)
+	default:
 	}
 	return nil
 }
@@ -2993,10 +3061,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		planner.curPlan.flags.Set(planFlagPartiallyDistributed)
 	}
 
-	ex.sessionTracing.TraceRetryInformation(ctx, int(ex.state.mu.autoRetryCounter), ex.state.mu.autoRetryReason)
-	if ex.server.cfg.TestingKnobs.OnTxnRetry != nil && ex.state.mu.autoRetryReason != nil {
-		ex.server.cfg.TestingKnobs.OnTxnRetry(ex.state.mu.autoRetryReason, planner.EvalContext())
-	}
 	distribute := DistributionType(LocalDistribution)
 	if distributePlan.WillDistribute() {
 		distribute = FullDistribution
@@ -3040,14 +3104,14 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			populateQueryLevelStats(ctx, &curPlanner, ex.server.cfg, ppInfo.dispatchToExecutionEngine.queryStats, &ex.cpuStatsCollector)
 			ppInfo.dispatchToExecutionEngine.stmtFingerprintID = ex.recordStatementSummary(
 				ctx, &curPlanner,
-				int(ex.state.mu.autoRetryCounter), ppInfo.dispatchToExecutionEngine.rowsAffected, ppInfo.curRes.ErrAllowReleased(), *ppInfo.dispatchToExecutionEngine.queryStats,
+				int(ex.state.mu.autoRetryCounter), 0, ppInfo.dispatchToExecutionEngine.rowsAffected, ppInfo.curRes.ErrAllowReleased(), *ppInfo.dispatchToExecutionEngine.queryStats,
 			)
 		})
 	} else {
 		populateQueryLevelStats(ctx, planner, ex.server.cfg, &stats, &ex.cpuStatsCollector)
 		ex.recordStatementSummary(
 			ctx, planner,
-			int(ex.state.mu.autoRetryCounter), res.RowsAffected(), res.Err(), stats,
+			int(ex.state.mu.autoRetryCounter), 0, res.RowsAffected(), res.Err(), stats,
 		)
 	}
 

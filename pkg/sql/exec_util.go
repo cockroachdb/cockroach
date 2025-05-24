@@ -2861,8 +2861,12 @@ func (st *SessionTracing) TracePlanCheckEnd(ctx context.Context, err error, dist
 }
 
 // TraceRetryInformation conditionally emits a trace message for retry information.
-func (st *SessionTracing) TraceRetryInformation(ctx context.Context, retries int, err error) {
-	log.VEventfDepth(ctx, 2, 1, "executing after %d retries, last retry reason: %v", retries, err)
+func (st *SessionTracing) TraceRetryInformation(
+	ctx context.Context, thing string, retries int, err error,
+) {
+	log.VEventfDepth(
+		ctx, 2, 1, "executing after %d %s retries, last retry reason: %v", retries, thing, err,
+	)
 }
 
 // TraceExecStart conditionally emits a trace message at the moment
@@ -4168,6 +4172,10 @@ func (m *sessionDataMutator) SetPropagateAdmissionHeaderToLeafTransactions(val b
 
 func (m *sessionDataMutator) SetOptimizerUseExistsFilterHoistRule(val bool) {
 	m.data.OptimizerUseExistsFilterHoistRule = val
+}
+
+func (m *sessionDataMutator) SetInitialBackoffOfRetriesForReadCommitted(val time.Duration) {
+	m.data.InitialBackoffOfRetriesForReadCommitted = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.

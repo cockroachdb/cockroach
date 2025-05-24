@@ -127,14 +127,17 @@ func (GuardrailMetrics) MetricStruct() {}
 // last executed statement/query and performs the associated
 // accounting in the passed-in EngineMetrics.
 //   - distSQLUsed reports whether the query was distributed.
-//   - automaticRetryCount is the count of implicit txn retries
+//   - automaticRetryTxnCount is the count of implicit txn retries
+//     so far.
+//   - automaticRetryStmtCount is the count of implicit stmt retries
 //     so far.
 //   - result is the result set computed by the query/statement.
 //   - err is the error encountered, if any.
 func (ex *connExecutor) recordStatementSummary(
 	ctx context.Context,
 	planner *planner,
-	automaticRetryCount int,
+	automaticRetryTxnCount int,
+	automaticRetryStmtCount int,
 	rowsAffected int,
 	stmtErr error,
 	stats topLevelQueryStats,
@@ -160,7 +163,9 @@ func (ex *connExecutor) recordStatementSummary(
 
 	stmt := &planner.stmt
 	flags := planner.curPlan.flags
-	ex.recordStatementLatencyMetrics(stmt, flags, automaticRetryCount, runLatRaw, svcLatRaw)
+	ex.recordStatementLatencyMetrics(
+		stmt, flags, automaticRetryTxnCount+automaticRetryStmtCount, runLatRaw, svcLatRaw,
+	)
 
 	fullScan := flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan)
 
@@ -190,7 +195,7 @@ func (ex *connExecutor) recordStatementSummary(
 		PlanHash:             planner.instrumentation.planGist.Hash(),
 		SessionID:            ex.planner.extendedEvalCtx.SessionID,
 		StatementID:          stmt.QueryID,
-		AutoRetryCount:       automaticRetryCount,
+		AutoRetryCount:       automaticRetryTxnCount + automaticRetryStmtCount,
 		Failed:               stmtErr != nil,
 		AutoRetryReason:      ex.state.mu.autoRetryReason,
 		RowsAffected:         rowsAffected,
@@ -289,7 +294,7 @@ func (ex *connExecutor) recordStatementSummary(
 				"run %.2fµs (%.1f%%), "+
 				"overhead %.2fµs (%.1f%%), "+
 				"session age %.4fs",
-			rowsAffected, automaticRetryCount,
+			rowsAffected, automaticRetryTxnCount+automaticRetryStmtCount,
 			parseLatSec*1e6, 100*parseLatSec/svcLatSec,
 			planLatSec*1e6, 100*planLatSec/svcLatSec,
 			runLatSec*1e6, 100*runLatSec/svcLatSec,
@@ -345,6 +350,7 @@ func (ex *connExecutor) recordStatementLatencyMetrics(
 			}
 		}
 	}
+	// update per-statement retry count metric? maybe not, since this will get visited for each retry
 }
 
 func (ex *connExecutor) updateOptCounters(planFlags planFlags) {
