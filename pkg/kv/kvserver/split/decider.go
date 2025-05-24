@@ -9,6 +9,7 @@ package split
 
 import (
 	"context"
+	"math"
 	"math/rand/v2"
 	"time"
 
@@ -140,8 +141,9 @@ func GlobalRandSource() RandSource {
 
 // LoadSplitterMetrics consists of metrics for load-based splitter split key.
 type LoadSplitterMetrics struct {
-	PopularKeyCount *metric.Counter
-	NoSplitKeyCount *metric.Counter
+	PopularKeyCount     *metric.Counter
+	NoSplitKeyCount     *metric.Counter
+	ClearDirectionCount *metric.Counter
 }
 
 // Decider tracks the latest load and if certain conditions are met, records
@@ -276,13 +278,28 @@ func (d *Decider) recordLocked(
 				if now.Sub(d.mu.lastNoSplitKeyLoggingMetrics) > minNoSplitKeyLoggingMetricsInterval {
 					d.mu.lastNoSplitKeyLoggingMetrics = now
 					if causeMsg := d.mu.splitFinder.NoSplitKeyCauseLogMsg(); causeMsg != "" {
-						popularKeyFrequency := d.mu.splitFinder.PopularKey().Frequency
-						log.KvDistribution.Infof(ctx, "%s, most popular key occurs in %d%% of samples",
-							causeMsg, int(popularKeyFrequency*100))
 						log.KvDistribution.VInfof(ctx, 3, "splitter_state=%v", (*lockedDecider)(d))
+						popularKeyDetected := ", no popular key"
+						clearDirectionDetected := ", no clear direction"
+
+						popularKeyFrequency := d.mu.splitFinder.PopularKey().Frequency
 						if popularKeyFrequency >= splitKeyThreshold {
+							popularKeyDetected = ", popular key detected"
 							d.loadSplitterMetrics.PopularKeyCount.Inc(1)
 						}
+
+						accessDirection := d.mu.splitFinder.AccessDirection()
+						direction := directionStr(accessDirection)
+						if math.Abs(accessDirection) >= clearDirectionThreshold {
+							clearDirectionDetected = ", clear direction detected"
+							d.loadSplitterMetrics.ClearDirectionCount.Inc(1)
+						}
+
+						log.KvDistribution.Infof(
+							ctx, "%s, most popular key occurs in %d%% of samples, access balance %s-biased %d%%%s%s",
+							causeMsg, int(popularKeyFrequency*100), direction, int(math.Abs(accessDirection)*100),
+							redact.SafeString(popularKeyDetected), redact.SafeString(clearDirectionDetected),
+						)
 						d.loadSplitterMetrics.NoSplitKeyCount.Inc(1)
 					}
 				}
@@ -541,4 +558,17 @@ func (t *maxStatTracker) max(now time.Time, minRetention time.Duration) (float64
 func (t *maxStatTracker) windowWidth() time.Duration {
 	// NB: -1 because during a rotation, only len(t.windows)-1 windows survive.
 	return t.minRetention / time.Duration(len(t.windows)-1)
+}
+
+// Returns the absolute percentage and direction of accesses
+// as a string to be used in a log statement.
+func directionStr(direction float64) redact.SafeString {
+	dstr := "right"
+	if direction == 0 {
+		dstr = "even"
+	}
+	if direction < 0 {
+		dstr = "left"
+	}
+	return redact.SafeString(dstr)
 }
