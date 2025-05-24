@@ -754,7 +754,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			}
 		})
 	}
-
+	cfr := NewCoalescedFlightRecorder(logtags.FromContext(ctx), s.sqlServer.cfg.ExecutionTraceDirName)
 	if !s.sqlServer.cfg.DisableRuntimeStatsMonitor {
 		// Begin recording runtime statistics.
 		if err := startSampleEnvironment(workersCtx,
@@ -764,6 +764,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			s.runtime,
 			s.tenantStatus.sessionRegistry,
 			s.sqlServer.execCfg.RootMemoryMonitor,
+			cfr,
 		); err != nil {
 			return err
 		}

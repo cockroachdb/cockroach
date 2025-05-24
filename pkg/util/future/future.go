@@ -85,14 +85,21 @@ func MakeAwaitableFuture[T any](f *Future[T]) AwaitableFuture[T] {
 
 // Wait is a helper function that waits until future becomes ready and returns
 // its value. Returns context error.
+//
+// If multiple waiters await the same future, it is more allocation-efficient
+// to make an AwaitableFuture and call Wait() on it.
 func Wait[T any](ctx context.Context, f *Future[T]) (T, error) {
-	a := MakeAwaitableFuture(f)
+	return MakeAwaitableFuture(f).Wait(ctx)
+}
+
+// Wait blocks on the future and returns the value once it is ready.
+func (f AwaitableFuture[T]) Wait(ctx context.Context) (T, error) {
 	select {
 	case <-ctx.Done():
 		var zero T
 		return zero, ctx.Err()
-	case <-a.done:
-		return a.Get(), nil
+	case <-f.done:
+		return f.Get(), nil
 	}
 }
 
