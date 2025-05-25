@@ -203,6 +203,7 @@ func (s *Store) tryGetOrCreateReplica(
 	// be accessed by someone holding a reference to, or currently creating a
 	// Replica for this rangeID, and that's us.
 
+	_ = kvstorage.CreateUninitReplicaTODO
 	if err := kvstorage.CreateUninitializedReplica(
 		// TODO(sep-raft-log): needs both engines due to tombstone (which lives on
 		// statemachine).
