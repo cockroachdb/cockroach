@@ -40,6 +40,7 @@ type MemProvider struct {
 	stopper          *stop.Stopper
 	datasetName      string
 	dims             int
+	distanceMetric   vecdist.Metric
 	options          cspann.IndexOptions
 	store            *memstore.Store
 	index            *cspann.Index
@@ -49,13 +50,18 @@ type MemProvider struct {
 // NewMemProvider creates a new MemProvider that maintains an in-memory, indexed
 // dataset of vectors.
 func NewMemProvider(
-	stopper *stop.Stopper, datasetName string, dims int, options cspann.IndexOptions,
+	stopper *stop.Stopper,
+	datasetName string,
+	dims int,
+	distanceMetric vecdist.Metric,
+	options cspann.IndexOptions,
 ) *MemProvider {
 	return &MemProvider{
-		stopper:     stopper,
-		datasetName: datasetName,
-		dims:        dims,
-		options:     options,
+		stopper:        stopper,
+		datasetName:    datasetName,
+		dims:           dims,
+		distanceMetric: distanceMetric,
+		options:        options,
 	}
 }
 
@@ -256,7 +262,14 @@ func (m *MemProvider) ensureIndex(ctx context.Context) error {
 		return nil
 	}
 
-	quantizer := quantize.NewRaBitQuantizer(m.dims, seed, vecdist.L2Squared)
+	distanceMetric := m.distanceMetric
+	if distanceMetric == vecdist.Cosine {
+		// RaBitQuantizer always expects normalized vectors; the index will ensure
+		// this is the case.
+		distanceMetric = vecdist.Cosine
+	}
+
+	quantizer := quantize.NewRaBitQuantizer(m.dims, seed, distanceMetric)
 	if m.store == nil {
 		// Construct empty store if one doesn't yet exist.
 		m.store = memstore.New(quantizer, seed)
