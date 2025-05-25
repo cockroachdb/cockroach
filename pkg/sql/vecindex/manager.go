@@ -231,6 +231,8 @@ func (m *Manager) getIndexOptions(config vecpb.Config, readOnly bool) *cspann.In
 		},
 		IsDeterministic: config.IsDeterministic,
 		ReadOnly:        readOnly,
+		// Disable adaptive search until it's extended to work with vecstore.
+		DisableAdaptiveSearch: true,
 	}
 }
 

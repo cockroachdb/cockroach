@@ -83,6 +83,8 @@ func TestSearcher(t *testing.T) {
 		MaxPartitionSize: 4,
 		BaseBeamSize:     1,
 		IsDeterministic:  true,
+		// Disable adaptive search until it's extended to work with vecstore.
+		DisableAdaptiveSearch: true,
 	}
 	idx, err := cspann.NewIndex(ctx, store, quantizer, 42 /* seed */, &options, srv.Stopper())
 	require.NoError(t, err)

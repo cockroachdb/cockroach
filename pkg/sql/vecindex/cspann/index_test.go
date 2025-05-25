@@ -619,6 +619,9 @@ func (s *testState) makeNewIndex(d *datadriven.TestData) {
 		IsDeterministic: true,
 		// Disable stalled op timeout, since it can interfere with stepping tests.
 		StalledOpTimeout: func() time.Duration { return 0 },
+		// Disable adaptive search for now, until it's fully supported for stores
+		// other than the in-memory store.
+		DisableAdaptiveSearch: true,
 	}
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
