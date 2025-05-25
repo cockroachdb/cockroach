@@ -589,7 +589,7 @@ func (s *testState) ValidateTree(d *datadriven.TestData) string {
 			}
 
 			// If this is not the leaf level, then process the next level.
-			if childKeys[0].KeyBytes == nil {
+			if !childKeys[0].IsPrimaryIndexBytes() {
 				partitionKeys = make([]cspann.PartitionKey, len(childKeys))
 				for i := range childKeys {
 					partitionKeys[i] = childKeys[i].PartitionKey
@@ -1105,7 +1105,7 @@ func validateIndex(
 			break
 		}
 
-		if childKeys[0].KeyBytes != nil {
+		if childKeys[0].IsPrimaryIndexBytes() {
 			// This partition contains leaf-level vectors.
 			commontest.RunTransaction(ctx, t, store, func(txn cspann.Txn) {
 				refs := make([]cspann.VectorWithKey, len(childKeys))

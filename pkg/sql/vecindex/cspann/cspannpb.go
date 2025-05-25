@@ -35,6 +35,12 @@ func (s *IndexStats) String() string {
 	return buf.String()
 }
 
+// IsPrimaryIndexBytes returns true if this key points to a row in the primary
+// index, or false if it references a child partition.
+func (k ChildKey) IsPrimaryIndexBytes() bool {
+	return k.KeyBytes != nil
+}
+
 // Equal returns true if this key has the same partition key and primary key as
 // the given key.
 func (k ChildKey) Equal(other ChildKey) bool {
@@ -45,7 +51,7 @@ func (k ChildKey) Equal(other ChildKey) bool {
 // the two are equal, -1 if this key is less than the other, and +1 if this key
 // is greater than the other.
 func (k ChildKey) Compare(other ChildKey) int {
-	if k.KeyBytes != nil {
+	if k.IsPrimaryIndexBytes() {
 		return bytes.Compare(k.KeyBytes, other.KeyBytes)
 	}
 	if k.PartitionKey < other.PartitionKey {

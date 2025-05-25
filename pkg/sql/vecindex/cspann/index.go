@@ -933,7 +933,7 @@ func (vi *Index) getFullVectors(
 		if candidates[i].Vector == nil {
 			// TODO(andyk): Need to create an DeletePartitionKey fixup to handle
 			// the case of a dangling partition key.
-			if candidates[i].ChildKey.KeyBytes != nil {
+			if candidates[i].ChildKey.IsPrimaryIndexBytes() {
 				// Vector was deleted, so add fixup to delete it.
 				vi.fixups.AddDeleteVector(ctx, idxCtx.treeKey,
 					candidates[i].ParentPartitionKey, candidates[i].ChildKey.KeyBytes)
