@@ -557,7 +557,7 @@ func (vi *Index) setupInsertContext(idxCtx *Context, treeKey TreeKey, vec vector
 	vi.setupContext(idxCtx, treeKey, vec, SearchOptions{
 		BaseBeamSize: vi.options.BaseBeamSize,
 		SkipRerank:   true,
-		UpdateStats:  true,
+		UpdateStats:  !vi.options.DisableAdaptiveSearch,
 	}, SecondLevel)
 	idxCtx.forInsert = true
 }
@@ -570,7 +570,7 @@ func (vi *Index) setupDeleteContext(idxCtx *Context, treeKey TreeKey, vec vector
 	vi.setupContext(idxCtx, treeKey, vec, SearchOptions{
 		BaseBeamSize: vi.options.BaseBeamSize * 2,
 		SkipRerank:   true,
-		UpdateStats:  true,
+		UpdateStats:  !vi.options.DisableAdaptiveSearch,
 	}, LeafLevel)
 	idxCtx.forDelete = true
 }

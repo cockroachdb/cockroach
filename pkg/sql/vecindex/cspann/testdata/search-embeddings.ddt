@@ -7,47 +7,47 @@ new-index dims=512 min-partition-size=4 max-partition-size=16 quality-samples=8 
 Created index with 1000 vectors with 512 dimensions.
 3 levels, 201 partitions.
 CV stats:
-  level 2 - mean: 0.1153, stdev: 0.0235
+  level 2 - mean: 0.0000, stdev: 0.0000
   level 3 - mean: 0.0000, stdev: 0.0000
 
 # Search with small beam size.
 search max-results=1 use-dataset=5000 beam-size=1
 ----
 vec771: 0.5624
-26 leaf vectors, 49 vectors, 14 full vectors, 4 partitions
+15 leaf vectors, 38 vectors, 14 full vectors, 3 partitions
 
 # Search for additional results.
 search max-results=6 use-dataset=5000 beam-size=1
 ----
 vec771: 0.5624
-vec356: 0.5976
-vec309: 0.7311
 vec590: 0.8131
-vec133: 0.8381
 vec271: 0.84
-26 leaf vectors, 49 vectors, 14 full vectors, 4 partitions
+vec586: 0.8472
+vec311: 0.8634
+vec884: 0.8802
+15 leaf vectors, 38 vectors, 14 full vectors, 3 partitions
 
 # Use a larger beam size.
 search max-results=6 use-dataset=5000 beam-size=4
 ----
 vec771: 0.5624
-vec356: 0.5976
 vec302: 0.6601
 vec329: 0.6871
 vec386: 0.7301
-vec309: 0.7311
-74 leaf vectors, 110 vectors, 23 full vectors, 10 partitions
+vec117: 0.7576
+vec240: 0.7723
+44 leaf vectors, 80 vectors, 21 full vectors, 7 partitions
 
 # Turn off re-ranking, which results in increased inaccuracy.
 search max-results=6 use-dataset=5000 beam-size=4 skip-rerank
 ----
 vec771: 0.5344 ± 0.04
-vec356: 0.5722 ± 0.03
 vec302: 0.6617 ± 0.03
 vec329: 0.6928 ± 0.03
-vec309: 0.6953 ± 0.03
 vec347: 0.7579 ± 0.03
-74 leaf vectors, 110 vectors, 0 full vectors, 10 partitions
+vec386: 0.7606 ± 0.03
+vec240: 0.7624 ± 0.04
+44 leaf vectors, 80 vectors, 0 full vectors, 7 partitions
 
 # Return top 25 results with large beam size.
 search max-results=25 use-dataset=5000 beam-size=16
@@ -61,58 +61,58 @@ vec95: 0.7008
 vec249: 0.7268
 vec386: 0.7301
 vec309: 0.7311
-vec633: 0.7513
 vec117: 0.7576
 vec25: 0.761
 vec776: 0.7633
-vec872: 0.7707
 vec859: 0.7708
 vec240: 0.7723
 vec347: 0.7745
-vec11: 0.777
 vec340: 0.7858
 vec704: 0.7916
 vec220: 0.7957
-vec848: 0.7958
 vec387: 0.8038
 vec637: 0.8039
 vec979: 0.8066
-315 leaf vectors, 418 vectors, 88 full vectors, 40 partitions
+vec52: 0.8068
+vec590: 0.8131
+vec246: 0.8141
+vec493: 0.8184
+159 leaf vectors, 262 vectors, 69 full vectors, 24 partitions
 
 # Search for an "easy" result, where adaptive search inspects less partitions.
 recall topk=20 use-dataset=8601 beam-size=8
 ----
-65.00% recall@20
-40.00 leaf vectors, 93.00 vectors, 26.00 full vectors, 9.00 partitions
+85.00% recall@20
+83.00 leaf vectors, 136.00 vectors, 37.00 full vectors, 13.00 partitions
 
 # Search for a "hard" result, where adaptive search inspects more partitions.
 recall topk=20 use-dataset=2717 beam-size=8
 ----
-50.00% recall@20
-175.00 leaf vectors, 234.00 vectors, 49.00 full vectors, 21.00 partitions
+35.00% recall@20
+78.00 leaf vectors, 137.00 vectors, 35.00 full vectors, 13.00 partitions
 
 # Test recall at different beam sizes.
 recall topk=10 beam-size=2 samples=50
 ----
-31.20% recall@10
-26.26 leaf vectors, 46.60 vectors, 15.74 full vectors, 4.36 partitions
+33.80% recall@10
+22.14 leaf vectors, 42.48 vectors, 15.56 full vectors, 4.00 partitions
 
 recall topk=10 beam-size=4 samples=50
 ----
-56.80% recall@10
-54.84 leaf vectors, 87.04 vectors, 20.82 full vectors, 8.00 partitions
+55.20% recall@10
+43.88 leaf vectors, 76.08 vectors, 19.64 full vectors, 7.00 partitions
 
 recall topk=10 beam-size=8 samples=50
 ----
-79.20% recall@10
-115.10 leaf vectors, 169.22 vectors, 23.02 full vectors, 15.66 partitions
+76.00% recall@10
+87.54 leaf vectors, 141.66 vectors, 22.56 full vectors, 13.00 partitions
 
 recall topk=10 beam-size=16 samples=50
 ----
-94.20% recall@10
-231.92 leaf vectors, 335.92 vectors, 26.94 full vectors, 30.82 partitions
+90.80% recall@10
+172.58 leaf vectors, 276.58 vectors, 25.44 full vectors, 25.00 partitions
 
 recall topk=10 beam-size=32 samples=50
 ----
-98.80% recall@10
-460.56 leaf vectors, 564.56 vectors, 28.74 full vectors, 52.46 partitions
+98.40% recall@10
+339.60 leaf vectors, 443.60 vectors, 28.62 full vectors, 41.00 partitions
