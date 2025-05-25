@@ -292,6 +292,7 @@ go_library(
         "//pkg/workload/histogram",
         "//pkg/workload/histogram/exporter",
         "//pkg/workload/querybench",
+        "//pkg/workload/schemachange",
         "//pkg/workload/tpcc",
         "//pkg/workload/tpcds",
         "//pkg/workload/tpch",

@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
-	_ "github.com/cockroachdb/cockroach/pkg/workload/schemachange"
+	"github.com/cockroachdb/cockroach/pkg/workload/schemachange"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -57,7 +57,8 @@ func TestWorkload(t *testing.T) {
 		workload.Opser
 		workload.Flagser
 	})
-	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	db := tc.ServerConn(0)
+	tdb := sqlutils.MakeSQLRunner(db)
 	reg := histogram.NewRegistry(20*time.Second, m.Name)
 	tdb.Exec(t, "CREATE USER testuser")
 	tdb.Exec(t, "CREATE DATABASE schemachange")
@@ -71,36 +72,20 @@ func TestWorkload(t *testing.T) {
 		require.NoError(t, os.WriteFile(fmt.Sprintf("%s/%s.rows", dir, name), []byte(sqlutils.MatrixToStr(mat)), 0666))
 	}
 
-	// Reusable validation function.
 	findInvalidObjects := func() {
 		t.Helper()
-		var (
-			id           int
-			databaseName string
-			schemaName   string
-			objName      string
-			objError     string
-		)
-		numInvalidObjects := 0
-		rows, err := tdb.DB.QueryContext(ctx, `SELECT id, database_name, schema_name, obj_name, error FROM "".crdb_internal.invalid_objects`)
+		invalidObjects, err := schemachange.ValidateInvalidObjects(ctx, db)
 		if err != nil {
 			t.Fatal(err)
 		}
-		for rows.Next() {
-			numInvalidObjects++
-			if err := rows.Scan(&id, &databaseName, &schemaName, &objName, &objError); err != nil {
-				t.Fatal(err)
-			}
+		for _, obj := range invalidObjects {
 			t.Logf(
-				"invalid object found: id: %d, database_name: %s, schema_name: %s, obj_name: %s, error: %s",
-				id, databaseName, schemaName, objName, objError,
+				"invalid object found: id: %d, database_name: %s, schema_name: %s, obj_name: %s, error: %v",
+				obj.ID, obj.DatabaseName, obj.SchemaName, obj.ObjName, obj.Error,
 			)
 		}
-		if err := rows.Err(); err != nil {
-			t.Fatal(err)
-		}
-		if numInvalidObjects > 0 {
-			t.Errorf("found %d invalid objects", numInvalidObjects)
+		if len(invalidObjects) > 0 {
+			t.Errorf("found %d invalid objects", len(invalidObjects))
 		}
 	}
 
@@ -141,7 +126,6 @@ func TestWorkload(t *testing.T) {
 		t.Logf("running DROP with use_declarative_schema_changer = %s", schemaChangerSetting)
 		tdb.Exec(t, "SET use_declarative_schema_changer = $1", schemaChangerSetting)
 		tdb.Exec(t, "DROP DATABASE schemachange CASCADE")
-		tdb.Exec(t, "RESET use_declarative_schema_changer")
 		findInvalidObjects()
 	}()
 
