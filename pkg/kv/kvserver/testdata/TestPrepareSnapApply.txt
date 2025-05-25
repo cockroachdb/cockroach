@@ -1,0 +1,32 @@
+echo
+----
+>> sst:
+set: /Local/RangeID/123/u/RaftHardState/0,0 -> term:20 vote:0 commit:100 lead:0 lead_epoch:0 
+set: /Local/RangeID/123/u/RaftReplicaID/0,0 -> replica_id:4 
+set: /Local/RangeID/123/u/RaftTruncatedState/0,0 -> index:100 term:20 
+rangedel: /Local/RangeID/123/{u""-v""}
+>> sst:
+set: /Local/RangeID/101/u/RangeTombstone/0,0 -> next_replica_id:2147483647 
+rangedel: /Local/RangeID/101/{u/RaftReplicaID-v""}
+>> sst:
+set: /Local/RangeID/102/u/RangeTombstone/0,0 -> next_replica_id:2147483647 
+rangedel: /Local/RangeID/102/{u/RaftReplicaID-v""}
+>> sst:
+del: /Local/Lock"y\xff"/0300000000000000000000000000000000 -> /<empty>
+>> sst:
+del: "y\xff"/0.000000001,0 -> /<empty>
+>> unrepl: /Local/RangeID/123/{u""-v""}
+>> repl: /Local/RangeID/123/{r""-s""}
+>> repl: /Local/Range"{a"-k"}
+>> repl: /Local/Lock/Local/Range"{a"-k"}
+>> repl: /Local/Lock"{a"-k"}
+>> repl: {a-k}
+>> subsumed: /Local/RangeID/101/{r""-s""}
+>> subsumed: /Local/RangeID/101/{u""-v""}
+>> subsumed: /Local/RangeID/102/{r""-s""}
+>> subsumed: /Local/RangeID/102/{u""-v""}
+>> subsumed: /Local/Range"{k"-z"}
+>> subsumed: /Local/Lock/Local/Range"{k"-z"}
+>> subsumed: /Local/Lock"{k"-z"}
+>> subsumed: {k-z}
+>> excise: {a-k}
