@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -158,11 +159,10 @@ func ReportSSTEntries(buf *redact.StringBuilder, name string, sst []byte) error 
 		if err != nil {
 			return err
 		}
-		value, err := storage.DecodeMVCCValue(v)
-		if err != nil {
-			return err
-		}
-		buf.Printf("%s: %s -> %s\n", strings.ToLower(kv.Kind().String()), key, value)
+		buf.Printf("%s: %s\n",
+			strings.ToLower(kv.Kind().String()),
+			print.SprintMVCCKeyValue(storage.MVCCKeyValue{Key: key, Value: v}, true /* printKey */),
+		)
 	}
 
 	// Dump rangedels.
