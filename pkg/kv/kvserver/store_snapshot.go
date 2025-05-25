@@ -804,6 +804,9 @@ type noopStorePool struct{}
 func (n noopStorePool) Throttle(storepool.ThrottleReason, string, roachpb.StoreID) {}
 
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
+//
+// TODO(tbg): must ensure that witnesses are never asked nor will ever agree
+// to send snapshots to send non-witness snapshots.
 func sendSnapshot(
 	ctx context.Context,
 	clusterID uuid.UUID,

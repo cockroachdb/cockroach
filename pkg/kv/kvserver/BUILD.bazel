@@ -299,6 +299,7 @@ go_test(
         "client_replica_gc_test.go",
         "client_replica_raft_overload_test.go",
         "client_replica_test.go",
+        "client_replica_witness_test.go",
         "client_spanconfigs_test.go",
         "client_split_burst_test.go",
         "client_split_test.go",

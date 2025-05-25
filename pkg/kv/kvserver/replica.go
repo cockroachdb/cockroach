@@ -65,6 +65,12 @@ import (
 	"github.com/kr/pretty"
 )
 
+var StoreWitnessID atomic.Pointer[roachpb.StoreID]
+
+func init() {
+	StoreWitnessID.Store(new(roachpb.StoreID))
+}
+
 const (
 	// configGossipTTL is the time-to-live for configuration maps.
 

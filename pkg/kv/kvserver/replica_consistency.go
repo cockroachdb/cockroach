@@ -60,6 +60,11 @@ type replicaChecksum struct {
 // consistency check will be re-run to save storage engine checkpoints and
 // terminate suspicious nodes. This behavior should be lifted to the consistency
 // checker queue in the future.
+//
+// TODO(tbg): needs to learn about witnesses. It can still run the shallow stats
+// checks (compare the stats counters) but can not expect the user span of the
+// range to be populated, and so can't compare SHAs. It could verify that the
+// user span is empty instead.
 func (r *Replica) CheckConsistency(
 	ctx context.Context, req kvpb.CheckConsistencyRequest,
 ) (kvpb.CheckConsistencyResponse, *kvpb.Error) {

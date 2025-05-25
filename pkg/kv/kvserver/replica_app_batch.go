@@ -137,8 +137,14 @@ func (b *replicaAppBatch) Stage(
 	}
 
 	// Stage the command's write batch in the application batch.
-	if err := b.ab.addWriteBatch(ctx, b.batch, cmd); err != nil {
-		return nil, err
+	// If Replica is a witness, skip batches that do not affect the range metadata.
+	// TODO(tbg): IsTrivial is likely not exactly the right thing, or at least it
+	// was never intended to capture the precise semantics we want here. We want
+	// something more structured, like in `rditer.Select`.
+	if *StoreWitnessID.Load() != b.r.store.StoreID() || !cmd.IsTrivial() {
+		if err := b.ab.addWriteBatch(ctx, b.batch, cmd); err != nil {
+			return nil, err
+		}
 	}
 
 	// Run any triggers that should occur before the (entire) batch is applied but
