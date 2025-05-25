@@ -1,0 +1,28 @@
+echo
+----
+>> sst:
+set: /Local/RangeID/123/u/RaftHardState/0,0 -> /<err: unknown tag: 16>
+set: /Local/RangeID/123/u"rftr"/0,0 -> /<err: unknown tag: 16>
+set: /Local/RangeID/123/u/RaftTruncatedState/0,0 -> /<err: unknown tag: 16>
+rangedel: /Local/RangeID/123/{u""-v""}
+>> sst:
+set: /Local/RangeID/101/u/RangeTombstone/0,0 -> /<err: unknown tag: 16>
+rangedel: /Local/RangeID/101/{u"rftr"-v""}
+>> sst:
+set: /Local/RangeID/102/u/RangeTombstone/0,0 -> /<err: unknown tag: 16>
+rangedel: /Local/RangeID/102/{u"rftr"-v""}
+>> excise: {a-k}
+>> repl: /Local/RangeID/123/{r""-s""}
+>> repl: /Local/Range"{a"-k"}
+>> repl: /Local/Lock/Local/Range"{a"-k"}
+>> repl: /Local/Lock"{a"-k"}
+>> repl: {a-k}
+>> unrepl: /Local/RangeID/123/{u""-v""}
+>> subsumed: /Local/RangeID/101/{r""-s""}
+>> subsumed: /Local/RangeID/101/{u""-v""}
+>> subsumed: /Local/RangeID/102/{r""-s""}
+>> subsumed: /Local/RangeID/102/{u""-v""}
+>> subsumed: /Local/Range"{k"-z"}
+>> subsumed: /Local/Lock/Local/Range"{k"-z"}
+>> subsumed: /Local/Lock"{k"-z"}
+>> subsumed: {k-z}
