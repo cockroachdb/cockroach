@@ -242,7 +242,7 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	raBitQuantizer := quantize.NewRaBitQuantizer(2, 42, vecdist.L2Squared)
+	raBitQuantizer := quantize.NewRaBitQuantizer(2, 42, vecdist.Cosine)
 	unquantizer := quantize.NewUnQuantizer(2, vecdist.L2Squared)
 	store := New(raBitQuantizer, 42)
 	store.mu.partitions = make(map[qualifiedPartitionKey]*memPartition)
@@ -298,7 +298,9 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NotNil(t, store2.rootQuantizer)
+	require.Equal(t, vecdist.Cosine, store2.rootQuantizer.GetDistanceMetric())
 	require.NotNil(t, store2.quantizer)
+	require.Equal(t, vecdist.Cosine, store2.quantizer.GetDistanceMetric())
 	require.Len(t, store2.mu.partitions, 2)
 	require.Equal(t, qkey10, store2.mu.partitions[qkey10].key)
 	require.Equal(t, uint64(1), store2.mu.partitions[qkey10].lock.created)
