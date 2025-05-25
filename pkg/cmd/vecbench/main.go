@@ -67,6 +67,12 @@ var flagSearchBeamSizes = flag.String(
 	"1,2,4,8,16,32,64,128,256,512",
 	"List of beam sizes used for search.")
 
+// Disable adaptive search by default until it is enabled for the vecstore.
+var flagDisableAdaptiveSearch = flag.Bool(
+	"disable-adaptive-search",
+	true,
+	"Disable use of historical statistics to adjust number of partitions searched")
+
 // Store options.
 var flagMemStore = flag.Bool("memstore", false, "Use in-memory store instead of CockroachDB")
 var flagDBConnStr = flag.String("db", "postgresql://root@localhost:26257",
@@ -440,10 +446,11 @@ func newVectorProvider(
 	stopper *stop.Stopper, datasetName string, dims int,
 ) (VectorProvider, error) {
 	options := cspann.IndexOptions{
-		MinPartitionSize: minPartitionSize,
-		MaxPartitionSize: maxPartitionSize,
-		BaseBeamSize:     *flagBeamSize,
-		RotAlgorithm:     cspann.RotGivens,
+		MinPartitionSize:      minPartitionSize,
+		MaxPartitionSize:      maxPartitionSize,
+		BaseBeamSize:          *flagBeamSize,
+		RotAlgorithm:          cspann.RotGivens,
+		DisableAdaptiveSearch: *flagDisableAdaptiveSearch,
 	}
 
 	if *flagMemStore {
