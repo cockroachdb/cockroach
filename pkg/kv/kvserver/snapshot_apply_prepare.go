@@ -44,17 +44,19 @@ func prepareSnapApply(
 	[]roachpb.Span, // clearedSubsumedSpans
 	error,
 ) {
-	// Step 1: Write unreplicated SST
+	_ = applySnapshotTODO // 3.1 + 1.1 + 2.5.
 	unreplicatedSSTFile, clearedUnreplicatedSpan, err := writeUnreplicatedSST(
 		ctx, input.id, input.st, input.truncState, input.hardState, input.sl,
 	)
 	if err != nil {
 		return roachpb.Span{}, nil, err
 	}
+	_ = applySnapshotTODO // add to 2.4.
 	if err := input.writeSST(ctx, unreplicatedSSTFile.Data()); err != nil {
 		return roachpb.Span{}, nil, err
 	}
 
+	_ = applySnapshotTODO // 3.2 + 2.1 + 2.2 + 2.3
 	clearedSubsumedSpans, err := clearSubsumedReplicaDiskData(
 		ctx, input.st, input.todoEng, input.writeSST,
 		input.desc, input.subsumedDescs,
