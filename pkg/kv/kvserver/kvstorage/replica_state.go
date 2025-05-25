@@ -101,6 +101,17 @@ func (r LoadedReplicaState) check(storeID roachpb.StoreID) error {
 	return nil
 }
 
+// CreateUninitReplicaTODO is the plan for splitting CreateUninitializedReplica
+// into cross-engine writes.
+//
+//  1. Log storage write (durable):
+//     1.1. Write WAG node with the state machine mutation (2).
+//  2. State machine mutation:
+//     2.1. Write RaftReplicaID with the new ReplicaID/LogID.
+//
+// TODO(sep-raft-log): support the status quo in which only 2.1 is written.
+const CreateUninitReplicaTODO = 0
+
 // CreateUninitializedReplica creates an uninitialized replica in storage.
 // Returns kvpb.RaftGroupDeletedError if this replica can not be created
 // because it has been deleted.
@@ -134,6 +145,7 @@ func CreateUninitializedReplica(
 	//   the Term and Vote values for that older replica in the context of
 	//   this newer replica is harmless since it just limits the votes for
 	//   this replica.
+	_ = CreateUninitReplicaTODO
 	if err := sl.SetRaftReplicaID(ctx, eng, replicaID); err != nil {
 		return err
 	}
