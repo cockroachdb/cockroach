@@ -655,8 +655,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-tablespace.html"
 pg_catalog,pg_timezone_abbrevs,table,node,permanent,prefix,pg_timezone_abbrevs was created for compatibility and is currently unimplemented
 pg_catalog,pg_timezone_names,table,node,permanent,prefix,pg_timezone_names lists all the timezones that are supported by SET timezone
 pg_catalog,pg_transform,table,node,permanent,prefix,pg_transform was created for compatibility and is currently unimplemented
-pg_catalog,pg_trigger,table,node,permanent,prefix,"triggers (empty - feature does not exist)
-https://www.postgresql.org/docs/9.5/catalog-pg-trigger.html"
+pg_catalog,pg_trigger,table,node,permanent,prefix,"trigger definitions
+https://www.postgresql.org/docs/16/catalog-pg-trigger.html"
 pg_catalog,pg_ts_config,table,node,permanent,prefix,pg_ts_config was created for compatibility and is currently unimplemented
 pg_catalog,pg_ts_config_map,table,node,permanent,prefix,pg_ts_config_map was created for compatibility and is currently unimplemented
 pg_catalog,pg_ts_dict,table,node,permanent,prefix,pg_ts_dict was created for compatibility and is currently unimplemented

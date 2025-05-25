@@ -4501,12 +4501,12 @@ DROP FUNCTION f1;
 subtest end
 
 # ==============================================================================
-# Test information_schema.triggers
+# Test information_schema.triggers and pg_catalog.pg_trigger
 # ==============================================================================
 
-subtest information_schema_triggers
+subtest trigger_introspection
 
-# Create test tables and trigger functions
+# Create test tables and trigger functions.
 statement ok
 CREATE TABLE test_triggers (
     id INT PRIMARY KEY,
@@ -4601,7 +4601,7 @@ CREATE FUNCTION trigger_func3() RETURNS TRIGGER AS $$
   END;
 $$ LANGUAGE PLpgSQL;
 
-# TODO(sql-queries): Enable tests for statement-level triggers when supported.
+# TODO(#126362, #135655): Enable tests for statement-level triggers when supported.
 # statement ok
 # CREATE TRIGGER after_update_transition
 # AFTER UPDATE ON test_triggers
@@ -4609,7 +4609,7 @@ $$ LANGUAGE PLpgSQL;
 # FOR EACH STATEMENT
 # EXECUTE FUNCTION trigger_func3();
 
-# TODO(sql-queries): Enable tests for statement-level triggers when supported.
+# TODO(#126362, #135655): Enable tests for statement-level triggers when supported.
 # query TTTTT colnames
 # SELECT 
 #     trigger_name,
@@ -4670,6 +4670,99 @@ ORDER BY trigger_schema;
 trigger_schema  trigger_count
 other_schema    1
 public          7
+
+# Create a trigger with arguments to test tgnargs and tgargs.
+statement ok
+CREATE TRIGGER trigger_with_args
+AFTER INSERT ON test_triggers
+FOR EACH ROW
+EXECUTE FUNCTION trigger_func1('arg1', 'arg2', 'test value with spaces');
+
+# Test pg_catalog.pg_trigger.
+query TIBITTT colnames
+SELECT 
+    tgname,
+    tgtype,
+    tgfoid > 0 AS has_func_oid,
+    tgnargs,
+    tgenabled,
+    tgoldtable,
+    tgnewtable
+FROM pg_catalog.pg_trigger
+WHERE tgrelid = 'test_triggers'::regclass
+ORDER BY tgname;
+----
+tgname              tgtype  has_func_oid  tgnargs  tgenabled  tgoldtable  tgnewtable
+after_delete_row    9       true          0        A          NULL        NULL
+after_insert_row    5       true          0        A          NULL        NULL
+before_update_row   19      true          0        A          NULL        NULL
+multi_event_trigger 31      true          0        A          NULL        NULL
+trigger_with_args   5       true          3        A          NULL        NULL
+
+# Test tgtype bitmap calculation
+# Bit 0: FOR EACH ROW (1) or FOR EACH STATEMENT (0)
+# Bit 1: BEFORE (2) or AFTER (0)
+# Bits 2-4: INSERT (4), DELETE (8), UPDATE (16)
+# TODO(#126363, #135657): Add tests for INSTEAD OF and TRUNCATE triggers here when supported.
+query TBBBBB colnames
+SELECT 
+    tgname,
+    (tgtype::INT & 1) > 0 AS is_row_level,
+    (tgtype::INT & 2) > 0 AS is_before,
+    (tgtype::INT & 4) > 0 AS has_insert,
+    (tgtype::INT & 8) > 0 AS has_delete,
+    (tgtype::INT & 16) > 0 AS has_update
+FROM pg_catalog.pg_trigger
+WHERE tgrelid = 'test_triggers'::regclass
+ORDER BY tgname;
+----
+tgname               is_row_level  is_before  has_insert  has_delete  has_update
+after_delete_row     true          false      false       true        false
+after_insert_row     true          false      true        false       false
+before_update_row    true          true       false       false       true
+multi_event_trigger  true          true       true        true        true
+trigger_with_args    true          false      true        false       false
+
+# Test trigger with arguments.
+query TIT colnames
+SELECT 
+    tgname,
+    tgnargs,
+    encode(tgargs, 'escape') AS tgargs
+FROM pg_catalog.pg_trigger
+WHERE tgrelid = 'test_triggers'::regclass
+ORDER BY tgname;
+----
+tgname               tgnargs  tgargs
+after_delete_row     0        ·
+after_insert_row     0        ·
+before_update_row    0        ·
+multi_event_trigger  0        ·
+trigger_with_args    3        arg1\000arg2\000test value with spaces\000
+
+# Test trigger with WHEN condition.
+query TTT colnames
+SELECT 
+    tgname,
+    tgqual,
+    tgattr
+FROM pg_catalog.pg_trigger
+WHERE tgrelid = 'test_triggers'::regclass AND tgqual IS NOT NULL;
+----
+tgname             tgqual               tgattr
+before_update_row  ((new).value > 100)  ·
+
+# Test cross-schema trigger.
+query TTT colnames
+SELECT 
+    tgname,
+    tgrelid::regclass::text AS table_name,
+    tgfoid::regproc::text AS trigger_func_name
+FROM pg_catalog.pg_trigger
+WHERE tgrelid = 'other_schema.test_table'::regclass;
+----
+tgname                table_name  trigger_func_name
+other_schema_trigger  test_table  trigger_func1
 
 # Clean up
 statement ok
