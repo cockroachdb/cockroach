@@ -9,8 +9,10 @@ import (
 	"context"
 	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
@@ -408,19 +410,10 @@ func (fw *fixupWorker) addTargetPartitionToRoot(
 	ctx context.Context, partitionKey PartitionKey, rootMetadata, metadata PartitionMetadata,
 ) error {
 	if metadata.StateDetails.State == UpdatingState {
-		// Add the target partition key to the root paritition.
-		fw.tempChildKey[0] = ChildKey{PartitionKey: partitionKey}
-		fw.tempValueBytes[0] = nil
-		added, err := fw.addToPartition(ctx, RootKey,
-			metadata.Centroid.AsSet(), fw.tempChildKey[:1], fw.tempValueBytes[:1], rootMetadata)
-		if added {
-			log.VEventf(ctx, 2,
-				"added partition %d (state=%s) to root partition (state=%s)",
-				partitionKey, metadata.StateDetails.String(), rootMetadata.StateDetails.String())
-		}
+		// Add the target partition's key and centroid to the root partition.
+		err := fw.addToParentPartition(ctx, RootKey, rootMetadata, metadata.Centroid, partitionKey)
 		if err != nil {
-			return errors.Wrapf(err, "adding partition %d (state=%s) to root partition (state=%s)",
-				partitionKey, metadata.StateDetails.String(), rootMetadata.StateDetails.String())
+			return err
 		}
 
 		// Change target partition's state from Updating to Ready.
@@ -451,6 +444,7 @@ func (fw *fixupWorker) addToPartition(
 		return false, errors.AssertionFailedf(
 			"cannot add to partition in state that disallows adds/removes")
 	}
+	fw.index.validateVectorsToAdd(expected.Level, vectors)
 
 	added, err = fw.index.store.TryAddToPartition(ctx, fw.treeKey, partitionKey,
 		vectors, childKeys, valueBytes, expected)
@@ -540,7 +534,11 @@ func (fw *fixupWorker) computeSplitCentroids(
 
 	default:
 		// Compute centroids using K-means.
-		kmeans := BalancedKmeans{Workspace: &fw.workspace, Rand: fw.rng}
+		kmeans := BalancedKmeans{
+			Workspace:      &fw.workspace,
+			Rand:           fw.rng,
+			DistanceMetric: fw.index.quantizer.GetDistanceMetric(),
+		}
 		kmeans.ComputeCentroids(vectors, leftCentroid, rightCentroid, pinLeftCentroid)
 	}
 }
@@ -585,8 +583,23 @@ func (fw *fixupWorker) createSplitSubPartition(
 
 	// Ensure that the new sub-partition is linked into a parent partition.
 	if targetMetadata.StateDetails.State == UpdatingState && parentPartitionKey != InvalidKey {
+		// Load parent metadata to verify that it's in a state that allows inserts.
+		parentMetadata, err := fw.getPartitionMetadata(ctx, parentPartitionKey)
+		if err != nil {
+			return PartitionMetadata{}, errors.Wrapf(err,
+				"getting parent partition %d metadata", parentPartitionKey)
+		}
+
+		parentLevel := sourceMetadata.Level + 1
+		if parentMetadata.StateDetails.State != ReadyState || parentMetadata.Level != parentLevel {
+			// Only parent partitions in the Ready state at the expected level (level
+			// can change after split/merge) allow children to be added.
+			// TODO(andyk): Use parent state to identify alternate insert partition.
+			return PartitionMetadata{}, errFixupAborted
+		}
+
 		err = fw.addToParentPartition(
-			ctx, parentPartitionKey, partitionKey, sourceMetadata.Level+1, centroid)
+			ctx, parentPartitionKey, parentMetadata, centroid, partitionKey)
 		if err != nil {
 			return PartitionMetadata{}, err
 		}
@@ -602,42 +615,36 @@ func (fw *fixupWorker) createSplitSubPartition(
 // its level does not match the given level, then this fixup is aborted.
 func (fw *fixupWorker) addToParentPartition(
 	ctx context.Context,
-	parentPartitionKey, partitionKey PartitionKey,
-	parentLevel Level,
+	parentPartitionKey PartitionKey,
+	parentMetadata PartitionMetadata,
 	centroid vector.T,
-) (err error) {
-	var parentMetadata PartitionMetadata
-
-	defer func() {
-		err = errors.Wrapf(err, "adding partition %d to parent partition %d (level=%d, state=%s)",
-			partitionKey, parentPartitionKey, parentLevel, parentMetadata.StateDetails.String())
-	}()
-
-	// Load parent metadata to verify that it's in a state that allows inserts.
-	parentMetadata, err = fw.getPartitionMetadata(ctx, parentPartitionKey)
-	if err != nil {
-		return errors.Wrapf(err, "getting parent partition %d metadata", parentPartitionKey)
+	partitionKey PartitionKey,
+) error {
+	// Cosine and InnerProduct need to normalize centroids before adding them to a
+	// partition.
+	switch fw.index.quantizer.GetDistanceMetric() {
+	case vecdist.Cosine, vecdist.InnerProduct:
+		tempCentroid := fw.workspace.AllocVector(len(centroid))
+		defer fw.workspace.FreeVector(tempCentroid)
+		copy(tempCentroid, centroid)
+		num32.Normalize(tempCentroid)
+		centroid = tempCentroid
 	}
 
-	if parentMetadata.StateDetails.State != ReadyState || parentMetadata.Level != parentLevel {
-		// Only parent partitions in the Ready state at the expected level (level
-		// can change after split/merge) allow children to be added.
-		// TODO(andyk): Use parent state to identify alternate insert partition.
-		return errFixupAborted
-	}
-
-	// Parent partition is ready, so try to add to it.
+	// Add the target partition key to the root paritition.
 	fw.tempChildKey[0] = ChildKey{PartitionKey: partitionKey}
 	fw.tempValueBytes[0] = nil
 	added, err := fw.addToPartition(ctx, parentPartitionKey,
 		centroid.AsSet(), fw.tempChildKey[:1], fw.tempValueBytes[:1], parentMetadata)
 	if added {
 		log.VEventf(ctx, 2,
-			"added partition %d to parent partition %d (level=%d, state=%s)",
-			partitionKey, parentPartitionKey, parentLevel, parentMetadata.StateDetails.String())
+			"added centroid for partition %d to parent partition %d (level=%d, state=%s)",
+			partitionKey, parentPartitionKey, parentMetadata.Level, parentMetadata.StateDetails.String())
 	}
 	if err != nil {
-		return err
+		return errors.Wrapf(err,
+			"adding centroid for partition %d to parent partition %d (level=%d, state=%s)",
+			partitionKey, parentPartitionKey, parentMetadata.Level, parentMetadata.StateDetails.String())
 	}
 
 	return nil

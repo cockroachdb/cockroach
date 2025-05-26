@@ -119,6 +119,9 @@ type Store interface {
 	// metadata and returns a ConditionFailedError if it is not the same as the
 	// expected metadata. If the partition does not exist, it returns
 	// ErrPartitionNotFound.
+	//
+	// NOTE: The caller owns the vectors, childKeys, and valueBytes memory. The
+	// Store implementation should not try to use it after returning.
 	TryAddToPartition(
 		ctx context.Context,
 		treeKey TreeKey,
@@ -191,6 +194,9 @@ type Txn interface {
 	// state that does not allow adds. It returns ErrPartitionNotFound if the
 	// partition cannot be found, or ErrRestartOperation if the caller should
 	// retry the insert operation that triggered this call.
+	//
+	// NOTE: The caller owns the vec, childKey, and valueBytes memory. The Store
+	// implementation should not try to use it after returning.
 	AddToPartition(
 		ctx context.Context,
 		treeKey TreeKey,
@@ -242,7 +248,7 @@ type Txn interface {
 	// corresponding reference will be set to nil. If a partition cannot be found,
 	// GetFullVectors returns ErrPartitionNotFound.
 	//
-	// NOTE: The caller takes ownership of any vector memory returned in "refs".
-	// The Store implementation should not try to use it after returning it.
+	// NOTE: Returned vectors should be treated as immutable. Neither the caller
+	// or the Store implementation should modify the memory.
 	GetFullVectors(ctx context.Context, treeKey TreeKey, refs []VectorWithKey) error
 }
