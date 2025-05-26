@@ -19,9 +19,12 @@ import (
 type ReplicatedSpansFilter int
 
 const (
+	// Throw away the zero value for easier migration away from this deprecated
+	// field.
+	_ ReplicatedSpansFilter = iota
 	// ReplicatedSpansAll includes all replicated spans, including user keys,
 	// range descriptors, and lock keys.
-	ReplicatedSpansAll ReplicatedSpansFilter = iota
+	ReplicatedSpansAll
 	// ReplicatedSpansExcludeUser includes all replicated spans except for user
 	// keys.
 	ReplicatedSpansExcludeUser

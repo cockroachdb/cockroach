@@ -67,6 +67,7 @@ func ClearRangeData(
 ) error {
 	keySpans := rditer.Select(rangeID, rditer.SelectOpts{
 		ReplicatedBySpan:      opts.ClearReplicatedBySpan,
+		ReplicatedSpansFilter: rditer.ReplicatedSpansAll,
 		ReplicatedByRangeID:   opts.ClearReplicatedByRangeID,
 		UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
 	})

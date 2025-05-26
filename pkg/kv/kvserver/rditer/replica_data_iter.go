@@ -68,6 +68,7 @@ func MakeAllKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 		ReplicatedBySpan:      d.RSpan(),
 		ReplicatedByRangeID:   true,
 		UnreplicatedByRangeID: true,
+		ReplicatedSpansFilter: ReplicatedSpansAll,
 	})
 }
 
@@ -104,8 +105,9 @@ func MakeAllKeySpanSet(d *roachpb.RangeDescriptor) *spanset.SpanSet {
 // 5. User key span.
 func MakeReplicatedKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return Select(d.RangeID, SelectOpts{
-		ReplicatedBySpan:    d.RSpan(),
-		ReplicatedByRangeID: true,
+		ReplicatedBySpan:      d.RSpan(),
+		ReplicatedByRangeID:   true,
+		ReplicatedSpansFilter: ReplicatedSpansAll,
 	})
 }
 

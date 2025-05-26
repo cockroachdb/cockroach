@@ -161,7 +161,8 @@ func clearSubsumedReplicaDiskData(
 	// via the call to DestroyReplica.
 	getKeySpans := func(d *roachpb.RangeDescriptor) []roachpb.Span {
 		return rditer.Select(d.RangeID, rditer.SelectOpts{
-			ReplicatedBySpan: d.RSpan(),
+			ReplicatedBySpan:      d.RSpan(),
+			ReplicatedSpansFilter: rditer.ReplicatedSpansAll,
 		})
 	}
 	keySpans := getKeySpans(desc)
