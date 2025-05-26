@@ -155,7 +155,7 @@ func verifyIterateReplicaKeySpans(
 	desc *roachpb.RangeDescriptor,
 	eng storage.Engine,
 	replicatedOnly bool,
-	rangedOpts SelectRangedOptions,
+	selOpts SelectOpts,
 ) {
 	readWriter := eng.NewSnapshot()
 	defer readWriter.Close()
@@ -170,7 +170,7 @@ func verifyIterateReplicaKeySpans(
 	})
 
 	require.NoError(t, IterateReplicaKeySpans(context.Background(), desc, readWriter, replicatedOnly,
-		rangedOpts,
+		selOpts,
 		func(iter storage.EngineIterator, span roachpb.Span) error {
 			var err error
 			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
@@ -306,13 +306,17 @@ func TestReplicaDataIterator(t *testing.T) {
 							var innerBuf strings.Builder
 							tbl := tablewriter.NewWriter(&innerBuf)
 							// Print contents of the Replica according to the iterator.
-							rangedOpts := SelectRangedOptions{
-								Span:       tc.desc.RSpan(),
-								SystemKeys: testCase.systemKeys,
-								UserKeys:   testCase.userKeys,
-								LockTable:  testCase.lockTable,
+							opts := SelectOpts{
+								Ranged: SelectRangedOptions{
+									Span:       tc.desc.RSpan(),
+									SystemKeys: testCase.systemKeys,
+									UserKeys:   testCase.userKeys,
+									LockTable:  testCase.lockTable,
+								},
+								ReplicatedByRangeID:   true,
+								UnreplicatedByRangeID: !replicatedOnly,
 							}
-							verifyIterateReplicaKeySpans(t, tbl, &tc.desc, eng, replicatedOnly, rangedOpts)
+							verifyIterateReplicaKeySpans(t, tbl, &tc.desc, eng, replicatedOnly, opts)
 
 							tbl.Render()
 							return innerBuf.String()
@@ -481,14 +485,20 @@ func TestReplicaDataIteratorGlobalRangeKey(t *testing.T) {
 					expectedSpans = MakeAllKeySpans(&desc)
 				}
 
-				var actualSpans []roachpb.Span
-				require.NoError(t, IterateReplicaKeySpans(
-					context.Background(), &desc, snapshot, replicatedOnly, SelectRangedOptions{
+				selOpts := SelectOpts{
+					Ranged: SelectRangedOptions{
 						Span:       desc.RSpan(),
 						SystemKeys: true,
 						UserKeys:   true,
 						LockTable:  true,
 					},
+					ReplicatedByRangeID:   true,
+					UnreplicatedByRangeID: !replicatedOnly,
+				}
+
+				var actualSpans []roachpb.Span
+				require.NoError(t, IterateReplicaKeySpans(
+					context.Background(), &desc, snapshot, replicatedOnly, selOpts,
 					func(iter storage.EngineIterator, span roachpb.Span) error {
 						// We should never see any point keys.
 						hasPoint, hasRange := iter.HasPointAndRange()
@@ -598,11 +608,15 @@ func benchReplicaEngineDataIterator(b *testing.B, numRanges, numKeysPerRange, va
 	for i := 0; i < b.N; i++ {
 		for _, desc := range descs {
 			err := IterateReplicaKeySpans(
-				context.Background(), &desc, snapshot, false /* replicatedOnly */, SelectRangedOptions{
-					Span:       desc.RSpan(),
-					SystemKeys: true,
-					UserKeys:   true,
-					LockTable:  true,
+				context.Background(), &desc, snapshot, false /* replicatedOnly */, SelectOpts{
+					Ranged: SelectRangedOptions{
+						Span:       desc.RSpan(),
+						SystemKeys: true,
+						UserKeys:   true,
+						LockTable:  true,
+					},
+					ReplicatedByRangeID:   true,
+					UnreplicatedByRangeID: true,
 				},
 				func(iter storage.EngineIterator, _ roachpb.Span) error {
 					var err error
