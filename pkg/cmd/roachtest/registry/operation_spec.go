@@ -85,6 +85,11 @@ type OperationSpec struct {
 	// and will have CanRunConcurrently = false.
 	CanRunConcurrently OperationIsolation
 
+	// WaitBeforeCleanup specifies the amount of time to wait before running
+	// the cleanup function. This overrides the default wait time set by the flag
+	// --wait-before-cleanup.
+	WaitBeforeCleanup time.Duration
+
 	// Run is the operation function. It returns an OperationCleanup if this
 	// operation requires additional cleanup steps afterwards (eg. dropping an
 	// extra column that was created). A nil return value indicates no cleanup
