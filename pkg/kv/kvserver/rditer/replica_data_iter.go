@@ -65,10 +65,14 @@ type ReplicaMVCCDataIterator struct {
 // sorted order.
 func MakeAllKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return Select(d.RangeID, SelectOpts{
-		ReplicatedBySpan:      d.RSpan(),
+		Ranged: SelectRangedOptions{
+			Span:       d.RSpan(),
+			SystemKeys: true,
+			UserKeys:   true,
+			LockTable:  true,
+		},
 		ReplicatedByRangeID:   true,
 		UnreplicatedByRangeID: true,
-		ReplicatedSpansFilter: ReplicatedSpansAll,
 	})
 }
 
@@ -76,12 +80,16 @@ func MakeAllKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 // instead of a slice of spans. Note that lock table spans are skipped.
 func MakeAllKeySpanSet(d *roachpb.RangeDescriptor) *spanset.SpanSet {
 	spans := Select(d.RangeID, SelectOpts{
-		ReplicatedBySpan:      d.RSpan(),
+		Ranged: SelectRangedOptions{
+			Span:       d.RSpan(),
+			SystemKeys: true,
+			// NB: We don't need to add lock table spans. The caller is expected to
+			// add these.
+			LockTable: false,
+			UserKeys:  true,
+		},
 		ReplicatedByRangeID:   true,
 		UnreplicatedByRangeID: true,
-		// NB: We don't need to add lock table spans. The caller is expected to add
-		// these.
-		ReplicatedSpansFilter: ReplicatedSpansExcludeLocks,
 	})
 	ss := spanset.New()
 	for _, span := range spans {
@@ -105,9 +113,13 @@ func MakeAllKeySpanSet(d *roachpb.RangeDescriptor) *spanset.SpanSet {
 // 5. User key span.
 func MakeReplicatedKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return Select(d.RangeID, SelectOpts{
-		ReplicatedBySpan:      d.RSpan(),
-		ReplicatedByRangeID:   true,
-		ReplicatedSpansFilter: ReplicatedSpansAll,
+		Ranged: SelectRangedOptions{
+			Span:       d.RSpan(),
+			SystemKeys: true,
+			LockTable:  true,
+			UserKeys:   true,
+		},
+		ReplicatedByRangeID: true,
 	})
 }
 
@@ -116,11 +128,15 @@ func MakeReplicatedKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 // are skipped.
 func MakeReplicatedKeySpanSet(d *roachpb.RangeDescriptor) *spanset.SpanSet {
 	spans := Select(d.RangeID, SelectOpts{
-		ReplicatedBySpan:    d.RSpan(),
+		Ranged: SelectRangedOptions{
+			Span:       d.RSpan(),
+			SystemKeys: true,
+			// NB: We don't need to add lock table spans. The caller is expected to
+			// add these.
+			LockTable: false,
+			UserKeys:  true,
+		},
 		ReplicatedByRangeID: true,
-		// NB: We don't need to add lock table spans. The caller is expected to add
-		// these.
-		ReplicatedSpansFilter: ReplicatedSpansExcludeLocks,
 	})
 	ss := spanset.New()
 	for _, span := range spans {
@@ -139,8 +155,10 @@ func MakeReplicatedKeySpanSet(d *roachpb.RangeDescriptor) *spanset.SpanSet {
 // keys.
 func MakeReplicatedKeySpansUserOnly(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return Select(d.RangeID, SelectOpts{
-		ReplicatedBySpan:      d.RSpan(),
-		ReplicatedSpansFilter: ReplicatedSpansUserOnly,
+		Ranged: SelectRangedOptions{
+			Span:     d.RSpan(),
+			UserKeys: true,
+		},
 	})
 }
 
@@ -148,9 +166,12 @@ func MakeReplicatedKeySpansUserOnly(d *roachpb.RangeDescriptor) []roachpb.Span {
 // non-user keys.
 func MakeReplicatedKeySpansExcludingUser(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return Select(d.RangeID, SelectOpts{
-		ReplicatedBySpan:      d.RSpan(),
-		ReplicatedByRangeID:   true,
-		ReplicatedSpansFilter: ReplicatedSpansExcludeUser,
+		Ranged: SelectRangedOptions{
+			Span:       d.RSpan(),
+			SystemKeys: true,
+			LockTable:  true,
+		},
+		ReplicatedByRangeID: true,
 	})
 }
 
@@ -409,16 +430,18 @@ func IterateReplicaKeySpans(
 	var spans []roachpb.Span
 	if replicatedOnly {
 		spans = Select(desc.RangeID, SelectOpts{
-			ReplicatedBySpan:      desc.RSpan(),
-			ReplicatedSpansFilter: replicatedSpansFilter,
+			Ranged: SelectRangedOptions{
+				Span: desc.RSpan(),
+			}.Filtered(replicatedSpansFilter),
 			// NB: We exclude ReplicatedByRangeID if replicatedSpansFilter is
 			// ReplicatedSpansUserOnly.
 			ReplicatedByRangeID: replicatedSpansFilter != ReplicatedSpansUserOnly,
 		})
 	} else {
 		spans = Select(desc.RangeID, SelectOpts{
-			ReplicatedBySpan:      desc.RSpan(),
-			ReplicatedSpansFilter: replicatedSpansFilter,
+			Ranged: SelectRangedOptions{
+				Span: desc.RSpan(),
+			}.Filtered(replicatedSpansFilter),
 			ReplicatedByRangeID:   true,
 			UnreplicatedByRangeID: true,
 		})
