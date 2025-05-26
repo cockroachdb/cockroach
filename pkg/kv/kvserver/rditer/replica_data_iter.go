@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/rangekey"
 )
@@ -405,7 +406,7 @@ func (ri *ReplicaMVCCDataIterator) HasPointAndRange() (bool, bool) {
 // IterateReplicaKeySpans iterates over each of a range's key spans, and calls
 // the given visitor with an iterator over its data. Specifically, it iterates
 // over the spans returned by a Select() over all spans or replicated only spans
-// (with replicatedSpansFilter applied on replicated spans), and for each one
+// (with filterOrOptions applied on replicated spans), and for each one
 // provides first a point key iterator and then a range key iterator. This is the
 // expected order for Raft snapshots.
 //
@@ -415,33 +416,47 @@ func (ri *ReplicaMVCCDataIterator) HasPointAndRange() (bool, bool) {
 // automatically be closed when done. To halt iteration over key spans, return
 // iterutil.StopIteration().
 //
+// The filterOrOptions parameter can be either:
+// - ReplicatedSpansFilter (deprecated): Legacy enum-based filtering
+// - SelectRangedOptions: New struct-based filtering with explicit boolean fields
+//
 // Must use a reader with consistent iterators.
 func IterateReplicaKeySpans(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	reader storage.Reader,
-	replicatedOnly bool,
-	replicatedSpansFilter ReplicatedSpansFilter,
+	replicatedOnly bool, // TODO(tbg): remove when SelectRangedOptions is used
+	filterOrOptions interface{}, // ReplicatedSpansFilter or SelectRangedOptions
 	visitor func(storage.EngineIterator, roachpb.Span) error,
 ) error {
 	if !reader.ConsistentIterators() {
 		panic("reader must provide consistent iterators")
 	}
+
+	// Handle backward compatibility: convert filterOrOptions to SelectRangedOptions.
+	var rangedOpts SelectRangedOptions
+	switch v := filterOrOptions.(type) {
+	case ReplicatedSpansFilter:
+		// Legacy path: convert filter to SelectRangedOptions.
+		rangedOpts = SelectRangedOptions{Span: desc.RSpan()}.Filtered(v)
+	case SelectRangedOptions:
+		// New path: use directly.
+		rangedOpts = v
+		rangedOpts.Span = desc.RSpan()
+	default:
+		panic(errors.AssertionFailedf("filterOrOptions must be ReplicatedSpansFilter or SelectRangedOptions, got %T", v))
+	}
+
 	var spans []roachpb.Span
 	if replicatedOnly {
 		spans = Select(desc.RangeID, SelectOpts{
-			Ranged: SelectRangedOptions{
-				Span: desc.RSpan(),
-			}.Filtered(replicatedSpansFilter),
-			// NB: We exclude ReplicatedByRangeID if replicatedSpansFilter is
-			// ReplicatedSpansUserOnly.
-			ReplicatedByRangeID: replicatedSpansFilter != ReplicatedSpansUserOnly,
+			Ranged: rangedOpts,
+			// NB: We exclude ReplicatedByRangeID if only user keys are requested.
+			ReplicatedByRangeID: rangedOpts.SystemKeys || rangedOpts.LockTable,
 		})
 	} else {
 		spans = Select(desc.RangeID, SelectOpts{
-			Ranged: SelectRangedOptions{
-				Span: desc.RSpan(),
-			}.Filtered(replicatedSpansFilter),
+			Ranged:                rangedOpts,
 			ReplicatedByRangeID:   true,
 			UnreplicatedByRangeID: true,
 		})
