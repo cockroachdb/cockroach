@@ -1,10 +1,10 @@
 echo
 ----
-Select({ReplicatedBySpan:/Min ReplicatedSpansFilter:0 ReplicatedByRangeID:false UnreplicatedByRangeID:false}):
-Select({ReplicatedBySpan:/Min ReplicatedSpansFilter:0 ReplicatedByRangeID:false UnreplicatedByRangeID:true}):
+Select({ReplicatedBySpan:/Min Ranged:{Span:/Min SystemKeys:false LockTable:false UserKeys:false} ReplicatedSpansFilter:0 ReplicatedByRangeID:false UnreplicatedByRangeID:false}):
+Select({ReplicatedBySpan:/Min Ranged:{Span:/Min SystemKeys:false LockTable:false UserKeys:false} ReplicatedSpansFilter:0 ReplicatedByRangeID:false UnreplicatedByRangeID:true}):
   /Local/RangeID/123/{u""-v""}
-Select({ReplicatedBySpan:/Min ReplicatedSpansFilter:0 ReplicatedByRangeID:true UnreplicatedByRangeID:false}):
+Select({ReplicatedBySpan:/Min Ranged:{Span:/Min SystemKeys:false LockTable:false UserKeys:false} ReplicatedSpansFilter:0 ReplicatedByRangeID:true UnreplicatedByRangeID:false}):
   /Local/RangeID/123/{r""-s""}
-Select({ReplicatedBySpan:/Min ReplicatedSpansFilter:0 ReplicatedByRangeID:true UnreplicatedByRangeID:true}):
+Select({ReplicatedBySpan:/Min Ranged:{Span:/Min SystemKeys:false LockTable:false UserKeys:false} ReplicatedSpansFilter:0 ReplicatedByRangeID:true UnreplicatedByRangeID:true}):
   /Local/RangeID/123/{r""-s""}
   /Local/RangeID/123/{u""-v""}
