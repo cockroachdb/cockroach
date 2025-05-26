@@ -494,9 +494,19 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	snapshot := db.NewSnapshot()
 	defer snapshot.Close()
 
+	selOpts := rditer.SelectOpts{
+		Ranged: rditer.SelectRangedOptions{
+			SystemKeys: true,
+			LockTable:  true,
+			UserKeys:   true,
+		},
+		ReplicatedByRangeID:   true,
+		UnreplicatedByRangeID: !debugCtx.replicated,
+	}
+
 	var results int
 	return rditer.IterateReplicaKeySpans(cmd.Context(), &desc, snapshot, debugCtx.replicated,
-		rditer.ReplicatedSpansAll,
+		selOpts,
 		func(iter storage.EngineIterator, _ roachpb.Span) error {
 			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
 				hasPoint, hasRange := iter.HasPointAndRange()

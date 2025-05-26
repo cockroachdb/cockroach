@@ -3913,8 +3913,17 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			}
 		}
 
+		selOpts := rditer.SelectOpts{
+			Ranged: rditer.SelectRangedOptions{
+				SystemKeys: true,
+				LockTable:  true,
+				UserKeys:   true,
+			},
+			ReplicatedByRangeID:   true,
+			UnreplicatedByRangeID: false,
+		}
 		err := rditer.IterateReplicaKeySpans(
-			context.Background(), inSnap.Desc, sendingEngSnapshot, true /* replicatedOnly */, rditer.ReplicatedSpansAll,
+			context.Background(), inSnap.Desc, sendingEngSnapshot, true /* replicatedOnly */, selOpts,
 			func(iter storage.EngineIterator, span roachpb.Span) error {
 				fw, ok := sstFileWriters[string(span.Key)]
 				if !ok || !fw.span.Equal(span) {
