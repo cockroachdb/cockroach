@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
@@ -30,6 +31,7 @@ type MutationSearcher struct {
 	idxCtx       cspann.Context
 	partitionKey tree.Datum
 	encoded      tree.Datum
+	evalCtx      *eval.Context
 }
 
 // Init wraps the given KV transaction in a C-SPANN transaction and initializes
@@ -40,10 +42,13 @@ type MutationSearcher struct {
 //
 // tableDesc is expected to be leased such that its lifetime is at least as long
 // as txn.
-func (s *MutationSearcher) Init(idx *cspann.Index, txn *kv.Txn, tableDesc catalog.TableDescriptor) {
+func (s *MutationSearcher) Init(
+	evalCtx *eval.Context, idx *cspann.Index, txn *kv.Txn, tableDesc catalog.TableDescriptor,
+) {
 	s.idx = idx
-	s.txn.Init(idx.Store().(*vecstore.Store), txn, tableDesc)
+	s.txn.Init(evalCtx, idx.Store().(*vecstore.Store), txn, tableDesc)
 	s.idxCtx.Init(&s.txn)
+	s.evalCtx = evalCtx
 
 	// If the index is deterministic, then synchronously run the background worker
 	// to process any pending fixups.

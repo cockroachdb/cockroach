@@ -479,6 +479,8 @@ type VectorIndexHelper struct {
 	indexPrefix []byte
 	// tableDesc is the table descriptor for the table being backfilled.
 	tableDesc catalog.TableDescriptor
+	// evalCtx is the evaluation context used for vector operations.
+	evalCtx *eval.Context
 }
 
 // ReEncodeVector takes a rowenc.indexEntry, extracts the key values, unquantized
@@ -509,7 +511,7 @@ func (vih *VectorIndexHelper) ReEncodeVector(
 
 	// Locate a new partition for the key and re-encode the vector.
 	var searcher vecindex.MutationSearcher
-	searcher.Init(vih.vecIndex, txn, vih.tableDesc)
+	searcher.Init(vih.evalCtx, vih.vecIndex, txn, vih.tableDesc)
 	if err := searcher.SearchForInsert(ctx, roachpb.Key(key.Prefix), vec); err != nil {
 		return &rowenc.IndexEntry{}, err
 	}
@@ -902,6 +904,7 @@ func (ib *IndexBackfiller) initIndexes(
 			vecIndex:      vecIndex,
 			indexPrefix:   rowenc.MakeIndexKeyPrefix(codec, desc.GetID(), idx.GetID()),
 			tableDesc:     desc,
+			evalCtx:       ib.evalCtx,
 		}
 	}
 

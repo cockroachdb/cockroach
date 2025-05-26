@@ -781,3 +781,55 @@ statement ok
 CREATE VECTOR INDEX vec_idx ON test_145973 (v)
 
 subtest end
+
+subtest test_146046
+
+statement ok
+CREATE TABLE test_146046 (
+  a INT PRIMARY KEY,
+  b INT,
+  vec1 VECTOR(3),
+  VECTOR INDEX idx1 (vec1) WITH (min_partition_size=1, max_partition_size=4),
+  VECTOR INDEX idx2 (b, vec1) WITH (min_partition_size=1, max_partition_size=4),
+  FAMILY (a), FAMILY (b), FAMILY (vec1)
+)
+
+statement ok
+INSERT INTO test_146046 (a, b, vec1) VALUES
+  (1, 1, '[1, 2, 3]'),
+  (2, 1, '[4, 5, 6]'),
+  (3, 2, '[7, 8, 9]'),
+  (4, 2, '[10, 11, 12]'),
+  (5, 2, '[13, 14, 15]'),
+  (6, NULL, '[16, 17, 18]'),
+  (7, NULL, '[1, 1, 1]'),
+  (8, NULL, NULL),
+  (9, 3, NULL);
+
+query IT rowsort
+SELECT a, vec1 FROM test_146046@idx1 ORDER BY vec1 <-> '[5, 5, 5]' LIMIT 1;
+----
+2  [4,5,6]
+
+query IT rowsort
+SELECT a, vec1 FROM test_146046@idx1 ORDER BY vec1 <-> '[5, 5, 5]' LIMIT 10;
+----
+2  [4,5,6]
+3  [7,8,9]
+1  [1,2,3]
+7  [1,1,1]
+4  [10,11,12]
+5  [13,14,15]
+6  [16,17,18]
+
+query IT rowsort
+SELECT a, vec1 FROM test_146046@idx1 ORDER BY vec1 <-> '[5, 5, 5]' LIMIT 3;
+----
+2  [4,5,6]
+3  [7,8,9]
+1  [1,2,3]
+
+statement ok
+DROP TABLE test_146046
+
+subtest end
