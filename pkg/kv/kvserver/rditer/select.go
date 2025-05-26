@@ -26,9 +26,7 @@ const (
 	_
 	_
 	_
-	// ReplicatedSpansExcludeLocks includes all replicated spans except for the
-	// lock table.
-	ReplicatedSpansExcludeLocks
+	_
 	// ReplicatedSpansLocksOnly includes just spans for the lock table, and no
 	// other replicated spans.
 	ReplicatedSpansLocksOnly
@@ -191,10 +189,6 @@ func Select(rangeID roachpb.RangeID, opts SelectOpts) []roachpb.Span {
 // according to the ReplicatedSpansFilter.
 func (opts SelectRangedOptions) Filtered(filter ReplicatedSpansFilter) SelectRangedOptions {
 	switch filter {
-	case ReplicatedSpansExcludeLocks:
-		opts.SystemKeys = true
-		opts.UserKeys = true
-		opts.LockTable = false
 	case ReplicatedSpansLocksOnly:
 		opts.SystemKeys = false
 		opts.UserKeys = false
