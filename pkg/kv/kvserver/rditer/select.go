@@ -29,9 +29,7 @@ const (
 	// ReplicatedSpansExcludeUser includes all replicated spans except for user
 	// keys.
 	ReplicatedSpansExcludeUser
-	// ReplicatedSpansUserOnly includes just user keys, and no other replicated
-	// spans.
-	ReplicatedSpansUserOnly
+	_
 	// ReplicatedSpansExcludeLocks includes all replicated spans except for the
 	// lock table.
 	ReplicatedSpansExcludeLocks
@@ -115,13 +113,8 @@ func MakeLegacySelectOpts(
 		Ranged: SelectRangedOptions{
 			Span: sp,
 		}.Filtered(filter),
-	}
-	if replicatedOnly {
-		// NB: We exclude ReplicatedByRangeID if only user keys are requested.
-		opts.ReplicatedByRangeID = filter != ReplicatedSpansUserOnly
-	} else {
-		opts.ReplicatedByRangeID = true
-		opts.UnreplicatedByRangeID = true
+		ReplicatedByRangeID:   true,
+		UnreplicatedByRangeID: !replicatedOnly,
 	}
 	return opts
 }
@@ -210,10 +203,6 @@ func (opts SelectRangedOptions) Filtered(filter ReplicatedSpansFilter) SelectRan
 		opts.SystemKeys = true
 		opts.UserKeys = false
 		opts.LockTable = true
-	case ReplicatedSpansUserOnly:
-		opts.SystemKeys = false
-		opts.UserKeys = true
-		opts.LockTable = false
 	case ReplicatedSpansExcludeLocks:
 		opts.SystemKeys = true
 		opts.UserKeys = true
