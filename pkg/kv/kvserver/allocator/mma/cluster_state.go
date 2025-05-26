@@ -1017,7 +1017,7 @@ func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterS
 	return cs
 }
 
-func (cs *clusterState) processStoreLoadMsg(storeMsg *StoreLoadMsg) {
+func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *StoreLoadMsg) {
 	now := cs.ts.Now()
 	cs.gcPendingChanges(now)
 
@@ -1061,6 +1061,7 @@ func (cs *clusterState) processStoreLoadMsg(storeMsg *StoreLoadMsg) {
 	// need to undo the corresponding delta adjustment as the reported load
 	// already contains the effect.
 	for _, change := range ss.computePendingChangesReflectedInLatestLoad(storeMsg.LoadTime) {
+		log.Infof(ctx, "s%d not-pending %v", storeMsg.StoreID, change)
 		delete(ss.adjusted.loadPendingChanges, change.ChangeID)
 		delete(cs.pendingChanges, change.ChangeID)
 		cs.ranges[change.rangeID].removePendingChangeTracking(change.ChangeID)
