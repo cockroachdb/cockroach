@@ -39,6 +39,7 @@ type Source struct {
 // method prefixed IDP URI.
 func ParseProvisioningSource(sourceStr string) (source *Source, err error) {
 	var idp string
+	source = new(Source)
 	if source.authMethod, idp, err = parseAuthMethod(sourceStr); err != nil {
 		return nil, err
 	}
@@ -61,9 +62,16 @@ func parseAuthMethod(sourceStr string) (authMethod string, idp string, err error
 	return "", "", errors.Newf("PROVISIONING_SOURCE %q was not prefixed with any valid auth methods %q", sourceStr, supportedProvisioningMethods)
 }
 
-func parseIDP(idp string) (url *url.URL, err error) {
-	if url, err = url.Parse(idp); err != nil {
+func parseIDP(idp string) (u *url.URL, err error) {
+	if len(idp) == 0 {
+		return nil, errors.Newf("PROVISIONING_SOURCE IDP cannot be empty")
+	}
+	if u, err = url.Parse(idp); err != nil {
 		return nil, errors.Wrapf(err, "provided IDP %q in PROVISIONING_SOURCE is non parseable", idp)
 	}
 	return
+}
+
+func (source *Source) Size() int {
+	return len(source.authMethod) + len(source.idp.String())
 }
