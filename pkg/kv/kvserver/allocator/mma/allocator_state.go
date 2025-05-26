@@ -488,8 +488,8 @@ func (a *allocatorState) UpdateFailureDetectionSummary(
 }
 
 // ProcessStoreLeaseholderMsg implements the Allocator interface.
-func (a *allocatorState) ProcessStoreLoadMsg(msg *StoreLoadMsg) {
-	a.cs.processStoreLoadMsg(msg)
+func (a *allocatorState) ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoadMsg) {
+	a.cs.processStoreLoadMsg(ctx, msg)
 }
 
 // ProcessStoreLeaseholderMsg implements the Allocator interface.
@@ -745,6 +745,7 @@ func sortTargetCandidateSetAndPick(
 	}
 	if lowestLoad == loadThreshold && ignoreLevel != ignoreHigherThanLoadThreshold {
 		log.Infof(ctx, "sortTargetCandidateSetAndPick: no candidates due to equal to loadThreshold")
+		return 0
 	}
 	// < loadNoChange is fine. We need to check whether the following cases can continue.
 	// [loadNoChange, loadThreshold), or loadThreshold && ignoreHigherThanLoadThreshold.

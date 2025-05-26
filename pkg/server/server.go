@@ -609,7 +609,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			}
 			storeLoadMsg := allocator.MakeStoreLoadMsg(storeDesc, origTimestampNanos)
 			mmAllocator.SetStore(storeDesc)
-			mmAllocator.ProcessStoreLoadMsg(&storeLoadMsg)
+			mmAllocator.ProcessStoreLoadMsg(context.TODO(), &storeLoadMsg)
 		},
 	)
 
