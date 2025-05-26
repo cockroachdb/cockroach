@@ -154,7 +154,6 @@ func verifyIterateReplicaKeySpans(
 	tbl *tablewriter.Table,
 	desc *roachpb.RangeDescriptor,
 	eng storage.Engine,
-	replicatedOnly bool, // TODO(tbg): remove
 	selOpts SelectOpts,
 ) {
 	readWriter := eng.NewSnapshot()
@@ -316,7 +315,7 @@ func TestReplicaDataIterator(t *testing.T) {
 								ReplicatedByRangeID:   true,
 								UnreplicatedByRangeID: !replicatedOnly,
 							}
-							verifyIterateReplicaKeySpans(t, tbl, &tc.desc, eng, replicatedOnly, opts)
+							verifyIterateReplicaKeySpans(t, tbl, &tc.desc, eng, opts)
 
 							tbl.Render()
 							return innerBuf.String()
