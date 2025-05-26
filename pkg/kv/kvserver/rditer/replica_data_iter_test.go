@@ -293,17 +293,8 @@ func TestReplicaDataIterator(t *testing.T) {
 					{false, false, false},
 				}
 
-				legacyNameMapping := map[string]string{
-					"sys=true,lock=true,user=true":   "all",
-					"sys=true,lock=true,user=false":  "exclude-user",
-					"sys=false,lock=false,user=true": "user-only",
-				}
-
 				for _, testCase := range testCases {
 					name := fmt.Sprintf("sys=%t,lock=%t,user=%t", testCase.systemKeys, testCase.lockTable, testCase.userKeys)
-					if override, ok := legacyNameMapping[name]; ok {
-						name = override
-					}
 					t.Run(name, func(t *testing.T) {
 						flavor := "all"
 						if replicatedOnly {
