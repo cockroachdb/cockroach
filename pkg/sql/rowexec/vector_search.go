@@ -63,7 +63,7 @@ func newVectorSearchProcessor(
 	}
 	searchBeamSize := int(flowCtx.EvalCtx.SessionData().VectorSearchBeamSize)
 	maxResults := int(v.targetCount)
-	v.searcher.Init(idx, flowCtx.Txn, tabledesc.NewBuilder(&spec.Table).BuildImmutableTable(), searchBeamSize, maxResults)
+	v.searcher.Init(idx, flowCtx.Txn, tabledesc.NewBuilder(&spec.Table).BuildImmutableTable(), searchBeamSize, maxResults, flowCtx.EvalCtx)
 	colTypes := make([]*types.T, len(v.fetchSpec.FetchedColumns))
 	for i, col := range v.fetchSpec.FetchedColumns {
 		colTypes[i] = col.Type
@@ -237,7 +237,7 @@ func newVectorMutationSearchProcessor(
 	if err != nil {
 		return nil, err
 	}
-	v.searcher.Init(idx, flowCtx.Txn, tabledesc.NewBuilder(&spec.Table).BuildImmutableTable())
+	v.searcher.Init(idx, flowCtx.Txn, tabledesc.NewBuilder(&spec.Table).BuildImmutableTable(), flowCtx.EvalCtx)
 
 	// Pass through the input columns, and add the partition column and optional
 	// quantized vector column.

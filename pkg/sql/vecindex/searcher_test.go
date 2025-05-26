@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
@@ -96,7 +97,9 @@ func TestSearcher(t *testing.T) {
 
 	// Insert two vectors into root partition.
 	var mutator MutationSearcher
-	mutator.Init(idx, tx, tableDesc)
+	evalCtx := eval.NewTestingEvalContext(srv.ApplicationLayer().ClusterSettings())
+	defer evalCtx.Stop(ctx)
+	mutator.Init(idx, tx, tableDesc, evalCtx)
 
 	// Reuse prefix, key bytes, value bytes and vector memory, to ensure it's
 	// allowed.
@@ -147,7 +150,7 @@ func TestSearcher(t *testing.T) {
 	original[0] = 1
 	original[1] = 1
 	var searcher Searcher
-	searcher.Init(idx, tx, tableDesc, 8 /* baseBeamSize */, 2 /* maxResults */)
+	searcher.Init(idx, tx, tableDesc, 8 /* baseBeamSize */, 2 /* maxResults */, evalCtx)
 	require.NoError(t, searcher.Search(ctx, prefix, original))
 	require.Nil(t, searcher.NextResult())
 
