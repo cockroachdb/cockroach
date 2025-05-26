@@ -38,6 +38,7 @@ func TestSelect(t *testing.T) {
 				Key:    roachpb.RKeyMin,
 				EndKey: roachpb.RKey("c"),
 			},
+			filter: ReplicatedSpansAll,
 		},
 		{
 			name: "r2",
@@ -85,6 +86,7 @@ func TestSelect(t *testing.T) {
 				Key:    roachpb.RKey("a"),
 				EndKey: roachpb.RKeyMax,
 			},
+			filter: ReplicatedSpansAll,
 		},
 	} {
 		t.Run(tc.name, w.Run(t, tc.name, func(t *testing.T) string {
