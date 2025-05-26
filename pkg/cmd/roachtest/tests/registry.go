@@ -141,4 +141,5 @@ func RegisterTests(r registry.Registry) {
 	registerUnoptimizedQueryOracle(r)
 	registerYCSB(r)
 	registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r)
+	registerTTLRestart(r)
 }
