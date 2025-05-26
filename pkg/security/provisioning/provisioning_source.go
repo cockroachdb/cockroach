@@ -64,8 +64,18 @@ func parseAuthMethod(sourceStr string) (authMethod string, idp string, err error
 }
 
 func parseIDP(idp string) (u *url.URL, err error) {
+	if len(idp) == 0 {
+		return nil, errors.Newf("PROVISIONSRC IDP cannot be empty")
+	}
 	if u, err = url.Parse(idp); err != nil {
 		return nil, errors.Wrapf(err, "provided IDP %q in PROVISIONSRC is non parseable", idp)
 	}
+	if len(u.Port()) != 0 || u.Opaque != "" {
+		return nil, errors.Newf("unknown PROVISIONSRC IDP url format in %q", idp)
+	}
 	return
+}
+
+func (source *Source) Size() int {
+	return len(source.authMethod) + len(source.idp.String())
 }
