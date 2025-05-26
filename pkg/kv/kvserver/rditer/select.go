@@ -8,7 +8,6 @@ package rditer
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/errors"
 )
 
 // SelectRangedOptions configures span-based selection for replicated keys.
@@ -53,13 +52,6 @@ type SelectRangedOptions struct {
 // and unreplicated spans, and depending on external circumstances one may want
 // to read or erase only certain components of a Replica.
 type SelectOpts struct {
-	// ReplicatedBySpan selects all replicated key Spans that are keyed by a user
-	// key. This includes user keys, range descriptors, and locks (separated
-	// intents).
-	//
-	// DEPRECATED: Use Ranged.Span instead.
-	// TODO(tbg): remove.
-	ReplicatedBySpan roachpb.RSpan
 	// Ranged selects spans based on key ranges. If Span is empty, no range-based
 	// selection is performed.
 	Ranged SelectRangedOptions
@@ -78,13 +70,6 @@ type SelectOpts struct {
 // [^1]: lexicographically (bytes.Compare), which means they are compatible with
 // pebble's CockroachDB-specific sort order (storage.EngineComparer).
 func Select(rangeID roachpb.RangeID, opts SelectOpts) []roachpb.Span {
-	// Handle backward compatibility: determine which span and boolean fields to use.
-	// Priority: Ranged fields > ReplicatedSpansFilter.
-
-	if len(opts.ReplicatedBySpan.EndKey) > 0 {
-		opts.Ranged.Span = opts.ReplicatedBySpan
-	}
-
 	var sl []roachpb.Span
 
 	if opts.ReplicatedByRangeID {
@@ -137,15 +122,4 @@ func Select(rangeID roachpb.RangeID, opts SelectOpts) []roachpb.Span {
 		}
 	}
 	return sl
-}
-
-// Filtered returns a copy of the SelectRangedOptions with boolean fields set
-// according to the ReplicatedSpansFilter.
-func (opts SelectRangedOptions) Filtered(filter interface{}) SelectRangedOptions {
-	switch filter {
-	default:
-		panic(errors.AssertionFailedf("unknown ReplicatedSpansFilter: %d", filter))
-	}
-
-	return opts
 }
