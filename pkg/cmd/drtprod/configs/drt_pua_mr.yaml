@@ -242,7 +242,7 @@ targets:
           - --
           - "sudo systemd-run --unit tpcc_run --same-dir --uid $(id -u) --gid $(id -g) bash ./tpcc_run.sh"
         wait: 3600
-  - target_name: "Phase-2: Endogenous Stress"
+  - target_name: "Phase-2: Internal Operational Stress"
     dependent_targets:
       - "Phase-1: Baseline TPC-C Performance"
     steps:
@@ -271,10 +271,6 @@ targets:
           - -e
           - "CREATE INDEX add_index_o_w_id ON cct_tpcc.public.order (o_w_id)"
         wait: 700
-  - target_name: "Phase-3: Rolling Upgrade"
-    dependent_targets:
-      - "Phase-2: Endogenous Stress"
-    steps:
       - command: deploy # rolling upgrade
         args:
           - $CLUSTER
@@ -284,9 +280,9 @@ targets:
           pause: 5m
           grace-period: 500
         wait: 300
-  - target_name: "Phase-4: Flaky Disks"
+  - target_name: "Phase-3: Disk Stalls"
     dependent_targets:
-      - "Phase-3: Rolling Upgrade"
+      - "Phase-2: Internal Operational Stress"
     steps:
       - command: run
         args:
@@ -294,9 +290,9 @@ targets:
           - --
           - "./run_ops_disk-stall.sh"
         wait: 1200
-  - target_name: "Phase-5: Network Partition"
+  - target_name: "Phase-4: Network Failure"
     dependent_targets:
-      - "Phase-4: Flaky Disks"
+      - "Phase-3: Disk Stalls"
     steps:
       - command: run
         args:
@@ -310,9 +306,9 @@ targets:
           - --
           - "./run_ops_network-partition-full.sh"
         wait: 1500
-  - target_name: "Phase-6: Node Restarts"
+  - target_name: "Phase-5: Node Restarts"
     dependent_targets:
-      - "Phase-5: Network Partition"
+      - "Phase-4: Network Failure"
     steps:
       - command: stop # ungraceful shutdown of node 4
         args:
@@ -344,9 +340,9 @@ targets:
         flags:
           restart: true
         wait: 1500
-  - target_name: "Phase-7: Zone Outages"
+  - target_name: "Phase-6: Zone Outages"
     dependent_targets:
-      - "Phase-6: Node Restarts"
+      - "Phase-5: Node Restarts"
     steps:
       - command: stop # ungraceful shutdown of nodes 3, 4 to simulate zone outage
         args:
@@ -358,9 +354,9 @@ targets:
         flags:
           restart: true
         wait: 3300
-  - target_name: "Phase-8: Region Outages"
+  - target_name: "Phase-7: Region Outages"
     dependent_targets:
-      - "Phase-7: Zone Outages"
+      - "Phase-6: Zone Outages"
     steps:
       - command: stop # ungraceful shutdown of nodes 11-15 to simulate region outage
         args:
