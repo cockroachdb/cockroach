@@ -94,7 +94,9 @@ func TestSelect(t *testing.T) {
 			for _, replicatedByRangeID := range []bool{false, true} {
 				for _, unreplicatedByRangeID := range []bool{false, true} {
 					opts := SelectOpts{
-						ReplicatedBySpan:      tc.sp,
+						Ranged: SelectRangedOptions{
+							Span: tc.sp,
+						},
 						ReplicatedSpansFilter: tc.filter,
 						ReplicatedByRangeID:   replicatedByRangeID,
 						UnreplicatedByRangeID: unreplicatedByRangeID,
