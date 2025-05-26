@@ -154,7 +154,7 @@ func verifyIterateReplicaKeySpans(
 	tbl *tablewriter.Table,
 	desc *roachpb.RangeDescriptor,
 	eng storage.Engine,
-	replicatedOnly bool,
+	replicatedOnly bool, // TODO(tbg): remove
 	selOpts SelectOpts,
 ) {
 	readWriter := eng.NewSnapshot()
@@ -169,8 +169,8 @@ func verifyIterateReplicaKeySpans(
 		"pretty",
 	})
 
-	require.NoError(t, IterateReplicaKeySpans(context.Background(), desc, readWriter, replicatedOnly,
-		selOpts,
+	require.NoError(t, IterateReplicaKeySpans(
+		context.Background(), desc, readWriter, selOpts,
 		func(iter storage.EngineIterator, span roachpb.Span) error {
 			var err error
 			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
@@ -498,7 +498,7 @@ func TestReplicaDataIteratorGlobalRangeKey(t *testing.T) {
 
 				var actualSpans []roachpb.Span
 				require.NoError(t, IterateReplicaKeySpans(
-					context.Background(), &desc, snapshot, replicatedOnly, selOpts,
+					context.Background(), &desc, snapshot, selOpts,
 					func(iter storage.EngineIterator, span roachpb.Span) error {
 						// We should never see any point keys.
 						hasPoint, hasRange := iter.HasPointAndRange()
@@ -607,8 +607,8 @@ func benchReplicaEngineDataIterator(b *testing.B, numRanges, numKeysPerRange, va
 
 	for i := 0; i < b.N; i++ {
 		for _, desc := range descs {
-			err := IterateReplicaKeySpans(
-				context.Background(), &desc, snapshot, false /* replicatedOnly */, SelectOpts{
+			err := IterateReplicaKeySpans(context.Background(), &desc, snapshot,
+				SelectOpts{
 					Ranged: SelectRangedOptions{
 						Span:       desc.RSpan(),
 						SystemKeys: true,
@@ -617,8 +617,7 @@ func benchReplicaEngineDataIterator(b *testing.B, numRanges, numKeysPerRange, va
 					},
 					ReplicatedByRangeID:   true,
 					UnreplicatedByRangeID: true,
-				},
-				func(iter storage.EngineIterator, _ roachpb.Span) error {
+				}, func(iter storage.EngineIterator, _ roachpb.Span) error {
 					var err error
 					for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
 						_, _ = iter.UnsafeEngineKey()

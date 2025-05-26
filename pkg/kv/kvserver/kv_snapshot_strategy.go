@@ -424,8 +424,9 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		}
 		return err
 	}
-	err := rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
-		selOpts, iterateRKSpansVisitor)
+	err := rditer.IterateReplicaKeySpans(
+		ctx, snap.State.Desc, snap.EngineSnap, selOpts, iterateRKSpansVisitor,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -552,8 +553,9 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 				ReplicatedByRangeID:   false, // we only want the user span
 				UnreplicatedByRangeID: false,
 			}
-			err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
-				opts, iterateRKSpansVisitor)
+			err = rditer.IterateReplicaKeySpans(
+				ctx, snap.State.Desc, snap.EngineSnap, opts, iterateRKSpansVisitor,
+			)
 		}
 		if err != nil {
 			return 0, err
