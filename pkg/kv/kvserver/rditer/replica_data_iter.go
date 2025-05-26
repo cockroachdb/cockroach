@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/rangekey"
 )
@@ -416,10 +415,6 @@ func (ri *ReplicaMVCCDataIterator) HasPointAndRange() (bool, bool) {
 // automatically be closed when done. To halt iteration over key spans, return
 // iterutil.StopIteration().
 //
-// The filterOrOptions parameter can be either:
-// - ReplicatedSpansFilter (deprecated): Legacy enum-based filtering
-// - SelectRangedOptions: New struct-based filtering with explicit boolean fields
-//
 // Must use a reader with consistent iterators.
 func IterateReplicaKeySpans(
 	ctx context.Context,
@@ -427,27 +422,15 @@ func IterateReplicaKeySpans(
 	reader storage.Reader,
 	// NB: ignored if SelectOpts passed as filterOrOptions.
 	replicatedOnly bool, // TODO(tbg): remove when SelectRangedOptions is used
-	filterOrOptions interface{}, // ReplicatedSpansFilter or SelectOpts
+	opts SelectOpts,
 	visitor func(storage.EngineIterator, roachpb.Span) error,
 ) error {
 	if !reader.ConsistentIterators() {
 		panic("reader must provide consistent iterators")
 	}
 
-	// Handle backward compatibility: convert filterOrOptions to SelectRangedOptions.
-	var selOpts SelectOpts
-	switch v := filterOrOptions.(type) {
-	case ReplicatedSpansFilter:
-		selOpts = MakeLegacySelectOpts(desc.RSpan(), replicatedOnly, v)
-	case SelectOpts:
-		// New path: use directly.
-		selOpts = v
-		selOpts.Ranged.Span = desc.RSpan()
-	default:
-		panic(errors.AssertionFailedf("filterOrOptions must be ReplicatedSpansFilter or SelectRangedOptions, got %T", v))
-	}
-
-	spans := Select(desc.RangeID, selOpts)
+	opts.Ranged.Span = desc.RSpan()
+	spans := Select(desc.RangeID, opts)
 	for _, span := range spans {
 		err := func() error {
 			iter, err := reader.NewEngineIterator(ctx, storage.IterOptions{
