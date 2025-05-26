@@ -6,6 +6,7 @@
 package mma
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strconv"
@@ -374,7 +375,7 @@ func TestClusterState(t *testing.T) {
 
 				case "store-load-msg":
 					msg := parseStoreLoadMsg(t, d.Input)
-					cs.processStoreLoadMsg(&msg)
+					cs.processStoreLoadMsg(context.Background(), &msg)
 					return ""
 
 				case "store-leaseholder-msg":

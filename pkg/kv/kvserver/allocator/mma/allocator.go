@@ -47,7 +47,7 @@ type Allocator interface {
 
 	// ProcessStoreLoadMsg provides frequent the state of every store and its
 	// associated node in the cluster.
-	ProcessStoreLoadMsg(msg *StoreLoadMsg)
+	ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoadMsg)
 
 	// ProcessStoreLeaseholderMsg provides updates for each local store and the
 	// ranges for which it is the leaseholder.

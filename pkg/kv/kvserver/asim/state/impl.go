@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreporter"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/logtags"
 	"github.com/google/btree"
 )
 
@@ -1173,9 +1174,12 @@ func (s *state) UpdateStorePool(
 		copiedDetail.Desc = &copiedDesc
 		node.storepool.DetailsMu.StoreDetails[gossipStoreID] = &copiedDetail
 		// TODO(mma): Support origin timestamps.
-		storeLoadMsg := allocator.MakeStoreLoadMsg(copiedDesc, s.clock.Now().UnixNano())
+		ts := s.clock.Now()
+		storeLoadMsg := allocator.MakeStoreLoadMsg(copiedDesc, ts.UnixNano())
 		node.mmAllocator.SetStore(copiedDesc)
-		node.mmAllocator.ProcessStoreLoadMsg(&storeLoadMsg)
+		ctx := logtags.AddTag(context.Background(), fmt.Sprintf("n%d", nodeID), "")
+		ctx = logtags.AddTag(ctx, "t", ts.Sub(s.settings.StartTime))
+		node.mmAllocator.ProcessStoreLoadMsg(ctx, &storeLoadMsg)
 	}
 }
 
