@@ -11,14 +11,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// ReplicatedSpansFilter is used to declare filters when selecting replicated
-// spans.
-//
-// TODO(arul): we could consider using a bitset here instead. Note that a lot of
-// the fields here are mutually exclusive (e.g. ReplicatedSpansExcludeLocks and
-// ReplicatedSpansLocksOnly), so we'd need some sort of validation here.
-type ReplicatedSpansFilter int
-
 // SelectRangedOptions configures span-based selection for replicated keys.
 type SelectRangedOptions struct {
 	// Span describes the range bounds. This must be set if any of the other
@@ -71,13 +63,6 @@ type SelectOpts struct {
 	// Ranged selects spans based on key ranges. If Span is empty, no range-based
 	// selection is performed.
 	Ranged SelectRangedOptions
-	// ReplicatedSpansFilter specifies which of the replicated spans indicated by
-	// ReplicatedBySpan should be returned or excluded. The zero value,
-	// ReplicatedSpansAll, returns all replicated spans.
-	//
-	// DEPRECATED: Use the individual Ranged fields instead.
-	// TODO(tbg): remove.
-	ReplicatedSpansFilter ReplicatedSpansFilter
 	// ReplicatedByRangeID selects all RangeID-keyed replicated keys. An example
 	// of a key that falls into this Span is the GCThresholdKey.
 	ReplicatedByRangeID bool
@@ -85,19 +70,6 @@ type SelectOpts struct {
 	// of keys that fall into this Span are the HardStateKey (and generally all
 	// Raft state) and the RangeTombstoneKey.
 	UnreplicatedByRangeID bool
-}
-
-func MakeLegacySelectOpts(
-	sp roachpb.RSpan, replicatedOnly bool, filter ReplicatedSpansFilter,
-) SelectOpts {
-	opts := SelectOpts{
-		Ranged: SelectRangedOptions{
-			Span: sp,
-		}.Filtered(filter),
-		ReplicatedByRangeID:   true,
-		UnreplicatedByRangeID: !replicatedOnly,
-	}
-	return opts
 }
 
 // Select returns a slice of disjoint sorted[^1] Spans describing all or a part
@@ -108,11 +80,6 @@ func MakeLegacySelectOpts(
 func Select(rangeID roachpb.RangeID, opts SelectOpts) []roachpb.Span {
 	// Handle backward compatibility: determine which span and boolean fields to use.
 	// Priority: Ranged fields > ReplicatedSpansFilter.
-
-	if opts.ReplicatedSpansFilter > 0 {
-		// TODO(tbg): remove this once we've migrated to the new fields.
-		opts.Ranged = opts.Ranged.Filtered(opts.ReplicatedSpansFilter)
-	}
 
 	if len(opts.ReplicatedBySpan.EndKey) > 0 {
 		opts.Ranged.Span = opts.ReplicatedBySpan
@@ -174,7 +141,7 @@ func Select(rangeID roachpb.RangeID, opts SelectOpts) []roachpb.Span {
 
 // Filtered returns a copy of the SelectRangedOptions with boolean fields set
 // according to the ReplicatedSpansFilter.
-func (opts SelectRangedOptions) Filtered(filter ReplicatedSpansFilter) SelectRangedOptions {
+func (opts SelectRangedOptions) Filtered(filter interface{}) SelectRangedOptions {
 	switch filter {
 	default:
 		panic(errors.AssertionFailedf("unknown ReplicatedSpansFilter: %d", filter))
