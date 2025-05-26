@@ -23,9 +23,7 @@ const (
 	// Throw away the zero value for easier migration away from this deprecated
 	// field.
 	_ ReplicatedSpansFilter = iota
-	// ReplicatedSpansAll includes all replicated spans, including user keys,
-	// range descriptors, and lock keys.
-	ReplicatedSpansAll
+	_
 	// ReplicatedSpansExcludeUser includes all replicated spans except for user
 	// keys.
 	ReplicatedSpansExcludeUser
@@ -195,10 +193,6 @@ func Select(rangeID roachpb.RangeID, opts SelectOpts) []roachpb.Span {
 // according to the ReplicatedSpansFilter.
 func (opts SelectRangedOptions) Filtered(filter ReplicatedSpansFilter) SelectRangedOptions {
 	switch filter {
-	case ReplicatedSpansAll:
-		opts.SystemKeys = true
-		opts.UserKeys = true
-		opts.LockTable = true
 	case ReplicatedSpansExcludeUser:
 		opts.SystemKeys = true
 		opts.UserKeys = false
