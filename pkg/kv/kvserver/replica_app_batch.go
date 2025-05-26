@@ -360,11 +360,13 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// required for correctness, since the merge protocol should guarantee that
 		// no new replicas of the RHS can ever be created, but it doesn't hurt to
 		// be careful.
-		if err := kvstorage.DestroyReplica(ctx, rhsRepl.RangeID, b.batch, b.batch, mergedTombstoneReplicaID, kvstorage.ClearRangeDataOptions{
-			ClearReplicatedByRangeID:   true,
-			ClearUnreplicatedByRangeID: true,
-		}); err != nil {
-			return errors.Wrapf(err, "unable to destroy replica before merge")
+		if err := kvstorage.DestroyRangeID(
+			ctx, b.batch, b.batch, rhsRepl.RangeID, mergedTombstoneReplicaID,
+		); err != nil {
+			return errors.Wrapf(err, "unable to destroy RangeID before merge")
+		}
+		if err := kvstorage.DestroyRaft(ctx, b.batch, b.batch, rhsRepl.RangeID); err != nil {
+			return errors.Wrapf(err, "unable to destroy raft before merge")
 		}
 
 		// Shut down rangefeed processors on either side of the merge.
@@ -451,12 +453,16 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// We've set the replica's in-mem status to reflect the pending destruction
 		// above, and DestroyReplica will also add a range tombstone to the
 		// batch, so that when we commit it, the removal is finalized.
-		if err := kvstorage.DestroyReplica(ctx, b.r.RangeID, b.batch, b.batch, change.NextReplicaID(), kvstorage.ClearRangeDataOptions{
-			ClearReplicatedBySpan:      span,
-			ClearReplicatedByRangeID:   true,
-			ClearUnreplicatedByRangeID: true,
-		}); err != nil {
-			return errors.Wrapf(err, "unable to destroy replica before removal")
+		if err := kvstorage.ClearRSpan(ctx, b.batch, b.batch, span); err != nil {
+			return errors.Wrapf(err, "unable to clear RSpan before removal")
+		}
+		if err := kvstorage.DestroyRangeID(
+			ctx, b.batch, b.batch, b.r.RangeID, change.NextReplicaID(),
+		); err != nil {
+			return errors.Wrapf(err, "unable to destroy RangeID before removal")
+		}
+		if err := kvstorage.DestroyRaft(ctx, b.batch, b.batch, b.r.RangeID); err != nil {
+			return errors.Wrapf(err, "unable to destroy raft before removal")
 		}
 	}
 

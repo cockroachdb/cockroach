@@ -109,27 +109,26 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	desc := r.Desc()
 	inited := desc.IsInitialized()
 
-	opts := kvstorage.ClearRangeDataOptions{
-		ClearReplicatedBySpan: desc.RSpan(), // zero if !inited
-		// TODO(tbg): if it's uninitialized, we might as well clear
-		// the replicated state because there isn't any. This seems
-		// like it would be simpler, but needs a code audit to ensure
-		// callers don't call this in in-between states where the above
-		// assumption doesn't hold.
-		ClearReplicatedByRangeID:   inited,
-		ClearUnreplicatedByRangeID: true,
+	if inited {
+		if err := kvstorage.ClearRSpan(ctx, r.store.StateEngine(), batch, desc.RSpan()); err != nil {
+			return err
+		}
 	}
-	// TODO(sep-raft-log): need both engines separately here.
-	if err := kvstorage.DestroyReplica(ctx, r.RangeID, r.store.TODOEngine(), batch, nextReplicaID, opts); err != nil {
+	if err := kvstorage.DestroyRangeID(
+		ctx, r.store.StateEngine(), batch, r.RangeID, nextReplicaID,
+	); err != nil {
 		return err
 	}
-	preTime := timeutil.Now()
+	if err := kvstorage.DestroyRaft(ctx, r.store.StateEngine(), batch, r.RangeID); err != nil {
+		return err
+	}
 
 	// We need to sync here because we are potentially deleting sideloaded
 	// proposals from the file system next. We could write the tombstone only in
 	// a synchronous batch first and then delete the data alternatively, but
 	// then need to handle the case in which there is both the tombstone and
 	// leftover replica data.
+	preTime := timeutil.Now()
 	if err := batch.Commit(true); err != nil {
 		return err
 	}

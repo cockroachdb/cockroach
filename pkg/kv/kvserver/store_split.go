@@ -89,30 +89,20 @@ func splitPreApply(
 				log.Fatalf(ctx, "failed to load hard state for removed rhs: %v", err)
 			}
 		}
-		if err := kvstorage.ClearRangeData(ctx, split.RightDesc.RangeID, readWriter, readWriter, kvstorage.ClearRangeDataOptions{
-			// We know there isn't anything in these two replicated spans below in the
-			// right-hand side (before the current batch), so setting these options
-			// will in effect only clear the writes to the RHS replicated state we have
-			// staged in this batch, which is what we're after.
-			ClearReplicatedBySpan:    split.RightDesc.RSpan(),
-			ClearReplicatedByRangeID: true,
-			// See the HardState write-back dance above and below.
-			//
-			// TODO(tbg): we don't actually want to touch the raft state of the right
-			// hand side replica since it's absent or a more recent replica than the
-			// split. Now that we have a boolean targeting the unreplicated
-			// RangeID-based keyspace, we can set this to false and remove the
-			// HardState+ReplicaID write-back. (The WriteBatch does not contain
-			// any writes to the unreplicated RangeID keyspace for the RHS, see
-			// splitTriggerHelper[^1]).
-			//
-			// [^1]: https://github.com/cockroachdb/cockroach/blob/f263a765d750e41f2701da0a923a6e92d09159fa/pkg/kv/kvserver/batcheval/cmd_end_transaction.go#L1109-L1149
-			//
-			// See also:
-			//
-			// https://github.com/cockroachdb/cockroach/issues/94933
-			ClearUnreplicatedByRangeID: true,
-		}); err != nil {
+		// We know there isn't anything in these two replicated spans below in the
+		// right-hand side (before the current batch), so setting these options
+		// will in effect only clear the writes to the RHS replicated state we have
+		// staged in this batch, which is what we're after.
+		if err := kvstorage.ClearRSpan(
+			ctx, readWriter, readWriter, split.RightDesc.RSpan(),
+		); err != nil {
+			log.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
+		}
+		// FIXME: should not set the RangeTombstone here, only clear the
+		// RangeID-local replicated state.
+		if err := kvstorage.DestroyRangeID(
+			ctx, readWriter, readWriter, split.RightDesc.RangeID, 0,
+		); err != nil {
 			log.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
 		}
 		if rightRepl != nil {
