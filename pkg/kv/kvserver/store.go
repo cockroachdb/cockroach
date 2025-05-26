@@ -3657,8 +3657,12 @@ func (s *Store) checkpointSpans(desc *roachpb.RangeDescriptor) []roachpb.Span {
 	// Include replicated user key span containing ranges left, desc, and right.
 	// TODO(tbg): rangeID is ignored here, make a rangeID-agnostic helper.
 	spans = append(spans, rditer.Select(0, rditer.SelectOpts{
-		ReplicatedBySpan:      userKeys,
-		ReplicatedSpansFilter: rditer.ReplicatedSpansAll,
+		Ranged: rditer.SelectRangedOptions{
+			Span:       userKeys,
+			SystemKeys: true,
+			UserKeys:   true,
+			LockTable:  true,
+		},
 	})...)
 
 	return spans
