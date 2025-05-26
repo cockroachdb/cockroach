@@ -28,48 +28,28 @@ import (
 
 type revokeRole struct {
 	grantedRole, granteeRole string
-	waitDuration             time.Duration
 }
 
 func (cl *revokeRole) Cleanup(ctx context.Context, o operation.Operation, c cluster.Cluster) {
-	o.Status(fmt.Sprintf("Scheduling cleanup to happen after %s", cl.waitDuration))
+	conn := c.Conn(ctx, o.L(), 1, option.VirtualClusterName(roachtestflags.VirtualCluster))
+	defer func() { _ = conn.Close() }()
 
-	// Start a goroutine to handle the wait and cleanup. Since this runs in the
-	// background, we also create a new context so that the background goroutine
-	// isn't aborted by the parent context.
-	go func() {
-		newCtx := context.Background()
-		if deadline, ok := ctx.Deadline(); ok {
-			var cancel context.CancelFunc
-			newCtx, cancel = context.WithDeadline(newCtx, deadline.Add(cl.waitDuration))
-			defer cancel()
-		}
-		ctx = newCtx
+	o.Status(fmt.Sprintf("Revoking role %s from role %s", cl.grantedRole, cl.granteeRole))
+	_, err := conn.ExecContext(ctx, fmt.Sprintf("REVOKE %s FROM %s", cl.grantedRole, cl.granteeRole))
+	if err != nil {
+		o.Fatal(err)
+	}
+	o.Status(fmt.Sprintf("Revoked role %s from role %s", cl.grantedRole, cl.granteeRole))
 
-		// Wait for the specified duration before performing cleanup.
-		time.Sleep(cl.waitDuration)
-		o.Status(fmt.Sprintf("Wait time of %s elapsed, performing cleanup", cl.waitDuration))
-
-		conn := c.Conn(ctx, o.L(), 1, option.VirtualClusterName(roachtestflags.VirtualCluster))
-		defer func() { _ = conn.Close() }()
-
-		o.Status(fmt.Sprintf("Revoking role %s from role %s", cl.grantedRole, cl.granteeRole))
-		_, err := conn.ExecContext(ctx, fmt.Sprintf("REVOKE %s FROM %s", cl.grantedRole, cl.granteeRole))
+	// Drop both roles
+	for _, role := range []string{cl.granteeRole, cl.grantedRole} {
+		o.Status(fmt.Sprintf("Dropping role %s", role))
+		_, err = conn.ExecContext(ctx, fmt.Sprintf("DROP ROLE %s", role))
 		if err != nil {
 			o.Fatal(err)
 		}
-		o.Status(fmt.Sprintf("Revoked role %s from role %s", cl.grantedRole, cl.granteeRole))
-
-		// Drop both roles
-		for _, role := range []string{cl.granteeRole, cl.grantedRole} {
-			o.Status(fmt.Sprintf("Dropping role %s", role))
-			_, err = conn.ExecContext(ctx, fmt.Sprintf("DROP ROLE %s", role))
-			if err != nil {
-				o.Fatal(err)
-			}
-			o.Status(fmt.Sprintf("Dropped role %s", role))
-		}
-	}()
+		o.Status(fmt.Sprintf("Dropped role %s", role))
+	}
 }
 
 func runGrantRole(
@@ -101,12 +81,9 @@ func runGrantRole(
 	}
 	o.Status(fmt.Sprintf("Granted role %s to role %s", grantedRole, granteeRole))
 
-	// Return the cleanup struct with wait duration.
-	waitDuration := 1 * time.Hour
 	return &revokeRole{
-		grantedRole:  grantedRole,
-		granteeRole:  granteeRole,
-		waitDuration: waitDuration,
+		grantedRole: grantedRole,
+		granteeRole: granteeRole,
 	}
 }
 
@@ -118,6 +95,7 @@ func registerGrantRole(r registry.Registry) {
 		CompatibleClouds:   registry.AllClouds,
 		CanRunConcurrently: registry.OperationCanRunConcurrently,
 		Dependencies:       []registry.OperationDependency{registry.OperationRequiresNodes},
+		WaitBeforeCleanup:  1 * time.Hour,
 		Run:                runGrantRole,
 	})
 }
