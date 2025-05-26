@@ -26,7 +26,7 @@ func TestSelect(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		sp     roachpb.RSpan
-		filter ReplicatedSpansFilter
+		filter SelectRangedOptions
 	}{
 		{
 			name: "no_span",
@@ -38,7 +38,11 @@ func TestSelect(t *testing.T) {
 				Key:    roachpb.RKeyMin,
 				EndKey: roachpb.RKey("c"),
 			},
-			filter: ReplicatedSpansAll,
+			filter: SelectRangedOptions{
+				SystemKeys: true,
+				LockTable:  true,
+				UserKeys:   true,
+			},
 		},
 		{
 			name: "r2",
@@ -46,7 +50,11 @@ func TestSelect(t *testing.T) {
 				Key:    roachpb.RKey("a"),
 				EndKey: roachpb.RKey("c"),
 			},
-			filter: ReplicatedSpansAll,
+			filter: SelectRangedOptions{
+				SystemKeys: true,
+				LockTable:  true,
+				UserKeys:   true,
+			},
 		},
 		{
 			name: "r2_excludeuser",
@@ -54,7 +62,11 @@ func TestSelect(t *testing.T) {
 				Key:    roachpb.RKey("a"),
 				EndKey: roachpb.RKey("c"),
 			},
-			filter: ReplicatedSpansExcludeUser,
+			filter: SelectRangedOptions{
+				SystemKeys: true,
+				LockTable:  true,
+				UserKeys:   false,
+			},
 		},
 		{
 			name: "r2_useronly",
@@ -62,7 +74,11 @@ func TestSelect(t *testing.T) {
 				Key:    roachpb.RKey("a"),
 				EndKey: roachpb.RKey("c"),
 			},
-			filter: ReplicatedSpansUserOnly,
+			filter: SelectRangedOptions{
+				SystemKeys: false,
+				LockTable:  false,
+				UserKeys:   true,
+			},
 		},
 		{
 			name: "r2_excludelocks",
@@ -70,7 +86,11 @@ func TestSelect(t *testing.T) {
 				Key:    roachpb.RKey("a"),
 				EndKey: roachpb.RKey("c"),
 			},
-			filter: ReplicatedSpansExcludeLocks,
+			filter: SelectRangedOptions{
+				SystemKeys: true,
+				LockTable:  false,
+				UserKeys:   true,
+			},
 		},
 		{
 			name: "r2_locksonly",
@@ -78,7 +98,11 @@ func TestSelect(t *testing.T) {
 				Key:    roachpb.RKey("a"),
 				EndKey: roachpb.RKey("c"),
 			},
-			filter: ReplicatedSpansLocksOnly,
+			filter: SelectRangedOptions{
+				SystemKeys: false,
+				LockTable:  true,
+				UserKeys:   false,
+			},
 		},
 		{
 			name: "r3",
@@ -86,18 +110,21 @@ func TestSelect(t *testing.T) {
 				Key:    roachpb.RKey("a"),
 				EndKey: roachpb.RKeyMax,
 			},
-			filter: ReplicatedSpansAll,
+			filter: SelectRangedOptions{
+				SystemKeys: true,
+				LockTable:  true,
+				UserKeys:   true,
+			},
 		},
 	} {
 		t.Run(tc.name, w.Run(t, tc.name, func(t *testing.T) string {
 			var buf strings.Builder
 			for _, replicatedByRangeID := range []bool{false, true} {
 				for _, unreplicatedByRangeID := range []bool{false, true} {
+					ranged := tc.filter
+					ranged.Span = tc.sp
 					opts := SelectOpts{
-						Ranged: SelectRangedOptions{
-							Span: tc.sp,
-						},
-						ReplicatedSpansFilter: tc.filter,
+						Ranged:                ranged,
 						ReplicatedByRangeID:   replicatedByRangeID,
 						UnreplicatedByRangeID: unreplicatedByRangeID,
 					}
