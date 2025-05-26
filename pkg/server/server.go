@@ -142,8 +142,12 @@ type topLevelServer struct {
 	clock           *hlc.Clock
 	rpcContext      *rpc.Context
 	engines         Engines
-	// The gRPC server on which the different RPC handlers will be registered.
-	grpc         *grpcServer
+
+	// The gRPC and DRPC servers on which the different RPC handlers will be
+	// registered.
+	grpc *grpcServer
+	drpc *drpcServer
+
 	gossip       *gossip.Gossip
 	kvNodeDialer *nodedialer.Dialer
 	nodeLiveness *liveness.NodeLiveness
@@ -400,6 +404,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	if err != nil {
 		return nil, err
 	}
+
+	drpcServer, err := newDRPCServer(ctx, rpcContext)
+	if err != nil {
+		return nil, err
+	}
+
 	gossip.RegisterGossipServer(grpcServer.Server, g)
 
 	var dialerKnobs nodedialer.DialerTestingKnobs
@@ -987,7 +997,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		cfg.LicenseEnforcer,
 	)
 	kvpb.RegisterInternalServer(grpcServer.Server, node)
-	if err := kvpb.DRPCRegisterBatch(grpcServer.drpc.Mux, node.AsDRPCBatchServer()); err != nil {
+	if err := kvpb.DRPCRegisterBatch(drpcServer.mux, node.AsDRPCBatchServer()); err != nil {
 		return nil, err
 	}
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
@@ -1203,7 +1213,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	sAuth := authserver.NewServer(cfg.Config, sqlServer)
 
 	// Create a drain server.
-	drain := newDrainServer(cfg.BaseConfig, stopper, stopTrigger, grpcServer, sqlServer)
+	drain := newDrainServer(cfg.BaseConfig, stopper, stopTrigger, grpcServer, drpcServer, sqlServer)
 	drain.setNode(node, nodeLiveness)
 
 	// Instantiate the admin API server.
@@ -1221,6 +1231,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		clock,
 		distSender,
 		grpcServer,
+		drpcServer,
 		drain,
 		lateBoundServer,
 	)
@@ -1288,6 +1299,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		rpcContext:                rpcContext,
 		engines:                   engines,
 		grpc:                      grpcServer,
+		drpc:                      drpcServer,
 		gossip:                    g,
 		kvNodeDialer:              kvNodeDialer,
 		nodeLiveness:              nodeLiveness,
@@ -1576,7 +1588,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// below when the server has initialized.
 	pgL, loopbackPgL, rpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(
 		ctx, workersCtx, s.cfg.BaseConfig,
-		s.stopper, s.grpc, ListenAndUpdateAddrs, true /* enableSQLListener */, s.cfg.AcceptProxyProtocolHeaders)
+		s.stopper, s.grpc, s.drpc, ListenAndUpdateAddrs, true /* enableSQLListener */, s.cfg.AcceptProxyProtocolHeaders)
 	if err != nil {
 		return err
 	}
@@ -1951,6 +1963,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// After setting modeOperational, we can block until all stores are fully
 	// initialized.
 	s.grpc.setMode(modeOperational)
+	s.drpc.setMode(modeOperational)
 
 	s.nodeLiveness.Start(workersCtx)
 
