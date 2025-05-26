@@ -19,19 +19,6 @@ import (
 // ReplicatedSpansLocksOnly), so we'd need some sort of validation here.
 type ReplicatedSpansFilter int
 
-const (
-	// Throw away the zero value for easier migration away from this deprecated
-	// field.
-	_ ReplicatedSpansFilter = iota
-	_
-	_
-	_
-	_
-	// ReplicatedSpansLocksOnly includes just spans for the lock table, and no
-	// other replicated spans.
-	ReplicatedSpansLocksOnly
-)
-
 // SelectRangedOptions configures span-based selection for replicated keys.
 type SelectRangedOptions struct {
 	// Span describes the range bounds. This must be set if any of the other
@@ -189,10 +176,6 @@ func Select(rangeID roachpb.RangeID, opts SelectOpts) []roachpb.Span {
 // according to the ReplicatedSpansFilter.
 func (opts SelectRangedOptions) Filtered(filter ReplicatedSpansFilter) SelectRangedOptions {
 	switch filter {
-	case ReplicatedSpansLocksOnly:
-		opts.SystemKeys = false
-		opts.UserKeys = false
-		opts.LockTable = true
 	default:
 		panic(errors.AssertionFailedf("unknown ReplicatedSpansFilter: %d", filter))
 	}
