@@ -90,7 +90,7 @@ Validated index with 4 vectors.
 search-for-insert tree=2
 (5, 5)
 ----
-partition 2, centroid=(2, 7.6667), sqdist=16.1111
+partition 2, centroid=(2, 7.6667), dist=16.1111
 
 # Search for delete from tree #2.
 search-for-delete tree=2
