@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
@@ -48,7 +49,6 @@ type Store struct {
 	minConsistency kvpb.ReadConsistencyType
 
 	prefix   roachpb.Key // KV prefix for the vector index.
-	pkPrefix roachpb.Key // KV prefix for the primary key.
 	emptyVec vector.T    // A zero-valued vector, used when root centroid does not exist.
 
 	// These are set by NewWithLeasedDesc and should only be used for testing.
@@ -81,7 +81,6 @@ func NewWithLeasedDesc(
 		TestingTableDesc: tableDesc,
 	}
 	ps.prefix = rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), indexID)
-	ps.pkPrefix = rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), tableDesc.GetPrimaryIndex().GetID())
 
 	return ps, nil
 }
@@ -125,9 +124,8 @@ func New(
 			ps.codec = keys.MakeSQLCodec(ext.TenantID)
 			ps.tableID = ext.TableID
 		}
-		ps.pkPrefix = rowenc.MakeIndexKeyPrefix(ps.codec, ps.tableID, tableDesc.GetPrimaryIndex().GetID())
 
-		return err
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -154,13 +152,13 @@ func (s *Store) RunTransaction(ctx context.Context, fn func(txn cspann.Txn) erro
 	return s.db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		var tx Txn
 		if s.TestingTableDesc != nil {
-			tx.Init(s, txn.KV(), s.TestingTableDesc)
+			tx.Init(&eval.Context{}, s, txn.KV(), s.TestingTableDesc)
 		} else {
 			tableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, s.tableID)
 			if err != nil {
 				return err
 			}
-			tx.Init(s, txn.KV(), tableDesc)
+			tx.Init(&eval.Context{}, s, txn.KV(), tableDesc)
 		}
 
 		return fn(&tx)
