@@ -108,6 +108,24 @@ type SelectOpts struct {
 	UnreplicatedByRangeID bool
 }
 
+func MakeLegacySelectOpts(
+	sp roachpb.RSpan, replicatedOnly bool, filter ReplicatedSpansFilter,
+) SelectOpts {
+	opts := SelectOpts{
+		Ranged: SelectRangedOptions{
+			Span: sp,
+		}.Filtered(filter),
+	}
+	if replicatedOnly {
+		// NB: We exclude ReplicatedByRangeID if only user keys are requested.
+		opts.ReplicatedByRangeID = filter != ReplicatedSpansUserOnly
+	} else {
+		opts.ReplicatedByRangeID = true
+		opts.UnreplicatedByRangeID = true
+	}
+	return opts
+}
+
 // Select returns a slice of disjoint sorted[^1] Spans describing all or a part
 // of a Replica's keyspace, depending on the supplied SelectOpts.
 //

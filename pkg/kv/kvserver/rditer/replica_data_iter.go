@@ -425,8 +425,9 @@ func IterateReplicaKeySpans(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	reader storage.Reader,
+	// NB: ignored if SelectOpts passed as filterOrOptions.
 	replicatedOnly bool, // TODO(tbg): remove when SelectRangedOptions is used
-	filterOrOptions interface{}, // ReplicatedSpansFilter or SelectRangedOptions
+	filterOrOptions interface{}, // ReplicatedSpansFilter or SelectOpts
 	visitor func(storage.EngineIterator, roachpb.Span) error,
 ) error {
 	if !reader.ConsistentIterators() {
@@ -434,33 +435,19 @@ func IterateReplicaKeySpans(
 	}
 
 	// Handle backward compatibility: convert filterOrOptions to SelectRangedOptions.
-	var rangedOpts SelectRangedOptions
+	var selOpts SelectOpts
 	switch v := filterOrOptions.(type) {
 	case ReplicatedSpansFilter:
-		// Legacy path: convert filter to SelectRangedOptions.
-		rangedOpts = SelectRangedOptions{Span: desc.RSpan()}.Filtered(v)
-	case SelectRangedOptions:
+		selOpts = MakeLegacySelectOpts(desc.RSpan(), replicatedOnly, v)
+	case SelectOpts:
 		// New path: use directly.
-		rangedOpts = v
-		rangedOpts.Span = desc.RSpan()
+		selOpts = v
+		selOpts.Ranged.Span = desc.RSpan()
 	default:
 		panic(errors.AssertionFailedf("filterOrOptions must be ReplicatedSpansFilter or SelectRangedOptions, got %T", v))
 	}
 
-	var spans []roachpb.Span
-	if replicatedOnly {
-		spans = Select(desc.RangeID, SelectOpts{
-			Ranged: rangedOpts,
-			// NB: We exclude ReplicatedByRangeID if only user keys are requested.
-			ReplicatedByRangeID: rangedOpts.SystemKeys || rangedOpts.LockTable,
-		})
-	} else {
-		spans = Select(desc.RangeID, SelectOpts{
-			Ranged:                rangedOpts,
-			ReplicatedByRangeID:   true,
-			UnreplicatedByRangeID: true,
-		})
-	}
+	spans := Select(desc.RangeID, selOpts)
 	for _, span := range spans {
 		err := func() error {
 			iter, err := reader.NewEngineIterator(ctx, storage.IterOptions{
