@@ -173,7 +173,7 @@ func (s *searcher) Next(ctx context.Context) (ok bool, err error) {
 		// Re-rank search results with full vectors.
 		results := lastSearcher.SearchSet().PopResults()
 		s.searchSet.Stats.FullVectorCount += len(results)
-		results, err = s.idx.rerankSearchResults(ctx, s.idxCtx, results)
+		results, err = s.idx.findExactDistances(ctx, s.idxCtx, results)
 		if err != nil {
 			return false, err
 		}
@@ -398,7 +398,7 @@ func (s *levelSearcher) searchChildPartitions(
 
 	// Search all partitions in parallel.
 	err := s.idxCtx.txn.SearchPartitions(
-		ctx, s.idxCtx.treeKey, s.idxCtx.tempToSearch, s.idxCtx.randomized, &s.searchSet)
+		ctx, s.idxCtx.treeKey, s.idxCtx.tempToSearch, s.idxCtx.query.Randomized(), &s.searchSet)
 	if err != nil {
 		return InvalidLevel, errors.Wrapf(err, "searching level %d", s.level)
 	}

@@ -456,7 +456,7 @@ force-split partition-key=1 steps=1
 search-for-insert discard-fixups
 (-3, 6)
 ----
-partition 1, centroid=(6.8, 4.2), sqdist=0
+partition 1, centroid=(6.8, 4.2), dist=0
 
 insert discard-fixups
 vec4: (-3, 6)
@@ -482,7 +482,7 @@ force-split partition-key=1 steps=3
 search-for-insert discard-fixups
 (10, 5)
 ----
-partition 2, centroid=(10.5, 2.5), sqdist=6.5
+partition 2, centroid=(10.5, 2.5), dist=6.5
 
 insert discard-fixups
 vec5: (10, 5)
@@ -513,7 +513,7 @@ force-split partition-key=1 steps=2 root=2
 search-for-insert discard-fixups
 (0, 0)
 ----
-partition 3, centroid=(-1, 4), sqdist=17
+partition 3, centroid=(-1, 4), dist=17
 
 insert discard-fixups root=3
 vec6: (0, 0)
@@ -533,7 +533,7 @@ force-split partition-key=1 steps=1
 search-for-insert discard-fixups
 (8, 8)
 ----
-partition 2, centroid=(10.5, 2.5), sqdist=36.5
+partition 2, centroid=(10.5, 2.5), dist=36.5
 
 insert discard-fixups root=2
 vec7: (8, 8)
@@ -580,7 +580,7 @@ force-split partition-key=2 parent-partition-key=1 steps=10 root=2
 search-for-insert discard-fixups
 (15, 5)
 ----
-partition 2, centroid=(10.5, 2.5), sqdist=0
+partition 2, centroid=(10.5, 2.5), dist=0
 
 insert discard-fixups root=2
 vec8: (15, 5)

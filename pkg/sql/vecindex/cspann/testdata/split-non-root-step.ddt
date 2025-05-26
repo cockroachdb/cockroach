@@ -738,7 +738,7 @@ force-split partition-key=5 parent-partition-key=1 steps=6
 search-for-insert discard-fixups
 (2, -4)
 ----
-partition 6, centroid=(2, -6), sqdist=1
+partition 6, centroid=(2, -6), dist=1
 
 # Perform the insert into partition #6.
 insert discard-fixups
