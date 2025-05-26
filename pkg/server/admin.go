@@ -117,6 +117,7 @@ type adminServer struct {
 	rpcContext       *rpc.Context
 	clock            *hlc.Clock
 	grpc             *grpcServer
+	drpc             *DRPCServer
 	db               *kv.DB
 	drainServer      *drainServer
 }
@@ -156,6 +157,7 @@ func newSystemAdminServer(
 	clock *hlc.Clock,
 	distSender *kvcoord.DistSender,
 	grpc *grpcServer,
+	drpc *DRPCServer,
 	drainServer *drainServer,
 	s *topLevelServer,
 ) *systemAdminServer {
@@ -172,6 +174,7 @@ func newSystemAdminServer(
 		clock,
 		distSender,
 		grpc,
+		drpc,
 		drainServer,
 	)
 	return &systemAdminServer{
@@ -199,6 +202,7 @@ func newAdminServer(
 	clock *hlc.Clock,
 	distSender *kvcoord.DistSender,
 	grpc *grpcServer,
+	drpc *DRPCServer,
 	drainServer *drainServer,
 ) *adminServer {
 	server := &adminServer{
@@ -217,6 +221,7 @@ func newAdminServer(
 		rpcContext:     rpcCtx,
 		clock:          clock,
 		grpc:           grpc,
+		drpc:           drpc,
 		db:             db,
 		drainServer:    drainServer,
 	}
@@ -2104,6 +2109,12 @@ func (s *adminServer) checkReadinessForHealthCheck(ctx context.Context) error {
 		return err
 	}
 
+	if rpc.ExperimentalDRPCEnabled.Get(&s.rpcContext.Settings.SV) && s.drpc != nil {
+		if err := s.drpc.health(ctx); err != nil {
+			return err
+		}
+	}
+
 	if !s.sqlServer.isReady.Load() {
 		return grpcstatus.Errorf(codes.Unavailable, "node is not accepting SQL clients")
 	}
@@ -2140,6 +2151,12 @@ func (s *systemAdminServer) Health(
 func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) error {
 	if err := s.grpc.health(ctx); err != nil {
 		return err
+	}
+
+	if rpc.ExperimentalDRPCEnabled.Get(&s.rpcContext.Settings.SV) && s.drpc != nil {
+		if err := s.drpc.health(ctx); err != nil {
+			return err
+		}
 	}
 
 	status := s.nodeLiveness.GetNodeVitalityFromCache(roachpb.NodeID(s.serverIterator.getID()))
