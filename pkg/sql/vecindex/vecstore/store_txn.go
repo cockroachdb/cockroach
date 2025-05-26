@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
@@ -54,6 +55,9 @@ type Txn struct {
 	// Retained allocations to prevent excessive reallocation.
 	tmpSpans   []roachpb.Span
 	tmpSpanIDs []int
+
+	// vectorColumnOrdinal stores the ordinal of the vector column in the table.
+	vectorColumnOrdinal int
 }
 
 var _ cspann.Txn = (*Txn)(nil)
@@ -85,6 +89,15 @@ func (tx *Txn) Init(
 	}
 	if tx.indexDesc == nil {
 		panic(errors.Errorf("indexID %d not found in table %d", store.indexID, tableDesc.GetID()))
+	}
+
+	// Find the ordinal of the vector column in the table.
+	vectorColID := tx.indexDesc.VectorColumnID()
+	for i, col := range tx.tableDesc.PublicColumns() {
+		if col.GetID() == vectorColID {
+			tx.vectorColumnOrdinal = i
+			break
+		}
 	}
 
 	primaryIndex := tx.tableDesc.GetPrimaryIndex()
@@ -393,6 +406,11 @@ func (tx *Txn) getFullVectorsFromPK(ctx context.Context, refs []cspann.VectorWit
 	spanBuilder := span.Builder{}
 	spanBuilder.Init(tx.evalCtx, tx.store.codec, tx.tableDesc, tx.tableDesc.GetPrimaryIndex())
 
+	// Create a splitter for the vector column ordinal.
+	var neededColOrdinals intsets.Fast
+	neededColOrdinals.Add(tx.vectorColumnOrdinal)
+	splitter := span.MakeSplitter(tx.tableDesc, tx.tableDesc.GetPrimaryIndex(), neededColOrdinals)
+
 	for refIdx, ref := range refs {
 		if ref.Key.PartitionKey != cspann.InvalidKey {
 			return errors.AssertionFailedf(
@@ -414,7 +432,15 @@ func (tx *Txn) getFullVectorsFromPK(ctx context.Context, refs []cspann.VectorWit
 		if containsNull {
 			return errors.AssertionFailedf("primary key contains null")
 		}
-		tx.tmpSpans = append(tx.tmpSpans, span)
+
+		// Use the splitter to potentially split the span into family-specific spans.
+		prevLen := len(tx.tmpSpans)
+		tx.tmpSpans = splitter.MaybeSplitSpanIntoSeparateFamilies(tx.tmpSpans, span, len(tx.pkDir), containsNull)
+		if len(tx.tmpSpans) != prevLen+1 {
+			return errors.AssertionFailedf(
+				"MaybeSplitSpanIntoSeparateFamilies added %d spans, expected 1",
+				len(tx.tmpSpans)-prevLen)
+		}
 		tx.tmpSpanIDs = append(tx.tmpSpanIDs, refIdx)
 	}
 
