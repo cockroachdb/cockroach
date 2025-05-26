@@ -578,3 +578,60 @@ SELECT * FROM crdb_internal.invalid_objects ORDER BY id;
 ----
 
 subtest end
+
+# Test for issue #146516: Ensure type comments are cleaned up when dropping types
+# This test verifies that COMMENT ON TYPE followed by DROP DATABASE CASCADE
+# properly cleans up orphaned comments to avoid "invalid objects" errors.
+subtest type_comment_cleanup_on_drop_database_cascade
+
+statement ok
+CREATE DATABASE test_db
+
+statement ok
+USE test_db
+
+statement ok
+CREATE TYPE roach_type AS ENUM ('option1', 'option2')
+
+# Skip for legacy schema changer as COMMENT ON TYPE is not supported
+skipif config local-legacy-schema-changer
+statement ok
+COMMENT ON TYPE roach_type IS 'This is a test comment on a type'
+
+skipif config local-legacy-schema-changer
+query TTTT colnames
+SHOW TYPES WITH COMMENT
+----
+schema  name        owner  comment
+public  roach_type  root   This is a test comment on a type
+
+# Now drop the database with CASCADE, which should clean up type comments
+statement ok
+USE defaultdb
+
+let $schema_changer_state
+SHOW use_declarative_schema_changer
+
+statement ok
+SET use_declarative_schema_changer = 'off'
+
+statement ok
+DROP DATABASE test_db CASCADE
+
+# Restore the schema changer state back.
+statement ok
+SET use_declarative_schema_changer = $schema_changer_state
+
+# Check that no invalid objects exist - this should be empty
+# The issue was that type comments were not being cleaned up,
+# leaving orphaned entries in system.comments
+query ITTTT
+SELECT id, database_name, schema_name, obj_name, error FROM "".crdb_internal.invalid_objects
+----
+
+# Verify the database is actually gone
+query T
+SELECT database_name FROM [SHOW DATABASES] WHERE database_name = 'test_db'
+----
+
+subtest end
