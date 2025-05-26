@@ -96,6 +96,7 @@ type SQLServerWrapper struct {
 	rpcContext *rpc.Context
 
 	// The gRPC and DRPC servers on which the different RPC handlers will be
+	// registered
 	grpc *grpcServer
 	drpc *DRPCServer
 
