@@ -3923,7 +3923,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			UnreplicatedByRangeID: false,
 		}
 		err := rditer.IterateReplicaKeySpans(
-			context.Background(), inSnap.Desc, sendingEngSnapshot, true /* replicatedOnly */, selOpts,
+			context.Background(), inSnap.Desc, sendingEngSnapshot, selOpts,
 			func(iter storage.EngineIterator, span roachpb.Span) error {
 				fw, ok := sstFileWriters[string(span.Key)]
 				if !ok || !fw.span.Equal(span) {

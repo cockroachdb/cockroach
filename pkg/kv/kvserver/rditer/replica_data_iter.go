@@ -420,8 +420,6 @@ func IterateReplicaKeySpans(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	reader storage.Reader,
-	// NB: ignored if SelectOpts passed as filterOrOptions.
-	replicatedOnly bool, // TODO(tbg): remove when SelectRangedOptions is used
 	opts SelectOpts,
 	visitor func(storage.EngineIterator, roachpb.Span) error,
 ) error {

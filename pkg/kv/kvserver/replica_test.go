@@ -7017,7 +7017,7 @@ func TestReplicaDestroy(t *testing.T) {
 		UnreplicatedByRangeID: true,
 	}
 	require.NoError(t, rditer.IterateReplicaKeySpans(
-		ctx, tc.repl.Desc(), engSnapshot, false /* replicatedOnly */, selOpts,
+		ctx, tc.repl.Desc(), engSnapshot, selOpts,
 		func(iter storage.EngineIterator, _ roachpb.Span) error {
 			var err error
 			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {

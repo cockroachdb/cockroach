@@ -67,7 +67,7 @@ import (
 	"github.com/cockroachdb/pebble/tool"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/ttycolor"
-	humanize "github.com/dustin/go-humanize"
+	"github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/kr/pretty"
 	"github.com/spf13/cobra"
@@ -505,8 +505,8 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	}
 
 	var results int
-	return rditer.IterateReplicaKeySpans(cmd.Context(), &desc, snapshot, debugCtx.replicated,
-		selOpts,
+	return rditer.IterateReplicaKeySpans(
+		cmd.Context(), &desc, snapshot, selOpts,
 		func(iter storage.EngineIterator, _ roachpb.Span) error {
 			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
 				hasPoint, hasRange := iter.HasPointAndRange()
