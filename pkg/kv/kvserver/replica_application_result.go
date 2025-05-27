@@ -520,9 +520,7 @@ func (r *replicaLogStorage) stagePendingTruncationSharedRaftMuLockedMuLocked(pt 
 	}
 }
 
-func (r *replicaLogStorage) stagePendingTruncationOnSnapshotRaftMuLocked(
-	truncState kvserverpb.RaftTruncatedState,
-) {
+func (r *replicaLogStorage) stageApplySnapshot(truncState kvserverpb.RaftTruncatedState) {
 	r.raftMu.AssertHeld()
 
 	// A snapshot application implies a log truncation to the snapshot's index,
@@ -533,11 +531,16 @@ func (r *replicaLogStorage) stagePendingTruncationOnSnapshotRaftMuLocked(
 	//
 	// The truncation finalized below, after the snapshot is visible.
 
-	// Clear the raft entry cache at the end of this method (after mu has
-	// been released). This means that the cache will lag the disk, but since
-	// we update the in-memory metadata for the raft log before mutating disk,
-	// the cached entries will never be visible to any readers until they are
-	// cleared from the cache.
+	// Clear the raft entry cache at the end of this method (after mu has been
+	// released). Any reader that obtains their log bounds after the critical
+	// section but before the clear will see an empty log anyway, since the
+	// in-memory state is already updated to reflect the truncation, even if
+	// entries are still present in the cache.
+	//
+	// NB: a reader that obtained bounds pre-critical section might be able to
+	// load entries, though, and could repopulate the cache after it has been
+	// cleared - the cache is not "snapshotted". Ideally, mu-only readers simply
+	// cannot populate the cache.
 	defer r.cache.Drop(r.ls.RangeID)
 
 	r.mu.Lock()
@@ -553,15 +556,6 @@ func (r *replicaLogStorage) stagePendingTruncationOnSnapshotRaftMuLocked(
 	//
 	// [1]: this is not properly supported yet and will currently fatal.
 	// See: https://github.com/cockroachdb/cockroach/pull/125530
-	r.stagePendingTruncationSharedRaftMuLockedMuLocked(pendingTruncation{
-		RaftTruncatedState: truncState,
-		expectedFirstIndex: r.shMu.trunc.Index + 1,
-		logDeltaBytes:      -r.shMu.size, // we're removing everything...
-		isDeltaTrusted:     true,         // ... and we know it
-		hasSideloaded:      true,         // just in case, no point in actually checking
-	})
-	r.shMu.sizeTrusted = true // we know it's zero (see above)
-
 	// We also, in the same mu critical section, update the in-memory metadata
 	// accordingly before the change is visible on the engine. This means that
 	// even if someone used the in-memory state to grab an iterator (all within
@@ -572,8 +566,11 @@ func (r *replicaLogStorage) stagePendingTruncationOnSnapshotRaftMuLocked(
 	r.updateStateRaftMuLockedMuLocked(logstore.RaftState{
 		LastIndex: truncState.Index,
 		LastTerm:  truncState.Term,
-		ByteSize:  0, // it's already zero, but we have to do it again
+		ByteSize:  0,
 	})
+	r.shMu.trunc = truncState
+	r.shMu.lastCheckSize = 0
+	r.shMu.sizeTrusted = true
 }
 
 func (r *replicaLogStorage) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
