@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -20,14 +21,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -116,7 +120,7 @@ func (b *EventBuilder) deleteEvent(
 // newKvBatchHandler creates a new batch handler for testing.
 func newKvBatchHandler(
 	t *testing.T, s serverutils.ApplicationLayerInterface, tableName string,
-) (*kvRowProcessor, catalog.TableDescriptor) {
+) (BatchHandler, catalog.TableDescriptor) {
 	ctx := context.Background()
 	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), tree.Name(tableName))
 	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
@@ -143,6 +147,38 @@ func newKvBatchHandler(
 	return handler, desc
 }
 
+// newSqlBatchHandler creates a new SQL-based batch handler for testing.
+func newSqlBatchHandler(
+	t *testing.T, s serverutils.ApplicationLayerInterface, tableName string,
+) (BatchHandler, catalog.TableDescriptor) {
+	ctx := context.Background()
+	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), tree.Name(tableName))
+	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
+	codec := s.Codec()
+	handler, err := makeSQLProcessor(
+		ctx,
+		s.ClusterSettings(),
+		map[descpb.ID]sqlProcessorTableConfig{
+			desc.GetID(): {
+				srcDesc: desc,
+			},
+		},
+		0, // jobID
+		s.InternalDB().(descs.DB),
+		s.InternalDB().(isql.DB).Executor(isql.WithSessionData(sd)),
+		sd,
+		execinfrapb.LogicalReplicationWriterSpec{
+			Mode: jobspb.LogicalReplicationDetails_Immediate,
+		},
+		codec,
+		s.LeaseManager().(*lease.Manager),
+	)
+	require.NoError(t, err)
+	return handler, desc
+}
+
+type batchHandlerFactory func(t *testing.T, s serverutils.ApplicationLayerInterface, tableName string) (BatchHandler, catalog.TableDescriptor)
+
 // addAndRemoveColumn is a metamorphic test option that randomly decides whether
 // to add and remove a column to trigger a rebuild of the primary key.
 var addAndRemoveColumn = metamorphic.ConstantWithTestBool("batch-handler-exhaustive-rebuild-primary-index", false)
@@ -151,9 +187,33 @@ var addAndRemoveColumn = metamorphic.ConstantWithTestBool("batch-handler-exhaust
 // to add a unique constraint to the table.
 var uniqueConstraint = metamorphic.ConstantWithTestBool("batch-handler-exhaustive-unique-constraint", false)
 
-func TestBatchHandlerExhaustive(t *testing.T) {
+func TestBatchHandlerExhaustiveKV(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	testBatchHandlerExhaustive(t, newKvBatchHandler)
+}
+
+func TestBatchHandlerExhaustiveSQL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.WithIssue(t, 146117)
+
+	testBatchHandlerExhaustive(t, newSqlBatchHandler)
+}
+
+func TestBatchHandlerExhaustiveCrud(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.WithIssue(t, 146117)
+
+	testBatchHandlerExhaustive(t, newCrudBatchHandler)
+}
+
+func testBatchHandlerExhaustive(t *testing.T, factory batchHandlerFactory) {
+	t.Helper()
 
 	// This test is an "exhaustive" test of the batch handler. It tries to test
 	// cross product of every possible (replication event type, local value,
@@ -188,7 +248,7 @@ func TestBatchHandlerExhaustive(t *testing.T) {
 		runner.Exec(t, `ALTER TABLE test_table DROP COLUMN temp_col`)
 	}
 
-	handler, desc := newKvBatchHandler(t, s, "test_table")
+	handler, desc := factory(t, s, "test_table")
 	defer handler.ReleaseLeases(ctx)
 
 	// TODO(jeffswenson): test the other handler types.
