@@ -71,6 +71,8 @@ const remoteStoreLeaseSheddingGraceDuration = 2 * time.Minute
 const ignoreLoadThresholdAndHigherGraceDuration = 5 * time.Minute
 const ignoreHigherThanLoadThresholdGraceDuration = 8 * time.Minute
 
+const overloadGracePeriod = time.Minute
+
 // Called periodically, say every 10s.
 //
 // We do not want to shed replicas for CPU from a remote store until its had a
@@ -115,8 +117,15 @@ func (a *allocatorState) rebalanceStores(
 		a.changeRateLimiter.updateForRebalancePass(&ss.adjusted.enactedHistory, now)
 		sls := a.cs.meansMemo.getStoreLoadSummary(clusterMeans, storeID, ss.loadSeqNum)
 		if sls.sls >= overloadSlow {
-			if ss.overloadStartTime == (time.Time{}) {
-				ss.overloadStartTime = now
+			if ss.overloadEndTime != (time.Time{}) {
+				if now.Sub(ss.overloadEndTime) > overloadGracePeriod {
+					ss.overloadStartTime = now
+					log.Infof(ctx, "overload-start s%v (%v)", storeID, sls)
+				} else {
+					// Else, extend the previous overload interval.
+					log.Infof(ctx, "overload-continued s%v (%v)", storeID, sls)
+				}
+				ss.overloadEndTime = time.Time{}
 			}
 			if ss.adjusted.enactedHistory.allowLoadBasedChanges() &&
 				// The pending decrease must be small enough to continue shedding
@@ -125,9 +134,13 @@ func (a *allocatorState) rebalanceStores(
 				ss.maxFractionPendingIncrease < epsilon {
 				sheddingStores = append(sheddingStores, sheddingStore{StoreID: storeID, storeLoadSummary: sls})
 			}
-		} else {
-			ss.overloadStartTime = time.Time{}
+		} else if sls.sls < loadNoChange && ss.overloadEndTime == (time.Time{}) {
+			// NB: we don't stop the overloaded interval if the store is at
+			// loadNoChange, since a store can hover at the border of the two.
+			log.Infof(ctx, "overload-end s%v (%v)", storeID, sls)
+			ss.overloadEndTime = now
 		}
+
 	}
 	// We have used storeLoadSummary.sls to filter above. But when sorting, we
 	// first compare using nls. Consider the following scenario with 4 stores
@@ -402,18 +415,25 @@ func (a *allocatorState) rebalanceStores(
 						cand.StoreID, rstate.constraints.spanConfig.leasePreferences, a.cs.constraintMatcher)
 				}
 			}
-			// TODO(sumeer): remove this override. Consider a cluster where s1 is
-			// overloadSlow, s2 is loadNoChange, and s3, s4 are loadNormal. Now s4 is
-			// considering rebalancing load away from s1, but the candidate top-k range
-			// has replicas {s1, s3, s4}. So the only way to shed load from s1 is a s1
-			// => s2 move. But there may be other ranges at other leaseholder stores
-			// which can be moved from s1 => {s3, s4}. So we should not be doing this
-			// sub-optimal transfer of load from s1 => s2 unless s1 is not seeing any
-			// load shedding for some interval of time. We need a way to capture this
-			// information in a simple but effective manner.
-			const tempOverrideToIgnoreLoadNoChangeAndHigher = ignoreLoadNoChangeAndHigher
+			// Consider a cluster where s1 is overloadSlow, s2 is loadNoChange, and
+			// s3, s4 are loadNormal. Now s4 is considering rebalancing load away
+			// from s1, but the candidate top-k range has replicas {s1, s3, s4}. So
+			// the only way to shed load from s1 is a s1 => s2 move. But there may
+			// be other ranges at other leaseholder stores which can be moved from
+			// s1 => {s3, s4}. So we should not be doing this sub-optimal transfer
+			// of load from s1 => s2 unless s1 is not seeing any load shedding for
+			// some interval of time. We need a way to capture this information in a
+			// simple but effective manner. For now, we capture this using these
+			// grace duration thresholds.
+			ignoreLevel := ignoreLoadNoChangeAndHigher
+			overloadDur := now.Sub(ss.overloadStartTime)
+			if overloadDur > ignoreHigherThanLoadThresholdGraceDuration {
+				ignoreLevel = ignoreHigherThanLoadThreshold
+			} else if overloadDur > ignoreLoadThresholdAndHigherGraceDuration {
+				ignoreLevel = ignoreLoadThresholdAndHigher
+			}
 			targetStoreID := sortTargetCandidateSetAndPick(
-				ctx, cands, ssSLS.sls, tempOverrideToIgnoreLoadNoChangeAndHigher, loadDim, a.rand)
+				ctx, cands, ssSLS.sls, ignoreLevel, loadDim, a.rand)
 			if targetStoreID == 0 {
 				continue
 			}

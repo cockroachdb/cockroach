@@ -785,9 +785,10 @@ type storeState struct {
 	lastLeaseShedAt time.Time
 
 	// Time when this store started to be observed as overloaded. Set by
-	// allocatorState.rebalanceStores. When not overloaded, this is equal to
-	// time.Time{}.
+	// allocatorState.rebalanceStores.
 	overloadStartTime time.Time
+	// When overloaded this is equal to time.Time{}.
+	overloadEndTime time.Time
 }
 
 // The time duration between a change happening at a store, and when the
@@ -1464,6 +1465,8 @@ func (cs *clusterState) setStore(desc roachpb.StoreDescriptor) {
 		// immediately begin shedding replicas from this store if it were CPU
 		// overloaded. Yet, this is hacky.
 		ss.lastLeaseShedAt = cs.ts.Now()
+		ss.overloadStartTime = cs.ts.Now()
+		ss.overloadEndTime = cs.ts.Now()
 		cs.constraintMatcher.setStore(desc)
 		cs.stores[desc.StoreID] = ss
 		ns.stores = append(ns.stores, desc.StoreID)
