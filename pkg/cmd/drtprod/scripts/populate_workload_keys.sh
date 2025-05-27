@@ -5,6 +5,8 @@
 # Use of this software is governed by the CockroachDB Software License
 # included in the /LICENSE file.
 
+export ROACHPROD_DISABLED_PROVIDERS=IBM
+
 if [ -z "${CLUSTER}" ]; then
   echo "environment CLUSTER is not set"
   exit 1

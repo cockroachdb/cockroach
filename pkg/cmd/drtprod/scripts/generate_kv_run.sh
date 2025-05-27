@@ -29,6 +29,8 @@ if [ -z "${WORKLOAD_NODES}" ]; then
   exit 1
 fi
 
+export ROACHPROD_DISABLED_PROVIDERS=IBM
+
 PGURLS=$(drtprod pgurl $CLUSTER --external | sed s/\'//g)
 
 # Loop through each node
