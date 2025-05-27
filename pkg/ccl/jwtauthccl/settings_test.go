@@ -8,6 +8,8 @@ package jwtauthccl
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -160,6 +162,75 @@ func TestValidateAndParseJWTAuthJWKS(t *testing.T) {
 					require.True(t, ok)
 				}
 			}
+		})
+	}
+}
+
+// validateStringSetting is a small helper mirroring the pattern used by
+// TestValidateAndParseJWTAuthAudience. It calls the StringSetting's Validate
+// method against a fresh Settings object and asserts the expected outcome.
+func validateStringSetting(t *testing.T, set *settings.StringSetting, val string, wantErr bool) {
+	t.Helper()
+	st := cluster.MakeTestingClusterSettings()
+	err := set.Validate(&st.SV, val)
+	if wantErr {
+		require.Error(t, err)
+	} else {
+		require.NoError(t, err)
+	}
+}
+
+// JWTAuthGroupClaim setting validation
+func TestValidateJWTAuthGroupClaim(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cases := []struct {
+		name    string
+		val     string
+		wantErr bool
+	}{
+		{"empty", "", true},
+		{"valid_single", "groups", false},
+		{"valid_multiple", "groups,roles", false},
+		{"valid_with_dots", "org.groups,tenant.roles", false},
+		{"valid_plus_invalid", "groups,inv@lid", true},
+		{"multiple_invalid", "bad!,#", true},
+		{"ws_leading", " groups", false},
+		{"ws_trailing", "groups ", false},
+		{"ws_after_comma", "groups, roles", false},
+		{"ws_inside_name", "group name", true}, //internal space is not allowed in a claim key
+		{"ws_mixed", "groups, bad name", true},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			validateStringSetting(t, JWTAuthGroupClaim, tc.val, tc.wantErr)
+		})
+	}
+}
+
+// JWTAuthUserinfoGroupKey setting validation
+func TestValidateJWTAuthUserinfoGroupKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cases := []struct {
+		name    string
+		val     string
+		wantErr bool
+	}{
+		{"empty", "", true},
+		{"valid_single", "groups", false},
+		{"valid_multiple", "groups,roles", false},
+		{"valid_with_dash", "custom-groups", false},
+		{"valid_plus_invalid", "groups,inv@lid", true},
+		{"multiple_invalid", "bad!,#", true},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			validateStringSetting(t, JWTAuthUserinfoGroupKey, tc.val, tc.wantErr)
 		})
 	}
 }
