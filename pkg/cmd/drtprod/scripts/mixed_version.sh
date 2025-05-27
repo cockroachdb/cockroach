@@ -37,6 +37,8 @@ if [ -z "$CLUSTER" ]; then
     exit 1
 fi
 
+export ROACHPROD_DISABLED_PROVIDERS=IBM
+
 /home/ubuntu/drtprod sync
 
 # Set optional release versions

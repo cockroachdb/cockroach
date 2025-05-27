@@ -8,19 +8,17 @@ environment:
   ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
   CLUSTER: drt-scale-300
   WORKLOAD_CLUSTER: workload-scale-300
-  CLUSTER_NODES: 150
-  TOTAL_PARTITIONS: 30
+  CLUSTER_NODES: 90
+  TOTAL_PARTITIONS: 15
   WORKLOAD_NODES: 15
 
 dependent_file_locations:
   - pkg/cmd/drtprod/scripts/setup_datadog_cluster
   - pkg/cmd/drtprod/scripts/setup_datadog_workload
-  - pkg/cmd/drtprod/scripts/ycsb_init.sh
-  - pkg/cmd/drtprod/scripts/generate_ycsb_run.sh
   - pkg/cmd/drtprod/scripts/tpcc_init.sh
   - pkg/cmd/drtprod/scripts/generate_tpcc_run.sh
-  - pkg/cmd/drtprod/scripts/ycsb_init.sh
-  - pkg/cmd/drtprod/scripts/generate_ycsb_run.sh
+  - artifacts/roachtest
+  - artifacts/drtprod
 
 targets:
   # crdb cluster specs
@@ -33,13 +31,13 @@ targets:
           clouds: gce
           gce-managed: true
           gce-enable-multiple-stores: true
-          gce-zones: "us-central1-a:50,us-central1-b:50,us-central1-c:50"
+          gce-zones: "us-central1-a:30,us-central1-b:30,us-central1-c:30"
           nodes: $CLUSTER_NODES
           gce-machine-type: n2-standard-16
           local-ssd: false
-          gce-pd-volume-size: 1024
+          gce-pd-volume-size: 2048
           gce-pd-volume-type: pd-ssd
-          gce-pd-volume-count: 4
+          gce-pd-volume-count: 2
           os-volume-size: 100
           username: drt
           lifetime: 8760h
@@ -51,7 +49,12 @@ targets:
         args:
           - $CLUSTER
           - release
-          - v25.1.1
+          - v25.2.0-rc.1 # for libgeos
+      - command: stage
+        args:
+          - $CLUSTER
+          - cockroach
+          - release-25.2.1-rc
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_cluster"
       - command: start
         args:
@@ -61,7 +64,7 @@ targets:
         flags:
           # add flag to set provisioned throughput on each store according to their cloud provider limits
           enable-fluent-sink: true
-          store-count: 4
+          store-count: 2
           args: --wal-failover=among-stores
           restart: false
           sql-port: 26257
@@ -84,7 +87,7 @@ targets:
           - $WORKLOAD_CLUSTER
         flags:
           clouds: gce
-          gce-zones: "us-central1-f"
+          gce-zones: "us-central1-a"
           nodes: $WORKLOAD_NODES
           gce-machine-type: n2-standard-8
           os-volume-size: 100
@@ -102,6 +105,15 @@ targets:
         args:
           - $WORKLOAD_CLUSTER
           - cockroach
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - artifacts/roachtest
+          - roachtest-operations
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - artifacts/drtprod
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_workload"
   - target_name: post_tasks
     dependent_targets:
@@ -129,18 +141,14 @@ targets:
           - chmod
           - 600
           - './certs/*'
-      - command: put
-        args:
-          - $WORKLOAD_CLUSTER
-          - artifacts/drtprod
-          - drtprod
       - script: "pkg/cmd/drtprod/scripts/tpcc_init.sh"
         args:
-          - cct_tpcc_6M
+          - cct_tpcc
           - false
         flags:
-          warehouses: 6000000
-          db: cct_tpcc_6M
+          warehouses: 4000000
+          db: cct_tpcc
+      - script: pkg/cmd/drtprod/scripts/populate_workload_keys.sh
   - target_name: tpcc_run
     dependent_targets:
       - $CLUSTER
@@ -148,38 +156,16 @@ targets:
     steps:
       - script: "pkg/cmd/drtprod/scripts/generate_tpcc_run.sh"
         args:
-          - cct_tpcc_6M # suffix added to script name tpcc_run_400k.sh
-          - false # determines whether to execute the script immediately on workload node
+          - cct_tpcc
+          - false
         flags:
-          db: cct_tpcc_6M
-          warehouses: 6000000
+          db: cct_tpcc
+          warehouses: 4000000
           active-warehouses: 500000
-          conns: 33333
+          active-workers: 2000
+          conns: 2000
           max-rate: 2500
-          workers: 166666
+          workers: 500000
           duration: 12h
           ramp: 1h
           wait: 0
-      - script: "pkg/cmd/drtprod/scripts/ycsb_init.sh"
-        args:
-          - 20M
-          - true
-        flags:
-          splits: 200
-          insert-count: 20000000
-  - target_name: ycsb_run
-    dependent_targets:
-      - post_tasks
-    steps:
-      - script: "pkg/cmd/drtprod/scripts/generate_ycsb_run.sh"
-        args:
-          - 20M
-          - false
-        flags:
-          max-rate: 66666
-          read-freq: 0.8
-          insert-freq: 0.1
-          update-freq: 0.05
-          delete-freq: 0.05
-          duration: 0
-          ramp: 5s
