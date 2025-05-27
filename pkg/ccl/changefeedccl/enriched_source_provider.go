@@ -162,6 +162,7 @@ func newEnrichedSourceProvider(
 	addNonFixedJSONfield(fieldNameSchemaName)
 	addNonFixedJSONfield(fieldNameTableName)
 	addNonFixedJSONfield(fieldNamePrimaryKeys)
+	addNonFixedJSONfield(fieldNameTableID)
 
 	if opts.MVCCTimestamps {
 		addNonFixedJSONfield(fieldNameMVCCTimestamp)
@@ -208,6 +209,7 @@ func (p *enrichedSourceProvider) GetJSON(
 	p.jsonNonFixedData[fieldNameSchemaName] = json.FromString(tableInfo.schemaName)
 	p.jsonNonFixedData[fieldNameTableName] = json.FromString(tableInfo.tableName)
 	p.jsonNonFixedData[fieldNamePrimaryKeys] = tableInfo.primaryKeysJSON
+	p.jsonNonFixedData[fieldNameTableID] = json.FromInt(int(metadata.TableID))
 
 	if p.opts.mvccTimestamp {
 		p.jsonNonFixedData[fieldNameMVCCTimestamp] = json.FromString(evCtx.mvcc.AsOfSystemTime())
@@ -247,6 +249,7 @@ func (p *enrichedSourceProvider) GetAvro(
 		dest[fieldNameSchemaName] = goavro.Union(avro.SchemaTypeString, tableInfo.schemaName)
 		dest[fieldNameTableName] = goavro.Union(avro.SchemaTypeString, tableInfo.tableName)
 		dest[fieldNamePrimaryKeys] = goavro.Union(avro.SchemaTypeArray, tableInfo.primaryKeys)
+		dest[fieldNameTableID] = goavro.Union(avro.SchemaTypeInt, int32(tableID))
 
 		if p.opts.mvccTimestamp {
 			dest[fieldNameMVCCTimestamp] = goavro.Union(avro.SchemaTypeString, evCtx.mvcc.AsOfSystemTime())
@@ -280,6 +283,7 @@ const (
 	fieldNameSchemaName         = "schema_name"
 	fieldNameTableName          = "table_name"
 	fieldNamePrimaryKeys        = "primary_keys"
+	fieldNameTableID            = "crdb_internal_table_id"
 )
 
 type fieldInfo struct {
@@ -470,6 +474,17 @@ var allFieldInfo = map[string]fieldInfo{
 			TypeName: kcjsonschema.SchemaTypeArray,
 			Optional: false,
 			Items:    &kcjsonschema.Schema{TypeName: kcjsonschema.SchemaTypeString},
+		},
+	},
+	fieldNameTableID: {
+		avroSchemaField: avro.SchemaField{
+			Name:       fieldNameTableID,
+			SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeInt},
+		},
+		kafkaConnectSchema: kcjsonschema.Schema{
+			Field:    fieldNameTableID,
+			TypeName: kcjsonschema.SchemaTypeInt32,
+			Optional: false,
 		},
 	},
 }
