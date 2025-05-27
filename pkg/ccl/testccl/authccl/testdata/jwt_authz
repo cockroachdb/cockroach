@@ -1,0 +1,207 @@
+# JWT authorization (role-sync) integration tests
+config secure
+----
+
+jwt_cluster_setting enabled=true
+----
+
+jwt_cluster_setting authorization.enabled=true
+----
+
+jwt_cluster_setting issuers=test-issuer
+----
+
+jwt_cluster_setting audience=test_cluster
+----
+
+jwt_cluster_setting claim=username
+----
+
+jwt_cluster_setting group_claim=roles
+----
+
+jwt_cluster_setting userinfo_group_key=roles
+----
+
+jwt_cluster_setting jwks={"kty":"RSA","n":"6S7asUuzq5Q_3U9rbs-PkDVIdjgmtgWreG5qWPsC9xXZKiMV1AiV9LXyqQsAYpCqEDM3XbfmZqGb48yLhb_XqZaKgSYaC_h2DjM7lgrIQAp9902Rr8fUmLN2ivr5tnLxUUOnMOc2SQtr9dgzTONYW5Zu3PwyvAWk5D6ueIUhLtYzpcB-etoNdL3Ir2746KIy_VUsDwAM7dhrqSK8U2xFCGlau4ikOTtvzDownAMHMrfE7q1B6WZQDAQlBmxRQsyKln5DIsKv6xauNsHRgBAKctUxZG8M4QJIx3S6Aughd3RZC4Ca5Ae9fd8L8mlNYBCrQhOZ7dS0f4at4arlLcajtw","e":"AQAB","kid":"test-rsa"}
+----
+
+# bootstrap users and roles
+sql
+CREATE USER alice;
+CREATE ROLE "owner";
+CREATE ROLE "user";
+----
+ok
+
+# no roles claim -> try to fetch userinfo
+subtest no_roles
+
+# JWT Payload
+# {
+#   "iss": "test-issuer",
+#   "aud": "test_cluster",
+#   "username": "alice",
+#   "sub": "1234567890",
+#   "iat": 1749293038,
+#   "exp": 4102444800
+# }
+
+connect user=alice options=--crdb:jwt_auth_enabled=true password=eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QtcnNhIn0.eyJpc3MiOiJ0ZXN0LWlzc3VlciIsImF1ZCI6InRlc3RfY2x1c3RlciIsInVzZXJuYW1lIjoiYWxpY2UiLCJzdWIiOiIxMjM0NTY3ODkwIiwiaWF0IjoxNzQ5MjkzMDM4LCJleHAiOjQxMDI0NDQ4MDB9.yDOSKVjgNDhqD2X3x5AO1X2Fl_rHbsF6GEGpMOdBTEvwfZjpI0bvDGfrs5WN4mzIQ-3ya7KbHyAbSu4kcudIpmpAwpAPCCO0aW2CjhURAmv30vpABnewg6NzU2Ib0rXS-uNaTHFWCHNzg-cbOMvl7pb9przH3o6fzaJH0rzXfRat2Oc3nze2E0W6rYoqztwXyfp1TMYvv8argDiph7L1UVewXnUnf4JAmbOr_2dmIG07HvlWZTxjpFRVTMFpAN2jEhrV75jTor6FyGtPPnJAQlt29pnHRLVc90B2PWKsNI9Zcb0ybXgI5UfEurlOtcfa7MW59C1wDxq8dGGqBF5PmQ
+----
+ERROR: JWT authorization: userinfo lookup failed (SQLSTATE 28000)
+
+subtest end
+
+# empty roles -> fail auth
+subtest empty_roles
+
+# JWT Payload
+# {
+#   "iss": "test-issuer",
+#   "aud": "test_cluster",
+#   "username": "alice",
+#   "sub": "1234567890",
+#   "iat": 1749293038,
+#   "exp": 4102444800,
+#   "roles": []
+# }
+
+connect user=alice options=--crdb:jwt_auth_enabled=true password=eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QtcnNhIn0.eyJpc3MiOiJ0ZXN0LWlzc3VlciIsImF1ZCI6InRlc3RfY2x1c3RlciIsInVzZXJuYW1lIjoiYWxpY2UiLCJzdWIiOiIxMjM0NTY3ODkwIiwiaWF0IjoxNzQ5MjkzMDM4LCJleHAiOjQxMDI0NDQ4MDAsInJvbGVzIjpbXX0.pSNb9jObLflx1avb-BBG03X0hod5q9LsBqloEXxn2L_pitOKRlhvs6ZbUui2bSqqC8KVGE07B8tqGaQoQLNAyI-2jf354nVVPI5UWo6CvCNHFTVOvv9fDAsWixpurURgUA8SmM-xlArM-qlB61ttyTcVycjGYTTNDB9sMgxLNDqaLFWd7qmqmUIVt__gSltZxmv7HeS2Nz7UW3rFYbUR1WKSY5qWfsi7esDdm9t6FPalE90TJ5j8-gv-38wSQpsxuA7ZdNwBqSXmiFVplA6MWjZQMNseLcLLUujp6EsorlUGLtwLkOhaCw5ejIA5lpngZ-nnLd2k40j7rFlTR0kZrg
+----
+ERROR: JWT authorization: empty group list (SQLSTATE 28000)
+
+query_row
+SELECT pg_has_role('alice','owner','MEMBER')
+----
+false
+
+query_row
+SELECT pg_has_role('alice','user','MEMBER')
+----
+false
+
+subtest end
+
+# JSON array grants two roles
+subtest json_two_roles
+
+# JWT Payload
+# {
+#   "iss": "test-issuer",
+#   "aud": "test_cluster",
+#   "username": "alice",
+#   "sub": "1234567890",
+#   "iat": 1749293038,
+#   "exp": 4102444800,
+#   "roles": [
+#     "Owner",
+#     "uSER"
+#   ]
+# }
+
+connect user=alice options=--crdb:jwt_auth_enabled=true password=eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QtcnNhIn0.eyJpc3MiOiJ0ZXN0LWlzc3VlciIsImF1ZCI6InRlc3RfY2x1c3RlciIsInVzZXJuYW1lIjoiYWxpY2UiLCJzdWIiOiIxMjM0NTY3ODkwIiwiaWF0IjoxNzQ5MjkzMDM4LCJleHAiOjQxMDI0NDQ4MDAsInJvbGVzIjpbIk93bmVyIiwidVNFUiJdfQ.1YMO3yHaDnEH6AV61-XoCS0dByw0CPI1Xec_LClKw7sD6zKiztxkGKyShxN2gBQSM1G0OOXubXFb6bktfWoQym_lAqsueMD_L08PbSrdUa3VIxi9IWG8GhegTgjPrIby73MarTqVsdMKNOiCF7gCTu1STvILhQczdHVPDIU8SPm9FW6Cr7Gr0rI5FFSsWxUHxTwJ-YScfa8BYL-HC5Dvau5z6HEljE8Njn3VOz58-H9RfdbTygIkkLui0BEDBGfhbYVfNQRSEe9UEAqSz0V-FEj8_O4Hb2lax0RM3AxLHAXMsW8UMNE1QCJWaXafyqmol02F_hIRraw1hsznAvTrNQ
+----
+ok defaultdb
+
+query_row
+SELECT pg_has_role('alice','owner','MEMBER')
+----
+true
+
+query_row
+SELECT pg_has_role('alice','user','MEMBER')
+----
+true
+
+subtest end
+
+# JSON array with one role revokes owner
+subtest json_one_role
+
+# JWT Payload
+# {
+#   "iss": "test-issuer",
+#   "aud": "test_cluster",
+#   "username": "alice",
+#   "sub": "1234567890",
+#   "iat": 1749293038,
+#   "exp": 4102444800,
+#   "roles": "USER"
+# }
+
+connect user=alice options=--crdb:jwt_auth_enabled=true password=eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QtcnNhIn0.eyJpc3MiOiJ0ZXN0LWlzc3VlciIsImF1ZCI6InRlc3RfY2x1c3RlciIsInVzZXJuYW1lIjoiYWxpY2UiLCJzdWIiOiIxMjM0NTY3ODkwIiwiaWF0IjoxNzQ5MjkzMDM4LCJleHAiOjQxMDI0NDQ4MDAsInJvbGVzIjoiVVNFUiJ9.0IRB5Fi8C2rxkipCCljZ1rgm4a9NZW7xfd4wON8PVt496goEfdflrw0g2kB2dYNrUSWWWYZjU5e9IRGTVB_WLvwaKtXScpd5JfgbK8hpuYWNd3YWvRFKRx8v25xr6RRJhYgiiyjgFEPeK1_wpTh3rSfV3VFc7RjBr1lUUlIpdkOH1k1fnvMofRoyK1b1-lV04UKkZtx1oKywv1V-XtdH-hd5OOMt4yWQCZsnRGyPlvUI11hbLWITt_3Xvk53KUUUIZuyuK13ai8GWd7u5gp0UeO0xFlNYxbNdpAbvk4iFqTSxLlt3FzR_HMYGpIz9Jk4QgNh7d0GmBVbumLdNDh_Gw
+----
+ok defaultdb
+
+query_row
+SELECT pg_has_role('alice','owner','MEMBER')
+----
+false
+
+query_row
+SELECT pg_has_role('alice','user','MEMBER')
+----
+true
+
+subtest end
+
+# comma-string roles grants both again
+subtest comma_string
+
+# JWT Payload
+# {
+#   "iss": "test-issuer",
+#   "aud": "test_cluster",
+#   "username": "alice",
+#   "sub": "1234567890",
+#   "iat": 1749293038,
+#   "exp": 4102444800,
+#   "roles": "USER , owneR"
+# }
+
+connect user=alice options=--crdb:jwt_auth_enabled=true password=eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QtcnNhIn0.eyJpc3MiOiJ0ZXN0LWlzc3VlciIsImF1ZCI6InRlc3RfY2x1c3RlciIsInVzZXJuYW1lIjoiYWxpY2UiLCJzdWIiOiIxMjM0NTY3ODkwIiwiaWF0IjoxNzQ5MjkzMDM4LCJleHAiOjQxMDI0NDQ4MDAsInJvbGVzIjoiVVNFUiAsIG93bmVSIn0.TyAdBVAZquW3e4VxWFT9Mex9yRAmmlojLBB-iBYjbIiHLewdITT8eecWtbmJs0QctYJ6LInYswbVeRR-01hEtnBetPhioPHTqfVZxP9JtE52gJxkuBk1SoRXo6GGKnxXHGkuGkJYyQrxgVtuWL1AHI2PgBe2jlhadHd-FC1tncSr2n5cLVB89nzWm0uPgsNgHQgJwWfdVTbRKCSYtzjN6JySqA02Rgb925mwq9V70iasuttXRoWnVz7zWQ7NEvoNaA-PrOSDdPYG4gjpmHU9WfpoT4HqYR9NEiBFRihl2ig161KhRHrLovSdc4lPnQmipKcESaxi22IiC3_5fmqBBw
+----
+ok defaultdb
+
+query_row
+SELECT pg_has_role('alice','owner','MEMBER')
+----
+true
+
+query_row
+SELECT pg_has_role('alice','user','MEMBER')
+----
+true
+
+subtest end
+
+# a token with empty roles rejects login and all roles are revoked
+subtest revoke_all
+
+# JWT Payload
+# {
+#   "iss": "test-issuer",
+#   "aud": "test_cluster",
+#   "username": "alice",
+#   "sub": "1234567890",
+#   "iat": 1749293038,
+#   "exp": 4102444800,
+#   "roles": []
+# }
+
+connect user=alice options=--crdb:jwt_auth_enabled=true password=eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QtcnNhIn0.eyJpc3MiOiJ0ZXN0LWlzc3VlciIsImF1ZCI6InRlc3RfY2x1c3RlciIsInVzZXJuYW1lIjoiYWxpY2UiLCJzdWIiOiIxMjM0NTY3ODkwIiwiaWF0IjoxNzQ5MjkzMDM4LCJleHAiOjQxMDI0NDQ4MDAsInJvbGVzIjpbXX0.pSNb9jObLflx1avb-BBG03X0hod5q9LsBqloEXxn2L_pitOKRlhvs6ZbUui2bSqqC8KVGE07B8tqGaQoQLNAyI-2jf354nVVPI5UWo6CvCNHFTVOvv9fDAsWixpurURgUA8SmM-xlArM-qlB61ttyTcVycjGYTTNDB9sMgxLNDqaLFWd7qmqmUIVt__gSltZxmv7HeS2Nz7UW3rFYbUR1WKSY5qWfsi7esDdm9t6FPalE90TJ5j8-gv-38wSQpsxuA7ZdNwBqSXmiFVplA6MWjZQMNseLcLLUujp6EsorlUGLtwLkOhaCw5ejIA5lpngZ-nnLd2k40j7rFlTR0kZrg
+----
+ERROR: JWT authorization: empty group list (SQLSTATE 28000)
+
+query_row
+SELECT pg_has_role('alice','owner','MEMBER')
+----
+false
+
+query_row
+SELECT pg_has_role('alice','user','MEMBER')
+----
+false
+
+subtest end
