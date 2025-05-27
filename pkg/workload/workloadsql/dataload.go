@@ -14,9 +14,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/version"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -57,6 +60,13 @@ func (l InsertsDataLoader) InitialDataLoad(
 		}
 	}
 
+	AutocommitBeforeDDL, err := version.WithGoSQL(db).Compare(ctx, func(v roachpb.Version) bool {
+		return v.AtLeast(clusterversion.V24_1.Version())
+	})
+	if err != nil {
+		return 0, errors.Wrapf(err, "Could not check cluster version")
+	}
+
 	const maxTableBatchSize = 5000
 	currentTable := 0
 	// When dealing with large number of tables, opt to use transactions
@@ -66,10 +76,14 @@ func (l InsertsDataLoader) InitialDataLoad(
 		batchEnd := min(currentTable+maxTableBatchSize, len(tables))
 		nextBatch := tables[currentTable:batchEnd]
 		if err := crdb.ExecuteTx(ctx, db, &gosql.TxOptions{}, func(tx *gosql.Tx) error {
-			// Run the operations in a single txn so they complete more quickly.
-			if _, err := tx.Exec("SET LOCAL autocommit_before_ddl = false"); err != nil {
-				return err
+			// Run the operations in a single txn, if supported by the cluster
+			// version, so they complete more quickly.
+			if AutocommitBeforeDDL {
+				if _, err := tx.Exec("SET LOCAL autocommit_before_ddl = false"); err != nil {
+					return err
+				}
 			}
+
 			currentDatabase := ""
 			for _, table := range nextBatch {
 				// Switch databases if one is explicitly specified for multi-region
