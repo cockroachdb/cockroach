@@ -587,7 +587,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 
 	// Stage the truncation, so that in-memory state reflects an
 	// empty log.
-	ls.stagePendingTruncationOnSnapshotRaftMuLocked(truncState)
+	ls.stageApplySnapshot(truncState)
 
 	stats.subsumedReplicas = timeutil.Now()
 
