@@ -616,6 +616,8 @@ func makeMetrics(internal bool, sv *settings.Values) Metrics {
 			TransactionTimeoutCount:           metric.NewCounter(getMetricMeta(MetaTransactionTimeout, internal)),
 			FullTableOrIndexScanCount:         aggmetric.NewSQLCounter(getMetricMeta(MetaFullTableOrIndexScan, internal)),
 			FullTableOrIndexScanRejectedCount: metric.NewCounter(getMetricMeta(MetaFullTableOrIndexScanRejected, internal)),
+			TxnRetryCount:                     metric.NewCounter(getMetricMeta(MetaTxnRetry, internal)),
+			StatementRetryCount:               metric.NewCounter(getMetricMeta(MetaStatementRetry, internal)),
 		},
 		StartedStatementCounters:  makeStartedStatementCounters(internal),
 		ExecutedStatementCounters: makeExecutedStatementCounters(internal),
