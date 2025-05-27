@@ -1355,10 +1355,24 @@ func (b *Builder) buildWhere(where *tree.Where, inScope *scope, colRefs *opt.Col
 		colRefs,
 	)
 
+	filterItem := b.factory.ConstructFiltersItem(filter)
+
+	// If the WHERE clause contains any functions that aren't leakproof, we add a
+	// barrier to prevent the optimizer from reordering user-defined predicates
+	// ahead of any row-level security (RLS) predicates. This avoids the risk of
+	// leaking sensitive information. Since RLS metadata is updated lazily, we can
+	// check whether any RLS tables were referenced by seeing if the metadata has
+	// been initialized.
+	if b.factory.Metadata().GetRLSMeta().IsInitialized {
+		if !filterItem.ScalarProps().VolatilitySet.IsLeakproof() {
+			b.addBarrier(inScope)
+		}
+	}
+
 	// Wrap the filter in a FiltersOp.
 	inScope.expr = b.factory.ConstructSelect(
 		inScope.expr,
-		memo.FiltersExpr{b.factory.ConstructFiltersItem(filter)},
+		memo.FiltersExpr{filterItem},
 	)
 }
 

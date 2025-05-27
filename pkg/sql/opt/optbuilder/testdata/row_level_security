@@ -2019,3 +2019,143 @@ root
                 └── filters
                      ├── customer_id:14 = 2
                      └── customer_id:14 IS DISTINCT FROM CAST(NULL AS INT8)
+
+# Show that optimization barriers are added to prevent reording of predicates if
+# we use any non-leakproof functions in the WHERE clause.
+
+exec-ddl
+CREATE TABLE ob (x INT PRIMARY KEY, y INT, user_has_access BOOL);
+----
+
+exec-ddl
+CREATE INDEX ON ob(y);
+----
+
+exec-ddl
+ALTER TABLE ob ENABLE ROW LEVEL SECURITY;
+----
+
+exec-ddl
+CREATE POLICY p1 ON ob USING (user_has_access);
+----
+
+# Barrier needed. Try to expose with a division by zero error.
+build
+SELECT * FROM ob WHERE y = 20 AND y/0 = 0;
+----
+project
+ ├── columns: x:1!null y:2!null user_has_access:3!null
+ └── select
+      ├── columns: x:1!null y:2!null user_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── barrier
+      │    ├── columns: x:1!null y:2 user_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      │    └── select
+      │         ├── columns: x:1!null y:2 user_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      │         ├── scan ob
+      │         │    └── columns: x:1!null y:2 user_has_access:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      │         └── filters
+      │              └── user_has_access:3
+      └── filters
+           └── (y:2 = 20) AND ((y:2 / 0) = 0)
+
+# Barrier needed. Try to expose with a function error from a builtin.
+build
+UPDATE ob SET y = y + 1 WHERE y = 20 AND sqrt(-1::float) = 0
+----
+update ob
+ ├── columns: <none>
+ ├── fetch columns: x:6 y:7 user_has_access:8
+ ├── update-mapping:
+ │    └── y_new:11 => y:2
+ ├── check columns: rls:12
+ └── project
+      ├── columns: rls:12!null x:6!null y:7!null user_has_access:8!null crdb_internal_mvcc_timestamp:9 tableoid:10 y_new:11!null
+      ├── project
+      │    ├── columns: y_new:11!null x:6!null y:7!null user_has_access:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── select
+      │    │    ├── columns: x:6!null y:7!null user_has_access:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    ├── barrier
+      │    │    │    ├── columns: x:6!null y:7 user_has_access:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    │    └── select
+      │    │    │         ├── columns: x:6!null y:7 user_has_access:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    │         ├── scan ob
+      │    │    │         │    ├── columns: x:6!null y:7 user_has_access:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    │         │    └── flags: avoid-full-scan
+      │    │    │         └── filters
+      │    │    │              └── user_has_access:8 AND user_has_access:8
+      │    │    └── filters
+      │    │         └── (y:7 = 20) AND (sqrt(-(1.0)) = 0.0)
+      │    └── projections
+      │         └── y:7 + 1 [as=y_new:11]
+      └── projections
+           └── user_has_access:8 AND user_has_access:8 [as=rls:12]
+
+# Barrier needed. Try to expose with an invalid regular expression.
+build
+SELECT * FROM ob WHERE y = 20 AND 'a' ~ '(';
+----
+project
+ ├── columns: x:1!null y:2!null user_has_access:3!null
+ └── select
+      ├── columns: x:1!null y:2!null user_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── barrier
+      │    ├── columns: x:1!null y:2 user_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      │    └── select
+      │         ├── columns: x:1!null y:2 user_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      │         ├── scan ob
+      │         │    └── columns: x:1!null y:2 user_has_access:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      │         └── filters
+      │              └── user_has_access:3
+      └── filters
+           └── (y:2 = 20) AND ('a' ~ '(')
+
+# Barrier needed. Try to expose with an unicode error.
+build
+UPDATE ob SET y = y + 1 WHERE y = 20 AND convert_to('𐍈', 'LATIN1') = '';
+----
+update ob
+ ├── columns: <none>
+ ├── fetch columns: x:6 y:7 user_has_access:8
+ ├── update-mapping:
+ │    └── y_new:11 => y:2
+ ├── check columns: rls:12
+ └── project
+      ├── columns: rls:12!null x:6!null y:7!null user_has_access:8!null crdb_internal_mvcc_timestamp:9 tableoid:10 y_new:11!null
+      ├── project
+      │    ├── columns: y_new:11!null x:6!null y:7!null user_has_access:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── select
+      │    │    ├── columns: x:6!null y:7!null user_has_access:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    ├── barrier
+      │    │    │    ├── columns: x:6!null y:7 user_has_access:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    │    └── select
+      │    │    │         ├── columns: x:6!null y:7 user_has_access:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    │         ├── scan ob
+      │    │    │         │    ├── columns: x:6!null y:7 user_has_access:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    │         │    └── flags: avoid-full-scan
+      │    │    │         └── filters
+      │    │    │              └── user_has_access:8 AND user_has_access:8
+      │    │    └── filters
+      │    │         └── (y:7 = 20) AND (convert_to(e'\U00010348', 'LATIN1') = '\x')
+      │    └── projections
+      │         └── y:7 + 1 [as=y_new:11]
+      └── projections
+           └── user_has_access:8 AND user_has_access:8 [as=rls:12]
+
+# Barrier needed. Try to expose with a mathematical overflow.
+build
+SELECT * FROM ob WHERE y = 20 AND power(1e400, 1) > 0;
+----
+project
+ ├── columns: x:1!null y:2!null user_has_access:3!null
+ └── select
+      ├── columns: x:1!null y:2!null user_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── barrier
+      │    ├── columns: x:1!null y:2 user_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      │    └── select
+      │         ├── columns: x:1!null y:2 user_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      │         ├── scan ob
+      │         │    └── columns: x:1!null y:2 user_has_access:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      │         └── filters
+      │              └── user_has_access:3
+      └── filters
+           └── (y:2 = 20) AND (power(1E+400, 1) > 0)
