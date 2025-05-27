@@ -123,9 +123,25 @@ func runGetRequests(
 	// We can ensure we request from in-memory tables by requesting stats from
 	// a time range for which no data is available, as the in-memory table
 	// is only used when no data is available from system tables.
-	if err := s.requestSQLStatsFromEmptyInterval(ctx, roachNodes, statsType, addToTableSources); err != nil {
-		return errors.Wrap(err, "failed to request stats for empty interval")
+	rEmpty := retry.StartWithCtx(ctx, retry.Options{
+		InitialBackoff: 10 * time.Second,
+		MaxBackoff:     30 * time.Second,
+		MaxRetries:     6, // 6 * 30s = 3m, which is well past the flush interval.
+	})
+	var lastErr error
+	for rEmpty.Next() {
+		if err := s.requestSQLStatsFromEmptyInterval(ctx, roachNodes, statsType, addToTableSources); err != nil {
+			// We retry despite these errors because they could be due to cluster
+			// operations which cause timeouts and instability.
+			lastErr = errors.Wrap(err, "failed to request stats for empty interval")
+			continue
+		}
+		break
 	}
+	if lastErr != nil {
+		return lastErr
+	}
+
 	inMemTable := crdbInternalStmtStatsCombined
 	if statsType == serverpb.CombinedStatementsStatsRequest_TxnStatsOnly {
 		inMemTable = crdbInternalTxnStatsCombined
@@ -144,13 +160,19 @@ func runGetRequests(
 	for r.Next() {
 		// Requesting data from the last two hours should return data from the persisted tables eventually.
 		if err := s.requestSQLStatsFromLastTwoHours(ctx, roachNodes, statsType, addToTableSources); err != nil {
-			return errors.Wrap(err, "failed to request stats for last two hours")
+			// We retry despite these errors because they could be due to cluster
+			// operations which cause timeouts and instability.
+			lastErr = errors.Wrap(err, "failed to request stats for last two hours")
+			continue
 		}
 		if len(foundTableSources) >= expectedTableCount {
 			foundFlushedStats = true
 			break
 		}
 		l.Printf("waiting for flushed stats...")
+	}
+	if lastErr != nil {
+		return lastErr
 	}
 	if !foundFlushedStats {
 		return errors.Newf("failed to find flushed stats, found: %v", maps.Keys(foundTableSources))
