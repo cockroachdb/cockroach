@@ -87,6 +87,11 @@ func (o *Optimizer) TryPlaceholderFastPath() (_ opt.Expr, ok bool, err error) {
 		return nil, false, nil
 	}
 
+	if scan.Flags.ForceInvertedIndex || scan.Flags.ForceZigzag {
+		// We don't support inverted or zigzag indexes in the fast path.
+		return false, nil
+	}
+
 	var constrainedCols opt.ColSet
 	for i := range sel.Filters {
 		// Each condition must be an equality between a variable and a constant
@@ -122,6 +127,10 @@ func (o *Optimizer) TryPlaceholderFastPath() (_ opt.Expr, ok bool, err error) {
 	for ord, n := 0, tabMeta.Table.IndexCount(); ord < n; ord++ {
 		index := tabMeta.Table.Index(ord)
 		if index.IsInverted() {
+			continue
+		}
+		if scan.Flags.ForceIndex && scan.ScanPrivate.Flags.Index != ord {
+			// If an index is forced, skip all other indexes.
 			continue
 		}
 
