@@ -2105,11 +2105,13 @@ func (s *adminServer) Health(
 
 // checkReadinessForHealthCheck returns a gRPC error.
 func (s *adminServer) checkReadinessForHealthCheck(ctx context.Context) error {
+	// A gRPC server will always be running, so ensure that we check its health
+	// until it is completely removed after the DRPC to gRPC migration.
 	if err := s.grpc.health(ctx); err != nil {
 		return err
 	}
 
-	if rpc.ExperimentalDRPCEnabled.Get(&s.rpcContext.Settings.SV) && s.drpc != nil {
+	if s.drpc.enabled {
 		if err := s.drpc.health(ctx); err != nil {
 			return err
 		}
@@ -2149,11 +2151,13 @@ func (s *systemAdminServer) Health(
 
 // checkReadinessForHealthCheck returns a gRPC error.
 func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) error {
+	// A gRPC server will always be running, so ensure that we check its health
+	// until it is completely removed after the DRPC to gRPC migration.
 	if err := s.grpc.health(ctx); err != nil {
 		return err
 	}
 
-	if rpc.ExperimentalDRPCEnabled.Get(&s.rpcContext.Settings.SV) && s.drpc != nil {
+	if s.drpc.enabled {
 		if err := s.drpc.health(ctx); err != nil {
 			return err
 		}

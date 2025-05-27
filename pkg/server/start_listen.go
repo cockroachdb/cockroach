@@ -205,11 +205,11 @@ func startListenRPCAndSQL(
 			netutil.FatalIfUnexpected(grpc.Serve(grpcL))
 		})
 		_ = stopper.RunAsyncTask(drpcCtx, "serve-drpc", func(ctx context.Context) {
-			if cfg := drpc.TLSCfg; cfg != nil {
+			if cfg := drpc.tlsCfg; cfg != nil {
 				drpcTLSL := tls.NewListener(drpcL, cfg)
-				netutil.FatalIfUnexpected(drpc.Srv.Serve(ctx, drpcTLSL))
+				netutil.FatalIfUnexpected(drpc.srv.Serve(ctx, drpcTLSL))
 			} else {
-				netutil.FatalIfUnexpected(drpc.Srv.Serve(ctx, drpcL))
+				netutil.FatalIfUnexpected(drpc.srv.Serve(ctx, drpcL))
 			}
 		})
 		_ = stopper.RunAsyncTask(workersCtx, "serve-loopback-grpc", func(context.Context) {

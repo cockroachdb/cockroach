@@ -33,9 +33,10 @@ type drpcMuxI interface {
 
 type drpcServer struct {
 	serveModeHandler
-	Srv    drpcServerI
-	Mux    drpcMuxI
-	TLSCfg *tls.Config
+	srv     drpcServerI
+	mux     drpcMuxI
+	tlsCfg  *tls.Config
+	enabled bool
 }
 
 var _ drpcServerI = (*drpcserver.Server)(nil)
@@ -46,8 +47,10 @@ func newDRPCServer(_ context.Context, rpcCtx *rpc.Context) (*drpcServer, error) 
 	var dmux drpcMuxI = &drpcOffServer{}
 	var dsrv drpcServerI = &drpcOffServer{}
 	var tlsCfg *tls.Config
+	enabled := false
 
 	if rpc.ExperimentalDRPCEnabled.Get(&rpcCtx.Settings.SV) {
+		enabled = true
 		mux := drpcmux.New()
 		dsrv = drpcserver.NewWithOptions(mux, drpcserver.Options{
 			Log: func(err error) {
@@ -81,9 +84,10 @@ func newDRPCServer(_ context.Context, rpcCtx *rpc.Context) (*drpcServer, error) 
 	}
 
 	d := &drpcServer{
-		Srv:    dsrv,
-		Mux:    dmux,
-		TLSCfg: tlsCfg,
+		srv:     dsrv,
+		mux:     dmux,
+		tlsCfg:  tlsCfg,
+		enabled: enabled,
 	}
 
 	d.setMode(modeInitializing)
