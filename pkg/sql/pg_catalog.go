@@ -637,6 +637,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 			if err != nil {
 				return err
 			}
+			bypassRLS, err := options.bypassRLS()
+			if err != nil {
+				return err
+			}
 
 			isSuper, err := userIsSuper(ctx, p, userName)
 			if err != nil {
@@ -652,7 +656,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 				tree.MakeDBool(isRoot || createDB),   // rolcreatedb
 				tree.MakeDBool(roleCanLogin),         // rolcanlogin.
 				tree.DBoolFalse,                      // rolreplication
-				tree.DBoolFalse,                      // rolbypassrls
+				tree.MakeDBool(bypassRLS),            // rolbypassrls
 				negOneVal,                            // rolconnlimit
 				passwdStarString,                     // rolpassword
 				rolValidUntil,                        // rolvaliduntil
@@ -2986,6 +2990,10 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 				if err != nil {
 					return err
 				}
+				bypassRLS, err := options.bypassRLS()
+				if err != nil {
+					return err
+				}
 				isSuper, err := userIsSuper(ctx, p, userName)
 				if err != nil {
 					return err
@@ -3004,7 +3012,7 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 					negOneVal,                             // rolconnlimit
 					passwdStarString,                      // rolpassword
 					rolValidUntil,                         // rolvaliduntil
-					tree.DBoolFalse,                       // rolbypassrls
+					tree.MakeDBool(bypassRLS),             // rolbypassrls
 					settings,                              // rolconfig
 				)
 			})
