@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -288,6 +289,11 @@ func (p *planner) dropTypeImpl(
 		return err
 	}
 	if err := p.txn.Run(ctx, b); err != nil {
+		return err
+	}
+
+	// Delete any comments associated with this type.
+	if err := p.deleteComment(ctx, typeDesc.ID, 0, catalogkeys.TypeCommentType); err != nil {
 		return err
 	}
 
