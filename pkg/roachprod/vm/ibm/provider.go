@@ -7,6 +7,8 @@ package ibm
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -50,6 +52,8 @@ const (
 	InstanceInvalidStatus  = "invalid-status"
 	InstanceInvalidTags    = "invalid-tags"
 	InstanceNotRochprod    = "not-roachprod"
+
+	expectedEnvVarIBMAPIKey = defaultAPIKeyEnvVarPrefix + "_" + core.PROPNAME_APIKEY
 )
 
 var (
@@ -59,7 +63,10 @@ var (
 	ErrInvalidZoneFormat  = fmt.Errorf("invalid zone format")
 	ErrImageNotFound      = fmt.Errorf("image not found")
 	ErrImageObsolete      = fmt.Errorf("image is obsolete, and cannot be used")
-	ErrMissingAPIKey      = fmt.Errorf("missing IBM_APIKEY environment variable")
+	ErrMissingAuth        = fmt.Errorf(
+		"neither %s environment variable nor ibmcloud CLI found in path",
+		expectedEnvVarIBMAPIKey,
+	)
 )
 
 // The default region used for non-geo clusters.
@@ -135,6 +142,27 @@ var providerInstance = &Provider{}
 
 // Init initializes the IBM provider instance for the roachprod CLI.
 func Init() (err error) {
+
+	hasCliOrEnv := func() bool {
+		// If the credentials environment variable is set, we can use the IBM sdk.
+		if os.Getenv(expectedEnvVarIBMAPIKey) != "" {
+			return true
+		}
+
+		// If the ibmcloud CLI is installed, we assume the user wants
+		// the IBM provider to be enabled, and we'll try to initialize it.
+		if _, err := exec.LookPath("ibmcloud"); err == nil {
+			return true
+		}
+
+		// Nothing points to the IBM provider being used.
+		return false
+	}
+
+	if !hasCliOrEnv() {
+		vm.Providers[ProviderName] = flagstub.New(&Provider{}, ErrMissingAuth.Error())
+		return err
+	}
 
 	providerInstance, err = NewProvider()
 	if err != nil {
