@@ -63,12 +63,13 @@ func NewAllocatorState(ts timeutil.TimeSource, rand *rand.Rand) *allocatorState 
 	}
 }
 
-// TODO(sumeer): lease shedding:
-//
-// - remote store: don't start moving ranges for a cpu overloaded remote store
-//   if it still has leases. Give it the opportunity to shed *all* its leases
-//   first, or have its aggregate non-raft cpu fall to a level where it doesn't
-//   change the fact that it is cpu overloaded.
+// These constants are semi-arbitrary.
+
+// Don't start moving ranges from a cpu overloaded remote store, to give it
+// some time to shed its leases.
+const remoteStoreLeaseSheddingGraceDuration = 2 * time.Minute
+const ignoreLoadThresholdAndHigherGraceDuration = 5 * time.Minute
+const ignoreHigherThanLoadThresholdGraceDuration = 8 * time.Minute
 
 // Called periodically, say every 10s.
 //
@@ -77,7 +78,7 @@ func NewAllocatorState(ts timeutil.TimeSource, rand *rand.Rand) *allocatorState 
 func (a *allocatorState) rebalanceStores(
 	ctx context.Context, localStoreID roachpb.StoreID,
 ) []PendingRangeChange {
-	now := timeutil.Now()
+	now := a.cs.ts.Now()
 	// To select which stores are overloaded, we use a notion of overload that
 	// is based on cluster means (and of course individual store/node
 	// capacities). We do not want to loop through all ranges in the cluster,
@@ -113,12 +114,19 @@ func (a *allocatorState) rebalanceStores(
 	for storeID, ss := range a.cs.stores {
 		a.changeRateLimiter.updateForRebalancePass(&ss.adjusted.enactedHistory, now)
 		sls := a.cs.meansMemo.getStoreLoadSummary(clusterMeans, storeID, ss.loadSeqNum)
-		if sls.sls >= overloadSlow && ss.adjusted.enactedHistory.allowLoadBasedChanges() &&
-			// The pending decrease must be small enough to continue shedding
-			ss.maxFractionPendingDecrease < maxFractionPendingThreshold &&
-			// There should be no pending increase, since that can be an overestimate.
-			ss.maxFractionPendingIncrease < epsilon {
-			sheddingStores = append(sheddingStores, sheddingStore{StoreID: storeID, storeLoadSummary: sls})
+		if sls.sls >= overloadSlow {
+			if ss.overloadStartTime == (time.Time{}) {
+				ss.overloadStartTime = now
+			}
+			if ss.adjusted.enactedHistory.allowLoadBasedChanges() &&
+				// The pending decrease must be small enough to continue shedding
+				ss.maxFractionPendingDecrease < maxFractionPendingThreshold &&
+				// There should be no pending increase, since that can be an overestimate.
+				ss.maxFractionPendingIncrease < epsilon {
+				sheddingStores = append(sheddingStores, sheddingStore{StoreID: storeID, storeLoadSummary: sls})
+			}
+		} else {
+			ss.overloadStartTime = time.Time{}
 		}
 	}
 	// We have used storeLoadSummary.sls to filter above. But when sorting, we
@@ -159,23 +167,7 @@ func (a *allocatorState) rebalanceStores(
 	for _, store := range sheddingStores {
 		log.Infof(ctx, "shedding store %v sls=%v", store.StoreID, store.storeLoadSummary)
 		ss := a.cs.stores[store.StoreID]
-		// TODO(sumeer): For remote stores that are cpu overloaded, wait for them
-		// to shed leases first. See earlier longer to do.
-		//
-		// When there is CPU overload on the remote store, we should wait out the
-		// grace period before moving ranges.
-		//
-		// TODO: Below is example logic, which doesn't consider when this store
-		// became CPU overloaded, only that it hasn't recently shed any leases. We
-		// should also consider the last time it became CPU overloaded in addition
-		// to it not having shed leases recently.
-		//
-		// if store.StoreID != localStoreID && store.dimSummary[CPURate] >= overloadSlow &&
-		// 	!ss.lastLeaseShedAt.IsZero() &&
-		// 	now.Sub(ss.lastLeaseShedAt) < waitBeforeSheddingRemoteReplicaCPU {
-		// 	// We wait out the grace period.
-		// 	continue
-		// }
+
 		doneShedding := false
 		if true {
 			// Debug logging.
@@ -320,6 +312,11 @@ func (a *allocatorState) rebalanceStores(
 				// lease transfers -- so be it.
 				continue
 			}
+		}
+
+		if store.StoreID != localStoreID && store.dimSummary[CPURate] >= overloadSlow &&
+			now.Sub(ss.overloadStartTime) < remoteStoreLeaseSheddingGraceDuration {
+			continue
 		}
 		// If the node is cpu overloaded, or the store/node is not fdOK, exclude
 		// the other stores on this node from receiving replicas shed by this
