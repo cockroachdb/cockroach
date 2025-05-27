@@ -59,6 +59,14 @@ type EngineMetrics struct {
 	// FullTableOrIndexScanRejectedCount counts the number of queries that were
 	// rejected because of the `disallow_full_table_scans` guardrail.
 	FullTableOrIndexScanRejectedCount *metric.Counter
+
+	// TxnRetryCount counts the number of automatic transaction retries that
+	// have occurred.
+	TxnRetryCount *metric.Counter
+
+	// StatementRetryCount counts the number of automatic statement retries that
+	// have occurred under READ COMMITTED isolation.
+	StatementRetryCount *metric.Counter
 }
 
 // EngineMetrics implements the metric.Struct interface.
