@@ -427,7 +427,7 @@ func init() {
 		cloud.RegisteredProvider{
 			EarlyBootConstructFn: makeAzureStorage,
 			EarlyBootParseFn:     parseAzureURL,
-			RedactedParams:       cloud.RedactedParams(AzureAccountKeyParam),
+			RedactedParams:       cloud.RedactedParams(AzureAccountKeyParam, AzureClientSecretParam),
 			Schemes:              []string{scheme, deprecatedScheme, deprecatedExternalConnectionScheme},
 		})
 }
