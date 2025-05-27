@@ -334,5 +334,5 @@ type DRPCBatchStreamClient = streamClient[*kvpb.BatchRequest, *kvpb.BatchRespons
 
 // newDRPCBatchStream constructs a BatchStreamClient from a drpc.Conn.
 func newDRPCBatchStream(ctx context.Context, dc drpc.Conn) (DRPCBatchStreamClient, error) {
-	return kvpb.NewDRPCBatchClient(dc).BatchStream(ctx)
+	return kvpb.NewDRPCKVBatchClient(dc).BatchStream(ctx)
 }
