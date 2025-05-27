@@ -29,7 +29,7 @@ type streamClient[Req, Resp any] interface {
 
 // streamConstructor creates a new gRPC stream client over the provided client
 // connection, using the provided call options.
-type streamConstructor[Req, Resp, Conn any] func(
+type streamConstructor[Req, Resp any, Conn rpcConn] func(
 	context.Context, Conn,
 ) (streamClient[Req, Resp], error)
 
@@ -67,7 +67,7 @@ const defaultPooledStreamIdleTimeout = 10 * time.Second
 //
 // A pooledStream must only be returned to the pool for reuse after a successful
 // Send call. If the Send call fails, the pooledStream must not be reused.
-type pooledStream[Req, Resp any, Conn comparable] struct {
+type pooledStream[Req, Resp any, Conn rpcConn] struct {
 	pool         *streamPool[Req, Resp, Conn]
 	stream       streamClient[Req, Resp]
 	streamCtx    context.Context
@@ -77,7 +77,7 @@ type pooledStream[Req, Resp any, Conn comparable] struct {
 	respC chan result[Resp]
 }
 
-func newPooledStream[Req, Resp any, Conn comparable](
+func newPooledStream[Req, Resp any, Conn rpcConn](
 	pool *streamPool[Req, Resp, Conn],
 	stream streamClient[Req, Resp],
 	streamCtx context.Context,
@@ -190,7 +190,7 @@ func (s *pooledStream[Req, Resp, Conn]) Send(ctx context.Context, req Req) (Resp
 // manner that mimics unary RPC invocation. Pooling these streams allows for
 // reuse of gRPC resources across calls, as opposed to native unary RPCs, which
 // create a new stream and throw it away for each request (see grpc.invoke).
-type streamPool[Req, Resp any, Conn comparable] struct {
+type streamPool[Req, Resp any, Conn rpcConn] struct {
 	stopper     *stop.Stopper
 	idleTimeout time.Duration
 	newStream   streamConstructor[Req, Resp, Conn]
@@ -206,7 +206,7 @@ type streamPool[Req, Resp any, Conn comparable] struct {
 	}
 }
 
-func makeStreamPool[Req, Resp any, Conn comparable](
+func makeStreamPool[Req, Resp any, Conn rpcConn](
 	stopper *stop.Stopper, newStream streamConstructor[Req, Resp, Conn],
 ) streamPool[Req, Resp, Conn] {
 	return streamPool[Req, Resp, Conn]{
