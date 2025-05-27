@@ -732,6 +732,8 @@ type JWTVerifier interface {
 	RetrieveIdentity(
 		_ context.Context, _ username.SQLUsername, _ []byte, _ *identmap.Conf,
 	) (retrievedUser username.SQLUsername, authError error)
+
+	ExtractGroups(ctx context.Context, st *cluster.Settings, token []byte) ([]string, error)
 }
 
 var jwtVerifier JWTVerifier
@@ -748,6 +750,10 @@ func (c *noJWTConfigured) RetrieveIdentity(
 	_ context.Context, u username.SQLUsername, _ []byte, _ *identmap.Conf,
 ) (retrievedUser username.SQLUsername, authError error) {
 	return u, errors.New("JWT token authentication requires CCL features")
+}
+
+func (c *noJWTConfigured) ExtractGroups(ctx context.Context, _ *cluster.Settings, _ []byte) ([]string, error) {
+	return nil, errors.New("JWT authorization requires CCL features")
 }
 
 // ConfigureJWTAuth is a hook for the `jwtauthccl` library to add JWT login support. It's called to
@@ -823,6 +829,28 @@ func authJwtToken(
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, errForLog)
 			return authError
 		}
+		// Ask the CCL verifier for groups (nil slice means feature disabled).
+		groups, err := jwtVerifier.ExtractGroups(ctx, execCfg.Settings, []byte(token))
+		if err != nil {
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_AUTHORIZATION_ERROR, err)
+			return err
+		}
+
+		// convert group to role name
+		sqlRoles := make([]username.SQLUsername, 0, len(groups))
+		for _, g := range groups {
+			if role, err := username.MakeSQLUsernameFromUserInput(
+				g, username.PurposeValidation); err == nil {
+				sqlRoles = append(sqlRoles, role)
+			}
+		}
+		// synchronise role membership (same as AuthLDAP)
+		if err := sql.EnsureUserOnlyBelongsToRoles(
+			ctx, execCfg, user, sqlRoles); err != nil {
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_AUTHORIZATION_ERROR, err)
+			return err
+		}
+
 		return nil
 	})
 	return b, nil
