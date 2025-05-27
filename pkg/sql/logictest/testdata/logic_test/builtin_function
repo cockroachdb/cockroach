@@ -286,7 +286,7 @@ SELECT substr('12345', -2, 77)
 ----
 12345
 
-statement error substr\(\): negative substring length -1 not allowed
+statement error negative substring length not allowed
 SELECT substr('12345', 2, -1)
 
 query T
@@ -314,7 +314,7 @@ SELECT substring('f(oabaroob' from '+(o(.)b' for '+')
 ----
 a
 
-query error substring\(\): error parsing regexp: missing closing \): `\\\\\(o\(.\)b`
+query error error parsing regexp: missing closing \): `\\\\\(o\(.\)b`
 SELECT substring('f(oabaroob' from '\(o(.)b' for '+')
 
 query error unknown signature: substring\(\)
@@ -357,7 +357,7 @@ SELECT substring(B'10001000' FOR 4 FROM 0), substring(B'10001000' FROM 0 FOR 4),
 ----
 100 100 1000
 
-query error substring\(\): negative bit subarray length -1 not allowed
+query error negative substring length not allowed
 SELECT substring('11100011'::bit(10), 4, -1)
 
 # Adding testcases for substring against byte array.
@@ -397,7 +397,7 @@ SELECT substring(b'abc' FOR 3 FROM 1), substring(b'abc' FROM 1 FOR 3), substring
 ----
 abc abc abc
 
-query error substring\(\): negative byte subarray length -1 not allowed
+query error negative substring length not allowed
 SELECT substring('11100011'::bytea, 4, -1)
 
 query TTTTT
@@ -458,7 +458,7 @@ SELECT split_part('abc,def,ghi,jkl', ',', -2)
 ----
 ghi
 
-statement error pq: split_part\(\): field position must not be zero
+statement error pq: field position must not be zero
 SELECT split_part('abc,def,ghi,jkl', ',', 0)
 
 # To maintain compatibility with postgres, if the separator is not found and
@@ -515,11 +515,11 @@ SELECT repeat('Pg', -1) || 'empty'
 ----
 empty
 
-statement error pq: repeat\(\): requested length too large
+statement error pq: requested length too large
 SELECT repeat('s', 9223372036854775807)
 
 # Regression for #19035.
-statement error pq: repeat\(\): requested length too large
+statement error pq: requested length too large
 SELECT repeat('1234567890'::string, 6978072892806141784::int)
 
 query I
@@ -532,7 +532,7 @@ select ascii('禅')
 ----
 31109
 
-query error ascii\(\): the input string must not be empty
+query error the input string must not be empty
 select ascii('')
 
 query T
@@ -550,7 +550,7 @@ select chr(31109)
 ----
 禅
 
-query error chr\(\): input value must be >= 0
+query error input value must be >= 0
 SELECT chr(-1)
 
 query T
@@ -851,7 +851,7 @@ SELECT abs(NULL)
 ----
 NULL
 
-query error abs\(\): abs of min integer value \(-9223372036854775808\) not defined
+query error abs of min integer value \(-9223372036854775808\) not defined
 SELECT abs(-9223372036854775808)
 
 query I
@@ -987,10 +987,10 @@ SELECT div(-1.0::float, 2.0), div(1.0::float, 2.0), div(9.0::float, 4.0), div(-9
 ----
 -0 0 2 -2 +Inf 117
 
-query error div\(\): division by zero
+query error division by zero
 SELECT div(1.0::decimal, 0.0::decimal)
 
-query error div\(\): division by zero
+query error division by zero
 SELECT div(1::int, 0::int)
 
 # math.Exp(1.0) returns different results on amd64 vs arm64.
@@ -1001,7 +1001,7 @@ SELECT exp(-1.0::float), round(exp(1.0::float), 13), exp(2.0::decimal)
 ----
 0.367879441171442  2.718281828459  7.3890560989306502272
 
-query error exp\(\): overflow
+query error overflow
 SELECT exp(1e2000::decimal)
 
 query RRR
@@ -1066,10 +1066,10 @@ SELECT mod(5.0::float, 2.0), mod(1.0::float, 0.0), mod(5, 2), mod(19.3::decimal,
 # mod returns the same results as PostgreSQL 9.4.4
 # in tests below (except for the error message).
 
-query error mod\(\): division by zero
+query error division by zero
 SELECT mod(5, 0)
 
-query error mod\(\): division by zero
+query error division by zero
 SELECT mod(5::decimal, 0::decimal)
 
 query II
@@ -1486,7 +1486,7 @@ SELECT regexp_replace('foobarbaz', 'nope', 'NO')
 ----
 foobarbaz
 
-query error regexp_replace\(\): invalid regexp flag: 'z'
+query error invalid regexp flag: 'z'
 SELECT regexp_replace(E'fooBar\nbaz', 'b(..)$', E'X\\&Y', 'z')
 
 query T
@@ -1761,7 +1761,7 @@ SELECT cos(*) FROM system.namespace
 query error no data source matches pattern: nonexistent.\*
 SELECT TRIM(TRAILING nonexistent.*[1])
 
-query error rtrim\(\): cannot subscript type tuple
+query error cannot subscript type tuple
 SELECT TRIM(TRAILING foo.*[1]) FROM (VALUES (1)) AS foo(x)
 
 # Don't panic with invalid names (#8044)
@@ -1882,7 +1882,7 @@ SELECT COLLATION FOR ('foo' COLLATE "de_DE");
 ----
 "de_DE"
 
-statement error pq: pg_collation_for\(\): collations are not supported by type: int
+statement error pq: collations are not supported by type: int
 SELECT COLLATION FOR (1);
 
 query T
@@ -1895,7 +1895,7 @@ SELECT pg_collation_for ('foo' COLLATE "de_DE");
 ----
 "de_DE"
 
-statement error pq: pg_collation_for\(\): collations are not supported by type: int
+statement error pq: collations are not supported by type: int
 SELECT pg_collation_for(1);
 
 query I
@@ -2066,13 +2066,13 @@ select from_ip(to_ip('2001:0db8:85a3:0000:0000:8a2e:0370:7334'))
 query error pq: unknown signature: to_ip()
 SELECT to_ip()
 
-query error pq: from_ip\(\): zero length IP
+query error pq: zero length IP
 SELECT from_ip(b'')
 
-query error pq: to_ip\(\): invalid IP format: ''
+query error pq: invalid IP format: ''
 SELECT to_ip('')
 
-query error pq: to_ip\(\): invalid IP format: 'asdf'
+query error pq: invalid IP format: 'asdf'
 select to_ip('asdf')
 
 query R
@@ -2727,7 +2727,7 @@ SELECT format(E'Testing %3\x24s, %2\x24s, %s', 'one', 'two', 'three')
 ----
 Testing three, two, three
 
-query error pq: format\(\): error parsing format string: not enough arguments
+query error pq: error parsing format string: not enough arguments
 SELECT format(E'%2\x24s','foo');
 
 statement error pgcode 42883 pq: unknown signature: format\(\)
@@ -2780,7 +2780,7 @@ SELECT width_bucket(now(), array['yesterday', 'today', 'tomorrow']::timestamptz[
 ----
 2
 
-query error pq: width_bucket\(\): operand and thresholds must be of the same type
+query error pq: operand and thresholds must be of the same type
 SELECT width_bucket(1, array['a', 'h', 'l', 'z']);
 
 # Regression for #40623
@@ -2799,7 +2799,7 @@ SELECT width_bucket('-Infinity'::numeric, 1, 10, 10);
 ----
 0
 
-statement error pgcode 2201G pq: width_bucket\(\): operand, lower bound, and upper bound cannot be NaN
+statement error pgcode 2201G pq: operand, lower bound, and upper bound cannot be NaN
 SELECT width_bucket('NaN', 3.0, 4.0, 888);
 
 
@@ -2995,10 +2995,10 @@ SELECT get_bit('000000'::varbit, 5) UNION SELECT get_bit('1111111'::varbit, 5)
 1
 0
 
-query error get_bit\(\): bit index 10 out of valid range \(0..4\)
+query error bit index 10 out of valid range \(0..4\)
 SELECT get_bit(B'10110', 10)
 
-query error get_bit\(\): bit index 0 out of valid range \(0..-1\)
+query error bit index 0 out of valid range \(0..-1\)
 SELECT get_bit(B'', 0);
 
 query II
@@ -3033,10 +3033,10 @@ SELECT i, get_bit('\x11ef'::BYTEA, i) FROM generate_series(0, 15) i ORDER BY i;
 14  1
 15  1
 
-query error get_bit\(\): bit index 8 out of valid range \(0..7\)
+query error bit index 8 out of valid range \(0..7\)
 SELECT get_bit(b'\x61', 8)
 
-query error get_bit\(\): bit index 0 out of valid range \(0..-1\)
+query error bit index 0 out of valid range \(0..-1\)
 SELECT get_bit(b'', 0)
 
 subtest set_bit
@@ -3053,13 +3053,13 @@ SELECT set_bit('000000'::varbit, 5, 1) UNION SELECT set_bit('111111'::varbit, 5,
 000001
 111110
 
-query error set_bit\(\): bit index 10 out of valid range \(0..6\)
+query error bit index 10 out of valid range \(0..6\)
 SELECT set_bit(B'1101010', 10, 1)
 
-query error set_bit\(\): new bit must be 0 or 1
+query error new bit must be 0 or 1
 SELECT set_bit(B'1001010', 0, 2)
 
-query error set_bit\(\): bit index 0 out of valid range \(0..-1\)
+query error bit index 0 out of valid range \(0..-1\)
 SELECT set_bit(B'', 0, 1)
 
 query IT
@@ -3094,13 +3094,13 @@ SELECT i, encode(set_bit('\x0000'::bytea, i, 1), 'hex') FROM generate_series(0, 
 14  0040
 15  0080
 
-query error set_bit\(\): bit index 16 out of valid range \(0..15\)
+query error bit index 16 out of valid range \(0..15\)
 SELECT set_bit(b'ac', 16, 0)
 
-query error set_bit\(\): bit index 0 out of valid range \(0..-1\)
+query error bit index 0 out of valid range \(0..-1\)
 SELECT set_bit(b'', 0, 1)
 
-query error set_bit\(\): new bit must be 0 or 1
+query error new bit must be 0 or 1
 SELECT set_bit(b'\145\x6C\l', 0, 2)
 
 subtest num_nulls_test
@@ -3187,7 +3187,7 @@ select crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, 
 ----
 system
 
-query error pq: crdb_internal.pb_to_json\(\): invalid protocol message: unknown proto message type cockroach.sql.sqlbase.descriptor
+query error pq: invalid protocol message: unknown proto message type cockroach.sql.sqlbase.descriptor
 select crdb_internal.pb_to_json('cockroach.sql.sqlbase.descriptor', descriptor)->'database'->>'name' from system.descriptor where id=1
 
 query B
@@ -3201,7 +3201,7 @@ select crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', crdb_interna
 ----
 true
 
-query error pq: crdb_internal.json_to_pb\(\): invalid proto JSON: unmarshaling to cockroach.sql.sqlbase.Descriptor json: .+ unknown field "__redacted__" in descpb.Descriptor
+query error pq: invalid proto JSON: unmarshaling to cockroach.sql.sqlbase.Descriptor json: .+ unknown field "__redacted__" in descpb.Descriptor
 select crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, true, true)) = descriptor from system.descriptor where id = 1
 
 subtest regexp_split
@@ -3936,10 +3936,10 @@ SELECT encode(decompress(compress('Hello World', 'lz4'), 'LZ4'), 'escape');
 ----
 Hello World
 
-query error pq: decompress\(\): lz4: bad magic number
+query error pq: lz4: bad magic number
 SELECT encode(decompress(compress('Hello World', 'snappy'), 'lz4'), 'escape');
 
-query error pq: compress\(\): only 'gzip', 'lz4', 'snappy', or 'zstd' compression codecs are supported
+query error pq: only 'gzip', 'lz4', 'snappy', or 'zstd' compression codecs are supported
 SELECT compress('Hello World', 'infiniteCompressionCodec');
 
 subtest crdb_internal.hide_sql_constants
@@ -4026,10 +4026,10 @@ query error string is not a valid identifier: \"ab.xyz\(\)\"
 SELECT parse_ident('ab.xyz()', true)
 
 # Test that we return appropriate user-facing errors when trying to decode invalid bytes.
-query error pgcode 22023 pq: crdb_internal.job_payload_type\(\): invalid protocol message: proto: wrong wireType = 1 for field Import
+query error pgcode 22023 pq: invalid protocol message: proto: wrong wireType = 1 for field Import
 select crdb_internal.job_payload_type('invalid'::BYTES);
 
-query error pgcode 22023 pq: crdb_internal.job_payload_type\(\): invalid type in job payload protocol message: Payload.Type called on a payload with an unknown details type: <nil>
+query error pgcode 22023 pq: invalid type in job payload protocol message: Payload.Type called on a payload with an unknown details type: <nil>
 select crdb_internal.job_payload_type('');
 
 subtest crdb_internal.get_fully_qualified_table_name

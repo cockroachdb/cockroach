@@ -2420,15 +2420,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
  set time zone default;
  -- jsonpath operators
  SELECT jsonb_path_query('[{"a": 1}, {"a": 2}]', '$[*]');
-@@ -2236,7 +1830,7 @@
- (1 row)
- 
- SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}, {}]', 'strict $[*].a');
--ERROR:  JSON object does not contain key "a"
-+ERROR:  jsonb_path_query_array(): JSON object does not contain key "a"
- SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}]', '$[*].a');
-  jsonb_path_query_array 
- ------------------------
 @@ -2256,25 +1850,25 @@
  (1 row)
  
@@ -2455,8 +2446,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
 +                                                                                                                   ^
 +HINT:  try \hf jsonb_path_query_array
  SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {}]', 'strict $[*].a');
--ERROR:  JSON object does not contain key "a"
-+ERROR:  jsonb_path_query_first(): JSON object does not contain key "a"
+ ERROR:  JSON object does not contain key "a"
  SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {}]', 'strict $[*].a', silent => true);
 - jsonb_path_query_first 
 -------------------------
@@ -2471,7 +2461,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
  SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}]', '$[*].a');
   jsonb_path_query_first 
  ------------------------
-@@ -2294,19 +1888,19 @@
+@@ -2294,17 +1888,17 @@
  (1 row)
  
  SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*].a ? (@ > $min && @ < $max)', vars => '{"min": 1, "max": 4}');
@@ -2497,11 +2487,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
 +                                                                                                                   ^
 +HINT:  try \hf jsonb_path_query_first
  SELECT jsonb_path_query_first('[{"a": 1}]', '$undefined_var');
--ERROR:  could not find jsonpath variable "undefined_var"
-+ERROR:  jsonb_path_query_first(): could not find jsonpath variable "undefined_var"
+ ERROR:  could not find jsonpath variable "undefined_var"
  SELECT jsonb_path_query_first('[{"a": 1}]', 'false');
-  jsonb_path_query_first 
- ------------------------
 @@ -2314,17 +1908,15 @@
  (1 row)
  
@@ -2528,7 +2515,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
  SELECT jsonb_path_exists('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ > 1)');
   jsonb_path_exists 
  -------------------
-@@ -2332,19 +1924,19 @@
+@@ -2332,17 +1924,17 @@
  (1 row)
  
  SELECT jsonb_path_exists('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*] ? (@.a > $min && @.a < $max)', vars => '{"min": 1, "max": 4}');
@@ -2554,11 +2541,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
 +                                                                                                                ^
 +HINT:  try \hf jsonb_path_exists
  SELECT jsonb_path_exists('[{"a": 1}]', '$undefined_var');
--ERROR:  could not find jsonpath variable "undefined_var"
-+ERROR:  jsonb_path_exists(): could not find jsonpath variable "undefined_var"
+ ERROR:  could not find jsonpath variable "undefined_var"
  SELECT jsonb_path_exists('[{"a": 1}]', 'false');
-  jsonb_path_exists 
- -------------------
 @@ -2352,61 +1944,81 @@
  (1 row)
  
@@ -2681,15 +2665,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
 -
 +ERROR:  unsupported comparison operator: <jsonb> @@ <string>
  SELECT jsonb_path_match('[{"a": 1}, {"a": 2}]', '$[*].a > 1');
-  jsonb_path_match 
- ------------------
-@@ -2414,7 +2026,7 @@
- (1 row)
- 
- SELECT jsonb_path_match('[{"a": 1}]', '$undefined_var');
--ERROR:  could not find jsonpath variable "undefined_var"
-+ERROR:  jsonb_path_match(): could not find jsonpath variable "undefined_var"
- SELECT jsonb_path_match('[{"a": 1}]', 'false');
   jsonb_path_match 
  ------------------
 @@ -2436,151 +2048,15 @@

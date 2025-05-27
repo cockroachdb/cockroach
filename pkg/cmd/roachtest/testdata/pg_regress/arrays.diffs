@@ -2304,7 +2304,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/arrays.out --labe
 +HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
 +-- error cases
 +SELECT width_bucket('5'::text, ARRAY[3, 4]::integer[]);
-+ERROR:  width_bucket(): operand and thresholds must be of the same type
++ERROR:  operand and thresholds must be of the same type
 +SELECT width_bucket(5, ARRAY[3, 4, NULL]);
   width_bucket 
  --------------
@@ -2322,7 +2322,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/arrays.out --labe
 -ERROR:  thresholds array must not contain NULLs
  SELECT width_bucket(5, ARRAY[ARRAY[1, 2], ARRAY[3, 4]]);
 -ERROR:  thresholds must be one-dimensional array
-+ERROR:  width_bucket(): operand and thresholds must be of the same type
++ERROR:  operand and thresholds must be of the same type
  -- trim_array
  SELECT arr, trim_array(arr, 2)
  FROM

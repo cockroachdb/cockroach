@@ -339,12 +339,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
  --
  -- test conversions between various string types
  -- E021-10 implicit casting among the character data types
-@@ -435,96 +386,99 @@
- (1 row)
- 
- SELECT SUBSTRING('string' FROM -10 FOR -2147483646) AS "error";
--ERROR:  negative substring length not allowed
-+ERROR:  substring(): negative substring length -2147483646 not allowed
+@@ -438,93 +389,96 @@
+ ERROR:  negative substring length not allowed
  -- T581 regular expression substring (with SQL's bizarre regexp syntax)
  SELECT SUBSTRING('abcdefg' SIMILAR 'a#"(b_d)#"%' ESCAPE '#') AS "bcd";
 - bcd 
@@ -512,13 +508,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
  (1 row)
  
  -- Check behavior of SIMILAR TO, which uses largely the same regexp variant
-@@ -594,8 +548,7 @@
- (1 row)
+@@ -595,7 +549,6 @@
  
  SELECT 'abcdefg' SIMILAR TO '_bcd#%' ESCAPE '##' AS error;
--ERROR:  invalid escape string
+ ERROR:  invalid escape string
 -HINT:  Escape string must be empty or one character.
-+ERROR:  similar_to_escape(): invalid escape string
  -- Test backslash escapes in regexp_replace's replacement string
  SELECT regexp_replace('1112223333', E'(\\d{3})(\\d{3})(\\d{4})', E'(\\1) \\2-\\3');
   regexp_replace 
@@ -531,14 +525,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
 - fXooYbaXrrYbaXzzY
 -(1 row)
 -
-+ERROR:  regexp_replace(): error parsing regexp: invalid escape sequence: `\1`
++ERROR:  error parsing regexp: invalid escape sequence: `\1`
  SELECT regexp_replace('foobarrbazz', E'(.)\\1', E'X\\\\Y', 'g');
 - regexp_replace 
 -----------------
 - fX\YbaX\YbaX\Y
 -(1 row)
 -
-+ERROR:  regexp_replace(): error parsing regexp: invalid escape sequence: `\1`
++ERROR:  error parsing regexp: invalid escape sequence: `\1`
  -- not an error, though perhaps it should be:
  SELECT regexp_replace('foobarrbazz', E'(.)\\1', E'X\\Y\\1Z\\');
 - regexp_replace  
@@ -546,7 +540,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
 - fX\YoZ\barrbazz
 -(1 row)
 -
-+ERROR:  regexp_replace(): error parsing regexp: invalid escape sequence: `\1`
++ERROR:  error parsing regexp: invalid escape sequence: `\1`
  SELECT regexp_replace('AAA   BBB   CCC   ', E'\\s+', ' ', 'g');
   regexp_replace 
  ----------------
@@ -555,7 +549,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
  -- invalid regexp option
  SELECT regexp_replace('AAA aaa', 'A+', 'Z', 'z');
 -ERROR:  invalid regular expression option: "z"
-+ERROR:  regexp_replace(): invalid regexp flag: 'z'
++ERROR:  invalid regexp flag: 'z'
  -- extended regexp_replace tests
  SELECT regexp_replace('A PostgreSQL function', 'A|e|i|o|u', 'X', 1);
 -    regexp_replace     
@@ -643,7 +637,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
  SELECT regexp_replace('A PostgreSQL function', 'a|e|i|o|u', 'X', '1');
 -ERROR:  invalid regular expression option: "1"
 -HINT:  If you meant to use regexp_replace() with a start parameter, cast the fourth argument to integer explicitly.
-+ERROR:  regexp_replace(): invalid regexp flag: '1'
++ERROR:  invalid regexp flag: '1'
  --  regexp_count tests
  SELECT regexp_count('123123123123123', '(12)3');
 - regexp_count 
@@ -1142,7 +1136,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
 +ERROR:  invalid regexp flag: 'z'
  SELECT regexp_split_to_array('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'iz');
 -ERROR:  invalid regular expression option: "z"
-+ERROR:  regexp_split_to_array(): invalid regexp flag: 'z'
++ERROR:  invalid regexp flag: 'z'
  -- global option meaningless for regexp_split
  SELECT foo, length(foo) FROM regexp_split_to_table('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'g') AS foo;
 -ERROR:  regexp_split_to_table() does not support the "global" option
@@ -1228,15 +1222,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
  insert into toasttest values(repeat('1234567890',10000));
  insert into toasttest values(repeat('1234567890',10000));
  -- If the starting position is zero or less, then return from the start of the string
-@@ -1843,7 +1504,7 @@
- 
- -- If the length is less than zero, an ERROR is thrown.
- SELECT substr(f1, 5, -1) from toasttest;
--ERROR:  negative substring length not allowed
-+ERROR:  negative substring length -1 not allowed
- -- If no third argument (length) is provided, the length to the end of the
- -- string is assumed.
- SELECT substr(f1, 99995) from toasttest;
 @@ -1874,13 +1535,12 @@
  -- expect >0 blocks
  SELECT pg_relation_size(reltoastrelid) = 0 AS is_empty
@@ -1280,24 +1265,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
  insert into toasttest values(decode(repeat('1234567890',10000),'escape'));
  insert into toasttest values(decode(repeat('1234567890',10000),'escape'));
  -- If the starting position is zero or less, then return from the start of the string
-@@ -1920,7 +1581,7 @@
- 
- -- If the length is less than zero, an ERROR is thrown.
- SELECT substr(f1, 5, -1) from toasttest;
--ERROR:  negative substring length not allowed
-+ERROR:  substr(): negative byte subarray length -1 not allowed
- -- If no third argument (length) is provided, the length to the end of the
- -- string is assumed.
- SELECT substr(f1, 99995) from toasttest;
-@@ -2067,7 +1728,7 @@
- (1 row)
- 
- select split_part('joeuser@mydatabase','@',0) AS "an error";
--ERROR:  field position must not be zero
-+ERROR:  split_part(): field position must not be zero
- select split_part('joeuser@mydatabase','@@',1) AS "joeuser@mydatabase";
-  joeuser@mydatabase 
- --------------------
 @@ -2148,51 +1809,51 @@
  --
  SET bytea_output TO hex;
@@ -1402,7 +1369,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
  
  SELECT get_bit('\x1234567890abcdef00'::bytea, 99);  -- error
 -ERROR:  index 99 out of valid range, 0..71
-+ERROR:  get_bit(): bit index 99 out of valid range (0..71)
++ERROR:  bit index 99 out of valid range (0..71)
  SELECT set_bit('\x1234567890abcdef00'::bytea, 43, 0);
         set_bit        
  ----------------------
@@ -1411,7 +1378,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
  
  SELECT set_bit('\x1234567890abcdef00'::bytea, 99, 0);  -- error
 -ERROR:  index 99 out of valid range, 0..71
-+ERROR:  set_bit(): bit index 99 out of valid range (0..71)
++ERROR:  bit index 99 out of valid range (0..71)
  SELECT get_byte('\x1234567890abcdef00'::bytea, 3);
   get_byte 
  ----------
@@ -1420,7 +1387,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
  
  SELECT get_byte('\x1234567890abcdef00'::bytea, 99);  -- error
 -ERROR:  index 99 out of valid range, 0..8
-+ERROR:  get_byte(): byte index 99 out of valid range (0..8)
++ERROR:  byte index 99 out of valid range (0..8)
  SELECT set_byte('\x1234567890abcdef00'::bytea, 7, 11);
         set_byte       
  ----------------------
@@ -1429,7 +1396,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
  
  SELECT set_byte('\x1234567890abcdef00'::bytea, 99, 11);  -- error
 -ERROR:  index 99 out of valid range, 0..8
-+ERROR:  set_byte(): byte index 99 out of valid range (0..8)
++ERROR:  byte index 99 out of valid range (0..8)
  --
  -- test behavior of escape_string_warning and standard_conforming_strings options
  --
@@ -1530,7 +1497,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
 -     0
 -(1 row)
 -
-+ERROR:  ascii(): the input string must not be empty
++ERROR:  the input string must not be empty
  SELECT chr(65);
   chr 
  -----
@@ -1547,12 +1514,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
  SELECT repeat('Pg', 4);
    repeat  
  ----------
-@@ -2506,61 +2151,34 @@
- (1 row)
- 
+@@ -2508,59 +2153,32 @@
  SELECT SUBSTRING('string'::bytea FROM -10 FOR -2147483646) AS "error";
--ERROR:  negative substring length not allowed
-+ERROR:  substring(): negative byte subarray length -2147483646 not allowed
+ ERROR:  negative substring length not allowed
  SELECT trim(E'\\000'::bytea from E'\\000Tom\\000'::bytea);
 - btrim 
 --------

@@ -521,7 +521,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
 -  {"b":3,"c":6}]
 -(1 row)
 -
-+ERROR:  array_to_json(): pretty printing is not supported
++ERROR:  pretty printing is not supported
  SELECT array_to_json(array_agg(q),false)
    FROM ( SELECT $$a$$ || x AS b, y AS c,
                 ARRAY[ROW(x.*,ARRAY[1,2,3]),
@@ -843,15 +843,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  -- nulls
  select (test_json->'field3') is null as expect_false
  from test_json
-@@ -928,42 +841,42 @@
- (1 row)
- 
- SELECT json_array_length('{"f1":1,"f2":[5,6]}');
--ERROR:  cannot get array length of a non-array
-+ERROR:  json_array_length(): cannot get array length of a non-array
- SELECT json_array_length('4');
--ERROR:  cannot get array length of a scalar
-+ERROR:  json_array_length(): cannot get array length of a scalar
+@@ -933,37 +846,37 @@
+ ERROR:  cannot get array length of a scalar
  -- each
  select json_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null}');
 -     json_each     
@@ -1149,7 +1142,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  (1 row)
  
  select * from json_populate_record(null::jpop,'{"a":"blurfl","x":43.2}') q;
-@@ -1430,518 +1376,289 @@
+@@ -1430,518 +1376,279 @@
  (1 row)
  
  select * from json_populate_record(row('x',3,'2012-12-31 15:30:56')::jpop,'{"a":"blurfl","x":43.2}') q;
@@ -1640,12 +1633,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
 - 776 |  
 -(1 row)
 -
-+ERROR:  at or near "(": syntax error
-+DETAIL:  source SQL:
-+SELECT * FROM
-+  json_populate_record(null::record, '{"x": 776}') AS (x int, y int)
-+                                                      ^
-+HINT:  try \h <SOURCE>
++ERROR:  anonymous records cannot be used with json{b}_populate_record{set}
  -- composite domain
  SELECT json_populate_record(null::j_ordered_pair, '{"x": 0, "y": 1}');
 - json_populate_record 
@@ -1792,12 +1780,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
 - 776 |  
 -(1 row)
 -
-+ERROR:  at or near "(": syntax error
-+DETAIL:  source SQL:
-+SELECT * FROM
-+  json_populate_recordset(null::record, '[{"x": 776}]') AS (x int, y int)
-+                                                           ^
-+HINT:  try \h <SOURCE>
++ERROR:  anonymous records cannot be used with json{b}_populate_record{set}
  -- empty array is a corner case
  SELECT json_populate_recordset(null::record, '[]');
 -ERROR:  could not determine row type for result of json_populate_recordset
@@ -1809,20 +1792,16 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  SELECT json_populate_recordset(row(1,2), '[]');
   json_populate_recordset 
  -------------------------
-@@ -1954,39 +1671,28 @@
+@@ -1954,39 +1661,26 @@
  
  SELECT * FROM
    json_populate_recordset(null::record, '[]') AS (x int, y int);
 - x | y 
 ----+---
--(0 rows)
--
-+ERROR:  at or near "(": syntax error
-+DETAIL:  source SQL:
-+SELECT * FROM
-+  json_populate_recordset(null::record, '[]') AS (x int, y int)
-+                                                 ^
-+HINT:  try \h <SOURCE>
++ json_populate_recordset 
++-------------------------
+ (0 rows)
+ 
  -- composite domain
  SELECT json_populate_recordset(null::j_ordered_pair, '[{"x": 0, "y": 1}]');
 - json_populate_recordset 
@@ -1862,7 +1841,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  -- test type info caching in json_populate_record()
  CREATE TEMP TABLE jspoptest (js json);
  INSERT INTO jspoptest
-@@ -1997,19 +1703,39 @@
+@@ -1997,19 +1691,39 @@
  }'::json
  FROM generate_series(1, 3);
  SELECT (json_populate_record(NULL::jsrec, js)).* FROM jspoptest;
@@ -1909,7 +1888,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  DROP TYPE j_unordered_pair;
  --json_typeof() function
  select value, json_typeof(value)
-@@ -2025,26 +1751,26 @@
+@@ -2025,26 +1739,26 @@
                 (json '{}'),
                 (NULL::json))
        as data(value);
@@ -1952,7 +1931,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  (1 row)
  
  SELECT json_build_array('a', NULL); -- ok
-@@ -2054,119 +1780,256 @@
+@@ -2054,119 +1768,256 @@
  (1 row)
  
  SELECT json_build_array(VARIADIC NULL::text[]); -- ok
@@ -2109,19 +2088,15 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  (1 row)
  
  SELECT json_build_object('{a,b,c}'::text[]); -- error
--ERROR:  argument list must have even number of elements
+ ERROR:  argument list must have even number of elements
 -HINT:  The arguments of json_build_object() must consist of alternating keys and values.
-+ERROR:  json_build_object(): argument list must have even number of elements
  SELECT json_build_object('{a,b,c}'::text[], '{d,e,f}'::text[]); -- error, key cannot be array
--ERROR:  key value must be scalar, not array, composite, or json
-+ERROR:  json_build_object(): key value must be scalar, not array, composite, or json
+ ERROR:  key value must be scalar, not array, composite, or json
  SELECT json_build_object('a', 'b', 'c'); -- error
--ERROR:  argument list must have even number of elements
+ ERROR:  argument list must have even number of elements
 -HINT:  The arguments of json_build_object() must consist of alternating keys and values.
-+ERROR:  json_build_object(): argument list must have even number of elements
  SELECT json_build_object(NULL, 'a'); -- error, key cannot be NULL
--ERROR:  null value not allowed for object key
-+ERROR:  json_build_object(): null value not allowed for object key
+ ERROR:  null value not allowed for object key
  SELECT json_build_object('a', NULL); -- ok
   json_build_object 
  -------------------
@@ -2266,9 +2241,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
 -(1 row)
 +If you would rather not post publicly, please contact us directly
 +using the support form.
-+
-+We appreciate your feedback.
  
++We appreciate your feedback.
++
 +SELECT json_build_object(VARIADIC '{{1,4},{2,5},{3,6}}'::int[][]); -- ok
 +ERROR:  at or near "]": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
@@ -2279,7 +2254,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  -- empty objects/arrays
  SELECT json_build_array();
   json_build_array 
-@@ -2184,33 +2047,30 @@
+@@ -2184,7 +2035,7 @@
  SELECT json_build_object(1,2);
   json_build_object 
  -------------------
@@ -2288,21 +2263,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  (1 row)
  
  -- keys must be scalar and not null
- SELECT json_build_object(null,2);
--ERROR:  null value not allowed for object key
-+ERROR:  json_build_object(): null value not allowed for object key
- SELECT json_build_object(r,2) FROM (SELECT 1 AS a, 2 AS b) r;
--ERROR:  key value must be scalar, not array, composite, or json
-+ERROR:  json_build_object(): key value must be scalar, not array, composite, or json
- SELECT json_build_object(json '{"a":1,"b":2}', 3);
--ERROR:  key value must be scalar, not array, composite, or json
-+ERROR:  json_build_object(): key value must be scalar, not array, composite, or json
- SELECT json_build_object('{1,2,3}'::int[], 3);
--ERROR:  key value must be scalar, not array, composite, or json
-+ERROR:  json_build_object(): key value must be scalar, not array, composite, or json
- CREATE TEMP TABLE foo (serial_num int, name text, type text);
- INSERT INTO foo VALUES (847001,'t15','GE1043');
- INSERT INTO foo VALUES (847002,'t16','GE1043');
+@@ -2202,15 +2053,12 @@
  INSERT INTO foo VALUES (847003,'sub-alpha','GESS90');
  SELECT json_build_object('turbines',json_object_agg(serial_num,json_build_object('name',name,'type',type)))
  FROM foo;
@@ -2323,7 +2284,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  (1 row)
  
  INSERT INTO foo VALUES (999999, NULL, 'bar');
-@@ -2233,53 +2093,54 @@
+@@ -2233,40 +2081,41 @@
  
  -- one dimension
  SELECT json_object('{a,1,b,2,3,NULL,"d e f","a b c"}');
@@ -2346,8 +2307,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
 +HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
  -- odd number error
  SELECT json_object('{a,b,c}');
--ERROR:  array must have even number of elements
-+ERROR:  json_object(): array must have even number of elements
+ ERROR:  array must have even number of elements
  -- one column error
  SELECT json_object('{{a},{b}}');
 -ERROR:  array must have two columns
@@ -2380,15 +2340,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
 +HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
  -- mismatched dimensions
  select json_object('{a,b,c,"d e f",g}','{1,2,3,"a b c"}');
--ERROR:  mismatched array dimensions
-+ERROR:  json_object(): mismatched array dimensions
- select json_object('{a,b,c,"d e f"}','{1,2,3,"a b c",g}');
--ERROR:  mismatched array dimensions
-+ERROR:  json_object(): mismatched array dimensions
- -- null key error
- select json_object('{a,b,NULL,"d e f"}','{1,2,3,"a b c"}');
--ERROR:  null value not allowed for object key
-+ERROR:  json_object(): null value not allowed for object key
+ ERROR:  mismatched array dimensions
+@@ -2277,9 +2126,9 @@
+ ERROR:  null value not allowed for object key
  -- empty key is allowed
  select json_object('{a,b,"","d e f"}','{1,2,3,"a b c"}');
 -                     json_object                     
@@ -2400,7 +2354,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  (1 row)
  
  -- json_to_record and json_to_recordset
-@@ -2300,26 +2161,29 @@
+@@ -2300,26 +2149,29 @@
  
  select * from json_to_recordset('[{"a":1,"b":{"d":"foo"},"c":true},{"a":2,"c":false,"b":{"d":"bar"}}]')
      as x(a int, b json, c boolean);
@@ -2442,7 +2396,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  (1 row)
  
  select * from json_to_record('{"ia": null}') as x(ia _int4);
-@@ -2330,7 +2194,6 @@
+@@ -2330,7 +2182,6 @@
  
  select * from json_to_record('{"ia": 123}') as x(ia _int4);
  ERROR:  expected JSON array
@@ -2450,7 +2404,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  select * from json_to_record('{"ia": [1, "2", null, 4]}') as x(ia _int4);
        ia      
  --------------
-@@ -2338,35 +2201,32 @@
+@@ -2338,35 +2189,32 @@
  (1 row)
  
  select * from json_to_record('{"ia": [[1, 2], [3, 4]]}') as x(ia _int4);
@@ -2507,7 +2461,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  select * from json_to_record('{"out": {"key": 1}}') as x(out json);
      out     
  ------------
-@@ -2380,9 +2240,9 @@
+@@ -2380,9 +2228,9 @@
  (1 row)
  
  select * from json_to_record('{"out": "{\"key\": 1}"}') as x(out json);
@@ -2520,7 +2474,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  (1 row)
  
  select * from json_to_record('{"out": {"key": 1}}') as x(out jsonb);
-@@ -2398,9 +2258,9 @@
+@@ -2398,9 +2246,9 @@
  (1 row)
  
  select * from json_to_record('{"out": "{\"key\": 1}"}') as x(out jsonb);
@@ -2533,7 +2487,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  (1 row)
  
  -- json_strip_nulls
-@@ -2429,239 +2289,172 @@
+@@ -2429,239 +2277,172 @@
  (1 row)
  
  select json_strip_nulls('[1,2,null,3,4]');

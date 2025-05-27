@@ -3081,7 +3081,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 - t
 -(1 row)
 -
-+ERROR:  has_foreign_data_wrapper_privilege(): foreign-data wrapper 'foo' does not exist
++ERROR:  foreign-data wrapper 'foo' does not exist
  SELECT has_foreign_data_wrapper_privilege(
      (SELECT oid FROM pg_roles WHERE rolname='regress_test_role'),
      (SELECT oid FROM pg_foreign_data_wrapper WHERE fdwname='foo'), 'USAGE');
@@ -3106,14 +3106,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 - t
 -(1 row)
 -
-+ERROR:  has_foreign_data_wrapper_privilege(): foreign-data wrapper 'foo' does not exist
++ERROR:  foreign-data wrapper 'foo' does not exist
  SELECT has_foreign_data_wrapper_privilege('foo', 'USAGE');
 - has_foreign_data_wrapper_privilege 
 -------------------------------------
 - t
 -(1 row)
 -
-+ERROR:  has_foreign_data_wrapper_privilege(): foreign-data wrapper 'foo' does not exist
++ERROR:  foreign-data wrapper 'foo' does not exist
  GRANT USAGE ON FOREIGN DATA WRAPPER foo TO regress_test_role;
 +ERROR:  at or near "foreign": syntax error
 +DETAIL:  source SQL:
@@ -3126,7 +3126,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 - t
 -(1 row)
 -
-+ERROR:  has_foreign_data_wrapper_privilege(): foreign-data wrapper 'foo' does not exist
++ERROR:  foreign-data wrapper 'foo' does not exist
  -- has_server_privilege
  SELECT has_server_privilege('regress_test_role',
      (SELECT oid FROM pg_foreign_server WHERE srvname='s8'), 'USAGE');
@@ -3142,7 +3142,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 - f
 -(1 row)
 -
-+ERROR:  has_server_privilege(): server 's8' does not exist
++ERROR:  server 's8' does not exist
  SELECT has_server_privilege(
      (SELECT oid FROM pg_roles WHERE rolname='regress_test_role'),
      (SELECT oid FROM pg_foreign_server WHERE srvname='s8'), 'USAGE');
@@ -3167,14 +3167,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 - f
 -(1 row)
 -
-+ERROR:  has_server_privilege(): server 's8' does not exist
++ERROR:  server 's8' does not exist
  SELECT has_server_privilege('s8', 'USAGE');
 - has_server_privilege 
 -----------------------
 - t
 -(1 row)
 -
-+ERROR:  has_server_privilege(): server 's8' does not exist
++ERROR:  server 's8' does not exist
  GRANT USAGE ON FOREIGN SERVER s8 TO regress_test_role;
 +ERROR:  at or near "foreign": syntax error
 +DETAIL:  source SQL:
@@ -3187,7 +3187,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 - t
 -(1 row)
 -
-+ERROR:  has_server_privilege(): server 's8' does not exist
++ERROR:  server 's8' does not exist
  REVOKE USAGE ON FOREIGN SERVER s8 FROM regress_test_role;
 +ERROR:  at or near "foreign": syntax error
 +DETAIL:  source SQL:
