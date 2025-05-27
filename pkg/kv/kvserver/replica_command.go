@@ -4174,7 +4174,7 @@ func (r *Replica) scatterRangeAndRandomizeLeases(ctx context.Context, randomizeL
 
 	// Return early with number of replicas moved as 0.
 	if tokenErr != nil {
-		log.Warningf(ctx, "failed to scatter range: unable to acquire allocator "+
+		log.Warningf(ctx, "unable to acquire allocator "+
 			"due to %v after %d attempts", tokenErr, retryOpts.MaxRetries)
 		return 0
 	}
@@ -4212,7 +4212,7 @@ func (r *Replica) scatterRangeAndRandomizeLeases(ctx context.Context, randomizeL
 	// currentAttempt, but no backoff between different attempts.
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
 		if currentAttempt == maxAttempts {
-			log.Eventf(ctx, "stopped scattering after hitting max %d attempts", maxAttempts)
+			log.Infof(ctx, "stopped scattering after hitting max %d attempts", maxAttempts)
 			break
 		}
 		desc, conf := r.DescAndSpanConfig()
@@ -4220,8 +4220,8 @@ func (r *Replica) scatterRangeAndRandomizeLeases(ctx context.Context, randomizeL
 		if err != nil {
 			// The replica can not be processed, so skip it.
 			log.Warningf(ctx,
-				"failed to scatter range (%v) at %dth attempt: cannot process replica due to %v",
-				desc, currentAttempt+1, err)
+				"cannot process range (%v) due to %v at attempt %d",
+				desc, err, currentAttempt+1)
 			break
 		}
 		_, err = rq.processOneChange(
@@ -4236,8 +4236,8 @@ func (r *Replica) scatterRangeAndRandomizeLeases(ctx context.Context, randomizeL
 				log.Errorf(ctx, "retrying scatter process for range %v after retryable error: %v", desc, err)
 				continue
 			}
-			log.Warningf(ctx, "failed to scatter range (%v) at %dth attempt due to %v",
-				desc, currentAttempt+1, err)
+			log.Warningf(ctx, "failed to process range (%v) due to %v at attempt %d",
+				desc, err, currentAttempt+1)
 			break
 		}
 		currentAttempt++
