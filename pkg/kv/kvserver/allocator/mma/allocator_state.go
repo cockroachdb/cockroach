@@ -114,7 +114,10 @@ func (a *allocatorState) rebalanceStores(
 		a.changeRateLimiter.updateForRebalancePass(&ss.adjusted.enactedHistory, now)
 		sls := a.cs.meansMemo.getStoreLoadSummary(clusterMeans, storeID, ss.loadSeqNum)
 		if sls.sls >= overloadSlow && ss.adjusted.enactedHistory.allowLoadBasedChanges() &&
-			ss.maxFractionPending < maxFractionPendingThreshold {
+			// The pending decrease must be small enough to continue shedding
+			ss.maxFractionPendingDecrease < maxFractionPendingThreshold &&
+			// There should be no pending increase, since that can be an overestimate.
+			ss.maxFractionPendingIncrease < epsilon {
 			sheddingStores = append(sheddingStores, sheddingStore{StoreID: storeID, storeLoadSummary: sls})
 		}
 	}
@@ -293,14 +296,16 @@ func (a *allocatorState) rebalanceStores(
 				}
 				log.Infof(ctx,
 					"shedding=n%vs%v range %v lease from store %v to store %v [%v] with "+
-						"resulting loads %v %v (means: %v) (frac_pending: %.2f %.2f)",
+						"resulting loads %v %v (means: %v) (frac_pending: (%.2f,%.2f) (%.2f,%.2f))",
 					ss.NodeID, store.StoreID, rangeID,
 					removeTarget.StoreID, addTarget.StoreID, changes[len(changes)-1],
-					ss.adjusted.load, targetSS.adjusted.load, means.storeLoad.load, ss.maxFractionPending, targetSS.maxFractionPending)
+					ss.adjusted.load, targetSS.adjusted.load, means.storeLoad.load,
+					ss.maxFractionPendingIncrease, ss.maxFractionPendingDecrease,
+					targetSS.maxFractionPendingIncrease, targetSS.maxFractionPendingDecrease)
 				if leaseTransferCount >= maxLeaseTransferCount {
 					return changes
 				}
-				doneShedding = ss.maxFractionPending >= maxFractionPendingThreshold
+				doneShedding = ss.maxFractionPendingDecrease >= maxFractionPendingThreshold
 				if doneShedding {
 					break
 				}
@@ -453,7 +458,7 @@ func (a *allocatorState) rebalanceStores(
 			if rangeMoveCount >= maxRangeMoveCount {
 				return changes
 			}
-			doneShedding = ss.maxFractionPending >= maxFractionPendingThreshold
+			doneShedding = ss.maxFractionPendingDecrease >= maxFractionPendingThreshold
 			if doneShedding {
 				break
 			}
@@ -618,8 +623,9 @@ const (
 // experimentation and learnings.
 //
 // The caller must not exclude any candidates based on load or
-// maxFractionPending. That filtering must happen here. Depending on the value
-// of ignoreLevel, only candidates < loadThreshold may be considered.
+// maxFractionPendingIncrease. That filtering must happen here. Depending on
+// the value of ignoreLevel, only candidates < loadThreshold may be
+// considered.
 //
 // overloadDim, if not set to NumLoadDimensions, represents the dimension that
 // is overloaded in the source.
@@ -706,9 +712,9 @@ func sortTargetCandidateSetAndPick(
 		}
 		candDiscardedByNLS := cand.nls > loadThreshold ||
 			(cand.nls == loadThreshold && ignoreLevel != ignoreHigherThanLoadThreshold)
-		if candDiscardedByNLS || cand.maxFractionPending >= maxFractionPendingThreshold {
+		if candDiscardedByNLS || cand.maxFractionPendingIncrease >= maxFractionPendingThreshold {
 			// Discard this candidate.
-			if cand.maxFractionPending > epsilon && discardedCandsHadNoPendingChanges {
+			if cand.maxFractionPendingIncrease > epsilon && discardedCandsHadNoPendingChanges {
 				discardedCandsHadNoPendingChanges = false
 			}
 			log.Infof(ctx,
@@ -733,8 +739,8 @@ func sortTargetCandidateSetAndPick(
 	// ignored because of pending changes. Because if a candidate was ignored
 	// because of pending work, we want to wait for that pending work to finish
 	// and then see if we can transfer to those. Note that we used the condition
-	// cand.maxFractionPending>epsilon and not
-	// cand.maxFractionPending>=maxFractionPendingThreshold when setting
+	// cand.maxFractionPendingIncrease>epsilon and not
+	// cand.maxFractionPendingIncrease>=maxFractionPendingThreshold when setting
 	// discardedCandsHadNoPendingChanges. This is an additional conservative
 	// choice, since pending added work is slightly inflated in size, and we
 	// want to have a true picture of all of these potential candidates before
