@@ -30,7 +30,7 @@ import (
 
 func newCrudBatchHandler(
 	t *testing.T, s serverutils.ApplicationLayerInterface, tableName string,
-) (*sqlCrudWriter, catalog.TableDescriptor) {
+) (BatchHandler, catalog.TableDescriptor) {
 	ctx := context.Background()
 	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), tree.Name(tableName))
 	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
