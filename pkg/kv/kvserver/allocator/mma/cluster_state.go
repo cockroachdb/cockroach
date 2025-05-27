@@ -783,6 +783,11 @@ type storeState struct {
 	// leases during rebalancing. This is used to determine whether the store,
 	// when remote, can shed replicas to reduce CPU load.
 	lastLeaseShedAt time.Time
+
+	// Time when this store started to be observed as overloaded. Set by
+	// allocatorState.rebalanceStores. When not overloaded, this is equal to
+	// time.Time{}.
+	overloadStartTime time.Time
 }
 
 // The time duration between a change happening at a store, and when the
