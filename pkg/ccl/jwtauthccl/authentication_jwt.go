@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -146,6 +147,7 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 	tokenBytes []byte,
 	identMap *identmap.Conf,
 ) (detailedErrorMsg redact.RedactableString, authError error) {
+	authenticator.reloadConfig(ctx, st)
 	authenticator.mu.Lock()
 	defer authenticator.mu.Unlock()
 
@@ -370,8 +372,37 @@ func getOpenIdConfigEndpoint(issuerUrl string) string {
 	return openIdConfigEndpoint
 }
 
-var getHttpResponse = func(ctx context.Context, url string, authenticator *jwtAuthenticator) ([]byte, error) {
-	resp, err := authenticator.mu.conf.httpClient.Get(context.Background(), url)
+// getHTTPResponse issues a GET request using the authenticator’s configured
+// HTTP client, optionally setting the supplied headers.
+//
+//	ctx – caller’s context (for cancellation / deadlines)
+//	url – absolute URL to fetch
+//	a   – the *jwtAuthenticator whose client must be reused
+//	hdr – OPTIONAL: pass one http.Header with any extra headers, or omit entirely
+//
+// The function returns the response body (fully read) so that callers can
+// inspect the payload without worrying about closing the body.
+//
+// Callers should wrap the returned error with errors.WithDetailf to tag the
+// operation they’re performing.
+var getHttpResponse = func(
+	ctx context.Context,
+	url string,
+	authenticator *jwtAuthenticator,
+	hdr ...http.Header, // OPTIONAL variadic param for extra headers
+) ([]byte, error) {
+
+	// Build the request
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if len(hdr) == 1 && hdr[0] != nil {
+		req.Header = hdr[0].Clone()
+	}
+
+	client := authenticator.mu.conf.httpClient
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
