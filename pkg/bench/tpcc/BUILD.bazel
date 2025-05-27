@@ -1,45 +1,38 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-
-go_library(
-    name = "tpcc",
-    srcs = ["tpcc_bench.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/bench/tpcc",
-    visibility = ["//visibility:public"],
-)
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "tpcc_test",
     srcs = [
+        "bench_test.go",
+        "internal_test.go",
         "main_test.go",
-        "subprocess_commands_test.go",
-        "subprocess_utils_test.go",
-        "tpcc_bench_generate_data_test.go",
-        "tpcc_bench_options_test.go",
-        "tpcc_bench_test.go",
+        "utils_test.go",
     ],
-    embed = [":tpcc"],
+    data = glob(["testdata/**"]),
     deps = [
         "//pkg/base",
-        "//pkg/kv/kvserver/logstore",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/testutils",
+        "//pkg/storage",
         "//pkg/testutils/pgurlutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/testutils/testfixtures",
         "//pkg/util/envutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
+        "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/workload",
         "//pkg/workload/histogram",
         "//pkg/workload/tpcc",
         "//pkg/workload/workloadsql",
         "@com_github_cockroachdb_pebble//vfs",
+        "@com_github_jackc_pgx_v5//:pgx",
         "@com_github_stretchr_testify//require",
     ],
 )

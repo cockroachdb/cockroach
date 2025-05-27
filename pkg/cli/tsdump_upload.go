@@ -387,7 +387,7 @@ func (d *datadogWriter) flush(data []DatadogSeries) error {
 	}
 
 	retryOpts := base.DefaultRetryOptions()
-	retryOpts.MaxBackoff = 2 * time.Second
+	retryOpts.MaxBackoff = 100 * time.Millisecond
 	retryOpts.MaxRetries = 100
 	var req *http.Request
 	for retry := retry.Start(retryOpts); retry.Next(); {
@@ -460,9 +460,9 @@ func (d *datadogWriter) upload(fileName string) error {
 
 	// Note(davidh): This was previously set at 1000 and we'd get regular
 	// 400s from Datadog with the cryptic `Unable to decompress payload`
-	// error. I reduced this to 10 and was able to upload a 1.65GB tsdump
-	// in 3m10s without any errors (compared to 1m43s with 700 errors).
-	for i := 0; i < 10; i++ {
+	// error. We reduced this to 20 and was able to upload a 3.2GB tsdump
+	// in 6m20s without any errors.
+	for i := 0; i < 20; i++ {
 		go func() {
 			for data := range ch {
 				emittedMetrics, err := d.emitDataDogMetrics(data)
