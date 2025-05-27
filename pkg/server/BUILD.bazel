@@ -181,6 +181,7 @@ go_library(
         "//pkg/server/decommissioning",
         "//pkg/server/diagnostics",
         "//pkg/server/diagnostics/diagnosticspb",
+        "//pkg/server/faulttolerance",
         "//pkg/server/goroutinedumper",
         "//pkg/server/license",
         "//pkg/server/pgurl",

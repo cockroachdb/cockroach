@@ -410,4 +410,26 @@ func TestReplicaSetOperations(t *testing.T) {
 			require.Equal(t, removed, rs(1, 2, 3).Descriptors())
 		}
 	})
+	t.Run("countLive", func(t *testing.T) {
+		{
+			total, live := rs(1, 2, 3).countLive(func(rDesc ReplicaDescriptor) bool {
+				return true
+			}, func(rDesc ReplicaDescriptor) bool {
+				return true
+			})
+
+			require.Equal(t, 3, total)
+			require.Equal(t, 3, live)
+		}
+		{
+			total, live := rs(1, 2, 3).countLive(func(rDesc ReplicaDescriptor) bool {
+				return rDesc.ReplicaID != 2
+			}, func(rDesc ReplicaDescriptor) bool {
+				return rDesc.ReplicaID != 3
+			})
+
+			require.Equal(t, 2, total)
+			require.Equal(t, 1, live)
+		}
+	})
 }
