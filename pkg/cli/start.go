@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/profiler"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	profilerutil "github.com/cockroachdb/cockroach/pkg/server/profiler"
 	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -165,6 +167,24 @@ func initMutexProfile() {
 	d := envutil.EnvOrDefaultInt("COCKROACH_MUTEX_PROFILE_RATE",
 		1000 /* 1 sample per 1000 mutex contention events */)
 	runtime.SetMutexProfileFraction(d)
+}
+
+func initGoogleProfiler() {
+	// The mutex profile can be viewed with `pprof http://HOST:PORT/debug/pprof/mutex`
+	d := envutil.EnvOrDefaultBool("COCKROACH_GOOGLE_PROFILER_ENABLED", true)
+	if d {
+		cfg := profiler.Config{
+			Service: "cockroachdb",
+			// ServiceVersion: "1.0.0",
+			// ProjectID must be set if not running on GCP.
+			ProjectID: "cockroach-ephemeral",
+		}
+
+		// Profiler initialization, best done as early as possible.
+		if err := profiler.Start(cfg); err != nil {
+			log.Warningf(context.Background(), "failed to start google profiler: %v", err)
+		}
+	}
 }
 
 func initTraceDir(ctx context.Context, dir string) {
@@ -618,6 +638,9 @@ func runStartInternal(
 	); err != nil {
 		return err
 	}
+
+	// Initialize Google Cloud Profiler now that cluster settings are available
+	profilerutil.InitGoogleProfiler(ctx, st)
 
 	// The configuration is now ready to report to the user and the log
 	// file. We had to wait after InitNode() so that all configuration

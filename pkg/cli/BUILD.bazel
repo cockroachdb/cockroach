@@ -270,6 +270,7 @@ go_library(
         "@com_github_spf13_cobra//:cobra",
         "@com_github_spf13_cobra//doc",
         "@com_github_spf13_pflag//:pflag",
+        "@com_google_cloud_go_profiler//:profiler",
         "@com_google_cloud_go_storage//:storage",
         "@in_gopkg_yaml_v2//:yaml_v2",
         "@in_gopkg_yaml_v3//:yaml_v3",
