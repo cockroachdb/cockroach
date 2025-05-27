@@ -139,9 +139,8 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 			// compute.
 			msr.pendingChanges = nil
 			msr.pendingChangeIdx = 0
-			log.VInfof(ctx, 1, "no more pending changes to process, will call compute changes again")
 			msr.lastRebalanceTime = tick
-			msr.pendingChangeIdx = 0
+			log.VInfof(ctx, 1, "no more pending changes to process, will call compute changes again")
 			storeLeaseholderMsg := MakeStoreLeaseholderMsgFromState(s, msr.localStoreID)
 			msr.allocator.ProcessStoreLeaseholderMsg(&storeLeaseholderMsg)
 			msr.pendingChanges = msr.allocator.ComputeChanges(ctx, mma.ChangeOptions{

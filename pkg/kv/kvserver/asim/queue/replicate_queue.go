@@ -69,7 +69,7 @@ func (rq *replicateQueue) MaybeAdd(ctx context.Context, replica state.Replica, s
 		return false
 	}
 	repl := NewSimulatorReplica(replica, s)
-	rq.AddLogTag("r", repl.repl.Descriptor())
+	rq.AddLogTag("r", repl.Desc().RangeID)
 	rq.AnnotateCtx(ctx)
 
 	desc := repl.Desc()
@@ -154,8 +154,8 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 			continue
 		}
 
-		rq.lastChangeIDs = pushReplicateChange(
-			ctx, change, repl, tick, rq.settings.ReplicaChangeDelayFn(), rq.baseQueue, rq.as)
+		rq.next, rq.lastChangeIDs = pushReplicateChange(
+			ctx, change, repl, tick, rq.settings.ReplicaChangeDelayFn(), rq.baseQueue.stateChanger, rq.as)
 	}
 
 	rq.lastTick = tick
@@ -167,15 +167,16 @@ func pushReplicateChange(
 	repl *SimulatorReplica,
 	tick time.Time,
 	delayFn func(int64, bool) time.Duration,
-	queue baseQueue,
+	stateChanger state.Changer,
 	as *kvserver.AllocatorSync,
-) []mma.ChangeID {
+) (time.Time, []mma.ChangeID) {
 	var stateChange state.Change
 	var changeIDs []mma.ChangeID
+	next := tick
 	switch op := change.Op.(type) {
 	case plan.AllocationNoop:
 		// Nothing to do.
-		return nil
+		return next, nil
 	case plan.AllocationFinalizeAtomicReplicationOp:
 		panic("unimplemented finalize atomic replication op")
 	case plan.AllocationTransferLeaseOp:
@@ -206,7 +207,7 @@ func pushReplicateChange(
 				op.Chgs,
 			)
 		}
-		log.VEventf(ctx, 1, "pushing state change for range=%s, details=%s", repl.rng, op.Details)
+		log.VEventf(ctx, 1, "pushing state change for range=%s, details=%s changeIDs=%v", repl.rng, op.Details, changeIDs)
 		stateChange = &state.ReplicaChange{
 			RangeID: state.RangeID(change.Replica.GetRangeID()),
 			Changes: op.Chgs,
@@ -217,13 +218,13 @@ func pushReplicateChange(
 		panic(fmt.Sprintf("Unknown operation %+v, unable to create state change", op))
 	}
 
-	if completeAt, ok := queue.stateChanger.Push(tick, stateChange); ok {
-		queue.next = completeAt
+	if completeAt, ok := stateChanger.Push(tick, stateChange); ok {
 		log.VEventf(ctx, 1, "pushing state change succeeded, complete at %s (cur %s)", completeAt, tick)
+		next = completeAt
 	} else {
 		log.VEventf(ctx, 1, "pushing state change failed")
 		as.PostApply(changeIDs, false /* success */)
 		changeIDs = nil
 	}
-	return changeIDs
+	return next, changeIDs
 }
