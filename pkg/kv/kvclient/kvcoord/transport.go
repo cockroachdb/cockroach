@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -208,14 +209,23 @@ func (gt *grpcTransport) sendBatch(
 	log.VEvent(ctx, 2, "sending batch request")
 	reply, err := iface.Batch(ctx, ba)
 	log.VEvent(ctx, 2, "received batch response")
-	// If we queried a remote node, perform extra validation.
-	if reply != nil && !rpc.IsLocal(iface) {
-		if err == nil {
-			for i := range reply.Responses {
-				err = reply.Responses[i].GetInner().Verify(ba.Requests[i].GetInner())
-				if err != nil {
-					log.Errorf(ctx, "verification of response for %s failed: %v", ba.Requests[i].GetInner(), err)
-					break
+
+	// We don't have any strong reason to keep verifying the checksum of the
+	// response. However, since this check has historically caught some bugs, we
+	// are keeping it in Test builds for not.
+	// TODO(ibrahim): There is a path to remove Value checksum computations and
+	// verifications. More details are available in:
+	// https://github.com/cockroachdb/cockroach/issues/145541#issuecomment-2917225539
+	if buildutil.CrdbTestBuild {
+		// If we queried a remote node, perform extra validation.
+		if reply != nil && !rpc.IsLocal(iface) {
+			if err == nil {
+				for i := range reply.Responses {
+					err = reply.Responses[i].GetInner().Verify(ba.Requests[i].GetInner())
+					if err != nil {
+						log.Errorf(ctx, "verification of response for %s failed: %v", ba.Requests[i].GetInner(), err)
+						break
+					}
 				}
 			}
 		}
