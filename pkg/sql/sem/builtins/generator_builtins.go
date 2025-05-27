@@ -589,6 +589,18 @@ The output can be used to recreate a database.'
 			volatility.Volatile,
 		),
 	),
+	"crdb_internal.show_create_all_routines": makeBuiltin(
+		tree.FunctionProperties{},
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "database_name", Typ: types.String},
+			},
+			ShowCreateAllRoutinesGeneratorType,
+			makeShowCreateAllRoutinesGenerator,
+			"Returns rows of CREATE FUNCTION statements for all functions in the specified database.",
+			volatility.Volatile,
+		),
+	),
 	"crdb_internal.decode_plan_gist": makeBuiltin(
 		tree.FunctionProperties{},
 		makeGeneratorOverload(
@@ -2817,6 +2829,7 @@ func (p *payloadsForTraceGenerator) Close(_ context.Context) {
 var showCreateAllSchemasGeneratorType = types.String
 var showCreateAllTypesGeneratorType = types.String
 var showCreateAllTablesGeneratorType = types.String
+var showCreateAllRoutinesGeneratorType = types.String
 
 // Phase is used to determine if CREATE statements or ALTER statements
 // are being generated for showCreateAllTables.
@@ -3139,6 +3152,73 @@ func makeShowCreateAllTypesGenerator(
 ) (eval.ValueGenerator, error) {
 	dbName := string(tree.MustBeDString(args[0]))
 	return &showCreateAllTypesGenerator{
+		evalPlanner: evalCtx.Planner,
+		dbName:      dbName,
+		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),
+	}, nil
+}
+
+// ShowCreateAllRoutinesGenerator supports the execution of
+// crdb_internal.show_create_all_routines(dbName).
+type showCreateAllRoutinesGenerator struct {
+	evalPlanner eval.Planner
+	txn         *kv.Txn
+	dbName      string
+	acc         mon.BoundAccount
+
+	statements []string
+	curr       tree.Datum
+	idx        int
+}
+
+// ResolvedType implements the eval.ValueGenerator interface.
+func (s *showCreateAllRoutinesGenerator) ResolvedType() *types.T {
+	return showCreateAllRoutinesGeneratorType
+}
+
+// Start implements the eval.ValueGenerator interface.
+func (s *showCreateAllRoutinesGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+	s.txn = txn
+	s.idx = -1
+
+	statements, err := getRoutineCreateStatements(ctx, s.evalPlanner, txn, s.dbName, &s.acc)
+	if err != nil {
+		return err
+	}
+	s.statements = statements
+	return nil
+}
+
+func (s *showCreateAllRoutinesGenerator) Next(ctx context.Context) (bool, error) {
+	s.idx++
+	if s.idx >= len(s.statements) {
+		return false, nil
+	}
+
+	createStmt := s.statements[s.idx]
+	s.curr = tree.NewDString(createStmt + ";")
+	return true, nil
+}
+
+// Values implements the eval.ValueGenerator interface.
+func (s *showCreateAllRoutinesGenerator) Values() (tree.Datums, error) {
+	return tree.Datums{s.curr}, nil
+}
+
+// Close implements the eval.ValueGenerator interface.
+func (s *showCreateAllRoutinesGenerator) Close(ctx context.Context) {
+	s.acc.Close(ctx)
+}
+
+// makeShowCreateAllRoutinesGenerator creates a generator to support the
+// crdb_internal.show_create_all_routines(dbName) builtin.
+// We use the timestamp of when the generator is created as the
+// timestamp to pass to AS OF SYSTEM TIME for looking up the create routine
+func makeShowCreateAllRoutinesGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	dbName := string(tree.MustBeDString(args[0]))
+	return &showCreateAllRoutinesGenerator{
 		evalPlanner: evalCtx.Planner,
 		dbName:      dbName,
 		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),

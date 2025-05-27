@@ -74,6 +74,9 @@ func TryDelegate(
 	case *tree.ShowCreateAllTypes:
 		return d.delegateShowCreateAllTypes()
 
+	case *tree.ShowCreateAllRoutines:
+		return d.delegateShowCreateAllRoutines() //TODO: implement delegateShowCreateAllRoutines in show_function.go
+
 	case *tree.ShowDatabaseIndexes:
 		return d.delegateShowDatabaseIndexes(t)
 
