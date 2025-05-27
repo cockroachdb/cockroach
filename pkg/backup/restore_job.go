@@ -1112,9 +1112,10 @@ func createImportingDescriptors(
 
 	// Assign new IDs and privileges to the tables, and update all references to
 	// use the new IDs.
-	if err := rewrite.TableDescs(
+	typeBackrefsToRemove, err := rewrite.TableDescs(
 		mutableTables, details.DescriptorRewrites, details.OverrideDB,
-	); err != nil {
+	)
+	if err != nil {
 		return nil, nil, nil, err
 	}
 	tableDescs := make([]*descpb.TableDescriptor, len(mutableTables))
@@ -1152,7 +1153,7 @@ func createImportingDescriptors(
 	// the ID the descriptor had when it was backed up. Changes to existing type
 	// descriptors will not be written to disk, and is only for accurate,
 	// in-memory resolution hereon out.
-	if err := rewrite.TypeDescs(types, details.DescriptorRewrites); err != nil {
+	if err := rewrite.TypeDescs(types, details.DescriptorRewrites, typeBackrefsToRemove); err != nil {
 		return nil, nil, nil, err
 	}
 
