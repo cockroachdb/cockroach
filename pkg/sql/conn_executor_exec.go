@@ -2758,6 +2758,7 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		}
 		ex.state.mu.autoRetryCounter++
 		ex.state.mu.autoRetryReason = txnRetryErr
+		ex.metrics.EngineMetrics.StatementRetryCount.Inc(1)
 	}
 	return nil
 }
@@ -4346,6 +4347,7 @@ func (ex *connExecutor) recordTransactionFinish(
 		ex.sessionData().Database, ex.sessionData().ApplicationName)
 	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(elapsedTime.Nanoseconds(),
 		ex.sessionData().Database, ex.sessionData().ApplicationName)
+	ex.metrics.EngineMetrics.TxnRetryCount.Inc(int64(ex.state.mu.autoRetryCounter))
 
 	ex.txnIDCacheWriter.Record(contentionpb.ResolvedTxnID{
 		TxnID:            ev.txnID,
