@@ -152,7 +152,7 @@ func (og *operationGenerator) resetTxnState() {
 
 // getSupportedDeclarativeOp generates declarative operations until,
 // a fully supported one is found. This is required for mixed version testing
-// support, where statements may be partially supproted.
+// support, where statements may be partially supported.
 func (og *operationGenerator) getSupportedDeclarativeOp(
 	ctx context.Context, tx pgx.Tx,
 ) (opType, error) {
