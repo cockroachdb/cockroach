@@ -17,7 +17,7 @@ import (
 type unaryDRPCBatchServiceToInternalAdapter struct {
 	useStreamPoolClient bool
 	rpc.RestrictedInternalClient
-	drpcClient     kvpb.DRPCBatchClient
+	drpcClient     kvpb.DRPCKVBatchClient
 	drpcStreamPool *rpc.DRPCBatchStreamPool
 }
 
