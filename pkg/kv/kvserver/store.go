@@ -3249,7 +3249,8 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	capacity.BytesPerReplica = roachpb.PercentilesFromData(bytesPerReplica)
 	capacity.WritesPerReplica = roachpb.PercentilesFromData(writesPerReplica)
 	s.storeGossip.RecordNewPerSecondStats(
-		totalQueriesPerSecond, totalWritesPerSecond, totalWriteBytesPerSecond)
+		totalQueriesPerSecond, totalWritesPerSecond,
+		totalWriteBytesPerSecond, totalStoreCPUTimePerSecond)
 	s.replRankings.Update(rankingsAccumulator)
 	s.replRankingsByTenant.Update(rankingsByTenantAccumulator)
 
@@ -3546,7 +3547,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.AverageWriteBytesPerSecond.Update(averageWriteBytesPerSecond)
 	s.metrics.AverageCPUNanosPerSecond.Update(averageCPUNanosPerSecond)
 	s.storeGossip.RecordNewPerSecondStats(
-		averageQueriesPerSecond, averageWritesPerSecond, averageWriteBytesPerSecond)
+		averageQueriesPerSecond, averageWritesPerSecond,
+		averageWriteBytesPerSecond, averageCPUNanosPerSecond)
 
 	s.metrics.RangeCount.Update(rangeCount)
 	s.metrics.UnavailableRangeCount.Update(unavailableRangeCount)
