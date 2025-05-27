@@ -8008,7 +8008,8 @@ in the current database. Returns an error if validation fails.`,
 
 	"crdb_internal.revalidate_unique_constraints_in_table": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "table_name", Typ: types.String}},
@@ -8032,7 +8033,8 @@ table. Returns an error if validation fails.`,
 
 	"crdb_internal.revalidate_unique_constraint": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "table_name", Typ: types.String}, {Name: "constraint_name", Typ: types.String}},
@@ -8058,7 +8060,8 @@ table. Returns an error if validation fails.`,
 	),
 	"crdb_internal.is_constraint_active": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "table_name", Typ: types.String}, {Name: "constraint_name", Typ: types.String}},
