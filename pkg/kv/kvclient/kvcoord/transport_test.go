@@ -181,38 +181,6 @@ func TestSpanImport(t *testing.T) {
 	}
 }
 
-func TestResponseVerifyFailure(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	metrics := MakeDistSenderMetrics(roachpb.Locality{})
-	gt := grpcTransport{
-		opts: SendOptions{
-			metrics: &metrics,
-		},
-	}
-
-	ba := &kvpb.BatchRequest{}
-	req := kvpb.NewScan(roachpb.KeyMin, roachpb.KeyMax)
-	ba.Add(req)
-	br := ba.CreateReply()
-	resp := br.Responses[0].GetInner().(*kvpb.ScanResponse)
-	val := roachpb.MakeValueFromString("hi")
-	val.InitChecksum(roachpb.Key("not the right key"))
-	resp.Rows = append(resp.Rows, roachpb.KeyValue{
-		Key:   roachpb.Key("x"),
-		Value: val,
-	})
-	require.Error(t, resp.Verify(req)) // we set this up to fail
-
-	server := mockInternalClient{
-		br: br,
-	}
-
-	_, err := gt.sendBatch(ctx, roachpb.NodeID(1), &server, ba)
-	require.ErrorContains(t, err, "invalid checksum")
-}
-
 // mockInternalClient is an implementation of kvpb.InternalClient.
 // It simulates aspects of how the Node normally handles tracing in gRPC calls.
 type mockInternalClient struct {

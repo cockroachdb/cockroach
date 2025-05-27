@@ -208,18 +208,6 @@ func (gt *grpcTransport) sendBatch(
 	log.VEvent(ctx, 2, "sending batch request")
 	reply, err := iface.Batch(ctx, ba)
 	log.VEvent(ctx, 2, "received batch response")
-	// If we queried a remote node, perform extra validation.
-	if reply != nil && !rpc.IsLocal(iface) {
-		if err == nil {
-			for i := range reply.Responses {
-				err = reply.Responses[i].GetInner().Verify(ba.Requests[i].GetInner())
-				if err != nil {
-					log.Errorf(ctx, "verification of response for %s failed: %v", ba.Requests[i].GetInner(), err)
-					break
-				}
-			}
-		}
-	}
 
 	// Import the remotely collected spans, if any. Do this on error too, to get
 	// traces in that case as well (or to at least have a chance).
