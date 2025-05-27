@@ -595,7 +595,7 @@ The output can be used to recreate a database.'
 			tree.ParamTypes{
 				{Name: "database_name", Typ: types.String},
 			},
-			ShowCreateAllRoutinesGeneratorType,
+			showCreateAllRoutinesGeneratorType,
 			makeShowCreateAllRoutinesGenerator,
 			"Returns rows of CREATE FUNCTION statements for all functions in the specified database.",
 			volatility.Volatile,
@@ -3161,14 +3161,18 @@ func makeShowCreateAllTypesGenerator(
 // ShowCreateAllRoutinesGenerator supports the execution of
 // crdb_internal.show_create_all_routines(dbName).
 type showCreateAllRoutinesGenerator struct {
-	evalPlanner eval.Planner
-	txn         *kv.Txn
-	dbName      string
-	acc         mon.BoundAccount
+	evalPlanner  eval.Planner
+	txn          *kv.Txn
+	dbName       string
+	acc          mon.BoundAccount
+	functionIds  []int64
+	procedureIds []int64
 
-	statements []string
-	curr       tree.Datum
-	idx        int
+	// The following could be updated during the generator's lifecycle
+	// by calls to Next()
+	curr     tree.Datum
+	idxFuncs int
+	idxProcs int
 }
 
 // ResolvedType implements the eval.ValueGenerator interface.
@@ -3178,26 +3182,47 @@ func (s *showCreateAllRoutinesGenerator) ResolvedType() *types.T {
 
 // Start implements the eval.ValueGenerator interface.
 func (s *showCreateAllRoutinesGenerator) Start(ctx context.Context, txn *kv.Txn) error {
-	s.txn = txn
-	s.idx = -1
-
-	statements, err := getRoutineCreateStatements(ctx, s.evalPlanner, txn, s.dbName, &s.acc)
+	functionIds, procedureIds, err := getRoutineCreateStatementIds(ctx, s.evalPlanner, txn, s.dbName, &s.acc)
 	if err != nil {
 		return err
 	}
-	s.statements = statements
+	s.functionIds = functionIds
+	s.procedureIds = procedureIds
+	s.txn = txn
+	s.idxFuncs = -1
+	s.idxProcs = -1
+
 	return nil
 }
 
 func (s *showCreateAllRoutinesGenerator) Next(ctx context.Context) (bool, error) {
-	s.idx++
-	if s.idx >= len(s.statements) {
-		return false, nil
+	s.idxFuncs++
+	if s.idxFuncs < len(s.functionIds) {
+		createStmt, err := getFunctionCreateStatement(
+			ctx, s.evalPlanner, s.txn, s.functionIds[s.idxFuncs], s.dbName,
+		)
+		if err != nil {
+			return false, err
+		}
+		createStmtStr := string(tree.MustBeDString(createStmt))
+		s.curr = tree.NewDString(createStmtStr + ";")
+		return true, nil
 	}
 
-	createStmt := s.statements[s.idx]
-	s.curr = tree.NewDString(createStmt + ";")
-	return true, nil
+	s.idxProcs++
+	if s.idxProcs < len(s.procedureIds) {
+		createStmt, err := getProcedureCreateStatement(
+			ctx, s.evalPlanner, s.txn, s.procedureIds[s.idxProcs], s.dbName,
+		)
+		if err != nil {
+			return false, err
+		}
+		createStmtStr := string(tree.MustBeDString(createStmt))
+		s.curr = tree.NewDString(createStmtStr + ";")
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // Values implements the eval.ValueGenerator interface.

@@ -89,5 +89,13 @@ AND %[1]s = %[4]s
 
 func (d *delegator) delegateShowCreateAllRoutines() (tree.Statement, error) {
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Create)
-	// TODO: Implement
+
+	const showCreateAllRoutinesQuery = `SELECT crdb_internal.show_create_all_routines(%[1]s) AS create_statement;`
+	databaseLiteral := d.evalCtx.SessionData().Database
+
+	query := fmt.Sprintf(showCreateAllRoutinesQuery,
+		lexbase.EscapeSQLString(databaseLiteral),
+	)
+
+	return d.parse(query)
 }
