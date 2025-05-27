@@ -42,7 +42,7 @@ type applyCommittedEntriesStats struct {
 	appBatchStats
 	followerStoreWriteBytes kvadmission.FollowerStoreWriteBytes
 	numBatchesProcessed     int // TODO(sep-raft-log): numBatches
-	stateAssertions         int
+	assertionsRequested     int
 	numConfChangeEntries    int
 }
 
@@ -213,7 +213,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			// pass both engines in.
 			sm.r.assertStateRaftMuLockedReplicaMuRLocked(ctx, sm.r.store.TODOEngine())
 			sm.r.mu.RUnlock()
-			sm.applyStats.stateAssertions++
+			sm.applyStats.assertionsRequested++
 		}
 	} else if res := cmd.ReplicatedResult(); !res.IsZero() {
 		log.Fatalf(ctx, "failed to handle all side-effects of ReplicatedEvalResult: %v", res)

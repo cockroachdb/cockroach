@@ -823,7 +823,7 @@ func (s handleRaftReadyStats) SafeFormat(p redact.SafePrinter, _ rune) {
 	}
 	p.SafeString("]")
 
-	if n := s.apply.stateAssertions; n > 0 {
+	if n := s.apply.assertionsRequested; n > 0 {
 		p.Printf(", state_assertions=%d", n)
 	}
 	if s.snap.offered {
