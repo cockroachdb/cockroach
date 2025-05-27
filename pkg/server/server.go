@@ -146,7 +146,7 @@ type topLevelServer struct {
 	// The gRPC and DRPC servers on which the different RPC handlers will be
 	// registered.
 	grpc *grpcServer
-	drpc *DRPCServer
+	drpc *drpcServer
 
 	gossip       *gossip.Gossip
 	kvNodeDialer *nodedialer.Dialer

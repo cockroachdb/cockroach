@@ -98,7 +98,7 @@ type SQLServerWrapper struct {
 	// The gRPC and DRPC servers on which the different RPC handlers will be
 	// registered
 	grpc *grpcServer
-	drpc *DRPCServer
+	drpc *drpcServer
 
 	kvNodeDialer *nodedialer.Dialer
 	db           *kv.DB

@@ -396,7 +396,7 @@ type sqlServerArgs struct {
 	// grpc is the RPC service.
 	grpc *grpcServer
 
-	drpc *DRPCServer
+	drpc *drpcServer
 
 	// externalStorageBuilder is the constructor for accesses to external
 	// storage.

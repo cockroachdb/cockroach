@@ -42,7 +42,7 @@ func startListenRPCAndSQL(
 	cfg BaseConfig,
 	stopper *stop.Stopper,
 	grpc *grpcServer,
-	drpc *DRPCServer,
+	drpc *drpcServer,
 	rpcListenerFactory RPCListenerFactory,
 	enableSQLListener bool,
 	acceptProxyProtocolHeaders bool,

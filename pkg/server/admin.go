@@ -117,7 +117,7 @@ type adminServer struct {
 	rpcContext       *rpc.Context
 	clock            *hlc.Clock
 	grpc             *grpcServer
-	drpc             *DRPCServer
+	drpc             *drpcServer
 	db               *kv.DB
 	drainServer      *drainServer
 }
@@ -157,7 +157,7 @@ func newSystemAdminServer(
 	clock *hlc.Clock,
 	distSender *kvcoord.DistSender,
 	grpc *grpcServer,
-	drpc *DRPCServer,
+	drpc *drpcServer,
 	drainServer *drainServer,
 	s *topLevelServer,
 ) *systemAdminServer {
@@ -202,7 +202,7 @@ func newAdminServer(
 	clock *hlc.Clock,
 	distSender *kvcoord.DistSender,
 	grpc *grpcServer,
-	drpc *DRPCServer,
+	drpc *drpcServer,
 	drainServer *drainServer,
 ) *adminServer {
 	server := &adminServer{

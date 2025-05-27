@@ -31,7 +31,7 @@ type drpcMuxI interface {
 	Register(srv interface{}, desc drpc.Description) error
 }
 
-type DRPCServer struct {
+type drpcServer struct {
 	serveModeHandler
 	Srv    drpcServerI
 	Mux    drpcMuxI
@@ -42,7 +42,7 @@ var _ drpcServerI = (*drpcserver.Server)(nil)
 var _ drpcServerI = (*drpcOffServer)(nil)
 
 // TODO: Register DRPC Heartbeat service
-func newDRPCServer(_ context.Context, rpcCtx *rpc.Context) (*DRPCServer, error) {
+func newDRPCServer(_ context.Context, rpcCtx *rpc.Context) (*drpcServer, error) {
 	var dmux drpcMuxI = &drpcOffServer{}
 	var dsrv drpcServerI = &drpcOffServer{}
 	var tlsCfg *tls.Config
@@ -80,7 +80,7 @@ func newDRPCServer(_ context.Context, rpcCtx *rpc.Context) (*DRPCServer, error) 
 		// https://github.com/bryk-io/pkg/blob/4da5fbfef47770be376e4022eab5c6c324984bf7/net/drpc/server.go#L91-L101
 	}
 
-	d := &DRPCServer{
+	d := &drpcServer{
 		Srv:    dsrv,
 		Mux:    dmux,
 		TLSCfg: tlsCfg,
@@ -109,7 +109,7 @@ func (srv *drpcOffServer) Register(interface{}, drpc.Description) error {
 	return nil
 }
 
-func (s *DRPCServer) health(ctx context.Context) error {
+func (s *drpcServer) health(ctx context.Context) error {
 	sm := s.mode.get()
 	switch sm {
 	case modeInitializing:
