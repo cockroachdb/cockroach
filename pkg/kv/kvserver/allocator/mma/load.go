@@ -188,12 +188,12 @@ type meanNodeLoad struct {
 }
 
 type storeLoadSummary struct {
-	sls                      loadSummary
-	nls                      loadSummary
-	dimSummary               [NumLoadDimensions]loadSummary
-	highDiskSpaceUtilization bool
-	fd                       failureDetectionSummary
-	maxFractionPending       float64
+	sls                                                    loadSummary
+	nls                                                    loadSummary
+	dimSummary                                             [NumLoadDimensions]loadSummary
+	highDiskSpaceUtilization                               bool
+	fd                                                     failureDetectionSummary
+	maxFractionPendingIncrease, maxFractionPendingDecrease float64
 
 	loadSeqNum uint64
 }
@@ -203,9 +203,11 @@ func (sls storeLoadSummary) String() string {
 }
 
 func (sls storeLoadSummary) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("(store=%v cpu=%v writes=%v bytes=%v node=%v high_disk=%v fd=%v, frac_pending=%.2f(%t))",
+	w.Printf("(store=%v cpu=%v writes=%v bytes=%v node=%v high_disk=%v fd=%v, frac_pending=%.2f,%.2f(%t))",
 		sls.sls, sls.dimSummary[CPURate], sls.dimSummary[WriteBandwidth], sls.dimSummary[ByteSize],
-		sls.nls, sls.highDiskSpaceUtilization, sls.fd, sls.maxFractionPending, sls.maxFractionPending < epsilon)
+		sls.nls, sls.highDiskSpaceUtilization, sls.fd, sls.maxFractionPendingIncrease,
+		sls.maxFractionPendingDecrease,
+		sls.maxFractionPendingIncrease < epsilon && sls.maxFractionPendingDecrease < epsilon)
 }
 
 // The allocator often needs mean load information for a set of stores. This

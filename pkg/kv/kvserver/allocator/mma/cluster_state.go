@@ -753,14 +753,25 @@ type storeState struct {
 	// storeLoadSummary stored in meansForStoreSet.
 	loadSeqNum uint64
 
+	// maxFractionPendingIncrease is computed for load dimensions where
+	// adjusted.load[i] > reportedLoad[i], and maxFractionPendingDecrease is
+	// computed for load dimensions where adjusted.load[i] < reportedLoad[i].
+	// These are:
 	// max(|1-(adjusted.load[i]/reportedLoad[i])|)
 	//
-	// If maxFractionPending is greater than some threshold, we don't add or
+	// If maxFractionPendingIncrease is greater than some threshold, we don't add
+	// more load to the store. If maxFractionPendingIncrease is greater than zero,
+	// we don't shed from that store, since we may be over-estimating the load on
+	// that store.
+	//
+	// If maxFractionPendingDecrease is greater than some threshold, we don't
 	// remove more load unless we are shedding load due to failure detection.
+	//
 	// This is to allow the effect of the changes to stabilize since our
 	// adjustments to load vectors are estimates, and there can be overhead on
 	// these nodes due to making the change.
-	maxFractionPending float64
+	maxFractionPendingIncrease float64
+	maxFractionPendingDecrease float64
 
 	// TODO: also need a maxFractionPending at the node level since with many
 	// stores on a node, some stores may have used up all the budget for changes
@@ -811,18 +822,25 @@ func (ss *storeState) computePendingChangesReflectedInLatestLoad(
 }
 
 func (ss *storeState) computeMaxFractionPending() {
-	frac := 0.0
+	fracIncrease := 0.0
+	fracDecrease := 0.0
 	for i := range ss.reportedLoad {
 		if ss.reportedLoad[i] == 0 {
-			frac = 1000
+			fracIncrease = 1000
+			fracDecrease = 1000
 			break
 		}
 		f := math.Abs(float64(ss.adjusted.load[i]-ss.reportedLoad[i])) / float64(ss.reportedLoad[i])
-		if f > frac {
-			frac = f
+		if ss.adjusted.load[i] > ss.reportedLoad[i] {
+			if f > fracIncrease {
+				fracIncrease = f
+			}
+		} else if f > fracDecrease {
+			fracDecrease = f
 		}
 	}
-	ss.maxFractionPending = frac
+	ss.maxFractionPendingIncrease = fracIncrease
+	ss.maxFractionPendingDecrease = fracDecrease
 }
 
 func newStoreState(storeID roachpb.StoreID, nodeID roachpb.NodeID) *storeState {
@@ -1054,9 +1072,9 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 	// remaining pending change deltas to the updated adjusted load.
 	ss.adjusted.load = storeMsg.Load
 	ss.adjusted.secondaryLoad = storeMsg.SecondaryLoad
-	ss.maxFractionPending = 0
+	ss.maxFractionPendingIncrease, ss.maxFractionPendingDecrease = 0, 0
 
-	// Find any pending changes for range's which involve this store. These
+	// Find any pending changes for ranges which involve this store. These
 	// pending changes can now be removed from the loadPendingChanges. We don't
 	// need to undo the corresponding delta adjustment as the reported load
 	// already contains the effect.
@@ -1073,7 +1091,7 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 		// replicas.
 		cs.applyChangeLoadDelta(change.ReplicaChange)
 	}
-	log.Infof(context.Background(), "s%d load %s(%s) adjusted %s", storeMsg.StoreID,
+	log.Infof(ctx, "s%d load %s(%s) adjusted %s", storeMsg.StoreID,
 		storeMsg.Load, storeMsg.Capacity, ss.adjusted.load)
 }
 
@@ -1552,7 +1570,9 @@ func (cs *clusterState) canShedAndAddLoad(
 	}
 	canAddLoad := !targetSLS.highDiskSpaceUtilization && overloadedDimPermitsChange &&
 		(targetSummary < loadNoChange ||
-			(targetSLS.maxFractionPending < epsilon && targetSLS.sls <= srcSLS.sls &&
+			(targetSLS.maxFractionPendingIncrease < epsilon &&
+				targetSLS.maxFractionPendingDecrease < epsilon &&
+				targetSLS.sls <= srcSLS.sls &&
 				// NB: targetSLS.nls <= targetSLS.sls is not a typo, in that we are
 				// comparing targetSLS with itself. The nls only captures node-level
 				// CPU, so if a store that is overloaded wrt WriteBandwidth wants to
@@ -1597,19 +1617,19 @@ func computeLoadSummary(
 	}
 	nls := loadSummaryForDimension(CPURate, ns.adjustedCPU, ns.CapacityCPU, mnl.loadCPU, mnl.utilCPU)
 	return storeLoadSummary{
-		sls:                      sls,
-		nls:                      nls,
-		dimSummary:               dimSummary,
-		highDiskSpaceUtilization: highDiskSpaceUtil,
-		fd:                       ns.fdSummary,
-		maxFractionPending:       ss.maxFractionPending,
-		loadSeqNum:               ss.loadSeqNum,
+		sls:                        sls,
+		nls:                        nls,
+		dimSummary:                 dimSummary,
+		highDiskSpaceUtilization:   highDiskSpaceUtil,
+		fd:                         ns.fdSummary,
+		maxFractionPendingIncrease: ss.maxFractionPendingIncrease,
+		maxFractionPendingDecrease: ss.maxFractionPendingDecrease,
+		loadSeqNum:                 ss.loadSeqNum,
 	}
 }
 
 // Avoid unused lint errors.
 var _ = ReplicaState{}.VoterIsLagging
-var _ = storeState{}.maxFractionPending
 var _ = rangeState{}.diversityIncreaseLastFailedAttempt
 var _ = enactedReplicaChange{}
 var _ = storeEnactedHistory{}.changes
