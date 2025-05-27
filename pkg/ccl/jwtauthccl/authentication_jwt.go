@@ -30,16 +30,24 @@ import (
 )
 
 const (
-	counterPrefix           = "auth.jwt."
-	beginAuthCounterName    = counterPrefix + "begin_auth"
-	loginSuccessCounterName = counterPrefix + "login_success"
-	enableCounterName       = counterPrefix + "enable"
+	counterPrefix               = "auth.jwt."
+	beginAuthCounterName        = counterPrefix + "begin_auth"
+	loginSuccessCounterName     = counterPrefix + "login_success"
+	enableCounterName           = counterPrefix + "enable"
+	authzTokenSuccessCounter    = counterPrefix + "authz_success"
+	authzUserinfoSuccessCounter = counterPrefix + "authz_userinfo_success"
+	authzUserinfoMissCounter    = counterPrefix + "authz_userinfo_miss"
+	authzFailureCounter         = counterPrefix + "authz_failure"
 )
 
 var (
-	beginAuthUseCounter    = telemetry.GetCounterOnce(beginAuthCounterName)
-	loginSuccessUseCounter = telemetry.GetCounterOnce(loginSuccessCounterName)
-	enableUseCounter       = telemetry.GetCounterOnce(enableCounterName)
+	beginAuthUseCounter            = telemetry.GetCounterOnce(beginAuthCounterName)
+	loginSuccessUseCounter         = telemetry.GetCounterOnce(loginSuccessCounterName)
+	enableUseCounter               = telemetry.GetCounterOnce(enableCounterName)
+	authzTokenSuccessUseCounter    = telemetry.GetCounterOnce(authzTokenSuccessCounter)
+	authzUserinfoSuccessUseCounter = telemetry.GetCounterOnce(authzUserinfoSuccessCounter)
+	authzUserinfoMissUseCounter    = telemetry.GetCounterOnce(authzUserinfoMissCounter)
+	authzFailureUseCounter         = telemetry.GetCounterOnce(authzFailureCounter)
 )
 
 // jwtAuthenticator is an object that is used to validate JWTs that are used as part of
