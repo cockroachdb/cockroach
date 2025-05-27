@@ -1262,6 +1262,18 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaTxnRetry = metric.Metadata{
+		Name:        "sql.txn.auto_retry.count",
+		Help:        "Number of SQL transaction automatic retries",
+		Measurement: "SQL Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaStatementRetry = metric.Metadata{
+		Name:        "sql.statements.auto_retry.count",
+		Help:        "Number of SQL statement automatic retries",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {
