@@ -559,6 +559,27 @@ func (r *replicaLogStorage) stageApplySnapshot(truncState kvserverpb.RaftTruncat
 	r.shMu.sizeTrusted = true
 }
 
+func (r *replicaLogStorage) finalizeApplySnapshotRaftMuLocked(ctx context.Context) {
+	r.raftMu.AssertHeld()
+	// This mirrors finalizeTruncationRaftMuLocked, but a snapshot may regress the last
+	// index (to discard a divergent log). For example:
+	//
+	// Raft log (before snapshot):
+	// - entry 100-150: term 1 [committed]
+	// - entry 151-200: term 2
+	// Committed raft log (on leader):
+	// - entry 100-150: term 1
+	// - entry 151:     term 3
+	//
+	// The replica may receive a snapshot at index 151. If we don't clear the
+	// sideloaded storage all the way up to the *old* last index, we may leak
+	// sideloaded entries. Rather than remember the old last index, we instead
+	// clear the sideloaded storage entirely. This is equivalent.
+	if err := r.ls.Sideload.Clear(ctx); err != nil {
+		log.Errorf(ctx, "while clearing sideloaded storage after snapshot: %+v", err)
+	}
+}
+
 func (r *replicaLogStorage) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
 	r.raftMu.AssertHeld()
 	// NB: The expected first index can be zero if this proposal is from before
