@@ -626,7 +626,7 @@ ROLLBACK; DROP TABLE t
 -- NoTxn       -> NoTxn       #.....  (none)
 2: BEGIN; SAVEPOINT init; INSERT INTO t(x) VALUES (1) -- 1 row
 -- NoTxn       -> Open        ##....  init(r)
-3: SELECT crdb_internal.force_retry('1h') -- pq: restart transaction: crdb_internal.force_retry(): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+3: SELECT crdb_internal.force_retry('1h') -- pq: restart transaction: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
 -- Open        -> Aborted     XXXXXX  init(r)
 4: ROLLBACK TO SAVEPOINT init -- 0 rows
 -- Aborted     -> Open        ##....  init(r)
@@ -649,7 +649,7 @@ ROLLBACK; DROP TABLE t
 -- NoTxn       -> NoTxn       #.....  (none)
 2: BEGIN; SAVEPOINT init; SELECT count(1) from t; SAVEPOINT inner_savepoint -- 0 rows
 -- NoTxn       -> Open        ##....  init(r)>inner_savepoint
-3: SELECT crdb_internal.force_retry('1h') -- pq: restart transaction: crdb_internal.force_retry(): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+3: SELECT crdb_internal.force_retry('1h') -- pq: restart transaction: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
 -- Open        -> Aborted     XXXXXX  init(r)>inner_savepoint
 4: ROLLBACK TO SAVEPOINT inner_savepoint -- pq: restart transaction: TransactionRetryWithProtoRefreshError: cannot rollback to savepoint after a transaction restart
 -- Aborted     -> Aborted     XXXXXX  init(r)>inner_savepoint
@@ -786,7 +786,7 @@ COMMIT
 -- Open        -> Open        ###.....  cockroach_restart(r)>foo>bar
 4: ROLLBACK TO SAVEPOINT foo -- 0 rows
 -- Open        -> Open        ##......  cockroach_restart(r)>foo
-5: SELECT crdb_internal.force_retry('1h') -- pq: restart transaction: crdb_internal.force_retry(): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+5: SELECT crdb_internal.force_retry('1h') -- pq: restart transaction: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
 -- Open        -> Aborted     XXXXXXXX  cockroach_restart(r)>foo
 6: ROLLBACK TO SAVEPOINT cockroach_restart -- 0 rows
 -- Aborted     -> Open        #.......  cockroach_restart(r)

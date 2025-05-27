@@ -187,10 +187,10 @@ SELECT enum_range('cockroach'::dbs, 'spanner'::dbs)
 ----
 {}
 
-query error pq: enum_range\(\): both arguments cannot be NULL
+query error pq: both arguments cannot be NULL
 SELECT enum_range(NULL::dbs, NULL::dbs)
 
-query error pq: enum_range\(\): mismatched types
+query error pq: mismatched types
 SELECT enum_range('cockroach'::dbs, 'hello'::greeting)
 
 # Test inserting and reading enum data from tables.

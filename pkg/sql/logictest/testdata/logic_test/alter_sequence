@@ -296,7 +296,7 @@ select nextval('set_no_maxvalue'),nextval('set_no_maxvalue'),nextval('set_no_max
 ----
 1  2  3
 
-statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "set_no_maxvalue" \(3\)
+statement error pgcode 2200H pq: reached maximum value of sequence "set_no_maxvalue" \(3\)
 select nextval('set_no_maxvalue')
 
 statement ok
@@ -315,7 +315,7 @@ select nextval('set_no_minvalue'),nextval('set_no_minvalue'),nextval('set_no_min
 ----
 -1  -2  -3
 
-statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "set_no_minvalue" \(-3\)
+statement error pgcode 2200H pq: reached minimum value of sequence "set_no_minvalue" \(-3\)
 select nextval('set_no_minvalue')
 
 statement ok

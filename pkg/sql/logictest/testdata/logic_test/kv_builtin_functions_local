@@ -16,7 +16,7 @@ SELECT crdb_internal.kv_enqueue_replica($rangeid, 'mvccGC', true);
 ----
 true
 
-query error pq: crdb_internal.kv_enqueue_replica\(\): replica with range id 10000 not found on this node
+query error pq: replica with range id 10000 not found on this node
 SELECT crdb_internal.kv_enqueue_replica(10000, 'mvccGC', true);
 
 
@@ -27,8 +27,8 @@ SELECT crdb_internal.kv_enqueue_replica($rangeid, 'mvccGC', true, 1);
 ----
 true
 
-query error pq: crdb_internal.kv_enqueue_replica\(\): store 42 not found on this node
+query error pq: store 42 not found on this node
 SELECT crdb_internal.kv_enqueue_replica($rangeid, 'mvccGC', true, 42);
 
-query error pq: crdb_internal.kv_enqueue_replica\(\): r10000 was not found on s1
+query error pq: r10000 was not found on s1
 SELECT crdb_internal.kv_enqueue_replica(10000, 'mvccGC', true, 1);

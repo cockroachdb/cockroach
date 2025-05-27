@@ -25,24 +25,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/bit.out --label=/
  --INSERT INTO VARBIT_TABLE VALUES ('X554');
  --INSERT INTO VARBIT_TABLE VALUES ('X555');
  SELECT * FROM VARBIT_TABLE;
-@@ -120,7 +120,7 @@
- (1 row)
- 
- SELECT SUBSTRING('01010101'::bit(8) FROM -10 FOR -2147483646) AS "error";
--ERROR:  negative substring length not allowed
-+ERROR:  substring(): negative bit subarray length -2147483646 not allowed
- SELECT SUBSTRING('01010101'::varbit FROM 2 FOR 2147483646) AS "1010101";
-  1010101 
- ---------
-@@ -134,7 +134,7 @@
- (1 row)
- 
- SELECT SUBSTRING('01010101'::varbit FROM -10 FOR -2147483646) AS "error";
--ERROR:  negative substring length not allowed
-+ERROR:  substring(): negative bit subarray length -2147483646 not allowed
- --- Bit operations
- DROP TABLE varbit_table;
- CREATE TABLE varbit_table (a BIT VARYING(16), b BIT VARYING(16));
 @@ -248,231 +248,231 @@
  ERROR:  cannot XOR bit strings of different sizes
  -- More position tests, checking all the boundary cases
@@ -475,12 +457,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/bit.out --label=/
  (16 rows)
  
  SELECT v, v >> 1 AS vsr, v << 1 AS vsl
-@@ -684,32 +684,20 @@
- (1 row)
- 
- SELECT set_bit(B'0101011000100100', 16, 1);	-- fail
--ERROR:  bit index 16 out of valid range (0..15)
-+ERROR:  set_bit(): bit index 16 out of valid range (0..15)
+@@ -687,29 +687,17 @@
+ ERROR:  bit index 16 out of valid range (0..15)
  -- Overlay
  SELECT overlay(B'0101011100' placing '001' from 2 for 3);
 -  overlay   

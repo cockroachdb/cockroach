@@ -82,10 +82,10 @@ SELECT currval('discard_seq_test')
 statement ok
 DISCARD SEQUENCES
 
-statement error pgcode 55000 pq: lastval\(\): lastval is not yet defined in this session
+statement error pgcode 55000 pq: lastval is not yet defined in this session
 SELECT lastval()
 
-statement error pgcode 55000 pq: currval\(\): currval of sequence "test.public.discard_seq_test" is not yet defined in this session
+statement error pgcode 55000 pq: currval of sequence "test.public.discard_seq_test" is not yet defined in this session
 SELECT currval('discard_seq_test')
 
 statement ok
@@ -99,7 +99,7 @@ SELECT nextval('discard_seq_test_2')
 statement ok
 DISCARD ALL
 
-statement error pgcode 55000 pq: lastval\(\): lastval is not yet defined in this session
+statement error pgcode 55000 pq: lastval is not yet defined in this session
 SELECT lastval()
 
 statement ok
@@ -217,7 +217,7 @@ UTC
 statement error prepared statement \"a\" does not exist
 DEALLOCATE a
 
-statement error pgcode 55000 pq: currval\(\): currval of sequence "test.public.discard_seq" is not yet defined in this session
+statement error pgcode 55000 pq: currval of sequence "test.public.discard_seq" is not yet defined in this session
 SELECT currval('discard_seq')
 
 query T rowsort
