@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "faulttolerance",
+    srcs = ["locality.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/faulttolerance",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/gossip",
+        "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "faulttolerance_test",
+    srcs = ["locality_test.go"],
+    embed = [":faulttolerance"],
+    deps = [
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb",
+        "@com_github_stretchr_testify//require",
+    ],
+)
