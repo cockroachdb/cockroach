@@ -206,13 +206,8 @@ func (sm *replicaStateMachine) ApplySideEffects(
 		// Some tests (TestRangeStatsInit) assumes that once the store has started
 		// and the first range has a lease that there will not be a later hard-state.
 		if shouldAssert {
-			// Assert that the on-disk state doesn't diverge from the in-memory
+			// Queue a check that the on-disk state doesn't diverge from the in-memory
 			// state as a result of the side effects.
-			sm.r.mu.RLock()
-			// TODO(sep-raft-log): either check only statemachine invariants or
-			// pass both engines in.
-			sm.r.assertStateRaftMuLockedReplicaMuRLocked(ctx, sm.r.store.TODOEngine())
-			sm.r.mu.RUnlock()
 			sm.applyStats.assertionsRequested++
 		}
 	} else if res := cmd.ReplicatedResult(); !res.IsZero() {

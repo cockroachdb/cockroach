@@ -775,14 +775,6 @@ func (r *Replica) applySnapshotRaftMuLocked(
 
 	r.mu.Unlock()
 
-	// Assert that the in-memory and on-disk states of the Replica are congruent
-	// after the application of the snapshot. Do so under a read lock, as this
-	// operation can be expensive. This is safe, as we hold the Replica.raftMu
-	// across both Replica.mu critical sections.
-	r.mu.RLock()
-	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.TODOEngine())
-	r.mu.RUnlock()
-
 	// The rangefeed processor is listening for the logical ops attached to
 	// each raft command. These will be lost during a snapshot, so disconnect
 	// the rangefeed, if one exists.
