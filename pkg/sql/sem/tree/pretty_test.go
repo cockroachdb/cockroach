@@ -31,8 +31,8 @@ import (
 )
 
 var (
-	flagWritePretty = flag.Bool("rewrite-pretty", false, "rewrite pretty test outputs")
-	testPrettyCfg   = func() tree.PrettyCfg {
+	flagRewrite   = flag.Bool("rewrite", false, "rewrite pretty test outputs")
+	testPrettyCfg = func() tree.PrettyCfg {
 		cfg := tree.DefaultPrettyCfg()
 		cfg.JSONFmt = true
 		return cfg
@@ -51,8 +51,8 @@ func TestPrettyDataShort(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if *flagWritePretty {
-		t.Log("WARNING: do not forget to run TestPrettyData with build flag 'nightly' and the -rewrite-pretty flag too!")
+	if *flagRewrite {
+		t.Log("WARNING: do not forget to run TestPrettyData with build flag 'nightly' and the -rewrite flag too!")
 	}
 	cfg := testPrettyCfg
 	cfg.Align = tree.PrettyNoAlign
@@ -143,7 +143,7 @@ func runTestPrettyData(
 				outfile = outfile + ".short"
 			}
 
-			if *flagWritePretty {
+			if *flagRewrite {
 				if err := os.WriteFile(outfile, []byte(got), 0666); err != nil {
 					t.Fatal(err)
 				}

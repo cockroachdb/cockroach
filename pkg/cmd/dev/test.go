@@ -180,6 +180,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 			{"pkg/sql/opt/norm", "pkg/sql/opt/testutils/opttester/testfixtures"},
 			{"pkg/sql/opt/xform", "pkg/sql/opt/testutils/opttester/testfixtures"},
 			{"pkg/sql/opt/exec/explain", "pkg/sql/opt/testutils/opttester/testfixtures"},
+			{"pkg/sql/sem/tree", "pkg/sql/sem/tree/testdata/pretty"},
 		}
 
 		logicTestPaths = []string{
