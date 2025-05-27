@@ -62,7 +62,7 @@ const HotRangesTable = ({
             placement="bottom"
             title={
               <span>
-                The internal ID of the hot range. Click the range ID to view the{" "}
+                The internal ID of the top range. Click the range ID to view the{" "}
                 <Anchor href={uiDebugPages} className={cx("light-anchor")}>
                   range report
                 </Anchor>{" "}
@@ -297,11 +297,11 @@ const HotRangesTable = ({
         pagination={pagination}
         renderNoResult={
           <EmptyTable
-            title="No hot ranges"
+            title="No top ranges"
             icon={emptyTableResultsImg}
             footer={
               <Anchor href={performanceBestPracticesHotSpots} target="_blank">
-                Learn more about hot ranges
+                Learn more about top ranges
               </Anchor>
             }
           />

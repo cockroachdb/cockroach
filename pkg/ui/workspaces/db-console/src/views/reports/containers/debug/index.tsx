@@ -568,7 +568,7 @@ export default function Debug() {
             note="_status/nodes/[node_id]"
           />
         </DebugTableRow>
-        <DebugTableRow title="Hot Ranges">
+        <DebugTableRow title="Top Ranges">
           <DebugTableLink
             name="All Nodes"
             url="#/debug/hotranges"
