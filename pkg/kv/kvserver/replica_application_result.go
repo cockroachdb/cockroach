@@ -506,20 +506,6 @@ func (r *Replica) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
 	r.asLogStorage().stagePendingTruncationRaftMuLocked(pt)
 }
 
-func (r *replicaLogStorage) stagePendingTruncationSharedRaftMuLockedMuLocked(pt pendingTruncation) {
-	// This code is shared between regular log truncations and snapshot-induced
-	// truncations.
-	r.shMu.trunc = pt.RaftTruncatedState
-	// Ensure the raft log size is not negative since it isn't persisted between
-	// server restarts.
-	// TODO(pav-kv): should we distrust the log size if it goes negative?
-	r.shMu.size = max(r.shMu.size+pt.logDeltaBytes, 0)
-	r.shMu.lastCheckSize = max(r.shMu.lastCheckSize+pt.logDeltaBytes, 0)
-	if !pt.isDeltaTrusted {
-		r.shMu.sizeTrusted = false
-	}
-}
-
 func (r *replicaLogStorage) stageApplySnapshot(truncState kvserverpb.RaftTruncatedState) {
 	r.raftMu.AssertHeld()
 
@@ -584,7 +570,15 @@ func (r *replicaLogStorage) stagePendingTruncationRaftMuLocked(pt pendingTruncat
 	func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		r.stagePendingTruncationSharedRaftMuLockedMuLocked(pt)
+		r.shMu.trunc = pt.RaftTruncatedState
+		// Ensure the raft log size is not negative since it isn't persisted between
+		// server restarts.
+		// TODO(pav-kv): should we distrust the log size if it goes negative?
+		r.shMu.size = max(r.shMu.size+pt.logDeltaBytes, 0)
+		r.shMu.lastCheckSize = max(r.shMu.lastCheckSize+pt.logDeltaBytes, 0)
+		if !pt.isDeltaTrusted {
+			r.shMu.sizeTrusted = false
+		}
 	}()
 
 	// Clear entries in the raft log entry cache for this range up to and
