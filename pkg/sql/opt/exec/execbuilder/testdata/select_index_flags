@@ -357,3 +357,41 @@ vectorized: true
       missing stats
       table: abcd@abcd_pkey
       spans: FULL SCAN
+
+# Regression tests for #147363. Statements should not error because the fast path
+# picks a plan that does not adhere to hints.
+statement ok
+CREATE TABLE t147363 (
+  a INT,
+  b INT,
+  c INT,
+  PRIMARY KEY (a, b),
+  INDEX i (a, b)
+)
+
+statement ok
+PREPARE p147363 AS
+SELECT * FROM t147363@i WHERE a = $1 AND b = $2
+
+statement ok
+EXECUTE p147363(1, 2)
+
+statement ok
+DEALLOCATE p147363
+
+statement ok
+PREPARE p147363 AS
+SELECT * FROM t147363@{FORCE_INVERTED_INDEX} WHERE a = $1 AND b = $2
+
+statement error pgcode XXUUU could not produce a query plan conforming to the FORCE_INVERTED_INDEX hint
+EXECUTE p147363(1, 2)
+
+statement ok
+DEALLOCATE p147363
+
+statement ok
+PREPARE p147363 AS
+SELECT * FROM t147363@{FORCE_ZIGZAG} WHERE a = $1 AND b = $2
+
+statement error pgcode XXUUU could not produce a query plan conforming to the FORCE_ZIGZAG hint
+EXECUTE p147363(1, 2)
