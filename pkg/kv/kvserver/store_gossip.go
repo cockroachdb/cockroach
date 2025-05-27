@@ -461,6 +461,7 @@ func (s *StoreGossip) RecordNewPerSecondStats(newQPS, newWPS, newWBPS float64) {
 	s.cachedCapacity.cached.QueriesPerSecond = newQPS
 	s.cachedCapacity.cached.WritesPerSecond = newWPS
 	s.cachedCapacity.cached.WriteBytesPerSecond = newWBPS
+	// TODO: Add CPU here.
 	s.cachedCapacity.Unlock()
 
 	if shouldGossip, reason := s.shouldGossipOnCapacityDelta(); shouldGossip {
