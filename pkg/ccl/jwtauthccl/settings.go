@@ -9,7 +9,9 @@ import (
 	"bytes"
 	"crypto/x509"
 	"encoding/json"
+	"regexp"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -20,16 +22,25 @@ import (
 
 // All cluster settings necessary for the JWT authentication feature.
 const (
-	baseJWTAuthSettingName           = "server.jwt_authentication."
-	JWTAuthAudienceSettingName       = baseJWTAuthSettingName + "audience"
-	JWTAuthEnabledSettingName        = baseJWTAuthSettingName + "enabled"
-	JWTAuthIssuersSettingName        = baseJWTAuthSettingName + "issuers"
-	JWTAuthJWKSSettingName           = baseJWTAuthSettingName + "jwks"
-	JWTAuthClaimSettingName          = baseJWTAuthSettingName + "claim"
-	JWKSAutoFetchEnabledSettingName  = baseJWTAuthSettingName + "jwks_auto_fetch.enabled"
-	jwtAuthIssuerCustomCASettingName = baseJWTAuthSettingName + "issuers.custom_ca"
-	jwtAuthClientTimeoutSettingName  = baseJWTAuthSettingName + "client.timeout"
-	jwtAuthIssuersConfigSettingName  = JWTAuthIssuersSettingName + ".configuration"
+	baseJWTAuthSettingName             = "server.jwt_authentication."
+	JWTAuthAudienceSettingName         = baseJWTAuthSettingName + "audience"
+	JWTAuthEnabledSettingName          = baseJWTAuthSettingName + "enabled"
+	JWTAuthIssuersSettingName          = baseJWTAuthSettingName + "issuers"
+	JWTAuthJWKSSettingName             = baseJWTAuthSettingName + "jwks"
+	JWTAuthClaimSettingName            = baseJWTAuthSettingName + "claim"
+	JWKSAutoFetchEnabledSettingName    = baseJWTAuthSettingName + "jwks_auto_fetch.enabled"
+	jwtAuthIssuerCustomCASettingName   = baseJWTAuthSettingName + "issuers.custom_ca"
+	jwtAuthClientTimeoutSettingName    = baseJWTAuthSettingName + "client.timeout"
+	jwtAuthIssuersConfigSettingName    = JWTAuthIssuersSettingName + ".configuration"
+	JWTAuthZEnabledSettingName         = baseJWTAuthSettingName + "authorization.enabled"
+	JWTAuthGroupClaimSettingName       = baseJWTAuthSettingName + "group_claim"
+	JWTAuthUserinfoGroupKeySettingName = baseJWTAuthSettingName + "userinfo_group_key"
+)
+
+// Validator for group claim settings
+var (
+	// allowed: letters, digits, underscore, dot, dash
+	groupKeyRe = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 )
 
 // JWTAuthClaim sets the JWT claim that is parsed to get the username.
@@ -142,6 +153,39 @@ var JWTAuthClientTimeout = settings.RegisterDurationSetting(
 	"sets the client timeout for external calls made during JWT authentication "+
 		"(e.g. fetching JWKS, etc.)",
 	15*time.Second,
+	settings.WithPublic,
+)
+
+// JWTAuthZEnabled enables role-sync (authorization) for JWT logins.
+var JWTAuthZEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	JWTAuthZEnabledSettingName,
+	"enables role synchronisation based on group claims in JWTs",
+	false,
+	settings.WithReportable(true),
+	settings.WithPublic)
+
+// JWTAuthGroupClaim sets the name of the JWT claim that contains the groups.
+var JWTAuthGroupClaim = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	JWTAuthGroupClaimSettingName,
+	"sets the name of the JWT claim that contains groups used for role mapping",
+	"groups",
+	settings.WithValidateString(validateJWTGroupKey),
+	settings.WithReportable(true),
+	settings.WithPublic)
+
+// JWTAuthUserinfoGroupKey sets the name of the field in the userinfo response which
+// contains the group membership info.
+// This is an optional fallback for when access_tokens that don't contain a
+// groups claim are used during jwt auth.
+var JWTAuthUserinfoGroupKey = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	JWTAuthUserinfoGroupKeySettingName,
+	"sets the field name to look for in userinfo JSON that lists groups when groups claim is absent from JWT",
+	"groups",
+	settings.WithValidateString(validateJWTGroupKey),
+	settings.WithReportable(true),
 	settings.WithPublic,
 )
 
@@ -287,6 +331,22 @@ func validateJWTAuthIssuerCACert(values *settings.Values, s string) error {
 	if len(s) != 0 {
 		if ok := x509.NewCertPool().AppendCertsFromPEM([]byte(s)); !ok {
 			return errors.Newf("JWT authentication issuer custom CA certificate not valid")
+		}
+	}
+	return nil
+}
+
+func validateJWTGroupKey(_ *settings.Values, s string) error {
+	if len(strings.TrimSpace(s)) == 0 {
+		return errors.Newf("JWT authentication: value cannot be empty")
+	}
+	for _, token := range strings.Split(s, ",") {
+		token = strings.TrimSpace(token)
+		if token == "" {
+			return errors.Newf("JWT authentication: empty token in list")
+		}
+		if !groupKeyRe.MatchString(token) {
+			return errors.Newf("JWT authentication: %q contains invalid characters", token)
 		}
 	}
 	return nil
