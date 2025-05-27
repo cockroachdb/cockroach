@@ -30,16 +30,24 @@ import (
 )
 
 const (
-	counterPrefix           = "auth.jwt."
-	beginAuthCounterName    = counterPrefix + "begin_auth"
-	loginSuccessCounterName = counterPrefix + "login_success"
-	enableCounterName       = counterPrefix + "enable"
+	counterPrefix               = "auth.jwt."
+	beginAuthCounterName        = counterPrefix + "begin_auth"
+	loginSuccessCounterName     = counterPrefix + "login_success"
+	enableCounterName           = counterPrefix + "enable"
+	authzTokenSuccessCounter    = counterPrefix + "authz_success"
+	authzUserinfoSuccessCounter = counterPrefix + "authz_userinfo_success"
+	authzUserinfoMissCounter    = counterPrefix + "authz_userinfo_miss"
+	authzFailureCounter         = counterPrefix + "authz_failure"
 )
 
 var (
-	beginAuthUseCounter    = telemetry.GetCounterOnce(beginAuthCounterName)
-	loginSuccessUseCounter = telemetry.GetCounterOnce(loginSuccessCounterName)
-	enableUseCounter       = telemetry.GetCounterOnce(enableCounterName)
+	beginAuthUseCounter            = telemetry.GetCounterOnce(beginAuthCounterName)
+	loginSuccessUseCounter         = telemetry.GetCounterOnce(loginSuccessCounterName)
+	enableUseCounter               = telemetry.GetCounterOnce(enableCounterName)
+	authzTokenSuccessUseCounter    = telemetry.GetCounterOnce(authzTokenSuccessCounter)
+	authzUserinfoSuccessUseCounter = telemetry.GetCounterOnce(authzUserinfoSuccessCounter)
+	authzUserinfoMissUseCounter    = telemetry.GetCounterOnce(authzUserinfoMissCounter)
+	authzFailureUseCounter         = telemetry.GetCounterOnce(authzFailureCounter)
 )
 
 // jwtAuthenticator is an object that is used to validate JWTs that are used as part of
@@ -311,6 +319,42 @@ func (authenticator *jwtAuthenticator) RetrieveIdentity(
 	return user, nil
 }
 
+// ExtractGroups implements pgwire.JWTVerifier.
+//   - If server.jwt_authentication.authorization.enabled is FALSE -> return (nil, nil)
+//   - Else return the groups list from jwt
+//     if groups field is absent from jwt, try fetching it from userinfo endpoint
+func (a *jwtAuthenticator) ExtractGroups(
+	st *cluster.Settings, tokenBytes []byte,
+) ([]string, error) {
+	if !JWTAuthZEnabled.Get(&st.SV) {
+		return nil, nil
+	}
+	tok, err := jwt.ParseInsecure(tokenBytes)
+	if err != nil {
+		return nil, err
+	}
+	groups, err := extractGroupsFromJWT(st, tok)
+	if err == nil && len(groups) > 0 {
+		telemetry.Inc(authzTokenSuccessUseCounter)
+		return groups, nil // found groups in jwt, early exit
+	}
+
+	// Fallback to userinfo
+	ctx := context.TODO()
+	groups, err = fetchGroupsFromUserinfo(
+		ctx, st, tok.Issuer(), tokenBytes, a.mu.conf.httpClient)
+	if err != nil {
+		telemetry.Inc(authzFailureUseCounter)
+		return nil, err
+	}
+	if len(groups) == 0 {
+		telemetry.Inc(authzUserinfoMissUseCounter)
+		return nil, errors.New("no groups claim in token nor userinfo")
+	}
+	telemetry.Inc(authzUserinfoSuccessUseCounter)
+	return groups, nil
+}
+
 // remoteFetchJWKS fetches the JWKS URI from the provided issuer URL.
 func (authenticator *jwtAuthenticator) remoteFetchJWKS(
 	ctx context.Context, issuerURL string,
@@ -362,6 +406,34 @@ func (authenticator *jwtAuthenticator) getJWKSURI(
 		return "", errors.Newf("no JWKS URI found in OpenID configuration")
 	}
 	return config.JWKSUri, nil
+}
+
+// getUserinfoEndpoint returns <issuer>'s user-info URL as advertised in the
+// OpenID-Connect discovery document. An empty string means the provider
+// doesn’t expose one.
+func getUserinfoEndpoint(
+	ctx context.Context, issuer string, httpClient *httputil.Client,
+) (string, error) {
+	cfgURL := getOpenIdConfigEndpoint(issuer)
+
+	resp, err := httpClient.Get(ctx, cfgURL)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	var cfg struct {
+		UserinfoEndpoint string `json:"userinfo_endpoint"`
+	}
+	if err := json.Unmarshal(body, &cfg); err != nil {
+		return "", err
+	}
+	return cfg.UserinfoEndpoint, nil
 }
 
 // getOpenIdConfigEndpoint returns the OpenID configuration endpoint by appending standard open-id url.
