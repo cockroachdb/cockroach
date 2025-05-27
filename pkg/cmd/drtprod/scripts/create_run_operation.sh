@@ -32,6 +32,8 @@ if [ -z "${DD_API_KEY}" ]; then
   exit 1
 fi
 
+export ROACHPROD_DISABLED_PROVIDERS=IBM
+
 # sync cluster is needed for operations
 drtprod ssh ${WORKLOAD_CLUSTER} -- "ROACHPROD_GCE_DEFAULT_PROJECT=${ROACHPROD_GCE_DEFAULT_PROJECT} ./roachprod sync"
 

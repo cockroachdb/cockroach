@@ -28,6 +28,8 @@ for var in "${env_vars[@]}"; do
   fi
 done
 
+export ROACHPROD_DISABLED_PROVIDERS=IBM
+
 for NODE in $(seq 1 $NUM_REGIONS)
 do
   NODE_OFFSET=$(($(($(($NODE - 1))*$NODES_PER_REGION))+1))
@@ -45,6 +47,7 @@ do
   cat <<EOF >/tmp/tpcc_run.sh
 #!/usr/bin/env bash
 
+export ROACHPROD_DISABLED_PROVIDERS=IBM
 export ROACHPROD_GCE_DEFAULT_PROJECT=$ROACHPROD_GCE_DEFAULT_PROJECT
 ./roachprod sync
 PGURLS=\$(./roachprod load-balancer pgurl $CLUSTER | sed s/\'//g)
