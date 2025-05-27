@@ -20,16 +20,19 @@ import (
 
 // All cluster settings necessary for the JWT authentication feature.
 const (
-	baseJWTAuthSettingName           = "server.jwt_authentication."
-	JWTAuthAudienceSettingName       = baseJWTAuthSettingName + "audience"
-	JWTAuthEnabledSettingName        = baseJWTAuthSettingName + "enabled"
-	JWTAuthIssuersSettingName        = baseJWTAuthSettingName + "issuers"
-	JWTAuthJWKSSettingName           = baseJWTAuthSettingName + "jwks"
-	JWTAuthClaimSettingName          = baseJWTAuthSettingName + "claim"
-	JWKSAutoFetchEnabledSettingName  = baseJWTAuthSettingName + "jwks_auto_fetch.enabled"
-	jwtAuthIssuerCustomCASettingName = baseJWTAuthSettingName + "issuers.custom_ca"
-	jwtAuthClientTimeoutSettingName  = baseJWTAuthSettingName + "client.timeout"
-	jwtAuthIssuersConfigSettingName  = JWTAuthIssuersSettingName + ".configuration"
+	baseJWTAuthSettingName             = "server.jwt_authentication."
+	JWTAuthAudienceSettingName         = baseJWTAuthSettingName + "audience"
+	JWTAuthEnabledSettingName          = baseJWTAuthSettingName + "enabled"
+	JWTAuthIssuersSettingName          = baseJWTAuthSettingName + "issuers"
+	JWTAuthJWKSSettingName             = baseJWTAuthSettingName + "jwks"
+	JWTAuthClaimSettingName            = baseJWTAuthSettingName + "claim"
+	JWKSAutoFetchEnabledSettingName    = baseJWTAuthSettingName + "jwks_auto_fetch.enabled"
+	jwtAuthIssuerCustomCASettingName   = baseJWTAuthSettingName + "issuers.custom_ca"
+	jwtAuthClientTimeoutSettingName    = baseJWTAuthSettingName + "client.timeout"
+	jwtAuthIssuersConfigSettingName    = JWTAuthIssuersSettingName + ".configuration"
+	JWTAuthZEnabledSettingName         = baseJWTAuthSettingName + "authorization.enabled"
+	JWTAuthGroupClaimSettingName       = baseJWTAuthSettingName + "group_claim"
+	JWTAuthUserinfoGroupKeySettingName = baseJWTAuthSettingName + "userinfo_group_key"
 )
 
 // JWTAuthClaim sets the JWT claim that is parsed to get the username.
@@ -142,6 +145,37 @@ var JWTAuthClientTimeout = settings.RegisterDurationSetting(
 	"sets the client timeout for external calls made during JWT authentication "+
 		"(e.g. fetching JWKS, etc.)",
 	15*time.Second,
+	settings.WithPublic,
+)
+
+// JWTAuthZEnabled enables role-sync (authorization) for JWT logins.
+var JWTAuthZEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	JWTAuthZEnabledSettingName,
+	"enables role synchronisation based on group claims in JWTs",
+	false,
+	settings.WithReportable(true),
+	settings.WithPublic)
+
+// JWTAuthGroupClaim sets the name of the JWT Claim that contains the groups
+var JWTAuthGroupClaim = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	JWTAuthGroupClaimSettingName,
+	"sets the name of the JWT claim that contains groups used for role mapping",
+	"groups",
+	settings.WithReportable(true),
+	settings.WithPublic)
+
+// JWTAuthUserinfoGroupKey sets the name of the field in the userinfo response which
+// contains the group membership info.
+// This is an optional fallback for when access_tokens that don't contain a
+// groups claim are used during jwt auth.
+var JWTAuthUserinfoGroupKey = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	JWTAuthUserinfoGroupKeySettingName,
+	"sets the field name to look for in userinfo JSON that lists groups when groups claim is absent from JWT",
+	"groups",
+	settings.WithReportable(true),
 	settings.WithPublic,
 )
 
