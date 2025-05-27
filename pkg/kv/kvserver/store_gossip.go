@@ -454,14 +454,14 @@ func (s *StoreGossip) MaybeGossipOnCapacityChange(ctx context.Context, cce Capac
 // queries, key writes, and write bytes the store is handling and decides
 // whether either has changed enough to justify re-gossiping the store's
 // capacity.
-func (s *StoreGossip) RecordNewPerSecondStats(newQPS, newWPS, newWBPS float64) {
+func (s *StoreGossip) RecordNewPerSecondStats(newQPS, newWPS, newWBPS, newCPUS float64) {
 	// Overwrite stats to keep them up to date even if the capacity is
 	// gossiped, but isn't due yet to be recomputed from scratch.
 	s.cachedCapacity.Lock()
 	s.cachedCapacity.cached.QueriesPerSecond = newQPS
 	s.cachedCapacity.cached.WritesPerSecond = newWPS
 	s.cachedCapacity.cached.WriteBytesPerSecond = newWBPS
-	// TODO: Add CPU here.
+	s.cachedCapacity.cached.CPUPerSecond = newCPUS
 	s.cachedCapacity.Unlock()
 
 	if shouldGossip, reason := s.shouldGossipOnCapacityDelta(); shouldGossip {
@@ -516,6 +516,9 @@ func (s *StoreGossip) shouldGossipOnCapacityDelta() (should bool, reason string)
 	updateForWBPS, deltaWBPS := deltaExceedsThreshold(
 		s.cachedCapacity.lastGossiped.WriteBytesPerSecond, s.cachedCapacity.cached.WriteBytesPerSecond,
 		gossipMinAbsoluteDelta, gossipWhenLoadDeltaExceedsFraction)
+	updateForCPUS, deltaCPUS := deltaExceedsThreshold(
+		s.cachedCapacity.lastGossiped.CPUPerSecond, s.cachedCapacity.cached.CPUPerSecond,
+		gossipMinAbsoluteDelta, gossipWhenLoadDeltaExceedsFraction)
 	updateForRangeCount, deltaRangeCount := deltaExceedsThreshold(
 		float64(s.cachedCapacity.lastGossiped.RangeCount), float64(s.cachedCapacity.cached.RangeCount),
 		GossipWhenRangeCountDeltaExceeds, gossipWhenCapacityDeltaExceedsFraction)
@@ -540,6 +543,9 @@ func (s *StoreGossip) shouldGossipOnCapacityDelta() (should bool, reason string)
 	}
 	if updateForWBPS {
 		reason += fmt.Sprintf("write-bytes-per-second(%.1f) ", deltaWBPS)
+	}
+	if updateForCPUS {
+		reason += fmt.Sprintf("cpu-nanos-per-second(%.1f) ", deltaCPUS)
 	}
 	if updateForRangeCount {
 		reason += fmt.Sprintf("range-count(%.1f) ", deltaRangeCount)
