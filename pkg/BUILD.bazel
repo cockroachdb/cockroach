@@ -2842,6 +2842,7 @@ GO_TARGETS = [
     "//pkg/workload/ttllogger:ttllogger",
     "//pkg/workload/vecann:vecann",
     "//pkg/workload/vecann:vecann_test",
+    "//pkg/workload/version:version",
     "//pkg/workload/workloadimpl:workloadimpl",
     "//pkg/workload/workloadimpl:workloadimpl_test",
     "//pkg/workload/workloadsql:workloadsql",
