@@ -4437,6 +4437,10 @@ func TestChangefeedEnrichedSourceWithDataAvro(t *testing.T) {
 
 					sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY)`)
 					sqlDB.Exec(t, `INSERT INTO foo values (0)`)
+
+					var tableID string
+					sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables WHERE name = 'foo' AND database_name = 'd'`).Scan(&tableID)
+
 					stmt := `CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', format=avro`
 					if withMVCCTS {
 						stmt += ", mvcc_timestamp"
@@ -4474,12 +4478,13 @@ func TestChangefeedEnrichedSourceWithDataAvro(t *testing.T) {
 						var assertion string
 						assertionMap := map[string]any{
 							"source": map[string]any{
-								"changefeed_sink": map[string]any{"string": sink},
-								"cluster_id":      map[string]any{"string": clusterID},
-								"cluster_name":    map[string]any{"string": clusterName},
-								"database_name":   map[string]any{"string": "d"},
-								"db_version":      map[string]any{"string": dbVersion},
-								"job_id":          map[string]any{"string": jobIDStr},
+								"changefeed_sink":        map[string]any{"string": sink},
+								"cluster_id":             map[string]any{"string": clusterID},
+								"cluster_name":           map[string]any{"string": clusterName},
+								"crdb_internal_table_id": map[string]any{"string": tableID},
+								"database_name":          map[string]any{"string": "d"},
+								"db_version":             map[string]any{"string": dbVersion},
+								"job_id":                 map[string]any{"string": jobIDStr},
 								// Note that the field is still present in the avro schema, so it appears here as nil.
 								"mvcc_timestamp":       nil,
 								"node_id":              map[string]any{"string": nodeID},
@@ -4555,6 +4560,10 @@ func TestChangefeedEnrichedSourceWithDataJSON(t *testing.T) {
 
 					sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY)`)
 					sqlDB.Exec(t, `INSERT INTO foo values (0)`)
+
+					var tableID string
+					sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables WHERE name = 'foo' AND database_name = 'd'`).Scan(&tableID)
+
 					stmt := `CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', format=json`
 					if withMVCCTS {
 						stmt += ", mvcc_timestamp"
@@ -4593,19 +4602,20 @@ func TestChangefeedEnrichedSourceWithDataJSON(t *testing.T) {
 
 						var assertion string
 						assertionMap := map[string]any{
-							"cluster_id":           clusterID,
-							"cluster_name":         clusterName,
-							"db_version":           dbVersion,
-							"job_id":               jobIDStr,
-							"node_id":              nodeID,
-							"node_name":            nodeName,
-							"origin":               "cockroachdb",
-							"changefeed_sink":      sink,
-							"source_node_locality": sourceNodeLocality,
-							"database_name":        "d",
-							"schema_name":          "public",
-							"table_name":           "foo",
-							"primary_keys":         []any{"i"},
+							"cluster_id":             clusterID,
+							"cluster_name":           clusterName,
+							"crdb_internal_table_id": tableID,
+							"db_version":             dbVersion,
+							"job_id":                 jobIDStr,
+							"node_id":                nodeID,
+							"node_name":              nodeName,
+							"origin":                 "cockroachdb",
+							"changefeed_sink":        sink,
+							"source_node_locality":   sourceNodeLocality,
+							"database_name":          "d",
+							"schema_name":            "public",
+							"table_name":             "foo",
+							"primary_keys":           []any{"i"},
 						}
 						if withMVCCTS {
 							assertReasonableMVCCTimestamp(t, actualSource["mvcc_timestamp"].(string))
@@ -4666,6 +4676,10 @@ func TestChangefeedEnrichedSourceWithDataJSONWebhook(t *testing.T) {
 
 					sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY)`)
 					sqlDB.Exec(t, `INSERT INTO foo values (0)`)
+
+					var tableID string
+					sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables WHERE name = 'foo' AND database_name = 'd'`).Scan(&tableID)
+
 					stmt := `CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', format=json`
 					if withMVCCTS {
 						stmt += ", mvcc_timestamp"
@@ -4699,19 +4713,20 @@ func TestChangefeedEnrichedSourceWithDataJSONWebhook(t *testing.T) {
 
 						var assertion string
 						assertionMap := map[string]any{
-							"cluster_id":           clusterID,
-							"cluster_name":         clusterName,
-							"db_version":           dbVersion,
-							"job_id":               jobIDStr,
-							"node_id":              nodeID,
-							"node_name":            nodeName,
-							"origin":               "cockroachdb",
-							"changefeed_sink":      sink,
-							"source_node_locality": sourceNodeLocality,
-							"database_name":        "d",
-							"schema_name":          "public",
-							"table_name":           "foo",
-							"primary_keys":         []any{"i"},
+							"cluster_id":             clusterID,
+							"cluster_name":           clusterName,
+							"crdb_internal_table_id": tableID,
+							"db_version":             dbVersion,
+							"job_id":                 jobIDStr,
+							"node_id":                nodeID,
+							"node_name":              nodeName,
+							"origin":                 "cockroachdb",
+							"changefeed_sink":        sink,
+							"source_node_locality":   sourceNodeLocality,
+							"database_name":          "d",
+							"schema_name":            "public",
+							"table_name":             "foo",
+							"primary_keys":           []any{"i"},
 						}
 						if withMVCCTS {
 							assertReasonableMVCCTimestamp(t, actualSource["mvcc_timestamp"].(string))
