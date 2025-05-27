@@ -24,6 +24,7 @@ func updateBrew(workDir string, version *semver.Version, latestMajor bool) error
 		commands = append(commands, exec.Command("make", fmt.Sprintf("VERSION=%s", version.String()), "PRODUCT=cockroach"))
 		commands = append(commands, exec.Command("make", fmt.Sprintf("VERSION=%s", version.String()), "PRODUCT=cockroach-sql"))
 	}
+	commands = append(commands, exec.Command("git", "add", "Formula"))
 	for _, cmd := range commands {
 		cmd.Dir = workDir
 		out, err := cmd.CombinedOutput()
