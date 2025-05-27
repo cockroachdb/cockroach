@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"iter"
 	"math"
 	"net"
 	"sort"
@@ -40,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/server/faulttolerance"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/tenantsettingswatcher"
@@ -59,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -83,6 +86,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
@@ -194,6 +198,18 @@ This metric is thus not an indicator of KV health.`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaFaultTolerance = metric.Metadata{
+		Name: "fault_tolerance.nodes",
+		Help: `Number of nodes that can fail before we lose quorum on any range, 
+    if the labeled failure domain goes down. 0 indicates that we can tolerate a fault
+    in the failure domain, but only just. Negative values indicate that the failure 
+    domain is critical to continued availability for at least one range.`,
+		Measurement: "Nodes",
+		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_REPLICATION,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+		HowToUse:    "Take the minimum, faceted across all labels",
+	}
 )
 
 // Cluster settings.
@@ -263,6 +279,7 @@ type nodeMetrics struct {
 	// Note that there could be multiple buffered senders in a node.
 	BufferedSenderMetrics  *rangefeed.BufferedSenderMetrics
 	LockedMuxStreamMetrics *rangefeed.LockedMuxStreamMetrics
+	FaultTolerance         *metric.GaugeVec
 }
 
 func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) *nodeMetrics {
@@ -285,6 +302,7 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) *nodeM
 		StreamManagerMetrics:          rangefeed.NewStreamManagerMetrics(),
 		BufferedSenderMetrics:         rangefeed.NewBufferedSenderMetrics(),
 		LockedMuxStreamMetrics:        rangefeed.NewLockedMuxStreamMetrics(),
+		FaultTolerance:                metric.NewExportedGaugeVec(metaFaultTolerance, []string{"Locality"}),
 	}
 
 	for i := range nm.MethodCounts {
@@ -1237,9 +1255,90 @@ func (n *Node) computeMetricsPeriodically(
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
 	n.updateNodeRangeCount()
 	n.storeCfg.KVFlowStreamTokenProvider.UpdateMetricGauges()
+	err = n.updateFaultToleranceMetrics(ctx)
 	return err
+}
+
+// Replicas returns an iter.Seq over this node's Replicas.
+func (n *Node) Replicas() iter.Seq[*kvserver.Replica] {
+	return func(yield func(*kvserver.Replica) bool) {
+		keepGoing := true
+		_ = n.stores.VisitStores(func(store *kvserver.Store) error {
+			store.VisitReplicas(func(replica *kvserver.Replica) bool {
+				keepGoing = yield(replica)
+				return keepGoing
+			})
+			if !keepGoing {
+				return iterutil.StopIteration()
+			}
+			return nil
+		})
+	}
+}
+
+// StoreReplicas returns an iter.Seq2 over this node's Store, Replica pairs.
+func (n *Node) StoreReplicas() iter.Seq2[*kvserver.Store, *kvserver.Replica] {
+	return func(yield func(*kvserver.Store, *kvserver.Replica) bool) {
+		keepGoing := true
+		_ = n.stores.VisitStores(func(store *kvserver.Store) error {
+			store.VisitReplicas(func(replica *kvserver.Replica) bool {
+				keepGoing = yield(store, replica)
+				return keepGoing
+			})
+			if !keepGoing {
+				return iterutil.StopIteration()
+			}
+			return nil
+		})
+	}
+}
+
+// updateFaultToleranceMetrics updates the FaultTolerance gauges.
+func (n *Node) updateFaultToleranceMetrics(ctx context.Context) error {
+	localityMap, err := faulttolerance.LocalityMapsFromGossip(n.storeCfg.Gossip)
+	if err != nil {
+		return err
+	}
+
+	// Check that all nodes have a locality set.
+	nodesWithLocality := 0
+	nodesMissingLocality := 0
+	for _, l := range localityMap {
+		if len(l.Tiers) > 0 {
+			nodesWithLocality++
+		} else {
+			nodesMissingLocality++
+		}
+	}
+	if nodesWithLocality == 0 {
+		// Locality isn't set anywhere; this metric is meaningless in this cluster.
+		return nil
+	}
+	if nodesMissingLocality > 0 {
+		log.Warningf(ctx, "skipping fault tolerance metric update: some nodes missing locality")
+		return nil
+	}
+
+	if domainMargins, err := faulttolerance.ComputeFaultTolerance(
+		ctx,
+		n.storeCfg.NodeLiveness.ScanNodeVitalityFromCache(),
+		localityMap,
+		n.Replicas(),
+	); err == nil {
+		for domainKey, margin := range domainMargins {
+			n.metrics.FaultTolerance.Update(map[string]string{"Locality": domainKey}, int64(margin))
+		}
+	} else {
+		return err
+	}
+
+	return nil
 }
 
 // UpdateIOThreshold relays the supplied IOThreshold to the same method on the

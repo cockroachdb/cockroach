@@ -10425,6 +10425,15 @@ layers:
       essential: true
   - name: REPLICATION
     metrics:
+    - name: fault_tolerance.nodes
+      exported_name: fault_tolerance_nodes
+      description: "Number of nodes that can fail before we lose quorum on any range, \n    if the labeled failure domain goes down. 0 indicates that we can tolerate a fault\n    in the failure domain, but only just. Negative values indicate that the failure \n    domain is critical to continued availability for at least one range."
+      y_axis_label: Nodes
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Take the minimum, faceted across all labels
     - name: leases.transfers.success
       exported_name: leases_transfers_success
       description: Number of successful lease transfers
