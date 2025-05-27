@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -33,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/workload/version"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -159,7 +159,7 @@ func (og *operationGenerator) getSupportedDeclarativeOp(
 	for {
 		op := opType(og.params.declarativeOps.Int())
 		if opVerKey := opDeclarativeVersion[op]; opVerKey != clusterversion.MinSupported {
-			notSupported, err := isClusterVersionLessThan(ctx, tx, opVerKey.Version())
+			notSupported, err := version.WithPGX(tx).IsClusterVersionLessThan(ctx, opVerKey.Version())
 			if err != nil {
 				return op, err
 			}
@@ -1285,7 +1285,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	}()
 
 	// Randomly create as schema locked table.
-	versionBefore253, err := isClusterVersionLessThan(ctx, tx, clusterversion.V25_3.Version())
+	versionBefore253, err := version.WithPGX(tx).IsClusterVersionLessThan(ctx, clusterversion.V25_3.Version())
 	if err != nil {
 		return nil, err
 	}
@@ -2884,9 +2884,8 @@ func (og *operationGenerator) commentOn(ctx context.Context, tx pgx.Tx) (*opStmt
 	var onType string
 
 	// COMMENT ON TYPE is only implemented in the declarative schema changer in v24.2.
-	commentOnTypeNotSupported, err := isClusterVersionLessThan(
+	commentOnTypeNotSupported, err := version.WithPGX(tx).IsClusterVersionLessThan(
 		ctx,
-		tx,
 		clusterversion.V24_2.Version())
 	if err != nil {
 		return nil, err
@@ -4010,9 +4009,8 @@ func (og *operationGenerator) randType(
 		return typName, typ, nil
 	}
 
-	pgVectorNotSupported, err := isClusterVersionLessThan(
+	pgVectorNotSupported, err := version.WithPGX(tx).IsClusterVersionLessThan(
 		ctx,
-		tx,
 		clusterversion.V24_2.Version())
 	if err != nil {
 		return nil, nil, err
@@ -4838,24 +4836,6 @@ func (og *operationGenerator) typeFromTypeName(
 		return nil, errors.Wrapf(err, "ResolveType: %v", typeName)
 	}
 	return typ, nil
-}
-
-// Check if the test is running with a mixed version cluster, with a version
-// less than the target version number. This can be used to detect
-// in mixed version environments if certain errors should be encountered.
-func isClusterVersionLessThan(
-	ctx context.Context, tx pgx.Tx, targetVersion roachpb.Version,
-) (bool, error) {
-	var clusterVersionStr string
-	row := tx.QueryRow(ctx, `SHOW CLUSTER SETTING version`)
-	if err := row.Scan(&clusterVersionStr); err != nil {
-		return false, err
-	}
-	clusterVersion, err := roachpb.ParseVersion(clusterVersionStr)
-	if err != nil {
-		return false, err
-	}
-	return clusterVersion.Less(targetVersion), nil
 }
 
 func (og *operationGenerator) setSeedInDB(ctx context.Context, tx pgx.Tx) error {

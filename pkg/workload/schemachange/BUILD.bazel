@@ -23,7 +23,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
-        "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/colinfo",
@@ -43,6 +42,7 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/workload",
         "//pkg/workload/histogram",
+        "//pkg/workload/version",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_jackc_pgx_v5//:pgx",
         "@com_github_jackc_pgx_v5//pgconn",
