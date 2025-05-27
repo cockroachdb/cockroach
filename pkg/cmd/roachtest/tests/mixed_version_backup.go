@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -23,6 +24,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -37,6 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -2309,6 +2315,54 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 		fingerprintAOST = collection.restoreAOST
 	}
 	return d.saveContents(ctx, l, rng, &collection, fingerprintAOST)
+}
+
+// deleteRandomSSTs deletes an SST from the full backup in a collection. This is
+// used to test online restore recovery. We delete from the full backup
+// specifically to avoid deleting an SST from an incremental that is skipped due
+// to a compacted backup. This ensures that deleting an SST will cause the
+// download job to fail (assuming it hasn't already been downloaded).
+func (d *BackupRestoreTestDriver) deleteRandomSST(
+	ctx context.Context, l *logger.Logger, db *gosql.DB, collection *backupCollection,
+) error {
+	var sstPath string
+	if err := db.QueryRowContext(
+		ctx,
+		`SELECT path FROM
+		[SHOW BACKUP FILES FROM LATEST IN $1]
+		WHERE backup_type = 'full'
+		ORDER BY random() LIMIT 1 `,
+		collection.uri(),
+	).Scan(&sstPath); err != nil {
+		return errors.Wrapf(err, "failed to get random SST path from %s", collection.uri())
+	}
+	uri, err := url.Parse(collection.uri())
+	if err != nil {
+		return errors.Wrapf(err, "failed to parse backup collection URI %q", collection.uri())
+	}
+	l.Printf("deleting sst %s at %s", sstPath, uri)
+	storage, err := cloud.ExternalStorageFromURI(
+		ctx,
+		collection.uri(),
+		base.ExternalIODirConfig{},
+		clustersettings.MakeTestingClusterSettings(),
+		blobs.TestBlobServiceClient(uri.Path),
+		username.RootUserName(),
+		nil, /* db */
+		nil, /* limiters */
+		cloud.NilMetrics,
+	)
+	if err != nil {
+		return errors.Wrapf(err, "failed to create external storage for %q", collection.uri())
+	}
+	defer storage.Close()
+	return errors.Wrapf(
+		storage.Delete(ctx, sstPath),
+		"failed to delete sst %s from backup %s at %s",
+		sstPath,
+		collection.name,
+		uri,
+	)
 }
 
 // sentinelFilePath returns the path to the file that prevents job
