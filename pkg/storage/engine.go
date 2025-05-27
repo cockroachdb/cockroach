@@ -1349,7 +1349,7 @@ func (m *Metrics) IngestedBytes() uint64 {
 func (m *Metrics) CompactedBytes() (read, written uint64) {
 	for _, lm := range m.Metrics.Levels {
 		read += lm.TableBytesRead + lm.BlobBytesReadEstimate
-		written += lm.TableBytesCompacted + lm.BlobBytesWritten
+		written += lm.TableBytesCompacted + lm.BlobBytesCompacted
 	}
 	return read, written
 }
@@ -1405,7 +1405,7 @@ func (m *Metrics) AsStoreStatsEvent() eventpb.StoreStats {
 			BytesIngested:   l.TableBytesIngested,
 			BytesMoved:      l.TableBytesMoved,
 			BytesRead:       l.TableBytesRead + l.BlobBytesReadEstimate,
-			BytesCompacted:  l.TableBytesCompacted + l.BlobBytesWritten,
+			BytesCompacted:  l.TableBytesCompacted + l.BlobBytesCompacted,
 			BytesFlushed:    l.TableBytesFlushed + l.BlobBytesFlushed,
 			TablesCompacted: l.TablesCompacted,
 			TablesFlushed:   l.TablesFlushed,

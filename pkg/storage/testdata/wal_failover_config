@@ -48,6 +48,7 @@ UnhealthyOperationLatencyThreshold() = (100ms,true)
 open flag= envs=(foo,bar) open=foo
 ----
 open error: directory "bar/auxiliary/wals-among-stores" may contain relevant WALs
+  OPTIONS key: WAL Failover.secondary_dir
 
 # Opening with the "disabled" setting should succeed.
 
@@ -109,6 +110,7 @@ UnhealthyOperationLatencyThreshold() = (100ms,true)
 open flag= envs=(foo) open=foo
 ----
 open error: directory "bax" may contain relevant WALs
+  OPTIONS key: WAL Failover.secondary_dir
 
 # Try to disable it without setting a prev_path. It should fail
 # as well.
@@ -116,6 +118,7 @@ open error: directory "bax" may contain relevant WALs
 open flag=disabled envs=(foo) open=foo
 ----
 open error: directory "bax" may contain relevant WALs
+  OPTIONS key: WAL Failover.secondary_dir
 
 # Changing the secondary location without specifying prev_path=bax
 # should fail.
@@ -123,6 +126,8 @@ open error: directory "bax" may contain relevant WALs
 open flag=path=baz envs=(foo) open=foo
 ----
 open error: directory "bax" may contain relevant WALs
+  OPTIONS key: WAL Failover.secondary_dir
+  o.WALFailover.Secondary.Dirname: baz
 
 # Changing the secondary location WITH specifying prev_path=bax
 # should succeed.
