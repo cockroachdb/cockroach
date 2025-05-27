@@ -97,6 +97,24 @@ func (r Resolution) SlabDuration() int64 {
 	return duration
 }
 
+// Duration returns the time.Duration corresponding to the Resolution
+func (r Resolution) Duration() time.Duration {
+	switch r {
+	case Resolution10s:
+		return time.Second * 10
+	case Resolution30m:
+		return time.Minute * 30
+	case resolution1ns:
+		return time.Nanosecond
+	case resolution50ns:
+		return time.Nanosecond * 50
+	default:
+		// it will never reach here because this is an enum. The user is never
+		// expected to construct a Resolution value directly. But just in case.
+		return time.Duration(r)
+	}
+}
+
 // IsRollup returns true if this resolution contains rollup data: statistical
 // values about a large number of samples taken over a long period, such as
 // the min, max and sum.
