@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1165,4 +1166,53 @@ func TestJWTAuthWithIssuerJWKSConfAutoFetchJWKS(t *testing.T) {
 			}
 		})
 	}
+}
+
+// This test verifies that when the groups claim is not present in the JWT,
+// ExtractGroups() issues exactly one HTTP request to the userinfo endpoint
+// and returns the groups obtained there.
+func TestExtractGroups_FallsBackToUserinfo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	// Arrange: enable JWT auth + authz and configure group key
+	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+	JWTAuthZEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+	JWTAuthUserinfoGroupKey.Override(ctx, &s.ClusterSettings().SV, "groups")
+
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+
+	// Create a token without a groups claim
+	tok := jwt.New()
+	require.NoError(t, tok.Set(jwt.SubjectKey, "alice"))
+
+	tokenBytes, err := jwt.Sign(tok, jwt.WithKey(jwa.HS256, []byte("secret")))
+	require.NoError(t, err, "failed to serialize token")
+
+	// Stub the user-info fetcher
+	httpCalls := 0
+	origFetch := fetchGroupsFromUserinfo
+	fetchGroupsFromUserinfo = func(
+		_ context.Context,
+		_ *cluster.Settings,
+		_ string,
+		_ []byte,
+		_ *httputil.Client,
+	) ([]string, error) {
+		httpCalls++
+		return []string{"team1"}, nil
+	}
+	defer func() { fetchGroupsFromUserinfo = origFetch }()
+
+	// Act
+	groups, err := verifier.ExtractGroups(s.ClusterSettings(), tokenBytes)
+
+	// Assert
+	require.NoError(t, err)
+	require.Equal(t, []string{"team1"}, groups)
+	require.Equal(t, 1, httpCalls)
 }
