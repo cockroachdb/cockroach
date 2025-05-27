@@ -651,7 +651,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		writeBytes = uint64(inSnap.SSTSize)
 	}
 	// The snapshot is visible, so finalize the truncation.
-	r.finalizeTruncationRaftMuLocked(ctx)
+	ls.finalizeApplySnapshotRaftMuLocked(ctx)
 
 	// The "ignored" here is to ignore the writes to create the AC linear models
 	// for LSM writes. Since these writes typically correspond to actual writes
