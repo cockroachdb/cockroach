@@ -39,7 +39,7 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
       preCalcGraphSize={true}
     >
-      <Axis label="queries">
+      <Axis label="queries per second">
         <Metric
           name="cr.node.sql.select.count"
           title="Selects"
