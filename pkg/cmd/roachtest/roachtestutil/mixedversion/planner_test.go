@@ -553,7 +553,7 @@ func Test_stepSelectorFilter(t *testing.T) {
 			name:                   "no filter",
 			predicate:              func(*singleStep) bool { return true },
 			expectedAllSteps:       true,
-			expectedRandomStepType: runHookStep{},
+			expectedRandomStepType: restartWithNewBinaryStep{},
 		},
 		{
 			name: "filter eliminates all steps",
@@ -861,7 +861,9 @@ type concurrentUserHooksMutator struct{}
 func (concurrentUserHooksMutator) Name() string         { return "concurrent_user_hooks_mutator" }
 func (concurrentUserHooksMutator) Probability() float64 { return 0.5 }
 
-func (concurrentUserHooksMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutation {
+func (concurrentUserHooksMutator) Generate(
+	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
+) []mutation {
 	// Insert our `testSingleStep` implementation concurrently with every
 	// user-provided function.
 	return plan.
@@ -880,7 +882,9 @@ type removeUserHooksMutator struct{}
 func (removeUserHooksMutator) Name() string         { return "remove_user_hooks_mutator" }
 func (removeUserHooksMutator) Probability() float64 { return 0.5 }
 
-func (removeUserHooksMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutation {
+func (removeUserHooksMutator) Generate(
+	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
+) []mutation {
 	return plan.
 		newStepSelector().
 		Filter(func(s *singleStep) bool {
