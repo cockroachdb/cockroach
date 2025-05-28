@@ -2238,29 +2238,25 @@ func (p *Pebble) BufferedSize() int {
 func (p *Pebble) ConvertFilesToBatchAndCommit(
 	_ context.Context, paths []string, clear roachpb.Span,
 ) error {
-	files := make([]sstable.ReadableFile, len(paths))
+	files := make([]sstable.ReadableFile, 0, len(paths))
 	closeFiles := func() {
-		for i := range files {
-			if files[i] != nil {
-				files[i].Close()
-			}
+		for _, file := range files {
+			_ = file.Close()
 		}
 	}
-	for i, fileName := range paths {
-		f, err := p.cfg.env.Open(fileName)
+	for _, path := range paths {
+		f, err := p.cfg.env.Open(path)
 		if err != nil {
 			closeFiles()
 			return err
 		}
-		files[i] = f
+		files = append(files, f)
 	}
-	iter, err := NewSSTEngineIterator(
-		[][]sstable.ReadableFile{files},
-		IterOptions{
-			KeyTypes:   IterKeyTypePointsAndRanges,
-			LowerBound: roachpb.KeyMin,
-			UpperBound: roachpb.KeyMax,
-		})
+	iter, err := NewSSTEngineIterator([][]sstable.ReadableFile{files}, IterOptions{
+		KeyTypes:   IterKeyTypePointsAndRanges,
+		LowerBound: roachpb.KeyMin,
+		UpperBound: roachpb.KeyMax,
+	})
 	if err != nil {
 		// TODO(sumeer): we don't call closeFiles() since in the error case some
 		// of the files may be closed. See the code in
@@ -2285,38 +2281,30 @@ func (p *Pebble) ConvertFilesToBatchAndCommit(
 	// into account?
 
 	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: roachpb.KeyMin})
-	for valid {
+	for ; valid; valid, err = iter.NextEngineKey() {
 		hasPoint, hasRange := iter.HasPointAndRange()
 		if hasPoint {
-			var k EngineKey
-			if k, err = iter.UnsafeEngineKey(); err != nil {
-				break
-			}
-			var v []byte
-			if v, err = iter.UnsafeValue(); err != nil {
-				break
-			}
-			if err = batch.PutEngineKey(k, v); err != nil {
-				break
+			if k, err := iter.UnsafeEngineKey(); err != nil {
+				return err
+			} else if v, err := iter.UnsafeValue(); err != nil {
+				return err
+			} else if err := batch.PutEngineKey(k, v); err != nil {
+				return err
 			}
 		}
 		if hasRange && iter.RangeKeyChanged() {
-			var rangeBounds roachpb.Span
-			if rangeBounds, err = iter.EngineRangeBounds(); err != nil {
-				break
+			rangeBounds, err := iter.EngineRangeBounds()
+			if err != nil {
+				return err
 			}
-			rangeKeys := iter.EngineRangeKeys()
-			for i := range rangeKeys {
-				if err = batch.PutEngineRangeKey(rangeBounds.Key, rangeBounds.EndKey, rangeKeys[i].Version,
-					rangeKeys[i].Value); err != nil {
-					break
+			for _, rk := range iter.EngineRangeKeys() {
+				if err := batch.PutEngineRangeKey(
+					rangeBounds.Key, rangeBounds.EndKey, rk.Version, rk.Value,
+				); err != nil {
+					return err
 				}
 			}
-			if err != nil {
-				break
-			}
 		}
-		valid, err = iter.NextEngineKey()
 	}
 	if err != nil {
 		return err
