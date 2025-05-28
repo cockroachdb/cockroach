@@ -934,9 +934,14 @@ func (t *Test) plan() (plan *TestPlan, retErr error) {
 			hooks:          t.hooks,
 			prng:           t.prng,
 			bgChans:        t.bgChans,
+			logger:         t.logger,
+			cluster:        t.cluster,
 		}
 		// Let's generate a plan.
-		plan = planner.Plan()
+		plan, err = planner.Plan()
+		if err != nil {
+			return nil, errors.Wrapf(err, "error generating test plan")
+		}
 		if plan.length <= t.options.maxNumPlanSteps {
 			break
 		}
