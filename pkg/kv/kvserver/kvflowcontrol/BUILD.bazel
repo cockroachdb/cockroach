@@ -15,7 +15,6 @@ go_library(
         "//pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb",
         "//pkg/roachpb",
         "//pkg/settings",
-        "//pkg/settings/cluster",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/ctxutil",
         "//pkg/util/humanizeutil",

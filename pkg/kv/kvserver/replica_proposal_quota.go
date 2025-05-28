@@ -110,13 +110,7 @@ func (r *Replica) shouldReplicationAdmissionControlUsePullMode(ctx context.Conte
 		return knobs.OverridePullPushMode()
 	}
 
-	versionEnabled := true
-	if knobs := r.store.TestingKnobs().FlowControlTestingKnobs; knobs != nil && knobs.OverrideV2EnabledWhenLeaderLevel != nil {
-		versionEnabled = knobs.OverrideV2EnabledWhenLeaderLevel() == kvflowcontrol.V2EnabledWhenLeaderV2Encoding
-	}
-
-	return versionEnabled &&
-		kvflowcontrol.Mode.Get(&r.store.cfg.Settings.SV) == kvflowcontrol.ApplyToAll &&
+	return kvflowcontrol.Mode.Get(&r.store.cfg.Settings.SV) == kvflowcontrol.ApplyToAll &&
 		kvflowcontrol.Enabled.Get(&r.store.cfg.Settings.SV)
 }
 
@@ -178,15 +172,6 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			r.mu.proposalQuota.Release(r.mu.quotaReleaseQueue...)
 			r.mu.quotaReleaseQueue = nil
 			r.mu.proposalQuota = nil
-			r.mu.Unlock()
-		}
-
-		if r.raftMu.flowControlLevel <= kvflowcontrol.V2NotEnabledWhenLeader {
-			// We only need to tick the replicaFlowControlIntegration interface if we
-			// are not using flowControlV2. If we are using flowControlV2, the calls
-			// or no-ops.
-			r.mu.Lock()
-			r.mu.replicaFlowControlIntegration.onRaftTicked(ctx)
 			r.mu.Unlock()
 		}
 		return

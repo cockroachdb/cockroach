@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
@@ -168,23 +167,8 @@ func (sh *storeForFlowControl) LookupReplicationAdmissionHandle(
 		return nil, false
 	}
 	// NB: Admit is called soon after this lookup.
-	level := repl.flowControlV2.GetEnabledWhenLeader()
-	useV1 := level == kvflowcontrol.V2NotEnabledWhenLeader
-	var v1Handle kvflowcontrol.ReplicationAdmissionHandle
-	if useV1 {
-		repl.mu.Lock()
-		var found bool
-		v1Handle, found = repl.mu.replicaFlowControlIntegration.handle()
-		repl.mu.Unlock()
-		if !found {
-			return nil, found
-		}
-	}
-	// INVARIANT: useV1 => v1Handle was found.
-	return admissionDemuxHandle{
-		v1Handle: v1Handle,
-		r:        repl,
-		useV1:    useV1,
+	return admissionHandle{
+		r: repl,
 	}, true
 }
 
@@ -239,37 +223,6 @@ func (sh *storeForFlowControl) OnRaftTransportDisconnected(
 		replica.mu.replicaFlowControlIntegration.onRaftTransportDisconnected(ctx, storeIDs...)
 		return true
 	})
-}
-
-// storeFlowControlHandleFactory is a concrete implementation of
-// kvflowcontrol.HandleFactory.
-type storeFlowControlHandleFactory Store
-
-var _ kvflowcontrol.HandleFactory = &storeFlowControlHandleFactory{}
-
-// makeStoreFlowControlHandleFactory returns a new storeFlowControlHandleFactory
-// instance.
-func makeStoreFlowControlHandleFactory(store *Store) *storeFlowControlHandleFactory {
-	return (*storeFlowControlHandleFactory)(store)
-}
-
-// NewHandle is part of the kvflowcontrol.HandleFactory interface.
-func (shf *storeFlowControlHandleFactory) NewHandle(
-	rangeID roachpb.RangeID, tenantID roachpb.TenantID,
-) kvflowcontrol.Handle {
-	s := (*Store)(shf)
-	var knobs *kvflowcontrol.TestingKnobs
-	if s.TestingKnobs() != nil {
-		knobs = s.TestingKnobs().FlowControlTestingKnobs
-	}
-	return kvflowhandle.New(
-		s.cfg.KVFlowController,
-		s.cfg.KVFlowHandleMetrics,
-		s.cfg.Clock,
-		rangeID,
-		tenantID,
-		knobs,
-	)
 }
 
 // NoopStoresFlowControlIntegration is a no-op implementation of the
@@ -429,34 +382,13 @@ func (ss *storesForRACv2) Inspect() []roachpb.RangeID {
 	return rangeIDs
 }
 
-type admissionDemuxHandle struct {
-	v1Handle kvflowcontrol.ReplicationAdmissionHandle
-	r        *Replica
-	useV1    bool
+type admissionHandle struct {
+	r *Replica
 }
 
 // Admit implements kvflowcontrol.ReplicationAdmissionHandle.
-func (h admissionDemuxHandle) Admit(
+func (h admissionHandle) Admit(
 	ctx context.Context, pri admissionpb.WorkPriority, ct time.Time,
 ) (admitted bool, err error) {
-	if h.useV1 {
-		admitted, err = h.v1Handle.Admit(ctx, pri, ct)
-		if err != nil {
-			return admitted, err
-		}
-		// It is possible a transition from v1 => v2 happened while waiting, which
-		// can cause either value of admitted. See the comment in
-		// ReplicationAdmissionHandle.
-		level := h.r.flowControlV2.GetEnabledWhenLeader()
-		if level == kvflowcontrol.V2NotEnabledWhenLeader {
-			return admitted, err
-		}
-		// Transition from v1 => v2 happened while waiting. Fall through to wait
-		// on v2, since it is possible that nothing was waited on, or the
-		// overloaded stream was not waited on. This double wait is acceptable
-		// since during the transition from v1 => v2 only elastic work should be
-		// subject to replication AC, and we would like to err towards not
-		// overloading.
-	}
 	return h.r.flowControlV2.AdmitForEval(ctx, pri, ct)
 }
