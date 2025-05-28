@@ -14,6 +14,7 @@ debug/crdb_internal.create_function_statements.txt
 debug/crdb_internal.create_procedure_statements.txt
 debug/crdb_internal.create_schema_statements.txt
 debug/crdb_internal.create_statements.txt
+debug/crdb_internal.create_trigger_statements.txt
 debug/crdb_internal.create_type_statements.txt
 debug/crdb_internal.default_privileges.txt
 debug/crdb_internal.index_usage_statistics.txt
@@ -156,6 +157,7 @@ debug/crdb_internal.create_function_statements.txt
 debug/crdb_internal.create_procedure_statements.txt
 debug/crdb_internal.create_schema_statements.txt
 debug/crdb_internal.create_statements.txt
+debug/crdb_internal.create_trigger_statements.txt
 debug/crdb_internal.create_type_statements.txt
 debug/crdb_internal.default_privileges.txt
 debug/crdb_internal.index_usage_statistics.txt
@@ -305,6 +307,7 @@ debug/crdb_internal.create_function_statements.txt
 debug/crdb_internal.create_procedure_statements.txt
 debug/crdb_internal.create_schema_statements.txt
 debug/crdb_internal.create_statements.txt
+debug/crdb_internal.create_trigger_statements.txt
 debug/crdb_internal.create_type_statements.txt
 debug/crdb_internal.default_privileges.txt
 debug/crdb_internal.index_usage_statistics.txt
@@ -448,6 +451,7 @@ debug/crdb_internal.create_function_statements.txt
 debug/crdb_internal.create_procedure_statements.txt
 debug/crdb_internal.create_schema_statements.txt
 debug/crdb_internal.create_statements.txt
+debug/crdb_internal.create_trigger_statements.txt
 debug/crdb_internal.create_type_statements.txt
 debug/crdb_internal.default_privileges.txt
 debug/crdb_internal.index_usage_statistics.txt
@@ -559,6 +563,7 @@ debug/crdb_internal.create_function_statements.txt
 debug/crdb_internal.create_procedure_statements.txt
 debug/crdb_internal.create_schema_statements.txt
 debug/crdb_internal.create_statements.txt
+debug/crdb_internal.create_trigger_statements.txt
 debug/crdb_internal.create_type_statements.txt
 debug/crdb_internal.default_privileges.txt
 debug/crdb_internal.index_usage_statistics.txt

@@ -71,6 +71,9 @@ func TryDelegate(
 	case *tree.ShowCreateAllTables:
 		return d.delegateShowCreateAllTables()
 
+	case *tree.ShowCreateAllTriggers:
+		return d.delegateShowCreateAllTriggers()
+
 	case *tree.ShowCreateAllTypes:
 		return d.delegateShowCreateAllTypes()
 
