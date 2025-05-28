@@ -12,42 +12,40 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testfixtures"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/workload"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
+)
+
+const (
+	dbName = "tpcc"
+	nodes  = 3
 )
 
 // BenchmarkTPCC runs TPC-C transactions against a single warehouse. It runs the
 // client side of the workload in a subprocess so that the client overhead is
 // not included in CPU and heap profiles.
-//
-// The benchmark will generate the schema and table data for a single warehouse,
-// using a reusable store directory. In future runs the cockroach server will
-// clone and use the store directory, rather than regenerating the schema and
-// data. This enables faster iteration when re-running the benchmark.
 func BenchmarkTPCC(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
 
-	// Reuse or generate TPCC data.
-	storeName := "bench_tpcc_store_" + storage.MinimumSupportedFormatVersion.String()
-	storeDir := testfixtures.ReuseOrGenerate(b, storeName, func(dir string) {
-		c, output := generateStoreDir.withEnv(storeDirEnvVar, dir).exec()
-		if err := c.Run(); err != nil {
-			b.Fatalf("failed to generate store dir: %s\n%s", err, output.String())
-		}
-	})
+	// Setup the c once for all benchmarks.
+	c, pgURL := startCluster(b)
+	defer c.Stopper().Stop(context.Background())
 
 	for _, impl := range []struct{ name, flag string }{
 		{"literal", "--literal-implementation=true"},
 		{"optimized", "--literal-implementation=false"},
 	} {
 		b.Run(impl.name, func(b *testing.B) {
+
 			for _, mix := range []struct{ name, flag string }{
 				{"new_order", "--mix=newOrder=1"},
 				{"payment", "--mix=payment=1"},
@@ -57,7 +55,7 @@ func BenchmarkTPCC(b *testing.B) {
 				{"default", "--mix=newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1"},
 			} {
 				b.Run(mix.name, func(b *testing.B) {
-					run(b, storeDir, []string{impl.flag, mix.flag})
+					run(b, pgURL, []string{impl.flag, mix.flag})
 				})
 			}
 		})
@@ -65,9 +63,7 @@ func BenchmarkTPCC(b *testing.B) {
 	}
 }
 
-func run(b *testing.B, storeDir string, workloadFlags []string) {
-	server, pgURL := startCockroach(b, storeDir)
-	defer server.Stopper().Stop(context.Background())
+func run(b *testing.B, pgURL string, workloadFlags []string) {
 	c, output := startClient(b, pgURL, workloadFlags)
 
 	var s synchronizer
@@ -89,35 +85,61 @@ func run(b *testing.B, storeDir string, workloadFlags []string) {
 	}
 }
 
-func startCockroach(
-	b testing.TB, storeDir string,
-) (server serverutils.TestServerInterface, pgURL string) {
-	// Clone the store dir.
-	td := b.TempDir()
-	c, output := cloneEngine.
-		withEnv(srcEngineEnvVar, storeDir).
-		withEnv(dstEngineEnvVar, td).
-		exec()
-	if err := c.Run(); err != nil {
-		b.Fatalf("failed to clone engine: %s\n%s", err, output.String())
+// startCluster starts a cluster and initializes the workload data.
+func startCluster(b testing.TB) (_ serverutils.TestClusterInterface, pgURL string) {
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	const cacheSize = 2 * 1024 * 1024 * 1024 // 2GB
+	serverArgs := make(map[int]base.TestServerArgs, nodes)
+	for i := 0; i < nodes; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Settings:  st,
+			CacheSize: cacheSize,
+		}
 	}
 
-	// Start the server.
-	s := serverutils.StartServerOnly(b, base.TestServerArgs{
-		StoreSpecs: []base.StoreSpec{{Path: td}},
+	// Start the cluster.
+	c := serverutils.StartCluster(b, nodes, base.TestClusterArgs{
+		ServerArgsPerNode: serverArgs,
+		ParallelStart:     true,
 	})
 
 	// Generate a PG URL.
 	u, urlCleanup, err := pgurlutils.PGUrlE(
-		s.AdvSQLAddr(), b.TempDir(), url.User("root"),
+		c.Server(0).AdvSQLAddr(), b.TempDir(), url.User("root"),
 	)
 	if err != nil {
 		b.Fatalf("failed to create pgurl: %s", err)
 	}
-	u.Path = databaseName
-	s.Stopper().AddCloser(stop.CloserFn(urlCleanup))
+	u.Path = dbName
+	c.Stopper().AddCloser(stop.CloserFn(urlCleanup))
 
-	return s, u.String()
+	r := sqlutils.MakeSQLRunner(c.ServerConn(0))
+	r.Exec(b, "CREATE DATABASE "+dbName)
+	r.Exec(b, "USE "+dbName)
+	tpcc, err := workload.Get("tpcc")
+	if err != nil {
+		b.Fatal(err)
+	}
+	gen := tpcc.New().(interface {
+		workload.Flagser
+		workload.Hookser
+		workload.Generator
+	})
+	if err := gen.Flags().Parse([]string{"--db=" + dbName}); err != nil {
+		b.Fatal(err)
+	}
+	if err := gen.Hooks().Validate(); err != nil {
+		b.Fatal(err)
+	}
+
+	var l workloadsql.InsertsDataLoader
+	if _, err := workloadsql.Setup(ctx, c.ServerConn(0), gen, l); err != nil {
+		b.Fatal(err)
+	}
+
+	return c, u.String()
 }
 
 func startClient(
@@ -125,7 +147,7 @@ func startClient(
 ) (c *exec.Cmd, output *synchronizedBuffer) {
 	c, output = runClient.
 		withEnv(nEnvVar, b.N).
-		withEnv(pgurlEnvVar, pgURL).
+		withEnv(pgURLEnvVar, pgURL).
 		exec(workloadFlags...)
 	if err := c.Start(); err != nil {
 		b.Fatalf("failed to start client: %s\n%s", err, output.String())
