@@ -213,6 +213,8 @@ const (
 	spanConfigTenantLimit = 50000
 )
 
+// failureInjectionMutators includes a list of all
+// failure injection mutators.
 var failureInjectionMutators = []mutator{
 	panicNodeMutator{},
 }
@@ -255,14 +257,12 @@ var clusterSettingMutators = []mutator{
 
 // planMutators includes a list of all known `mutator`
 // implementations. A subset of these mutations might be enabled in
-// any mixedversion test plan.
 var planMutators = append(
-	append([]mutator{
-		preserveDowngradeOptionRandomizerMutator{},
-	},
-		failureInjectionMutators...,
+	append(
+		[]mutator{preserveDowngradeOptionRandomizerMutator{}},
+		clusterSettingMutators...,
 	),
-	clusterSettingMutators...,
+	failureInjectionMutators...,
 )
 
 // Plan returns the TestPlan used to upgrade the cluster from the
@@ -439,7 +439,7 @@ func (p *testPlanner) Plan() *TestPlan {
 	// panic failure).
 	for _, mut := range planMutators {
 		if p.mutatorEnabled(mut) {
-			if _, found := failureInjections[mut.Name()]; found && len(p.currentContext.System.Descriptor.Nodes) < 3 {
+			if _, found := failureInjections[mut.Name()]; found && len(p.currentContext.Nodes()) < 3 {
 				continue
 			}
 			mutations := mut.Generate(p.prng, testPlan, p)
@@ -1362,6 +1362,20 @@ func (ss stepSelector) Filter(predicate func(*singleStep) bool) stepSelector {
 	return result
 }
 
+func (ss stepSelector) FindValidSteps(start int, predicate func(*singleStep) bool) stepSelector {
+	var result stepSelector
+	for _, s := range ss[start:] {
+		if predicate(s) {
+			result = append(result, s)
+		} else {
+			result = append(result, s)
+			break
+		}
+	}
+
+	return result
+}
+
 // RandomStep returns a new selector that selects a single step,
 // randomly chosen from the list of selected steps in the original
 // selector.
@@ -1372,6 +1386,15 @@ func (ss stepSelector) RandomStep(rng *rand.Rand) stepSelector {
 	}
 
 	return ss
+}
+
+func (ss stepSelector) FindStep(target stepSelector) (int, error) {
+	for i, s := range ss {
+		if s == target[0] {
+			return i, nil
+		}
+	}
+	return 0, fmt.Errorf("step %v not found in selector", target[0].impl.Description())
 }
 
 func (ss stepSelector) insert(impl singleStepProtocol, opGen func() mutationOp) []mutation {
