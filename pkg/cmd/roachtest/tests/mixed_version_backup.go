@@ -1231,6 +1231,170 @@ func newBackupRestoreTestDriver(
 	return d, nil
 }
 
+// verifyBackupCollection restores the backup collection passed and verifies
+// that the contents after the restore match the contents when the backup was
+// taken. For cluster level backups, the cluster needs to be wiped before
+// verifyBackupCollection is called or else the cluster restore will fail.
+func (d *BackupRestoreTestDriver) verifyBackupCollection(
+	ctx context.Context,
+	l *logger.Logger,
+	rng *rand.Rand,
+	bc *backupCollection,
+	checkFiles bool,
+	internalSystemJobs bool,
+) error {
+	restoredTables, _, err := d.runRestore(ctx, l, rng, bc, checkFiles, internalSystemJobs)
+	if err != nil {
+		return fmt.Errorf("error restoring backup: %w", err)
+	}
+	restoredContents, err := d.getRestoredContents(
+		ctx, l, rng, restoredTables, bc, internalSystemJobs,
+	)
+	if err != nil {
+		return err
+	}
+
+	for j, contents := range bc.contents {
+		table := bc.tables[j]
+		restoredTableContents := restoredContents[j]
+		l.Printf("%s: verifying %s", bc.name, table)
+		if err := contents.ValidateRestore(ctx, l, restoredTableContents); err != nil {
+			return fmt.Errorf("backup %s: %w", bc.name, err)
+		}
+	}
+	_, db := d.testUtils.RandomDB(rng, d.testUtils.roachNodes)
+	if err := roachtestutil.CheckInvalidDescriptors(ctx, db); err != nil {
+		return fmt.Errorf("failed descriptor check: %w", err)
+	}
+
+	l.Printf("%s: OK", bc.name)
+	return nil
+}
+
+// runRestore runs the restore statement for the backup collection and waits for
+// a job success. It returns the tables that were restored and the database that
+// was restored into.
+func (d *BackupRestoreTestDriver) runRestore(
+	ctx context.Context,
+	l *logger.Logger,
+	rng *rand.Rand,
+	bc *backupCollection,
+	checkFiles bool,
+	internalSystemJobs bool,
+) ([]string, string, error) {
+	restoreStmt, restoredTables, restoreDB := d.buildRestoreStatement(bc)
+	if _, isTableBackup := bc.btype.(*tableBackup); isTableBackup {
+		// If we are restoring a table backup , we need to create the database
+		// first.
+		if err := d.testUtils.Exec(ctx, rng, fmt.Sprintf("CREATE DATABASE %s", restoreDB)); err != nil {
+			return nil, "", fmt.Errorf("backup %s: error creating database %s: %w", bc.name, restoreDB, err)
+		}
+	}
+	// As a sanity check, make sure that a `check_files` check passes
+	// before attempting a restore.
+	if checkFiles {
+		if err := d.testUtils.checkFiles(ctx, rng, bc); err != nil {
+			return nil, "", fmt.Errorf("backup %s: check_files failed: %w", bc.name, err)
+		}
+	}
+	l.Printf("Running restore: %s", restoreStmt)
+	var jobID int
+	if err := d.testUtils.QueryRow(ctx, rng, restoreStmt).Scan(&jobID); err != nil {
+		return nil, "", fmt.Errorf("backup %s: error in restore statement: %w", bc.name, err)
+	}
+	if err := d.testUtils.waitForJobSuccess(ctx, l, rng, jobID, internalSystemJobs); err != nil {
+		return nil, "", err
+	}
+	return restoredTables, restoreDB, nil
+}
+
+// getRestoredContents loads the contents (e.g. non system table fingerprints)
+// of the tables that were restored from the backup collection. This should be
+// called after runRestore has been called.
+func (d *BackupRestoreTestDriver) getRestoredContents(
+	ctx context.Context,
+	l *logger.Logger,
+	rng *rand.Rand,
+	restoredTables []string,
+	bc *backupCollection,
+	internalSystemJobs bool,
+) ([]tableContents, error) {
+	var restoredContents []tableContents
+	var err error
+	if d.testUtils.onlineRestore {
+		waitForDownloadJob := rng.Intn(3) == 0
+		restoredContents, err = d.getOnlineRestoredContents(
+			ctx, l, rng, bc, restoredTables, internalSystemJobs, waitForDownloadJob,
+		)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"backup %s: error loading online restore contents: %w (waitForDownloadJob: %v)",
+				bc.name, err, waitForDownloadJob,
+			)
+		}
+	} else {
+		restoredContents, err = d.computeTableContents(
+			ctx, l, rng, restoredTables, bc.contents, "", /* timestamp */
+		)
+		if err != nil {
+			return nil, fmt.Errorf("backup %s: error loading restored contents: %w", bc.name, err)
+		}
+	}
+	return restoredContents, nil
+}
+
+// buildRestoreStatement builds the restore statement for the backup collection
+// and returns the command, the tables being restored and the database being
+// restored.
+// Note: the database being restored into may not exist and may need to be
+// created (e.g. when restoring a table backup).
+func (d *BackupRestoreTestDriver) buildRestoreStatement(
+	bc *backupCollection,
+) (restoreStmt string, tables []string, database string) {
+	tables, database = d.getRestoredTablesAndDB(bc)
+	restoreCmd, options := bc.btype.RestoreCommand(database)
+	restoreOptions := append([]string{"detached"}, options...)
+	// If the backup was created with an encryption passphrase, we
+	// need to include it when restoring as well.
+	if opt := bc.encryptionOption(); opt != nil {
+		restoreOptions = append(restoreOptions, opt.String())
+	}
+	if d.testUtils.onlineRestore {
+		restoreOptions = append(restoreOptions, "experimental deferred copy")
+	}
+
+	var optionsStr string
+	if len(restoreOptions) > 0 {
+		optionsStr = fmt.Sprintf(" WITH %s", strings.Join(restoreOptions, ", "))
+	}
+	restoreStmt = fmt.Sprintf(
+		"%s FROM LATEST IN '%s'%s %s",
+		restoreCmd, bc.uri(), aostFor(bc.restoreAOST), optionsStr,
+	)
+	return restoreStmt, tables, database
+}
+
+// getRestoredTablesAndDB returns the name of the database being restored *into*
+// along with the names of the tables being restored.
+// Note: the database being restored into may not exist and may need to be
+// created (e.g. when restoring a table backup).
+func (d *BackupRestoreTestDriver) getRestoredTablesAndDB(bc *backupCollection) ([]string, string) {
+	// Defaults for the database where the backup will be restored,
+	// along with the expected names of the tables after restore.
+	restoreDB := fmt.Sprintf(
+		"restore_%s_%d", invalidDBNameRE.ReplaceAllString(bc.name, "_"), d.nextRestoreID(),
+	)
+	restoredTables := tableNamesWithDB(restoreDB, bc.tables)
+	_, ok := bc.btype.(*clusterBackup)
+	if ok {
+		// For cluster backups, the restored tables are always the same
+		// as the tables we backed up. In addition, we need to wipe the
+		// cluster before attempting a restore.
+		restoredTables = bc.tables
+	}
+	return restoredTables, restoreDB
+}
+
 func (mvb *mixedVersionBackup) initBackupRestoreTestDriver(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
 ) error {
@@ -2364,124 +2528,21 @@ func (u *CommonTestUtils) collectFailureArtifacts(
 	return fmt.Errorf("%w (artifacts collected in %s)", restoreErr, dirName), nil
 }
 
-// verifyBackupCollection restores the backup collection passed and verifies
-// that the contents after the restore match the contents when the backup was
-// taken. For cluster level backups, the cluster needs to be wiped before
-// verifyBackupCollection is called or else the cluster restore will fail.
-func (bc *backupCollection) verifyBackupCollection(
+func (d BackupRestoreTestDriver) getOnlineRestoredContents(
 	ctx context.Context,
 	l *logger.Logger,
 	rng *rand.Rand,
-	d *BackupRestoreTestDriver,
-	checkFiles bool,
-	internalSystemJobs bool,
-) error {
-	// Defaults for the database where the backup will be restored,
-	// along with the expected names of the tables after restore.
-	restoreDB := fmt.Sprintf(
-		"restore_%s_%d", invalidDBNameRE.ReplaceAllString(bc.name, "_"), d.nextRestoreID(),
-	)
-	restoredTables := tableNamesWithDB(restoreDB, bc.tables)
-
-	// Pre-requisites:
-	switch bc.btype.(type) {
-	case *clusterBackup:
-		// For cluster backups, the restored tables are always the same
-		// as the tables we backed up. In addition, we need to wipe the
-		// cluster before attempting a restore.
-		restoredTables = bc.tables
-
-	case *tableBackup:
-		// If we are restoring a table backup , we need to create it
-		// first.
-		if err := d.testUtils.Exec(ctx, rng, fmt.Sprintf("CREATE DATABASE %s", restoreDB)); err != nil {
-			return fmt.Errorf("backup %s: error creating database %s: %w", bc.name, restoreDB, err)
-		}
-	}
-
-	// As a sanity check, make sure that a `check_files` check passes
-	// before attempting a restore.
-	if checkFiles {
-		if err := d.testUtils.checkFiles(ctx, rng, bc); err != nil {
-			return fmt.Errorf("backup %s: check_files failed: %w", bc.name, err)
-		}
-	}
-
-	restoreCmd, options := bc.btype.RestoreCommand(restoreDB)
-	restoreOptions := append([]string{"detached"}, options...)
-	// If the backup was created with an encryption passphrase, we
-	// need to include it when restoring as well.
-	if opt := bc.encryptionOption(); opt != nil {
-		restoreOptions = append(restoreOptions, opt.String())
-	}
-	if d.testUtils.onlineRestore {
-		restoreOptions = append(restoreOptions, "experimental deferred copy")
-	}
-
-	var optionsStr string
-	if len(restoreOptions) > 0 {
-		optionsStr = fmt.Sprintf(" WITH %s", strings.Join(restoreOptions, ", "))
-	}
-	restoreStmt := fmt.Sprintf(
-		"%s FROM LATEST IN '%s'%s %s",
-		restoreCmd, bc.uri(), aostFor(bc.restoreAOST), optionsStr,
-	)
-	l.Printf("Running restore: %s", restoreStmt)
-	var jobID int
-	if err := d.testUtils.QueryRow(ctx, rng, restoreStmt).Scan(&jobID); err != nil {
-		return fmt.Errorf("backup %s: error in restore statement: %w", bc.name, err)
-	}
-
-	if err := d.testUtils.waitForJobSuccess(ctx, l, rng, jobID, internalSystemJobs); err != nil {
-		return err
-	}
-	var restoredContents []tableContents
-	var err error
-	if d.testUtils.onlineRestore {
-		restoredContents, err = bc.verifyOnlineRestore(ctx, l, rng, d, restoredTables, internalSystemJobs)
-		if err != nil {
-			return fmt.Errorf("backup %s: error verifying online restore: %w", bc.name, err)
-		}
-	} else {
-		restoredContents, err = d.computeTableContents(
-			ctx, l, rng, restoredTables, bc.contents, "", /* timestamp */
-		)
-		if err != nil {
-			return fmt.Errorf("backup %s: error loading restored contents: %w", bc.name, err)
-		}
-	}
-
-	for j, contents := range bc.contents {
-		table := bc.tables[j]
-		restoredTableContents := restoredContents[j]
-		l.Printf("%s: verifying %s", bc.name, table)
-		if err := contents.ValidateRestore(ctx, l, restoredTableContents); err != nil {
-			return fmt.Errorf("backup %s: %w", bc.name, err)
-		}
-	}
-	_, db := d.testUtils.RandomDB(rng, d.testUtils.roachNodes)
-	if err := roachtestutil.CheckInvalidDescriptors(ctx, db); err != nil {
-		return fmt.Errorf("failed descriptor check: %w", err)
-	}
-
-	l.Printf("%s: OK", bc.name)
-	return nil
-}
-
-func (bc *backupCollection) verifyOnlineRestore(
-	ctx context.Context,
-	l *logger.Logger,
-	rng *rand.Rand,
-	d *BackupRestoreTestDriver,
+	bc *backupCollection,
 	restoredTables []string,
 	internalSystemJobs bool,
+	waitForDownloadJob bool,
 ) ([]tableContents, error) {
-	var downloadJobID int
-	if err := d.testUtils.QueryRow(ctx, rng, `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%' ORDER BY created DESC LIMIT 1`).Scan(&downloadJobID); err != nil {
-		return nil, err
+	downloadJobID, err := d.getORDownloadJobID(ctx, l, rng)
+	if err != nil {
+		return nil, fmt.Errorf("backup %s: error getting download job ID: %w", bc.name, err)
 	}
 
-	if rng.Intn(3) == 0 {
+	if waitForDownloadJob {
 		// Sometimes wait for the download job to complete before fingerprinting.
 		if err := d.testUtils.waitForJobSuccess(ctx, l, rng, downloadJobID, internalSystemJobs); err != nil {
 			return nil, err
@@ -2508,6 +2569,16 @@ func (bc *backupCollection) verifyOnlineRestore(
 		return nil, fmt.Errorf("download job %d did not download all data. Cluster has %d external bytes", downloadJobID, externalBytes)
 	}
 	return restoredContents, nil
+}
+
+func (d BackupRestoreTestDriver) getORDownloadJobID(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand,
+) (int, error) {
+	var downloadJobID int
+	if err := d.testUtils.QueryRow(ctx, rng, `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%' ORDER BY created DESC LIMIT 1`).Scan(&downloadJobID); err != nil {
+		return 0, err
+	}
+	return downloadJobID, nil
 }
 
 // resetCluster wipes the entire cluster and starts it again with the
@@ -2573,7 +2644,7 @@ func (mvb *mixedVersionBackup) verifySomeBackups(
 
 	for _, collection := range toBeRestored {
 		l.Printf("mixed-version: verifying %s", collection.name)
-		if err := collection.verifyBackupCollection(ctx, l, rng, mvb.backupRestoreTestDriver, checkFiles, internalSystemJobs); err != nil {
+		if err := mvb.backupRestoreTestDriver.verifyBackupCollection(ctx, l, rng, collection, checkFiles, internalSystemJobs); err != nil {
 			return errors.Wrap(err, "mixed-version")
 		}
 	}
@@ -2650,7 +2721,7 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 				return
 			}
 
-			if err := collection.verifyBackupCollection(ctx, l, rng, mvb.backupRestoreTestDriver, checkFiles, internalSystemJobs); err != nil {
+			if err := mvb.backupRestoreTestDriver.verifyBackupCollection(ctx, l, rng, collection, checkFiles, internalSystemJobs); err != nil {
 				err := errors.Wrapf(err, "%s", v)
 				l.Printf("restore error: %v", err)
 				// Attempt to collect logs and debug.zip at the time of this
