@@ -449,6 +449,9 @@ func tryRangeIDKey(kv storage.MVCCKeyValue) (string, error) {
 	case bytes.Equal(suffix, keys.LocalRaftLogSuffix):
 		return tryRaftLogEntry(kv)
 
+	case bytes.Equal(suffix, keys.LocalRaftReplicaIDSuffix):
+		msg = &kvserverpb.RaftReplicaID{}
+
 	case bytes.Equal(suffix, keys.LocalRangeLastReplicaGCTimestampSuffix):
 		msg = &hlc.Timestamp{}
 
