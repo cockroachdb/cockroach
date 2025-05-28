@@ -112,8 +112,10 @@ func registerRebalanceLoad(r registry.Registry) {
 				})
 			mvt.InMixedVersion("rebalance load run",
 				func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
+					binary := uploadCockroach(ctx, t, c, appNode, h.System.FromVersion)
 					return rebalanceByLoad(
-						ctx, t, l, c, rebalanceMode, maxDuration, concurrency, appNode, numStores, numNodes)
+						ctx, t, l, c, maxDuration, concurrency, appNode,
+						fmt.Sprintf("%s workload", binary), numStores, numNodes)
 				})
 			mvt.Run()
 		} else {
@@ -121,8 +123,8 @@ func registerRebalanceLoad(r registry.Registry) {
 			// a failure it will be available in the artifacts.
 			c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 			require.NoError(t, rebalanceByLoad(
-				ctx, t, t.L(), c, rebalanceMode, maxDuration,
-				concurrency, appNode, numStores, numNodes,
+				ctx, t, t.L(), c, maxDuration,
+				concurrency, appNode, "./cockroach workload", numStores, numNodes,
 			))
 		}
 
@@ -236,19 +238,20 @@ func rebalanceByLoad(
 	t test.Test,
 	l *logger.Logger,
 	c cluster.Cluster,
-	rebalanceMode string,
 	maxDuration time.Duration,
 	concurrency int,
 	appNode option.NodeListOption,
+	workloadPath string,
 	numStores, numNodes int,
 ) error {
+
 	// We want each store to end up with approximately storeToRangeFactor
 	// (factor) leases such that the CPU load is evenly spread, e.g.
 	//   (n * factor) -1 splits = factor * n ranges = factor leases per store
 	// Note that we only assert on the CPU of each store w.r.t the mean, not
 	// the lease count.
 	splits := (numStores * storeToRangeFactor) - 1
-	c.Run(ctx, option.WithNodes(appNode), fmt.Sprintf("./cockroach workload init kv --drop --splits=%d {pgurl:1}", splits))
+	c.Run(ctx, option.WithNodes(appNode), fmt.Sprintf("%s init kv --drop --splits=%d {pgurl:1}", workloadPath, splits))
 
 	db := c.Conn(ctx, l, 1)
 	defer db.Close()
@@ -264,9 +267,9 @@ func rebalanceByLoad(
 	m.Go(func(ctx context.Context, l *logger.Logger) error {
 		l.Printf("starting load generator")
 		err := c.RunE(ctx, option.WithNodes(appNode), fmt.Sprintf(
-			"./cockroach workload run kv --read-percent=95 --tolerate-errors --concurrency=%d "+
+			"%s run kv --read-percent=95 --tolerate-errors --concurrency=%d "+
 				"--duration=%v {pgurl:1-%d}",
-			concurrency, maxDuration, numNodes))
+			workloadPath, concurrency, maxDuration, numNodes))
 		if errors.Is(ctx.Err(), context.Canceled) {
 			// We got canceled either because CPU balance was achieved or the
 			// other worker hit an error. In either case, it's not this worker's
