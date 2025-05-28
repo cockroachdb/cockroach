@@ -518,7 +518,7 @@ func (tr *testRunner) refreshBinaryVersions(ctx context.Context, service *servic
 	defer cancel()
 
 	group := ctxgroup.WithContext(connectionCtx)
-	for j, node := range service.descriptor.Nodes {
+	for j, node := range tr.monitor.AvailableNodes(install.SystemInterfaceName) {
 		group.GoCtx(func(ctx context.Context) error {
 			bv, err := clusterupgrade.BinaryVersion(ctx, tr.conn(node, service.descriptor.Name))
 			if err != nil {
@@ -527,7 +527,6 @@ func (tr *testRunner) refreshBinaryVersions(ctx context.Context, service *servic
 					node, service.descriptor.Name, err,
 				)
 			}
-
 			newBinaryVersions[j] = bv
 			return nil
 		})
@@ -550,7 +549,7 @@ func (tr *testRunner) refreshClusterVersions(ctx context.Context, service *servi
 	defer cancel()
 
 	group := ctxgroup.WithContext(connectionCtx)
-	for j, node := range service.descriptor.Nodes {
+	for j, node := range tr.monitor.AvailableNodes(install.SystemInterfaceName) {
 		group.GoCtx(func(ctx context.Context) error {
 			cv, err := clusterupgrade.ClusterVersion(ctx, tr.conn(node, service.descriptor.Name))
 			if err != nil {
@@ -609,7 +608,7 @@ func (tr *testRunner) maybeInitConnections(service *serviceRuntime) error {
 	}
 
 	cc := map[int]*gosql.DB{}
-	for _, node := range service.descriptor.Nodes {
+	for _, node := range tr.monitor.AvailableNodes(install.SystemInterfaceName) {
 		conn, err := tr.cluster.ConnE(
 			tr.ctx, tr.logger, node, option.VirtualClusterName(service.descriptor.Name),
 		)
@@ -643,6 +642,7 @@ func (tr *testRunner) newHelper(
 			connFunc:        connFunc,
 			stepLogger:      l,
 			clusterVersions: cv,
+			monitor:         tr.monitor,
 		}
 	}
 
