@@ -127,9 +127,11 @@ type (
 		// this probability for specific mutator implementations as
 		// needed.
 		Probability() float64
-		// Generate takes a test plan and a RNG and returns the list of
-		// mutations that should be applied to the plan.
-		Generate(*rand.Rand, *TestPlan) []mutation
+		// Generate takes a test plan, the testPlanner, and an RNG and returns the list of
+		// mutations that should be applied to the plan. The test plan is the intended output
+		// after applying the mutations. The testPlanner is used to access specific attributes
+		// of the test plan, such as the current context or the services
+		Generate(*rand.Rand, *TestPlan, *testPlanner) []mutation
 	}
 
 	// mutationOp encodes the type of mutation and controls how the
@@ -252,6 +254,7 @@ var clusterSettingMutators = []mutator{
 // any mixedversion test plan.
 var planMutators = append([]mutator{
 	preserveDowngradeOptionRandomizerMutator{},
+	panicNodeMutator{},
 },
 	clusterSettingMutators...,
 )
@@ -418,11 +421,12 @@ func (p *testPlanner) Plan() *TestPlan {
 		isLocal:        p.isLocal,
 	}
 
-	// Probabilistically enable some of of the mutators on the base test
+	// Probabilistically enable some of the mutators on the base test
 	// plan generated above.
 	for _, mut := range planMutators {
 		if p.mutatorEnabled(mut) {
-			mutations := mut.Generate(p.prng, testPlan)
+
+			mutations := mut.Generate(p.prng, testPlan, p)
 			testPlan.applyMutations(p.prng, mutations)
 			testPlan.enabledMutators = append(testPlan.enabledMutators, mut)
 		}
@@ -1396,12 +1400,16 @@ func (ss stepSelector) InsertSequential(rng *rand.Rand, impl singleStepProtocol)
 	})
 }
 
+// InsertBefore inserts the step before the selected step. This is not guaranteed to be a non-concurrent insert, if the
+// selected step is part of a `concurrentRunStep`, the new step will be concurrent with the selected step.
 func (ss stepSelector) InsertBefore(impl singleStepProtocol) []mutation {
 	return ss.insert(impl, func() mutationOp {
 		return mutationInsertBefore
 	})
 }
 
+// InsertAfter inserts the step after the selected step. This is not guaranteed to be a non-concurrent insert, if the
+// selected step is part of a `concurrentRunStep`, the new step will be concurrent with the selected step.
 func (ss stepSelector) InsertAfter(impl singleStepProtocol) []mutation {
 	return ss.insert(impl, func() mutationOp {
 		return mutationInsertAfter

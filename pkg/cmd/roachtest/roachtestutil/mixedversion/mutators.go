@@ -53,7 +53,7 @@ func (m preserveDowngradeOptionRandomizerMutator) Probability() float64 {
 // current version is always mutated. The length of the returned
 // mutations is always even.
 func (m preserveDowngradeOptionRandomizerMutator) Generate(
-	rng *rand.Rand, plan *TestPlan,
+	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
 ) []mutation {
 	var mutations []mutation
 	for _, upgradeSelector := range randomUpgrades(rng, plan) {
@@ -221,7 +221,9 @@ func (m clusterSettingMutator) Probability() float64 {
 // original test plan. Up to `maxChanges` steps will be added to the
 // plan. Changes may be concurrent with user-provided steps and may
 // happen any time after cluster setup.
-func (m clusterSettingMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutation {
+func (m clusterSettingMutator) Generate(
+	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
+) []mutation {
 	var mutations []mutation
 
 	// possiblePointsInTime is the list of steps in the plan that are
@@ -246,12 +248,7 @@ func (m clusterSettingMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutati
 				}
 			}
 
-			// We skip restart steps as we might insert the cluster setting
-			// change step concurrently with the selected step.
-			_, isRestartSystem := s.impl.(restartWithNewBinaryStep)
-			_, isRestartTenant := s.impl.(restartVirtualClusterStep)
-			isRestart := isRestartSystem || isRestartTenant
-			return s.context.System.Stage >= OnStartupStage && !isRestart
+			return s.context.System.Stage >= OnStartupStage && !s.impl.DisableConcurrency()
 		})
 
 	for _, changeStep := range m.changeSteps(rng, len(possiblePointsInTime)) {
@@ -382,4 +379,59 @@ func (m clusterSettingMutator) changeSteps(
 	}
 
 	return steps
+}
+
+const (
+	// PanicNode is a mutator that will randomly cause a node to crash
+	// during the test, before restarting the node within the same step.
+	PanicNode = "panic_node"
+)
+
+type panicNodeMutator struct {
+	maxPanics int
+}
+
+func (m panicNodeMutator) Name() string {
+	return PanicNode
+}
+
+// PanicNodeMutator is newly added, so the default probability
+// will be temporarily raised to 50% to induce deeper testing.
+func (m panicNodeMutator) Probability() float64 {
+	return 0.5
+}
+
+func (m panicNodeMutator) Generate(
+	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
+) []mutation {
+	var mutations []mutation
+	const defaultMaxPanics = 3
+
+	maxPanics := m.maxPanics
+	if maxPanics <= 0 {
+		maxPanics = defaultMaxPanics
+	}
+
+	idx := newStepIndex(plan)
+	possiblePointsInTime := plan.
+		newStepSelector().
+		Filter(func(s *singleStep) bool {
+
+			return s.context.System.Stage >= InitUpgradeStage && !idx.IsConcurrent(s)
+		})
+
+	numPanics := 1 + rng.Intn(maxPanics)
+	numPanics = min(numPanics, len(possiblePointsInTime))
+
+	for i := 0; i < numPanics; i++ {
+		nodeList := planner.currentContext.System.Descriptor.Nodes
+		targetNode := nodeList.SeededRandNode(rng)
+		addRandomly := possiblePointsInTime.
+			RandomStep(rng).
+			InsertBefore(panicNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt})
+
+		mutations = append(mutations, addRandomly...)
+	}
+
+	return mutations
 }
