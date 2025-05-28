@@ -1285,10 +1285,18 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			return stats, err
 		}
 
-		if r.store.cfg.KVAdmissionController != nil &&
-			stats.apply.followerStoreWriteBytes.NumEntries > 0 {
-			r.store.cfg.KVAdmissionController.FollowerStoreWriteBytes(
-				r.store.StoreID(), stats.apply.followerStoreWriteBytes)
+		if stats.apply.followerStoreWriteBytes.NumEntries > 0 {
+			// NB: The write bytes for non-followers are recorded in replica
+			// send, the folower bytes are accounted for here on the follower
+			// replica's store.
+			r.loadStats.RecordWriteBytes(
+				float64(stats.apply.followerStoreWriteBytes.IngestedBytes) +
+					float64(stats.apply.followerStoreWriteBytes.WriteBytes))
+
+			if r.store.cfg.KVAdmissionController != nil {
+				r.store.cfg.KVAdmissionController.FollowerStoreWriteBytes(
+					r.store.StoreID(), stats.apply.followerStoreWriteBytes)
+			}
 		}
 
 		// etcd raft occasionally adds a nil entry (our own commands are never
