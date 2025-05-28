@@ -49,7 +49,7 @@ active_exists() {
   [[ $age -lt $AUTO_SHUTDOWN_DURATION ]]
 }
 
-if active_exists || w -hs | grep pts | grep -vq "pts/[0-9]* *tmux" || pgrep unison || pgrep -f remote-dev-server.sh; then
+if active_exists || who | grep pts | grep -vq "pts/[0-9]* *tmux" || pgrep unison || pgrep -f remote-dev-server.sh; then
   # Auto-shutdown is disabled (via /.active) or there is a remote session.
   echo 0 > $FILE
   exit 0
