@@ -11,4 +11,5 @@ import "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 type Monitor interface {
 	ExpectProcessDead(nodes option.NodeListOption, opts ...option.OptionFunc)
 	ExpectProcessAlive(nodes option.NodeListOption, opts ...option.OptionFunc)
+	AvailableNodes(virtualClusterName string) option.NodeListOption
 }
