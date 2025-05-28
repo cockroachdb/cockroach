@@ -3,12 +3,7 @@
 
 reset
 ----
-n1,s2,r3: replica=5, tenant=4, enabled-level=not-enabled
-
-# Not enabled to use v2 if become leader.
-get-enabled-level
-----
-enabled-level: not-enabled
+n1,s2,r3: replica=5, tenant=4
 
 on-destroy
 ----
@@ -31,19 +26,7 @@ HandleRaftReady:
 
 reset
 ----
-n1,s2,r3: replica=5, tenant=4, enabled-level=not-enabled
-
-get-enabled-level
-----
-enabled-level: not-enabled
-
-# Can use v1 encoding and v2 protocol, if become leader.
-set-enabled-level enabled-level=v1-encoding
-----
-
-get-enabled-level
-----
-enabled-level: v1-encoding
+n1,s2,r3: replica=5, tenant=4
 
 # When replica is initialized, stable index and admitted indices are at the tip
 # of the log. The leader and leaseholder are both on replica-id 10.
@@ -70,23 +53,24 @@ set-raft-state log-term=50 log-index=24 next-unstable-index=25
 ----
 Raft: term: 50 leader: 10 leaseholder: 10 mark: {Term:50 Index:24} next-unstable: 25
 
-# handleRaftReady. It thinks the leader is using v1, so there is no
-# advancement of admitted, or submission of this entry for admission.
+# handleRaftReady. We didn't provide information via the side-channel for the
+# entry, which is tolerated.
 handle-raft-ready-and-admit entries=v1/i24/t45/pri0/time2/len100 leader-term=50
 ----
 HandleRaftReady:
 .....
 AdmitRaftEntries:
-destroyed-or-leader-using-v2: false
-LogTracker [+dirty]: mark:{Term:50 Index:24}, stable:23, admitted:[23 23 23 23]
+ ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{Mark:{Term:50 Index:24} Priority:LowPri}}) = true
+LogTracker: mark:{Term:50 Index:24}, stable:23, admitted:[23 23 23 23]
+LowPri: {Term:50 Index:24}
 
 # A new entry 25 appended to raft by the leader at term 50.
 set-raft-state log-term=50 log-index=25 next-unstable-index=26
 ----
 Raft: term: 50 leader: 10 leaseholder: 10 mark: {Term:50 Index:25} next-unstable: 26
 
-# Told that the leader is using v2. And that [25,25] has no low-pri override.
-side-channel v2 leader-term=50 first=25 last=25
+# Told that [25,25] has no low-pri override.
+side-channel leader-term=50 first=25 last=25
 ----
 
 # The index 25 entry is v1 encoded, so by default it is low-pri. Admitted vector
@@ -97,9 +81,8 @@ HandleRaftReady:
 .....
 AdmitRaftEntries:
  ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{Mark:{Term:50 Index:25} Priority:LowPri}}) = true
-destroyed-or-leader-using-v2: true
 LogTracker: mark:{Term:50 Index:25}, stable:23, admitted:[23 23 23 23]
-LowPri: {Term:50 Index:25}
+LowPri: {Term:50 Index:24} {Term:50 Index:25}
 
 # The leader has changed.
 # TODO(pav-kv): the leader can't have changed without bumping the term.
@@ -108,19 +91,19 @@ set-raft-state leader=11
 Raft: term: 50 leader: 11 leaseholder: 10 mark: {Term:50 Index:25} next-unstable: 26
 
 # Stable index is advanced to 25, and the admitted vector is updated. The
-# low-pri admitted index is 24 since there is an entry at 25 that is not
+# low-pri admitted index is 23 since there is an entry at 24 that is not
 # admitted.
 synced-log term=50 index=25
 ----
-LogTracker [+dirty]: mark:{Term:50 Index:25}, stable:25, admitted:[24 25 25 25]
-LowPri: {Term:50 Index:25}
+LogTracker [+dirty]: mark:{Term:50 Index:25}, stable:25, admitted:[23 25 25 25]
+LowPri: {Term:50 Index:24} {Term:50 Index:25}
 
-# handleRaftReady with no entries. Since the leader is using v2, and the
-# admitted vector was updated, the new vector is handed to the piggybacker.
+# handleRaftReady with no entries. Since the admitted vector was updated, the
+# new vector is handed to the piggybacker.
 handle-raft-ready-and-admit
 ----
 HandleRaftReady:
- Piggybacker.Add(n11, [r3,s11,5->11] admitted=t50/[24 25 25 25])
+ Piggybacker.Add(n11, [r3,s11,5->11] admitted=t50/[23 25 25 25])
 .....
 
 # A new entry 26 appended to raft by the same leader at term 50.
@@ -129,19 +112,18 @@ set-raft-state log-term=50 log-index=26 next-unstable-index=27
 Raft: term: 50 leader: 11 leaseholder: 10 mark: {Term:50 Index:26} next-unstable: 27
 
 # Side channel for entries [26, 26] with no low-pri override.
-side-channel v2 leader-term=50 first=26 last=26
+side-channel leader-term=50 first=26 last=26
 ----
 
-# The index 26 entry uses v2 and is using pri=2, which is AboveNormalPri.
+# The index 26 entry uses v2 encoding and is using pri=2, which is AboveNormalPri.
 handle-raft-ready-and-admit entries=v2/i26/t45/pri2/time2/len100 leader-term=50
 ----
 HandleRaftReady:
 .....
 AdmitRaftEntries:
  ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:user-high-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{Mark:{Term:50 Index:26} Priority:AboveNormalPri}}) = true
-destroyed-or-leader-using-v2: true
-LogTracker: mark:{Term:50 Index:26}, stable:25, admitted:[24 25 25 25]
-LowPri: {Term:50 Index:25}
+LogTracker: mark:{Term:50 Index:26}, stable:25, admitted:[23 25 25 25]
+LowPri: {Term:50 Index:24} {Term:50 Index:25}
 AboveNormalPri: {Term:50 Index:26}
 
 # handleRaftReady is a noop.
@@ -154,21 +136,21 @@ HandleRaftReady:
 # admitted, which will be piggybacked in the next handleRaftReady.
 synced-log term=50 index=26
 ----
-LogTracker [+dirty]: mark:{Term:50 Index:26}, stable:26, admitted:[24 26 25 26]
-LowPri: {Term:50 Index:25}
+LogTracker [+dirty]: mark:{Term:50 Index:26}, stable:26, admitted:[23 26 25 26]
+LowPri: {Term:50 Index:24} {Term:50 Index:25}
 AboveNormalPri: {Term:50 Index:26}
 
 # Some admitted indices are advanced, but LowPri and AboveNormalPri cannot
-# advance past the index 25 and index 26 entries respectively, that are
+# advance past the index 24 and index 26 entries respectively, that are
 # waiting for admission. The new admitted vector is piggybacked.
 handle-raft-ready-and-admit
 ----
 HandleRaftReady:
- Piggybacker.Add(n11, [r3,s11,5->11] admitted=t50/[24 26 25 26])
+ Piggybacker.Add(n11, [r3,s11,5->11] admitted=t50/[23 26 25 26])
 .....
 
-# Callback is accurate and index 25 is admitted. The admitted index advances for
-# AboveNormalPri.
+# Callback is accurate and index 25 (and 24) at LowPri is admitted. The
+# admitted index advances for LowPri.
 admitted-log-entry leader-term=50 index=25 pri=0
 ----
  RaftScheduler.EnqueueRaftReady(rangeID=3)
@@ -188,7 +170,7 @@ set-raft-state log-term=50 log-index=27 next-unstable-index=28
 Raft: term: 50 leader: 11 leaseholder: 10 mark: {Term:50 Index:27} next-unstable: 28
 
 # Side channel for entries [27,27] indicate a low-pri override.
-side-channel v2 leader-term=50 first=27 last=27 low-pri
+side-channel leader-term=50 first=27 last=27 low-pri
 ----
 
 # The index 27 entry is marked AboveNormalPri, but will be treated as LowPri.
@@ -198,23 +180,25 @@ HandleRaftReady:
 .....
 AdmitRaftEntries:
  ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{Mark:{Term:50 Index:27} Priority:LowPri}}) = true
-destroyed-or-leader-using-v2: true
 LogTracker: mark:{Term:50 Index:27}, stable:26, admitted:[26 26 25 26]
 LowPri: {Term:50 Index:27}
 AboveNormalPri: {Term:50 Index:26}
 
+# Noop, since there is waiting to be admitted entry at HighPri.
 admitted-log-entry leader-term=50 index=27 pri=3
 ----
 LogTracker: mark:{Term:50 Index:27}, stable:26, admitted:[26 26 25 26]
 LowPri: {Term:50 Index:27}
 AboveNormalPri: {Term:50 Index:26}
 
+# Admit the entry at index 26 at AboveNormalPri.
 admitted-log-entry leader-term=50 index=26 pri=2
 ----
  RaftScheduler.EnqueueRaftReady(rangeID=3)
 LogTracker [+dirty+sched]: mark:{Term:50 Index:27}, stable:26, admitted:[26 26 26 26]
 LowPri: {Term:50 Index:27}
 
+# The new admitted vector is piggybacked.
 handle-raft-ready-and-admit
 ----
 HandleRaftReady:
@@ -226,14 +210,8 @@ set-raft-state term=51
 ----
 Raft: term: 51 leader: 11 leaseholder: 10 mark: {Term:50 Index:27} next-unstable: 28
 
-# index 27 is still waiting for admission, but we switch to a new leader that
-# is using the v1 protocol. NB: in practice, we will never have the v1
-# protocol be used after v2 encoding has happened, but processor does not
-# mind.
-side-channel v1 leader-term=51 first=27 last=27
-----
-
 # Stable index advanced to 27, as well as all admitted indices except LowPri.
+# Index 27 at LowPri is still waiting for admission.
 synced-log term=50 index=27
 ----
 LogTracker [+dirty]: mark:{Term:50 Index:27}, stable:27, admitted:[26 27 27 27]
@@ -245,31 +223,26 @@ handle-raft-ready-and-admit
 HandleRaftReady:
 .....
 
+side-channel leader-term=51 first=27 last=27
+----
+
 # A new entry at index 27 overwrites the previous one, and regresses the stable
 # and admitted indices.
 handle-raft-ready-and-admit entries=v1/i27/t46/pri0/time2/len100 leader-term=51
 ----
 HandleRaftReady:
+ Piggybacker.Add(n11, [r3,s11,5->11] admitted=t51/[26 26 26 26])
 .....
 AdmitRaftEntries:
-destroyed-or-leader-using-v2: false
-LogTracker [+dirty]: mark:{Term:51 Index:27}, stable:26, admitted:[26 26 26 26]
+ ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{Mark:{Term:51 Index:27} Priority:LowPri}}) = true
+LogTracker: mark:{Term:51 Index:27}, stable:26, admitted:[26 26 26 26]
+LowPri: {Term:51 Index:27}
 
 # Noop. Stale entry admission.
 admitted-log-entry leader-term=50 index=27 pri=0
 ----
-LogTracker [+dirty]: mark:{Term:51 Index:27}, stable:26, admitted:[26 26 26 26]
-
-# Same leader switches to v2.
-side-channel v2 leader-term=51 first=27 last=27
-----
-
-# Admitted vector is now sent to the leader.
-handle-raft-ready-and-admit
-----
-HandleRaftReady:
- Piggybacker.Add(n11, [r3,s11,5->11] admitted=t51/[26 26 26 26])
-.....
+LogTracker: mark:{Term:51 Index:27}, stable:26, admitted:[26 26 26 26]
+LowPri: {Term:51 Index:27}
 
 # Noop, since not the leader.
 enqueue-piggybacked-admitted from=25 to=5 term=50 index=24 pri=0
@@ -302,9 +275,8 @@ HandleRaftReady:
 .....
 AdmitRaftEntries:
  ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{Mark:{Term:52 Index:28} Priority:LowPri}}) = true
-destroyed-or-leader-using-v2: true
 LogTracker: mark:{Term:52 Index:28}, stable:26, admitted:[26 26 26 26]
-LowPri: {Term:52 Index:28}
+LowPri: {Term:51 Index:27} {Term:52 Index:28}
 
 # AdmitForEval returns true since there is a RangeController which admitted.
 admit-for-eval pri=low-pri
@@ -418,15 +390,6 @@ handle-raft-ready-and-admit
 HandleRaftReady:
 .....
 
-# Noop, since destroyed.
-set-enabled-level enabled-level=v2-encoding
-----
-
-# Noop.
-get-enabled-level
-----
-enabled-level: v1-encoding
-
 # Noop.
 enqueue-piggybacked-admitted from=25 to=5 term=52 index=24 pri=0
 ----
@@ -436,7 +399,7 @@ process-piggybacked-admitted
 ----
 
 # Noop.
-side-channel v2 leader-term=53 first=29 last=29
+side-channel leader-term=53 first=29 last=29
 ----
 
 # Noop.
@@ -445,7 +408,6 @@ handle-raft-ready-and-admit entries=v1/i29/t45/pri0/time2/len100 leader-term=53
 HandleRaftReady:
 .....
 AdmitRaftEntries:
-destroyed-or-leader-using-v2: true
 LogTracker [+dirty]: mark:{Term:53 Index:29}, stable:28, admitted:[28 28 28 28]
 
 # Noop.
@@ -453,21 +415,16 @@ admitted-log-entry leader-term=52 index=28 pri=0
 ----
 LogTracker [+dirty]: mark:{Term:53 Index:29}, stable:28, admitted:[28 28 28 28]
 
-# Test transitioning to v2 protocol after becoming leader.
 reset
 ----
-n1,s2,r3: replica=5, tenant=4, enabled-level=not-enabled
+n1,s2,r3: replica=5, tenant=4
 
-get-enabled-level
-----
-enabled-level: not-enabled
-
-init-raft log-term=50 log-index=24
+init-raft log-term=50 log-index=25
 ----
 
 set-raft-state term=50 leader=5 leaseholder=5
 ----
-Raft: term: 50 leader: 5 leaseholder: 5 mark: {Term:50 Index:24} next-unstable: 25
+Raft: term: 50 leader: 5 leaseholder: 5 mark: {Term:50 Index:25} next-unstable: 26
 
 # Noop, since don't know the descriptor.
 handle-raft-ready-and-admit
@@ -479,29 +436,15 @@ HandleRaftReady:
 on-desc-changed  replicas=n11/s11/11,n13/s13/13
 ----
 
+# RangeController is created.
 handle-raft-ready-and-admit
 ----
 HandleRaftReady:
-.....
-
-set-raft-state log-term=50 log-index=25 next-unstable-index=26
-----
-Raft: term: 50 leader: 5 leaseholder: 5 mark: {Term:50 Index:25} next-unstable: 26
-
-# v1 protocol, so does not do anything.
-handle-raft-ready-and-admit entries=v1/i25/t45/pri0/time2/len100 leader-term=50
-----
-HandleRaftReady:
-.....
-AdmitRaftEntries:
-destroyed-or-leader-using-v2: false
-LogTracker: mark:{Term:50 Index:25}, stable:24, admitted:[24 24 24 24]
-
-# RangeController is created.
-set-enabled-level enabled-level=v1-encoding
-----
  RangeControllerFactory.New(replicaSet=[(n11,s11):11,(n13,s13):13], leaseholder=5, nextRaftIndex=26, forceFlushIndex=0)
+ RangeController.HandleRaftEventRaftMuLocked([])
+.....
 
+# Raft is about to send us a newly appended entry 26.
 set-raft-state log-term=50 log-index=26 next-unstable-index=27
 ----
 Raft: term: 50 leader: 5 leaseholder: 5 mark: {Term:50 Index:26} next-unstable: 27
@@ -514,14 +457,13 @@ HandleRaftReady:
 .....
 AdmitRaftEntries:
  ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{Mark:{Term:50 Index:26} Priority:LowPri}}) = true
-destroyed-or-leader-using-v2: true
-LogTracker: mark:{Term:50 Index:26}, stable:24, admitted:[24 24 24 24]
+LogTracker: mark:{Term:50 Index:26}, stable:25, admitted:[25 25 25 25]
 LowPri: {Term:50 Index:26}
 
 # Entry is admitted.
 admitted-log-entry leader-term=50 index=26 pri=0
 ----
-LogTracker: mark:{Term:50 Index:26}, stable:24, admitted:[24 24 24 24]
+LogTracker: mark:{Term:50 Index:26}, stable:25, admitted:[25 25 25 25]
 
 # Noop, since stable index is still 24.
 handle-raft-ready-and-admit
@@ -553,7 +495,6 @@ HandleRaftReady:
  RangeController.HandleRaftEventRaftMuLocked([27])
 .....
 AdmitRaftEntries:
-destroyed-or-leader-using-v2: true
 LogTracker: mark:{Term:50 Index:27}, stable:26, admitted:[26 26 26 26]
 
 # Everything up to 27 is admitted.

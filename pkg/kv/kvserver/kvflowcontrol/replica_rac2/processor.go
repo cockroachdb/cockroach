@@ -7,7 +7,6 @@ package replica_rac2
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
@@ -157,17 +156,13 @@ type ProcessorOptions struct {
 	RangeControllerFactory RangeControllerFactory
 	EvalWaitMetrics        *rac2.EvalWaitMetrics
 
-	EnabledWhenLeaderLevel kvflowcontrol.V2EnabledWhenLeaderLevel
-	Knobs                  *kvflowcontrol.TestingKnobs
+	Knobs *kvflowcontrol.TestingKnobs
 }
 
 // SideChannelInfoUsingRaftMessageRequest is used to provide a follower
-// information about the leader's protocol, and if the leader is using the
-// RACv2 protocol, additional information about entries.
+// information about entries.
 type SideChannelInfoUsingRaftMessageRequest struct {
-	UsingV2Protocol bool
-	LeaderTerm      uint64
-	// Following are only used if UsingV2Protocol is true.
+	LeaderTerm     uint64
 	First, Last    uint64
 	LowPriOverride bool
 }
@@ -271,23 +266,6 @@ type Processor interface {
 	// raftMu is held.
 	OnDestroyRaftMuLocked(context.Context)
 
-	// SetEnabledWhenLeaderRaftMuLocked is the dynamic change corresponding to
-	// ProcessorOptions.EnabledWhenLeaderLevel. The level must only be ratcheted
-	// up. We call it in Replica.handleRaftReadyRaftMuLocked, before doing any
-	// work (before Ready is called, since it may create a RangeController).
-	// This may be a noop if the level has already been reached.
-	//
-	// raftMu is held.
-	SetEnabledWhenLeaderRaftMuLocked(
-		context.Context, kvflowcontrol.V2EnabledWhenLeaderLevel, RaftNodeBasicState)
-	// GetEnabledWhenLeader returns the current level. It may be used in
-	// highly concurrent settings at the leaseholder, when waiting for eval,
-	// and when encoding a proposal. Note that if the leaseholder is not the
-	// leader and the leader has switched to a higher level, there is no harm
-	// done, since the leaseholder can continue waiting for v1 tokens and use
-	// the v1 entry encoding.
-	GetEnabledWhenLeader() kvflowcontrol.V2EnabledWhenLeaderLevel
-
 	// OnDescChangedLocked provides a possibly updated RangeDescriptor. The
 	// tenantID passed in all calls must be the same.
 	//
@@ -322,16 +300,11 @@ type Processor interface {
 	//
 	// It is split off from that function since it is natural to position the
 	// admission control processing when we are writing to the store in
-	// Replica.handleRaftReadyRaftMuLocked. This is mostly a noop if the leader is
-	// not using the RACv2 protocol.
-	//
-	// Returns false if the leader is using RACv1 and the replica is not
-	// destroyed, in which case the caller should follow the RACv1 admission
-	// pathway.
+	// Replica.handleRaftReadyRaftMuLocked.
 	//
 	// raftMu is held.
 	AdmitRaftEntriesRaftMuLocked(
-		ctx context.Context, event rac2.RaftEvent) bool
+		ctx context.Context, event rac2.RaftEvent)
 
 	// EnqueuePiggybackedAdmittedAtLeader is called at the leader when receiving a
 	// piggybacked admitted vector that can advance the given follower's admitted
@@ -472,16 +445,12 @@ type processorImpl struct {
 
 	// State at a follower.
 	follower struct {
-		// isLeaderUsingV2Protocol is true when the leaderID indicated that it's
-		// using RACv2.
-		isLeaderUsingV2Protocol bool
 		// lowPriOverrideState records which raft log entries have their priority
 		// overridden to be raftpb.LowPri.
 		lowPriOverrideState lowPriOverrideState
 	}
 
-	// State when leader, i.e., when leaderID == opts.ReplicaID, and v2 protocol
-	// is enabled.
+	// State when leader, i.e., when leaderID == opts.ReplicaID.
 	leader struct {
 		// pendingAdmittedMu contains recently delivered admitted vectors. When the
 		// updates map is not empty, the range is scheduled for applying these
@@ -549,11 +518,6 @@ type processorImpl struct {
 		tenantID roachpb.TenantID
 	}
 
-	// enabledWhenLeader indicates the RACv2 mode of operation when this replica
-	// is the leader. Atomic value, for serving GetEnabledWhenLeader. Updated only
-	// while holding raftMu. Can be read non-atomically if raftMu is held.
-	enabledWhenLeader kvflowcontrol.V2EnabledWhenLeaderLevel
-
 	v1EncodingPriorityMismatch log.EveryN
 }
 
@@ -562,17 +526,8 @@ var _ Processor = &processorImpl{}
 func NewProcessor(opts ProcessorOptions) Processor {
 	return &processorImpl{
 		opts:                       opts,
-		enabledWhenLeader:          opts.EnabledWhenLeaderLevel,
 		v1EncodingPriorityMismatch: log.Every(time.Minute),
 	}
-}
-
-// isLeaderUsingV2RaftMuLocked returns true if the current leader uses the V2
-// protocol.
-func (p *processorImpl) isLeaderUsingV2ProcLocked() bool {
-	// We are the leader using V2, or a follower who learned that the leader is
-	// using the V2 protocol.
-	return p.leader.rc != nil || (p.opts.ReplicaID != p.leaderID && p.follower.isLeaderUsingV2Protocol)
 }
 
 // InitRaftLocked implements Processor.
@@ -595,29 +550,6 @@ func (p *processorImpl) OnDestroyRaftMuLocked(ctx context.Context) {
 	p.closeLeaderStateRaftMuLocked(ctx)
 	// Release some memory.
 	p.follower.lowPriOverrideState = lowPriOverrideState{}
-}
-
-// SetEnabledWhenLeaderRaftMuLocked implements Processor.
-func (p *processorImpl) SetEnabledWhenLeaderRaftMuLocked(
-	ctx context.Context, level kvflowcontrol.V2EnabledWhenLeaderLevel, state RaftNodeBasicState,
-) {
-	p.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
-	if p.destroyed || p.enabledWhenLeader >= level {
-		return
-	}
-	atomic.StoreUint32(&p.enabledWhenLeader, level)
-	if level != kvflowcontrol.V2EnabledWhenLeaderV1Encoding ||
-		p.desc.replicas == nil {
-		return
-	}
-	log.VEventf(ctx, 1, "enabled v2 protocol using v1 priority encoding")
-	// May need to create RangeController.
-	p.makeStateConsistentRaftMuLocked(ctx, state, true /* force */)
-}
-
-// GetEnabledWhenLeader implements Processor.
-func (p *processorImpl) GetEnabledWhenLeader() kvflowcontrol.V2EnabledWhenLeaderLevel {
-	return atomic.LoadUint32(&p.enabledWhenLeader)
 }
 
 func descToReplicaSet(desc *roachpb.RangeDescriptor) rac2.ReplicaSet {
@@ -687,14 +619,8 @@ func (p *processorImpl) ForceFlushIndexChangedLocked(ctx context.Context, index 
 // state.NextUnstableIndex is used to initialize the state of the send-queues
 // if this replica is becoming the leader. This index must immediately precede
 // the entries provided to RangeController.
-//
-// The force parameter is set to true to always take the slow-path and not
-// assume that no change does not mean that all the state is already
-// consistent. This is specifically used when RACv2 is being enabled, since a
-// RangeController may need to be created, even though the observed Raft or
-// descriptor state has not changed.
 func (p *processorImpl) makeStateConsistentRaftMuLocked(
-	ctx context.Context, state RaftNodeBasicState, force bool,
+	ctx context.Context, state RaftNodeBasicState,
 ) {
 	if state.Term < p.term {
 		log.Fatalf(ctx, "term regressed from %d to %d", p.term, state.Term)
@@ -716,7 +642,7 @@ func (p *processorImpl) makeStateConsistentRaftMuLocked(
 	becameLeader := (!p.isLeader || termChanged) && state.IsLeader
 
 	// Check the common case: nothing changed.
-	if !leftLeader && !becameLeader && !leadChanged && !leaseChanged && !replicasChanged && !force {
+	if !leftLeader && !becameLeader && !leadChanged && !leaseChanged && !replicasChanged {
 		// There is no observed change, and force is false, so return.
 		return
 	}
@@ -756,9 +682,6 @@ func (p *processorImpl) makeStateConsistentRaftMuLocked(
 		}
 	}
 
-	if p.enabledWhenLeader == kvflowcontrol.V2NotEnabledWhenLeader {
-		return
-	}
 	if leftLeader {
 		p.closeLeaderStateRaftMuLocked(ctx)
 	}
@@ -848,18 +771,11 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(
 		return
 	}
 
-	// NB: we need to call makeStateConsistentRaftMuLocked even if
-	// NotEnabledWhenLeader, since this replica could be a follower and the leader
-	// may switch to v2.
-
 	if len(e.Entries) > 0 {
 		state.NextUnstableIndex = e.Entries[0].Index
 	}
-	p.makeStateConsistentRaftMuLocked(ctx, state, false /* force */)
+	p.makeStateConsistentRaftMuLocked(ctx, state)
 
-	if !p.isLeaderUsingV2ProcLocked() {
-		return
-	}
 	// NB: since we've registered the latest log/snapshot write (if any) above,
 	// our admitted vector is likely consistent with the latest leader term.
 	p.maybeSendAdmittedRaftMuLocked(ctx)
@@ -951,11 +867,11 @@ func (p *processorImpl) registerStorageAppendRaftMuLocked(ctx context.Context, e
 }
 
 // AdmitRaftEntriesRaftMuLocked implements Processor.
-func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2.RaftEvent) bool {
+func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2.RaftEvent) {
 	p.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	// Return false only if we're not destroyed and not using V2.
-	if p.destroyed || !p.isLeaderUsingV2ProcLocked() {
-		return p.destroyed
+	if p.destroyed {
+		return
 	}
 
 	for _, entry := range e.Entries {
@@ -978,7 +894,7 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 				log.Infof(ctx,
 					"decoded v2 raft admission meta below-raft: pri=%v create-time=%d "+
 						"proposer=n%v receiver=[n%d,s%v] tenant=t%d tokens≈%v "+
-						"sideloaded=%t raft-entry=%d/%d lead-v2=%v",
+						"sideloaded=%t raft-entry=%d/%d",
 					raftpb.Priority(meta.AdmissionPriority),
 					meta.AdmissionCreateTime,
 					meta.AdmissionOriginNode,
@@ -989,13 +905,12 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 					typ.IsSideloaded(),
 					entry.Term,
 					entry.Index,
-					p.isLeaderUsingV2ProcLocked(),
 				)
 			} else {
 				log.Infof(ctx,
 					"decoded v1 raft admission meta below-raft: pri=%v create-time=%d "+
 						"proposer=n%v receiver=[n%d,s%v] tenant=t%d tokens≈%v "+
-						"sideloaded=%t raft-entry=%d/%d lead-v2=%v",
+						"sideloaded=%t raft-entry=%d/%d",
 					admissionpb.WorkPriority(meta.AdmissionPriority),
 					meta.AdmissionCreateTime,
 					meta.AdmissionOriginNode,
@@ -1006,7 +921,6 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 					typ.IsSideloaded(),
 					entry.Term,
 					entry.Index,
-					p.isLeaderUsingV2ProcLocked(),
 				)
 			}
 		}
@@ -1024,7 +938,7 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 			if admissionpb.WorkClassFromPri(admissionpb.WorkPriority(meta.AdmissionPriority)) ==
 				admissionpb.RegularWorkClass && p.v1EncodingPriorityMismatch.ShouldLog() {
 				log.Errorf(ctx,
-					"do not use RACv1 for pri %s, which is regular work",
+					"do not use RACv1 encoding for pri %s, which is regular work",
 					admissionpb.WorkPriority(meta.AdmissionPriority))
 			}
 		}
@@ -1057,7 +971,6 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 			p.logTracker.logAdmitted(ctx, mark, raftPri)
 		}
 	}
-	return true
 }
 
 // EnqueuePiggybackedAdmittedAtLeader implements Processor.
@@ -1124,22 +1037,8 @@ func (p *processorImpl) SideChannelForPriorityOverrideAtFollowerRaftMuLocked(
 	if p.destroyed {
 		return
 	}
-	if info.UsingV2Protocol {
-		if p.follower.lowPriOverrideState.sideChannelForLowPriOverride(
-			info.LeaderTerm, info.First, info.Last, info.LowPriOverride) &&
-			!p.follower.isLeaderUsingV2Protocol {
-			// Either term advanced, or stayed the same. In the latter case we know
-			// that a leader does a one-way switch from v1 => v2. In the former case
-			// we of course use v2 if the leader is claiming to use v2.
-			p.follower.isLeaderUsingV2Protocol = true
-		}
-	} else {
-		if p.follower.lowPriOverrideState.sideChannelForV1Leader(info.LeaderTerm) &&
-			p.follower.isLeaderUsingV2Protocol {
-			// Leader term advanced, so this is switching back to v1.
-			p.follower.isLeaderUsingV2Protocol = false
-		}
-	}
+	p.follower.lowPriOverrideState.sideChannelForLowPriOverride(
+		info.LeaderTerm, info.First, info.Last, info.LowPriOverride)
 }
 
 // SyncedLogStorage implements Processor.

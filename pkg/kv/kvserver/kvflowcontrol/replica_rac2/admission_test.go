@@ -59,12 +59,6 @@ func TestLowPriOverrideState(t *testing.T) {
 				notStaleTerm := lpos.sideChannelForLowPriOverride(leaderTerm, first, last, lowPriOverride)
 				return fmt.Sprintf("not-stale-term: %t\n%s", notStaleTerm, lposString())
 
-			case "side-channel-v1":
-				var leaderTerm uint64
-				d.ScanArgs(t, "leader-term", &leaderTerm)
-				termAdvanced := lpos.sideChannelForV1Leader(leaderTerm)
-				return fmt.Sprintf("term-advanced: %t\n%s", termAdvanced, lposString())
-
 			case "get-effective-priority":
 				// Example:
 				//  get-effective-priority index=4 pri=HighPri
