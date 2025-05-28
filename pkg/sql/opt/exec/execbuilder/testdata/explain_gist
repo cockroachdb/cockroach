@@ -262,13 +262,13 @@ SELECT crdb_internal.decode_plan_gist('AgH8/f//nxkAAN6DgICAgDQAAAADAZz9//+fGQAAz
 └── • render
     │
     └── • group (hash)
-        │ group by: table_catalog, table_catalog, table_catalog, table_catalog, table_catalog, table_catalog, table_catalog
+        │ group by: engine_attribute, engine_attribute, engine_attribute, engine_attribute, engine_attribute, engine_attribute, engine_attribute
         │
         └── • sort
             │ order
             │
             └── • hash join (left outer)
-                │ equality: (table_catalog) = (table_catalog)
+                │ equality: (engine_attribute) = (conversion_factor)
                 │
                 ├── • filter
                 │   │
