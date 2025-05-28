@@ -79,7 +79,7 @@ import {
   timeScale1hMinOptions,
   TimeScaleDropdown,
   timeScaleRangeToObj,
-  toRoundedDateRange,
+  toDateRange,
 } from "../timeScaleDropdown";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 import { baseHeadingClasses } from "../transactionsPage/transactionsPageClasses";
@@ -143,7 +143,7 @@ interface TState {
 function statementsRequestFromProps(
   props: TransactionDetailsProps,
 ): StatementsRequest {
-  const [start, end] = toRoundedDateRange(props.timeScale);
+  const [start, end] = toDateRange(props.timeScale);
   return createCombinedStmtsRequest({
     start,
     end,
