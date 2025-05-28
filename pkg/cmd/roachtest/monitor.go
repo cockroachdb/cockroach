@@ -149,7 +149,7 @@ func (m *monitorImpl) ExpectProcessHealth(
 	m.expProcessHealth.set(nodes, virtualClusterOptions.VirtualClusterName, virtualClusterOptions.SQLInstance, health)
 }
 
-// ExpectProcessDeath lets the monitor know that a set of processes are about
+// ExpectProcessDead lets the monitor know that a set of processes are about
 // to be killed, and that their deaths should be ignored. Virtual cluster
 // options can be passed to denote a separate process.
 func (m *monitorImpl) ExpectProcessDead(nodes option.NodeListOption, opts ...option.OptionFunc) {
@@ -161,6 +161,19 @@ func (m *monitorImpl) ExpectProcessDead(nodes option.NodeListOption, opts ...opt
 // a separate process.
 func (m *monitorImpl) ExpectProcessAlive(nodes option.NodeListOption, opts ...option.OptionFunc) {
 	m.ExpectProcessHealth(nodes.InstallNodes(), ExpectedAlive, opts...)
+}
+
+// AvailableNodes returns the availability of nodes based on the expected
+// health of them, not by what the monitor is actually observing.
+func (m *monitorImpl) AvailableNodes(virtualClusterName string) option.NodeListOption {
+	var availableNodes install.Nodes
+	m.expProcessHealth.Range(func(process monitorProcess, health *MonitorExpectedProcessHealth) bool {
+		if process.virtualClusterName == virtualClusterName && *health == ExpectedAlive {
+			availableNodes = append(availableNodes, process.node)
+		}
+		return true
+	})
+	return option.FromInstallNodes(availableNodes)
 }
 
 // ExpectDeath lets the monitor know that a node is about to be killed, and that

@@ -213,6 +213,8 @@ const (
 	spanConfigTenantLimit = 50000
 )
 
+// failureInjectionMutators includes a list of all
+// failure injection mutators.
 var failureInjectionMutators = []mutator{
 	panicNodeMutator{},
 }
@@ -255,15 +257,14 @@ var clusterSettingMutators = []mutator{
 
 // planMutators includes a list of all known `mutator`
 // implementations. A subset of these mutations might be enabled in
-// any mixedversion test plan.
-var planMutators = append(
-	append([]mutator{
-		preserveDowngradeOptionRandomizerMutator{},
-	},
-		failureInjectionMutators...,
-	),
-	clusterSettingMutators...,
-)
+// planMutators includes a list of all known `mutator`
+// implementations. A subset of these mutations might be enabled in
+var planMutators = func() []mutator {
+	mutators := []mutator{preserveDowngradeOptionRandomizerMutator{}}
+	mutators = append(mutators, clusterSettingMutators...)
+	mutators = append(mutators, failureInjectionMutators...)
+	return mutators
+}()
 
 // Plan returns the TestPlan used to upgrade the cluster from the
 // first to the final version in the `versions` field. The test plan
@@ -439,7 +440,7 @@ func (p *testPlanner) Plan() *TestPlan {
 	// panic failure).
 	for _, mut := range planMutators {
 		if p.mutatorEnabled(mut) {
-			if _, found := failureInjections[mut.Name()]; found && len(p.currentContext.System.Descriptor.Nodes) < 3 {
+			if _, found := failureInjections[mut.Name()]; found && len(p.currentContext.Nodes()) < 3 {
 				continue
 			}
 			mutations := mut.Generate(p.prng, testPlan, p)
@@ -1360,6 +1361,37 @@ func (ss stepSelector) Filter(predicate func(*singleStep) bool) stepSelector {
 	}
 
 	return result
+}
+
+// Cut returns the before and after of a cut step selector, as well as the step that was cut out.
+func (ss stepSelector) Cut(
+	predicate func(*singleStep) bool,
+) (stepSelector, stepSelector, stepSelector) {
+	var before, after, cut stepSelector
+	predicateFound := false
+	for _, s := range ss {
+		if predicateFound {
+			after = append(after, s)
+		} else if predicate(s) {
+			predicateFound = true
+			cut = append(cut, s)
+		} else {
+			before = append(before, s)
+		}
+	}
+	return before, after, cut
+}
+
+// CutAfter cuts the selector and returns the two halves with the after including the cut step.
+func (ss stepSelector) CutAfter(predicate func(*singleStep) bool) (stepSelector, stepSelector) {
+	before, after, cut := ss.Cut(predicate)
+	return before, append(cut, after...)
+}
+
+// CutBefore cuts the selector and returns the two halves with the before including the cut step.
+func (ss stepSelector) CutBefore(predicate func(*singleStep) bool) (stepSelector, stepSelector) {
+	before, after, cut := ss.Cut(predicate)
+	return append(before, cut...), after
 }
 
 // RandomStep returns a new selector that selects a single step,
