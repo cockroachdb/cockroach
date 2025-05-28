@@ -453,13 +453,13 @@ func (rsl StateLoader) SynthesizeRaftState(
 	if err != nil {
 		return err
 	}
-	truncState, err := rsl.LoadRaftTruncatedState(ctx, readWriter)
-	if err != nil {
-		return err
-	}
 	as, err := rsl.LoadRangeAppliedState(ctx, readWriter)
 	if err != nil {
 		return err
 	}
-	return rsl.SynthesizeHardState(ctx, readWriter, hs, truncState, as.RaftAppliedIndex)
+	applied := logstore.EntryID{
+		Index: as.RaftAppliedIndex,
+		Term:  as.RaftAppliedIndexTerm,
+	}
+	return rsl.SynthesizeHardState(ctx, readWriter, hs, applied)
 }
