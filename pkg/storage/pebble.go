@@ -2236,7 +2236,7 @@ func (p *Pebble) BufferedSize() int {
 
 // ConvertFilesToBatchAndCommit implements the Engine interface.
 func (p *Pebble) ConvertFilesToBatchAndCommit(
-	_ context.Context, paths []string, clearedSpans []roachpb.Span,
+	_ context.Context, paths []string, clear roachpb.Span,
 ) error {
 	files := make([]sstable.ReadableFile, len(paths))
 	closeFiles := func() {
@@ -2275,13 +2275,14 @@ func (p *Pebble) ConvertFilesToBatchAndCommit(
 	defer iter.Close()
 
 	batch := p.NewWriteBatch()
-	for i := range clearedSpans {
-		err :=
-			batch.ClearRawRange(clearedSpans[i].Key, clearedSpans[i].EndKey, true, true)
-		if err != nil {
-			return err
-		}
+	if err := batch.ClearRawRange(clear.Key, clear.EndKey, true, true); err != nil {
+		return err
 	}
+
+	// FIXME: make sure the range deletions in the files are respected.
+	// Why is this not the case already, given the loop below takes range keys
+	// into account?
+
 	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: roachpb.KeyMin})
 	for valid {
 		hasPoint, hasRange := iter.HasPointAndRange()
