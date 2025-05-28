@@ -235,13 +235,13 @@ var planMutators = []mutator{
 		"kv.transaction.write_buffering.enabled",
 		[]bool{true, false},
 		clusterSettingMinimumVersion("v25.2.0"),
-		clusterSettingProbability(1),
+		clusterSettingProbability(0.5),
 	),
 	newClusterSettingMutator(
 		"kv.rangefeed.buffered_sender.enabled",
 		[]bool{true, false},
 		clusterSettingMinimumVersion("v25.2.0"),
-		clusterSettingProbability(1),
+		clusterSettingProbability(0.5),
 	),
 }
 
