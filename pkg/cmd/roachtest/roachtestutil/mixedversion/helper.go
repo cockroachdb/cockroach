@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/exp/maps"
 )
 
 type (
@@ -47,6 +48,7 @@ type (
 		connFunc        func(int) *gosql.DB
 		stepLogger      *logger.Logger
 		clusterVersions *atomic.Value
+		availableNodes  map[int]struct{}
 	}
 
 	// Helper is the struct passed to `stepFunc`s (user-provided or
@@ -67,6 +69,15 @@ type (
 	}
 )
 
+func (s *Service) randomAvailableNode(rng *rand.Rand) int {
+	nodes := option.NodeListOption(maps.Keys(s.availableNodes))
+	return nodes.SeededRandNode(rng)[0]
+}
+
+func (s *Service) AvailableNodes() option.NodeListOption {
+	return maps.Keys(s.availableNodes)
+}
+
 // Connect returns a connection pool to the given node. Note that
 // these connection pools are managed by the framework and therefore
 // *must not* be closed. They are closed automatically when the test
@@ -79,7 +90,7 @@ func (s *Service) Connect(node int) *gosql.DB {
 // cluster. Do *not* call `Close` on the pool returned (see comment on
 // `Connect` function).
 func (s *Service) RandomDB(rng *rand.Rand) (int, *gosql.DB) {
-	node := s.Descriptor.Nodes.SeededRandNode(rng)[0]
+	node := s.randomAvailableNode(rng)
 	return node, s.Connect(node)
 }
 
@@ -104,19 +115,22 @@ func (s *Service) prepareQuery(
 }
 
 func (s *Service) Query(rng *rand.Rand, query string, args ...interface{}) (*gosql.Rows, error) {
-	db, err := s.prepareQuery(rng, s.Descriptor.Nodes, query, args...)
+	nodes := maps.Keys(s.availableNodes)
+	db, err := s.prepareQuery(rng, nodes, query, args...)
 	handleInternalError(err)
 	return db.QueryContext(s.ctx, query, args...)
 }
 
 func (s *Service) QueryRow(rng *rand.Rand, query string, args ...interface{}) *gosql.Row {
-	db, err := s.prepareQuery(rng, s.Descriptor.Nodes, query, args...)
+	nodes := maps.Keys(s.availableNodes)
+	db, err := s.prepareQuery(rng, nodes, query, args...)
 	handleInternalError(err)
 	return db.QueryRowContext(s.ctx, query, args...)
 }
 
 func (s *Service) Exec(rng *rand.Rand, query string, args ...interface{}) error {
-	return s.ExecWithGateway(rng, s.Descriptor.Nodes, query, args...)
+	nodes := maps.Keys(s.availableNodes)
+	return s.ExecWithGateway(rng, nodes, query, args...)
 }
 
 func (s *Service) ExecWithGateway(
@@ -174,6 +188,10 @@ func (h *Helper) DefaultService() *Service {
 	}
 
 	return h.System
+}
+
+func (h *Helper) AvailableNodes() option.NodeListOption {
+	return maps.Keys(h.DefaultService().availableNodes)
 }
 
 func (h *Helper) Context() *ServiceContext {

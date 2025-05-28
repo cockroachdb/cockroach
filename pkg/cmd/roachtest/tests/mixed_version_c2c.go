@@ -124,12 +124,15 @@ func InitC2CMixed(
 		return 0.0
 	}
 
+	// This test has the source and destination clusters interacting with each other
+	// through specific nodes, so it is incompatible with failure injections.
 	sourceMvt := mixedversion.NewTest(ctx, t, t.L(), c, c.Range(1, sp.srcNodes),
 		mixedversion.AlwaysUseLatestPredecessors,
 		mixedversion.NumUpgrades(expectedMajorUpgrades),
 		mixedversion.EnabledDeploymentModes(mixedversion.SharedProcessDeployment),
 		mixedversion.WithTag("source"),
 		mixedversion.WithSkipVersionProbability(boolToProb(sourceVersionSkips)),
+		mixedversion.DisableAllFailureInjectionMutators(),
 	)
 
 	destMvt := mixedversion.NewTest(ctx, t, t.L(), c, c.Range(sp.srcNodes+1, sp.srcNodes+sp.dstNodes),
@@ -138,6 +141,7 @@ func InitC2CMixed(
 		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
 		mixedversion.WithTag("dest"),
 		mixedversion.WithSkipVersionProbability(boolToProb(destVersionSkips)),
+		mixedversion.DisableAllFailureInjectionMutators(),
 	)
 
 	return &c2cMixed{

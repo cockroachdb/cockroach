@@ -512,8 +512,10 @@ func (s setClusterSettingStep) Run(
 		args = []interface{}{val}
 	}
 
+	validNodes := h.AvailableNodes().Intersect(nodesRunningAtLeast(s.virtualClusterName, s.minVersion, h))
+
 	return serviceByName(h, serviceName).ExecWithGateway(
-		rng, nodesRunningAtLeast(s.virtualClusterName, s.minVersion, h), stmt, args...,
+		rng, validNodes, stmt, args...,
 	)
 }
 
@@ -787,13 +789,9 @@ func startStopOpts(opts ...option.StartStopOption) []option.StartStopOption {
 }
 
 // TODO(kyleli): This step currently only affects the system tenant, should support panicking secondary tenants as well.
-// TODO(kyleli): Current mixedversion cannot support separating this into two steps (panic and restart) because during
-// each step the framework checks each node to ensure they are all alive and healthy. Ideally there should be a state
-// that allows the framework to skip this check, so that we can panic a node and then restart it in a separate step.
 type panicNodeStep struct {
 	initTarget int
 	targetNode option.NodeListOption
-	rt         test.Test
 }
 
 func (s panicNodeStep) Background() shouldStop { return nil }
@@ -803,6 +801,41 @@ func (s panicNodeStep) Description() string {
 }
 
 func (s panicNodeStep) Run(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
+	h.runner.monitor.ExpectProcessDead(s.targetNode)
+
+	const stmt = "SELECT crdb_internal.force_panic('expected panic from panicNodeMutator')"
+	if err := h.System.ExecWithGateway(
+		rng,
+		s.targetNode,
+		stmt,
+	); err == nil {
+		return errors.Errorf("expected panic statement to fail, but it succeeded on %s", s.targetNode)
+	}
+
+	delete(h.System.availableNodes, s.targetNode[0])
+	if h.IsMultitenant() {
+		delete(h.Tenant.availableNodes, s.targetNode[0])
+	}
+	return nil
+}
+
+func (s panicNodeStep) ConcurrencyDisabled() bool {
+	return true
+}
+
+type startNodeStep struct {
+	initTarget int
+	targetNode option.NodeListOption
+	rt         test.Test
+}
+
+func (startNodeStep) Background() shouldStop { return nil }
+
+func (s startNodeStep) Description() string {
+	return fmt.Sprintf("start node %d", s.targetNode[0])
+}
+
+func (s startNodeStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper) error {
 	nodeVersion, err := h.System.NodeVersion(s.targetNode[0])
 	if err != nil {
 		return errors.Wrapf(err, "failed to get node version for %s", s.targetNode)
@@ -814,31 +847,29 @@ func (s panicNodeStep) Run(ctx context.Context, l *logger.Logger, rng *rand.Rand
 	)
 	customStartOpts := restartSystemSettings(true, s.initTarget)
 
-	h.runner.monitor.ExpectProcessDead(s.targetNode)
-
-	const stmt = "SELECT crdb_internal.force_panic('expected panic from panicNodeMutator')"
-	err = h.System.ExecWithGateway(
-		rng,
-		s.targetNode,
-		stmt,
-	)
-
-	if err == nil {
-		return errors.Errorf("expected panic statement to fail, but it succeeded on %s", s.targetNode)
-	}
-
 	startCtx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
 
-	return h.runner.cluster.StartE(
+	err = h.runner.cluster.StartE(
 		startCtx,
 		l,
 		startOpts(customStartOpts...),
 		settings,
 		s.targetNode,
 	)
+	if err != nil {
+		return errors.Wrapf(
+			err, "failed to start node %d with binary %s", s.targetNode[0], binary,
+		)
+	}
+	h.System.availableNodes[s.targetNode[0]] = struct{}{}
+	if h.IsMultitenant() {
+		h.Tenant.availableNodes[s.targetNode[0]] = struct{}{}
+	}
+	return nil
+
 }
 
-func (s panicNodeStep) ConcurrencyDisabled() bool {
+func (s startNodeStep) ConcurrencyDisabled() bool {
 	return true
 }

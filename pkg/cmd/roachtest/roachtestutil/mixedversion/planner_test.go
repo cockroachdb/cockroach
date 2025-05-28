@@ -553,7 +553,7 @@ func Test_stepSelectorFilter(t *testing.T) {
 			name:                   "no filter",
 			predicate:              func(*singleStep) bool { return true },
 			expectedAllSteps:       true,
-			expectedRandomStepType: restartWithNewBinaryStep{},
+			expectedRandomStepType: runHookStep{},
 		},
 		{
 			name: "filter eliminates all steps",
