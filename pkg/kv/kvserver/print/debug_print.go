@@ -434,6 +434,9 @@ func tryRangeIDKey(kv storage.MVCCKeyValue) (string, error) {
 	case bytes.Equal(suffix, keys.LocalRaftTruncatedStateSuffix):
 		msg = &kvserverpb.RaftTruncatedState{}
 
+	case bytes.Equal(suffix, keys.LocalRangeGCHintSuffix):
+		msg = &roachpb.GCHint{}
+
 	case bytes.Equal(suffix, keys.LocalRangeLeaseSuffix):
 		msg = &roachpb.Lease{}
 

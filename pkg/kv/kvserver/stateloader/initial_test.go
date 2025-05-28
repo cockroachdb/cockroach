@@ -9,7 +9,6 @@ import (
 	"context"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -52,7 +51,6 @@ func TestWriteInitialRangeState(t *testing.T) {
 
 	str, err := print.DecodeWriteBatch(b.Repr())
 	require.NoError(t, err)
-	str = strings.ReplaceAll(str, "\n\n", "\n")
 	echotest.Require(t, str, filepath.Join("testdata", t.Name()+".txt"))
 }
 
