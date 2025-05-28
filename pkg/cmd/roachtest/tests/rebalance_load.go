@@ -114,7 +114,7 @@ func registerRebalanceLoad(r registry.Registry) {
 				func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
 					binary := uploadCockroach(ctx, t, c, appNode, h.System.FromVersion)
 					return rebalanceByLoad(
-						ctx, t, l, c, rebalanceMode, maxDuration, concurrency, appNode,
+						ctx, t, l, c, maxDuration, concurrency, appNode,
 						fmt.Sprintf("%s workload", binary), numStores, numNodes)
 				})
 			mvt.Run()
@@ -123,7 +123,7 @@ func registerRebalanceLoad(r registry.Registry) {
 			// a failure it will be available in the artifacts.
 			c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 			require.NoError(t, rebalanceByLoad(
-				ctx, t, t.L(), c, rebalanceMode, maxDuration,
+				ctx, t, t.L(), c, maxDuration,
 				concurrency, appNode, "./cockroach workload", numStores, numNodes,
 			))
 		}
@@ -238,7 +238,6 @@ func rebalanceByLoad(
 	t test.Test,
 	l *logger.Logger,
 	c cluster.Cluster,
-	rebalanceMode string,
 	maxDuration time.Duration,
 	concurrency int,
 	appNode option.NodeListOption,
