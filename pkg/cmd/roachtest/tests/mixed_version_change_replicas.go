@@ -285,6 +285,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 		// Avoid repeatedly running into #114549 on earlier minor versions.
 		// TODO(kvoli): Remove in 24.2.
 		mixedversion.AlwaysUseLatestPredecessors,
+		mixedversion.DisableAllFailureInjectionMutators(),
 	)
 
 	mvt.OnStartup("create test table", createTable)

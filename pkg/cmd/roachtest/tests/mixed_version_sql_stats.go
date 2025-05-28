@@ -83,7 +83,7 @@ func runSQLStatsMixedVersion(ctx context.Context, t test.Test, c cluster.Cluster
 
 	for name, reqType := range requestTypes {
 		mvt.InMixedVersion("request "+name, func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-			return runGetRequests(ctx, c, l, c.CRDBNodes(), reqType)
+			return runGetRequests(ctx, c, l, h.AvailableNodes(), reqType)
 		})
 	}
 	mvt.Run()
@@ -204,6 +204,7 @@ func (s *sqlStatsRequestHelper) requestSQLStats(
 	respHandler func(*serverpb.StatementsResponse),
 ) error {
 	adminUIAddrs, err := s.cluster.ExternalAdminUIAddr(ctx, s.logger, gatewayNodes)
+
 	if err != nil {
 		return err
 	}
