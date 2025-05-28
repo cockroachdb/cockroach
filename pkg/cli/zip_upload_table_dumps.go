@@ -99,6 +99,7 @@ var clusterWideTableDumps = map[string]columnParserMap{
 	"crdb_internal.create_type_statements.txt":      {},
 	"crdb_internal.create_procedure_statements.txt": {},
 	"crdb_internal.create_function_statements.txt":  {},
+	"crdb_internal.create_trigger_statements.txt":   {},
 	"crdb_internal.logical_replication_spans.txt":   {},
 	"crdb_internal.cluster_replication_spans.txt":   {},
 	"system.protected_ts_records.txt":               {},
