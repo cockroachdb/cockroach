@@ -357,10 +357,7 @@ func getIDFromDatabaseAndTableName(
 		"SELECT $1::regclass::oid, crdb_internal.get_database_id($2)", table, database,
 	)
 	if err != nil {
-		return 0, 0, err
-	}
-	if row == nil {
-		return 0, 0, errors.Newf("expected to find table ID for table %s, but found nothing", fqtName)
+		return 0, 0, status.Errorf(codes.NotFound, "table %s not found in database %s", fqtName, database)
 	}
 	tableID = int(tree.MustBeDOid(row[0]).Oid)
 	databaseID = int(tree.MustBeDInt(row[1]))
