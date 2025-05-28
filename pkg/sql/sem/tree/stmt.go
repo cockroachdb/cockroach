@@ -1763,6 +1763,15 @@ func (*ShowCreateAllTables) StatementType() StatementType { return TypeDML }
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowCreateAllTables) StatementTag() string { return "SHOW CREATE ALL TABLES" }
 
+// StatementReturnType implements the Statement interface
+func (*ShowCreateAllTriggers) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowCreateAllTriggers) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowCreateAllTriggers) StatementTag() string { return "SHOW CREATE ALL TRIGGERS" }
+
 // StatementReturnType implements the Statement interface.
 func (*ShowCreateAllTypes) StatementReturnType() StatementReturnType { return Rows }
 
@@ -2624,6 +2633,7 @@ func (n *ShowConstraints) String() string                     { return AsString(
 func (n *ShowCreate) String() string                          { return AsString(n) }
 func (n *ShowCreateAllSchemas) String() string                { return AsString(n) }
 func (n *ShowCreateAllTables) String() string                 { return AsString(n) }
+func (n *ShowCreateAllTriggers) String() string               { return AsString(n) }
 func (n *ShowCreateAllTypes) String() string                  { return AsString(n) }
 func (n *ShowCreateAllRoutines) String() string               { return AsString(n) }
 func (n *ShowCreateSchedules) String() string                 { return AsString(n) }

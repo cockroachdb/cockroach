@@ -450,7 +450,7 @@ vectorized: true
         │       │                       └── • render
         │       │                           │
         │       │                           └── • filter
-        │       │                               │ filter: classoid = 4294967083
+        │       │                               │ filter: classoid = 4294967082
         │       │                               │
         │       │                               └── • virtual table
         │       │                                     table: kv_catalog_comments@primary

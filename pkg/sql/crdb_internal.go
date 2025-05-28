@@ -143,6 +143,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalClusterSettingsTableID:             crdbInternalClusterSettingsTable,
 		catconstants.CrdbInternalClusterStmtStatsTableID:            crdbInternalClusterStmtStatsTable,
 		catconstants.CrdbInternalCreateFunctionStmtsTableID:         crdbInternalCreateFunctionStmtsTable,
+		catconstants.CrdbInternalCreateTriggerStmtsTableID:          crdbInternalCreateTriggerStmtsTable,
 		catconstants.CrdbInternalCreateProcedureStmtsTableID:        crdbInternalCreateProcedureStmtsTable,
 		catconstants.CrdbInternalCreateSchemaStmtsTableID:           crdbInternalCreateSchemaStmtsTable,
 		catconstants.CrdbInternalCreateStmtsTableID:                 crdbInternalCreateStmtsTable,
@@ -3941,6 +3942,189 @@ CREATE TABLE crdb_internal.create_procedure_statements (
 )
 `,
 	populate: createRoutinePopulate(true /* procedure */),
+}
+
+func renderCreateTriggerStatement(
+	ctx context.Context,
+	p *planner,
+	trigger *descpb.TriggerDescriptor,
+	tableDesc catalog.TableDescriptor,
+) (string, error) {
+	tableTyp, err := p.ResolveTypeByOID(ctx, typedesc.TableIDToImplicitTypeOID(tableDesc.GetID()))
+	if err != nil {
+		return "", err
+	}
+
+	funcName, err := p.GetQualifiedFunctionNameByID(ctx, int64(trigger.FuncID))
+	if err != nil {
+		return "", err
+	}
+
+	tableName, err := p.getQualifiedTableName(ctx, tableDesc)
+	if err != nil {
+		return "", err
+	}
+
+	events := make([]*tree.TriggerEvent, len(trigger.Events))
+	for j := range events {
+		descEvent := trigger.Events[j]
+		events[j] = &tree.TriggerEvent{
+			EventType: tree.TriggerEventTypeToTree[descEvent.Type],
+			Columns:   make(tree.NameList, 0, len(descEvent.ColumnNames)),
+		}
+		for _, colName := range descEvent.ColumnNames {
+			events[j].Columns = append(events[j].Columns, tree.Name(colName))
+		}
+	}
+
+	var transitions []*tree.TriggerTransition
+	if trigger.NewTransitionAlias != "" {
+		transitions = append(transitions, &tree.TriggerTransition{
+			IsNew: true,
+			Name:  tree.Name(trigger.NewTransitionAlias),
+		})
+	}
+	if trigger.OldTransitionAlias != "" {
+		transitions = append(transitions, &tree.TriggerTransition{
+			IsNew: false,
+			Name:  tree.Name(trigger.OldTransitionAlias),
+		})
+	}
+
+	forEach := tree.TriggerForEachStatement
+	if trigger.ForEachRow {
+		forEach = tree.TriggerForEachRow
+	}
+
+	var whenExpr tree.Expr
+	if trigger.WhenExpr != "" {
+		whenExpr, err = schemaexpr.ParseTriggerWhenExprForDisplay(
+			ctx, tableTyp, trigger.WhenExpr, p.EvalContext(), p.SemaCtx(), tree.FmtParsable,
+		)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	createTrigger := &tree.CreateTrigger{
+		Replace:     false,
+		Name:        tree.Name(trigger.Name),
+		ActionTime:  tree.TriggerActionTimeToTree[trigger.ActionTime],
+		Events:      events,
+		TableName:   tableName.ToUnresolvedObjectName(),
+		Transitions: transitions,
+		ForEach:     forEach,
+		When:        whenExpr,
+		FuncName:    funcName.ToUnresolvedObjectName().ToUnresolvedName(),
+		FuncArgs:    trigger.FuncArgs,
+	}
+
+	f := tree.NewFmtCtx(
+		tree.FmtParsable,
+		tree.FmtDataConversionConfig(p.SessionData().DataConversionConfig),
+		tree.FmtLocation(p.SessionData().Location),
+	)
+	f.FormatNode(createTrigger)
+
+	return f.CloseAndGetString(), nil
+}
+
+func createTriggerPopulate(
+	ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
+) error {
+	// Skip virtual tables by setting virtualOpts to hideVirtual since they do not have triggers.
+	options := forEachTableDescOptions{virtualOpts: hideVirtual}
+	return forEachTableDesc(ctx, p, db, options, func(ctx context.Context, tblCtx tableDescContext) error {
+		tbl := tblCtx.table
+		curDB := tblCtx.database
+		sc := tblCtx.schema
+
+		for _, trig := range tbl.GetTriggers() {
+			sql, err := renderCreateTriggerStatement(ctx, p, &trig, tbl)
+			if err != nil {
+				return err
+			}
+
+			err = addRow(
+				tree.NewDInt(tree.DInt(curDB.GetID())), // database_id
+				tree.NewDString(curDB.GetName()),       // database_name
+				tree.NewDInt(tree.DInt(sc.GetID())),    // schema_id
+				tree.NewDString(sc.GetName()),          // schema_name
+				tree.NewDInt(tree.DInt(tbl.GetID())),   // table_id
+				tree.NewDString(tbl.GetName()),         // table_name
+				tree.NewDInt(tree.DInt(trig.ID)),       // trigger_id
+				tree.NewDString(trig.Name),             // trigger_name
+				tree.NewDString(sql),                   // create_statement
+			)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+	)
+}
+
+var crdbInternalCreateTriggerStmtsTable = virtualSchemaTable{
+	comment: "CREATE statements for all user-defined triggers.",
+	schema: `
+CREATE TABLE crdb_internal.create_trigger_statements (
+  database_id INT,
+  database_name STRING,
+  schema_id INT,
+  schema_name STRING,
+  table_id INT,
+  table_name STRING,
+  trigger_id INT,
+  trigger_name STRING,
+  create_statement STRING,
+  INDEX (table_id)
+)`,
+	populate: createTriggerPopulate,
+	indexes: []virtualIndex{
+		{
+			populate: func(
+				ctx context.Context,
+				unwrappedConstraint tree.Datum,
+				p *planner,
+				db catalog.DatabaseDescriptor,
+				addRow func(...tree.Datum) error,
+			) (matched bool, err error) {
+				tableID := descpb.ID(tree.MustBeDInt(unwrappedConstraint))
+				tableDesc, err := p.LookupTableByID(ctx, tableID)
+				if err != nil || tableDesc == nil {
+					return false, err
+				}
+				triggers := tableDesc.GetTriggers()
+				schemaID := tableDesc.GetParentSchemaID()
+				sc, err := p.LookupSchemaByID(ctx, schemaID)
+				if err != nil {
+					return false, err
+				}
+				for _, trig := range triggers {
+					sql, err := renderCreateTriggerStatement(ctx, p, &trig, tableDesc)
+					if err != nil {
+						return false, err
+					}
+					err = addRow(
+						tree.NewDInt(tree.DInt(db.GetID())),
+						tree.NewDString(db.GetName()),
+						tree.NewDInt(tree.DInt(sc.GetID())),
+						tree.NewDString(sc.GetName()),
+						tree.NewDInt(tree.DInt(tableDesc.GetID())),
+						tree.NewDString(tableDesc.GetName()),
+						tree.NewDInt(tree.DInt(trig.ID)),
+						tree.NewDString(trig.Name),
+						tree.NewDString(sql),
+					)
+					if err != nil {
+						return false, err
+					}
+				}
+				return true, nil
+			},
+		},
+	},
 }
 
 // Prepare the row populate function.
