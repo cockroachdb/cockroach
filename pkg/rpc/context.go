@@ -56,7 +56,7 @@ import (
 // either expects incoming connections from KV nodes, or from tenant SQL
 // servers.
 func NewServer(ctx context.Context, rpcCtx *Context, opts ...ServerOption) (*grpc.Server, error) {
-	srv, _, _, err := NewServerEx(ctx, rpcCtx, opts...)
+	srv, _, err := NewServerEx(ctx, rpcCtx, opts...)
 	return srv, err
 }
 
@@ -84,7 +84,7 @@ type ClientInterceptorInfo struct {
 // internalClientAdapter does).
 func NewServerEx(
 	ctx context.Context, rpcCtx *Context, opts ...ServerOption,
-) (s *grpc.Server, d *DRPCServer, sii ServerInterceptorInfo, err error) {
+) (s *grpc.Server, sii ServerInterceptorInfo, err error) {
 	var o serverOpts
 	for _, f := range opts {
 		f(&o)
@@ -113,7 +113,7 @@ func NewServerEx(
 	if !rpcCtx.ContextOptions.Insecure {
 		tlsConfig, err := rpcCtx.GetServerTLSConfig()
 		if err != nil {
-			return nil, nil, sii, err
+			return nil, sii, err
 		}
 		grpcOpts = append(grpcOpts, grpc.Creds(newTLSCipherRestrictCred(tlsConfig)))
 	}
@@ -194,13 +194,10 @@ func NewServerEx(
 	grpcOpts = append(grpcOpts, grpc.ChainStreamInterceptor(streamInterceptor...))
 
 	s = grpc.NewServer(grpcOpts...)
-	d, err = newDRPCServer(ctx, rpcCtx)
-	if err != nil {
-		return nil, nil, ServerInterceptorInfo{}, err
-	}
+
 	RegisterHeartbeatServer(s, rpcCtx.NewHeartbeatService())
 
-	return s, d, ServerInterceptorInfo{
+	return s, ServerInterceptorInfo{
 		UnaryInterceptors:  unaryInterceptor,
 		StreamInterceptors: streamInterceptor,
 	}, nil
