@@ -715,3 +715,51 @@ func startStopOpts(opts ...option.StartStopOption) []option.StartStopOption {
 		option.NoBackupSchedule,
 	}, opts...)
 }
+
+type panicNodeStep struct {
+	rt         test.Test
+	initTarget int
+}
+
+func (s panicNodeStep) Background() shouldStop { return nil }
+
+func (s panicNodeStep) Description() string { return "run panic node" }
+
+func (s panicNodeStep) Run(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
+	nodeList := h.System.Descriptor.Nodes
+	targetNode := nodeList[rng.Intn(len(nodeList))]
+	nodeVersion, err := h.System.NodeVersion(targetNode)
+
+	if err != nil {
+		return errors.Wrapf(err, "failed to get node version from target node %d", targetNode)
+	}
+
+	binaryPath := clusterupgrade.CockroachPathForVersion(s.rt, nodeVersion)
+	settings := install.MakeClusterSettings(
+		install.BinaryOption(binaryPath),
+		install.TagOption(systemTag),
+	)
+	customStartOpts := []option.StartStopOption{option.WithInitTarget(s.initTarget)}
+
+	h.ExpectDeath()
+
+	const stmt = "SELECT crdb_internal.force_panic('expected panic from panicNodeMutator')"
+	if err = h.System.ExecWithGateway(
+		rng,
+		option.NodeListOption{targetNode},
+		stmt,
+	); err == nil {
+		return errors.New("expected connection failure due to node panic, but got nil")
+	}
+
+	startCtx, cancel := context.WithTimeout(ctx, startTimeout)
+	defer cancel()
+
+	return h.runner.cluster.StartE(
+		startCtx,
+		l,
+		startOpts(customStartOpts...),
+		settings,
+		option.NodeListOption{targetNode},
+	)
+}

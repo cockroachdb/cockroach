@@ -32,6 +32,12 @@ type (
 		// initial version, installing fixtures, running initial upgrades,
 		// etc.
 		setup testSetup
+		// rt is the test handler used to control access specific properties
+		// in the test plan.
+		rt test.Test
+		// ctx is the context of the test plan that can be used to access
+		// the target node for restart context.
+		ctx *Context
 		// initSteps is the sequence of user-provided steps to be
 		// performed when the test starts (i.e., the cluster is running in
 		// a supported version).
@@ -252,6 +258,7 @@ var clusterSettingMutators = []mutator{
 // any mixedversion test plan.
 var planMutators = append([]mutator{
 	preserveDowngradeOptionRandomizerMutator{},
+	panicNodeMutator{},
 },
 	clusterSettingMutators...,
 )
@@ -412,6 +419,8 @@ func (p *testPlanner) Plan() *TestPlan {
 		seed:           p.seed,
 		services:       p.serviceDescriptors(),
 		setup:          setup,
+		rt:             p.rt,
+		ctx:            p.currentContext,
 		initSteps:      p.testStartSteps(firstTestedUpgradeVersion),
 		upgrades:       testUpgrades,
 		deploymentMode: p.deploymentMode,
