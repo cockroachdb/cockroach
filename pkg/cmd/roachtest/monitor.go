@@ -149,7 +149,7 @@ func (m *monitorImpl) ExpectProcessHealth(
 	m.expProcessHealth.set(nodes, virtualClusterOptions.VirtualClusterName, virtualClusterOptions.SQLInstance, health)
 }
 
-// ExpectProcessDeath lets the monitor know that a set of processes are about
+// ExpectProcessDead lets the monitor know that a set of processes are about
 // to be killed, and that their deaths should be ignored. Virtual cluster
 // options can be passed to denote a separate process.
 func (m *monitorImpl) ExpectProcessDead(nodes option.NodeListOption, opts ...option.OptionFunc) {
@@ -161,6 +161,32 @@ func (m *monitorImpl) ExpectProcessDead(nodes option.NodeListOption, opts ...opt
 // a separate process.
 func (m *monitorImpl) ExpectProcessAlive(nodes option.NodeListOption, opts ...option.OptionFunc) {
 	m.ExpectProcessHealth(nodes.InstallNodes(), ExpectedAlive, opts...)
+}
+
+// AvailableNodes returns the availability of nodes based on expected
+// node health provided by ExpectProcessDead and ExpectProcessAlive.
+// Note that this is not necessarily identical to the node health
+// provided by the monitor itself, and is instead a way to determine
+// which nodes are not available, despite not being dead yet.
+func (m *monitorImpl) AvailableNodes(virtualClusterName string) option.NodeListOption {
+	var availableNodes install.Nodes
+	nodeCount := 0
+	m.expProcessHealth.Range(func(process monitorProcess, health *MonitorExpectedProcessHealth) bool {
+		if process.virtualClusterName == virtualClusterName {
+			nodeCount++
+			if *health == ExpectedAlive {
+				availableNodes = append(availableNodes, process.node)
+			}
+		}
+		return true
+	})
+	// In a shared process deployment, the secondary tenants run on the same process as the system tenant.
+	// The monitor only tracks the system tenant in this case, so if we find no nodes (regardless of health)
+	// for the virtual cluster name, we fall back to the system interface nodes.
+	if nodeCount == 0 && !install.IsSystemInterface(virtualClusterName) {
+		return m.AvailableNodes(install.SystemInterfaceName)
+	}
+	return option.FromInstallNodes(availableNodes)
 }
 
 // ExpectDeath lets the monitor know that a node is about to be killed, and that
