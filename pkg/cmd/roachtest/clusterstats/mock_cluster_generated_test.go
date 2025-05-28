@@ -145,20 +145,6 @@ func (mr *MockClusterMockRecorder) CRDBNodes() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CRDBNodes", reflect.TypeOf((*MockCluster)(nil).CRDBNodes))
 }
 
-// CaptureSideEyeSnapshot mocks base method.
-func (m *MockCluster) CaptureSideEyeSnapshot(arg0 context.Context) string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CaptureSideEyeSnapshot", arg0)
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// CaptureSideEyeSnapshot indicates an expected call of CaptureSideEyeSnapshot.
-func (mr *MockClusterMockRecorder) CaptureSideEyeSnapshot(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CaptureSideEyeSnapshot", reflect.TypeOf((*MockCluster)(nil).CaptureSideEyeSnapshot), arg0)
-}
-
 // Cloud mocks base method.
 func (m *MockCluster) Cloud() spec.Cloud {
 	m.ctrl.T.Helper()
