@@ -694,6 +694,8 @@ func SendEmptySnapshot(
 		return err
 	}
 
+	// TODO(review): this now doesn't write RaftTruncatedState, is this fine? It's
+	// a snapshot, so it will not load unreplicated state.
 	ms, err = stateloader.WriteInitialReplicaState(
 		ctx,
 		eng,
