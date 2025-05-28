@@ -62,14 +62,15 @@ type (
 	}
 
 	testRunner struct {
-		ctx           context.Context
-		cancel        context.CancelFunc
-		plan          *TestPlan
-		tag           string
-		cluster       cluster.Cluster
-		systemService *serviceRuntime
-		tenantService *serviceRuntime
-		logger        *logger.Logger
+		ctx            context.Context
+		cancel         context.CancelFunc
+		plan           *TestPlan
+		tag            string
+		cluster        cluster.Cluster
+		systemService  *serviceRuntime
+		tenantService  *serviceRuntime
+		logger         *logger.Logger
+		availableNodes map[int]struct{}
 
 		background task.Manager
 		monitor    *crdbMonitor
@@ -133,17 +134,18 @@ func newTestRunner(
 
 	var ranUserHooks atomic.Bool
 	return &testRunner{
-		ctx:           ctx,
-		cancel:        cancel,
-		plan:          plan,
-		tag:           tag,
-		logger:        l,
-		systemService: systemService,
-		tenantService: tenantService,
-		cluster:       c,
-		background:    task.NewManager(ctx, l),
-		monitor:       newCRDBMonitor(ctx, c, maps.Keys(allCRDBNodes)),
-		ranUserHooks:  &ranUserHooks,
+		ctx:            ctx,
+		cancel:         cancel,
+		plan:           plan,
+		tag:            tag,
+		logger:         l,
+		systemService:  systemService,
+		tenantService:  tenantService,
+		cluster:        c,
+		background:     task.NewManager(ctx, l),
+		monitor:        newCRDBMonitor(ctx, c, maps.Keys(allCRDBNodes)),
+		ranUserHooks:   &ranUserHooks,
+		availableNodes: allCRDBNodes,
 	}
 }
 
@@ -204,15 +206,17 @@ func (tr *testRunner) run() (retErr error) {
 // recursively in the case of sequentialRunStep and concurrentRunStep.
 func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 	if ss, ok := step.(*singleStep); ok {
-		if ss.ID > tr.plan.startSystemID {
-			if err := tr.refreshServiceData(ctx, tr.systemService); err != nil {
-				return errors.Wrapf(err, "preparing to run step %d", ss.ID)
+		if _, startNode := ss.impl.(startNodeStep); !startNode {
+			if ss.ID > tr.plan.startSystemID {
+				if err := tr.refreshServiceData(ctx, tr.systemService); err != nil {
+					return errors.Wrapf(err, "preparing to run step %d", ss.ID)
+				}
 			}
-		}
 
-		if ss.ID > tr.plan.startTenantID && tr.tenantService != nil {
-			if err := tr.refreshServiceData(ctx, tr.tenantService); err != nil {
-				return errors.Wrapf(err, "preparing to run step %d", ss.ID)
+			if ss.ID > tr.plan.startTenantID && tr.tenantService != nil {
+				if err := tr.refreshServiceData(ctx, tr.tenantService); err != nil {
+					return errors.Wrapf(err, "preparing to run step %d", ss.ID)
+				}
 			}
 		}
 	}
@@ -540,18 +544,20 @@ func (tr *testRunner) refreshBinaryVersions(ctx context.Context, service *servic
 
 	group := ctxgroup.WithContext(connectionCtx)
 	for j, node := range service.descriptor.Nodes {
-		group.GoCtx(func(ctx context.Context) error {
-			bv, err := clusterupgrade.BinaryVersion(ctx, tr.conn(node, service.descriptor.Name))
-			if err != nil {
-				return fmt.Errorf(
-					"failed to get binary version for node %d (%s): %w",
-					node, service.descriptor.Name, err,
-				)
-			}
-
-			newBinaryVersions[j] = bv
-			return nil
-		})
+		node := node
+		if _, exists := tr.availableNodes[node]; exists {
+			group.GoCtx(func(ctx context.Context) error {
+				bv, err := clusterupgrade.BinaryVersion(ctx, tr.conn(node, service.descriptor.Name))
+				if err != nil {
+					return fmt.Errorf(
+						"failed to get binary version for node %d (%s): %w",
+						node, service.descriptor.Name, err,
+					)
+				}
+				newBinaryVersions[j] = bv
+				return nil
+			})
+		}
 	}
 
 	if err := group.Wait(); err != nil {
@@ -572,18 +578,21 @@ func (tr *testRunner) refreshClusterVersions(ctx context.Context, service *servi
 
 	group := ctxgroup.WithContext(connectionCtx)
 	for j, node := range service.descriptor.Nodes {
-		group.GoCtx(func(ctx context.Context) error {
-			cv, err := clusterupgrade.ClusterVersion(ctx, tr.conn(node, service.descriptor.Name))
-			if err != nil {
-				return fmt.Errorf(
-					"failed to get cluster version for node %d (%s): %w",
-					node, service.descriptor.Name, err,
-				)
-			}
+		node := node
+		if _, exists := tr.availableNodes[node]; exists {
+			group.GoCtx(func(ctx context.Context) error {
+				cv, err := clusterupgrade.ClusterVersion(ctx, tr.conn(node, service.descriptor.Name))
+				if err != nil {
+					return fmt.Errorf(
+						"failed to get cluster version for node %d (%s): %w",
+						node, service.descriptor.Name, err,
+					)
+				}
 
-			newClusterVersions[j] = cv
-			return nil
-		})
+				newClusterVersions[j] = cv
+				return nil
+			})
+		}
 	}
 
 	if err := group.Wait(); err != nil {
@@ -647,14 +656,17 @@ func (tr *testRunner) maybeInitConnections(service *serviceRuntime) error {
 
 	cc := map[int]*gosql.DB{}
 	for _, node := range service.descriptor.Nodes {
-		conn, err := tr.cluster.ConnE(
-			tr.ctx, tr.logger, node, option.VirtualClusterName(service.descriptor.Name),
-		)
-		if err != nil {
-			return fmt.Errorf("failed to connect to node %d: %w", node, err)
-		}
+		node := node
+		if _, exists := tr.availableNodes[node]; exists {
+			conn, err := tr.cluster.ConnE(
+				tr.ctx, tr.logger, node, option.VirtualClusterName(service.descriptor.Name),
+			)
+			if err != nil {
+				return fmt.Errorf("failed to connect to node %d: %w", node, err)
+			}
 
-		cc[node] = conn
+			cc[node] = conn
+		}
 	}
 
 	service.connCache.cache = cc
@@ -680,6 +692,7 @@ func (tr *testRunner) newHelper(
 			connFunc:        connFunc,
 			stepLogger:      l,
 			clusterVersions: cv,
+			availableNodes:  tr.availableNodes,
 		}
 	}
 
