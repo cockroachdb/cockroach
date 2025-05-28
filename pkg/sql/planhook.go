@@ -159,8 +159,12 @@ var _ planNode = &hookFnNode{}
 
 // hookFnRun contains the run-time state of hookFnNode during local execution.
 type hookFnRun struct {
+	// resultsCh is used to communicate both the progress of the function and
+	// its final result (this depends on the implementation). This channel is
+	// never closed.
 	resultsCh chan tree.Datums
-	errCh     chan error
+	// errCh will be closed when the worker goroutine exits.
+	errCh chan error
 
 	row tree.Datums
 }
@@ -174,25 +178,27 @@ func newHookFnNode(
 func (f *hookFnNode) startExec(params runParams) error {
 	f.run.resultsCh = make(chan tree.Datums)
 	f.run.errCh = make(chan error)
-	// Note that it's ok if the async task is not started due to server shutdown
-	// because the context should be canceled then too, which would unblock
-	// calls to Next if they happen.
-	return f.stopper.RunAsyncTaskEx(
+	if err := f.stopper.RunAsyncTaskEx(
 		params.ctx,
 		stop.TaskOpts{
 			TaskName: f.name,
 			SpanOpt:  stop.ChildSpan,
 		},
 		func(ctx context.Context) {
+			defer close(f.run.errCh)
 			err := f.f(ctx, f.run.resultsCh)
 			select {
 			case <-ctx.Done():
 			case f.run.errCh <- err:
 			}
-			close(f.run.errCh)
-			close(f.run.resultsCh)
 		},
-	)
+	); err != nil {
+		// The async task is not started due to server shutdown, so we need to
+		// explicitly close the channel ourselves.
+		close(f.run.errCh)
+		return err
+	}
+	return nil
 }
 
 func (f *hookFnNode) Next(params runParams) (bool, error) {
@@ -208,4 +214,9 @@ func (f *hookFnNode) Next(params runParams) (bool, error) {
 
 func (f *hookFnNode) Values() tree.Datums { return f.run.row }
 
-func (f *hookFnNode) Close(ctx context.Context) {}
+func (f *hookFnNode) Close(ctx context.Context) {
+	if f.run.errCh != nil {
+		// Block until the worker goroutine exits.
+		<-f.run.errCh
+	}
+}

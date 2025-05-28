@@ -73,6 +73,7 @@
 /pkg/sql/control_job*        @cockroachdb/sql-queries-prs @cockroachdb/jobs-prs
 /pkg/sql/job_exec_context*   @cockroachdb/sql-queries-prs @cockroachdb/jobs-prs
 /pkg/sql/delegate/*job*.go   @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
+/pkg/sql/vecindex/           @cockroachdb/sql-queries-prs
 #!/pkg/sql/BUILD.bazel       @cockroachdb/sql-queries-noreview
 
 /pkg/sql/importer/           @cockroachdb/sql-queries-prs
@@ -604,12 +605,17 @@
 #!/pkg/util/                 @cockroachdb/unowned
 /pkg/util/addr/              @cockroachdb/obs-prs
 /pkg/util/admission/         @cockroachdb/admission-control
+/pkg/util/cancelchecker/     @cockroachdb/sql-queries-prs
+/pkg/util/encoding/          @cockroachdb/sql-queries-prs
 /pkg/util/goschedstats       @cockroachdb/admission-control
 /pkg/util/grunning/          @cockroachdb/admission-control
+/pkg/util/intsets/           @cockroachdb/sql-queries-prs
+/pkg/util/json/              @cockroachdb/sql-queries-prs
 /pkg/util/jsonpath/          @cockroachdb/sql-queries-prs
 /pkg/util/log/               @cockroachdb/obs-prs @cockroachdb/obs-india-prs
 /pkg/util/metric/            @cockroachdb/obs-prs @cockroachdb/obs-india-prs
 /pkg/util/mon                @cockroachdb/sql-queries-prs
+/pkg/util/num32              @cockroachdb/sql-queries-prs
 /pkg/util/schedulerlatency/  @cockroachdb/admission-control
 /pkg/util/stop/              @cockroachdb/kv-prs
 /pkg/util/tracing            @cockroachdb/obs-prs @cockroachdb/obs-india-prs
