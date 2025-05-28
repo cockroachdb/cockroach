@@ -9,6 +9,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -56,13 +58,9 @@ func WriteInitialReplicaState(
 	gcHint roachpb.GCHint,
 	replicaVersion roachpb.Version,
 ) (enginepb.MVCCStats, error) {
-	truncState := &kvserverpb.RaftTruncatedState{
-		Term:  RaftInitialLogTerm,
-		Index: RaftInitialLogIndex,
-	}
 	s := kvserverpb.ReplicaState{
-		RaftAppliedIndex:     truncState.Index,
-		RaftAppliedIndexTerm: truncState.Term,
+		RaftAppliedIndex:     RaftInitialLogIndex,
+		RaftAppliedIndexTerm: RaftInitialLogTerm,
 		LeaseAppliedIndex:    InitialLeaseAppliedIndex,
 		Desc: &roachpb.RangeDescriptor{
 			RangeID: desc.RangeID,
@@ -101,17 +99,22 @@ func WriteInitialReplicaState(
 		log.Fatalf(ctx, "expected trivial version, but found %+v", existingVersion)
 	}
 
-	// TODO(sep-raft-log): SetRaftTruncatedState will be in a separate batch when
-	// the Raft log engine is separated. Figure out the ordering required here.
-	if err := rsl.SetRaftTruncatedState(ctx, readWriter, truncState); err != nil {
-		return enginepb.MVCCStats{}, err
-	}
 	newMS, err := rsl.Save(ctx, readWriter, s)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 
 	return newMS, nil
+}
+
+// WriteInitialTruncState writes the initial RaftTruncatedState.
+// TODO(arulajmani): remove this.
+func WriteInitialTruncState(ctx context.Context, w storage.Writer, rangeID roachpb.RangeID) error {
+	return logstore.NewStateLoader(rangeID).SetRaftTruncatedState(ctx, w,
+		&kvserverpb.RaftTruncatedState{
+			Index: RaftInitialLogIndex,
+			Term:  RaftInitialLogTerm,
+		})
 }
 
 // WriteInitialRangeState writes the initial range state. It's called during
@@ -134,17 +137,35 @@ func WriteInitialRangeState(
 	); err != nil {
 		return err
 	}
-
-	// TODO(sep-raft-log): when the log storage is separated, the below can't be
-	// written in the same batch. Figure out the ordering required here.
-	sl := Make(desc.RangeID)
-	if err := sl.SynthesizeRaftState(ctx, readWriter); err != nil {
-		return err
-	}
 	// Maintain the invariant that any replica (uninitialized or initialized),
 	// with persistent state, has a RaftReplicaID.
-	if err := sl.SetRaftReplicaID(ctx, readWriter, replicaID); err != nil {
+	if err := Make(desc.RangeID).SetRaftReplicaID(ctx, readWriter, replicaID); err != nil {
 		return err
 	}
-	return nil
+
+	// TODO(sep-raft-log): when the log storage is separated, raft state must be
+	// written separately.
+	return WriteInitialRaftState(ctx, readWriter, desc.RangeID)
+}
+
+// WriteInitialRaftState writes raft state for an initialized replica created
+// during cluster bootstrap.
+func WriteInitialRaftState(
+	ctx context.Context, writer storage.Writer, rangeID roachpb.RangeID,
+) error {
+	sl := logstore.NewStateLoader(rangeID)
+	// Initialize the HardState with the term and commit index matching the
+	// initial applied state of the replica.
+	if err := sl.SetHardState(ctx, writer, raftpb.HardState{
+		Term:   RaftInitialLogTerm,
+		Commit: RaftInitialLogIndex,
+	}); err != nil {
+		return err
+	}
+	// The raft log is initialized empty, with the truncated state matching the
+	// committed / applied initial state of the replica.
+	return sl.SetRaftTruncatedState(ctx, writer, &kvserverpb.RaftTruncatedState{
+		Index: RaftInitialLogIndex,
+		Term:  RaftInitialLogTerm,
+	})
 }
