@@ -459,7 +459,16 @@ func (u Updater) failed(ctx context.Context, err error) error {
 			jobErrMaxRuneCount    = 1024
 			jobErrTruncatedMarker = " -- TRUNCATED"
 		)
+		hints := errors.FlattenHints(err)
+		details := errors.FlattenDetails(err)
 		errStr := err.Error()
+		if hints != "" {
+			errStr += "\nHINT: " + hints
+		}
+		if details != "" {
+			errStr += "\nDETAIL: " + details
+		}
+
 		if len(errStr) > jobErrMaxRuneCount {
 			errStr = util.TruncateString(errStr, jobErrMaxRuneCount) + jobErrTruncatedMarker
 		}
