@@ -66,6 +66,7 @@ export type StmtInsightsResponseRow = {
   error_code: string;
   last_error_redactable: string;
   status: StatementStatus;
+  query_tags: Array<{ name: string; value: string }>;
 };
 
 const stmtColumns = `
@@ -97,7 +98,8 @@ plan_gist,
 cpu_sql_nanos,
 error_code,
 last_error_redactable,
-status
+status,
+query_tags
 `;
 
 const stmtInsightsOverviewQuery = (req?: StmtInsightsReq): string => {
@@ -241,6 +243,7 @@ export function formatStmtInsights(
       errorCode: row.error_code,
       errorMsg: row.last_error_redactable,
       status: row.status,
+      queryTags: row.query_tags || [],
     } as StmtInsightEvent;
   });
 }
