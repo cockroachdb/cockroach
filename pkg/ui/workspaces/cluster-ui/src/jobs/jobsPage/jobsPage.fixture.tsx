@@ -2,18 +2,9 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+// import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
-import { createMemoryHistory } from "history";
 import Long from "long";
-import moment from "moment-timezone";
-
-import { JobsPageProps } from "./jobsPage";
-
-import JobsResponse = cockroach.server.serverpb.JobsResponse;
-import Job = cockroach.server.serverpb.IJobResponse;
-
-const jobsTimeoutErrorMessage = "Unable to retrieve the Jobs table.";
 
 const defaultJobProperties = {
   username: "root",
@@ -269,83 +260,7 @@ export const allJobsFixture = [
   revertFailedJobFixture,
 ];
 
-const history = createMemoryHistory({ initialEntries: ["/statements"] });
-
-const staticJobProps: Pick<
-  JobsPageProps,
-  | "history"
-  | "location"
-  | "match"
-  | "sort"
-  | "status"
-  | "show"
-  | "type"
-  | "setSort"
-  | "setStatus"
-  | "setShow"
-  | "setType"
-  | "refreshJobs"
-> = {
-  history,
-  location: {
-    pathname: "/jobs",
-    search: "",
-    hash: "",
-    state: null,
-  },
-  match: {
-    path: "/jobs",
-    url: "/jobs",
-    isExact: true,
-    params: "{}",
-  },
-  sort: {
-    columnTitle: "creationTime",
-    ascending: false,
-  },
-  status: "",
-  show: "50",
-  type: 0,
-  setSort: () => {},
-  setStatus: () => {},
-  setShow: () => {},
-  setType: () => {},
-  refreshJobs: () => null,
-};
-
 export const earliestRetainedTime = new protos.google.protobuf.Timestamp({
   seconds: new Long(1633611318),
   nanos: 200459000,
 });
-
-const getJobsPageProps = (
-  jobs: Array<Job>,
-  error: Error | null = null,
-  isLoading = false,
-): JobsPageProps => ({
-  ...staticJobProps,
-  jobsResponse: {
-    data: new JobsResponse({
-      jobs: jobs,
-      earliest_retained_time: earliestRetainedTime,
-    }),
-    error,
-    inFlight: isLoading,
-    valid: !isLoading,
-    lastUpdated: moment.utc(),
-  },
-  columns: null,
-  onColumnsChange: () => {},
-});
-
-export const withData: JobsPageProps = getJobsPageProps(allJobsFixture);
-export const empty: JobsPageProps = getJobsPageProps([]);
-export const loading: JobsPageProps = getJobsPageProps(
-  allJobsFixture,
-  null,
-  true,
-);
-export const error: JobsPageProps = getJobsPageProps(
-  allJobsFixture,
-  new Error(jobsTimeoutErrorMessage),
-);
