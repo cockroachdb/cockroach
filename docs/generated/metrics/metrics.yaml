@@ -12370,6 +12370,22 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+    - name: kv.rangefeed.mux_stream_send.latency
+      exported_name: kv_rangefeed_mux_stream_send_latency
+      description: KV RangeFeed event send on mux stream latency
+      y_axis_label: Latency
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: kv.rangefeed.mux_stream_send.slow_events
+      exported_name: kv_rangefeed_mux_stream_send_slow_events
+      description: Number of times RangeFeed was slow sending an event on a mux stream
+      y_axis_label: Events
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: kv.rangefeed.output_loop_unbuffered_registration_nanos
       exported_name: kv_rangefeed_output_loop_unbuffered_registration_nanos
       description: Duration of the Rangefeed O(range) output loop goroutine. This is only applicable for unbuffered registrations since buffered registrations spawns long-living goroutines.
