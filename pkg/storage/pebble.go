@@ -2275,6 +2275,7 @@ func (p *Pebble) ConvertFilesToBatchAndCommit(
 	defer iter.Close()
 
 	batch := p.NewWriteBatch()
+	defer batch.Close()
 	if err := batch.ClearRawRange(clear.Key, clear.EndKey, true, true); err != nil {
 		return err
 	}
@@ -2318,7 +2319,6 @@ func (p *Pebble) ConvertFilesToBatchAndCommit(
 		valid, err = iter.NextEngineKey()
 	}
 	if err != nil {
-		batch.Close()
 		return err
 	}
 	return batch.Commit(true)
