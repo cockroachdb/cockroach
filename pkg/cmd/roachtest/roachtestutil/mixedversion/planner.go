@@ -12,10 +12,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -58,6 +61,9 @@ type (
 		// length denotes the total number of steps in this test plan.
 		// It is computed in `assignIDs`.
 		length int
+		// failures is a map of failure injection names to failure
+		// injections.
+		failures map[string]*failures.Failer
 	}
 
 	// serviceSetup encapsulates the steps to setup a service in the
@@ -93,6 +99,8 @@ type (
 		hooks          *testHooks
 		prng           *rand.Rand
 		bgChans        []shouldStop
+		logger         *logger.Logger
+		cluster        cluster.Cluster
 
 		// State variables updated as the test plan is generated.
 		usingFixtures bool
@@ -131,7 +139,10 @@ type (
 		// mutations that should be applied to the plan. The test plan is the intended output
 		// after applying the mutations. The testPlanner is used to access specific attributes
 		// of the test plan, such as the current context or the services.
-		Generate(*rand.Rand, *TestPlan, *testPlanner) []mutation
+		Generate(*rand.Rand, *TestPlan, *testPlanner) ([]mutation, error)
+		// DisabledDeploymentModes returns which deployment modes this mutator
+		// does not support running in.
+		DisabledDeploymentModes() map[DeploymentMode]struct{}
 	}
 
 	// mutationOp encodes the type of mutation and controls how the
@@ -217,6 +228,7 @@ const (
 // failure injection mutators.
 var failureInjectionMutators = []mutator{
 	panicNodeMutator{},
+	networkPartitionMutator{},
 }
 
 // clusterSettingMutators includes a list of all
@@ -291,7 +303,7 @@ var planMutators = func() []mutator {
 //     allowing the cluster version to advance. Mixed-version hooks may be
 //     executed while this is happening.
 //     - AfterUpgradeFinalizedStage: run after-upgrade hooks.
-func (p *testPlanner) Plan() *TestPlan {
+func (p *testPlanner) Plan() (*TestPlan, error) {
 	setup, testUpgrades := p.setupTest()
 
 	upgradeStepsForService := func(
@@ -417,6 +429,7 @@ func (p *testPlanner) Plan() *TestPlan {
 	// functions; the setup upgrades that happened before should be
 	// invisible to them.
 	firstTestedUpgradeVersion := testUpgrades[0].from
+	failures := make(map[string]*failures.Failer)
 
 	testPlan := &TestPlan{
 		seed:           p.seed,
@@ -426,6 +439,7 @@ func (p *testPlanner) Plan() *TestPlan {
 		upgrades:       testUpgrades,
 		deploymentMode: p.deploymentMode,
 		isLocal:        p.isLocal,
+		failures:       failures,
 	}
 
 	failureInjections := make(map[string]struct{})
@@ -440,17 +454,22 @@ func (p *testPlanner) Plan() *TestPlan {
 	// panic failure).
 	for _, mut := range planMutators {
 		if p.mutatorEnabled(mut) {
-			if _, found := failureInjections[mut.Name()]; found && len(p.currentContext.Nodes()) < 3 {
-				continue
+			if _, found := failureInjections[mut.Name()]; found {
+				if len(p.currentContext.Nodes()) < 3 {
+					continue
+				}
 			}
-			mutations := mut.Generate(p.prng, testPlan, p)
+			mutations, err := mut.Generate(p.prng, testPlan, p)
+			if err != nil {
+				return nil, err
+			}
 			testPlan.applyMutations(p.prng, mutations)
 			testPlan.enabledMutators = append(testPlan.enabledMutators, mut)
 		}
 	}
 
 	testPlan.assignIDs()
-	return testPlan
+	return testPlan, nil
 }
 
 // nonUpgradeContext builds a mixed-version context to be used during
@@ -1153,6 +1172,10 @@ func (p *testPlanner) newRNG() *rand.Rand {
 }
 
 func (p *testPlanner) mutatorEnabled(mut mutator) bool {
+	disabledDeployments := mut.DisabledDeploymentModes()
+	if _, disabled := disabledDeployments[p.deploymentMode]; disabled {
+		return false
+	}
 	probability := mut.Probability()
 	if p, ok := p.options.overriddenMutatorProbabilities[mut.Name()]; ok {
 		probability = p
@@ -1394,6 +1417,19 @@ func (ss stepSelector) CutBefore(predicate func(*singleStep) bool) (stepSelector
 	return append(before, cut...), after
 }
 
+// MarkNodesUnavailable marks all steps in the given step selector
+// as being in the context of a failure injection.
+func (ss stepSelector) MarkNodesUnavailable(systemUnavailable bool, tenantUnavailable bool) {
+	for _, s := range ss {
+		if systemUnavailable {
+			s.context.System.hasUnavailableNodes = true
+		}
+		if tenantUnavailable {
+			s.context.Tenant.hasUnavailableNodes = true
+		}
+	}
+}
+
 // RandomStep returns a new selector that selects a single step,
 // randomly chosen from the list of selected steps in the original
 // selector.
@@ -1490,7 +1526,6 @@ func (plan *TestPlan) applyMutations(rng *rand.Rand, mutations []mutation) {
 	for _, mut := range mutationApplicationOrder(mutations) {
 		plan.mapSingleSteps(func(ss *singleStep, isConcurrent bool) []testStep {
 			index := newStepIndex(plan)
-
 			// If the mutation is not relative to this step, move on.
 			if ss != mut.reference {
 				return []testStep{ss}
