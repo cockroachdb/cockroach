@@ -15,7 +15,6 @@ import { DEFAULT_STATS_REQ_OPTIONS } from "src/api/statementsApi";
 import { mockStmtStats } from "src/api/testUtils";
 import { RequestError } from "src/util";
 
-
 import { StatementDiagnosticsReport } from "../api";
 
 import { StatementsPageProps } from "./statementsPage";
@@ -414,10 +413,7 @@ export const statementsPagePropsWithRequestError: StatementsPageProps = {
     data: null,
     lastUpdated,
     valid: true,
-    error: new RequestError(
-      403,
-      "this operation requires admin privilege",
-    ),
+    error: new RequestError(403, "this operation requires admin privilege"),
     inFlight: false,
   },
 };

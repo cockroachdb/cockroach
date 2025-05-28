@@ -147,6 +147,28 @@ export function makeStatementInsightsColumns(): ColumnDescriptor<StmtInsightEven
       showByDefault: true,
     },
     {
+      name: "queryTags",
+      title: insightsTableTitles.queryTags(execType),
+      cell: (item: StmtInsightEvent) => {
+        if (!item.queryTags || item.queryTags.length === 0) {
+          return "N/A";
+        }
+        const tagsStr = item.queryTags
+          .map(tag => `${tag.name}=${tag.value}`)
+          .join(", ");
+        return (
+          <Tooltip placement="bottom" content={tagsStr}>
+            <span className={cx("queries-row")}>{limitText(tagsStr, 30)}</span>
+          </Tooltip>
+        );
+      },
+      sort: (item: StmtInsightEvent) =>
+        item.queryTags
+          ? item.queryTags.map(tag => `${tag.name}=${tag.value}`).join(", ")
+          : "",
+      showByDefault: false,
+    },
+    {
       name: "rowsProcessed",
       title: insightsTableTitles.rowsProcessed(execType),
       className: cx("statements-table__col-rows-read"),
