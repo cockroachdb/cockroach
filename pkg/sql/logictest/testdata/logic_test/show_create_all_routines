@@ -42,11 +42,18 @@ CREATE FUNCTION public.add_one(x INT8) RETURNS INT8 VOLATILE NOT LEAKPROOF CALLE
 CREATE FUNCTION public.add_one(x FLOAT8) RETURNS FLOAT8 VOLATILE NOT LEAKPROOF CALLED ON NULL INPUT LANGUAGE SQL SECURITY INVOKER AS $$ SELECT x + 1;
 CREATE PROCEDURE public.proc() LANGUAGE plpgsql SECURITY INVOKER AS $$ DECLARE v public.comp := (1:::INT8, 'foo':::STRING); BEGIN RAISE NOTICE '%', v; END;
 
+#test dropping routines
 statement ok
 DROP FUNCTION add_one(x INT8);
 
 statement ok
 DROP FUNCTION add_one(x FLOAT8);
+
+query T colnames
+SHOW CREATE ALL ROUTINES;
+----
+create_statement
+CREATE PROCEDURE public.proc() LANGUAGE plpgsql SECURITY INVOKER AS $$ DECLARE v public.comp := (1:::INT8, 'foo':::STRING); BEGIN RAISE NOTICE '%', v; END;
 
 statement ok
 DROP PROCEDURE proc;

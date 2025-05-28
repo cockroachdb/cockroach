@@ -1893,6 +1893,13 @@ func TestLogic_show_create(
 	runLogicTest(t, "show_create")
 }
 
+func TestLogic_show_create_all_routines(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_create_all_routines")
+}
+
 func TestLogic_show_create_all_schemas(
 	t *testing.T,
 ) {

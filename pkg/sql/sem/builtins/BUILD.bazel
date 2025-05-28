@@ -21,6 +21,7 @@ go_library(
         "pgcrypto_builtins.go",
         "pgvector_builtins.go",
         "replication_builtins.go",
+        "show_create_all_routines_builtin.go",
         "show_create_all_schemas_builtin.go",
         "show_create_all_tables_builtin.go",
         "show_create_all_types_builtin.go",
