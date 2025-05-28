@@ -19,7 +19,7 @@ go_library(
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
-        "//pkg/sql/plpgsql/parser:plpgparser",
+        "//pkg/sql/plpgsql/parser",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/screl",
         "//pkg/sql/sem/catid",

@@ -25,7 +25,7 @@ genrule(
 )
 
 go_library(
-    name = "plpgparser",
+    name = "parser",
     srcs = [
         "lexer.go",
         "parse.go",
@@ -62,7 +62,7 @@ go_test(
     srcs = ["parser_test.go"],
     data = glob(["testdata/**"]),
     deps = [
-        ":plpgparser",
+        ":parser",
         "//pkg/sql/sem/plpgsqltree/utils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/sqlutils",
