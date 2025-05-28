@@ -12,6 +12,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/logstore",
+        "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/storage/enginepb",
@@ -34,7 +35,7 @@ go_test(
     embed = [":stateloader"],
     deps = [
         "//pkg/kv/kvpb",
-        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/logstore",
         "//pkg/kv/kvserver/print",
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
