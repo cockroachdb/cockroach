@@ -5323,4 +5323,40 @@ DROP TABLE trigger_rls_table;
 DROP USER alice;
 DROP USER bob;
 
+subtest bypassrls_pg_roles_pg_authid
+
+statement ok
+CREATE ROLE can_bypassrls WITH BYPASSRLS;
+
+statement ok
+CREATE ROLE cannot_bypassrls;
+
+query B
+SELECT rolbypassrls FROM pg_authid WHERE rolname = 'can_bypassrls';
+----
+true
+
+query B
+SELECT rolbypassrls FROM pg_authid WHERE rolname = 'cannot_bypassrls';
+----
+false
+
+query B
+SELECT rolbypassrls FROM pg_roles WHERE rolname = 'can_bypassrls';
+----
+true
+
+
+query B
+SELECT rolbypassrls FROM pg_roles WHERE rolname = 'cannot_bypassrls';
+----
+false
+
+
+statement ok
+DROP ROLE can_bypassrls;
+
+statement ok
+DROP ROLE cannot_bypassrls;
+
 subtest end
