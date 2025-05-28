@@ -1650,9 +1650,23 @@ func (c *SyncedCluster) upsertVirtualClusterMetadata(
 	ctx context.Context, l *logger.Logger, startOpts StartOpts,
 ) (int, error) {
 	runSQL := func(stmt string) (string, error) {
-		results, err := startOpts.StorageCluster.ExecSQL(
-			ctx, l, startOpts.StorageCluster.Nodes[:1], SystemInterfaceName, 0, DefaultAuthMode(), "", /* database */
-			[]string{"--format", "csv", "-e", stmt})
+		var results []*RunResultDetails
+		var err error
+		// It is possible to target a storage node that is currently down, so
+		// we should attempt connecting to all storage nodes before erroring out.
+		for n := 0; n < len(startOpts.StorageCluster.Nodes); n++ {
+			results, err = startOpts.StorageCluster.ExecSQL(
+				ctx, l, startOpts.StorageCluster.Nodes[n:n+1], SystemInterfaceName, 0, DefaultAuthMode(), "", /* database */
+				[]string{"--format", "csv", "-e", stmt})
+			if err == nil && results[0].Err == nil {
+				return results[0].CombinedOut, nil
+			}
+			if err != nil {
+				l.Printf("failed to execute SQL statement %q on node %d: %s", stmt, n, err)
+			} else if results[0].Err != nil {
+				l.Printf("failed to execute SQL statement %q on node %d: %s", stmt, n, err)
+			}
+		}
 		if err != nil {
 			return "", err
 		}
