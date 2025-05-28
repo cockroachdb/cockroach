@@ -63,6 +63,24 @@ func (n NodeListOption) Merge(o NodeListOption) NodeListOption {
 	return r
 }
 
+func (n NodeListOption) Intersect(o NodeListOption) NodeListOption {
+	set := make(map[int]struct{}, len(o))
+	for _, node := range o {
+		set[node] = struct{}{}
+	}
+
+	var result NodeListOption
+	seen := make(map[int]struct{}, len(n))
+	for _, node := range n {
+		if _, ok := set[node]; ok {
+			result = append(result, node)
+			seen[node] = struct{}{}
+		}
+	}
+
+	return result
+}
+
 // RandNode returns a random node from the NodeListOption.
 func (n NodeListOption) RandNode() NodeListOption {
 	return NodeListOption{n[rand.Intn(len(n))]}
