@@ -98,7 +98,6 @@ build/teamcity-roachtest-invoke.sh \
   --slack-token="${SLACK_TOKEN}" \
   --suite nightly \
   --selective-tests="${selective_tests:-false}" \
-  --side-eye-token="${SIDE_EYE_API_TOKEN}" \
   --export-openmetrics="${EXPORT_OPENMETRICS:-false}" \
   ${EXTRA_ROACHTEST_ARGS:+$EXTRA_ROACHTEST_ARGS} \
   "${TESTS}"
