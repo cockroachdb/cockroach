@@ -345,3 +345,33 @@ placeholder-scan t_dec
  ├── fd: ()-->(1,2)
  └── span
       └── $1
+
+# Regression tests for #147363. The placeholder fast path should respect index
+# flags.
+exec-ddl
+CREATE TABLE t147363 (
+  a INT,
+  b INT,
+  c INT,
+  PRIMARY KEY (a, b),
+  INDEX i (a, b)
+)
+----
+
+# No fast path is selected because i is not covering.
+placeholder-fast-path
+SELECT * FROM t147363@i WHERE a = $1 AND b = $2
+----
+no fast path
+
+# The fast path does not support inverted indexes.
+placeholder-fast-path
+SELECT * FROM t147363@{FORCE_INVERTED_INDEX} WHERE a = $1 AND b = $2
+----
+no fast path
+
+# The fast path does not support zig-zag joins.
+placeholder-fast-path
+SELECT * FROM t147363@{FORCE_ZIGZAG} WHERE a = $1 AND b = $2
+----
+no fast path

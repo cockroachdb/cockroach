@@ -306,7 +306,7 @@ func computeCumStoreCompactionStats(m *pebble.Metrics) cumStoreCompactionStats {
 	var compactedWriteBytes uint64
 	baseLevel := -1
 	for i := range m.Levels {
-		compactedWriteBytes += m.Levels[i].TableBytesCompacted + m.Levels[i].BlobBytesWritten
+		compactedWriteBytes += m.Levels[i].TableBytesCompacted + m.Levels[i].BlobBytesCompacted
 		if i > 0 && m.Levels[i].TablesSize > 0 && baseLevel < 0 {
 			baseLevel = i
 		}
