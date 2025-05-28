@@ -45,7 +45,6 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":replica_rac2"],
     deps = [
-        "//pkg/kv/kvserver/kvflowcontrol",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb",
         "//pkg/kv/kvserver/kvflowcontrol/rac2",

@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
@@ -289,7 +288,7 @@ func TestProcessorBasic(t *testing.T) {
 	var p *processorImpl
 	tenantID := roachpb.MustMakeTenantID(4)
 	muAsserter := makeTestMutexAsserter()
-	reset := func(enabled kvflowcontrol.V2EnabledWhenLeaderLevel) {
+	reset := func() {
 		b.Reset()
 		r = newTestReplica(&b)
 		sched = testRaftScheduler{b: &b}
@@ -308,12 +307,10 @@ func TestProcessorBasic(t *testing.T) {
 			ACWorkQueue:            &q,
 			MsgAppSender:           testMsgAppSender{},
 			RangeControllerFactory: &rcFactory,
-			EnabledWhenLeaderLevel: enabled,
 			EvalWaitMetrics:        rac2.NewEvalWaitMetrics(),
 		}).(*processorImpl)
-		fmt.Fprintf(&b, "n%s,s%s,r%s: replica=%s, tenant=%s, enabled-level=%s\n",
-			p.opts.NodeID, p.opts.StoreID, p.opts.RangeID, p.opts.ReplicaID, tenantID,
-			enabledLevelString(p.GetEnabledWhenLeader()))
+		fmt.Fprintf(&b, "n%s,s%s,r%s: replica=%s, tenant=%s\n",
+			p.opts.NodeID, p.opts.StoreID, p.opts.RangeID, p.opts.ReplicaID, tenantID)
 	}
 	builderStr := func() string {
 		str := b.String()
@@ -329,8 +326,7 @@ func TestProcessorBasic(t *testing.T) {
 
 			switch d.Cmd {
 			case "reset":
-				enabledLevel := parseEnabledLevel(t, d)
-				reset(enabledLevel)
+				reset()
 				return builderStr()
 
 			case "init-raft":
@@ -388,28 +384,6 @@ func TestProcessorBasic(t *testing.T) {
 				unlockFunc()
 				return builderStr()
 
-			case "set-enabled-level":
-				enabledLevel := parseEnabledLevel(t, d)
-				var state RaftNodeBasicState
-				if r.raftNode != nil {
-					state = RaftNodeBasicState{
-						Term:              r.raftNode.term,
-						IsLeader:          r.raftNode.isLeader,
-						Leader:            r.raftNode.leader,
-						NextUnstableIndex: r.raftNode.nextUnstableIndex,
-						Leaseholder:       r.leaseholder,
-					}
-				}
-				unlockFunc := LockRaftMu(&muAsserter)
-				p.SetEnabledWhenLeaderRaftMuLocked(ctx, enabledLevel, state)
-				unlockFunc()
-				return builderStr()
-
-			case "get-enabled-level":
-				enabledLevel := p.GetEnabledWhenLeader()
-				fmt.Fprintf(&b, "enabled-level: %s\n", enabledLevelString(enabledLevel))
-				return builderStr()
-
 			case "on-desc-changed":
 				desc := parseRangeDescriptor(t, d)
 				unlockFunc := LockRaftMuAndReplicaMu(&muAsserter)
@@ -446,8 +420,7 @@ func TestProcessorBasic(t *testing.T) {
 				fmt.Fprintf(&b, ".....\n")
 				if len(event.Entries) > 0 {
 					fmt.Fprintf(&b, "AdmitRaftEntries:\n")
-					destroyedOrV2 := p.AdmitRaftEntriesRaftMuLocked(ctx, event)
-					fmt.Fprintf(&b, "destroyed-or-leader-using-v2: %t\n", destroyedOrV2)
+					p.AdmitRaftEntriesRaftMuLocked(ctx, event)
 					printLogTracker()
 				}
 				unlockFunc()
@@ -480,10 +453,6 @@ func TestProcessorBasic(t *testing.T) {
 				return builderStr()
 
 			case "side-channel":
-				var usingV2 bool
-				if d.HasArg("v2") {
-					usingV2 = true
-				}
 				var leaderTerm uint64
 				d.ScanArgs(t, "leader-term", &leaderTerm)
 				var first, last uint64
@@ -494,11 +463,10 @@ func TestProcessorBasic(t *testing.T) {
 					lowPriOverride = true
 				}
 				info := SideChannelInfoUsingRaftMessageRequest{
-					UsingV2Protocol: usingV2,
-					LeaderTerm:      leaderTerm,
-					First:           first,
-					Last:            last,
-					LowPriOverride:  lowPriOverride,
+					LeaderTerm:     leaderTerm,
+					First:          first,
+					Last:           last,
+					LowPriOverride: lowPriOverride,
 				}
 				unlockFunc := LockRaftMu(&muAsserter)
 				p.SideChannelForPriorityOverrideAtFollowerRaftMuLocked(info)
@@ -566,38 +534,6 @@ func parseAdmissionPriority(t *testing.T, td *datadriven.TestData) admissionpb.W
 	}
 	t.Fatalf("unknown priority %s", priStr)
 	return admissionpb.NormalPri
-}
-
-func parseEnabledLevel(
-	t *testing.T, td *datadriven.TestData,
-) kvflowcontrol.V2EnabledWhenLeaderLevel {
-	if td.HasArg("enabled-level") {
-		var str string
-		td.ScanArgs(t, "enabled-level", &str)
-		switch str {
-		case "not-enabled":
-			return kvflowcontrol.V2NotEnabledWhenLeader
-		case "v1-encoding":
-			return kvflowcontrol.V2EnabledWhenLeaderV1Encoding
-		case "v2-encoding":
-			return kvflowcontrol.V2EnabledWhenLeaderV2Encoding
-		default:
-			t.Fatalf("unrecoginized level %s", str)
-		}
-	}
-	return kvflowcontrol.V2NotEnabledWhenLeader
-}
-
-func enabledLevelString(enabledLevel kvflowcontrol.V2EnabledWhenLeaderLevel) string {
-	switch enabledLevel {
-	case kvflowcontrol.V2NotEnabledWhenLeader:
-		return "not-enabled"
-	case kvflowcontrol.V2EnabledWhenLeaderV1Encoding:
-		return "v1-encoding"
-	case kvflowcontrol.V2EnabledWhenLeaderV2Encoding:
-		return "v2-encoding"
-	}
-	return "unknown-level"
 }
 
 func parseRangeDescriptor(t *testing.T, td *datadriven.TestData) roachpb.RangeDescriptor {

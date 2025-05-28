@@ -378,10 +378,6 @@ func (r *Replica) abandon(tok abandonToken) {
 	last.ctx.Store(&ctx)
 }
 
-func (r *Replica) encodePriorityForRACv2() bool {
-	return r.flowControlV2.GetEnabledWhenLeader() == kvflowcontrol.V2EnabledWhenLeaderV2Encoding
-}
-
 // propose encodes a command, starts tracking it, and proposes it to Raft.
 //
 // The method hands ownership of the command over to the Raft machinery. After
@@ -433,18 +429,16 @@ func (r *Replica) propose(
 		raftAdmissionMeta = nil
 	}
 
-	encodePriority := r.encodePriorityForRACv2()
-	if encodePriority && raftAdmissionMeta != nil {
-		// AdmissionPriority is the same for both v1 and v2 replication flow control
-		// until we get here. If the v2 encoding is enabled, we need to convert the
-		// priority to the v2 encoding.
+	if raftAdmissionMeta != nil {
+		// AdmissionPriority is the admissionpb.WorkPriority until we get here.
+		// From now on, it is the raftpb.Priority.
 		raftAdmissionMeta.AdmissionPriority = int32(rac2.AdmissionToRaftPriority(
 			admissionpb.WorkPriority(raftAdmissionMeta.AdmissionPriority)))
 	}
 	data, err := raftlog.EncodeCommand(ctx, p.command, p.idKey,
 		raftlog.EncodeOptions{
 			RaftAdmissionMeta: raftAdmissionMeta,
-			EncodePriority:    encodePriority,
+			EncodePriority:    true,
 		})
 	if err != nil {
 		return kvpb.NewError(err)
@@ -722,12 +716,16 @@ func (r *Replica) stepRaftGroupRaftMuLocked(req *kvserverpb.RaftMessageRequest) 
 			r.maybeForgetLeaderOnVoteRequestLocked()
 		case raftpb.MsgApp:
 			if n := len(req.Message.Entries); n > 0 {
+				if !req.UsingRac2Protocol {
+					// Arguably, we should panic here -- we choose not to only because
+					// this is a message from another server.
+					return false, errors.AssertionFailedf("must use RACv2 protocol for MsgApp with entries")
+				}
 				sideChannelInfo = replica_rac2.SideChannelInfoUsingRaftMessageRequest{
-					UsingV2Protocol: req.UsingRac2Protocol,
-					LeaderTerm:      req.Message.Term,
-					First:           req.Message.Entries[0].Index,
-					Last:            req.Message.Entries[n-1].Index,
-					LowPriOverride:  req.LowPriorityOverride,
+					LeaderTerm:     req.Message.Term,
+					First:          req.Message.Entries[0].Index,
+					Last:           req.Message.Entries[n-1].Index,
+					LowPriOverride: req.LowPriorityOverride,
 				}
 			}
 		case raftpb.MsgAppResp:
@@ -890,35 +888,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		return handleRaftReadyStats{}, errors.AssertionFailedf(
 			"handleRaftReadyRaftMuLocked cannot be called with a cancellable context")
 	}
-	// Before doing anything, including calling Ready(), see if we need to
-	// ratchet up the flow control level. This code will go away when RACv1 =>
-	// RACv2 transition is complete and RACv1 code is removed.
-	if r.raftMu.flowControlLevel < kvflowcontrol.V2EnabledWhenLeaderV2Encoding {
-		// Not already at highest level.
-		level := kvflowcontrol.GetV2EnabledWhenLeaderLevel(
-			ctx, r.store.ClusterSettings(), r.store.TestingKnobs().FlowControlTestingKnobs)
-		if level > r.raftMu.flowControlLevel {
-			var basicState replica_rac2.RaftNodeBasicState
-			func() {
-				r.mu.Lock()
-				defer r.mu.Unlock()
-				basicState = replica_rac2.MakeRaftNodeBasicStateLocked(
-					r.mu.internalRaftGroup, r.shMu.state.Lease.Replica.ReplicaID)
-				if r.raftMu.flowControlLevel == kvflowcontrol.V2NotEnabledWhenLeader {
-					// This will close all connected streams and consequently all
-					// requests waiting on v1 kvflowcontrol.ReplicationAdmissionHandles
-					// will return.
-					r.mu.replicaFlowControlIntegration.onDestroyed(ctx)
-					// Replace with a noop integration since want no code to execute on
-					// various calls.
-					r.mu.replicaFlowControlIntegration = noopReplicaFlowControlIntegration{}
-				}
-			}()
-			r.raftMu.flowControlLevel = level
-			r.flowControlV2.SetEnabledWhenLeaderRaftMuLocked(ctx, level, basicState)
-		}
-	}
-
 	// NB: we need to reference the named return parameter here. If `stats` were
 	// just a local, we'd be modifying the local but not the return value in the
 	// defer below.
@@ -1227,19 +1196,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			if r.IsInitialized() && r.store.cfg.KVAdmissionController != nil {
 				// Enqueue raft log entries into admission queues. This is
 				// non-blocking; actual admission happens asynchronously.
-				isUsingV2OrDestroyed := r.flowControlV2.AdmitRaftEntriesRaftMuLocked(ctx, raftEvent)
-				if !isUsingV2OrDestroyed {
-					// Leader is using RACv1 protocol.
-					tenantID, _ := r.TenantID()
-					for _, entry := range raftEvent.Entries {
-						if len(entry.Data) == 0 {
-							continue // nothing to do
-						}
-						r.store.cfg.KVAdmissionController.AdmitRaftEntry(
-							ctx, tenantID, r.StoreID(), r.RangeID, r.replicaID, raftEvent.Term, entry,
-						)
-					}
-				}
+				r.flowControlV2.AdmitRaftEntriesRaftMuLocked(ctx, raftEvent)
 			}
 
 			r.mu.raftTracer.MaybeTraceAppend(app)
@@ -2032,7 +1989,7 @@ func (r *Replica) sendRaftMessage(
 		FromReplica:         fromReplica,
 		Message:             msg,
 		RangeStartKey:       startKey, // usually nil
-		UsingRac2Protocol:   r.flowControlV2.GetEnabledWhenLeader() >= kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
+		UsingRac2Protocol:   true,
 		LowPriorityOverride: lowPriorityOverride,
 		TracedEntries:       traced,
 	}

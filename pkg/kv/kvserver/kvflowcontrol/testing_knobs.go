@@ -20,9 +20,6 @@ type TestingKnobs struct {
 	// OverrideTokenDeduction is used to override how many tokens are deducted
 	// post-evaluation.
 	OverrideTokenDeduction func(tokens Tokens) Tokens
-	// OverrideV2EnabledWhenLeaderLevel is used to override the level at which
-	// RACv2 is enabled when a replica is the leader.
-	OverrideV2EnabledWhenLeaderLevel func() V2EnabledWhenLeaderLevel
 	// OverridePullPushMode is used to override whether the pull mode, or push
 	// mode is enabled.
 	//
