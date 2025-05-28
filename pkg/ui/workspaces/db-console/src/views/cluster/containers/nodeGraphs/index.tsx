@@ -219,6 +219,8 @@ export class NodeGraphs extends React.Component<
   NodeGraphsProps,
   NodeGraphsState
 > {
+  private refreshTimer: NodeJS.Timeout;
+
   constructor(props: NodeGraphsProps) {
     super(props);
     this.state = {
@@ -266,10 +268,20 @@ export class NodeGraphs extends React.Component<
     if (isSystemTenant(this.props.currentTenant)) {
       this.props.refreshTenantsList();
     }
+    // Refresh nodes every 10 seconds
+    this.refreshTimer = setInterval(() => {
+      this.refresh();
+    }, 10000);
   }
 
   componentDidUpdate() {
     this.refresh();
+  }
+
+  componentWillUnmount() {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+    }
   }
 
   adjustTimeScaleOnChange = (
