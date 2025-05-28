@@ -118,7 +118,7 @@ func (p *peer[Conn]) releaseMetricsLocked() {
 // of its surrounding rpc.Context and will no longer probe; see
 // (*peer).maybeDelete.
 // See (*peer).launch for details on the probe (heartbeat loop) itself.
-type peer[Conn rpcConn] struct {
+type peer[Conn RPCConn] struct {
 	peerMetrics
 	k                    peerKey
 	opts                 *ContextOptions
@@ -151,7 +151,7 @@ type peer[Conn rpcConn] struct {
 }
 
 // PeerSnap is the state of a peer.
-type PeerSnap[Conn rpcConn] struct {
+type PeerSnap[Conn RPCConn] struct {
 	c *Connection[Conn] // never nil, only mutated in the breaker probe
 
 	// Timestamp of latest successful initial heartbeat on `c`. This
@@ -634,7 +634,7 @@ func (p *peer[Conn]) onSubsequentHeartbeatSucceeded(_ context.Context, now time.
 	// ConnectionFailures is not updated here.
 }
 
-func maybeLogOnFailedHeartbeat[Conn rpcConn](
+func maybeLogOnFailedHeartbeat[Conn RPCConn](
 	ctx context.Context,
 	now time.Time,
 	err, prevErr error,
@@ -792,7 +792,7 @@ func (p PeerSnap[Conn]) deletable(now time.Time) bool {
 // In both cases, if such a conn exists that became healthy *after* ours became
 // unhealthy, `healthy` will be true. If no such conn exists, (false, false) is
 // returned.
-func hasSiblingConn[Conn rpcConn](peers map[peerKey]*peer[Conn], self peerKey) (healthy, ok bool) {
+func hasSiblingConn[Conn RPCConn](peers map[peerKey]*peer[Conn], self peerKey) (healthy, ok bool) {
 	for other, otherPeer := range peers {
 		if self == other {
 			continue // exclude self
@@ -879,7 +879,7 @@ func (peers *peerMap[Conn]) shouldDeleteAfter(myKey peerKey, err error) time.Dur
 	return deleteAfter
 }
 
-func touchOldPeers[Conn rpcConn](peers *peerMap[Conn], now time.Time) {
+func touchOldPeers[Conn RPCConn](peers *peerMap[Conn], now time.Time) {
 	sigs := func() (sigs []circuit.Signal) {
 		peers.mu.RLock()
 		defer peers.mu.RUnlock()

@@ -17,11 +17,11 @@ import (
 	"storj.io/drpc"
 )
 
-// rpcConn defines a lightweight interface that both grpc.ClientConn and drpc.Conn
+// RPCConn defines a lightweight interface that both grpc.ClientConn and drpc.Conn
 // must implement. It is used as a type constraint for rpc connections and allows
 // the Connection and Peer structs to work seamlessly with both gRPC and DRPC
 // connections.
-type rpcConn interface {
+type RPCConn interface {
 	io.Closer
 	comparable
 }
@@ -35,7 +35,7 @@ type rpcHeartbeatClient interface {
 // heartbeatClientConstructor is a function type that creates a HeartbeatClient
 // for a given rpc connection. This allows us to use different implementations of
 // HeartbeatClient for different types of connections (e.g., gRPC and DRPC).
-type heartbeatClientConstructor[Conn rpcConn] func(Conn) rpcHeartbeatClient
+type heartbeatClientConstructor[Conn RPCConn] func(Conn) rpcHeartbeatClient
 
 // closeNotifier signals via a channel when its underlying gRPC or DRPC connection closes.
 type closeNotifier interface {
@@ -46,12 +46,12 @@ type closeNotifier interface {
 // closeNotifierConstructor is a function type that creates a closeNotifier
 // for a given rpc connection. This allows us to use different implementations of
 // closeNotifier for different types of connections (e.g., gRPC and DRPC).
-type closeNotifierConstructor[Conn rpcConn] func(*stop.Stopper, Conn) closeNotifier
+type closeNotifierConstructor[Conn RPCConn] func(*stop.Stopper, Conn) closeNotifier
 
 // Connection is a wrapper around an rpc connection (ex: grpc.ClientConn or
 // drpc.Conn). It prevents the underlying rpc connection from being used until
 // it has been validated via heartbeat.
-type Connection[Conn rpcConn] struct {
+type Connection[Conn RPCConn] struct {
 	// Fields in this struct are only ever mutated from the circuit breaker probe,
 	// but they may be read widely (many callers hold a *Connection).
 
@@ -83,7 +83,7 @@ type Connection[Conn rpcConn] struct {
 
 // newConnectionToNodeID makes a Connection for the given node, class, and nontrivial Signal
 // that should be queried in Connect().
-func newConnectionToNodeID[Conn rpcConn](
+func newConnectionToNodeID[Conn RPCConn](
 	opts *ContextOptions,
 	k peerKey,
 	breakerSignal func() circuit.Signal,
@@ -232,7 +232,7 @@ func (c *Connection[Conn]) DRPCBatchStreamPool() *DRPCBatchStreamPool {
 	return &c.drpcBatchStreamPool
 }
 
-type connFuture[Conn rpcConn] struct {
+type connFuture[Conn RPCConn] struct {
 	ready chan struct{}
 	cc    Conn
 	dc    drpc.Conn

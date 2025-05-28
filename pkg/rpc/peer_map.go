@@ -37,7 +37,7 @@ func (c peerKey) SafeFormat(p redact.SafePrinter, _ rune) {
 	p.Printf("{n%d: %s (%v)}", c.NodeID, c.TargetAddr, c.Class)
 }
 
-type peerMap[Conn rpcConn] struct {
+type peerMap[Conn RPCConn] struct {
 	mu struct {
 		syncutil.RWMutex
 		m map[peerKey]*peer[Conn]
