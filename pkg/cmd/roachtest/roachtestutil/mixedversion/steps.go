@@ -1,4 +1,3 @@
-// Copyright 2024 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -16,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -584,7 +584,6 @@ func (s resetClusterSettingStep) Run(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
 ) error {
 	stmt := fmt.Sprintf("RESET CLUSTER SETTING %s", s.name)
-
 	return serviceByName(h, s.virtualClusterName).ExecWithGateway(
 		rng, nodesRunningAtLeast(s.virtualClusterName, s.minVersion, h), stmt,
 	)
@@ -876,4 +875,91 @@ func (s restartNodeStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand
 
 func (s restartNodeStep) ConcurrencyDisabled() bool {
 	return true
+}
+
+type networkPartitionStep struct {
+	partitionType string
+	partition     failures.NetworkPartition
+	targetNode    option.NodeListOption
+}
+
+func (s networkPartitionStep) Background() shouldStop { return nil }
+
+func (s networkPartitionStep) Description() string {
+	var stmt string
+	switch s.partitionType {
+	case "Bidirectional":
+		stmt = fmt.Sprintf("setting up bidirectional network partition: dropping connections between nodes %d and %v", s.partition.Source, s.partition.Destination)
+	case "Incoming":
+		stmt = fmt.Sprintf("setting up incoming network partition: dropping connections from nodes %v to %d", s.partition.Destination, s.partition.Source)
+	case "Outgoing":
+		stmt = fmt.Sprintf("setting up outgoing network partition: dropping connections from nodes %d to %v", s.partition.Source, s.partition.Destination)
+	}
+	return stmt
+}
+
+func (s networkPartitionStep) Run(
+	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
+) error {
+	h.runner.monitor.ExpectProcessDead(s.targetNode)
+
+	args := failures.NetworkPartitionArgs{Partitions: []failures.NetworkPartition{s.partition}}
+	f := h.runner.failures[failures.IPTablesNetworkPartitionName]
+
+	if err := f.Setup(ctx, l, args); err != nil {
+		return errors.Wrapf(err, "failed to setup failure %s", failures.IPTablesNetworkPartitionName)
+	}
+
+	if err := f.Inject(ctx, l, args); err != nil {
+		return errors.Wrapf(err, "failed to inject failure %s", failures.IPTablesNetworkPartitionName)
+	}
+
+	return f.WaitForFailureToPropagate(ctx, l)
+}
+
+func (s networkPartitionStep) ConcurrencyDisabled() bool {
+	return true
+}
+
+type networkPartitionRecoveryStep struct {
+	partitionType string
+	partition     failures.NetworkPartition
+	targetNode    option.NodeListOption
+}
+
+func (s networkPartitionRecoveryStep) Background() shouldStop { return nil }
+
+func (s networkPartitionRecoveryStep) Description() string {
+	var stmt string
+	switch s.partitionType {
+	case "Bidirectional":
+		stmt = fmt.Sprintf("recovering from bidirectional network partition: allowing connections between nodes %d and %v", s.partition.Source, s.partition.Destination)
+	case "Incoming":
+		stmt = fmt.Sprintf("recovering from incoming network partition: allowing connections from nodes %v to %d", s.partition.Destination, s.partition.Source)
+	case "Outgoing":
+		stmt = fmt.Sprintf("recovering from outgoing network partition: allowing connections from nodes %d to %v", s.partition.Source, s.partition.Destination)
+	}
+	return stmt
+}
+
+func (s networkPartitionRecoveryStep) Run(
+	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
+) error {
+	f := h.runner.failures[failures.IPTablesNetworkPartitionName]
+
+	if err := f.Recover(ctx, l); err != nil {
+		return errors.Wrapf(err, "failed to recover failure %s", failures.IPTablesNetworkPartitionName)
+	}
+
+	if err := f.WaitForFailureToRecover(ctx, l); err != nil {
+		return errors.Wrapf(err, "failed to wait for recovery of failure %s", failures.IPTablesNetworkPartitionName)
+	}
+
+	h.runner.monitor.ExpectProcessAlive(s.targetNode)
+	return f.Cleanup(ctx, l)
+
+}
+
+func (s networkPartitionRecoveryStep) ConcurrencyDisabled() bool {
+	return false
 }

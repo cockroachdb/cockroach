@@ -874,6 +874,13 @@ func (concurrentUserHooksMutator) Generate(
 		}).
 		InsertConcurrent(&testSingleStep{})
 }
+func (concurrentUserHooksMutator) SupportedDeployments() map[DeploymentMode]struct{} {
+	return map[DeploymentMode]struct{}{
+		SharedProcessDeployment:   {},
+		SystemOnlyDeployment:      {},
+		SeparateProcessDeployment: {},
+	}
+}
 
 // removeUserHooksMutator is a test mutator that removes every
 // user-provided hook from the plan.
@@ -892,6 +899,13 @@ func (removeUserHooksMutator) Generate(
 			return ok
 		}).
 		Remove()
+}
+func (removeUserHooksMutator) SupportedDeployments() map[DeploymentMode]struct{} {
+	return map[DeploymentMode]struct{}{
+		SharedProcessDeployment:   {},
+		SystemOnlyDeployment:      {},
+		SeparateProcessDeployment: {},
+	}
 }
 
 func dummyHook(context.Context, *logger.Logger, *rand.Rand, *Helper) error {
