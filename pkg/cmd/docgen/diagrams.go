@@ -677,6 +677,16 @@ var specs = []stmtSpec{
 		unlink:  []string{"table_name", "column_name", "column_type", "check_expr", "column_constraints", "table_constraints"},
 	},
 	{
+		name:   "check_external_connection",
+		stmt:   "check_external_connection_stmt",
+		inline: []string{"opt_with_check_external_connection_options_list"},
+		exclude: []*regexp.Regexp{
+			regexp.MustCompile("'WITH' 'OPTIONS'"),
+		},
+		replace: map[string]string{"string_or_placeholder": "connection_uri"},
+		unlink:  []string{"connection_uri"},
+	},
+	{
 		name:    "check_table_level",
 		stmt:    "stmt_block",
 		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' ( column_table_def ( ',' column_table_def )* ) ( 'CONSTRAINT' constraint_name | ) 'CHECK' '(' check_expr ')' ( table_constraints | ) ')'"},
@@ -786,9 +796,10 @@ var specs = []stmtSpec{
 		unlink: []string{"table_name", "sink", "option", "value"},
 	},
 	{
-		name:    "create_external_connection_stmt",
-		replace: map[string]string{"label_spec": "connection_name", "string_or_placeholder": "connection_URI"},
-		unlink:  []string{"connection_name", "connection_URI"},
+		name:    "create_external_connection",
+		stmt:    "create_external_connection_stmt",
+		replace: map[string]string{"label_spec": "connection_name", "string_or_placeholder": "connection_uri"},
+		unlink:  []string{"connection_name", "connection_uri"},
 	},
 	{
 		name:   "create_index_stmt",
