@@ -10,7 +10,9 @@ import (
 	"math/rand"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"golang.org/x/exp/maps"
 )
@@ -410,9 +412,11 @@ func (m panicNodeMutator) Generate(
 	for _, upgrade := range upgrades {
 		possiblePointsInTime := upgrade.
 			// We don't want to panic concurrently with other steps, and inserting before a concurrent step
-			// causes the step to run concurrently with that step, so we filter out any concurrent steps.
+			// causes the step to run concurrently with that step, so we filter out any concurrent steps. We
+			// also don't want different failure injections to overlap, so we filter out any steps that are
+			// already in the context of a failure.
 			Filter(func(s *singleStep) bool {
-				return s.context.System.Stage >= InitUpgradeStage && !idx.IsConcurrent(s)
+				return s.context.System.Stage >= InitUpgradeStage && !idx.IsConcurrent(s) && !s.inFailureContext
 			})
 
 		targetNode := nodeList.SeededRandNode(rng)
@@ -441,7 +445,7 @@ func (m panicNodeMutator) Generate(
 				firstStepInConcurrentBlock = nil
 			}
 
-			return restart || waitForStable || runHook
+			return restart || waitForStable || runHook || s.inFailureContext
 		}
 
 		// The node should be restarted after the panic, but before any steps that are
@@ -468,18 +472,157 @@ func (m panicNodeMutator) Generate(
 		addPanicStep := stepToPanic.
 			InsertBefore(panicNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode})
 		var addRestartStep []mutation
+		var restartStep stepSelector
 		// If validEndStep is nil, it means that there are no steps after the panic step that
 		// are compatible with a dead node, so we immediately restart the node after the panic.
 		if validEndStep == nil {
+			restartStep = cutStep
 			addRestartStep = cutStep.InsertBefore(restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt, restartDesc})
 		} else {
-			addRestartStep = validEndStep.
-				RandomStep(rng).
+			restartStep = validEndStep.RandomStep(rng)
+			addRestartStep = restartStep.
 				Insert(rng, restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt, restartDesc})
 		}
 
+		failureContextSteps, _ := validStartStep.CutBefore(func(s *singleStep) bool {
+			return s == restartStep[0]
+		})
+		failureContextSteps.MarkInFailureContext()
+
 		mutations = append(mutations, addPanicStep...)
 		mutations = append(mutations, addRestartStep...)
+	}
+
+	return mutations
+}
+
+type networkPartitionMutator struct{}
+
+func (m networkPartitionMutator) Name() string { return failures.IPTablesNetworkPartitionName }
+
+func (m networkPartitionMutator) Probability() float64 {
+	return 0.3
+}
+
+func (m networkPartitionMutator) Generate(
+	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
+) []mutation {
+	var mutations []mutation
+	upgrades := randomUpgrades(rng, plan)
+	idx := newStepIndex(plan)
+	nodeList := planner.currentContext.System.Descriptor.Nodes
+	for _, upgrade := range upgrades {
+		possiblePointsInTime := upgrade.
+			Filter(func(s *singleStep) bool {
+				// We don't want to set up a partition concurrently with other steps, and inserting
+				// before a concurrent step causes the step to run concurrently with that step, so
+				// we filter out any concurrent steps. We also filter out any steps that are
+				// already in the context of a failure to avoid overlapping failure injections.
+				return s.context.System.Stage >= InitUpgradeStage && !idx.IsConcurrent(s) && !s.inFailureContext
+			})
+
+		stepToPartition := possiblePointsInTime.RandomStep(rng)
+		hasInvalidConcurrentStep := false
+		var firstStepInConcurrentBlock *singleStep
+
+		isInvalidRecoverStep := func(s *singleStep) bool {
+			// Restarting a node in the middle of a network partition has a chance of
+			// loss of quorum, so we do should recover the network partition before this
+			// if the restarted node is not the node being partitioned.
+			_, restartSystem := s.impl.(restartWithNewBinaryStep)
+			_, restartTenant := s.impl.(restartVirtualClusterStep)
+			// WaitForStableClusterVersion waits for every node in the cluster to agree on
+			// the same version, so a network partition will cause it to timeout.
+			_, waitForStable := s.impl.(waitForStableClusterVersionStep)
+			// Many hook steps require communication between specific nodes, so we
+			// should recover the network partition before running them.
+			_, runHook := s.impl.(runHookStep)
+
+			if idx.IsConcurrent(s) {
+				if firstStepInConcurrentBlock == nil {
+					firstStepInConcurrentBlock = s
+				}
+				hasInvalidConcurrentStep = true
+			} else {
+				hasInvalidConcurrentStep = false
+				firstStepInConcurrentBlock = nil
+			}
+
+			return s.inFailureContext || restartTenant || waitForStable || restartSystem || runHook
+		}
+
+		_, validStartStep := upgrade.CutAfter(func(s *singleStep) bool {
+			return s == stepToPartition[0]
+		})
+
+		validEndStep, _, cutStep := validStartStep.Cut(func(s *singleStep) bool {
+			return isInvalidRecoverStep(s)
+		})
+
+		// Inserting before a concurrent step will cause the step to run concurrently with that step,
+		// so we remove the concurrent steps from the list of possible insertions if they contain
+		// any invalid steps.
+		if hasInvalidConcurrentStep {
+			validEndStep, _ = validEndStep.CutAfter(func(s *singleStep) bool {
+				return s == firstStepInConcurrentBlock
+			})
+		}
+
+		nodeCount := len(nodeList)
+		partitionedNode := nodeList[rng.Intn(nodeCount)]
+
+		leftPartition := []install.Node{install.Node(partitionedNode)}
+		var rightPartition []install.Node
+		for i := 0; i < nodeCount; i++ {
+			node := nodeList[i]
+			if node != partitionedNode {
+				if rng.Float64() < 0.7 {
+					rightPartition = append(rightPartition, install.Node(node))
+				}
+			}
+		}
+
+		if len(rightPartition) == 0 {
+			var eligible []int
+			for i := 0; i < nodeCount; i++ {
+				node := nodeList[i]
+				if node != partitionedNode {
+					eligible = append(eligible, node)
+				}
+			}
+			rightPartition = append(rightPartition, install.Node(eligible[rng.Intn(len(eligible))]))
+		}
+
+		types := [3]failures.PartitionType{failures.Bidirectional, failures.Incoming, failures.Outgoing}
+		partitionTypeNames := [3]string{"bidirectional", "incoming", "outgoing"}
+		partitionType := rng.Intn(len(types))
+
+		partition := failures.NetworkPartition{Source: leftPartition, Destination: rightPartition, Type: types[partitionType]}
+		targetNode := option.NodeListOption{partitionedNode}
+
+		addPartition := stepToPartition.
+			InsertBefore(networkPartitionStep{partitionTypeNames[partitionType], partition, targetNode})
+		var addRecoveryStep []mutation
+		var recoveryStep stepSelector
+		// If validEndStep is nil, it means that there are no steps after the partition step that are
+		// compatible with a network partition, so we immediately restart the node after the partition.
+		if validEndStep == nil {
+			recoveryStep = cutStep
+			addRecoveryStep = cutStep.InsertBefore(networkPartitionRecoveryStep{partitionTypeNames[partitionType], partition, targetNode})
+		} else {
+			recoveryStep = validEndStep.RandomStep(rng)
+			addRecoveryStep = recoveryStep.
+				Insert(rng, networkPartitionRecoveryStep{partitionTypeNames[partitionType], partition, targetNode})
+		}
+
+		failureContextSteps, _ := validStartStep.CutBefore(func(s *singleStep) bool {
+			return s == recoveryStep[0]
+		})
+
+		failureContextSteps.MarkInFailureContext()
+
+		mutations = append(mutations, addPartition...)
+		mutations = append(mutations, addRecoveryStep...)
 	}
 
 	return mutations
