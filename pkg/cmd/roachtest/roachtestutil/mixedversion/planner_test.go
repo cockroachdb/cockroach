@@ -389,6 +389,7 @@ func newTest(options ...CustomOption) *Test {
 	defaultTestOverrides := []CustomOption{
 		EnabledDeploymentModes(SystemOnlyDeployment),
 		DisableSkipVersionUpgrades,
+		DisableAllFailureInjectionMutators(),
 	}
 
 	for _, fn := range defaultTestOverrides {
@@ -863,7 +864,7 @@ func (concurrentUserHooksMutator) Probability() float64 { return 0.5 }
 
 func (concurrentUserHooksMutator) Generate(
 	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
-) []mutation {
+) ([]mutation, error) {
 	// Insert our `testSingleStep` implementation concurrently with every
 	// user-provided function.
 	return plan.
@@ -872,7 +873,14 @@ func (concurrentUserHooksMutator) Generate(
 			_, ok := s.impl.(runHookStep)
 			return ok
 		}).
-		InsertConcurrent(&testSingleStep{})
+		InsertConcurrent(&testSingleStep{}), nil
+}
+func (concurrentUserHooksMutator) DisabledDeploymentModes() map[DeploymentMode]struct{} {
+	return nil
+}
+
+func (concurrentUserHooksMutator) SupportsLocalRun() bool {
+	return true
 }
 
 // removeUserHooksMutator is a test mutator that removes every
@@ -884,14 +892,21 @@ func (removeUserHooksMutator) Probability() float64 { return 0.5 }
 
 func (removeUserHooksMutator) Generate(
 	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
-) []mutation {
+) ([]mutation, error) {
 	return plan.
 		newStepSelector().
 		Filter(func(s *singleStep) bool {
 			_, ok := s.impl.(runHookStep)
 			return ok
 		}).
-		Remove()
+		Remove(), nil
+}
+func (removeUserHooksMutator) DisabledDeploymentModes() map[DeploymentMode]struct{} {
+	return nil
+}
+
+func (removeUserHooksMutator) SupportsLocalRun() bool {
+	return true
 }
 
 func dummyHook(context.Context, *logger.Logger, *rand.Rand, *Helper) error {
@@ -935,6 +950,7 @@ func Test_SeparateProcessUsesLatestPred(t *testing.T) {
 	testOverrides := []CustomOption{
 		EnabledDeploymentModes(SeparateProcessDeployment),
 		DisableSkipVersionUpgrades,
+		DisableAllFailureInjectionMutators(),
 		MinUpgrades(5),
 		MaxUpgrades(5),
 	}
@@ -956,7 +972,6 @@ func Test_SeparateProcessUsesLatestPred(t *testing.T) {
 
 	plan, err := mvt.plan()
 	require.NoError(t, err)
-	//
 	upgradePath := plan.Versions()
 	// Remove the last element as it's the current version which is a special case.
 	// The unit test framework hardcodes the current version which should have no
