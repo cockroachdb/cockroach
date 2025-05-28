@@ -66,7 +66,7 @@ import {
   TimeScale,
   timeScale1hMinOptions,
   getValidOption,
-  toRoundedDateRange,
+  toDateRange,
 } from "../timeScaleDropdown";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 import {
@@ -140,7 +140,7 @@ export type TransactionsPageProps = TransactionsPageStateProps &
 type RequestParams = Pick<TState, "timeScale" | "limit" | "reqSortSetting">;
 
 function stmtsRequestFromParams(params: RequestParams): StatementsRequest {
-  const [start, end] = toRoundedDateRange(params.timeScale);
+  const [start, end] = toDateRange(params.timeScale);
   return createCombinedStmtsRequest({
     start,
     end,
