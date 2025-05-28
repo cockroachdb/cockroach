@@ -196,7 +196,7 @@ pg_tablespace                    false
 pg_timezone_abbrevs              true
 pg_timezone_names                false
 pg_transform                     true
-pg_trigger                       true
+pg_trigger                       false
 pg_ts_config                     true
 pg_ts_config_map                 true
 pg_ts_dict                       true
