@@ -93,7 +93,7 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
                 value={
                   <LiveDataPercent
                     liveBytes={metadata.totalLiveDataBytes}
-                    totalBytes={metadata.totalLiveDataBytes}
+                    totalBytes={metadata.totalDataBytes}
                   />
                 }
               />
