@@ -163,6 +163,17 @@ func (m *monitorImpl) ExpectProcessAlive(nodes option.NodeListOption, opts ...op
 	m.ExpectProcessHealth(nodes.InstallNodes(), ExpectedAlive, opts...)
 }
 
+func (m *monitorImpl) AvailableNodes(virtualClusterName string) option.NodeListOption {
+	var availableNodes install.Nodes
+	m.expProcessHealth.Range(func(process monitorProcess, health *MonitorExpectedProcessHealth) bool {
+		if process.virtualClusterName == virtualClusterName && *health == ExpectedAlive {
+			availableNodes = append(availableNodes, process.node)
+		}
+		return true
+	})
+	return option.FromInstallNodes(availableNodes)
+}
+
 // ExpectDeath lets the monitor know that a node is about to be killed, and that
 // this should be ignored.
 func (m *monitorImpl) ExpectDeath() {

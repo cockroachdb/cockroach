@@ -403,26 +403,45 @@ func (m panicNodeMutator) Generate(
 	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
 ) []mutation {
 	var mutations []mutation
-	maxPanics := len(plan.upgrades)
-	numPanics := 1 + rng.Intn(maxPanics)
-
+	upgrades := randomUpgrades(rng, plan)
 	idx := newStepIndex(plan)
-	possiblePointsInTime := plan.
-		newStepSelector().
-		// We don't want to panic concurrently with other steps, and inserting before a concurrent step
-		// causes the step to run concurrently with that step, so we filter out any concurrent steps.
-		Filter(func(s *singleStep) bool {
-			return s.context.System.Stage >= InitUpgradeStage && !idx.IsConcurrent(s)
+	nodeList := planner.currentContext.System.Descriptor.Nodes
+
+	for _, upgrade := range upgrades {
+		possiblePointsInTime := upgrade.
+			// We don't want to panic concurrently with other steps, and inserting before a concurrent step
+			// causes the step to run concurrently with that step, so we filter out any concurrent steps.
+			Filter(func(s *singleStep) bool {
+				return s.context.System.Stage >= InitUpgradeStage && !idx.IsConcurrent(s)
+			})
+
+		targetNode := nodeList.SeededRandNode(rng)
+		stepToPanic := possiblePointsInTime.RandomStep(rng)
+
+		isValidStartStep := func(s *singleStep) bool {
+			_, validStartSystem := s.impl.(restartWithNewBinaryStep)
+			implStartVirtual, validStartVirtual := s.impl.(restartVirtualClusterStep)
+			_, waitForStable := s.impl.(waitForStableClusterVersionStep)
+			_, runHook := s.impl.(runHookStep)
+
+			return !(validStartSystem || (validStartVirtual && implStartVirtual.node == targetNode[0]) || waitForStable || runHook)
+		}
+		_, afterPanicSteps := possiblePointsInTime.Cut(func(s *singleStep) bool {
+			return s == stepToPanic[0]
 		})
 
-	for range numPanics {
-		nodeList := planner.currentContext.System.Descriptor.Nodes
-		targetNode := nodeList.SeededRandNode(rng)
-		addRandomly := possiblePointsInTime.
-			RandomStep(rng).
-			InsertBefore(panicNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt})
+		validStartInserts, _ := afterPanicSteps.Cut(func(s *singleStep) bool {
+			return !isValidStartStep(s)
+		})
 
-		mutations = append(mutations, addRandomly...)
+		addPanicStep := stepToPanic.
+			InsertBefore(panicNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode})
+		addStartStep := validStartInserts.
+			RandomStep(rng).
+			InsertBefore(startNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt})
+
+		mutations = append(mutations, addPanicStep...)
+		mutations = append(mutations, addStartStep...)
 	}
 
 	return mutations
