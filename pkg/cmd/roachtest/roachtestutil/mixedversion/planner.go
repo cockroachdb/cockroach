@@ -91,6 +91,7 @@ type (
 		seed           int64
 		currentContext *Context
 		rt             test.Test
+		isMultiRegion  bool
 		isLocal        bool
 		options        testOptions
 		hooks          *testHooks
@@ -232,6 +233,7 @@ const (
 var failureInjectionMutators = []mutator{
 	panicNodeMutator{},
 	networkPartitionMutator{},
+	multiRegionSimulationMutator{},
 }
 
 // clusterSettingMutators includes a list of all
@@ -475,8 +477,55 @@ func (p *testPlanner) Plan() (*TestPlan, error) {
 		}
 	}
 
+	if p.isMultiRegion {
+		simulateStep, _, err := p.generateMultiRegionSimulationSteps(p.prng)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate multi-region simulation steps: %w", err)
+		}
+
+		testPlan.initSteps = append([]testStep{simulateStep}, testPlan.initSteps...)
+	}
+
 	testPlan.assignIDs()
 	return testPlan, nil
+}
+
+func (p *testPlanner) generateMultiRegionSimulationSteps(
+	rng *rand.Rand,
+) (*singleStep, *singleStep, error) {
+	nodeList := p.currentContext.System.Descriptor.Nodes
+
+	failure := failures.GetFailureRegistry()
+	f, err := failure.GetFailer(p.cluster.Name(), failures.NetworkLatencyName, p.logger)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get failer for %s: %w", failures.NetworkLatencyName, err)
+	}
+
+	var regionToNodes map[failures.Region][]install.Node
+	validAssignment := false
+
+	for !validAssignment {
+		regionToNodes = make(map[failures.Region][]install.Node)
+
+		for _, n := range nodeList {
+			region := failures.AllRegions[rng.Intn(len(failures.AllRegions))]
+			regionToNodes[region] = append(regionToNodes[region], install.Node(n))
+		}
+
+		// We want to ensure that there is at least two regions with nodes in them.
+		if len(regionToNodes) > 1 {
+			break
+		}
+	}
+
+	args, err := failures.MakeNetworkLatencyArgs(regionToNodes)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create network latency args: %w", err)
+	}
+	simulateStep := simulateMultiRegionStep{f, args, regionToNodes}
+	endSimulationStep := endMultiRegionSimulationStep{f, args}
+
+	return p.newSingleStep(simulateStep), p.newSingleStep(endSimulationStep), nil
 }
 
 // nonUpgradeContext builds a mixed-version context to be used during
