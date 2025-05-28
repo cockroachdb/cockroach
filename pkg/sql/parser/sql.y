@@ -9682,6 +9682,7 @@ show_transfer_stmt:
 // SHOW CREATE [ SECONDARY ] INDEXES FROM <table_name>
 // SHOW CREATE ALL SCHEMAS
 // SHOW CREATE ALL TABLES
+// SHOW CREATE ALL TRIGGERS
 // SHOW CREATE ALL TYPES
 // %SeeAlso: WEBDOCS/show-create.html
 show_create_stmt:
@@ -9764,6 +9765,10 @@ show_create_stmt:
   {
     $$.val = &tree.ShowCreateAllTables{}
   }
+| SHOW CREATE ALL TRIGGERS
+	{
+		$$.val = &tree.ShowCreateAllTriggers{}
+	}
 | SHOW CREATE ALL TYPES
   {
     $$.val = &tree.ShowCreateAllTypes{}
