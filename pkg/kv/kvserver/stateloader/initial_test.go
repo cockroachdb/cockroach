@@ -7,18 +7,54 @@ package stateloader
 
 import (
 	"context"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/stretchr/testify/require"
 )
+
+// TestWriteInitialRangeState captures the typical initial range state written
+// to storage at cluster bootstrap.
+func TestWriteInitialRangeState(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+	b := eng.NewBatch() // TODO(pav-kv): make it write-only batch
+	defer b.Close()
+
+	require.NoError(t, WriteInitialRangeState(context.Background(), b,
+		roachpb.RangeDescriptor{
+			RangeID:       5,
+			StartKey:      roachpb.RKey("a"),
+			EndKey:        roachpb.RKey("z"),
+			NextReplicaID: 4,
+		},
+		roachpb.ReplicaID(3),
+		// Use arbitrary version instead of things like clusterversion.Latest, so
+		// that the test doesn't sporadically fail when version bumps occur.
+		roachpb.Version{Major: 10, Minor: 2, Patch: 17},
+	))
+
+	str, err := print.DecodeWriteBatch(b.Repr())
+	require.NoError(t, err)
+	str = strings.ReplaceAll(str, "\n\n", "\n")
+	echotest.Require(t, str, filepath.Join("testdata", t.Name()+".txt"))
+}
 
 func TestSynthesizeHardState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
