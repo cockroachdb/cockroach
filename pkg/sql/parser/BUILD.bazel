@@ -55,11 +55,16 @@ go_test(
         "parse_internal_test.go",
         "parse_test.go",
         "scanner_test.go",
+        "unused_keywords_test.go",
         ":gen-helpmap-test",  # keep
     ],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + [
+        "sql.y",
+        "unused_keywords.sh",
+    ],
     embed = [":parser"],
     deps = [
+        "//pkg/build/bazel",
         "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/randgen",
