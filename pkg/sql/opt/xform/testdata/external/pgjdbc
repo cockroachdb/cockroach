@@ -99,7 +99,7 @@ project
  │    │    │    │    │    │    │         │    │    ├── scan kv_catalog_comments
  │    │    │    │    │    │    │         │    │    │    └── columns: crdb_internal.kv_catalog_comments.classoid:76!null crdb_internal.kv_catalog_comments.objoid:77!null crdb_internal.kv_catalog_comments.objsubid:78!null crdb_internal.kv_catalog_comments.description:79!null
  │    │    │    │    │    │    │         │    │    └── filters
- │    │    │    │    │    │    │         │    │         └── crdb_internal.kv_catalog_comments.classoid:76 != 4294967077 [outer=(76), constraints=(/76: (/NULL - /4294967076] [/4294967078 - ]; tight)]
+ │    │    │    │    │    │    │         │    │         └── crdb_internal.kv_catalog_comments.classoid:76 != 4294967076 [outer=(76), constraints=(/76: (/NULL - /4294967075] [/4294967077 - ]; tight)]
  │    │    │    │    │    │    │         │    └── projections
  │    │    │    │    │    │    │         │         └── crdb_internal.kv_catalog_comments.objsubid:78::INT8 [as=objsubid:85, outer=(78), immutable]
  │    │    │    │    │    │    │         └── filters
@@ -110,7 +110,7 @@ project
  │    │    │    │    │    │         ├── scan kv_builtin_function_comments
  │    │    │    │    │    │         │    └── columns: crdb_internal.kv_builtin_function_comments.oid:81!null crdb_internal.kv_builtin_function_comments.description:82!null
  │    │    │    │    │    │         └── projections
- │    │    │    │    │    │              └── 4294967045 [as=classoid:83]
+ │    │    │    │    │    │              └── 4294967044 [as=classoid:83]
  │    │    │    │    │    ├── inner-join (hash)
  │    │    │    │    │    │    ├── columns: c.oid:91!null relname:92!null relnamespace:93!null n.oid:128!null nspname:129!null
  │    │    │    │    │    │    ├── fd: ()-->(92,129), (93)==(128), (128)==(93)
@@ -294,7 +294,7 @@ sort
       │    │    │    │    │    │    │    │    │    │    ├── scan kv_catalog_comments
       │    │    │    │    │    │    │    │    │    │    │    └── columns: crdb_internal.kv_catalog_comments.classoid:109!null crdb_internal.kv_catalog_comments.objoid:110!null crdb_internal.kv_catalog_comments.objsubid:111!null crdb_internal.kv_catalog_comments.description:112!null
       │    │    │    │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │    │    │    │         └── crdb_internal.kv_catalog_comments.classoid:109 != 4294967077 [outer=(109), constraints=(/109: (/NULL - /4294967076] [/4294967078 - ]; tight)]
+      │    │    │    │    │    │    │    │    │    │         └── crdb_internal.kv_catalog_comments.classoid:109 != 4294967076 [outer=(109), constraints=(/109: (/NULL - /4294967075] [/4294967077 - ]; tight)]
       │    │    │    │    │    │    │    │    │    └── projections
       │    │    │    │    │    │    │    │    │         └── crdb_internal.kv_catalog_comments.objsubid:111::INT8 [as=objsubid:118, outer=(111), immutable]
       │    │    │    │    │    │    │    │    └── filters
