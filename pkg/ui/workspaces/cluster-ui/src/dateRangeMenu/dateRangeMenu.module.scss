@@ -53,6 +53,14 @@
   width: 150px;
 }
 
+.time-input-hour,
+.time-input-minute {
+  margin-right: 8px;
+  width: 60px;
+  // Antd InputNumber components default to height 32px, which matches $spacing-x-large.
+  // No explicit height needed unless it needs to be different.
+}
+
 .alert {
   margin-top: $spacing-smaller;
 }

@@ -6,11 +6,13 @@
 import { Button, Dropdown } from "antd";
 import classNames from "classnames/bind";
 import moment, { Moment } from "moment-timezone";
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useContext } from "react";
 
 import { DateRangeMenu } from "src/dateRangeMenu";
 import { CaretDown } from "src/icon/caretDown";
+import { Text, TextTypes } from "src/text";
 import { Timezone } from "src/timestamp";
+import { TimezoneContext } from "src/contexts";
 
 import styles from "./rangeSelector.module.scss";
 import { TimeWindow } from "./timeScaleTypes";
@@ -38,6 +40,9 @@ interface RangeSelectProps {
   onPresetOptionSelect: (arg0: RangeOption) => void;
   onCustomSelect: (dateRange: [moment.Moment, moment.Moment]) => void;
   selected: Selected;
+  recentCustomIntervals?: TimeWindow[];
+  // Timezone is already available via TimezoneContext, but passed as prop for clarity from parent
+  timezone: string;
 }
 
 type TimeLabelProps = {
@@ -81,8 +86,11 @@ const RangeSelect = ({
   onPresetOptionSelect,
   onCustomSelect,
   selected,
+  recentCustomIntervals,
+  timezone, // Received as prop, but TimezoneContext can also be used directly if preferred
 }: RangeSelectProps): React.ReactElement => {
   const [isVisible, setIsVisible] = useState<boolean>(false);
+  const actualTimezone = useContext(TimezoneContext); // Use context for formatting
   /**
    * customDropdownOptionWasJustSelected holds whether the user had just clicked the "Custom time interval" option in
    * the dropdown menu.
@@ -183,6 +191,88 @@ const RangeSelect = ({
                     onClick={onDropdownOptionClick}
                   />
                 ))}
+                {recentCustomIntervals && recentCustomIntervals.length > 0 && (
+                  <>
+                    <div className={cx("recent-intervals-separator")} />
+                    <Text
+                      textType={TextTypes.Caption}
+                      className={cx("recent-intervals-title")}
+                    >
+                      Recently Used
+                    </Text>
+                    {recentCustomIntervals.map(interval => {
+                      const formatRecentIntervalLabel = (
+                        start: moment.Moment,
+                        end: moment.Moment,
+                        tz: string,
+                      ): string => {
+                        const tzStart = start.clone().tz(tz);
+                        const tzEnd = end.clone().tz(tz);
+                        const dayFormat = "MMM D";
+                        const timeFormat = "HH:mm";
+                        if (tzStart.isSame(tzEnd, "day")) {
+                          return `${tzStart.format(
+                            dayFormat,
+                          )}, ${tzStart.format(timeFormat)} - ${tzEnd.format(
+                            timeFormat,
+                          )}`;
+                        }
+                        return `${tzStart.format(
+                          dayFormat + ", " + timeFormat,
+                        )} - ${tzEnd.format(dayFormat + ", " + timeFormat)}`;
+                      };
+
+                      const formatTimeRangeDuration = (
+                        start: moment.Moment,
+                        end: moment.Moment,
+                      ): string => {
+                        const duration = moment.duration(end.diff(start));
+                        const days = Math.floor(duration.asDays());
+                        const hours = duration.hours();
+                        const minutes = duration.minutes();
+                        let label = "";
+                        if (days > 0) label += `${days}d `;
+                        if (hours > 0) label += `${hours}h `;
+                        if (minutes > 0 && days === 0)
+                          label += `${minutes}m`; // Only show minutes if no days
+                        return label.trim() || "0m"; // Default to 0m if duration is very short
+                      };
+
+                      const recentOption: RangeOption = {
+                        value: `Recent: ${interval.start.toISOString()} - ${interval.end.toISOString()}`,
+                        label: formatRecentIntervalLabel(
+                          interval.start,
+                          interval.end,
+                          actualTimezone,
+                        ),
+                        timeLabel: formatTimeRangeDuration(
+                          interval.start,
+                          interval.end,
+                        ),
+                      };
+                      const isSelected =
+                        selected.key === "Custom" &&
+                        selected.timeWindow &&
+                        selected.timeWindow.start.isSame(interval.start) &&
+                        selected.timeWindow.end.isSame(interval.end);
+
+                      return (
+                        <OptionButton
+                          key={
+                            interval.start.toISOString() +
+                            interval.end.toISOString()
+                          }
+                          isSelected={isSelected}
+                          option={recentOption}
+                          onClick={() => {
+                            onCustomSelect([interval.start, interval.end]);
+                            closeDropdown();
+                          }}
+                        />
+                      );
+                    })}
+                  </>
+                )}
               </div>
             )}
           </div>

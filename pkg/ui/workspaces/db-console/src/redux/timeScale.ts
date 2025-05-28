@@ -35,6 +35,7 @@ export const SET_METRICS_MOVING_WINDOW =
 export const SET_METRICS_FIXED_WINDOW =
   "cockroachui/timewindow/SET_METRICS_FIXED_WINDOW";
 const TIME_SCALE_SESSION_STORAGE_KEY = "time_scale";
+const MAX_RECENT_CUSTOM_INTERVALS = 5;
 
 /**
  * TimeWindow represents an absolute window of time, defined with a start and
@@ -48,6 +49,7 @@ export interface TimeWindow {
 export class TimeScaleState {
   // Currently selected scale.
   scale: TimeScale;
+  recentCustomIntervals: TimeWindow[];
   /**
    * Timekeeping for the db console metrics page. Due to tech debt, this duplicates part of state currently in scale.
    * e.g.,
@@ -68,15 +70,31 @@ export class TimeScaleState {
 
   constructor() {
     let timeScale: TimeScale;
+    this.recentCustomIntervals = [];
     try {
-      const val = getValueFromSessionStorage(TIME_SCALE_SESSION_STORAGE_KEY);
-      timeScale = {
-        key: val.key,
-        windowSize: val.windowSize && moment.duration(val.windowSize),
-        windowValid: val.windowValid && moment.duration(val.windowValid),
-        sampleSize: val.sampleSize && moment.duration(val.sampleSize),
-        fixedWindowEnd: val.fixedWindowEnd && moment(val.fixedWindowEnd),
-      };
+      const storedValue = getValueFromSessionStorage(
+        TIME_SCALE_SESSION_STORAGE_KEY,
+      );
+      if (storedValue) {
+        if (storedValue.scale) {
+          const s = storedValue.scale;
+          timeScale = {
+            key: s.key,
+            windowSize: s.windowSize && moment.duration(s.windowSize),
+            windowValid: s.windowValid && moment.duration(s.windowValid),
+            sampleSize: s.sampleSize && moment.duration(s.sampleSize),
+            fixedWindowEnd: s.fixedWindowEnd && moment(s.fixedWindowEnd),
+          };
+        }
+        if (storedValue.recentCustomIntervals) {
+          this.recentCustomIntervals = storedValue.recentCustomIntervals.map(
+            (item: { start: string; end: string }) => ({
+              start: moment(item.start),
+              end: moment(item.end),
+            }),
+          );
+        }
+      }
     } catch (e) {
       // Don't log this in tests because it pollutes the output.
       if (process.env.NODE_ENV !== "test") {
@@ -113,7 +131,34 @@ export function timeScaleReducer(
       state = cloneDeep(state);
       state.metricsTime.isFixedWindow = scale.key === "Custom";
       state.scale = scale;
+
+      if (scale.key === "Custom" && scale.fixedWindowEnd && scale.windowSize) {
+        const newInterval: TimeWindow = {
+          start: moment(scale.fixedWindowEnd).utc().subtract(scale.windowSize),
+          end: moment(scale.fixedWindowEnd).utc(),
+        };
+
+        // Avoid duplicates: if an identical interval exists, remove it before adding the new one to the front.
+        state.recentCustomIntervals = state.recentCustomIntervals.filter(
+          item =>
+            !item.start.isSame(newInterval.start) ||
+            !item.end.isSame(newInterval.end),
+        );
+
+        state.recentCustomIntervals.unshift(newInterval);
+
+        if (
+          state.recentCustomIntervals.length > MAX_RECENT_CUSTOM_INTERVALS
+        ) {
+          state.recentCustomIntervals.pop();
+        }
+      }
+
       state.metricsTime.shouldUpdateMetricsWindowFromScale = true;
+      setLocalSetting(TIME_SCALE_SESSION_STORAGE_KEY, {
+        scale: state.scale,
+        recentCustomIntervals: state.recentCustomIntervals,
+      });
       return state;
     }
     case SET_METRICS_MOVING_WINDOW: {
@@ -234,8 +279,8 @@ export const adjustTimeScale = (
 };
 
 export function* timeScaleSaga() {
-  yield takeEvery(SET_SCALE, function* ({ payload }: PayloadAction<TimeScale>) {
-    yield put(setLocalSetting(TIME_SCALE_SESSION_STORAGE_KEY, payload));
+  yield takeEvery(SET_SCALE, function* (_action: PayloadAction<TimeScale>) {
+    // setLocalSetting is now handled by the reducer.
     yield all([
       put(invalidateStatements()),
       put(invalidateExecutionInsights()),

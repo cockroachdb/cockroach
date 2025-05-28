@@ -5,7 +5,7 @@
 
 import ArrowLeftOutlined from "@ant-design/icons/ArrowLeftOutlined";
 import { Time as TimeIcon, ErrorCircleFilled } from "@cockroachlabs/icons";
-import { Alert, DatePicker as AntDatePicker } from "antd";
+import { Alert, DatePicker as AntDatePicker, InputNumber } from "antd";
 import classNames from "classnames/bind";
 import moment, { Moment } from "moment-timezone";
 import momentGenerateConfig from "rc-picker/lib/generate/moment";
@@ -34,6 +34,9 @@ const TimePicker = React.forwardRef<any, TimePickerProps>((props, ref) => (
 ));
 
 TimePicker.displayName = "TimePicker";
+
+// Custom type for InputNumber onChange handler
+type InputNumberOnChange = (value: number | null) => void;
 
 type DateRangeMenuProps = {
   startInit?: Moment;
@@ -93,6 +96,30 @@ export function DateRangeMenu({
     m && setEndMoment(m);
   };
 
+  const onChangeStartHour: InputNumberOnChange = value => {
+    if (value === null || isNaN(value)) return;
+    const newMoment = startMoment.clone().hour(value);
+    setStartMoment(newMoment);
+  };
+
+  const onChangeStartMinute: InputNumberOnChange = value => {
+    if (value === null || isNaN(value)) return;
+    const newMoment = startMoment.clone().minute(value);
+    setStartMoment(newMoment);
+  };
+
+  const onChangeEndHour: InputNumberOnChange = value => {
+    if (value === null || isNaN(value)) return;
+    const newMoment = endMoment.clone().hour(value);
+    setEndMoment(newMoment);
+  };
+
+  const onChangeEndMinute: InputNumberOnChange = value => {
+    if (value === null || isNaN(value)) return;
+    const newMoment = endMoment.clone().minute(value);
+    setEndMoment(newMoment);
+  };
+
   const isDisabled = allowedInterval
     ? (date: Moment): boolean => {
         return (
@@ -138,14 +165,19 @@ export function DateRangeMenu({
         value={startMoment}
         className={cx("date-picker")}
       />
-      <TimePicker
-        allowClear={false}
-        format={timeFormat}
-        onChange={onChangeStart}
-        suffixIcon={<span />}
-        value={startMoment}
-        className={cx("time-picker")}
-        showNow={false}
+      <InputNumber<number>
+        min={0}
+        max={23}
+        value={startMoment.hour()}
+        onChange={onChangeStartHour}
+        className={cx("time-input-hour")}
+      />
+      <InputNumber<number>
+        min={0}
+        max={59}
+        value={startMoment.minute()}
+        onChange={onChangeStartMinute}
+        className={cx("time-input-minute")}
       />
       <div className={cx("divider")} />
       <Text className={cx("label")} textType={TextTypes.BodyStrong}>
@@ -160,14 +192,19 @@ export function DateRangeMenu({
         value={endMoment}
         className={cx("date-picker")}
       />
-      <TimePicker
-        allowClear={false}
-        format={timeFormat}
-        onChange={onChangeEnd}
-        suffixIcon={<span />}
-        value={endMoment}
-        className={cx("time-picker")}
-        showNow={false}
+      <InputNumber<number>
+        min={0}
+        max={23}
+        value={endMoment.hour()}
+        onChange={onChangeEndHour}
+        className={cx("time-input-hour")}
+      />
+      <InputNumber<number>
+        min={0}
+        max={59}
+        value={endMoment.minute()}
+        onChange={onChangeEndMinute}
+        className={cx("time-input-minute")}
       />
       {!isValid && (
         <Alert
