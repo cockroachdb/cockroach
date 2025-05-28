@@ -115,10 +115,15 @@ if [ -e /mnt/data1/.roachprod-initialized ]; then
 	exit 0
 fi
 
-# Uninstall some packages to prevent them running cronjobs and similar jobs in parallel
-systemctl stop unattended-upgrades
-sudo rm -rf /var/log/unattended-upgrades
-apt-get purge -y unattended-upgrades
+# Uninstall some packages to prevent them running cronjobs and similar jobs in
+# parallel Check if the service exists before trying to stop it, because it may
+# have been removed during a previous invocation of this script.
+if systemctl list-unit-files | grep -q '^unattended-upgrades.service'; then
+    echo "unattended-upgrades service exists. Proceeding with uninstallation."
+    systemctl stop unattended-upgrades
+    sudo rm -rf /var/log/unattended-upgrades
+    apt-get purge -y unattended-upgrades
+fi
 
 
 
