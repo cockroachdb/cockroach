@@ -391,7 +391,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/dgrijalva/jwt-go/v4/com_github_dgrijalva_jwt_go_v4-v4.0.0-preview1.zip": "9453f2b0484885c192b0c777195f911b599d1a424def0eb9387ef619d5bd7f4a",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/dgryski/go-bitstream/com_github_dgryski_go_bitstream-v0.0.0-20180413035011-3522498ce2c8.zip": "52765898078b5dca28ebced04b05cff943a3b3538a371c16568c97f05d669f23",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/dgryski/go-farm/com_github_dgryski_go_farm-v0.0.0-20200201041132-a6ae2369ad13.zip": "bdf602cab00a24c2898aabad0b40c7b1d76a29cf8dd3319ef87046a5f4b1726f",
-    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/dgryski/go-metro/com_github_dgryski_go_metro-v0.0.0-20180109044635-280f6062b5bc.zip": "3f97b3cdeaee7b4fbf4fa06b7c52e3ee6bca461a100077892e861c6c8fc03722",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/dgryski/go-metro/com_github_dgryski_go_metro-v0.0.0-20250106013310-edb8663e5e33.zip": "cbad2d78b4b3a5b14e14df7e61f96564351b664988aeb49582d12627ffb84550",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/dgryski/go-sip13/com_github_dgryski_go_sip13-v0.0.0-20200911182023-62edffca9245.zip": "55a0be7d50eab4c3daba9204a88554209c2065019d01ac78725155dd705e3fa9",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/digitalocean/godo/com_github_digitalocean_godo-v1.65.0.zip": "9a41cecefd19a707f3f6810beba85f7da129059f2fb5f45aa8c9630f8a435332",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/dimchansky/utfbom/com_github_dimchansky_utfbom-v1.1.1.zip": "0c1a11101602d5f57ac3e790c0b72e09ff87d8d535535f43fbee9e6a42327350",
