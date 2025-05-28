@@ -12,17 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
-	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
-	"github.com/cockroachdb/pebble/vfs"
 	"github.com/jackc/pgx/v5"
-	"github.com/stretchr/testify/require"
 )
 
 // This file contains "internal tests" that are run by BenchmarkTPCC in a
@@ -38,9 +32,8 @@ const databaseName = "tpcc"
 // to the client subprocess.
 const (
 	allowInternalTestEnvVar = "COCKROACH_INTERNAL_TEST"
-	pgurlEnvVar             = "COCKROACH_PGURL"
+	pgURLEnvVar             = "COCKROACH_PGURL"
 	nEnvVar                 = "COCKROACH_N"
-	storeDirEnvVar          = "COCKROACH_STORE_DIR"
 	srcEngineEnvVar         = "COCKROACH_SRC_ENGINE"
 	dstEngineEnvVar         = "COCKROACH_DST_ENGINE"
 )
@@ -49,42 +42,25 @@ var (
 	benchmarkN        = envutil.EnvOrDefaultInt(nEnvVar, -1)
 	allowInternalTest = envutil.EnvOrDefaultBool(allowInternalTestEnvVar, false)
 
-	cloneEngine      = makeCmd("TestInternalCloneEngine", TestInternalCloneEngine)
-	runClient        = makeCmd("TestInternalRunClient", TestInternalRunClient)
-	generateStoreDir = makeCmd("TestInternalGenerateStoreDir", TestInternalGenerateStoreDir)
+	runClient = makeCmd("TestInternalRunClient", TestInternalRunClient)
 )
-
-func TestInternalCloneEngine(t *testing.T) {
-	if !allowInternalTest {
-		skip.IgnoreLint(t)
-	}
-
-	src, ok := envutil.EnvString(srcEngineEnvVar, 0)
-	if !ok {
-		t.Fatal("missing src engine env var")
-	}
-	dst, ok := envutil.EnvString(dstEngineEnvVar, 0)
-	if !ok {
-		t.Fatal("missing dst engine env var")
-	}
-	if _, err := vfs.Clone(vfs.Default, vfs.Default, src, dst); err != nil {
-		t.Fatal(err)
-	}
-}
 
 func TestInternalRunClient(t *testing.T) {
 	if !allowInternalTest {
 		skip.IgnoreLint(t)
 	}
 
-	require.Positive(t, benchmarkN)
+	if benchmarkN <= 0 {
+		t.Fatal(nEnvVar + " env var must be positive")
+	}
 	ctx := context.Background()
 
-	pgURL, ok := envutil.EnvString(pgurlEnvVar, 0)
-	require.True(t, ok)
+	pgURL, ok := envutil.EnvString(pgURLEnvVar, 0)
+	if !ok {
+		t.Fatal(pgURLEnvVar + " must be set")
+	}
 	ql := makeQueryLoad(t, pgURL)
 	defer func() { _ = ql.Close(ctx) }()
-	require.True(t, ok)
 
 	conn, err := pgx.Connect(ctx, pgURL)
 	if err != nil {
@@ -107,53 +83,20 @@ func TestInternalRunClient(t *testing.T) {
 	}
 
 	for i := 0; i < benchmarkN; i++ {
-		require.NoError(t, ql.WorkerFns[0](ctx))
+		if err := ql.WorkerFns[0](ctx); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Notify the parent process that the benchmark has completed.
 	s.notify(t)
 }
 
-func TestInternalGenerateStoreDir(t *testing.T) {
-	if !allowInternalTest {
-		skip.IgnoreLint(t)
-	}
-
-	ctx := context.Background()
-	storeDir, ok := envutil.EnvString(storeDirEnvVar, 0)
-	if !ok {
-		t.Fatal("missing store dir env var")
-	}
-
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		StoreSpecs: []base.StoreSpec{{Path: storeDir}},
-	})
-	defer srv.Stopper().Stop(ctx)
-
-	tdb := sqlutils.MakeSQLRunner(db)
-	tdb.Exec(t, "CREATE DATABASE "+databaseName)
-	tdb.Exec(t, "USE "+databaseName)
-	tpcc, err := workload.Get("tpcc")
-	require.NoError(t, err)
-	gen := tpcc.New().(interface {
-		workload.Flagser
-		workload.Hookser
-		workload.Generator
-	})
-	require.NoError(t, gen.Flags().Parse([]string{
-		"--db=" + databaseName,
-	}))
-	require.NoError(t, gen.Hooks().Validate())
-	{
-		var l workloadsql.InsertsDataLoader
-		_, err := workloadsql.Setup(ctx, db, gen, l)
-		require.NoError(t, err)
-	}
-}
-
 func makeQueryLoad(t *testing.T, pgURL string) workload.QueryLoad {
 	tpcc, err := workload.Get("tpcc")
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	gen := tpcc.New()
 	wl := gen.(interface {
 		workload.Flagser
@@ -167,12 +110,18 @@ func makeQueryLoad(t *testing.T, pgURL string) workload.QueryLoad {
 		"--workers=1",
 		"--db=" + databaseName,
 	}, flag.CommandLine.Args()...)
-	require.NoError(t, wl.Flags().Parse(flags))
+	if err := wl.Flags().Parse(flags); err != nil {
+		t.Fatal(err)
+	}
 
-	require.NoError(t, wl.Hooks().Validate())
+	if err := wl.Hooks().Validate(); err != nil {
+		t.Fatal(err)
+	}
 
 	reg := histogram.NewRegistry(time.Minute, "tpcc")
 	ql, err := wl.Ops(ctx, []string{pgURL}, reg)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	return ql
 }
