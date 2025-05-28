@@ -34,6 +34,12 @@ const (
 	EuropeWest Region = "europe-west"
 )
 
+var AllRegions = []Region{
+	USEast,
+	USWest,
+	EuropeWest,
+}
+
 // createLatencyMap creates a LatencyMap from a slice of roundTripLatency.
 // N.B. Latencies are assumed to be symmetric. The latency from region A
 // to region B is the same as the latency from region B to region A, i.e.
