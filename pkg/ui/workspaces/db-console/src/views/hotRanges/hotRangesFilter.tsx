@@ -49,20 +49,19 @@ export const HotRangesFilter = (props: HotRangesFilterProps) => {
 
   // databaseOptions is a list of uniq database names that are available in
   // provided list of hot ranges.
-  const databaseOptions = useMemo(
-    () =>
-      Array.from(new Set(hotRanges.map(r => r.database_name)))
-        .filter(i => !isEmpty(i))
-        .sort()
-        .map(dbName => ({ label: dbName, value: dbName })),
-    [hotRanges],
-  );
+  const databaseOptions = useMemo(() => {
+    const allDatabases = hotRanges.flatMap(r => r.databases || []);
+    return Array.from(new Set(allDatabases))
+      .filter(i => !isEmpty(i))
+      .sort()
+      .map(dbName => ({ label: dbName, value: dbName }));
+  }, [hotRanges]);
 
   // localitiesOptions is a list of uniq localities that are available in
   // provided list of hot ranges.
   const localitiesOptions = useMemo(
     () =>
-      Array.from(nodeIdToLocalityMap.values())
+      Array.from(new Set(nodeIdToLocalityMap.values()))
         .sort()
         .map(locality => ({ label: locality, value: locality })),
     [nodeIdToLocalityMap],
@@ -148,19 +147,26 @@ export const HotRangesFilter = (props: HotRangesFilterProps) => {
       }
 
       if (!isEmpty(dbNames)) {
-        filtered = filtered.filter(r =>
-          dbNames.some(
-            (f: FilterCheckboxOptionItem) => f.value === r.database_name,
-          ),
-        );
+        filtered = filtered.filter(r => {
+          const databases = r.databases || [];
+          return dbNames.some((f: FilterCheckboxOptionItem) =>
+            databases.includes(f.value as string),
+          );
+        });
       }
 
       if (!isEmpty(tableName)) {
-        filtered = filtered.filter(r => r.table_name?.includes(tableName));
+        filtered = filtered.filter(r => {
+          const tables = r.tables || [];
+          return tables.some(t => t.includes(tableName));
+        });
       }
 
       if (!isEmpty(indexName)) {
-        filtered = filtered.filter(r => r.index_name?.includes(indexName));
+        filtered = filtered.filter(r => {
+          const indexes = r.indexes || [];
+          return indexes.some(idx => idx.includes(indexName));
+        });
       }
 
       if (!isEmpty(localities)) {
