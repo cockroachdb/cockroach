@@ -940,8 +940,8 @@ func (r *testRunner) runWorker(
 					// 50% change of enabling buffered writes.
 					//
 					// Disabled by default. Disabled for mixed-version tests
-					// since these cluster settings are not supported in all
-					// versions.
+					// because they use a separate mechanism for metamorphic
+					// cluster settings.
 					for _, tc := range []struct {
 						setting string
 						label   string
