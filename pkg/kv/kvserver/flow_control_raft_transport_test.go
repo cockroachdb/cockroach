@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -88,33 +87,6 @@ func parseReplicaDescriptor(
 	desc.StoreID = roachpb.StoreID(store)
 	desc.ReplicaID = roachpb.ReplicaID(repl)
 	return desc
-}
-
-type builderWithMu struct {
-	mu  syncutil.Mutex
-	buf strings.Builder
-}
-
-func (b *builderWithMu) printf(format string, a ...interface{}) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.buf.Len() > 0 {
-		fmt.Fprintf(&b.buf, "\n")
-	}
-	fmt.Fprintf(&b.buf, format, a...)
-}
-
-type mockRaftTransportDisconnectListener struct {
-	buf *builderWithMu
-}
-
-var _ kvserver.RaftTransportDisconnectListener = &mockRaftTransportDisconnectListener{}
-
-// OnRaftTransportDisconnected implements the kvserver.StoresForFlowControl interface.
-func (m *mockRaftTransportDisconnectListener) OnRaftTransportDisconnected(
-	ctx context.Context, storeIDs ...roachpb.StoreID,
-) {
-	m.buf.printf("disconnected-from: %s", roachpb.StoreIDSlice(storeIDs))
 }
 
 // TestFlowControlRaftTransportV2 tests the integration of MsgAppResp
