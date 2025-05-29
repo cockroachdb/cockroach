@@ -6,7 +6,6 @@
 package importer
 
 import (
-	"bufio"
 	gosql "database/sql"
 	"math/rand"
 	"os"
@@ -116,45 +115,15 @@ var everythingTestRows = func() []everythingTestRow {
 	}
 }()
 
-type testFiles struct {
-	simple, second, everything, wholeDB string
-}
-
-func getMysqldumpTestdata(t *testing.T) testFiles {
-	var files testFiles
-
-	files.simple = datapathutils.TestDataPath(t, "mysqldump", "simple.sql")
-	files.second = datapathutils.TestDataPath(t, "mysqldump", "second.sql")
-	files.everything = datapathutils.TestDataPath(t, "mysqldump", "everything.sql")
-	files.wholeDB = datapathutils.TestDataPath(t, "mysqldump", "db.sql")
-
-	if rewriteMysqlTestData {
-		genMysqlTestdata(t, func() {
-			mysqldump(t, files.simple, "simple")
-			mysqldump(t, files.second, "second")
-			mysqldump(t, files.everything, "everything")
-			mysqldump(t, files.wholeDB, "")
-		})
-
-		_ = os.Remove(files.wholeDB + ".bz2")
-		out, err := exec.Command("bzip2", "-k", files.wholeDB).CombinedOutput()
-		if err != nil {
-			t.Fatal(err, string(out))
-		}
-		gzipFile(t, files.wholeDB)
-	}
-	return files
-}
-
-type outfileDumpCfg struct {
+type outfileCfg struct {
 	name     string
 	filename string
 	opts     roachpb.MySQLOutfileOptions
 	null     string
 }
 
-func getMysqlOutfileTestdata(t *testing.T) ([]simpleTestRow, []outfileDumpCfg) {
-	configs := []outfileDumpCfg{
+func getMysqlOutfileTestdata(t *testing.T) ([]simpleTestRow, []outfileCfg) {
+	configs := []outfileCfg{
 		{
 			name: "escape-and-enclose",
 			opts: roachpb.MySQLOutfileOptions{
@@ -342,38 +311,6 @@ func genMysqlTestdata(t *testing.T, dump func()) {
 	dump()
 
 	if _, err := db.Exec(dropTables); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func mysqldump(t *testing.T, dest string, table string) {
-	if err := os.MkdirAll(filepath.Dir(dest), 0777); err != nil {
-		t.Fatal(err)
-	}
-	out, err := os.Create(dest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer out.Close()
-	writer := bufio.NewWriter(out)
-
-	args := []string{`-u`, `root`, `cockroachtestdata`}
-	if table != "" {
-		args = append(args, table)
-	}
-	cmd := exec.Command(`mysqldump`, args...)
-	cmd.Stdout = writer
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	if err := cmd.Wait(); err != nil {
-		t.Fatal(err)
-	}
-	if err := writer.Flush(); err != nil {
-		t.Fatal(err)
-	}
-	if err := out.Sync(); err != nil {
 		t.Fatal(err)
 	}
 }

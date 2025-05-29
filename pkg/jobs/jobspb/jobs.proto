@@ -683,10 +683,9 @@ message ImportDetails {
     sqlbase.TableDescriptor desc = 1;
     string name = 18;
     int64 seq_val = 19;
-    bool is_new = 20;
     bool was_empty = 22;
     repeated string target_cols = 21;
-    reserved 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17;
+    reserved 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 20;
   }
   message Schema {
     sqlbase.SchemaDescriptor desc = 1;
@@ -714,20 +713,13 @@ message ImportDetails {
   bool schemas_published = 24;
   bool tables_published = 13;
 
-  bool parse_bundle_schema = 14;
-
-  // DefaultIntSize is the integer type that a "naked" int will be resolved
-  // to during the import. This is set based on the session variable DefaultIntSize
-  // when the import is planned.
-  int32 default_int_size = 25;
-
   // If the database being imported into is a multi-region database, then this
   // field stores the databases' primary region.
   string database_primary_region = 27 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"
   ];
 
-  reserved 4, 7, 8, 9, 11, 22;
+  reserved 4, 7, 8, 9, 11, 14, 22, 25;
 
   // next val: 28
 }

@@ -445,6 +445,7 @@ func NewDatumRowConverter(
 				// been identified now (e.g. "IMPORT PGDUMP...") and we want to
 				// throw an error only at the "Row" stage when the targeted columns
 				// have been identified.
+				// TODO: can this check be removed now?
 				c.defaultCache[i] = &unsafeErrExpr{
 					err: errors.Wrapf(err, "default expression %s unsafe for import", defaultExprs[i].String()),
 				}
