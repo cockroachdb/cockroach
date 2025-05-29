@@ -641,6 +641,12 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 			if err != nil {
 				return err
 			}
+			// Also check for global BYPASSRLS privilege
+			hasGlobalBypassRLS, err := p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.BYPASSRLS, userName)
+			if err != nil {
+				return err
+			}
+			finalBypassRLS := bypassRLS || tree.DBool(hasGlobalBypassRLS)
 
 			isSuper, err := userIsSuper(ctx, p, userName)
 			if err != nil {
@@ -656,7 +662,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 				tree.MakeDBool(isRoot || createDB),   // rolcreatedb
 				tree.MakeDBool(roleCanLogin),         // rolcanlogin.
 				tree.DBoolFalse,                      // rolreplication
-				tree.MakeDBool(bypassRLS),            // rolbypassrls
+				tree.MakeDBool(finalBypassRLS),       // rolbypassrls
 				negOneVal,                            // rolconnlimit
 				passwdStarString,                     // rolpassword
 				rolValidUntil,                        // rolvaliduntil
@@ -2994,6 +3000,12 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 				if err != nil {
 					return err
 				}
+				// Also check for global BYPASSRLS privilege
+				hasGlobalBypassRLS, err := p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.BYPASSRLS, userName)
+				if err != nil {
+					return err
+				}
+				finalBypassRLS := bypassRLS || tree.DBool(hasGlobalBypassRLS)
 				isSuper, err := userIsSuper(ctx, p, userName)
 				if err != nil {
 					return err
@@ -3012,7 +3024,7 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 					negOneVal,                             // rolconnlimit
 					passwdStarString,                      // rolpassword
 					rolValidUntil,                         // rolvaliduntil
-					tree.MakeDBool(bypassRLS),             // rolbypassrls
+					tree.MakeDBool(finalBypassRLS),       // rolbypassrls
 					settings,                              // rolconfig
 				)
 			})
