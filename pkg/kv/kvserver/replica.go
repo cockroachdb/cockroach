@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -455,11 +454,9 @@ type Replica struct {
 		// decoder is used to decode committed raft entries.
 		decoder replicaDecoder
 
-		flowControlLevel kvflowcontrol.V2EnabledWhenLeaderLevel
-
 		// Scratch for populating rac2.RaftEvent.MsgApps for flowControlV2.
 		msgAppScratchForFlowControl map[roachpb.ReplicaID][]raftpb.Message
-		// Scratch for populating rac2.RaftEvent.ReplicaSateInfo for flowContrlV2.
+		// Scratch for populating rac2.RaftEvent.ReplicaSateInfo for flowControlV2.
 		replicaStateScratchForFlowControl map[roachpb.ReplicaID]rac2.ReplicaStateInfo
 
 		// rangefeedCTLagObserver is used to observe the closed timestamp lag of

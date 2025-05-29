@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -258,17 +257,8 @@ func newUninitializedReplicaWithoutRaftGroup(
 	)
 	r.LeaderlessWatcher = newLeaderlessWatcher()
 	r.shMu.currentRACv2Mode = r.replicationAdmissionControlModeToUse(context.TODO())
-	r.raftMu.flowControlLevel = kvflowcontrol.GetV2EnabledWhenLeaderLevel(
-		r.raftCtx, store.ClusterSettings(), store.TestingKnobs().FlowControlTestingKnobs)
-	if r.raftMu.flowControlLevel > kvflowcontrol.V2NotEnabledWhenLeader {
-		r.mu.replicaFlowControlIntegration = noopReplicaFlowControlIntegration{}
-	} else {
-		r.mu.replicaFlowControlIntegration = newReplicaFlowControlIntegration(
-			(*replicaFlowControl)(r),
-			makeStoreFlowControlHandleFactory(r.store),
-			r.store.TestingKnobs().FlowControlTestingKnobs,
-		)
-	}
+	r.mu.replicaFlowControlIntegration = noopReplicaFlowControlIntegration{}
+
 	r.raftMu.msgAppScratchForFlowControl = map[roachpb.ReplicaID][]raftpb.Message{}
 	r.raftMu.replicaStateScratchForFlowControl = map[roachpb.ReplicaID]rac2.ReplicaStateInfo{}
 	r.flowControlV2 = replica_rac2.NewProcessor(replica_rac2.ProcessorOptions{
@@ -285,7 +275,6 @@ func newUninitializedReplicaWithoutRaftGroup(
 		MsgAppSender:           r,
 		EvalWaitMetrics:        r.store.cfg.KVFlowEvalWaitMetrics,
 		RangeControllerFactory: r.store.kvflowRangeControllerFactory,
-		EnabledWhenLeaderLevel: r.raftMu.flowControlLevel,
 		Knobs:                  r.store.TestingKnobs().FlowControlTestingKnobs,
 	})
 	r.RefreshPolicy(nil)
