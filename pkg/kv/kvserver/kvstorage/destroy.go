@@ -67,7 +67,7 @@ func ClearRangeData(
 ) error {
 	keySpans := rditer.Select(rangeID, rditer.SelectOpts{
 		Ranged: rditer.SelectRangedOptions{
-			Span:       opts.ClearReplicatedBySpan,
+			RSpan:      opts.ClearReplicatedBySpan,
 			SystemKeys: true,
 			LockTable:  true,
 			UserKeys:   true,

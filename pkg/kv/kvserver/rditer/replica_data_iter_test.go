@@ -307,7 +307,7 @@ func TestReplicaDataIterator(t *testing.T) {
 							// Print contents of the Replica according to the iterator.
 							opts := SelectOpts{
 								Ranged: SelectRangedOptions{
-									Span:       tc.desc.RSpan(),
+									RSpan:      tc.desc.RSpan(),
 									SystemKeys: testCase.systemKeys,
 									UserKeys:   testCase.userKeys,
 									LockTable:  testCase.lockTable,
@@ -486,7 +486,7 @@ func TestReplicaDataIteratorGlobalRangeKey(t *testing.T) {
 
 				selOpts := SelectOpts{
 					Ranged: SelectRangedOptions{
-						Span:       desc.RSpan(),
+						RSpan:      desc.RSpan(),
 						SystemKeys: true,
 						UserKeys:   true,
 						LockTable:  true,
@@ -609,7 +609,7 @@ func benchReplicaEngineDataIterator(b *testing.B, numRanges, numKeysPerRange, va
 			err := IterateReplicaKeySpans(context.Background(), &desc, snapshot,
 				SelectOpts{
 					Ranged: SelectRangedOptions{
-						Span:       desc.RSpan(),
+						RSpan:      desc.RSpan(),
 						SystemKeys: true,
 						UserKeys:   true,
 						LockTable:  true,

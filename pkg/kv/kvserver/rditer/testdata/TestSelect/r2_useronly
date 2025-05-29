@@ -1,14 +1,14 @@
 echo
 ----
-Select({Ranged:{Span:{a-c} SystemKeys:false LockTable:false UserKeys:true} ReplicatedByRangeID:false UnreplicatedByRangeID:false}):
+Select({Ranged:{RSpan:{a-c} SystemKeys:false LockTable:false UserKeys:true} ReplicatedByRangeID:false UnreplicatedByRangeID:false}):
   {a-c}
-Select({Ranged:{Span:{a-c} SystemKeys:false LockTable:false UserKeys:true} ReplicatedByRangeID:false UnreplicatedByRangeID:true}):
+Select({Ranged:{RSpan:{a-c} SystemKeys:false LockTable:false UserKeys:true} ReplicatedByRangeID:false UnreplicatedByRangeID:true}):
   /Local/RangeID/123/{u""-v""}
   {a-c}
-Select({Ranged:{Span:{a-c} SystemKeys:false LockTable:false UserKeys:true} ReplicatedByRangeID:true UnreplicatedByRangeID:false}):
+Select({Ranged:{RSpan:{a-c} SystemKeys:false LockTable:false UserKeys:true} ReplicatedByRangeID:true UnreplicatedByRangeID:false}):
   /Local/RangeID/123/{r""-s""}
   {a-c}
-Select({Ranged:{Span:{a-c} SystemKeys:false LockTable:false UserKeys:true} ReplicatedByRangeID:true UnreplicatedByRangeID:true}):
+Select({Ranged:{RSpan:{a-c} SystemKeys:false LockTable:false UserKeys:true} ReplicatedByRangeID:true UnreplicatedByRangeID:true}):
   /Local/RangeID/123/{r""-s""}
   /Local/RangeID/123/{u""-v""}
   {a-c}

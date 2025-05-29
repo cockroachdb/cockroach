@@ -1,23 +1,23 @@
 echo
 ----
-Select({Ranged:{Span:{/Min-c} SystemKeys:true LockTable:true UserKeys:true} ReplicatedByRangeID:false UnreplicatedByRangeID:false}):
+Select({Ranged:{RSpan:{/Min-c} SystemKeys:true LockTable:true UserKeys:true} ReplicatedByRangeID:false UnreplicatedByRangeID:false}):
   /Local/Range{/Min-"c"}
   /Local/Lock/Local/Range{/Min-"c"}
   /Local/Lock{/Meta1/""-"c"}
   {/Meta1-c}
-Select({Ranged:{Span:{/Min-c} SystemKeys:true LockTable:true UserKeys:true} ReplicatedByRangeID:false UnreplicatedByRangeID:true}):
+Select({Ranged:{RSpan:{/Min-c} SystemKeys:true LockTable:true UserKeys:true} ReplicatedByRangeID:false UnreplicatedByRangeID:true}):
   /Local/RangeID/123/{u""-v""}
   /Local/Range{/Min-"c"}
   /Local/Lock/Local/Range{/Min-"c"}
   /Local/Lock{/Meta1/""-"c"}
   {/Meta1-c}
-Select({Ranged:{Span:{/Min-c} SystemKeys:true LockTable:true UserKeys:true} ReplicatedByRangeID:true UnreplicatedByRangeID:false}):
+Select({Ranged:{RSpan:{/Min-c} SystemKeys:true LockTable:true UserKeys:true} ReplicatedByRangeID:true UnreplicatedByRangeID:false}):
   /Local/RangeID/123/{r""-s""}
   /Local/Range{/Min-"c"}
   /Local/Lock/Local/Range{/Min-"c"}
   /Local/Lock{/Meta1/""-"c"}
   {/Meta1-c}
-Select({Ranged:{Span:{/Min-c} SystemKeys:true LockTable:true UserKeys:true} ReplicatedByRangeID:true UnreplicatedByRangeID:true}):
+Select({Ranged:{RSpan:{/Min-c} SystemKeys:true LockTable:true UserKeys:true} ReplicatedByRangeID:true UnreplicatedByRangeID:true}):
   /Local/RangeID/123/{r""-s""}
   /Local/RangeID/123/{u""-v""}
   /Local/Range{/Min-"c"}

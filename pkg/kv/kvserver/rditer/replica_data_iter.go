@@ -66,7 +66,7 @@ type ReplicaMVCCDataIterator struct {
 func MakeAllKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return Select(d.RangeID, SelectOpts{
 		Ranged: SelectRangedOptions{
-			Span:       d.RSpan(),
+			RSpan:      d.RSpan(),
 			SystemKeys: true,
 			UserKeys:   true,
 			LockTable:  true,
@@ -81,7 +81,7 @@ func MakeAllKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 func MakeAllKeySpanSet(d *roachpb.RangeDescriptor) *spanset.SpanSet {
 	spans := Select(d.RangeID, SelectOpts{
 		Ranged: SelectRangedOptions{
-			Span:       d.RSpan(),
+			RSpan:      d.RSpan(),
 			SystemKeys: true,
 			// NB: We don't need to add lock table spans. The caller is expected to
 			// add these.
@@ -114,7 +114,7 @@ func MakeAllKeySpanSet(d *roachpb.RangeDescriptor) *spanset.SpanSet {
 func MakeReplicatedKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return Select(d.RangeID, SelectOpts{
 		Ranged: SelectRangedOptions{
-			Span:       d.RSpan(),
+			RSpan:      d.RSpan(),
 			SystemKeys: true,
 			LockTable:  true,
 			UserKeys:   true,
@@ -129,7 +129,7 @@ func MakeReplicatedKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 func MakeReplicatedKeySpanSet(d *roachpb.RangeDescriptor) *spanset.SpanSet {
 	spans := Select(d.RangeID, SelectOpts{
 		Ranged: SelectRangedOptions{
-			Span:       d.RSpan(),
+			RSpan:      d.RSpan(),
 			SystemKeys: true,
 			// NB: We don't need to add lock table spans. The caller is expected to
 			// add these.
@@ -156,7 +156,7 @@ func MakeReplicatedKeySpanSet(d *roachpb.RangeDescriptor) *spanset.SpanSet {
 func MakeReplicatedKeySpansUserOnly(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return Select(d.RangeID, SelectOpts{
 		Ranged: SelectRangedOptions{
-			Span:     d.RSpan(),
+			RSpan:    d.RSpan(),
 			UserKeys: true,
 		},
 	})
@@ -167,7 +167,7 @@ func MakeReplicatedKeySpansUserOnly(d *roachpb.RangeDescriptor) []roachpb.Span {
 func MakeReplicatedKeySpansExcludingUser(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return Select(d.RangeID, SelectOpts{
 		Ranged: SelectRangedOptions{
-			Span:       d.RSpan(),
+			RSpan:      d.RSpan(),
 			SystemKeys: true,
 			LockTable:  true,
 		},
@@ -427,7 +427,7 @@ func IterateReplicaKeySpans(
 		panic("reader must provide consistent iterators")
 	}
 
-	opts.Ranged.Span = desc.RSpan()
+	opts.Ranged.RSpan = desc.RSpan()
 	spans := Select(desc.RangeID, opts)
 	for _, span := range spans {
 		err := func() error {

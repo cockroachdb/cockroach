@@ -162,7 +162,7 @@ func clearSubsumedReplicaDiskData(
 	getKeySpans := func(d *roachpb.RangeDescriptor) []roachpb.Span {
 		return rditer.Select(d.RangeID, rditer.SelectOpts{
 			Ranged: rditer.SelectRangedOptions{
-				Span:       d.RSpan(),
+				RSpan:      d.RSpan(),
 				SystemKeys: true,
 				UserKeys:   true,
 				LockTable:  true,
