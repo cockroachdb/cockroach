@@ -689,9 +689,9 @@ with &1 (update_last_trade)
                 ├── key: (141)
                 ├── fd: (141)-->(142-144)
                 ├── project
-                │    ├── columns: "?column?":87
+                │    ├── columns: "?column?":64
                 │    ├── volatile, mutations
-                │    ├── fd: ()-->(87)
+                │    ├── fd: ()-->(64)
                 │    ├── insert trade_history
                 │    │    ├── columns: trade_history.th_t_id:52!null trade_history.th_st_id:54!null
                 │    │    ├── insert-mapping:
@@ -720,30 +720,30 @@ with &1 (update_last_trade)
                 │    │    └── f-k-checks
                 │    │         ├── f-k-checks-item: trade_history(th_t_id) -> trade(t_id)
                 │    │         │    └── anti-join (lookup trade)
-                │    │         │         ├── columns: th_t_id:64!null
-                │    │         │         ├── key columns: [64] = [65]
+                │    │         │         ├── columns: th_t_id:65!null
+                │    │         │         ├── key columns: [65] = [66]
                 │    │         │         ├── lookup columns are key
-                │    │         │         ├── key: (64)
+                │    │         │         ├── key: (65)
                 │    │         │         ├── with-scan &4
-                │    │         │         │    ├── columns: th_t_id:64!null
+                │    │         │         │    ├── columns: th_t_id:65!null
                 │    │         │         │    ├── mapping:
-                │    │         │         │    │    └──  tr_t_id:57 => th_t_id:64
-                │    │         │         │    └── key: (64)
+                │    │         │         │    │    └──  tr_t_id:57 => th_t_id:65
+                │    │         │         │    └── key: (65)
                 │    │         │         └── filters (true)
                 │    │         └── f-k-checks-item: trade_history(th_st_id) -> status_type(st_id)
                 │    │              └── anti-join (lookup status_type)
-                │    │                   ├── columns: th_st_id:82!null
-                │    │                   ├── key columns: [82] = [83]
+                │    │                   ├── columns: th_st_id:83!null
+                │    │                   ├── key columns: [83] = [84]
                 │    │                   ├── lookup columns are key
-                │    │                   ├── fd: ()-->(82)
+                │    │                   ├── fd: ()-->(83)
                 │    │                   ├── with-scan &4
-                │    │                   │    ├── columns: th_st_id:82!null
+                │    │                   │    ├── columns: th_st_id:83!null
                 │    │                   │    ├── mapping:
-                │    │                   │    │    └──  th_st_id_cast:63 => th_st_id:82
-                │    │                   │    └── fd: ()-->(82)
+                │    │                   │    │    └──  th_st_id_cast:63 => th_st_id:83
+                │    │                   │    └── fd: ()-->(83)
                 │    │                   └── filters (true)
                 │    └── projections
-                │         └── NULL [as="?column?":87]
+                │         └── NULL [as="?column?":64]
                 └── with &7 (update_trade_submitted)
                      ├── columns: tr_t_id:141!null tr_bid_price:142!null tr_tt_id:143!null tr_qty:144!null
                      ├── volatile, mutations
@@ -2956,11 +2956,11 @@ with &2 (insert_trade)
  ├── key: ()
  ├── fd: ()-->(121)
  ├── project
- │    ├── columns: "?column?":87!null
+ │    ├── columns: "?column?":42!null
  │    ├── cardinality: [1 - 1]
  │    ├── volatile, mutations
  │    ├── key: ()
- │    ├── fd: ()-->(87)
+ │    ├── fd: ()-->(42)
  │    ├── insert trade
  │    │    ├── columns: t_id:1!null
  │    │    ├── insert-mapping:
@@ -2981,85 +2981,85 @@ with &2 (insert_trade)
  │    │    │    └── column15:32 => t_lifo:15
  │    │    ├── return-mapping:
  │    │    │    └── column1:18 => t_id:1
- │    │    ├── check columns: check1:42 check2:43 check3:44 check4:45 check5:46
+ │    │    ├── check columns: check1:43 check2:44 check3:45 check4:46 check5:47
  │    │    ├── input binding: &1
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── volatile, mutations
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1)
  │    │    ├── values
- │    │    │    ├── columns: column1:18!null column2:19!null column5:22!null column9:26!null column11:28 column15:32!null t_st_id_cast:33!null t_tt_id_cast:34!null t_s_symb_cast:35!null t_qty_cast:36!null t_bid_price_cast:37!null t_exec_name_cast:38!null t_chrg_cast:39!null t_comm_cast:40!null t_tax_cast:41!null check1:42!null check2:43!null check3:44!null check4:45!null check5:46!null
+ │    │    │    ├── columns: column1:18!null column2:19!null column5:22!null column9:26!null column11:28 column15:32!null t_st_id_cast:33!null t_tt_id_cast:34!null t_s_symb_cast:35!null t_qty_cast:36!null t_bid_price_cast:37!null t_exec_name_cast:38!null t_chrg_cast:39!null t_comm_cast:40!null t_tax_cast:41!null check1:43!null check2:44!null check3:45!null check4:46!null check5:47!null
  │    │    │    ├── cardinality: [1 - 1]
  │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(18,19,22,26,28,32-46)
+ │    │    │    ├── fd: ()-->(18,19,22,26,28,32-41,43-47)
  │    │    │    └── (0, '2020-06-17 22:27:42.148484', true, 0, NULL, true, 'SBMT', 'TMB', 'SYMB', 10, 100.00, 'Name', 1.00, 0.00, 0.00, true, true, true, true, true)
  │    │    └── f-k-checks
  │    │         ├── f-k-checks-item: trade(t_st_id) -> status_type(st_id)
  │    │         │    └── anti-join (lookup status_type)
- │    │         │         ├── columns: t_st_id:47!null
- │    │         │         ├── key columns: [47] = [48]
+ │    │         │         ├── columns: t_st_id:48!null
+ │    │         │         ├── key columns: [48] = [49]
  │    │         │         ├── lookup columns are key
  │    │         │         ├── cardinality: [0 - 1]
  │    │         │         ├── key: ()
- │    │         │         ├── fd: ()-->(47)
+ │    │         │         ├── fd: ()-->(48)
  │    │         │         ├── with-scan &1
- │    │         │         │    ├── columns: t_st_id:47!null
+ │    │         │         │    ├── columns: t_st_id:48!null
  │    │         │         │    ├── mapping:
- │    │         │         │    │    └──  t_st_id_cast:33 => t_st_id:47
+ │    │         │         │    │    └──  t_st_id_cast:33 => t_st_id:48
  │    │         │         │    ├── cardinality: [1 - 1]
  │    │         │         │    ├── key: ()
- │    │         │         │    └── fd: ()-->(47)
+ │    │         │         │    └── fd: ()-->(48)
  │    │         │         └── filters (true)
  │    │         ├── f-k-checks-item: trade(t_tt_id) -> trade_type(tt_id)
  │    │         │    └── anti-join (lookup trade_type)
- │    │         │         ├── columns: t_tt_id:52!null
- │    │         │         ├── key columns: [52] = [53]
+ │    │         │         ├── columns: t_tt_id:53!null
+ │    │         │         ├── key columns: [53] = [54]
  │    │         │         ├── lookup columns are key
  │    │         │         ├── cardinality: [0 - 1]
  │    │         │         ├── key: ()
- │    │         │         ├── fd: ()-->(52)
+ │    │         │         ├── fd: ()-->(53)
  │    │         │         ├── with-scan &1
- │    │         │         │    ├── columns: t_tt_id:52!null
+ │    │         │         │    ├── columns: t_tt_id:53!null
  │    │         │         │    ├── mapping:
- │    │         │         │    │    └──  t_tt_id_cast:34 => t_tt_id:52
+ │    │         │         │    │    └──  t_tt_id_cast:34 => t_tt_id:53
  │    │         │         │    ├── cardinality: [1 - 1]
  │    │         │         │    ├── key: ()
- │    │         │         │    └── fd: ()-->(52)
+ │    │         │         │    └── fd: ()-->(53)
  │    │         │         └── filters (true)
  │    │         ├── f-k-checks-item: trade(t_s_symb) -> security(s_symb)
  │    │         │    └── anti-join (lookup security)
- │    │         │         ├── columns: t_s_symb:59!null
- │    │         │         ├── key columns: [59] = [60]
+ │    │         │         ├── columns: t_s_symb:60!null
+ │    │         │         ├── key columns: [60] = [61]
  │    │         │         ├── lookup columns are key
  │    │         │         ├── cardinality: [0 - 1]
  │    │         │         ├── key: ()
- │    │         │         ├── fd: ()-->(59)
+ │    │         │         ├── fd: ()-->(60)
  │    │         │         ├── with-scan &1
- │    │         │         │    ├── columns: t_s_symb:59!null
+ │    │         │         │    ├── columns: t_s_symb:60!null
  │    │         │         │    ├── mapping:
- │    │         │         │    │    └──  t_s_symb_cast:35 => t_s_symb:59
+ │    │         │         │    │    └──  t_s_symb_cast:35 => t_s_symb:60
  │    │         │         │    ├── cardinality: [1 - 1]
  │    │         │         │    ├── key: ()
- │    │         │         │    └── fd: ()-->(59)
+ │    │         │         │    └── fd: ()-->(60)
  │    │         │         └── filters (true)
  │    │         └── f-k-checks-item: trade(t_ca_id) -> customer_account(ca_id)
  │    │              └── anti-join (lookup customer_account)
- │    │                   ├── columns: t_ca_id:78!null
- │    │                   ├── key columns: [78] = [79]
+ │    │                   ├── columns: t_ca_id:79!null
+ │    │                   ├── key columns: [79] = [80]
  │    │                   ├── lookup columns are key
  │    │                   ├── cardinality: [0 - 1]
  │    │                   ├── key: ()
- │    │                   ├── fd: ()-->(78)
+ │    │                   ├── fd: ()-->(79)
  │    │                   ├── with-scan &1
- │    │                   │    ├── columns: t_ca_id:78!null
+ │    │                   │    ├── columns: t_ca_id:79!null
  │    │                   │    ├── mapping:
- │    │                   │    │    └──  column9:26 => t_ca_id:78
+ │    │                   │    │    └──  column9:26 => t_ca_id:79
  │    │                   │    ├── cardinality: [1 - 1]
  │    │                   │    ├── key: ()
- │    │                   │    └── fd: ()-->(78)
+ │    │                   │    └── fd: ()-->(79)
  │    │                   └── filters (true)
  │    └── projections
- │         └── 1 [as="?column?":87]
+ │         └── 1 [as="?column?":42]
  └── with &4 (insert_trade_history)
       ├── columns: "?column?":121!null
       ├── cardinality: [1 - 1]
@@ -3067,11 +3067,11 @@ with &2 (insert_trade)
       ├── key: ()
       ├── fd: ()-->(121)
       ├── project
-      │    ├── columns: "?column?":120!null
+      │    ├── columns: "?column?":97!null
       │    ├── cardinality: [1 - 1]
       │    ├── volatile, mutations
       │    ├── key: ()
-      │    ├── fd: ()-->(120)
+      │    ├── fd: ()-->(97)
       │    ├── insert trade_history
       │    │    ├── columns: trade_history.th_t_id:88!null trade_history.th_st_id:90!null
       │    │    ├── insert-mapping:
@@ -3095,38 +3095,38 @@ with &2 (insert_trade)
       │    │    └── f-k-checks
       │    │         ├── f-k-checks-item: trade_history(th_t_id) -> trade(t_id)
       │    │         │    └── anti-join (lookup trade)
-      │    │         │         ├── columns: th_t_id:97!null
-      │    │         │         ├── key columns: [97] = [98]
+      │    │         │         ├── columns: th_t_id:98!null
+      │    │         │         ├── key columns: [98] = [99]
       │    │         │         ├── lookup columns are key
       │    │         │         ├── cardinality: [0 - 1]
       │    │         │         ├── key: ()
-      │    │         │         ├── fd: ()-->(97)
+      │    │         │         ├── fd: ()-->(98)
       │    │         │         ├── with-scan &3
-      │    │         │         │    ├── columns: th_t_id:97!null
+      │    │         │         │    ├── columns: th_t_id:98!null
       │    │         │         │    ├── mapping:
-      │    │         │         │    │    └──  column1:93 => th_t_id:97
+      │    │         │         │    │    └──  column1:93 => th_t_id:98
       │    │         │         │    ├── cardinality: [1 - 1]
       │    │         │         │    ├── key: ()
-      │    │         │         │    └── fd: ()-->(97)
+      │    │         │         │    └── fd: ()-->(98)
       │    │         │         └── filters (true)
       │    │         └── f-k-checks-item: trade_history(th_st_id) -> status_type(st_id)
       │    │              └── anti-join (lookup status_type)
-      │    │                   ├── columns: th_st_id:115!null
-      │    │                   ├── key columns: [115] = [116]
+      │    │                   ├── columns: th_st_id:116!null
+      │    │                   ├── key columns: [116] = [117]
       │    │                   ├── lookup columns are key
       │    │                   ├── cardinality: [0 - 1]
       │    │                   ├── key: ()
-      │    │                   ├── fd: ()-->(115)
+      │    │                   ├── fd: ()-->(116)
       │    │                   ├── with-scan &3
-      │    │                   │    ├── columns: th_st_id:115!null
+      │    │                   │    ├── columns: th_st_id:116!null
       │    │                   │    ├── mapping:
-      │    │                   │    │    └──  th_st_id_cast:96 => th_st_id:115
+      │    │                   │    │    └──  th_st_id_cast:96 => th_st_id:116
       │    │                   │    ├── cardinality: [1 - 1]
       │    │                   │    ├── key: ()
-      │    │                   │    └── fd: ()-->(115)
+      │    │                   │    └── fd: ()-->(116)
       │    │                   └── filters (true)
       │    └── projections
-      │         └── 1 [as="?column?":120]
+      │         └── 1 [as="?column?":97]
       └── values
            ├── columns: "?column?":121!null
            ├── cardinality: [1 - 1]
@@ -3211,11 +3211,11 @@ with &2 (insert_trade)
  ├── key: ()
  ├── fd: ()-->(195)
  ├── project
- │    ├── columns: "?column?":87!null
+ │    ├── columns: "?column?":42!null
  │    ├── cardinality: [1 - 1]
  │    ├── volatile, mutations
  │    ├── key: ()
- │    ├── fd: ()-->(87)
+ │    ├── fd: ()-->(42)
  │    ├── insert trade
  │    │    ├── columns: t_id:1!null
  │    │    ├── insert-mapping:
@@ -3236,85 +3236,85 @@ with &2 (insert_trade)
  │    │    │    └── column15:32 => t_lifo:15
  │    │    ├── return-mapping:
  │    │    │    └── column1:18 => t_id:1
- │    │    ├── check columns: check1:42 check2:43 check3:44 check4:45 check5:46
+ │    │    ├── check columns: check1:43 check2:44 check3:45 check4:46 check5:47
  │    │    ├── input binding: &1
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── volatile, mutations
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1)
  │    │    ├── values
- │    │    │    ├── columns: column1:18!null column2:19!null column5:22!null column9:26!null column11:28 column15:32!null t_st_id_cast:33!null t_tt_id_cast:34!null t_s_symb_cast:35!null t_qty_cast:36!null t_bid_price_cast:37!null t_exec_name_cast:38!null t_chrg_cast:39!null t_comm_cast:40!null t_tax_cast:41!null check1:42!null check2:43!null check3:44!null check4:45!null check5:46!null
+ │    │    │    ├── columns: column1:18!null column2:19!null column5:22!null column9:26!null column11:28 column15:32!null t_st_id_cast:33!null t_tt_id_cast:34!null t_s_symb_cast:35!null t_qty_cast:36!null t_bid_price_cast:37!null t_exec_name_cast:38!null t_chrg_cast:39!null t_comm_cast:40!null t_tax_cast:41!null check1:43!null check2:44!null check3:45!null check4:46!null check5:47!null
  │    │    │    ├── cardinality: [1 - 1]
  │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(18,19,22,26,28,32-46)
+ │    │    │    ├── fd: ()-->(18,19,22,26,28,32-41,43-47)
  │    │    │    └── (0, '2020-06-17 22:27:42.148484', true, 0, NULL, true, 'SBMT', 'TMB', 'SYMB', 10, 100.00, 'Name', 1.00, 0.00, 0.00, true, true, true, true, true)
  │    │    └── f-k-checks
  │    │         ├── f-k-checks-item: trade(t_st_id) -> status_type(st_id)
  │    │         │    └── anti-join (lookup status_type)
- │    │         │         ├── columns: t_st_id:47!null
- │    │         │         ├── key columns: [47] = [48]
+ │    │         │         ├── columns: t_st_id:48!null
+ │    │         │         ├── key columns: [48] = [49]
  │    │         │         ├── lookup columns are key
  │    │         │         ├── cardinality: [0 - 1]
  │    │         │         ├── key: ()
- │    │         │         ├── fd: ()-->(47)
+ │    │         │         ├── fd: ()-->(48)
  │    │         │         ├── with-scan &1
- │    │         │         │    ├── columns: t_st_id:47!null
+ │    │         │         │    ├── columns: t_st_id:48!null
  │    │         │         │    ├── mapping:
- │    │         │         │    │    └──  t_st_id_cast:33 => t_st_id:47
+ │    │         │         │    │    └──  t_st_id_cast:33 => t_st_id:48
  │    │         │         │    ├── cardinality: [1 - 1]
  │    │         │         │    ├── key: ()
- │    │         │         │    └── fd: ()-->(47)
+ │    │         │         │    └── fd: ()-->(48)
  │    │         │         └── filters (true)
  │    │         ├── f-k-checks-item: trade(t_tt_id) -> trade_type(tt_id)
  │    │         │    └── anti-join (lookup trade_type)
- │    │         │         ├── columns: t_tt_id:52!null
- │    │         │         ├── key columns: [52] = [53]
+ │    │         │         ├── columns: t_tt_id:53!null
+ │    │         │         ├── key columns: [53] = [54]
  │    │         │         ├── lookup columns are key
  │    │         │         ├── cardinality: [0 - 1]
  │    │         │         ├── key: ()
- │    │         │         ├── fd: ()-->(52)
+ │    │         │         ├── fd: ()-->(53)
  │    │         │         ├── with-scan &1
- │    │         │         │    ├── columns: t_tt_id:52!null
+ │    │         │         │    ├── columns: t_tt_id:53!null
  │    │         │         │    ├── mapping:
- │    │         │         │    │    └──  t_tt_id_cast:34 => t_tt_id:52
+ │    │         │         │    │    └──  t_tt_id_cast:34 => t_tt_id:53
  │    │         │         │    ├── cardinality: [1 - 1]
  │    │         │         │    ├── key: ()
- │    │         │         │    └── fd: ()-->(52)
+ │    │         │         │    └── fd: ()-->(53)
  │    │         │         └── filters (true)
  │    │         ├── f-k-checks-item: trade(t_s_symb) -> security(s_symb)
  │    │         │    └── anti-join (lookup security)
- │    │         │         ├── columns: t_s_symb:59!null
- │    │         │         ├── key columns: [59] = [60]
+ │    │         │         ├── columns: t_s_symb:60!null
+ │    │         │         ├── key columns: [60] = [61]
  │    │         │         ├── lookup columns are key
  │    │         │         ├── cardinality: [0 - 1]
  │    │         │         ├── key: ()
- │    │         │         ├── fd: ()-->(59)
+ │    │         │         ├── fd: ()-->(60)
  │    │         │         ├── with-scan &1
- │    │         │         │    ├── columns: t_s_symb:59!null
+ │    │         │         │    ├── columns: t_s_symb:60!null
  │    │         │         │    ├── mapping:
- │    │         │         │    │    └──  t_s_symb_cast:35 => t_s_symb:59
+ │    │         │         │    │    └──  t_s_symb_cast:35 => t_s_symb:60
  │    │         │         │    ├── cardinality: [1 - 1]
  │    │         │         │    ├── key: ()
- │    │         │         │    └── fd: ()-->(59)
+ │    │         │         │    └── fd: ()-->(60)
  │    │         │         └── filters (true)
  │    │         └── f-k-checks-item: trade(t_ca_id) -> customer_account(ca_id)
  │    │              └── anti-join (lookup customer_account)
- │    │                   ├── columns: t_ca_id:78!null
- │    │                   ├── key columns: [78] = [79]
+ │    │                   ├── columns: t_ca_id:79!null
+ │    │                   ├── key columns: [79] = [80]
  │    │                   ├── lookup columns are key
  │    │                   ├── cardinality: [0 - 1]
  │    │                   ├── key: ()
- │    │                   ├── fd: ()-->(78)
+ │    │                   ├── fd: ()-->(79)
  │    │                   ├── with-scan &1
- │    │                   │    ├── columns: t_ca_id:78!null
+ │    │                   │    ├── columns: t_ca_id:79!null
  │    │                   │    ├── mapping:
- │    │                   │    │    └──  column9:26 => t_ca_id:78
+ │    │                   │    │    └──  column9:26 => t_ca_id:79
  │    │                   │    ├── cardinality: [1 - 1]
  │    │                   │    ├── key: ()
- │    │                   │    └── fd: ()-->(78)
+ │    │                   │    └── fd: ()-->(79)
  │    │                   └── filters (true)
  │    └── projections
- │         └── 1 [as="?column?":87]
+ │         └── 1 [as="?column?":42]
  └── with &4 (insert_trade_history)
       ├── columns: "?column?":195!null
       ├── cardinality: [1 - 1]
@@ -3322,11 +3322,11 @@ with &2 (insert_trade)
       ├── key: ()
       ├── fd: ()-->(195)
       ├── project
-      │    ├── columns: "?column?":120!null
+      │    ├── columns: "?column?":97!null
       │    ├── cardinality: [1 - 1]
       │    ├── volatile, mutations
       │    ├── key: ()
-      │    ├── fd: ()-->(120)
+      │    ├── fd: ()-->(97)
       │    ├── insert trade_history
       │    │    ├── columns: trade_history.th_t_id:88!null trade_history.th_st_id:90!null
       │    │    ├── insert-mapping:
@@ -3350,38 +3350,38 @@ with &2 (insert_trade)
       │    │    └── f-k-checks
       │    │         ├── f-k-checks-item: trade_history(th_t_id) -> trade(t_id)
       │    │         │    └── anti-join (lookup trade)
-      │    │         │         ├── columns: th_t_id:97!null
-      │    │         │         ├── key columns: [97] = [98]
+      │    │         │         ├── columns: th_t_id:98!null
+      │    │         │         ├── key columns: [98] = [99]
       │    │         │         ├── lookup columns are key
       │    │         │         ├── cardinality: [0 - 1]
       │    │         │         ├── key: ()
-      │    │         │         ├── fd: ()-->(97)
+      │    │         │         ├── fd: ()-->(98)
       │    │         │         ├── with-scan &3
-      │    │         │         │    ├── columns: th_t_id:97!null
+      │    │         │         │    ├── columns: th_t_id:98!null
       │    │         │         │    ├── mapping:
-      │    │         │         │    │    └──  column1:93 => th_t_id:97
+      │    │         │         │    │    └──  column1:93 => th_t_id:98
       │    │         │         │    ├── cardinality: [1 - 1]
       │    │         │         │    ├── key: ()
-      │    │         │         │    └── fd: ()-->(97)
+      │    │         │         │    └── fd: ()-->(98)
       │    │         │         └── filters (true)
       │    │         └── f-k-checks-item: trade_history(th_st_id) -> status_type(st_id)
       │    │              └── anti-join (lookup status_type)
-      │    │                   ├── columns: th_st_id:115!null
-      │    │                   ├── key columns: [115] = [116]
+      │    │                   ├── columns: th_st_id:116!null
+      │    │                   ├── key columns: [116] = [117]
       │    │                   ├── lookup columns are key
       │    │                   ├── cardinality: [0 - 1]
       │    │                   ├── key: ()
-      │    │                   ├── fd: ()-->(115)
+      │    │                   ├── fd: ()-->(116)
       │    │                   ├── with-scan &3
-      │    │                   │    ├── columns: th_st_id:115!null
+      │    │                   │    ├── columns: th_st_id:116!null
       │    │                   │    ├── mapping:
-      │    │                   │    │    └──  th_st_id_cast:96 => th_st_id:115
+      │    │                   │    │    └──  th_st_id_cast:96 => th_st_id:116
       │    │                   │    ├── cardinality: [1 - 1]
       │    │                   │    ├── key: ()
-      │    │                   │    └── fd: ()-->(115)
+      │    │                   │    └── fd: ()-->(116)
       │    │                   └── filters (true)
       │    └── projections
-      │         └── 1 [as="?column?":120]
+      │         └── 1 [as="?column?":97]
       └── with &6 (insert_trade_request)
            ├── columns: "?column?":195!null
            ├── cardinality: [1 - 1]
@@ -3389,11 +3389,11 @@ with &2 (insert_trade)
            ├── key: ()
            ├── fd: ()-->(195)
            ├── project
-           │    ├── columns: "?column?":194!null
+           │    ├── columns: "?column?":139!null
            │    ├── cardinality: [1 - 1]
            │    ├── volatile, mutations
            │    ├── key: ()
-           │    ├── fd: ()-->(194)
+           │    ├── fd: ()-->(139)
            │    ├── insert trade_request
            │    │    ├── columns: trade_request.tr_t_id:121!null
            │    │    ├── insert-mapping:
@@ -3405,86 +3405,86 @@ with &2 (insert_trade)
            │    │    │    └── column6:134 => trade_request.tr_b_id:126
            │    │    ├── return-mapping:
            │    │    │    └── column1:129 => trade_request.tr_t_id:121
-           │    │    ├── check columns: check1:139 check2:140
-           │    │    ├── partial index put columns: partial_index_put1:141
+           │    │    ├── check columns: check1:140 check2:141
+           │    │    ├── partial index put columns: partial_index_put1:142
            │    │    ├── input binding: &5
            │    │    ├── cardinality: [1 - 1]
            │    │    ├── volatile, mutations
            │    │    ├── key: ()
            │    │    ├── fd: ()-->(121)
            │    │    ├── values
-           │    │    │    ├── columns: column1:129!null column6:134!null tr_tt_id_cast:135!null tr_s_symb_cast:136!null tr_qty_cast:137!null tr_bid_price_cast:138!null check1:139!null check2:140!null partial_index_put1:141!null
+           │    │    │    ├── columns: column1:129!null column6:134!null tr_tt_id_cast:135!null tr_s_symb_cast:136!null tr_qty_cast:137!null tr_bid_price_cast:138!null check1:140!null check2:141!null partial_index_put1:142!null
            │    │    │    ├── cardinality: [1 - 1]
            │    │    │    ├── key: ()
-           │    │    │    ├── fd: ()-->(129,134-141)
+           │    │    │    ├── fd: ()-->(129,134-138,140-142)
            │    │    │    └── (0, 0, 'TMB', 'SYMB', 10, 100.00, true, true, false)
            │    │    └── f-k-checks
            │    │         ├── f-k-checks-item: trade_request(tr_t_id) -> trade(t_id)
            │    │         │    └── anti-join (lookup trade)
-           │    │         │         ├── columns: tr_t_id:142!null
-           │    │         │         ├── key columns: [142] = [143]
+           │    │         │         ├── columns: tr_t_id:143!null
+           │    │         │         ├── key columns: [143] = [144]
            │    │         │         ├── lookup columns are key
            │    │         │         ├── cardinality: [0 - 1]
            │    │         │         ├── key: ()
-           │    │         │         ├── fd: ()-->(142)
+           │    │         │         ├── fd: ()-->(143)
            │    │         │         ├── with-scan &5
-           │    │         │         │    ├── columns: tr_t_id:142!null
+           │    │         │         │    ├── columns: tr_t_id:143!null
            │    │         │         │    ├── mapping:
-           │    │         │         │    │    └──  column1:129 => tr_t_id:142
+           │    │         │         │    │    └──  column1:129 => tr_t_id:143
            │    │         │         │    ├── cardinality: [1 - 1]
            │    │         │         │    ├── key: ()
-           │    │         │         │    └── fd: ()-->(142)
+           │    │         │         │    └── fd: ()-->(143)
            │    │         │         └── filters (true)
            │    │         ├── f-k-checks-item: trade_request(tr_tt_id) -> trade_type(tt_id)
            │    │         │    └── anti-join (lookup trade_type)
-           │    │         │         ├── columns: tr_tt_id:160!null
-           │    │         │         ├── key columns: [160] = [161]
+           │    │         │         ├── columns: tr_tt_id:161!null
+           │    │         │         ├── key columns: [161] = [162]
            │    │         │         ├── lookup columns are key
            │    │         │         ├── cardinality: [0 - 1]
            │    │         │         ├── key: ()
-           │    │         │         ├── fd: ()-->(160)
+           │    │         │         ├── fd: ()-->(161)
            │    │         │         ├── with-scan &5
-           │    │         │         │    ├── columns: tr_tt_id:160!null
+           │    │         │         │    ├── columns: tr_tt_id:161!null
            │    │         │         │    ├── mapping:
-           │    │         │         │    │    └──  tr_tt_id_cast:135 => tr_tt_id:160
+           │    │         │         │    │    └──  tr_tt_id_cast:135 => tr_tt_id:161
            │    │         │         │    ├── cardinality: [1 - 1]
            │    │         │         │    ├── key: ()
-           │    │         │         │    └── fd: ()-->(160)
+           │    │         │         │    └── fd: ()-->(161)
            │    │         │         └── filters (true)
            │    │         ├── f-k-checks-item: trade_request(tr_s_symb) -> security(s_symb)
            │    │         │    └── anti-join (lookup security)
-           │    │         │         ├── columns: tr_s_symb:167!null
-           │    │         │         ├── key columns: [167] = [168]
+           │    │         │         ├── columns: tr_s_symb:168!null
+           │    │         │         ├── key columns: [168] = [169]
            │    │         │         ├── lookup columns are key
            │    │         │         ├── cardinality: [0 - 1]
            │    │         │         ├── key: ()
-           │    │         │         ├── fd: ()-->(167)
+           │    │         │         ├── fd: ()-->(168)
            │    │         │         ├── with-scan &5
-           │    │         │         │    ├── columns: tr_s_symb:167!null
+           │    │         │         │    ├── columns: tr_s_symb:168!null
            │    │         │         │    ├── mapping:
-           │    │         │         │    │    └──  tr_s_symb_cast:136 => tr_s_symb:167
+           │    │         │         │    │    └──  tr_s_symb_cast:136 => tr_s_symb:168
            │    │         │         │    ├── cardinality: [1 - 1]
            │    │         │         │    ├── key: ()
-           │    │         │         │    └── fd: ()-->(167)
+           │    │         │         │    └── fd: ()-->(168)
            │    │         │         └── filters (true)
            │    │         └── f-k-checks-item: trade_request(tr_b_id) -> broker(b_id)
            │    │              └── anti-join (lookup broker)
-           │    │                   ├── columns: tr_b_id:186!null
-           │    │                   ├── key columns: [186] = [187]
+           │    │                   ├── columns: tr_b_id:187!null
+           │    │                   ├── key columns: [187] = [188]
            │    │                   ├── lookup columns are key
            │    │                   ├── cardinality: [0 - 1]
            │    │                   ├── key: ()
-           │    │                   ├── fd: ()-->(186)
+           │    │                   ├── fd: ()-->(187)
            │    │                   ├── with-scan &5
-           │    │                   │    ├── columns: tr_b_id:186!null
+           │    │                   │    ├── columns: tr_b_id:187!null
            │    │                   │    ├── mapping:
-           │    │                   │    │    └──  column6:134 => tr_b_id:186
+           │    │                   │    │    └──  column6:134 => tr_b_id:187
            │    │                   │    ├── cardinality: [1 - 1]
            │    │                   │    ├── key: ()
-           │    │                   │    └── fd: ()-->(186)
+           │    │                   │    └── fd: ()-->(187)
            │    │                   └── filters (true)
            │    └── projections
-           │         └── 1 [as="?column?":194]
+           │         └── 1 [as="?column?":139]
            └── values
                 ├── columns: "?column?":195!null
                 ├── cardinality: [1 - 1]
@@ -4320,11 +4320,11 @@ with &2 (update_trade_commission)
            ├── key: ()
            ├── fd: ()-->(104)
            ├── project
-           │    ├── columns: "?column?":103!null
+           │    ├── columns: "?column?":80!null
            │    ├── cardinality: [1 - 1]
            │    ├── volatile, mutations
            │    ├── key: ()
-           │    ├── fd: ()-->(103)
+           │    ├── fd: ()-->(80)
            │    ├── insert trade_history
            │    │    ├── columns: trade_history.th_t_id:71!null trade_history.th_st_id:73!null
            │    │    ├── insert-mapping:
@@ -4348,38 +4348,38 @@ with &2 (update_trade_commission)
            │    │    └── f-k-checks
            │    │         ├── f-k-checks-item: trade_history(th_t_id) -> trade(t_id)
            │    │         │    └── anti-join (lookup trade)
-           │    │         │         ├── columns: th_t_id:80!null
-           │    │         │         ├── key columns: [80] = [81]
+           │    │         │         ├── columns: th_t_id:81!null
+           │    │         │         ├── key columns: [81] = [82]
            │    │         │         ├── lookup columns are key
            │    │         │         ├── cardinality: [0 - 1]
            │    │         │         ├── key: ()
-           │    │         │         ├── fd: ()-->(80)
+           │    │         │         ├── fd: ()-->(81)
            │    │         │         ├── with-scan &4
-           │    │         │         │    ├── columns: th_t_id:80!null
+           │    │         │         │    ├── columns: th_t_id:81!null
            │    │         │         │    ├── mapping:
-           │    │         │         │    │    └──  column1:76 => th_t_id:80
+           │    │         │         │    │    └──  column1:76 => th_t_id:81
            │    │         │         │    ├── cardinality: [1 - 1]
            │    │         │         │    ├── key: ()
-           │    │         │         │    └── fd: ()-->(80)
+           │    │         │         │    └── fd: ()-->(81)
            │    │         │         └── filters (true)
            │    │         └── f-k-checks-item: trade_history(th_st_id) -> status_type(st_id)
            │    │              └── anti-join (lookup status_type)
-           │    │                   ├── columns: th_st_id:98!null
-           │    │                   ├── key columns: [98] = [99]
+           │    │                   ├── columns: th_st_id:99!null
+           │    │                   ├── key columns: [99] = [100]
            │    │                   ├── lookup columns are key
            │    │                   ├── cardinality: [0 - 1]
            │    │                   ├── key: ()
-           │    │                   ├── fd: ()-->(98)
+           │    │                   ├── fd: ()-->(99)
            │    │                   ├── with-scan &4
-           │    │                   │    ├── columns: th_st_id:98!null
+           │    │                   │    ├── columns: th_st_id:99!null
            │    │                   │    ├── mapping:
-           │    │                   │    │    └──  th_st_id_cast:79 => th_st_id:98
+           │    │                   │    │    └──  th_st_id_cast:79 => th_st_id:99
            │    │                   │    ├── cardinality: [1 - 1]
            │    │                   │    ├── key: ()
-           │    │                   │    └── fd: ()-->(98)
+           │    │                   │    └── fd: ()-->(99)
            │    │                   └── filters (true)
            │    └── projections
-           │         └── 1 [as="?column?":103]
+           │         └── 1 [as="?column?":80]
            └── values
                 ├── columns: "?column?":104!null
                 ├── cardinality: [1 - 1]
@@ -4420,11 +4420,11 @@ with &2 (insert_settlement)
  ├── key: ()
  ├── fd: ()-->(81)
  ├── project
- │    ├── columns: "?column?":31!null
+ │    ├── columns: "?column?":13!null
  │    ├── cardinality: [1 - 1]
  │    ├── volatile, mutations
  │    ├── key: ()
- │    ├── fd: ()-->(31)
+ │    ├── fd: ()-->(13)
  │    ├── insert settlement
  │    │    ├── columns: settlement.se_t_id:1!null
  │    │    ├── insert-mapping:
@@ -4448,22 +4448,22 @@ with &2 (insert_settlement)
  │    │    └── f-k-checks
  │    │         └── f-k-checks-item: settlement(se_t_id) -> trade(t_id)
  │    │              └── anti-join (lookup trade)
- │    │                   ├── columns: se_t_id:13!null
- │    │                   ├── key columns: [13] = [14]
+ │    │                   ├── columns: se_t_id:14!null
+ │    │                   ├── key columns: [14] = [15]
  │    │                   ├── lookup columns are key
  │    │                   ├── cardinality: [0 - 1]
  │    │                   ├── key: ()
- │    │                   ├── fd: ()-->(13)
+ │    │                   ├── fd: ()-->(14)
  │    │                   ├── with-scan &1
- │    │                   │    ├── columns: se_t_id:13!null
+ │    │                   │    ├── columns: se_t_id:14!null
  │    │                   │    ├── mapping:
- │    │                   │    │    └──  column1:7 => se_t_id:13
+ │    │                   │    │    └──  column1:7 => se_t_id:14
  │    │                   │    ├── cardinality: [1 - 1]
  │    │                   │    ├── key: ()
- │    │                   │    └── fd: ()-->(13)
+ │    │                   │    └── fd: ()-->(14)
  │    │                   └── filters (true)
  │    └── projections
- │         └── 1 [as="?column?":31]
+ │         └── 1 [as="?column?":13]
  └── with &4 (insert_cash_transaction)
       ├── columns: ca_bal:81!null
       ├── cardinality: [0 - 1]
@@ -4471,11 +4471,11 @@ with &2 (insert_settlement)
       ├── key: ()
       ├── fd: ()-->(81)
       ├── project
-      │    ├── columns: "?column?":62!null
+      │    ├── columns: "?column?":44!null
       │    ├── cardinality: [1 - 1]
       │    ├── volatile, mutations
       │    ├── key: ()
-      │    ├── fd: ()-->(62)
+      │    ├── fd: ()-->(44)
       │    ├── insert cash_transaction
       │    │    ├── columns: cash_transaction.ct_t_id:32!null
       │    │    ├── insert-mapping:
@@ -4499,22 +4499,22 @@ with &2 (insert_settlement)
       │    │    └── f-k-checks
       │    │         └── f-k-checks-item: cash_transaction(ct_t_id) -> trade(t_id)
       │    │              └── anti-join (lookup trade)
-      │    │                   ├── columns: ct_t_id:44!null
-      │    │                   ├── key columns: [44] = [45]
+      │    │                   ├── columns: ct_t_id:45!null
+      │    │                   ├── key columns: [45] = [46]
       │    │                   ├── lookup columns are key
       │    │                   ├── cardinality: [0 - 1]
       │    │                   ├── key: ()
-      │    │                   ├── fd: ()-->(44)
+      │    │                   ├── fd: ()-->(45)
       │    │                   ├── with-scan &3
-      │    │                   │    ├── columns: ct_t_id:44!null
+      │    │                   │    ├── columns: ct_t_id:45!null
       │    │                   │    ├── mapping:
-      │    │                   │    │    └──  column1:38 => ct_t_id:44
+      │    │                   │    │    └──  column1:38 => ct_t_id:45
       │    │                   │    ├── cardinality: [1 - 1]
       │    │                   │    ├── key: ()
-      │    │                   │    └── fd: ()-->(44)
+      │    │                   │    └── fd: ()-->(45)
       │    │                   └── filters (true)
       │    └── projections
-      │         └── 1 [as="?column?":62]
+      │         └── 1 [as="?column?":44]
       └── project
            ├── columns: ca_bal:81!null
            ├── cardinality: [0 - 1]
@@ -4570,11 +4570,11 @@ with &2 (insert_settlement)
  ├── key: ()
  ├── fd: ()-->(40)
  ├── project
- │    ├── columns: "?column?":31!null
+ │    ├── columns: "?column?":13!null
  │    ├── cardinality: [1 - 1]
  │    ├── volatile, mutations
  │    ├── key: ()
- │    ├── fd: ()-->(31)
+ │    ├── fd: ()-->(13)
  │    ├── insert settlement
  │    │    ├── columns: settlement.se_t_id:1!null
  │    │    ├── insert-mapping:
@@ -4598,22 +4598,22 @@ with &2 (insert_settlement)
  │    │    └── f-k-checks
  │    │         └── f-k-checks-item: settlement(se_t_id) -> trade(t_id)
  │    │              └── anti-join (lookup trade)
- │    │                   ├── columns: se_t_id:13!null
- │    │                   ├── key columns: [13] = [14]
+ │    │                   ├── columns: se_t_id:14!null
+ │    │                   ├── key columns: [14] = [15]
  │    │                   ├── lookup columns are key
  │    │                   ├── cardinality: [0 - 1]
  │    │                   ├── key: ()
- │    │                   ├── fd: ()-->(13)
+ │    │                   ├── fd: ()-->(14)
  │    │                   ├── with-scan &1
- │    │                   │    ├── columns: se_t_id:13!null
+ │    │                   │    ├── columns: se_t_id:14!null
  │    │                   │    ├── mapping:
- │    │                   │    │    └──  column1:7 => se_t_id:13
+ │    │                   │    │    └──  column1:7 => se_t_id:14
  │    │                   │    ├── cardinality: [1 - 1]
  │    │                   │    ├── key: ()
- │    │                   │    └── fd: ()-->(13)
+ │    │                   │    └── fd: ()-->(14)
  │    │                   └── filters (true)
  │    └── projections
- │         └── 1 [as="?column?":31]
+ │         └── 1 [as="?column?":13]
  └── project
       ├── columns: ca_bal:40!null
       ├── cardinality: [0 - 1]

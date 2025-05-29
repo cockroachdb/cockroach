@@ -897,7 +897,7 @@ build
 INSERT INTO t1(c1) VALUES (10) RETURNING (select 1);
 ----
 project
- ├── columns: "?column?":15
+ ├── columns: "?column?":12
  ├── insert t1
  │    ├── columns: c1:1!null c2:2 c3:3 rowid:4!null
  │    ├── insert-mapping:
@@ -925,15 +925,76 @@ project
  │         └── projections
  │              └── char_length(c2_default:8) < 10 [as=rls:13]
  └── projections
-      └── subquery [as="?column?":15]
+      └── subquery [as="?column?":12]
            └── max1-row
-                ├── columns: "?column?":14!null
+                ├── columns: "?column?":11!null
                 └── project
-                     ├── columns: "?column?":14!null
+                     ├── columns: "?column?":11!null
                      ├── values
                      │    └── ()
                      └── projections
-                          └── 1 [as="?column?":14]
+                          └── 1 [as="?column?":11]
+
+# The RETURNING clause references a column, but not one in the target table, so
+# the SELECT policy should not apply with the function is called.
+exec-ddl
+CREATE FUNCTION insert_zero_into_t1(n INT) RETURNS INT AS $$
+  INSERT INTO t1 VALUES (0) RETURNING n;
+$$ LANGUAGE SQL
+----
+
+build format=show-scalars
+SELECT insert_zero_into_t1(10)
+----
+project
+ ├── columns: insert_zero_into_t1:14
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: insert_zero_into_t1 [as=insert_zero_into_t1:14]
+           ├── args
+           │    └── const: 10
+           ├── params: n:1
+           └── body
+                └── limit
+                     ├── columns: n:12
+                     ├── project
+                     │    ├── columns: n:12
+                     │    ├── insert t1
+                     │    │    ├── columns: c1:2!null c2:3 c3:4 rowid:5!null
+                     │    │    ├── insert-mapping:
+                     │    │    │    ├── column1:8 => c1:2
+                     │    │    │    ├── c2_default:9 => c2:3
+                     │    │    │    ├── c3_default:10 => c3:4
+                     │    │    │    └── rowid_default:11 => rowid:5
+                     │    │    ├── return-mapping:
+                     │    │    │    ├── column1:8 => c1:2
+                     │    │    │    ├── c2_default:9 => c2:3
+                     │    │    │    ├── c3_default:10 => c3:4
+                     │    │    │    └── rowid_default:11 => rowid:5
+                     │    │    ├── check columns: rls:13
+                     │    │    └── project
+                     │    │         ├── columns: rls:13 column1:8!null c2_default:9 c3_default:10 rowid_default:11
+                     │    │         ├── project
+                     │    │         │    ├── columns: c2_default:9 c3_default:10 rowid_default:11 column1:8!null
+                     │    │         │    ├── values
+                     │    │         │    │    ├── columns: column1:8!null
+                     │    │         │    │    └── tuple
+                     │    │         │    │         └── const: 0
+                     │    │         │    └── projections
+                     │    │         │         ├── cast: STRING [as=c2_default:9]
+                     │    │         │         │    └── null
+                     │    │         │         ├── cast: DATE [as=c3_default:10]
+                     │    │         │         │    └── null
+                     │    │         │         └── function: unique_rowid [as=rowid_default:11]
+                     │    │         └── projections
+                     │    │              └── lt [as=rls:13]
+                     │    │                   ├── function: char_length
+                     │    │                   │    └── variable: c2_default:9
+                     │    │                   └── const: 10
+                     │    └── projections
+                     │         └── variable: n:1 [as=n:12]
+                     └── const: 1
 
 exec-ddl
 DROP POLICY p_select on t1;
