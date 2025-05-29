@@ -583,7 +583,7 @@ func prepareNewTablesForIngestion(
 		}
 		seqVals[id] = tableDesc.SeqVal
 	}
-	if err := rewrite.TableDescs(
+	if _, err := rewrite.TableDescs(
 		newMutableTableDescriptors, tableRewrites, "",
 	); err != nil {
 		return nil, err

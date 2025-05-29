@@ -2044,7 +2044,9 @@ func doRestorePlan(
 	if newDBName != "" {
 		overrideDBName = newDBName
 	}
-	if err := rewrite.TableDescs(tables, descriptorRewrites, overrideDBName); err != nil {
+	var typeBackrefsToRemove map[descpb.ID]map[descpb.ID]struct{}
+	typeBackrefsToRemove, err = rewrite.TableDescs(tables, descriptorRewrites, overrideDBName)
+	if err != nil {
 		return errors.Wrapf(err, "table descriptor rewrite failed")
 	}
 	if err := rewrite.DatabaseDescs(databases, descriptorRewrites, map[descpb.ID]struct{}{}); err != nil {
@@ -2053,7 +2055,7 @@ func doRestorePlan(
 	if err := rewrite.SchemaDescs(schemas, descriptorRewrites); err != nil {
 		return errors.Wrapf(err, "schema descriptor rewrite failed")
 	}
-	if err := rewrite.TypeDescs(types, descriptorRewrites); err != nil {
+	if err := rewrite.TypeDescs(types, descriptorRewrites, typeBackrefsToRemove); err != nil {
 		return errors.Wrapf(err, "type descriptor rewrite failed")
 	}
 	if err := rewrite.FunctionDescs(functions, descriptorRewrites, overrideDBName); err != nil {

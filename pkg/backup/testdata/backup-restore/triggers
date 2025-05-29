@@ -33,6 +33,7 @@ CREATE FUNCTION sc1.f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
     foobar sc1.enum1;
   BEGIN
     SELECT a FROM sc1.tbl1;
+    SELECT a FROM sc2.tbl2;
     SELECT 'Good'::sc1.enum1;
     RAISE NOTICE '%', nextval('sc1.sq1');
     RETURN NEW;
@@ -291,7 +292,7 @@ RESTORE TABLE sc1.tbl1 FROM LATEST IN 'nodelocal://1/test/' WITH into_db = 'db2'
 regex matches error
 
 exec-sql
-RESTORE TABLE sc1.tbl1 FROM LATEST IN 'nodelocal://1/test/' WITH into_db = 'db2', skip_missing_udfs;
+RESTORE TABLE sc1.tbl1,sc2.tbl2,sc1.sq1 FROM LATEST IN 'nodelocal://1/test/' WITH into_db = 'db2', skip_missing_udfs;
 ----
 
 exec-sql
@@ -312,4 +313,30 @@ SELECT relname, t.name FROM descs, LATERAL (
   SELECT value->'name' FROM jsonb_array_elements(descs.triggers)
 ) AS t(name)
 ORDER BY relname, t.name
+----
+
+# Do DDLs to validate the the dependencies were properly maintained when the
+# trigger was dropped by restore.
+exec-sql
+ALTER TABLE sc2.tbl2 RENAME TO table2;
+----
+
+exec-sql
+DROP TABLE sc1.tbl1
+----
+
+exec-sql
+DROP SEQUENCE sc1.sq1;
+----
+
+exec-sql
+DROP DATABASE db1_new;
+----
+
+exec-sql
+DROP TYPE sc1.enum1;
+----
+
+exec-sql
+ALTER TABLE sc2.table2 RENAME TO tbl2;
 ----
