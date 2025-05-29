@@ -83,5 +83,4 @@ build/teamcity-roachtest-invoke.sh \
   --slack-token="${SLACK_TOKEN}" \
   --suite nightly \
   --selective-tests="${SELECTIVE_TESTS:-true}" \
-  --side-eye-token="${SIDE_EYE_API_TOKEN}" \
   "${TESTS}"

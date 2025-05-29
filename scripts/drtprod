@@ -60,18 +60,6 @@ case $1 in
         ;;
     esac
     ;;
-  "side-eye")
-    shift
-    cluster="$1"
-    key="$(gcloud secrets versions access latest --secret='side-eye-key')"
-    if [[ -z "${key}" ]]; then
-      echo "no key"
-      exit 1
-    fi
-    echo "installing side-eye on ${cluster}..."
-    roachprod ssh $cluster -- "curl https://sh.side-eye.io/ | SIDE_EYE_API_TOKEN=${key} SIDE_EYE_ENVIRONMENT=${cluster} sh"
-    exit 0
-    ;;
   "dns")
     if [ "$#" -lt 2 ]; then
       echo "usage: drtprod $1 <cluster> [create]"
