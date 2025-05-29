@@ -79,8 +79,8 @@ type fixtureToDelete struct {
 
 // fixturesToGc returns a list of fixtures to delete. The policy is as follows:
 //
-// If a fixture is not ready within 48 hours, assume creation failed and it
-// was leaked.
+// If a fixtures is not ready within a week, we can assume creation has failed
+// and enough time has passed for investigation.
 //
 // A fixture has a successor if there is another fixture of the same kind
 // that was made ready after it. A fixture is eligible for gc if it has a
@@ -94,9 +94,9 @@ type fixtureToDelete struct {
 // revisiting if the registry is given its own bucket and is guaranteed to own
 // all data in it.
 func fixturesToGc(gcAt time.Time, allFixtures []FixtureMetadata) []fixtureToDelete {
-	// If a fixtures is not ready within 48 hours, assume creation failed and it
-	// was leaked.
-	leakedAtThreshold := gcAt.Add(-48 * time.Hour)
+	// If a fixtures is not ready within a week, we can assume creation has failed
+	// and enough time has passed for investigation.
+	leakedAtThreshold := gcAt.Add(-7 * 24 * time.Hour)
 
 	// A fixture is eligible for gc if it has a successor and the successor was
 	// made ready more than 24 hours ago.
@@ -110,7 +110,7 @@ func fixturesToGc(gcAt time.Time, allFixtures []FixtureMetadata) []fixtureToDele
 			if f.CreatedAt.Before(leakedAtThreshold) {
 				toDelete = append(toDelete, fixtureToDelete{
 					metadata: f,
-					reason:   "fixture was not made ready within 48 hours",
+					reason:   "fixture was not made ready within a week",
 				})
 				continue
 			} else {
