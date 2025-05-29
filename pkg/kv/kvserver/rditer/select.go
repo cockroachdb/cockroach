@@ -10,7 +10,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
-// SelectRangedOptions configures span-based selection for replicated keys.
+// SelectRangedOptions configures span-based selection for replicated keys. This
+// allows selecting combinations of the following types of keys:
+//
+//   - SystemKeys: /Local/Range/<key>/{RangeDescriptor, ...}
+//   - LockTable:  /Local/Lock/Local/Range/<key>/{RangeDescriptor, ...}
+//   - LockTable:  /Local/Lock/<key>
+//   - UserKeys:   <key>
 type SelectRangedOptions struct {
 	// RSpan describes the range bounds. This must be set if any of the other
 	// fields in this struct are.
