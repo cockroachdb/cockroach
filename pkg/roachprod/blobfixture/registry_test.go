@@ -69,10 +69,10 @@ func TestFixtureRegistry(t *testing.T) {
 
 	fixtures := []fixture{
 		{
-			// This fixture was created 3 days ago, but is not ready yet, so it will
-			// be garbage collected.
+			// This fixture was created over a week ago, but is not ready yet, so it
+			// will be garbage collected.
 			kind:           "kind-leaked",
-			createdAt:      makeTime(-3),
+			createdAt:      makeTime(-8),
 			survivesGC:     false,
 			isLatestOfKind: false,
 		},
