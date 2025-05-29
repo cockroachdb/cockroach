@@ -637,7 +637,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 			if err != nil {
 				return err
 			}
-			bypassRLS, err := options.bypassRLS()
+			// Also check for BYPASSRLS privilege.
+			bypassRLS, err := p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.BYPASSRLS, userName)
 			if err != nil {
 				return err
 			}
@@ -648,18 +649,18 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 			}
 
 			return addRow(
-				h.UserOid(userName),                  // oid
-				tree.NewDName(userName.Normalized()), // rolname
-				tree.MakeDBool(isRoot || isSuper),    // rolsuper
-				tree.MakeDBool(roleInherits),         // rolinherit
-				tree.MakeDBool(isRoot || createRole), // rolcreaterole
-				tree.MakeDBool(isRoot || createDB),   // rolcreatedb
-				tree.MakeDBool(roleCanLogin),         // rolcanlogin.
-				tree.DBoolFalse,                      // rolreplication
-				tree.MakeDBool(bypassRLS),            // rolbypassrls
-				negOneVal,                            // rolconnlimit
-				passwdStarString,                     // rolpassword
-				rolValidUntil,                        // rolvaliduntil
+				h.UserOid(userName),                   // oid
+				tree.NewDName(userName.Normalized()),  // rolname
+				tree.MakeDBool(isRoot || isSuper),     // rolsuper
+				tree.MakeDBool(roleInherits),          // rolinherit
+				tree.MakeDBool(isRoot || createRole),  // rolcreaterole
+				tree.MakeDBool(isRoot || createDB),    // rolcreatedb
+				tree.MakeDBool(roleCanLogin),          // rolcanlogin.
+				tree.DBoolFalse,                       // rolreplication
+				tree.MakeDBool(tree.DBool(bypassRLS)), // rolbypassrls
+				negOneVal,                             // rolconnlimit
+				passwdStarString,                      // rolpassword
+				rolValidUntil,                         // rolvaliduntil
 			)
 		})
 	},
@@ -2990,7 +2991,8 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 				if err != nil {
 					return err
 				}
-				bypassRLS, err := options.bypassRLS()
+				// Also check for BYPASSRLS privilege.
+				bypassRLS, err := p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.BYPASSRLS, userName)
 				if err != nil {
 					return err
 				}
@@ -3012,7 +3014,7 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 					negOneVal,                             // rolconnlimit
 					passwdStarString,                      // rolpassword
 					rolValidUntil,                         // rolvaliduntil
-					tree.MakeDBool(bypassRLS),             // rolbypassrls
+					tree.MakeDBool(tree.DBool(bypassRLS)), // rolbypassrls
 					settings,                              // rolconfig
 				)
 			})
