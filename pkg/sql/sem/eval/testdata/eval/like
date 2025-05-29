@@ -1350,3 +1350,43 @@ eval
 'TEST' NOT ILIKE 'TE_'
 ----
 true
+
+eval
+'TEST' COLLATE "en_US" LIKE 'TEST' COLLATE "en_US"
+----
+true
+
+eval
+'TEST' COLLATE "en_US" LIKE 'TEST'
+----
+true
+
+eval
+'TEST' LIKE 'TEST' COLLATE "en_US"
+----
+true
+
+eval
+'TEST' COLLATE "en_US" LIKE 'TESTER' COLLATE "en_US"
+----
+false
+
+eval
+'TEST' COLLATE "en_US" LIKE '_ES%'
+----
+true
+
+eval
+'TEST' COLLATE "en_US" LIKE 'test' COLLATE "de_DE"
+----
+unsupported comparison operator: <collatedstring{en_US}> LIKE <collatedstring{de_DE}>
+
+eval
+'TEST' COLLATE "en_US_u-ks-level1" LIKE 'test' COLLATE "en_US-u-ks-level1"
+----
+nondeterministic collations are not supported for LIKE
+
+eval
+'TEST' COLLATE "en_US-ks-level1" LIKE 'test' COLLATE "en_US-ks-level1"
+----
+invalid locale en_US-ks-level1: language: tag is not well-formed

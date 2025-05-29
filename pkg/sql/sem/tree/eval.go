@@ -1926,12 +1926,9 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 	}},
 
 	treecmp.Like: {overloads: []*CmpOp{
-		{
-			LeftType:   types.String,
-			RightType:  types.String,
-			EvalOp:     &MatchLikeOp{CaseInsensitive: false},
-			Volatility: volatility.Leakproof,
-		},
+		// TODO(mgartner): This overload should be immutable, not leakproof.
+		makeLikeFn(types.String, types.String, volatility.Leakproof),
+		makeLikeFn(types.AnyCollatedString, types.AnyCollatedString, volatility.Immutable),
 	}},
 
 	treecmp.ILike: {overloads: []*CmpOp{
@@ -2145,6 +2142,15 @@ func makeEvalTupleIn(typ *types.T, v volatility.V) *CmpOp {
 		EvalOp:            &InTupleOp{},
 		CalledOnNullInput: true,
 		Volatility:        v,
+	}
+}
+
+func makeLikeFn(a, b *types.T, v volatility.V) *CmpOp {
+	return &CmpOp{
+		LeftType:   a,
+		RightType:  b,
+		EvalOp:     &MatchLikeOp{CaseInsensitive: false},
+		Volatility: v,
 	}
 }
 

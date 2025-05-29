@@ -762,3 +762,9 @@ SELECT b COLLATE "en_US_u_ks_level2" FROM str_arr ORDER BY 1
 NULL
 d
 h
+
+query error unsupported comparison operator: <collatedstring{en_US}> LIKE <collatedstring{de_DE}>
+SELECT 'TEST' COLLATE "en_US" LIKE 'TEST' COLLATE "de_DE"
+
+query error nondeterministic collations are not supported for LIKE
+SELECT 'TEST' COLLATE "en_US-u-ks-level1" LIKE 'TEST' COLLATE "en_US-u-ks-level1"
