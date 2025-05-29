@@ -160,14 +160,7 @@ The 5th argument to the call above (`c.CRDBNodes()`) indicates to the framework 
 mvt.OnStartup("create some tables on the previous version", createSomeTables)
 ```
 
-This is the first _user hook_ we encounter: `OnStartup`. [Hooks](#terminology) are functions that are invoked at specific points in the test and is where test logic and assertions must live. The `OnStartup` function lets the test register a hook to be executed as soon as the cluster is ready (i.e., when it is running a version greater than the test's _minimum supported version_). In addition, in multi-tenant tests, the test tenant has also been created and is ready to serve requests at this point.
-
-One important point to note is that mixed-version tests start the cluster at a [_predecessor version_ (not necessarily immediate predecessor)](#high-level-overview). As such, if a feature was just introduced in the current release, it won't be available at this point.
-
-**Note**: _Minimum Supported Version_ vs. _Minimum Bootstrap Version_:
-One common mistake is to think that the _minimum supported version_ will configure the test to never start on any version older. However, this setting only configures _user hooks_ to not be scheduled at any versions older than the _minimum supported version_. It is still possible for the test to start the cluster at a _predecessor version_ of the _minimum supported version_ and run upgrades normally without any user hooks. Even if the feature we are primarily testing was not introduced until _minimum supported version_, it can be useful to run through the exercise of loading in old data.
-
-However, you may run into a scenario that requires the cluster to _start_ at a certain version. This is where _minimum bootstrap version_ comes in and enforces that the framework will not generate any plans that start the cluster on a version older. For best practices, if either option works, prefer _Minimum Supported Version_ due to the extra coverage it provides.
+This is the first _user hook_ we encounter: `OnStartup`. [Hooks](#terminology) are functions that are invoked at specific points in the test and is where test logic and assertions must live. The `OnStartup` function lets the test register a hook to be executed as soon as the cluster is ready (i.e., when it is running a version greater than or equal to the test's _minimum supported version_). In addition, in multi-tenant tests, the test tenant has also been created and is ready to serve requests at this point.
 
 #### Testing code in mixed-version
 
@@ -197,6 +190,43 @@ mvt.Run()
 Once all hooks are registered, all that is left to do is to actually run the test. The `Run()` function will run the mixed-version test and fail the roachtest in case one of the user-hooks returns an error or panics. Naturally, failures can also happen due to bugs in the framework itself: report it to `#test-eng` in that case!
 
 ### Best Practices
+
+#### Mixed-version Hooks and Compatibility
+
+One important point to note is that mixed-version tests start the cluster at a [_predecessor version_](#high-level-overview). As such, if a feature was introduced in the _current_ release, it will not be
+"available" in _all_ mixed-version states. The reason is that a new feature is typically version-gated; i.e., it's disabled until after the cluster is at the specified _minimum_ version (or above). Thus, the user
+hooks which are designed to run in mixed-version states, i.e., `OnStartup`, `InMixedVersion`, and `AfterUpgradeFinalized`, will not be able to exercise the new feature. The new feature is still tested in mixed-version
+states since some of the cluster nodes will be running on a previous release; thus, we're mostly testing backward compatibility. (Also, see [BackgroundFunc](#aside-background-functions) which can be utilized in this scenario.)
+
+In reality, the above case is mitigated by the release process, wherein upon feature completion (aka "stability period"), a new release branch is created (and [`cockroach_releases.yaml`](https://github.com/cockroachdb/cockroach/blob/master/pkg/testutils/release/cockroach_releases.yaml) is updated in `master`). Any subsequent commit on that branch will yield a new version
+that is available for mixed-version testing. Now, the cluster would start at the _minimum_ version where the feature is available, and the mixed-version user hooks will be exercised, all throughout the stability
+period.
+
+A test may explicitly require a _minimum supported version_ to ensure that the mixed-version user-hooks don't encounter any incompatibility. E.g.,
+```
+// We test only upgrades from 23.2 in this test because it uses
+// the `workload fixtures import` command, which is only supported
+// reliably multi-tenant mode starting from that version.
+// mixedversion.MinimumSupportedVersion("v23.2.0"),
+```
+Thus, `MinimumSupportedVersion` allows tests to specify that the mixed-versions hooks are run only _after_ the cluster is running at least at the specified version, or above. As a side-note, the
+implementation uses `minimumSupportedVersion` to divide the resulting test plan into "setup" and "test" parts, the latter of which denotes when the mixed-version user hooks are eligible to run. As another
+side-note, when testing skip-upgrades, e.g., `v23.2.0` to `v24.2.0`, the framework must ensure that `minimumSupportedVersion` is _not_ older than `v23.2.0`; otherwise, the mixed-version hooks
+won't run.
+
+```go
+// Find which upgrades are part of setup and which upgrades will be
+// tested, based on the test's minimum supported version. 
+idx := slices.IndexFunc(allUpgrades, func(upgrade *upgradePlan) bool {
+	   return upgrade.from.AtLeast(p.options.minimumSupportedVersion)
+})
+```
+
+**Note**: _Minimum Supported Version_ vs. _Minimum Bootstrap Version_:
+One common mistake is to think that the _minimum supported version_ will configure the test to never start on any version older. However, this setting only configures _user hooks_ to not be scheduled at any versions older than the _minimum supported version_. It is still possible for the test to start the cluster at a _predecessor version_ of the _minimum supported version_ and run upgrades normally without any user hooks. Even if the feature we are primarily testing was not introduced until _minimum supported version_, it can be useful to run through the exercise of loading in old data.
+
+However, you may run into a scenario that requires the cluster to _start_ at a certain version. This is where _minimum bootstrap version_ comes in and enforces that the framework will not generate any plans that start the cluster on a version older. For best practices, if either option works, prefer _Minimum Supported Version_ due to the extra coverage it provides.
+
 
 #### Embrace randomness
 
