@@ -1,4 +1,4 @@
-# LogicTest: !local-mixed-25.1 !local-mixed-24.3 !local-schema-locked
+# LogicTest: !local-mixed-25.1 !local-schema-locked
 
 # ------------------------------------------------------------------------------
 # CREATE TABLE/INDEX tests.

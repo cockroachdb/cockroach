@@ -497,7 +497,7 @@ INSERT INTO t6 VALUES (1,1)
 # This assertion depends on write buffering not being disabled because
 # of the version or transaction isolation level. Skip configurations
 # that result in buffered writes being disabled.
-skipif config local-read-committed local-repeatable-read local-mixed-24.3 local-mixed-25.1
+skipif config local-read-committed local-repeatable-read local-mixed-25.1
 query T
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE location LIKE '%write_buffer.go%'
 ----

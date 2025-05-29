@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant-default-configs !local-mixed-24.3
+# LogicTest: !3node-tenant-default-configs
 
 # TODO(#144252): remove this.
 statement ok

@@ -943,7 +943,6 @@ table_constraints
 table_columns
 
 # Check that the metadata is reported properly.
-skipif config local-mixed-24.3
 query TTTTT colnames
 SELECT table_catalog, table_schema, table_name, table_type, is_insertable_into
 FROM system.information_schema.tables
@@ -1227,7 +1226,6 @@ SET DATABASE = test
 ## information_schema.check_constraints
 ## information_schema.constraint_column_usage
 
-skipif config local-mixed-24.3
 query TTTTTTTTT colnames
 SELECT *
 FROM system.information_schema.table_constraints
@@ -1252,7 +1250,7 @@ NULL                   NULL                  UTF8                UCS            
 NULL                   NULL                  UTF8                UCS                   UTF8         test                     NULL                    NULL
 
 
-skipif config local-mixed-24.3 local-mixed-25.1
+skipif config local-mixed-25.1
 query TTTT colnames
 SELECT *
 FROM system.information_schema.check_constraints
@@ -1552,7 +1550,6 @@ system              public             check_sampling_probability               
 system              public             check_singleton                                                                                                 ((singleton))
 system              public             single_row                                                                                                      ((singleton))
 
-skipif config local-mixed-24.3
 query TTTTTTT colnames
 SELECT *
 FROM system.information_schema.constraint_column_usage
@@ -1563,7 +1560,6 @@ table_catalog  table_schema  table_name  column_name    constraint_catalog  cons
 system         public        locations   localityKey    system              public             primary
 system         public        locations   localityValue  system              public             primary
 
-skipif config local-mixed-24.3
 query TTTTTTT colnames
 SELECT *
 FROM system.information_schema.constraint_column_usage
@@ -1574,7 +1570,7 @@ table_catalog  table_schema  table_name  column_name    constraint_catalog  cons
 system         public        locations   localityKey    system              public             primary
 system         public        locations   localityValue  system              public             primary
 
-skipif config local-mixed-24.3 local-mixed-25.1
+skipif config local-mixed-25.1
 query TTTT colnames
 SELECT *
 FROM system.information_schema.check_constraints
@@ -1964,7 +1960,6 @@ select data_type, column_default from information_schema.columns where table_nam
 data_type  column_default
 smallint   0
 
-skipif config local-mixed-24.3
 query TTTTI colnames
 SELECT table_catalog, table_schema, table_name, column_name, ordinal_position
 FROM system.information_schema.columns
@@ -2600,7 +2595,6 @@ root      other_db       public              ALL             YES
 
 ## information_schema.table_privileges and information_schema.role_table_grants
 
-skipif config local-mixed-24.3
 # root can see everything (filtering most of crdb_internal and system to avoid a brittle test)
 query TTTTTTTT colnames,rowsort
 SELECT * FROM system.information_schema.table_privileges 
@@ -2830,7 +2824,6 @@ NULL     public   system         pg_extension        geography_columns          
 NULL     public   system         pg_extension        geometry_columns                       SELECT          NO            YES
 NULL     public   system         pg_extension        spatial_ref_sys                        SELECT          NO            YES
 
-skipif config local-mixed-24.3
 query TTTTTTTT colnames,rowsort
 SELECT * FROM system.information_schema.role_table_grants 
 WHERE 
@@ -3466,7 +3459,7 @@ specific_catalog  specific_schema  specific_name  ordinal_position  parameter_mo
 test              pg_catalog       get_byte_854   1                 IN              NO         NO          NULL            bytea      NULL                      NULL                    NULL                   NULL                  NULL                NULL               NULL              NULL            NULL               NULL                     NULL           NULL                NULL           NULL                test         pg_catalog  bytea     NULL           NULL          NULL        NULL                 1               NULL
 test              pg_catalog       get_byte_854   2                 IN              NO         NO          NULL            bigint     NULL                      NULL                    NULL                   NULL                  NULL                NULL               NULL              NULL            NULL               NULL                     NULL           NULL                NULL           NULL                test         pg_catalog  int8      NULL           NULL          NULL        NULL                 2               NULL
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
+skipif config local-mixed-25.1 local-mixed-25.2
 query TTTTTTTT colnames,rowsort
 SELECT * FROM system.information_schema.column_privileges WHERE table_name = 'eventlog'
 ----

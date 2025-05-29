@@ -2181,7 +2181,7 @@ ALTER TABLE regional_by_row_add_drop_col ADD COLUMN k INT DEFAULT 0
 
 # Check that the subzone config has an entry for our new index, along with a
 # subzone span.
-skipif config local-mixed-24.3 local-legacy-schema-changer
+skipif config local-legacy-schema-changer
 statement ok
 WITH subzones AS (
     SELECT
@@ -2218,7 +2218,7 @@ FROM primary_idx_matches_subzone_idx WHERE match_found = false;
 # There should be subzone configs for each index, as well as the temporary
 # index. The subzones for the old index and temporary index are removed
 # later by the GC job, but they should still be present at this point.
-skipif config local-mixed-24.3 local-legacy-schema-changer
+skipif config local-legacy-schema-changer
 query IT
 WITH subzones AS (
     SELECT
@@ -2250,7 +2250,7 @@ SELECT index_id, partition_name FROM subzone_indexes ORDER BY index_id, partitio
 4  "us-east-1"
 
 # Verify that the subzone spans refer to the new primary index.
-skipif config local-mixed-24.3 local-legacy-schema-changer
+skipif config local-legacy-schema-changer
 query T
 WITH subzone_spans AS (
     SELECT json_array_elements(crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzoneSpans') ->> 'key' AS key
@@ -2280,7 +2280,7 @@ statement ok
 CREATE INDEX rbr_idx ON regional_by_row_add_drop_col (k)
 
 # There should be subzone configs for each index, as well as the temporary index.
-skipif config local-mixed-24.3 local-legacy-schema-changer
+skipif config local-legacy-schema-changer
 query IT
 WITH subzones AS (
     SELECT
@@ -2318,7 +2318,7 @@ SELECT index_id, partition_name FROM subzone_indexes ORDER BY index_id, partitio
 6  "us-east-1"
 
 # Verify that the subzone spans refer to the new secondary index.
-skipif config local-mixed-24.3 local-legacy-schema-changer
+skipif config local-legacy-schema-changer
 query T
 WITH subzone_spans AS (
     SELECT json_array_elements(crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzoneSpans') ->> 'key' AS key
@@ -2352,7 +2352,7 @@ ALTER TABLE regional_by_row_add_drop_col DROP COLUMN k
 
 # Check that the subzone config has an entry for our new index, along with a
 # subzone span.
-skipif config local-mixed-24.3 local-legacy-schema-changer
+skipif config local-legacy-schema-changer
 statement ok
 WITH subzones AS (
     SELECT
@@ -2389,7 +2389,7 @@ FROM primary_idx_matches_subzone_idx WHERE match_found = false;
 # There should be subzone configs for each index, as well as the temporary
 # indexes. The subzones for the old indexes and temporary indexes are removed
 # later by the GC job, but they should still be present at this point.
-skipif config local-mixed-24.3 local-legacy-schema-changer
+skipif config local-legacy-schema-changer
 query IT
 WITH subzones AS (
     SELECT
@@ -2433,7 +2433,7 @@ SELECT index_id, partition_name FROM subzone_indexes ORDER BY index_id, partitio
 8  "us-east-1"
 
 # Verify that the subzone spans refer to the new primary index.
-skipif config local-mixed-24.3 local-legacy-schema-changer
+skipif config local-legacy-schema-changer
 query T
 WITH subzone_spans AS (
     SELECT json_array_elements(crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzoneSpans') ->> 'key' AS key

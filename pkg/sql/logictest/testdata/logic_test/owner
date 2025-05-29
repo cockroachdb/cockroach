@@ -258,34 +258,34 @@ DROP ROLE testuser
 
 user root
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
+skipif config local-mixed-25.1 local-mixed-25.2
 let $testuser_job_id
 SELECT id FROM system.jobs WHERE owner = 'testuser' LIMIT 1
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
+skipif config local-mixed-25.1 local-mixed-25.2
 let $testuser2_job_id
 SELECT id FROM system.jobs WHERE owner = 'testuser2' LIMIT 1
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
+skipif config local-mixed-25.1 local-mixed-25.2
 let $node_job_id
 SELECT id FROM system.jobs WHERE owner = 'node' LIMIT 1
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
+skipif config local-mixed-25.1 local-mixed-25.2
 # Verify a simple transfer by an admin from testuser to testuser2 and back.
 statement ok
 ALTER JOB $testuser_job_id OWNER TO testuser2
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
+skipif config local-mixed-25.1 local-mixed-25.2
 query T
 SELECT owner FROM system.jobs WHERE id = $testuser_job_id
 ----
 testuser2
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
+skipif config local-mixed-25.1 local-mixed-25.2
 statement ok
 ALTER JOB $testuser_job_id OWNER TO testuser
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
+skipif config local-mixed-25.1 local-mixed-25.2
 query T
 SELECT owner FROM system.jobs WHERE id = $testuser_job_id
 ----
@@ -293,11 +293,11 @@ testuser
 
 # Verify that ownership cannot transfer to or from 'node'.
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
+skipif config local-mixed-25.1 local-mixed-25.2
 statement error cannot transfer ownership
 ALTER JOB $node_job_id OWNER TO testuser
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
+skipif config local-mixed-25.1 local-mixed-25.2
 statement error cannot transfer ownership
 ALTER JOB $testuser_job_id OWNER TO node
 
@@ -316,32 +316,32 @@ CREATE USER testuser3
 statement ok
 GRANT testrole TO testuser3
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
+skipif config local-mixed-25.1 local-mixed-25.2
 statement ok
 ALTER JOB $testuser_job_id OWNER TO testrole
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
+skipif config local-mixed-25.1 local-mixed-25.2
 query T
 SELECT owner FROM system.jobs WHERE id = $testuser_job_id
 ----
 testrole
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
+skipif config local-mixed-25.1 local-mixed-25.2
 # Verify testuser2 can transfer ownership to themselves and back to testuser.
 statement ok
 ALTER JOB $testuser_job_id OWNER TO testuser2
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
+skipif config local-mixed-25.1 local-mixed-25.2
 query T
 SELECT owner FROM system.jobs WHERE id = $testuser_job_id
 ----
 testuser2
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
+skipif config local-mixed-25.1 local-mixed-25.2
 statement ok
 ALTER JOB $testuser_job_id OWNER TO testuser
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
+skipif config local-mixed-25.1 local-mixed-25.2
 query T
 SELECT owner FROM system.jobs WHERE id = $testuser_job_id
 ----
@@ -349,7 +349,7 @@ testuser
 
 user testuser3
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
+skipif config local-mixed-25.1 local-mixed-25.2
 # Verify testuser3 cannot transfer since they do not own it, including via role.
 statement error testuser3 does not own job
 ALTER JOB $testuser_job_id OWNER TO testuser3
@@ -357,17 +357,17 @@ ALTER JOB $testuser_job_id OWNER TO testuser3
 # Now move ownership to testrole so testuser3 can transfer it.
 user testuser2
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
+skipif config local-mixed-25.1 local-mixed-25.2
 statement ok
 ALTER JOB $testuser_job_id OWNER TO testrole
 
 user testuser3
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
+skipif config local-mixed-25.1 local-mixed-25.2
 statement ok
 ALTER JOB $testuser_job_id OWNER TO testuser3
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
+skipif config local-mixed-25.1 local-mixed-25.2
 # Verify testuser3, who is not an admin, cannot transfer to otherrole which they
 # are not a member of.
 statement error testuser3 cannot transfer ownership to otherrole

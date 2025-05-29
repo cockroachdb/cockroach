@@ -83,35 +83,35 @@ CREATE TABLE t (i INT PRIMARY KEY, j INT, UNIQUE INDEX idx (j)) WITH (schema_loc
 statement ok
 INSERT INTO t SELECT i, i+1 FROM generate_series(1,10) AS tmp(i);
 
-onlyif config local-mixed-24.3 local-mixed-25.1 local-legacy-schema-changer
+onlyif config local-mixed-25.1 local-legacy-schema-changer
 statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 ALTER TABLE t ADD COLUMN k INT DEFAULT 30;
 
-onlyif config local-mixed-24.3 local-mixed-25.1 local-legacy-schema-changer
+onlyif config local-mixed-25.1 local-legacy-schema-changer
 statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 ALTER TABLE t DROP COLUMN j;
 
-onlyif config local-mixed-24.3 local-mixed-25.1
+onlyif config local-mixed-25.1
 statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 ALTER TABLE t RENAME TO t2;
 
-onlyif config local-mixed-24.3 local-mixed-25.1
+onlyif config local-mixed-25.1
 statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 ALTER TABLE t RENAME COLUMN j TO j2;
 
-onlyif config local-mixed-24.3 local-mixed-25.1
+onlyif config local-mixed-25.1
 statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 ALTER INDEX idx RENAME TO idx2;
 
-onlyif config local-mixed-24.3 local-mixed-25.1
+onlyif config local-mixed-25.1
 statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 ALTER INDEX idx INVISIBLE;
 
-onlyif config local-mixed-24.3 local-mixed-25.1 local-legacy-schema-changer
+onlyif config local-mixed-25.1 local-legacy-schema-changer
 statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 DROP INDEX idx;
 
-onlyif config local-mixed-24.3 local-mixed-25.1 local-legacy-schema-changer
+onlyif config local-mixed-25.1 local-legacy-schema-changer
 statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 CREATE INDEX idx2 ON t(j);
 
@@ -119,7 +119,7 @@ statement ok
 CREATE TABLE ref (a INT PRIMARY KEY, b INT)
 
 # Locked tables cannot be referenced by foreign keys.
-onlyif config local-mixed-24.3 local-mixed-25.1 local-legacy-schema-changer
+onlyif config local-mixed-25.1 local-legacy-schema-changer
 statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 ALTER TABLE ref ADD CONSTRAINT fk FOREIGN KEY (b) REFERENCES t(j);
 
@@ -139,23 +139,23 @@ subtest end
 # Declarative schema change can automatically unset and set schema locked.
 subtest declarative_allows_schema_changes
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-legacy-schema-changer
+skipif config local-mixed-25.1 local-legacy-schema-changer
 statement ok
 ALTER TABLE t ADD COLUMN k INT DEFAULT 30;
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-legacy-schema-changer
+skipif config local-mixed-25.1 local-legacy-schema-changer
 statement ok
 CREATE INDEX idx2 ON t(j);
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-legacy-schema-changer
+skipif config local-mixed-25.1 local-legacy-schema-changer
 statement ok
 DROP INDEX idx2;
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-legacy-schema-changer
+skipif config local-mixed-25.1 local-legacy-schema-changer
 statement ok
 ALTER TABLE ref ADD CONSTRAINT fk FOREIGN KEY (b) REFERENCES t(j);
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-legacy-schema-changer
+skipif config local-mixed-25.1 local-legacy-schema-changer
 statement ok
 ALTER TABLE t DROP COLUMN j CASCADE;
 
@@ -165,7 +165,7 @@ SELECT count(create_statement) FROM [SHOW CREATE TABLE t] WHERE create_statement
 ----
 1
 
-onlyif config local-mixed-24.3 local-mixed-25.1 local-legacy-schema-changer
+onlyif config local-mixed-25.1 local-legacy-schema-changer
 statement ok
 ALTER TABLE t SET (schema_locked = false);
 
@@ -179,7 +179,7 @@ subtest zone_config
 statement ok
 ALTER TABLE ref SET (schema_locked = true);
 
-onlyif config local-mixed-24.3 local-mixed-25.1 local-legacy-schema-changer
+onlyif config local-mixed-25.1 local-legacy-schema-changer
 statement error pgcode 57000 schema changes are disallowed on table "ref" because it is locked
 ALTER TABLE ref CONFIGURE ZONE USING num_replicas = 11;
 

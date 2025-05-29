@@ -280,7 +280,7 @@ c  CREATE TABLE public.c (
 
 subtest alter_column_type_not_break_show_create
 
-onlyif config local-legacy-schema-changer local-mixed-24.3
+onlyif config local-legacy-schema-changer
 statement ok
 SET enable_experimental_alter_column_type_general = true;
 
