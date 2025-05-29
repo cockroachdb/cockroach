@@ -513,6 +513,7 @@
 <table><thead>
 <tr><td><code>LIKE</code></td><td>Return</td></tr>
 </thead><tbody>
+<tr><td><a href="collate.html">collatedstring</a> <code>LIKE</code> <a href="collate.html">collatedstring</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>LIKE</code> <a href="string.html">string</a></td><td><a href="bool.html">bool</a></td></tr>
 </tbody></table>
 <table><thead>
