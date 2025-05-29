@@ -214,8 +214,7 @@ type controllerImpl struct {
 	kvAdmissionQ               *admission.WorkQueue
 	storeGrantCoords           *admission.StoreGrantCoordinators
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator
-	kvflowController           kvflowcontrol.Controller
-	kvflowHandles              kvflowcontrol.Handles
+	kvflowHandles              kvflowcontrol.ReplicationAdmissionHandles
 
 	settings *cluster.Settings
 	every    log.EveryN
@@ -258,8 +257,7 @@ func MakeController(
 	kvAdmissionQ *admission.WorkQueue,
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator,
 	storeGrantCoords *admission.StoreGrantCoordinators,
-	kvflowController kvflowcontrol.Controller,
-	kvflowHandles kvflowcontrol.Handles,
+	kvflowHandles kvflowcontrol.ReplicationAdmissionHandles,
 	settings *cluster.Settings,
 ) Controller {
 	return &controllerImpl{
@@ -267,7 +265,6 @@ func MakeController(
 		kvAdmissionQ:               kvAdmissionQ,
 		storeGrantCoords:           storeGrantCoords,
 		elasticCPUGrantCoordinator: elasticCPUGrantCoordinator,
-		kvflowController:           kvflowController,
 		kvflowHandles:              kvflowHandles,
 		settings:                   settings,
 		every:                      log.Every(10 * time.Second),

@@ -154,6 +154,8 @@ message RaftMessageRequestBatch {
   // [^2]: See kvflowcontrolpb.AdmittedRaftLogEntries and its use in
   //       RaftMessageRequest.
   // [^3]: See I1 from kvflowcontrol/doc.go.
+  //
+  // TODO(rac1): remove.
   repeated uint64 store_ids = 2 [(gogoproto.customname) = "StoreIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
 
   // now is a clock reading from the sender of the batch. It must be used by
