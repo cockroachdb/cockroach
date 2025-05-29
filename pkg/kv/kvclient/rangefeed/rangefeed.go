@@ -349,6 +349,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier, resumeWithF
 	if f.onMetadata != nil {
 		rangefeedOpts = append(rangefeedOpts, kvcoord.WithMetadata())
 	}
+	rangefeedOpts = append(rangefeedOpts, kvcoord.WithConsumerID(f.consumerID))
 
 	for i := 0; r.Next(); i++ {
 		ts := frontier.Frontier()
