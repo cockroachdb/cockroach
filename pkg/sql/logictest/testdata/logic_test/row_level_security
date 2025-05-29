@@ -5331,9 +5331,16 @@ CREATE ROLE can_bypassrls WITH BYPASSRLS;
 statement ok
 CREATE ROLE cannot_bypassrls;
 
+statement ok
+CREATE ROLE can_bypassrls_global;
+
+statement ok
+GRANT SYSTEM BYPASSRLS TO can_bypassrls_global; 
+
 query B
-SELECT rolbypassrls FROM pg_authid WHERE rolname = 'can_bypassrls';
+SELECT rolbypassrls FROM pg_authid WHERE rolname = 'can_bypassrls' OR rolname = 'can_bypassrls_global';
 ----
+true
 true
 
 query B
@@ -5342,8 +5349,9 @@ SELECT rolbypassrls FROM pg_authid WHERE rolname = 'cannot_bypassrls';
 false
 
 query B
-SELECT rolbypassrls FROM pg_roles WHERE rolname = 'can_bypassrls';
+SELECT rolbypassrls FROM pg_roles WHERE rolname = 'can_bypassrls' OR rolname = 'can_bypassrls_global';
 ----
+true
 true
 
 
@@ -5358,5 +5366,101 @@ DROP ROLE can_bypassrls;
 
 statement ok
 DROP ROLE cannot_bypassrls;
+
+subtest createrole_pg_roles_pg_authid
+
+statement ok
+CREATE ROLE can_createrole WITH CREATEROLE;
+
+statement ok
+CREATE ROLE cannot_createrole;
+
+statement ok
+CREATE ROLE can_createrole_global;
+
+statement ok
+GRANT SYSTEM CREATEROLE TO can_createrole_global; 
+
+query B
+SELECT rolcreaterole FROM pg_authid WHERE rolname = 'can_createrole' OR rolname = 'can_createrole_global';
+----
+true
+true
+
+query B
+SELECT rolcreaterole FROM pg_authid WHERE rolname = 'cannot_createrole';
+----
+false
+
+query B
+SELECT rolcreaterole FROM pg_roles WHERE rolname = 'can_createrole' OR rolname = 'can_createrole_global';
+----
+true
+true
+
+query B
+SELECT rolcreaterole FROM pg_roles WHERE rolname = 'cannot_createrole';
+----
+false
+
+statement ok
+DROP ROLE can_createrole;
+
+statement ok
+DROP ROLE cannot_createrole;
+
+statement ok
+REVOKE SYSTEM CREATEROLE FROM can_createrole_global; 
+
+statement ok
+DROP ROLE can_createrole_global;
+
+subtest createdb_pg_roles_pg_authid
+
+statement ok
+CREATE ROLE can_createdb WITH CREATEDB;
+
+statement ok
+CREATE ROLE cannot_createdb;
+
+statement ok
+CREATE ROLE can_createdb_global;
+
+statement ok
+GRANT SYSTEM CREATEDB TO can_createdb_global; 
+
+query B
+SELECT rolcreatedb FROM pg_authid WHERE rolname = 'can_createdb' OR rolname = 'can_createdb_global';
+----
+true
+true
+
+query B
+SELECT rolcreatedb FROM pg_authid WHERE rolname = 'cannot_createdb';
+----
+false
+
+query B
+SELECT rolcreatedb FROM pg_roles WHERE rolname = 'can_createdb' OR rolname = 'can_createdb_global';
+----
+true
+true
+
+query B
+SELECT rolcreatedb FROM pg_roles WHERE rolname = 'cannot_createdb';
+----
+false
+
+statement ok
+DROP ROLE can_createdb;
+
+statement ok
+DROP ROLE cannot_createdb;
+
+statement ok
+REVOKE SYSTEM CREATEDB FROM can_createdb_global; 
+
+statement ok
+DROP ROLE can_createdb_global;
 
 subtest end
