@@ -4345,8 +4345,7 @@ https://www.postgresql.org/docs/17/catalog-pg-policy.html`,
 				return errors.AssertionFailedf("unexpected policy command: %s", policy.Command.String())
 			}
 
-			// loop through role names and get all the role oids
-			h := makeOidHasher()
+			// Loop through role names and get all the role OIDs.
 			treeRoleOids := tree.NewDArray(types.Oid)
 			for _, roleName := range policy.RoleNames {
 				if roleName == "public" {
@@ -4391,14 +4390,14 @@ https://www.postgresql.org/docs/17/catalog-pg-policy.html`,
 			}
 
 			if err := addRow(
-				tree.NewDOid(oid.Oid(policy.ID)),                           // oid
+				h.PolicyOid(table.GetID(), policy.ID),                      // oid
 				tree.NewDName(policy.Name),                                 // polname
 				tableOid(table.GetID()),                                    // polrelid
 				tree.NewDString(cmd),                                       // polcmd
 				tree.MakeDBool(policy.Type == catpb.PolicyType_PERMISSIVE), // polpermissive
-				treeRoleOids,                                               // polroles
-				usingExpr,                                                  // polqual
-				checkExpr,                                                  // polwithcheck
+				treeRoleOids, // polroles
+				usingExpr,    // polqual
+				checkExpr,    // polwithcheck
 			); err != nil {
 				return err
 			}
@@ -5212,6 +5211,7 @@ const (
 	rewriteTypeTag
 	dbSchemaRoleTypeTag
 	castTypeTag
+	policyTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -5408,6 +5408,13 @@ func (h oidHasher) CastOid(srcID oid.Oid, tgtID oid.Oid) *tree.DOid {
 	h.writeTypeTag(castTypeTag)
 	h.writeUInt32(uint32(srcID))
 	h.writeUInt32(uint32(tgtID))
+	return h.getOid()
+}
+
+func (h oidHasher) PolicyOid(tableID descpb.ID, policyID descpb.PolicyID) *tree.DOid {
+	h.writeTypeTag(policyTypeTag)
+	h.writeTable(tableID)
+	h.writeUInt32(uint32(policyID))
 	return h.getOid()
 }
 

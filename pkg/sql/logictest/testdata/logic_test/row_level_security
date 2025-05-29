@@ -166,15 +166,15 @@ multi_pol_tab1  CREATE TABLE public.multi_pol_tab1 (
 query ITITBTTT colnames,rowsort
 select oid::INT, polname, polrelid::INT, polcmd, polpermissive, polroles::string, polqual, polwithcheck from pg_catalog.pg_policy
 ----
-oid  polname  polrelid  polcmd  polpermissive  polroles       polqual  polwithcheck
-1    policy1  110       *       true           {0}            NULL     NULL
-2    policy2  110       *       false          {0}            NULL     NULL
-3    policy3  110       *       true           {0}            NULL     NULL
-4    policy4  110       a       true           {0}            NULL     NULL
-5    policy5  110       w       true           {0}            NULL     NULL
-6    policy6  110       d       true           {0}            NULL     NULL
-7    policy7  110       r       true           {0}            NULL     NULL
-8    policy8  110       *       true           {0,835509264}  NULL     NULL
+oid         polname  polrelid  polcmd  polpermissive  polroles       polqual  polwithcheck
+2144106144  policy1  110       *       true           {0}            NULL     NULL
+2144106147  policy2  110       *       false          {0}            NULL     NULL
+2144106146  policy3  110       *       true           {0}            NULL     NULL
+2144106149  policy4  110       a       true           {0}            NULL     NULL
+2144106148  policy5  110       w       true           {0}            NULL     NULL
+2144106151  policy6  110       d       true           {0}            NULL     NULL
+2144106150  policy7  110       r       true           {0}            NULL     NULL
+2144106153  policy8  110       *       true           {0,835509264}  NULL     NULL
 
 query TTTTTTTT colnames,rowsort
 select schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check from pg_catalog.pg_policies
@@ -253,9 +253,9 @@ vectorized: true
 query ITITBTTT colnames,rowsort
 select oid::INT, polname, polrelid::INT, polcmd, polpermissive, polroles::string, polqual, polwithcheck from pg_catalog.pg_policy WHERE polrelid = 'multi_pol_tab2'::regclass
 ----
-oid  polname   polrelid  polcmd  polpermissive  polroles  polqual  polwithcheck
-1    policy9   113       *       true           {0}       NULL     NULL
-2    policy10  113       *       true           {0}       NULL     NULL
+oid         polname   polrelid  polcmd  polpermissive  polroles  polqual  polwithcheck
+2403842415  policy9   113       *       true           {0}       NULL     NULL
+2403842412  policy10  113       *       true           {0}       NULL     NULL
 
 query TTTTTTTT colnames,rowsort
 select schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check from pg_catalog.pg_policies where tablename = 'multi_pol_tab2'
@@ -267,9 +267,9 @@ public      multi_pol_tab2  policy10    permissive  {public}  ALL  NULL  NULL
 query ITITBTTT colnames,rowsort
 select oid::INT, polname, polrelid::INT, polcmd, polpermissive, polroles::string, polqual, polwithcheck from pg_catalog.pg_policy WHERE polrelid = 'multi_pol_tab3'::regclass
 ----
-oid  polname   polrelid  polcmd  polpermissive  polroles  polqual  polwithcheck
-1    policy11  114       *       true           {0}       NULL     NULL
-2    policy12  114       *       true           {0}       NULL     NULL
+oid         polname   polrelid  polcmd  polpermissive  polroles  polqual  polwithcheck
+1058765404  policy11  114       *       true           {0}       NULL     NULL
+1058765407  policy12  114       *       true           {0}       NULL     NULL
 
 query TTTTTTTT colnames,rowsort
 select schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check from pg_catalog.pg_policies where tablename = 'multi_pol_tab3'
