@@ -56,7 +56,7 @@ func getTriggerCreateStatement(
 	query := fmt.Sprintf(`
 SELECT create_statement
 FROM %s.crdb_internal.create_trigger_statements
-WHERE descriptor_id = $1`, lexbase.EscapeSQLIdent(dbName))
+WHERE trigger_id = $1`, lexbase.EscapeSQLIdent(dbName))
 
 	row, err := evalPlanner.QueryRowEx(ctx,
 		"crdb_internal.show_create_all_triggers",

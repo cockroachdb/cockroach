@@ -575,6 +575,19 @@ The output can be used to recreate a database.'
 			volatility.Volatile,
 		),
 	),
+	"crdb_internal.show_create_all_triggers": makeBuiltin(
+		tree.FunctionProperties{},
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "database_name", Typ: types.String},
+			},
+			showCreateAllTriggersGeneratorType,
+			makeShowCreateAllTriggersGenerator,
+			`Returns rows of CREATE trigger statements.
+				The output can be used to recreate a database.`,
+			volatility.Volatile,
+		),
+	),
 	"crdb_internal.show_create_all_types": makeBuiltin(
 		tree.FunctionProperties{},
 		makeGeneratorOverload(
@@ -3090,7 +3103,7 @@ func (s *showCreateAllTriggersGenerator) ResolvedType() *types.T {
 // Start implements the eval.ValueGenerator interface.
 func (s *showCreateAllTriggersGenerator) Start(ctx context.Context, txn *kv.Txn) error {
 	ids, err := getTriggerIds(
-		ctx, s.evalPlanner, txn, s.dbName, &s.acc) //TODO: Implement in a pkg/sql/sem/builtins/show_create_all_triggers.go
+		ctx, s.evalPlanner, txn, s.dbName, &s.acc)
 
 	if err != nil {
 		return err
@@ -3109,7 +3122,7 @@ func (s *showCreateAllTriggersGenerator) Next(ctx context.Context) (bool, error)
 		return false, nil
 	}
 
-	createStmt, err := getTriggerCreateStatement( //TODO: Implement in a pkg/sql/sem/builtins/show_create_all_triggers.go
+	createStmt, err := getTriggerCreateStatement(
 		ctx, s.evalPlanner, s.txn, s.ids[s.idx], s.dbName)
 
 	if err != nil {
@@ -3128,6 +3141,19 @@ func (s *showCreateAllTriggersGenerator) Values() (tree.Datums, error) {
 // Close implements the eval.ValueGenerator interface.
 func (s *showCreateAllTriggersGenerator) Close(ctx context.Context) {
 	s.acc.Close(ctx)
+}
+
+// makeShowCreateAllTriggersGenerator creates a generator to support the
+// crdb_internal.show_create_all_triggers(dbName) builtin.
+func makeShowCreateAllTriggersGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	dbName := string(tree.MustBeDString(args[0]))
+	return &showCreateAllTriggersGenerator{
+		evalPlanner: evalCtx.Planner,
+		dbName:      dbName,
+		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),
+	}, nil
 }
 
 // showCreateAllTypesGenerator supports the execution of

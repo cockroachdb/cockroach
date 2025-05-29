@@ -3944,6 +3944,91 @@ CREATE TABLE crdb_internal.create_procedure_statements (
 	populate: createRoutinePopulate(true /* procedure */),
 }
 
+func renderCreateTriggerStatement(
+	ctx context.Context,
+	p *planner,
+	trigger *descpb.TriggerDescriptor,
+	tableDesc catalog.TableDescriptor,
+) (string, error) {
+	tableTyp, err := p.ResolveTypeByOID(ctx, typedesc.TableIDToImplicitTypeOID(tableDesc.GetID()))
+	if err != nil {
+		return "", err
+	}
+
+	funcName, err := p.GetQualifiedFunctionNameByID(ctx, int64(trigger.FuncID))
+	if err != nil {
+		return "", err
+	}
+
+	tableName, err := p.getQualifiedTableName(ctx, tableDesc)
+	if err != nil {
+		return "", err
+	}
+
+	events := make([]*tree.TriggerEvent, len(trigger.Events))
+	for j := range events {
+		descEvent := trigger.Events[j]
+		events[j] = &tree.TriggerEvent{
+			EventType: tree.TriggerEventTypeToTree[descEvent.Type],
+			Columns:   make(tree.NameList, 0, len(descEvent.ColumnNames)),
+		}
+		for _, colName := range descEvent.ColumnNames {
+			events[j].Columns = append(events[j].Columns, tree.Name(colName))
+		}
+	}
+
+	var transitions []*tree.TriggerTransition
+	if trigger.NewTransitionAlias != "" {
+		transitions = append(transitions, &tree.TriggerTransition{
+			IsNew: true,
+			Name:  tree.Name(trigger.NewTransitionAlias),
+		})
+	}
+	if trigger.OldTransitionAlias != "" {
+		transitions = append(transitions, &tree.TriggerTransition{
+			IsNew: false,
+			Name:  tree.Name(trigger.OldTransitionAlias),
+		})
+	}
+
+	forEach := tree.TriggerForEachStatement
+	if trigger.ForEachRow {
+		forEach = tree.TriggerForEachRow
+	}
+
+	var whenExpr tree.Expr
+	if trigger.WhenExpr != "" {
+		whenExpr, err = schemaexpr.ParseTriggerWhenExprForDisplay(
+			ctx, tableTyp, trigger.WhenExpr, p.EvalContext(), p.SemaCtx(), tree.FmtParsable,
+		)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	createTrigger := &tree.CreateTrigger{
+		Replace:     false,
+		Name:        tree.Name(trigger.Name),
+		ActionTime:  tree.TriggerActionTimeToTree[trigger.ActionTime],
+		Events:      events,
+		TableName:   tableName.ToUnresolvedObjectName(),
+		Transitions: transitions,
+		ForEach:     forEach,
+		When:        whenExpr,
+		FuncName:    funcName.ToUnresolvedObjectName().ToUnresolvedName(),
+		FuncArgs:    trigger.FuncArgs,
+	}
+
+	f := tree.NewFmtCtx(
+		tree.FmtParsable,
+		tree.FmtDataConversionConfig(p.SessionData().DataConversionConfig),
+		tree.FmtLocation(p.SessionData().Location),
+	)
+	f.FormatNode(createTrigger)
+
+	return f.CloseAndGetString(), nil
+}
+
 func createTriggerPopulate() func(
 	ctx context.Context,
 	p *planner,
@@ -3953,24 +4038,37 @@ func createTriggerPopulate() func(
 	return func(
 		ctx context.Context,
 		p *planner,
-		db catalog.DatabaseDescriptor,
+		_ catalog.DatabaseDescriptor, // unused, since we get all descriptors
 		addRow func(...tree.Datum) error,
 	) error {
-		// TODO: Walk databases, schemas, and tables.
-		// TODO: Fetch trigger descriptors from tables.
-		// TODO: Generate proper CREATE TRIGGER SQL.
+		return forEachTableDesc(ctx, p, nil, forEachTableDescOptions{}, func(ctx context.Context, tblCtx tableDescContext) error {
+			tbl := tblCtx.table
+			curDB := tblCtx.database
+			sc := tblCtx.schema
 
-		// Placeholder example row.
-		return addRow(
-			tree.NewDInt(0),                    // database_id
-			tree.NewDString("example_db"),      // database_name
-			tree.NewDInt(0),                    // schema_id
-			tree.NewDString("public"),          // schema_name
-			tree.NewDInt(0),                    // table_id
-			tree.NewDString("example_table"),   // table_name
-			tree.NewDInt(0),                    // trigger_id
-			tree.NewDString("example_trigger"), // trigger_name
-			tree.NewDString("CREATE TRIGGER example_trigger ..."), // create_statement
+			for _, trig := range tbl.GetTriggers() {
+				sql, err := renderCreateTriggerStatement(ctx, p, &trig, tbl)
+				if err != nil {
+					return err
+				}
+
+				err = addRow(
+					tree.NewDInt(tree.DInt(curDB.GetID())), // database_id
+					tree.NewDString(curDB.GetName()),       // database_name
+					tree.NewDInt(tree.DInt(sc.GetID())),    // schema_id
+					tree.NewDString(sc.GetName()),          // schema_name
+					tree.NewDInt(tree.DInt(tbl.GetID())),   // table_id
+					tree.NewDString(tbl.GetName()),         // table_name
+					tree.NewDInt(tree.DInt(trig.ID)),       // trigger_id
+					tree.NewDString(trig.Name),             // trigger_name
+					tree.NewDString(sql),                   // create_statement
+				)
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		},
 		)
 	}
 }
@@ -3983,6 +4081,8 @@ CREATE TABLE crdb_internal.create_trigger_statements (
   database_name STRING,
   schema_id INT,
   schema_name STRING,
+  table_id INT,
+  table_name STRING,
   trigger_id INT,
   trigger_name STRING,
   create_statement STRING)`,
