@@ -66,7 +66,7 @@ func iterateReplicaKeySpansShared(
 	}
 	spans := rditer.Select(desc.RangeID, rditer.SelectOpts{
 		Ranged: rditer.SelectRangedOptions{
-			Span:     desc.RSpan(),
+			RSpan:    desc.RSpan(),
 			UserKeys: true,
 		},
 	})

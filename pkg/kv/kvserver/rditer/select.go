@@ -12,9 +12,9 @@ import (
 
 // SelectRangedOptions configures span-based selection for replicated keys.
 type SelectRangedOptions struct {
-	// Span describes the range bounds. This must be set if any of the other
+	// RSpan describes the range bounds. This must be set if any of the other
 	// fields in this struct are.
-	Span roachpb.RSpan
+	RSpan roachpb.RSpan
 	// SystemKeys includes replicated range-local system keys such as range
 	// descriptors, transaction records, queue processing state, and probe keys.
 	// These keys are stored under the /Local/Range prefix and are part of the
@@ -80,7 +80,7 @@ func Select(rangeID roachpb.RangeID, opts SelectOpts) []roachpb.Span {
 		sl = append(sl, makeRangeIDUnreplicatedSpan(rangeID))
 	}
 
-	if !opts.Ranged.Span.Equal(roachpb.RSpan{}) {
+	if !opts.Ranged.RSpan.Equal(roachpb.RSpan{}) {
 		// r1 "really" only starts at LocalMax. But because we use a StartKey of
 		// RKeyMin for r1, we actually do anchor range descriptors (and their locks
 		// and txn records) at RKeyMin as well. On the other hand, the "user key
@@ -89,7 +89,7 @@ func Select(rangeID roachpb.RangeID, opts SelectOpts) []roachpb.Span {
 		// keyspace we must not call KeySpan, for user keys we have to.
 		//
 		// See also the comment on KeySpan.
-		in := opts.Ranged.Span
+		in := opts.Ranged.RSpan
 		adjustedIn := in.KeySpan()
 
 		// System keys (range descriptors, txn records, probes, etc).

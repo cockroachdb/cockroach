@@ -3658,7 +3658,7 @@ func (s *Store) checkpointSpans(desc *roachpb.RangeDescriptor) []roachpb.Span {
 	// TODO(tbg): rangeID is ignored here, make a rangeID-agnostic helper.
 	spans = append(spans, rditer.Select(0, rditer.SelectOpts{
 		Ranged: rditer.SelectRangedOptions{
-			Span:       userKeys,
+			RSpan:      userKeys,
 			SystemKeys: true,
 			UserKeys:   true,
 			LockTable:  true,

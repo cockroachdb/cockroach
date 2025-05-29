@@ -591,7 +591,7 @@ func processReplicatedLocks(
 	// keys. That's what the call to Select below will give us.
 	ltSpans := rditer.Select(desc.RangeID, rditer.SelectOpts{
 		Ranged: rditer.SelectRangedOptions{
-			Span:      desc.RSpan(),
+			RSpan:     desc.RSpan(),
 			LockTable: true,
 		},
 	})
