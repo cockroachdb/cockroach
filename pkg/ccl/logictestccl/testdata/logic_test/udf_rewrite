@@ -585,7 +585,6 @@ subtest end
 
 subtest do_block
 
-skipif config local-mixed-24.3
 statement ok
 CREATE FUNCTION f_rewrite() RETURNS INT AS $$
   BEGIN
@@ -607,13 +606,11 @@ CREATE FUNCTION f_rewrite() RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
-skipif config local-mixed-24.3
 query T
 SELECT get_body_str('f_rewrite');
 ----
 "BEGIN\nDO $funcbody$\nBEGIN\nSELECT nextval(106:::REGCLASS);\nSELECT b'\\x80':::@100107;\nRAISE NOTICE 'foo';\nDO $$\nBEGIN\nRAISE NOTICE 'bar';\nSELECT nextval(106:::REGCLASS);\nSELECT b'\\x80':::@100107;\nEND;\n$$;\nEND;\n$funcbody$;\nRETURN 100;\nEND;\n"
 
-skipif config local-mixed-24.3
 query TT
 SHOW CREATE FUNCTION f_rewrite;
 ----
@@ -650,13 +647,11 @@ ALTER TYPE weekday RENAME VALUE 'friday' TO 'humpday';
 statement ok
 ALTER TYPE weekday RENAME TO workday;
 
-skipif config local-mixed-24.3
 query T
 SELECT get_body_str('f_rewrite');
 ----
 "BEGIN\nDO $funcbody$\nBEGIN\nSELECT nextval(106:::REGCLASS);\nSELECT b'\\x80':::@100107;\nRAISE NOTICE 'foo';\nDO $$\nBEGIN\nRAISE NOTICE 'bar';\nSELECT nextval(106:::REGCLASS);\nSELECT b'\\x80':::@100107;\nEND;\n$$;\nEND;\n$funcbody$;\nRETURN 100;\nEND;\n"
 
-skipif config local-mixed-24.3
 query TT
 SHOW CREATE FUNCTION f_rewrite;
 ----
@@ -694,7 +689,6 @@ ALTER TYPE workday RENAME TO weekday;
 statement ok
 ALTER TYPE weekday RENAME VALUE 'humpday' TO 'friday';
 
-skipif config local-mixed-24.3
 statement ok
 DROP FUNCTION f_rewrite;
 

@@ -4439,7 +4439,6 @@ ALTER TABLE t1 SET (schema_locked = false);
 statement ok
 ALTER TABLE other SET (schema_locked = false);
 
-skipif config local-mixed-24.3
 statement error pq: ALTER COLUMN TYPE is only implemented in the declarative schema changer
 alter table t1 alter column j set data type text;
 

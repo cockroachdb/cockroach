@@ -5145,13 +5145,11 @@ CREATE TABLE t_128420 (i int not null);
 
 # Not supported in mixed version configurations
 skipif config local-legacy-schema-changer
-skipif config local-mixed-24.3
 skipif config local-mixed-25.1
 statement ok
 ALTER TABLE t_128420 ADD COLUMN box BOX2D NULL UNIQUE, ALTER PRIMARY KEY USING COLUMNS (i) USING HASH;
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-24.3
 skipif config local-mixed-25.1
 skipif config local-schema-locked
 query TT
