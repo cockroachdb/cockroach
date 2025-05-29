@@ -159,13 +159,8 @@ func clearSubsumedReplicaDiskData(
 ) (clearedSpans []roachpb.Span, _ error) {
 	// NB: we don't clear RangeID local key spans here. That happens
 	// via the call to DestroyReplica.
-	getKeySpans := func(d *roachpb.RangeDescriptor) []roachpb.Span {
-		return rditer.Select(d.RangeID, rditer.SelectOpts{
-			ReplicatedBySpan: d.RSpan(),
-		})
-	}
-	keySpans := getKeySpans(desc)
-	totalKeySpans := append([]roachpb.Span(nil), keySpans...)
+	keySpan := desc.RSpan()
+	totalSpan := keySpan
 	for _, subDesc := range subsumedDescs {
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		subsumedReplSSTFile := &storage.MemObject{}
@@ -175,21 +170,15 @@ func clearSubsumedReplicaDiskData(
 		// NOTE: We set mustClearRange to true because we are setting
 		// RangeTombstoneKey. Since Clears and Puts need to be done in increasing
 		// order of keys, it is not safe to use ClearRangeIter.
-		opts := kvstorage.ClearRangeDataOptions{
-			ClearReplicatedByRangeID:   true,
-			ClearUnreplicatedByRangeID: true,
-			MustUseClearRange:          true,
-		}
-		subsumedClearedSpans := rditer.Select(subDesc.RangeID, rditer.SelectOpts{
-			ReplicatedByRangeID:   opts.ClearReplicatedByRangeID,
-			UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
-		})
-		clearedSpans = append(clearedSpans, subsumedClearedSpans...)
-		if err := kvstorage.DestroyReplica(ctx, subDesc.RangeID, reader, &subsumedReplSST, mergedTombstoneReplicaID, opts); err != nil {
+		if err := kvstorage.DestroyRangeIDOrdered(
+			ctx, reader, &subsumedReplSST, subDesc.RangeID, mergedTombstoneReplicaID,
+		); err != nil {
 			subsumedReplSST.Close()
 			return nil, err
-		}
-		if err := subsumedReplSST.Finish(); err != nil {
+		} else if err := kvstorage.DestroyRaft(ctx, reader, &subsumedReplSST, subDesc.RangeID); err != nil {
+			subsumedReplSST.Close()
+			return nil, err
+		} else if err := subsumedReplSST.Finish(); err != nil {
 			return nil, err
 		}
 		if subsumedReplSST.DataSize > 0 {
@@ -200,16 +189,21 @@ func clearSubsumedReplicaDiskData(
 			}
 		}
 
-		srKeySpans := getKeySpans(subDesc)
-		// Compute the total key space covered by the current replica and all
-		// subsumed replicas.
-		for i := range srKeySpans {
-			if srKeySpans[i].Key.Compare(totalKeySpans[i].Key) < 0 {
-				totalKeySpans[i].Key = srKeySpans[i].Key
-			}
-			if srKeySpans[i].EndKey.Compare(totalKeySpans[i].EndKey) > 0 {
-				totalKeySpans[i].EndKey = srKeySpans[i].EndKey
-			}
+		// TODO: we probably don't need to return these. This is already
+		// incorporated in any deletions that the above calls made.
+		clearedSpans = append(clearedSpans, rditer.Select(subDesc.RangeID, rditer.SelectOpts{
+			ReplicatedByRangeID:   true,
+			UnreplicatedByRangeID: true,
+		})...)
+
+		// Compute the key space covered by the current replica and all subsumed
+		// replicas.
+		subSpan := subDesc.RSpan()
+		if subSpan.Key.Compare(totalSpan.Key) < 0 {
+			totalSpan.Key = subSpan.Key
+		}
+		if subSpan.EndKey.Compare(totalSpan.EndKey) > 0 {
+			totalSpan.EndKey = subSpan.EndKey
 		}
 	}
 
@@ -226,58 +220,61 @@ func clearSubsumedReplicaDiskData(
 	// Since the merge is the first operation to happen, a follower could be down
 	// before it completes. It is reasonable for a snapshot for r1 from S3 to
 	// subsume both r1 and r2 in S1.
-	for i := range keySpans {
-		// The snapshot must never subsume a replica that extends the range of the
-		// replica to the left. This is because splits and merges (the only
-		// operation that change the key bounds) always leave the start key intact.
-		// Extending to the left implies that either we merged "to the left" (we
-		// don't), or that we're applying a snapshot for another range (we don't do
-		// that either). Something is severely wrong for this to happen.
-		if totalKeySpans[i].Key.Compare(keySpans[i].Key) < 0 {
-			log.Fatalf(ctx, "subsuming replica to our left; key span: %v; total key span %v",
-				keySpans[i], totalKeySpans[i])
-		}
 
-		// In the comments below, s1, ..., sn are the end keys for the subsumed
-		// replicas (for the current keySpan).
-		// Note that if there aren't any subsumed replicas (the common case), the
-		// next comparison is always zero and this loop is a no-op.
+	// FIXME: call ClearRSpan once, instead of decomposing it? Or not. Make it
+	// consistent with how the subsumed ranges data is cleared: in separate SSTs
+	// or one. They probably need to be separate so that the SST doesn't overlap
+	// with others.
+	//
+	// Instead of all this ordered SST craft, could we de-atomic snap&subsume into
+	// apply batch + ingest at some point? With WAG, this operation can be made
+	// look atomic. Same as we will do for AddSSTable stuff.
+	_ = kvstorage.ClearRSpan
 
-		if totalKeySpans[i].EndKey.Compare(keySpans[i].EndKey) <= 0 {
-			// The subsumed replicas are fully contained in the snapshot:
-			//
-			// [a---s1---...---sn)
-			// [a---------------------b)
-			//
-			// We don't need to clear additional keyspace here, since clearing `[a,b)`
-			// will also clear all subsumed replicas.
-			continue
-		}
-
-		// The subsumed replicas extend past the snapshot:
+	// The snapshot must never subsume a replica that extends the range of the
+	// replica to the left. This is because splits and merges (the only
+	// operation that change the key bounds) always leave the start key intact.
+	// Extending to the left implies that either we merged "to the left" (we
+	// don't), or that we're applying a snapshot for another range (we don't do
+	// that either). Something is severely wrong for this to happen.
+	if totalSpan.Key.Compare(keySpan.Key) < 0 {
+		log.Fatalf(ctx, "subsuming replica to our left; key span: %v; total key span %v",
+			keySpan, totalSpan)
+	}
+	// In the comments below, s1, ..., sn are the end keys for the subsumed
+	// replicas (for the current keySpan).
+	// Note that if there aren't any subsumed replicas (the common case), the
+	// next comparison is always zero and this loop is a no-op.
+	if totalSpan.EndKey.Compare(keySpan.EndKey) <= 0 {
+		// The subsumed replicas are fully contained in the snapshot:
 		//
-		// [a----------------s1---...---sn)
+		// [a---s1---...---sn)
 		// [a---------------------b)
 		//
-		// We need to additionally clear [b,sn).
-
+		// We don't need to clear additional keyspace here, since clearing `[a,b)`
+		// will also clear all subsumed replicas.
+		return clearedSpans, nil
+	}
+	// The subsumed replicas extend past the snapshot:
+	//
+	// [a----------------s1---...---sn)
+	// [a---------------------b)
+	//
+	// We need to additionally clear [b,sn).
+	for s := range rditer.RSpan(roachpb.RSpan{Key: keySpan.EndKey, EndKey: totalSpan.EndKey}) {
 		subsumedReplSSTFile := &storage.MemObject{}
 		subsumedReplSST := storage.MakeIngestionSSTWriter(
 			ctx, st, subsumedReplSSTFile,
 		)
 		if err := storage.ClearRangeWithHeuristic(
-			ctx,
-			reader,
-			&subsumedReplSST,
-			keySpans[i].EndKey,
-			totalKeySpans[i].EndKey,
+			ctx, reader, &subsumedReplSST,
+			s.Key, s.EndKey,
 			kvstorage.ClearRangeThresholdPointKeys,
 		); err != nil {
 			subsumedReplSST.Close()
 			return nil, err
 		}
-		clearedSpans = append(clearedSpans,
-			roachpb.Span{Key: keySpans[i].EndKey, EndKey: totalKeySpans[i].EndKey})
+		clearedSpans = append(clearedSpans, s)
 		if err := subsumedReplSST.Finish(); err != nil {
 			return nil, err
 		}

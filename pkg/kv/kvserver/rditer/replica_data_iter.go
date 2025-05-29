@@ -7,6 +7,7 @@ package rditer
 
 import (
 	"context"
+	"iter"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -93,6 +94,44 @@ func MakeAllKeySpanSet(d *roachpb.RangeDescriptor) *spanset.SpanSet {
 		panic(err)
 	}
 	return ss
+}
+
+func RSpan(s roachpb.RSpan) iter.Seq[roachpb.Span] {
+	return func(yield func(roachpb.Span) bool) {
+		if !yield(makeRangeLocalKeySpan(s)) {
+			return
+		}
+		// Handle doubly-local lock table keys since range descriptor key is a range
+		// local key that can have a replicated lock acquired on it.
+		startRangeLocal, _ := keys.LockTableSingleKey(keys.MakeRangeKeyPrefix(s.Key), nil)
+		endRangeLocal, _ := keys.LockTableSingleKey(keys.MakeRangeKeyPrefix(s.EndKey), nil)
+		if !yield(roachpb.Span{Key: startRangeLocal, EndKey: endRangeLocal}) {
+			return
+		}
+		// r1 "really" only starts at LocalMax. But because we use a StartKey of
+		// RKeyMin for r1, we actually do anchor range descriptors (and their locks
+		// and txn records) at RKeyMin as well. On the other hand, the "user key
+		// space" cannot start at RKeyMin because then it encompasses the
+		// special-cased prefix \x02... (/Local/). So awkwardly for key-based local
+		// keyspace we must not call KeySpan, for user keys we have to.
+		s = s.KeySpan()
+		startGlobal, _ := keys.LockTableSingleKey(s.Key.AsRawKey(), nil)
+		endGlobal, _ := keys.LockTableSingleKey(s.EndKey.AsRawKey(), nil)
+		if !yield(roachpb.Span{Key: startGlobal, EndKey: endGlobal}) {
+			return
+		}
+		yield(s.AsRawSpanWithNoLocals())
+	}
+}
+
+func RangeIDReplicated(rangeID roachpb.RangeID) roachpb.Span {
+	prefix := keys.MakeRangeIDReplicatedPrefix(rangeID)
+	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+}
+
+func RangeIDUnreplicated(rangeID roachpb.RangeID) roachpb.Span {
+	prefix := keys.MakeRangeIDUnreplicatedPrefix(rangeID)
+	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
 }
 
 // MakeReplicatedKeySpans returns all key spans that are fully Raft
