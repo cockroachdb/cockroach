@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed/rangefeedpb"
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,6 +36,7 @@ type Server struct {
 	handlesV1, handlesV2                   kvflowcontrol.InspectHandles
 	kvflowControllerV1, kvflowControllerV2 kvflowcontrol.InspectController
 	storeLiveness                          kvserver.InspectAllStoreLiveness
+	rangefeed                              kvserver.InspectAllRangefeeds
 }
 
 var _ inspectzpb.InspectzServer = &Server{}
@@ -45,6 +47,7 @@ func NewServer(
 	handlesV1, handlesV2 kvflowcontrol.InspectHandles,
 	kvflowControllerV1, kvflowControllerV2 kvflowcontrol.InspectController,
 	storeLiveness kvserver.InspectAllStoreLiveness,
+	rangefeed kvserver.InspectAllRangefeeds,
 ) *Server {
 	mux := http.NewServeMux()
 	server := &Server{
@@ -56,6 +59,7 @@ func NewServer(
 		kvflowControllerV1: kvflowControllerV1,
 		kvflowControllerV2: kvflowControllerV2,
 		storeLiveness:      storeLiveness,
+		rangefeed:          rangefeed,
 	}
 	mux.Handle("/inspectz/v1/kvflowhandles", server.makeKVFlowHandlesHandler(server.KVFlowHandles))
 	mux.Handle("/inspectz/v1/kvflowcontroller", server.makeKVFlowControllerHandler(server.KVFlowController))
@@ -68,6 +72,10 @@ func NewServer(
 	mux.Handle(
 		"/inspectz/storeliveness/supportFor",
 		server.makeStoreLivenessHandler(server.StoreLivenessSupportFor),
+	)
+	mux.Handle(
+		"/inspectz/rangefeed",
+		server.makeRangefeedHandler(server.Rangefeed),
 	)
 
 	return server
@@ -134,6 +142,24 @@ func (s *Server) makeStoreLivenessHandler(
 	}
 }
 
+func (s *Server) makeRangefeedHandler(
+	impl func(ctx context.Context, request *rangefeedpb.InspectStoreRangefeedsRequest) (
+		*rangefeedpb.InspectStoreRangefeedsResponse, error,
+	),
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := s.AnnotateCtx(context.Background())
+		req := &rangefeedpb.InspectStoreRangefeedsRequest{}
+		resp, err := impl(ctx, req)
+		if err != nil {
+			log.ErrorfDepth(ctx, 1, "%s", err)
+			http.Error(w, "internal error: check logs for details", http.StatusInternalServerError)
+			return
+		}
+		respond(ctx, w, http.StatusOK, resp)
+	}
+}
+
 // KVFlowController implements the InspectzServer interface.
 func (s *Server) KVFlowController(
 	ctx context.Context, request *kvflowinspectpb.ControllerRequest,
@@ -180,6 +206,17 @@ func (s *Server) StoreLivenessSupportFor(
 	support, err := s.storeLiveness.InspectAllSupportFor()
 	resp.SupportStatesPerStore = support
 	return resp, err
+}
+
+func (s *Server) Rangefeed(
+	_ context.Context, _ *rangefeedpb.InspectStoreRangefeedsRequest,
+) (*rangefeedpb.InspectStoreRangefeedsResponse, error) {
+	// Server: rangefeed inspect all rangefeeds InspectStoreRangefeedsResponse
+	resp, err := s.rangefeed.InspectAllRangefeeds()
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 // ServeHTTP serves various tools under the /debug endpoint.
