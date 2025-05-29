@@ -448,6 +448,7 @@ const (
 	PgExtensionGeometryColumnsTableID
 	PgExtensionSpatialRefSysTableID
 	MinVirtualID = PgExtensionSpatialRefSysTableID
+	CrdbInternalCreateTriggerStmtsTableID
 )
 
 // ConstraintType is used to identify the type of a constraint.

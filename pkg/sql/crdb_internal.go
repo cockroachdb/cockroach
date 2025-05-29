@@ -143,6 +143,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalClusterSettingsTableID:             crdbInternalClusterSettingsTable,
 		catconstants.CrdbInternalClusterStmtStatsTableID:            crdbInternalClusterStmtStatsTable,
 		catconstants.CrdbInternalCreateFunctionStmtsTableID:         crdbInternalCreateFunctionStmtsTable,
+		catconstants.CrdbInternalCreateTriggerStmtsTableID:          crdbInternalCreateTriggerStmtsTable,
 		catconstants.CrdbInternalCreateProcedureStmtsTableID:        crdbInternalCreateProcedureStmtsTable,
 		catconstants.CrdbInternalCreateSchemaStmtsTableID:           crdbInternalCreateSchemaStmtsTable,
 		catconstants.CrdbInternalCreateStmtsTableID:                 crdbInternalCreateStmtsTable,
@@ -3941,6 +3942,51 @@ CREATE TABLE crdb_internal.create_procedure_statements (
 )
 `,
 	populate: createRoutinePopulate(true /* procedure */),
+}
+
+func createTriggerPopulate() func(
+	ctx context.Context,
+	p *planner,
+	db catalog.DatabaseDescriptor,
+	addRow func(...tree.Datum) error,
+) error {
+	return func(
+		ctx context.Context,
+		p *planner,
+		db catalog.DatabaseDescriptor,
+		addRow func(...tree.Datum) error,
+	) error {
+		// TODO: Walk databases, schemas, and tables.
+		// TODO: Fetch trigger descriptors from tables.
+		// TODO: Generate proper CREATE TRIGGER SQL.
+
+		// Placeholder example row.
+		return addRow(
+			tree.NewDInt(0),                    // database_id
+			tree.NewDString("example_db"),      // database_name
+			tree.NewDInt(0),                    // schema_id
+			tree.NewDString("public"),          // schema_name
+			tree.NewDInt(0),                    // table_id
+			tree.NewDString("example_table"),   // table_name
+			tree.NewDInt(0),                    // trigger_id
+			tree.NewDString("example_trigger"), // trigger_name
+			tree.NewDString("CREATE TRIGGER example_trigger ..."), // create_statement
+		)
+	}
+}
+
+var crdbInternalCreateTriggerStmtsTable = virtualSchemaTable{
+	comment: "CREATE statements for all user-defined triggers.",
+	schema: `
+CREATE TABLE crdb_internal.create_trigger_statements (
+  database_id INT,
+  database_name STRING,
+  schema_id INT,
+  schema_name STRING,
+  trigger_id INT,
+  trigger_name STRING,
+  create_statement STRING)`,
+	populate: createTriggerPopulate(),
 }
 
 // Prepare the row populate function.
