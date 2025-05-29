@@ -2821,11 +2821,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 				// TODO(renato): don't disable these mutators when the
 				// framework exposes some utility to provide mutual exclusion
 				// of concurrent steps.
-				mixedversion.DisableMutators(
-					mixedversion.ClusterSettingMutator("kv.expiration_leases_only.enabled"),
-					mixedversion.ClusterSettingMutator("storage.ingest_split.enabled"),
-					mixedversion.ClusterSettingMutator("storage.sstable.compression_algorithm"),
-				),
+				mixedversion.DisableAllClusterSettingMutators(),
 			)
 			testRNG := mvt.RNG()
 

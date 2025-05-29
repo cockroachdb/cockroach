@@ -211,11 +211,9 @@ const (
 	spanConfigTenantLimit = 50000
 )
 
-// planMutators includes a list of all known `mutator`
-// implementations. A subset of these mutations might be enabled in
-// any mixedversion test plan.
-var planMutators = []mutator{
-	preserveDowngradeOptionRandomizerMutator{},
+// clusterSettingMutators includes a list of all
+// cluster setting mutator implementations.
+var clusterSettingMutators = []mutator{
 	newClusterSettingMutator(
 		"kv.expiration_leases_only.enabled",
 		[]bool{true, false},
@@ -231,7 +229,32 @@ var planMutators = []mutator{
 		[]string{"snappy", "zstd"},
 		clusterSettingMinimumVersion("v24.1.0-alpha.0"),
 	),
+	// These two settings are newly introduced, so their probabilities
+	// are temporarily raised to increase testing on them specifically.
+	// The 50% matches the metamorphic probability of these settings
+	// being enabled in non mixed version tests.
+	newClusterSettingMutator(
+		"kv.transaction.write_buffering.enabled",
+		[]bool{true, false},
+		clusterSettingMinimumVersion("v25.2.0"),
+		clusterSettingProbability(0.5),
+	),
+	newClusterSettingMutator(
+		"kv.rangefeed.buffered_sender.enabled",
+		[]bool{true, false},
+		clusterSettingMinimumVersion("v25.2.0"),
+		clusterSettingProbability(0.5),
+	),
 }
+
+// planMutators includes a list of all known `mutator`
+// implementations. A subset of these mutations might be enabled in
+// any mixedversion test plan.
+var planMutators = append([]mutator{
+	preserveDowngradeOptionRandomizerMutator{},
+},
+	clusterSettingMutators...,
+)
 
 // Plan returns the TestPlan used to upgrade the cluster from the
 // first to the final version in the `versions` field. The test plan
