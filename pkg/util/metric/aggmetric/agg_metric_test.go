@@ -299,7 +299,7 @@ func TestAggMetricClear(t *testing.T) {
 		Name: "bar_counter",
 	})
 	r.AddMetric(d)
-	d.labelConfig.Store(uint64(metric.LabelConfigAppAndDB))
+	d.mu.labelConfig = uint64(metric.LabelConfigAppAndDB)
 	tenant2 := roachpb.MustMakeTenantID(2)
 	c1 := c.AddChild(tenant2.String())
 
