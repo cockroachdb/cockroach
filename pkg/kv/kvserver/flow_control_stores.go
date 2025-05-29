@@ -28,9 +28,11 @@ var _ StoresForFlowControl = &storesForFlowControl{}
 
 // MakeStoresForFlowControl returns the canonical StoresForFlowControl
 // implementation.
-func MakeStoresForFlowControl(stores *Stores) StoresForFlowControl {
+func MakeStoresForFlowControl(stores *Stores) kvflowcontrol.ReplicationAdmissionHandles {
 	return (*storesForFlowControl)(stores)
 }
+
+// TODO(rac1): cleanup and stop implementing StoresForFlowControl.
 
 // Lookup is part of the StoresForFlowControl interface.
 func (sh *storesForFlowControl) Lookup(
@@ -227,6 +229,8 @@ func (sh *storeForFlowControl) OnRaftTransportDisconnected(
 
 // NoopStoresFlowControlIntegration is a no-op implementation of the
 // StoresForFlowControl interface.
+//
+// TODO(rac1): remove.
 type NoopStoresFlowControlIntegration struct{}
 
 var _ StoresForFlowControl = NoopStoresFlowControlIntegration{}

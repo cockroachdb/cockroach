@@ -9196,6 +9196,7 @@ FROM system.privileges;`,
 	resultColumns: resultColsFromColDescs(systemschema.SystemPrivilegeTable.TableDesc().Columns),
 }
 
+// Obsolete, so empty output.
 var crdbInternalKVFlowController = virtualSchemaTable{
 	comment: `node-level view of the kv flow controller, its active streams and available tokens state`,
 	schema: `
@@ -9212,21 +9213,6 @@ CREATE TABLE crdb_internal.kv_flow_controller (
 		}
 		if !hasRoleOption {
 			return noViewActivityOrViewActivityRedactedRoleError(p.User())
-		}
-
-		resp, err := p.extendedEvalCtx.ExecCfg.InspectzServer.KVFlowController(ctx, &kvflowinspectpb.ControllerRequest{})
-		if err != nil {
-			return err
-		}
-		for _, stream := range resp.Streams {
-			if err := addRow(
-				tree.NewDInt(tree.DInt(stream.TenantID.ToUint64())),
-				tree.NewDInt(tree.DInt(stream.StoreID)),
-				tree.NewDInt(tree.DInt(stream.AvailableEvalRegularTokens)),
-				tree.NewDInt(tree.DInt(stream.AvailableEvalElasticTokens)),
-			); err != nil {
-				return err
-			}
 		}
 		return nil
 	},
@@ -9271,6 +9257,7 @@ CREATE TABLE crdb_internal.kv_flow_controller_v2 (
 	},
 }
 
+// Obsolete, so empty output.
 var crdbInternalKVFlowHandles = virtualSchemaTable{
 	comment: `node-level view of active kv flow control handles, their underlying streams, and tracked state`,
 	schema: `
@@ -9292,16 +9279,7 @@ CREATE TABLE crdb_internal.kv_flow_control_handles (
 				if !hasRoleOption {
 					return false, noViewActivityOrViewActivityRedactedRoleError(p.User())
 				}
-
-				rangeID := roachpb.RangeID(tree.MustBeDInt(constraint))
-				resp, err := p.extendedEvalCtx.ExecCfg.InspectzServer.KVFlowHandles(
-					ctx, &kvflowinspectpb.HandlesRequest{
-						RangeIDs: []roachpb.RangeID{rangeID},
-					})
-				if err != nil {
-					return false, err
-				}
-				return true, populateFlowHandlesResponse(resp, addRow)
+				return true, nil
 			},
 		},
 	},
@@ -9313,12 +9291,7 @@ CREATE TABLE crdb_internal.kv_flow_control_handles (
 		if !hasRoleOption {
 			return noViewActivityOrViewActivityRedactedRoleError(p.User())
 		}
-
-		resp, err := p.extendedEvalCtx.ExecCfg.InspectzServer.KVFlowHandles(ctx, &kvflowinspectpb.HandlesRequest{})
-		if err != nil {
-			return err
-		}
-		return populateFlowHandlesResponse(resp, addRow)
+		return nil
 	},
 }
 var crdbInternalKVFlowHandlesV2 = virtualSchemaTable{
@@ -9374,28 +9347,6 @@ CREATE TABLE crdb_internal.kv_flow_control_handles_v2 (
 	},
 }
 
-func populateFlowHandlesResponse(
-	resp *kvflowinspectpb.HandlesResponse, addRow func(...tree.Datum) error,
-) error {
-	for _, handle := range resp.Handles {
-		for _, connected := range handle.ConnectedStreams {
-			totalTrackedTokens := int64(0)
-			for _, tracked := range connected.TrackedDeductions {
-				totalTrackedTokens += tracked.Tokens
-			}
-			if err := addRow(
-				tree.NewDInt(tree.DInt(handle.RangeID)),
-				tree.NewDInt(tree.DInt(connected.Stream.TenantID.ToUint64())),
-				tree.NewDInt(tree.DInt(connected.Stream.StoreID)),
-				tree.NewDInt(tree.DInt(totalTrackedTokens)),
-			); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 func populateFlowHandlesResponseV2(
 	resp *kvflowinspectpb.HandlesResponse, addRow func(...tree.Datum) error,
 ) error {
@@ -9444,16 +9395,8 @@ CREATE TABLE crdb_internal.kv_flow_token_deductions (
 				if !hasRoleOption {
 					return false, noViewActivityOrViewActivityRedactedRoleError(p.User())
 				}
-
-				rangeID := roachpb.RangeID(tree.MustBeDInt(constraint))
-				resp, err := p.extendedEvalCtx.ExecCfg.InspectzServer.KVFlowHandles(
-					ctx, &kvflowinspectpb.HandlesRequest{
-						RangeIDs: []roachpb.RangeID{rangeID},
-					})
-				if err != nil {
-					return false, err
-				}
-				return true, populateFlowTokensResponse(resp, addRow)
+				_ = roachpb.RangeID(tree.MustBeDInt(constraint))
+				return true, nil
 			},
 		},
 	},
@@ -9465,12 +9408,7 @@ CREATE TABLE crdb_internal.kv_flow_token_deductions (
 		if !hasRoleOption {
 			return noViewActivityOrViewActivityRedactedRoleError(p.User())
 		}
-
-		resp, err := p.extendedEvalCtx.ExecCfg.InspectzServer.KVFlowHandles(ctx, &kvflowinspectpb.HandlesRequest{})
-		if err != nil {
-			return err
-		}
-		return populateFlowTokensResponse(resp, addRow)
+		return nil
 	},
 }
 

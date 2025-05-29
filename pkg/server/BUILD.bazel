@@ -5,7 +5,6 @@ go_library(
     name = "server",
     srcs = [
         "admin.go",
-        "admission.go",
         "api_v2.go",
         "api_v2_constants.go",
         "api_v2_databases_metadata.go",
@@ -136,10 +135,6 @@ go_library(
         "//pkg/kv/kvserver/closedts/sidetransport",
         "//pkg/kv/kvserver/kvadmission",
         "//pkg/kv/kvserver/kvflowcontrol",
-        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontroller",
-        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
-        "//pkg/kv/kvserver/kvflowcontrol/kvflowdispatch",
-        "//pkg/kv/kvserver/kvflowcontrol/kvflowhandle",
         "//pkg/kv/kvserver/kvflowcontrol/node_rac2",
         "//pkg/kv/kvserver/kvflowcontrol/rac2",
         "//pkg/kv/kvserver/kvserverbase",

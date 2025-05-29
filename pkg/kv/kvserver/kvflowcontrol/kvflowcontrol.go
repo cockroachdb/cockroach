@@ -131,20 +131,6 @@ var TokenCounterResetEpoch = settings.RegisterIntSetting(
 	"escape hatch for administrators to reset all token counters to their default (full) state",
 	0)
 
-// V2EnabledWhenLeaderLevel captures the level at which RACv2 is enabled when
-// this replica is the leader.
-//
-// State transitions are V2NotEnabledWhenLeader =>
-// V2EnabledWhenLeaderV1Encoding => V2EnabledWhenLeaderV2Encoding, i.e., the
-// level will never regress.
-type V2EnabledWhenLeaderLevel = uint32
-
-const (
-	V2NotEnabledWhenLeader V2EnabledWhenLeaderLevel = iota
-	V2EnabledWhenLeaderV1Encoding
-	V2EnabledWhenLeaderV2Encoding
-)
-
 // Stream models the stream over which we replicate data traffic, the
 // transmission for which we regulate using flow control. It's segmented by the
 // specific store the traffic is bound for and the tenant driving it. Despite
@@ -232,6 +218,16 @@ type ReplicationAdmissionHandle interface {
 	// connectedStreams (because they were already closed) it will return
 	// (false, nil).
 	Admit(context.Context, admissionpb.WorkPriority, time.Time) (admitted bool, _ error)
+}
+
+// ReplicationAdmissionHandles is used to look up a
+// ReplicationAdmissionHandle.
+type ReplicationAdmissionHandles interface {
+	// LookupReplicationAdmissionHandle looks up the ReplicationAdmissionHandle
+	// for the specific range (or rather, the replica of the specific range
+	// that's locally held). The bool is false if no handle was found, in which
+	// case the caller must use the pre-replication-admission-control path.
+	LookupReplicationAdmissionHandle(roachpb.RangeID) (ReplicationAdmissionHandle, bool)
 }
 
 // Handle is used to interface with replication flow control; it's typically
@@ -334,11 +330,7 @@ type Handles interface {
 	//
 	//   Iterate(roachpb.StoreID, func(context.Context, Handle, Stream))
 
-	// LookupReplicationAdmissionHandle looks up the ReplicationAdmissionHandle
-	// for the specific range (or rather, the replica of the specific range
-	// that's locally held). The bool is false if no handle was found, in which
-	// case the caller must use the pre-replication-admission-control path.
-	LookupReplicationAdmissionHandle(roachpb.RangeID) (ReplicationAdmissionHandle, bool)
+	ReplicationAdmissionHandles
 }
 
 type InspectHandles interface {

@@ -31,10 +31,10 @@ const URLPrefix = "/inspectz/"
 type Server struct {
 	log.AmbientContext
 
-	mux                                    *http.ServeMux
-	handlesV1, handlesV2                   kvflowcontrol.InspectHandles
-	kvflowControllerV1, kvflowControllerV2 kvflowcontrol.InspectController
-	storeLiveness                          kvserver.InspectAllStoreLiveness
+	mux                *http.ServeMux
+	handlesV2          kvflowcontrol.InspectHandles
+	kvflowControllerV2 kvflowcontrol.InspectController
+	storeLiveness      kvserver.InspectAllStoreLiveness
 }
 
 var _ inspectzpb.InspectzServer = &Server{}
@@ -42,8 +42,8 @@ var _ inspectzpb.InspectzServer = &Server{}
 // NewServer sets up an inspectz server.
 func NewServer(
 	ambient log.AmbientContext,
-	handlesV1, handlesV2 kvflowcontrol.InspectHandles,
-	kvflowControllerV1, kvflowControllerV2 kvflowcontrol.InspectController,
+	handlesV2 kvflowcontrol.InspectHandles,
+	kvflowControllerV2 kvflowcontrol.InspectController,
 	storeLiveness kvserver.InspectAllStoreLiveness,
 ) *Server {
 	mux := http.NewServeMux()
@@ -51,14 +51,10 @@ func NewServer(
 		AmbientContext: ambient,
 
 		mux:                mux,
-		handlesV1:          handlesV1,
 		handlesV2:          handlesV2,
-		kvflowControllerV1: kvflowControllerV1,
 		kvflowControllerV2: kvflowControllerV2,
 		storeLiveness:      storeLiveness,
 	}
-	mux.Handle("/inspectz/v1/kvflowhandles", server.makeKVFlowHandlesHandler(server.KVFlowHandles))
-	mux.Handle("/inspectz/v1/kvflowcontroller", server.makeKVFlowControllerHandler(server.KVFlowController))
 	mux.Handle("/inspectz/v2/kvflowhandles", server.makeKVFlowHandlesHandler(server.KVFlowHandlesV2))
 	mux.Handle("/inspectz/v2/kvflowcontroller", server.makeKVFlowControllerHandler(server.KVFlowControllerV2))
 	mux.Handle(
@@ -132,20 +128,6 @@ func (s *Server) makeStoreLivenessHandler(
 		}
 		respond(ctx, w, http.StatusOK, resp)
 	}
-}
-
-// KVFlowController implements the InspectzServer interface.
-func (s *Server) KVFlowController(
-	ctx context.Context, request *kvflowinspectpb.ControllerRequest,
-) (*kvflowinspectpb.ControllerResponse, error) {
-	return kvFlowController(ctx, request, s.kvflowControllerV1)
-}
-
-// KVFlowHandles implements the InspectzServer interface.
-func (s *Server) KVFlowHandles(
-	ctx context.Context, request *kvflowinspectpb.HandlesRequest,
-) (*kvflowinspectpb.HandlesResponse, error) {
-	return kvFlowHandles(ctx, request, s.handlesV1)
 }
 
 // KVFlowControllerV2 implements the InspectzServer interface.
