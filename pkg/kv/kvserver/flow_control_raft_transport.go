@@ -6,7 +6,6 @@
 package kvserver
 
 import (
-	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -15,13 +14,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 )
 
+// TODO(rac1): delete all stores state and store related methods.
+
 var _ raftTransportForFlowControl = &RaftTransport{}
 
 // isConnectedTo implements the raftTransportForFlowControl interface.
 func (r *RaftTransport) isConnectedTo(storeID roachpb.StoreID) bool {
-	r.kvflowControl.mu.RLock()
-	defer r.kvflowControl.mu.RUnlock()
-	return r.kvflowControl.mu.connectionTracker.isStoreConnected(storeID)
+	r.connectionMu.RLock()
+	defer r.connectionMu.RUnlock()
+	return r.connectionMu.connectionTracker.isStoreConnected(storeID)
 }
 
 // connectionTrackerForFlowControl tracks the set of client-side stores and
@@ -47,21 +48,6 @@ func newConnectionTrackerForFlowControl() *connectionTrackerForFlowControl {
 func (c *connectionTrackerForFlowControl) isStoreConnected(storeID roachpb.StoreID) bool {
 	_, found := c.stores[storeID]
 	return found
-}
-
-// markStoresConnected is used to inform the tracker that we've received
-// raft messages from nodes with the given set of stores.
-func (c *connectionTrackerForFlowControl) markStoresConnected(storeIDs []roachpb.StoreID) {
-	for _, storeID := range storeIDs {
-		c.stores[storeID] = struct{}{}
-	}
-}
-
-// markStoresDisconnected marks the given set of stores as disconnected.
-func (c *connectionTrackerForFlowControl) markStoresDisconnected(storeIDs []roachpb.StoreID) {
-	for _, storeID := range storeIDs {
-		delete(c.stores, storeID)
-	}
 }
 
 // isNodeConnected returns whether we're connected to the given (server-side)
@@ -109,17 +95,4 @@ func (c *connectionTrackerForFlowControl) testingPrint() string {
 	buf.WriteString(fmt.Sprintf("connected-stores (server POV): %s\n", roachpb.StoreIDSlice(storeIDs)))
 	buf.WriteString(fmt.Sprintf("connected-nodes  (client POV): %s\n", roachpb.NodeIDSlice(nodeIDs)))
 	return buf.String()
-}
-
-// NoopRaftTransportDisconnectListener is a no-op implementation of the
-// RaftTransportDisconnectListener interface.
-type NoopRaftTransportDisconnectListener struct{}
-
-var _ RaftTransportDisconnectListener = NoopRaftTransportDisconnectListener{}
-
-// OnRaftTransportDisconnected implements the RaftTransportDisconnectListener
-// interface.
-func (n NoopRaftTransportDisconnectListener) OnRaftTransportDisconnected(
-	ctx context.Context, storeIDs ...roachpb.StoreID,
-) {
 }

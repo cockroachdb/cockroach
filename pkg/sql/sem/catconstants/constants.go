@@ -205,9 +205,9 @@ const (
 	CrdbInternalShowTenantCapabilitiesCacheTableID
 	CrdbInternalInheritedRoleMembersTableID
 	CrdbInternalKVSystemPrivilegesViewID
-	CrdbInternalKVFlowControllerID
+	CrdbInternalKVFlowControllerID // obsolete
 	CrdbInternalKVFlowControllerIDV2
-	CrdbInternalKVFlowHandlesID
+	CrdbInternalKVFlowHandlesID // obsolete
 	CrdbInternalKVFlowHandlesIDV2
 	CrdbInternalKVFlowTokenDeductions
 	CrdbInternalKVFlowTokenDeductionsV2

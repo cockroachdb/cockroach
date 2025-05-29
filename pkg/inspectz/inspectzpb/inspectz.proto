@@ -18,16 +18,6 @@ import "kv/kvserver/storeliveness/storelivenesspb/service.proto";
 // waiting and for how long.
 service Inspectz {
   // KVFlowController exposes in-memory state of the node-level
-  // kvflowcontrol.Controller. It's housed under /inspectz/kvflowcontroller.
-  rpc KVFlowController(kv.kvserver.kvflowcontrol.kvflowinspectpb.ControllerRequest)
-      returns (kv.kvserver.kvflowcontrol.kvflowinspectpb.ControllerResponse) {}
-
-  // KVFlowHandles exposes in-memory state of kvflowcontrol.Handles. It's housed
-  // under /inspectz/kvflowhandles.
-  rpc KVFlowHandles(kv.kvserver.kvflowcontrol.kvflowinspectpb.HandlesRequest)
-      returns (kv.kvserver.kvflowcontrol.kvflowinspectpb.HandlesResponse) {}
-
-  // KVFlowController exposes in-memory state of the node-level
   // rac2.StreamTokenCounterProvider. It's housed under
   // /inspectz/v2/kvflowcontroller.
   rpc KVFlowControllerV2(kv.kvserver.kvflowcontrol.kvflowinspectpb.ControllerRequest)

@@ -2379,16 +2379,6 @@ func (ts *testServer) SystemConfigProvider() config.SystemConfigProvider {
 	return ts.node.storeCfg.SystemConfigProvider
 }
 
-// KVFlowController is part of the serverutils.StorageLayerInterface.
-func (ts *testServer) KVFlowController() interface{} {
-	return ts.node.storeCfg.KVFlowController
-}
-
-// KVFlowHandles is part of the serverutils.StorageLayerInterface.
-func (ts *testServer) KVFlowHandles() interface{} {
-	return ts.node.storeCfg.KVFlowHandles
-}
-
 // Codec is part of the serverutils.ApplicationLayerInterface.
 func (ts *testServer) Codec() keys.SQLCodec {
 	return ts.ExecutorConfig().(sql.ExecutorConfig).Codec

@@ -662,13 +662,6 @@ type StorageLayerInterface interface {
 	// the server.
 	SpanConfigKVSubscriber() interface{}
 
-	// KVFlowController returns the embedded kvflowcontrol.Controller for the
-	// server.
-	KVFlowController() interface{}
-
-	// KVFlowHandles returns the embedded kvflowcontrol.Handles for the server.
-	KVFlowHandles() interface{}
-
 	// KvProber returns a *kvprober.Prober, which is useful when asserting the
 	// correctness of the prober from integration tests.
 	KvProber() *kvprober.Prober
