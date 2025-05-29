@@ -1966,10 +1966,10 @@ SELECT rolname AS "Role name",
        memberof AS "Member of"
   FROM roles
 Role name,Attributes,Member of
-myuser,"Superuser, Create role, Create DB",{admin}
-root,"Superuser, Create role, Create DB",{admin}
-admin,"Superuser, Create role, Create DB",{}
-node,"Superuser, Create role, Create DB, Cannot login",{}
+myuser,"Superuser, Create role, Create DB, Bypass RLS",{admin}
+root,"Superuser, Create role, Create DB, Bypass RLS",{admin}
+admin,"Superuser, Create role, Create DB, Bypass RLS",{}
+node,"Superuser, Create role, Create DB, Cannot login, Bypass RLS",{}
 
 cli
 \du myuser
@@ -2008,7 +2008,7 @@ SELECT rolname AS "Role name",
        memberof AS "Member of"
   FROM roles
 Role name,Attributes,Member of
-myuser,"Superuser, Create role, Create DB",{admin}
+myuser,"Superuser, Create role, Create DB, Bypass RLS",{admin}
 
 subtest end
 
