@@ -42,9 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontroller"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -587,8 +584,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	storesForFlowControl := kvserver.MakeStoresForFlowControl(stores)
 	storesForRACv2 := kvserver.MakeStoresForRACv2(stores)
-	kvflowTokenDispatch := kvflowdispatch.New(nodeRegistry, storesForFlowControl, nodeIDContainer)
-	admittedEntryAdaptor := newAdmittedLogEntryAdaptor(kvflowTokenDispatch, storesForRACv2)
 	admissionKnobs, ok := cfg.TestingKnobs.AdmissionControl.(*admission.TestingKnobs)
 	if !ok {
 		admissionKnobs = &admission.TestingKnobs{}
@@ -598,7 +593,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		st,
 		admissionOptions,
 		nodeRegistry,
-		admittedEntryAdaptor,
+		storesForRACv2,
 		admissionKnobs,
 	)
 	db.SQLKVResponseAdmissionQ = gcoords.Regular.GetWorkQueue(admission.SQLKVResponseWork)
@@ -616,29 +611,19 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	var admissionControl struct {
 		schedulerLatencyListener admission.SchedulerLatencyListener
-		kvflowController         kvflowcontrol.Controller
-		kvflowTokenDispatch      kvflowcontrol.Dispatch
 		kvAdmissionController    kvadmission.Controller
-		storesFlowControl        kvserver.StoresForFlowControl
-		kvFlowHandleMetrics      *kvflowhandle.Metrics
+		storesFlowControl        kvflowcontrol.ReplicationAdmissionHandles
 	}
 	admissionControl.schedulerLatencyListener = gcoords.Elastic.SchedulerLatencyListener
-	admissionControl.kvflowController = kvflowcontroller.New(nodeRegistry, st, clock)
-	admissionControl.kvflowTokenDispatch = kvflowTokenDispatch
 	admissionControl.storesFlowControl = storesForFlowControl
 	admissionControl.kvAdmissionController = kvadmission.MakeController(
 		nodeIDContainer,
 		gcoords.Regular.GetWorkQueue(admission.KVWork),
 		gcoords.Elastic,
 		gcoords.Stores,
-		admissionControl.kvflowController,
 		admissionControl.storesFlowControl,
 		cfg.Settings,
 	)
-	admissionControl.kvFlowHandleMetrics = kvflowhandle.NewMetrics(nodeRegistry)
-	kvflowcontrol.Mode.SetOnChange(&st.SV, func(ctx context.Context) {
-		admissionControl.storesFlowControl.ResetStreams(ctx)
-	})
 
 	admittedPiggybacker := node_rac2.NewAdmittedPiggybacker()
 	streamTokenCounterProvider := rac2.NewStreamTokenCounterProvider(st, clock)
@@ -661,9 +646,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		clock,
 		kvNodeDialer,
 		grpcServer.Server,
-		admissionControl.kvflowTokenDispatch,
-		admissionControl.storesFlowControl,
-		admissionControl.storesFlowControl,
 		admittedPiggybacker,
 		storesForRACv2,
 		raftTransportKnobs,
@@ -926,9 +908,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		SpanConfigSubscriber:         spanConfig.subscriber,
 		RangeLogWriter:               rangeLogWriter,
 		KVAdmissionController:        admissionControl.kvAdmissionController,
-		KVFlowController:             admissionControl.kvflowController,
-		KVFlowHandles:                admissionControl.storesFlowControl,
-		KVFlowHandleMetrics:          admissionControl.kvFlowHandleMetrics,
 		KVFlowAdmittedPiggybacker:    admittedPiggybacker,
 		KVFlowStreamTokenProvider:    streamTokenCounterProvider,
 		KVFlowSendTokenWatcher:       sendTokenWatcher,
@@ -1127,9 +1106,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	inspectzServer := inspectz.NewServer(
 		cfg.BaseConfig.AmbientCtx,
-		node.storeCfg.KVFlowHandles,
 		storesForRACv2,
-		node.storeCfg.KVFlowController,
 		node.storeCfg.KVFlowStreamTokenProvider,
 		kvserver.MakeStoresForStoreLiveness(stores),
 	)
@@ -1803,14 +1780,6 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// initState -- and everything after it is actually starting the server,
 	// using the listeners and init state.
 
-	initialStoreIDs, err := state.initialStoreIDs()
-	if err != nil {
-		return err
-	}
-
-	// Inform the raft transport of these initial store IDs.
-	s.raftTransport.SetInitialStoreIDs(initialStoreIDs)
-
 	// Spawn a goroutine that will print a nice message when Gossip connects.
 	// Note that we already know the clusterID, but we don't know that Gossip
 	// has connected. The pertinent case is that of restarting an entire
@@ -1977,14 +1946,6 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// - we'll need to do it after starting node liveness, see:
 	//   https://github.com/cockroachdb/cockroach/issues/106706#issuecomment-1640254715
 	s.node.waitForAdditionalStoreInit()
-
-	additionalStoreIDs, err := state.additionalStoreIDs()
-	if err != nil {
-		return err
-	}
-
-	// Inform the raft transport of these additional store IDs.
-	s.raftTransport.SetAdditionalStoreIDs(additionalStoreIDs)
 
 	// Connect the engines to the disk stats map constructor. This needs to
 	// wait until after waitForAdditionalStoreInit returns since it realizes on

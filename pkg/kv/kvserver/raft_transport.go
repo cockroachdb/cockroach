@@ -17,9 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -29,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -182,87 +179,34 @@ type RaftTransport struct {
 	incomingMessageHandlers syncutil.Map[roachpb.StoreID, IncomingRaftMessageHandler]
 	outgoingMessageHandlers syncutil.Map[roachpb.StoreID, OutgoingRaftMessageHandler]
 
-	// kvflowControl is used for replication admission control v1.
-	kvflowControl struct {
-		// Everything nested under this struct is used to return flow tokens
-		// from the receiver (where work was admitted) up to the sender (where
-		// work originated and tokens were deducted). There are few parts to the
-		// protocol, and can be experimented with using TestFlowControlRaftTransport
-		// and various TestFlowControl* tests in this package. We briefly sketch
-		// how the various pieces fit below, repeating some of what is described
-		// in kvflowcontrol/doc.go (which details about how/why we integrate
-		// with the RaftTransport so intimately).
-		//
+	connectionMu struct {
 		// Background: Each CRDB node acts as both the "server" and the "client"
 		// of bidirectional RaftTransport streams. That is, raft messages from
 		// n1->n2 are sent from the client code on n1 to server code on n2.
 		// Responses to those raft messages are sent from the client code on n2
 		// to server code in n1.
 		//
-		// - When flow tokens are deducted where the MsgApps originate, and
-		//   after they're admitted below-raft, the remote nodes send back
-		//   kvflowcontrolpb.AdmittedRaftLogEntries through the RaftMessageBatch
-		//   stream. This happens on the client side, and we read from
-		//   dispatchReader and either attach the protos to already outbound
-		//   messages, or fire off one-off messages periodically if there's
-		//   little raft activity but still tokens to be returned.
+		// - When flow tokens are deducted where the MsgApps originate (at the
+		//   leader), and after they're admitted below-raft, the remote nodes send
+		//   back piggybacked kvflowcontrolpb.PiggybackedAdmittedState messages in
+		//   RaftMessageRequestBatch to the leader. This happens on the client
+		//   side, and we read from PiggybackMsgReader and either attach the
+		//   protos to already outbound messages, or fire off one-off messages
+		//   periodically if there's little raft activity but still tokens to be
+		//   returned.
 		//
-		// - On the server side, we intercept every message and look for these
-		//   protos, and inform the storesForFlowControl integration interface
-		//   of this fact.
+		// - On the server side, we intercept every RaftMessageRequestBatch
+		//   message and look for these protos, and pass them to the
+		//   PiggybackedAdmittedResponseScheduler.
 		//
-		// - The server side maintains the set of client-side stores it's
-		//   currently connected to, from the POV of these server side streams.
-		//   Since tokens are returned to the server along these streams, when
-		//   they disconnect, it's possible for us to be leaking tokens in
-		//   transit. So it uses information about the set of client-side stores
-		//   it's no longer connected to, to simply free up all held tokens. See
-		//   uses of connectionTracker below and how the storesForFlowControl
-		//   interface is informed about stores we're no longer connected to.
-		//
-		//   - There's some complexity in how this set of connected stores is
-		//     tracked. For one it's a "connected" set, not a "disconnected"
-		//     one. It's hard to do the latter. Ignoring memory maintenance
-		//     issues that come from nodes that are no longer part of the
-		//     cluster, we have multiple RPC classes from the client side and
-		//     clients are also free to establish/disconnect many streams
-		//     concurrently without synchronization on their end. The server is
-		//     not guaranteed to learn about these streams connecting or
-		//     disconnecting in any particular order, so it's difficult to track
-		//     directly by looking at connection/disconnection events alone
-		//     whether we're connected somehow to a given client. Some form of
-		//     heartbeat scheme comes to mind, which fits more naturally with
-		//     tracking the set of "connected" stores. We can still react to
-		//     streams disconnecting by clearing the relevant stores from the
-		//     tracked set, relying on a subsequent heartbeat (from, say, a
-		//     different stream/RPC class) to re-track that client+its store as
-		//     connected.
-		//
-		// - How does the server learn about what stores are present on each
-		//   client? When establishing the stream, the client simply sends this
-		//   information over. If the client learns of newly added stores
-		//   (possible during early startup), it sends it again. See uses of
-		//   localStoreIDs and setAdditionalStoreIDs below.
-		//
-		// - Idle streams are periodically culled from the client side. It's
-		//   possible that we cull a stream without having delivered all flow
-		//   tokens to the sender (for example, if below-raft admission happens
-		//   after the stream is culled). The server side detected these
-		//   disconnected streams and releases tokens, but on the client side we
-		//   don't want to accumulate to-be-delivered flow tokens unboundedly.
-		//   So we track the set of servers we're connected to, across all RPC
-		//   classes, and periodically just clear our outbox if there are
-		//   dispatches bound for nodes we're simply not connected to, across
-		//   all RPC classes. See uses of connectedNodes below.
-		mu struct {
-			syncutil.RWMutex
-			localStoreIDs     []roachpb.StoreID // sent to servers to track client-side stores
-			connectionTracker *connectionTrackerForFlowControl
-		}
-		setAdditionalStoreIDs atomic.Bool
-		dispatchReader        kvflowcontrol.DispatchReader
-		handles               kvflowcontrol.Handles
-		disconnectListener    RaftTransportDisconnectListener
+		// - The client side maintains the set of server-side nodes it is
+		//   currently connected to, in the connectionTrackerForFlowControl. This
+		//   is used to avoid accumulating an unbounded number of
+		//   kvflowcontrolpb.PiggybackedAdmittedState messages, for nodes that are
+		//   not connected. Periodically, this connection tracker is queried, and
+		//   messages in PiggybackMsgReader for disconnected nodes are dropped.
+		syncutil.RWMutex
+		connectionTracker *connectionTrackerForFlowControl
 	}
 	// kvflowcontrol2 is used for replication admission control v2.
 	kvflowcontrol2 struct {
@@ -292,8 +236,7 @@ func NewDummyRaftTransport(
 		return nil, roachpb.Locality{}, errors.New("dummy resolver")
 	}
 	return NewRaftTransport(ambient, st, nil, clock, nodedialer.New(nil, resolver), nil,
-		kvflowdispatch.NewDummyDispatch(), NoopStoresFlowControlIntegration{},
-		NoopRaftTransportDisconnectListener{}, nil, nil, nil,
+		nil, nil, nil,
 	)
 }
 
@@ -305,9 +248,6 @@ func NewRaftTransport(
 	clock *hlc.Clock,
 	dialer *nodedialer.Dialer,
 	grpcServer *grpc.Server,
-	kvflowTokenDispatch kvflowcontrol.DispatchReader,
-	kvflowHandles kvflowcontrol.Handles,
-	disconnectListener RaftTransportDisconnectListener,
 	piggybackReader node_rac2.PiggybackMsgReader,
 	piggybackedResponseScheduler PiggybackedAdmittedResponseScheduler,
 	knobs *RaftTransportTestingKnobs,
@@ -323,10 +263,7 @@ func NewRaftTransport(
 		dialer:         dialer,
 		knobs:          knobs,
 	}
-	t.kvflowControl.dispatchReader = kvflowTokenDispatch
-	t.kvflowControl.handles = kvflowHandles
-	t.kvflowControl.disconnectListener = disconnectListener
-	t.kvflowControl.mu.connectionTracker = newConnectionTrackerForFlowControl()
+	t.connectionMu.connectionTracker = newConnectionTrackerForFlowControl()
 	t.kvflowcontrol2.piggybackReader = piggybackReader
 	t.kvflowcontrol2.piggybackedResponseScheduler = piggybackedResponseScheduler
 
@@ -344,31 +281,6 @@ func (t *RaftTransport) Start(ctx context.Context) error {
 		return errors.Wrapf(err, "failed to run flow token dispatch loop")
 	}
 	return nil
-}
-
-// SetInitialStoreIDs informs the RaftTransport of the initial set of store
-// IDs the local node starts off with. If it's a restarting node, restarted with
-// no additional stores, this is just all the local store IDs. For nodes newly
-// added to the cluster, it's just the first initialized store. If there are
-// additional stores post-restart, or stores other than the first for a newly
-// added node, they're provided using (*RaftTransport).SetAdditionalStoreIDs.
-func (t *RaftTransport) SetInitialStoreIDs(storeIDs []roachpb.StoreID) {
-	t.kvflowControl.mu.Lock()
-	defer t.kvflowControl.mu.Unlock()
-	t.kvflowControl.mu.localStoreIDs = storeIDs
-}
-
-// SetAdditionalStoreIDs informs the RaftTransport of any additional stores the
-// local node starts off with. See commentary on SetInitialStoreIDs for more
-// details.
-func (t *RaftTransport) SetAdditionalStoreIDs(storeIDs []roachpb.StoreID) {
-	if len(storeIDs) == 0 {
-		return // nothing to do
-	}
-	t.kvflowControl.mu.Lock()
-	defer t.kvflowControl.mu.Unlock()
-	t.kvflowControl.mu.localStoreIDs = append(t.kvflowControl.mu.localStoreIDs, storeIDs...)
-	t.kvflowControl.setAdditionalStoreIDs.Store(true)
 }
 
 // Metrics returns metrics tracking this transport.
@@ -429,33 +341,6 @@ func (t *RaftTransport) handleRaftRequest(
 	ctx context.Context, req *kvserverpb.RaftMessageRequest, respStream RaftMessageResponseStream,
 ) *kvpb.Error {
 	isV1 := log.V(1)
-	for i := range req.AdmittedRaftLogEntries {
-		// Process any flow tokens that were returned over the RaftTransport. Do
-		// this first thing, before these requests enter the receive queues
-		// which could drop them if full and cause token leaks, or bail after
-		// processing the raft heartbeats. See I8 from kvflowcontrol/doc.go.
-		admittedEntries := req.AdmittedRaftLogEntries[i]
-		handle, found := t.kvflowControl.handles.Lookup(admittedEntries.RangeID)
-		if found {
-			handle.ReturnTokensUpto(
-				ctx,
-				admissionpb.WorkPriority(admittedEntries.AdmissionPriority),
-				admittedEntries.UpToRaftLogPosition,
-				kvflowcontrol.Stream{StoreID: admittedEntries.StoreID},
-			)
-		}
-
-		if isV1 {
-			log.Infof(ctx, "informed of below-raft %s", admittedEntries)
-		}
-	}
-	if req.ToReplica.StoreID == roachpb.StoreID(0) && len(req.AdmittedRaftLogEntries) > 0 {
-		// The fallback token dispatch mechanism does not specify a destination
-		// replica, and as such, there's no handler for it. We don't want to
-		// return StoreNotFoundErrors in such cases.
-		return nil
-	}
-
 	incomingMessageHandler, ok := t.getIncomingRaftMessageHandler(req.ToReplica.StoreID)
 	if !ok {
 		if isV1 {
@@ -506,13 +391,7 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 			SpanOpt:  stop.ChildSpan,
 		}, func(ctx context.Context) {
 			errCh <- func() error {
-				var storeIDs []roachpb.StoreID
 				defer func() {
-					ctx := t.AnnotateCtx(context.Background())
-					t.kvflowControl.mu.Lock()
-					t.kvflowControl.mu.connectionTracker.markStoresDisconnected(storeIDs)
-					t.kvflowControl.mu.Unlock()
-					t.kvflowControl.disconnectListener.OnRaftTransportDisconnected(ctx, storeIDs...)
 					if fn := t.knobs.OnServerStreamDisconnected; fn != nil {
 						fn()
 					}
@@ -527,15 +406,6 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 					if !batch.Now.IsEmpty() {
 						t.clock.Update(batch.Now)
 					}
-					if len(batch.StoreIDs) > 0 {
-						// Collect the set of store IDs from the client side to
-						// later free up relevant flow tokens once the gRPC
-						// stream breaks/disconnects.
-						storeIDs = batch.StoreIDs
-					}
-					t.kvflowControl.mu.Lock()
-					t.kvflowControl.mu.connectionTracker.markStoresConnected(storeIDs)
-					t.kvflowControl.mu.Unlock()
 					if len(batch.AdmittedStates) != 0 {
 						// Dispatch the admitted vectors to RACv2.
 						// NB: we do this via this special path instead of using the
@@ -708,46 +578,6 @@ func (t *RaftTransport) processQueue(
 		return err
 	}
 
-	// For replication admission control v1.
-	maybeAnnotateWithAdmittedRaftLogEntries := func(
-		req *kvserverpb.RaftMessageRequest,
-		admitted []kvflowcontrolpb.AdmittedRaftLogEntries,
-	) {
-		if len(admitted) == 0 {
-			return // nothing to do
-		}
-		req.AdmittedRaftLogEntries = append(req.AdmittedRaftLogEntries, admitted...)
-		flowTokenDispatchCount := len(req.AdmittedRaftLogEntries)
-		if log.V(2) && flowTokenDispatchCount > 0 {
-			for i, admittedEntries := range req.AdmittedRaftLogEntries {
-				log.Infof(ctx, "informing n%s of below-raft %s: %d out of %d dispatches",
-					q.nodeID, admittedEntries,
-					i+1, flowTokenDispatchCount,
-				)
-			}
-		}
-	}
-
-	// For replication admission control v1.
-	var sentInitialStoreIDs, sentAdditionalStoreIDs bool
-	maybeAnnotateWithStoreIDs := func(batch *kvserverpb.RaftMessageRequestBatch) {
-		shouldSendAdditionalStoreIDs := t.kvflowControl.setAdditionalStoreIDs.Load() && !sentAdditionalStoreIDs
-		if !sentInitialStoreIDs || shouldSendAdditionalStoreIDs {
-			t.kvflowControl.mu.RLock()
-			batch.StoreIDs = nil
-			batch.StoreIDs = append(batch.StoreIDs, t.kvflowControl.mu.localStoreIDs...)
-			t.kvflowControl.mu.RUnlock()
-			// Unconditionally set sentInitialStoreIDs, since we always have
-			// the initial store IDs before the additional ones.
-			sentInitialStoreIDs = true
-			// Mark that we've sent the additional store IDs, to not need to
-			// re-send it again.
-			sentAdditionalStoreIDs = shouldSendAdditionalStoreIDs
-			log.VInfof(ctx, 1, "informing n%d of %d local store ID(s) (%s) over the raft transport[%s]",
-				q.nodeID, len(batch.StoreIDs), roachpb.StoreIDSlice(batch.StoreIDs), class)
-		}
-	}
-
 	// For replication admission control v2.
 	maybeAnnotateWithAdmittedStates := func(
 		batch *kvserverpb.RaftMessageRequestBatch, admitted []kvflowcontrolpb.PiggybackedAdmittedState,
@@ -809,30 +639,8 @@ func (t *RaftTransport) processQueue(
 			q.bytes.Add(-size)
 			budget := targetRaftOutgoingBatchSize.Get(&t.st.SV) - size
 
-			var pendingDispatches []kvflowcontrolpb.AdmittedRaftLogEntries
 			var admittedStates []kvflowcontrolpb.PiggybackedAdmittedState
 			if disableFn := t.knobs.DisablePiggyBackedFlowTokenDispatch; disableFn == nil || !disableFn() {
-				// RACv1.
-				//
-				// Piggyback any pending flow token dispatches on raft transport
-				// messages already bound for the remote node. If the stream
-				// over which we're returning these flow tokens breaks, this is
-				// detected by the remote node, where tokens were originally
-				// deducted, who then frees up all held tokens (see I1 from
-				// kvflowcontrol/doc.go). If the stream is culled because it's
-				// idle, that's deducted remotely using the same stream-break
-				// mechanism. If there are no open streams to a given node and
-				// there's still pending flow tokens, we'll drop those tokens to
-				// reclaim memory in dropFlowTokensForDisconnectedNodes. For
-				// idle-but-not-culled connections, we have a fallback timer to
-				// periodically transmit one-off RaftMessageRequests for timely
-				// token returns.
-				pendingDispatches, _ = t.kvflowControl.dispatchReader.PendingDispatchFor(
-					q.nodeID,
-					kvadmission.FlowTokenDispatchMaxBytes.Get(&t.st.SV),
-				)
-				maybeAnnotateWithAdmittedRaftLogEntries(req, pendingDispatches)
-
 				// RACv2.
 				admittedStates, _ = t.kvflowcontrol2.piggybackReader.PopMsgsForNode(
 					timeutil.Now(), q.nodeID, kvadmission.FlowTokenDispatchMaxBytes.Get(&t.st.SV))
@@ -856,12 +664,10 @@ func (t *RaftTransport) processQueue(
 				}
 			}
 
-			maybeAnnotateWithStoreIDs(batch)
 			annotateWithClockTimestamp(batch)
 
 			if err := stream.Send(batch); err != nil {
-				t.metrics.FlowTokenDispatchesDropped.Inc(int64(
-					len(pendingDispatches) + len(admittedStates)))
+				t.metrics.FlowTokenDispatchesDropped.Inc(int64(len(admittedStates)))
 				return err
 			}
 			t.metrics.MessagesSent.Inc(int64(len(batch.Requests)))
@@ -874,37 +680,23 @@ func (t *RaftTransport) processQueue(
 				continue // nothing to do
 			}
 
-			// RACv1.
-			pendingDispatches, remainingDispatches := t.kvflowControl.dispatchReader.PendingDispatchFor(
-				q.nodeID,
-				kvadmission.FlowTokenDispatchMaxBytes.Get(&t.st.SV),
-			)
 			// RACv2.
 			admittedStates, remainingAdmittedResponses := t.kvflowcontrol2.piggybackReader.PopMsgsForNode(
 				timeutil.Now(), q.nodeID, kvadmission.FlowTokenDispatchMaxBytes.Get(&t.st.SV))
-			if len(pendingDispatches) == 0 && len(admittedStates) == 0 {
+			if len(admittedStates) == 0 {
 				continue // nothing to do
 			}
-			// If there are remaining dispatches/responses, schedule them
-			// immediately in the following raft message.
-			if remainingDispatches > 0 || remainingAdmittedResponses > 0 {
+			// If there are remaining responses, schedule them immediately in the
+			// following raft message.
+			if remainingAdmittedResponses > 0 {
 				dispatchPendingFlowTokensTimer.Reset(0)
 			}
 
-			if len(pendingDispatches) != 0 {
-				req := newRaftMessageRequest()
-				maybeAnnotateWithAdmittedRaftLogEntries(req, pendingDispatches)
-				batch.Requests = append(batch.Requests, *req)
-				releaseRaftMessageRequest(req)
-			}
-
-			maybeAnnotateWithStoreIDs(batch)
 			annotateWithClockTimestamp(batch)
 			maybeAnnotateWithAdmittedStates(batch, admittedStates)
 
 			if err := stream.Send(batch); err != nil {
-				t.metrics.FlowTokenDispatchesDropped.Inc(int64(
-					len(pendingDispatches) + len(admittedStates)))
+				t.metrics.FlowTokenDispatchesDropped.Inc(int64(len(admittedStates)))
 				return err
 			}
 			t.metrics.MessagesSent.Inc(int64(len(batch.Requests)))
@@ -936,14 +728,14 @@ func (t *RaftTransport) getQueue(
 	queuesMap := &t.queues[class]
 	value, ok := queuesMap.Load(nodeID)
 	if !ok {
-		t.kvflowControl.mu.Lock()
+		t.connectionMu.Lock()
 		q := &raftSendQueue{
 			reqs:   make(chan *kvserverpb.RaftMessageRequest, raftSendBufferSize),
 			nodeID: nodeID,
 		}
 		value, ok = queuesMap.LoadOrStore(nodeID, q)
-		t.kvflowControl.mu.connectionTracker.markNodeConnected(nodeID, class)
-		t.kvflowControl.mu.Unlock()
+		t.connectionMu.connectionTracker.markNodeConnected(nodeID, class)
+		t.connectionMu.Unlock()
 	}
 	return value, ok
 }
@@ -1048,10 +840,10 @@ func (t *RaftTransport) startProcessNewQueue(
 		}()
 		defer cleanup(q)
 		defer func() {
-			t.kvflowControl.mu.Lock()
+			t.connectionMu.Lock()
 			t.queues[class].Delete(toNodeID)
-			t.kvflowControl.mu.connectionTracker.markNodeDisconnected(toNodeID, class)
-			t.kvflowControl.mu.Unlock()
+			t.connectionMu.connectionTracker.markNodeDisconnected(toNodeID, class)
+			t.connectionMu.Unlock()
 		}()
 		conn, err := t.dialer.Dial(ctx, toNodeID, class)
 		if err != nil {
@@ -1078,22 +870,20 @@ func (t *RaftTransport) startProcessNewQueue(
 			pprof.Do(ctx, pprof.Labels("remote_node_id", toNodeID.String()), worker)
 		})
 	if err != nil {
-		t.kvflowControl.mu.Lock()
+		t.connectionMu.Lock()
 		t.queues[class].Delete(toNodeID)
-		t.kvflowControl.mu.connectionTracker.markNodeDisconnected(toNodeID, class)
-		t.kvflowControl.mu.Unlock()
+		t.connectionMu.connectionTracker.markNodeDisconnected(toNodeID, class)
+		t.connectionMu.Unlock()
 		return false
 	}
 	return true
 }
 
 // startDroppingFlowTokensForDisconnectedNodes kicks of an asynchronous worker
-// that periodically scans for nodes we're no longer connected to, and if there
-// are any pending flow tokens bound for that node, it simply drops them. This
-// "connected nodes" is a client-side view of the world. On the server-side when
-// gRPC streams disconnect, we release all held tokens. So simply dropping these
-// pending dispatches on the client side does not cause token leaks, and exists
-// to prevent an unbounded accumulation of memory.
+// that periodically scans for nodes we're no longer connected to, and if
+// there are any pending flow tokens bound for that node, it simply drops
+// them, to prevent an unbounded accumulation of memory. This "connected
+// nodes" is a client-side view of the world.
 func (t *RaftTransport) startDroppingFlowTokensForDisconnectedNodes(ctx context.Context) error {
 	return t.stopper.RunAsyncTask(
 		ctx,
@@ -1148,35 +938,17 @@ func (t *RaftTransport) TestingDropFlowTokensForDisconnectedNodes() {
 // TestingPrintFlowControlConnectionTracker renders the state of the underlying
 // connection tracker.
 func (t *RaftTransport) TestingPrintFlowControlConnectionTracker() string {
-	t.kvflowControl.mu.RLock()
-	defer t.kvflowControl.mu.RUnlock()
-	return t.kvflowControl.mu.connectionTracker.testingPrint()
+	t.connectionMu.RLock()
+	defer t.connectionMu.RUnlock()
+	return t.connectionMu.connectionTracker.testingPrint()
 }
 
 func (t *RaftTransport) dropFlowTokensForDisconnectedNodes() {
-	t.kvflowControl.mu.RLock()
-	defer t.kvflowControl.mu.RUnlock()
-	for _, nodeID := range t.kvflowControl.dispatchReader.PendingDispatch() {
-		if t.kvflowControl.mu.connectionTracker.isNodeConnected(nodeID) {
-			// If there's already a queue active, there's nothing to do. We rely
-			// on timely piggybacking of flow tokens on existing raft transport
-			// messages. It's only when all queues are idle/culled that we use
-			// this worker to drop any held tokens. The expectation is that on
-			// the server-side of the stream, we'll have returned all tokens
-			// when streams disconnect.
-			continue
-		}
-		// Drop any held tokens for that node. Pass maxBytes = MaxInt64 to clear the
-		// outbox.
-		pendingDispatches, _ := t.kvflowControl.dispatchReader.PendingDispatchFor(
-			nodeID,
-			math.MaxInt64,
-		)
-		t.metrics.FlowTokenDispatchesDropped.Inc(int64(len(pendingDispatches)))
-	}
+	t.connectionMu.RLock()
+	defer t.connectionMu.RUnlock()
 	now := timeutil.Now()
 	for _, nodeID := range t.kvflowcontrol2.piggybackReader.NodesWithMsgs(now) {
-		if t.kvflowControl.mu.connectionTracker.isNodeConnected(nodeID) {
+		if t.connectionMu.connectionTracker.isNodeConnected(nodeID) {
 			continue
 		}
 		msgs, remainingMsgs :=
