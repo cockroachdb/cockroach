@@ -93,6 +93,8 @@ type interval struct {
 //
 // Returns true iff the leaderTerm was not stale.
 //
+// TODO(rac1): remove the return value since unused.
+//
 // INVARIANT: first <= last.
 func (p *lowPriOverrideState) sideChannelForLowPriOverride(
 	leaderTerm uint64, first, last uint64, lowPriOverride bool,
@@ -148,16 +150,6 @@ func (p *lowPriOverrideState) sideChannelForLowPriOverride(
 		}
 	}
 	p.intervals.Push(interval{first: first, last: last, lowPriOverride: lowPriOverride})
-	return true
-}
-
-// sideChannelForV1Leader returns true iff the leaderTerm advanced.
-func (p *lowPriOverrideState) sideChannelForV1Leader(leaderTerm uint64) bool {
-	if leaderTerm <= p.leaderTerm {
-		return false
-	}
-	p.leaderTerm = leaderTerm
-	p.intervals.ShrinkToPrefix(0)
 	return true
 }
 

@@ -146,26 +146,3 @@ not-stale-term: true
 leader-term: 6
 intervals:
  [ 35,  40] => true
-
-# Existing term. Old message claiming v1 is ignored.
-side-channel-v1 leader-term=6
-----
-term-advanced: false
-leader-term: 6
-intervals:
- [ 35,  40] => true
-
-
-# Old term. Message is ignored.
-side-channel-v1 leader-term=5
-----
-term-advanced: false
-leader-term: 6
-intervals:
- [ 35,  40] => true
-
-# New term. Message claiming v1 is relevant.
-side-channel-v1 leader-term=7
-----
-term-advanced: true
-leader-term: 7

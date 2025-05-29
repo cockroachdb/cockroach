@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -25,10 +24,6 @@ import (
 )
 
 // Enabled determines whether we use flow control for replication traffic in KV.
-//
-// TODO(sumeer): changing this to false does not affect requests that are
-// already waiting for tokens for eval in RACv1. Consider fixing and
-// back-porting.
 var Enabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kvadmission.flow_control.enabled",
@@ -149,33 +144,6 @@ const (
 	V2EnabledWhenLeaderV1Encoding
 	V2EnabledWhenLeaderV2Encoding
 )
-
-// GetV2EnabledWhenLeaderLevel returns the level at which RACV2 is enabled when
-// this replica is the leader.
-//
-// The level is determined by the cluster version, and is ratcheted up as the
-// cluster version advances. The level is used to determine:
-//
-//  1. Whether the leader should use the RACv2 protocol.
-//  2. Whether the leader should use the V1 or V2 entry encoding iff (1) is
-//     true.
-//
-// Upon the leader first seeing V24_3_UseRACV2WithV1EntryEncoding, it will
-// create a RangeController and use the V1 entry encoding, operating in Push
-// mode. Upon the leader first seeing V24_3_UseRACV2Full, it will continue
-// using the RACV2 protocol, but will switch to the V2 entry encoding. Note the
-// necessary migration for V2NotEnabledWhenLeader =>
-// V2EnabledWhenLeaderV1Encoding occurs before anything else in
-// kvserver.handleRaftReadyRaftMuLocked.
-func GetV2EnabledWhenLeaderLevel(
-	ctx context.Context, st *cluster.Settings, knobs *TestingKnobs,
-) V2EnabledWhenLeaderLevel {
-	if knobs != nil && knobs.OverrideV2EnabledWhenLeaderLevel != nil {
-		return knobs.OverrideV2EnabledWhenLeaderLevel()
-	}
-	// Full RACv2 can be enabled: RACv2 protocol with V2 entry encoding.
-	return V2EnabledWhenLeaderV2Encoding
-}
 
 // Stream models the stream over which we replicate data traffic, the
 // transmission for which we regulate using flow control. It's segmented by the

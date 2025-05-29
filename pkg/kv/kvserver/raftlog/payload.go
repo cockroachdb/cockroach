@@ -24,6 +24,8 @@ type EncodeOptions struct {
 	// RaftAdmissionMeta is non-nil iff this entry should be encoded using an AC
 	// encoding.
 	RaftAdmissionMeta *kvflowcontrolpb.RaftAdmissionMeta
+	// TODO(rac1): remove, since this is always true.
+	//
 	// When this entry should be encoded using an AC encoding, this specifies
 	// whether a WithACAndPriority encoding should be used.
 	EncodePriority bool
