@@ -363,17 +363,6 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	// of data we're iterating on and sending over the network.
 	sharedReplicate := header.SharedReplicate && rditer.IterateReplicaKeySpansShared != nil
 	externalReplicate := header.ExternalReplicate && rditer.IterateReplicaKeySpansShared != nil
-	selOpts := rditer.SelectOpts{
-		Ranged: rditer.SelectRangedOptions{
-			SystemKeys: true,
-			LockTable:  true,
-			// In shared/external mode, the user span come from external SSTs and
-			// are not iterated over here.
-			UserKeys: !(sharedReplicate || externalReplicate),
-		},
-		ReplicatedByRangeID:   true,
-		UnreplicatedByRangeID: false,
-	}
 
 	iterateRKSpansVisitor := func(iter storage.EngineIterator, _ roachpb.Span) error {
 		timingTag.start("iter")
@@ -424,10 +413,17 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		}
 		return err
 	}
-	err := rditer.IterateReplicaKeySpans(
-		ctx, snap.State.Desc, snap.EngineSnap, selOpts, iterateRKSpansVisitor,
-	)
-	if err != nil {
+	if err := rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, rditer.SelectOpts{
+		Ranged: rditer.SelectRangedOptions{
+			SystemKeys: true,
+			LockTable:  true,
+			// In shared/external mode, the user span come from external SSTs and
+			// are not iterated over here.
+			UserKeys: !(sharedReplicate || externalReplicate),
+		},
+		ReplicatedByRangeID:   true,
+		UnreplicatedByRangeID: false,
+	}, iterateRKSpansVisitor); err != nil {
 		return 0, err
 	}
 
@@ -546,23 +542,20 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			//
 			// See: https://github.com/cockroachdb/cockroach/issues/142673
 			transitionFromSharedToRegularReplicate = true
-			opts := rditer.SelectOpts{
+			err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, rditer.SelectOpts{
 				Ranged: rditer.SelectRangedOptions{
 					UserKeys: true,
 				},
 				ReplicatedByRangeID:   false, // we only want the user span
 				UnreplicatedByRangeID: false,
-			}
-			err = rditer.IterateReplicaKeySpans(
-				ctx, snap.State.Desc, snap.EngineSnap, opts, iterateRKSpansVisitor,
-			)
+			}, iterateRKSpansVisitor)
 		}
 		if err != nil {
 			return 0, err
 		}
 	}
 	if b != nil {
-		if err = flushBatch(); err != nil {
+		if err := flushBatch(); err != nil {
 			return 0, err
 		}
 	}
