@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
+	_ "storj.io/drpc/drpcclient"
 )
 
 // grpcGatewayServer represents a grpc service with HTTP endpoints through GRPC
