@@ -1,4 +1,4 @@
-# LogicTest: !local-mixed-24.3 !local-mixed-25.1
+# LogicTest: !local-mixed-25.1
 
 query T
 SELECT jsonb_path_query('{}', '$')

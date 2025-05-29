@@ -6,7 +6,6 @@ postgres   root  NULL  NULL  {}  NULL
 system     node  NULL  NULL  {}  NULL
 test       root  NULL  NULL  {}  NULL
 
-skipif config local-mixed-24.3
 query TTTTT
 SELECT schema_name, table_name, type, owner, locality FROM [SHOW TABLES FROM system] 
 where table_name IN ('descriptor_id_seq', 'comments', 'locations', 'span_configurations')
@@ -17,7 +16,6 @@ public  descriptor_id_seq    sequence  node  NULL
 public  locations            table     node  NULL
 public  span_configurations  table     node  NULL
 
-skipif config local-mixed-24.3
 query I rowsort
 SELECT count(id) FROM system.descriptor
 ----
@@ -80,7 +78,7 @@ session_id       BYTES  false  NULL  ·  {primary}  false
 crdb_region      BYTES  false  NULL  ·  {primary}  false
 
 
-skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
+skipif config local-mixed-25.1 local-mixed-25.2
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.eventlog
 ----
@@ -110,7 +108,6 @@ key          STRING     false  NULL  ·  {primary}  false
 value        BYTES      true   NULL  ·  {primary}  false
 lastUpdated  TIMESTAMP  false  NULL  ·  {primary}  false
 
-skipif config local-mixed-24.3
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.jobs
 ----
@@ -155,7 +152,6 @@ SHOW GRANTS ON DATABASE system
 system  admin  CONNECT  true
 system  root   CONNECT  true
 
-skipif config local-mixed-24.3
 query TTTTTB rowsort
 WITH grants AS (SHOW GRANTS ON system.*) SELECT * FROM grants WHERE
   table_name IN ('comments', 'locations', 'tenants')
