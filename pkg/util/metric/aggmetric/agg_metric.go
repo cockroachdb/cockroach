@@ -11,7 +11,6 @@ package aggmetric
 import (
 	"hash/fnv"
 	"strings"
-	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -175,8 +174,8 @@ func (cs *childSet) clear() {
 }
 
 type SQLMetric struct {
-	labelConfig atomic.Uint64
-	mu          struct {
+	mu struct {
+		labelConfig metric.LabelConfig
 		syncutil.Mutex
 		children ChildrenStorage
 	}
@@ -184,7 +183,7 @@ type SQLMetric struct {
 
 func NewSQLMetric(labelConfig metric.LabelConfig) *SQLMetric {
 	sm := &SQLMetric{}
-	sm.labelConfig.Store(uint64(labelConfig))
+	sm.mu.labelConfig = labelConfig
 	sm.mu.children = &UnorderedCacheWrapper{
 		cache: getCacheStorage(),
 	}
@@ -205,18 +204,18 @@ func (sm *SQLMetric) Each(
 		lvs := cm.labelValues()
 		dbLabel := dbLabel
 		appLabel := appLabel
-		switch sm.labelConfig.Load() {
-		case uint64(metric.LabelConfigDB):
+		switch sm.mu.labelConfig {
+		case metric.LabelConfigDB:
 			childLabels = append(childLabels, &io_prometheus_client.LabelPair{
 				Name:  &dbLabel,
 				Value: &lvs[0],
 			})
-		case uint64(metric.LabelConfigApp):
+		case metric.LabelConfigApp:
 			childLabels = append(childLabels, &io_prometheus_client.LabelPair{
 				Name:  &appLabel,
 				Value: &lvs[0],
 			})
-		case uint64(metric.LabelConfigAppAndDB):
+		case metric.LabelConfigAppAndDB:
 			childLabels = append(childLabels, &io_prometheus_client.LabelPair{
 				Name:  &dbLabel,
 				Value: &lvs[0],
@@ -242,12 +241,12 @@ func (sm *SQLMetric) add(metric ChildMetric) {
 
 type createChildMetricFunc func(labelValues labelValuesSlice) ChildMetric
 
-// getOrAddChild returns the child metric for the given label values. If the child
+// getOrAddChildLocked returns the child metric for the given label values. If the child
 // doesn't exist, it creates a new one and adds it to the collection.
-func (sm *SQLMetric) getOrAddChild(f createChildMetricFunc, labelValues ...string) ChildMetric {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
+// REQUIRES: sm.mu is locked.
+func (sm *SQLMetric) getOrAddChildLocked(
+	f createChildMetricFunc, labelValues ...string,
+) ChildMetric {
 	// If the child already exists, return it.
 	if child, ok := sm.get(labelValues...); ok {
 		return child
@@ -266,18 +265,24 @@ func (sm *SQLMetric) getOrAddChild(f createChildMetricFunc, labelValues ...strin
 func (sm *SQLMetric) getChildByLabelConfig(
 	f createChildMetricFunc, db string, app string,
 ) (ChildMetric, bool) {
+	// We should acquire the lock before evaluating the label configuration
+	// and accessing the children storage in a thread-safe manner. We have moved
+	// the lock acquisition from getOrAddChildLocked to here to fix bug #147475.
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
 	var childMetric ChildMetric
-	switch sm.labelConfig.Load() {
-	case uint64(metric.LabelConfigDisabled):
+	switch sm.mu.labelConfig {
+	case metric.LabelConfigDisabled:
 		return nil, false
-	case uint64(metric.LabelConfigDB):
-		childMetric = sm.getOrAddChild(f, db)
+	case metric.LabelConfigDB:
+		childMetric = sm.getOrAddChildLocked(f, db)
 		return childMetric, true
-	case uint64(metric.LabelConfigApp):
-		childMetric = sm.getOrAddChild(f, app)
+	case metric.LabelConfigApp:
+		childMetric = sm.getOrAddChildLocked(f, app)
 		return childMetric, true
-	case uint64(metric.LabelConfigAppAndDB):
-		childMetric = sm.getOrAddChild(f, db, app)
+	case metric.LabelConfigAppAndDB:
+		childMetric = sm.getOrAddChildLocked(f, db, app)
 		return childMetric, true
 	default:
 		return nil, false
@@ -290,7 +295,7 @@ func (sm *SQLMetric) ReinitialiseChildMetrics(labelConfig metric.LabelConfig) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.mu.children.Clear()
-	sm.labelConfig.Store(uint64(labelConfig))
+	sm.mu.labelConfig = labelConfig
 }
 
 type MetricItem interface {
