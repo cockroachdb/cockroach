@@ -21,8 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // IndexBackfillPlanner holds dependencies for an index backfiller
@@ -77,17 +79,34 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 		completed.g.Add(c...)
 		return completed.g.Slice()
 	}
+	// Add spans that were already completed before the job resumed.
+	addCompleted(progress.CompletedSpans...)
 	updateFunc := func(
 		ctx context.Context, meta *execinfrapb.ProducerMetadata,
 	) error {
 		if meta.BulkProcessorProgress == nil {
 			return nil
 		}
-		progress.CompletedSpans = append(progress.CompletedSpans, addCompleted(
-			meta.BulkProcessorProgress.CompletedSpans...)...)
+		progress.CompletedSpans = addCompleted(meta.BulkProcessorProgress.CompletedSpans...)
+		// Make sure the progress update does not contain overlapping spans.
+		// This is a sanity check that only runs in test configurations, since it
+		// is an expensive n^2 check.
+		if buildutil.CrdbTestBuild {
+			for i, span1 := range progress.CompletedSpans {
+				for j, span2 := range progress.CompletedSpans {
+					if i <= j {
+						continue
+					}
+					if span1.Overlaps(span2) {
+						return errors.Newf("progress update contains overlapping spans: %s and %s", span1, span2)
+					}
+				}
+			}
+		}
+
 		knobs := &ib.execCfg.DistSQLSrv.TestingKnobs
 		if knobs.RunBeforeIndexBackfillProgressUpdate != nil {
-			knobs.RunBeforeIndexBackfillProgressUpdate(progress.CompletedSpans)
+			knobs.RunBeforeIndexBackfillProgressUpdate(ctx, progress.CompletedSpans)
 		}
 		return tracker.SetBackfillProgress(ctx, progress)
 	}
