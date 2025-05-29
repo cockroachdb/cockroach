@@ -86,6 +86,7 @@ func newBufferedRegistration(
 ) *bufferedRegistration {
 	br := &bufferedRegistration{
 		baseRegistration: baseRegistration{
+			consumerID:             0, // TODO(wenyihu6)
 			streamCtx:              streamCtx,
 			span:                   span,
 			catchUpTimestamp:       startTS,
