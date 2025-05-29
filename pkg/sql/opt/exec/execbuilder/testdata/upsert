@@ -1434,9 +1434,9 @@ INSERT INTO t139160 VALUES (11, 12, 3, 14) ON CONFLICT (u) DO UPDATE SET k = 11,
 ----
 Scan /Table/126/3/3/0
 Scan /Table/126/1/1/0
+Del (locking) /Table/126/1/1/0
 Del /Table/126/2/2/1/0
 Del (locking) /Table/126/3/3/0
-Del (locking) /Table/126/1/1/0
 CPut /Table/126/1/11/0 -> /TUPLE/2:2:Int/12/1:3:Int/3/1:4:Int/14
 Put /Table/126/2/12/11/0 -> /BYTES/0x3306
 CPut /Table/126/3/3/0 -> /BYTES/0x932318

@@ -105,8 +105,8 @@ Scan /Table/106/1/2/0
 Scan /Table/106/2/{1/1-2}
 Scan /Table/106/3/10/{1/1-2}
 Scan /Table/106/4/"\x16\x05\x15\xef\x17\xbd\x00\x00\x00 \x00 \x00 "/{1/1-2}
+Del (locking) /Table/106/1/2/0
 Del /Table/106/2/1/1/2/0
 Del /Table/106/3/10/1/1/2/0
 Del /Table/106/4/"\x16\x05\x15\xef\x17\xbd\x00\x00\x00 \x00 \x00 "/1/1/2/0
 Del /Table/106/5/10/2/0
-Del (locking) /Table/106/1/2/0
