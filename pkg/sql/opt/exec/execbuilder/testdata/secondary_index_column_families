@@ -40,6 +40,10 @@ query T kvtrace(prefix=/Table/106)
 DELETE FROM t1 WHERE x = 1
 ----
 Scan /Table/106/1/1/{0-1/2} lock Exclusive (Block, Unreplicated)
+Del (locking) /Table/106/1/1/0
+Del (locking) /Table/106/1/1/1/1
+Del (locking) /Table/106/1/1/2/1
+Del (locking) /Table/106/1/1/3/1
 Del /Table/106/2/1/1/0
 Del (locking) /Table/106/3/1/0
 Del /Table/106/4/1/1/0
@@ -48,10 +52,6 @@ Del /Table/106/4/1/1/3/1
 Del (locking) /Table/106/5/1/0
 Del (locking) /Table/106/5/1/2/1
 Del (locking) /Table/106/5/1/3/1
-Del (locking) /Table/106/1/1/0
-Del (locking) /Table/106/1/1/1/1
-Del (locking) /Table/106/1/1/2/1
-Del (locking) /Table/106/1/1/3/1
 
 # Put some data back into the table.
 statement ok
