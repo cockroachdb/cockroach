@@ -45,7 +45,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgnotice",
-        "//pkg/sql/plpgsql/parser:plpgparser",
+        "//pkg/sql/plpgsql/parser",
         "//pkg/sql/privilege",
         "//pkg/sql/rowenc",
         "//pkg/sql/schemachanger/scpb",
