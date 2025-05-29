@@ -7,16 +7,13 @@ package kvserver
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -25,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -125,7 +121,6 @@ type admitEntHandle struct {
 
 type singleBatchProposer interface {
 	getReplicaID() roachpb.ReplicaID
-	flowControlHandle(ctx context.Context) kvflowcontrol.Handle
 	onErrProposalDropped([]raftpb.Entry, []*ProposalData, raftpb.StateType)
 	registerForTracing(*ProposalData, raftpb.Entry) bool
 }
@@ -880,16 +875,6 @@ func proposeBatch(
 	if err != nil {
 		return err
 	}
-	// Now that we know what raft log position[1] this proposal is to end up
-	// in, deduct flow tokens for it. This is done without blocking (we've
-	// already waited for available flow tokens pre-evaluation). The tokens
-	// will later be returned once we're informed of the entry being
-	// admitted below raft.
-	//
-	// [1]: We're relying on an undocumented side effect of upstream raft
-	//      API where it populates the index and term for the passed in
-	//      slice of entries. See etcd-io/raft#57.
-	maybeDeductFlowTokens(ctx, p.flowControlHandle(ctx), handles, ents)
 
 	// Register the proposal with rafttrace. This will add the trace to the raft
 	// lifecycle. We trace at most one entry per batch, so break after the first
@@ -900,48 +885,6 @@ func proposeBatch(
 		}
 	}
 	return nil
-}
-
-func maybeDeductFlowTokens(
-	ctx context.Context, h kvflowcontrol.Handle, admitHandles []admitEntHandle, ents []raftpb.Entry,
-) {
-	if len(admitHandles) != len(ents) || cap(admitHandles) != cap(ents) {
-		panic(
-			fmt.Sprintf("mismatched slice sizes: len(admit)=%d len(ents)=%d cap(admit)=%d cap(ents)=%d",
-				len(admitHandles), len(ents), cap(admitHandles), cap(ents)),
-		)
-	}
-	for i, admitHandle := range admitHandles {
-		if admitHandle.handle == nil {
-			continue // nothing to do
-		}
-		if ents[i].Term == 0 && ents[i].Index == 0 {
-			// It's possible to have lost raft leadership right before stepping
-			// proposals through raft. They'll get forwarded to the new raft
-			// leader, and for flow token purposes, there's no tracking
-			// necessary. The token deductions below asserts on monotonic
-			// observations of log positions, which this empty position would
-			// otherwise violate. There's integration code elsewhere that will
-			// free up all tracked tokens as a result of this leadership change.
-			return
-		}
-		if log.ExpensiveLogEnabled(ctx, 1) {
-			log.VInfof(ctx, 1, "bound index/log terms for proposal entry: %s",
-				raft.DescribeEntry(ents[i], func(bytes []byte) string {
-					return "<omitted>"
-				}),
-			)
-		}
-		h.DeductTokensFor(
-			admitHandle.pCtx,
-			admissionpb.WorkPriority(admitHandle.handle.AdmissionPriority),
-			kvflowcontrolpb.RaftLogPosition{
-				Term:  ents[i].Term,
-				Index: ents[i].Index,
-			},
-			kvflowcontrol.Tokens(int64(len(ents[i].Data))),
-		)
-	}
 }
 
 // FlushLockedWithoutProposing is like FlushLockedWithRaftGroup but it does not
@@ -1249,14 +1192,6 @@ func (rp *replicaProposer) shouldCampaignOnRedirect(
 
 func (rp *replicaProposer) campaignLocked(ctx context.Context) {
 	(*Replica)(rp).campaignLocked(ctx)
-}
-
-func (rp *replicaProposer) flowControlHandle(ctx context.Context) kvflowcontrol.Handle {
-	handle, found := rp.mu.replicaFlowControlIntegration.handle()
-	if !found {
-		return kvflowhandle.Noop{}
-	}
-	return handle
 }
 
 func (rp *replicaProposer) verifyLeaseRequestSafetyRLocked(

@@ -582,7 +582,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		/* deterministic */ false,
 	)
 
-	storesForFlowControl := kvserver.MakeStoresForFlowControl(stores)
 	storesForRACv2 := kvserver.MakeStoresForRACv2(stores)
 	admissionKnobs, ok := cfg.TestingKnobs.AdmissionControl.(*admission.TestingKnobs)
 	if !ok {
@@ -612,16 +611,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	var admissionControl struct {
 		schedulerLatencyListener admission.SchedulerLatencyListener
 		kvAdmissionController    kvadmission.Controller
-		storesFlowControl        kvflowcontrol.ReplicationAdmissionHandles
+		racHandles               kvflowcontrol.ReplicationAdmissionHandles
 	}
 	admissionControl.schedulerLatencyListener = gcoords.Elastic.SchedulerLatencyListener
-	admissionControl.storesFlowControl = storesForFlowControl
+	admissionControl.racHandles = kvserver.MakeRACHandles(stores)
 	admissionControl.kvAdmissionController = kvadmission.MakeController(
 		nodeIDContainer,
 		gcoords.Regular.GetWorkQueue(admission.KVWork),
 		gcoords.Elastic,
 		gcoords.Stores,
-		admissionControl.storesFlowControl,
+		admissionControl.racHandles,
 		cfg.Settings,
 	)
 

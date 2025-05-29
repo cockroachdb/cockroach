@@ -257,7 +257,6 @@ func newUninitializedReplicaWithoutRaftGroup(
 	)
 	r.LeaderlessWatcher = newLeaderlessWatcher()
 	r.shMu.currentRACv2Mode = r.replicationAdmissionControlModeToUse(context.TODO())
-	r.mu.replicaFlowControlIntegration = noopReplicaFlowControlIntegration{}
 
 	r.raftMu.msgAppScratchForFlowControl = map[roachpb.ReplicaID][]raftpb.Message{}
 	r.raftMu.replicaStateScratchForFlowControl = map[roachpb.ReplicaID]rac2.ReplicaStateInfo{}
@@ -500,7 +499,6 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey, defRaftConnClass))
 	r.concMgr.OnRangeDescUpdated(desc)
 	r.shMu.state.Desc = desc
-	r.mu.replicaFlowControlIntegration.onDescChanged(ctx)
 	r.flowControlV2.OnDescChangedLocked(ctx, desc, r.mu.tenantID)
 
 	// Give the liveness and meta ranges high priority in the Raft scheduler, to

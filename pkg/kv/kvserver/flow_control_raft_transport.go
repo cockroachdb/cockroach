@@ -14,40 +14,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 )
 
-// TODO(rac1): delete all stores state and store related methods.
-
-var _ raftTransportForFlowControl = &RaftTransport{}
-
-// isConnectedTo implements the raftTransportForFlowControl interface.
-func (r *RaftTransport) isConnectedTo(storeID roachpb.StoreID) bool {
-	r.connectionMu.RLock()
-	defer r.connectionMu.RUnlock()
-	return r.connectionMu.connectionTracker.isStoreConnected(storeID)
-}
-
-// connectionTrackerForFlowControl tracks the set of client-side stores and
-// server-side nodes the raft transport is connected to. The "client" and
-// "server" refer to the client and server side of the RaftTransport stream (see
-// flow_control_integration.go). Client-side stores return tokens, it's where
-// work gets admitted. Server-side nodes are where tokens were originally
-// deducted.
+// connectionTrackerForFlowControl tracks the set of server-side nodes the
+// raft transport is connected to. Client-side stores return flow tokens, so
+// if a server-side node is no longer connected, we can choose to drop the
+// token return messages.
 type connectionTrackerForFlowControl struct {
-	stores map[roachpb.StoreID]struct{}
-	nodes  map[roachpb.NodeID]map[rpc.ConnectionClass]struct{}
+	nodes map[roachpb.NodeID]map[rpc.ConnectionClass]struct{}
 }
 
 func newConnectionTrackerForFlowControl() *connectionTrackerForFlowControl {
 	return &connectionTrackerForFlowControl{
-		stores: make(map[roachpb.StoreID]struct{}),
-		nodes:  make(map[roachpb.NodeID]map[rpc.ConnectionClass]struct{}),
+		nodes: make(map[roachpb.NodeID]map[rpc.ConnectionClass]struct{}),
 	}
-}
-
-// isStoreConnected returns whether we're connected to the given (client-side)
-// store.
-func (c *connectionTrackerForFlowControl) isStoreConnected(storeID roachpb.StoreID) bool {
-	_, found := c.stores[storeID]
-	return found
 }
 
 // isNodeConnected returns whether we're connected to the given (server-side)
@@ -80,19 +58,13 @@ func (q *connectionTrackerForFlowControl) markNodeDisconnected(
 }
 
 func (c *connectionTrackerForFlowControl) testingPrint() string {
-	storeIDs := make([]roachpb.StoreID, 0, len(c.stores))
 	nodeIDs := make([]roachpb.NodeID, 0, len(c.nodes))
-	for storeID := range c.stores {
-		storeIDs = append(storeIDs, storeID)
-	}
 	for nodeID := range c.nodes {
 		nodeIDs = append(nodeIDs, nodeID)
 	}
 
 	var buf strings.Builder
-	slices.Sort(storeIDs)
 	slices.Sort(nodeIDs)
-	buf.WriteString(fmt.Sprintf("connected-stores (server POV): %s\n", roachpb.StoreIDSlice(storeIDs)))
 	buf.WriteString(fmt.Sprintf("connected-nodes  (client POV): %s\n", roachpb.NodeIDSlice(nodeIDs)))
 	return buf.String()
 }
