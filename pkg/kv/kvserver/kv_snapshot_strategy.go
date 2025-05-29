@@ -364,7 +364,10 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	sharedReplicate := header.SharedReplicate && rditer.IterateReplicaKeySpansShared != nil
 	externalReplicate := header.ExternalReplicate && rditer.IterateReplicaKeySpansShared != nil
 	replicatedFilter := rditer.ReplicatedSpansAll
-	if sharedReplicate || externalReplicate {
+	if sharedReplicate || externalReplicate ||
+		(*StoreWitnessID.Load() == header.RaftMessageRequest.ToReplica.StoreID) {
+		// TODO(tbg): there are also other variants (include/exclude locks), check
+		// that this is the correct one.
 		replicatedFilter = rditer.ReplicatedSpansExcludeUser
 	}
 

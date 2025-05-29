@@ -116,6 +116,11 @@ enum ReplicaType {
   // of a joint state, which will become a non-voter when the atomic replication
   // change is finalized (i.e. when we exit the joint state).
   VOTER_DEMOTING_NON_VOTER = 6;
+
+  // TODO(tbg): unused for now.
+  WITNESS_FULL = 7;
+  WITNESS_INCOMING = 8;
+  WITNESS_DEMOTING_LEARNER = 9;
 }
 
 // ReplicaDescriptor describes a replica location by node ID

@@ -1263,6 +1263,8 @@ func (s *Store) rangeLeaseAcquireTimeout() time.Duration {
 func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 	ctx context.Context, reqTS hlc.Timestamp, brSig signaller,
 ) (status kvserverpb.LeaseStatus, pErr *kvpb.Error) {
+	// TODO(tbg): must ensure that witnesses don't acquire leases.
+
 	// Does not use RunWithTimeout(), because we do not want to mask the
 	// NotLeaseHolderError on context cancellation.
 	ctx, cancel := context.WithTimeout(ctx, r.store.rangeLeaseAcquireTimeout()) // nolint:context
