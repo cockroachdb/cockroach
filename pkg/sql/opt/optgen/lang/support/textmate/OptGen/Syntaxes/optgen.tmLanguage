@@ -124,6 +124,7 @@
                         AggregationsItem |
                         Filters |
                         FiltersItem |
+                        Barrier |
                         Zip |
                         ZipItem |
                         ZipItemPrivate |

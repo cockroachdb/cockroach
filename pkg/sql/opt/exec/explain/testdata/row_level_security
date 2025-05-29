@@ -317,7 +317,6 @@ UPDATE writer SET key = key * 11;
     └── • scan
           table: writer@writer_pkey
           spans: 1+ spans
-          locking strength: for update
           policies: p_select, p_update1
 
 plan

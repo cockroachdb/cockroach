@@ -351,3 +351,15 @@ $input
     (FoldIsNullProjectionsItems $projections $input)
     $passthrough
 )
+
+# EliminateProjectBarrier removes a Barrier operator from under a Project when
+# all projection expressions are fully leak-proof and the Barrier is marked for
+# skipping.
+[EliminateProjectBarrier, Normalize]
+(Project
+    (Barrier $input:* $private:* & (IsBarrierSkippable $private))
+    $projections:* & (HasAllLeakProofProjections $projections)
+    $passthrough:*
+)
+=>
+(Project $input $projections $passthrough)

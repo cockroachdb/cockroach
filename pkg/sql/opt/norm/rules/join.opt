@@ -845,3 +845,36 @@ $left
     )
     $on
 )
+
+# EliminateJoinLeftBarrier removes a Barrier from the left side of a join when
+# all ON expressions are fully leak-proof and the Barrier is marked for skipping.
+[EliminateJoinLeftBarrier, Normalize]
+(InnerJoin | InnerJoinApply | SemiJoin | SemiJoinApply
+    (Barrier
+        $left:*
+        $leftBarrierPrivate:* &
+            (IsBarrierSkippable $leftBarrierPrivate)
+    )
+    $right:*
+    $on:* & (HasAllLeakProofFilters $on)
+    $private:*
+)
+=>
+((OpName) $left $right $on $private)
+
+# EliminateJoinRightBarrier is the right-side variant of EliminateJoinLeftBarrier.
+# It removes a Barrier from the right side of a join when all ON expressions are
+# fully leak-proof and the Barrier is marked for skipping.
+[EliminateJoinRightBarrier, Normalize]
+(InnerJoin | InnerJoinApply | SemiJoin | SemiJoinApply
+    $left:*
+    (Barrier
+        $right:*
+        $leftBarrierPrivate:* &
+            (IsBarrierSkippable $leftBarrierPrivate)
+    )
+    $on:* & (HasAllLeakProofFilters $on)
+    $private:*
+)
+=>
+((OpName) $left $right $on $private)

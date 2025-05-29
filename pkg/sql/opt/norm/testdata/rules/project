@@ -31,6 +31,30 @@ CREATE TABLE assn_cast (
 )
 ----
 
+exec-ddl
+CREATE TABLE rls (x INT PRIMARY KEY, y INT, alice_has_access BOOL);
+----
+
+exec-ddl
+CREATE INDEX ON rls(y);
+----
+
+exec-ddl
+ALTER TABLE rls ENABLE ROW LEVEL SECURITY;
+----
+
+exec-ddl
+CREATE POLICY select_policy_alice
+ON rls
+FOR SELECT
+TO alice
+USING (alice_has_access);
+----
+
+exec-ddl
+CREATE ROLE alice;
+----
+
 # --------------------------------------------------
 # EliminateJoinUnderProjectLeft
 # --------------------------------------------------
@@ -2018,3 +2042,108 @@ sort
       │    └── fd: (1)-->(2)
       └── projections
            └── y:2 IS NULL [as=nulls_ordering_y:7, outer=(2)]
+
+# --------------------------------------------------
+# EliminateProjectBarrier
+# --------------------------------------------------
+
+exec-ddl
+SET ROLE alice;
+----
+
+norm expect=EliminateProjectBarrier
+SELECT * FROM rls;
+----
+select
+ ├── columns: x:1!null y:2 alice_has_access:3!null
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2)
+ ├── scan rls
+ │    ├── columns: x:1!null y:2 alice_has_access:3
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+
+norm expect-not=EliminateProjectBarrier
+SELECT y AS bucket
+FROM rls
+GROUP BY bucket
+HAVING max(CASE WHEN y = 20 THEN y/0 ELSE 0 END) > 0;
+----
+project
+ ├── columns: bucket:2
+ ├── immutable
+ ├── key: (2)
+ └── select
+      ├── columns: y:2 max:7!null
+      ├── immutable
+      ├── key: (2)
+      ├── fd: (2)-->(7)
+      ├── group-by (hash)
+      │    ├── columns: y:2 max:7
+      │    ├── grouping columns: y:2
+      │    ├── immutable
+      │    ├── key: (2)
+      │    ├── fd: (2)-->(7)
+      │    ├── project
+      │    │    ├── columns: column6:6 y:2
+      │    │    ├── immutable
+      │    │    ├── fd: (2)-->(6)
+      │    │    ├── barrier
+      │    │    │    ├── columns: x:1!null y:2 alice_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: ()-->(3), (1)-->(2,4,5)
+      │    │    │    └── select
+      │    │    │         ├── columns: x:1!null y:2 alice_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      │    │    │         ├── key: (1)
+      │    │    │         ├── fd: ()-->(3), (1)-->(2,4,5)
+      │    │    │         ├── scan rls
+      │    │    │         │    ├── columns: x:1!null y:2 alice_has_access:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      │    │    │         │    ├── key: (1)
+      │    │    │         │    └── fd: (1)-->(2-5)
+      │    │    │         └── filters
+      │    │    │              └── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+      │    │    └── projections
+      │    │         └── CASE WHEN y:2 = 20 THEN y:2 / 0 ELSE 0 END [as=column6:6, outer=(2), immutable]
+      │    └── aggregations
+      │         └── max [as=max:7, outer=(6)]
+      │              └── column6:6
+      └── filters
+           └── max:7 > 0 [outer=(7), immutable, constraints=(/7: (/0 - ]; tight)]
+
+norm expect=EliminateProjectBarrier
+SELECT y AS bucket
+FROM rls
+GROUP BY bucket
+HAVING max(CASE WHEN y = 20 THEN y ELSE 0 END) > 0;
+----
+project
+ ├── columns: bucket:2
+ ├── key: (2)
+ └── select
+      ├── columns: y:2 max:7!null
+      ├── key: (2)
+      ├── fd: (2)-->(7)
+      ├── group-by (hash)
+      │    ├── columns: y:2 max:7
+      │    ├── grouping columns: y:2
+      │    ├── key: (2)
+      │    ├── fd: (2)-->(7)
+      │    ├── project
+      │    │    ├── columns: column6:6 y:2
+      │    │    ├── fd: (2)-->(6)
+      │    │    ├── select
+      │    │    │    ├── columns: y:2 alice_has_access:3!null
+      │    │    │    ├── fd: ()-->(3)
+      │    │    │    ├── scan rls
+      │    │    │    │    └── columns: y:2 alice_has_access:3
+      │    │    │    └── filters
+      │    │    │         └── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+      │    │    └── projections
+      │    │         └── CASE WHEN y:2 = 20 THEN y:2 ELSE 0 END [as=column6:6, outer=(2)]
+      │    └── aggregations
+      │         └── max [as=max:7, outer=(6)]
+      │              └── column6:6
+      └── filters
+           └── max:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]

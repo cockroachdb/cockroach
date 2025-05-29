@@ -448,3 +448,14 @@ $input
     )
     (RemoveFiltersItem $filter $item)
 )
+
+# EliminateSelectBarrier removes a Barrier operator from under a Select when
+# all filter expressions are fully leak-proof and the Barrier is marked for
+# skipping.
+[EliminateSelectBarrier, Normalize]
+(Select
+    (Barrier $input:* $private:* & (IsBarrierSkippable $private))
+    $filters:* & (HasAllLeakProofFilters $filters)
+)
+=>
+(Select $input $filters)
