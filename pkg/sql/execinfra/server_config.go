@@ -244,7 +244,7 @@ type TestingKnobs struct {
 
 	// RunBeforeIndexBackfillProgressUpdate is called before updating the
 	// progress for a single index backfill.
-	RunBeforeIndexBackfillProgressUpdate func(completed []roachpb.Span)
+	RunBeforeIndexBackfillProgressUpdate func(ctx context.Context, completed []roachpb.Span)
 
 	// SerializeIndexBackfillCreationAndIngestion ensures that every index batch
 	// created during an index backfill is also ingested before moving on to the
