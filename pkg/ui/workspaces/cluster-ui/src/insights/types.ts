@@ -177,12 +177,10 @@ export const slowExecutionInsight = (
   execType: InsightExecEnum,
   latencyThreshold?: number,
 ): Insight => {
-  let threshold = latencyThreshold + "ms";
-  if (!latencyThreshold) {
-    threshold =
-      "the value of the 'sql.insights.latency_threshold' cluster setting";
-  }
-  const description = `This ${execType} took longer than ${threshold} to execute.`;
+  const description =
+    `An execution of this ${execType} was marked as slow. Slow executions ` +
+    `are determined by the 'sql.insights.latency_threshold' and 'sql.insights.anomaly_detection_threshold' ` +
+    `cluster settings.`;
   return {
     name: InsightNameEnum.SLOW_EXECUTION,
     label: InsightEnumToLabel.get(InsightNameEnum.SLOW_EXECUTION),
