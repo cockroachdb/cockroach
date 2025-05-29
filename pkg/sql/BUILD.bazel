@@ -468,7 +468,7 @@ go_library(
         "//pkg/sql/pgwire/pgwirecancel",
         "//pkg/sql/physicalplan",
         "//pkg/sql/physicalplan/replicaoracle",
-        "//pkg/sql/plpgsql/parser:plpgparser",
+        "//pkg/sql/plpgsql/parser",
         "//pkg/sql/prep",
         "//pkg/sql/privilege",
         "//pkg/sql/protoreflect",

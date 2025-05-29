@@ -9,7 +9,7 @@ go_library(
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/parser",
-        "//pkg/sql/plpgsql/parser:plpgparser",
+        "//pkg/sql/plpgsql/parser",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/sem/tree",
         "@com_github_cockroachdb_errors//:errors",
