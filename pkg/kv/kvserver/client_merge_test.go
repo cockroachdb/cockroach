@@ -3881,8 +3881,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 
 		// Construct SSTs for the the first 4 bullets as numbered above, but only
 		// ultimately keep the last one.
-		sendingEngSnapshot := sendingEng.NewSnapshot()
-		defer sendingEngSnapshot.Close()
+		snapReader := sendingEng.NewSnapshot()
+		defer snapReader.Close()
 
 		// Write a Pebble range deletion tombstone to each of the SSTs then put in
 		// the kv entries from the sender of the snapshot.
@@ -3913,7 +3913,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			}
 		}
 
-		selOpts := rditer.SelectOpts{
+		if err := rditer.IterateReplicaKeySpans(ctx, inSnap.Desc, snapReader, rditer.SelectOpts{
 			Ranged: rditer.SelectRangedOptions{
 				SystemKeys: true,
 				LockTable:  true,
@@ -3921,34 +3921,30 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			},
 			ReplicatedByRangeID:   true,
 			UnreplicatedByRangeID: false,
-		}
-		err := rditer.IterateReplicaKeySpans(
-			context.Background(), inSnap.Desc, sendingEngSnapshot, selOpts,
-			func(iter storage.EngineIterator, span roachpb.Span) error {
-				fw, ok := sstFileWriters[string(span.Key)]
-				if !ok || !fw.span.Equal(span) {
-					return errors.Errorf("unexpected span %s", span)
+		}, func(iter storage.EngineIterator, span roachpb.Span) error {
+			fw, ok := sstFileWriters[string(span.Key)]
+			if !ok || !fw.span.Equal(span) {
+				return errors.Errorf("unexpected span %s", span)
+			}
+			var err error
+			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
+				var key storage.EngineKey
+				if key, err = iter.UnsafeEngineKey(); err != nil {
+					return err
 				}
-				var err error
-				for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
-					var key storage.EngineKey
-					if key, err = iter.UnsafeEngineKey(); err != nil {
-						return err
-					}
-					v, err := iter.UnsafeValue()
-					if err != nil {
-						return err
-					}
-					if err := fw.writer.PutEngineKey(key, v); err != nil {
-						return err
-					}
-				}
+				v, err := iter.UnsafeValue()
 				if err != nil {
 					return err
 				}
-				return nil
-			})
-		if err != nil {
+				if err := fw.writer.PutEngineKey(key, v); err != nil {
+					return err
+				}
+			}
+			if err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
 			return err
 		}
 
@@ -4024,8 +4020,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			ctx, receivingEng, &sst, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey(), 64,
 		); err != nil {
 			return err
-		}
-		if err = sst.Finish(); err != nil {
+		} else if err := sst.Finish(); err != nil {
 			return err
 		}
 		expectedSSTs = append(expectedSSTs, sstFile.Data())
