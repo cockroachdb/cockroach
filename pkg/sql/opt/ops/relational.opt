@@ -191,6 +191,7 @@ define Select {
 # Projections describes the synthesized columns constructed by Project, and
 # Passthrough describes the input columns that are passed through as Project
 # output columns.
+# _ ProjectPrivate
 [Relational]
 define Project {
     Input RelExpr
@@ -204,7 +205,17 @@ define Project {
     # internalFuncDeps are the functional dependencies between all columns
     # (input or synthesized).
     internalFuncDeps FuncDepSet
+
+    # TODO
+    equiv EquivGroups
 }
+
+# TODO
+# [Private]
+# define ProjectPrivate {
+#     Passthrough ColSet
+#     EquivCols EquivGroups
+# }
 
 # InvertedFilter filters rows from its input result set, based on the
 # InvertedExpression predicate (which is defined in InvertedFilterPrivate).

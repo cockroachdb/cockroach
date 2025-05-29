@@ -1125,6 +1125,7 @@ func (prj *ProjectExpr) initUnexportedFields(mem *Memo) {
 	// Determine the "internal" functional dependencies (for the union of input
 	// columns and synthesized columns).
 	prj.internalFuncDeps.CopyFrom(&inputProps.FuncDeps)
+	prj.internalFuncDeps.AddEquiv(prj.equiv)
 	for i := range prj.Projections {
 		item := &prj.Projections[i]
 		if v, ok := item.Element.(*VariableExpr); ok && inputProps.OutputCols.Contains(v.Col) {
@@ -1155,6 +1156,10 @@ func (prj *ProjectExpr) initUnexportedFields(mem *Memo) {
 // columns plus the synthesized columns.
 func (prj *ProjectExpr) InternalFDs() *props.FuncDepSet {
 	return &prj.internalFuncDeps
+}
+
+func (prj *ProjectExpr) SetEquivGroups(equiv props.EquivGroups) {
+	prj.equiv = equiv
 }
 
 // GetProjectedEnumConstant looks for the projection with target colID in prj,

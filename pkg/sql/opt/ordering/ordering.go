@@ -524,10 +524,28 @@ func checkRequired(expr memo.RelExpr, required *props.OrderingChoice) {
 	for i := range required.Columns {
 		c := &required.Columns[i]
 		if !c.Group.SubsetOf(rel.FuncDeps.ComputeEquivGroup(c.AnyID())) && !rel.Cardinality.IsZero() {
+			var fds string
+			if p, ok := expr.(*memo.ProjectExpr); ok {
+				fds = p.InternalFDs().String()
+			}
+			_ = fds
+			// groupHasVirtualCol := false
+			// // TODO: Need to get real metadata.
+			// var md opt.Metadata
+			// for col, ok := c.Group.Next(0); ok; col, ok = c.Group.Next(col + 1) {
+			// 	tab := md.ColumnMeta(col).Table
+			// 	ord := tab.ColumnOrdinal(col)
+			// 	if md.Table(tab).Column(ord).IsVirtualComputed() {
+			// 		groupHasVirtualCol = true
+			// 		break
+			// 	}
+			// }
+			// if !groupHasVirtualCol {
 			panic(errors.AssertionFailedf(
 				"ordering column group %s contains non-equivalent columns (op %s)",
 				c.Group, expr.Op(),
 			))
+			// }
 		}
 	}
 }
