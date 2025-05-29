@@ -625,19 +625,24 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 				return err
 			}
 			roleCanLogin := !noLogin
-			createDB, err := options.createDB()
-			if err != nil {
-				return err
-			}
 			rolValidUntil, err := options.validUntil(p)
 			if err != nil {
 				return err
 			}
-			createRole, err := options.createRole()
+			// Also check for BYPASSRLS privilege.
+			bypassRLS, err := p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.BYPASSRLS, userName)
 			if err != nil {
 				return err
 			}
-			bypassRLS, err := options.bypassRLS()
+
+			// Also check for CREATEROLE privilege.
+			createRole, err := p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEROLE, userName)
+			if err != nil {
+				return err
+			}
+
+			// Also check for CREATEDB privilege.
+			createDB, err := p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEDB, userName)
 			if err != nil {
 				return err
 			}
@@ -648,18 +653,18 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 			}
 
 			return addRow(
-				h.UserOid(userName),                  // oid
-				tree.NewDName(userName.Normalized()), // rolname
-				tree.MakeDBool(isRoot || isSuper),    // rolsuper
-				tree.MakeDBool(roleInherits),         // rolinherit
-				tree.MakeDBool(isRoot || createRole), // rolcreaterole
-				tree.MakeDBool(isRoot || createDB),   // rolcreatedb
-				tree.MakeDBool(roleCanLogin),         // rolcanlogin.
-				tree.DBoolFalse,                      // rolreplication
-				tree.MakeDBool(bypassRLS),            // rolbypassrls
-				negOneVal,                            // rolconnlimit
-				passwdStarString,                     // rolpassword
-				rolValidUntil,                        // rolvaliduntil
+				h.UserOid(userName),                              // oid
+				tree.NewDName(userName.Normalized()),             // rolname
+				tree.MakeDBool(isRoot || isSuper),                // rolsuper
+				tree.MakeDBool(roleInherits),                     // rolinherit
+				tree.MakeDBool(isRoot || tree.DBool(createRole)), // rolcreaterole
+				tree.MakeDBool(isRoot || tree.DBool(createDB)),   // rolcreatedb
+				tree.MakeDBool(roleCanLogin),                     // rolcanlogin.
+				tree.DBoolFalse,                                  // rolreplication
+				tree.MakeDBool(tree.DBool(bypassRLS)),            // rolbypassrls
+				negOneVal,                                        // rolconnlimit
+				passwdStarString,                                 // rolpassword
+				rolValidUntil,                                    // rolvaliduntil
 			)
 		})
 	},
@@ -2978,42 +2983,48 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 					return err
 				}
 				roleCanLogin := isRoot || !noLogin
-				createDB, err := options.createDB()
-				if err != nil {
-					return err
-				}
 				rolValidUntil, err := options.validUntil(p)
 				if err != nil {
 					return err
 				}
-				createRole, err := options.createRole()
+				// Also check for BYPASSRLS privilege.
+				bypassRLS, err := p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.BYPASSRLS, userName)
 				if err != nil {
 					return err
 				}
-				bypassRLS, err := options.bypassRLS()
+
+				// Also check for CREATEROLE privilege.
+				createRole, err := p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEROLE, userName)
 				if err != nil {
 					return err
 				}
+
+				// Also check for CREATEDB privilege.
+				createDB, err := p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEDB, userName)
+				if err != nil {
+					return err
+				}
+
 				isSuper, err := userIsSuper(ctx, p, userName)
 				if err != nil {
 					return err
 				}
 
 				return addRow(
-					h.UserOid(userName),                   // oid
-					tree.NewDName(userName.Normalized()),  // rolname
-					tree.MakeDBool(isRoot || isSuper),     // rolsuper
-					tree.MakeDBool(roleInherits),          // rolinherit
-					tree.MakeDBool(isSuper || createRole), // rolcreaterole
-					tree.MakeDBool(isSuper || createDB),   // rolcreatedb
-					tree.DBoolFalse,                       // rolcatupdate
-					tree.MakeDBool(roleCanLogin),          // rolcanlogin.
-					tree.DBoolFalse,                       // rolreplication
-					negOneVal,                             // rolconnlimit
-					passwdStarString,                      // rolpassword
-					rolValidUntil,                         // rolvaliduntil
-					tree.MakeDBool(bypassRLS),             // rolbypassrls
-					settings,                              // rolconfig
+					h.UserOid(userName),                               // oid
+					tree.NewDName(userName.Normalized()),              // rolname
+					tree.MakeDBool(isRoot || isSuper),                 // rolsuper
+					tree.MakeDBool(roleInherits),                      // rolinherit
+					tree.MakeDBool(isSuper || tree.DBool(createRole)), // rolcreaterole
+					tree.MakeDBool(isSuper || tree.DBool(createDB)),   // rolcreatedb
+					tree.DBoolFalse,                                   // rolcatupdate
+					tree.MakeDBool(roleCanLogin),                      // rolcanlogin.
+					tree.DBoolFalse,                                   // rolreplication
+					negOneVal,                                         // rolconnlimit
+					passwdStarString,                                  // rolpassword
+					rolValidUntil,                                     // rolvaliduntil
+					tree.MakeDBool(tree.DBool(bypassRLS)),             // rolbypassrls
+					settings,                                          // rolconfig
 				)
 			})
 	},
