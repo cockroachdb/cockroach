@@ -245,9 +245,6 @@ type createChildMetricFunc func(labelValues labelValuesSlice) ChildMetric
 // getOrAddChild returns the child metric for the given label values. If the child
 // doesn't exist, it creates a new one and adds it to the collection.
 func (sm *SQLMetric) getOrAddChild(f createChildMetricFunc, labelValues ...string) ChildMetric {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
 	// If the child already exists, return it.
 	if child, ok := sm.get(labelValues...); ok {
 		return child
@@ -266,6 +263,12 @@ func (sm *SQLMetric) getOrAddChild(f createChildMetricFunc, labelValues ...strin
 func (sm *SQLMetric) getChildByLabelConfig(
 	f createChildMetricFunc, db string, app string,
 ) (ChildMetric, bool) {
+	// We should acquire the lock before evaluating the label configuration
+	// and accessing the children storage in a thread-safe manner. We have moved
+	// the lock acquisition from getOrAddChild to here to fix bug #147475.
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
 	var childMetric ChildMetric
 	switch sm.labelConfig.Load() {
 	case uint64(metric.LabelConfigDisabled):
