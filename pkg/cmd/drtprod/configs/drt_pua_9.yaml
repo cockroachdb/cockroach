@@ -228,7 +228,7 @@ targets:
           - --
           - "sudo systemd-run --unit tpcc_init --same-dir --uid $(id -u) --gid $(id -g) bash ./tpcc_init_cct_tpcc.sh"
         wait: 3600
-  - target_name: "Phase-1: Baseline TPC-C Performance"
+  - target_name: "Phase-1: Baseline Performance"
     dependent_targets:
       - "Data Import"
     steps:
@@ -240,7 +240,7 @@ targets:
         wait: 3600
   - target_name: "Phase-2: Internal Operational Stress"
     dependent_targets:
-      - "Phase-1: Baseline TPC-C Performance"
+      - "Phase-1: Baseline Performance"
     steps:
       - command: sql # create backup schedule
         args:
@@ -284,7 +284,7 @@ targets:
           - --
           - "./run_ops_disk-stall.sh"
         wait: 1200
-  - target_name: "Phase-4: Network Failure"
+  - target_name: "Phase-4: Network Failures"
     dependent_targets:
       - "Phase-3: Disk Stalls"
     steps:
@@ -302,7 +302,7 @@ targets:
         wait: 1500
   - target_name: "Phase-5: Node Restarts"
     dependent_targets:
-      - "Phase-4: Network Failure"
+      - "Phase-4: Network Failures"
     steps:
       - command: stop # ungraceful shutdown of node 2
         args:
