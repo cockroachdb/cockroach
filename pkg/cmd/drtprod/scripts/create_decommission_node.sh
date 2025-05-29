@@ -12,6 +12,8 @@ if [ -z "${CLUSTER}" ]; then
   exit 1
 fi
 
+export ROACHPROD_DISABLED_PROVIDERS=IBM
+
 absolute_path=$(drtprod run "${CLUSTER}":1 -- "realpath ./cockroach")
 pwd=$(drtprod run "${CLUSTER}":1 -- "dirname ${absolute_path}")
 
