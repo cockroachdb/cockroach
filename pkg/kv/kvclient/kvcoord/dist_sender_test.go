@@ -4022,6 +4022,27 @@ func TestMultipleErrorsMerged(t *testing.T) {
 	}
 }
 
+func TestMergeErrorIndex(t *testing.T) {
+	// When merging, the error with lower index should be preferred. Create two
+	// errors with the same priority but different indices.
+	err1 := kvpb.NewError(&kvpb.ConditionFailedError{})
+	err1.Index = &kvpb.ErrPosition{Index: 2}
+	err2 := kvpb.NewError(&kvpb.ConditionFailedError{})
+	err2.Index = &kvpb.ErrPosition{Index: 1}
+
+	require.Equal(t, int32(1), mergeErrors(err1, err2).Index.Index)
+	require.Equal(t, int32(1), mergeErrors(err2, err1).Index.Index)
+
+	// Test that priority still takes precedence over index
+	highPriorityErr := kvpb.NewError(&kvpb.TransactionAbortedError{})
+	highPriorityErr.Index = &kvpb.ErrPosition{Index: 5}
+	lowPriorityErr := kvpb.NewError(&kvpb.ConditionFailedError{})
+	lowPriorityErr.Index = &kvpb.ErrPosition{Index: 3}
+
+	require.Equal(t, int32(5), mergeErrors(highPriorityErr, lowPriorityErr).Index.Index)
+	require.Equal(t, int32(5), mergeErrors(lowPriorityErr, highPriorityErr).Index.Index)
+}
+
 // Regression test for #20067.
 // If a batch is partitioned into multiple partial batches, the
 // kvpb.Error.Index of each batch should correspond to its original index in
