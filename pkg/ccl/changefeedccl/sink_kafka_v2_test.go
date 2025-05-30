@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/mocks"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -99,7 +100,7 @@ func TestKafkaSinkClientV2_Basic(t *testing.T) {
 	buf := fx.sink.MakeBatchBuffer("t")
 	keys := []string{"k1", "k2", "k3"}
 	for i, key := range keys {
-		buf.Append([]byte(key), []byte(strconv.Itoa(i)), attributes{})
+		buf.Append(context.Background(), []byte(key), []byte(strconv.Itoa(i)), attributes{})
 	}
 	payload, err := buf.Close()
 	require.NoError(t, err)
@@ -113,17 +114,26 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	setup := func(t *testing.T, canResize bool) (*kafkaSinkV2Fx, SinkPayload, []any) {
+	setup := func(t *testing.T, canResize bool, errorDetails bool) (*kafkaSinkV2Fx, SinkPayload, []any) {
 		fx := newKafkaSinkV2Fx(t, withSettings(func(settings *cluster.Settings) {
 			if canResize {
 				changefeedbase.BatchReductionRetryEnabled.Override(context.Background(), &settings.SV, true)
+			}
+			if errorDetails {
+				changefeedbase.KafkaV2IncludeErrorDetails.Override(context.Background(), &settings.SV, true)
 			}
 		}))
 		defer fx.close()
 
 		buf := fx.sink.MakeBatchBuffer("t")
 		for i := range 100 {
-			buf.Append([]byte("k1"), []byte(strconv.Itoa(i)), attributes{})
+			buf.Append(context.Background(),
+				[]byte("k1"),
+				[]byte(strconv.Itoa(i)),
+				attributes{
+					mvcc: hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
+				},
+			)
 		}
 		payload, err := buf.Close()
 		require.NoError(t, err)
@@ -137,14 +147,14 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 	}
 
 	t.Run("resize disabled", func(t *testing.T) {
-		fx, payload, payloadAnys := setup(t, false)
+		fx, payload, payloadAnys := setup(t, false, false)
 		pr := kgo.ProduceResults{kgo.ProduceResult{Err: fmt.Errorf("..: %w", kerr.MessageTooLarge)}}
 		fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys...).Times(1).Return(pr)
 		require.Error(t, fx.sink.Flush(fx.ctx, payload))
 	})
 
-	t.Run("resize enabled and it keeps failing", func(t *testing.T) {
-		fx, payload, payloadAnys := setup(t, true)
+	t.Run("resize and error details enabled and it keeps failing", func(t *testing.T) {
+		fx, payload, payloadAnys := setup(t, true, true)
 
 		pr := kgo.ProduceResults{kgo.ProduceResult{Err: fmt.Errorf("..: %w", kerr.MessageTooLarge)}}
 		// it should keep splitting it in two until it hits size=1
@@ -157,11 +167,19 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 			fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys[:3]...).Times(1).Return(pr),
 			fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys[:1]...).Times(1).Return(pr),
 		)
-		require.Error(t, fx.sink.Flush(fx.ctx, payload))
+
+		err := fx.sink.Flush(fx.ctx, payload)
+		require.Error(t, err)
+
+		// Validate that error includes key, size, and mvcc
+		errStr := err.Error()
+		require.Contains(t, errStr, "k1", "error should include key")
+		require.Regexp(t, `size=\d+`, errStr, "error should include size")
+		require.Regexp(t, `mvcc=\d+`, errStr, "error should include mvcc timestamp")
 	})
 
 	t.Run("resize enabled and it gets everything", func(t *testing.T) {
-		fx, payload, payloadAnys := setup(t, true)
+		fx, payload, payloadAnys := setup(t, true, false)
 
 		prErr := kgo.ProduceResults{kgo.ProduceResult{Err: fmt.Errorf("..: %w", kerr.MessageTooLarge)}}
 		prOk := kgo.ProduceResults{}
@@ -556,7 +574,7 @@ func TestKafkaSinkClientV2_ErrorsEventually(t *testing.T) {
 	defer fx.close()
 
 	buf := fx.sink.MakeBatchBuffer("t")
-	buf.Append([]byte("k1"), []byte("v1"), attributes{})
+	buf.Append(context.Background(), []byte("k1"), []byte("v1"), attributes{})
 	payload, err := buf.Close()
 	require.NoError(t, err)
 
