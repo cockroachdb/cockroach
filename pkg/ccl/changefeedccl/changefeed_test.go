@@ -10137,7 +10137,7 @@ func TestChangefeedMultiPodTenantPlanning(t *testing.T) {
 	require.Equal(t, 2, aggregatorCount)
 }
 
-func TestChangefeedCreateTelemetryLogs(t *testing.T) {
+func TestCreateChangefeedTelemetryLogs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -10188,6 +10188,44 @@ func TestChangefeedCreateTelemetryLogs(t *testing.T) {
 		require.Equal(t, 1, len(createLogs))
 		require.Equal(t, true, createLogs[0].Transformation)
 	})
+}
+
+func TestAlterChangefeedTelemetryLogs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
+
+		beforeCreate := timeutil.Now()
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo, bar`)
+		defer closeFeed(t, testFeed)
+		feed := testFeed.(cdctest.EnterpriseTestFeed)
+
+		// Alter changefeed to drop bar as a target and set resolved.
+		require.NoError(t, feed.Pause())
+		sqlDB.Exec(t, `ALTER CHANGEFEED $1 DROP bar SET resolved`, feed.JobID())
+		require.NoError(t, feed.Resume())
+
+		var logs []eventpb.AlterChangefeed
+		testutils.SucceedsSoon(t, func() error {
+			logs = checkAlterChangefeedLogs(t, beforeCreate.UnixNano())
+			if len(logs) < 1 {
+				return errors.New("no logs found")
+			}
+			return nil
+		})
+
+		require.Len(t, logs, 1)
+		l := logs[0]
+		require.EqualValues(t, feed.JobID(), l.JobId)
+		require.Equal(t, `alter_changefeed`, l.EventType)
+		require.Contains(t, l.PreviousDescription, `bar`)
+		require.NotContains(t, l.Description, `bar`)
+		require.Equal(t, "yes", l.Resolved)
+	}, feedTestEnterpriseSinks)
 }
 
 // Note that closeFeed needs to be called in order for the logs to be detected
