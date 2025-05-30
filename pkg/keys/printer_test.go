@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -563,16 +564,16 @@ func TestPrettyPrintRange(t *testing.T) {
 	testCases := []struct {
 		start, end roachpb.Key
 		maxChars   int
-		expected   string
+		expected   redact.RedactableString
 	}{
-		{key, nil, 20, "a"},
+		{key, nil, 20, "‹a›"},
 		{tableKey, nil, 10, "/Table/61…"},
-		{tableKey, specialBytesKeyB, 20, `/Table/61/{4-"\xe2…}`},
-		{tableKey, specialBytesKeyB, 30, `/Table/61/{4-"☃️…}`},
-		{tableKey, specialBytesKeyB, 50, `/Table/61/{4-"☃️⚠"}`},
-		{specialBytesKeyA, specialBytesKeyB, 20, `/Table/61/"☃️…`},
-		{specialBytesKeyA, specialBytesKeyB, 25, `/Table/61/"☃️{"-\xe2…}`},
-		{specialBytesKeyA, specialBytesKeyB, 30, `/Table/61/"☃️{"-⚠"}`},
+		{tableKey, specialBytesKeyB, 20, `/Table/61/{4-‹"☃›…}`},
+		{tableKey, specialBytesKeyB, 30, `/Table/61/{4-‹"☃️⚠"›}`},
+		{tableKey, specialBytesKeyB, 50, `/Table/61/{4-‹"☃️⚠"›}`},
+		{specialBytesKeyA, specialBytesKeyB, 20, `/Table/61/‹"☃️›…`},
+		{specialBytesKeyA, specialBytesKeyB, 25, `/Table/61/‹"☃️›{‹"›-‹⚠"›}`},
+		{specialBytesKeyA, specialBytesKeyB, 30, `/Table/61/‹"☃️›{‹"›-‹⚠"›}`},
 		// Note: the PrettyPrintRange() algorithm operates on the result
 		// of PrettyPrint(), which already turns special characters into
 		// hex sequences. Therefore, it can merge and truncate the hex
@@ -582,13 +583,13 @@ func TestPrettyPrintRange(t *testing.T) {
 		//
 		// Since all of this is best-effort, we'll accept the status quo
 		// for now.
-		{specialBytesKeyC, specialBytesKeyD, 20, `/Table/61/"\xff\x…`},
-		{specialBytesKeyC, specialBytesKeyD, 30, `/Table/61/"\xff\x{00"-fe"}`},
-		{specialBytesKeyB, specialBytesKeyD, 20, `/Table/61/"{\xe2\x98…-\x…}`},
-		{specialBytesKeyB, specialBytesKeyD, 30, `/Table/61/"{☃️\xe2…-\xff\xf…}`},
-		{specialBytesKeyB, specialBytesKeyD, 50, `/Table/61/"{☃️⚠"-\xff\xfe"}`},
+		{specialBytesKeyC, specialBytesKeyD, 20, `/Table/61/‹"\xff\x›…`},
+		{specialBytesKeyC, specialBytesKeyD, 30, `/Table/61/‹"\xff\x›{‹00"›-‹fe"›}`},
+		{specialBytesKeyB, specialBytesKeyD, 20, `/Table/61/‹"›{‹☃›…-‹\›…}`},
+		{specialBytesKeyB, specialBytesKeyD, 30, `/Table/61/‹"›{‹☃️⚠"›-‹\xff\x›…}`},
+		{specialBytesKeyB, specialBytesKeyD, 50, `/Table/61/‹"›{‹☃️⚠"›-‹\xff\xfe"›}`},
 		{tenTableKey, nil, 20, "/Tenant/5/Table/61/…"},
-		{key, key2, 20, "{a-z}"},
+		{key, key2, 20, "{‹a›-‹z›}"},
 		{keys.MinKey, tableKey, 8, "/{M…-T…}"},
 		{keys.MinKey, tableKey, 15, "/{Min-Tabl…}"},
 		{keys.MinKey, tableKey, 20, "/{Min-Table/6…}"},
@@ -633,4 +634,59 @@ func TestFormatHexKey(t *testing.T) {
 
 func makeKey(keys ...[]byte) []byte {
 	return bytes.Join(keys, nil)
+}
+
+func TestCopyEscape(t *testing.T) {
+	invalidUTF8 := []byte("🪳")[:2]
+	expectEscaped := "\\xf0\\x9f"
+
+	tt := []struct {
+		input    string
+		expected redact.RedactableString
+		maxChars int
+	}{
+		{"abc", "abc", math.MaxInt32},
+		{"abc", "abc", 3},
+		{"abc", "a…", 2},
+
+		// should handle redaction markers
+		{"abc‹cde›", redact.Sprintf("abc%s", "cde"), math.MaxInt32},
+		{"abc‹def›ghi", redact.Sprintf("abc%sghi", "def"), math.MaxInt32},
+		{"abc‹cde›", redact.Sprint(redact.SafeString("abc…")), 4},
+
+		// should handle other valid UTF-8 characters
+		{"abc🪳‹def›ghi", redact.Sprintf("abc🪳%sghi", "def"), math.MaxInt32},
+		{"abc🪳def", redact.Sprint(redact.SafeString("abc🪳def")), math.MaxInt32},
+		{"abc‹de🪳f›ghi", redact.Sprintf("abc%sghi", "de🪳f"), math.MaxInt32},
+		{"abc‹de🪳f›ghi", redact.Sprintf("abc%s…", "de"), 6},
+
+		// should handle partial redaction markers
+		{"abc‹cd", redact.Sprintf("abc%s", "cd"), math.MaxInt32},
+		{"abc‹cd", redact.Sprintf("ab…"), 3},
+		{"abc‹cd", redact.Sprintf("abc…"), 4},
+		{"abc›cd", redact.Sprintf("%scd", "abc"), math.MaxInt32},
+		{"abc›cd", redact.Sprintf("%s…", "a"), 2},
+		{"abc›cd", redact.Sprintf("%s…", "abc"), 4},
+
+		// should handle invalid UTF-8 characters
+		{string(append([]byte("abc"), invalidUTF8...)), redact.Sprintf("abc%s", redact.SafeString(expectEscaped)), math.MaxInt32},
+		{string(append(invalidUTF8, []byte("abc")...)), redact.Sprintf("%sabc", redact.SafeString(expectEscaped)), math.MaxInt32},
+		{string(append([]byte("abc‹"), invalidUTF8...)), redact.Sprintf("abc%s", expectEscaped), math.MaxInt32},
+		{string(append([]byte("abc‹"), append(invalidUTF8, []byte("›def")...)...)), redact.Sprintf("abc%sdef", expectEscaped), math.MaxInt32},
+		{string(append(invalidUTF8, []byte("abc")...)), redact.Sprintf("%s…", redact.SafeString(expectEscaped)[:4]), 2}, // the 1st escaped char is 4 bytes
+
+		// should handle control characters (code points < 0x20)
+		{"abc\x01\x02def", redact.Sprintf("abc\\x01\\x02def"), math.MaxInt32},
+		{"abc‹\x00\x1F›def", redact.Sprintf("abc%sdef", "\\x00\\x1f"), math.MaxInt32},
+		{"\x00abc\x1f", redact.Sprintf("\\x00abc\\x1f"), math.MaxInt32},
+		{"\x00abc\x1f", redact.Sprintf("\\x00a…"), 3},
+	}
+
+	for _, tc := range tt {
+		t.Run("", func(t *testing.T) {
+			var b redact.StringBuilder
+			keys.CopyEscapeTrunc(&b, tc.input, tc.maxChars)
+			assert.Equal(t, tc.expected, b.RedactableString())
+		})
+	}
 }
