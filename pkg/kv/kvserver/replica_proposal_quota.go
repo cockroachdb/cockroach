@@ -128,11 +128,9 @@ func (r *Replica) updateProposalQuotaOnLeaderChangeRaftMuLocked(ctx context.Cont
 	defer r.mu.Unlock()
 	if r.replicaID == r.shMu.leaderID {
 		// We're becoming the leader.
-		r.mu.replicaFlowControlIntegration.onBecameLeader(ctx)
 		r.mu.lastProposalAtTicks = r.mu.ticks // delay imminent quiescence
 	} else {
 		// We're becoming a follower.
-		r.mu.replicaFlowControlIntegration.onBecameFollower(ctx)
 		if r.mu.proposalQuota != nil {
 			// We unblock all ongoing and subsequent quota acquisition goroutines
 			// (if any) and release the quotaReleaseQueue so its allocs are pooled.
@@ -331,10 +329,4 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			r.mu.proposalQuotaBaseIndex, len(r.mu.quotaReleaseQueue), releasableIndex,
 			status.Applied)
 	}
-
-	// Tick the replicaFlowControlIntegration interface. This is as convenient a
-	// place to do it as any other. Much like the quota pool code above, the
-	// flow control integration layer considers raft progress state for
-	// individual replicas, and whether they've been recently active.
-	r.mu.replicaFlowControlIntegration.onRaftTicked(ctx)
 }
