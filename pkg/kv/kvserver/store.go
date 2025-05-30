@@ -918,10 +918,6 @@ type Store struct {
 	policyRefresher     *policyrefresher.PolicyRefresher
 	storeGossip         *StoreGossip
 	rebalanceObjManager *RebalanceObjectiveManager
-	// raftTransportForFlowControl exposes the set of (remote) stores the raft
-	// transport is connected to, and is used by the canonical
-	// replicaFlowControlIntegration implementation.
-	raftTransportForFlowControl raftTransportForFlowControl
 
 	// kvflowRangeControllerFactory is used for replication AC (flow control) V2
 	// to create new range controllers which mediate the flow of requests to
@@ -1668,7 +1664,6 @@ func NewStore(
 		log.Warningf(ctx, "failed to clear snapshot storage: %v", err)
 	}
 	s.protectedtsReader = cfg.ProtectedTimestampReader
-	s.raftTransportForFlowControl = cfg.Transport
 
 	// On low-CPU instances, a default limit value may still allow ExportRequests
 	// to tie up all cores so cap limiter at cores-1 when setting value is higher.

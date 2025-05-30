@@ -26,12 +26,10 @@ send range=r1 from=n2/s2/2 to=n1/s1/1 commit=1
 # RACv2.
 connection-tracker from=n1
 ----
-connected-stores (server POV): 
 connected-nodes  (client POV): n2
 
 connection-tracker from=n2
 ----
-connected-stores (server POV): 
 connected-nodes  (client POV): n1
 
 # Add a msg to be piggybacked from n2 back to n1.
@@ -51,14 +49,12 @@ client-mark-idle from=n2 to=n1
 # disconnected from as a client.
 connection-tracker from=n2
 ----
-connected-stores (server POV): 
 connected-nodes  (client POV): 
 
 # n1's not done the same since it still is connected to n2 as a client. We
 # don't actually care about n1's perspective in this test.
 connection-tracker from=n1
 ----
-connected-stores (server POV): 
 connected-nodes  (client POV): n2
 
 # Note that it is still pending. It will only get pruned out by the periodic
