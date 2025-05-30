@@ -117,7 +117,7 @@ func (p *planner) findColumnToRename(
 		}
 		if found {
 			return nil, p.dependentError(
-				ctx, "column", oldName.String(), tableDesc.ParentID, tableRef.ID, "rename",
+				ctx, "column", oldName.String(), tableDesc.ParentID, tableRef.ID, tableDesc.ID, "rename",
 			)
 		}
 	}
