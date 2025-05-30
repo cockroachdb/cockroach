@@ -67,7 +67,7 @@ import (
 	"github.com/cockroachdb/pebble/tool"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/ttycolor"
-	humanize "github.com/dustin/go-humanize"
+	"github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/kr/pretty"
 	"github.com/spf13/cobra"
@@ -495,43 +495,49 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	defer snapshot.Close()
 
 	var results int
-	return rditer.IterateReplicaKeySpans(cmd.Context(), &desc, snapshot, debugCtx.replicated,
-		rditer.ReplicatedSpansAll,
-		func(iter storage.EngineIterator, _ roachpb.Span) error {
-			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
-				hasPoint, hasRange := iter.HasPointAndRange()
-				if hasPoint {
-					key, err := iter.UnsafeEngineKey()
-					if err != nil {
-						return err
-					}
-					v, err := iter.UnsafeValue()
-					if err != nil {
-						return err
-					}
-					print.PrintEngineKeyValue(key, v)
+	return rditer.IterateReplicaKeySpans(cmd.Context(), &desc, snapshot, rditer.SelectOpts{
+		Ranged: rditer.SelectRangedOptions{
+			SystemKeys: true,
+			LockTable:  true,
+			UserKeys:   true,
+		},
+		ReplicatedByRangeID:   true,
+		UnreplicatedByRangeID: !debugCtx.replicated,
+	}, func(iter storage.EngineIterator, _ roachpb.Span) error {
+		for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
+			hasPoint, hasRange := iter.HasPointAndRange()
+			if hasPoint {
+				key, err := iter.UnsafeEngineKey()
+				if err != nil {
+					return err
+				}
+				v, err := iter.UnsafeValue()
+				if err != nil {
+					return err
+				}
+				print.PrintEngineKeyValue(key, v)
+				results++
+				if results == debugCtx.maxResults {
+					return iterutil.StopIteration()
+				}
+			}
+
+			if hasRange && iter.RangeKeyChanged() {
+				bounds, err := iter.EngineRangeBounds()
+				if err != nil {
+					return err
+				}
+				for _, v := range iter.EngineRangeKeys() {
+					print.PrintEngineRangeKeyValue(bounds, v)
 					results++
 					if results == debugCtx.maxResults {
 						return iterutil.StopIteration()
 					}
 				}
-
-				if hasRange && iter.RangeKeyChanged() {
-					bounds, err := iter.EngineRangeBounds()
-					if err != nil {
-						return err
-					}
-					for _, v := range iter.EngineRangeKeys() {
-						print.PrintEngineRangeKeyValue(bounds, v)
-						results++
-						if results == debugCtx.maxResults {
-							return iterutil.StopIteration()
-						}
-					}
-				}
 			}
-			return err
-		})
+		}
+		return err
+	})
 }
 
 var debugRangeDescriptorsCmd = &cobra.Command{

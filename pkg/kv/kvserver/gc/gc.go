@@ -590,8 +590,10 @@ func processReplicatedLocks(
 	// We want to find/resolve replicated locks over both local and global
 	// keys. That's what the call to Select below will give us.
 	ltSpans := rditer.Select(desc.RangeID, rditer.SelectOpts{
-		ReplicatedBySpan:      desc.RSpan(),
-		ReplicatedSpansFilter: rditer.ReplicatedSpansLocksOnly,
+		Ranged: rditer.SelectRangedOptions{
+			RSpan:     desc.RSpan(),
+			LockTable: true,
+		},
 	})
 	for _, sp := range ltSpans {
 		if err := process(sp.Key, sp.EndKey); err != nil {

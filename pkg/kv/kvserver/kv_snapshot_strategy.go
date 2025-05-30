@@ -363,10 +363,6 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	// of data we're iterating on and sending over the network.
 	sharedReplicate := header.SharedReplicate && rditer.IterateReplicaKeySpansShared != nil
 	externalReplicate := header.ExternalReplicate && rditer.IterateReplicaKeySpansShared != nil
-	replicatedFilter := rditer.ReplicatedSpansAll
-	if sharedReplicate || externalReplicate {
-		replicatedFilter = rditer.ReplicatedSpansExcludeUser
-	}
 
 	iterateRKSpansVisitor := func(iter storage.EngineIterator, _ roachpb.Span) error {
 		timingTag.start("iter")
@@ -417,9 +413,17 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		}
 		return err
 	}
-	err := rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
-		replicatedFilter, iterateRKSpansVisitor)
-	if err != nil {
+	if err := rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, rditer.SelectOpts{
+		Ranged: rditer.SelectRangedOptions{
+			SystemKeys: true,
+			LockTable:  true,
+			// In shared/external mode, the user span come from external SSTs and
+			// are not iterated over here.
+			UserKeys: !(sharedReplicate || externalReplicate),
+		},
+		ReplicatedByRangeID:   true,
+		UnreplicatedByRangeID: false,
+	}, iterateRKSpansVisitor); err != nil {
 		return 0, err
 	}
 
@@ -538,15 +542,20 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			//
 			// See: https://github.com/cockroachdb/cockroach/issues/142673
 			transitionFromSharedToRegularReplicate = true
-			err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
-				rditer.ReplicatedSpansUserOnly, iterateRKSpansVisitor)
+			err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, rditer.SelectOpts{
+				Ranged: rditer.SelectRangedOptions{
+					UserKeys: true,
+				},
+				ReplicatedByRangeID:   false, // we only want the user span
+				UnreplicatedByRangeID: false,
+			}, iterateRKSpansVisitor)
 		}
 		if err != nil {
 			return 0, err
 		}
 	}
 	if b != nil {
-		if err = flushBatch(); err != nil {
+		if err := flushBatch(); err != nil {
 			return 0, err
 		}
 	}

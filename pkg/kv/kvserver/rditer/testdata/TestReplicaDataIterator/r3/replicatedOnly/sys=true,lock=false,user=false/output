@@ -1,0 +1,16 @@
+echo
+----
++----------------------------+--------------------------------------------------------------+--------------+--------------------+------------------------------------------------------------------------------------+
+|            SPAN            |                           KEY HEX                            |  ENDKEY HEX  |    VERSION HEX     |                                       PRETTY                                       |
++----------------------------+--------------------------------------------------------------+--------------+--------------------+------------------------------------------------------------------------------------+
+| /Local/RangeID/3/{r""-s""} | 01698b723a61                                                 | 01698b723a78 | 000000000000000109 | /Local/RangeID/3/r":{a"-x"}/0.000000001,0                                          |
+| /Local/RangeID/3/{r""-s""} | 01698b726162632d120ce61c175eb445878c36dcf4062ada4c0001       |              |                    | /Local/RangeID/3/r/AbortSpan/"0ce61c17-5eb4-4587-8c36-dcf4062ada4c"                |
+| /Local/RangeID/3/{r""-s""} | 01698b726162632d129855a1ef8eb94c06a106cab1dda78a2b0001       |              |                    | /Local/RangeID/3/r/AbortSpan/"9855a1ef-8eb9-4c06-a106-cab1dda78a2b"                |
+| /Local/RangeID/3/{r""-s""} | 01698b726c67632d                                             |              |                    | /Local/RangeID/3/r/RangeGCThreshold                                                |
+| /Local/RangeID/3/{r""-s""} | 01698b727261736b                                             |              |                    | /Local/RangeID/3/r/RangeAppliedState                                               |
+| /Local/RangeID/3/{r""-s""} | 01698b72726c6c2d                                             |              |                    | /Local/RangeID/3/r/RangeLease                                                      |
+| /Local/Range"{c"-d"}       | 016b1263000172647363                                         |              | 0000000000000001   | /Local/Range"c"/RangeDescriptor/0.000000001,0                                      |
+| /Local/Range"{c"-d"}       | 016b1263000174786e2d0ce61c175eb445878c36dcf4062ada4c         |              |                    | /Local/Range"c"/Transaction/"0ce61c17-5eb4-4587-8c36-dcf4062ada4c"                 |
+| /Local/Range"{c"-d"}       | 016b126300ff000174786e2d9855a1ef8eb94c06a106cab1dda78a2b     |              |                    | /Local/Range"c\x00"/Transaction/"9855a1ef-8eb9-4c06-a106-cab1dda78a2b"             |
+| /Local/Range"{c"-d"}       | 016b1263ffffffff000174786e2d295e727c8ca9437cbb5e8e2ebbad996f |              |                    | /Local/Range"c\xff\xff\xff\xff"/Transaction/"295e727c-8ca9-437c-bb5e-8e2ebbad996f" |
++----------------------------+--------------------------------------------------------------+--------------+--------------------+------------------------------------------------------------------------------------+
