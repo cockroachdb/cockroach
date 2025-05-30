@@ -9,7 +9,9 @@ import (
 	"bufio"
 	"bytes"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -299,7 +301,7 @@ func TestAggMetricClear(t *testing.T) {
 		Name: "bar_counter",
 	})
 	r.AddMetric(d)
-	d.labelConfig.Store(uint64(metric.LabelConfigAppAndDB))
+	d.mu.labelConfig = metric.LabelConfigAppAndDB
 	tenant2 := roachpb.MustMakeTenantID(2)
 	c1 := c.AddChild(tenant2.String())
 
@@ -419,4 +421,30 @@ func TestSQLMetricsReinitialise(t *testing.T) {
 		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 	})
 
+}
+
+// TestConcurrentUpdatesAndReinitialiseMetric tests that concurrent updates to a metric
+// do not cause a panic when the metric is reinitialised and scraped. The test case
+// validates the fix for the bug #147475.
+func TestConcurrentUpdatesAndReinitialiseMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	r := metric.NewRegistry()
+
+	c := NewSQLCounter(metric.Metadata{Name: "test.counter"})
+	c.ReinitialiseChildMetrics(metric.LabelConfigApp)
+	r.AddMetric(c)
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			c.Inc(1, "test_db"+"_"+strconv.Itoa(i), "test_app"+"_"+strconv.Itoa(i))
+			wg.Done()
+		}()
+	}
+	c.ReinitialiseChildMetrics(metric.LabelConfigAppAndDB)
+	wg.Wait()
+	pe := metric.MakePrometheusExporter()
+	require.NotPanics(t, func() {
+		pe.ScrapeRegistry(r, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(true))
+	})
 }
