@@ -8,10 +8,6 @@ go_library(
         "metadata.go",
     ],
     embedsrcs = [
-        "data/24_3_system.keys",
-        "data/24_3_system.sha256",
-        "data/24_3_tenant.keys",
-        "data/24_3_tenant.sha256",
         "data/25_1_system.keys",
         "data/25_1_system.sha256",
         "data/25_1_tenant.keys",
