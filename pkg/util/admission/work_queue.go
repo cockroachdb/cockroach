@@ -205,15 +205,8 @@ type ReplicatedWorkInfo struct {
 	LeaderTerm uint64
 	// LogPosition is the point on the raft log where the write was replicated.
 	LogPosition LogPosition
-	// Origin is the node at which this work originated. It's used for
-	// replication admission control to inform the origin of admitted work
-	// (after which flow tokens are released, permitting more replicated
-	// writes). Only populated for RACv1.
-	Origin roachpb.NodeID
 	// RaftPri is the raft priority of the entry. Only populated for RACv2.
 	RaftPri raftpb.Priority
-	// IsV2Protocol is true iff the v2 protocol requested this admission.
-	IsV2Protocol bool
 	// Ingested captures whether the write work corresponds to an ingest
 	// (for sstables, for example). This is used alongside RequestedCount to
 	// maintain accurate linear models for L0 growth due to ingests and
@@ -659,10 +652,9 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 				// fast path, or swapping this entry from the top-most one in
 				// the waiting heap (and fixing the heap).
 				if log.V(1) {
-					log.Infof(ctx, "fast-path: admitting t%d pri=%s r%s origin=n%s log-position=%s ingested=%t",
+					log.Infof(ctx, "fast-path: admitting t%d pri=%s r%s log-position=%s ingested=%t",
 						tenantID, info.Priority,
 						info.ReplicatedWorkInfo.RangeID,
-						info.ReplicatedWorkInfo.Origin,
 						info.ReplicatedWorkInfo.LogPosition.String(),
 						info.ReplicatedWorkInfo.Ingested,
 					)
@@ -756,10 +748,9 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 			queueLen := tenant.waitingWorkHeap.Len()
 			q.mu.Unlock()
 
-			log.Infof(ctx, "async-path: len(waiting-work)=%d: enqueued t%d pri=%s r%s origin=n%s log-position=%s ingested=%t",
+			log.Infof(ctx, "async-path: len(waiting-work)=%d: enqueued t%d pri=%s r%s log-position=%s ingested=%t",
 				queueLen, tenantID, info.Priority,
 				info.ReplicatedWorkInfo.RangeID,
-				info.ReplicatedWorkInfo.Origin,
 				info.ReplicatedWorkInfo.LogPosition,
 				info.ReplicatedWorkInfo.Ingested,
 			)
@@ -924,10 +915,9 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 			queueLen := tenant.waitingWorkHeap.Len()
 			q.mu.Unlock()
 
-			log.Infof(q.ambientCtx, "async-path: len(waiting-work)=%d dequeued t%d pri=%s r%s origin=n%s log-position=%s ingested=%t",
+			log.Infof(q.ambientCtx, "async-path: len(waiting-work)=%d dequeued t%d pri=%s r%s log-position=%s ingested=%t",
 				queueLen, tenantID, item.priority,
 				item.replicated.RangeID,
-				item.replicated.Origin,
 				item.replicated.LogPosition,
 				item.replicated.Ingested,
 			)
@@ -2118,15 +2108,13 @@ func (q *StoreWorkQueue) admittedReplicatedWork(
 	// have a separate goroutine invoke these callbacks (without holding
 	// coord.mu). We could directly invoke here too if not holding the lock.
 	cbState := LogEntryAdmittedCallbackState{
-		StoreID:      q.storeID,
-		RangeID:      rwi.RangeID,
-		ReplicaID:    rwi.ReplicaID,
-		LeaderTerm:   rwi.LeaderTerm,
-		Pos:          rwi.LogPosition,
-		Pri:          pri,
-		Origin:       rwi.Origin,
-		RaftPri:      rwi.RaftPri,
-		IsV2Protocol: rwi.IsV2Protocol,
+		StoreID:    q.storeID,
+		RangeID:    rwi.RangeID,
+		ReplicaID:  rwi.ReplicaID,
+		LeaderTerm: rwi.LeaderTerm,
+		Pos:        rwi.LogPosition,
+		Pri:        pri,
+		RaftPri:    rwi.RaftPri,
 	}
 	q.onLogEntryAdmitted.AdmittedLogEntry(q.q[wc].ambientCtx, cbState)
 }
@@ -2157,19 +2145,11 @@ type LogEntryAdmittedCallbackState struct {
 	Pos LogPosition
 	// Pri is the admission priority used for admission.
 	Pri admissionpb.WorkPriority
-	// Origin is the node where the entry originated. It is only populated for
-	// replication admission control v1 (RACv1).
-	Origin roachpb.NodeID
 	// RaftPri is only populated for replication admission control v2 (RACv2).
 	// It is the raft priority for the entry. Technically, it could be derived
 	// from Pri, but we do not want the admission package to be aware of this
 	// translation.
 	RaftPri raftpb.Priority
-	// IsV2Protocol is true iff the v2 protocol requested this admission. It is
-	// used for de-multiplexing the callback correctly.
-	//
-	// TODO(sumeer): remove when the RACv1 protocol is deleted.
-	IsV2Protocol bool
 }
 
 // AdmittedWorkDone indicates to the queue that the admitted work has completed.
