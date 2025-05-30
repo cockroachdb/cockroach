@@ -238,7 +238,9 @@ type pubsubBuffer struct {
 var _ BatchBuffer = (*pubsubBuffer)(nil)
 
 // Append implements the BatchBuffer interface
-func (psb *pubsubBuffer) Append(key []byte, value []byte, attributes attributes) {
+func (psb *pubsubBuffer) Append(
+	ctx context.Context, key []byte, value []byte, attributes attributes,
+) {
 	var content []byte
 	switch psb.sc.format {
 	case changefeedbase.OptFormatJSON:
