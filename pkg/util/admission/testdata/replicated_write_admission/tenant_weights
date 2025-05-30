@@ -14,35 +14,35 @@ tenant-weights t1=2 t2=5
 # path but fails. The create-times increment with incrementing log positions,
 # to mimic the kind of explicit sequencing we introduce at
 # kvflowcontrol.Handle.
-admit tenant=t1 pri=normal-pri create-time=1.001us size=1B range=r1 origin=n1 log-position=4/20
+admit tenant=t1 pri=normal-pri create-time=1.001us size=1B range=r1 log-position=4/20
 ----
 [regular] try-get=1B available=0B => insufficient tokens
 
-admit tenant=t1 pri=normal-pri create-time=1.002us size=1B range=r1 origin=n1 log-position=4/21
+admit tenant=t1 pri=normal-pri create-time=1.002us size=1B range=r1 log-position=4/21
 ----
 
-admit tenant=t1 pri=normal-pri create-time=1.003us size=1B range=r1 origin=n1 log-position=4/22
+admit tenant=t1 pri=normal-pri create-time=1.003us size=1B range=r1 log-position=4/22
 ----
 
-admit tenant=t1 pri=normal-pri create-time=1.004us size=1B range=r1 origin=n1 log-position=4/23
+admit tenant=t1 pri=normal-pri create-time=1.004us size=1B range=r1 log-position=4/23
 ----
 
-admit tenant=t1 pri=normal-pri create-time=1.005us size=1B range=r1 origin=n1 log-position=4/24
+admit tenant=t1 pri=normal-pri create-time=1.005us size=1B range=r1 log-position=4/24
 ----
 
-admit tenant=t2 pri=normal-pri create-time=1.001us size=1B range=r2 origin=n1 log-position=5/20
+admit tenant=t2 pri=normal-pri create-time=1.001us size=1B range=r2 log-position=5/20
 ----
 
-admit tenant=t2 pri=normal-pri create-time=1.002us size=1B range=r2 origin=n1 log-position=5/21
+admit tenant=t2 pri=normal-pri create-time=1.002us size=1B range=r2 log-position=5/21
 ----
 
-admit tenant=t2 pri=normal-pri create-time=1.003us size=1B range=r2 origin=n1 log-position=5/22
+admit tenant=t2 pri=normal-pri create-time=1.003us size=1B range=r2 log-position=5/22
 ----
 
-admit tenant=t2 pri=normal-pri create-time=1.004us size=1B range=r2 origin=n1 log-position=5/23
+admit tenant=t2 pri=normal-pri create-time=1.004us size=1B range=r2 log-position=5/23
 ----
 
-admit tenant=t2 pri=normal-pri create-time=1.005us size=1B range=r2 origin=n1 log-position=5/24
+admit tenant=t2 pri=normal-pri create-time=1.005us size=1B range=r2 log-position=5/24
 ----
 
 # Observe all waiting requests.
@@ -51,17 +51,17 @@ print
 physical-stats: work-count=10 written-bytes=10B ingested-bytes=0B
 [regular work queue]: len(tenant-heap)=2 top-tenant=t2
  tenant=t1 weight=2 fifo-threshold=low-pri used=0B
-  [0: pri=normal-pri create-time=1.001µs size=1B range=r1 origin=n1 log-position=4/20]
-  [1: pri=normal-pri create-time=1.002µs size=1B range=r1 origin=n1 log-position=4/21]
-  [2: pri=normal-pri create-time=1.003µs size=1B range=r1 origin=n1 log-position=4/22]
-  [3: pri=normal-pri create-time=1.004µs size=1B range=r1 origin=n1 log-position=4/23]
-  [4: pri=normal-pri create-time=1.005µs size=1B range=r1 origin=n1 log-position=4/24]
+  [0: pri=normal-pri create-time=1.001µs size=1B range=r1 log-position=4/20]
+  [1: pri=normal-pri create-time=1.002µs size=1B range=r1 log-position=4/21]
+  [2: pri=normal-pri create-time=1.003µs size=1B range=r1 log-position=4/22]
+  [3: pri=normal-pri create-time=1.004µs size=1B range=r1 log-position=4/23]
+  [4: pri=normal-pri create-time=1.005µs size=1B range=r1 log-position=4/24]
  tenant=t2 weight=5 fifo-threshold=low-pri used=0B
-  [0: pri=normal-pri create-time=1.001µs size=1B range=r2 origin=n1 log-position=5/20]
-  [1: pri=normal-pri create-time=1.002µs size=1B range=r2 origin=n1 log-position=5/21]
-  [2: pri=normal-pri create-time=1.003µs size=1B range=r2 origin=n1 log-position=5/22]
-  [3: pri=normal-pri create-time=1.004µs size=1B range=r2 origin=n1 log-position=5/23]
-  [4: pri=normal-pri create-time=1.005µs size=1B range=r2 origin=n1 log-position=5/24]
+  [0: pri=normal-pri create-time=1.001µs size=1B range=r2 log-position=5/20]
+  [1: pri=normal-pri create-time=1.002µs size=1B range=r2 log-position=5/21]
+  [2: pri=normal-pri create-time=1.003µs size=1B range=r2 log-position=5/22]
+  [3: pri=normal-pri create-time=1.004µs size=1B range=r2 log-position=5/23]
+  [4: pri=normal-pri create-time=1.005µs size=1B range=r2 log-position=5/24]
 [elastic work queue]: len(tenant-heap)=0
 
 # Produce 7B worth of regular tokens.
@@ -75,13 +75,13 @@ granter class=regular adjust-tokens=+7B
 # towards the tenant with the higher weight (t2).
 grant class=regular
 ----
-admitted [tenant=t2 pri=normal-pri create-time=1.001µs size=1B range=r2 origin=n1 log-position=5/20]
-admitted [tenant=t1 pri=normal-pri create-time=1.001µs size=1B range=r1 origin=n1 log-position=4/20]
-admitted [tenant=t2 pri=normal-pri create-time=1.002µs size=1B range=r2 origin=n1 log-position=5/21]
-admitted [tenant=t2 pri=normal-pri create-time=1.003µs size=1B range=r2 origin=n1 log-position=5/22]
-admitted [tenant=t1 pri=normal-pri create-time=1.002µs size=1B range=r1 origin=n1 log-position=4/21]
-admitted [tenant=t2 pri=normal-pri create-time=1.004µs size=1B range=r2 origin=n1 log-position=5/23]
-admitted [tenant=t2 pri=normal-pri create-time=1.005µs size=1B range=r2 origin=n1 log-position=5/24]
+admitted [tenant=t2 pri=normal-pri create-time=1.001µs size=1B range=r2 log-position=5/20]
+admitted [tenant=t1 pri=normal-pri create-time=1.001µs size=1B range=r1 log-position=4/20]
+admitted [tenant=t2 pri=normal-pri create-time=1.002µs size=1B range=r2 log-position=5/21]
+admitted [tenant=t2 pri=normal-pri create-time=1.003µs size=1B range=r2 log-position=5/22]
+admitted [tenant=t1 pri=normal-pri create-time=1.002µs size=1B range=r1 log-position=4/21]
+admitted [tenant=t2 pri=normal-pri create-time=1.004µs size=1B range=r2 log-position=5/23]
+admitted [tenant=t2 pri=normal-pri create-time=1.005µs size=1B range=r2 log-position=5/24]
 
 # Pretty print granter state to show no more available tokens. We've consumed
 # the 7B above.
@@ -98,9 +98,9 @@ print
 physical-stats: work-count=10 written-bytes=10B ingested-bytes=0B
 [regular work queue]: len(tenant-heap)=1 top-tenant=t1
  tenant=t1 weight=2 fifo-threshold=low-pri used=2B
-  [0: pri=normal-pri create-time=1.003µs size=1B range=r1 origin=n1 log-position=4/22]
-  [1: pri=normal-pri create-time=1.004µs size=1B range=r1 origin=n1 log-position=4/23]
-  [2: pri=normal-pri create-time=1.005µs size=1B range=r1 origin=n1 log-position=4/24]
+  [0: pri=normal-pri create-time=1.003µs size=1B range=r1 log-position=4/22]
+  [1: pri=normal-pri create-time=1.004µs size=1B range=r1 log-position=4/23]
+  [2: pri=normal-pri create-time=1.005µs size=1B range=r1 log-position=4/24]
  tenant=t2 weight=5 fifo-threshold=low-pri used=5B
 [elastic work queue]: len(tenant-heap)=0
 

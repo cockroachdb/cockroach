@@ -28,8 +28,5 @@ go_library(
     embed = [":kvflowcontrolpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/util/admission/admissionpb",
-        "@com_github_cockroachdb_redact//:redact",
-    ],
+    deps = ["@com_github_cockroachdb_redact//:redact"],
 )

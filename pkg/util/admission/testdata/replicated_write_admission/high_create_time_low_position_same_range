@@ -7,12 +7,12 @@ init
 [elastic] 0B tokens available
 
 # Admit two requests, one created at t=5us but with a lower log position.
-admit tenant=t1 pri=normal-pri create-time=5us size=1B range=r1 origin=n1 log-position=4/20
+admit tenant=t1 pri=normal-pri create-time=5us size=1B range=r1 log-position=4/20
 ----
 [regular] try-get=1B available=0B => insufficient tokens
 
 # And one created at t=1us but but higher log position.
-admit tenant=t1 pri=normal-pri create-time=1us size=1B range=r1 origin=n1 log-position=4/21
+admit tenant=t1 pri=normal-pri create-time=1us size=1B range=r1 log-position=4/21
 ----
 
 # Observe both waiting requests and physical admission stats. Note how the
@@ -24,8 +24,8 @@ print
 physical-stats: work-count=2 written-bytes=2B ingested-bytes=0B
 [regular work queue]: len(tenant-heap)=1 top-tenant=t1
  tenant=t1 weight=1 fifo-threshold=low-pri used=0B
-  [0: pri=normal-pri create-time=5µs size=1B range=r1 origin=n1 log-position=4/20]
-  [1: pri=normal-pri create-time=5.001µs size=1B range=r1 origin=n1 log-position=4/21]
+  [0: pri=normal-pri create-time=5µs size=1B range=r1 log-position=4/20]
+  [1: pri=normal-pri create-time=5.001µs size=1B range=r1 log-position=4/21]
 [elastic work queue]: len(tenant-heap)=0
 
 # Produce 1B worth of regular tokens.
@@ -39,14 +39,14 @@ granter class=regular adjust-tokens=+1B
 # request with the lower log position despite the higher original create-time.
 grant class=regular
 ----
-admitted [tenant=t1 pri=normal-pri create-time=5µs size=1B range=r1 origin=n1 log-position=4/20]
+admitted [tenant=t1 pri=normal-pri create-time=5µs size=1B range=r1 log-position=4/20]
 
 print
 ----
 physical-stats: work-count=2 written-bytes=2B ingested-bytes=0B
 [regular work queue]: len(tenant-heap)=1 top-tenant=t1
  tenant=t1 weight=1 fifo-threshold=low-pri used=1B
-  [0: pri=normal-pri create-time=5.001µs size=1B range=r1 origin=n1 log-position=4/21]
+  [0: pri=normal-pri create-time=5.001µs size=1B range=r1 log-position=4/21]
 [elastic work queue]: len(tenant-heap)=0
 
 # vim:ft=sh

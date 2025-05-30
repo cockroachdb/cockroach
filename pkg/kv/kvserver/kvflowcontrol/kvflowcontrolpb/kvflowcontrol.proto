@@ -72,49 +72,6 @@ message RaftAdmissionMeta {
   // small write sizes). The ideas above are too complicated.
 }
 
-// AdmittedRaftLogEntries is only used by RACv1.
-//
-// AdmittedRaftLogEntries represents a set of raft log entries that were
-// admitted below raft. These are identified by:
-// - the range ID (there's one per raft group);
-// - the admission priority of all said entries;
-// - the (inclusive) raft log position up-to-which we've admitted entries;
-// - the store ID on which these raft logs were admitted.
-//
-// This is used as part replication admission control to release, at the origin,
-// the specific flow tokens acquired when replicating these log entries along
-// this particular "replication stream" (i.e. flowing to a particular store,
-// remote or otherwise).
-message AdmittedRaftLogEntries {
-  option (gogoproto.goproto_stringer) = false;
-
-  // RangeID of the raft group these entries belong to. This is the range on
-  // whose behalf work was admitted.
-  int64 range_id = 1 [(gogoproto.customname) = "RangeID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
-
-  // AdmissionPriority of all admitted entries (maps to admissionpb.WorkPriority).
-  int32 admission_priority = 2;
-
-  // UpToRaftLogPosition (inclusive) of the highest entry that was admitted.
-  // Within a given priority, admission takes place in raft log order (i.e.
-  // entries with lower terms get admitted first, or with lower indexes within
-  // the same term). So the value here implies admission of all entries that
-  // sort before and have the same priority.
-  RaftLogPosition up_to_raft_log_position = 3 [(gogoproto.nullable) = false];
-
-  // StoreID on which this raft log entry was admitted.
-  //
-  // TODO(irfansharif): We can avoid sending this for every logically admitted
-  // message if the raft transport stream we were sending it on had some
-  // handshake protocol at the start, where the client identified itself by its
-  // NodeID. That way the origin replica receiving this information can infer
-  // the StoreID where this work was done since we we never store multiple
-  // replicas of a range on the same {single,multi}-store node.
-  uint64 store_id = 4 [(gogoproto.customname) = "StoreID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
-}
-
 // RaftLogPosition is a point on the raft log, identified by a term and an
 // index.
 message RaftLogPosition {
