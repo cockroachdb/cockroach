@@ -44,7 +44,7 @@ type SinkClient interface {
 // BatchBuffer is an interface to aggregate KVs into a payload that can be sent
 // to the sink.
 type BatchBuffer interface {
-	Append(key []byte, value []byte, attributes attributes)
+	Append(ctx context.Context, key []byte, value []byte, attributes attributes)
 	ShouldFlush() bool
 
 	// Once all data has been Append'ed, Close can be called to return a finalized
@@ -101,6 +101,7 @@ type flushReq struct {
 // but separate from the encoded keys and values.
 type attributes struct {
 	tableName string
+	mvcc      hlc.Timestamp
 }
 
 type rowEvent struct {
@@ -298,12 +299,12 @@ func hashToInt(h hash.Hash32, buf []byte) int {
 }
 
 // Append adds the contents of a kvEvent to the batch, merging its alloc pool.
-func (sb *sinkBatch) Append(e *rowEvent) {
+func (sb *sinkBatch) Append(ctx context.Context, e *rowEvent) {
 	if sb.isEmpty() {
 		sb.bufferTime = timeutil.Now()
 	}
 
-	sb.buffer.Append(e.key, e.val, attributes{
+	sb.buffer.Append(ctx, e.key, e.val, attributes{
 		tableName: e.topicDescriptor.GetTableName(),
 	})
 
@@ -490,7 +491,7 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 					topicBatches[topic] = batchBuffer
 				}
 
-				batchBuffer.Append(r)
+				batchBuffer.Append(ctx, r)
 				if s.knobs.OnAppend != nil {
 					s.knobs.OnAppend(r)
 				}
