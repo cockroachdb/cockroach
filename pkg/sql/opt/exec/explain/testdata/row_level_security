@@ -317,7 +317,6 @@ UPDATE writer SET key = key * 11;
     └── • scan
           table: writer@writer_pkey
           spans: 1+ spans
-          locking strength: for update
           policies: p_select, p_update1
 
 plan
@@ -353,7 +352,6 @@ UPDATE writer SET value = 'updated' WHERE key between 1 and 100;
     └── • scan
           table: writer@writer_pkey
           spans: 1+ spans
-          locking strength: for update
           policies: p_select, p_update1
 
 plan
@@ -370,7 +368,6 @@ UPDATE writer SET value = value WHERE key = 5;
     └── • scan
           table: writer@writer_pkey
           spans: 1+ spans
-          locking strength: for update
           policies: p_select, p_update1
 
 # Should not apply select policy for the new row because columns weren't
@@ -389,7 +386,6 @@ UPDATE writer SET key = 10 WHERE true;
     └── • scan
           table: writer@writer_pkey
           spans: 1+ spans
-          locking strength: for update
           policies: p_select, p_update1
 
 
@@ -413,11 +409,14 @@ CREATE POLICY p_delete ON writer FOR DELETE USING (key = 1);
 plan
 DELETE FROM writer WHERE key = 1;
 ----
-• delete range
-  from: writer
-  auto commit
-  spans: 1+ spans
-  policies: p_select, p_delete
+• delete
+│ from: writer
+│ auto commit
+│
+└── • scan
+      table: writer@writer_pkey
+      spans: 1+ spans
+      policies: p_select, p_delete
 
 plan
 DELETE FROM writer WHERE value = 'some-val' or value = 'other-val';

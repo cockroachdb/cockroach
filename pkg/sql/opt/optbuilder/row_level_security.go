@@ -32,6 +32,14 @@ func (b *Builder) addRowLevelSecurityFilter(
 	if scalar != nil {
 		tableScope.expr = b.factory.ConstructSelect(tableScope.expr,
 			memo.FiltersExpr{b.factory.ConstructFiltersItem(scalar)})
+
+		// Wrap the RLS filter in a Barrier to prevent it from being reordered across
+		// non-leak-proof expressions. This ensures that queries can't leak information
+		// about the existence of rows that the caller isn't allowed to see. The Barrier
+		// is marked as skippable so that optgen can remove it when all filters and
+		// projections are verified to be leak-proof.
+		tableScope.expr = b.factory.ConstructBarrier(tableScope.expr,
+			&memo.BarrierPrivate{SkipIfLeakProof: true})
 	}
 }
 

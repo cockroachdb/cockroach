@@ -448,3 +448,14 @@ $input
     )
     (RemoveFiltersItem $filter $item)
 )
+
+# PushSelectBarrierAbove moves a skippable Barrier from under a Select to wrap
+# the Select when all filter expressions are leak-proof. This ensures that
+# the Barrier is preserved in case it’s needed by expressions higher in the tree.
+[PushSelectBarrierAbove, Normalize]
+(Select
+    (Barrier $input:* $private:* & (IsBarrierSkippable $private))
+    $filters:* & (HasAllLeakProofFilters $filters)
+)
+=>
+(Barrier (Select $input $filters) $private)
