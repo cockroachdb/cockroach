@@ -464,30 +464,26 @@ func (c *SyncedCluster) Stop(
 	// killProcesses indicates whether processed need to be stopped.
 	killProcesses := true
 
+	// For shared process secondary tenants, we just stop the service via SQL.
+	// Find out of this is a shared process secondary tenant.
 	if virtualClusterLabel != "" {
 		name, sqlInstance, err := VirtualClusterInfoFromLabel(virtualClusterLabel)
 		if err != nil {
 			return err
 		}
 
-		services, err := c.DiscoverServices(ctx, name, ServiceTypeSQL)
-		if err != nil {
-			return err
-		}
+		if !IsSystemInterface(name) {
+			isExternal, err := c.IsExternalService(ctx, name)
+			if err != nil {
+				return err
+			}
 
-		if len(services) == 0 {
-			return fmt.Errorf("no service for virtual cluster %q", virtualClusterName)
+			if isExternal {
+				virtualClusterDisplay = fmt.Sprintf(" virtual cluster %q, instance %d", virtualClusterName, sqlInstance)
+			} else {
+				killProcesses = false
+			}
 		}
-
-		virtualClusterName = name
-		if services[0].ServiceMode == ServiceModeShared {
-			// For shared process virtual clusters, we just stop the service
-			// via SQL.
-			killProcesses = false
-		} else {
-			virtualClusterDisplay = fmt.Sprintf(" virtual cluster %q, instance %d", virtualClusterName, sqlInstance)
-		}
-
 	}
 
 	if killProcesses {
@@ -2266,7 +2262,7 @@ func (c *SyncedCluster) pgurls(
 	}
 	m := make(map[Node]string, len(hosts))
 	for node, host := range hosts {
-		desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
+		desc, err := c.ServiceDescriptor(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
 		if err != nil {
 			return nil, err
 		}
@@ -2301,24 +2297,19 @@ func (c *SyncedCluster) loadBalancerURL(
 	sqlInstance int,
 	auth PGAuthMode,
 ) (string, error) {
-	services, err := c.DiscoverServices(ctx, virtualClusterName, ServiceTypeSQL)
+	// Note that it's possible for our service to not be running on the entire roachprod
+	// cluster, e.g. one of the nodes is a workload node, or we have a separate process
+	// virtual cluster running on a subset of nodes. We must search for our service on
+	// the entire cluster.
+	descs, err := c.ServiceDescriptors(ctx, c.Nodes, virtualClusterName, ServiceTypeSQL, sqlInstance)
 	if err != nil {
 		return "", err
 	}
-	port := config.DefaultSQLPort
-	serviceMode := ServiceModeExternal
-	for _, service := range services {
-		if service.VirtualClusterName == virtualClusterName && service.Instance == sqlInstance {
-			serviceMode = service.ServiceMode
-			port = service.Port
-			break
-		}
-	}
-	address, err := c.FindLoadBalancer(l, port)
+	address, err := c.FindLoadBalancer(l, descs[0].Port)
 	if err != nil {
 		return "", err
 	}
-	loadBalancerURL := c.NodeURL(address.IP, address.Port, virtualClusterName, serviceMode, auth, "" /* database */)
+	loadBalancerURL := c.NodeURL(address.IP, address.Port, virtualClusterName, descs[0].ServiceMode, auth, "" /* database */)
 	return loadBalancerURL, nil
 }
 

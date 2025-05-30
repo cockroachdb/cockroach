@@ -72,7 +72,7 @@ func TestServicePorts(t *testing.T) {
 		Nodes: allNodes(2),
 	}
 
-	descriptors, err := c.DiscoverServices(context.Background(), "t1", ServiceTypeSQL, ServiceNodePredicate(c.Nodes...))
+	descriptors, err := c.discoverServices(context.Background(), "t1", ServiceTypeSQL, ServiceNodePredicate(c.Nodes...))
 	sort.Slice(descriptors, func(i, j int) bool {
 		return descriptors[i].Port < descriptors[j].Port
 	})
