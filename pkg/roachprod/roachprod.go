@@ -831,7 +831,7 @@ func updatePrometheusTargets(
 		wg.Add(1)
 		go func(nodeID int, v vm.VM) {
 			defer wg.Done()
-			desc, err := c.DiscoverService(ctx, install.Node(nodeID), "", install.ServiceTypeUI, 0)
+			desc, err := c.ServiceDescriptor(ctx, install.Node(nodeID), "", install.ServiceTypeUI, 0)
 			if err != nil {
 				l.Errorf("error getting the port for node %d: %v", nodeID, err)
 				return
@@ -1143,7 +1143,7 @@ func PgURL(
 
 	var urls []string
 	for i, ip := range ips {
-		desc, err := c.DiscoverService(ctx, nodes[i], opts.VirtualClusterName, install.ServiceTypeSQL, opts.SQLInstance)
+		desc, err := c.ServiceDescriptor(ctx, nodes[i], opts.VirtualClusterName, install.ServiceTypeSQL, opts.SQLInstance)
 		if err != nil {
 			return nil, err
 		}
@@ -1197,7 +1197,7 @@ func urlGenerator(
 		}
 		port := uConfig.port
 		if port == 0 {
-			desc, err := c.DiscoverService(
+			desc, err := c.ServiceDescriptor(
 				ctx, node, uConfig.virtualClusterName, install.ServiceTypeUI, uConfig.sqlInstance,
 			)
 			if err != nil {
@@ -2778,9 +2778,8 @@ func CreateLoadBalancer(
 	}
 
 	// Find the SQL ports for the service on all nodes.
-	services, err := c.DiscoverServices(
-		ctx, virtualClusterName, install.ServiceTypeSQL,
-		install.ServiceNodePredicate(c.Nodes...), install.ServiceInstancePredicate(sqlInstance),
+	services, err := c.ServiceDescriptors(
+		ctx, c.Nodes, virtualClusterName, install.ServiceTypeSQL, sqlInstance,
 	)
 	if err != nil {
 		return err
@@ -2841,8 +2840,7 @@ func LoadBalancerPgURL(
 		return "", err
 	}
 
-	services, err := c.DiscoverServices(ctx, opts.VirtualClusterName, install.ServiceTypeSQL,
-		install.ServiceInstancePredicate(opts.SQLInstance))
+	services, err := c.ServiceDescriptors(ctx, c.Nodes, opts.VirtualClusterName, install.ServiceTypeSQL, opts.SQLInstance)
 	if err != nil {
 		return "", err
 	}
@@ -2868,8 +2866,7 @@ func LoadBalancerIP(
 	if err != nil {
 		return "", err
 	}
-	services, err := c.DiscoverServices(ctx, virtualClusterName, install.ServiceTypeSQL,
-		install.ServiceInstancePredicate(sqlInstance))
+	services, err := c.ServiceDescriptors(ctx, c.Nodes, virtualClusterName, install.ServiceTypeSQL, sqlInstance)
 	if err != nil {
 		return "", err
 	}

@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
 )
@@ -213,18 +212,11 @@ func (e *expander) maybeExpandPgHost(
 
 	switch strings.ToLower(m[1]) {
 	case ":lb":
-		services, err := c.DiscoverServices(ctx, virtualClusterName, ServiceTypeSQL, ServiceInstancePredicate(sqlInstance))
+		descs, err := c.ServiceDescriptors(ctx, c.Nodes, virtualClusterName, ServiceTypeSQL, sqlInstance)
 		if err != nil {
 			return "", false, err
 		}
-		port := config.DefaultSQLPort
-		for _, svc := range services {
-			if svc.VirtualClusterName == virtualClusterName && svc.Instance == sqlInstance {
-				port = svc.Port
-				break
-			}
-		}
-		addr, err := c.FindLoadBalancer(l, port)
+		addr, err := c.FindLoadBalancer(l, descs[0].Port)
 		if err != nil {
 			return "", false, err
 		}
@@ -258,7 +250,7 @@ func (e *expander) maybeExpandPgPort(
 	if e.pgPorts == nil {
 		e.pgPorts = make(map[Node]string, len(c.VMs))
 		for _, node := range allNodes(len(c.VMs)) {
-			desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
+			desc, err := c.ServiceDescriptor(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
 			if err != nil {
 				return s, false, err
 			}
