@@ -420,7 +420,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 		))
 		var rows []tree.Datums
 		for {
-			datums, err := fetcher.NextRowDecoded(ctx)
+			datums, _, err := fetcher.NextRowDecoded(ctx)
 			require.NoError(t, err)
 			if datums == nil {
 				break

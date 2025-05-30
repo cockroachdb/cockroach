@@ -1221,13 +1221,13 @@ func (rf *Fetcher) NextRowInto(
 // NextRowDecoded calls NextRow and decodes the EncDatumRow into a Datums.
 // The Datums should not be modified and is only valid until the next call.
 // When there are no more rows, the Datums is nil.
-func (rf *Fetcher) NextRowDecoded(ctx context.Context) (datums tree.Datums, err error) {
-	row, _, err := rf.NextRow(ctx)
+func (rf *Fetcher) NextRowDecoded(ctx context.Context) (datums tree.Datums, spanID int, err error) {
+	row, spanID, err := rf.NextRow(ctx)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if row == nil {
-		return nil, nil
+		return nil, 0, nil
 	}
 
 	for i, encDatum := range row {
@@ -1236,12 +1236,12 @@ func (rf *Fetcher) NextRowDecoded(ctx context.Context) (datums tree.Datums, err 
 			continue
 		}
 		if err := encDatum.EnsureDecoded(rf.table.spec.FetchedColumns[i].Type, rf.args.Alloc); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		rf.table.decodedRow[i] = encDatum.Datum
 	}
 
-	return rf.table.decodedRow, nil
+	return rf.table.decodedRow, spanID, nil
 }
 
 // NextRowDecodedInto calls NextRow and decodes the EncDatumRow into Datums,
