@@ -175,10 +175,6 @@ CREATE TABLE t1 (date string)
 statement ok
 INSERT INTO t1 VALUES ('2024-07-26')
 
-onlyif config local-mixed-24.3
-statement error pq: ALTER COLUMN TYPE from string to date is only supported experimentally
-ALTER TABLE t1 ALTER COLUMN date TYPE DATE USING date::DATE
-
 # After setting enable_experimental_alter_column_type_general, ALTER COLUMN TYPE should work.
 statement ok
 SET enable_experimental_alter_column_type_general = true
@@ -1435,14 +1431,12 @@ ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE TEXT;
 
 # Convert the type to something compatible, but specify a custom value for the
 # column with the USING expression. This will force a type conversion with a backfill.
-skipif config local-mixed-24.3
 statement ok
 ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE INT2 USING -1;
 
 statement ok
 INSERT INTO stored1 VALUES (-1000);
 
-skipif config local-mixed-24.3
 query TT
 SHOW CREATE TABLE stored1;
 ----
@@ -1453,7 +1447,6 @@ stored1  CREATE TABLE public.stored1 (
            FAMILY f1 (a, comp1)
          );
 
-skipif config local-mixed-24.3
 query II
 SELECT * FROM stored1 ORDER BY A;
 ----
@@ -1465,7 +1458,6 @@ SELECT * FROM stored1 ORDER BY A;
 2147483647  -1
 
 # Attempt to drop stored along with changing the column type
-skipif config local-mixed-24.3
 statement error pq: unimplemented: ALTER COLUMN TYPE operations that require rewriting on-disk data cannot be combined with other ALTER TABLE commands
 ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE INT4 USING -1, ALTER COLUMN comp1 drop stored;
 
@@ -1711,35 +1703,30 @@ INSERT INTO t_multi_alter VALUES (10,'ten','1984-09-06'),(20,'twenty','2024-08-1
 # The add column operation creates multiple primary keys, with all but one being
 # temporary. Previously, this caused the alter type to fail because it
 # encountered more primary keys than expected.
-skipif config local-mixed-24.3
 statement ok
 begin;
 ALTER TABLE t_multi_alter ADD COLUMN c3 TEXT DEFAULT '<default>', DROP COLUMN drop;
 ALTER TABLE t_multi_alter ALTER COLUMN c2 SET DATA TYPE BIGINT USING c1::BIGINT;
 commit;
 
-skipif config local-mixed-24.3
 query IIT
 select * from t_multi_alter order by c1;
 ----
 10 10 <default>
 20 20 <default>
 
-skipif config local-mixed-24.3
 statement ok
 begin;
 ALTER TABLE t_multi_alter ALTER COLUMN c3 SET DEFAULT NULL;
 ALTER TABLE t_multi_alter ALTER COLUMN c3 SET DATA TYPE DATE USING '2024-04-22'::DATE;
 commit;
 
-skipif config local-mixed-24.3
 query IIT
 select * from t_multi_alter order by c1;
 ----
 10 10 2024-04-22 00:00:00 +0000 +0000
 20 20 2024-04-22 00:00:00 +0000 +0000
 
-skipif config local-mixed-24.3
 query TT colnames
 show create table t_multi_alter
 ----

@@ -50,9 +50,9 @@ query T kvtrace
 DELETE FROM d WHERE a=1
 ----
 Scan /Table/106/1/1/0 lock Exclusive (Block, Unreplicated)
+Del /Table/106/1/1/0
 Del /Table/106/2/Arr/0/1/0
 Del /Table/106/2/Arr/7/1/0
-Del /Table/106/1/1/0
 
 query T kvtrace
 INSERT INTO d VALUES(2, '[{"a": "b"}, 3, {"a": "b"}]')

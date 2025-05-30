@@ -12,12 +12,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -597,25 +595,5 @@ func TestAlterReplicationJobErrors(t *testing.T) {
 		testuser.ExpectErr(t, "user testuser does not have REPLICATIONSOURCE system privilege", cmd)
 		db.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATIONSOURCE TO %s", username.TestUser))
 		testuser.Exec(t, cmd)
-	})
-	t.Run("alter replication dest priv 24.3", func(t *testing.T) {
-		params := base.TestServerArgs{
-			DefaultTestTenant: base.TestControlsTenantsExplicitly,
-		}
-		params.Knobs.Server = &server.TestingKnobs{
-			ClusterVersionOverride:         clusterversion.V24_3.Version(),
-			DisableAutomaticVersionUpgrade: make(chan struct{}),
-		}
-
-		srv, sqlDB, _ := serverutils.StartServer(t, params)
-		defer srv.Stopper().Stop(ctx)
-		db := sqlutils.MakeSQLRunner(sqlDB)
-		db.Exec(t, "CREATE TENANT t1")
-		db.Exec(t, fmt.Sprintf("CREATE USER %s", username.TestUser))
-		testuser := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.User(username.TestUser)))
-		db.Exec(t, fmt.Sprintf("GRANT SYSTEM MANAGEVIRTUALCLUSTER TO %s", username.TestUser))
-		// Implies we got past the priv checks, without REPLICATIONDEST.
-		cmd := "ALTER TENANT t1 SET REPLICATION RETENTION ='100ms'"
-		testuser.ExpectErr(t, `does not have an active replication consumer job`, cmd)
 	})
 }

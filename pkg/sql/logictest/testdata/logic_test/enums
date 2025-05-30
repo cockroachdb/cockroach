@@ -1025,7 +1025,7 @@ statement error pq: foreign key violation: "enum_origin" row x='hello' has no ma
 ALTER TABLE enum_origin ADD FOREIGN KEY (x) REFERENCES enum_referenced (x)
 
 # Tests for ALTER COLUMN SET DATA TYPE.
-onlyif config local-legacy-schema-changer local-mixed-24.3
+onlyif config local-legacy-schema-changer
 statement ok
 SET enable_experimental_alter_column_type_general = true;
 

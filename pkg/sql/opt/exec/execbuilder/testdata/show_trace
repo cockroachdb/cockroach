@@ -198,8 +198,8 @@ $trace_query
 ----
 colbatchscan  Scan /Table/108/{1-2} lock Exclusive (Block, Unreplicated)
 colbatchscan  fetched: /kv/kv_pkey/1/v -> /2
-count         Del (locking) /Table/108/2/2/0
 count         Del /Table/108/1/1/0
+count         Del (locking) /Table/108/2/2/0
 count         fast path completed
 sql query     rows affected: 1
 

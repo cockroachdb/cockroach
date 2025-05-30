@@ -185,40 +185,40 @@ const (
 	// V24_3 is CockroachDB v24.3. It's used for all v24.3.x patch releases.
 	V24_3
 
-	V25_1_Start
+	TODO_Delete_V25_1_Start
 
-	// V25_1_AddJobsTables added new jobs tables.
-	V25_1_AddJobsTables
+	// TODO_Delete_V25_1_AddJobsTables added new jobs tables.
+	TODO_Delete_V25_1_AddJobsTables
 
-	// V25_1_MoveRaftTruncatedState moves the RaftTruncatedState in eval result
+	// TODO_Delete_V25_1_MoveRaftTruncatedState moves the RaftTruncatedState in eval result
 	// from ReplicaState to its own field.
-	V25_1_MoveRaftTruncatedState
+	TODO_Delete_V25_1_MoveRaftTruncatedState
 
-	// V25_1_AddRangeForceFlushKey adds the RangeForceFlushKey, a replicated
+	// TODO_Delete_V25_1_AddRangeForceFlushKey adds the RangeForceFlushKey, a replicated
 	// range-ID local key, which is written below raft.
-	V25_1_AddRangeForceFlushKey
+	TODO_Delete_V25_1_AddRangeForceFlushKey
 
-	// V25_1_BatchStreamRPC adds the BatchStream RPC, which allows for more
+	// TODO_Delete_V25_1_BatchStreamRPC adds the BatchStream RPC, which allows for more
 	// efficient Batch unary RPCs.
-	V25_1_BatchStreamRPC
+	TODO_Delete_V25_1_BatchStreamRPC
 
-	// V25_1_PreparedTransactionsTable adds the system.prepared_transactions
+	// TODO_Delete_V25_1_PreparedTransactionsTable adds the system.prepared_transactions
 	// table. The table is used to store information about prepared transaction
 	// that are part of the XA two-phase commit protocol.
-	V25_1_PreparedTransactionsTable
+	TODO_Delete_V25_1_PreparedTransactionsTable
 
-	// V25_1_AddJobsColumns added new columns to system.jobs.
-	V25_1_AddJobsColumns
+	// TODO_Delete_V25_1_AddJobsColumns added new columns to system.jobs.
+	TODO_Delete_V25_1_AddJobsColumns
 
-	// V25_1_JobsWritesFence is an empty version that is used to add a "fence"
+	// TODO_Delete_V25_1_JobsWritesFence is an empty version that is used to add a "fence"
 	// between the column addition version and the backfill version. This allows
 	// the backfill version's upgrade step to make the assumption that all nodes
 	// will be writing to the new columns, since moving from fence to backfill can
 	// only start once no nodes are still on add-columnns.
-	V25_1_JobsWritesFence
+	TODO_Delete_V25_1_JobsWritesFence
 
-	// V25_1_JobsBackfill backfills the new jobs tables and columns.
-	V25_1_JobsBackfill
+	// TODO_Delete_V25_1_JobsBackfill backfills the new jobs tables and columns.
+	TODO_Delete_V25_1_JobsBackfill
 
 	// V25_1 is CockroachDB v25.1. It's used for all v25.1.x patch releases.
 	V25_1
@@ -275,16 +275,16 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_3: {Major: 24, Minor: 3, Internal: 0},
 
 	// v25.1 versions. Internal versions must be even.
-	V25_1_Start: {Major: 24, Minor: 3, Internal: 2},
+	TODO_Delete_V25_1_Start: {Major: 24, Minor: 3, Internal: 2},
 
-	V25_1_AddJobsTables:             {Major: 24, Minor: 3, Internal: 4},
-	V25_1_MoveRaftTruncatedState:    {Major: 24, Minor: 3, Internal: 6},
-	V25_1_AddRangeForceFlushKey:     {Major: 24, Minor: 3, Internal: 8},
-	V25_1_BatchStreamRPC:            {Major: 24, Minor: 3, Internal: 10},
-	V25_1_PreparedTransactionsTable: {Major: 24, Minor: 3, Internal: 12},
-	V25_1_AddJobsColumns:            {Major: 24, Minor: 3, Internal: 14},
-	V25_1_JobsWritesFence:           {Major: 24, Minor: 3, Internal: 16},
-	V25_1_JobsBackfill:              {Major: 24, Minor: 3, Internal: 18},
+	TODO_Delete_V25_1_AddJobsTables:             {Major: 24, Minor: 3, Internal: 4},
+	TODO_Delete_V25_1_MoveRaftTruncatedState:    {Major: 24, Minor: 3, Internal: 6},
+	TODO_Delete_V25_1_AddRangeForceFlushKey:     {Major: 24, Minor: 3, Internal: 8},
+	TODO_Delete_V25_1_BatchStreamRPC:            {Major: 24, Minor: 3, Internal: 10},
+	TODO_Delete_V25_1_PreparedTransactionsTable: {Major: 24, Minor: 3, Internal: 12},
+	TODO_Delete_V25_1_AddJobsColumns:            {Major: 24, Minor: 3, Internal: 14},
+	TODO_Delete_V25_1_JobsWritesFence:           {Major: 24, Minor: 3, Internal: 16},
+	TODO_Delete_V25_1_JobsBackfill:              {Major: 24, Minor: 3, Internal: 18},
 
 	V25_1: {Major: 25, Minor: 1, Internal: 0},
 
@@ -311,7 +311,7 @@ var versionTable = [numKeys]roachpb.Version{
 const Latest Key = numKeys - 1
 
 // MinSupported is the minimum logical cluster version supported by this branch.
-const MinSupported Key = V24_3
+const MinSupported Key = V25_1
 
 // PreviousRelease is the logical cluster version of the previous release (which must
 // have at least an RC build published).

@@ -85,7 +85,7 @@ func Migrate(
 	// Set DoTimelyApplicationToAllReplicas so that migrates are applied on all
 	// replicas. This is done since MigrateRequests trigger a call to
 	// waitForApplication (see Replica.executeWriteBatch).
-	if cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.V25_1_AddRangeForceFlushKey) ||
+	if cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.TODO_Delete_V25_1_AddRangeForceFlushKey) ||
 		cArgs.EvalCtx.EvalKnobs().OverrideDoTimelyApplicationToAllReplicas {
 		pd.Replicated.DoTimelyApplicationToAllReplicas = true
 	}

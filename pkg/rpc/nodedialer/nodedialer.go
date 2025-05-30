@@ -343,7 +343,7 @@ func shouldUseBatchStreamPoolClient(ctx context.Context, st *cluster.Settings) b
 	// NOTE: we use ActiveVersionOrEmpty(ctx).IsActive(...) instead of the more
 	// common IsActive(ctx, ...) to avoid a fatal error if an RPC is made before
 	// the cluster version is initialized.
-	if !st.Version.ActiveVersionOrEmpty(ctx).IsActive(clusterversion.V25_1_BatchStreamRPC) {
+	if !st.Version.ActiveVersionOrEmpty(ctx).IsActive(clusterversion.TODO_Delete_V25_1_BatchStreamRPC) {
 		return false
 	}
 	if !batchStreamPoolingEnabled.Get(&st.SV) {

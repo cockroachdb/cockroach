@@ -3,7 +3,7 @@
 statement ok
 SET sql_safe_updates = false;
 
-onlyif config local-legacy-schema-changer local-mixed-24.3
+onlyif config local-legacy-schema-changer
 statement ok
 SET enable_experimental_alter_column_type_general = true;
 
