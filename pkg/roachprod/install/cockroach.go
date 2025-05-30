@@ -270,11 +270,17 @@ func (c *SyncedCluster) allowServiceRegistration() bool {
 	return true
 }
 
-// maybeRegisterServices registers the SQL and Admin UI DNS services
-// for the cluster if no previous services for the virtual or storage
-// cluster are found. Any ports specified in the startOpts are used
-// for the services. If no ports are specified, a search for open
-// ports will be performed and selected for use.
+// maybeRegisterServices registers the SQL and Admin UI DNS services for the cluster if necessary:
+//  1. The system interface is only registered if custom ports are passed in/required.
+//     By default, the system interface is assumed to be running on the default ports.
+//  2. Separate process virtual clusters are always registered. They always run on non
+//     default ports as we assume those to be taken by the system interface.
+//  3. Shared-process virtual clusters do not register services, as they share the same
+//     ports as the system interface.
+//
+// If service registration is deemed necessary, ports will be selected in the following order:
+//  1. If the startOpts specify non-zero ports, they will be used.
+//  2. If no port is specified, a search for open ports will be performed and selected for use.
 func (c *SyncedCluster) maybeRegisterServices(
 	ctx context.Context, l *logger.Logger, startOpts StartOpts, portFunc FindOpenPortsFunc,
 ) error {
@@ -286,14 +292,19 @@ func (c *SyncedCluster) maybeRegisterServices(
 	var servicesToRegister ServiceDescriptors
 	switch startOpts.Target {
 	case StartDefault:
-		startOpts.VirtualClusterName = SystemInterfaceName
-		// The system interface on the storage cluster is always regarded as an
-		// external service. Only non-system virtual clusters, running on the
-		// storage cluster, are regarded as shared services.
-		servicesToRegister, err = c.servicesWithOpenPortSelection(
-			ctx, l, startOpts, ServiceModeExternal, serviceMap, portFunc,
-		)
+		// We only register the system interface service if custom ports are specified/required
+		// due to local mode to avoid collisions.
+		if startOpts.customPortsSpecified() || c.IsLocal() {
+			startOpts.VirtualClusterName = SystemInterfaceName
+			// The system interface is always regarded as a shared service, as it contains both a
+			// SQL and KV server.
+			servicesToRegister, err = c.servicesWithOpenPortSelection(
+				ctx, l, startOpts, ServiceModeShared, serviceMap, portFunc,
+			)
+		}
 	case StartServiceForVirtualCluster:
+		// Separate process virtual clusters are always external services,
+		// as they only contain a SQL server.
 		servicesToRegister, err = c.servicesWithOpenPortSelection(
 			ctx, l, startOpts, ServiceModeExternal, serviceMap, portFunc,
 		)
@@ -310,9 +321,9 @@ func (c *SyncedCluster) maybeRegisterServices(
 
 // servicesWithOpenPortSelection returns services to be registered for
 // cases where a new cockroach process is being instantiated and needs
-// to being to available ports. This happens when we start the system
-// interface process, or when we start SQL servers for separate
-// process virtual clusters.
+// to bind to available ports. This happens when we start the system
+// interface process, or when we start SQL servers for separate process
+// virtual clusters. If an existing service is found it is not registered again.
 func (c *SyncedCluster) servicesWithOpenPortSelection(
 	ctx context.Context,
 	l *logger.Logger,
@@ -379,6 +390,136 @@ func (c *SyncedCluster) servicesWithOpenPortSelection(
 	return servicesToRegister, nil
 }
 
+// IsExternalService is a helper that determines if a given virtual cluster
+// is an external service.
+func (c *SyncedCluster) IsExternalService(
+	ctx context.Context, virtualClusterName string,
+) (bool, error) {
+	if IsSystemInterface(virtualClusterName) {
+		return false, nil
+	}
+	services, err := c.discoverServices(ctx, virtualClusterName, ServiceTypeSQL)
+	if err != nil {
+		return false, err
+	}
+
+	// We only register services for external secondary tenants. If we find any
+	// results we know it must be one.
+	return len(services) > 0, nil
+}
+
+// defaultServiceDescriptors returns the default ports for a service type. This is
+// required for scenarios where the services were not registered with a DNS
+// provider (Google DNS). Currently, services will not be registered in the
+// following scenarios:
+//
+// 1. A system interface started with default ports. This is an optimisation
+// to avoid the overhead of registering services when starting a storage
+// cluster with default ports.
+// 2. Shared process virtual clusters. These are always started with the same
+// ports as the system interface, so we do not register them with DNS.
+// 2. Clusters not on GCP
+// 3. Clusters that specify a custom project.
+//
+// Note that because separate process virtual clusters require service registration,
+// there is no default port and only shared process services should call this.
+func defaultServiceDescriptors(
+	virtualClusterName string, nodes Nodes, serviceType ServiceType, sqlInstance int,
+) ServiceDescriptors {
+	var port int
+	switch serviceType {
+	case ServiceTypeSQL:
+		port = config.DefaultSQLPort
+	case ServiceTypeUI:
+		port = config.DefaultAdminUIPort
+	}
+	services := make(ServiceDescriptors, len(nodes))
+	for i, node := range nodes {
+		services[i] = ServiceDesc{
+			VirtualClusterName: virtualClusterName,
+			ServiceType:        serviceType,
+			ServiceMode:        ServiceModeShared,
+			Node:               node,
+			Port:               port,
+			Instance:           sqlInstance,
+		}
+	}
+	return services
+}
+
+// ServiceDescriptors returns the service descriptors for the given nodes and virtual
+// cluster. If no services are found, it returns a service descriptor with the default port
+// for the service type.
+func (c *SyncedCluster) ServiceDescriptors(
+	ctx context.Context,
+	nodes Nodes,
+	virtualClusterName string,
+	serviceType ServiceType,
+	sqlInstance int,
+) (ServiceDescriptors, error) {
+	// Not all virtual clusters are registered with DNS, so we must reconstruct our
+	// service descriptor based on the registration rules stated in maybeRegisterServices.
+	//
+	// We first try to discover a service for the virtual cluster name provided on the
+	// requested node. If we find a result, we are done.
+	services, err := c.discoverServices(
+		ctx, virtualClusterName, serviceType,
+		ServiceNodePredicate(nodes...), ServiceInstancePredicate(sqlInstance),
+	)
+	if err != nil {
+		return ServiceDescriptors{}, err
+	}
+	if len(services) > 0 {
+		return services, nil
+	}
+
+	// If we are looking for the system interface at this point, we know it must be using the default
+	// ports, or we would have found it above. Return the default fallback case.
+	if IsSystemInterface(virtualClusterName) {
+		return defaultServiceDescriptors(
+			virtualClusterName, nodes, serviceType, 0, /* sqlInstance */
+		), nil
+	}
+
+	// If we are looking for a secondary tenant, we know it must be a shared process tenant as all
+	// external process services are registered with DNS. Shared process secondary tenants resolve
+	// to the system interface, so we must attempt to discover that instead.
+	services, err = c.discoverServices(
+		ctx, SystemInterfaceName, serviceType, ServiceNodePredicate(nodes...),
+	)
+	if err != nil {
+		return ServiceDescriptors{}, err
+	}
+
+	// Update the system service to point to the virtual cluster requested.
+	for i := range services {
+		services[i].VirtualClusterName = virtualClusterName
+		services[i].Instance = sqlInstance
+	}
+
+	// If we still have not found a service at this point, it must be a shared process secondary
+	// tenant where the system interface is on the default ports.
+	if len(services) == 0 {
+		return defaultServiceDescriptors(
+			virtualClusterName, nodes, serviceType, sqlInstance,
+		), nil
+	}
+	return services, err
+}
+
+// ServiceDescriptor is a convenience wrapper for ServiceDescriptors that
+// returns only a single service.
+func (c *SyncedCluster) ServiceDescriptor(
+	ctx context.Context,
+	node Node,
+	virtualClusterName string,
+	serviceType ServiceType,
+	sqlInstance int,
+) (ServiceDesc, error) {
+	services, err := c.ServiceDescriptors(ctx, Nodes{node}, virtualClusterName, serviceType, sqlInstance)
+	return services[0], err
+}
+
 // Attempts to fetch the version of the cockroach binary on the first node.
 // N.B. For mixed-version clusters, it's the user's responsibility to start only the nodes of
 // the same version, at a time.
@@ -424,11 +565,9 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 		// ports, or for local cluster port management to avoid collisions. The
 		// lookup logic will automatically fall back to the default ports if the
 		// service is not found (or has not been registered).
-		if startOpts.customPortsSpecified() || c.IsLocal() || startOpts.Target != StartDefault {
-			err := c.maybeRegisterServices(ctx, l, startOpts, c.FindOpenPorts)
-			if err != nil {
-				return err
-			}
+		err := c.maybeRegisterServices(ctx, l, startOpts, c.FindOpenPorts)
+		if err != nil {
+			return err
 		}
 	} else {
 		l.Printf(strings.Join([]string{
@@ -692,27 +831,15 @@ func (c *SyncedCluster) NodeURL(
 		v.Add("sslmode", "disable")
 	}
 
-	// The rules for when to include the `cluster` connection parameter
-	// are a little nuanced:
-	//
-	// Firstly, we only want to pass an explicit `cluster` name if the
-	// user provided one.
-	if virtualClusterName != "" &&
-		// If this is a shared service, we should always be passing the
-		// cluster connection parameter.
-		((serviceMode == ServiceModeShared) ||
-			// However, if this is an external process, this means that the
-			// service is either the system tenant, or a virtual cluster
-			// serviced by an external process. We only want to specify the
-			// `cluster` parameter in the former case, as SQL server
-			// processes don't support cluster selection. The main use-case
-			// for specifying the cluster parameter in this case would be in
-			// a shared-process deployment model where the default tenant is
-			// switched, and we want to connect to the system tenant
-			// directly.
-			(serviceMode == ServiceModeExternal && virtualClusterName == SystemInterfaceName)) {
-		v.Add("options", fmt.Sprintf("-ccluster=%s", virtualClusterName))
+	// We only want to pass an explicit `cluster` name if the user provided one.
+	if virtualClusterName != "" {
+		// We can only pass the cluster parameter for shared processes, as SQL server
+		// only processes don't support cluster selection.
+		if serviceMode == ServiceModeShared {
+			v.Add("options", fmt.Sprintf("-ccluster=%s", virtualClusterName))
+		}
 	}
+
 	u.RawQuery = v.Encode()
 	return "'" + u.String() + "'"
 }
@@ -721,7 +848,7 @@ func (c *SyncedCluster) NodeURL(
 func (c *SyncedCluster) NodePort(
 	ctx context.Context, node Node, virtualClusterName string, sqlInstance int,
 ) (int, error) {
-	desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
+	desc, err := c.ServiceDescriptor(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
 	if err != nil {
 		return 0, err
 	}
@@ -732,7 +859,7 @@ func (c *SyncedCluster) NodePort(
 func (c *SyncedCluster) NodeUIPort(
 	ctx context.Context, node Node, virtualClusterName string, sqlInstance int,
 ) (int, error) {
-	desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeUI, sqlInstance)
+	desc, err := c.ServiceDescriptor(ctx, node, virtualClusterName, ServiceTypeUI, sqlInstance)
 	if err != nil {
 		return 0, err
 	}
@@ -757,7 +884,7 @@ func (c *SyncedCluster) ExecOrInteractiveSQL(
 	if len(c.Nodes) != 1 {
 		return fmt.Errorf("invalid number of nodes for interactive sql: %d", len(c.Nodes))
 	}
-	desc, err := c.DiscoverService(ctx, c.Nodes[0], virtualClusterName, ServiceTypeSQL, sqlInstance)
+	desc, err := c.ServiceDescriptor(ctx, c.Nodes[0], virtualClusterName, ServiceTypeSQL, sqlInstance)
 	if err != nil {
 		return err
 	}
@@ -784,7 +911,7 @@ func (c *SyncedCluster) ExecSQL(
 	display := fmt.Sprintf("%s: executing sql", c.Name)
 	results, _, err := c.ParallelE(ctx, l, WithNodes(nodes).WithDisplay(display).WithFailSlow(),
 		func(ctx context.Context, node Node) (*RunResultDetails, error) {
-			desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
+			desc, err := c.ServiceDescriptor(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
 			if err != nil {
 				return nil, err
 			}
@@ -1053,7 +1180,7 @@ func (c *SyncedCluster) generateStartArgs(
 	instance := startOpts.SQLInstance
 	var sqlPort int
 	if startOpts.Target == StartServiceForVirtualCluster {
-		desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, instance)
+		desc, err := c.ServiceDescriptor(ctx, node, virtualClusterName, ServiceTypeSQL, instance)
 		if err != nil {
 			return nil, err
 		}
@@ -1063,14 +1190,14 @@ func (c *SyncedCluster) generateStartArgs(
 		virtualClusterName = SystemInterfaceName
 		// System interface instance is always 0.
 		instance = 0
-		desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, instance)
+		desc, err := c.ServiceDescriptor(ctx, node, virtualClusterName, ServiceTypeSQL, instance)
 		if err != nil {
 			return nil, err
 		}
 		sqlPort = desc.Port
 		args = append(args, fmt.Sprintf("--listen-addr=%s:%d", listenHost, sqlPort))
 	}
-	desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeUI, instance)
+	desc, err := c.ServiceDescriptor(ctx, node, virtualClusterName, ServiceTypeUI, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -1093,7 +1220,7 @@ func (c *SyncedCluster) generateStartArgs(
 		joinTargets := startOpts.GetJoinTargets()
 		addresses := make([]string, len(joinTargets))
 		for i, joinNode := range startOpts.GetJoinTargets() {
-			desc, err := c.DiscoverService(ctx, joinNode, SystemInterfaceName, ServiceTypeSQL, 0)
+			desc, err := c.ServiceDescriptor(ctx, joinNode, SystemInterfaceName, ServiceTypeSQL, 0)
 			if err != nil {
 				return nil, err
 			}
