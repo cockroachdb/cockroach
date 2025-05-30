@@ -3,3 +3,4 @@ show_create_stmt ::=
 	| 'SHOW' 'CREATE' 'ALL' 'SCHEMAS'
 	| 'SHOW' 'CREATE' 'ALL' 'TABLES'
 	| 'SHOW' 'CREATE' 'ALL' 'TYPES'
+	| 'SHOW' 'CREATE' 'ALL' 'ROUTINES'

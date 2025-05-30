@@ -45,3 +45,11 @@ SHOW PROCEDURES
 SHOW PROCEDURES -- fully parenthesized
 SHOW PROCEDURES -- literals removed
 SHOW PROCEDURES -- identifiers removed
+
+parse
+SHOW CREATE ALL ROUTINES
+----
+SHOW CREATE ALL ROUTINES
+SHOW CREATE ALL ROUTINES -- fully parenthesized
+SHOW CREATE ALL ROUTINES -- literals removed
+SHOW CREATE ALL ROUTINES -- identifiers removed
