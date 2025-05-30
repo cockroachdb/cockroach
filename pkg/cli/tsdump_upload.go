@@ -86,6 +86,7 @@ type DatadogSeries struct {
 	Metric    string         `json:"metric"`
 	Type      int            `json:"type"`
 	Points    []DatadogPoint `json:"points"`
+	Interval  int            `json:"interval,omitempty"`
 	Resources []struct {
 		Name string `json:"name"`
 		Type string `json:"type"`
@@ -171,7 +172,7 @@ var getCurrentTime = func() time.Time {
 	return timeutil.Now()
 }
 
-func doDDRequest(req *http.Request) error {
+var doDDRequest = func(req *http.Request) error {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
@@ -201,7 +202,7 @@ func appendTag(series *DatadogSeries, tagKey, tagValue string) {
 }
 
 func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*DatadogSeries, error) {
-	name, source, _, _, err := ts.DecodeDataKey(kv.Key)
+	name, source, res, _, err := ts.DecodeDataKey(kv.Key)
 	if err != nil {
 		return nil, err
 	}
@@ -211,10 +212,11 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*DatadogSeries, error) {
 	}
 
 	series := &DatadogSeries{
-		Metric: name,
-		Tags:   []string{},
-		Type:   d.resolveMetricType(name),
-		Points: make([]DatadogPoint, idata.SampleCount()),
+		Metric:   name,
+		Tags:     []string{},
+		Type:     d.resolveMetricType(name),
+		Points:   make([]DatadogPoint, idata.SampleCount()),
+		Interval: int(res.Duration().Seconds()), // convert from time.Duration to number of seconds.
 	}
 
 	sl := reCrStoreNode.FindStringSubmatch(name)
