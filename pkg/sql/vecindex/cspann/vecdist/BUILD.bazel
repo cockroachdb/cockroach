@@ -1,8 +1,12 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "vecdist",
-    srcs = ["metric.go"],
+    srcs = [
+        "metric.go",
+        "metric_string.go",  # keep
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist",
     visibility = ["//visibility:public"],
     deps = [
@@ -19,5 +23,13 @@ go_test(
     deps = [
         "//pkg/util/vector",
         "@com_github_stretchr_testify//require",
+        "@org_gonum_v1_gonum//floats/scalar",
     ],
+)
+
+stringer(
+    name = "metric-stringer",
+    src = "metric.go",
+    additional_args = ["--linecomment"],
+    typ = "Metric",
 )

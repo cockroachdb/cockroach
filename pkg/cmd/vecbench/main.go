@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -67,6 +68,12 @@ var flagSearchBeamSizes = flag.String(
 	"1,2,4,8,16,32,64,128,256,512",
 	"List of beam sizes used for search.")
 
+// Disable adaptive search by default until it is enabled for the vecstore.
+var flagDisableAdaptiveSearch = flag.Bool(
+	"disable-adaptive-search",
+	true,
+	"Disable use of historical statistics to adjust number of partitions searched")
+
 // Store options.
 var flagMemStore = flag.Bool("memstore", false, "Use in-memory store instead of CockroachDB")
 var flagDBConnStr = flag.String("db", "postgresql://root@localhost:26257",
@@ -78,12 +85,15 @@ var flagDBConnStr = flag.String("db", "postgresql://root@localhost:26257",
 // of available datasets, most of which are derived from datasets on
 // ann-benchmarks.com:
 //
+//	images-512-euclidean (1M vectors, 512 dims)
 //	fashion-mnist-784-euclidean (60K vectors, 784 dims)
 //	gist-960-euclidean (1M vectors, 960 dims)
 //	random-s-100-euclidean (90K vectors, 100 dims)
 //	random-xs-20-euclidean (9K vectors, 20 dims)
 //	sift-128-euclidean (1M vectors, 128 dims)
 //	dbpedia-openai-100k-angular (100K vectors, 1536 dims)
+//	dbpedia-openai-1000k-angular (1M vectors, 1536 dims)
+//	laion-1m-test-ip (1M vectors, 768 dims)
 //
 // After download, the datasets are cached in a local temp directory and a
 // vector index is created. The built vector index is also cached in the temp
@@ -171,20 +181,35 @@ func main() {
 
 // vectorBench encapsulates the state and operations for vector benchmarking.
 type vectorBench struct {
-	ctx         context.Context
-	stopper     *stop.Stopper
-	datasetName string
-	provider    VectorProvider
-	buildData   vecann.Dataset
-	searchData  vecann.SearchDataset
+	ctx            context.Context
+	stopper        *stop.Stopper
+	datasetName    string
+	distanceMetric vecdist.Metric
+	provider       VectorProvider
+	buildData      vecann.Dataset
+	searchData     vecann.SearchDataset
 }
 
 // newVectorBench creates a new VecBench instance for the given dataset.
 func newVectorBench(ctx context.Context, stopper *stop.Stopper, datasetName string) *vectorBench {
+	// Derive the distance metric from the dataset name, assuming certain naming
+	// conventions.
+	var distanceMetric vecdist.Metric
+	if strings.HasSuffix(datasetName, "-euclidean") {
+		distanceMetric = vecdist.L2Squared
+	} else if strings.HasSuffix(datasetName, "-ip") || strings.HasSuffix(datasetName, "-dot") {
+		distanceMetric = vecdist.InnerProduct
+	} else if strings.HasSuffix(datasetName, "-angular") {
+		distanceMetric = vecdist.Cosine
+	} else {
+		panic(errors.Newf("can't derive distance metric for dataset %s", datasetName))
+	}
+
 	return &vectorBench{
-		ctx:         ctx,
-		stopper:     stopper,
-		datasetName: datasetName,
+		ctx:            ctx,
+		stopper:        stopper,
+		datasetName:    datasetName,
+		distanceMetric: distanceMetric,
 	}
 }
 
@@ -194,7 +219,8 @@ func (vb *vectorBench) SearchIndex() {
 	vb.ensureDataset(vb.ctx, true /* forSearch */)
 
 	var err error
-	vb.provider, err = newVectorProvider(vb.stopper, vb.datasetName, vb.searchData.Test.Dims)
+	vb.provider, err = newVectorProvider(
+		vb.stopper, vb.datasetName, vb.searchData.Test.Dims, vb.distanceMetric)
 	if err != nil {
 		panic(err)
 	}
@@ -284,7 +310,8 @@ func (vb *vectorBench) BuildIndex() {
 
 	// Construct the vector provider.
 	var err error
-	vb.provider, err = newVectorProvider(vb.stopper, vb.datasetName, vb.buildData.Train.Dims)
+	vb.provider, err = newVectorProvider(
+		vb.stopper, vb.datasetName, vb.buildData.Train.Dims, vb.distanceMetric)
 	if err != nil {
 		panic(err)
 	}
@@ -437,17 +464,18 @@ func (vb *vectorBench) ensureDataset(ctx context.Context, forSearch bool) {
 // newVectorProvider creates a new in-memory or SQL based vector provider that
 // indexes the given dataset.
 func newVectorProvider(
-	stopper *stop.Stopper, datasetName string, dims int,
+	stopper *stop.Stopper, datasetName string, dims int, distanceMetric vecdist.Metric,
 ) (VectorProvider, error) {
 	options := cspann.IndexOptions{
-		MinPartitionSize: minPartitionSize,
-		MaxPartitionSize: maxPartitionSize,
-		BaseBeamSize:     *flagBeamSize,
-		RotAlgorithm:     cspann.RotGivens,
+		MinPartitionSize:      minPartitionSize,
+		MaxPartitionSize:      maxPartitionSize,
+		BaseBeamSize:          *flagBeamSize,
+		RotAlgorithm:          cspann.RotGivens,
+		DisableAdaptiveSearch: *flagDisableAdaptiveSearch,
 	}
 
 	if *flagMemStore {
-		return NewMemProvider(stopper, datasetName, dims, options), nil
+		return NewMemProvider(stopper, datasetName, dims, distanceMetric, options), nil
 	}
 
 	// Use SQL-based provider with connection string from flags.

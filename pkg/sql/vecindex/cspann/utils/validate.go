@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package quantize
+package utils
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -13,25 +13,25 @@ import (
 	"gonum.org/v1/gonum/floats/scalar"
 )
 
-// validateUnitVector panics if the given vector is not a unit vector or the
+// ValidateUnitVector panics if the given vector is not a unit vector or the
 // zero vector (for degenerate case where norm=0).
 // NOTE: This should only be used in test builds.
-func validateUnitVector(vec vector.T) {
+func ValidateUnitVector(vec vector.T) {
 	if buildutil.CrdbTestBuild {
 		norm := num32.SquaredNorm(vec)
-		if norm != 0 && scalar.Round(float64(norm), 4) != 1 {
+		if norm != 0 && scalar.Round(float64(norm), 2) != 1 {
 			panic(errors.AssertionFailedf("vector is not a unit vector: %s", vec))
 		}
 	}
 }
 
-// validateUnitVectors panics if the given vectors are not unit vectors or zero
+// ValidateUnitVectors panics if the given vectors are not unit vectors or zero
 // vectors (for degenerate case where norm=0).
 // NOTE: This should only be used in test builds.
-func validateUnitVectors(vectors vector.Set) {
+func ValidateUnitVectors(vectors vector.Set) {
 	if buildutil.CrdbTestBuild {
 		for i := range vectors.Count {
-			validateUnitVector(vectors.At(i))
+			ValidateUnitVector(vectors.At(i))
 		}
 	}
 }

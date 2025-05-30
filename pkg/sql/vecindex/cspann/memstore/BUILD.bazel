@@ -15,7 +15,7 @@ go_library(
     deps = [
         "//pkg/sql/vecindex/cspann",
         "//pkg/sql/vecindex/cspann/quantize",
-        "//pkg/sql/vecindex/cspann/vecdist",
+        "//pkg/sql/vecindex/cspann/vecdist",  # keep
         "//pkg/sql/vecindex/cspann/workspace",
         "//pkg/util/container/list",
         "//pkg/util/protoutil",

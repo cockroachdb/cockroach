@@ -10,6 +10,7 @@ import (
 	"math/bits"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -108,11 +109,6 @@ func (q *RaBitQuantizer) Quantize(w *workspace.T, vectors vector.Set) QuantizedV
 	} else {
 		// Compute the centroid.
 		centroid = vectors.Centroid(make(vector.T, vectors.Dims))
-		if q.distanceMetric == vecdist.InnerProduct || q.distanceMetric == vecdist.Cosine {
-			// Use spherical centroid for inner product and cosine distances,
-			// which is the mean centroid, but normalized.
-			num32.Normalize(centroid)
-		}
 	}
 
 	quantizedSet := q.NewQuantizedVectorSet(vectors.Count, centroid)
@@ -129,10 +125,6 @@ func (q *RaBitQuantizer) QuantizeInSet(
 
 // NewQuantizedVectorSet implements the Quantizer interface
 func (q *RaBitQuantizer) NewQuantizedVectorSet(capacity int, centroid vector.T) QuantizedVectorSet {
-	if buildutil.CrdbTestBuild && q.distanceMetric == vecdist.Cosine {
-		validateUnitVector(centroid)
-	}
-
 	codeWidth := RaBitQCodeSetWidth(q.GetDims())
 	dataBuffer := make([]uint64, 0, capacity*codeWidth)
 	if capacity <= 1 {
@@ -169,7 +161,7 @@ func (q *RaBitQuantizer) EstimateDistances(
 	errorBounds []float32,
 ) {
 	if buildutil.CrdbTestBuild && q.distanceMetric == vecdist.Cosine {
-		validateUnitVector(queryVector)
+		utils.ValidateUnitVector(queryVector)
 	}
 
 	raBitSet := quantizedSet.(*RaBitQuantizedVectorSet)
@@ -204,6 +196,10 @@ func (q *RaBitQuantizer) EstimateDistances(
 			// All vectors have been normalized, so cosine distance = 1 - dot product.
 			num32.ScaleTo(distances, -1, raBitSet.CentroidDotProducts)
 			num32.AddConst(1, distances)
+
+		default:
+			panic(errors.AssertionFailedf(
+				"RaBitQuantizer does not support distance metric %s", q.distanceMetric))
 		}
 
 		num32.Zero(errorBounds)
@@ -369,7 +365,8 @@ func (q *RaBitQuantizer) EstimateDistances(
 			errorBounds[i] = errorBound
 
 		default:
-			panic(errors.AssertionFailedf("unknown distance function %d", q.distanceMetric))
+			panic(errors.AssertionFailedf(
+				"RaBitQuantizer does not support distance metric %s", q.distanceMetric))
 		}
 	}
 }
@@ -380,7 +377,7 @@ func (q *RaBitQuantizer) quantizeHelper(
 	w *workspace.T, qs *RaBitQuantizedVectorSet, vectors vector.Set,
 ) {
 	if buildutil.CrdbTestBuild && q.distanceMetric == vecdist.Cosine {
-		validateUnitVectors(vectors)
+		utils.ValidateUnitVectors(vectors)
 	}
 
 	// Extend any existing slices in the vector set.

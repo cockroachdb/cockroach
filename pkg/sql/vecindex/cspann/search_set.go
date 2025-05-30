@@ -33,8 +33,7 @@ type SearchResult struct {
 	// partition, or the key of its partition if it's in a root/branch partition.
 	ChildKey ChildKey
 	// Vector is the original, full-size data vector. This is nil by default,
-	// and is only set when SearchOptions.SkipRerank is false or
-	// SearchOptions.ReturnVectors is true.
+	// and is only set when SearchOptions.SkipRerank is false.
 	// NOTE: If this is an interior centroid vector, then it is randomized.
 	// Otherwise, it's an original, un-randomized leaf vector.
 	Vector vector.T
@@ -277,22 +276,21 @@ func (ss *SearchSet) AddSet(searchSet *SearchSet) {
 	}
 }
 
-// FindBestDistances sets the input "distances" slice to the
-// QuerySquaredDistance values for the closest candidate search results. It
-// returns the "distances" slice, possibly truncated if there are not enough
-// search results to fill it. The returned distances are unsorted and duplicates
-// are not filtered.
+// FindBestDistances sets the input "distances" slice to the QueryDistance
+// values for the closest candidate search results. It returns the "distances"
+// slice, possibly truncated if there are not enough search results to fill it.
+// The returned distances are unsorted and duplicates are not filtered.
 func (ss *SearchSet) FindBestDistances(distances []float64) []float64 {
 	// Can't return more distances than there are candidates.
 	n := len(ss.candidates)
 	k := min(len(distances), n)
 
 	// Copy all distances to the output slice. Track the max distance.
-	maxDistance := float32(-1)
+	var maxDistance float32
 	maxOffset := -1
 	for i := range k {
 		distance := ss.candidates[i].QueryDistance
-		if distance > maxDistance {
+		if maxOffset == -1 || distance > maxDistance {
 			maxDistance = distance
 			maxOffset = i
 		}

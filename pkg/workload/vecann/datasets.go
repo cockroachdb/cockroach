@@ -298,7 +298,7 @@ func (dl *DatasetLoader) download(ctx context.Context) (err error) {
 //	Header: [4]byte{'V','E','C',1} // Magic number + version
 //	Train: uint64 count + uint64 dims + []float32 data
 //	Test: uint64 count + uint64 dims + []float32 data
-//	Neighbors: uint64 count + uint64 neighborsPerVector + [][]int64 data
+//	Neighbors: uint64 count + uint64 neighborsPerVector + []int64 data
 //
 // We use a custom binary format rather than .gob, because .gob encoding is
 // limited to 8G on 64-bit machines.
@@ -370,12 +370,15 @@ func (dl *DatasetLoader) loadFromDisk(ctx context.Context) error {
 	if err := binary.Read(readFile, binary.LittleEndian, &neighborsPerVector); err != nil {
 		return errors.Wrap(err, "reading neighbors per vector")
 	}
+	allNeighbors := make([]int64, neighborsCount*neighborsPerVector)
+	if err := binary.Read(readFile, binary.LittleEndian, allNeighbors); err != nil {
+		return errors.Wrap(err, "reading neighbors data")
+	}
+
 	dl.Data.Neighbors = make([][]int64, neighborsCount)
-	for i := range dl.Data.Neighbors {
-		dl.Data.Neighbors[i] = make([]int64, neighborsPerVector)
-		if err := binary.Read(readFile, binary.LittleEndian, dl.Data.Neighbors[i]); err != nil {
-			return errors.Wrap(err, "reading neighbors data")
-		}
+	for i := range neighborsCount {
+		offset := int(i * neighborsPerVector)
+		dl.Data.Neighbors[i] = allNeighbors[offset : offset+int(neighborsPerVector)]
 	}
 
 	// Copy test and neighbors data to SearchData.

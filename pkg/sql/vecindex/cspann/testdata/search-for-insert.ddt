@@ -18,7 +18,7 @@ vec3: (4, 3)
 search-for-insert
 (5, 5)
 ----
-partition 1, centroid=(0, 0), sqdist=0
+partition 1, centroid=(0, 0), dist=0
 
 # ----------
 # Search tree with multiple partitions.
@@ -61,13 +61,13 @@ vec9: (-2, 8)
 search-for-insert
 (5, 5)
 ----
-partition 4, centroid=(6, 4.5), sqdist=1.25
+partition 4, centroid=(6, 4.5), dist=1.25
 
 # Test non-exact match.
 search-for-insert
 (1, 1)
 ----
-partition 6, centroid=(0, 2), sqdist=2
+partition 6, centroid=(0, 2), dist=2
 
 # ----------------------------------------------------------------------
 # Search tree with one over-sized partition.
@@ -91,7 +91,7 @@ vec5: (8, 11)
 search-for-insert
 (3, 8)
 ----
-partition 1, centroid=(0, 0), sqdist=0
+partition 1, centroid=(0, 0), dist=0
 
 # Root partition should now be split.
 format-tree
@@ -122,7 +122,7 @@ Loaded 0 vectors.
 search-for-insert
 (1, 1)
 ----
-partition 1, centroid=(0, 0), sqdist=0
+partition 1, centroid=(0, 0), dist=0
 
 # DrainingForSplit state.
 load-index min-partition-size=1 max-partition-size=3 beam-size=2
@@ -137,7 +137,7 @@ force-split partition-key=1 steps=4
 search-for-insert
 (1, 1)
 ----
-partition 2, centroid=(0, 0), sqdist=2
+partition 2, centroid=(0, 0), dist=2
 
 # AddingLevel state before sub-partitions have been added.
 load-index min-partition-size=1 max-partition-size=3 beam-size=2
@@ -148,7 +148,7 @@ Loaded 0 vectors.
 search-for-insert
 (1, 1)
 ----
-partition 1, centroid=(0, 0), sqdist=0
+partition 1, centroid=(0, 0), dist=0
 
 # AddingLevel state after sub-partitions have been added.
 load-index min-partition-size=1 max-partition-size=3 beam-size=2
@@ -163,7 +163,7 @@ Loaded 0 vectors.
 search-for-insert
 (1, 1)
 ----
-partition 2, centroid=(1, 1), sqdist=0
+partition 2, centroid=(1, 1), dist=0
 
 # DeletingForSplit state.
 load-index min-partition-size=1 max-partition-size=3 beam-size=2
@@ -178,4 +178,4 @@ Loaded 0 vectors.
 search-for-insert
 (1, 1)
 ----
-partition 3, centroid=(2, 2), sqdist=2
+partition 3, centroid=(2, 2), dist=2

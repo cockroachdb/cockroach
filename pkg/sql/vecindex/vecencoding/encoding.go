@@ -250,7 +250,7 @@ func EncodedPartitionLevelLen(level cspann.Level) int {
 // slice is expected to be the prefix shared between all KV entries for a
 // partition.
 func EncodeChildKey(appendTo []byte, key cspann.ChildKey) []byte {
-	if key.KeyBytes != nil {
+	if key.IsPrimaryIndexBytes() {
 		// The primary key is already in encoded form. That encoded form always
 		// already contains the final family ID 0 value.
 		return append(appendTo, key.KeyBytes...)
