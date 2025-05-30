@@ -422,11 +422,11 @@ var regularBuiltins = map[string]builtinDefinition{
 				}
 
 				// If count is negative, return the last 'abs(count)' parts joined by delim
-				count = -count
-				if count >= length {
+				if -count >= length || count == math.MinInt {
 					return tree.NewDString(input), nil // If count exceeds occurrences, return the full string
 				}
-				return tree.NewDString(strings.Join(parts[length-count:], delim)), nil
+				start := length + count // count is negative
+				return tree.NewDString(strings.Join(parts[start:], delim)), nil
 			},
 			Info: "Returns a substring of `input` before `count` occurrences of `delim`.\n" +
 				"If `count` is positive, the leftmost part is returned. If `count` is negative, the rightmost part is returned.",

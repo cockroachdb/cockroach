@@ -4694,4 +4694,20 @@ SELECT substring_index('a..b..c..d', '..', -2);
 ----
 c..d
 
+# Verify boundary cases of count input. Found in issue #147516.
+query T
+SELECT substring_index('a..b..c..d', '..', -9223372036854775808);
+----
+a..b..c..d
+
+query T
+SELECT substring_index('a..b..c..d', '..', -9223372036854775807);
+----
+a..b..c..d
+
+query T
+SELECT substring_index('a..b..c..d', '..', 9223372036854775807);
+----
+a..b..c..d
+
 subtest end
