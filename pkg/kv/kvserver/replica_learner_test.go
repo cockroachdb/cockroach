@@ -2219,41 +2219,48 @@ func getExpectedSnapshotSizeBytes(
 	b := originStore.TODOEngine().NewWriteBatch()
 	defer b.Close()
 
-	err = rditer.IterateReplicaKeySpans(
-		ctx, snap.State.Desc, snap.EngineSnap, true /* replicatedOnly */, rditer.ReplicatedSpansAll,
-		func(iter storage.EngineIterator, _ roachpb.Span) error {
-			var err error
-			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
-				hasPoint, hasRange := iter.HasPointAndRange()
+	selOpts := rditer.SelectOpts{
+		Ranged: rditer.SelectRangedOptions{
+			SystemKeys: true,
+			LockTable:  true,
+			UserKeys:   true,
+		},
+		ReplicatedByRangeID:   true,
+		UnreplicatedByRangeID: false,
+	}
+	err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, selOpts, func(iter storage.EngineIterator, _ roachpb.Span) error {
+		var err error
+		for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
+			hasPoint, hasRange := iter.HasPointAndRange()
 
-				if hasPoint {
-					unsafeKey, err := iter.UnsafeEngineKey()
-					if err != nil {
-						return err
-					}
-					v, err := iter.UnsafeValue()
-					if err != nil {
-						return err
-					}
-					if err := b.PutEngineKey(unsafeKey, v); err != nil {
-						return err
-					}
+			if hasPoint {
+				unsafeKey, err := iter.UnsafeEngineKey()
+				if err != nil {
+					return err
 				}
-				if hasRange && iter.RangeKeyChanged() {
-					bounds, err := iter.EngineRangeBounds()
+				v, err := iter.UnsafeValue()
+				if err != nil {
+					return err
+				}
+				if err := b.PutEngineKey(unsafeKey, v); err != nil {
+					return err
+				}
+			}
+			if hasRange && iter.RangeKeyChanged() {
+				bounds, err := iter.EngineRangeBounds()
+				if err != nil {
+					return err
+				}
+				for _, rkv := range iter.EngineRangeKeys() {
+					err := b.PutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
 					if err != nil {
 						return err
-					}
-					for _, rkv := range iter.EngineRangeKeys() {
-						err := b.PutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
-						if err != nil {
-							return err
-						}
 					}
 				}
 			}
-			return err
-		})
+		}
+		return err
+	})
 	return int64(b.Len()), err
 }
 
