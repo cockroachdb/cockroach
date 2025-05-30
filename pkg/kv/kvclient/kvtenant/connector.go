@@ -221,6 +221,7 @@ type connector struct {
 
 // client represents an RPC client that proxies to a KV instance.
 type client struct {
+	conn *grpc.ClientConn
 	kvpb.InternalClient
 	serverpb.StatusClient
 	serverpb.AdminClient
@@ -981,6 +982,7 @@ func (c *connector) dialAddrs(ctx context.Context) (*client, error) {
 				continue
 			}
 			return &client{
+				conn:             conn,
 				InternalClient:   kvpb.NewInternalClient(conn),
 				StatusClient:     serverpb.NewStatusClient(conn),
 				AdminClient:      serverpb.NewAdminClient(conn),
@@ -1002,15 +1004,55 @@ func (c *connector) dialAddr(ctx context.Context, addr string) (conn *grpc.Clien
 	return conn, err
 }
 
+// tryForgetClient is called when a RPC call fails such that the
+// caller cannot proceed. This happens in two cases:
+//   - the client's context.Context has been canceled. In that
+//     case, the cause of the error is local, and we do not
+//     need to touch the RPC client connection.
+//   - the client has observed an error on the outgoing RPC
+//     call. This is a more serious error and, in current design,
+//     indicates an assertion about the server was violated.
+//     To recover from this, we wish to drop the connection
+//     fully and reconnect (at a low level). To achieve this,
+//     we need to bypass the rpc.Context's internal connection
+//     reuse mechanism.
 func (c *connector) tryForgetClient(ctx context.Context, client kvpb.InternalClient) {
 	if ctx.Err() != nil {
-		// Error (may be) due to context. Don't forget client.
+		// Error is (may be) due to context.
+		// In that case the error is local and we do not
+		// need to touch the RPC client connection.
 		return
 	}
+	c.forgetClientAndAvoidConnectionReuse(ctx, client)
+}
+
+// forgetClientAndAvoidConnectionReuse force closes the RPC connection
+// such that the next call to getClient()/dialAddr() will re-dial
+// the server.
+func (c *connector) forgetClientAndAvoidConnectionReuse(
+	ctx context.Context, client kvpb.InternalClient,
+) {
 	// Compare-and-swap to avoid thrashing.
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.mu.client == client {
+		// Forgetting the reference to *grpc.ClientConn in c.mu.client is
+		// not sufficient. In the common case where the gRPC connection
+		// was healthy (the caller calls tryForgetClient due to a logic
+		// error), our rpc.Connection/rpc.Context code would keep it
+		// cached, such that the next call to dialAddr() with the same
+		// address would retrieve the same *grpc.ClientConn object.
+		//
+		// Worse yet, if there were multiple KV addresses available,
+		// dialAddr() might dial a different KV server, such that
+		// the previous one would simply leak.
+		//
+		// Instead, we want to close and re-dial. For this, we must
+		// disable reuse by manually closing the grpc.ClientConn.
+		err := c.mu.client.conn.Close() // nolint:grpcconnclose
+		if err != nil {
+			log.Warningf(ctx, "error closing client conn: %v", err)
+		}
 		c.mu.client = nil
 	}
 }
