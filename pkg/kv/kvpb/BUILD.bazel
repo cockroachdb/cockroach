@@ -30,6 +30,7 @@ go_library(
     deps = [
         "//pkg/col/coldata",
         "//pkg/kv/kvnemesis/kvnemesisutil",
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
