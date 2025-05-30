@@ -24,8 +24,8 @@ kvtrace
 DELETE FROM ti WHERE a = 1
 ----
 Scan /Table/106/1/1/0 lock Exclusive (Block, Unreplicated)
-Put (delete) (locking) /Table/106/2/1/100/0
 Del /Table/106/1/1/0
+Put (delete) (locking) /Table/106/2/1/100/0
 
 kvtrace
 INSERT INTO ti VALUES (1, 1, 100)

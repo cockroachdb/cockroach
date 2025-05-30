@@ -146,47 +146,14 @@ func (rd *Deleter) DeleteRow(
 ) error {
 	b := &KVBatchAdapter{Batch: batch}
 
-	// Delete the row from any secondary indices.
-	for i, index := range rd.Helper.Indexes {
-		// If the index ID exists in the set of indexes to ignore, do not
-		// attempt to delete from the index.
-		if pm.IgnoreForDel.Contains(int(index.GetID())) {
-			continue
-		}
-
-		// We want to include empty k/v pairs because we want to delete all k/v's for this row.
-		entries, err := rowenc.EncodeSecondaryIndex(
-			ctx,
-			rd.Helper.Codec,
-			rd.Helper.TableDesc,
-			index,
-			rd.FetchColIDtoRowIndex,
-			values,
-			vh.GetDel(),
-			true, /* includeEmpty */
-		)
-		if err != nil {
-			return err
-		}
-		alreadyLocked := rd.secondaryLocked != nil && rd.secondaryLocked.GetID() == index.GetID()
-		for _, e := range entries {
-			if err = rd.Helper.deleteIndexEntry(
-				ctx, b, index, &e.Key, alreadyLocked, rd.Helper.sd.BufferedWritesUseLockingOnNonUniqueIndexes,
-				traceKV, rd.Helper.secIndexValDirs[i],
-			); err != nil {
-				return err
-			}
-		}
-	}
-
 	primaryIndexKey, err := rd.Helper.encodePrimaryIndexKey(rd.FetchColIDtoRowIndex, values)
 	if err != nil {
 		return err
 	}
 
-	// Delete the row.
+	// Delete the row from the primary index.
 	var called bool
-	return rd.Helper.TableDesc.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
+	err = rd.Helper.TableDesc.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
 		if called {
 			// HACK: MakeFamilyKey appends to its argument, so on every loop iteration
 			// after the first, trim primaryIndexKey so nothing gets overwritten.
@@ -221,6 +188,44 @@ func (rd *Deleter) DeleteRow(
 		rd.key = nil
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	// Delete the row from any secondary indices.
+	for i, index := range rd.Helper.Indexes {
+		// If the index ID exists in the set of indexes to ignore, do not
+		// attempt to delete from the index.
+		if pm.IgnoreForDel.Contains(int(index.GetID())) {
+			continue
+		}
+
+		// We want to include empty k/v pairs because we want to delete all k/v's for this row.
+		entries, err := rowenc.EncodeSecondaryIndex(
+			ctx,
+			rd.Helper.Codec,
+			rd.Helper.TableDesc,
+			index,
+			rd.FetchColIDtoRowIndex,
+			values,
+			vh.GetDel(),
+			true, /* includeEmpty */
+		)
+		if err != nil {
+			return err
+		}
+		alreadyLocked := rd.secondaryLocked != nil && rd.secondaryLocked.GetID() == index.GetID()
+		for _, e := range entries {
+			if err = rd.Helper.deleteIndexEntry(
+				ctx, b, index, &e.Key, alreadyLocked, rd.Helper.sd.BufferedWritesUseLockingOnNonUniqueIndexes,
+				traceKV, rd.Helper.secIndexValDirs[i],
+			); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 // encodeValueForPrimaryIndexFamily encodes the expected roachpb.Value

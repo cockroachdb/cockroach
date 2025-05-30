@@ -275,27 +275,27 @@ query T kvtrace
 DELETE FROM t WHERE a = 5
 ----
 Scan /Table/113/1/5/0 lock Exclusive (Block, Unreplicated)
-Del /Table/113/2/4/5/0
 Del /Table/113/1/5/0
+Del /Table/113/2/4/5/0
 
 # Deleted row matches the first partial index.
 query T kvtrace
 DELETE FROM t WHERE a = 6
 ----
 Scan /Table/113/1/6/0 lock Exclusive (Block, Unreplicated)
+Del /Table/113/1/6/0
 Del /Table/113/2/11/6/0
 Del /Table/113/3/11/6/0
-Del /Table/113/1/6/0
 
 # Deleted row matches both partial indexes.
 query T kvtrace
 DELETE FROM t WHERE a = 12
 ----
 Scan /Table/113/1/12/0 lock Exclusive (Block, Unreplicated)
+Del /Table/113/1/12/0
 Del /Table/113/2/11/12/0
 Del /Table/113/3/11/12/0
 Del /Table/113/4/"foo"/12/0
-Del /Table/113/1/12/0
 
 # Deleted row does not match partial index with predicate column that is not
 # indexed.
@@ -311,8 +311,8 @@ query T kvtrace
 DELETE FROM u WHERE k = 2
 ----
 Scan /Table/114/1/2/0 lock Exclusive (Block, Unreplicated)
-Del /Table/114/2/3/2/0
 Del /Table/114/1/2/0
+Del /Table/114/2/3/2/0
 
 # ---------------------------------------------------------
 # UPDATE
@@ -446,9 +446,9 @@ query T kvtrace
 UPDATE t SET a = 21 WHERE a = 20
 ----
 Scan /Table/113/1/20/0 lock Exclusive (Block, Unreplicated)
+Del /Table/113/1/20/0
 Del /Table/113/2/11/20/0
 Del /Table/113/3/11/20/0
-Del /Table/113/1/20/0
 CPut /Table/113/1/21/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/bar
 Put /Table/113/2/11/21/0 -> /BYTES/
 Put /Table/113/3/11/21/0 -> /BYTES/
@@ -460,9 +460,9 @@ query T kvtrace
 UPDATE t SET a = 22, b = 9, c = 'foo' WHERE a = 21
 ----
 Scan /Table/113/1/21/0 lock Exclusive (Block, Unreplicated)
+Del /Table/113/1/21/0
 Del /Table/113/2/11/21/0
 Del /Table/113/3/11/21/0
-Del /Table/113/1/21/0
 CPut /Table/113/1/22/0 -> /TUPLE/2:2:Int/9/1:3:Bytes/foo
 Put /Table/113/2/9/22/0 -> /BYTES/
 Put /Table/113/4/"foo"/22/0 -> /BYTES/
@@ -696,8 +696,8 @@ query T kvtrace
 INSERT INTO t VALUES (5, 3, 'baz') ON CONFLICT (a) DO UPDATE SET a = 6
 ----
 Scan /Table/113/1/5/0 lock Exclusive (Block, Unreplicated)
-Del /Table/113/2/4/5/0
 Del /Table/113/1/5/0
+Del /Table/113/2/4/5/0
 CPut /Table/113/1/6/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/bar
 Put /Table/113/2/4/6/0 -> /BYTES/
 
@@ -707,8 +707,8 @@ query T kvtrace
 INSERT INTO t VALUES (6, 3, 'bar') ON CONFLICT (a) DO UPDATE SET a = 7, c = 'foo'
 ----
 Scan /Table/113/1/6/0 lock Exclusive (Block, Unreplicated)
-Del /Table/113/2/4/6/0
 Del /Table/113/1/6/0
+Del /Table/113/2/4/6/0
 CPut /Table/113/1/7/0 -> /TUPLE/2:2:Int/4/1:3:Bytes/foo
 Put /Table/113/2/4/7/0 -> /BYTES/
 Put /Table/113/4/"foo"/7/0 -> /BYTES/
@@ -720,9 +720,9 @@ query T kvtrace
 INSERT INTO t VALUES (7, 3, 'bar') ON CONFLICT (a) DO UPDATE SET a = 8, b = 11
 ----
 Scan /Table/113/1/7/0 lock Exclusive (Block, Unreplicated)
+Del /Table/113/1/7/0
 Del /Table/113/2/4/7/0
 Del /Table/113/4/"foo"/7/0
-Del /Table/113/1/7/0
 CPut /Table/113/1/8/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/foo
 Put /Table/113/2/11/8/0 -> /BYTES/
 Put /Table/113/3/11/8/0 -> /BYTES/
@@ -733,9 +733,9 @@ query T kvtrace
 INSERT INTO t VALUES (8, 4, 'bar') ON CONFLICT (a) DO UPDATE SET a = 9, c = 'foobar'
 ----
 Scan /Table/113/1/8/0 lock Exclusive (Block, Unreplicated)
+Del /Table/113/1/8/0
 Del /Table/113/2/11/8/0
 Del /Table/113/3/11/8/0
-Del /Table/113/1/8/0
 CPut /Table/113/1/9/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/foobar
 Put /Table/113/2/11/9/0 -> /BYTES/
 Put /Table/113/3/11/9/0 -> /BYTES/
@@ -900,9 +900,9 @@ query T kvtrace
 DELETE FROM inv WHERE a = 1
 ----
 Scan /Table/107/1/1/0 lock Exclusive (Block, Unreplicated)
+Del /Table/107/1/1/0
 Del /Table/107/2/"num"/1/1/0
 Del /Table/107/2/"x"/"y"/1/0
-Del /Table/107/1/1/0
 
 query T kvtrace
 DELETE FROM inv WHERE a = 2
@@ -971,9 +971,9 @@ query T kvtrace
 UPDATE inv SET a = 4 WHERE a = 2
 ----
 Scan /Table/107/1/2/0 lock Exclusive (Block, Unreplicated)
+Del /Table/107/1/2/0
 Del /Table/107/2/"num"/4/2/0
 Del /Table/107/2/"x"/"y"/2/0
-Del /Table/107/1/2/0
 CPut /Table/107/1/4/0 -> /TUPLE/2:2:SentinelType/{"num": 4, "x": "y"}/1:3:Bytes/bar
 Put /Table/107/2/"num"/4/4/0 -> /BYTES/
 Put /Table/107/2/"x"/"y"/4/0 -> /BYTES/
@@ -1083,8 +1083,8 @@ DELETE FROM t57085_p WHERE p = 1;
 ----
 Del (locking) /Table/115/1/1/0
 Scan /Table/116/{1-2}
-Del /Table/116/2/1/10/0
 Del (locking) /Table/116/1/10/0
+Del /Table/116/2/1/10/0
 Del (locking) /Table/116/1/20/0
 
 # Tests for partial vector indexes.
@@ -1157,8 +1157,8 @@ DELETE FROM vec WHERE a = 10
 ----
 Scan /Table/108/1/10/0
 Scan /Table/108/2/"foo"/{1/1-2}
-Del /Table/108/2/"foo"/1/1/10/0
 Del (locking) /Table/108/1/10/0
+Del /Table/108/2/"foo"/1/1/10/0
 
 query T kvtrace
 DELETE FROM vec WHERE a = 20
@@ -1242,8 +1242,8 @@ UPDATE vec SET a = 40 WHERE a = 20
 Scan /Table/108/1/20/0
 Scan /Table/108/2/"bar"/{1/1-2}
 Scan /Table/108/2/"bar"/{1/2-2}
-Del /Table/108/2/"bar"/1/1/20/0
 Del (locking) /Table/108/1/20/0
+Del /Table/108/2/"bar"/1/1/20/0
 CPut /Table/108/1/40/0 -> /TUPLE/
 Put /Table/108/2/"bar"/1/1/40/0 -> /BYTES/:redacted:
 

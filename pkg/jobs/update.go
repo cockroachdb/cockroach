@@ -285,7 +285,7 @@ WHERE id = $1
 	if err != nil {
 		return err
 	}
-	if v.AtLeast(clusterversion.V25_1_AddJobsTables.Version()) {
+	if v.AtLeast(clusterversion.TODO_Delete_V25_1_AddJobsTables.Version()) {
 		if ju.md.State != "" && ju.md.State != state {
 			if err := j.Messages().Record(ctx, u.txn, "state", string(ju.md.State)); err != nil {
 				return err
@@ -322,7 +322,7 @@ WHERE id = $1
 			}
 		}
 	}
-	if v.AtLeast(clusterversion.V25_1_AddJobsColumns.Version()) {
+	if v.AtLeast(clusterversion.TODO_Delete_V25_1_AddJobsColumns.Version()) {
 
 		vals := []interface{}{j.ID()}
 

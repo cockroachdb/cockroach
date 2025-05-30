@@ -781,41 +781,32 @@ query T rowsort
 SELECT name FROM pg_cursors
 ----
 
-skipif config local-mixed-24.3
 # A transaction with an active holdable cursor cannot be prepared.
 statement ok
 BEGIN;
 
-skipif config local-mixed-24.3
 statement ok
 DECLARE foo CURSOR WITH HOLD FOR SELECT 1
 
-skipif config local-mixed-24.3
 statement error pgcode 0A000 pq: cannot PREPARE a transaction that has created a cursor WITH HOLD
 PREPARE TRANSACTION 'read-only'
 
-skipif config local-mixed-24.3
 query T rowsort
 SELECT name FROM pg_cursors
 ----
 
-skipif config local-mixed-24.3
 statement ok
 BEGIN;
 
-skipif config local-mixed-24.3
 statement ok
 DECLARE foo CURSOR WITH HOLD FOR SELECT 1
 
-skipif config local-mixed-24.3
 statement ok
 CLOSE foo;
 
-skipif config local-mixed-24.3
 statement ok
 PREPARE TRANSACTION 'read-only'
 
-skipif config local-mixed-24.3
 statement ok
 COMMIT PREPARED 'read-only'
 

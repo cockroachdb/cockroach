@@ -105,7 +105,7 @@ func TestBackfillJobsTablesAndColumns(t *testing.T) {
 	require.NoError(t, getJob(1003).NoTxn().UpdateStatusMessage(ctx, "up that hill"))
 
 	// Do this again on the verison that includes status and progress tables.
-	sqlDB.Exec(t, `SET CLUSTER SETTING version = $1`, clusterversion.V25_1_AddJobsTables.Version().String())
+	sqlDB.Exec(t, `SET CLUSTER SETTING version = $1`, clusterversion.TODO_Delete_V25_1_AddJobsTables.Version().String())
 	mkJob(1004, "four")
 	mkJob(1005, "five")
 
@@ -113,7 +113,7 @@ func TestBackfillJobsTablesAndColumns(t *testing.T) {
 	require.NoError(t, getJob(1005).NoTxn().UpdateStatusMessage(ctx, "up that hill"))
 
 	// And again on the version that has the new columns.
-	sqlDB.Exec(t, `SET CLUSTER SETTING version = $1`, clusterversion.V25_1_JobsWritesFence.Version().String())
+	sqlDB.Exec(t, `SET CLUSTER SETTING version = $1`, clusterversion.TODO_Delete_V25_1_JobsWritesFence.Version().String())
 
 	mkJob(1006, "six")
 	mkJob(1007, "seven")
@@ -165,7 +165,7 @@ func TestBackfillJobsTablesAndColumns(t *testing.T) {
 
 	// Now let's do the backfill (lower the page size to make it paginate).
 	upgrades.TestingSetJobsBackfillPageSize(3)
-	sqlDB.Exec(t, `SET CLUSTER SETTING version = $1`, clusterversion.V25_1_JobsBackfill.Version().String())
+	sqlDB.Exec(t, `SET CLUSTER SETTING version = $1`, clusterversion.TODO_Delete_V25_1_JobsBackfill.Version().String())
 
 	// Let's look at the jobs table after the backfill.
 	sqlDB.CheckQueryResults(t,

@@ -1009,19 +1009,15 @@ CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$ BEGIN CALL p_nested_commit(); END $$
 statement error pgcode 0A000 pq: unimplemented: transaction control statements in nested routines
 CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$ BEGIN CALL p_nested_rollback(); END $$;
 
-skipif config local-mixed-24.3
 statement error pgcode 0A000 pq: unimplemented: transaction control statements in nested routines
 CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$ BEGIN DO $inner$ BEGIN CALL p_nested_rollback(); END $inner$; END $$;
 
-skipif config local-mixed-24.3
 statement error pgcode 0A000 pq: unimplemented: transaction control statements in nested routines
 DO $$ BEGIN CALL p_nested_commit(); END $$;
 
-skipif config local-mixed-24.3
 statement error pgcode 0A000 pq: unimplemented: transaction control statements in DO blocks
 CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$ BEGIN DO $inner$ BEGIN COMMIT; END $inner$; END $$;
 
-skipif config local-mixed-24.3
 statement error pgcode 0A000 pq: unimplemented: transaction control statements in DO blocks
 DO $$ BEGIN COMMIT; END $$;
 
