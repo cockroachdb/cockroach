@@ -278,3 +278,139 @@ search max-results=1
 ----
 vec6: 500000
 6 leaf vectors, 9 vectors, 6 full vectors, 4 partitions
+
+# ----------------------------------------------------------------------
+# Search using Cosine distance metric.
+# ----------------------------------------------------------------------
+new-index distance-metric=Cosine min-partition-size=1 max-partition-size=4 beam-size=2
+vec1: (1, 2)
+vec2: (7, 4)
+vec3: (4, 3)
+vec4: (-4, 5)
+vec5: (1, 11)
+vec6: (1, -6)
+vec7: (0, 4)
+vec8: (-2, 8)
+vec9: (2, 8)
+vec10: (0, 3)
+vec11: (1, 1)
+vec12: (5, 4)
+vec13: (6, 2)
+----
+• 1 (0, 0)
+│
+├───• 10 (-0.0222, 0.9445)
+│   │
+│   ├───• 6 (0.3449, 0.9323)
+│   │   │
+│   │   ├───• vec1 (1, 2)
+│   │   └───• vec9 (2, 8)
+│   │
+│   ├───• 7 (0.0302, 0.9986)
+│   │   │
+│   │   ├───• vec5 (1, 11)
+│   │   ├───• vec7 (0, 4)
+│   │   └───• vec10 (0, 3)
+│   │
+│   └───• 4 (-0.4336, 0.8755)
+│       │
+│       ├───• vec8 (-2, 8)
+│       └───• vec4 (-4, 5)
+│
+└───• 11 (0.8337, 0.1081)
+    │
+    ├───• 9 (0.7627, 0.6439) [Splitting:12,13]
+    │   │
+    │   ├───• vec3 (4, 3)
+    │   ├───• vec11 (1, 1)
+    │   ├───• vec12 (5, 4)
+    │   └───• vec13 (6, 2)
+    │
+    └───• 8 (0.5163, -0.2451)
+        │
+        ├───• vec6 (1, -6)
+        └───• vec2 (7, 4)
+
+# Search for closest vectors with beam-size=1.
+search max-results=2 beam-size=1
+(1, 6)
+----
+vec5: 0.0028
+vec10: 0.0136
+3 leaf vectors, 8 vectors, 3 full vectors, 3 partitions
+
+# Search for closest vectors with beam-size=2.
+search max-results=2 beam-size=2
+(1, 6)
+----
+vec5: 0.0028
+vec9: 0.0032
+5 leaf vectors, 10 vectors, 5 full vectors, 4 partitions
+
+# ----------------------------------------------------------------------
+# Search using InnerProduct distance metric.
+# ----------------------------------------------------------------------
+new-index distance-metric=InnerProduct min-partition-size=1 max-partition-size=4 beam-size=2
+vec1: (1, 2)
+vec2: (7, 4)
+vec3: (4, 3)
+vec4: (-4, 5)
+vec5: (1, 11)
+vec6: (1, -6)
+vec7: (0, 4)
+vec8: (-2, 8)
+vec9: (2, 8)
+vec10: (0, 3)
+vec11: (1, 1)
+vec12: (5, 4)
+vec13: (6, 2)
+----
+• 1 (0, 0)
+│
+├───• 10 (-0.0254, 0.9547)
+│   │
+│   ├───• 6 (1.5, 5)
+│   │   │
+│   │   ├───• vec10 (0, 3)
+│   │   ├───• vec7 (0, 4)
+│   │   └───• vec1 (1, 2)
+│   │
+│   ├───• 7 (0.3333, 6)
+│   │   │
+│   │   ├───• vec9 (2, 8)
+│   │   └───• vec5 (1, 11)
+│   │
+│   └───• 4 (-3, 6.5)
+│       │
+│       ├───• vec8 (-2, 8)
+│       └───• vec4 (-4, 5)
+│
+└───• 11 (0.5977, -0.181)
+    │
+    ├───• 9 (5.3333, 3.6667) [Splitting:12,13]
+    │   │
+    │   ├───• vec3 (4, 3)
+    │   ├───• vec2 (7, 4)
+    │   ├───• vec12 (5, 4)
+    │   └───• vec13 (6, 2)
+    │
+    └───• 8 (1, -2.5)
+        │
+        ├───• vec6 (1, -6)
+        └───• vec11 (1, 1)
+
+# Search for closest vectors with beam-size=1.
+search max-results=2 beam-size=1
+(1, 6)
+----
+vec8: -46
+vec4: -26
+2 leaf vectors, 7 vectors, 2 full vectors, 3 partitions
+
+# Search for closest vectors with beam-size=2.
+search max-results=2 beam-size=2
+(1, 6)
+----
+vec5: -67
+vec9: -50
+4 leaf vectors, 9 vectors, 4 full vectors, 4 partitions

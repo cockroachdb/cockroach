@@ -173,7 +173,7 @@ func (s *searcher) Next(ctx context.Context) (ok bool, err error) {
 		// Re-rank search results with full vectors.
 		results := lastSearcher.SearchSet().PopResults()
 		s.searchSet.Stats.FullVectorCount += len(results)
-		results, err = s.idx.rerankSearchResults(ctx, s.idxCtx, results)
+		results, err = s.idx.findExactDistances(ctx, s.idxCtx, results)
 		if err != nil {
 			return false, err
 		}
@@ -330,37 +330,36 @@ func (s *levelSearcher) NextBatch(ctx context.Context) (ok bool, err error) {
 	}
 
 	if firstBatch {
-		// Compute the Z-score of the parent results if there are enough samples.
-		// Otherwise, use the default Z-score of 0.
-		var zscore float64
-		if len(s.parentResults) >= s.idx.options.QualitySamples {
-			for i := range s.idx.options.QualitySamples {
-				s.idxCtx.tempQualitySamples[i] = float64(s.parentResults[i].QueryDistance)
-			}
-			samples := s.idxCtx.tempQualitySamples[:s.idx.options.QualitySamples]
-			zscore = s.idx.stats.ReportSearch(s.parent.Level(), samples, s.idxCtx.options.UpdateStats)
-		}
-
 		// Calculate beam size for this level.
-		s.beamSize = s.idxCtx.options.BaseBeamSize
+		beamSize := float64(s.idxCtx.options.BaseBeamSize)
 		if !s.idx.options.DisableAdaptiveSearch {
+			// Compute the Z-score of the parent results if there are enough samples.
+			// Otherwise, use the default Z-score of 0.
+			var zscore float64
+			if len(s.parentResults) >= s.idx.options.QualitySamples {
+				for i := range s.idx.options.QualitySamples {
+					s.idxCtx.tempQualitySamples[i] = float64(s.parentResults[i].QueryDistance)
+				}
+				samples := s.idxCtx.tempQualitySamples[:s.idx.options.QualitySamples]
+				zscore = s.idx.stats.ReportSearch(s.parent.Level(), samples, s.idxCtx.options.UpdateStats)
+			}
+
 			// Look at variance in result distances to calculate the beam size for
 			// the next level. The less variance there is, the larger the beam size.
 			// The intuition is that the closer the distances are to one another, the
 			// more densely packed are the vectors, and the more partitions they're
 			// likely to be spread across.
-			tempBeamSize := float64(s.beamSize) * math.Pow(2, -zscore)
-			tempBeamSize = max(min(tempBeamSize, float64(s.beamSize)*2), float64(s.beamSize)/2)
-
-			if s.level > LeafLevel {
-				// Use progressively smaller beam size for higher levels, since
-				// each contains exponentially fewer partitions.
-				tempBeamSize /= math.Pow(2, float64(s.level-LeafLevel))
-			}
-
-			s.beamSize = int(math.Ceil(tempBeamSize))
+			adjustedBeamSize := beamSize * math.Pow(2, -zscore)
+			beamSize = max(min(adjustedBeamSize, beamSize*2), beamSize/2)
 		}
-		s.beamSize = max(s.beamSize, 1)
+
+		if s.level > LeafLevel {
+			// Use progressively smaller beam size for higher levels, since
+			// each contains exponentially fewer partitions.
+			beamSize /= math.Pow(2, float64(s.level-LeafLevel))
+		}
+
+		s.beamSize = max(int(math.Ceil(beamSize)), 1)
 	}
 
 	// Search up to s.beamSize child partitions.
@@ -399,7 +398,7 @@ func (s *levelSearcher) searchChildPartitions(
 
 	// Search all partitions in parallel.
 	err := s.idxCtx.txn.SearchPartitions(
-		ctx, s.idxCtx.treeKey, s.idxCtx.tempToSearch, s.idxCtx.randomized, &s.searchSet)
+		ctx, s.idxCtx.treeKey, s.idxCtx.tempToSearch, s.idxCtx.query.Randomized(), &s.searchSet)
 	if err != nil {
 		return InvalidLevel, errors.Wrapf(err, "searching level %d", s.level)
 	}

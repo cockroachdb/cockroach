@@ -83,6 +83,8 @@ func TestSearcher(t *testing.T) {
 		MaxPartitionSize: 4,
 		BaseBeamSize:     1,
 		IsDeterministic:  true,
+		// Disable adaptive search until it's extended to work with vecstore.
+		DisableAdaptiveSearch: true,
 	}
 	idx, err := cspann.NewIndex(ctx, store, quantizer, 42 /* seed */, &options, srv.Stopper())
 	require.NoError(t, err)
@@ -110,7 +112,7 @@ func TestSearcher(t *testing.T) {
 		keyBytes = keys.MakeFamilyKey(encoding.EncodeVarintAscending(keyBytes, key), 0 /* famID */)
 
 		randomized = slices.Grow(randomized, len(vec))[:len(vec)]
-		idx.RandomizeVector(vec, randomized)
+		idx.TransformVector(vec, randomized)
 		err = mutator.txn.AddToPartition(ctx, cspann.TreeKey(prefix), partitionKey, cspann.LeafLevel,
 			randomized, cspann.ChildKey{KeyBytes: keyBytes}, val)
 		require.NoError(t, err)

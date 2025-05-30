@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/container/list"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -600,12 +599,13 @@ func (s *Store) MarshalBinary() (data []byte, err error) {
 	}
 
 	storeProto := StoreProto{
-		Dims:       s.dims,
-		Seed:       s.seed,
-		Partitions: make([]PartitionProto, 0, len(s.mu.partitions)),
-		NextKey:    s.mu.nextKey,
-		Vectors:    make([]VectorProto, 0, len(s.mu.vectors)),
-		Stats:      s.mu.stats,
+		Dims:           s.dims,
+		Seed:           s.seed,
+		DistanceMetric: s.quantizer.GetDistanceMetric(),
+		Partitions:     make([]PartitionProto, 0, len(s.mu.partitions)),
+		NextKey:        s.mu.nextKey,
+		Vectors:        make([]VectorProto, 0, len(s.mu.vectors)),
+		Stats:          s.mu.stats,
 	}
 
 	// Remap partitions to protobufs.
@@ -665,8 +665,9 @@ func Load(data []byte) (*Store, error) {
 		return nil, err
 	}
 
-	raBitQuantizer := quantize.NewRaBitQuantizer(storeProto.Dims, storeProto.Seed, vecdist.L2Squared)
-	unquantizer := quantize.NewUnQuantizer(storeProto.Dims, vecdist.L2Squared)
+	raBitQuantizer := quantize.NewRaBitQuantizer(
+		storeProto.Dims, storeProto.Seed, storeProto.DistanceMetric)
+	unquantizer := quantize.NewUnQuantizer(storeProto.Dims, storeProto.DistanceMetric)
 
 	// Construct the InMemoryStore object.
 	inMemStore := &Store{
@@ -703,6 +704,7 @@ func Load(data []byte) (*Store, error) {
 		} else {
 			quantizer = unquantizer
 			quantizedSet = partitionProto.UnQuantized
+			centroid = make(vector.T, unquantizer.GetDims())
 		}
 
 		metadata := cspann.PartitionMetadata{

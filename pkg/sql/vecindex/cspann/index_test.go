@@ -44,9 +44,6 @@ func TestIndex(t *testing.T) {
 	state := testState{T: t, Ctx: ctx, Stopper: stop.NewStopper()}
 	defer state.Stopper.Stop(ctx)
 
-	// Load test dataset.
-	state.Dataset = testutils.LoadDataset(t, testutils.ImagesDataset)
-
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
 		if regexp.MustCompile("/.+/").MatchString(path) {
 			// Skip files that are in subdirs.
@@ -284,7 +281,7 @@ func (s *testState) SearchForInsert(d *datadriven.TestData) string {
 	s.Index.UnRandomizeVector(result.Vector, original)
 	utils.WriteVector(&buf, original, 4)
 
-	fmt.Fprintf(&buf, ", sqdist=%s", utils.FormatFloat(result.QueryDistance, 4))
+	fmt.Fprintf(&buf, ", dist=%s", utils.FormatFloat(result.QueryDistance, 4))
 	if result.ErrorBound != 0 {
 		fmt.Fprintf(&buf, "±%s", utils.FormatFloat(result.ErrorBound, 2))
 	}
@@ -327,7 +324,7 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 	count := 0
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
-		case "load-embeddings":
+		case "dataset-count":
 			count = s.parseInt(arg)
 
 		case "hide-tree":
@@ -338,8 +335,7 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 	vectors := vector.MakeSet(s.Quantizer.GetDims())
 	childKeys := make([]cspann.ChildKey, 0, count)
 	if count != 0 {
-		vectors = s.Dataset
-		vectors.SplitAt(count)
+		vectors = s.Dataset.Slice(0, count)
 		for i := range count {
 			key := cspann.KeyBytes(fmt.Sprintf("vec%d", i))
 			childKeys = append(childKeys, cspann.ChildKey{KeyBytes: key})
@@ -526,8 +522,8 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 		for i := range samples {
 			// Calculate truth set for the vector.
 			queryVector := s.Dataset.At(samples[i])
-			truth := testutils.CalculateTruth(
-				searchSet.MaxResults, vecdist.L2Squared, queryVector, dataVectors, dataKeys)
+			truth := testutils.CalculateTruth(searchSet.MaxResults,
+				s.Quantizer.GetDistanceMetric(), queryVector, dataVectors, dataKeys)
 
 			// Calculate prediction set for the vector.
 			err = s.Index.Search(s.Ctx, &idxCtx, s.TreeKey, queryVector, &searchSet, options)
@@ -551,10 +547,10 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 
 	var buf bytes.Buffer
 	buf.WriteString(fmt.Sprintf("%.2f%% recall@%d\n", recall, searchSet.MaxResults))
-	buf.WriteString(fmt.Sprintf("%.2f leaf vectors, ", quantizedLeafVectors))
-	buf.WriteString(fmt.Sprintf("%.2f vectors, ", quantizedVectors))
-	buf.WriteString(fmt.Sprintf("%.2f full vectors, ", fullVectors))
-	buf.WriteString(fmt.Sprintf("%.2f partitions", partitions))
+	buf.WriteString(fmt.Sprintf("%.0f leaf vectors, ", quantizedLeafVectors))
+	buf.WriteString(fmt.Sprintf("%.0f vectors, ", quantizedVectors))
+	buf.WriteString(fmt.Sprintf("%.0f full vectors, ", fullVectors))
+	buf.WriteString(fmt.Sprintf("%.0f partitions", partitions))
 	return buf.String()
 }
 
@@ -613,15 +609,29 @@ func (s *testState) ShowMetrics(d *datadriven.TestData) string {
 
 func (s *testState) makeNewIndex(d *datadriven.TestData) {
 	var err error
-	dims := 2
+	dims := 0
+	datasetName := ""
+	distanceMetric := vecdist.L2Squared
 	s.Options = cspann.IndexOptions{
 		RotAlgorithm:    cspann.RotGivens,
 		IsDeterministic: true,
 		// Disable stalled op timeout, since it can interfere with stepping tests.
 		StalledOpTimeout: func() time.Duration { return 0 },
+		// Disable adaptive search for now, until it's fully supported for stores
+		// other than the in-memory store.
+		DisableAdaptiveSearch: true,
 	}
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
+		case "dataset":
+			require.Len(s.T, arg.Vals, 1)
+			datasetName = arg.Vals[0]
+
+		case "distance-metric":
+			require.Len(s.T, arg.Vals, 1)
+			distanceMetric, err = vecdist.ParseMetric(arg.Vals[0])
+			require.NoError(s.T, err)
+
 		case "rot-algorithm":
 			require.Len(s.T, arg.Vals, 1)
 			switch strings.ToLower(arg.Vals[0]) {
@@ -655,8 +665,17 @@ func (s *testState) makeNewIndex(d *datadriven.TestData) {
 		}
 	}
 
+	require.False(s.T, dims != 0 && datasetName != "", "dims and dataset options cannot both be set")
+	if datasetName != "" {
+		s.Dataset = testutils.LoadDataset(s.T, datasetName)
+		dims = s.Dataset.Dims
+	} else if dims == 0 {
+		// Default to 2 dimensions if not specified.
+		dims = 2
+	}
+
 	const seed = 42
-	s.Quantizer = quantize.NewRaBitQuantizer(dims, seed, vecdist.L2Squared)
+	s.Quantizer = quantize.NewRaBitQuantizer(dims, seed, distanceMetric)
 	s.MemStore = memstore.New(s.Quantizer, seed)
 	s.Index, err = cspann.NewIndex(s.Ctx, s.MemStore, s.Quantizer, seed, &s.Options, s.Stopper)
 	require.NoError(s.T, err)
@@ -747,7 +766,7 @@ func (s *testState) loadIndexFromFormat(
 		line = strings.TrimSpace(line[idx:])
 		vec := s.parseVector(line)
 		s.MemStore.InsertVector(keyBytes, vec)
-		randomized := s.Index.RandomizeVector(vec, make(vector.T, len(vec)))
+		randomized := s.Index.TransformVector(vec, make(vector.T, len(vec)))
 		return lines[1:], cspann.LeafLevel, randomized, cspann.ChildKey{KeyBytes: keyBytes}
 	}
 
@@ -768,7 +787,7 @@ func (s *testState) loadIndexFromFormat(
 		line = line[:idx-1]
 	}
 	centroid = s.parseVector(line)
-	centroid = s.Index.RandomizeVector(centroid, make(vector.T, len(centroid)))
+	centroid = s.Index.TransformVector(centroid, make(vector.T, len(centroid)))
 
 	lines = lines[1:]
 
@@ -849,7 +868,7 @@ func parsePartitionStateDetails(s string) cspann.PartitionStateDetails {
 	return details
 }
 
-func TestRandomizeVector(t *testing.T) {
+func TestTransformVector(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -881,9 +900,10 @@ func TestRandomizeVector(t *testing.T) {
 	randomized := vector.MakeSet(dims)
 	randomized.AddUndefined(count)
 	for i := range original.Count {
-		index.RandomizeVector(original.At(i), randomized.At(i))
+		index.TransformVector(original.At(i), randomized.At(i))
 
-		// Ensure that calling unRandomizeVector recovers original vector.
+		// Ensure that calling UnRandomizeVector recovers the normalized vector
+		// (or original vector if not using Cosine distance).
 		randomizedInv := make([]float32, dims)
 		index.UnRandomizeVector(randomized.At(i), randomizedInv)
 		for j, val := range original.At(i) {
