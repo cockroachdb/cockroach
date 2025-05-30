@@ -5,10 +5,7 @@
 
 package kvflowcontrolpb
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/redact"
-)
+import "github.com/cockroachdb/redact"
 
 func (p RaftLogPosition) String() string {
 	return redact.StringWithoutMarkers(p)
@@ -37,16 +34,6 @@ func (p *RaftLogPosition) Less(o RaftLogPosition) bool {
 // other
 func (p *RaftLogPosition) LessEq(o RaftLogPosition) bool {
 	return p.Less(o) || p.Equal(o)
-}
-
-func (a AdmittedRaftLogEntries) String() string {
-	return redact.StringWithoutMarkers(a)
-}
-
-// SafeFormat implements the redact.SafeFormatter interface.
-func (a AdmittedRaftLogEntries) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("admitted-entries (r%s s%s pri=%s up-to-%s)",
-		a.RangeID, a.StoreID, admissionpb.WorkPriority(a.AdmissionPriority), a.UpToRaftLogPosition)
 }
 
 func (a AdmittedState) String() string {
