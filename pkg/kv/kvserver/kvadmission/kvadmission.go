@@ -17,8 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -173,11 +171,6 @@ type Controller interface {
 	// replicated to a raft follower, that have not been subject to admission
 	// control.
 	FollowerStoreWriteBytes(roachpb.StoreID, FollowerStoreWriteBytes)
-	// AdmitRaftEntry informs admission control of a raft log entry being
-	// written to storage.
-	AdmitRaftEntry(
-		_ context.Context, _ roachpb.TenantID, _ roachpb.StoreID, _ roachpb.RangeID, _ roachpb.ReplicaID,
-		leaderTerm uint64, _ raftpb.Entry)
 	replica_rac2.ACWorkQueue
 	// GetSnapshotQueue returns the SnapshotQueue which is used for ingesting raft
 	// snapshots.
@@ -570,88 +563,6 @@ func (n *controllerImpl) FollowerStoreWriteBytes(
 		followerWriteBytes.NumEntries, followerWriteBytes.StoreWorkDoneInfo)
 }
 
-// AdmitRaftEntry implements the Controller interface. It is only used for the
-// RACv1 protocol.
-func (n *controllerImpl) AdmitRaftEntry(
-	ctx context.Context,
-	tenantID roachpb.TenantID,
-	storeID roachpb.StoreID,
-	rangeID roachpb.RangeID,
-	replicaID roachpb.ReplicaID,
-	leaderTerm uint64,
-	entry raftpb.Entry,
-) {
-	typ, _, err := raftlog.EncodingOf(entry)
-	if err != nil {
-		log.Errorf(ctx, "unable to determine raft command encoding: %v", err)
-		return
-	}
-	if !typ.UsesAdmissionControl() {
-		return // nothing to do
-	}
-	meta, err := raftlog.DecodeRaftAdmissionMeta(entry.Data)
-	if err != nil {
-		log.Errorf(ctx, "unable to decode raft command admission data: %v", err)
-		return
-	}
-
-	if log.V(1) {
-		log.Infof(ctx, "decoded raft admission meta below-raft: pri=%s create-time=%d proposer=n%s receiver=[n%d,s%s] tenant=t%d tokens≈%d sideloaded=%t raft-entry=%d/%d",
-			admissionpb.WorkPriority(meta.AdmissionPriority),
-			meta.AdmissionCreateTime,
-			meta.AdmissionOriginNode,
-			n.nodeID.Get(),
-			storeID,
-			tenantID.ToUint64(),
-			kvflowcontrol.Tokens(len(entry.Data)),
-			typ.IsSideloaded(),
-			entry.Term,
-			entry.Index,
-		)
-	}
-
-	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(storeID)
-	if storeAdmissionQ == nil {
-		log.Errorf(ctx, "unable to find queue for store: %s", storeID)
-		return // nothing to do
-	}
-
-	if len(entry.Data) == 0 {
-		log.Fatal(ctx, "found (unexpected) empty raft command for below-raft admission")
-	}
-	wi := admission.WorkInfo{
-		TenantID:        tenantID,
-		Priority:        admissionpb.WorkPriority(meta.AdmissionPriority),
-		CreateTime:      meta.AdmissionCreateTime,
-		BypassAdmission: false,
-		RequestedCount:  int64(len(entry.Data)),
-	}
-	wi.ReplicatedWorkInfo = admission.ReplicatedWorkInfo{
-		Enabled:    true,
-		RangeID:    rangeID,
-		ReplicaID:  replicaID,
-		LeaderTerm: leaderTerm,
-		LogPosition: admission.LogPosition{
-			Term:  entry.Term,
-			Index: entry.Index,
-		},
-		Origin:       meta.AdmissionOriginNode,
-		IsV2Protocol: false,
-		Ingested:     typ.IsSideloaded(),
-	}
-
-	handle, err := storeAdmissionQ.Admit(ctx, admission.StoreWriteWorkInfo{
-		WorkInfo: wi,
-	})
-	if err != nil {
-		log.Errorf(ctx, "error while admitting to store admission queue: %v", err)
-		return
-	}
-	if handle.UseAdmittedWorkDone() {
-		log.Fatalf(ctx, "unexpected handle.UseAdmittedWorkDone")
-	}
-}
-
 var _ replica_rac2.ACWorkQueue = &controllerImpl{}
 
 // Admit implements replica_rac2.ACWorkQueue. It is only used for the RACv2 protocol.
@@ -681,10 +592,8 @@ func (n *controllerImpl) Admit(ctx context.Context, entry replica_rac2.EntryForA
 			Term:  0, // Ignored by callback in RACv2.
 			Index: entry.CallbackState.Mark.Index,
 		},
-		Origin:       0,
-		RaftPri:      entry.CallbackState.Priority,
-		IsV2Protocol: true,
-		Ingested:     entry.Ingested,
+		RaftPri:  entry.CallbackState.Priority,
+		Ingested: entry.Ingested,
 	}
 
 	handle, err := storeAdmissionQ.Admit(ctx, admission.StoreWriteWorkInfo{

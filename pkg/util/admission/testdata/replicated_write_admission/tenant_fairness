@@ -8,17 +8,17 @@ init
 # For two tenants t1 and t2, try to admit two requests of 1B each at
 # incrementing log positions. We specify create-times in log-position order for
 # work within a given range, similar to what we do at the StoreWorkQueue level.
-admit tenant=t1 pri=normal-pri create-time=1.001us size=1B range=r1 origin=n1 log-position=4/20
+admit tenant=t1 pri=normal-pri create-time=1.001us size=1B range=r1 log-position=4/20
 ----
 [regular] try-get=1B available=0B => insufficient tokens
 
-admit tenant=t1 pri=normal-pri create-time=1.002us size=1B range=r1 origin=n1 log-position=4/21
+admit tenant=t1 pri=normal-pri create-time=1.002us size=1B range=r1 log-position=4/21
 ----
 
-admit tenant=t2 pri=normal-pri create-time=1.001us size=1B range=r2 origin=n1 log-position=5/20
+admit tenant=t2 pri=normal-pri create-time=1.001us size=1B range=r2 log-position=5/20
 ----
 
-admit tenant=t2 pri=normal-pri create-time=1.002us size=1B range=r2 origin=n1 log-position=5/21
+admit tenant=t2 pri=normal-pri create-time=1.002us size=1B range=r2 log-position=5/21
 ----
 
 # Observe all waiting requests.
@@ -27,11 +27,11 @@ print
 physical-stats: work-count=4 written-bytes=4B ingested-bytes=0B
 [regular work queue]: len(tenant-heap)=2 top-tenant=t1
  tenant=t1 weight=1 fifo-threshold=low-pri used=0B
-  [0: pri=normal-pri create-time=1.001µs size=1B range=r1 origin=n1 log-position=4/20]
-  [1: pri=normal-pri create-time=1.002µs size=1B range=r1 origin=n1 log-position=4/21]
+  [0: pri=normal-pri create-time=1.001µs size=1B range=r1 log-position=4/20]
+  [1: pri=normal-pri create-time=1.002µs size=1B range=r1 log-position=4/21]
  tenant=t2 weight=1 fifo-threshold=low-pri used=0B
-  [0: pri=normal-pri create-time=1.001µs size=1B range=r2 origin=n1 log-position=5/20]
-  [1: pri=normal-pri create-time=1.002µs size=1B range=r2 origin=n1 log-position=5/21]
+  [0: pri=normal-pri create-time=1.001µs size=1B range=r2 log-position=5/20]
+  [1: pri=normal-pri create-time=1.002µs size=1B range=r2 log-position=5/21]
 [elastic work queue]: len(tenant-heap)=0
 
 # Produce 2B worth of regular tokens.
@@ -45,8 +45,8 @@ granter class=regular adjust-tokens=+2B
 # tenant.
 grant class=regular
 ----
-admitted [tenant=t1 pri=normal-pri create-time=1.001µs size=1B range=r1 origin=n1 log-position=4/20]
-admitted [tenant=t2 pri=normal-pri create-time=1.001µs size=1B range=r2 origin=n1 log-position=5/20]
+admitted [tenant=t1 pri=normal-pri create-time=1.001µs size=1B range=r1 log-position=4/20]
+admitted [tenant=t2 pri=normal-pri create-time=1.001µs size=1B range=r2 log-position=5/20]
 
 # Pretty print granter state to show no more available tokens. We've consumed
 # the 2B above.
@@ -61,9 +61,9 @@ print
 physical-stats: work-count=4 written-bytes=4B ingested-bytes=0B
 [regular work queue]: len(tenant-heap)=2 top-tenant=t1
  tenant=t1 weight=1 fifo-threshold=low-pri used=1B
-  [0: pri=normal-pri create-time=1.002µs size=1B range=r1 origin=n1 log-position=4/21]
+  [0: pri=normal-pri create-time=1.002µs size=1B range=r1 log-position=4/21]
  tenant=t2 weight=1 fifo-threshold=low-pri used=1B
-  [0: pri=normal-pri create-time=1.002µs size=1B range=r2 origin=n1 log-position=5/21]
+  [0: pri=normal-pri create-time=1.002µs size=1B range=r2 log-position=5/21]
 [elastic work queue]: len(tenant-heap)=0
 
 # vim:ft=sh

@@ -8,13 +8,13 @@ init
 
 # Admit two requests, one at low-pri but lower log position and lower
 # create-time. It gets classified as an elastic request.
-admit tenant=t1 pri=low-pri create-time=1us size=1B range=r1 origin=n1 log-position=4/20
+admit tenant=t1 pri=low-pri create-time=1us size=1B range=r1 log-position=4/20
 ----
 [elastic] try-get=1B available=0B => insufficient tokens
 
 # And one at high-pri but higher log position and higher create-time. It gets
 # classified as a regular request.
-admit tenant=t1 pri=high-pri create-time=2us size=1B range=r1 origin=n1 log-position=4/21
+admit tenant=t1 pri=high-pri create-time=2us size=1B range=r1 log-position=4/21
 ----
 [regular] try-get=1B available=0B => insufficient tokens
 
@@ -25,10 +25,10 @@ print
 physical-stats: work-count=2 written-bytes=2B ingested-bytes=0B
 [regular work queue]: len(tenant-heap)=1 top-tenant=t1
  tenant=t1 weight=1 fifo-threshold=low-pri used=0B
-  [0: pri=high-pri create-time=2µs size=1B range=r1 origin=n1 log-position=4/21]
+  [0: pri=high-pri create-time=2µs size=1B range=r1 log-position=4/21]
 [elastic work queue]: len(tenant-heap)=1 top-tenant=t1
  tenant=t1 weight=1 fifo-threshold=low-pri used=0B
-  [0: pri=low-pri create-time=1µs size=1B range=r1 origin=n1 log-position=4/20]
+  [0: pri=low-pri create-time=1µs size=1B range=r1 log-position=4/20]
 
 # Produce 1B worth of regular tokens and verify that it only admits work
 # waiting in the regular work queue.
@@ -39,7 +39,7 @@ granter class=regular adjust-tokens=+1B
 
 grant
 ----
-admitted [tenant=t1 pri=high-pri create-time=2µs size=1B range=r1 origin=n1 log-position=4/21]
+admitted [tenant=t1 pri=high-pri create-time=2µs size=1B range=r1 log-position=4/21]
 
 print
 ----
@@ -48,7 +48,7 @@ physical-stats: work-count=2 written-bytes=2B ingested-bytes=0B
  tenant=t1 weight=1 fifo-threshold=low-pri used=1B
 [elastic work queue]: len(tenant-heap)=1 top-tenant=t1
  tenant=t1 weight=1 fifo-threshold=low-pri used=0B
-  [0: pri=low-pri create-time=1µs size=1B range=r1 origin=n1 log-position=4/20]
+  [0: pri=low-pri create-time=1µs size=1B range=r1 log-position=4/20]
 
 # Do the same for elastic tokens.
 granter class=elastic adjust-tokens=+1B
@@ -58,6 +58,6 @@ granter class=elastic adjust-tokens=+1B
 
 grant
 ----
-admitted [tenant=t1 pri=low-pri create-time=1µs size=1B range=r1 origin=n1 log-position=4/20]
+admitted [tenant=t1 pri=low-pri create-time=1µs size=1B range=r1 log-position=4/20]
 
 # vim:ft=sh
