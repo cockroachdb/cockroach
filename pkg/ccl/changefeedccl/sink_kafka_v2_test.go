@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/mocks"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -99,7 +100,7 @@ func TestKafkaSinkClientV2_Basic(t *testing.T) {
 	buf := fx.sink.MakeBatchBuffer("t")
 	keys := []string{"k1", "k2", "k3"}
 	for i, key := range keys {
-		buf.Append([]byte(key), []byte(strconv.Itoa(i)), attributes{})
+		buf.Append(context.Background(), []byte(key), []byte(strconv.Itoa(i)), attributes{})
 	}
 	payload, err := buf.Close()
 	require.NoError(t, err)
@@ -123,7 +124,13 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 
 		buf := fx.sink.MakeBatchBuffer("t")
 		for i := range 100 {
-			buf.Append([]byte("k1"), []byte(strconv.Itoa(i)), attributes{})
+			buf.Append(context.Background(),
+				[]byte("k1"),
+				[]byte(strconv.Itoa(i)),
+				attributes{
+					mvcc: hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
+				},
+			)
 		}
 		payload, err := buf.Close()
 		require.NoError(t, err)
@@ -556,7 +563,7 @@ func TestKafkaSinkClientV2_ErrorsEventually(t *testing.T) {
 	defer fx.close()
 
 	buf := fx.sink.MakeBatchBuffer("t")
-	buf.Append([]byte("k1"), []byte("v1"), attributes{})
+	buf.Append(context.Background(), []byte("k1"), []byte("v1"), attributes{})
 	payload, err := buf.Close()
 	require.NoError(t, err)
 
