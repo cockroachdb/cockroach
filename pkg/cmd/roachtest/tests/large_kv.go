@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2025 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -7,8 +7,9 @@ package tests
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
+	"math/rand"
+	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -25,7 +26,7 @@ func registerLargeKV(r registry.Registry) {
 		Name:             "storage/large_kv",
 		Owner:            registry.OwnerStorage,
 		Cluster:          r.MakeClusterSpec(1),
-		CompatibleClouds: registry.OnlyLocal,
+		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.Roachtest),
 		Timeout:          60 * time.Minute,
 		Run:              runLargeKeyAndValueKV,
@@ -34,15 +35,15 @@ func registerLargeKV(r registry.Registry) {
 
 func runLargeKeyAndValueKV(ctx context.Context, t test.Test, c cluster.Cluster) {
 	const (
-		dbNode    = 1
-		tableName = "largekv"
-		keySize   = 1 << 20 // 1MB
-		valueSize = 1 << 20 // 1MB
-		targetGB  = 2.5     // Target total data in GB
+		dbNode     = 1
+		tableName  = "largekv"
+		keySize    = 1 << 20       // 1MB
+		valueSize  = 1 << 20       // 1MB
+		targetSize = 2<<30 + 1<<29 // Target total data in bytes (2.5GB)
 	)
 
-	numPairs := int((targetGB * (1 << 30)) / float64(keySize+valueSize))
-	t.L().Printf("Inserting %d key-value pairs of %d bytes each to exceed %.1fGB", numPairs, keySize+valueSize, targetGB)
+	numPairs := targetSize / (keySize + valueSize)
+	t.L().Printf("Inserting %d key-value pairs of %d bytes each to exceed %.1fGB", numPairs, keySize+valueSize, targetSize/float64(1<<30))
 
 	t.Status("starting cockroach cluster")
 	settings := install.MakeClusterSettings()
@@ -62,27 +63,30 @@ func runLargeKeyAndValueKV(ctx context.Context, t test.Test, c cluster.Cluster) 
 	}
 
 	// Prevent splits so all data stays in one range (and thus one Pebble block).
-	zoneBytes := int64(targetGB * 1.1 * float64(1<<30))
+	zoneBytes := int64(targetSize * 1.1)
 	rangeMinBytes := zoneBytes / 2
 	rangeMaxBytes := zoneBytes
 	if _, err := conn.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE %s CONFIGURE ZONE USING num_replicas = 1, range_min_bytes = %d, range_max_bytes = %d`, tableName, rangeMinBytes, rangeMaxBytes)); err != nil {
 		t.Fatal(errors.Wrap(err, "failed to configure zone to prevent splits"))
 	}
 
+	seed := timeutil.Now().UnixNano()
+	t.L().Printf("PRNG seed: %d", seed)
+	rng := rand.New(rand.NewSource(seed))
+
 	// Sample the first, middle, and last keys for verification.
-	sample := []int{0, numPairs / 2, numPairs - 1}
-	sampleKeys := make(map[int][]byte)
+	sampleKeys := map[int][]byte{
+		0:            nil,
+		numPairs / 2: nil,
+		numPairs - 1: nil,
+	}
 	for i := 0; i < numPairs; i++ {
 		key := make([]byte, keySize)
 		value := make([]byte, valueSize)
 		// Use a fixed prefix to keep all keys in the same range.
 		copy(key, []byte(fmt.Sprintf("prefix-%08d-", i)))
-		if _, err := rand.Read(key[len("prefix-00000000-"):]); err != nil {
-			t.Fatal(errors.Wrap(err, "failed to generate random key"))
-		}
-		if _, err := rand.Read(value); err != nil {
-			t.Fatal(errors.Wrap(err, "failed to generate random value"))
-		}
+		rng.Read(key[len("prefix-00000000-"):])
+		rng.Read(value)
 		label := fmt.Sprintf("kv_%d", i)
 		t.Status(fmt.Sprintf("inserting %s", label))
 		start := timeutil.Now()
@@ -91,17 +95,15 @@ func runLargeKeyAndValueKV(ctx context.Context, t test.Test, c cluster.Cluster) 
 		}
 		t.L().Printf("[%s] inserted in %s", label, timeutil.Since(start))
 		// Store sample keys for verification
-		for _, s := range sample {
+		for s := range sampleKeys {
 			if i == s {
-				copied := make([]byte, len(key))
-				copy(copied, key)
-				sampleKeys[s] = copied
+				sampleKeys[s] = slices.Clone(key)
 			}
 		}
 	}
 
 	t.Status("verifying a sample of inserted keys")
-	for _, i := range sample {
+	for i := range sampleKeys {
 		key := sampleKeys[i]
 		label := fmt.Sprintf("sample_kv_%d", i)
 		// Read
@@ -115,9 +117,7 @@ func runLargeKeyAndValueKV(ctx context.Context, t test.Test, c cluster.Cluster) 
 		// Update
 		t.Status(fmt.Sprintf("[%s] updating", label))
 		newValue := make([]byte, valueSize)
-		if _, err := rand.Read(newValue); err != nil {
-			t.Fatal(errors.Wrapf(err, "[%s] failed to generate random update value", label))
-		}
+		rng.Read(newValue)
 		start = timeutil.Now()
 		if _, err := conn.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET v = $1 WHERE k = $2`, tableName), newValue, key); err != nil {
 			t.Fatal(errors.Wrapf(err, "[%s] update failed", label))
@@ -130,6 +130,36 @@ func runLargeKeyAndValueKV(ctx context.Context, t test.Test, c cluster.Cluster) 
 			t.Fatal(errors.Wrapf(err, "[%s] delete failed", label))
 		}
 		t.L().Printf("[%s] deleted in %s", label, timeutil.Since(start))
+	}
+
+	// Perform a scan query to verify range scan works.
+	t.Status("verifying scan query over key range")
+	firstKey := sampleKeys[0]
+	lastKey := sampleKeys[numPairs-1]
+	var scanCount int
+	rows, err := conn.QueryContext(ctx, fmt.Sprintf(
+		`SELECT length(v) FROM %s WHERE k >= $1 AND k <= $2`, tableName),
+		firstKey, lastKey)
+	if err != nil {
+		t.Fatal(errors.Wrap(err, "scan query failed"))
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var l int
+		if err := rows.Scan(&l); err != nil {
+			t.Fatal(errors.Wrap(err, "scan row failed"))
+		}
+		if l != valueSize {
+			t.Fatalf("unexpected value length: got %d, want %d", l, valueSize)
+		}
+		scanCount++
+	}
+	t.L().Printf("scan query returned %d rows", scanCount)
+
+	// one row for each key in the range, minus the sample keys as they are deleted above.
+	expectedRows := numPairs - len(sampleKeys)
+	if scanCount != expectedRows {
+		t.Fatalf("scan query returned %d rows, expected %d", scanCount, expectedRows)
 	}
 
 	t.Status("large multi-KV block test completed successfully")
