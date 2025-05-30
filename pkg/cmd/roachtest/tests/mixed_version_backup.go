@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -23,6 +24,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -37,6 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -2310,6 +2316,54 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 	return d.saveContents(ctx, l, rng, &collection, fingerprintAOST)
 }
 
+// deleteRandomSSTs deletes an SST from the full backup in a collection. This is
+// used to test online restore recovery. We delete from the full backup
+// specifically to avoid deleting an SST from an incremental that is skipped due
+// to a compacted backup. This ensures that deleting an SST will cause the
+// download job to fail (assuming it hasn't already been downloaded).
+func (d *BackupRestoreTestDriver) deleteRandomSST(
+	ctx context.Context, l *logger.Logger, db *gosql.DB, collection *backupCollection,
+) error {
+	var sstPath string
+	if err := db.QueryRowContext(
+		ctx,
+		`SELECT path FROM
+		[SHOW BACKUP FILES FROM LATEST IN $1]
+		WHERE backup_type = 'full'
+		ORDER BY random() LIMIT 1 `,
+		collection.uri(),
+	).Scan(&sstPath); err != nil {
+		return errors.Wrapf(err, "failed to get random SST path from %s", collection.uri())
+	}
+	uri, err := url.Parse(collection.uri())
+	if err != nil {
+		return errors.Wrapf(err, "failed to parse backup collection URI %q", collection.uri())
+	}
+	l.Printf("deleting sst %s at %s", sstPath, uri)
+	storage, err := cloud.ExternalStorageFromURI(
+		ctx,
+		collection.uri(),
+		base.ExternalIODirConfig{},
+		clustersettings.MakeTestingClusterSettings(),
+		blobs.TestBlobServiceClient(uri.Path),
+		username.RootUserName(),
+		nil, /* db */
+		nil, /* limiters */
+		cloud.NilMetrics,
+	)
+	if err != nil {
+		return errors.Wrapf(err, "failed to create external storage for %q", collection.uri())
+	}
+	defer storage.Close()
+	return errors.Wrapf(
+		storage.Delete(ctx, sstPath),
+		"failed to delete sst %s from backup %s at %s",
+		sstPath,
+		collection.name,
+		uri,
+	)
+}
+
 // sentinelFilePath returns the path to the file that prevents job
 // adoption on the given node.
 func (u *CommonTestUtils) sentinelFilePath(
@@ -2559,16 +2613,26 @@ func (d BackupRestoreTestDriver) getOnlineRestoredContents(
 	if err := d.testUtils.waitForJobSuccess(ctx, l, rng, downloadJobID, internalSystemJobs); err != nil {
 		return nil, err
 	}
-	conn := d.testUtils.cluster.Conn(ctx, l, d.roachNodes[0])
-	defer conn.Close()
-	var externalBytes uint64
-	if err := conn.QueryRowContext(ctx, jobutils.GetExternalBytesForConnectedTenant).Scan(&externalBytes); err != nil {
-		return nil, fmt.Errorf("could not get external bytes: %w", err)
-	}
-	if externalBytes != 0 {
-		return nil, fmt.Errorf("download job %d did not download all data. Cluster has %d external bytes", downloadJobID, externalBytes)
+	db := d.testUtils.cluster.Conn(ctx, l, d.roachNodes[0])
+	defer db.Close()
+	if err := checkNoExternalBytesRemaining(ctx, db); err != nil {
+		return nil, fmt.Errorf("download job %d did not download all data", downloadJobID)
 	}
 	return restoredContents, nil
+}
+
+// checkNoExternalBytesRemaining checks that there are no external bytes
+// remaining of the tenant that runs the query. If there are, it returns an
+// error.
+func checkNoExternalBytesRemaining(ctx context.Context, db *gosql.DB) error {
+	var externalBytes uint64
+	if err := db.QueryRowContext(ctx, jobutils.GetExternalBytesForConnectedTenant).Scan(&externalBytes); err != nil {
+		return errors.Wrapf(err, "could not get external bytes")
+	}
+	if externalBytes != 0 {
+		return fmt.Errorf("cluster has %d external bytes remaining", externalBytes)
+	}
+	return nil
 }
 
 func (d BackupRestoreTestDriver) getORDownloadJobID(
