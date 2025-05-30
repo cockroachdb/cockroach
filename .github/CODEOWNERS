@@ -196,6 +196,7 @@
 /pkg/server/api_v2_auth*.go              @cockroachdb/obs-prs @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/server/application_api/             @cockroachdb/obs-prs
 /pkg/server/authentication*.go           @cockroachdb/security-engineering @cockroachdb/product-security
+/pkg/server/authserver/                  @cockroachdb/product-security
 /pkg/server/clock_monotonicity.go        @cockroachdb/kv-prs
 /pkg/server/combined_statement_stats*.go @cockroachdb/obs-prs
 /pkg/server/critical_nodes*.go           @cockroachdb/obs-prs
