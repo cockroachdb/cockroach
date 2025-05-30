@@ -5321,13 +5321,13 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 	}
 
 	// First, ensure the trigger_log table exists
-	//	_, err = tx.Exec(ctx, `
-	//CREATE TABLE IF NOT EXISTS trigger_log (
-	//    changed_at TIMESTAMP DEFAULT current_timestamp
-	//)`)
-	//	if err != nil {
-	//		return nil, err
-	//	}
+	_, err = tx.Exec(ctx, `
+	CREATE TABLE IF NOT EXISTS trigger_log (
+	   changed_at TIMESTAMP DEFAULT current_timestamp
+	)`)
+	if err != nil {
+		return nil, err
+	}
 
 	// Query to show the descriptor ID of the trigger_log table
 	var descriptorID int
@@ -5351,7 +5351,7 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 	triggerBody.WriteString("BEGIN ")
 
 	// Add the basic trigger log insert
-	// triggerBody.WriteString("INSERT INTO trigger_log VALUES (current_timestamp);")
+	triggerBody.WriteString("INSERT INTO trigger_log VALUES (current_timestamp);")
 
 	// Try to generate a random SELECT statement for more complex dependencies
 	selectStmt, err := og.selectStmt(ctx, tx)
