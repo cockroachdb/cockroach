@@ -3618,6 +3618,19 @@ message JoinNodeResponse {
   roachpb.Version active_version = 4;
 }
 
+// KVBatch defines Batch RPCs of Internal service (see below) for DRPC use only.
+//
+// During the gRPC to DRPC migration:
+// - gRPC clients will continue to use the full 'Internal' service client.
+// - DRPC clients targeting Batch* RPCs will use clients generated from this.
+//
+// TODO(server): Remove these methods from the 'Internal' service once the
+// migration to DRPC complete, making this service the sole definition.
+service KVBatch {
+  rpc Batch(BatchRequest) returns (BatchResponse) {}
+  rpc BatchStream(stream BatchRequest) returns (stream BatchResponse) {}
+}
+
 // Batch and RangeFeed service implemented by nodes for KV API requests.
 service Internal {
   rpc Batch (BatchRequest) returns (BatchResponse) {}
