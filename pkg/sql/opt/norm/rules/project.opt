@@ -351,3 +351,15 @@ $input
     (FoldIsNullProjectionsItems $projections $input)
     $passthrough
 )
+
+# PushProjectBarrierAbove moves a skippable Barrier from under a Project to wrap
+# the Project when all projection expressions are leak-proof. This preserves
+# the Barrier so that it can still prevent unsafe reordering at higher levels.
+[PushProjectBarrierAbove, Normalize]
+(Project
+    (Barrier $input:* $private:* & (IsBarrierSkippable $private))
+    $projections:* & (HasAllLeakProofProjections $projections)
+    $passthrough:*
+)
+=>
+(Barrier (Project $input $projections $passthrough) $private)

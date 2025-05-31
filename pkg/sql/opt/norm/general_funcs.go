@@ -1560,3 +1560,19 @@ func (c *CustomFuncs) DuplicateJoinPrivate(jp *memo.JoinPrivate) *memo.JoinPriva
 		SkipReorderJoins: jp.SkipReorderJoins,
 	}
 }
+
+// IsBarrierSkippable returns true if the barrier is marked as one that can be
+// skipped.
+func (c *CustomFuncs) IsBarrierSkippable(priv *memo.BarrierPrivate) bool {
+	return priv.SkipIfLeakProof
+}
+
+// HasAllLeakProofFilters returns true if every filter given is leak-proof.
+func (c *CustomFuncs) HasAllLeakProofFilters(filters memo.FiltersExpr) bool {
+	for i := range filters {
+		if !filters[i].ScalarProps().VolatilitySet.IsLeakproof() {
+			return false
+		}
+	}
+	return true
+}

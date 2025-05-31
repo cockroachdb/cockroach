@@ -35,7 +35,7 @@ syn keyword define contained define
 syn match func contained '(A-Za-z0-9_)*'
 
 syn keyword operator Subquery SubqueryPrivate Any Exists Variable Const Null True False Placeholder
-syn keyword operator Tuple Projections ColPrivate Aggregations AggregationsItem Filters FiltersItem
+syn keyword operator Tuple Projections ColPrivate Aggregations AggregationsItem Filters FiltersItem Barrier
 syn keyword operator Zip ZipItem ZipItemPrivate And Or Not Eq Lt Gt Le Ge Ne In NotIn
 syn keyword operator Like NotLike ILike NotILike SimilarTo NotSimilarTo RegMatch NotRegMatch
 syn keyword operator RegIMatch NotRegIMatch Is IsNot Contains JsonExists JsonAllExists

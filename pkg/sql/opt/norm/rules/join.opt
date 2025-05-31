@@ -845,3 +845,41 @@ $left
     )
     $on
 )
+
+# PushJoinLeftBarrierAbove moves a skippable Barrier from the left side of a
+# join to wrap the entire join when all ON expressions are leak-proof.
+# A leak-proof expression is one that can be safely reordered with other
+# predicates without leaking information. Rather than removing the Barrier
+# outright, this rule preserves it to prevent unsafe reordering at higher levels
+# of the plan tree.
+[PushJoinLeftBarrierAbove, Normalize]
+(InnerJoin | InnerJoinApply | SemiJoin | SemiJoinApply
+    (Barrier
+        $left:*
+        $barrierPrivate:* & (IsBarrierSkippable $barrierPrivate)
+    )
+    $right:*
+    $on:* & (HasAllLeakProofFilters $on)
+    $private:*
+)
+=>
+(Barrier ((OpName) $left $right $on $private) $barrierPrivate)
+
+# PushJoinRightBarrierAbove is the right-side variant of PushJoinLeftBarrierAbove.
+# It moves a skippable Barrier from the right side of a join to wrap the entire
+# join when all ON expressions are leak-proof. Leak-proof expressions can be
+# safely reordered with other predicates, making the Barrier unnecessary at this
+# level—but still important to preserve higher up to guard against unsafe
+# transformations.
+[PushJoinRightBarrierAbove, Normalize]
+(InnerJoin | InnerJoinApply | SemiJoin | SemiJoinApply
+    $left:*
+    (Barrier
+        $right:*
+        $barrierPrivate:* & (IsBarrierSkippable $barrierPrivate)
+    )
+    $on:* & (HasAllLeakProofFilters $on)
+    $private:*
+)
+=>
+(Barrier ((OpName) $left $right $on $private) $barrierPrivate)
