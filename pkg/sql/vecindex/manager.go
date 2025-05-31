@@ -221,7 +221,7 @@ func (m *Manager) Get(
 
 func (m *Manager) getIndexOptions(config vecpb.Config, readOnly bool) *cspann.IndexOptions {
 	return &cspann.IndexOptions{
-		RotAlgorithm:     cspann.RotAlgorithm(config.RotAlgorithm),
+		RotAlgorithm:     config.RotAlgorithm,
 		MinPartitionSize: int(config.MinPartitionSize),
 		MaxPartitionSize: int(config.MaxPartitionSize),
 		BaseBeamSize:     int(config.BuildBeamSize),

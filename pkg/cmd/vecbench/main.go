@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -470,7 +471,7 @@ func newVectorProvider(
 		MinPartitionSize:      minPartitionSize,
 		MaxPartitionSize:      maxPartitionSize,
 		BaseBeamSize:          *flagBeamSize,
-		RotAlgorithm:          cspann.RotGivens,
+		RotAlgorithm:          vecpb.RotGivens,
 		DisableAdaptiveSearch: *flagDisableAdaptiveSearch,
 	}
 

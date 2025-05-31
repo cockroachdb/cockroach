@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
@@ -213,7 +214,7 @@ func (s *testState) calculateRecall(t *testing.T, d *datadriven.TestData) string
 
 	if randomize {
 		var transform cspann.RandomOrthoTransformer
-		transform.Init(cspann.RotGivens, dataset.Dims, 42)
+		transform.Init(vecpb.RotGivens, dataset.Dims, 42)
 		for i := range queryVectors.Count {
 			transform.RandomizeVector(queryVectors.At(i), queryVectors.At(i))
 		}

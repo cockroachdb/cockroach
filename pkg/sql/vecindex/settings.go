@@ -67,7 +67,7 @@ func CheckEnabled(sv *settings.Values) error {
 func MakeVecConfig(evalCtx *eval.Context, typ *types.T) vecpb.Config {
 	// Dimensions are derived from the vector type. By default, use Givens
 	// rotations to mix input vectors.
-	config := vecpb.Config{Dims: typ.Width(), RotAlgorithm: int32(cspann.RotGivens)}
+	config := vecpb.Config{Dims: typ.Width(), RotAlgorithm: vecpb.RotGivens}
 	if DeterministicFixupsSetting.Get(&evalCtx.Settings.SV) {
 		// Set well-known seed and deterministic fixups.
 		config.Seed = 42
