@@ -39,6 +39,7 @@ export interface TimeScaleDropdownProps {
   ) => TimeScale;
   hasCustomOption?: boolean;
   className?: string;
+  recentCustomIntervals?: TimeWindow[];
 }
 
 export const getTimeLabel = (
@@ -130,6 +131,7 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
   adjustTimeScaleOnChange,
   hasCustomOption = true,
   className,
+  recentCustomIntervals,
 }): React.ReactElement => {
   const end = currentScale.fixedWindowEnd
     ? moment.utc(currentScale.fixedWindowEnd)
@@ -261,6 +263,8 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
         onPresetOptionSelect={onPresetOptionSelect}
         onCustomSelect={setDateRange}
         options={timeScaleOptions}
+        recentCustomIntervals={recentCustomIntervals}
+        timezone={timezone}
       />
       <TimeFrameControls
         disabledArrows={generateDisabledArrows(currentWindow)}

@@ -289,3 +289,15 @@
   letter-spacing: 0.1px;
   font-family: $font-family--bold;
 }
+
+.recent-intervals-separator {
+  height: 1px;
+  background-color: $colors--neutral-3;
+  margin: 8px 0;
+}
+
+.recent-intervals-title {
+  color: $colors--neutral-6;
+  padding: 0 4px 4px; // Match OptionButton's internal padding/alignment better
+  display: block;
+}
