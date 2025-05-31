@@ -207,7 +207,7 @@ export class Range extends React.Component<RangeProps, {}> {
           iconPosition="left"
           className={commonStyles("small-margin")}
         >
-          Hot Ranges
+          Top Ranges
         </Button>
         <h1 className="base-heading">
           Range Report for r{responseRangeID.toString()}
