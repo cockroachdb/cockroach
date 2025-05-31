@@ -154,7 +154,7 @@ func TestFixPrivileges(t *testing.T) {
 		}
 
 		for u, expected := range testCase.output {
-			outputUser, ok := desc.FindUser(u)
+			outputUser, ok := desc.AtomicFindUser(u)
 			if !ok {
 				t.Fatalf("#%d: expected user %s in output, but not found (%v)", num, u, desc.Users)
 			}
@@ -249,7 +249,7 @@ func TestMaybeFixSchemaPrivileges(t *testing.T) {
 		}
 
 		for u, expected := range tc.output {
-			outputUser, ok := desc.FindUser(u)
+			outputUser, ok := desc.AtomicFindUser(u)
 			if !ok {
 				t.Errorf("#%d: expected user %s in output, but not found (%v)",
 					num, u, desc.Users,

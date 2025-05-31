@@ -92,19 +92,19 @@ func MaybeFixPrivilegesWithBuilder(
 	changed := false
 
 	fixSuperUser := func(user username.SQLUsername) {
-		privs, found := readOnlyPriv.FindUser(user)
+		privs, found := readOnlyPriv.AtomicFindUser(user)
 		if !found {
 			privs = reader.GetMutablePrivilege().FindOrCreateUser(user)
 		}
 		oldPrivilegeBits := privs.Privileges
 		if privilege.ALL.IsSetIn(allowedPrivilegesBits) {
 			if oldPrivilegeBits != privilege.ALL.Mask() {
-				privs, _ = reader.GetMutablePrivilege().FindUser(user)
+				privs, _ = reader.GetMutablePrivilege().AtomicFindUser(user)
 				privs.Privileges = privilege.ALL.Mask()
 				changed = true
 			}
 		} else if oldPrivilegeBits != allowedPrivilegesBits {
-			privs, _ = reader.GetMutablePrivilege().FindUser(user)
+			privs, _ = reader.GetMutablePrivilege().AtomicFindUser(user)
 			privs.Privileges = allowedPrivilegesBits
 			changed = true
 		}
