@@ -6068,7 +6068,8 @@ SELECT
 	// different than the current statement's transaction.
 	"crdb_internal.force_retry": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "val", Typ: types.Interval}},
@@ -6079,6 +6080,22 @@ SELECT
 				if elapsed.Compare(minDuration) < 0 {
 					return nil, evalCtx.Txn.GenerateForcedRetryableErr(
 						ctx, "forced by crdb_internal.force_retry()")
+				}
+				return tree.DZero, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: volatility.Volatile,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "val", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				retries := int64(evalCtx.Planner.RetryCounter())
+				maxRetries := int64(tree.MustBeDInt(args[0]))
+				if retries < maxRetries {
+					return nil, evalCtx.Txn.GenerateForcedRetryableErr(
+						ctx, "forced by crdb_internal.force_retry()",
+					)
 				}
 				return tree.DZero, nil
 			},
