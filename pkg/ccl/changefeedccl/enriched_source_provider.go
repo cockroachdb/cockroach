@@ -31,7 +31,7 @@ import (
 )
 
 type enrichedSourceProviderOpts struct {
-	updated, mvccTimestamp bool
+	updated, mvccTimestamp, topicInValue bool
 }
 type enrichedSourceData struct {
 	jobID, sink,
@@ -170,6 +170,9 @@ func newEnrichedSourceProvider(
 		addNonFixedJSONfield(fieldNameUpdatedTSNS)
 		addNonFixedJSONfield(fieldNameUpdatedTSHLC)
 	}
+	if opts.TopicInValue {
+		addNonFixedJSONfield(fieldNameTopic)
+	}
 
 	jpo, err := json.NewPartialObject(jsonBase, nonFixedJSONFields)
 	if err != nil {
@@ -181,6 +184,7 @@ func newEnrichedSourceProvider(
 		opts: enrichedSourceProviderOpts{
 			mvccTimestamp: opts.MVCCTimestamps,
 			updated:       opts.UpdatedTimestamps,
+			topicInValue:  opts.TopicInValue,
 		},
 		jsonPartialObject: jpo,
 		jsonNonFixedData:  make(map[string]json.JSON, len(nonFixedJSONFields)),
@@ -215,6 +219,9 @@ func (p *enrichedSourceProvider) GetJSON(
 	if p.opts.updated {
 		p.jsonNonFixedData[fieldNameUpdatedTSNS] = json.FromInt64(evCtx.updated.WallTime)
 		p.jsonNonFixedData[fieldNameUpdatedTSHLC] = json.FromString(evCtx.updated.AsOfSystemTime())
+	}
+	if p.opts.topicInValue {
+		p.jsonNonFixedData[fieldNameTopic] = json.FromString(evCtx.topic)
 	}
 	return p.jsonPartialObject.NewObject(p.jsonNonFixedData)
 }
@@ -280,6 +287,7 @@ const (
 	fieldNameSchemaName         = "schema_name"
 	fieldNameTableName          = "table_name"
 	fieldNamePrimaryKeys        = "primary_keys"
+	fieldNameTopic              = "topic"
 )
 
 type fieldInfo struct {
@@ -472,6 +480,14 @@ var allFieldInfo = map[string]fieldInfo{
 			Items:    &kcjsonschema.Schema{TypeName: kcjsonschema.SchemaTypeString},
 		},
 	},
+	fieldNameTopic: {
+		// This field is not present in the avro schema, since topic_in_value is not supported for avro.
+		kafkaConnectSchema: kcjsonschema.Schema{
+			Field:    fieldNameTopic,
+			TypeName: kcjsonschema.SchemaTypeString,
+			Optional: true,
+		},
+	},
 }
 
 // filled in by init() using allFieldInfo
@@ -486,7 +502,9 @@ var kafkaConnectJSONSchema kcjsonschema.Schema
 func init() {
 	kcjFields := make([]kcjsonschema.Schema, 0, len(allFieldInfo))
 	for _, info := range allFieldInfo {
-		avroFields = append(avroFields, &info.avroSchemaField)
+		if info.avroSchemaField.Name != "" {
+			avroFields = append(avroFields, &info.avroSchemaField)
+		}
 		kcjFields = append(kcjFields, info.kafkaConnectSchema)
 		jsonFields = append(jsonFields, info.kafkaConnectSchema.Field)
 	}
