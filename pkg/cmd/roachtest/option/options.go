@@ -8,6 +8,7 @@ package option
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
@@ -283,3 +284,51 @@ const (
 	// PreStartVirtualClusterHook is similar to preStartHook but for virtual clusters.
 	PreStartVirtualClusterHook
 )
+
+type GrafanaService int
+
+const (
+	CentralizedGrafanaService GrafanaService = iota
+	InternalGrafanaService    GrafanaService = iota
+	AllGrafanaServices        GrafanaService = iota
+)
+
+type GrafanaAnnotationOptions struct {
+	Request grafana.AddAnnotationRequest
+	Service GrafanaService
+}
+
+type GrafanaAnnotationOptionFunc func(*GrafanaAnnotationOptions)
+
+func (o *GrafanaAnnotationOptions) Apply(c GrafanaAnnotationOptionFunc) { c(o) }
+
+func WithText(text string) GrafanaAnnotationOptionFunc {
+	return func(o *GrafanaAnnotationOptions) {
+		o.Request.Text = text
+	}
+}
+
+func WithTimeRange(startTime, endTime int64) GrafanaAnnotationOptionFunc {
+	return func(o *GrafanaAnnotationOptions) {
+		o.Request.StartTime = startTime
+		o.Request.EndTime = endTime
+	}
+}
+
+func AtTime(time int64) GrafanaAnnotationOptionFunc {
+	return func(o *GrafanaAnnotationOptions) {
+		o.Request.StartTime = time
+	}
+}
+
+func WithTag(tags ...string) GrafanaAnnotationOptionFunc {
+	return func(o *GrafanaAnnotationOptions) {
+		o.Request.Tags = append(o.Request.Tags, tags...)
+	}
+}
+
+func WithService(service GrafanaService) GrafanaAnnotationOptionFunc {
+	return func(o *GrafanaAnnotationOptions) {
+		o.Service = service
+	}
+}

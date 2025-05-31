@@ -59,6 +59,9 @@ type Config struct {
 	// NodeExporter identifies each node in the cluster to scrape with the node exporter process
 	NodeExporter install.Nodes
 
+	// CgroupsExporter identifies each node in the cluster to scrape with the cgroups exporter process
+	CgroupsExporter install.Nodes
+
 	// Grafana provides the info to set up grafana
 	Grafana GrafanaConfig
 }
@@ -188,6 +191,23 @@ func (cfg *Config) WithNodeExporter(nodes install.Nodes) *Config {
 	return cfg
 }
 
+func (cfg *Config) WithCgroupExporter(nodes install.Nodes) *Config {
+	cfg.CgroupsExporter = nodes
+	for _, node := range cfg.CgroupsExporter {
+		s := strconv.Itoa(int(node))
+		cfg.ScrapeConfigs = append(cfg.ScrapeConfigs, ScrapeConfig{
+			JobName:     "cgroup_exporter-" + s,
+			MetricsPath: vm.CgroupExporterMetricsPath,
+			Labels:      map[string]string{"node": s},
+			ScrapeNodes: []ScrapeNode{{
+				Node: node,
+				Port: vm.CgroupExporterPort,
+			}},
+		})
+	}
+	return cfg
+}
+
 // MakeInsecureCockroachScrapeConfig creates a scrape config for each
 // cockroach node. All nodes are assumed to be insecure and running on
 // port 26258.
@@ -284,6 +304,50 @@ fi
 			return nil, errors.Wrap(err, "grafana-start currently cannot run on darwin")
 		}
 	}
+
+	if len(cfg.CgroupsExporter) > 0 {
+		if err := install.InstallGoVersion(ctx, l, c.WithNodes(cfg.CgroupsExporter), "1.22.2"); err != nil {
+			return nil, errors.Wrap(err, "failed to install go")
+		}
+		if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(cfg.CgroupsExporter).WithShouldRetryFn(install.AlwaysTrue),
+			"download cgroup exporter",
+			fmt.Sprintf(`
+if ! test -d %[1]s; then
+	git clone %[2]s %[1]s
+fi
+cd %[1]s && git checkout 97b83d6d495b3cb6f959a4368fd93ac342d23706`,
+				"cgroup-exporter", "https://github.com/cockroachdb/cgroup-exporter.git")); err != nil {
+			return nil, err
+		}
+
+		if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(cfg.CgroupsExporter),
+			"build cgroup exporter", `
+if ! systemctl is-active --quiet cgroup_exporter; then
+	cd cgroup-exporter && go build
+fi`,
+		); err != nil {
+			return nil, err
+		}
+		if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(cfg.CgroupsExporter),
+			"allowlist the cgroup exporter address",
+			fmt.Sprintf(`
+sudo iptables -C INPUT -p tcp -s {ip:%[1]d:public} --dport %[2]d -j ACCEPT || sudo iptables -I INPUT -p tcp -s {ip:%[1]d:public} --dport %[2]d -j ACCEPT;
+`, cfg.PrometheusNode, vm.CgroupExporterPort)); err != nil {
+			return nil, err
+		}
+		if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(cfg.CgroupsExporter),
+			"start cgroup exporter",
+			fmt.Sprintf(`
+sudo systemctl stop cgroup_exporter || true
+if ! systemctl is-active --quiet cgroup_exporter; then
+	cd cgroup-exporter && sudo systemd-run --unit cgroup_exporter --same-dir ./cgroup-exporter \
+	--listen-address=":%d" --cgroup="system.slice/cockroach-system.service"
+fi`,
+				vm.CgroupExporterPort)); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := c.Run(
 		ctx,
 		l,
