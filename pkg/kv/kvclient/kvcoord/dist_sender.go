@@ -1687,12 +1687,12 @@ func maybeSwapErrorIndex(pErr *kvpb.Error, a, b int) {
 	}
 }
 
-// mergeErrors merges the two errors, combining their transaction state and
-// returning the error with the highest priority. If errors have the same
-// priority, the error with the lowest request index is preferred. This allows
-// a caller issuing multiple cputs to control which ConditionFailedError is
-// returned. Specifically, it allows returning a primary key cput failure
-// instead of a unique index conflict.
+// mergeErrors merges two errors, combining their transaction states and
+// returning the one with the higher priority. If priorities are equal, the
+// error with the lower request index is preferred. This lets callers control
+// which ConditionFailedError is returned when issuing multiple CPUTs. For
+// example, SQL can guarantee a primary key CPUT failure instead of a unique
+// index conflict by placing the primary key CPUT first in the batch.
 func mergeErrors(pErr1, pErr2 *kvpb.Error) *kvpb.Error {
 	ret, drop := pErr1, pErr2
 
