@@ -220,7 +220,6 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/stats",
-        "//pkg/sql/tests",
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/testutils",
