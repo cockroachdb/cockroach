@@ -85,7 +85,7 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Disk Read MiB/s"
+      title="Disk Read Bytes/s"
       sources={nodeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
@@ -103,7 +103,7 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Disk Write MiB/s"
+      title="Disk Write Bytes/s"
       sources={nodeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
