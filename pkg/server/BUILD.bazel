@@ -162,6 +162,7 @@ go_library(
         "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/multitenant/tenantcostmodel",
         "//pkg/raft",
+        "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
