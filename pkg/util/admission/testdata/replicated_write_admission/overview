@@ -8,7 +8,7 @@ init
 # Try to admit two requests of 1B each, at incrementing log positions. The
 # first requests tries the fast path and fails admission, and gets added to the
 # work queue's internal heap.
-admit tenant=t1 pri=normal-pri create-time=1.001us size=1B range=r1 origin=n1 log-position=4/20
+admit tenant=t1 pri=normal-pri create-time=1.001us size=1B range=r1 log-position=4/20
 ----
 [regular] try-get=1B available=0B => insufficient tokens
 
@@ -19,12 +19,12 @@ print
 physical-stats: work-count=1 written-bytes=1B ingested-bytes=0B
 [regular work queue]: len(tenant-heap)=1 top-tenant=t1
  tenant=t1 weight=1 fifo-threshold=low-pri used=0B
-  [0: pri=normal-pri create-time=1.001µs size=1B range=r1 origin=n1 log-position=4/20]
+  [0: pri=normal-pri create-time=1.001µs size=1B range=r1 log-position=4/20]
 [elastic work queue]: len(tenant-heap)=0
 
 # Admit a second request. Since there's already a request waiting, we don't get
 # the fast path.
-admit tenant=t1 pri=normal-pri create-time=1.002us size=1B range=r1 origin=n1 log-position=4/21 ingested=true
+admit tenant=t1 pri=normal-pri create-time=1.002us size=1B range=r1 log-position=4/21 ingested=true
 ----
 
 # Observe both waiting requests.
@@ -33,8 +33,8 @@ print
 physical-stats: work-count=2 written-bytes=1B ingested-bytes=1B
 [regular work queue]: len(tenant-heap)=1 top-tenant=t1
  tenant=t1 weight=1 fifo-threshold=low-pri used=0B
-  [0: pri=normal-pri create-time=1.001µs size=1B range=r1 origin=n1 log-position=4/20]
-  [1: pri=normal-pri create-time=1.002µs size=1B range=r1 origin=n1 log-position=4/21 ingested ]
+  [0: pri=normal-pri create-time=1.001µs size=1B range=r1 log-position=4/20]
+  [1: pri=normal-pri create-time=1.002µs size=1B range=r1 log-position=4/21 ingested ]
 [elastic work queue]: len(tenant-heap)=0
 
 # Produce 2B worth of regular tokens.
@@ -48,8 +48,8 @@ granter class=regular adjust-tokens=+2B
 # order.
 grant class=regular
 ----
-admitted [tenant=t1 pri=normal-pri create-time=1.001µs size=1B range=r1 origin=n1 log-position=4/20]
-admitted [tenant=t1 pri=normal-pri create-time=1.002µs size=1B range=r1 origin=n1 log-position=4/21 ingested]
+admitted [tenant=t1 pri=normal-pri create-time=1.001µs size=1B range=r1 log-position=4/20]
+admitted [tenant=t1 pri=normal-pri create-time=1.002µs size=1B range=r1 log-position=4/21 ingested]
 
 # Pretty print granter state to show no more available tokens. We've consumed
 # the 2B above.

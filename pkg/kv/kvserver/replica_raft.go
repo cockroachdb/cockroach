@@ -716,11 +716,6 @@ func (r *Replica) stepRaftGroupRaftMuLocked(req *kvserverpb.RaftMessageRequest) 
 			r.maybeForgetLeaderOnVoteRequestLocked()
 		case raftpb.MsgApp:
 			if n := len(req.Message.Entries); n > 0 {
-				if !req.UsingRac2Protocol {
-					// Arguably, we should panic here -- we choose not to only because
-					// this is a message from another server.
-					return false, errors.AssertionFailedf("must use RACv2 protocol for MsgApp with entries")
-				}
 				sideChannelInfo = replica_rac2.SideChannelInfoUsingRaftMessageRequest{
 					LeaderTerm:     req.Message.Term,
 					First:          req.Message.Entries[0].Index,
@@ -1989,7 +1984,6 @@ func (r *Replica) sendRaftMessage(
 		FromReplica:         fromReplica,
 		Message:             msg,
 		RangeStartKey:       startKey, // usually nil
-		UsingRac2Protocol:   true,
 		LowPriorityOverride: lowPriorityOverride,
 		TracedEntries:       traced,
 	}

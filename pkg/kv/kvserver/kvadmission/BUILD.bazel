@@ -11,8 +11,6 @@ go_library(
         "//pkg/kv/kvserver/kvflowcontrol",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/kv/kvserver/kvflowcontrol/replica_rac2",
-        "//pkg/kv/kvserver/raftlog",
-        "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",

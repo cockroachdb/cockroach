@@ -9,13 +9,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 )
 
 // TestingKnobs provide fine-grained control over the various kvflowcontrol
 // components for testing.
 type TestingKnobs struct {
-	V1                      TestingKnobsV1
 	UseOnlyForScratchRanges bool
 	// OverrideTokenDeduction is used to override how many tokens are deducted
 	// post-evaluation.
@@ -41,25 +39,6 @@ type TestingKnobs struct {
 	// will always be refreshed on a HandleRaftEventRaftMuLocked call. Otherwise,
 	// when set to false, the default behavior will be used.
 	OverrideAlwaysRefreshSendStreamStats bool
-}
-
-// TestingKnobsV1 are the testing knobs that appply to replication flow control
-// v1, which is mostly contained in the kvflowcontroller, kvflowdispatch,
-// kvflowhandle and kvflowtokentracker packages.
-type TestingKnobsV1 struct {
-	// UntrackTokensInterceptor is invoked whenever tokens are untracked, along
-	// with their corresponding log positions.
-	UntrackTokensInterceptor func(Tokens, kvflowcontrolpb.RaftLogPosition)
-	// MaintainStreamsForBehindFollowers is used in tests to maintain
-	// replication streams for behind followers.
-	MaintainStreamsForBehindFollowers func() bool
-	// MaintainStreamsForInactiveFollowers is used in tests to maintain
-	// replication streams for inactive followers.
-	MaintainStreamsForInactiveFollowers func() bool
-	// MaintainStreamsForBrokenRaftTransport is used in tests to maintain
-	// replication streams for followers we're no longer connected to via the
-	// RaftTransport.
-	MaintainStreamsForBrokenRaftTransport func() bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

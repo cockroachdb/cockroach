@@ -596,7 +596,6 @@ func (t *RaftTransport) processQueue(
 			batch.Requests[i] = kvserverpb.RaftMessageRequest{}
 		}
 		batch.Requests = batch.Requests[:0]
-		batch.StoreIDs = nil
 		batch.Now = hlc.ClockTimestamp{}
 		for i := range batch.AdmittedStates {
 			batch.AdmittedStates[i] = kvflowcontrolpb.PiggybackedAdmittedState{}

@@ -89,7 +89,7 @@ responses to Raft messages. Responses are received over another stream.`,
 			Unit:        metric.Unit_COUNT,
 		}),
 
-		// This counts both RACv1 dispatches and RACv2 piggybacked MsgAppResps.
+		// This counts RACv2 piggybacked MsgAppResps.
 		FlowTokenDispatchesDropped: metric.NewCounter(metric.Metadata{
 			Name:        "raft.transport.flow-token-dispatches-dropped",
 			Help:        "Number of flow token dispatches dropped by the Raft Transport",
