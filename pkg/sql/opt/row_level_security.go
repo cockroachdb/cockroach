@@ -99,8 +99,10 @@ func (r *RowLevelSecurityMeta) GetPoliciesUsed(
 // is complete for a given table. If no policies were recorded for the table,
 // it updates the 'NoPoliciesApplied' flag to indicate this.
 func (r *RowLevelSecurityMeta) RefreshNoPoliciesAppliedForTable(tableID TableID) {
-	if _, ok := r.PoliciesApplied[tableID]; !ok {
+	if a, ok := r.PoliciesApplied[tableID]; !ok {
 		r.NoPoliciesApplied = true
+	} else {
+		r.NoPoliciesApplied = a.Filter.Len() == 0 && a.Check.Len() == 0
 	}
 }
 
