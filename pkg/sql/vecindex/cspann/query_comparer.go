@@ -6,7 +6,7 @@
 package cspann
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
@@ -19,7 +19,7 @@ import (
 type queryComparer struct {
 	// distanceMetric specifies the vector similarity function: L2Squared,
 	// InnerProduct, or Cosine.
-	distanceMetric vecdist.Metric
+	distanceMetric vecpb.DistanceMetric
 	// original is the original query vector passed to the top-level Index method.
 	original vector.T
 	// randomized is the query vector after random orthogonal transformation and
@@ -29,7 +29,7 @@ type queryComparer struct {
 
 // Init sets the query vector and prepares the comparer for use.
 func (c *queryComparer) Init(
-	distanceMetric vecdist.Metric, queryVector vector.T, rot *RandomOrthoTransformer,
+	distanceMetric vecpb.DistanceMetric, queryVector vector.T, rot *RandomOrthoTransformer,
 ) {
 	c.distanceMetric = distanceMetric
 	c.original = queryVector
@@ -39,7 +39,7 @@ func (c *queryComparer) Init(
 	c.randomized = rot.RandomizeVector(queryVector, c.randomized)
 
 	// If using cosine distance, also normalize the query vector.
-	if c.distanceMetric == vecdist.Cosine {
+	if c.distanceMetric == vecpb.CosineDistance {
 		num32.Normalize(c.randomized)
 	}
 }
@@ -72,7 +72,7 @@ func (c *queryComparer) ComputeExactDistances(level Level, candidates []SearchRe
 
 		// If using Cosine distance, then ensure that data vectors are normalized.
 		// Also, normalize the original query vector.
-		if c.distanceMetric == vecdist.Cosine {
+		if c.distanceMetric == vecpb.CosineDistance {
 			normalize = true
 			queryNorm = num32.Norm(queryVector)
 		}
@@ -84,7 +84,7 @@ func (c *queryComparer) ComputeExactDistances(level Level, candidates []SearchRe
 		// vector is not normalized (queryNorm = 1). For Cosine, the randomized
 		// query vector has already been normalized.
 		switch c.distanceMetric {
-		case vecdist.Cosine, vecdist.InnerProduct:
+		case vecpb.CosineDistance, vecpb.InnerProductDistance:
 			normalize = true
 		}
 	}
@@ -93,18 +93,18 @@ func (c *queryComparer) ComputeExactDistances(level Level, candidates []SearchRe
 		candidate := &candidates[i]
 		if normalize {
 			// Compute inner product distance and perform needed normalization.
-			candidate.QueryDistance = vecdist.Measure(vecdist.InnerProduct, candidate.Vector, queryVector)
+			candidate.QueryDistance = vecpb.MeasureDistance(vecpb.InnerProductDistance, candidate.Vector, queryVector)
 			product := queryNorm * num32.Norm(candidate.Vector)
 			if product != 0 {
 				candidate.QueryDistance /= product
 			}
-			if c.distanceMetric == vecdist.Cosine {
+			if c.distanceMetric == vecpb.CosineDistance {
 				// Cosine distance for normalized vectors is 1 - (query ⋅ data).
 				// We've computed the negative inner product, so just add one.
 				candidate.QueryDistance++
 			}
 		} else {
-			candidate.QueryDistance = vecdist.Measure(c.distanceMetric, candidate.Vector, queryVector)
+			candidate.QueryDistance = vecpb.MeasureDistance(c.distanceMetric, candidate.Vector, queryVector)
 		}
 		candidate.ErrorBound = 0
 	}

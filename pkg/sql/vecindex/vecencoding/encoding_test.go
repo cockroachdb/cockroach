@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -52,8 +52,8 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set) {
 	var workspace workspace.T
 	for _, quantizer := range []quantize.Quantizer{
-		quantize.NewUnQuantizer(set.Dims, vecdist.L2Squared),
-		quantize.NewRaBitQuantizer(set.Dims, rnd.Int63(), vecdist.L2Squared),
+		quantize.NewUnQuantizer(set.Dims, vecpb.L2SquaredDistance),
+		quantize.NewRaBitQuantizer(set.Dims, rnd.Int63(), vecpb.L2SquaredDistance),
 	} {
 		name := strings.TrimPrefix(fmt.Sprintf("%T", quantizer), "*quantize.")
 		t.Run(name, func(t *testing.T) {

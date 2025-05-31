@@ -18,7 +18,7 @@ option (gogoproto.goproto_getters_all) = false;
 message StoreProto {
   int64 dims = 1 [(gogoproto.casttype) = "int"];
   int64 seed = 2;
-  int32 distanceMetric = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist.Metric"];
+  vecpb.DistanceMetric distance_metric = 3;
   repeated PartitionProto partitions = 4 [(gogoproto.nullable) = false];
   uint64 next_key = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann.PartitionKey"];
   repeated VectorProto vectors = 6 [(gogoproto.nullable) = false];

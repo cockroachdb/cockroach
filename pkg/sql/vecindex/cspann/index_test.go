@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -612,7 +611,7 @@ func (s *testState) makeNewIndex(d *datadriven.TestData) {
 	var err error
 	dims := 0
 	datasetName := ""
-	distanceMetric := vecdist.L2Squared
+	distanceMetric := vecpb.L2SquaredDistance
 	s.Options = cspann.IndexOptions{
 		RotAlgorithm:    vecpb.RotGivens,
 		IsDeterministic: true,
@@ -630,7 +629,12 @@ func (s *testState) makeNewIndex(d *datadriven.TestData) {
 
 		case "distance-metric":
 			require.Len(s.T, arg.Vals, 1)
-			distanceMetric, err = vecdist.ParseMetric(arg.Vals[0])
+			switch strings.ToLower(arg.Vals[0]) {
+			case "innerproduct":
+				distanceMetric = vecpb.InnerProductDistance
+			case "cosine":
+				distanceMetric = vecpb.CosineDistance
+			}
 			require.NoError(s.T, err)
 
 		case "rot-algorithm":
@@ -883,7 +887,7 @@ func TestTransformVector(t *testing.T) {
 	// TestRandomOrthoTransformer.
 	const dims = 97
 	const count = 5
-	quantizer := quantize.NewRaBitQuantizer(dims, 46, vecdist.L2Squared)
+	quantizer := quantize.NewRaBitQuantizer(dims, 46, vecpb.L2SquaredDistance)
 	inMemStore := memstore.New(quantizer, 42)
 	index, err := cspann.NewIndex(ctx, inMemStore, quantizer, 42, &cspann.IndexOptions{}, stopper)
 	require.NoError(t, err)
@@ -961,7 +965,7 @@ func TestIndexConcurrency(t *testing.T) {
 		// Construct store. Multiple index instances running on different goroutines
 		// will use this store.
 		const seed = 42
-		quantizer := quantize.NewRaBitQuantizer(vectors.Dims, seed, vecdist.L2Squared)
+		quantizer := quantize.NewRaBitQuantizer(vectors.Dims, seed, vecpb.L2SquaredDistance)
 		store := memstore.New(quantizer, seed)
 
 		// Create 8 instances of the index, all using the same shared Store.

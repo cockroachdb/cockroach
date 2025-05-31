@@ -8,7 +8,7 @@ package quantize
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -65,7 +65,7 @@ func TestRaBitQuantizedVectorSet(t *testing.T) {
 	quantizedSet.Centroid = []float32{1, 2, 3}
 	quantizedSet.Codes.Width = 3
 
-	quantizedSet.AddUndefined(5, vecdist.L2Squared)
+	quantizedSet.AddUndefined(5, vecpb.L2SquaredDistance)
 	copy(quantizedSet.Codes.At(4), []uint64{1, 2, 3})
 	quantizedSet.CodeCounts[4] = 15
 	quantizedSet.CentroidDistances[4] = 1.23
@@ -107,7 +107,7 @@ func TestRaBitQuantizedVectorSet(t *testing.T) {
 	// Test InnerProduct distance metric, which uses the CentroidDotProducts
 	// field (L2Squared does not use it).
 	quantizedSet.Clear(quantizedSet.Centroid)
-	quantizedSet.AddUndefined(2, vecdist.InnerProduct)
+	quantizedSet.AddUndefined(2, vecpb.InnerProductDistance)
 	copy(quantizedSet.Codes.At(1), []uint64{1, 2, 3})
 	quantizedSet.CodeCounts[1] = 15
 	quantizedSet.CentroidDistances[1] = 1.23

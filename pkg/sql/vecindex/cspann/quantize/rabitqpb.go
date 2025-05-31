@@ -9,7 +9,7 @@ import (
 	math "math"
 	"slices"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
@@ -169,7 +169,7 @@ func (vs *RaBitQuantizedVectorSet) Clear(centroid vector.T) {
 
 // AddUndefined adds the given number of quantized vectors to this set. The new
 // quantized vector information should be set to defined values before use.
-func (vs *RaBitQuantizedVectorSet) AddUndefined(count int, distanceMetric vecdist.Metric) {
+func (vs *RaBitQuantizedVectorSet) AddUndefined(count int, distanceMetric vecpb.DistanceMetric) {
 	newCount := len(vs.CodeCounts) + count
 	vs.Codes.AddUndefined(count)
 	vs.CodeCounts = slices.Grow(vs.CodeCounts, count)
@@ -178,7 +178,7 @@ func (vs *RaBitQuantizedVectorSet) AddUndefined(count int, distanceMetric vecdis
 	vs.CentroidDistances = vs.CentroidDistances[:newCount]
 	vs.QuantizedDotProducts = slices.Grow(vs.QuantizedDotProducts, count)
 	vs.QuantizedDotProducts = vs.QuantizedDotProducts[:newCount]
-	if distanceMetric != vecdist.L2Squared {
+	if distanceMetric != vecpb.L2SquaredDistance {
 		// L2Squared doesn't need this.
 		vs.CentroidDotProducts = slices.Grow(vs.CentroidDotProducts, count)
 		vs.CentroidDotProducts = vs.CentroidDotProducts[:newCount]

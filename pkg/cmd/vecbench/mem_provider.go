@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/memstore"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -40,7 +40,7 @@ type MemProvider struct {
 	stopper          *stop.Stopper
 	datasetName      string
 	dims             int
-	distanceMetric   vecdist.Metric
+	distanceMetric   vecpb.DistanceMetric
 	options          cspann.IndexOptions
 	store            *memstore.Store
 	index            *cspann.Index
@@ -53,7 +53,7 @@ func NewMemProvider(
 	stopper *stop.Stopper,
 	datasetName string,
 	dims int,
-	distanceMetric vecdist.Metric,
+	distanceMetric vecpb.DistanceMetric,
 	options cspann.IndexOptions,
 ) *MemProvider {
 	return &MemProvider{
