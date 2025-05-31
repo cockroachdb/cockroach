@@ -152,11 +152,19 @@
     $filters:* & ^(FilterHasCorrelatedSubquery $filters)
 )
 =>
-(Project
+(ProjectWithFilterEquivGroups
     (Select $input (InlineSelectProject $filters $projections))
     $projections
     $passthrough
+    $filters
 )
+
+# (TODOProject
+#     (Select $input (InlineSelectProject $filters $projections))
+#     $projections
+#     $passthrough
+#     $filters
+# )
 
 # InlineSelectVirtualColumns pushes Select filters referencing virtual columns
 # into a Project by inlining the virtual column expressions. This makes the

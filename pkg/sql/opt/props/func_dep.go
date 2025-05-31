@@ -1143,6 +1143,14 @@ func (f *FuncDepSet) AddEquivFrom(fdset *FuncDepSet) {
 	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
 }
 
+func (f *FuncDepSet) AddEquiv(equiv EquivGroups) {
+	for i := 0; i < equiv.GroupCount(); i++ {
+		// NOTE: the ColSet of an equiv group is immutable.
+		f.addEquivalency(equiv.Group(i))
+	}
+	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
+}
+
 // MakeProduct modifies the FD set to reflect the impact of a cartesian product
 // operation between this set and the given set. The result is a union of the
 // FDs from each set, as well as a union of their keys. The two FD sets are

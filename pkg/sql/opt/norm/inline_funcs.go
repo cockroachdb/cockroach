@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
@@ -223,6 +224,24 @@ func (c *CustomFuncs) InlineSelectProject(
 		)
 	}
 	return newFilters
+}
+
+func (c *CustomFuncs) ProjectWithFilterEquivGroups(
+	input memo.RelExpr,
+	projections memo.ProjectionsExpr,
+	passthrough opt.ColSet,
+	filters memo.FiltersExpr,
+) memo.RelExpr {
+	p := c.f.ConstructProject(input, projections, passthrough)
+	if p, ok := p.(*memo.ProjectExpr); ok {
+		var eq props.EquivGroups
+		for i := range filters {
+			item := &filters[i]
+			eq.AddFromFDs(&item.ScalarProps().FuncDeps)
+		}
+		p.SetEquivGroups(eq)
+	}
+	return p
 }
 
 // InlineProjectProject searches the projection expressions for any variable
