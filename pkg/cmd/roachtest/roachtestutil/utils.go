@@ -20,12 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -78,11 +78,7 @@ func (e *EveryN) ShouldLog() bool {
 // asynchronously at server startup.
 // (See "Root Cause" in https://github.com/cockroachdb/cockroach/issues/137988)
 func WaitForSQLReady(ctx context.Context, db *gosql.DB) error {
-	retryOpts := retry.Options{MaxRetries: 5}
-	return retryOpts.Do(ctx, func(ctx context.Context) error {
-		_, err := db.ExecContext(ctx, "SELECT 1")
-		return err
-	})
+	return roachprod.WaitForSQLReady(ctx, db, roachprod.WithMaxRetries(5))
 }
 
 // WaitForReady waits until the given nodes report ready via health checks.
@@ -295,5 +291,10 @@ func PrefixCmdOutputWithTimestamp(cmd string) string {
 func GetFailer(
 	fr *failures.FailureRegistry, c cluster.Cluster, failureModeName string, l *logger.Logger,
 ) (*failures.Failer, error) {
-	return fr.GetFailer(c.MakeNodes(c.CRDBNodes()), failureModeName, l, c.IsSecure())
+	connectionInfo := failures.ConnectionInfo{
+		Secure:         c.IsSecure(),
+		LocalCertsPath: c.LocalCertsDir(),
+	}
+
+	return fr.GetFailer(c.MakeNodes(c.CRDBNodes()), failureModeName, l, connectionInfo)
 }
