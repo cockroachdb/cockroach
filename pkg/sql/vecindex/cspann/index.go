@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
@@ -62,7 +63,7 @@ func IncreaseRerankResults(desiredMaxResults int) (maxResults, maxExtraResults i
 type IndexOptions struct {
 	// RotAlgorithm specifies the type of random orthogonal transformation to
 	// apply to vectors before indexing and search. See RotAlgorithm for details.
-	RotAlgorithm RotAlgorithm
+	RotAlgorithm vecpb.RotAlgorithm
 	// MinPartitionSize specifies the size below which a partition will be merged
 	// into other partitions at the same level.
 	MinPartitionSize int
