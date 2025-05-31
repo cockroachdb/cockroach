@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -505,6 +506,80 @@ func (r *Replica) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
 	r.asLogStorage().stagePendingTruncationRaftMuLocked(pt)
 }
 
+func (r *replicaLogStorage) stageApplySnapshot(truncState kvserverpb.RaftTruncatedState) {
+	r.raftMu.AssertHeld()
+
+	// A snapshot application implies a log truncation to the snapshot's index,
+	// and we apply the resulting memory state here (before the snapshot takes
+	// effect, i.e. the log entries disappear from storage). This avoids
+	// situations in which entries were already removed, but the in-mem state
+	// indicates that they ought to still exist.
+	//
+	// The truncation finalized below, after the snapshot is visible.
+
+	// Clear the raft entry cache at the end of this method (after mu has been
+	// released). Any reader that obtains their log bounds after the critical
+	// section but before the clear will see an empty log anyway, since the
+	// in-memory state is already updated to reflect the truncation, even if
+	// entries are still present in the cache.
+	//
+	// NB: a reader that obtained bounds pre-critical section might be able to
+	// load entries, though, and could repopulate the cache after it has been
+	// cleared - the cache is not "snapshotted". Ideally, mu-only readers simply
+	// cannot populate the cache.
+	defer r.cache.Drop(r.ls.RangeID)
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// Raft never accepts a snapshot that does not increase the commit index, and
+	// the commit index always refers to a log entry (unless the log is empty
+	// already). In particular, any entries in the log are guaranteed to be at
+	// indexes that this truncation will remove, and the result is an empty log
+	// (and raft entry cache). This is true even if the RawNode has entries lined
+	// up that it wants to append to the log[1] (on top of the snapshot), as these
+	// entries are not yet stable and thus not in the log/cache yet.
+	//
+	// [1]: this is not properly supported yet and will currently fatal.
+	// See: https://github.com/cockroachdb/cockroach/pull/125530
+	// We also, in the same mu critical section, update the in-memory metadata
+	// accordingly before the change is visible on the engine. This means that
+	// even if someone used the in-memory state to grab an iterator (all within
+	// the same mu section), they would either see pre-snapshot raft log, or the
+	// post-snapshot (empty) log, but never any in-between state in which the
+	// first and last index are out of sync either with each other or with what's
+	// actually on the log engine.
+	r.updateStateRaftMuLockedMuLocked(logstore.RaftState{
+		LastIndex: truncState.Index,
+		LastTerm:  truncState.Term,
+		ByteSize:  0,
+	})
+	r.shMu.trunc = truncState
+	r.shMu.lastCheckSize = 0
+	r.shMu.sizeTrusted = true
+}
+
+func (r *replicaLogStorage) finalizeApplySnapshotRaftMuLocked(ctx context.Context) {
+	r.raftMu.AssertHeld()
+	// This mirrors finalizeTruncationRaftMuLocked, but a snapshot may regress the last
+	// index (to discard a divergent log). For example:
+	//
+	// Raft log (before snapshot):
+	// - entry 100-150: term 1 [committed]
+	// - entry 151-200: term 2
+	// Committed raft log (on leader):
+	// - entry 100-150: term 1
+	// - entry 151:     term 3
+	//
+	// The replica may receive a snapshot at index 151. If we don't clear the
+	// sideloaded storage all the way up to the *old* last index, we may leak
+	// sideloaded entries. Rather than remember the old last index, we instead
+	// clear the sideloaded storage entirely. This is equivalent.
+	if err := r.ls.Sideload.Clear(ctx); err != nil {
+		log.Errorf(ctx, "while clearing sideloaded storage after snapshot: %+v", err)
+	}
+}
+
 func (r *replicaLogStorage) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
 	r.raftMu.AssertHeld()
 	// NB: The expected first index can be zero if this proposal is from before
@@ -513,7 +588,6 @@ func (r *replicaLogStorage) stagePendingTruncationRaftMuLocked(pt pendingTruncat
 	// this doesn't need any special casing.
 	pt.isDeltaTrusted = pt.isDeltaTrusted && r.shMu.trunc.Index+1 == pt.expectedFirstIndex
 
-	// TODO(pav-kv): move this logic to replicaLogStorage type.
 	func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
