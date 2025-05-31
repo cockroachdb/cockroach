@@ -1,0 +1,2 @@
+alter_external_connection_stmt ::=
+	'ALTER' 'EXTERNAL' 'CONNECTION' label_spec 'AS' string_or_placeholder
