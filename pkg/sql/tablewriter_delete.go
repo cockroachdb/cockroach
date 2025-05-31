@@ -21,12 +21,13 @@ import (
 // tableDeleter handles writing kvs and forming table rows for deletes.
 type tableDeleter struct {
 	tableWriterBase
-
-	rd row.Deleter
+	rd      row.Deleter
+	evalCtx *eval.Context
 }
 
 // init initializes the tableDeleter with a Txn.
 func (td *tableDeleter) init(_ context.Context, txn *kv.Txn, evalCtx *eval.Context) error {
+	td.evalCtx = evalCtx
 	return td.tableWriterBase.init(txn, td.tableDesc(), evalCtx)
 }
 
@@ -59,7 +60,13 @@ func (td *tableDeleter) row(
 	traceKV bool,
 ) error {
 	td.currentBatchSize++
-	return td.rd.DeleteRow(ctx, td.b, values, pm, vh, nil, mustValidateOldPKValues, traceKV)
+	var oth *row.OriginTimestampCPutHelper
+	if td.evalCtx.SessionData().OriginTimestampForLogicalDataReplication.IsSet() {
+		oth = &row.OriginTimestampCPutHelper{
+			OriginTimestamp: td.evalCtx.SessionData().OriginTimestampForLogicalDataReplication,
+		}
+	}
+	return td.rd.DeleteRow(ctx, td.b, values, pm, vh, oth, mustValidateOldPKValues, traceKV)
 }
 
 // deleteIndex runs the kv operations necessary to delete all kv entries in the

@@ -18,11 +18,13 @@ import (
 // tableUpdater handles writing kvs and forming table rows for updates.
 type tableUpdater struct {
 	tableWriterBase
-	ru row.Updater
+	ru      row.Updater
+	evalCtx *eval.Context
 }
 
 // init initializes the tableUpdater with a Txn.
 func (tu *tableUpdater) init(_ context.Context, txn *kv.Txn, evalCtx *eval.Context) error {
+	tu.evalCtx = evalCtx
 	return tu.tableWriterBase.init(txn, tu.tableDesc(), evalCtx)
 }
 
@@ -55,8 +57,14 @@ func (tu *tableUpdater) rowForUpdate(
 	traceKV bool,
 ) (tree.Datums, error) {
 	tu.currentBatchSize++
+	var oth *row.OriginTimestampCPutHelper
+	if tu.evalCtx.SessionData().OriginTimestampForLogicalDataReplication.IsSet() {
+		oth = &row.OriginTimestampCPutHelper{
+			OriginTimestamp: tu.evalCtx.SessionData().OriginTimestampForLogicalDataReplication,
+		}
+	}
 	return tu.ru.UpdateRow(
-		ctx, tu.b, oldValues, updateValues, pm, vh, nil, mustValidateOldPKValues, traceKV,
+		ctx, tu.b, oldValues, updateValues, pm, vh, oth, mustValidateOldPKValues, traceKV,
 	)
 }
 

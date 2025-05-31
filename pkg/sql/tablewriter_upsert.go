@@ -171,6 +171,13 @@ func (tu *tableUpserter) row(
 ) error {
 	tu.currentBatchSize++
 
+	var oth *row.OriginTimestampCPutHelper
+	if tu.originTimestamp.IsSet() {
+		oth = &row.OriginTimestampCPutHelper{
+			OriginTimestamp: tu.originTimestamp,
+		}
+	}
+
 	// Consult the canary column to determine whether to insert or update. For
 	// more details on how canary columns work, see the block comment on
 	// Builder.buildInsert in opt/optbuilder/insert.go.
@@ -186,11 +193,11 @@ func (tu *tableUpserter) row(
 		// - if buffered writes are disabled, then the KV layer will write an
 		// intent which acts as a lock.
 		kvOp := row.PutMustAcquireExclusiveLockOp
-		return tu.insertNonConflictingRow(ctx, datums[:insertEnd], pm, vh, kvOp, traceKV)
+		return tu.insertNonConflictingRow(ctx, datums[:insertEnd], pm, vh, oth, kvOp, traceKV)
 	}
 	if datums[tu.canaryOrdinal] == tree.DNull {
 		// No conflict, so insert a new row.
-		return tu.insertNonConflictingRow(ctx, datums[:insertEnd], pm, vh, row.CPutOp, traceKV)
+		return tu.insertNonConflictingRow(ctx, datums[:insertEnd], pm, vh, oth, row.CPutOp, traceKV)
 	}
 
 	// If no columns need to be updated, then possibly collect the unchanged row.
@@ -229,11 +236,12 @@ func (tu *tableUpserter) insertNonConflictingRow(
 	insertRow tree.Datums,
 	pm row.PartialIndexUpdateHelper,
 	vh row.VectorIndexUpdateHelper,
+	oth *row.OriginTimestampCPutHelper,
 	kvOp row.KVInsertOp,
 	traceKV bool,
 ) error {
 	// Perform the insert proper.
-	if err := tu.ri.InsertRow(ctx, &tu.putter, insertRow, pm, vh, nil /* oth */, kvOp, traceKV); err != nil {
+	if err := tu.ri.InsertRow(ctx, &tu.putter, insertRow, pm, vh, oth, kvOp, traceKV); err != nil {
 		return err
 	}
 
