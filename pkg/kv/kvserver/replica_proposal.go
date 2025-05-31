@@ -473,8 +473,25 @@ func (r *Replica) leasePostApplyLocked(
 	// Gossip the first range whenever its lease is acquired. We check to make
 	// sure the lease is active so that a trailing replica won't process an old
 	// lease request and attempt to gossip the first range.
-	if leaseChangingHands && iAmTheLeaseHolder && r.IsFirstRange() && r.ownsValidLeaseRLocked(ctx, now) {
+	isLeaseholderWithStillValidLease := iAmTheLeaseHolder && r.ownsValidLeaseRLocked(ctx, now)
+	if leaseChangingHands && isLeaseholderWithStillValidLease && r.IsFirstRange() {
 		r.gossipFirstRangeLocked(ctx)
+	}
+
+	// If this replica is configured with an execution trace handle (i.e. it's the
+	// liveness range), and we have a "good" lease, set a timer that will fire once
+	// this lease expires.
+	if r.mu.execTraceHandle != nil && newLease.Type() == roachpb.LeaseExpiration && isLeaseholderWithStillValidLease {
+		remaining := time.Duration(now.WallTime - newLease.GetExpiration().WallTime)
+		if remaining > time.Second { // weed out tests that don't use real clocks
+			if r.mu.execTraceExpLeaseWatcher == nil {
+				r.mu.execTraceExpLeaseWatcher = time.AfterFunc(remaining, r.maybeDumpExecTraceOnExpiredLease)
+			} else {
+				// Reset the timer, i.e. reschedule the callback to the new expiration.
+				r.mu.execTraceExpLeaseWatcher.Reset(remaining)
+			}
+		}
+
 	}
 
 	// Log the lease, if appropriate.
@@ -590,6 +607,28 @@ func (r *Replica) leasePostApplyLocked(
 	if r.leaseHistory != nil {
 		r.leaseHistory.add(*newLease)
 	}
+}
+
+func (r *Replica) maybeDumpExecTraceOnExpiredLease() {
+	name := func() string {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		l, _ := r.getLeaseRLocked()
+		if l.Replica.ReplicaID != r.replicaID || r.mu.execTraceHandle == nil {
+			return ""
+		}
+		// We have the lease, and since the timer fired, no extension came through.
+		name, _ := r.mu.execTraceHandle.Dump() // NB: no exclusive lock needed
+		return name
+	}()
+	if name == "" {
+		// Likely no longer have the lease.
+		return
+	}
+
+	ctx := r.AnnotateCtx(context.Background())
+	// TODO: should also dump the involved leases here.
+	log.Warningf(ctx, "lease expired; writing execution trace flight recorder to %s", name)
 }
 
 // maybeLogLease is called on the new leaseholder to log the lease

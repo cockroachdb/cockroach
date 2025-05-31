@@ -125,7 +125,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	sentry "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go"
 	"google.golang.org/grpc/codes"
 )
 
@@ -873,6 +873,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			uint64(kvserver.EagerLeaseAcquisitionConcurrency.Get(&cfg.Settings.SV)))
 	})
 
+	cfr := NewCoalescedFlightRecorder(logtags.FromContext(ctx), cfg.BaseConfig.ExecutionTraceDirName)
 	storeCfg := kvserver.StoreConfig{
 		DefaultSpanConfig:            cfg.DefaultZoneConfig.AsSpanConfig(),
 		Settings:                     st,
@@ -915,6 +916,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		KVFlowRangeControllerMetrics: rangeControllerMetrics,
 		SchedulerLatencyListener:     admissionControl.schedulerLatencyListener,
 		RangeCount:                   &atomic.Int64{},
+		CoalescedFlightRecorder:      cfr,
 	}
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
 		storeCfg.TestingKnobs = *storeTestingKnobs.(*kvserver.StoreTestingKnobs)
@@ -1891,6 +1893,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.runtime,
 		s.status.sessionRegistry,
 		s.sqlServer.execCfg.RootMemoryMonitor,
+		s.node.storeCfg.CoalescedFlightRecorder,
 	); err != nil {
 		return err
 	}

@@ -239,6 +239,7 @@ func makeSharedProcessTenantServerConfig(
 	baseCfg.DefaultZoneConfig = kvServerCfg.BaseConfig.DefaultZoneConfig
 	baseCfg.HeapProfileDirName = kvServerCfg.BaseConfig.HeapProfileDirName
 	baseCfg.CPUProfileDirName = kvServerCfg.BaseConfig.CPUProfileDirName
+	baseCfg.ExecutionTraceDirName = kvServerCfg.BaseConfig.ExecutionTraceDirName
 	baseCfg.GoroutineDumpDirName = kvServerCfg.BaseConfig.GoroutineDumpDirName
 
 	// The ListenerFactory allows us to dynamically choose a
@@ -294,6 +295,7 @@ func makeSharedProcessTenantServerConfig(
 	baseCfg.GoroutineDumpDirName = ""
 	baseCfg.HeapProfileDirName = ""
 	baseCfg.CPUProfileDirName = ""
+	baseCfg.ExecutionTraceDirName = ""
 
 	// Expose the process-wide runtime metrics to the tenant's metric
 	// collector. Since they are process-wide, all tenants can see them.
