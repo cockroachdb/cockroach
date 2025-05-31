@@ -801,6 +801,79 @@ func TestBitmaskOrAndXor(t *testing.T) {
 	}
 }
 
+func TestPGIOBuiltins(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	params := base.TestServerArgs{}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	testCases := []struct {
+		sql string
+		ok  string
+		err string
+	}{
+		{ // int4in() ok
+			sql: "SELECT int4in('12345')",
+			ok:  "12345",
+		},
+		{ // int4in() 2^31-1
+			sql: "SELECT int4in((pow(2, 31) - 1)::TEXT)",
+			ok:  "2147483647",
+		},
+		{ // int4in() 2^31 (integer wrap)
+			sql: "SELECT int4in((pow(2, 31) - 0)::TEXT)",
+			ok:  "-2147483648",
+		},
+		{ // int4in() input error
+			sql: "SELECT int4in('abc')",
+			err: "ERROR: int4in(): invalid input syntax for int4: \"abc\"",
+		},
+		{ // int4in() uint32 overflow
+			sql: "SELECT int4in((pow(2, 32) + 1)::TEXT)",
+			err: "ERROR: int4in(): invalid input syntax for int4: \"4294967297\"",
+		},
+		{ // int4out() ok
+			sql: "SELECT int4out(67890::INT4)",
+			ok:  "67890",
+		},
+		{ // int4recv() ok
+			sql: "SELECT int4recv(decode('ffffff9c', 'hex'))",
+			ok:  "-100",
+		},
+		{ // int4recv() error
+			sql: "SELECT int4recv(decode('1234', 'hex'))",
+			err: "ERROR: int4recv(): invalid length for int4recv: got 2, expected 4",
+		},
+		{ // int4send() ok positive
+			sql: "SELECT encode(int4send(1234567890::INT4), 'hex')",
+			ok:  "499602d2",
+		},
+		{ // int4send() ok negative
+			sql: "SELECT encode(int4send((-1)::INT4), 'hex')",
+			ok:  "ffffffff",
+		},
+		{ // Round Trip
+			sql: "SELECT int4out(int4recv(int4send(int4in('-123456789'))))",
+			ok:  "-123456789",
+		},
+	}
+	for i, tc := range testCases {
+		switch {
+		case tc.ok != "":
+			res := tdb.QueryStr(t, tc.sql)
+			require.Equalf(t, tc.ok, res, "failed test case %d", i+1)
+		case tc.err != "":
+			// TODO(seanc): need to run the error tests
+		default:
+			panic("bad")
+		}
+	}
+}
+
 func BenchmarkGenerateID(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
