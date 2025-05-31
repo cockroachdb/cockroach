@@ -3003,16 +3003,16 @@ force_savepoint_restart                                    off                 N
 foreign_key_cascades_limit                                 10000               NULL      NULL        NULL        string
 idle_in_transaction_session_timeout                        0                   NULL      NULL        NULL        string
 idle_session_timeout                                       0                   NULL      NULL        NULL        string
-index_join_streamer_batch_size                             8.0 MiB             NULL      NULL        NULL        string
+index_join_streamer_batch_size                             8.0                 NULL      NULL        NULL        string
 index_recommendations_enabled                              off                 NULL      NULL        NULL        string
 inject_retry_errors_enabled                                off                 NULL      NULL        NULL        string
 inject_retry_errors_on_commit_enabled                      off                 NULL      NULL        NULL        string
 integer_datetimes                                          on                  NULL      NULL        NULL        string
 intervalstyle                                              postgres            NULL      NULL        NULL        string
 is_superuser                                               on                  NULL      NULL        NULL        string
-join_reader_index_join_strategy_batch_size                 4.0 MiB             NULL      NULL        NULL        string
-join_reader_no_ordering_strategy_batch_size                2.0 MiB             NULL      NULL        NULL        string
-join_reader_ordering_strategy_batch_size                   100 KiB             NULL      NULL        NULL        string
+join_reader_index_join_strategy_batch_size                 4.0                 NULL      NULL        NULL        string
+join_reader_no_ordering_strategy_batch_size                2.0                 NULL      NULL        NULL        string
+join_reader_ordering_strategy_batch_size                   100                 NULL      NULL        NULL        string
 large_full_scan_rows                                       0                   NULL      NULL        NULL        string
 lc_collate                                                 C.UTF-8             NULL      NULL        NULL        string
 lc_ctype                                                   C.UTF-8             NULL      NULL        NULL        string
@@ -3075,7 +3075,7 @@ pg_trgm.similarity_threshold                               0.3                 N
 plan_cache_mode                                            auto                NULL      NULL        NULL        string
 plpgsql_use_strict_into                                    off                 NULL      NULL        NULL        string
 prefer_lookup_joins_for_fks                                off                 NULL      NULL        NULL        string
-prepared_statements_cache_size                             0 B                 NULL      NULL        NULL        string
+prepared_statements_cache_size                             0                   NULL      NULL        NULL        string
 propagate_admission_header_to_leaf_transactions            on                  NULL      NULL        NULL        string
 propagate_input_ordering                                   off                 NULL      NULL        NULL        string
 recursion_depth_limit                                      1000                NULL      NULL        NULL        string
@@ -3231,18 +3231,18 @@ experimental_hash_group_join_enabled                       off                 N
 extra_float_digits                                         1                   NULL  user     NULL      1                   1
 force_savepoint_restart                                    off                 NULL  user     NULL      off                 off
 foreign_key_cascades_limit                                 10000               NULL  user     NULL      10000               10000
-idle_in_transaction_session_timeout                        0                   NULL  user     NULL      0s                  0s
-idle_session_timeout                                       0                   NULL  user     NULL      0s                  0s
-index_join_streamer_batch_size                             8.0 MiB             NULL  user     NULL      8.0 MiB             8.0 MiB
+idle_in_transaction_session_timeout                        0                   ms    user     NULL      0s                  0s
+idle_session_timeout                                       0                   ms    user     NULL      0s                  0s
+index_join_streamer_batch_size                             8.0                 MiB   user     NULL      8.0 MiB             8.0 MiB
 index_recommendations_enabled                              off                 NULL  user     NULL      on                  false
 inject_retry_errors_enabled                                off                 NULL  user     NULL      off                 off
 inject_retry_errors_on_commit_enabled                      off                 NULL  user     NULL      off                 off
 integer_datetimes                                          on                  NULL  user     NULL      on                  on
 intervalstyle                                              postgres            NULL  user     NULL      postgres            postgres
 is_superuser                                               on                  NULL  user     NULL      on                  on
-join_reader_index_join_strategy_batch_size                 4.0 MiB             NULL  user     NULL      4.0 MiB             4.0 MiB
-join_reader_no_ordering_strategy_batch_size                2.0 MiB             NULL  user     NULL      2.0 MiB             2.0 MiB
-join_reader_ordering_strategy_batch_size                   100 KiB             NULL  user     NULL      100 KiB             100 KiB
+join_reader_index_join_strategy_batch_size                 4.0                 MiB   user     NULL      4.0 MiB             4.0 MiB
+join_reader_no_ordering_strategy_batch_size                2.0                 MiB   user     NULL      2.0 MiB             2.0 MiB
+join_reader_ordering_strategy_batch_size                   100                 KiB   user     NULL      100 KiB             100 KiB
 large_full_scan_rows                                       0                   NULL  user     NULL      0                   0
 lc_collate                                                 C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
 lc_ctype                                                   C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
@@ -3253,7 +3253,7 @@ lc_time                                                    C.UTF-8             N
 legacy_varchar_typing                                      off                 NULL  user     NULL      off                 off
 locality                                                   region=test,dc=dc1  NULL  user     NULL      region=test,dc=dc1  region=test,dc=dc1
 locality_optimized_partitioned_index_scan                  on                  NULL  user     NULL      on                  on
-lock_timeout                                               0                   NULL  user     NULL      0s                  0s
+lock_timeout                                               0                   ms    user     NULL      0s                  0s
 log_timezone                                               UTC                 NULL  user     NULL      UTC                 UTC
 max_connections                                            -1                  NULL  user     NULL      -1                  -1
 max_identifier_length                                      128                 NULL  user     NULL      128                 128
@@ -3305,7 +3305,7 @@ pg_trgm.similarity_threshold                               0.3                 N
 plan_cache_mode                                            auto                NULL  user     NULL      auto                auto
 plpgsql_use_strict_into                                    off                 NULL  user     NULL      off                 off
 prefer_lookup_joins_for_fks                                off                 NULL  user     NULL      off                 off
-prepared_statements_cache_size                             0 B                 NULL  user     NULL      0 B                 0 B
+prepared_statements_cache_size                             0                   B     user     NULL      0 B                 0 B
 propagate_admission_header_to_leaf_transactions            on                  NULL  user     NULL      on                  on
 propagate_input_ordering                                   off                 NULL  user     NULL      off                 off
 recursion_depth_limit                                      1000                NULL  user     NULL      1000                1000
@@ -3324,7 +3324,7 @@ show_primary_key_constraint_on_not_visible_columns         on                  N
 sql_safe_updates                                           off                 NULL  user     NULL      off                 off
 ssl                                                        on                  NULL  user     NULL      on                  on
 standard_conforming_strings                                on                  NULL  user     NULL      on                  on
-statement_timeout                                          0                   NULL  user     NULL      0s                  0s
+statement_timeout                                          0                   ms    user     NULL      0s                  0s
 streamer_always_maintain_ordering                          off                 NULL  user     NULL      off                 off
 streamer_enabled                                           on                  NULL  user     NULL      on                  on
 streamer_head_of_line_only_fraction                        0.8                 NULL  user     NULL      0.8                 0.8
@@ -3350,7 +3350,7 @@ transaction_rows_read_log                                  0                   N
 transaction_rows_written_err                               0                   NULL  user     NULL      0                   0
 transaction_rows_written_log                               0                   NULL  user     NULL      0                   0
 transaction_status                                         NoTxn               NULL  user     NULL      NoTxn               NoTxn
-transaction_timeout                                        0                   NULL  user     NULL      0s                  0s
+transaction_timeout                                        0                   ms    user     NULL      0s                  0s
 troubleshooting_mode                                       off                 NULL  user     NULL      off                 off
 unbounded_parallel_scans                                   off                 NULL  user     NULL      off                 off
 unconstrained_non_covering_index_scan_enabled              off                 NULL  user     NULL      off                 off
