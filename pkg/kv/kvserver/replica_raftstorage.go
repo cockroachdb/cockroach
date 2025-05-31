@@ -309,13 +309,6 @@ type IncomingSnapshot struct {
 	msgAppRespCh     chan raftpb.Message // receives MsgAppResp if/when snap is applied
 	sharedSSTs       []pebble.SharedSSTMeta
 	externalSSTs     []pebble.ExternalFile
-	// clearedSpans represents the key spans in the existing store that will be
-	// cleared by doing the Ingest*. This is tracked so that we can convert the
-	// ssts into a WriteBatch if the total size of the ssts is small.
-	//
-	// This contains both the spans that have explicit rangedels, and the
-	// MVCC span (which would be cleared by Excise on Ingest).
-	clearedSpans []roachpb.Span
 }
 
 func (s IncomingSnapshot) String() string {
@@ -540,7 +533,6 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		Index: kvpb.RaftIndex(nonemptySnap.Metadata.Index),
 		Term:  kvpb.RaftTerm(nonemptySnap.Metadata.Term),
 	}
-	clearedSpans := inSnap.clearedSpans
 
 	subsumedDescs := make([]*roachpb.RangeDescriptor, 0, len(subsumedRepls))
 	for _, sr := range subsumedRepls {
@@ -577,12 +569,9 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		subsumedDescs: subsumedDescs,
 	}
 
-	clearedUnreplicatedSpan, clearedSubsumedSpans, err := prepareSnapApply(ctx, prepInput)
-	if err != nil {
+	if err := prepareSnapApply(ctx, prepInput); err != nil {
 		return err
 	}
-	clearedSpans = append(clearedSpans, clearedUnreplicatedSpan)
-	clearedSpans = append(clearedSpans, clearedSubsumedSpans...)
 
 	// Drop the entry cache before ingestion, like a real truncation would.
 	//
@@ -610,16 +599,18 @@ func (r *Replica) applySnapshotRaftMuLocked(
 
 	var ingestStats pebble.IngestOperationStats
 	var writeBytes uint64
+	exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
 	if applyAsIngest {
-		exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
-		if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(ctx, inSnap.SSTStorageScratch.SSTs(), inSnap.sharedSSTs, inSnap.externalSSTs, exciseSpan); err != nil {
+		if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(
+			ctx, inSnap.SSTStorageScratch.SSTs(), inSnap.sharedSSTs, inSnap.externalSSTs, exciseSpan,
+		); err != nil {
 			return errors.Wrapf(err, "while ingesting %s and excising %s-%s",
 				inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
 		}
 	} else {
-		err := r.store.TODOEngine().ConvertFilesToBatchAndCommit(
-			ctx, inSnap.SSTStorageScratch.SSTs(), clearedSpans)
-		if err != nil {
+		if err := r.store.TODOEngine().ConvertFilesToBatchAndCommit(
+			ctx, inSnap.SSTStorageScratch.SSTs(), exciseSpan,
+		); err != nil {
 			return errors.Wrapf(err, "while applying as batch %s", inSnap.SSTStorageScratch.SSTs())
 		}
 		// Admission control wants the writeBytes to be roughly equivalent to

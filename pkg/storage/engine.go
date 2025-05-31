@@ -1060,18 +1060,11 @@ type Engine interface {
 	// ConvertFilesToBatchAndCommit converts local files with the given paths to
 	// a WriteBatch and commits the batch with sync=true. The files represented
 	// in paths must not be overlapping -- this is the same contract as
-	// IngestLocalFiles*. Additionally, clearedSpans represents the spans which
-	// must be deleted before writing the data contained in these paths.
+	// IngestLocalFiles*.
 	//
 	// This method is expected to be used instead of IngestLocalFiles* or
 	// IngestAndExciseFiles when the sum of the file sizes is small.
-	//
-	// TODO(sumeer): support this as an alternative to IngestAndExciseFiles.
-	// This should be easy since we use NewSSTEngineIterator to read the ssts,
-	// which supports multiple levels.
-	ConvertFilesToBatchAndCommit(
-		ctx context.Context, paths []string, clearedSpans []roachpb.Span,
-	) error
+	ConvertFilesToBatchAndCommit(ctx context.Context, paths []string, clear roachpb.Span) error
 	// CompactRange ensures that the specified range of key value pairs is
 	// optimized for space efficiency.
 	CompactRange(ctx context.Context, start, end roachpb.Key) error

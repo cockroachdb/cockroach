@@ -37,33 +37,21 @@ type prepareSnapApplyInput struct {
 }
 
 // prepareSnapApply writes the unreplicated SST for the snapshot and clears disk data for subsumed replicas.
-func prepareSnapApply(
-	ctx context.Context, input prepareSnapApplyInput,
-) (
-	roachpb.Span, // clearedUnreplicatedSpan
-	[]roachpb.Span, // clearedSubsumedSpans
-	error,
-) {
+func prepareSnapApply(ctx context.Context, input prepareSnapApplyInput) error {
 	// Step 1: Write unreplicated SST
-	unreplicatedSSTFile, clearedUnreplicatedSpan, err := writeUnreplicatedSST(
+	unreplicatedSSTFile, err := writeUnreplicatedSST(
 		ctx, input.id, input.st, input.truncState, input.hardState, input.sl,
 	)
 	if err != nil {
-		return roachpb.Span{}, nil, err
+		return err
 	}
 	if err := input.writeSST(ctx, unreplicatedSSTFile.Data()); err != nil {
-		return roachpb.Span{}, nil, err
+		return err
 	}
-
-	clearedSubsumedSpans, err := clearSubsumedReplicaDiskData(
+	return clearSubsumedReplicaDiskData(
 		ctx, input.st, input.todoEng, input.writeSST,
 		input.desc, input.subsumedDescs,
 	)
-	if err != nil {
-		return roachpb.Span{}, nil, err
-	}
-
-	return clearedUnreplicatedSpan, clearedSubsumedSpans, nil
 }
 
 // writeUnreplicatedSST creates an SST for snapshot application that
@@ -77,7 +65,7 @@ func writeUnreplicatedSST(
 	ts kvserverpb.RaftTruncatedState,
 	hs raftpb.HardState,
 	sl stateloader.StateLoader,
-) (_ *storage.MemObject, clearedSpan roachpb.Span, _ error) {
+) (*storage.MemObject, error) {
 	unreplicatedSSTFile := &storage.MemObject{}
 	unreplicatedSST := storage.MakeIngestionSSTWriter(
 		ctx, st, unreplicatedSSTFile,
@@ -85,14 +73,13 @@ func writeUnreplicatedSST(
 	defer unreplicatedSST.Close()
 	// Clear the raft state/log, and initialize it again with the provided
 	// HardState and RaftTruncatedState.
-	clearedSpan, err := rewriteRaftState(ctx, id, hs, ts, sl, &unreplicatedSST)
-	if err != nil {
-		return nil, roachpb.Span{}, err
+	if err := rewriteRaftState(ctx, id, hs, ts, sl, &unreplicatedSST); err != nil {
+		return nil, err
 	}
 	if err := unreplicatedSST.Finish(); err != nil {
-		return nil, roachpb.Span{}, err
+		return nil, err
 	}
-	return unreplicatedSSTFile, clearedSpan, nil
+	return unreplicatedSSTFile, nil
 }
 
 // rewriteRaftState clears and rewrites the unreplicated rangeID-local key space
@@ -109,7 +96,7 @@ func rewriteRaftState(
 	ts kvserverpb.RaftTruncatedState,
 	sl stateloader.StateLoader,
 	w storage.Writer,
-) (clearedSpan roachpb.Span, _ error) {
+) error {
 	// Clearing the unreplicated state.
 	//
 	// NB: We do not expect to see range keys in the unreplicated state, so
@@ -117,27 +104,26 @@ func rewriteRaftState(
 	unreplicatedPrefixKey := keys.MakeRangeIDUnreplicatedPrefix(id.RangeID)
 	unreplicatedStart := unreplicatedPrefixKey
 	unreplicatedEnd := unreplicatedPrefixKey.PrefixEnd()
-	clearedSpan = roachpb.Span{Key: unreplicatedStart, EndKey: unreplicatedEnd}
 	if err := w.ClearRawRange(
 		unreplicatedStart, unreplicatedEnd, true /* pointKeys */, false, /* rangeKeys */
 	); err != nil {
-		return roachpb.Span{}, errors.Wrapf(err, "error clearing the unreplicated space")
+		return errors.Wrapf(err, "error clearing the unreplicated space")
 	}
 
 	// Update HardState.
 	if err := sl.SetHardState(ctx, w, hs); err != nil {
-		return roachpb.Span{}, errors.Wrapf(err, "unable to write HardState")
+		return errors.Wrapf(err, "unable to write HardState")
 	}
 	// We've cleared all the raft state above, so we are forced to write the
 	// RaftReplicaID again here.
 	if err := sl.SetRaftReplicaID(ctx, w, id.ReplicaID); err != nil {
-		return roachpb.Span{}, errors.Wrapf(err, "unable to write RaftReplicaID")
+		return errors.Wrapf(err, "unable to write RaftReplicaID")
 	}
 	// Update the log truncation state.
 	if err := sl.SetRaftTruncatedState(ctx, w, &ts); err != nil {
-		return roachpb.Span{}, errors.Wrapf(err, "unable to write RaftTruncatedState")
+		return errors.Wrapf(err, "unable to write RaftTruncatedState")
 	}
-	return clearedSpan, nil
+	return nil
 }
 
 // clearSubsumedReplicaDiskData clears the on disk data of the subsumed
@@ -156,7 +142,7 @@ func clearSubsumedReplicaDiskData(
 	writeSST func(context.Context, []byte) error,
 	desc *roachpb.RangeDescriptor,
 	subsumedDescs []*roachpb.RangeDescriptor,
-) (clearedSpans []roachpb.Span, _ error) {
+) error {
 	// NB: we don't clear RangeID local key spans here. That happens
 	// via the call to DestroyReplica.
 	getKeySpans := func(d *roachpb.RangeDescriptor) []roachpb.Span {
@@ -185,23 +171,18 @@ func clearSubsumedReplicaDiskData(
 			ClearUnreplicatedByRangeID: true,
 			MustUseClearRange:          true,
 		}
-		subsumedClearedSpans := rditer.Select(subDesc.RangeID, rditer.SelectOpts{
-			ReplicatedByRangeID:   opts.ClearReplicatedByRangeID,
-			UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
-		})
-		clearedSpans = append(clearedSpans, subsumedClearedSpans...)
 		if err := kvstorage.DestroyReplica(ctx, subDesc.RangeID, reader, &subsumedReplSST, mergedTombstoneReplicaID, opts); err != nil {
 			subsumedReplSST.Close()
-			return nil, err
+			return err
 		}
 		if err := subsumedReplSST.Finish(); err != nil {
-			return nil, err
+			return err
 		}
 		if subsumedReplSST.DataSize > 0 {
 			// TODO(itsbilal): Write to SST directly in subsumedReplSST rather than
 			// buffering in a MemObject first.
 			if err := writeSST(ctx, subsumedReplSSTFile.Data()); err != nil {
-				return nil, err
+				return err
 			}
 		}
 
@@ -279,20 +260,18 @@ func clearSubsumedReplicaDiskData(
 			kvstorage.ClearRangeThresholdPointKeys,
 		); err != nil {
 			subsumedReplSST.Close()
-			return nil, err
+			return err
 		}
-		clearedSpans = append(clearedSpans,
-			roachpb.Span{Key: keySpans[i].EndKey, EndKey: totalKeySpans[i].EndKey})
 		if err := subsumedReplSST.Finish(); err != nil {
-			return nil, err
+			return err
 		}
 		if subsumedReplSST.DataSize > 0 {
 			// TODO(itsbilal): Write to SST directly in subsumedReplSST rather than
 			// buffering in a MemObject first.
 			if err := writeSST(ctx, subsumedReplSSTFile.Data()); err != nil {
-				return nil, err
+				return err
 			}
 		}
 	}
-	return clearedSpans, nil
+	return nil
 }
