@@ -289,6 +289,10 @@ type planner struct {
 
 	// datumAlloc is used when decoding datums and running subqueries.
 	datumAlloc *tree.DatumAlloc
+
+	// This is a copy of txnState.mu.autoRetryCounter from when we started the
+	// statement.
+	autoRetryCounter int
 }
 
 // hasFlowForPausablePortal returns true if the planner is for re-executing a
@@ -949,6 +953,7 @@ func (p *planner) resetPlanner(
 	p.skipDescriptorCache = false
 	p.typeResolutionDbID = descpb.InvalidID
 	p.pausablePortal = nil
+	p.autoRetryCounter = 0
 }
 
 // GetReplicationStreamManager returns a ReplicationStreamManager.
@@ -1051,4 +1056,9 @@ func (p *planner) StartHistoryRetentionJob(
 
 func (p *planner) ExtendHistoryRetention(ctx context.Context, jobID jobspb.JobID) error {
 	return ExtendHistoryRetention(ctx, p.EvalContext(), p.InternalSQLTxn(), jobID)
+}
+
+// RetryCounter is part of the eval.Planner interface.
+func (p *planner) RetryCounter() int {
+	return p.autoRetryCounter
 }

@@ -1079,6 +1079,10 @@ func (ex *connExecutor) execStmtInOpenState(
 		}()
 	}
 
+	if ex.state.mu.autoRetryReason != nil {
+		p.autoRetryCounter = int(ex.state.mu.autoRetryCounter)
+	}
+
 	if ex.executorType != executorTypeInternal &&
 		ex.state.mu.txn.IsoLevel() == isolation.ReadCommitted &&
 		!ex.implicitTxn() {
@@ -2125,6 +2129,10 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 			// region" error occurs.
 			ex.execRelease(ctx, releaseHomeRegionSavepoint, res)
 		}()
+	}
+
+	if ex.state.mu.autoRetryReason != nil {
+		p.autoRetryCounter = int(ex.state.mu.autoRetryCounter)
 	}
 
 	if ex.executorType != executorTypeInternal &&

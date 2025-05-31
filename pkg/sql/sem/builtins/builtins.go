@@ -6061,15 +6061,15 @@ SELECT
 		},
 	),
 
-	// If force_retry is called during the specified interval from the beginning
-	// of the transaction it returns a retryable error. If not, 0 is returned
-	// instead of an error.
-	// The second version allows one to create an error intended for a transaction
-	// different than the current statement's transaction.
 	"crdb_internal.force_retry": makeBuiltin(
 		tree.FunctionProperties{
 			Category: builtinconstants.CategorySystemInfo,
 		},
+		// This overload takes an interval parameter. If force_retry is called
+		// within this interval from the beginning of the transaction, it returns a
+		// retryable error. If force_retry is called after this interval, it returns
+		// 0. This allows the transaction to eventually succeed after the interval
+		// has passed, assuming it is being retried.
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "val", Typ: types.Interval}},
 			ReturnType: tree.FixedReturnType(types.Int),
@@ -6084,6 +6084,29 @@ SELECT
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Volatile,
+		},
+		// This overload takes an integer parameter. If the statement or transaction
+		// has already been retried < the parameter number of times, force_retry
+		// will return a retryable error. If the statement or transaction has
+		// already been retried >= the parameter number of times, force_retry will
+		// return 0. This allows precise control of the number of times the
+		// statement or transaction is retied.
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "val", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				retries := int64(evalCtx.Planner.RetryCounter())
+				maxRetries := int64(tree.MustBeDInt(args[0]))
+				if retries < maxRetries {
+					return nil, evalCtx.Txn.GenerateForcedRetryableErr(
+						ctx, "forced by crdb_internal.force_retry()",
+					)
+				}
+				return tree.DZero, nil
+			},
+			Info:             "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility:       volatility.Volatile,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 	),
 
