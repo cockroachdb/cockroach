@@ -137,11 +137,22 @@ func NewRowHelper(
 
 	// Pre-compute the encoding directions of the index key values for
 	// pretty-printing in traces.
-	rh.primIndexValDirs = catalogkeys.IndexKeyValDirs(rh.TableDesc.GetPrimaryIndex())
+	primaryIndex := rh.TableDesc.GetPrimaryIndex()
+	n := catalogkeys.NumIndexKeyValDirs(primaryIndex)
+	for i := range rh.Indexes {
+		n += catalogkeys.NumIndexKeyValDirs(rh.Indexes[i])
+	}
+	dirs := make([]encoding.Direction, 0, n)
+
+	dirs = catalogkeys.AppendIndexKeyValDirs(dirs, rh.TableDesc.GetPrimaryIndex())
+	rh.primIndexValDirs = dirs[:len(dirs):len(dirs)]
+	dirs = dirs[len(dirs):]
 
 	rh.secIndexValDirs = make([][]encoding.Direction, len(rh.Indexes))
 	for i := range rh.Indexes {
-		rh.secIndexValDirs[i] = catalogkeys.IndexKeyValDirs(rh.Indexes[i])
+		dirs = catalogkeys.AppendIndexKeyValDirs(dirs, rh.Indexes[i])
+		rh.secIndexValDirs[i] = dirs[:len(dirs):len(dirs)]
+		dirs = dirs[len(dirs):]
 	}
 
 	rh.maxRowSizeLog = uint32(maxRowSizeLog.Get(sv))
