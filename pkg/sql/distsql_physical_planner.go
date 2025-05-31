@@ -4581,6 +4581,7 @@ func (dsp *DistSQLPlanner) planVectorSearch(
 		PrefixKeys:          planInfo.prefixKeys,
 		QueryVector:         queryVector,
 		TargetNeighborCount: planInfo.targetNeighborCount,
+		Table:               *planInfo.table.TableDesc(),
 	}
 	fetchCols := make([]descpb.ColumnID, len(planInfo.cols))
 	for i, col := range planInfo.cols {
@@ -4655,6 +4656,7 @@ func (dsp *DistSQLPlanner) planVectorMutationSearch(
 		SuffixKeyColumnOrdinals:  suffixKeyColumnOrdinals,
 		SuffixKeyColumns:         suffixKeyCols,
 		IsIndexPut:               planInfo.isIndexPut,
+		Table:                    *planInfo.table.TableDesc(),
 	}
 	// VectorMutationSearch operators materialize partition and quantized-vec
 	// columns rather than fetching from the table, so leave fetchCols empty.

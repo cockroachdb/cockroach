@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
@@ -115,10 +116,10 @@ func TestStore(t *testing.T) {
 		runner.Exec(t, "INSERT INTO "+tblName+" (id, prefix, v) VALUES ($1, $2, $3)", 5, 1, "[7, 4]")
 		runner.Exec(t, "INSERT INTO "+tblName+" (id, prefix, v) VALUES ($1, $2, $3)", 6, 1, "[4, 3]")
 
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "defaultdb", tblName)
-		vCol, err := catalog.MustFindColumnByName(tableDesc, "v")
+		baseTableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "defaultdb", tblName)
+		vCol, err := catalog.MustFindColumnByName(baseTableDesc, "v")
 		require.NoError(t, err)
-		prefixCol, err := catalog.MustFindColumnByName(tableDesc, "prefix")
+		prefixCol, err := catalog.MustFindColumnByName(baseTableDesc, "prefix")
 		require.NoError(t, err)
 
 		indexDesc1 := descpb.IndexDescriptor{
@@ -128,7 +129,7 @@ func TestStore(t *testing.T) {
 			KeyColumnIDs:        []descpb.ColumnID{vCol.GetID()},
 			KeyColumnNames:      []string{vCol.GetName()},
 			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
-			KeySuffixColumnIDs:  []descpb.ColumnID{tableDesc.GetPrimaryIndex().GetKeyColumnID(0)},
+			KeySuffixColumnIDs:  []descpb.ColumnID{baseTableDesc.GetPrimaryIndex().GetKeyColumnID(0)},
 			Version:             descpb.LatestIndexDescriptorVersion,
 			EncodingType:        catenumpb.SecondaryIndexEncoding,
 		}
@@ -140,24 +141,28 @@ func TestStore(t *testing.T) {
 			KeyColumnIDs:        []descpb.ColumnID{prefixCol.GetID(), vCol.GetID()},
 			KeyColumnNames:      []string{prefixCol.GetName(), vCol.GetName()},
 			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
-			KeySuffixColumnIDs:  []descpb.ColumnID{tableDesc.GetPrimaryIndex().GetKeyColumnID(0)},
+			KeySuffixColumnIDs:  []descpb.ColumnID{baseTableDesc.GetPrimaryIndex().GetKeyColumnID(0)},
 			Version:             descpb.LatestIndexDescriptorVersion,
 			EncodingType:        catenumpb.SecondaryIndexEncoding,
 		}
+
+		rawTableDesc := baseTableDesc.TableDesc()
+		rawTableDesc.Indexes = append(rawTableDesc.Indexes, indexDesc1)
+		rawTableDesc.Indexes = append(rawTableDesc.Indexes, indexDesc2)
+		tableDesc := tabledesc.NewBuilder(rawTableDesc).BuildImmutableTable()
 
 		indexID := indexDesc1.ID
 		if usePrefix {
 			indexID = indexDesc2.ID
 		}
 
-		store, err := NewWithColumnID(
+		store, err := NewWithLeasedDesc(
 			ctx,
 			internalDB,
 			quantizer,
 			codec,
 			tableDesc,
 			indexID,
-			vCol.GetID(),
 		)
 		require.NoError(t, err)
 

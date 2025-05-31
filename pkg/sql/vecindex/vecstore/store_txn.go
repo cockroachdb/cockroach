@@ -12,11 +12,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
@@ -26,6 +34,8 @@ import (
 // Calling methods here will use the wrapped KV Txn to update the vector index's
 // internal data. Committing changes is the responsibility of the caller.
 type Txn struct {
+	evalCtx *eval.Context
+
 	kv    *kv.Txn
 	store *Store
 
@@ -33,11 +43,21 @@ type Txn struct {
 	lockDurability kvpb.KeyLockingDurabilityType
 
 	// codec is used to decode KV rows and encode vectors.
-	codec partitionCodec
+	codec     partitionCodec
+	tableDesc catalog.TableDescriptor
+	indexDesc catalog.Index
+
+	// fullVecFetchSpec is used to fetch vectors from the primary index.
+	fullVecFetchSpec *fetchpb.IndexFetchSpec
+	pkDir            []catenumpb.IndexColumn_Direction
+	tmpEncDatums     rowenc.EncDatumRow
 
 	// Retained allocations to prevent excessive reallocation.
 	tmpSpans   []roachpb.Span
 	tmpSpanIDs []int
+
+	// vectorColumnOrdinal stores the ordinal of the vector column in the table.
+	vectorColumnOrdinal int
 }
 
 var _ cspann.Txn = (*Txn)(nil)
@@ -46,10 +66,46 @@ var _ cspann.Txn = (*Txn)(nil)
 // transaction for use with the cspann.Store API. The Init pattern is used
 // rather than New so that Txn can be embedded within larger structs and so that
 // temporary state can be reused.
-func (tx *Txn) Init(store *Store, kv *kv.Txn) {
+func (tx *Txn) Init(
+	evalCtx *eval.Context, store *Store, kv *kv.Txn, tableDesc catalog.TableDescriptor,
+) {
 	tx.kv = kv
 	tx.store = store
+	tx.evalCtx = evalCtx
 	tx.codec = makePartitionCodec(store.rootQuantizer, store.quantizer)
+	if tx.store.TestingTableDesc != nil {
+		tx.tableDesc = tx.store.TestingTableDesc
+	} else if tableDesc != nil {
+		tx.tableDesc = tableDesc
+	} else {
+		panic("tableDesc must be provided")
+	}
+
+	for _, desc := range tableDesc.NonPrimaryIndexes() {
+		if desc.GetID() == store.indexID {
+			tx.indexDesc = desc
+			break
+		}
+	}
+	if tx.indexDesc == nil {
+		panic(errors.Errorf("indexID %d not found in table %d", store.indexID, tableDesc.GetID()))
+	}
+
+	// Find the ordinal of the vector column in the table.
+	vectorColID := tx.indexDesc.VectorColumnID()
+	for i, col := range tx.tableDesc.PublicColumns() {
+		if col.GetID() == vectorColID {
+			tx.vectorColumnOrdinal = i
+			break
+		}
+	}
+
+	primaryIndex := tx.tableDesc.GetPrimaryIndex()
+	tx.pkDir = make([]catenumpb.IndexColumn_Direction, primaryIndex.NumKeyColumns())
+	tx.tmpEncDatums = make(rowenc.EncDatumRow, primaryIndex.NumKeyColumns())
+	for i := range primaryIndex.NumKeyColumns() {
+		tx.pkDir[i] = primaryIndex.GetKeyColumnDirection(i)
+	}
 
 	// TODO (mw5h): This doesn't take into account session variables that control
 	// lock durability. This doesn't matter for partition maintenance operations
@@ -309,6 +365,32 @@ func (tx *Txn) SearchPartitions(
 	return nil
 }
 
+func (tx *Txn) initFetcher(ctx context.Context) (*row.Fetcher, error) {
+	if tx.fullVecFetchSpec == nil {
+		tx.fullVecFetchSpec = &fetchpb.IndexFetchSpec{}
+		err := rowenc.InitIndexFetchSpec(
+			tx.fullVecFetchSpec,
+			tx.store.codec,
+			tx.tableDesc,
+			tx.tableDesc.GetPrimaryIndex(),
+			[]descpb.ColumnID{tx.indexDesc.VectorColumnID()},
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var alloc tree.DatumAlloc
+	var fetcher row.Fetcher
+	err := fetcher.Init(ctx, row.FetcherInitArgs{
+		Txn:             tx.kv,
+		Alloc:           &alloc,
+		Spec:            tx.fullVecFetchSpec,
+		SpansCanOverlap: true,
+	})
+	return &fetcher, err
+}
+
 // getFullVectorsFromPK fills in refs that are specified by primary key. Refs
 // that specify a partition ID are ignored. The values are returned in-line in
 // the refs slice.
@@ -321,60 +403,83 @@ func (tx *Txn) getFullVectorsFromPK(ctx context.Context, refs []cspann.VectorWit
 		tx.tmpSpanIDs = make([]int, 0, len(refs))
 	}
 
+	spanBuilder := span.Builder{}
+	spanBuilder.Init(tx.evalCtx, tx.store.codec, tx.tableDesc, tx.tableDesc.GetPrimaryIndex())
+
+	// Create a splitter for the vector column ordinal.
+	var neededColOrdinals intsets.Fast
+	neededColOrdinals.Add(tx.vectorColumnOrdinal)
+	splitter := span.MakeSplitter(tx.tableDesc, tx.tableDesc.GetPrimaryIndex(), neededColOrdinals)
+
 	for refIdx, ref := range refs {
 		if ref.Key.PartitionKey != cspann.InvalidKey {
 			return errors.AssertionFailedf(
 				"cannot mix partition key and primary key requests to GetFullVectors")
 		}
 
-		key := make(roachpb.Key, len(tx.store.pkPrefix)+len(ref.Key.KeyBytes))
-		copy(key, tx.store.pkPrefix)
-		copy(key[len(tx.store.pkPrefix):], ref.Key.KeyBytes)
-		tx.tmpSpans = append(tx.tmpSpans, roachpb.Span{Key: key})
+		_, num, err := rowenc.DecodeKeyVals(tx.tmpEncDatums, tx.pkDir, ref.Key.KeyBytes)
+		if err != nil {
+			return err
+		}
+		if num != len(tx.pkDir) {
+			return errors.AssertionFailedf("primary key has %d columns, expected %d", num, len(tx.pkDir))
+		}
+
+		span, containsNull, err := spanBuilder.SpanFromEncDatums(tx.tmpEncDatums)
+		if err != nil {
+			return err
+		}
+		if containsNull {
+			return errors.AssertionFailedf("primary key contains null")
+		}
+
+		// Use the splitter to potentially split the span into family-specific spans.
+		prevLen := len(tx.tmpSpans)
+		tx.tmpSpans = splitter.MaybeSplitSpanIntoSeparateFamilies(tx.tmpSpans, span, len(tx.pkDir), containsNull)
+		if len(tx.tmpSpans) != prevLen+1 {
+			return errors.AssertionFailedf(
+				"MaybeSplitSpanIntoSeparateFamilies added %d spans, expected 1",
+				len(tx.tmpSpans)-prevLen)
+		}
 		tx.tmpSpanIDs = append(tx.tmpSpanIDs, refIdx)
 	}
 
-	if len(tx.tmpSpans) > 0 {
-		var fetcher row.Fetcher
-		var alloc tree.DatumAlloc
-		err = fetcher.Init(ctx, row.FetcherInitArgs{
-			Txn:             tx.kv,
-			Alloc:           &alloc,
-			Spec:            &tx.store.fetchSpec,
-			SpansCanOverlap: true,
-		})
+	fetcher, err := tx.initFetcher(ctx)
+	if err != nil {
+		return errors.Wrapf(err, "initializing fetcher for GetFullVectors")
+	}
+	defer fetcher.Close(ctx)
+
+	err = fetcher.StartScan(
+		ctx,
+		tx.tmpSpans,
+		tx.tmpSpanIDs,
+		rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
+		rowinfra.RowLimit(len(tx.tmpSpans)),
+	)
+	if err != nil {
+		return err
+	}
+
+	var colIdxMap catalog.TableColMap
+	colIdxMap.Set(tx.indexDesc.VectorColumnID(), 0)
+
+	var data [1]tree.Datum
+	for {
+		ok, refIdx, err := fetcher.NextRowDecodedInto(ctx, data[:], colIdxMap)
 		if err != nil {
 			return err
 		}
-		defer fetcher.Close(ctx)
-
-		err = fetcher.StartScan(
-			ctx,
-			tx.tmpSpans,
-			tx.tmpSpanIDs,
-			rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
-			rowinfra.RowLimit(len(tx.tmpSpans)),
-		)
-		if err != nil {
-			return err
+		if !ok {
+			break
 		}
-
-		var data [1]tree.Datum
-		for {
-			ok, refIdx, err := fetcher.NextRowDecodedInto(ctx, data[:], tx.store.colIdxMap)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				break
-			}
-			if v, ok := tree.AsDPGVector(data[0]); ok {
-				refs[refIdx].Vector = v.T
-			} else {
-				refs[refIdx].Vector = nil
-			}
+		if v, ok := tree.AsDPGVector(data[0]); ok {
+			refs[refIdx].Vector = v.T
+		} else {
+			refs[refIdx].Vector = nil
 		}
 	}
+
 	return err
 }
 
