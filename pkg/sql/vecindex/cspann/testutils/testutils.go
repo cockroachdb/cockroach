@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
@@ -103,12 +103,16 @@ func NormalizeSlice[T any](s []T) []T {
 // CalculateTruth calculates the top k true nearest data vectors for the given
 // query vector. It returns the keys of the top k results, sorted by distance.
 func CalculateTruth[T comparable](
-	k int, distanceMetric vecdist.Metric, queryVector vector.T, dataVectors vector.Set, dataKeys []T,
+	k int,
+	distMetric vecpb.DistanceMetric,
+	queryVector vector.T,
+	dataVectors vector.Set,
+	dataKeys []T,
 ) []T {
 	distances := make([]float32, dataVectors.Count)
 	offsets := make([]int, dataVectors.Count)
 	for i := range dataVectors.Count {
-		distances[i] = vecdist.Measure(distanceMetric, queryVector, dataVectors.At(i))
+		distances[i] = vecpb.MeasureDistance(distMetric, queryVector, dataVectors.At(i))
 		offsets[i] = i
 	}
 	sort.SliceStable(offsets, func(i int, j int) bool {

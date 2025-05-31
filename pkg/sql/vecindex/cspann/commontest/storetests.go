@@ -11,7 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/suite"
@@ -90,8 +90,8 @@ func NewStoreTestSuite(ctx context.Context, makeStore MakeStoreFunc) *StoreTestS
 	return &StoreTestSuite{
 		ctx:           ctx,
 		makeStore:     makeStore,
-		rootQuantizer: quantize.NewUnQuantizer(2, vecdist.L2Squared),
-		quantizer:     quantize.NewRaBitQuantizer(2, 42, vecdist.L2Squared)}
+		rootQuantizer: quantize.NewUnQuantizer(2, vecpb.L2SquaredDistance),
+		quantizer:     quantize.NewRaBitQuantizer(2, 42, vecpb.L2SquaredDistance)}
 }
 
 func (suite *StoreTestSuite) TestRunTransaction() {

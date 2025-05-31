@@ -45,7 +45,6 @@ STRINGER_SRCS = [
     "//pkg/sql/sem/tree:createtypevariety_string.go",
     "//pkg/sql/sem/tree:statementreturntype_string.go",
     "//pkg/sql/sem/tree:statementtype_string.go",
-    "//pkg/sql/vecindex/cspann/vecdist:metric_string.go",
     "//pkg/sql:advancecode_string.go",
     "//pkg/sql:nodestatus_string.go",
     "//pkg/sql:txneventtype_string.go",

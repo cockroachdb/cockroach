@@ -9,8 +9,8 @@ import (
 	"context"
 	"math/rand"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -248,7 +248,7 @@ func (fw *fixupWorker) getFullVectorsForPartition(
 				// Convert mean centroids into spherical centroids for the Cosine
 				// and InnerProduct distance metrics.
 				switch fw.index.quantizer.GetDistanceMetric() {
-				case vecdist.Cosine, vecdist.InnerProduct:
+				case vecpb.CosineDistance, vecpb.InnerProductDistance:
 					num32.Normalize(vectors.At(i))
 				}
 			}
