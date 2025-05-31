@@ -1224,7 +1224,7 @@ func runCDCFineGrainedCheckpointingBenchmark(
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 	m := c.NewMonitor(ctx, c.All())
 
-	db := c.Conn(ctx, t.L(), 1)
+	db := c.Conn(ctx, t.L(), c.Spec().NodeCount)
 
 	startTime := timeutil.Now()
 
