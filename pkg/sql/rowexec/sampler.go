@@ -11,8 +11,7 @@ import (
 	"math/rand"
 	"time"
 
-	hllNew "github.com/axiomhq/hyperloglog"
-	hllOld "github.com/axiomhq/hyperloglog/000"
+	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -36,10 +35,8 @@ import (
 
 // sketchInfo contains the specification and run-time state for each sketch.
 type sketchInfo struct {
-	spec execinfrapb.SketchSpec
-	// Exactly one of sketchOld and sketchNew will be set.
-	sketchOld            *hllOld.Sketch
-	sketchNew            *hllNew.Sketch
+	spec                 execinfrapb.SketchSpec
+	sketch               *hyperloglog.Sketch
 	numNulls             int64
 	numRows              int64
 	size                 int64
@@ -103,7 +100,6 @@ func newSamplerProcessor(
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 ) (*samplerProcessor, error) {
-	useNewHLL := execversion.FromContext(ctx) >= execversion.V25_1
 	legacyFingerprinting := execversion.FromContext(ctx) < execversion.V25_2
 
 	// Limit the memory use by creating a child monitor with a hard limit.
@@ -133,14 +129,10 @@ func newSamplerProcessor(
 	for i := range spec.Sketches {
 		s.sketches[i] = sketchInfo{
 			spec:                 spec.Sketches[i],
+			sketch:               hyperloglog.New14(),
 			numNulls:             0,
 			numRows:              0,
 			legacyFingerprinting: legacyFingerprinting,
-		}
-		if useNewHLL {
-			s.sketches[i].sketchNew = hllNew.New14()
-		} else {
-			s.sketches[i].sketchOld = hllOld.New14()
 		}
 		if spec.Sketches[i].GenerateHistogram {
 			sampleCols.Add(int(spec.Sketches[i].Columns[0]))
@@ -160,13 +152,9 @@ func newSamplerProcessor(
 		sketchSpec.Columns = []uint32{0}
 		s.invSketch[col] = &sketchInfo{
 			spec:     sketchSpec,
+			sketch:   hyperloglog.New14(),
 			numNulls: 0,
 			numRows:  0,
-		}
-		if useNewHLL {
-			s.invSketch[col].sketchNew = hllNew.New14()
-		} else {
-			s.invSketch[col].sketchOld = hllOld.New14()
 		}
 	}
 
@@ -437,12 +425,7 @@ func (s *samplerProcessor) emitSketchRow(
 	outRow[s.numRowsCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(si.numRows))}
 	outRow[s.numNullsCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(si.numNulls))}
 	outRow[s.sizeCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(si.size))}
-	var data []byte
-	if si.sketchNew != nil {
-		data, err = si.sketchNew.MarshalBinary()
-	} else {
-		data, err = si.sketchOld.MarshalBinary()
-	}
+	data, err := si.sketch.MarshalBinary()
 	if err != nil {
 		return false, err
 	}
@@ -603,11 +586,7 @@ func (s *sketchInfo) addRow(
 	if allNulls {
 		s.numNulls++
 	}
-	if s.sketchNew != nil {
-		s.sketchNew.Insert(*buf)
-	} else {
-		s.sketchOld.Insert(*buf)
-	}
+	s.sketch.Insert(*buf)
 	return nil
 }
 
@@ -678,11 +657,7 @@ func (s *sketchInfo) addRowLegacy(
 		// be uniformly distributed in the 2^64 range). Experiments (on tpcc
 		// order_line) with simplistic functions yielded bad results.
 		binary.LittleEndian.PutUint64(*buf, uint64(val))
-		if s.sketchNew != nil {
-			s.sketchNew.Insert(*buf)
-		} else {
-			s.sketchOld.Insert(*buf)
-		}
+		s.sketch.Insert(*buf)
 		return nil
 	}
 	isNull := true
@@ -715,10 +690,6 @@ func (s *sketchInfo) addRowLegacy(
 	if isNull {
 		s.numNulls++
 	}
-	if s.sketchNew != nil {
-		s.sketchNew.Insert(*buf)
-	} else {
-		s.sketchOld.Insert(*buf)
-	}
+	s.sketch.Insert(*buf)
 	return nil
 }
