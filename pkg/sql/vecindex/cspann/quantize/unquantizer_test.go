@@ -8,8 +8,8 @@ package quantize
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
 )
@@ -17,7 +17,7 @@ import (
 // Basic tests.
 func TestUnQuantizerSimple(t *testing.T) {
 	var workspace workspace.T
-	quantizer := NewUnQuantizer(2, vecdist.L2Squared)
+	quantizer := NewUnQuantizer(2, vecpb.L2SquaredDistance)
 	require.Equal(t, 2, quantizer.GetDims())
 
 	// Quantize empty set.
@@ -85,7 +85,7 @@ func TestUnQuantizerSimple(t *testing.T) {
 	require.Equal(t, []float32{0}, errorBounds, 2)
 
 	// Test InnerProduct distance metric.
-	quantizer = NewUnQuantizer(2, vecdist.InnerProduct)
+	quantizer = NewUnQuantizer(2, vecpb.InnerProductDistance)
 	vectors = vector.MakeSetFromRawData([]float32{5, 2, 1, 2, 6, 5}, 2)
 	quantizedSet = quantizer.Quantize(&workspace, vectors)
 
@@ -97,7 +97,7 @@ func TestUnQuantizerSimple(t *testing.T) {
 	require.Equal(t, []float32{0, 0, 0}, errorBounds)
 
 	// Test Cosine distance metric.
-	quantizer = NewUnQuantizer(2, vecdist.Cosine)
+	quantizer = NewUnQuantizer(2, vecpb.CosineDistance)
 	vectors = vector.MakeSetFromRawData([]float32{-1, 0, 0, 1, 0.70710678, 0.70710678}, 2)
 	quantizedSet = quantizer.Quantize(&workspace, vectors)
 

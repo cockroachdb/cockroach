@@ -12,8 +12,8 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
@@ -67,7 +67,7 @@ type BalancedKmeans struct {
 	Rand *rand.Rand
 	// DistanceMetric specifies which distance function to use when clustering
 	// vectors. Lower distances indicate greater similarity.
-	DistanceMetric vecdist.Metric
+	DistanceMetric vecpb.DistanceMetric
 }
 
 // ComputeCentroids separates the given set of input vectors into a left and
@@ -159,7 +159,7 @@ func (km *BalancedKmeans) AssignPartitions(
 	// For Cosine and InnerProduct distances, compute the norms (magnitudes) of
 	// the left and right centroids. Invert the magnitude to avoid division in
 	// the loop, as well as to take care of the division-by-zero case up front.
-	spherical := km.DistanceMetric == vecdist.Cosine || km.DistanceMetric == vecdist.InnerProduct
+	spherical := km.DistanceMetric == vecpb.CosineDistance || km.DistanceMetric == vecpb.InnerProductDistance
 	var invLeftNorm, invRightNorm float32
 	if spherical {
 		invLeftNorm = num32.Norm(leftCentroid)
@@ -272,8 +272,8 @@ func (km *BalancedKmeans) selectInitialRightCentroid(
 	var distanceSum float32
 	distanceMin := float32(math.MaxFloat32)
 	for i := range count {
-		distance := vecdist.Measure(km.DistanceMetric, vectors.At(i), leftCentroid)
-		if km.DistanceMetric == vecdist.InnerProduct {
+		distance := vecpb.MeasureDistance(km.DistanceMetric, vectors.At(i), leftCentroid)
+		if km.DistanceMetric == vecpb.InnerProductDistance {
 			// For inner product, rank vectors by their angular distance from the
 			// left centroid, ignoring their magnitudes.
 			// NOTE: Vectors have norm of one (i.e. they are unit vectors) when using
@@ -399,9 +399,9 @@ func (km *BalancedKmeans) validateVectors(vectors vector.Set) {
 	}
 
 	switch km.DistanceMetric {
-	case vecdist.L2Squared, vecdist.InnerProduct:
+	case vecpb.L2SquaredDistance, vecpb.InnerProductDistance:
 
-	case vecdist.Cosine:
+	case vecpb.CosineDistance:
 		utils.ValidateUnitVectors(vectors)
 
 	default:

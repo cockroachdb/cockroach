@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
@@ -22,18 +22,18 @@ import (
 
 func TestBalancedKMeans(t *testing.T) {
 	calcMeanDistance := func(
-		distanceMetric vecdist.Metric,
+		distanceMetric vecpb.DistanceMetric,
 		vectors vector.Set,
 		centroid vector.T,
 		offsets []uint64,
 	) float32 {
-		if distanceMetric == vecdist.Cosine || distanceMetric == vecdist.InnerProduct {
+		if distanceMetric == vecpb.CosineDistance || distanceMetric == vecpb.InnerProductDistance {
 			centroid = slices.Clone(centroid)
 			num32.Normalize(centroid)
 		}
 		var distanceSum float32
 		for _, offset := range offsets {
-			distance := vecdist.Measure(distanceMetric, vectors.At(int(offset)), centroid)
+			distance := vecpb.MeasureDistance(distanceMetric, vectors.At(int(offset)), centroid)
 			distanceSum += distance
 		}
 		return distanceSum / float32(len(offsets))
@@ -45,7 +45,7 @@ func TestBalancedKMeans(t *testing.T) {
 
 	testCases := []struct {
 		desc           string
-		distanceMetric vecdist.Metric
+		distanceMetric vecpb.DistanceMetric
 		vectors        vector.Set
 		leftOffsets    []uint64
 		rightOffsets   []uint64
@@ -55,7 +55,7 @@ func TestBalancedKMeans(t *testing.T) {
 	}{
 		{
 			desc:           "partition vector set with only 2 elements",
-			distanceMetric: vecdist.L2Squared,
+			distanceMetric: vecpb.L2SquaredDistance,
 			vectors:        vector.MakeSetFromRawData([]float32{1, 2}, 1),
 			leftOffsets:    []uint64{1},
 			rightOffsets:   []uint64{0},
@@ -64,7 +64,7 @@ func TestBalancedKMeans(t *testing.T) {
 		},
 		{
 			desc:           "partition vector set with duplicates values",
-			distanceMetric: vecdist.L2Squared,
+			distanceMetric: vecpb.L2SquaredDistance,
 			vectors: vector.MakeSetFromRawData([]float32{
 				1, 1,
 				1, 1,
@@ -79,7 +79,7 @@ func TestBalancedKMeans(t *testing.T) {
 		},
 		{
 			desc:           "partition 5x3 set of vectors",
-			distanceMetric: vecdist.L2Squared,
+			distanceMetric: vecpb.L2SquaredDistance,
 			vectors: vector.MakeSetFromRawData([]float32{
 				1, 2, 3,
 				2, 5, 10,
@@ -98,7 +98,7 @@ func TestBalancedKMeans(t *testing.T) {
 			// One of the close vectors will be grouped with the far vector due
 			// to the balancing constraint.
 			desc:           "unbalanced vector set",
-			distanceMetric: vecdist.L2Squared,
+			distanceMetric: vecpb.L2SquaredDistance,
 			vectors: vector.MakeSetFromRawData([]float32{
 				3, 0,
 				2, 1,
@@ -113,7 +113,7 @@ func TestBalancedKMeans(t *testing.T) {
 		},
 		{
 			desc:           "very small values close to one another",
-			distanceMetric: vecdist.L2Squared,
+			distanceMetric: vecpb.L2SquaredDistance,
 			vectors: vector.MakeSetFromRawData([]float32{
 				1.23e-10, 2.58e-10,
 				1.25e-10, 2.60e-10,
@@ -127,7 +127,7 @@ func TestBalancedKMeans(t *testing.T) {
 		},
 		{
 			desc:           "inner product distance",
-			distanceMetric: vecdist.InnerProduct,
+			distanceMetric: vecpb.InnerProductDistance,
 			vectors: vector.MakeSetFromRawData([]float32{
 				1, 2, 3,
 				2, 5, -10,
@@ -145,7 +145,7 @@ func TestBalancedKMeans(t *testing.T) {
 			// same, so the vectors are the same distance to both. Therefore, they are
 			// arbitrarily assigned to the left or right partition.
 			desc:           "inner product distance, co-linear vectors",
-			distanceMetric: vecdist.InnerProduct,
+			distanceMetric: vecpb.InnerProductDistance,
 			vectors: vector.MakeSetFromRawData([]float32{
 				0, 1,
 				0, 10,
@@ -158,7 +158,7 @@ func TestBalancedKMeans(t *testing.T) {
 		},
 		{
 			desc:           "cosine distance",
-			distanceMetric: vecdist.Cosine,
+			distanceMetric: vecpb.CosineDistance,
 			vectors: vector.MakeSetFromRawData([]float32{
 				1, 0, 0,
 				0.57735, 0.57735, 0.57735,
@@ -172,7 +172,7 @@ func TestBalancedKMeans(t *testing.T) {
 		},
 		{
 			desc:           "high-dimensional unit vectors, Euclidean distance",
-			distanceMetric: vecdist.L2Squared,
+			distanceMetric: vecpb.L2SquaredDistance,
 			vectors:        images.Slice(0, 100),
 			// It's challenging to test pinLeftCentroid for this case, due to the
 			// inherent randomness of the K-means++ algorithm. The other test cases
@@ -181,19 +181,19 @@ func TestBalancedKMeans(t *testing.T) {
 		},
 		{
 			desc:           "high-dimensional unit vectors, InnerProduct distance",
-			distanceMetric: vecdist.InnerProduct,
+			distanceMetric: vecpb.InnerProductDistance,
 			vectors:        images.Slice(0, 100),
 			skipPinTest:    true,
 		},
 		{
 			desc:           "high-dimensional unit vectors, Cosine distance",
-			distanceMetric: vecdist.Cosine,
+			distanceMetric: vecpb.CosineDistance,
 			vectors:        images.Slice(0, 100),
 			skipPinTest:    true,
 		},
 		{
 			desc:           "high-dimensional non-unit vectors, InnerProduct distance",
-			distanceMetric: vecdist.InnerProduct,
+			distanceMetric: vecpb.InnerProductDistance,
 			vectors:        fashion.Slice(0, 100),
 			skipPinTest:    true,
 		},
