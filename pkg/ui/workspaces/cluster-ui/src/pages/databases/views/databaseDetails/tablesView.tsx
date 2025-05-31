@@ -36,7 +36,7 @@ import {
 } from "src/sharedFromCloud/table";
 import useTable, { TableParams } from "src/sharedFromCloud/useTable";
 import { Timestamp } from "src/timestamp";
-import { StoreID } from "src/types/clusterTypes";
+import { NodeID, StoreID } from "src/types/clusterTypes";
 import { Bytes, DATE_WITH_SECONDS_FORMAT_24_TZ, tabAttr } from "src/util";
 
 import { TableColName } from "./constants";
@@ -235,12 +235,6 @@ export const TablesPageV2 = () => {
   );
   const nodesResp = useNodeStatuses();
 
-  const onNodeRegionsChange = (storeIDs: StoreID[]) => {
-    setFilters({
-      storeIDs: storeIDs.map(sid => sid.toString()),
-    });
-  };
-
   const tableList = data?.results;
   const tableData = useMemo(
     () =>
@@ -272,9 +266,20 @@ export const TablesPageV2 = () => {
     }
   };
 
-  const nodeRegionsValue = params.filters.storeIDs.map(
-    sid => parseInt(sid, 10) as StoreID,
-  );
+  const onNodeRegionsChange = (nodeIds: string[]) => {
+    const { isLoading, nodeStatusByID } = nodesResp;
+    if (isLoading) {
+      return;
+    }
+    const storeIDs = nodeIds
+      .map((n: string) => nodeStatusByID[parseInt(n) as NodeID].stores)
+      .reduce((acc, v) => acc.concat(v), [] as StoreID[])
+      .map(String);
+
+    setFilters({
+      storeIDs,
+    });
+  };
 
   const sort = params.sort;
   const colsWithSort = useMemo(
@@ -304,10 +309,7 @@ export const TablesPageV2 = () => {
           </PageConfigItem>
           {!isTenant && (
             <PageConfigItem minWidth={"200px"}>
-              <NodeRegionsSelector
-                value={nodeRegionsValue}
-                onChange={onNodeRegionsChange}
-              />
+              <NodeRegionsSelector onChange={onNodeRegionsChange} />
             </PageConfigItem>
           )}
         </PageConfig>

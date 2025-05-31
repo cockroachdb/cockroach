@@ -1,0 +1,63 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "src/core/index.module.scss";
+
+.selector {
+  min-width: 200px;
+}
+
+.warningAllNodes {
+  padding-left: 24px;
+}
+
+
+.warningAllText {
+  padding: 0 8px 0 4px;
+}
+
+.warningIcon {
+  color: #b26000;
+}
+
+.regionsSection {
+  max-height: 40vh;
+  overflow-y: scroll;
+}
+
+.option {
+  padding: 2px 8px;
+  cursor: pointer;
+  input {
+    margin-right: 4px;
+  }
+
+  label {
+    cursor: pointer; /* Explicitly set cursor for labels */
+    margin-left: 4px;
+    display: inline-block;
+  }
+}
+
+.nodeOption {
+  padding-left: 24px;
+}
+.divider {
+  margin: 4px 0;
+}
+
+.applyBtnContainer {
+  padding: 4px 12px 16px 12px;
+}
+
+.applyBtn {
+  width: 100%;
+
+  div {
+    div {
+      justify-content: center;
+    }
+  }
+}

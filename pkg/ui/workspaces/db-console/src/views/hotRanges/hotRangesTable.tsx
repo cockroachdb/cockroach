@@ -35,6 +35,11 @@ import styles from "./hotRanges.module.styl";
 const PAGE_SIZE = 50;
 const cx = classNames.bind(styles);
 
+interface EmptyMessage {
+  title: string;
+  message: string;
+}
+
 interface HotRangesTableProps {
   hotRangesList: cockroach.server.serverpb.HotRangesResponseV2.IHotRange[];
   lastUpdate?: string;
@@ -42,6 +47,7 @@ interface HotRangesTableProps {
   clearFilterContainer: React.ReactNode;
   sortSetting?: SortSetting;
   onSortChange?: (ss: SortSetting) => void;
+  emptyMessage?: EmptyMessage;
 }
 
 const HotRangesTable = ({
@@ -51,6 +57,7 @@ const HotRangesTable = ({
   clearFilterContainer,
   sortSetting,
   onSortChange,
+  emptyMessage,
 }: HotRangesTableProps) => {
   const [pagination, updatePagination] = util.usePagination(1, PAGE_SIZE);
   const columns: ColumnDescriptor<cockroach.server.serverpb.HotRangesResponseV2.IHotRange>[] =
@@ -297,12 +304,16 @@ const HotRangesTable = ({
         pagination={pagination}
         renderNoResult={
           <EmptyTable
-            title="No hot ranges"
+            title={emptyMessage.title}
             icon={emptyTableResultsImg}
             footer={
-              <Anchor href={performanceBestPracticesHotSpots} target="_blank">
-                Learn more about hot ranges
-              </Anchor>
+              <div>
+                <span>{emptyMessage.message}</span>
+                <br />
+                <Anchor href={performanceBestPracticesHotSpots} target="_blank">
+                  Learn more about hot ranges
+                </Anchor>
+              </div>
             }
           />
         }
