@@ -1,0 +1,42 @@
+# LogicTest: !local-mixed-24.3 !local-mixed-25.1 !local-mixed-25.2
+# Tests for parsing/validation of the PROVISIONING_SOURCE role option.
+
+statement error role "root" cannot have a PROVISIONING_SOURCE
+ALTER ROLE root PROVISIONING_SOURCE 'ldap:ldap.example.com'
+
+statement error pq: PROVISIONING_SOURCE "ldap.example.com" was not prefixed with valid HBA auth method "ldap"
+CREATE ROLE role_with_provisioning PROVISIONING_SOURCE 'ldap.example.com'
+
+statement ok
+CREATE ROLE role_with_provisioning PROVISIONING_SOURCE 'ldap:ldap.bar.com'
+
+query T
+SELECT value FROM system.role_options
+WHERE username = 'role_with_provisioning'
+AND option = 'PROVISIONING_SOURCE'
+----
+ldap:ldap.bar.com
+
+statement ok
+ALTER ROLE role_with_provisioning PROVISIONING_SOURCE 'ldap:ldap.example.com'
+
+query T
+SELECT value FROM system.role_options
+WHERE username = 'role_with_provisioning'
+AND option = 'PROVISIONING_SOURCE'
+----
+ldap:ldap.example.com
+
+statement error pq: provided IDP "\[\]!@#%#\^\$&\*" in PROVISIONING_SOURCE is non parseable: parse "\[\]!@#%#\^\$&\*": invalid URL escape "%#\^"
+ALTER ROLE role_with_provisioning PROVISIONING_SOURCE 'ldap:[]!@#%#^$&*'
+
+statement ok
+ALTER ROLE role_with_provisioning PROVISIONING_SOURCE 'ldap:foo.bar'
+
+query T
+SELECT value FROM system.role_options
+WHERE username = 'role_with_provisioning'
+AND option = 'PROVISIONING_SOURCE'
+----
+ldap:foo.bar
+

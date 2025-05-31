@@ -2813,6 +2813,13 @@ func TestRepeatableReadLogicCCL_procedure_plpgsql(
 	runCCLLogicTest(t, "procedure_plpgsql")
 }
 
+func TestRepeatableReadLogicCCL_provisioning_source(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "provisioning_source")
+}
+
 func TestRepeatableReadLogicCCL_read_committed(
 	t *testing.T,
 ) {

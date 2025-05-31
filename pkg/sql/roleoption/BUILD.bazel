@@ -12,7 +12,9 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/cli/cliflags",
+        "//pkg/clusterversion",
         "//pkg/security/distinguishedname",
+        "//pkg/security/provisioning",
         "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/sql/pgwire/pgcode",
