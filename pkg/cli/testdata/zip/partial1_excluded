@@ -1,6 +1,6 @@
 zip
 ----
-debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
+debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0 --validate-zip-file=false
 [cluster] discovering virtual clusters... done
 [cluster] creating output file /dev/null... done
 [cluster] establishing RPC connection to ...

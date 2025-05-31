@@ -35,6 +35,7 @@ Release justification: non-production (release infra) change.
 const (
 	releasedVersionFlag = "released-version"
 	nextVersionFlag     = "next-version"
+	versionBumpOnly     = "version-bump-only"
 )
 
 var updateVersionsFlags = struct {
@@ -46,6 +47,7 @@ var updateVersionsFlags = struct {
 	smtpHost           string
 	smtpPort           int
 	emailAddresses     []string
+	versionBumpOnly    bool
 }{}
 
 var updateVersionsCmd = &cobra.Command{
@@ -57,6 +59,7 @@ var updateVersionsCmd = &cobra.Command{
 
 func init() {
 	updateVersionsCmd.Flags().BoolVar(&updateVersionsFlags.dryRun, dryRun, false, "print diff and emails without any side effects")
+	updateVersionsCmd.Flags().BoolVar(&updateVersionsFlags.versionBumpOnly, versionBumpOnly, false, "only bump the version, do not create any other PRs")
 	updateVersionsCmd.Flags().StringVar(&updateVersionsFlags.releasedVersionStr, releasedVersionFlag, "", "released cockroachdb version")
 	updateVersionsCmd.Flags().StringVar(&updateVersionsFlags.nextVersionStr, nextVersionFlag, "", "next cockroachdb version")
 	updateVersionsCmd.Flags().StringVar(&updateVersionsFlags.templatesDir, templatesDir, "", "templates directory")
@@ -490,6 +493,10 @@ func generateRepoList(
 		}
 		reposToWorkOn = append(reposToWorkOn, repo)
 	}
+	if updateVersionsFlags.versionBumpOnly {
+		log.Println("Version bump only, skipping other PRs")
+		return reposToWorkOn, nil
+	}
 
 	// 2. Brew. Update for all stable releases
 	if releasedVersion.Prerelease() == "" {
@@ -572,13 +579,15 @@ func generateRepoList(
 		// TODO: add a check to make sure the merge generates no unexpected
 		// changes (we can ignore version.txt changes). The "ours" strategy
 		// doesn't account for changes in the merge branch.
+		commitMessage := generateCommitMessage(fmt.Sprintf("merge %s to %s", mergeBranch, baseBranch), releasedVersion, nextVersion)
+		commitMessage += "\nDocs: noop merge\n"
 		repo := prRepo{
 			owner:          owner,
 			repo:           prefix + "cockroach",
 			branch:         baseBranch,
 			prBranch:       fmt.Sprintf("merge-%s-to-%s-%s", mergeBranch, baseBranch, randomString(4)),
 			githubUsername: "cockroach-teamcity",
-			commitMessage:  generateCommitMessage(fmt.Sprintf("merge %s to %s", mergeBranch, baseBranch), releasedVersion, nextVersion),
+			commitMessage:  commitMessage,
 			fn: func(gitDir string) error {
 				cmd := exec.Command("git", "merge", "-s", "ours", "--no-commit", remoteOrigin+"/"+mergeBranch)
 				cmd.Dir = gitDir
@@ -706,28 +715,7 @@ func parseVersion(versionStr string) (*semver.Version, error) {
 	return version, nil
 }
 
-// hasVersionTxt returns whether a given version uses the version.txt
-// file to determine binary version.
-func hasVersionTxt(version *semver.Version) bool {
-	return version.Major() >= 23
-}
-
 func generateCommitMessage(prefix string, released, next *semver.Version) string {
-	var nextVersionMsg string
-	if hasVersionTxt(released) {
-		nextVersionMsg = ". Next version: " + next.String()
-	}
+	nextVersionMsg := ". Next version: " + next.String()
 	return fmt.Sprintf(commitTemplate, prefix, released, nextVersionMsg)
-}
-
-// nextReleaseSeries parses the version and returns the next release series assuming we have 2 releases yearly
-func nextReleaseSeries(version *semver.Version) string {
-	nextMinor := version.IncMinor()
-	// TODO(rail): revisit when we have more than 2 releases a year
-	if nextMinor.Minor() > 2 {
-		nextMinor = nextMinor.IncMajor()
-		// IncMajor() resets all version parts to 0, thus we need to bump the minor part to match our version schema.
-		nextMinor = nextMinor.IncMinor()
-	}
-	return fmt.Sprintf("%d.%d", nextMinor.Major(), nextMinor.Minor())
 }

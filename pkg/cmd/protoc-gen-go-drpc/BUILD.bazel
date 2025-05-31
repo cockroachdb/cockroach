@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//proto:compiler.bzl", "go_proto_compiler")
+
+go_proto_compiler(
+    name = "protoc-gen-go-drpc_compiler",
+    options = [
+        "paths=source_relative",
+        "protolib=github.com/gogo/protobuf",
+    ],
+    plugin = "@io_storj_drpc//cmd/protoc-gen-go-drpc",
+    suffix = "_drpc.pb.go",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//jsonpb",
+        "@com_github_gogo_protobuf//proto",
+        "@io_storj_drpc//:drpc",
+        "@io_storj_drpc//drpcerr",
+    ],
+)

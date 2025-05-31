@@ -43,6 +43,21 @@ func migrateDeprecatedFields(
 		migrated = true
 	}
 
+	// In TriggerDeps, map the deprecated UsesRelationIDs to a
+	// TriggerDeps_RelationReference.
+	if deps := target.GetTriggerDeps(); deps != nil {
+		if len(deps.UsesRelationIDs) > 0 {
+			deps.UsesRelations = make([]TriggerDeps_RelationReference, len(deps.UsesRelationIDs))
+			for i := range deps.UsesRelationIDs {
+				deps.UsesRelations[i] = TriggerDeps_RelationReference{
+					ID: deps.UsesRelationIDs[i],
+				}
+			}
+			deps.UsesRelationIDs = nil
+			migrated = true
+		}
+	}
+
 	// Migrate ComputeExpr field  to separate ColumnComputeExpression target.
 	if columnType := target.GetColumnType(); columnType != nil {
 		if columnType.ComputeExpr != nil {

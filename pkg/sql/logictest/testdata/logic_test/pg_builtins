@@ -1065,3 +1065,19 @@ ubar     interval  NULL
 ufoo     interval  NULL
 
 subtest end
+
+# Regression test for not marking to_reg* builtins as DistSQL-blocklisted
+# (#144384).
+statement ok
+CREATE TABLE t144384 (c TEXT);
+
+statement ok
+CREATE INDEX i144384 ON t144384(c);
+
+statement ok
+INSERT INTO t144384 VALUES ('i144384');
+
+query T
+SELECT to_regclass(c) FROM t144384;
+----
+i144384

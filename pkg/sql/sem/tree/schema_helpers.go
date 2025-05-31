@@ -32,7 +32,7 @@ func IsSetOrResetSchemaLocked(n Statement) bool {
 // IsAllowedLDRSchemaChange returns true if the schema change statement is
 // allowed to occur while the table is being referenced by a logical data
 // replication job as a destination table.
-func IsAllowedLDRSchemaChange(n Statement, virtualColNames []string) bool {
+func IsAllowedLDRSchemaChange(n Statement, virtualColNames []string, kvWriterEnabled bool) bool {
 	switch s := n.(type) {
 	case *CreateIndex:
 		// Don't allow creating an index on a virtual column.
@@ -40,6 +40,10 @@ func IsAllowedLDRSchemaChange(n Statement, virtualColNames []string) bool {
 			if slices.Contains(virtualColNames, string(col.Column)) {
 				return false
 			}
+		}
+		if s.Predicate != nil && !kvWriterEnabled {
+			// The sql writer supports partial indexes.
+			return true
 		}
 		// Disallow unique, partial, or hash-sharded indexes. Having these indexes
 		// on a destination table could cause inserts to fail.

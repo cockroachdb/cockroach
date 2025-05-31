@@ -10,7 +10,7 @@ run ok
 txn_begin t=A ts=10,0
 ----
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 gul=0,0
 
 run error
 check_for_acquire_lock t=A k=k1 str=none
@@ -43,7 +43,7 @@ with t=A
   acquire_lock t=A k=k1 str=shared
 ----
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} lock=true stat=PENDING rts=10.000000000,0 gul=0,0
 lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 
 run error
@@ -52,7 +52,7 @@ with t=A
   acquire_lock t=A k=k1 str=shared
 ----
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=5} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=5} lock=true stat=PENDING rts=10.000000000,0 gul=0,0
 lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 error: (*withstack.withStack:) cannot acquire lock with strength Shared at seq number 5, already held at higher seq number 10
 
@@ -62,7 +62,7 @@ with t=A
   acquire_lock t=A k=k1 str=shared
 ----
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 gul=0,0
 lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 
 run error
@@ -71,6 +71,6 @@ with t=A
   acquire_lock t=A k=k1 str=shared
 ----
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 gul=0,0
 lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 error: (*withstack.withStack:) locking request with epoch 1 came after lock had already been acquired at epoch 2 in txn 00000001-0000-0000-0000-000000000000

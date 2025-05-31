@@ -7,7 +7,6 @@ package memstore
 
 import (
 	"context"
-	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
@@ -37,12 +36,6 @@ type memTxn struct {
 	// lifetime of the transaction.
 	updated bool
 
-	// unbalanced, if non-nil, records a non-leaf partition that had all of its
-	// vectors removed during the transaction. If, by the end of the transaction,
-	// the partition is still empty, the store will panic, since this violates
-	// the constraint that the K-means tree is always fully balanced.
-	unbalanced *memPartition
-
 	// ownedLocks contains all exclusive partition locks that have been obtained
 	// during the transaction. These will be released at the end of the
 	// transaction.
@@ -58,128 +51,6 @@ type memTxn struct {
 		// to determine when it's safe to garbage collect deleted partitions.
 		ended bool
 	}
-}
-
-// GetPartition implements the Txn interface.
-func (tx *memTxn) GetPartition(
-	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
-) (*cspann.Partition, error) {
-	// GetPartition is only called by split and merge operations, so acquire the
-	// exclusive structure lock so that only one operation at a time can modify
-	// the tree structure.
-	tx.acquireStructureLock()
-
-	// Acquire exclusive lock on the requested partition for the duration of the
-	// transaction.
-	memPart, err := tx.lockPartition(treeKey, partitionKey, true /* isExclusive */)
-	if err != nil {
-		if partitionKey == cspann.RootKey && errors.Is(err, cspann.ErrPartitionNotFound) {
-			// Root partition has not yet been created, so return empty partition.
-			metadata := tx.store.makeEmptyRootMetadata()
-			return cspann.CreateEmptyPartition(tx.store.rootQuantizer, metadata), nil
-		}
-		return nil, err
-	}
-	tx.ownedLocks = append(tx.ownedLocks, &memPart.lock.memLock)
-
-	// Make a deep copy of the partition, since modifications shouldn't impact
-	// the store's copy.
-	return memPart.lock.partition.Clone(), nil
-}
-
-// SetRootPartition implements the Txn interface.
-func (tx *memTxn) SetRootPartition(
-	ctx context.Context, treeKey cspann.TreeKey, partition *cspann.Partition,
-) error {
-	// Acquire the structure lock before replacing the root partition.
-	tx.acquireStructureLock()
-
-	// Acquire exclusive lock on the root partition to replace.
-	memPart, err := tx.lockPartition(treeKey, cspann.RootKey, true /* isExclusive */)
-	if err != nil {
-		return err
-	}
-	defer memPart.lock.Release()
-
-	tx.store.mu.Lock()
-	defer tx.store.mu.Unlock()
-
-	// Grow or shrink CVStats slice if a new level is being added or removed.
-	expectedLevels := int(partition.Level() - 1)
-	if expectedLevels > len(tx.store.mu.stats.CVStats) {
-		tx.store.mu.stats.CVStats =
-			slices.Grow(tx.store.mu.stats.CVStats, expectedLevels-len(tx.store.mu.stats.CVStats))
-	}
-	tx.store.mu.stats.CVStats = tx.store.mu.stats.CVStats[:expectedLevels]
-
-	// Update the root partition's creation time to indicate to callers that it
-	// was replaced.
-	memPart.lock.partition = partition
-	memPart.lock.created = tx.store.tickLocked()
-	memPart.count.Store(int64(partition.Count()))
-
-	tx.store.updatedStructureLocked(tx)
-	return nil
-}
-
-// InsertPartition implements the Txn interface.
-func (tx *memTxn) InsertPartition(
-	ctx context.Context, treeKey cspann.TreeKey, partition *cspann.Partition,
-) (cspann.PartitionKey, error) {
-	// Acquire the structure lock before inserting a new partition.
-	tx.acquireStructureLock()
-
-	tx.store.mu.Lock()
-	defer tx.store.mu.Unlock()
-
-	// Assign key to new partition.
-	partitionKey := tx.store.mu.nextKey
-	tx.store.mu.nextKey++
-
-	// Insert new partition.
-	tx.store.insertPartitionLocked(treeKey, partitionKey, partition)
-
-	// Update stats.
-	tx.store.mu.stats.NumPartitions++
-
-	tx.store.updatedStructureLocked(tx)
-	return partitionKey, nil
-}
-
-// DeletePartition implements the Txn interface.
-func (tx *memTxn) DeletePartition(
-	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
-) error {
-	// Acquire the structure lock before deleting a partition.
-	tx.acquireStructureLock()
-
-	memPart, err := tx.lockPartition(treeKey, partitionKey, true /* isExclusive */)
-	if err != nil {
-		// If partition doesn't exist or isn't visible, it's a no-op.
-		if errors.Is(err, cspann.ErrPartitionNotFound) || errors.Is(err, cspann.ErrRestartOperation) {
-			return nil
-		}
-		return err
-	}
-	defer memPart.lock.Release()
-
-	// Mark partition as deleted.
-	if memPart.lock.deleted {
-		panic(errors.AssertionFailedf("partition %d is already deleted", partitionKey))
-	}
-	memPart.lock.deleted = true
-
-	tx.store.mu.Lock()
-	defer tx.store.mu.Unlock()
-
-	// Add the partition to the pending list so that it will only be garbage
-	// collected once all older transactions have ended.
-	tx.store.mu.pending.PushBack(pendingItem{deletedPartition: memPart})
-
-	tx.store.mu.stats.NumPartitions--
-
-	tx.store.updatedStructureLocked(tx)
-	return nil
 }
 
 // GetPartitionMetadata implements the Txn interface.
@@ -213,7 +84,7 @@ func (tx *memTxn) GetPartitionMetadata(
 	if forUpdate && !metadata.StateDetails.State.AllowAddOrRemove() {
 		err = cspann.NewConditionFailedError(*metadata)
 		return cspann.PartitionMetadata{}, errors.Wrapf(err,
-			"getting partition metadata %d (state=%s)",
+			"getting metadata for partition %d (state=%s)",
 			partitionKey, metadata.StateDetails.State.String())
 	}
 
@@ -234,11 +105,10 @@ func (tx *memTxn) AddToPartition(
 	memPart, err := tx.lockPartition(treeKey, partitionKey, true /* isExclusive */)
 	if err != nil {
 		if partitionKey == cspann.RootKey && errors.Is(err, cspann.ErrPartitionNotFound) {
-			// Root partition did not exist, so ensure it's created now.
-			memPart, err = tx.ensureLockedRootPartition(treeKey)
-		}
-		if err != nil {
-			return err
+			// Root partition did not exist, so lazily create it now.
+			memPart = tx.ensureLockedRootPartition(treeKey)
+		} else {
+			return errors.Wrapf(err, "adding to partition %d (level=%d)", partitionKey, level)
 		}
 	}
 	defer memPart.lock.Release()
@@ -254,9 +124,9 @@ func (tx *memTxn) AddToPartition(
 
 	// Add the vector to the partition.
 	if level != partition.Level() {
-		panic(errors.AssertionFailedf(
-			"AddToPartition level %d does not match actual partition level %d",
-			level, partition.Level()))
+		return errors.Wrapf(cspann.ErrRestartOperation,
+			"partition %d level %d does not match expected level %d",
+			partitionKey, partition.Level(), level)
 	}
 
 	if partition.Add(&tx.workspace, vec, childKey, valueBytes, true /* overwrite */) {
@@ -299,22 +169,15 @@ func (tx *memTxn) RemoveFromPartition(
 
 	// Remove vector from the partition.
 	if level != partition.Level() {
-		panic(errors.AssertionFailedf(
-			"RemoveFromPartition level %d does not match actual partition level %d",
-			level, partition.Level()))
+		return errors.Wrapf(cspann.ErrRestartOperation,
+			"removing from partition %d (expected: %d, actual: %d)",
+			partitionKey, level, partition.Level())
 	}
 
 	if partition.ReplaceWithLastByKey(childKey) {
 		tx.store.mu.Lock()
 		defer tx.store.mu.Unlock()
 		memPart.count.Add(-1)
-	}
-
-	if partition.Count() == 0 && partition.Level() > cspann.LeafLevel {
-		// A non-leaf partition has zero vectors. If this is still true at the
-		// end of the transaction, the K-means tree will be unbalanced, which
-		// violates a key constraint.
-		tx.unbalanced = memPart
 	}
 
 	tx.updated = true
@@ -328,19 +191,21 @@ func (tx *memTxn) SearchPartitions(
 	toSearch []cspann.PartitionToSearch,
 	queryVector vector.T,
 	searchSet *cspann.SearchSet,
-) (level cspann.Level, err error) {
+) error {
 	for i := range toSearch {
-		var searchLevel cspann.Level
-
 		memPart, ok := tx.store.getPartition(treeKey, toSearch[i].Key)
 		if !ok {
 			if toSearch[i].Key == cspann.RootKey {
 				// Root partition has not yet been created, so it must be empty.
-				searchLevel = cspann.LeafLevel
-				toSearch[i].StateDetails = cspann.MakeReadyDetails()
+				toSearch[i].Level = cspann.LeafLevel
+				toSearch[i].StateDetails.MakeReady()
 				toSearch[i].Count = 0
 			} else {
-				return cspann.InvalidLevel, cspann.ErrPartitionNotFound
+				// Partition does not exist, so return InvalidLevel, MissingState
+				// and Count=0.
+				toSearch[i].Level = cspann.InvalidLevel
+				toSearch[i].StateDetails = cspann.PartitionStateDetails{}
+				toSearch[i].Count = 0
 			}
 		} else {
 			// Acquire shared lock on partition and search it. Note that we don't
@@ -352,50 +217,52 @@ func (tx *memTxn) SearchPartitions(
 				defer memPart.lock.ReleaseShared()
 
 				partition := memPart.lock.partition
+				toSearch[i].Level = partition.Level()
 				toSearch[i].StateDetails = partition.Metadata().StateDetails
-				searchLevel, toSearch[i].Count = partition.Search(
-					&tx.workspace, toSearch[i].Key, queryVector, searchSet)
+				toSearch[i].Count = partition.Search(&tx.workspace, toSearch[i].Key, queryVector, searchSet)
 			}()
-		}
-
-		if i == 0 {
-			level = searchLevel
-		} else if level != searchLevel {
-			// Callers should only search for partitions at the same level.
-			panic(errors.AssertionFailedf(
-				"caller already searched a partition at level %d, cannot search at level %d",
-				level, searchLevel))
 		}
 	}
 
-	return level, nil
+	return nil
 }
 
 // GetFullVectors implements the Txn interface.
 func (tx *memTxn) GetFullVectors(
 	ctx context.Context, treeKey cspann.TreeKey, refs []cspann.VectorWithKey,
 ) error {
-	tx.store.mu.Lock()
-	defer tx.store.mu.Unlock()
+	if len(refs) == 0 {
+		return nil
+	}
 
-	for i := 0; i < len(refs); i++ {
-		ref := &refs[i]
-		if ref.Key.PartitionKey != cspann.InvalidKey {
-			// Get the partition's centroid.
-			memPart, ok := tx.store.getPartitionLocked(treeKey, ref.Key.PartitionKey)
-			if !ok {
-				return cspann.ErrPartitionNotFound
-			}
+	// All vectors must be at the same level of the tree.
+	if refs[0].Key.PartitionKey != cspann.InvalidKey {
+		// Get partition centroids.
+		for i := range len(refs) {
+			func(vectorWithKey *cspann.VectorWithKey) {
+				// Lock the partition to read its data.
+				memPart := tx.store.lockPartition(
+					treeKey, vectorWithKey.Key.PartitionKey, uniqueOwner, false /* isExclusive */)
+				if memPart != nil {
+					defer memPart.lock.ReleaseShared()
+					vectorWithKey.Vector = memPart.lock.partition.Centroid()
+				} else {
+					vectorWithKey.Vector = nil
+				}
+			}(&refs[i])
+		}
+	} else {
+		// Get inserted vectors.
+		tx.store.mu.Lock()
+		defer tx.store.mu.Unlock()
 
-			// Don't need to acquire lock to call the Centroid method, since it
-			// is immutable and thread-safe.
-			ref.Vector = memPart.lock.partition.Centroid()
-		} else {
-			vector, ok := tx.store.mu.vectors[string(refs[i].Key.KeyBytes)]
+		for i := range len(refs) {
+			vectorWithKey := &refs[i]
+			vector, ok := tx.store.mu.vectors[string(vectorWithKey.Key.KeyBytes)]
 			if ok {
-				ref.Vector = vector
+				vectorWithKey.Vector = vector
 			} else {
-				ref.Vector = nil
+				vectorWithKey.Vector = nil
 			}
 		}
 	}
@@ -407,52 +274,22 @@ func (tx *memTxn) GetFullVectors(
 // K-means tree, and returns it with an exclusive lock already acquired on it.
 // NOTE: This is only intended for use with AddToPartition and/or other methods
 // that need an exclusive lock.
-func (tx *memTxn) ensureLockedRootPartition(treeKey cspann.TreeKey) (*memPartition, error) {
-	// Acquire the structure lock in order to create the root partition.
-	tx.store.structureLock.Acquire(tx.id)
-	tx.ownedLocks = append(tx.ownedLocks, &tx.store.structureLock)
+func (tx *memTxn) ensureLockedRootPartition(treeKey cspann.TreeKey) *memPartition {
+	metadata := tx.store.makeEmptyRootMetadata()
+	memPart, _ := tx.store.tryCreateEmptyPartition(treeKey, cspann.RootKey, metadata)
 
-	// Check for race condition where another thread already created the root.
-	memPart, err := tx.lockPartition(treeKey, cspann.RootKey, true /* isExclusive */)
-	if err != nil {
-		if !errors.Is(err, cspann.ErrPartitionNotFound) {
-			return nil, err
-		}
-
-		// Partition not found, so create it.
-	} else {
-		// Root was already created, return it.
-		return memPart, err
-	}
-
-	tx.store.mu.Lock()
-	defer tx.store.mu.Unlock()
-
-	metadata := tx.store.makeEmptyRootMetadataLocked()
-	root := cspann.CreateEmptyPartition(tx.store.rootQuantizer, metadata)
-	memPart = tx.store.insertPartitionLocked(treeKey, cspann.RootKey, root)
+	// Acquire an exclusive lock on the partition.
 	memPart.lock.Acquire(tx.id)
-
-	tx.store.updatedStructureLocked(tx)
-	return memPart, nil
+	return memPart
 }
 
-// acquireStructureLock acquires an exclusive lock that's needed by operations
-// that want to modify the structure of a tree, e.g. inserting or deleting a
-// partition. The lock is held for the duration of the transaction.
-func (tx *memTxn) acquireStructureLock() {
-	if tx.store.structureLock.IsAcquiredBy(tx.id) {
-		// Transaction has already acquired the structure lock.
-		return
-	}
-	tx.store.structureLock.Acquire(tx.id)
-	tx.ownedLocks = append(tx.ownedLocks, &tx.store.structureLock)
-}
-
-// lockPartition acquires a shared or exclusive lock of the given partition.
-// If the partition does not exist, it returns ErrPartitionNotFound. If the
-// partition was deleted by a concurrent transaction, it pushes the
-// transaction's forward and returns ErrRestartOperation.
+// lockPartition acquires a shared or exclusive lock of the given partition. If
+// the partition does not exist, it returns ErrPartitionNotFound. Unlike
+// Store.lockPartition, this method takes the timestamp of the transaction into
+// account. For example, if the partition has been deleted before the
+// transaction's creation time, it returns ErrPartitionNotFound. Or if the root
+// partition's level has been updated since the transaction's creation time, it
+// returns ErrRestartOperation.
 func (tx *memTxn) lockPartition(
 	treeKey cspann.TreeKey, partitionKey cspann.PartitionKey, isExclusive bool,
 ) (*memPartition, error) {
@@ -467,9 +304,11 @@ func (tx *memTxn) lockPartition(
 		memPart.lock.AcquireShared(tx.id)
 	}
 
-	// If the partition is deleted, then this transaction conflicted with another
-	// transaction and needs to be restarted.
-	if !memPart.isVisibleLocked(tx.current) {
+	// If the root partition's level was updated after the transaction was
+	// started, or if the partition was deleted after the transaction was started,
+	// then treat this as a concurrency conflict and instruct the caller to
+	// restart the operation at a later time.
+	if tx.current < memPart.lock.created || tx.current < memPart.lock.deleted {
 		// Release the partition lock.
 		if isExclusive {
 			memPart.lock.Release()
@@ -477,13 +316,27 @@ func (tx *memTxn) lockPartition(
 			memPart.lock.ReleaseShared()
 		}
 
-		// Push forward transaction's current time in case the root partition was
-		// deleted as part of being replaced. The restarted operation needs to
-		// see the new root partition.
 		tx.store.mu.Lock()
 		defer tx.store.mu.Unlock()
+		prevCurrent := tx.current
 		tx.current = tx.store.tickLocked()
-		return nil, cspann.ErrRestartOperation
+		return nil, errors.Wrapf(cspann.ErrRestartOperation,
+			"root partition (created=%d) is not visible to txn %d (current=%d)",
+			memPart.lock.created, tx.id, prevCurrent)
+	}
+
+	// If the partition has been deleted, and the operation wasn't restarted
+	// above, then return ErrPartitionNotFound.
+	if memPart.lock.deleted != 0 {
+		if isExclusive {
+			memPart.lock.Release()
+		} else {
+			memPart.lock.ReleaseShared()
+		}
+
+		return nil, errors.Wrapf(cspann.ErrPartitionNotFound,
+			"partition %d (created=%d, deleted=%d) has been deleted, txn %d (current=%d)",
+			partitionKey, memPart.lock.created, memPart.lock.deleted, tx.id, tx.current)
 	}
 
 	return memPart, nil

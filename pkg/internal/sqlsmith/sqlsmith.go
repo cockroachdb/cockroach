@@ -470,6 +470,17 @@ var InsUpdOnly = simpleOption("inserts and updates only", func(s *Smither) {
 	}
 })
 
+// InsUpdDelOnly causes the Smither to emit 80% INSERT, 10% UPDATE,
+// 10% DELETE statements.
+var InsUpdDelOnly = simpleOption("inserts updates and deletes only",
+	func(s *Smither) {
+		s.stmtWeights = []statementWeight{
+			{8, makeInsert},
+			{1, makeUpdate},
+			{1, makeDelete},
+		}
+	})
+
 // IgnoreFNs causes the Smither to ignore functions that match the regex.
 func IgnoreFNs(regex string) SmitherOption {
 	r := regexp.MustCompile(regex)

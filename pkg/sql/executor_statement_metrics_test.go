@@ -16,6 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -186,6 +188,13 @@ func executorStub(detailEnabled bool) *connExecutor {
 			Settings: cluster.MakeTestingClusterSettings(),
 		},
 	}
+
+	ex.sessionDataStack = sessiondata.NewStack(&sessiondata.SessionData{
+		SessionData: sessiondatapb.SessionData{
+			Database:        "test-db",
+			ApplicationName: "test-app",
+		}},
+	)
 	metrics := makeMetrics(false, &ex.server.cfg.Settings.SV)
 	ex.metrics = &metrics
 

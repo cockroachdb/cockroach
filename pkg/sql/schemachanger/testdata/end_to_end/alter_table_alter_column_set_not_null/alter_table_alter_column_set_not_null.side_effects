@@ -12,7 +12,7 @@ begin transaction #1
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.set_not_null
-## StatementPhase stage 1 of 1 with 1 MutationType op
+## StatementPhase stage 1 of 1 with 2 MutationType ops
 upsert descriptor #104
    table:
   +  checks:
@@ -47,7 +47,9 @@ upsert descriptor #104
      name: t
      nextColumnId: 3
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -56,7 +58,7 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 3 MutationType ops
+## PreCommitPhase stage 2 of 2 with 4 MutationType ops
 upsert descriptor #104
    table:
   +  checks:
@@ -123,7 +125,9 @@ upsert descriptor #104
      name: t
      nextColumnId: 3
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -137,11 +141,11 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitPhase stage 1 of 2 with 1 ValidationType op
+## PostCommitPhase stage 1 of 3 with 1 ValidationType op
 validate CHECK constraint j_auto_not_null in table #104
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 2 of 2 with 3 MutationType ops
+## PostCommitPhase stage 2 of 3 with 3 MutationType ops
 upsert descriptor #104
    table:
   -  checks:
@@ -160,6 +164,39 @@ upsert descriptor #104
   -    nullable: true
        type:
          family: IntFamily
+  ...
+     id: 104
+     modificationTime: {}
+  -  mutations:
+  -  - constraint:
+  -      check:
+  -        columnIds:
+  -        - 2
+  -        expr: j IS NOT NULL
+  -        isNonNullConstraint: true
+  -        name: j_auto_not_null
+  -        validity: Validating
+  -      constraintType: NOT_NULL
+  -      foreignKey: {}
+  -      name: j_auto_not_null
+  -      notNullColumn: 2
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: ADD
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+     name: t
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 3 of 3 with 1 MutationType op pending"
+commit transaction #4
+begin transaction #5
+## PostCommitPhase stage 3 of 3 with 3 MutationType ops
+upsert descriptor #104
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -193,32 +230,12 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
-     id: 104
-     modificationTime: {}
-  -  mutations:
-  -  - constraint:
-  -      check:
-  -        columnIds:
-  -        - 2
-  -        expr: j IS NOT NULL
-  -        isNonNullConstraint: true
-  -        name: j_auto_not_null
-  -        validity: Validating
-  -      constraintType: NOT_NULL
-  -      foreignKey: {}
-  -      name: j_auto_not_null
-  -      notNullColumn: 2
-  -      uniqueWithoutIndexConstraint: {}
-  -    direction: ADD
-  -    mutationId: 1
-  -    state: WRITE_ONLY
-     name: t
-     nextColumnId: 3
-  ...
+     replacementOf:
        time: {}
+  +  schemaLocked: true
      unexposedParentSchemaId: 101
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
 persist all catalog changes to storage
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
@@ -226,5 +243,5 @@ updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 104
-commit transaction #4
+commit transaction #5
 # end PostCommitPhase

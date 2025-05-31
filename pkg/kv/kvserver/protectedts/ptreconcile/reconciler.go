@@ -30,7 +30,6 @@ var ReconcileInterval = settings.RegisterDurationSetting(
 	"kv.protectedts.reconciliation.interval",
 	"the frequency for reconciling jobs with protected timestamp records",
 	5*time.Minute,
-	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 // StatusFunc is used to check on the status of a Record based on its Meta
@@ -98,7 +97,6 @@ func (r *Reconciler) run(ctx context.Context, stopper *stop.Stopper) {
 		timer.Reset(timeutil.Until(lastReconciled.Add(getInterval())))
 		select {
 		case <-timer.C:
-			timer.Read = true
 			r.reconcile(ctx)
 			lastReconciled = timeutil.Now()
 		case <-reconcileIntervalChanged:

@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -53,7 +54,6 @@ var (
 		"bulkio.ingest.flush_delay",
 		"amount of time to wait before sending a file to the KV/Storage layer to ingest",
 		0,
-		settings.NonNegativeDuration,
 	)
 
 	senderConcurrency = settings.RegisterIntSetting(
@@ -132,8 +132,6 @@ type SSTBatcher struct {
 
 	// writeAtBatchTS is passed to the writeAtBatchTs argument to db.AddSStable.
 	writeAtBatchTS bool
-
-	initialSplitDone bool
 
 	// disableScatters controls scatters of the as-we-fill split ranges.
 	disableScatters bool
@@ -646,9 +644,12 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 					resp, err := b.db.AdminScatter(ctx, splitAt, maxScatterSize)
 					b.currentStats.ScatterWait += timeutil.Since(beforeScatter)
 					if err != nil {
-						// err could be a max size violation, but this is unexpected since we
-						// split before, so a warning is probably ok.
-						log.Warningf(ctx, "%s failed to scatter	: %v", b.name, err)
+						// TODO(dt): switch to a typed error.
+						if strings.Contains(err.Error(), "existing range size") {
+							log.VEventf(ctx, 1, "%s scattered non-empty range rejected: %v", b.name, err)
+						} else {
+							log.Warningf(ctx, "%s failed to scatter	: %v", b.name, err)
+						}
 					} else {
 						b.currentStats.Scatters++
 						b.currentStats.ScatterMoved += resp.ReplicasScatteredBytes
@@ -692,7 +693,17 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 	// the next one; if memory is not available we'll just block on the send
 	// and then move on to the next send after this SST is no longer being held
 	// in memory.
-	flushAsync := reason == rangeFlush
+	//
+	// TODO(jeffswenson): re-enable flush async after fixing performance and
+	// correctness issues.
+	//
+	// CORRECTNESS: Something has to surface the error from the async flush to
+	// the caller. Right now the error is logged by `Reset`.
+	// PERFORMANCE: The only caller that sets `rangeFlush` calls Reset immediatly
+	// after, which blocks on all in flight requests. So there is no performance
+	// benefit to the async flush.
+	//flushAsync := reason == rangeFlush
+	flushAsync := false
 
 	var reserved int64
 	if flushAsync {

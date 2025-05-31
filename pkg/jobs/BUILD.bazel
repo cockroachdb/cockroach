@@ -66,6 +66,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/severity",
+        "//pkg/util/metamorphic",
         "//pkg/util/metric",
         "//pkg/util/pprofutil",
         "//pkg/util/protoutil",

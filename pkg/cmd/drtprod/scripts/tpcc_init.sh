@@ -36,6 +36,8 @@ if [ -z "${WORKLOAD_CLUSTER}" ]; then
   exit 1
 fi
 
+export ROACHPROD_DISABLED_PROVIDERS=IBM
+
 absolute_path=$(drtprod run "${WORKLOAD_CLUSTER}":1 -- "realpath ./cockroach")
 pwd=$(drtprod run "${WORKLOAD_CLUSTER}":1 -- "dirname ${absolute_path}")
 PGURLS=$(drtprod pgurl "${CLUSTER}":1)

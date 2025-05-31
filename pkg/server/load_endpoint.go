@@ -89,7 +89,7 @@ func newLoadEndpoint(
 
 // Exporter for the load vars that are provided only by the load handler.
 func (le *loadEndpoint) scrapeLoadVarsIntoPrometheus(pm *metric.PrometheusExporter) {
-	pm.ScrapeRegistry(le.registry, true, true)
+	pm.ScrapeRegistry(le.registry, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(true))
 }
 
 // Handler responsible for serving the instant values of selected

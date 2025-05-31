@@ -23,6 +23,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_datadriven//:datadriven",

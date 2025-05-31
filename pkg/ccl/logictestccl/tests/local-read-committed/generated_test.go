@@ -398,6 +398,13 @@ func TestReadCommittedLogic_cluster_locks(
 	runLogicTest(t, "cluster_locks")
 }
 
+func TestReadCommittedLogic_cluster_locks_write_buffering(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "cluster_locks_write_buffering")
+}
+
 func TestReadCommittedLogic_cluster_settings(
 	t *testing.T,
 ) {
@@ -613,6 +620,13 @@ func TestReadCommittedLogic_dependencies(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "dependencies")
+}
+
+func TestReadCommittedLogic_direct_columnar_scans(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "direct_columnar_scans")
 }
 
 func TestReadCommittedLogic_discard(
@@ -1175,11 +1189,32 @@ func TestReadCommittedLogic_jsonb_path_exists(
 	runLogicTest(t, "jsonb_path_exists")
 }
 
+func TestReadCommittedLogic_jsonb_path_match(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_match")
+}
+
 func TestReadCommittedLogic_jsonb_path_query(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "jsonb_path_query")
+}
+
+func TestReadCommittedLogic_jsonb_path_query_array(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_query_array")
+}
+
+func TestReadCommittedLogic_jsonb_path_query_first(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_query_first")
 }
 
 func TestReadCommittedLogic_jsonpath(
@@ -2755,6 +2790,13 @@ func TestReadCommittedLogicCCL_plpgsql_record(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_record")
+}
+
+func TestReadCommittedLogicCCL_plpgsql_srf(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "plpgsql_srf")
 }
 
 func TestReadCommittedLogicCCL_plpgsql_txn(

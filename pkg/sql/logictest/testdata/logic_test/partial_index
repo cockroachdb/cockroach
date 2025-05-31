@@ -1,3 +1,6 @@
+# LogicTest: !local-mixed-25.1 !local-schema-locked
+# TODO(mw5h): Remove this once 25.2 is our minimum supported version.
+
 #### Partial Indexes
 
 statement ok
@@ -126,7 +129,7 @@ t6  CREATE TABLE public.t6 (
       INDEX t6i1 (a ASC) WHERE a > 6:::INT8,
       INDEX t6i2 (a ASC) WHERE a > 7:::INT8,
       INDEX t6i3 (a DESC) WHERE a > 8:::INT8
-    )
+    );
 
 query TT
 SHOW CREATE TABLE t6 WITH REDACT
@@ -144,7 +147,7 @@ t6  CREATE TABLE public.t6 (
       INDEX t6i1 (a ASC) WHERE a > ‹×›:::INT8,
       INDEX t6i2 (a ASC) WHERE a > ‹×›:::INT8,
       INDEX t6i3 (a DESC) WHERE a > ‹×›:::INT8
-    )
+    );
 
 # Renaming a column updates the index predicates.
 
@@ -167,7 +170,7 @@ t6  CREATE TABLE public.t6 (
       INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
       INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
       INDEX t6i3 (b DESC) WHERE b > 8:::INT8
-    )
+    );
 
 # Renaming a table keeps the index predicates intact.
 
@@ -190,7 +193,7 @@ t7  CREATE TABLE public.t7 (
       INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
       INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
       INDEX t6i3 (b DESC) WHERE b > 8:::INT8
-    )
+    );
 
 # Dropping a column referenced in the predicate drops the index.
 
@@ -220,7 +223,7 @@ t8  CREATE TABLE public.t8 (
       INDEX t8_a_idx (a ASC) WHERE b > 0:::INT8,
       INDEX t8_a_idx1 (a ASC) WHERE c = 'foo':::STRING,
       FAMILY fam_0_a_b_c_rowid (a, b, c, rowid)
-    )
+    );
 
 # CREATE TABLE LIKE ... INCLUDING INDEXES copies partial index predicate
 # expressions to the new table.
@@ -240,7 +243,7 @@ t10  CREATE TABLE public.t10 (
        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
        CONSTRAINT t10_pkey PRIMARY KEY (rowid ASC),
        INDEX t9_a_idx (a ASC) WHERE b > 1:::INT8
-     )
+     );
 
 # SHOW CONSTRAINTS includes partial index predicate of UNIQUE partial indexes.
 
@@ -1174,7 +1177,7 @@ enum_table_show  CREATE TABLE public.enum_table_show (
                    CONSTRAINT enum_table_show_pkey PRIMARY KEY (rowid ASC),
                    INDEX i (a ASC) WHERE b IN ('foo':::public.enum_type, 'bar':::public.enum_type),
                    FAMILY fam_0_a_b_rowid (a, b, rowid)
-                 )
+                 );
 
 # Inverted partial indexes.
 subtest inverted
@@ -1361,18 +1364,38 @@ SELECT * FROM prune@idx WHERE c > 0
 1  2  3  7
 
 # Vector partial indexes.
-# TODO(andyk): Need more tests once insertion is possible.
 subtest vector
 
 statement ok
-CREATE TABLE vec (id INT PRIMARY KEY, v VECTOR(3), VECTOR INDEX (id, v) WHERE id > 0);
+CREATE TABLE vec (id INT PRIMARY KEY, v VECTOR(3), VECTOR INDEX (v) WHERE id > 0);
+
+statement ok
+INSERT INTO vec VALUES
+    (1, '[1,2,3]'),
+    (2, '[4,5,6]'),
+    (3, '[7,8,9]'),
+    (4, '[10,11,12]')
+
+query IT
+SELECT * FROM vec@vec_v_idx WHERE id > 0 ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+1  [1,2,3]
+2  [4,5,6]
+
+query IT
+SELECT * FROM vec@primary WHERE id > 0 ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+1  [1,2,3]
+2  [4,5,6]
+
+statement ok
 DROP TABLE vec;
 
 statement ok
 CREATE TABLE vec (
   id INT PRIMARY KEY,
   v VECTOR(3),
-  VECTOR INDEX (id, v) WHERE v <-> '[3,1,2]' < 1,
+  VECTOR INDEX (v) WHERE v <-> '[3,1,2]' >= 3,
   FAMILY (id, v)
 );
 
@@ -1383,9 +1406,28 @@ vec  CREATE TABLE public.vec (
        id INT8 NOT NULL,
        v VECTOR(3) NULL,
        CONSTRAINT vec_pkey PRIMARY KEY (id ASC),
-       VECTOR INDEX vec_id_v_idx (id ASC, v) WHERE (v <-> '[3,1,2]':::VECTOR) < 1.0:::FLOAT8,
+       VECTOR INDEX vec_v_idx (v vector_l2_ops) WHERE (v <-> '[3,1,2]':::VECTOR) >= 3.0:::FLOAT8,
        FAMILY fam_0_id_v (id, v)
-     )
+     );
+
+statement ok
+INSERT INTO vec VALUES
+    (1, '[1,2,3]'),
+    (2, '[4,5,6]'),
+    (3, '[7,8,9]'),
+    (4, '[10,11,12]')
+
+query IT
+SELECT * FROM vec@vec_v_idx WHERE v <-> '[3,1,2]' >= 3 ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+2  [4,5,6]
+3  [7,8,9]
+
+query IT
+SELECT * FROM vec@primary WHERE v <-> '[3,1,2]' >= 3 ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+2  [4,5,6]
+3  [7,8,9]
 
 statement ok
 DROP TABLE vec;
@@ -1393,7 +1435,164 @@ DROP TABLE vec;
 statement ok
 CREATE TABLE vec (id INT PRIMARY KEY, s STRING, v VECTOR(3));
 CREATE VECTOR INDEX ON vec (v) WHERE s IN ('foo', 'bar');
+
+statement ok
+INSERT INTO vec VALUES
+    (1, 'foo', '[1,2,3]'),
+    (2, 'bar', '[4,5,6]'),
+    (3, 'baz', '[7,8,9]'),
+    (4, 'bar', '[10,11,12]')
+
+query ITT
+SELECT * FROM vec@vec_v_idx WHERE s IN ('foo', 'bar') ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+1  foo  [1,2,3]
+2  bar  [4,5,6]
+
+query ITT
+SELECT * FROM vec@primary WHERE s IN ('foo', 'bar') ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+1  foo  [1,2,3]
+2  bar  [4,5,6]
+
+statement ok
 DROP TABLE vec;
+
+statement ok
+CREATE TABLE vec (k INT PRIMARY KEY, v VECTOR(2), s STRING);
+CREATE VECTOR INDEX i ON vec (s, v) WHERE s IN ('foo', 'bar');
+
+statement ok
+INSERT INTO vec VALUES
+    (1, '[1,2]', 'foo'),
+    (2, '[3,4]', 'foo'),
+    (3, '[5,6]', 'baz'),
+    (4, '[5,6]', 'bar')
+
+# Only consider foo rows.
+query ITT
+SELECT * FROM vec@i WHERE s = 'foo' ORDER BY v <-> '[5,5]' LIMIT 1
+----
+2  [3,4]  foo
+
+# Consider both foo and bar rows.
+query ITT
+SELECT * FROM vec@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 1
+----
+4  [5,6]  bar
+
+# Delete bar row and ensure it is not returned.
+statement ok
+DELETE FROM vec WHERE k = 4
+
+query ITT
+SELECT * FROM vec@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 1
+----
+2  [3,4]  foo
+
+# Update vector and ensure it is now returned.
+statement ok
+UPDATE vec SET v = '[6,6]' WHERE k = 1
+
+query ITT
+SELECT * FROM vec@i WHERE s = 'foo' ORDER BY v <-> '[5,5]' LIMIT 1
+----
+1  [6,6]  foo
+
+# Update primary key and move row into partial index (baz => bar).
+statement ok
+UPDATE vec SET k = 10 WHERE k = 1
+
+statement ok
+UPDATE vec SET s = 'bar' WHERE k = 3
+
+query ITT
+SELECT * FROM vec@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 3
+----
+3   [5,6]  bar
+10  [6,6]  foo
+2   [3,4]  foo
+
+# Move row out of partial index (foo => baz).
+statement ok
+UPDATE vec SET s = 'baz' WHERE k = 10
+
+query ITT
+SELECT * FROM vec@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 3
+----
+3  [5,6]  bar
+2  [3,4]  foo
+
+# Overwrite value of row in partial index.
+statement ok
+UPSERT INTO vec VALUES (3, '[7, 8]', 'bar')
+
+query ITT
+SELECT * FROM vec@i WHERE s = 'bar' ORDER BY v <-> '[5,5]' LIMIT 3
+----
+3  [7,8]  bar
+
+statement error index "i" is a partial index that does not contain all the rows needed to execute this query
+SELECT * FROM vec@i WHERE s = 'baz' ORDER BY v <-> '[5,5]' LIMIT 3
+
+statement ok
+DROP TABLE vec
+
+# Backfill a partial vector index.
+statement ok
+CREATE TABLE vec_b (k INT PRIMARY KEY, v VECTOR(2), s STRING)
+
+statement ok
+INSERT INTO vec_b VALUES
+    (1, '[1,2]', 'foo'),
+    (2, '[3,4]', 'foo'),
+    (3, '[5,6]', 'baz'),
+    (4, '[5,6]', 'bar')
+
+statement ok
+CREATE VECTOR INDEX i ON vec_b (s, v) WHERE s IN ('foo', 'bar')
+
+query ITT
+SELECT * FROM vec_b@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 3
+----
+4  [5,6]  bar
+2  [3,4]  foo
+1  [1,2]  foo
+
+statement ok
+DROP TABLE vec_b
+
+# Backfill a partial vector index when a new table is created in the same
+# transaction.
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE vec_c (k INT PRIMARY KEY, v VECTOR(2), s STRING)
+
+statement ok
+INSERT INTO vec_c VALUES
+    (1, '[1,2]', 'foo'),
+    (2, '[3,4]', 'foo'),
+    (3, '[5,6]', 'baz'),
+    (4, '[5,6]', 'bar')
+
+statement ok
+CREATE VECTOR INDEX i ON vec_c (s, v) WHERE s IN ('foo', 'bar')
+
+query ITT
+SELECT * FROM vec_c@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 3
+----
+4  [5,6]  bar
+2  [3,4]  foo
+1  [1,2]  foo
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE vec_c
 
 # Tests for partial indexes with predicates that reference virtual computed
 # columns.

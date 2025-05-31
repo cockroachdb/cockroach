@@ -545,7 +545,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 			case "on-lease-transfer-eval":
 				mon.runSync("eval transfer lease", func(ctx context.Context) {
-					locksToWrite := m.OnRangeLeaseTransferEval()
+					locksToWrite, _ := m.OnRangeLeaseTransferEval()
 					if len(locksToWrite) > 0 {
 						log.Eventf(ctx, "locks to propose as replicated: %d", len(locksToWrite))
 					}

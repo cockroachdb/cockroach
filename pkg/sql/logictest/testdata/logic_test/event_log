@@ -1,6 +1,6 @@
 # Legacy schema changer is skipped because mutation IDs throughout log
 # entries will differ. "event_log_legacy" file is for the legacy schema changer.
-# LogicTest: !local-legacy-schema-changer
+# LogicTest: !local-legacy-schema-changer !local-schema-locked
 # knob-opt: sync-event-log
 
 # For some reason, some of the queries produce non-deterministic results if
@@ -484,6 +484,8 @@ ORDER BY "timestamp", info
 ----
 1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "node", "Value": "true"}
 1  {"EventType": "set_cluster_setting", "SettingName": "sql.crdb_internal.table_row_statistics.as_of_time", "Statement": "SET CLUSTER SETTING \"sql.crdb_internal.table_row_statistics.as_of_time\" = e'-1\\u00B5s'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "-00:00:00.000001"}
+1  {"EventType": "set_cluster_setting", "SettingName": "feature.vector_index.enabled", "Statement": "SET CLUSTER SETTING \"feature.vector_index.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
+1  {"EventType": "set_cluster_setting", "SettingName": "sql.vecindex.deterministic_fixups.enabled", "Statement": "SET CLUSTER SETTING \"sql.vecindex.deterministic_fixups.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
 1  {"EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = false", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "false"}
 1  {"EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = DEFAULT", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "DEFAULT"}
 1  {"EventType": "set_cluster_setting", "PlaceholderValues": ["'some string'"], "SettingName": "cluster.label", "Statement": "SET CLUSTER SETTING \"cluster.label\" = $1", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "'some string'"}
@@ -503,6 +505,8 @@ ORDER BY "timestamp", info
 ----
 1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "node", "Value": "true"}
 1  {"EventType": "set_cluster_setting", "SettingName": "sql.crdb_internal.table_row_statistics.as_of_time", "Statement": "SET CLUSTER SETTING \"sql.crdb_internal.table_row_statistics.as_of_time\" = e'-1\\u00B5s'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "-00:00:00.000001"}
+1  {"EventType": "set_cluster_setting", "SettingName": "feature.vector_index.enabled", "Statement": "SET CLUSTER SETTING \"feature.vector_index.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
+1  {"EventType": "set_cluster_setting", "SettingName": "sql.vecindex.deterministic_fixups.enabled", "Statement": "SET CLUSTER SETTING \"sql.vecindex.deterministic_fixups.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
 1  {"EventType": "set_cluster_setting", "PlaceholderValues": ["'some string'"], "SettingName": "cluster.label", "Statement": "SET CLUSTER SETTING \"cluster.label\" = $1", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "'some string'"}
 
 # Set and unset zone configs
@@ -537,7 +541,7 @@ ALTER INDEX a@bar CONFIGURE ZONE USING gc.ttlseconds = 15000
 
 # verify zone config changes are logged
 ##################
-skipif config 3node-tenant-default-configs local-mixed-24.3
+skipif config 3node-tenant-default-configs
 query IT
 SELECT "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID' - 'Statement'
 FROM system.eventlog

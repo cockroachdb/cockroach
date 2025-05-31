@@ -271,9 +271,7 @@ func (b *Builder) validateGeneratorFunctionReturnType(
 			}
 		}
 	} else if overload.ReturnsRecordType {
-		panic(pgerror.New(pgcode.Syntax,
-			"a column definition list is required for functions returning \"record\"",
-		))
+		panic(needColumnDefListForRecordErr)
 	}
 
 	// Verify that the function return type can be assignment-casted to the
@@ -322,3 +320,7 @@ func (b *Builder) buildProjectSet(inScope *scope) {
 
 	inScope.expr = b.factory.ConstructProjectSet(inScope.expr, zip)
 }
+
+var needColumnDefListForRecordErr = pgerror.New(pgcode.Syntax,
+	"a column definition list is required for functions returning \"record\"",
+)

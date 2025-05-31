@@ -314,7 +314,7 @@ func NewDependentObjectErrorf(format string, args ...interface{}) error {
 func NewDependentBlocksOpError(op, objType, objName, dependentType, dependentName string) error {
 	return errors.WithHintf(
 		NewDependentObjectErrorf("cannot %s %s %q because %s %q depends on it",
-			op, objType, objName, dependentType, dependentName),
+			redact.SafeString(op), redact.SafeString(objType), objName, redact.SafeString(dependentType), dependentName),
 		"consider dropping %q first.", dependentName)
 }
 

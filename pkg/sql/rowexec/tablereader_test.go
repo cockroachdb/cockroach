@@ -330,7 +330,7 @@ func TestTableReaderDrain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), leafInputState)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), leafInputState, nil /* header */)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Mon:     evalCtx.TestingMon,

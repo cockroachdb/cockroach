@@ -478,7 +478,7 @@ SELECT cte.x, cte.y FROM cte LEFT JOIN cte as cte2 on cte.y = cte2.x`, j)
 		})
 
 		// Verify the case where a PREPARE encounters a query cache entry that was
-		// created by a direct execution (and hence has no PrepareMetadata).
+		// created by a direct execution (and hence has no Metadata).
 		t.Run("exec-and-prepare", func(t *testing.T) {
 			parallel(t)
 			h := makeQueryCacheTestHelper(t, 1 /* numConns */)

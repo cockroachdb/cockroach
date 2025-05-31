@@ -1,0 +1,30 @@
+/* setup */
+CREATE TABLE t(i int);
+CREATE INDEX foo ON t(i);
+
+/* test */
+ALTER INDEX t@foo CONFIGURE ZONE USING num_replicas = 7;
+ALTER INDEX t@foo CONFIGURE ZONE USING gc.ttlseconds = 10000;
+ALTER INDEX t@foo CONFIGURE ZONE USING num_replicas = 10;
+EXPLAIN (DDL) rollback at post-commit stage 1 of 1;
+----
+Schema change plan for rolling back ALTER INDEX defaultdb.public.t@foo CONFIGURE ZONE USING num_replicas = ‹10›; following ALTER INDEX defaultdb.public.t@foo CONFIGURE ZONE USING num_replicas = ‹7›; ALTER INDEX defaultdb.public.t@foo CONFIGURE ZONE USING "gc.ttlseconds" = ‹10000›;
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 3 elements transitioning toward ABSENT
+      │    │    ├── PUBLIC → ABSENT IndexZoneConfig:{DescID: 104 (t), IndexID: 2 (foo), SeqNum: 1}
+      │    │    ├── PUBLIC → ABSENT IndexZoneConfig:{DescID: 104 (t), IndexID: 2 (foo), SeqNum: 2}
+      │    │    └── PUBLIC → ABSENT IndexZoneConfig:{DescID: 104 (t), IndexID: 2 (foo), SeqNum: 3}
+      │    └── 5 Mutation operations
+      │         ├── DiscardSubzoneConfig {"TableID":104}
+      │         ├── DiscardSubzoneConfig {"TableID":104}
+      │         ├── DiscardSubzoneConfig {"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

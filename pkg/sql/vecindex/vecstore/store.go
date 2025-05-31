@@ -7,8 +7,10 @@ package vecstore
 
 import (
 	"context"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -20,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
@@ -28,12 +31,10 @@ import (
 // Store implements the cspann.Store interface for KV backed vector indices.
 type Store struct {
 	db descs.DB // Used to generate new partition IDs
+	kv *kv.DB
 
-	// Used for generating prefixes and reading from the PK to get full length
-	// vectors.
-	codec   keys.SQLCodec
-	tableID catid.DescID
-	indexID catid.IndexID
+	// readOnly is true if the store does not accept writes.
+	readOnly bool
 
 	// The root partition always uses the UnQuantizer while other partitions may
 	// use any quantizer.
@@ -58,32 +59,44 @@ var _ cspann.Store = (*Store)(nil)
 // in unit tests where full vector index creation capabilities aren't
 // necessarily available.
 func NewWithColumnID(
+	ctx context.Context,
 	db descs.DB,
 	quantizer quantize.Quantizer,
-	codec keys.SQLCodec,
+	defaultCodec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	indexID catid.IndexID,
 	vectorColumnID descpb.ColumnID,
 ) (ps *Store, err error) {
 	ps = &Store{
 		db:             db,
-		codec:          codec,
-		tableID:        tableDesc.GetID(),
-		indexID:        indexID,
-		rootQuantizer:  quantize.NewUnQuantizer(quantizer.GetDims()),
+		kv:             db.KV(),
+		rootQuantizer:  quantize.NewUnQuantizer(quantizer.GetDims(), quantizer.GetDistanceMetric()),
 		quantizer:      quantizer,
 		minConsistency: kvpb.INCONSISTENT,
 		emptyVec:       make(vector.T, quantizer.GetDims()),
 	}
 
+	codec := defaultCodec
+	tableID := tableDesc.GetID()
 	pk := tableDesc.GetPrimaryIndex()
-	ps.prefix = rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), indexID)
-	ps.pkPrefix = rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), pk.GetID())
+	if ext := tableDesc.ExternalRowData(); ext != nil {
+		// The table is external, so use the external codec and table ID. Also set
+		// the index to read-only.
+		log.VInfof(ctx, 2,
+			"table %d is external, using read-only mode for vector index %d",
+			tableDesc.GetID(), indexID,
+		)
+		ps.readOnly = true
+		codec = keys.MakeSQLCodec(ext.TenantID)
+		tableID = ext.TableID
+	}
+	ps.prefix = rowenc.MakeIndexKeyPrefix(codec, tableID, indexID)
+	ps.pkPrefix = rowenc.MakeIndexKeyPrefix(codec, tableID, pk.GetID())
 
 	ps.colIdxMap.Set(vectorColumnID, 0)
 	err = rowenc.InitIndexFetchSpec(
 		&ps.fetchSpec,
-		ps.codec,
+		codec,
 		tableDesc,
 		pk,
 		[]descpb.ColumnID{vectorColumnID},
@@ -124,7 +137,7 @@ func New(
 
 	vectorColumnID := index.VectorColumnID()
 
-	return NewWithColumnID(db, quantizer, codec, tableDesc, indexID, vectorColumnID)
+	return NewWithColumnID(ctx, db, quantizer, codec, tableDesc, indexID, vectorColumnID)
 }
 
 // SetConsistency sets the minimum consistency level to use when reading
@@ -133,52 +146,36 @@ func (s *Store) SetMinimumConsistency(consistency kvpb.ReadConsistencyType) {
 	s.minConsistency = consistency
 }
 
-// BeginTransaction is part of the cspann.Store interface. It creates a new
-// KV transaction on behalf of the user and prepares it to operate on the vector
-// store.
-func (s *Store) BeginTransaction(ctx context.Context) (cspann.Txn, error) {
-	var txn Txn
-	txn.Init(s, s.db.KV().NewTxn(ctx, "cspann.Store begin transaction"))
-	return &txn, nil
-}
-
-// CommitTransaction is part of the cspann.Store interface. It commits the
-// underlying KV transaction wrapped by the cspann.Txn passed in.
-func (s *Store) CommitTransaction(ctx context.Context, txn cspann.Txn) error {
-	return txn.(*Txn).kv.Commit(ctx)
-}
-
-// AbortTransaction is part of the cspann.Store interface. It causes the
-// underlying KV transaction wrapped by the passed cspann.Txn to roll back.
-func (s *Store) AbortTransaction(ctx context.Context, txn cspann.Txn) error {
-	return txn.(*Txn).kv.Rollback(ctx)
+// ReadOnly returns true if the store does not allow writes.
+func (s *Store) ReadOnly() bool {
+	return s.readOnly
 }
 
 // RunTransaction is part of the cspann.Store interface. It runs a function in
 // the context of a transaction.
 func (s *Store) RunTransaction(ctx context.Context, fn func(txn cspann.Txn) error) (err error) {
-	var txn cspann.Txn
-	txn, err = s.BeginTransaction(ctx)
+	var txn Txn
+	txn.Init(s, s.kv.NewTxn(ctx, "vecstore.Store transaction"))
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if err == nil {
-			err = s.CommitTransaction(ctx, txn)
+			err = txn.kv.Commit(ctx)
 		}
 		if err != nil {
-			err = errors.CombineErrors(err, s.AbortTransaction(ctx, txn))
+			err = errors.CombineErrors(err, txn.kv.Rollback(ctx))
 		}
 	}()
 
-	return fn(txn)
+	return fn(&txn)
 }
 
 // MakePartitionKey is part of the cspann.Store interface. It allocates a new
 // unique partition key.
 func (s *Store) MakePartitionKey() cspann.PartitionKey {
-	instanceID := s.db.KV().Context().NodeID.SQLInstanceID()
-	return cspann.PartitionKey(unique.GenerateUniqueInt(unique.ProcessUniqueID(instanceID)))
+	instanceID := s.kv.Context().NodeID.SQLInstanceID()
+	return cspann.PartitionKey(unique.GenerateUniqueUnorderedID(unique.ProcessUniqueID(instanceID)))
 }
 
 // EstimatePartitionCount is part of the cspann.Store interface. It returns an
@@ -195,15 +192,17 @@ func (s *Store) EstimatePartitionCount(
 	// stale results are not a concern in practice. If we ever find evidence that
 	// it is, we can fall back to a consistent scan if the inconsistent scan
 	// returns results that are too old.
-	b := s.db.KV().NewBatch()
+	b := s.kv.NewBatch()
 	b.Header.ReadConsistency = s.minConsistency
 
 	// Count the number of rows in the partition after the metadata row.
-	metadataKey := s.encodePartitionKey(treeKey, partitionKey)
-	b.Scan(metadataKey.Next(), metadataKey.PrefixEnd())
+	metadataKey := vecencoding.EncodeMetadataKey(s.prefix, treeKey, partitionKey)
+	startKey := vecencoding.EncodeStartVectorKey(metadataKey)
+	endKey := vecencoding.EncodeEndVectorKey(metadataKey)
+	b.Scan(startKey, endKey)
 
 	// Execute the batch and count the rows in the response.
-	if err := s.db.KV().Run(ctx, b); err != nil {
+	if err := s.kv.Run(ctx, b); err != nil {
 		return 0, errors.Wrap(err, "estimating partition count")
 	}
 	if err := b.Results[0].Err; err != nil {
@@ -214,6 +213,9 @@ func (s *Store) EstimatePartitionCount(
 
 // MergeStats is part of the cspann.Store interface.
 func (s *Store) MergeStats(ctx context.Context, stats *cspann.IndexStats, skipMerge bool) error {
+	if !skipMerge && s.ReadOnly() {
+		return errors.AssertionFailedf("cannot merge stats in read-only mode")
+	}
 	// TODO(mw5h): Implement MergeStats. We're not panicking here because some tested
 	// functionality needs to call this function but does not depend on the results.
 	return nil
@@ -224,7 +226,22 @@ func (s *Store) MergeStats(ctx context.Context, stats *cspann.IndexStats, skipMe
 func (s *Store) TryDeletePartition(
 	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
 ) error {
-	return errors.AssertionFailedf("TryDeletePartition is not yet implemented")
+	if s.ReadOnly() {
+		return errors.AssertionFailedf("cannot delete partition in read-only mode")
+	}
+	// Delete the metadata key and all vector keys in the partition.
+	b := s.kv.NewBatch()
+	metadataKey := vecencoding.EncodeMetadataKey(s.prefix, treeKey, partitionKey)
+	endKey := vecencoding.EncodeEndVectorKey(metadataKey)
+	b.DelRange(metadataKey, endKey, true /* returnKeys */)
+	if err := s.kv.Run(ctx, b); err != nil {
+		return err
+	}
+	if len(b.Results[0].Keys) == 0 {
+		// No metadata row existed, so partition must not exist.
+		return cspann.ErrPartitionNotFound
+	}
+	return nil
 }
 
 // TryCreateEmptyPartition is part of the cspann.Store interface. It creates a
@@ -235,7 +252,15 @@ func (s *Store) TryCreateEmptyPartition(
 	partitionKey cspann.PartitionKey,
 	metadata cspann.PartitionMetadata,
 ) error {
-	return errors.AssertionFailedf("TryCreateEmptyPartition is not yet implemented")
+	if s.ReadOnly() {
+		return errors.AssertionFailedf("cannot create partition in read-only mode")
+	}
+	meta := vecencoding.EncodeMetadataValue(metadata)
+	metadataKey := vecencoding.EncodeMetadataKey(s.prefix, treeKey, partitionKey)
+	if err := s.kv.CPut(ctx, metadataKey, meta, nil /* expValue */); err != nil {
+		return remapConditionFailedError(err)
+	}
+	return nil
 }
 
 // TryGetPartition is part of the cspann.Store interface. It returns an existing
@@ -243,7 +268,22 @@ func (s *Store) TryCreateEmptyPartition(
 func (s *Store) TryGetPartition(
 	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
 ) (*cspann.Partition, error) {
-	return nil, errors.AssertionFailedf("TryGetPartition is not yet implemented")
+	b := s.kv.NewBatch()
+	metadataKey := vecencoding.EncodeMetadataKey(s.prefix, treeKey, partitionKey)
+	startKey := vecencoding.EncodeStartVectorKey(metadataKey)
+	endKey := vecencoding.EncodeEndVectorKey(metadataKey)
+	b.Get(metadataKey)
+	b.Scan(startKey, endKey)
+	if err := s.kv.Run(ctx, b); err != nil {
+		return nil, err
+	}
+
+	codec := makePartitionCodec(s.rootQuantizer, s.quantizer)
+	partition, err := s.decodePartition(treeKey, partitionKey, &codec, &b.Results[0], &b.Results[1])
+	if err != nil {
+		return nil, err
+	}
+	return partition, nil
 }
 
 // TryGetPartitionMetadata is part of the cspann.Store interface. It returns the
@@ -251,8 +291,14 @@ func (s *Store) TryGetPartition(
 func (s *Store) TryGetPartitionMetadata(
 	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
 ) (cspann.PartitionMetadata, error) {
-	return cspann.PartitionMetadata{},
-		errors.AssertionFailedf("TryGetPartitionMetadata is not yet implemented")
+	b := s.kv.NewBatch()
+	metadataKey := vecencoding.EncodeMetadataKey(s.prefix, treeKey, partitionKey)
+	b.Get(metadataKey)
+	if err := s.kv.Run(ctx, b); err != nil {
+		return cspann.PartitionMetadata{},
+			errors.Wrapf(err, "getting partition metadata for %d", partitionKey)
+	}
+	return s.getMetadataFromKVResult(partitionKey, &b.Results[0])
 }
 
 // TryUpdatePartitionMetadata is part of the cspann.Store interface. It updates
@@ -264,7 +310,20 @@ func (s *Store) TryUpdatePartitionMetadata(
 	metadata cspann.PartitionMetadata,
 	expected cspann.PartitionMetadata,
 ) error {
-	return errors.AssertionFailedf("TryUpdatePartitionMetadata is not yet implemented")
+	if s.ReadOnly() {
+		return errors.AssertionFailedf("cannot update partition in read-only mode")
+	}
+	metadataKey := vecencoding.EncodeMetadataKey(s.prefix, treeKey, partitionKey)
+	encodedMetadata := vecencoding.EncodeMetadataValue(metadata)
+	encodedExpected := vecencoding.EncodeMetadataValue(expected)
+
+	var roachval roachpb.Value
+	roachval.SetBytes(encodedExpected)
+	err := s.kv.CPut(ctx, metadataKey, encodedMetadata, roachval.TagAndDataBytes())
+	if err != nil {
+		return remapConditionFailedError(err)
+	}
+	return nil
 }
 
 // TryAddToPartition is part of the cspann.Store interface. It adds vectors to
@@ -278,7 +337,93 @@ func (s *Store) TryAddToPartition(
 	valueBytes []cspann.ValueBytes,
 	expected cspann.PartitionMetadata,
 ) (added bool, err error) {
-	return false, errors.AssertionFailedf("TryAddToPartition is not yet implemented")
+	if s.ReadOnly() {
+		return added, errors.AssertionFailedf("cannot add to partition in read-only mode")
+	}
+	return added, s.kv.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Acquire a shared lock on the partition, to ensure that another agent
+		// doesn't modify it. Also, this will be used to verify expected metadata.
+		b := txn.NewBatch()
+		metadataKey := vecencoding.EncodeMetadataKey(s.prefix, treeKey, partitionKey)
+		b.GetForShare(metadataKey, kvpb.BestEffort)
+		if err = txn.Run(ctx, b); err != nil {
+			return errors.Wrapf(err, "locking partition %d for add", partitionKey)
+		}
+
+		// Verify expected metadata.
+		metadata, err := s.getMetadataFromKVResult(partitionKey, &b.Results[0])
+		if err != nil {
+			return err
+		}
+		if !metadata.Equal(&expected) {
+			return cspann.NewConditionFailedError(metadata)
+		}
+
+		// Do not add vectors that are found to already exist.
+		var exclude cspann.ChildKeyDeDup
+		exclude.Init(vectors.Count)
+
+		// Cap the key so that appends allocate a new slice.
+		vectorKey := vecencoding.EncodePrefixVectorKey(metadataKey, metadata.Level)
+		vectorKey = slices.Clip(vectorKey)
+		for {
+			// Quantize the vectors and add them to the partition with CPut commands
+			// that only take action if there is no value present yet.
+			b = txn.NewBatch()
+			codec := makePartitionCodec(s.rootQuantizer, s.quantizer)
+			for i := range vectors.Count {
+				if !exclude.TryAdd(childKeys[i]) {
+					// Vector already exists in the partition, do not add.
+					continue
+				}
+				added = true
+
+				encodedValue, err := codec.EncodeVector(partitionKey, vectors.At(i), metadata.Centroid)
+				if err != nil {
+					return err
+				}
+				encodedValue = append(encodedValue, valueBytes[i]...)
+
+				encodedKey := vecencoding.EncodeChildKey(vectorKey, childKeys[i])
+				b.CPut(encodedKey, encodedValue, nil /* expValue */)
+			}
+
+			if err = txn.Run(ctx, b); err == nil {
+				// The batch succeeded, so done.
+				return nil
+			}
+
+			// If the batch failed due to a CPut failure, then retry, but with
+			// any existing vectors excluded.
+			var errConditionFailed *kvpb.ConditionFailedError
+			if !errors.As(err, &errConditionFailed) {
+				// This was a different error, so exit.
+				return err
+			}
+
+			// Scan for existing vectors so they can be excluded from next attempt
+			// to add.
+			added = false
+			exclude.Clear()
+			b = txn.NewBatch()
+			startKey := vecencoding.EncodeStartVectorKey(metadataKey)
+			endKey := vecencoding.EncodeEndVectorKey(metadataKey)
+			b.Scan(startKey, endKey)
+			if err = txn.Run(ctx, b); err != nil {
+				return errors.Wrapf(err, "scanning for existing vectors in partition %d", partitionKey)
+			}
+			for _, keyval := range b.Results[0].Rows {
+				// Extract child key from the KV key.
+				prefixLen := len(vectorKey)
+				childKey, err := vecencoding.DecodeChildKey(keyval.Key[prefixLen:], metadata.Level)
+				if err != nil {
+					return errors.Wrapf(err, "decoding vector index key in partition %d: %+v",
+						partitionKey, keyval.Key)
+				}
+				exclude.TryAdd(childKey)
+			}
+		}
+	})
 }
 
 // TryRemoveFromPartition is part of the cspann.Store interface. It removes
@@ -290,7 +435,56 @@ func (s *Store) TryRemoveFromPartition(
 	childKeys []cspann.ChildKey,
 	expected cspann.PartitionMetadata,
 ) (removed bool, err error) {
-	return false, errors.AssertionFailedf("TryRemoveFromPartition is not yet implemented")
+	if s.ReadOnly() {
+		return removed, errors.AssertionFailedf("cannot remove from partition in read-only mode")
+	}
+	return removed, s.kv.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Acquire a shared lock on the partition, to ensure that another agent
+		// doesn't modify it. Also, this will be used to verify expected metadata.
+		b := txn.NewBatch()
+		metadataKey := vecencoding.EncodeMetadataKey(s.prefix, treeKey, partitionKey)
+		b.GetForShare(metadataKey, kvpb.BestEffort)
+		if err = txn.Run(ctx, b); err != nil {
+			return errors.Wrapf(err, "locking partition %d for add", partitionKey)
+		}
+
+		// Verify expected metadata.
+		metadata, err := s.getMetadataFromKVResult(partitionKey, &b.Results[0])
+		if err != nil {
+			return err
+		}
+		if !metadata.Equal(&expected) {
+			return cspann.NewConditionFailedError(metadata)
+		}
+
+		// Cap the vector key so that appends allocate a new slice.
+		vectorKey := vecencoding.EncodePrefixVectorKey(metadataKey, metadata.Level)
+		vectorKey = slices.Clip(vectorKey)
+
+		// Quantize the vectors and add them to the partition with CPut commands
+		// that only take action if there is no value present yet.
+		b = txn.NewBatch()
+		codec := makePartitionCodec(s.rootQuantizer, s.quantizer)
+		codec.InitForDecoding(partitionKey, metadata, 1)
+		for _, childKey := range childKeys {
+			encodedKey := vecencoding.EncodeChildKey(vectorKey, childKey)
+			b.Del(encodedKey)
+		}
+
+		if err = txn.CommitInBatch(ctx, b); err != nil {
+			return err
+		}
+
+		for _, response := range b.RawResponse().Responses {
+			del := response.GetDelete()
+			if del != nil && del.FoundKey {
+				removed = true
+				break
+			}
+		}
+
+		return nil
+	})
 }
 
 // TryClearPartition is part of the cspann.Store interface. It removes vectors
@@ -301,19 +495,125 @@ func (s *Store) TryClearPartition(
 	partitionKey cspann.PartitionKey,
 	expected cspann.PartitionMetadata,
 ) (count int, err error) {
-	return -1, errors.AssertionFailedf("TryRemoveFromPartition is not yet implemented")
+	if s.ReadOnly() {
+		return count, errors.AssertionFailedf("cannot clear partition in read-only mode")
+	}
+	return count, s.kv.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Acquire a shared lock on the partition, to ensure that another agent
+		// doesn't modify it. Also, this will be used to verify expected metadata.
+		b := txn.NewBatch()
+		metadataKey := vecencoding.EncodeMetadataKey(s.prefix, treeKey, partitionKey)
+		b.GetForShare(metadataKey, kvpb.BestEffort)
+		if err = txn.Run(ctx, b); err != nil {
+			return errors.Wrapf(err, "locking partition %d for add", partitionKey)
+		}
+
+		// Verify expected metadata.
+		metadata, err := s.getMetadataFromKVResult(partitionKey, &b.Results[0])
+		if err != nil {
+			return err
+		}
+		if !metadata.Equal(&expected) {
+			return cspann.NewConditionFailedError(metadata)
+		}
+
+		// Clear all vectors in the partition using DelRange.
+		b = txn.NewBatch()
+		startKey := vecencoding.EncodeStartVectorKey(metadataKey)
+		endKey := vecencoding.EncodeEndVectorKey(metadataKey)
+		b.DelRange(startKey, endKey, true /* returnKeys */)
+		if err = txn.CommitInBatch(ctx, b); err != nil {
+			return err
+		}
+
+		count = len(b.Results[0].Keys)
+		return nil
+	})
 }
 
-// encodePartitionKey takes a partition key and creates a KV key to read that
-// partition's metadata. Vector data can be read by scanning from the metadata
-// to the next partition's metadata.
-func (s *Store) encodePartitionKey(
-	treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
-) roachpb.Key {
-	capacity := len(s.prefix) + len(treeKey) + vecencoding.EncodedPartitionKeyLen(partitionKey)
-	keyBuffer := make(roachpb.Key, 0, capacity)
-	keyBuffer = append(keyBuffer, s.prefix...)
-	keyBuffer = append(keyBuffer, treeKey...)
-	keyBuffer = vecencoding.EncodePartitionKey(keyBuffer, partitionKey)
-	return keyBuffer
+// getMetadataFromKVResult returns the partition metadata row from the KV
+// result, returning the partition's K-means tree level and centroid.
+func (s *Store) getMetadataFromKVResult(
+	partitionKey cspann.PartitionKey, result *kv.Result,
+) (cspann.PartitionMetadata, error) {
+	if result.Err != nil {
+		return cspann.PartitionMetadata{}, result.Err
+	}
+
+	// If the value of the first result row is nil and this is a root partition,
+	// then it must be a root partition without a metadata record (a nil result
+	// happens when Get is used to fetch the metadata row).
+	value := result.Rows[0].ValueBytes()
+	if value == nil {
+		if partitionKey != cspann.RootKey {
+			return cspann.PartitionMetadata{}, cspann.ErrPartitionNotFound
+		}
+
+		// Construct synthetic metadata.
+		return cspann.MakeReadyPartitionMetadata(cspann.LeafLevel, s.emptyVec), nil
+	}
+
+	return vecencoding.DecodeMetadataValue(value)
+}
+
+// decodePartition decodes the metadata and data KV results into an ephemeral
+// partition. This partition will become invalid when the codec is next reset,
+// so it needs to be cloned if it will be used outside of the store.
+func (s *Store) decodePartition(
+	treeKey cspann.TreeKey,
+	partitionKey cspann.PartitionKey,
+	codec *partitionCodec,
+	metaResult, dataResult *kv.Result,
+) (*cspann.Partition, error) {
+	metadata, err := s.getMetadataFromKVResult(partitionKey, metaResult)
+	if err != nil {
+		return nil, err
+	}
+	if dataResult.Err != nil {
+		return nil, dataResult.Err
+	}
+	vectorEntries := dataResult.Rows
+
+	// Initialize the partition codec.
+	// NOTE: This reuses the memory returned by the last call to decodePartition.
+	codec.InitForDecoding(partitionKey, metadata, len(vectorEntries))
+
+	// Determine the length of the prefix of vector data records.
+	metadataKey := vecencoding.EncodeMetadataKey(s.prefix, treeKey, partitionKey)
+	prefixLen := vecencoding.EncodedPrefixVectorKeyLen(metadataKey, metadata.Level)
+	for _, entry := range vectorEntries {
+		err = codec.DecodePartitionData(entry.Key[prefixLen:], entry.ValueBytes())
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return codec.GetPartition(), nil
+}
+
+// remapConditionFailedError checks if the provided error is
+// kvpb.ConditionFiledError. If so, it translates it to a corresponding
+// cspann.ConditionFailedError by deserializing the partition metadata. If the
+// record does not exist, it returns ErrPartitionNotFound.
+func remapConditionFailedError(err error) error {
+	var errConditionFailed *kvpb.ConditionFailedError
+	if errors.As(err, &errConditionFailed) {
+		if errConditionFailed.ActualValue == nil {
+			// Metadata record does not exist.
+			return cspann.ErrPartitionNotFound
+		}
+
+		encodedMetadata, err := errConditionFailed.ActualValue.GetBytes()
+		if err != nil {
+			return errors.NewAssertionErrorWithWrappedErrf(err,
+				"partition metadata value should always be bytes")
+		}
+		actualMetadata, err := vecencoding.DecodeMetadataValue(encodedMetadata)
+		if err != nil {
+			return errors.NewAssertionErrorWithWrappedErrf(err,
+				"cannot decode partition metadata: %v", encodedMetadata)
+		}
+		return cspann.NewConditionFailedError(actualMetadata)
+	}
+	return err
 }

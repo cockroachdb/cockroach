@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -154,6 +155,7 @@ func TestCPUTimeEndToEnd(t *testing.T) {
 
 	skip.UnderStress(t, "multinode cluster setup times out under stress")
 	skip.UnderRace(t, "multinode cluster setup times out under race")
+	skip.UnderDeadlock(t, "lock verification can timeout")
 
 	if !grunning.Supported {
 		return
@@ -394,7 +396,21 @@ func TestMaximumMemoryUsage(t *testing.T) {
 	skip.UnderRace(t, "multinode cluster setup times out under race")
 
 	const numNodes = 3
-	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLEvalContext: &eval.TestingKnobs{
+					// We disable the randomization of the batch sizes so that
+					// small number of gRPC calls is issued in the query below
+					// (with kv-batch-size=1 we would issue 10k of them which
+					// might result in dropping the ComponentStats proto that
+					// powers "maximum memory usage" from the trace, flaking the
+					// test).
+					ForceProductionValues: true,
+				},
+			},
+		},
+	})
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 

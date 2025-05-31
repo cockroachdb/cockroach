@@ -694,6 +694,7 @@ func (b *Builder) buildExistsSubquery(
 			nil,  /* stmtStr */
 			true, /* allowOuterWithRefs */
 			wrapRootExpr,
+			0, /* resultBufferID */
 		)
 		return tree.NewTypedCoalesceExpr(tree.TypedExprs{
 			tree.NewTypedRoutineExpr(
@@ -705,12 +706,14 @@ func (b *Builder) buildExistsSubquery(
 				true,  /* calledOnNullInput */
 				false, /* multiColOutput */
 				false, /* generator */
+				false, /* discardLastStmtResult */
 				false, /* tailCall */
 				false, /* procedure */
 				false, /* triggerFunc */
 				false, /* blockStart */
 				nil,   /* blockState */
 				nil,   /* cursorDeclaration */
+				nil,   /* firstStmtResultWriter */
 			),
 			tree.DBoolFalse,
 		}, types.Bool), nil
@@ -817,6 +820,7 @@ func (b *Builder) buildSubquery(
 			nil,  /* stmtStr */
 			true, /* allowOuterWithRefs */
 			nil,  /* wrapRootExpr */
+			0,    /* resultBufferID */
 		)
 		_, tailCall := b.tailCalls[subquery]
 		return tree.NewTypedRoutineExpr(
@@ -828,12 +832,14 @@ func (b *Builder) buildSubquery(
 			true,  /* calledOnNullInput */
 			false, /* multiColOutput */
 			false, /* generator */
+			false, /* discardLastStmtResult */
 			tailCall,
 			false, /* procedure */
 			false, /* triggerFunc */
 			false, /* blockStart */
 			nil,   /* blockState */
 			nil,   /* cursorDeclaration */
+			nil,   /* firstStmtResultWriter */
 		), nil
 	}
 
@@ -847,7 +853,11 @@ func (b *Builder) buildSubquery(
 		withExprs := make([]builtWithExpr, len(b.withExprs))
 		copy(withExprs, b.withExprs)
 		planGen := func(
-			ctx context.Context, ref tree.RoutineExecFactory, args tree.Datums, fn tree.RoutinePlanGeneratedFunc,
+			ctx context.Context,
+			ref tree.RoutineExecFactory,
+			_ tree.RoutineResultWriter,
+			args tree.Datums,
+			fn tree.RoutinePlanGeneratedFunc,
 		) error {
 			// Analyze the input of the subquery to find tail calls, which will allow
 			// nested routines (including lazy subqueries) to be executed in the same
@@ -858,6 +868,7 @@ func (b *Builder) buildSubquery(
 			ef := ref.(exec.Factory)
 			eb := New(ctx, ef, b.optimizer, b.mem, b.catalog, input, b.semaCtx, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
 			eb.withExprs = withExprs
+			eb.routineResultBuffers = b.routineResultBuffers
 			eb.disableTelemetry = true
 			eb.planLazySubqueries = true
 			eb.tailCalls = tailCalls
@@ -901,12 +912,14 @@ func (b *Builder) buildSubquery(
 			true,  /* calledOnNullInput */
 			false, /* multiColOutput */
 			false, /* generator */
+			false, /* discardLastStmtResult */
 			tailCall,
 			false, /* procedure */
 			false, /* triggerFunc */
 			false, /* blockStart */
 			nil,   /* blockState */
 			nil,   /* cursorDeclaration */
+			nil,   /* firstStmtResultWriter */
 		), nil
 	}
 
@@ -977,15 +990,23 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	}
 
 	// Execution expects there to be more than one body statement if a cursor is
-	// opened.
-	if udf.Def.CursorDeclaration != nil && len(udf.Def.Body) <= 1 {
+	// opened or the result of the first statement is directed to a buffer.
+	firstStmtOut := udf.Def.FirstStmtOutput
+	if len(udf.Def.Body) <= 1 &&
+		(firstStmtOut.CursorDeclaration != nil || firstStmtOut.TargetBufferID != 0) {
 		panic(errors.AssertionFailedf(
-			"expected more than one body statement for a routine that opens a cursor",
+			"expected more than one body statement for a routine that " +
+				"redirects the output of the first statement",
 		))
+	}
+	var firstStmtResultWriter tree.RoutineResultWriter
+	if firstStmtOut.TargetBufferID != 0 {
+		// The first statement of this routine is writing to the result set of an
+		// ancestor set-returning PL/pgSQL function.
+		firstStmtResultWriter = b.routineResultBuffers[firstStmtOut.TargetBufferID]
 	}
 
 	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.
-	// TODO(mgartner): Add support for WITH expressions inside UDF bodies.
 	planGen := b.buildRoutinePlanGenerator(
 		udf.Def.Params,
 		udf.Def.Body,
@@ -993,12 +1014,18 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		udf.Def.BodyStmts,
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
+		udf.Def.ResultBufferID,
 	)
 
 	// Enable stepping for volatile functions so that statements within the UDF
 	// see mutations made by the invoking statement and by previously executed
 	// statements.
 	enableStepping := udf.Def.Volatility == volatility.Volatile
+
+	// A non-zero ResultBufferID indicates that the UDF is a set-returning
+	// function, with sub-routines adding to the result set. In this case, the
+	// last body statement does not directly contribute to the result set.
+	discardLastStmtResult := udf.Def.ResultBufferID != 0
 
 	// The calling routine, if any, will have already determined whether this
 	// routine is in tail-call position.
@@ -1013,12 +1040,14 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		udf.Def.CalledOnNullInput,
 		udf.Def.MultiColDataSource,
 		udf.Def.SetReturning,
+		discardLastStmtResult,
 		tailCall,
 		false, /* procedure */
 		udf.Def.TriggerFunc,
 		udf.Def.BlockStart,
 		blockState,
-		udf.Def.CursorDeclaration,
+		firstStmtOut.CursorDeclaration,
+		firstStmtResultWriter,
 	), nil
 }
 
@@ -1058,6 +1087,7 @@ func (b *Builder) initRoutineExceptionHandler(
 			action.BodyStmts,
 			false, /* allowOuterWithRefs */
 			nil,   /* wrapRootExpr */
+			0,     /* resultBufferID */
 		)
 		// Build a routine with no arguments for the exception handler. The actual
 		// arguments will be supplied when (if) the handler is invoked.
@@ -1070,12 +1100,14 @@ func (b *Builder) initRoutineExceptionHandler(
 			action.CalledOnNullInput,
 			action.MultiColDataSource,
 			action.SetReturning,
+			false, /* discardLastStmtResult */
 			false, /* tailCall */
 			false, /* procedure */
 			false, /* triggerFunc */
 			false, /* blockStart */
 			nil,   /* blockState */
 			nil,   /* cursorDeclaration */
+			nil,   /* firstStmtResultWriter */
 		)
 	}
 	blockState.ExceptionHandler = exceptionHandler
@@ -1093,6 +1125,10 @@ type wrapRootExprFn func(f *norm.Factory, e memo.RelExpr) opt.Expr
 // so that WithScans within a statement can be planned and executed.
 // wrapRootExpr allows the root expression of all statements to be replaced with
 // an arbitrary expression.
+//
+// resultBufferID, if not zero, specifies the ID of the routine's result buffer.
+// This is for PL/pgSQL set-returning routines, which must allow sub-routines to
+// add to the result set at any point during execution.
 func (b *Builder) buildRoutinePlanGenerator(
 	params opt.ColList,
 	stmts []memo.RelExpr,
@@ -1100,6 +1136,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 	stmtStr []string,
 	allowOuterWithRefs bool,
 	wrapRootExpr wrapRootExprFn,
+	resultBufferID memo.RoutineResultBufferID,
 ) tree.RoutinePlanGenerator {
 	// argOrd returns the ordinal of the argument within the arguments list that
 	// can be substituted for each reference to the given function parameter
@@ -1132,7 +1169,11 @@ func (b *Builder) buildRoutinePlanGenerator(
 	var o xform.Optimizer
 	originalMemo := b.mem
 	planGen := func(
-		ctx context.Context, ref tree.RoutineExecFactory, args tree.Datums, fn tree.RoutinePlanGeneratedFunc,
+		ctx context.Context,
+		ref tree.RoutineExecFactory,
+		resultWriter tree.RoutineResultWriter,
+		args tree.Datums,
+		fn tree.RoutinePlanGeneratedFunc,
 	) (err error) {
 		defer func() {
 			if r := recover(); r != nil {
@@ -1219,9 +1260,14 @@ func (b *Builder) buildRoutinePlanGenerator(
 			// Identify nested routines that are in tail-call position, and cache them
 			// in the Builder. When a nested routine is evaluated, this information
 			// may be used to enable tail-call optimization.
+			//
+			// Tail-call optimization is not allowed when resultBufferID is non-zero,
+			// because non-zero resultBufferID means that expressions in the body will
+			// add directly to the result set, and the result of the last body
+			// statement will be ignored.
 			isFinalPlan := i == len(stmts)-1
 			var tailCalls map[opt.ScalarExpr]struct{}
-			if isFinalPlan {
+			if isFinalPlan && resultBufferID == 0 {
 				tailCalls = make(map[opt.ScalarExpr]struct{})
 				memo.ExtractTailCalls(optimizedExpr, tailCalls)
 			}
@@ -1233,6 +1279,13 @@ func (b *Builder) buildRoutinePlanGenerator(
 			eb.disableTelemetry = true
 			eb.planLazySubqueries = true
 			eb.tailCalls = tailCalls
+			eb.routineResultBuffers = b.routineResultBuffers
+			if resultBufferID != 0 {
+				// A PL/pgSQL set-returning function must allow expressions in the body
+				// to add directly to the result set. We achieve this by passing the
+				// RoutineResultWriter to the child Builder.
+				eb.addRoutineResultBuffer(resultBufferID, resultWriter)
+			}
 			plan, err := eb.Build()
 			if err != nil {
 				if errors.IsAssertionFailure(err) {
@@ -1262,6 +1315,23 @@ func (b *Builder) buildRoutinePlanGenerator(
 		return nil
 	}
 	return planGen
+}
+
+func (b *Builder) addRoutineResultBuffer(
+	bufferID memo.RoutineResultBufferID, resWriter tree.RoutineResultWriter,
+) {
+	if b.routineResultBuffers == nil {
+		b.routineResultBuffers = make(map[memo.RoutineResultBufferID]tree.RoutineResultWriter)
+	} else {
+		// Copy the map to avoid modifying the original. Note that we expect only to
+		// call this method once for a given Builder.
+		newResultBuffers := make(map[memo.RoutineResultBufferID]tree.RoutineResultWriter)
+		for k, v := range b.routineResultBuffers {
+			newResultBuffers[k] = v
+		}
+		b.routineResultBuffers = newResultBuffers
+	}
+	b.routineResultBuffers[bufferID] = resWriter
 }
 
 func expectedLazyRoutineError(typ string) error {

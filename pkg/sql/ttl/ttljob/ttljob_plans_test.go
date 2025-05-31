@@ -16,11 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -45,12 +42,6 @@ func TestQueryPlansDataDriven(t *testing.T) {
 	db := s.InternalDB().(*sql.InternalDB)
 	cutoff, err := tree.MakeDTimestamp(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC), time.Second)
 	require.NoError(t, err)
-
-	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "test" /* opName */)
-	sds := sessiondata.NewStack(sd)
-	dsdp := catsessiondata.NewDescriptorSessionDataStackProvider(sds)
-	descsCol := execCfg.CollectionFactory.NewCollection(ctx, descs.WithDescriptorSessionDataProvider(dsdp))
 
 	getExplainPlan := func(query string, overrides string) string {
 		rows := runner.Query(t, fmt.Sprintf(`SELECT crdb_internal.execute_internally('EXPLAIN %s', '%s');`, query, overrides))
@@ -134,8 +125,8 @@ func TestQueryPlansDataDriven(t *testing.T) {
 				var tableID int64
 				row := runner.QueryRow(t, fmt.Sprintf("SELECT '%s'::REGCLASS::OID;", tableName))
 				row.Scan(&tableID)
-				relationName, _, pkColNames, _, pkColDirs, _, _, err := getTableInfo(
-					ctx, db, descsCol, descpb.ID(tableID),
+				relationName, _, pkColNames, pkColTypes, pkColDirs, _, _, err := getTableInfo(
+					ctx, db, descpb.ID(tableID),
 				)
 				require.NoError(t, err)
 
@@ -146,6 +137,7 @@ func TestQueryPlansDataDriven(t *testing.T) {
 							RelationName:    relationName,
 							PKColNames:      pkColNames,
 							PKColDirs:       pkColDirs,
+							PKColTypes:      pkColTypes,
 							Bounds:          selectBounds,
 							SelectBatchSize: ttlbase.DefaultSelectBatchSizeValue,
 							TTLExpr:         catpb.DefaultTTLExpirationExpr,

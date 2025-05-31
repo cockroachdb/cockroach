@@ -318,12 +318,12 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 	}{
 		{
 			desc:             "schema change too recent to start TTL job",
-			expectedTTLError: "found a recent schema change on the table at .*, aborting",
+			expectedTTLError: "found a recent schema change on the table at .*, job will run at the next scheduled time",
 			aostDuration:     -48 * time.Hour,
 		},
 		{
 			desc:             "schema change during job",
-			expectedTTLError: "error during row deletion: table has had a schema change since the job has started at .*, aborting",
+			expectedTTLError: "error during row deletion: table has had a schema change since the job has started at .*, job will run at the next scheduled time",
 			aostDuration:     zeroDuration,
 			// We cannot use a schema change to change the version in this test as
 			// we overtook the job adoption method, which means schema changes get
@@ -356,6 +356,36 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 			th.waitForScheduledJob(t, jobs.StateFailed, tc.expectedTTLError)
 		})
 	}
+}
+
+func TestRowLevelTTLAlterTypeInPrimaryKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
+		t,
+		&sql.TTLTestingKnobs{
+			AOSTDuration: &zeroDuration,
+			// Prior to https://github.com/cockroachdb/cockroach/pull/145374, this
+			// pre-select ALTER TYPE statement would hang forever.
+			PreSelectStatement: `ALTER TYPE defaultdb.public.typ ADD VALUE 'c'`,
+		},
+		false, /* testMultiTenant */
+		1,     /* numNodes */
+	)
+	defer cleanupFunc()
+	th.sqlDB.Exec(t, `CREATE TYPE typ AS ENUM ('foo', 'bar')`)
+	th.sqlDB.Exec(t, `CREATE TABLE t (
+	id INT,
+  v typ,
+  PRIMARY KEY (id, v)
+) WITH (ttl_expire_after = '10 minutes')`)
+	th.sqlDB.Exec(t, `ALTER TABLE t SPLIT AT VALUES (1), (2)`)
+	th.sqlDB.Exec(t, `INSERT INTO t (id, v, crdb_internal_expiration) VALUES (1, 'foo', now() - '1 month'), (2, 'bar', now() - '1 month')`)
+
+	// Prior to https://github.com/cockroachdb/cockroach/pull/145374, the job
+	// would fail with a "comparison of two different versions of enum" error.
+	th.waitForScheduledJob(t, jobs.StateSucceeded, "")
 }
 
 func TestRowLevelTTLJobDisabled(t *testing.T) {

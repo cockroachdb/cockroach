@@ -57,8 +57,11 @@ type Settings struct {
 	// minimum expiration field in the lease object. It is used for mixed-version
 	// compatibility.
 	MinExpirationSupported bool
-	// RangeLeaseDuration specifies the range lease duration.
+	// RangeLeaseDuration specifies the range lease duration. It's used for
+	// extending expiration leases.
 	RangeLeaseDuration time.Duration
+	// FortificationGracePeriod specifies the leader lease duration.
+	FortificationGracePeriod time.Duration
 }
 
 // PrevLeaseManipulation contains a set of instructions for manipulating the
@@ -537,7 +540,7 @@ func leaseMinTimestamp(st Settings, i BuildInput, nextType roachpb.LeaseType) hl
 		// there's no chance of an expiration regression. Still, it is still useful
 		// to set a minimum expiration time so that the new lease is guaranteed to
 		// have some validity period, even if the raft leader is unable to fortify.
-		minExp := i.Now.ToTimestamp().Add(int64(st.RangeLeaseDuration), 0)
+		minExp := i.Now.ToTimestamp().Add(int64(st.FortificationGracePeriod), 0)
 		minExp.Forward(i.PrevLeaseExpiration())
 		return minExp
 	default:

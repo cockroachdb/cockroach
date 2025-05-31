@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -817,8 +818,13 @@ func withPostCommitPlanAfterSchemaChange(
 	ctx := context.Background()
 	var processOnce sync.Once
 	var postCommitPlan scplan.Plan
+	var knobEnabled atomic.Bool
 	factory.WithSchemaChangerKnobs(&scexec.TestingKnobs{
 		BeforeStage: func(p scplan.Plan, _ int) error {
+			// Only enabled after setup.
+			if !knobEnabled.Load() {
+				return nil
+			}
 			if p.Params.ExecutionPhase >= scop.PostCommitPhase {
 				processOnce.Do(func() { postCommitPlan = p })
 			}
@@ -826,6 +832,7 @@ func withPostCommitPlanAfterSchemaChange(
 		},
 	}).Run(context.Background(), t, func(_ serverutils.TestServerInterface, db *gosql.DB) {
 		require.NoError(t, setupSchemaChange(ctx, t, spec, db))
+		knobEnabled.Swap(true)
 		require.NoError(t, executeSchemaChangeTxn(ctx, t, spec, db))
 		waitForSchemaChangesToFinish(t, sqlutils.MakeSQLRunner(db))
 		fn(db, postCommitPlan)
@@ -840,9 +847,8 @@ func setupSchemaChange(
 
 	tdb := sqlutils.MakeSQLRunner(db)
 
-	// Execute the setup statements with the legacy schema changer so that the
-	// declarative schema changer testing knobs don't get used.
-	tdb.Exec(t, "SET use_declarative_schema_changer = 'off'")
+	// Execute the setup statements with the declarative schema changer, we will
+	// disable the knobs before this.
 	for i, stmt := range spec.Setup {
 		if _, err := tdb.DB.ExecContext(ctx, stmt.SQL); err != nil {
 			// nolint:errcmp

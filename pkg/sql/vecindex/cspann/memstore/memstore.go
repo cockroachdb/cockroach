@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/container/list"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -111,21 +110,9 @@ type memPartition struct {
 		partition *cspann.Partition
 		// created is the logical clock time at which the partition was created.
 		created uint64
-		// deleted is true if the partition has been deleted.
-		deleted bool
+		// deleted is the logical clock time at which the partition was deleted.
+		deleted uint64
 	}
-}
-
-// isVisibleLocked returns true if the partition is visible to a transaction at
-// the given logical clock time. Once a partition has been deleted, it is not
-// considered visible to any transaction, regardless of its current time. In
-// addition, if a transaction's current time is before the root partition's
-// creation time, then the partition is not visible. This latter check is
-// necessary because the root partition is modified in-place, unlike other
-// partitions which are never reused after their deletion.
-// NOTE: Callers must acquire p.lock before calling this.
-func (p *memPartition) isVisibleLocked(current uint64) bool {
-	return !p.lock.deleted && (p.key.partitionKey != cspann.RootKey || current > p.lock.created)
 }
 
 // pendingItem tracks currently active transactions as well as partitions that
@@ -145,12 +132,6 @@ type Store struct {
 	seed          int64
 	rootQuantizer quantize.Quantizer
 	quantizer     quantize.Quantizer
-
-	// structureLock must be acquired by transactions that intend to modify the
-	// structure of a tree, e.g. splitting or merging a partition. This ensures
-	// that only one split or merge can be running at any given time, so that
-	// deadlocks are not possible.
-	structureLock memLock
 
 	mu struct {
 		syncutil.Mutex
@@ -189,7 +170,7 @@ func New(quantizer quantize.Quantizer, seed int64) *Store {
 	st := &Store{
 		dims:          quantizer.GetDims(),
 		seed:          seed,
-		rootQuantizer: quantize.NewUnQuantizer(quantizer.GetDims()),
+		rootQuantizer: quantize.NewUnQuantizer(quantizer.GetDims(), quantizer.GetDistanceMetric()),
 		quantizer:     quantizer,
 	}
 
@@ -197,7 +178,6 @@ func New(quantizer quantize.Quantizer, seed int64) *Store {
 	st.mu.vectors = make(map[string]vector.T)
 	st.mu.clock = 2
 	st.mu.nextKey = cspann.RootKey + 1
-	st.mu.stats.NumPartitions = 1
 	st.mu.pending.Init()
 	return st
 }
@@ -207,8 +187,27 @@ func (s *Store) Dims() int {
 	return s.dims
 }
 
-// BeginTransactionBegin implements the Store interface.
-func (s *Store) BeginTransaction(ctx context.Context) (cspann.Txn, error) {
+// RunTransaction implements the Store interface.
+func (s *Store) RunTransaction(ctx context.Context, fn func(txn cspann.Txn) error) (err error) {
+	var txn cspann.Txn
+	txn, err = s.beginTransaction()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err == nil {
+			err = s.commitTransaction(txn)
+		}
+		if err != nil {
+			err = errors.CombineErrors(err, s.abortTransaction(txn))
+		}
+	}()
+
+	return fn(txn)
+}
+
+// beginTransaction starts a new memstore transaction.
+func (s *Store) beginTransaction() (cspann.Txn, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -220,32 +219,12 @@ func (s *Store) BeginTransaction(ctx context.Context) (cspann.Txn, error) {
 	return &elem.Value.activeTxn, nil
 }
 
-// CommitTransaction implements the Store interface.
-func (s *Store) CommitTransaction(ctx context.Context, txn cspann.Txn) error {
+// commitTransaction commits a running memstore transaction.
+func (s *Store) commitTransaction(txn cspann.Txn) error {
 	// Release any exclusive partition locks held by the transaction.
 	tx := txn.(*memTxn)
 	for i := range tx.ownedLocks {
 		tx.ownedLocks[i].Release()
-	}
-
-	// Panic if the K-means tree contains an empty non-leaf partition after the
-	// transaction ends, as this violates the constraint that the K-means tree
-	// is always full balanced. This is helpful in testing.
-	if tx.unbalanced != nil {
-		// Need to acquire partition lock before inspecting the partition.
-		func() {
-			tx.unbalanced.lock.AcquireShared(tx.id)
-			defer tx.unbalanced.lock.ReleaseShared()
-
-			partition := tx.unbalanced.lock.partition
-			if partition.Count() == 0 && partition.Level() > cspann.LeafLevel {
-				if tx.unbalanced.isVisibleLocked(tx.current) {
-					panic(errors.AssertionFailedf(
-						"K-means tree is unbalanced, with empty non-leaf partition %d",
-						tx.unbalanced.key))
-				}
-			}
-		}()
 	}
 
 	s.mu.Lock()
@@ -259,34 +238,15 @@ func (s *Store) CommitTransaction(ctx context.Context, txn cspann.Txn) error {
 	return nil
 }
 
-// AbortTransaction implements the Store interface.
-func (s *Store) AbortTransaction(ctx context.Context, txn cspann.Txn) error {
+// abortTransaction implements the Store interface.
+func (s *Store) abortTransaction(txn cspann.Txn) error {
 	tx := txn.(*memTxn)
 	if tx.updated {
 		// Abort is only trivially supported by the in-memory store.
 		panic(errors.AssertionFailedf(
 			"in-memory transaction cannot be aborted because state has already been updated"))
 	}
-	return s.CommitTransaction(ctx, txn)
-}
-
-// RunTransaction implements the Store interface.
-func (s *Store) RunTransaction(ctx context.Context, fn func(txn cspann.Txn) error) (err error) {
-	var txn cspann.Txn
-	txn, err = s.BeginTransaction(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err == nil {
-			err = s.CommitTransaction(ctx, txn)
-		}
-		if err != nil {
-			err = errors.CombineErrors(err, s.AbortTransaction(ctx, txn))
-		}
-	}()
-
-	return fn(txn)
+	return s.commitTransaction(txn)
 }
 
 // MakePartitionKey implements the Store interface.
@@ -358,24 +318,15 @@ func (s *Store) TryCreateEmptyPartition(
 	partitionKey cspann.PartitionKey,
 	metadata cspann.PartitionMetadata,
 ) error {
-	memPart := s.lockPartition(treeKey, partitionKey, uniqueOwner, false /* isExclusive */)
-	if memPart != nil {
-		// Partition already exists, so return a ConditionFailedError.
-		defer memPart.lock.ReleaseShared()
-		return cspann.NewConditionFailedError(*memPart.lock.partition.Metadata())
+	memPart, ok := s.tryCreateEmptyPartition(treeKey, partitionKey, metadata)
+	if ok {
+		return nil
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Create the new empty partition.
-	partition := cspann.CreateEmptyPartition(s.quantizer, metadata)
-	_ = s.insertPartitionLocked(treeKey, partitionKey, partition)
-
-	// Update stats.
-	s.mu.stats.NumPartitions++
-
-	return nil
+	// Partition already exists, so return a ConditionFailedError.
+	memPart.lock.AcquireShared(uniqueOwner)
+	defer memPart.lock.ReleaseShared()
+	return cspann.NewConditionFailedError(*memPart.lock.partition.Metadata())
 }
 
 // TryDeletePartition implements the Store interface.
@@ -389,14 +340,14 @@ func (s *Store) TryDeletePartition(
 	}
 	defer memPart.lock.Release()
 
-	// Mark partition as deleted.
-	if memPart.lock.deleted {
-		panic(errors.AssertionFailedf("partition %d is already deleted", partitionKey))
-	}
-	memPart.lock.deleted = true
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// Mark partition as deleted.
+	if memPart.lock.deleted != 0 {
+		panic(errors.AssertionFailedf("partition %d is already deleted", partitionKey))
+	}
+	memPart.lock.deleted = s.tickLocked()
 
 	// Add the partition to the pending list so that it will only be garbage
 	// collected once all older transactions have ended.
@@ -460,8 +411,26 @@ func (s *Store) TryUpdatePartitionMetadata(
 		return cspann.NewConditionFailedError(*existing)
 	}
 
+	// Check whether new level is being added or removed.
+	if partitionKey == cspann.RootKey && metadata.Level != existing.Level {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+
+		// Treat adding new level as if it were a new root partition.
+		memPart.lock.created = s.tickLocked()
+
+		// Grow or shrink CVStats slice. Stats are for non-leaf levels, so subtract
+		// one to get the new slice length.
+		expectedLevels := int(metadata.Level - 1)
+		if expectedLevels > len(s.mu.stats.CVStats) {
+			s.mu.stats.CVStats =
+				slices.Grow(s.mu.stats.CVStats, expectedLevels-len(s.mu.stats.CVStats))
+		}
+		s.mu.stats.CVStats = s.mu.stats.CVStats[:expectedLevels]
+	}
+
 	// Update the partition's metadata.
-	*memPart.lock.partition.Metadata() = metadata
+	*existing = metadata
 
 	return nil
 }
@@ -523,18 +492,6 @@ func (s *Store) TryRemoveFromPartition(
 
 	// Remove vectors from the partition.
 	for i := range childKeys {
-		if partition.Level() > cspann.LeafLevel && partition.Count() == 1 {
-			// Cannot remove the last remaining vector in a non-leaf partition, as
-			// this would create an unbalanced K-means tree. However, this doesn't
-			// apply to the root partition that's draining.
-			state := existing.StateDetails.State
-			if partitionKey != cspann.RootKey || state != cspann.DrainingForSplitState {
-				err = errors.AssertionFailedf(
-					"cannot remove last remaining vector from non-leaf partition %d", partitionKey)
-				break
-			}
-		}
-
 		removed = partition.ReplaceWithLastByKey(childKeys[i]) || removed
 	}
 
@@ -642,11 +599,13 @@ func (s *Store) MarshalBinary() (data []byte, err error) {
 	}
 
 	storeProto := StoreProto{
-		Config:     vecpb.Config{Dims: int32(s.dims), Seed: s.seed},
-		Partitions: make([]PartitionProto, 0, len(s.mu.partitions)),
-		NextKey:    s.mu.nextKey,
-		Vectors:    make([]VectorProto, 0, len(s.mu.vectors)),
-		Stats:      s.mu.stats,
+		Dims:           s.dims,
+		Seed:           s.seed,
+		DistanceMetric: s.quantizer.GetDistanceMetric(),
+		Partitions:     make([]PartitionProto, 0, len(s.mu.partitions)),
+		NextKey:        s.mu.nextKey,
+		Vectors:        make([]VectorProto, 0, len(s.mu.vectors)),
+		Stats:          s.mu.stats,
 	}
 
 	// Remap partitions to protobufs.
@@ -656,16 +615,19 @@ func (s *Store) MarshalBinary() (data []byte, err error) {
 			defer memPart.lock.ReleaseShared()
 
 			partition := memPart.lock.partition
-			if partition.Metadata().StateDetails.State != cspann.ReadyState {
-				return errors.AssertionFailedf("cannot save store with non-ready partition %v", qkey)
-			}
-
+			metadata := partition.Metadata()
 			partitionProto := PartitionProto{
 				TreeId:       qkey.treeID,
 				PartitionKey: qkey.partitionKey,
-				ChildKeys:    partition.ChildKeys(),
-				ValueBytes:   partition.ValueBytes(),
-				Level:        partition.Level(),
+				Metadata: PartitionMetadataProto{
+					Level:   partition.Level(),
+					State:   metadata.StateDetails.State,
+					Target1: metadata.StateDetails.Target1,
+					Target2: metadata.StateDetails.Target2,
+					Source:  metadata.StateDetails.Source,
+				},
+				ChildKeys:  partition.ChildKeys(),
+				ValueBytes: partition.ValueBytes(),
 			}
 
 			rabitq, ok := partition.QuantizedSet().(*quantize.RaBitQuantizedVectorSet)
@@ -703,10 +665,16 @@ func Load(data []byte) (*Store, error) {
 		return nil, err
 	}
 
+	raBitQuantizer := quantize.NewRaBitQuantizer(
+		storeProto.Dims, storeProto.Seed, storeProto.DistanceMetric)
+	unquantizer := quantize.NewUnQuantizer(storeProto.Dims, storeProto.DistanceMetric)
+
 	// Construct the InMemoryStore object.
 	inMemStore := &Store{
-		dims: int(storeProto.Config.Dims),
-		seed: storeProto.Config.Seed,
+		dims:          storeProto.Dims,
+		seed:          storeProto.Seed,
+		rootQuantizer: unquantizer,
+		quantizer:     raBitQuantizer,
 	}
 	inMemStore.mu.clock = 2
 	inMemStore.mu.partitions = make(map[qualifiedPartitionKey]*memPartition, len(storeProto.Partitions))
@@ -714,9 +682,6 @@ func Load(data []byte) (*Store, error) {
 	inMemStore.mu.vectors = make(map[string]vector.T, len(storeProto.Vectors))
 	inMemStore.mu.stats = storeProto.Stats
 	inMemStore.mu.pending.Init()
-
-	raBitQuantizer := quantize.NewRaBitQuantizer(int(storeProto.Config.Dims), storeProto.Config.Seed)
-	unquantizer := quantize.NewUnQuantizer(int(storeProto.Config.Dims))
 
 	// Construct the Partition objects.
 	for i := range storeProto.Partitions {
@@ -731,16 +696,27 @@ func Load(data []byte) (*Store, error) {
 
 		var quantizer quantize.Quantizer
 		var quantizedSet quantize.QuantizedVectorSet
+		var centroid vector.T
 		if partitionProto.RaBitQ != nil {
 			quantizer = raBitQuantizer
 			quantizedSet = partitionProto.RaBitQ
+			centroid = partitionProto.RaBitQ.Centroid
 		} else {
 			quantizer = unquantizer
 			quantizedSet = partitionProto.UnQuantized
+			centroid = make(vector.T, unquantizer.GetDims())
 		}
 
 		metadata := cspann.PartitionMetadata{
-			Level: partitionProto.Level, Centroid: quantizedSet.GetCentroid()}
+			Level:    partitionProto.Metadata.Level,
+			Centroid: centroid,
+			StateDetails: cspann.PartitionStateDetails{
+				State:   partitionProto.Metadata.State,
+				Target1: partitionProto.Metadata.Target1,
+				Target2: partitionProto.Metadata.Target2,
+				Source:  partitionProto.Metadata.Source,
+			},
+		}
 		memPart.lock.partition = cspann.NewPartition(metadata, quantizer, quantizedSet,
 			partitionProto.ChildKeys, partitionProto.ValueBytes)
 
@@ -778,15 +754,6 @@ func (s *Store) tickLocked() uint64 {
 	val := s.mu.clock
 	s.mu.clock++
 	return val
-}
-
-// updatedStructureLocked marks the transaction as having updated the K-means
-// tree. It also pushes the transactions current time forward so that it can
-// always observe its changes.
-// NOTE: Callers must have locked the s.mu mutex.
-func (s *Store) updatedStructureLocked(tx *memTxn) {
-	tx.updated = true
-	tx.current = s.tickLocked()
 }
 
 // getPartition returns a partition by its key, or ErrPartitionNotFound if no
@@ -827,7 +794,7 @@ func (s *Store) lockPartition(
 	}
 
 	// If the partition is deleted, then release the lock and return nil.
-	if memPart.lock.deleted {
+	if memPart.lock.deleted != 0 {
 		if isExclusive {
 			memPart.lock.Release()
 		} else {
@@ -855,11 +822,38 @@ func (s *Store) makeEmptyRootMetadataLocked() cspann.PartitionMetadata {
 	if s.mu.emptyVec == nil {
 		s.mu.emptyVec = make(vector.T, s.dims)
 	}
-	return cspann.PartitionMetadata{
-		Level:        cspann.LeafLevel,
-		Centroid:     s.mu.emptyVec,
-		StateDetails: cspann.MakeReadyDetails(),
+	return cspann.MakeReadyPartitionMetadata(cspann.LeafLevel, s.mu.emptyVec)
+}
+
+// tryCreateEmptyPartition creates a empty partition with the given metadata and
+// inserts it into the tree if there is no existing partition with the same key.
+// If there is an existing partition, it returns that and ok=false; otherwise,
+// it returns the newly created partition and ok=true.
+func (s *Store) tryCreateEmptyPartition(
+	treeKey cspann.TreeKey, partitionKey cspann.PartitionKey, metadata cspann.PartitionMetadata,
+) (memPart *memPartition, ok bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Check for race condition where another thread already created the
+	// partition.
+	memPart, ok = s.getPartitionLocked(treeKey, partitionKey)
+	if ok {
+		return memPart, false
 	}
+
+	// Create the new empty partition.
+	quantizer := s.quantizer
+	if partitionKey == cspann.RootKey {
+		quantizer = s.rootQuantizer
+	}
+	partition := cspann.CreateEmptyPartition(quantizer, metadata)
+	memPart = s.insertPartitionLocked(treeKey, partitionKey, partition)
+
+	// Update stats.
+	s.mu.stats.NumPartitions++
+
+	return memPart, true
 }
 
 // processPendingActionsLocked iterates over pending actions to:

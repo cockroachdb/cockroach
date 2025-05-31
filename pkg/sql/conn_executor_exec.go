@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -58,8 +60,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	// TODO(normanchenn): temporarily import the parser here to ensure that
-	// init() is called.
+	// This import is needed here to properly inject tree.ValidateJSONPath from
+	// pkg/util/jsonpath/parser/parse.go.
 	_ "github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -73,6 +75,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 	"go.opentelemetry.io/otel/attribute"
@@ -150,7 +153,7 @@ func (ex *connExecutor) execStmt(
 		ev, payload = ex.execStmtInNoTxnState(ctx, parserStmt, res)
 
 	case stateOpen:
-		var preparedStmt *PreparedStatement
+		var preparedStmt *prep.Statement
 		if portal != nil {
 			preparedStmt = portal.Stmt
 		}
@@ -261,7 +264,7 @@ func (ex *connExecutor) startIdleInSessionTimeout() {
 }
 
 func (ex *connExecutor) recordFailure(p eventNonRetriableErrPayload) {
-	ex.metrics.EngineMetrics.FailureCount.Inc(1)
+	ex.metrics.EngineMetrics.FailureCount.Inc(1, ex.sessionData().Database, ex.sessionData().ApplicationName)
 	switch {
 	case errors.Is(p.errorCause(), sqlerrors.QueryTimeoutError):
 		ex.metrics.EngineMetrics.StatementTimeoutCount.Inc(1)
@@ -349,7 +352,7 @@ func (ex *connExecutor) execPortal(
 func (ex *connExecutor) execStmtInOpenState(
 	ctx context.Context,
 	parserStmt statements.Statement[tree.Statement],
-	prepared *PreparedStatement,
+	prepared *prep.Statement,
 	pinfo *tree.PlaceholderInfo,
 	res RestrictedCommandResult,
 	canAutoCommit bool,
@@ -385,6 +388,14 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt = makeStatement(parserStmt, queryID, stmtFingerprintFmtMask)
 	}
 
+	if len(stmt.QueryTags) > 0 {
+		tags := &logtags.Buffer{}
+		for _, tag := range stmt.QueryTags {
+			tags = tags.Add("querytag-"+tag.Key, tag.Value)
+		}
+		ctx = logtags.AddTags(ctx, tags)
+	}
+
 	var queryTimeoutTicker *time.Timer
 	var txnTimeoutTicker *time.Timer
 	queryTimedOut := false
@@ -414,7 +425,8 @@ func (ex *connExecutor) execStmtInOpenState(
 
 		// Note ex.metrics is Server.Metrics for the connExecutor that serves the
 		// client connection, and is Server.InternalMetrics for internal executors.
-		ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
+		ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1,
+			ex.sessionData().Database, ex.sessionData().ApplicationName)
 	}()
 
 	// Special handling for SET TRANSACTION statements within a stored procedure
@@ -429,7 +441,8 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	// Note ex.metrics is Server.Metrics for the connExecutor that serves the
 	// client connection, and is Server.InternalMetrics for internal executors.
-	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
+	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1,
+		ex.sessionData().Database, ex.sessionData().ApplicationName)
 
 	p := &ex.planner
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
@@ -524,11 +537,10 @@ func (ex *connExecutor) execStmtInOpenState(
 		// Replace the `EXECUTE foo` statement with the prepared statement, and
 		// continue execution.
 		name := e.Name.String()
-		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
+		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts.Get(name)
 		if !ok {
 			return makeErrEvent(newPreparedStmtDNEError(ex.sessionData(), name))
 		}
-		ex.extraTxnState.prepStmtsNamespace.touchLRUEntry(name)
 
 		var err error
 		pinfo, err = ex.planner.fillInPlaceholders(ctx, ps, name, e.Params)
@@ -673,6 +685,12 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
 	p.semaCtx.Placeholders.Assign(pinfo, stmt.NumPlaceholders)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
+
+	if buildutil.CrdbTestBuild {
+		// Ensure that each statement is formatted regardless of logging
+		// settings.
+		_ = p.FormatAstAsRedactableString(stmt.AST, p.extendedEvalCtx.Annotations)
+	}
 
 	// This flag informs logging decisions.
 	// Some statements are not dispatched to the execution engine and need
@@ -844,7 +862,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// This is handling the SQL statement "PREPARE". See execPrepare for
 		// handling of the protocol-level command for preparing statements.
 		name := s.Name.String()
-		if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]; ok {
+		if ex.extraTxnState.prepStmtsNamespace.prepStmts.Has(name) {
 			err := pgerror.Newf(
 				pgcode.DuplicatePreparedStatement,
 				"prepared statement %q already exists", name,
@@ -905,7 +923,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			p.extendedEvalCtx.Placeholders = oldPlaceholders
 		}()
 		if _, err := ex.addPreparedStmt(
-			ctx, name, prepStmt, typeHints, rawTypeHints, PreparedStatementOriginSQL,
+			ctx, name, prepStmt, typeHints, rawTypeHints, prep.StatementOriginSQL,
 		); err != nil {
 			return makeErrEvent(err)
 		}
@@ -1369,7 +1387,8 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 
 		// Note ex.metrics is Server.Metrics for the connExecutor that serves the
 		// client connection, and is Server.InternalMetrics for internal executors.
-		ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
+		ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1,
+			ex.sessionData().Database, ex.sessionData().ApplicationName)
 	}()
 
 	// Special handling for SET TRANSACTION statements within a stored procedure
@@ -1384,7 +1403,8 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 
 	// Note ex.metrics is Server.Metrics for the connExecutor that serves the
 	// client connection, and is Server.InternalMetrics for internal executors.
-	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
+	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1,
+		ex.sessionData().Database, ex.sessionData().ApplicationName)
 
 	// TODO(sql-sessions): persist the planner for a pausable portal, and reuse
 	// it for each re-execution.
@@ -1482,11 +1502,10 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		// Replace the `EXECUTE foo` statement with the prepared statement, and
 		// continue execution.
 		name := e.Name.String()
-		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
+		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts.Get(name)
 		if !ok {
 			return makeErrEvent(newPreparedStmtDNEError(ex.sessionData(), name))
 		}
-		ex.extraTxnState.prepStmtsNamespace.touchLRUEntry(name)
 
 		var err error
 		pinfo, err = ex.planner.fillInPlaceholders(ctx, ps, name, e.Params)
@@ -1668,6 +1687,12 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
 	p.semaCtx.Placeholders.Assign(pinfo, vars.stmt.NumPlaceholders)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
+
+	if buildutil.CrdbTestBuild {
+		// Ensure that each statement is formatted regardless of logging
+		// settings.
+		_ = p.FormatAstAsRedactableString(vars.stmt.AST, p.extendedEvalCtx.Annotations)
+	}
 
 	// This flag informs logging decisions.
 	// Some statements are not dispatched to the execution engine and need
@@ -1871,7 +1896,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		// This is handling the SQL statement "PREPARE". See execPrepare for
 		// handling of the protocol-level command for preparing statements.
 		name := s.Name.String()
-		if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]; ok {
+		if ex.extraTxnState.prepStmtsNamespace.prepStmts.Has(name) {
 			err := pgerror.Newf(
 				pgcode.DuplicatePreparedStatement,
 				"prepared statement %q already exists", name,
@@ -1932,7 +1957,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 			p.extendedEvalCtx.Placeholders = oldPlaceholders
 		}()
 		if _, err := ex.addPreparedStmt(
-			ctx, name, prepStmt, typeHints, rawTypeHints, PreparedStatementOriginSQL,
+			ctx, name, prepStmt, typeHints, rawTypeHints, prep.StatementOriginSQL,
 		); err != nil {
 			return makeErrEvent(err)
 		}
@@ -2513,7 +2538,7 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) (retEr
 		return err
 	}
 
-	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
+	ex.extraTxnState.prepStmtsNamespace.closePortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
 
 	// We need to step the transaction's internal read sequence before committing
 	// if it has stepping enabled. If it doesn't have stepping enabled, then we
@@ -2643,7 +2668,7 @@ func (ex *connExecutor) rollbackSQLTransaction(
 		return ex.makeErrEvent(err, stmt)
 	}
 
-	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
+	ex.extraTxnState.prepStmtsNamespace.closePortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
 	ex.recordDDLTxnTelemetry(true /* failed */)
 
 	// A non-retryable error automatically rolls-back the transaction if there are
@@ -3328,7 +3353,7 @@ func (ex *connExecutor) makeExecPlan(
 				)
 			}
 		}
-		ex.metrics.EngineMetrics.FullTableOrIndexScanCount.Inc(1)
+		ex.metrics.EngineMetrics.FullTableOrIndexScanCount.Inc(1, ex.sessionData().Database, ex.sessionData().ApplicationName)
 	}
 
 	// TODO(knz): Remove this accounting if/when savepoint rollbacks
@@ -3345,6 +3370,22 @@ func (ex *connExecutor) makeExecPlan(
 	// Include gist in error reports.
 	ih := &planner.instrumentation
 	ctx = withPlanGist(ctx, ih.planGist.String())
+	if buildutil.CrdbTestBuild && ih.planGist.String() != "" {
+		// Ensure that the gist can be decoded in test builds.
+		//
+		// In 50% cases, use nil catalog.
+		var catalog cat.Catalog
+		if ex.rng.internal.Float64() < 0.5 && !planner.SessionData().AllowRoleMembershipsToChangeDuringTransaction {
+			// For some reason, TestAllowRoleMembershipsToChangeDuringTransaction
+			// times out with non-nil catalog, so we'll keep it as nil when the
+			// session var is set to 'true' ('false' is the default).
+			catalog = planner.optPlanningCtx.catalog
+		}
+		_, err := explain.DecodePlanGistToRows(ctx, &planner.extendedEvalCtx.Context, ih.planGist.String(), catalog)
+		if err != nil {
+			return ctx, errors.NewAssertionErrorWithWrappedErrf(err, "failed to decode plan gist: %q", ih.planGist.String())
+		}
+	}
 
 	// Now that we have the plan gist, check whether we should get a bundle for
 	// it.
@@ -4060,6 +4101,8 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 			traceKV = true
 		case "cluster":
 			recordingType = tracingpb.RecordingVerbose
+		case "compact":
+			// compact modifies the output format.
 		default:
 			return pgerror.Newf(pgcode.Syntax,
 				"set tracing: unknown mode %q", s)
@@ -4263,7 +4306,8 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 
 	// Note ex.metrics is Server.Metrics for the connExecutor that serves the
 	// client connection, and is Server.InternalMetrics for internal executors.
-	ex.metrics.EngineMetrics.SQLTxnsOpen.Inc(1)
+	ex.metrics.EngineMetrics.SQLTxnsOpen.Inc(1,
+		ex.sessionData().Database, ex.sessionData().ApplicationName)
 
 	ex.extraTxnState.shouldExecuteOnTxnFinish = true
 	ex.extraTxnState.txnFinishClosure.txnStartTime = txnStart
@@ -4308,8 +4352,10 @@ func (ex *connExecutor) recordTransactionFinish(
 	if contentionDuration := ex.extraTxnState.accumulatedStats.ContentionTime.Nanoseconds(); contentionDuration > 0 {
 		ex.metrics.EngineMetrics.SQLContendedTxns.Inc(1)
 	}
-	ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1)
-	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(elapsedTime.Nanoseconds())
+	ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1,
+		ex.sessionData().Database, ex.sessionData().ApplicationName)
+	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(elapsedTime.Nanoseconds(),
+		ex.sessionData().Database, ex.sessionData().ApplicationName)
 
 	ex.txnIDCacheWriter.Record(contentionpb.ResolvedTxnID{
 		TxnID:            ev.txnID,
@@ -4427,10 +4473,7 @@ func logTraceAboveThreshold(
 }
 
 func (ex *connExecutor) execWithProfiling(
-	ctx context.Context,
-	ast tree.Statement,
-	prepared *PreparedStatement,
-	op func(context.Context) error,
+	ctx context.Context, ast tree.Statement, prepared *prep.Statement, op func(context.Context) error,
 ) error {
 	var err error
 	if ex.server.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {

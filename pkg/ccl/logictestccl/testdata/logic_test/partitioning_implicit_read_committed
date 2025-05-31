@@ -79,6 +79,7 @@ CREATE TABLE public.t (
   PARTITION five VALUES IN (('five'))
 )
 -- Warning: Partitioned table with no zone configurations.
+;
 
 query T
 EXPLAIN (OPT, CATALOG) SELECT * FROM t

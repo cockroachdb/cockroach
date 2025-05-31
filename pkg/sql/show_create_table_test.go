@@ -67,7 +67,7 @@ func TestShowCreateTableWithConstraintInvalidated(t *testing.T) {
 					`\n\trowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),`+
 					`\n\tCONSTRAINT table_pkey PRIMARY KEY (rowid ASC),`+
 					`\n\tINDEX table_y_idx (y ASC) USING HASH WITH (bucket_count=16)`+
-					`\n)'`,
+					`\n);'`,
 				fmt.Sprintf("%v", rows[1].String()),
 			)
 
@@ -106,7 +106,7 @@ func TestShowCreateTableWithConstraintInvalidated(t *testing.T) {
 					`crdb_internal_y_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, `+
 					`4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, `+
 					`11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)) NOT VALID`+
-					`\n)'`, fmt.Sprintf("%v", rows[1].String()))
+					`\n);'`, fmt.Sprintf("%v", rows[1].String()))
 			return nil
 		}))
 

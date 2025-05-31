@@ -34,6 +34,8 @@ import (
 type GeneratorConfig struct {
 	Ops                   OperationConfig
 	NumNodes, NumReplicas int
+
+	BufferedWritesProb float64
 }
 
 // OperationConfig configures the relative probabilities of producing various
@@ -1493,28 +1495,31 @@ func (g *generator) registerClosureTxnOps(allowed *[]opGen, c *ClosureTxnConfig)
 	const Commit, Rollback = ClosureTxnType_Commit, ClosureTxnType_Rollback
 	const SSI, SI, RC = isolation.Serializable, isolation.Snapshot, isolation.ReadCommitted
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SSI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSerializable)
+		makeClosureTxn(Commit, SSI, g.Config.BufferedWritesProb, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSerializable)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSnapshot)
+		makeClosureTxn(Commit, SI, 0 /* bufferedWritesProb */, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSnapshot)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, RC, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitReadCommitted)
+		makeClosureTxn(Commit, RC, 0 /* bufferedWritesProb */, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitReadCommitted)
+
 	addOpGen(allowed,
-		makeClosureTxn(Rollback, SSI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSerializable)
+		makeClosureTxn(Rollback, SSI, g.Config.BufferedWritesProb, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSerializable)
 	addOpGen(allowed,
-		makeClosureTxn(Rollback, SI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSnapshot)
+		makeClosureTxn(Rollback, SI, 0 /* bufferedWritesProb */, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSnapshot)
 	addOpGen(allowed,
-		makeClosureTxn(Rollback, RC, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackReadCommitted)
+		makeClosureTxn(Rollback, RC, 0 /* bufferedWritesProb */, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackReadCommitted)
+
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SSI, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSerializableInBatch)
+		makeClosureTxn(Commit, SSI, g.Config.BufferedWritesProb, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSerializableInBatch)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SI, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSnapshotInBatch)
+		makeClosureTxn(Commit, SI, 0 /* bufferedWritesProb */, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSnapshotInBatch)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, RC, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitReadCommittedInBatch)
+		makeClosureTxn(Commit, RC, 0 /* bufferedWritesProb */, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitReadCommittedInBatch)
 }
 
 func makeClosureTxn(
 	txnType ClosureTxnType,
 	iso isolation.Level,
+	bufferedWritesProb float64,
 	txnClientOps *ClientOperationConfig,
 	txnBatchOps *BatchOperationConfig,
 	commitInBatch *ClientOperationConfig,
@@ -1547,6 +1552,7 @@ func makeClosureTxn(
 			maybeUpdateSavepoints(&spIDs, ops[i])
 		}
 		op := closureTxn(txnType, iso, ops...)
+		op.ClosureTxn.BufferedWrites = rng.Float64() < bufferedWritesProb
 		if commitInBatch != nil {
 			if txnType != ClosureTxnType_Commit {
 				panic(errors.AssertionFailedf(`CommitInBatch must commit got: %s`, txnType))

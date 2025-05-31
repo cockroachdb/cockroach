@@ -79,9 +79,15 @@ go_proto_library(
 
 go_test(
     name = "jobspb_test",
-    srcs = ["wrap_test.go"],
+    srcs = [
+        "jobs_test.go",
+        "wrap_test.go",
+    ],
     deps = [
         ":jobspb",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
         "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )

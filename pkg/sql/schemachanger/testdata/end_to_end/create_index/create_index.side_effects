@@ -24,7 +24,7 @@ write *eventpb.CreateIndex to event log:
     tag: CREATE INDEX
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 10 MutationType ops
+## StatementPhase stage 1 of 1 with 11 MutationType ops
 upsert descriptor #104
   ...
      referencingDescriptorIds:
@@ -102,7 +102,9 @@ upsert descriptor #106
      nextMutationId: 1
      parentId: 100
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -111,7 +113,7 @@ upsert descriptor #106
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 16 MutationType ops
+## PreCommitPhase stage 2 of 2 with 17 MutationType ops
 upsert descriptor #104
    type:
      arrayTypeId: 105
@@ -247,7 +249,9 @@ upsert descriptor #106
      nextMutationId: 1
      parentId: 100
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -402,17 +406,11 @@ begin transaction #9
 validate forward indexes [2] in table #106
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 1 with 10 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 10 MutationType ops
 upsert descriptor #104
-   type:
-     arrayTypeId: 105
-  -  declarativeSchemaChangerState:
-  -    authorization:
-  -      userName: root
-  -    jobId: "1"
-  -    nameMapping:
-  -      id: 104
-  -      name: e
+  ...
+         id: 104
+         name: e
   -    revertible: true
      enumMembers:
      - logicalRepresentation: a
@@ -423,15 +421,8 @@ upsert descriptor #104
   +  version: "8"
 upsert descriptor #105
   ...
-       family: ArrayFamily
-       oid: 100105
-  -  declarativeSchemaChangerState:
-  -    authorization:
-  -      userName: root
-  -    jobId: "1"
-  -    nameMapping:
-  -      id: 105
-  -      name: _e
+         id: 105
+         name: _e
   -    revertible: true
      id: 105
      kind: ALIAS
@@ -442,38 +433,11 @@ upsert descriptor #105
   +  version: "8"
 upsert descriptor #106
   ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  -  declarativeSchemaChangerState:
-  -    authorization:
-  -      userName: root
-  -    currentStatuses: <redacted>
-  -    jobId: "1"
-  -    nameMapping:
-  -      columns:
-  -        "1": k
-  -        "2": v
-  -        "4294967292": crdb_internal_origin_timestamp
-  -        "4294967293": crdb_internal_origin_id
-  -        "4294967294": tableoid
-  -        "4294967295": crdb_internal_mvcc_timestamp
-  -      families:
-  -        "0": primary
-  -      id: 106
-  -      indexes:
-  -        "1": t_pkey
-  -        "2": idx1
-  -      name: t
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE (‹v› = ‹'a'›)
-  -        statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
-  -        statementTag: CREATE INDEX
+           statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
+           statementTag: CREATE INDEX
   -    revertible: true
-  -    targetRanks: <redacted>
-  -    targets: <redacted>
-     families:
-     - columnIds:
+       targetRanks: <redacted>
+       targets: <redacted>
   ...
      formatVersion: 3
      id: 106
@@ -564,12 +528,93 @@ persist all catalog changes to storage
 adding table for stats refresh: 106
 create job #2 (non-cancelable: true): "GC for CREATE INDEX idx1 ON defaultdb.public.t (v) WHERE (v = 'a')"
   descriptor IDs: [106]
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 1 MutationType op pending"
+set schema change job #1 to non-cancellable
+commit transaction #10
+notified job registry to adopt jobs: [2]
+begin transaction #11
+## PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops
+upsert descriptor #104
+   type:
+     arrayTypeId: 105
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+  -    nameMapping:
+  -      id: 104
+  -      name: e
+     enumMembers:
+     - logicalRepresentation: a
+  ...
+     referencingDescriptorIds:
+     - 106
+  -  version: "8"
+  +  version: "9"
+upsert descriptor #105
+  ...
+       family: ArrayFamily
+       oid: 100105
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+  -    nameMapping:
+  -      id: 105
+  -      name: _e
+     id: 105
+     kind: ALIAS
+  ...
+     referencingDescriptorIds:
+     - 106
+  -  version: "8"
+  +  version: "9"
+upsert descriptor #106
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": k
+  -        "2": v
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 106
+  -      indexes:
+  -        "1": t_pkey
+  -        "2": idx1
+  -      name: t
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE (‹v› = ‹'a'›)
+  -        statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
+  -        statementTag: CREATE INDEX
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "7"
+  +  version: "8"
+persist all catalog changes to storage
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 106
-commit transaction #10
-notified job registry to adopt jobs: [2]
+commit transaction #11
 # end PostCommitPhase

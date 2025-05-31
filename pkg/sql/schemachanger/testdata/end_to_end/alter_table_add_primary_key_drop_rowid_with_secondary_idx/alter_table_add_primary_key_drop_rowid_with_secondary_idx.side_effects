@@ -21,7 +21,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 19 MutationType ops
+## StatementPhase stage 1 of 1 with 20 MutationType ops
 upsert descriptor #104
    table:
   +  checks:
@@ -43,6 +43,20 @@ upsert descriptor #104
        version: 4
      modificationTime: {}
   +  mutations:
+  +  - column:
+  +      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)
+  +      hidden: true
+  +      id: 4
+  +      name: crdb_internal_a_shard_10
+  +      nullable: true
+  +      type:
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
+  +      virtual: true
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: DELETE_ONLY
   +  - constraint:
   +      check:
   +        columnIds:
@@ -59,20 +73,6 @@ upsert descriptor #104
   +    direction: DROP
   +    mutationId: 1
   +    state: WRITE_ONLY
-  +  - column:
-  +      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)
-  +      hidden: true
-  +      id: 4
-  +      name: crdb_internal_a_shard_10
-  +      nullable: true
-  +      type:
-  +        family: IntFamily
-  +        oid: 20
-  +        width: 64
-  +      virtual: true
-  +    direction: ADD
-  +    mutationId: 1
-  +    state: DELETE_ONLY
   +  - direction: ADD
   +    index:
   +      constraintId: 5
@@ -194,16 +194,18 @@ upsert descriptor #104
      nextMutationId: 1
      parentId: 100
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
-  -  version: "7"
-  +  version: "8"
+  -  version: "8"
+  +  version: "9"
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 24 MutationType ops
+## PreCommitPhase stage 2 of 2 with 25 MutationType ops
 upsert descriptor #104
    table:
   +  checks:
@@ -261,6 +263,20 @@ upsert descriptor #104
        version: 4
      modificationTime: {}
   +  mutations:
+  +  - column:
+  +      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)
+  +      hidden: true
+  +      id: 4
+  +      name: crdb_internal_a_shard_10
+  +      nullable: true
+  +      type:
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
+  +      virtual: true
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: DELETE_ONLY
   +  - constraint:
   +      check:
   +        columnIds:
@@ -277,20 +293,6 @@ upsert descriptor #104
   +    direction: DROP
   +    mutationId: 1
   +    state: WRITE_ONLY
-  +  - column:
-  +      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)
-  +      hidden: true
-  +      id: 4
-  +      name: crdb_internal_a_shard_10
-  +      nullable: true
-  +      type:
-  +        family: IntFamily
-  +        oid: 20
-  +        width: 64
-  +      virtual: true
-  +    direction: ADD
-  +    mutationId: 1
-  +    state: DELETE_ONLY
   +  - direction: ADD
   +    index:
   +      constraintId: 5
@@ -412,10 +414,12 @@ upsert descriptor #104
      nextMutationId: 1
      parentId: 100
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
-  -  version: "7"
-  +  version: "8"
+  -  version: "8"
+  +  version: "9"
 persist all catalog changes to storage
 create job #1 (non-cancelable: false): "ALTER TABLE defaultdb.public.t ADD PRIMARY KEY (a) USING HASH WITH ('bucket_count' = 10)"
   descriptor IDs: [104]
@@ -444,8 +448,8 @@ upsert descriptor #104
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: WRITE_ONLY
-     - direction: ADD
-       index:
+     - constraint:
+         check:
   ...
          version: 4
        mutationId: 1
@@ -477,8 +481,8 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "8"
-  +  version: "9"
+  -  version: "9"
+  +  version: "10"
 persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 2 of 16 with 1 BackfillType op pending"
 commit transaction #3
@@ -499,8 +503,8 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "9"
-  +  version: "10"
+  -  version: "10"
+  +  version: "11"
 persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 4 of 16 with 1 MutationType op pending"
 commit transaction #5
@@ -517,8 +521,8 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "10"
-  +  version: "11"
+  -  version: "11"
+  +  version: "12"
 persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 5 of 16 with 1 BackfillType op pending"
 commit transaction #6
@@ -548,8 +552,8 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "11"
-  +  version: "12"
+  -  version: "12"
+  +  version: "13"
 persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 7 of 16 with 1 ValidationType op pending"
 commit transaction #8
@@ -663,8 +667,8 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "12"
-  +  version: "13"
+  -  version: "13"
+  +  version: "14"
 persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 9 of 16 with 2 MutationType ops pending"
 commit transaction #10
@@ -688,8 +692,8 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "13"
-  +  version: "14"
+  -  version: "14"
+  +  version: "15"
 persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 10 of 16 with 2 BackfillType ops pending"
 commit transaction #11
@@ -717,8 +721,8 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "14"
-  +  version: "15"
+  -  version: "15"
+  +  version: "16"
 persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 12 of 16 with 2 MutationType ops pending"
 commit transaction #13
@@ -742,8 +746,8 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "15"
-  +  version: "16"
+  -  version: "16"
+  +  version: "17"
 persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 13 of 16 with 2 BackfillType ops pending"
 commit transaction #14
@@ -794,8 +798,8 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "16"
-  +  version: "17"
+  -  version: "17"
+  +  version: "18"
 persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 15 of 16 with 3 ValidationType ops pending"
 commit transaction #16
@@ -1055,15 +1059,15 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "17"
-  +  version: "18"
+  -  version: "18"
+  +  version: "19"
 persist all catalog changes to storage
 adding table for stats refresh: 104
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 1 of 5 with 23 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 1 of 6 with 23 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #18
 begin transaction #19
-## PostCommitNonRevertiblePhase stage 1 of 5 with 25 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 6 with 25 MutationType ops
 upsert descriptor #104
    table:
   -  checks:
@@ -1098,8 +1102,8 @@ upsert descriptor #104
        name: primary
      formatVersion: 3
   ...
-     modificationTime: {}
-     mutations:
+       mutationId: 1
+       state: WRITE_ONLY
   -  - constraint:
   -      check:
   -        columnIds:
@@ -1116,11 +1120,6 @@ upsert descriptor #104
   -    direction: DROP
   -    mutationId: 1
   -    state: WRITE_ONLY
-     - column:
-         computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)
-  ...
-       mutationId: 1
-       state: WRITE_ONLY
   -  - direction: DROP
   -    index:
   -      constraintId: 6
@@ -1277,13 +1276,13 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "18"
-  +  version: "19"
+  -  version: "19"
+  +  version: "20"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 5 with 12 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 6 with 12 MutationType ops pending"
 commit transaction #19
 begin transaction #20
-## PostCommitNonRevertiblePhase stage 2 of 5 with 14 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 6 with 14 MutationType ops
 upsert descriptor #104
    table:
   -  checks: []
@@ -1479,18 +1478,18 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "19"
-  +  version: "20"
+  -  version: "20"
+  +  version: "21"
 persist all catalog changes to storage
 adding table for stats refresh: 104
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 5 with 1 ValidationType op pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 6 with 1 ValidationType op pending"
 commit transaction #20
 begin transaction #21
-## PostCommitNonRevertiblePhase stage 3 of 5 with 1 ValidationType op
+## PostCommitNonRevertiblePhase stage 3 of 6 with 1 ValidationType op
 validate CHECK constraint check_crdb_internal_a_shard_10 in table #104
 commit transaction #21
 begin transaction #22
-## PostCommitNonRevertiblePhase stage 4 of 5 with 8 MutationType ops
+## PostCommitNonRevertiblePhase stage 4 of 6 with 8 MutationType ops
 upsert descriptor #104
   ...
        fromHashShardedColumn: true
@@ -1523,49 +1522,15 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "20"
-  +  version: "21"
+  -  version: "21"
+  +  version: "22"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 5 of 5 with 9 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 5 of 6 with 9 MutationType ops pending"
 commit transaction #22
 begin transaction #23
-## PostCommitNonRevertiblePhase stage 5 of 5 with 11 MutationType ops
+## PostCommitNonRevertiblePhase stage 5 of 6 with 11 MutationType ops
 upsert descriptor #104
   ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  -  declarativeSchemaChangerState:
-  -    authorization:
-  -      userName: root
-  -    currentStatuses: <redacted>
-  -    jobId: "1"
-  -    nameMapping:
-  -      columns:
-  -        "1": a
-  -        "2": b
-  -        "4": crdb_internal_a_shard_10
-  -        "4294967292": crdb_internal_origin_timestamp
-  -        "4294967293": crdb_internal_origin_id
-  -        "4294967294": tableoid
-  -        "4294967295": crdb_internal_mvcc_timestamp
-  -      constraints:
-  -        "2": check_crdb_internal_a_shard_10
-  -      families:
-  -        "0": primary
-  -      id: 104
-  -      indexes:
-  -        "4": idx_b
-  -        "8": t_pkey
-  -      name: t
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIMARY KEY (‹a›) USING HASH WITH ('bucket_count' = ‹10›)
-  -        statement: ALTER TABLE t ADD PRIMARY KEY (a) USING HASH WITH ('bucket_count' = 10)
-  -        statementTag: ALTER TABLE
-  -    targetRanks: <redacted>
-  -    targets: <redacted>
-     families:
-     - columnIds:
        - 1
        - 2
   -    - 3
@@ -1635,17 +1600,65 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "21"
-  +  version: "22"
+  -  version: "22"
+  +  version: "23"
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t ADD PRIMARY KEY (a) USING HASH WITH ('bucket_count' = 10)"
   descriptor IDs: [104]
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 6 of 6 with 1 MutationType op pending"
+commit transaction #23
+notified job registry to adopt jobs: [2]
+begin transaction #24
+## PostCommitNonRevertiblePhase stage 6 of 6 with 3 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": a
+  -        "2": b
+  -        "4": crdb_internal_a_shard_10
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      constraints:
+  -        "2": check_crdb_internal_a_shard_10
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "4": idx_b
+  -        "8": t_pkey
+  -      name: t
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIMARY KEY (‹a›) USING HASH WITH ('bucket_count' = ‹10›)
+  -        statement: ALTER TABLE t ADD PRIMARY KEY (a) USING HASH WITH ('bucket_count' = 10)
+  -        statementTag: ALTER TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "23"
+  +  version: "24"
+persist all catalog changes to storage
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 104
-commit transaction #23
-notified job registry to adopt jobs: [2]
+commit transaction #24
 # end PostCommitPhase

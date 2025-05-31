@@ -44,7 +44,7 @@ func registerBufferedLogging(r registry.Registry) {
 		t.Status("installing FluentBit containers on CRDB nodes")
 		// Create FluentBit container on the node with a TCP input and dev/null output.
 		err := c.RunE(ctx, option.WithNodes(c.CRDBNodes()), fmt.Sprintf(
-			"sudo docker run -d -p %d:%d --name=fluentbit fluent/fluent-bit -i tcp -o null",
+			"sudo docker run -d -p %d:%d --name=fluentbit us-central1-docker.pkg.dev/cockroach-testeng-infra/roachtest-support/fluent-bit -i tcp -o null",
 			fluentBitTCPPort,
 			fluentBitTCPPort))
 		if err != nil {

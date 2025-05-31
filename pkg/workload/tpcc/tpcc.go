@@ -83,9 +83,6 @@ type tpcc struct {
 	activeWorkers          int
 	fks                    bool
 	separateColumnFamilies bool
-	// deprecatedFKIndexes adds in foreign key indexes that are no longer needed
-	// due to origin index restrictions being lifted.
-	deprecatedFkIndexes bool
 
 	txInfos []txInfo
 	// deck contains indexes into the txInfos slice.
@@ -136,6 +133,14 @@ type tpcc struct {
 	resetTableCancelFn context.CancelFunc
 
 	asOfSystemTime string
+
+	// Set to true if a literal implemenation of the workload is desired. In
+	// this case "literal" means that the New Order and Payments transactions
+	// are implemented statement-by-statement as specified in the specification.
+	// This avoids the use of RETURNING clauses to batch updates together with
+	// selects, and performs each row select/update separately, as opposed to
+	// batching them using an IN list.
+	literalImplementation bool
 }
 
 type waitSetter struct {
@@ -266,16 +271,15 @@ var tpccMeta = workload.Meta{
 			`regions`:                  {RuntimeOnly: true},
 			`survival-goal`:            {RuntimeOnly: true},
 			`replicate-static-columns`: {RuntimeOnly: true},
-			`deprecated-fk-indexes`:    {RuntimeOnly: true},
 			`query-trace-file`:         {RuntimeOnly: true},
 			`fake-time`:                {RuntimeOnly: true},
 			`txn-preamble-file`:        {RuntimeOnly: true},
 			`aost`:                     {RuntimeOnly: true, CheckConsistencyOnly: true},
+			`literal-implementation`:   {RuntimeOnly: true},
 		}
 
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
-		g.flags.BoolVar(&g.deprecatedFkIndexes, `deprecated-fk-indexes`, false, `Add deprecated foreign keys (needed when running against v20.1 or below clusters)`)
 
 		g.flags.StringVar(&g.mix, `mix`,
 			`newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1`,
@@ -316,6 +320,7 @@ var tpccMeta = workload.Meta{
 		g.flags.StringVar(&g.asOfSystemTime, "aost", "",
 			"This is an optional parameter to specify AOST; used exclusively in conjunction with the TPC-C consistency "+
 				"check. Example values are (\"'-1m'\", \"'-1h'\")")
+		g.flags.BoolVar(&g.literalImplementation, "literal-implementation", false, "If true, use a literal implementation of the TPC-C kit instead of an optimized version")
 
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
@@ -484,9 +489,11 @@ func (w *tpcc) Hooks() workload.Hooks {
 				if err != nil {
 					return errors.Wrap(err, "error creating multi-region partitioner")
 				}
+				w.auditor = newAuditor(w.activeWarehouses, w.wMRPart, w.affinityPartitions)
+			} else {
+				w.auditor = newAuditor(w.activeWarehouses, w.wPart, w.affinityPartitions)
 			}
 
-			w.auditor = newAuditor(w.activeWarehouses, w.wPart, w.affinityPartitions)
 			return initializeMix(w)
 		},
 		PreCreate: func(db *gosql.DB) error {
@@ -564,18 +571,11 @@ func (w *tpcc) Hooks() workload.Hooks {
 
 				for _, fkStmt := range fkStmts {
 					if _, err := db.Exec(fkStmt); err != nil {
+						// If the statement failed because the fk already
+						// exists, ignore it. Return the error for any other
+						// reason.
 						const duplFKErr = "columns cannot be used by multiple foreign key constraints"
-						const idxErr = "foreign key requires an existing index on columns"
-						switch {
-						case strings.Contains(err.Error(), idxErr):
-							fmt.Println(errors.WithHint(err, "try using the --deprecated-fk-indexes flag"))
-							// If the statement failed because of a missing FK index, suggest
-							// to use the deprecated-fks flag.
-							return errors.WithHint(err, "try using the --deprecated-fk-indexes flag")
-						case strings.Contains(err.Error(), duplFKErr):
-							// If the statement failed because the fk already exists,
-							// ignore it. Return the error for any other reason.
-						default:
+						if !strings.Contains(err.Error(), duplFKErr) {
 							return err
 						}
 					}
@@ -761,10 +761,6 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `history`,
 		Schema: makeSchema(
 			tpccHistorySchemaBase,
-			maybeAddFkSuffix(
-				w.deprecatedFkIndexes,
-				deprecatedTpccHistorySchemaFkSuffix,
-			),
 			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `h_w_id`),
 		),
 		InitialRows: workload.BatchedTuples{
@@ -824,10 +820,6 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `stock`,
 		Schema: makeSchema(
 			tpccStockSchemaBase,
-			maybeAddFkSuffix(
-				w.deprecatedFkIndexes,
-				deprecatedTpccStockSchemaFkSuffix,
-			),
 			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `s_w_id`),
 		),
 		InitialRows: workload.BatchedTuples{
@@ -840,10 +832,6 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `order_line`,
 		Schema: makeSchema(
 			tpccOrderLineSchemaBase,
-			maybeAddFkSuffix(
-				w.deprecatedFkIndexes,
-				deprecatedTpccOrderLineSchemaFkSuffix,
-			),
 			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `ol_w_id`),
 		),
 		InitialRows: workload.BatchedTuples{

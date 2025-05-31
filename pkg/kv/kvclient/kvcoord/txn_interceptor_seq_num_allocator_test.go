@@ -62,7 +62,7 @@ func TestSequenceNumberAllocation(t *testing.T) {
 	ba.Requests = nil
 	ba.Add(&kvpb.ConditionalPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
-	ba.Add(&kvpb.InitPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}})
 
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
@@ -153,7 +153,7 @@ func TestSequenceNumberAllocationWithStep(t *testing.T) {
 			ba.Requests = nil
 			ba.Add(&kvpb.ConditionalPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 			ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
-			ba.Add(&kvpb.InitPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+			ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 			ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}})
 
 			mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
@@ -204,7 +204,7 @@ func TestSequenceNumberAllocationWithStep(t *testing.T) {
 	ba.Header = kvpb.Header{Txn: &txn}
 	ba.Add(&kvpb.ConditionalPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
-	ba.Add(&kvpb.InitPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}})
 
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
@@ -409,7 +409,7 @@ func TestSequenceNumberAllocationAfterEpochBump(t *testing.T) {
 	ba.Header = kvpb.Header{Txn: &txn}
 	ba.Add(&kvpb.ConditionalPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
-	ba.Add(&kvpb.InitPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 3)
@@ -435,7 +435,7 @@ func TestSequenceNumberAllocationAfterEpochBump(t *testing.T) {
 	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 	ba.Add(&kvpb.ConditionalPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}})
-	ba.Add(&kvpb.InitPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 4)

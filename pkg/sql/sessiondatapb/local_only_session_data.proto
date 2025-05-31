@@ -653,7 +653,23 @@ message LocalOnlySessionData {
   // though it currently doesn't have Postgres-compatible 0-based indexing
   // behavior.
   bool allow_create_trigger_function_with_argv_references = 165;
-
+  // CreateTableWithSchemaLocked, when true will create tables as schema_locked
+  // by default.
+  bool create_table_with_schema_locked = 166;
+  // UsePre_25_2VariadicBuiltins, when true, will treat variadic builtins with a
+  // types.Any variadic argument as types.AnyElement (the pre-25.2 behavior)
+  bool use_pre_25_2_variadic_builtins = 167;
+  // VectorSearchBeamSize controls the number of candidates examined during
+  // vector index searches. It represents the number of vector partitions that
+  // are considered at each level of the search tree. Higher values increase
+  // search accuracy but require more processing resources.
+  int32 vector_search_beam_size = 168;
+  // PropagateAdmissionHeaderToLeafTransactions, when true, causes leaf
+  // transactions to inherit the admission header from the root transaction.
+  bool propagate_admission_header_to_leaf_transactions = 169;
+  // OptimizerUseExistsFilterHoistRule, when true, causes the optimizer to apply
+  // the HoistUnboundFilterFromExistsSubquery rule to EXISTS conditions.
+  bool optimizer_use_exists_filter_hoist_rule = 170;
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //

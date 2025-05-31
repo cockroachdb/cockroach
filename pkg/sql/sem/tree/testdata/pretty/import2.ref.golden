@@ -6,19 +6,10 @@ IMPORT
 PGDUMP
 	'http://test'
 WITH
-	skip = '2',
-	sstsize = '30MB'
+	skip = '2'
 
-32:
---------------------------------
-IMPORT
-PGDUMP
-	'http://test'
-WITH
-	skip = '2', sstsize = '30MB'
-
-61:
--------------------------------------------------------------
-IMPORT PGDUMP 'http://test' WITH skip = '2', sstsize = '30MB'
+43:
+-------------------------------------------
+IMPORT PGDUMP 'http://test' WITH skip = '2'
 
 

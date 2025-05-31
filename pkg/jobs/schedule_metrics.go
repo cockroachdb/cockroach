@@ -8,6 +8,7 @@ package jobs
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
@@ -104,12 +105,17 @@ var _ metric.Struct = &SchedulerMetrics{}
 
 // MakeExecutorMetrics creates metrics for scheduled job executor.
 func MakeExecutorMetrics(name string) ExecutorMetrics {
-	return ExecutorMetrics{
+	m := ExecutorMetrics{
 		NumStarted: metric.NewCounter(metric.Metadata{
 			Name:        fmt.Sprintf("schedules.%s.started", name),
 			Help:        fmt.Sprintf("Number of %s jobs started", name),
 			Measurement: "Jobs",
 			Unit:        metric.Unit_COUNT,
+			LabeledName: "schedules",
+			StaticLabels: metric.MakeLabelPairs(
+				metric.LabelName, name,
+				metric.LabelStatus, "started",
+			),
 		}),
 
 		NumSucceeded: metric.NewCounter(metric.Metadata{
@@ -117,6 +123,11 @@ func MakeExecutorMetrics(name string) ExecutorMetrics {
 			Help:        fmt.Sprintf("Number of %s jobs succeeded", name),
 			Measurement: "Jobs",
 			Unit:        metric.Unit_COUNT,
+			LabeledName: "schedules",
+			StaticLabels: metric.MakeLabelPairs(
+				metric.LabelName, name,
+				metric.LabelStatus, "succeeded",
+			),
 		}),
 
 		NumFailed: metric.NewCounter(metric.Metadata{
@@ -124,8 +135,27 @@ func MakeExecutorMetrics(name string) ExecutorMetrics {
 			Help:        fmt.Sprintf("Number of %s jobs failed", name),
 			Measurement: "Jobs",
 			Unit:        metric.Unit_COUNT,
+			LabeledName: "schedules",
+			StaticLabels: metric.MakeLabelPairs(
+				metric.LabelName, name,
+				metric.LabelStatus, "failed",
+			),
 		}),
 	}
+
+	if name == tree.ScheduledBackupExecutor.UserName() {
+		m.NumFailed.Essential = true
+		m.NumFailed.Category = metric.Metadata_SQL
+		m.NumFailed.HowToUse = `Monitor this metric and investigate backup job failures.`
+	}
+
+	if name == tree.ScheduledRowLevelTTLExecutor.InternalName() {
+		m.NumFailed.Essential = true
+		m.NumFailed.Category = metric.Metadata_TTL
+		m.NumFailed.HowToUse = `Monitor this metric to ensure the Row Level TTL job is running. If it is non-zero, it means the job could not be created.`
+	}
+
+	return m
 }
 
 // MakeExecutorPTSMetrics creates PTS metrics.
@@ -137,6 +167,10 @@ func MakeExecutorPTSMetrics(name string) ExecutorPTSMetrics {
 			Measurement: "Records",
 			Unit:        metric.Unit_COUNT,
 			MetricType:  io_prometheus_client.MetricType_GAUGE,
+			LabeledName: "schedules.protected_record_count",
+			StaticLabels: metric.MakeLabelPairs(
+				metric.LabelName, name,
+			),
 		}),
 		PTSAge: metric.NewGauge(metric.Metadata{
 			Name:        fmt.Sprintf("schedules.%s.protected_age_sec", name),
@@ -144,6 +178,10 @@ func MakeExecutorPTSMetrics(name string) ExecutorPTSMetrics {
 			Measurement: "Seconds",
 			Unit:        metric.Unit_SECONDS,
 			MetricType:  io_prometheus_client.MetricType_GAUGE,
+			LabeledName: "schedules.protected_age_sec",
+			StaticLabels: metric.MakeLabelPairs(
+				metric.LabelName, name,
+			),
 		}),
 	}
 }

@@ -635,6 +635,16 @@ func (c *connector) Gossip(
 	return
 }
 
+func (c *connector) EngineStats(
+	ctx context.Context, req *serverpb.EngineStatsRequest,
+) (resp *serverpb.EngineStatsResponse, retErr error) {
+	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
+		resp, err = client.EngineStats(ctx, req)
+		return
+	})
+	return
+}
+
 // NewIterator implements the rangedesc.IteratorFactory interface.
 func (c *connector) NewIterator(
 	ctx context.Context, span roachpb.Span,

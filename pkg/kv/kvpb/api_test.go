@@ -189,52 +189,6 @@ func TestCombinable(t *testing.T) {
 		}
 	})
 
-	t.Run("AdminVerifyProtectedTimestamp", func(t *testing.T) {
-		v1 := &AdminVerifyProtectedTimestampResponse{
-			ResponseHeader: ResponseHeader{},
-			Verified:       false,
-			DeprecatedFailedRanges: []roachpb.RangeDescriptor{
-				{RangeID: 1},
-			},
-			VerificationFailedRanges: []AdminVerifyProtectedTimestampResponse_FailedRange{
-				{RangeID: 1, StartKey: roachpb.RKeyMin, EndKey: roachpb.RKeyMax, Reason: "foo"},
-			},
-		}
-
-		if _, ok := interface{}(v1).(combinable); !ok {
-			t.Fatal("AdminVerifyProtectedTimestampResponse unexpectedly does not implement combinable")
-		}
-		v2 := &AdminVerifyProtectedTimestampResponse{
-			ResponseHeader:         ResponseHeader{},
-			Verified:               true,
-			DeprecatedFailedRanges: nil,
-		}
-		v3 := &AdminVerifyProtectedTimestampResponse{
-			ResponseHeader: ResponseHeader{},
-			Verified:       false,
-			DeprecatedFailedRanges: []roachpb.RangeDescriptor{
-				{RangeID: 2},
-			},
-			VerificationFailedRanges: []AdminVerifyProtectedTimestampResponse_FailedRange{
-				{RangeID: 2, StartKey: roachpb.RKeyMin, EndKey: roachpb.RKeyMax, Reason: "bar"},
-			},
-		}
-		require.NoError(t, v1.combine(context.Background(), v2, nil))
-		require.NoError(t, v1.combine(context.Background(), v3, nil))
-		require.EqualValues(t, &AdminVerifyProtectedTimestampResponse{
-			Verified: false,
-			DeprecatedFailedRanges: []roachpb.RangeDescriptor{
-				{RangeID: 1},
-				{RangeID: 2},
-			},
-			VerificationFailedRanges: []AdminVerifyProtectedTimestampResponse_FailedRange{
-				{RangeID: 1, StartKey: roachpb.RKeyMin, EndKey: roachpb.RKeyMax, Reason: "foo"},
-				{RangeID: 2, StartKey: roachpb.RKeyMin, EndKey: roachpb.RKeyMax, Reason: "bar"},
-			},
-		}, v1)
-
-	})
-
 	t.Run("AdminScatter", func(t *testing.T) {
 
 		// Test that AdminScatterResponse properly implement it.

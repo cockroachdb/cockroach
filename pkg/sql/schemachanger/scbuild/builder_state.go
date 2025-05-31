@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -838,31 +837,37 @@ func (b *builderState) WrapExpression(tableID catid.DescID, expr tree.Expr) *scp
 }
 
 // ComputedColumnExpression implements the scbuildstmt.TableHelpers interface.
-func (b *builderState) ComputedColumnExpression(tbl *scpb.Table, d *tree.ColumnTableDef) tree.Expr {
+func (b *builderState) ComputedColumnExpression(
+	tbl *scpb.Table, d *tree.ColumnTableDef, exprContext tree.SchemaExprContext,
+) (tree.Expr, *types.T) {
 	_, _, ns := scpb.FindNamespace(b.QueryByID(tbl.TableID))
 	tn := tree.MakeTableNameFromPrefix(b.NamePrefix(tbl), tree.Name(ns.Name))
 	b.ensureDescriptor(tbl.TableID)
 	// TODO(postamar): this doesn't work when referencing newly added columns.
-	expr, _, err := schemaexpr.ValidateComputedColumnExpression(
+	expr, typ, err := schemaexpr.ValidateComputedColumnExpression(
 		b.ctx,
 		b.descCache[tbl.TableID].desc.(catalog.TableDescriptor),
 		d,
 		&tn,
-		tree.ComputedColumnExprContext(d.IsVirtual()),
+		exprContext,
 		b.semaCtx,
 		b.clusterSettings.Version.ActiveVersion(b.ctx),
 	)
 	if err != nil {
 		// This may be referencing newly added columns, so cheat and return
 		// a not implemented error.
-		panic(errors.Wrapf(errors.WithSecondaryError(scerrors.NotImplementedError(d), err),
-			"computed column validation error"))
+		if pgerror.GetPGCode(err) == pgcode.UndefinedColumn {
+
+			panic(errors.Wrapf(errors.WithSecondaryError(scerrors.NotImplementedError(d), err),
+				"computed column validation error"))
+		}
+		panic(err)
 	}
 	parsedExpr, err := parser.ParseExpr(expr)
 	if err != nil {
 		panic(err)
 	}
-	return parsedExpr
+	return parsedExpr, typ
 }
 
 // PartialIndexPredicateExpression implements the scbuildstmt.TableHelpers interface.
@@ -1016,9 +1021,6 @@ func (b *builderState) ResolveTargetObject(
 	b.ensureDescriptor(db.GetID())
 	if sc.SchemaKind() == catalog.SchemaVirtual {
 		panic(sqlerrors.NewCannotModifyVirtualSchemaError(sc.GetName()))
-	}
-	if sc.SchemaKind() == catalog.SchemaTemporary {
-		panic(unimplemented.NewWithIssue(104687, "cannot create UDFs under a temporary schema"))
 	}
 	b.ensureDescriptor(sc.GetID())
 	b.checkOwnershipOrPrivilegesOnSchemaDesc(objName.ObjectNamePrefix, sc, scbuildstmt.ResolveParams{RequiredPrivilege: requiredSchemaPriv})

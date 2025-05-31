@@ -359,6 +359,12 @@ type ApplicationLayerInterface interface {
 	// with verbose method name.
 	GetUnauthenticatedHTTPClient() (http.Client, error)
 
+	// GetUnauthenticatedHTTPClientWithTransport returns an http client and its
+	// corresponding transport configured with the client TLS config required by
+	// the TestServer's configuration. Discourages implementer from using
+	// unauthenticated http connections with verbose method name.
+	GetUnauthenticatedHTTPClientWithTransport() (http.Client, *http.Transport, error)
+
 	// GetAdminHTTPClient returns an http client which has been
 	// authenticated to access Admin API methods (via a cookie).
 	// The user has admin privileges.
@@ -655,13 +661,6 @@ type StorageLayerInterface interface {
 	// SpanConfigKVSubscriber returns the embedded spanconfig.KVSubscriber for
 	// the server.
 	SpanConfigKVSubscriber() interface{}
-
-	// KVFlowController returns the embedded kvflowcontrol.Controller for the
-	// server.
-	KVFlowController() interface{}
-
-	// KVFlowHandles returns the embedded kvflowcontrol.Handles for the server.
-	KVFlowHandles() interface{}
 
 	// KvProber returns a *kvprober.Prober, which is useful when asserting the
 	// correctness of the prober from integration tests.

@@ -3598,6 +3598,9 @@ of ranges currently considered “hot” by the node(s).
 | page_size | [int32](#cockroach.server.serverpb.HotRangesRequest-int32) |  |  | [reserved](#support-status) |
 | page_token | [string](#cockroach.server.serverpb.HotRangesRequest-string) |  |  | [reserved](#support-status) |
 | tenant_id | [string](#cockroach.server.serverpb.HotRangesRequest-string) |  |  | [reserved](#support-status) |
+| nodes | [string](#cockroach.server.serverpb.HotRangesRequest-string) | repeated |  | [reserved](#support-status) |
+| per_node_limit | [int32](#cockroach.server.serverpb.HotRangesRequest-int32) |  | per_node_limit indicates the maximum number of hot ranges to return for each node. If left empty, the default is 128. | [reserved](#support-status) |
+| stats_only | [bool](#cockroach.server.serverpb.HotRangesRequest-bool) |  | stats_only indicates whether to return only the stats for the hot ranges, without pulling descriptor information. | [reserved](#support-status) |
 
 
 
@@ -4542,7 +4545,7 @@ Support status: [reserved](#support-status)
 | statement_diagnostics_id | [int64](#cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse-int64) |  |  | [reserved](#support-status) |
 | requested_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
 | min_execution_latency | [google.protobuf.Duration](#cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse-google.protobuf.Duration) |  |  | [reserved](#support-status) |
-| expires_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse-google.protobuf.Timestamp) |  | TODO(yuzefovich): should we populate plan_gist, anti_plan_gist, and redacted fields? | [reserved](#support-status) |
+| expires_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse-google.protobuf.Timestamp) |  | TODO(yuzefovich): should we populate plan_gist, anti_plan_gist, redacted, and username fields? | [reserved](#support-status) |
 
 
 
@@ -4646,7 +4649,7 @@ Support status: [reserved](#support-status)
 | statement_diagnostics_id | [int64](#cockroach.server.serverpb.StatementDiagnosticsReportsResponse-int64) |  |  | [reserved](#support-status) |
 | requested_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementDiagnosticsReportsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
 | min_execution_latency | [google.protobuf.Duration](#cockroach.server.serverpb.StatementDiagnosticsReportsResponse-google.protobuf.Duration) |  |  | [reserved](#support-status) |
-| expires_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementDiagnosticsReportsResponse-google.protobuf.Timestamp) |  | TODO(yuzefovich): should we populate plan_gist, anti_plan_gist, and redacted fields? | [reserved](#support-status) |
+| expires_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementDiagnosticsReportsResponse-google.protobuf.Timestamp) |  | TODO(yuzefovich): should we populate plan_gist, anti_plan_gist, redacted, and username fields? | [reserved](#support-status) |
 
 
 

@@ -77,6 +77,9 @@ func registerAcceptance(r registry.Registry) {
 				defaultLeases: true,
 				randomized:    true,
 				suites:        []string{registry.MixedVersion},
+				// Disabled on IBM because s390x is only built on master
+				// and version upgrade is impossible to test as of 05/2025.
+				incompatibleClouds: registry.OnlyIBM,
 			},
 		},
 		registry.OwnerDisasterRecovery: {
@@ -103,6 +106,9 @@ func registerAcceptance(r registry.Registry) {
 				randomized:    true,
 				numNodes:      1,
 				suites:        []string{registry.MixedVersion},
+				// Disabled on IBM because s390x is only built on master
+				// and version upgrade is impossible to test as of 05/2025.
+				incompatibleClouds: registry.OnlyIBM,
 			},
 			{
 				name:     "mismatched-locality",

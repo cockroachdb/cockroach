@@ -323,8 +323,21 @@ func (r *opsRunner) runOperation(
 		return nil
 	}
 
-	op.Status(fmt.Sprintf("operation ran successfully; waiting %s before cleanup", roachtestflags.WaitBeforeCleanup))
-	<-time.After(roachtestflags.WaitBeforeCleanup)
+	waitBeforeCleanup := roachtestflags.WaitBeforeCleanup
+	if opSpec.WaitBeforeCleanup != 0 {
+		// if opSpec.WaitBeforeCleanup is set, use it instead of the default
+		waitBeforeCleanup = opSpec.WaitBeforeCleanup
+	}
+
+	op.Status(fmt.Sprintf("operation ran successfully; waiting %s before cleanup", waitBeforeCleanup))
+	select {
+	case <-time.After(waitBeforeCleanup):
+		// Wait completed successfully.
+	case <-ctx.Done():
+		// Context was canceled; exit early.
+		op.Status("context canceled during wait before cleanup")
+		return ctx.Err()
+	}
 
 	op.Status("running cleanup")
 	func() {

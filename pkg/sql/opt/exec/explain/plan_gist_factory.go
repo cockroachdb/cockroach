@@ -650,6 +650,11 @@ func (u *unknownTable) GetDatabaseID() descpb.ID {
 	return 0
 }
 
+// GetSchemaID is part of the cat.Table interface.
+func (u *unknownTable) GetSchemaID() descpb.ID {
+	return 0
+}
+
 // IsHypothetical is part of the cat.Table interface.
 func (u *unknownTable) IsHypothetical() bool {
 	return false
@@ -793,6 +798,10 @@ func (u *unknownIndex) PartitionCount() int {
 
 func (u *unknownIndex) Partition(i int) cat.Partition {
 	panic(errors.AssertionFailedf("not implemented"))
+}
+
+func (u *unknownIndex) IsTemporaryIndexForBackfill() bool {
+	return false
 }
 
 var _ cat.Index = &unknownIndex{}

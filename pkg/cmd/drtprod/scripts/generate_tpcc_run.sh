@@ -52,6 +52,8 @@ if [ -n "${TOTAL_PARTITIONS}" ] && [ "${TOTAL_PARTITIONS}" -lt "${WORKLOAD_NODES
   exit 1
 fi
 
+export ROACHPROD_DISABLED_PROVIDERS=IBM
+
 get_partitions_in_range() {
     local start=$(($1 - 1))
     local end=$(($2 - 1))
@@ -99,8 +101,15 @@ for ((NODE=0; NODE<WORKLOAD_NODES; NODE++)); do
   cat <<EOF >/tmp/tpcc_run_${suffix}.sh
 #!/usr/bin/env bash
 
+export ROACHPROD_DISABLED_PROVIDERS=IBM
+export ROACHPROD_GCE_DEFAULT_PROJECT=$ROACHPROD_GCE_DEFAULT_PROJECT
 ./drtprod sync
-PGURLS=\$(./drtprod pgurl $CLUSTER | sed s/\'//g)
+$([ "$execute_script" = "true" ] && [ "$NODE" -eq 0 ] && echo "${pwd}/tpcc_init_${suffix}.sh")
+PGURLS=\$(./drtprod load-balancer pgurl $CLUSTER | sed s/\'//g)
+if [ -z "\$PGURLS" ]; then
+    echo ">> No load-balancer configured; falling back to direct pgurl"
+    PGURLS=\$(./drtprod pgurl $CLUSTER | sed s/\'//g)
+fi
 read -r -a PGURLS_ARR <<< "\$PGURLS"
 j=0
 while true; do

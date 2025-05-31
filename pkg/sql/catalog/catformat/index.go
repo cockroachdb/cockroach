@@ -99,7 +99,8 @@ func indexForDisplay(
 	if displayMode == IndexDisplayShowCreate {
 		f.WriteString("CREATE ")
 	}
-	if index.Unique {
+	displayPrimaryKeyClauses := isPrimary && displayMode == IndexDisplayDefOnly
+	if index.Unique && !displayPrimaryKeyClauses {
 		f.WriteString("UNIQUE ")
 	}
 	if !f.HasFlags(tree.FmtPGCatalog) {
@@ -110,8 +111,12 @@ func indexForDisplay(
 			f.WriteString("VECTOR ")
 		}
 	}
-	f.WriteString("INDEX ")
-	f.FormatNameP(&index.Name)
+	if displayPrimaryKeyClauses {
+		f.WriteString("PRIMARY KEY")
+	} else {
+		f.WriteString("INDEX ")
+		f.FormatNameP(&index.Name)
+	}
 	if *tableName != descpb.AnonymousTable {
 		f.WriteString(" ON ")
 		f.FormatNode(tableName)
@@ -248,13 +253,19 @@ func FormatIndexElements(
 		} else {
 			f.FormatNameP(&index.KeyColumnNames[i])
 		}
-		// TODO(drewk): we might need to print something like "vector_l2_ops" for
-		// vector indexes.
-		if index.Type == idxtype.INVERTED &&
-			col.GetID() == index.InvertedColumnID() && len(index.InvertedColumnKinds) > 0 {
-			switch index.InvertedColumnKinds[0] {
-			case catpb.InvertedIndexColumnKind_TRIGRAM:
-				f.WriteString(" gin_trgm_ops")
+		switch index.Type {
+		case idxtype.INVERTED:
+			if col.GetID() == index.InvertedColumnID() && len(index.InvertedColumnKinds) > 0 {
+				switch index.InvertedColumnKinds[0] {
+				case catpb.InvertedIndexColumnKind_TRIGRAM:
+					f.WriteString(" gin_trgm_ops")
+				}
+			}
+		case idxtype.VECTOR:
+			// TODO(#144016): once more distance functions are supported, store the
+			// operator on the index and use it here.
+			if col.GetID() == index.VectorColumnID() {
+				f.WriteString(" vector_l2_ops")
 			}
 		}
 		// The last column of an inverted or vector index cannot have a DESC
@@ -275,6 +286,18 @@ func formatStorageConfigs(
 	table catalog.TableDescriptor, index *descpb.IndexDescriptor, f *tree.FmtCtx,
 ) error {
 	numCustomSettings := 0
+	writeCustomSetting := func(key, val string) {
+		if numCustomSettings > 0 {
+			f.WriteString(", ")
+		} else {
+			f.WriteString(" WITH (")
+		}
+		numCustomSettings++
+		f.WriteString(key)
+		f.WriteString("=")
+		f.WriteString(val)
+	}
+
 	if index.GeoConfig.S2Geometry != nil || index.GeoConfig.S2Geography != nil {
 		var s2Config *geopb.S2Config
 
@@ -297,15 +320,7 @@ func formatStorageConfigs(
 				{`s2_max_cells`, s2Config.MaxCells, defaultS2Config.MaxCells},
 			} {
 				if check.val != check.defaultVal {
-					if numCustomSettings > 0 {
-						f.WriteString(", ")
-					} else {
-						f.WriteString(" WITH (")
-					}
-					numCustomSettings++
-					f.WriteString(check.key)
-					f.WriteString("=")
-					f.WriteString(strconv.Itoa(int(check.val)))
+					writeCustomSetting(check.key, strconv.Itoa(int(check.val)))
 				}
 			}
 		}
@@ -332,29 +347,26 @@ func formatStorageConfigs(
 				{`geometry_max_y`, cfg.MaxY, defaultConfig.S2Geometry.MaxY},
 			} {
 				if check.val != check.defaultVal {
-					if numCustomSettings > 0 {
-						f.WriteString(", ")
-					} else {
-						f.WriteString(" WITH (")
-					}
-					numCustomSettings++
-					f.WriteString(check.key)
-					f.WriteString("=")
-					f.WriteString(strconv.FormatFloat(check.val, 'f', -1, 64))
+					writeCustomSetting(check.key, strconv.FormatFloat(check.val, 'f', -1, 64))
 				}
 			}
 		}
 	}
 
-	if index.IsSharded() {
-		if numCustomSettings > 0 {
-			f.WriteString(", ")
-		} else {
-			f.WriteString(" WITH (")
+	if index.Type == idxtype.VECTOR {
+		if index.VecConfig.BuildBeamSize != 0 {
+			writeCustomSetting(`build_beam_size`, strconv.Itoa(int(index.VecConfig.BuildBeamSize)))
 		}
-		f.WriteString(`bucket_count=`)
-		f.WriteString(strconv.FormatInt(int64(index.Sharded.ShardBuckets), 10))
-		numCustomSettings++
+		if index.VecConfig.MinPartitionSize != 0 {
+			writeCustomSetting(`min_partition_size`, strconv.Itoa(int(index.VecConfig.MinPartitionSize)))
+		}
+		if index.VecConfig.MaxPartitionSize != 0 {
+			writeCustomSetting(`max_partition_size`, strconv.Itoa(int(index.VecConfig.MaxPartitionSize)))
+		}
+	}
+
+	if index.IsSharded() {
+		writeCustomSetting(`bucket_count`, strconv.FormatInt(int64(index.Sharded.ShardBuckets), 10))
 	}
 
 	if numCustomSettings > 0 {

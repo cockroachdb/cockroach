@@ -85,7 +85,12 @@ func alterTableAddPrimaryKey(
 	if getPrimaryIndexDefaultRowIDColumn(
 		b, tbl.TableID, oldPrimaryIndex.IndexID,
 	) == nil {
-		panic(scerrors.NotImplementedError(t))
+		// If the constraint already exists then nothing to do here.
+		if oldPrimaryIndex != nil && d.IfNotExists {
+			return
+		}
+		panic(pgerror.Newf(pgcode.InvalidColumnDefinition,
+			"multiple primary keys for table %q are not allowed", tn.Object()))
 	}
 	alterPrimaryKey(b, tn, tbl, stmt, alterPrimaryKeySpec{
 		n:             t,

@@ -81,7 +81,7 @@ func (p *planner) AlterTableLocality(
 	}
 
 	// Disallow schema changes if this table's schema is locked.
-	if err := checkSchemaChangeIsAllowed(tableDesc, n); err != nil {
+	if err := p.checkSchemaChangeIsAllowed(ctx, tableDesc, n); err != nil {
 		return nil, err
 	}
 
@@ -666,9 +666,10 @@ func setNewLocalityConfig(
 		if err != nil {
 			return err
 		}
-		typ.RemoveReferencingDescriptorID(desc.GetID())
-		if err := descsCol.WriteDescToBatch(ctx, kvTrace, typ, b); err != nil {
-			return err
+		if typ.RemoveReferencingDescriptorID(desc.GetID()) {
+			if err := descsCol.WriteDescToBatch(ctx, kvTrace, typ, b); err != nil {
+				return err
+			}
 		}
 	}
 	desc.LocalityConfig = &config
@@ -678,9 +679,10 @@ func setNewLocalityConfig(
 		if err != nil {
 			return err
 		}
-		typ.AddReferencingDescriptorID(desc.GetID())
-		if err := descsCol.WriteDescToBatch(ctx, kvTrace, typ, b); err != nil {
-			return err
+		if typ.AddReferencingDescriptorID(desc.GetID()) {
+			if err := descsCol.WriteDescToBatch(ctx, kvTrace, typ, b); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

@@ -41,8 +41,6 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/sql",
-        "//pkg/sql/catalog/lease",
-        "//pkg/sql/catalog/replication",
         "//pkg/sql/gcjob",
         "//pkg/sql/isql",
         "//pkg/sql/lexbase",

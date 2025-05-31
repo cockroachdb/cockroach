@@ -183,6 +183,32 @@ func (oc *optCatalog) LookupDatabaseName(
 	return tree.Name(name), nil
 }
 
+func (oc *optCatalog) ResolveSchemaByID(
+	ctx context.Context, flags cat.Flags, schemaID cat.StableID,
+) (cat.Schema, error) {
+	if flags.AvoidDescriptorCaches {
+		defer func(prev bool) {
+			oc.planner.skipDescriptorCache = prev
+		}(oc.planner.skipDescriptorCache)
+		oc.planner.skipDescriptorCache = true
+	}
+
+	schemaLookup, err := oc.planner.LookupSchemaByID(ctx, descpb.ID(schemaID))
+	if err != nil {
+		return nil, err
+	}
+	databaseLookup, err := oc.planner.LookupDatabaseByID(ctx, schemaLookup.GetParentID())
+	if err != nil {
+		return nil, err
+	}
+	return &optSchema{
+		planner:  oc.planner,
+		database: databaseLookup,
+		schema:   schemaLookup,
+		name:     oc.tn.ObjectNamePrefix,
+	}, nil
+}
+
 // ResolveSchema is part of the cat.Catalog interface.
 func (oc *optCatalog) ResolveSchema(
 	ctx context.Context, flags cat.Flags, name *cat.SchemaName,
@@ -463,11 +489,43 @@ func (oc *optCatalog) UserHasAdminRole(
 	return oc.planner.UserHasAdminRole(ctx, user)
 }
 
+// UserIsMemberOfAnyRole is part of the cat.Catalog interface.
+func (oc *optCatalog) UserIsMemberOfAnyRole(
+	ctx context.Context, user username.SQLUsername, roles map[username.SQLUsername]struct{},
+) (bool, error) {
+	// First check if the user directly matches any of the roles
+	if _, found := roles[user]; found {
+		return true, nil
+	}
+
+	// Get all roles the user belongs to
+	memberRoles, err := oc.planner.MemberOfWithAdminOption(ctx, user)
+	if err != nil {
+		return false, err
+	}
+
+	// Check if any of the target roles are in the user's roles
+	for role := range roles {
+		if _, isMember := memberRoles[role]; isMember {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 // HasRoleOption is part of the cat.Catalog interface.
 func (oc *optCatalog) HasRoleOption(
 	ctx context.Context, roleOption roleoption.Option,
 ) (bool, error) {
 	return oc.planner.HasRoleOption(ctx, roleOption)
+}
+
+// UserHasGlobalPrivilegeOrRoleOption is part of the cat.Catalog interface.
+func (oc *optCatalog) UserHasGlobalPrivilegeOrRoleOption(
+	ctx context.Context, privilege privilege.Kind, user username.SQLUsername,
+) (bool, error) {
+	return oc.planner.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege, user)
 }
 
 // FullyQualifiedName is part of the cat.Catalog interface.
@@ -1516,6 +1574,11 @@ func (ot *optTable) GetDatabaseID() descpb.ID {
 	return ot.desc.GetParentID()
 }
 
+// GetSchemaID is part of the cat.Table interface.
+func (ot *optTable) GetSchemaID() descpb.ID {
+	return ot.desc.GetParentSchemaID()
+}
+
 // IsHypothetical is part of the cat.Table interface.
 func (ot *optTable) IsHypothetical() bool {
 	return false
@@ -1812,7 +1875,7 @@ func (oi *optIndex) InvertedColumn() cat.IndexColumn {
 // VectorColumn is part of the cat.Index interface.
 func (oi *optIndex) VectorColumn() cat.IndexColumn {
 	if oi.Type() != idxtype.VECTOR {
-		panic(errors.AssertionFailedf("non-vector indexes do not have inverted columns"))
+		panic(errors.AssertionFailedf("non-vector indexes do not have vector columns"))
 	}
 	ord := oi.idx.NumKeyColumns() - 1
 	return oi.Column(ord)
@@ -1878,6 +1941,10 @@ func (oi *optIndex) PartitionCount() int {
 // Partition is part of the cat.Index interface.
 func (oi *optIndex) Partition(i int) cat.Partition {
 	return &oi.partitions[i]
+}
+
+func (oi *optIndex) IsTemporaryIndexForBackfill() bool {
+	return oi.idx.IsTemporaryIndexForBackfill()
 }
 
 // optPartition implements cat.Partition and represents a PARTITION BY LIST
@@ -2632,6 +2699,11 @@ func (ot *optVirtualTable) GetDatabaseID() descpb.ID {
 	return 0
 }
 
+// GetSchemaID is part of the cat.Table interface.
+func (ot *optVirtualTable) GetSchemaID() descpb.ID {
+	return ot.desc.GetParentSchemaID()
+}
+
 // IsHypothetical is part of the cat.Table interface.
 func (ot *optVirtualTable) IsHypothetical() bool {
 	return false
@@ -2853,6 +2925,11 @@ func (oi *optVirtualIndex) PartitionCount() int {
 // Partition is part of the cat.Index interface.
 func (oi *optVirtualIndex) Partition(i int) cat.Partition {
 	return nil
+}
+
+// IsTemporaryIndexForBackfill is part of the cat.Index interface.
+func (oi *optVirtualIndex) IsTemporaryIndexForBackfill() bool {
+	return false
 }
 
 // optVirtualFamily is a dummy implementation of cat.Family for the only family

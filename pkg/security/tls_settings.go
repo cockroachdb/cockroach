@@ -47,7 +47,6 @@ var ocspTimeout = settings.RegisterDurationSetting(
 	settings.ApplicationLevel, "security.ocsp.timeout",
 	"timeout before considering the OCSP server unreachable",
 	3*time.Second,
-	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 type clusterTLSSettings struct {

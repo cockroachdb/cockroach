@@ -435,6 +435,11 @@ func TestLDRCreateTablesTPCC(
 		// on data ingested via the offline initial scan.
 		return c.RunE(ctx, option.WithNodes(setup.workloadNode), workload.workload.sourceRunCmd("system", setup.left.nodes))
 	})
+
+	// Setup LDR after the workload starts. This verifies we can catch up on
+	// backlog, ensures that writing to source table during the initial scan does
+	// not trigger any buts, and allows the test to run more quickly because the
+	// workload 30 minute timer overlaps with the ldr initial scan.
 	_, rightJobID := setupLDR(ctx, t, c, setup, workload, ldrConfig)
 
 	maxExpectedLatency := 3 * time.Minute
@@ -994,20 +999,33 @@ func VerifyCorrectness(
 	require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, setup.right.db, ldrWorkload.dbName))
 
 	t.L().Printf("Verifying equality of left and right clusters")
-	for _, tableName := range ldrWorkload.tableNames {
-		m := c.NewMonitor(context.Background(), setup.CRDBNodes())
-		var leftFingerprint, rightFingerprint [][]string
+
+	type fingerprint struct {
+		table string
+		left  [][]string
+		right [][]string
+	}
+	fingerprints := make([]fingerprint, len(ldrWorkload.tableNames))
+
+	m := c.NewMonitor(context.Background(), setup.CRDBNodes())
+	for i, tableName := range ldrWorkload.tableNames {
+		fingerprints[i] = fingerprint{
+			table: tableName,
+		}
 		queryStmt := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s", ldrWorkload.dbName, tableName)
 		m.Go(func(ctx context.Context) error {
-			leftFingerprint = setup.left.sysSQL.QueryStr(t, queryStmt)
+			fingerprints[i].left = setup.left.sysSQL.QueryStr(t, queryStmt)
 			return nil
 		})
 		m.Go(func(ctx context.Context) error {
-			rightFingerprint = setup.right.sysSQL.QueryStr(t, queryStmt)
+			fingerprints[i].right = setup.right.sysSQL.QueryStr(t, queryStmt)
 			return nil
 		})
-		m.Wait()
-		require.Equal(t, leftFingerprint, rightFingerprint, "fingerprint mismatch for table %s", tableName)
+	}
+	m.Wait()
+
+	for _, f := range fingerprints {
+		require.Equal(t, f.left, f.right, "fingerprint mismatch for table %s", f.table)
 	}
 }
 

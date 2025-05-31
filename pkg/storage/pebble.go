@@ -7,7 +7,6 @@ package storage
 
 import (
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -179,33 +178,38 @@ var readaheadModeSpeculative = settings.RegisterEnumSetting(
 
 // CompressionAlgorithm is an enumeration of available compression algorithms
 // available.
-type compressionAlgorithm int64
+type CompressionAlgorithm int64
 
+// These values end up being the underlying value of the cluster setting, so
+// they must be stable across releases.
 const (
-	compressionAlgorithmSnappy compressionAlgorithm = 1
-	compressionAlgorithmZstd   compressionAlgorithm = 2
-	compressionAlgorithmNone   compressionAlgorithm = 3
+	CompressionAlgorithmSnappy CompressionAlgorithm = 1
+	CompressionAlgorithmZstd   CompressionAlgorithm = 2
+	CompressionAlgorithmNone   CompressionAlgorithm = 3
+	CompressionAlgorithmMinLZ  CompressionAlgorithm = 4
 )
 
+var compressionAlgorithmToString = map[CompressionAlgorithm]string{
+	CompressionAlgorithmSnappy: "snappy",
+	CompressionAlgorithmMinLZ:  "minlz",
+	CompressionAlgorithmNone:   "none",
+	CompressionAlgorithmZstd:   "zstd",
+}
+
 // String implements fmt.Stringer for CompressionAlgorithm.
-func (c compressionAlgorithm) String() string {
-	switch c {
-	case compressionAlgorithmSnappy:
-		return "snappy"
-	case compressionAlgorithmZstd:
-		return "zstd"
-	case compressionAlgorithmNone:
-		return "none"
-	default:
-		panic(errors.Errorf("unknown compression type: %d", c))
+func (c CompressionAlgorithm) String() string {
+	str := compressionAlgorithmToString[c]
+	if str == "" {
+		panic(errors.Errorf("invalid compression type: %d", c))
 	}
+	return str
 }
 
 // RegisterCompressionAlgorithmClusterSetting is a helper to register an enum
 // cluster setting with the given name, description and default value.
 func RegisterCompressionAlgorithmClusterSetting(
-	name settings.InternalKey, desc string, defaultValue compressionAlgorithm,
-) *settings.EnumSetting[compressionAlgorithm] {
+	name settings.InternalKey, desc string, defaultValue CompressionAlgorithm,
+) *settings.EnumSetting[CompressionAlgorithm] {
 	return settings.RegisterEnumSetting(
 		// NB: We can't use settings.SystemOnly today because we may need to read the
 		// value from within a tenant building an sstable for AddSSTable.
@@ -215,11 +219,7 @@ func RegisterCompressionAlgorithmClusterSetting(
 		// will need to override it because they depend on a deterministic sstable
 		// size.
 		defaultValue.String(),
-		map[compressionAlgorithm]string{
-			compressionAlgorithmSnappy: compressionAlgorithmSnappy.String(),
-			compressionAlgorithmZstd:   compressionAlgorithmZstd.String(),
-			compressionAlgorithmNone:   compressionAlgorithmNone.String(),
-		},
+		compressionAlgorithmToString,
 		settings.WithPublic,
 	)
 }
@@ -232,7 +232,7 @@ func RegisterCompressionAlgorithmClusterSetting(
 var CompressionAlgorithmStorage = RegisterCompressionAlgorithmClusterSetting(
 	"storage.sstable.compression_algorithm",
 	`determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store;`,
-	compressionAlgorithmSnappy, // Default.
+	CompressionAlgorithmMinLZ, // Default.
 )
 
 // CompressionAlgorithmBackupStorage determines the compression algorithm used
@@ -242,7 +242,7 @@ var CompressionAlgorithmStorage = RegisterCompressionAlgorithmClusterSetting(
 var CompressionAlgorithmBackupStorage = RegisterCompressionAlgorithmClusterSetting(
 	"storage.sstable.compression_algorithm_backup_storage",
 	`determines the compression algorithm to use when compressing sstable data blocks for backup row data storage;`,
-	compressionAlgorithmSnappy, // Default.
+	CompressionAlgorithmMinLZ, // Default.
 )
 
 // CompressionAlgorithmBackupTransport determines the compression algorithm used
@@ -255,21 +255,23 @@ var CompressionAlgorithmBackupStorage = RegisterCompressionAlgorithmClusterSetti
 var CompressionAlgorithmBackupTransport = RegisterCompressionAlgorithmClusterSetting(
 	"storage.sstable.compression_algorithm_backup_transport",
 	`determines the compression algorithm to use when compressing sstable data blocks for backup transport;`,
-	compressionAlgorithmSnappy, // Default.
+	CompressionAlgorithmMinLZ, // Default.
 )
 
 func getCompressionAlgorithm(
 	ctx context.Context,
 	settings *cluster.Settings,
-	setting *settings.EnumSetting[compressionAlgorithm],
+	setting *settings.EnumSetting[CompressionAlgorithm],
 ) pebble.Compression {
 	switch setting.Get(&settings.SV) {
-	case compressionAlgorithmSnappy:
+	case CompressionAlgorithmSnappy:
 		return pebble.SnappyCompression
-	case compressionAlgorithmZstd:
+	case CompressionAlgorithmZstd:
 		return pebble.ZstdCompression
-	case compressionAlgorithmNone:
+	case CompressionAlgorithmNone:
 		return pebble.NoCompression
+	case CompressionAlgorithmMinLZ:
+		return pebble.MinLZCompression
 	default:
 		return pebble.DefaultCompression
 	}
@@ -281,6 +283,50 @@ var walFailoverUnhealthyOpThreshold = settings.RegisterDurationSetting(
 	"the latency of a WAL write considered unhealthy and triggers a failover to a secondary WAL location",
 	100*time.Millisecond,
 	settings.WithPublic,
+)
+
+// This cluster setting controls the baseline compaction concurrency (which
+// Pebble can dynamically increase up to the max concurrency; see
+// CompactionConcurrencyRange).
+//
+// When the value of this cluster setting is larger than the max concurrency
+// (see below), this cluster setting takes precedence (i.e. the max concurrency
+// will also equal this value).
+//
+// The baseline compaction concurrency is temporarily overridden while
+// crdb_internal.set_compaction_concurrency is running (which uses
+// SetCompactionConcurrency).
+var compactionConcurrencyLower = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"storage.compaction_concurrency",
+	"the baseline number of concurrent compactions",
+	1,
+	settings.IntWithMinimum(1),
+)
+
+// The maximum concurrency can be configured via an env var (which allows
+// per-node control) and/or this cluster setting (which applies to the entire
+// cluster).
+//
+// The environment variable is COCKROACH_CONCURRENT_COMPACTIONS (we also support
+// a deprecated variable, see getMaxConcurrentCompactionsFromEnv()).
+//
+// In the absence of any configuration, we use min(GOMAXPROCS-1, 3).
+//
+// If both the env variable and cluster setting are set, we take the maximum of
+// the two.
+//
+// In all cases, the maximum concurrency is temporarily overridden while
+// crdb_internal.set_compaction_concurrency is running (which uses
+// SetCompactionConcurrency).
+var compactionConcurrencyUpper = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"storage.max_compaction_concurrency",
+	"the maximum number of concurrent compactions (0 = default); the default value is "+
+		"min(3,numCPUs-1) or what the COCKROACH_CONCURRENT_COMPACTIONS env var specifies; "+
+		"the env var also takes precedence over the cluster setting when the latter is lower",
+	0,
+	settings.NonNegativeInt,
 )
 
 // TODO(ssd): This could be SystemOnly but we currently init pebble
@@ -345,116 +391,7 @@ var MVCCMerger = &pebble.Merger{
 	},
 }
 
-var _ sstable.BlockIntervalSuffixReplacer = MVCCBlockIntervalSuffixReplacer{}
-
-type MVCCBlockIntervalSuffixReplacer struct{}
-
-func (MVCCBlockIntervalSuffixReplacer) ApplySuffixReplacement(
-	interval sstable.BlockInterval, newSuffix []byte,
-) (sstable.BlockInterval, error) {
-	synthDecoded, err := mvccencoding.DecodeMVCCTimestampSuffix(newSuffix)
-	if err != nil {
-		return sstable.BlockInterval{}, errors.AssertionFailedf("could not decode synthetic suffix")
-	}
-	synthDecodedWalltime := uint64(synthDecoded.WallTime)
-	// The returned bound includes the synthetic suffix, regardless of its logical
-	// component.
-	return sstable.BlockInterval{Lower: synthDecodedWalltime, Upper: synthDecodedWalltime + 1}, nil
-}
-
-type pebbleIntervalMapper struct{}
-
-var _ sstable.IntervalMapper = pebbleIntervalMapper{}
-
-// MapPointKey is part of the sstable.IntervalMapper interface.
-func (pebbleIntervalMapper) MapPointKey(
-	key pebble.InternalKey, value []byte,
-) (sstable.BlockInterval, error) {
-	return mapSuffixToInterval(key.UserKey)
-}
-
-// MapRangeKey is part of the sstable.IntervalMapper interface.
-func (pebbleIntervalMapper) MapRangeKeys(span sstable.Span) (sstable.BlockInterval, error) {
-	var res sstable.BlockInterval
-	for _, k := range span.Keys {
-		i, err := mapSuffixToInterval(k.Suffix)
-		if err != nil {
-			return sstable.BlockInterval{}, err
-		}
-		res.UnionWith(i)
-	}
-	return res, nil
-}
-
-// mapSuffixToInterval maps the suffix of a key to a timestamp interval.
-// The buffer can be an entire key or just the suffix.
-func mapSuffixToInterval(b []byte) (sstable.BlockInterval, error) {
-	if len(b) == 0 {
-		return sstable.BlockInterval{}, nil
-	}
-	// Last byte is the version length + 1 when there is a version,
-	// else it is 0.
-	versionLen := int(b[len(b)-1])
-	if versionLen == 0 {
-		// This is not an MVCC key that we can collect.
-		return sstable.BlockInterval{}, nil
-	}
-	// prefixPartEnd points to the sentinel byte, unless this is a bare suffix, in
-	// which case the index is -1.
-	prefixPartEnd := len(b) - 1 - versionLen
-	// Sanity check: the index should be >= -1. Additionally, if the index is >=
-	// 0, it should point to the sentinel byte, as this is a full EngineKey.
-	if prefixPartEnd < -1 || (prefixPartEnd >= 0 && b[prefixPartEnd] != sentinel) {
-		return sstable.BlockInterval{}, errors.Errorf("invalid key %s", roachpb.Key(b).String())
-	}
-	// We don't need the last byte (the version length).
-	versionLen--
-	// Only collect if this looks like an MVCC timestamp.
-	if versionLen == engineKeyVersionWallTimeLen ||
-		versionLen == engineKeyVersionWallAndLogicalTimeLen ||
-		versionLen == engineKeyVersionWallLogicalAndSyntheticTimeLen {
-		// INVARIANT: -1 <= prefixPartEnd < len(b) - 1.
-		// Version consists of the bytes after the sentinel and before the length.
-		ts := binary.BigEndian.Uint64(b[prefixPartEnd+1:])
-		return sstable.BlockInterval{Lower: ts, Upper: ts + 1}, nil
-	}
-	return sstable.BlockInterval{}, nil
-}
-
 const mvccWallTimeIntervalCollector = "MVCCTimeInterval"
-
-var _ pebble.BlockPropertyFilterMask = (*mvccWallTimeIntervalRangeKeyMask)(nil)
-
-type mvccWallTimeIntervalRangeKeyMask struct {
-	sstable.BlockIntervalFilter
-}
-
-// SetSuffix implements the pebble.BlockPropertyFilterMask interface.
-func (m *mvccWallTimeIntervalRangeKeyMask) SetSuffix(suffix []byte) error {
-	if len(suffix) == 0 {
-		// This is currently impossible, because the only range key Cockroach
-		// writes today is the MVCC Delete Range that's always suffixed.
-		return nil
-	}
-	ts, err := mvccencoding.DecodeMVCCTimestampSuffix(suffix)
-	if err != nil {
-		return err
-	}
-	m.BlockIntervalFilter.SetInterval(uint64(ts.WallTime), math.MaxUint64)
-	return nil
-}
-
-// PebbleBlockPropertyCollectors is the list of functions to construct
-// BlockPropertyCollectors.
-var PebbleBlockPropertyCollectors = []func() pebble.BlockPropertyCollector{
-	func() pebble.BlockPropertyCollector {
-		return sstable.NewBlockIntervalCollector(
-			mvccWallTimeIntervalCollector,
-			pebbleIntervalMapper{},
-			MVCCBlockIntervalSuffixReplacer{},
-		)
-	},
-}
 
 // MinimumSupportedFormatVersion is the version that provides features that the
 // Cockroach code relies on unconditionally (like range keys). New stores are by
@@ -470,18 +407,14 @@ func DefaultPebbleOptions() *pebble.Options {
 		KeySchema:  DefaultKeySchema,
 		KeySchemas: sstable.MakeKeySchemas(KeySchemas...),
 		// A value of 2 triggers a compaction when there is 1 sub-level.
-		L0CompactionThreshold: 2,
-		L0StopWritesThreshold: 1000,
-		LBaseMaxBytes:         64 << 20, // 64 MB
-		Levels:                make([]pebble.LevelOptions, 7),
-		// NB: Options.MaxConcurrentCompactions may be overidden in NewPebble to
-		// allow overriding the max at runtime through
-		// Engine.SetCompactionConcurrency.
-		MaxConcurrentCompactions:    getMaxConcurrentCompactions,
+		L0CompactionThreshold:       2,
+		L0StopWritesThreshold:       1000,
+		LBaseMaxBytes:               64 << 20, // 64 MB
+		Levels:                      make([]pebble.LevelOptions, 7),
 		MemTableSize:                64 << 20, // 64 MB
 		MemTableStopWritesThreshold: 4,
 		Merger:                      MVCCMerger,
-		BlockPropertyCollectors:     PebbleBlockPropertyCollectors,
+		BlockPropertyCollectors:     cockroachkvs.BlockPropertyCollectors,
 		FormatMajorVersion:          MinimumSupportedFormatVersion,
 	}
 	opts.Experimental.L0CompactionConcurrency = l0SubLevelCompactionConcurrency
@@ -498,10 +431,17 @@ func DefaultPebbleOptions() *pebble.Options {
 	// once.
 	opts.TargetByteDeletionRate = 128 << 20 // 128 MB
 	opts.Experimental.ShortAttributeExtractor = shortAttributeExtractorForValues
-	opts.Experimental.RequiredInPlaceValueBound = pebble.UserKeyPrefixBound{
-		Lower: EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix}),
-		Upper: EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix.PrefixEnd()}),
-	}
+	opts.Experimental.SpanPolicyFunc = pebble.MakeStaticSpanPolicyFunc(
+		cockroachkvs.Compare,
+		pebble.KeyRange{
+			Start: EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix}),
+			End:   EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix.PrefixEnd()}),
+		},
+		pebble.SpanPolicy{
+			DisableValueSeparationBySuffix: true,
+			ValueStoragePolicy:             pebble.ValueStorageLowReadLatency,
+		},
+	)
 	// Disable multi-level compaction heuristic for now. See #134423
 	// for why this was disabled, and what needs to be changed to reenable it.
 	// This issue tracks re-enablement: https://github.com/cockroachdb/pebble/issues/4139
@@ -611,23 +551,14 @@ type engineConfig struct {
 
 // Pebble is a wrapper around a Pebble database instance.
 type Pebble struct {
-	atomic struct {
-		// compactionConcurrency is the current compaction concurrency set on
-		// the Pebble store. The compactionConcurrency option in the Pebble
-		// Options struct is a closure which will return
-		// Pebble.atomic.compactionConcurrency.
-		//
-		// This mechanism allows us to change the Pebble compactionConcurrency
-		// on the fly without restarting Pebble.
-		compactionConcurrency uint64
-	}
-
 	cfg         engineConfig
 	db          *pebble.DB
 	closed      bool
 	auxDir      string
 	ballastPath string
 	properties  roachpb.StoreProperties
+
+	cco compactionConcurrencyOverride
 
 	// Stats updated by pebble.EventListener invocations, and returned in
 	// GetMetrics. Updated and retrieved atomically.
@@ -685,10 +616,10 @@ var _ Engine = &Pebble{}
 // WorkloadCollectorEnabled specifies if the workload collector will be enabled
 var WorkloadCollectorEnabled = envutil.EnvOrDefaultBool("COCKROACH_STORAGE_WORKLOAD_COLLECTOR", false)
 
-// SetCompactionConcurrency will return the previous compaction concurrency.
-func (p *Pebble) SetCompactionConcurrency(n uint64) uint64 {
-	prevConcurrency := atomic.SwapUint64(&p.atomic.compactionConcurrency, n)
-	return prevConcurrency
+// SetCompactionConcurrency is used to override the engine's max compaction
+// concurrency. A value of 0 removes any existing override.
+func (p *Pebble) SetCompactionConcurrency(n uint64) {
+	p.cco.Set(uint32(n))
 }
 
 // RegisterDiskSlowCallback registers a callback that will be run when a write
@@ -703,21 +634,6 @@ func (p *Pebble) RegisterDiskSlowCallback(f func(vfs.DiskSlowInfo)) {
 // instance.
 func (p *Pebble) RegisterLowDiskSpaceCallback(f func(info pebble.LowDiskSpaceInfo)) {
 	p.lowDiskSpaceFunc.Store(&f)
-}
-
-// AdjustCompactionConcurrency adjusts the compaction concurrency up or down by
-// the passed delta, down to a minimum of 1.
-func (p *Pebble) AdjustCompactionConcurrency(delta int64) uint64 {
-	for {
-		current := atomic.LoadUint64(&p.atomic.compactionConcurrency)
-		adjusted := int64(current) + delta
-		if adjusted < 1 {
-			adjusted = 1
-		}
-		if atomic.CompareAndSwapUint64(&p.atomic.compactionConcurrency, current, uint64(adjusted)) {
-			return uint64(adjusted)
-		}
-	}
 }
 
 // SetStoreID adds the store id to pebble logs.
@@ -791,17 +707,11 @@ var ConfigureForSharedStorage func(opts *pebble.Options, storage remote.Storage)
 // Direct users of NewPebble: cfs.opts.{Logger,LoggerAndTracer} must not be
 // set.
 func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
-	if cfg.opts == nil {
-		cfg.opts = DefaultPebbleOptions()
-	} else {
-		// Open also causes DefaultPebbleOptions before calling NewPebble, so we
-		// are tolerant of Logger being set to pebble.DefaultLogger.
-		if cfg.opts.Logger != nil && cfg.opts.Logger != pebble.DefaultLogger {
-			return nil, errors.AssertionFailedf("Options.Logger is set to unexpected value")
-		}
-		// Clone the given options so that we are free to modify them.
-		cfg.opts = cfg.opts.Clone()
+	if cfg.opts.Logger != nil {
+		return nil, errors.AssertionFailedf("Options.Logger is set to unexpected value")
 	}
+	// Clone the given options so that we are free to modify them.
+	cfg.opts = cfg.opts.Clone()
 	if cfg.opts.FormatMajorVersion < MinimumSupportedFormatVersion {
 		return nil, errors.AssertionFailedf(
 			"FormatMajorVersion is %d, should be at least %d",
@@ -816,7 +726,20 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 			return getCompressionAlgorithm(ctx, cfg.settings, CompressionAlgorithmStorage)
 		}
 	}
-
+	// Note: the CompactionConcurrencyRange function will be wrapped below to
+	// allow overriding the lower and upper values at runtime through
+	// Engine.SetCompactionConcurrency.
+	if cfg.opts.CompactionConcurrencyRange == nil {
+		cfg.opts.CompactionConcurrencyRange = func() (lower, upper int) {
+			lower = int(compactionConcurrencyLower.Get(&cfg.settings.SV))
+			upper = determineMaxConcurrentCompactions(
+				defaultMaxConcurrentCompactions,
+				envMaxConcurrentCompactions,
+				int(compactionConcurrencyUpper.Get(&cfg.settings.SV)),
+			)
+			return lower, max(lower, upper)
+		}
+	}
 	if cfg.opts.MaxConcurrentDownloads == nil {
 		cfg.opts.MaxConcurrentDownloads = func() int {
 			return int(concurrentDownloadCompactions.Get(&cfg.settings.SV))
@@ -927,17 +850,9 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		diskWriteStatsCollector: cfg.DiskWriteStatsCollector,
 	}
 
-	// MaxConcurrentCompactions can be set by multiple sources, but all the
-	// sources will eventually call NewPebble. So, we override
-	// cfg.opts.MaxConcurrentCompactions to a closure which will return
-	// Pebble.atomic.compactionConcurrency. This will allow us to both honor
-	// the compactions concurrency which has already been set and allow us
-	// to update the compactionConcurrency on the fly by changing the
-	// Pebble.atomic.compactionConcurrency variable.
-	p.atomic.compactionConcurrency = uint64(cfg.opts.MaxConcurrentCompactions())
-	cfg.opts.MaxConcurrentCompactions = func() int {
-		return int(atomic.LoadUint64(&p.atomic.compactionConcurrency))
-	}
+	// Wrap the CompactionConcurrencyRange function to allow overriding the lower
+	// and upper values at runtime through Engine.SetCompactionConcurrency.
+	cfg.opts.CompactionConcurrencyRange = p.cco.Wrap(cfg.opts.CompactionConcurrencyRange)
 
 	// NB: The ordering of the event listeners passed to TeeEventListener is
 	// deliberate. The listener returned by makeMetricEtcEventListener is
@@ -1890,11 +1805,11 @@ func (p *Pebble) GetEnvStats() (*fs.EnvStats, error) {
 	stats.TotalFiles += uint64(m.WAL.Files + m.Table.ZombieCount + m.WAL.ObsoleteFiles + m.Table.ObsoleteCount)
 	stats.TotalBytes = m.WAL.Size + m.Table.ZombieSize + m.Table.ObsoleteSize
 	for _, l := range m.Levels {
-		stats.TotalFiles += uint64(l.NumFiles)
-		stats.TotalBytes += uint64(l.Size)
+		stats.TotalFiles += uint64(l.TablesCount)
+		stats.TotalBytes += uint64(l.TablesSize)
 	}
 
-	sstSizes := make(map[pebble.FileNum]uint64)
+	sstSizes := make(map[pebble.TableNum]uint64)
 	sstInfos, err := p.db.SSTables()
 	if err != nil {
 		return nil, err
@@ -1927,7 +1842,7 @@ func (p *Pebble) GetEnvStats() (*fs.EnvStats, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "parsing filename %q", errors.Safe(filename))
 		}
-		stats.ActiveKeyBytes += sstSizes[pebble.FileNum(u)]
+		stats.ActiveKeyBytes += sstSizes[pebble.TableNum(u)]
 	}
 
 	// Ensure that encryption percentage does not exceed 100%.
@@ -2041,7 +1956,6 @@ func (p *Pebble) IngestAndExciseFiles(
 	shared []pebble.SharedSSTMeta,
 	external []pebble.ExternalFile,
 	exciseSpan roachpb.Span,
-	sstsContainExciseTombstone bool,
 ) (pebble.IngestOperationStats, error) {
 	rawSpan := pebble.KeyRange{
 		Start: EngineKey{Key: exciseSpan.Key}.Encode(),
@@ -2146,12 +2060,12 @@ func (p *Pebble) ApproximateDiskBytes(
 }
 
 // Compact implements the Engine interface.
-func (p *Pebble) Compact() error {
-	return p.db.Compact(nil, EncodeMVCCKey(MVCCKeyMax), true /* parallel */)
+func (p *Pebble) Compact(ctx context.Context) error {
+	return p.db.Compact(ctx, nil /* start */, EncodeMVCCKey(MVCCKeyMax), true /* parallel */)
 }
 
 // CompactRange implements the Engine interface.
-func (p *Pebble) CompactRange(start, end roachpb.Key) error {
+func (p *Pebble) CompactRange(ctx context.Context, start, end roachpb.Key) error {
 	// TODO(jackson): Consider changing Engine.CompactRange's signature to take
 	// in EngineKeys so that it's unambiguous that the arguments have already
 	// been encoded as engine keys. We do need to encode these keys in protocol
@@ -2165,7 +2079,7 @@ func (p *Pebble) CompactRange(start, end roachpb.Key) error {
 	if ek, ok := DecodeEngineKey(end); !ok || ek.Validate() != nil {
 		return errors.Errorf("invalid end key: %q", end)
 	}
-	return p.db.Compact(start, end, true /* parallel */)
+	return p.db.Compact(ctx, start, end, true /* parallel */)
 }
 
 // RegisterFlushCompletedCallback implements the Engine interface.
@@ -2209,8 +2123,8 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 
 	// TODO(#90543, cockroachdb/pebble#2285): move spans info to Pebble manifest.
 	if len(spans) > 0 {
-		if err := fs.SafeWriteToFile(
-			p.cfg.env, dir, p.cfg.env.PathJoin(dir, "checkpoint.txt"),
+		if err := safeWriteToUnencryptedFile(
+			p.cfg.env.UnencryptedFS, dir, p.cfg.env.PathJoin(dir, "checkpoint.txt"),
 			checkpointSpansNote(spans),
 			fs.UnspecifiedWriteCategory,
 		); err != nil {
@@ -2243,7 +2157,8 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 // named version, it can be assumed all *nodes* have ratcheted to the pebble
 // version associated with it, since they did so during the fence version.
 var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
-	clusterversion.V24_3: pebble.FormatColumnarBlocks,
+	clusterversion.V25_1: pebble.FormatColumnarBlocks,
+	clusterversion.V25_2: pebble.FormatTableFormatV6,
 }
 
 // pebbleFormatVersionKeys contains the keys in the map above, in descending order.
@@ -2880,4 +2795,27 @@ var _ error = &ExceedMaxSizeError{}
 
 func (e *ExceedMaxSizeError) Error() string {
 	return fmt.Sprintf("export size (%d bytes) exceeds max size (%d bytes)", e.reached, e.maxSize)
+}
+
+// compactionConcurrencyOverride allows overriding the compaction concurrency.
+type compactionConcurrencyOverride struct {
+	override atomic.Uint32
+}
+
+// Set the override value. If the value is 0, the override is cancelled.
+func (cco *compactionConcurrencyOverride) Set(value uint32) {
+	cco.override.Store(value)
+}
+
+// Wrap a CompactionConcurrencyRange function to take into account the override.
+func (cco *compactionConcurrencyOverride) Wrap(
+	compactionConcurrencyRange func() (lower, upper int),
+) func() (lower, upper int) {
+	return func() (lower, upper int) {
+		if o := cco.override.Load(); o > 0 {
+			// We override both the lower and upper limits.
+			return int(o), int(o)
+		}
+		return compactionConcurrencyRange()
+	}
 }

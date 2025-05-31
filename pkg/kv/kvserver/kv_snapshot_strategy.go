@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/snaprecv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -43,7 +44,7 @@ type kvBatchSnapshotStrategy struct {
 	// before flushing to disk. Only used on the receiver side.
 	sstChunkSize int64
 	// Only used on the receiver side.
-	scratch   *SSTSnapshotStorageScratch
+	scratch   *snaprecv.SSTSnapshotStorageScratch
 	st        *cluster.Settings
 	clusterID uuid.UUID
 }
@@ -104,52 +105,24 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		return noSnap, sendSnapshotError(ctx, s, stream, errors.New("cannot accept shared sstables"))
 	}
 
-	// We rely on the last keyRange passed into multiSSTWriter being the user key
+	// We rely on the last keyRange passed into MultiSSTWriter being the user key
 	// span. If the sender signals that it can no longer do shared replication
 	// (with a TransitionFromSharedToRegularReplicate = true), we will have to
-	// switch to adding a rangedel for that span. Since multiSSTWriter acts on an
+	// switch to adding a rangedel for that span. Since MultiSSTWriter acts on an
 	// opaque slice of keyRanges, we just tell it to add a rangedel for the last
 	// span. To avoid bugs, assert on the last span in keyRanges actually being
 	// equal to the user key span.
 	if !keyRanges[len(keyRanges)-1].Equal(header.State.Desc.KeySpan().AsRawSpanWithNoLocals()) {
-		return noSnap, errors.AssertionFailedf("last span in multiSSTWriter did not equal the user key span: %s", keyRanges[len(keyRanges)-1].String())
+		return noSnap, errors.AssertionFailedf("last span in MultiSSTWriter did not equal the user key span: %s", keyRanges[len(keyRanges)-1].String())
 	}
-
-	// TODO(aaditya): Remove once we support flushableIngests for shared and
-	// external files in the engine.
-
-	// TODO(tbg): skipClearForMVCCSpan should equal true (since we always excise
-	// the MVCC span), but there appear to be bugs in this code as demonstrated by
-	// TestRaftSnapshotsWithMVCCRangeKeysEverywhere failing with the proposed
-	// change:
-	//
-	// * panic: failed to put range key in sst: pebble: spans must be added in order: /Local/RangeID/75/r":a"/0,0 > /Local/RangeID/75/r""/0,0
-	// ^- we added the ":a" key first, now we're trying to add the r"" key.
-	//
-	// My basic understanding of this failure mode is:
-	// - first, a range del covering the range-local replicated key span `/Range/75/{r-s}` is added in (msstw.initSST)
-	// - the fragmenter's start key is now `/Range/75/r`.
-	// - when the `/Range/75/r/{:a-:z}` rangedel, is handled, it enters through `msstw.PutRangeKey`
-	//    - since  `skipClearForMVCCSpan` is set, this does not update the fragmenter.
-	//    - the range deletion is added to the current SST.
-	// - when the first key >= `/Range/75/r` is added, `msstw.finalizeSST` flushes
-	//   the fragmenter to the current SST.
-	// - we hit the above error, since the SST already contains the rangedel
-	//   starting at `/Range/75/r:a` and we're not attempting to add a rangedel
-	//   `/Range/75/r` with smaller start key.
-	//
-	// The crucial problem is skipping the fragmenter. This seems to have to do with
-	// wanting to allow callers to use `skipClearForMVCCSpan`, but this is going to
-	// be dead code.
-	//
-	// Another note: CI passes when this is unconditionally set to `false`,
-	// indicating that we have poor coverage of the shared and external code paths.
-	skipClearForMVCCSpan := header.SharedReplicate || header.ExternalReplicate
 
 	// The last key range is the user key span.
 	localRanges := keyRanges[:len(keyRanges)-1]
 	mvccRange := keyRanges[len(keyRanges)-1]
-	msstw, err := newMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, localRanges, mvccRange, kvSS.sstChunkSize, skipClearForMVCCSpan, header.RangeKeysInOrder)
+	msstw, err := snaprecv.NewMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, localRanges, mvccRange, snaprecv.MultiSSTWriterOptions{
+		SSTChunkSize: kvSS.sstChunkSize,
+		MaxSSTSize:   MaxSnapshotSSTableSize.Get(&kvSS.st.SV),
+	})
 	if err != nil {
 		return noSnap, err
 	}
@@ -159,7 +132,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 
 	var sharedSSTs []pebble.SharedSSTMeta
 	var externalSSTs []pebble.ExternalFile
-	var prevWriteBytes int64
+	var prevBytesEstimate int64
 
 	snapshotQ := s.cfg.KVAdmissionController.GetSnapshotQueue(s.StoreID())
 	if snapshotQ == nil {
@@ -199,14 +172,15 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			// All batch operations are guaranteed to be point key or range key puts.
 			for batchReader.Next() {
 				// TODO(lyang24): maybe avoid decoding engine key twice.
-				// msstw calls (i.e. PutInternalPointKey) can use the decoded engine key here as input.
+				// msstw calls (i.e. putInternalPointKey) can use the decoded engine key here as input.
 
-				writeBytes := msstw.writeBytes - prevWriteBytes
+				bytesEstimate := msstw.EstimatedDataSize()
+				delta := bytesEstimate - prevBytesEstimate
 				// Calling nil pacer is a noop.
-				if err := pacer.Pace(ctx, writeBytes, false /* final */); err != nil {
+				if err := pacer.Pace(ctx, delta, false /* final */); err != nil {
 					return noSnap, errors.Wrapf(err, "snapshot admission pacer")
 				}
-				prevWriteBytes = msstw.writeBytes
+				prevBytesEstimate = bytesEstimate
 
 				ek, err := batchReader.EngineKey()
 				if err != nil {
@@ -219,7 +193,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 					}
 				}
 
-				if err := kvSS.readOneToBatch(ctx, ek, header.SharedReplicate, batchReader, msstw); err != nil {
+				if err := msstw.ReadOne(ctx, ek, header.SharedReplicate, batchReader); err != nil {
 					return noSnap, err
 				}
 			}
@@ -268,14 +242,13 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			// we must still construct SSTs with range deletion tombstones to remove
 			// the data.
 			timingTag.start("sst")
-			dataSize, err := msstw.Finish(ctx)
-			sstSize := msstw.sstSize
+			dataSize, sstSize, err := msstw.Finish(ctx)
 			if err != nil {
 				return noSnap, errors.Wrapf(err, "finishing sst for raft snapshot")
 			}
 			// Defensive call to account for any discrepancies. The SST sizes should
 			// have been updated upon closing.
-			additionalWrites := sstSize - msstw.writeBytes
+			additionalWrites := sstSize - prevBytesEstimate
 			if err := pacer.Pace(ctx, additionalWrites, true /* final */); err != nil {
 				return noSnap, errors.Wrapf(err, "snapshot admission pacer")
 			}
@@ -294,19 +267,18 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			}
 
 			inSnap := IncomingSnapshot{
-				SnapUUID:                    snapUUID,
-				SSTStorageScratch:           kvSS.scratch,
-				FromReplica:                 header.RaftMessageRequest.FromReplica,
-				Desc:                        header.State.Desc,
-				DataSize:                    dataSize,
-				SSTSize:                     sstSize,
-				SharedSize:                  sharedSize,
-				raftAppliedIndex:            header.State.RaftAppliedIndex,
-				msgAppRespCh:                make(chan raftpb.Message, 1),
-				sharedSSTs:                  sharedSSTs,
-				externalSSTs:                externalSSTs,
-				includesRangeDelForLastSpan: !skipClearForMVCCSpan,
-				clearedSpans:                keyRanges,
+				SnapUUID:          snapUUID,
+				SSTStorageScratch: kvSS.scratch,
+				FromReplica:       header.RaftMessageRequest.FromReplica,
+				Desc:              header.State.Desc,
+				DataSize:          dataSize,
+				SSTSize:           sstSize,
+				SharedSize:        sharedSize,
+				raftAppliedIndex:  header.State.RaftAppliedIndex,
+				msgAppRespCh:      make(chan raftpb.Message, 1),
+				sharedSSTs:        sharedSSTs,
+				externalSSTs:      externalSSTs,
+				clearedSpans:      keyRanges,
 			}
 
 			timingTag.stop("totalTime")
@@ -315,79 +287,6 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			return inSnap, nil
 		}
 	}
-}
-
-func (kvSS *kvBatchSnapshotStrategy) readOneToBatch(
-	ctx context.Context,
-	ek storage.EngineKey,
-	shared bool, // may receive shared SSTs
-	batchReader *storage.BatchReader,
-	msstw *multiSSTWriter,
-) error {
-	switch batchReader.KeyKind() {
-	case pebble.InternalKeyKindSet, pebble.InternalKeyKindSetWithDelete:
-		if err := msstw.Put(ctx, ek, batchReader.Value()); err != nil {
-			return errors.Wrapf(err, "writing sst for raft snapshot")
-		}
-	case pebble.InternalKeyKindDelete, pebble.InternalKeyKindDeleteSized:
-		if !shared {
-			return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
-		}
-		if err := msstw.PutInternalPointKey(ctx, batchReader.Key(), batchReader.KeyKind(), nil); err != nil {
-			return errors.Wrapf(err, "writing sst for raft snapshot")
-		}
-	case pebble.InternalKeyKindRangeDelete:
-		if !shared {
-			return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
-		}
-		start := batchReader.Key()
-		end, err := batchReader.EndKey()
-		if err != nil {
-			return err
-		}
-		if err := msstw.PutInternalRangeDelete(ctx, start, end); err != nil {
-			return errors.Wrapf(err, "writing sst for raft snapshot")
-		}
-
-	case pebble.InternalKeyKindRangeKeyUnset, pebble.InternalKeyKindRangeKeyDelete:
-		if !shared {
-			return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
-		}
-		start := batchReader.Key()
-		end, err := batchReader.EndKey()
-		if err != nil {
-			return err
-		}
-		rangeKeys, err := batchReader.RawRangeKeys()
-		if err != nil {
-			return err
-		}
-		for _, rkv := range rangeKeys {
-			err := msstw.PutInternalRangeKey(ctx, start, end, rkv)
-			if err != nil {
-				return errors.Wrapf(err, "writing sst for raft snapshot")
-			}
-		}
-	case pebble.InternalKeyKindRangeKeySet:
-		start := ek
-		end, err := batchReader.EngineEndKey()
-		if err != nil {
-			return err
-		}
-		rangeKeys, err := batchReader.EngineRangeKeys()
-		if err != nil {
-			return err
-		}
-		for _, rkv := range rangeKeys {
-			err := msstw.PutRangeKey(ctx, start.Key, end.Key, rkv.Version, rkv.Value)
-			if err != nil {
-				return errors.Wrapf(err, "writing sst for raft snapshot")
-			}
-		}
-	default:
-		return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
-	}
-	return nil
 }
 
 // Send implements the snapshotStrategy interface.
@@ -464,10 +363,6 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	// of data we're iterating on and sending over the network.
 	sharedReplicate := header.SharedReplicate && rditer.IterateReplicaKeySpansShared != nil
 	externalReplicate := header.ExternalReplicate && rditer.IterateReplicaKeySpansShared != nil
-	replicatedFilter := rditer.ReplicatedSpansAll
-	if sharedReplicate || externalReplicate {
-		replicatedFilter = rditer.ReplicatedSpansExcludeUser
-	}
 
 	iterateRKSpansVisitor := func(iter storage.EngineIterator, _ roachpb.Span) error {
 		timingTag.start("iter")
@@ -518,9 +413,17 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		}
 		return err
 	}
-	err := rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
-		replicatedFilter, iterateRKSpansVisitor)
-	if err != nil {
+	if err := rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, rditer.SelectOpts{
+		Ranged: rditer.SelectRangedOptions{
+			SystemKeys: true,
+			LockTable:  true,
+			// In shared/external mode, the user span come from external SSTs and
+			// are not iterated over here.
+			UserKeys: !(sharedReplicate || externalReplicate),
+		},
+		ReplicatedByRangeID:   true,
+		UnreplicatedByRangeID: false,
+	}, iterateRKSpansVisitor); err != nil {
 		return 0, err
 	}
 
@@ -639,15 +542,20 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			//
 			// See: https://github.com/cockroachdb/cockroach/issues/142673
 			transitionFromSharedToRegularReplicate = true
-			err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
-				rditer.ReplicatedSpansUserOnly, iterateRKSpansVisitor)
+			err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, rditer.SelectOpts{
+				Ranged: rditer.SelectRangedOptions{
+					UserKeys: true,
+				},
+				ReplicatedByRangeID:   false, // we only want the user span
+				UnreplicatedByRangeID: false,
+			}, iterateRKSpansVisitor)
 		}
 		if err != nil {
 			return 0, err
 		}
 	}
 	if b != nil {
-		if err = flushBatch(); err != nil {
+		if err := flushBatch(); err != nil {
 			return 0, err
 		}
 	}

@@ -306,51 +306,60 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 	ef := newExecFactory(ctx, g.p)
 	rrw := NewRowResultWriter(&g.rch)
 	var cursorHelper *plpgsqlCursorHelper
-	err = g.expr.ForEachPlan(ctx, ef, g.args, func(plan tree.RoutinePlan, stmtForDistSQLDiagram string, isFinalPlan bool) error {
-		stmtIdx++
-		opName := "routine-stmt-" + g.expr.Name + "-" + strconv.Itoa(stmtIdx)
-		ctx, sp := tracing.ChildSpan(ctx, opName)
-		defer sp.Finish()
+	err = g.expr.ForEachPlan(ctx, ef, rrw, g.args,
+		func(plan tree.RoutinePlan, stmtForDistSQLDiagram string, isFinalPlan bool) error {
+			stmtIdx++
+			opName := "routine-stmt-" + g.expr.Name + "-" + strconv.Itoa(stmtIdx)
+			ctx, sp := tracing.ChildSpan(ctx, opName)
+			defer sp.Finish()
 
-		var w rowResultWriter
-		openCursor := stmtIdx == 1 && g.expr.CursorDeclaration != nil
-		if isFinalPlan {
-			// The result of this statement is the routine's output.
-			w = rrw
-		} else if openCursor {
-			// The result of the first statement will be used to open a SQL cursor.
-			cursorHelper, err = g.newCursorHelper(plan.(*planComponents))
+			var w rowResultWriter
+			var openCursor bool
+			switch {
+			case isFinalPlan && !g.expr.DiscardLastStmtResult:
+				// The result of this statement is the routine's output.
+				w = rrw
+			case stmtIdx == 1 && g.expr.CursorDeclaration != nil:
+				// The result of the first statement will be used to open a SQL cursor.
+				openCursor = true
+				cursorHelper, err = g.newCursorHelper(plan.(*planComponents))
+				if err != nil {
+					return err
+				}
+				w = NewRowResultWriter(&cursorHelper.container)
+			case stmtIdx == 1 && g.expr.FirstStmtResultWriter != nil:
+				// The result of the first statement will be added to an existing result
+				// set.
+				w = g.expr.FirstStmtResultWriter.(*RowResultWriter)
+			default:
+				// The result of this statement is not needed. Use a rowResultWriter
+				// that drops all rows added to it.
+				w = &droppingResultWriter{}
+			}
+
+			// Place a sequence point before each statement in the routine for
+			// volatile functions. Unlike Postgres, we don't allow the txn's external
+			// read snapshot to advance, because we do not support restoring the txn's
+			// prior external read snapshot after returning from the volatile
+			// function.
+			if g.expr.EnableStepping {
+				if err := txn.Step(ctx, false /* allowReadTimestampStep */); err != nil {
+					return err
+				}
+			}
+
+			// Run the plan.
+			params := runParams{ctx, g.p.ExtendedEvalContext(), g.p}
+			err = runPlanInsidePlan(ctx, params, plan.(*planComponents), w, g, stmtForDistSQLDiagram)
 			if err != nil {
 				return err
 			}
-			w = NewRowResultWriter(&cursorHelper.container)
-		} else {
-			// The result of this statement is not needed. Use a rowResultWriter that
-			// drops all rows added to it.
-			w = &droppingResultWriter{}
-		}
-
-		// Place a sequence point before each statement in the routine for volatile
-		// functions. Unlike Postgres, we don't allow the txn's external read
-		// snapshot to advance, because we do not support restoring the txn's prior
-		// external read snapshot after returning from the volatile function.
-		if g.expr.EnableStepping {
-			if err := txn.Step(ctx, false /* allowReadTimestampStep */); err != nil {
-				return err
+			if openCursor {
+				return cursorHelper.createCursor(g.p)
 			}
-		}
-
-		// Run the plan.
-		params := runParams{ctx, g.p.ExtendedEvalContext(), g.p}
-		err = runPlanInsidePlan(ctx, params, plan.(*planComponents), w, g, stmtForDistSQLDiagram)
-		if err != nil {
-			return err
-		}
-		if openCursor {
-			return cursorHelper.createCursor(g.p)
-		}
-		return nil
-	})
+			return nil
+		},
+	)
 	if err != nil {
 		if cursorHelper != nil && !cursorHelper.addedCursor {
 			// The cursor wasn't successfully added to the list, so we clean it up

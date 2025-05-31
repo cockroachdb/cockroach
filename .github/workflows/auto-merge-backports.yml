@@ -3,8 +3,6 @@ name: Auto-Merge Test Backport PRs
 on:
   schedule:
     - cron: "0 * * * *"  # Every hour
-  workflow_dispatch:
-  push:
 
 jobs:
   auto-merge:
@@ -26,7 +24,7 @@ jobs:
 
             const query = `
               query SearchPRs() {
-                search(query: "repo:${context.repo.owner}/${context.repo.repo} is:pr is:open label:backport label:blathers-backport label:backport-test-only", type: ISSUE, first: 100) {
+                search(query: "repo:${context.repo.owner}/${context.repo.repo} is:pr is:open label:backport label:blathers-backport label:backport-test-only -author:blathers-crl[bot]", type: ISSUE, first: 100) {
                   nodes {
                     ... on PullRequest {
                       number
@@ -65,7 +63,7 @@ jobs:
               const approved = pr.reviews.nodes.some(
                 r =>
                   r.state === 'APPROVED' &&
-                  r.author?.login === 'blathers-crl[bot]'
+                  r.author?.login === 'blathers-crl'
               );
 
               if (!approved) {
@@ -77,15 +75,15 @@ jobs:
               console.log(`Merging PR #${pr.number}, Created at: ${pr.createdAt}, Approved: ${approved}, Labels: ${labels}`);
 
               // Merge the PR
-              // try {
-              //  console.log(`Merging PR #${pr.number}`);
-              //  await github.rest.pulls.merge({
-              //    owner: context.repo.owner,
-              //    repo: context.repo.repo,
-              //    pull_number: pr.number,
-              //    merge_method: "merge",
-              //  });
-              // } catch (err) {
-              //  console.warn(`Failed to merge PR #${pr.number}: ${err.message}`);
-              // }
+              try {
+                console.log(`Merging PR #${pr.number}`);
+                await github.rest.pulls.merge({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                  merge_method: "merge",
+                });
+              } catch (err) {
+                console.warn(`Failed to merge PR #${pr.number}: ${err.message}`);
+              }
             }

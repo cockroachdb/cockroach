@@ -190,7 +190,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamptz.out -
 +ERROR:  parsing as type timestamp: could not parse "19970710 173201 America/Does_not_exist"
  SELECT '19970710 173201' AT TIME ZONE 'America/Does_not_exist';
 -ERROR:  time zone "America/Does_not_exist" not recognized
-+ERROR:  timezone(): could not parse "America/Does_not_exist" as time zone
++ERROR:  could not parse "America/Does_not_exist" as time zone
  -- Daylight saving time for timestamps beyond 32-bit time_t range.
  SELECT '20500710 173201 Europe/Helsinki'::timestamptz; -- DST
 -         timestamptz          
@@ -1007,7 +1007,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamptz.out -
 - Thu Feb 15 20:00:00 2001 PST
 -(1 row)
 -
-+ERROR:  date_trunc(): could not parse "VET" as time zone
++ERROR:  could not parse "VET" as time zone
  -- verify date_bin behaves the same as date_trunc for relevant intervals
  SELECT
    str,
@@ -1318,7 +1318,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamptz.out -
 - Mon Jan 01 17:32:01 2001 PST    |       1 |  1000 |  1000000
 -(66 rows)
 -
-+ERROR:  date_part(): unsupported timespan: msec
++ERROR:  unsupported timespan: msec
  SELECT d1 as timestamptz,
     date_part( 'isoyear', d1) AS isoyear, date_part( 'week', d1) AS week,
     date_part( 'isodow', d1) AS isodow, date_part( 'dow', d1) AS dow,
@@ -2807,7 +2807,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamptz.out -
 - Fri Feb 26 12:44:50 2010 EST | +10:00:10
 -(15 rows)
 -
-+ERROR:  make_timestamptz(): could not parse "+1:" as time zone
++ERROR:  could not parse "+1:" as time zone
  -- these should fail
  SELECT make_timestamptz(1973, 07, 15, 08, 15, 55.33, '2');
 -ERROR:  invalid input syntax for type numeric time zone: "2"
@@ -2872,7 +2872,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamptz.out -
  
  SELECT make_timestamptz(1910, 12, 24, 0, 0, 0, 'Nehwon/Lankhmar');
 -ERROR:  time zone "Nehwon/Lankhmar" not recognized
-+ERROR:  make_timestamptz(): could not parse "Nehwon/Lankhmar" as time zone
++ERROR:  could not parse "Nehwon/Lankhmar" as time zone
  -- abbreviations
  SELECT make_timestamptz(2008, 12, 10, 10, 10, 10, 'EST');
 -       make_timestamptz       
@@ -2889,7 +2889,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamptz.out -
 - Wed Dec 10 09:10:10 2008 EST
 -(1 row)
 -
-+ERROR:  make_timestamptz(): could not parse "EDT" as time zone
++ERROR:  could not parse "EDT" as time zone
  SELECT make_timestamptz(2014, 12, 10, 10, 10, 10, 'PST8PDT');
 -       make_timestamptz       
 -------------------------------
@@ -3407,63 +3407,63 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamptz.out -
 - Sat Mar 26 21:00:00 2011 UTC
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2011-03-27 01:00:00'::timestamp AT TIME ZONE 'MSK';
 -           timezone           
 -------------------------------
 - Sat Mar 26 22:00:00 2011 UTC
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2011-03-27 01:59:59'::timestamp AT TIME ZONE 'MSK';
 -           timezone           
 -------------------------------
 - Sat Mar 26 22:59:59 2011 UTC
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2011-03-27 02:00:00'::timestamp AT TIME ZONE 'MSK';
 -           timezone           
 -------------------------------
 - Sat Mar 26 22:00:00 2011 UTC
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2011-03-27 02:00:01'::timestamp AT TIME ZONE 'MSK';
 -           timezone           
 -------------------------------
 - Sat Mar 26 22:00:01 2011 UTC
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2011-03-27 02:59:59'::timestamp AT TIME ZONE 'MSK';
 -           timezone           
 -------------------------------
 - Sat Mar 26 22:59:59 2011 UTC
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2011-03-27 03:00:00'::timestamp AT TIME ZONE 'MSK';
 -           timezone           
 -------------------------------
 - Sat Mar 26 23:00:00 2011 UTC
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2011-03-27 03:00:01'::timestamp AT TIME ZONE 'MSK';
 -           timezone           
 -------------------------------
 - Sat Mar 26 23:00:01 2011 UTC
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2011-03-27 04:00:00'::timestamp AT TIME ZONE 'MSK';
 -           timezone           
 -------------------------------
 - Sun Mar 27 00:00:00 2011 UTC
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2014-10-26 00:00:00'::timestamp AT TIME ZONE 'Europe/Moscow';
 -           timezone           
 -------------------------------
@@ -3515,49 +3515,49 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamptz.out -
 - Sat Oct 25 20:00:00 2014 UTC
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2014-10-26 00:59:59'::timestamp AT TIME ZONE 'MSK';
 -           timezone           
 -------------------------------
 - Sat Oct 25 20:59:59 2014 UTC
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2014-10-26 01:00:00'::timestamp AT TIME ZONE 'MSK';
 -           timezone           
 -------------------------------
 - Sat Oct 25 22:00:00 2014 UTC
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2014-10-26 01:00:01'::timestamp AT TIME ZONE 'MSK';
 -           timezone           
 -------------------------------
 - Sat Oct 25 22:00:01 2014 UTC
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2014-10-26 02:00:00'::timestamp AT TIME ZONE 'MSK';
 -           timezone           
 -------------------------------
 - Sat Oct 25 23:00:00 2014 UTC
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT make_timestamptz(2014, 10, 26, 0, 0, 0, 'MSK');
 -       make_timestamptz       
 -------------------------------
 - Sat Oct 25 20:00:00 2014 UTC
 -(1 row)
 -
-+ERROR:  make_timestamptz(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT make_timestamptz(2014, 10, 26, 1, 0, 0, 'MSK');
 -       make_timestamptz       
 -------------------------------
 - Sat Oct 25 22:00:00 2014 UTC
 -(1 row)
 -
-+ERROR:  make_timestamptz(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT to_timestamp(         0);          -- 1970-01-01 00:00:00+00
 -         to_timestamp         
 -------------------------------
@@ -3596,12 +3596,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamptz.out -
  (1 row)
  
  -- upper limit varies between integer and float timestamps, so hard to test
-@@ -2916,225 +1695,177 @@
- (1 row)
- 
- SELECT to_timestamp('NaN'::float);
--ERROR:  timestamp cannot be NaN
-+ERROR:  to_timestamp(): timestamp cannot be NaN
+@@ -2919,222 +1698,174 @@
+ ERROR:  timestamp cannot be NaN
  SET TimeZone to 'Europe/Moscow';
  SELECT '2011-03-26 21:00:00 UTC'::timestamptz;
 -         timestamptz          
@@ -3826,84 +3822,84 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamptz.out -
 - Sun Mar 27 00:00:00 2011
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2011-03-26 22:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
 -         timezone         
 ---------------------------
 - Sun Mar 27 01:00:00 2011
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2011-03-26 22:59:59 UTC'::timestamptz AT TIME ZONE 'MSK';
 -         timezone         
 ---------------------------
 - Sun Mar 27 01:59:59 2011
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2011-03-26 23:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
 -         timezone         
 ---------------------------
 - Sun Mar 27 03:00:00 2011
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2011-03-26 23:00:01 UTC'::timestamptz AT TIME ZONE 'MSK';
 -         timezone         
 ---------------------------
 - Sun Mar 27 03:00:01 2011
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2011-03-26 23:59:59 UTC'::timestamptz AT TIME ZONE 'MSK';
 -         timezone         
 ---------------------------
 - Sun Mar 27 03:59:59 2011
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2011-03-27 00:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
 -         timezone         
 ---------------------------
 - Sun Mar 27 04:00:00 2011
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2014-10-25 21:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
 -         timezone         
 ---------------------------
 - Sun Oct 26 01:00:00 2014
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2014-10-25 21:59:59 UTC'::timestamptz AT TIME ZONE 'MSK';
 -         timezone         
 ---------------------------
 - Sun Oct 26 01:59:59 2014
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2014-10-25 22:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
 -         timezone         
 ---------------------------
 - Sun Oct 26 01:00:00 2014
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2014-10-25 22:00:01 UTC'::timestamptz AT TIME ZONE 'MSK';
 -         timezone         
 ---------------------------
 - Sun Oct 26 01:00:01 2014
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  SELECT '2014-10-25 23:00:00 UTC'::timestamptz AT TIME ZONE 'MSK';
 -         timezone         
 ---------------------------
 - Sun Oct 26 02:00:00 2014
 -(1 row)
 -
-+ERROR:  timezone(): could not parse "MSK" as time zone
++ERROR:  could not parse "MSK" as time zone
  --
  -- Test that AT TIME ZONE isn't misoptimized when using an index (bug #14504)
  --

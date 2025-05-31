@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -31,8 +33,19 @@ import (
 // externalSSTTestCluster is a helper struct that has helper functions to set up
 // and run the tests.
 type externalSSTTestCluster struct {
-	tc *testcluster.TestCluster
-	db *kv.DB
+	tc        *testcluster.TestCluster
+	db        *kv.DB
+	externURI string
+	sstFile   string
+}
+
+// newExternalSSTTestCluster creates a new externalSSTTestCluster, and it also
+// initializes the sstFile and the externalURI to be used in the tests.
+func newExternalSSTTestCluster() *externalSSTTestCluster {
+	return &externalSSTTestCluster{
+		externURI: "nodelocal://1/external-files",
+		sstFile:   "file1.sst",
+	}
 }
 
 // testSetup creates a test cluster with ranges split in this way:
@@ -319,8 +332,9 @@ func (etc *externalSSTTestCluster) mergeHelper(ctx context.Context, key roachpb.
 
 // adminSplitArgs issues an AdminSplitRequest for the provided key.
 func (etc *externalSSTTestCluster) splitHelper(ctx context.Context, key roachpb.Key) error {
-	_, _, err := etc.tc.SplitRange(key)
-	return err
+	b := kv.Batch{}
+	b.AddRawRequest(adminSplitArgs(key))
+	return etc.db.Run(ctx, &b)
 }
 
 // exciseHelper excises the provided key range from the store.
@@ -363,7 +377,10 @@ func (etc *externalSSTTestCluster) checkKeysPointToSameRangeDesc(
 // due to the file not being found.
 func (etc *externalSSTTestCluster) requireNotFoundError(t *testing.T, err error) {
 	t.Helper()
-	require.Regexp(t, "no such file or directory", err)
+	pce := &kvpb.PebbleCorruptionError{}
+	require.ErrorAs(t, err, &pce)
+	require.True(t, pce.IsRemote)
+	require.Equal(t, fmt.Sprintf("remote-%s://%s", etc.externURI, etc.sstFile), pce.Path)
 }
 
 // TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST tests that general
@@ -402,7 +419,6 @@ func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
-	const externURI = "nodelocal://1/external-files"
 
 	skip.UnderRace(t) // too slow under stressrace
 
@@ -831,7 +847,7 @@ func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			ctx := context.Background()
-			etc := externalSSTTestCluster{}
+			etc := newExternalSSTTestCluster()
 			etc.testSetup(t)
 			defer etc.tc.Stopper().Stop(ctx)
 
@@ -840,21 +856,21 @@ func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 			stream, _ := etc.createRangeFeed(t, roachpb.Key("d"), roachpb.Key("g"))
 			defer stream.Cancel()
 
-			externalStorage, err := etc.createExternalStorage(ctx, externURI)
+			externalStorage, err := etc.createExternalStorage(ctx, etc.externURI)
 			require.NoError(t, err)
 
 			firstStartChar := testCase.deletedExternalSpanStart[0]
 			firstEndChar := testCase.deletedExternalSpanEnd[0]
 			require.NoError(t, etc.createExternalSSTableFile(t, ctx, externalStorage,
-				"file1.sst", firstStartChar, firstEndChar))
+				etc.sstFile, firstStartChar, firstEndChar))
 			require.NoError(t, etc.linkExternalSSTableToFile(ctx, testCase.deletedExternalSpanStart,
-				testCase.deletedExternalSpanEnd, externURI, "file1.sst"))
+				testCase.deletedExternalSpanEnd, etc.externURI, etc.sstFile))
 
 			// Before deleting the file, run some data operations that will be
 			// on top of the SSTable pointing to the soon-to-be deleted file.
 			pendingTxn1, pendingTxn2, err := etc.writeIntents(ctx, etc.db)
 			require.NoError(t, err)
-			require.NoError(t, externalStorage.Delete(ctx, "file1.sst"))
+			require.NoError(t, externalStorage.Delete(ctx, etc.sstFile))
 
 			// We should be able to commit the transactions since they just have
 			// point writes, and they wouldn't need the deleted file.
@@ -863,8 +879,148 @@ func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 
 			// Run the test function, and make sure that the store is consistent
 			// afterward.
-			testCase.testFunc(t, ctx, &etc)
+			testCase.testFunc(t, ctx, etc)
 			require.NoError(t, etc.checkConsistency(ctx, roachpb.Key("a"), roachpb.Key("z")))
 		})
 	}
+}
+
+// TestRangeFeedWithExcise tests that a RangeFeed can be created just before
+// excising a range and that the RangeFeed, and the RangeFeed will stop when
+// an excise command is issued.
+//
+// Test setup can be visualized in the following diagram:
+/*
+             a                d                g                z
+             |                |                |                |
+             v                v                v                v
+Keyspace:    |----------------|----------------|----------------|
+             Range 1          Range 2          Range 3
+             |                |                |                |
+RangeFeeds:  |---- RF1 -------|---- RF2 -------|---- RF3 -------|
+             |                |                |                |
+                              |<-- External SSTable -->|
+                              |                        |
+                              |<--- Excised Range ---->|
+                              |                        |
+                              d                        k
+*/
+func TestRangeFeedWithExcise(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	ctx := context.Background()
+	etc := newExternalSSTTestCluster()
+
+	// Create a test cluster with the following ranges: [a, d), [d, g), [g, z).
+	etc.testSetup(t)
+	defer etc.tc.Stopper().Stop(ctx)
+
+	externalStorage, err := etc.createExternalStorage(ctx, etc.externURI)
+	require.NoError(t, err)
+
+	deletedStartKey := roachpb.Key("d")
+	deletedEndKey := roachpb.Key("k")
+	firstStartChar := deletedStartKey[0]
+	firstEndChar := deletedEndKey[0]
+
+	require.NoError(t, etc.createExternalSSTableFile(t, ctx, externalStorage,
+		etc.sstFile, firstStartChar, firstEndChar))
+	require.NoError(t, etc.linkExternalSSTableToFile(ctx, deletedStartKey,
+		deletedEndKey, etc.externURI, etc.sstFile))
+
+	// Create one range feed per range.
+	rfStream1, rfErr1 := etc.createRangeFeed(t, roachpb.Key("a"), roachpb.Key("d"))
+	defer rfStream1.Cancel()
+
+	rfStream2, rfErr2 := etc.createRangeFeed(t, roachpb.Key("d"), roachpb.Key("g"))
+	defer rfStream2.Cancel()
+
+	rfStream3, rfErr3 := etc.createRangeFeed(t, roachpb.Key("g"), roachpb.Key("z"))
+	defer rfStream3.Cancel()
+
+	waitForCheckpoint := func(rfErr chan error, stream *testStream) {
+		require.Eventually(t, func() bool {
+			select {
+			case err = <-rfErr:
+				require.Fail(t, "unexpected RangeFeed error", "%v", err)
+			default:
+			}
+
+			events := stream.Events()
+			for _, event := range events {
+				require.NotNil(t, event.Checkpoint, "received non-checkpoint event: %v", event)
+			}
+			return len(events) > 0
+		}, 5*time.Second, 100*time.Millisecond)
+	}
+
+	// Wait for the RangeFeeds to receive the initial checkpoint. This is to avoid
+	// the RangeFeed racing with the deleted span, which would cause the
+	// RangeFeed to fail to start.
+	waitForCheckpoint(rfErr1, rfStream1)
+	waitForCheckpoint(rfErr2, rfStream2)
+	waitForCheckpoint(rfErr3, rfStream3)
+
+	// Perform some data operations, and delete the external SSTable file.
+	pendingTxn1, pendingTxn2, err := etc.writeIntents(ctx, etc.db)
+	require.NoError(t, err)
+
+	require.NoError(t, externalStorage.Delete(ctx, etc.sstFile))
+
+	require.NoError(t, pendingTxn1.Commit(ctx))
+	require.NoError(t, pendingTxn2.Commit(ctx))
+	require.NoError(t, etc.putHelper(ctx, roachpb.Key("a")))
+	// Requests to the deleted key span should fail.
+	etc.requireNotFoundError(t, etc.putHelper(ctx, roachpb.Key("e-15000")))
+	etc.requireNotFoundError(t, etc.putHelper(ctx, roachpb.Key("h-15000")))
+	require.NoError(t, etc.putHelper(ctx, roachpb.Key("y")))
+	require.NoError(t, etc.deleteRangeHelper(ctx, roachpb.Key("a"), roachpb.Key("b")))
+	require.NoError(t, etc.deleteRangeHelper(ctx, roachpb.Key("k"), roachpb.Key("l")))
+
+	assertNoRangeFeedErr := func(rfErr chan error) {
+		select {
+		case err = <-rfErr:
+			require.Fail(t, "unexpected RangeFeed error", "%v", err)
+		default:
+		}
+	}
+
+	// Before running Excise, the RangeFeeds should still be running.
+	assertNoRangeFeedErr(rfErr1)
+	assertNoRangeFeedErr(rfErr2)
+	assertNoRangeFeedErr(rfErr3)
+
+	waitForExciseError := func(rfErr chan error) {
+		testutils.SucceedsSoon(t, func() error {
+			select {
+			case err = <-rfErr:
+			default:
+				return errors.Errorf("no error was found on the range feed")
+			}
+
+			require.Regexp(t, "Replica applied ExciseRequest", err)
+			return nil
+		})
+	}
+
+	// After we excise, we expect that range [a,d) will not see any errors (since
+	// it doesn't overlap with the deleted span), but the other ranges should see
+	// an excise error.
+	require.NoError(t, etc.exciseHelper(ctx, deletedStartKey, deletedEndKey))
+	waitForExciseError(rfErr2)
+	waitForExciseError(rfErr3)
+	require.Equal(t, 0, len(rfErr1))
+
+	// Requests should work normally after excising.
+	require.NoError(t, etc.putHelper(ctx, roachpb.Key("a")))
+	require.NoError(t, etc.putHelper(ctx, roachpb.Key("e-15000")))
+	require.NoError(t, etc.putHelper(ctx, roachpb.Key("h-15000")))
+	require.NoError(t, etc.putHelper(ctx, roachpb.Key("y")))
+	require.NoError(t, etc.deleteRangeHelper(ctx, roachpb.Key("a"), roachpb.Key("b")))
+	require.NoError(t, etc.deleteRangeHelper(ctx, roachpb.Key("k"), roachpb.Key("l")))
+
+	// Make sure that the store is consistent after the excise.
+	require.NoError(t, etc.checkConsistency(ctx, roachpb.Key("a"), roachpb.Key("z")))
 }

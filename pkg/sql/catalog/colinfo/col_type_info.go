@@ -97,6 +97,10 @@ func ValidateColumnDefType(ctx context.Context, st *cluster.Settings, t *types.T
 			return unimplemented.NewWithIssueDetailf(23468, t.String(),
 				"arrays of JSON unsupported as column type")
 		}
+		if t.ArrayContents().Family() == types.JsonpathFamily {
+			return unimplemented.NewWithIssueDetailf(144910, t.String(),
+				"arrays of jsonpath unsupported as column type")
+		}
 		if err := types.CheckArrayElementType(t.ArrayContents()); err != nil {
 			return err
 		}
@@ -109,12 +113,21 @@ func ValidateColumnDefType(ctx context.Context, st *cluster.Settings, t *types.T
 		types.TSQueryFamily, types.TSVectorFamily, types.PGLSNFamily, types.PGVectorFamily, types.RefCursorFamily:
 	// These types are OK.
 
+	case types.JsonpathFamily:
+		return unimplemented.NewWithIssueDetailf(144910, t.String(),
+			"jsonpath unsupported as column type")
+
 	case types.TupleFamily:
 		if !t.UserDefined() {
 			return pgerror.New(pgcode.InvalidTableDefinition, "cannot use anonymous record type as table column")
 		}
 		if t.TypeMeta.ImplicitRecordType {
 			return unimplemented.NewWithIssue(70099, "cannot use table record type as table column")
+		}
+		for _, typ := range t.TupleContents() {
+			if err := ValidateColumnDefType(ctx, st, typ); err != nil {
+				return err
+			}
 		}
 
 	default:

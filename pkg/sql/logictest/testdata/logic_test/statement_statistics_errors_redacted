@@ -25,11 +25,6 @@ user testuser
 statement error division by zero
 SELECT 2/0;
 
-query TT
-SELECT last_error_code, last_error FROM crdb_internal.node_statement_statistics WHERE last_error_code!='NULL' AND application_name NOT LIKE '$ %' ORDER BY last_error_code ASC;
-----
-22012  <redacted>
-
 # Test 2: database does not exist. Error code "3D000" should be added.
 query TTTTTT colnames,rowsort
 SHOW DATABASES
@@ -42,17 +37,11 @@ test           root   NULL            NULL              {}       NULL
 statement error pq: database "posgres" does not exist
 use posgres
 
-query TT
-SELECT last_error_code, last_error FROM crdb_internal.node_statement_statistics WHERE last_error_code!='NULL' AND application_name NOT LIKE '$ %' ORDER BY last_error_code ASC;
-----
-22012  <redacted>
-3D000  <redacted>
-
 # Test 3: Nonexistant user. Error code "42704" should be added.
 statement error pq: role/user "who" does not exist
 ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES to who
 
-query TT
+query TT retry
 SELECT last_error_code, last_error FROM crdb_internal.node_statement_statistics WHERE last_error_code!='NULL' AND application_name NOT LIKE '$ %' ORDER BY last_error_code ASC;
 ----
 22012  <redacted>
@@ -71,8 +60,7 @@ REVOKE SYSTEM VIEWACTIVITYREDACTED FROM testuser
 user testuser
 
 # Now the error message should not be redacted.
-
-query TT
+query TT retry
 SELECT last_error_code, last_error FROM crdb_internal.node_statement_statistics WHERE last_error_code!='NULL' AND application_name NOT LIKE '$ %' ORDER BY last_error_code ASC;
 ----
 22012  division by zero
@@ -88,7 +76,7 @@ GRANT SYSTEM VIEWACTIVITYREDACTED TO testuser
 
 user testuser
 
-query TT
+query TT retry
 SELECT last_error_code, last_error FROM crdb_internal.node_statement_statistics WHERE last_error_code!='NULL' AND application_name NOT LIKE '$ %' ORDER BY last_error_code ASC;
 ----
 22012  <redacted>

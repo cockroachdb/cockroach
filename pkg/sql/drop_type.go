@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -170,7 +171,9 @@ func (p *planner) addTypeBackReference(
 		return err
 	}
 
-	mutDesc.AddReferencingDescriptorID(ref)
+	if !mutDesc.AddReferencingDescriptorID(ref) {
+		return nil // no-op
+	}
 	return p.writeTypeSchemaChange(ctx, mutDesc, jobDesc)
 }
 
@@ -182,9 +185,10 @@ func (p *planner) removeTypeBackReferences(
 		if err != nil {
 			return err
 		}
-		mutDesc.RemoveReferencingDescriptorID(ref)
-		if err := p.writeTypeSchemaChange(ctx, mutDesc, jobDesc); err != nil {
-			return err
+		if mutDesc.RemoveReferencingDescriptorID(ref) {
+			if err := p.writeTypeSchemaChange(ctx, mutDesc, jobDesc); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -285,6 +289,11 @@ func (p *planner) dropTypeImpl(
 		return err
 	}
 	if err := p.txn.Run(ctx, b); err != nil {
+		return err
+	}
+
+	// Delete any comments associated with this type.
+	if err := p.deleteComment(ctx, typeDesc.ID, 0, catalogkeys.TypeCommentType); err != nil {
 		return err
 	}
 

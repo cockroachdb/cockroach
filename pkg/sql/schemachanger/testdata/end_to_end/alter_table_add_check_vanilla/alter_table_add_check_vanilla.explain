@@ -1,10 +1,9 @@
 /* setup */
-CREATE TABLE t (i INT PRIMARY KEY);
+CREATE TABLE t (i INT);
 INSERT INTO t(i) VALUES (1), (2), (3);
 
 /* test */
-EXPLAIN (DDL) ALTER TABLE t ADD CHECK (i > 0)
----;
+EXPLAIN (DDL) ALTER TABLE t ADD CHECK (i > 0);
 ----
 Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK (‹i› > ‹0›);
  ├── StatementPhase
@@ -12,7 +11,10 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHEC
  │         ├── 2 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_i+), ReferencedColumnIDs: [1]}
  │         │    └── ABSENT → PUBLIC     ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_i", ConstraintID: 2 (check_i+)}
- │         └── 2 Mutation operations
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT     TableSchemaLocked:{DescID: 104 (t)}
+ │         └── 3 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── AddCheckConstraint {"CheckExpr":"i \u003e 0:::INT8","ConstraintID":2,"TableID":104,"Validity":2}
  │              └── SetConstraintName {"ConstraintID":2,"Name":"check_i","TableID":104}
  ├── PreCommitPhase
@@ -20,27 +22,39 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHEC
  │    │    ├── 2 elements transitioning toward PUBLIC
  │    │    │    ├── WRITE_ONLY → ABSENT CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_i+), ReferencedColumnIDs: [1]}
  │    │    │    └── PUBLIC     → ABSENT ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_i", ConstraintID: 2 (check_i+)}
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT     → PUBLIC TableSchemaLocked:{DescID: 104 (t)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 2 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_i+), ReferencedColumnIDs: [1]}
  │         │    └── ABSENT → PUBLIC     ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_i", ConstraintID: 2 (check_i+)}
- │         └── 4 Mutation operations
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT     TableSchemaLocked:{DescID: 104 (t)}
+ │         └── 5 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── AddCheckConstraint {"CheckExpr":"i \u003e 0:::INT8","ConstraintID":2,"TableID":104,"Validity":2}
  │              ├── SetConstraintName {"ConstraintID":2,"Name":"check_i","TableID":104}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  └── PostCommitPhase
-      ├── Stage 1 of 2 in PostCommitPhase
+      ├── Stage 1 of 3 in PostCommitPhase
       │    ├── 1 element transitioning toward PUBLIC
       │    │    └── WRITE_ONLY → VALIDATED CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_i+), ReferencedColumnIDs: [1]}
       │    └── 1 Validation operation
       │         └── ValidateConstraint {"ConstraintID":2,"TableID":104}
-      └── Stage 2 of 2 in PostCommitPhase
-           ├── 1 element transitioning toward PUBLIC
-           │    └── VALIDATED → PUBLIC CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_i+), ReferencedColumnIDs: [1]}
+      ├── Stage 2 of 3 in PostCommitPhase
+      │    ├── 1 element transitioning toward PUBLIC
+      │    │    └── VALIDATED → PUBLIC CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_i+), ReferencedColumnIDs: [1]}
+      │    └── 3 Mutation operations
+      │         ├── MakeValidatedCheckConstraintPublic {"ConstraintID":2,"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+      └── Stage 3 of 3 in PostCommitPhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
            └── 3 Mutation operations
-                ├── MakeValidatedCheckConstraintPublic {"ConstraintID":2,"TableID":104}
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

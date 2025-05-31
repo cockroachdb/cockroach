@@ -17,12 +17,14 @@ import (
 )
 
 type spyCollector struct {
-	collectCount int
+	collectCallCount int
 }
 
-func (s *spyCollector) collect(disks []*monitoredDisk) error {
-	s.collectCount++
-	return nil
+func (s *spyCollector) collect(
+	disks []*monitoredDisk, now time.Time,
+) (countCollected int, err error) {
+	s.collectCallCount++
+	return len(disks), nil
 }
 
 func TestMonitorManager_monitorDisks(t *testing.T) {
@@ -45,7 +47,7 @@ func TestMonitorManager_monitorDisks(t *testing.T) {
 
 	time.Sleep(2 * DefaultDiskStatsPollingInterval)
 	stop <- struct{}{}
-	require.Greater(t, testCollector.collectCount, 0)
+	require.Greater(t, testCollector.collectCallCount, 0)
 }
 
 func TestMonitor_StatsWindow(t *testing.T) {

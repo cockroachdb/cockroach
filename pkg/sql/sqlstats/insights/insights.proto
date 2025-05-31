@@ -133,6 +133,11 @@ message Statement {
   // KVNodeIDs is the ordered list of KV node ids which were used to evaluate KV
   // read requests.
   repeated int32 kv_node_ids = 26 [(gogoproto.customname) = "KVNodeIDs"];
+  // Query tags are tags extracted from comments on the executed SQL query.
+  // These comments typically capture application context and can be used to
+  // provide observability into the state of the client-side application at the
+  // time of execution.
+  repeated QueryTag query_tags = 27;
 }
 
 
@@ -150,4 +155,9 @@ message Insight {
 
   reserved  4; // Previously problem.
   reserved 5; // Previously causes.
+}
+
+message QueryTag {
+  string name = 1;
+  string value = 2 ;
 }

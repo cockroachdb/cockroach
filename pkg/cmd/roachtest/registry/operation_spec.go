@@ -27,6 +27,8 @@ const (
 	OperationRequiresZeroUnavailableRanges
 	OperationRequiresZeroUnderreplicatedRanges
 	OperationRequiresLDRJobRunning
+	OperationRequiresRunningBackupJob
+	OperationRequiresRunningRestoreJob
 )
 
 // OperationIsolation specifies to what extent the operation runner will try
@@ -82,6 +84,11 @@ type OperationSpec struct {
 	// other operations like node kills, while a drop would need to run on its own
 	// and will have CanRunConcurrently = false.
 	CanRunConcurrently OperationIsolation
+
+	// WaitBeforeCleanup specifies the amount of time to wait before running
+	// the cleanup function. This overrides the default wait time set by the flag
+	// --wait-before-cleanup.
+	WaitBeforeCleanup time.Duration
 
 	// Run is the operation function. It returns an OperationCleanup if this
 	// operation requires additional cleanup steps afterwards (eg. dropping an

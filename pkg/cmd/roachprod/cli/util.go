@@ -217,7 +217,7 @@ func ValidateAndConfigure(cmd *cobra.Command, args []string) {
 	if archOpt := cmd.Flags().Lookup("arch"); archOpt != nil && archOpt.Changed {
 		arch := vm.CPUArch(strings.ToLower(archOpt.Value.String()))
 
-		if arch != vm.ArchAMD64 && arch != vm.ArchARM64 && arch != vm.ArchFIPS {
+		if arch != vm.ArchAMD64 && arch != vm.ArchARM64 && arch != vm.ArchFIPS && arch != vm.ArchS390x {
 			printErrAndExit(fmt.Errorf("unsupported architecture %q", arch))
 		}
 		if string(arch) != archOpt.Value.String() {

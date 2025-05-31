@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	jsonpathparser "github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -474,7 +475,11 @@ func DecodeDatum(
 			}
 			return da.NewDJSON(tree.DJSON{JSON: v}), nil
 		case oidext.T_jsonpath:
-			return da.NewDJsonpath(tree.DJsonpath(bs)), nil
+			jp, err := jsonpathparser.Parse(bs)
+			if err != nil {
+				return nil, tree.MakeParseError(bs, typ, err)
+			}
+			return da.NewDJsonpath(tree.DJsonpath{Jsonpath: *jp.AST}), nil
 		case oid.T_tsquery:
 			ret, err := tsearch.ParseTSQuery(bs)
 			if err != nil {
@@ -760,7 +765,11 @@ func DecodeDatum(
 			}
 			return da.NewDJSON(tree.DJSON{JSON: v}), nil
 		case oidext.T_jsonpath:
-			return da.NewDJsonpath(tree.DJsonpath(bs)), nil
+			jp, err := jsonpathparser.Parse(bs)
+			if err != nil {
+				return nil, tree.MakeParseError(bs, typ, err)
+			}
+			return da.NewDJsonpath(tree.DJsonpath{Jsonpath: *jp.AST}), nil
 		case oid.T_varbit, oid.T_bit:
 			if len(b) < 4 {
 				return nil, NewProtocolViolationErrorf("insufficient data: %d", len(b))

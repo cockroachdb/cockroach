@@ -50,7 +50,7 @@ ErrorResponse
 ReadyForQuery
 ReadyForQuery
 ----
-{"Type":"ErrorResponse","Code":"XXUUU"}
+{"Type":"ErrorResponse","Code":"22023"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 

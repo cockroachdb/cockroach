@@ -24,7 +24,6 @@ type cleanupNodeKill struct {
 }
 
 func (cl *cleanupNodeKill) Cleanup(ctx context.Context, o operation.Operation, c cluster.Cluster) {
-	// We might need to restart the node if it isn't live.
 	db, err := c.ConnE(ctx, o.L(), cl.nodes[0])
 	if err != nil {
 		err = c.RunE(ctx, option.WithNodes(cl.nodes), "./cockroach.sh")
@@ -88,46 +87,46 @@ func runNodeKill(
 		time.Sleep(1 * time.Second)
 	}
 
-	return &cleanupNodeKill{
-		nodes: node,
-	}
+	return &cleanupNodeKill{nodes: node}
 }
 
 func registerNodeKill(r registry.Registry) {
-	r.AddOperation(registry.OperationSpec{
-		Name:               "node-kill/sigkill/drain=true",
-		Owner:              registry.OwnerServer,
-		Timeout:            15 * time.Minute,
-		CompatibleClouds:   registry.AllClouds,
-		CanRunConcurrently: registry.OperationCannotRunConcurrently,
-		Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
-		Run:                nodeKillRunner(9 /* signal */, true /* drain */),
-	})
-	r.AddOperation(registry.OperationSpec{
-		Name:               "node-kill/sigkill/drain=false",
-		Owner:              registry.OwnerServer,
-		Timeout:            10 * time.Minute,
-		CompatibleClouds:   registry.AllClouds,
-		CanRunConcurrently: registry.OperationCannotRunConcurrently,
-		Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
-		Run:                nodeKillRunner(9 /* signal */, false /* drain */),
-	})
-	r.AddOperation(registry.OperationSpec{
-		Name:               "node-kill/sigterm/drain=true",
-		Owner:              registry.OwnerServer,
-		Timeout:            15 * time.Minute,
-		CompatibleClouds:   registry.AllClouds,
-		CanRunConcurrently: registry.OperationCannotRunConcurrently,
-		Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
-		Run:                nodeKillRunner(15 /* signal */, true /* drain */),
-	})
-	r.AddOperation(registry.OperationSpec{
-		Name:               "node-kill/sigterm/drain=false",
-		Owner:              registry.OwnerServer,
-		Timeout:            10 * time.Minute,
-		CompatibleClouds:   registry.AllClouds,
-		CanRunConcurrently: registry.OperationCannotRunConcurrently,
-		Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
-		Run:                nodeKillRunner(15 /* signal */, false /* drain */),
-	})
+	for _, spec := range []struct {
+		name     string
+		signal   int
+		drain    bool
+		downtime time.Duration
+		timeout  time.Duration
+	}{
+		{"node-kill/sigkill/drain=true/downtime=1m", 9, true, 1 * time.Minute, 20 * time.Minute},
+		{"node-kill/sigkill/drain=true/downtime=10m", 9, true, 10 * time.Minute, 25 * time.Minute},
+		{"node-kill/sigkill/drain=true/downtime=1h", 9, true, 1 * time.Hour, 2 * time.Hour},
+		{"node-kill/sigkill/drain=true/downtime=5h", 9, true, 5 * time.Hour, 6 * time.Hour},
+
+		{"node-kill/sigkill/drain=false/downtime=1m", 9, false, 1 * time.Minute, 20 * time.Minute},
+		{"node-kill/sigkill/drain=false/downtime=10m", 9, false, 10 * time.Minute, 25 * time.Minute},
+		{"node-kill/sigkill/drain=false/downtime=1h", 9, false, 1 * time.Hour, 2 * time.Hour},
+		{"node-kill/sigkill/drain=false/downtime=5h", 9, true, 5 * time.Hour, 6 * time.Hour},
+
+		{"node-kill/sigterm/drain=true/downtime=1m", 15, true, 1 * time.Minute, 20 * time.Minute},
+		{"node-kill/sigterm/drain=true/downtime=10m", 15, true, 10 * time.Minute, 25 * time.Minute},
+		{"node-kill/sigterm/drain=true/downtime=1h", 15, true, 1 * time.Hour, 2 * time.Hour},
+		{"node-kill/sigterm/drain=true/downtime=5h", 15, true, 5 * time.Hour, 6 * time.Hour},
+
+		{"node-kill/sigterm/drain=false/downtime=1m", 15, false, 1 * time.Minute, 20 * time.Minute},
+		{"node-kill/sigterm/drain=false/downtime=10m", 15, false, 10 * time.Minute, 25 * time.Minute},
+		{"node-kill/sigterm/drain=false/downtime=1h", 15, false, 1 * time.Hour, 2 * time.Hour},
+		{"node-kill/sigterm/drain=false/downtime=5h", 15, true, 5 * time.Hour, 6 * time.Hour},
+	} {
+		r.AddOperation(registry.OperationSpec{
+			Name:               spec.name,
+			Owner:              registry.OwnerServer,
+			Timeout:            spec.timeout,
+			CompatibleClouds:   registry.AllClouds,
+			CanRunConcurrently: registry.OperationCannotRunConcurrently,
+			Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
+			WaitBeforeCleanup:  spec.downtime,
+			Run:                nodeKillRunner(spec.signal, spec.drain),
+		})
+	}
 }

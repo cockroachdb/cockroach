@@ -29,6 +29,7 @@ import (
 type PolicyRefresher struct {
 	stopper  *stop.Stopper
 	settings *cluster.Settings
+	knobs    *TestingKnobs
 
 	// getLeaseholderReplicas returns the set of replicas that are currently
 	// leaseholders of the node.
@@ -39,9 +40,10 @@ type PolicyRefresher struct {
 	// when there is a leaseholder change or when there is a span config change.
 	refreshNotificationCh chan struct{}
 
-	// getNodeLatencies returns a map of node IDs to their measured latencies
-	// from the current node. Replicas use this information to determine
-	// appropriate closed timestamp policies.
+	// getNodeLatencies returns a map of node IDs to their observed round-trip
+	// latencies from the current node. Replicas use this information to determine
+	// appropriate closed timestamp policies. See rpc.RemoteClockMonitor for more
+	// details.
 	getNodeLatencies func() map[roachpb.NodeID]time.Duration
 
 	// latencyCache caches the latency information from getNodeLatencies. This
@@ -64,6 +66,7 @@ func NewPolicyRefresher(
 	settings *cluster.Settings,
 	getLeaseholderReplicas func() []Replica,
 	getNodeLatencies func() map[roachpb.NodeID]time.Duration,
+	knobs *TestingKnobs,
 ) *PolicyRefresher {
 	if getLeaseholderReplicas == nil || getNodeLatencies == nil {
 		log.Fatalf(context.Background(), "getLeaseholderReplicas and getNodeLatencies must be non-nil")
@@ -72,6 +75,7 @@ func NewPolicyRefresher(
 	refresher := &PolicyRefresher{
 		stopper:                stopper,
 		settings:               settings,
+		knobs:                  knobs,
 		getLeaseholderReplicas: getLeaseholderReplicas,
 		getNodeLatencies:       getNodeLatencies,
 		refreshNotificationCh:  make(chan struct{}, 1),
@@ -82,10 +86,10 @@ func NewPolicyRefresher(
 // Replica defines a thin interface to update closed timestamp policies.
 type Replica interface {
 	// RefreshPolicy informs the replica that it should refresh its closed
-	// timestamp policy. A latency map, which includes observed latency to other
-	// nodes in the system by the PolicyRefresher may be supplied (or may be nil),
-	// in which case it may be used to correctly place a replica in its latency
-	// based global reads bucket.
+	// timestamp policy. A latency map, which includes round-trip observed latency
+	// to other nodes in the system by the PolicyRefresher may be supplied (or may
+	// be nil), in which case it may be used to correctly place a replica in its
+	// latency based global reads bucket.
 	RefreshPolicy(map[roachpb.NodeID]time.Duration)
 }
 
@@ -115,18 +119,24 @@ func (pr *PolicyRefresher) EnqueueReplicaForRefresh(replica Replica) {
 	}
 }
 
-// updateLatencyCache refreshes the cached latency information by fetching fresh
-// measurements from the actual RPC context. This can be expensive, so we only
-// do this periodically based on the configured refresh interval.
+// updateLatencyCache refreshes the cached round-trip latency information by
+// fetching fresh measurements from the actual RPC context. This can be
+// expensive, so we only do this periodically based on the configured refresh
+// interval.
 func (pr *PolicyRefresher) updateLatencyCache() {
 	pr.mu.Lock()
 	defer pr.mu.Unlock()
 	pr.mu.latencyCache = pr.getNodeLatencies()
 }
 
-// getCurrentLatencies returns the current latency information if auto-tuning is
-// enabled and the cluster has been fully upgraded to v25.2, or nil otherwise.
+// getCurrentLatencies returns the current round-trip latency information if
+// auto-tuning is enabled and the cluster has been fully upgraded to v25.2, or
+// nil otherwise.
 func (pr *PolicyRefresher) getCurrentLatencies() map[roachpb.NodeID]time.Duration {
+	// Testing knobs only.
+	if pr.knobs != nil && pr.knobs.InjectedLatencies != nil {
+		return pr.knobs.InjectedLatencies()
+	}
 	if !closedts.LeadForGlobalReadsAutoTuneEnabled.Get(&pr.settings.SV) || !pr.settings.Version.IsActive(context.TODO(), clusterversion.V25_2) {
 		return nil
 	}
@@ -203,7 +213,6 @@ func (pr *PolicyRefresher) run(ctx context.Context) {
 
 		// Refresh the policy for ranges with leaseholders on the node.
 		case <-policyRefresherTimer.C:
-			policyRefresherTimer.Read = true
 			policyRefresherTimer.Reset(getPolicyRefresh())
 			pr.refreshPolicies(pr.getLeaseholderReplicas())
 		case <-configUpdateCh:
@@ -211,7 +220,6 @@ func (pr *PolicyRefresher) run(ctx context.Context) {
 
 		// Refresh the latency cache.
 		case <-latencyRefresherTimer.C:
-			latencyRefresherTimer.Read = true
 			latencyRefresherTimer.Reset(getLatencyRefresh())
 			pr.updateLatencyCache()
 		case <-latencyRefresherConfigUpdateCh:

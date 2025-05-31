@@ -12,7 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/snaprecv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -111,7 +110,7 @@ var snapshotIngestAsWriteThreshold = settings.RegisterByteSizeSetting(
 // where it is important that all the data that goes into the snapshot comes
 // from a consistent view of the database, and not the replica's in-memory state
 // or via a reference to Replica.store.Engine().
-type replicaRaftStorage = replicaLogStorage
+type replicaRaftStorage Replica
 
 var _ raft.Storage = (*replicaRaftStorage)(nil)
 
@@ -136,6 +135,30 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 	// NB: r.mu.state is guarded by both r.raftMu and r.mu.
 	cs := r.shMu.state.Desc.Replicas().ConfState()
 	return hs, cs, nil
+}
+
+// TODO(pav-kv): remove the adapter methods from Entries() to LogSnapshot() below.
+// One way to do it: eliminate raft.Storage interface in favour of separate
+// raft.LogStorage and raft.StateStorage, and pass both to the RawNode constructor.
+
+func (r *replicaRaftStorage) Entries(lo, hi, maxSize uint64) ([]raftpb.Entry, error) {
+	return (*Replica)(r).asLogStorage().Entries(lo, hi, maxSize)
+}
+
+func (r *replicaRaftStorage) Term(index uint64) (uint64, error) {
+	return (*Replica)(r).asLogStorage().Term(index)
+}
+
+func (r *replicaRaftStorage) LastIndex() uint64 {
+	return (*Replica)(r).asLogStorage().LastIndex()
+}
+
+func (r *replicaRaftStorage) Compacted() uint64 {
+	return (*Replica)(r).asLogStorage().Compacted()
+}
+
+func (r *replicaRaftStorage) LogSnapshot() raft.LogStorageSnapshot {
+	return (*Replica)(r).asLogStorage().LogSnapshot()
 }
 
 // GetLeaseAppliedIndex returns the lease index of the last applied command.
@@ -272,24 +295,26 @@ func (s *OutgoingSnapshot) Close() {
 type IncomingSnapshot struct {
 	SnapUUID uuid.UUID
 	// The storage interface for the underlying SSTs.
-	SSTStorageScratch *SSTSnapshotStorageScratch
+	SSTStorageScratch *snaprecv.SSTSnapshotStorageScratch
 	FromReplica       roachpb.ReplicaDescriptor
 	// The descriptor in the snapshot, never nil.
 	Desc *roachpb.RangeDescriptor
 	// Size of the key-value pairs.
 	DataSize int64
 	// Size of the ssts containing these key-value pairs.
-	SSTSize                     int64
-	SharedSize                  int64
-	placeholder                 *ReplicaPlaceholder
-	raftAppliedIndex            kvpb.RaftIndex      // logging only
-	msgAppRespCh                chan raftpb.Message // receives MsgAppResp if/when snap is applied
-	sharedSSTs                  []pebble.SharedSSTMeta
-	externalSSTs                []pebble.ExternalFile
-	includesRangeDelForLastSpan bool
+	SSTSize          int64
+	SharedSize       int64
+	placeholder      *ReplicaPlaceholder
+	raftAppliedIndex kvpb.RaftIndex      // logging only
+	msgAppRespCh     chan raftpb.Message // receives MsgAppResp if/when snap is applied
+	sharedSSTs       []pebble.SharedSSTMeta
+	externalSSTs     []pebble.ExternalFile
 	// clearedSpans represents the key spans in the existing store that will be
 	// cleared by doing the Ingest*. This is tracked so that we can convert the
 	// ssts into a WriteBatch if the total size of the ssts is small.
+	//
+	// This contains both the spans that have explicit rangedels, and the
+	// MVCC span (which would be cleared by Excise on Ingest).
 	clearedSpans []roachpb.Span
 }
 
@@ -334,7 +359,7 @@ func snapshot(
 		return OutgoingSnapshot{}, err
 	}
 	// There is no need in sending TruncatedState because the receiver assigns it
-	// to match snap.RaftSnap.Metadata.{Index,Term}. See (*Replica).applySnapshot.
+	// to match snap.RaftSnap.Metadata.{Index,Term}. See (*Replica).applySnapshotRaftMuLocked.
 	state.TruncatedState = nil
 
 	return OutgoingSnapshot{
@@ -389,13 +414,13 @@ func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescri
 	return nil
 }
 
-// applySnapshot updates the replica and its store based on the given
+// applySnapshotRaftMuLocked updates the replica and its store based on the given
 // (non-empty) snapshot and associated HardState. All snapshots must pass
 // through Raft for correctness, i.e. the parameters to this method must be
 // taken from a raft.Ready. Any replicas specified in subsumedRepls will be
 // destroyed atomically with the application of the snapshot.
 //
-// If there is a placeholder associated with r, applySnapshot will remove that
+// If there is a placeholder associated with r, applySnapshotRaftMuLocked will remove that
 // placeholder from the store if and only if it does not return an error.
 //
 // This method requires that r.raftMu is held, as well as the raftMus of any
@@ -404,7 +429,7 @@ func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescri
 // TODO(benesch): the way this replica method reaches into its store to update
 // replicasByKey is unfortunate, but the fix requires a substantial refactor to
 // maintain the necessary synchronization.
-func (r *Replica) applySnapshot(
+func (r *Replica) applySnapshotRaftMuLocked(
 	ctx context.Context,
 	inSnap IncomingSnapshot,
 	nonemptySnap raftpb.Snapshot,
@@ -487,7 +512,7 @@ func (r *Replica) applySnapshot(
 		ingestion time.Time
 	}
 	log.KvDistribution.Infof(ctx, "applying %s", inSnap)
-	appliedAsWrite := false
+	applyAsIngest := true
 	defer func(start time.Time) {
 		var logDetails redact.StringBuilder
 		logDetails.Printf("total=%0.0fms", timeutil.Since(start).Seconds()*1000)
@@ -502,8 +527,8 @@ func (r *Replica) applySnapshot(
 		logDetails.Printf(" excise=true")
 		logDetails.Printf(" ingestion=%d@%0.0fms", len(inSnap.SSTStorageScratch.SSTs()),
 			stats.ingestion.Sub(stats.subsumedReplicas).Seconds()*1000)
-		var appliedAsWriteStr string
-		if appliedAsWrite {
+		var appliedAsWriteStr redact.SafeString
+		if !applyAsIngest {
 			appliedAsWriteStr = "as write "
 		}
 		log.Infof(ctx, "applied %s %s(%s)", inSnap, appliedAsWriteStr, logDetails)
@@ -516,20 +541,6 @@ func (r *Replica) applySnapshot(
 		Term:  kvpb.RaftTerm(nonemptySnap.Metadata.Term),
 	}
 	clearedSpans := inSnap.clearedSpans
-	unreplicatedSSTFile, clearedSpan, err := writeUnreplicatedSST(
-		ctx, r.ID(), r.ClusterSettings(), truncState, hs, &r.raftMu.stateLoader.StateLoader,
-	)
-	if err != nil {
-		return err
-	}
-	clearedSpans = append(clearedSpans, clearedSpan)
-	// TODO(itsbilal): Write to SST directly in unreplicatedSST rather than
-	// buffering in a MemObject first.
-	if err := inSnap.SSTStorageScratch.WriteSST(ctx, unreplicatedSSTFile.Data()); err != nil {
-		return err
-	}
-	// Update Raft entries.
-	r.store.raftEntryCache.Drop(r.RangeID)
 
 	subsumedDescs := make([]*roachpb.RangeDescriptor, 0, len(subsumedRepls))
 	for _, sr := range subsumedRepls {
@@ -551,22 +562,38 @@ func (r *Replica) applySnapshot(
 		subsumedDescs = append(subsumedDescs, sr.Desc())
 	}
 
-	// If we're subsuming a replica below, we don't have its last NextReplicaID,
-	// nor can we obtain it. That's OK: we can just be conservative and use the
-	// maximum possible replica ID. preDestroyRaftMuLocked will write a replica
-	// tombstone using this maximum possible replica ID, which would normally be
-	// problematic, as it would prevent this store from ever having a new replica
-	// of the removed range. In this case, however, it's copacetic, as subsumed
-	// ranges _can't_ have new replicas.
-	clearedSubsumedSpans, err := clearSubsumedReplicaDiskData(
-		// TODO(sep-raft-log): needs access to both engines.
-		ctx, r.store.ClusterSettings(), r.store.TODOEngine(), inSnap.SSTStorageScratch.WriteSST,
-		desc, subsumedDescs, mergedTombstoneReplicaID,
-	)
+	st := r.ClusterSettings()
+	prepInput := prepareSnapApplyInput{
+		id: r.ID(),
+
+		st:       st,
+		todoEng:  r.store.TODOEngine(),
+		sl:       r.raftMu.stateLoader,
+		writeSST: inSnap.SSTStorageScratch.WriteSST,
+
+		truncState:    truncState,
+		hardState:     hs,
+		desc:          desc,
+		subsumedDescs: subsumedDescs,
+	}
+
+	clearedUnreplicatedSpan, clearedSubsumedSpans, err := prepareSnapApply(ctx, prepInput)
 	if err != nil {
 		return err
 	}
+	clearedSpans = append(clearedSpans, clearedUnreplicatedSpan)
 	clearedSpans = append(clearedSpans, clearedSubsumedSpans...)
+
+	// Drop the entry cache before ingestion, like a real truncation would.
+	//
+	// TODO(sep-raft-log): like a real truncation, we should also bump the
+	// in-memory truncated state to the snapshot index. We should also assert
+	// that this leads to a (logically) empty log (otherwise we wouldn't have
+	// accepted the snapshot).
+	//
+	// See: https://github.com/cockroachdb/cockroach/pull/145328#discussion_r2068209588
+	r.store.raftEntryCache.Drop(r.RangeID)
+
 	stats.subsumedReplicas = timeutil.Now()
 
 	// Ingest all SSTs atomically.
@@ -575,53 +602,33 @@ func (r *Replica) applySnapshot(
 			return err
 		}
 	}
+
+	if len(inSnap.externalSSTs)+len(inSnap.sharedSSTs) == 0 && /* simple */
+		inSnap.SSTSize <= snapshotIngestAsWriteThreshold.Get(&st.SV) /* small */ {
+		applyAsIngest = false
+	}
+
 	var ingestStats pebble.IngestOperationStats
 	var writeBytes uint64
-	// TODO: separate ingestions for log and statemachine engine. See:
-	//
-	// https://github.com/cockroachdb/cockroach/issues/93251
-	if len(inSnap.externalSSTs) > 0 || len(inSnap.sharedSSTs) > 0 {
+	if applyAsIngest {
 		exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
-		if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(
-			ctx,
-			inSnap.SSTStorageScratch.SSTs(),
-			inSnap.sharedSSTs,
-			inSnap.externalSSTs,
-			exciseSpan,
-			inSnap.includesRangeDelForLastSpan,
-		); err != nil {
+		if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(ctx, inSnap.SSTStorageScratch.SSTs(), inSnap.sharedSSTs, inSnap.externalSSTs, exciseSpan); err != nil {
 			return errors.Wrapf(err, "while ingesting %s and excising %s-%s",
 				inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
 		}
 	} else {
-		if inSnap.SSTSize > snapshotIngestAsWriteThreshold.Get(&r.ClusterSettings().SV) {
-			exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
-			if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(
-				ctx,
-				inSnap.SSTStorageScratch.SSTs(),
-				nil, /* sharedSSTs */
-				nil, /* externalSSTs */
-				exciseSpan,
-				inSnap.includesRangeDelForLastSpan,
-			); err != nil {
-				return errors.Wrapf(err, "while ingesting %s and excising %s-%s",
-					inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
-			}
-		} else {
-			appliedAsWrite = true
-			err := r.store.TODOEngine().ConvertFilesToBatchAndCommit(
-				ctx, inSnap.SSTStorageScratch.SSTs(), clearedSpans)
-			if err != nil {
-				return errors.Wrapf(err, "while applying as batch %s", inSnap.SSTStorageScratch.SSTs())
-			}
-			// Admission control wants the writeBytes to be roughly equivalent to
-			// the bytes in the SST when these writes are eventually flushed. We use
-			// the SST size of the incoming snapshot as that approximation. We've
-			// written additional SSTs to clear some data earlier in this method,
-			// but we ignore those since the bulk of the data is in the incoming
-			// snapshot.
-			writeBytes = uint64(inSnap.SSTSize)
+		err := r.store.TODOEngine().ConvertFilesToBatchAndCommit(
+			ctx, inSnap.SSTStorageScratch.SSTs(), clearedSpans)
+		if err != nil {
+			return errors.Wrapf(err, "while applying as batch %s", inSnap.SSTStorageScratch.SSTs())
 		}
+		// Admission control wants the writeBytes to be roughly equivalent to
+		// the bytes in the SST when these writes are eventually flushed. We use
+		// the SST size of the incoming snapshot as that approximation. We've
+		// written additional SSTs to clear some data earlier in this method,
+		// but we ignore those since the bulk of the data is in the incoming
+		// snapshot.
+		writeBytes = uint64(inSnap.SSTSize)
 	}
 	// The "ignored" here is to ignore the writes to create the AC linear models
 	// for LSM writes. Since these writes typically correspond to actual writes
@@ -712,14 +719,15 @@ func (r *Replica) applySnapshot(
 		LastTerm:  truncState.Term,
 		ByteSize:  0, // the log is empty now
 	})
-	r.shMu.raftTruncState = truncState
+	ls := r.asLogStorage()
+	ls.shMu.trunc = truncState
 	// Snapshots typically have fewer log entries than the leaseholder. The next
 	// time we hold the lease, recompute the log size before making decisions.
 	//
 	// TODO(pav-kv): does this assume that snapshots can contain log entries,
 	// which is no longer true? The comment needs an update, and the decision to
 	// set this flag to false revisited.
-	r.shMu.raftLogSizeTrusted = false
+	ls.shMu.sizeTrusted = false
 
 	// Update the store stats for the data in the snapshot.
 	r.store.metrics.subtractMVCCStats(ctx, r.tenantMetricsRef, *r.shMu.state.Stats)
@@ -783,210 +791,6 @@ func (r *Replica) applySnapshot(
 	return nil
 }
 
-// writeUnreplicatedSST creates an SST for snapshot application that
-// covers the RangeID-unreplicated keyspace. A range tombstone is
-// laid down and the Raft state provided by the arguments is overlaid
-// onto it.
-func writeUnreplicatedSST(
-	ctx context.Context,
-	id storage.FullReplicaID,
-	st *cluster.Settings,
-	ts kvserverpb.RaftTruncatedState,
-	hs raftpb.HardState,
-	sl *logstore.StateLoader,
-) (_ *storage.MemObject, clearedSpan roachpb.Span, _ error) {
-	unreplicatedSSTFile := &storage.MemObject{}
-	unreplicatedSST := storage.MakeIngestionSSTWriter(
-		ctx, st, unreplicatedSSTFile,
-	)
-	defer unreplicatedSST.Close()
-	// Clear the raft state/log, and initialize it again with the provided
-	// HardState and RaftTruncatedState.
-	clearedSpan, err := rewriteRaftState(ctx, id, hs, ts, sl, &unreplicatedSST)
-	if err != nil {
-		return nil, roachpb.Span{}, err
-	}
-	if err := unreplicatedSST.Finish(); err != nil {
-		return nil, roachpb.Span{}, err
-	}
-	return unreplicatedSSTFile, clearedSpan, nil
-}
-
-// rewriteRaftState clears and rewrites the unreplicated rangeID-local key space
-// of the given replica with the provided raft state. Note that it also clears
-// the raft log contents.
-//
-// The caller must make sure the log does not have entries newer than the
-// snapshot entry ID, and that clearing the log is applied atomically with the
-// snapshot write, or after the latter is synced.
-func rewriteRaftState(
-	ctx context.Context,
-	id storage.FullReplicaID,
-	hs raftpb.HardState,
-	ts kvserverpb.RaftTruncatedState,
-	sl *logstore.StateLoader,
-	w storage.Writer,
-) (clearedSpan roachpb.Span, _ error) {
-	// Clearing the unreplicated state.
-	//
-	// NB: We do not expect to see range keys in the unreplicated state, so
-	// we don't drop a range tombstone across the range key space.
-	unreplicatedPrefixKey := keys.MakeRangeIDUnreplicatedPrefix(id.RangeID)
-	unreplicatedStart := unreplicatedPrefixKey
-	unreplicatedEnd := unreplicatedPrefixKey.PrefixEnd()
-	clearedSpan = roachpb.Span{Key: unreplicatedStart, EndKey: unreplicatedEnd}
-	if err := w.ClearRawRange(
-		unreplicatedStart, unreplicatedEnd, true /* pointKeys */, false, /* rangeKeys */
-	); err != nil {
-		return roachpb.Span{}, errors.Wrapf(err, "error clearing the unreplicated space")
-	}
-
-	// Update HardState.
-	if err := sl.SetHardState(ctx, w, hs); err != nil {
-		return roachpb.Span{}, errors.Wrapf(err, "unable to write HardState")
-	}
-	// We've cleared all the raft state above, so we are forced to write the
-	// RaftReplicaID again here.
-	if err := sl.SetRaftReplicaID(ctx, w, id.ReplicaID); err != nil {
-		return roachpb.Span{}, errors.Wrapf(err, "unable to write RaftReplicaID")
-	}
-	// Update the log truncation state.
-	if err := sl.SetRaftTruncatedState(ctx, w, &ts); err != nil {
-		return roachpb.Span{}, errors.Wrapf(err, "unable to write RaftTruncatedState")
-	}
-	return clearedSpan, nil
-}
-
-// clearSubsumedReplicaDiskData clears the on disk data of the subsumed
-// replicas by creating SSTs with range deletion tombstones. We have to be
-// careful here not to have overlapping ranges with the SSTs we have already
-// created since that will throw an error while we are ingesting them. This
-// method requires that each of the subsumed replicas raftMu is held, and that
-// the Reader reflects the latest I/O each of the subsumed replicas has done
-// (i.e. Reader was instantiated after all raftMu were acquired).
-func clearSubsumedReplicaDiskData(
-	ctx context.Context,
-	st *cluster.Settings,
-	reader storage.Reader,
-	writeSST func(context.Context, []byte) error,
-	desc *roachpb.RangeDescriptor,
-	subsumedDescs []*roachpb.RangeDescriptor,
-	subsumedNextReplicaID roachpb.ReplicaID,
-) (clearedSpans []roachpb.Span, _ error) {
-	// NB: we don't clear RangeID local key spans here. That happens
-	// via the call to preDestroyRaftMuLocked.
-	getKeySpans := func(d *roachpb.RangeDescriptor) []roachpb.Span {
-		return rditer.Select(d.RangeID, rditer.SelectOpts{
-			ReplicatedBySpan: d.RSpan(),
-		})
-	}
-	keySpans := getKeySpans(desc)
-	totalKeySpans := append([]roachpb.Span(nil), keySpans...)
-	for _, subDesc := range subsumedDescs {
-		// We have to create an SST for the subsumed replica's range-id local keys.
-		subsumedReplSSTFile := &storage.MemObject{}
-		subsumedReplSST := storage.MakeIngestionSSTWriter(
-			ctx, st, subsumedReplSSTFile,
-		)
-		// NOTE: We set mustClearRange to true because we are setting
-		// RangeTombstoneKey. Since Clears and Puts need to be done in increasing
-		// order of keys, it is not safe to use ClearRangeIter.
-		opts := kvstorage.ClearRangeDataOptions{
-			ClearReplicatedByRangeID:   true,
-			ClearUnreplicatedByRangeID: true,
-			MustUseClearRange:          true,
-		}
-		subsumedClearedSpans := rditer.Select(subDesc.RangeID, rditer.SelectOpts{
-			ReplicatedByRangeID:   opts.ClearReplicatedByRangeID,
-			UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
-		})
-		clearedSpans = append(clearedSpans, subsumedClearedSpans...)
-		if err := kvstorage.DestroyReplica(ctx, subDesc.RangeID, reader, &subsumedReplSST, subsumedNextReplicaID, opts); err != nil {
-			subsumedReplSST.Close()
-			return nil, err
-		}
-		if err := subsumedReplSST.Finish(); err != nil {
-			return nil, err
-		}
-		if subsumedReplSST.DataSize > 0 {
-			// TODO(itsbilal): Write to SST directly in subsumedReplSST rather than
-			// buffering in a MemObject first.
-			if err := writeSST(ctx, subsumedReplSSTFile.Data()); err != nil {
-				return nil, err
-			}
-		}
-
-		srKeySpans := getKeySpans(subDesc)
-		// Compute the total key space covered by the current replica and all
-		// subsumed replicas.
-		for i := range srKeySpans {
-			if srKeySpans[i].Key.Compare(totalKeySpans[i].Key) < 0 {
-				totalKeySpans[i].Key = srKeySpans[i].Key
-			}
-			if srKeySpans[i].EndKey.Compare(totalKeySpans[i].EndKey) > 0 {
-				totalKeySpans[i].EndKey = srKeySpans[i].EndKey
-			}
-		}
-	}
-
-	// We might have to create SSTs for the range local keys, lock table keys,
-	// and user keys depending on if the subsumed replicas are not fully
-	// contained by the replica in our snapshot. The following is an example to
-	// this case happening.
-	//
-	// a       b       c       d
-	// |---1---|-------2-------|  S1
-	// |---1-------------------|  S2
-	// |---1-----------|---3---|  S3
-	//
-	// Since the merge is the first operation to happen, a follower could be down
-	// before it completes. It is reasonable for a snapshot for r1 from S3 to
-	// subsume both r1 and r2 in S1.
-	for i := range keySpans {
-		if totalKeySpans[i].EndKey.Compare(keySpans[i].EndKey) > 0 {
-			subsumedReplSSTFile := &storage.MemObject{}
-			subsumedReplSST := storage.MakeIngestionSSTWriter(
-				ctx, st, subsumedReplSSTFile,
-			)
-			if err := storage.ClearRangeWithHeuristic(
-				ctx,
-				reader,
-				&subsumedReplSST,
-				keySpans[i].EndKey,
-				totalKeySpans[i].EndKey,
-				kvstorage.ClearRangeThresholdPointKeys,
-				kvstorage.ClearRangeThresholdRangeKeys,
-			); err != nil {
-				subsumedReplSST.Close()
-				return nil, err
-			}
-			clearedSpans = append(clearedSpans,
-				roachpb.Span{Key: keySpans[i].EndKey, EndKey: totalKeySpans[i].EndKey})
-			if err := subsumedReplSST.Finish(); err != nil {
-				return nil, err
-			}
-			if subsumedReplSST.DataSize > 0 {
-				// TODO(itsbilal): Write to SST directly in subsumedReplSST rather than
-				// buffering in a MemObject first.
-				if err := writeSST(ctx, subsumedReplSSTFile.Data()); err != nil {
-					return nil, err
-				}
-			}
-		}
-		// The snapshot must never subsume a replica that extends the range of the
-		// replica to the left. This is because splits and merges (the only
-		// operation that change the key bounds) always leave the start key intact.
-		// Extending to the left implies that either we merged "to the left" (we
-		// don't), or that we're applying a snapshot for another range (we don't do
-		// that either). Something is severely wrong for this to happen.
-		if totalKeySpans[i].Key.Compare(keySpans[i].Key) < 0 {
-			log.Fatalf(ctx, "subsuming replica to our left; key span: %v; total key span %v",
-				keySpans[i], totalKeySpans[i])
-		}
-	}
-	return clearedSpans, nil
-}
-
 // clearSubsumedReplicaInMemoryData clears the in-memory data of the subsumed
 // replicas. This method requires that each of the subsumed replicas raftMu is
 // held.
@@ -1002,11 +806,13 @@ func (r *Replica) clearSubsumedReplicaInMemoryData(
 		// consume. Without this, there would be a risk of errant snapshots being
 		// allowed in (perhaps not involving any of the RangeIDs known to the merge
 		// but still touching its keyspace) and causing corruption.
-		ph, err := r.store.removeInitializedReplicaRaftMuLocked(ctx, sr, subsumedNextReplicaID, RemoveOptions{
-			// The data was already destroyed by clearSubsumedReplicaDiskData.
-			DestroyData:       false,
-			InsertPlaceholder: true,
-		})
+		ph, err := r.store.removeInitializedReplicaRaftMuLocked(
+			ctx, sr, subsumedNextReplicaID, "subsumed by snapshot",
+			RemoveOptions{
+				// The data was already destroyed by clearSubsumedReplicaDiskData.
+				DestroyData:       false,
+				InsertPlaceholder: true,
+			})
 		if err != nil {
 			return nil, err
 		}

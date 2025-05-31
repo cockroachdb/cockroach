@@ -105,14 +105,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilegecache"
 	tablemetadatacacheutil "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
@@ -397,6 +395,8 @@ type sqlServerArgs struct {
 
 	// grpc is the RPC service.
 	grpc *grpcServer
+
+	drpc *drpcServer
 
 	// externalStorageBuilder is the constructor for accesses to external
 	// storage.
@@ -722,26 +722,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		return nil, errors.Wrap(err, "creating temp storage")
 	}
 	cfg.stopper.AddCloser(tempEngine)
-	// Remove temporary directory linked to tempEngine after closing
-	// tempEngine.
-	cfg.stopper.AddCloser(stop.CloserFn(func() {
-		useStore := cfg.TempStorageConfig.Spec
-		var err error
-		if useStore.InMemory {
-			// Used store is in-memory so we remove the temp
-			// directory directly since there is no record file.
-			err = os.RemoveAll(cfg.TempStorageConfig.Path)
-		} else {
-			// If record file exists, we invoke CleanupTempDirs to
-			// also remove the record after the temp directory is
-			// removed.
-			recordPath := filepath.Join(useStore.Path, TempDirsRecordFilename)
-			err = fs.CleanupTempDirs(recordPath)
-		}
-		if err != nil {
-			log.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())
-		}
-	}))
 
 	distSQLMetrics := execinfra.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
 	cfg.registry.AddMetricStruct(distSQLMetrics)
@@ -955,9 +935,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		if err != nil {
 			return nil, errors.Wrap(err, "initializing certificate manager")
 		}
-		certMgr.RegisterExpirationCache(
-			ctx, cfg.Settings, cfg.stopper, &timeutil.DefaultTimeSource{}, rootSQLMemoryMonitor,
+		err = certMgr.RegisterExpirationCache(
+			ctx, cfg.stopper, &timeutil.DefaultTimeSource{}, rootSQLMemoryMonitor,
 		)
+		if err != nil {
+			return nil, errors.Wrap(err, "adding clientcert cache")
+		}
 	}
 
 	storageEngineClient := kvserver.NewStorageEngineClient(cfg.kvNodeDialer)
@@ -1144,10 +1127,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.ExternalConnectionTestingKnobs = externalConnKnobs.(*externalconn.TestingKnobs)
 	}
 
-	if insightsKnobs := cfg.TestingKnobs.Insights; insightsKnobs != nil {
-		execCfg.InsightsTestingKnobs = insightsKnobs.(*insights.TestingKnobs)
-
-	}
 	var tableStatsTestingKnobs *stats.TableStatsTestingKnobs
 	if tableStatsKnobs := cfg.TestingKnobs.TableStatsKnobs; tableStatsKnobs != nil {
 		tableStatsTestingKnobs = tableStatsKnobs.(*stats.TableStatsTestingKnobs)
@@ -1172,7 +1151,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg,
 	)
 
-	distSQLServer.ServerConfig.SQLStatsController = pgServer.SQLServer.GetSQLStatsController()
+	distSQLServer.ServerConfig.SQLStatsController = pgServer.SQLServer.GetSQLStatsProvider()
 	distSQLServer.ServerConfig.SchemaTelemetryController = pgServer.SQLServer.GetSchemaTelemetryController()
 	distSQLServer.ServerConfig.IndexUsageStatsController = pgServer.SQLServer.GetIndexUsageStatsController()
 
@@ -1406,6 +1385,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 	vmoduleSetting.SetOnChange(&cfg.Settings.SV, fn)
 	fn(ctx)
+
+	metric.AppNameLabelEnabled.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+		pgServer.SQLServer.UpdateLabelValueConfig(&cfg.Settings.SV, cfg.registry)
+	})
+
+	metric.DBNameLabelEnabled.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+		pgServer.SQLServer.UpdateLabelValueConfig(&cfg.Settings.SV, cfg.registry)
+	})
 
 	auditlogging.ConfigureRoleBasedAuditClusterSettings(ctx, execCfg.AuditConfig, execCfg.Settings, &execCfg.Settings.SV)
 

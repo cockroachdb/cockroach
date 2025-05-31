@@ -128,12 +128,13 @@ func TestAsOfTime(t *testing.T) {
 	}
 
 	// Future queries shouldn't work if too far in the future.
-	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '+10h'").Scan(&i); !testutils.IsError(err, "pq: request timestamp .* too far in future") {
+	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '+10h'").Scan(&i); !testutils.IsError(err, `pq: AS OF SYSTEM TIME: interval value '\+10h' is in the future`) {
 		t.Fatal(err)
 	}
 
-	// Future queries work if only slightly in the future.
-	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '+10ms'").Scan(&i); err != nil {
+	// Even small future intervals (e.g., +10ms) are disallowed when using interval-based AS OF.
+	// Slight tolerance is only permitted when using a fixed timestamp.
+	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '+10ms'").Scan(&i); !testutils.IsError(err, `pq: AS OF SYSTEM TIME: interval value '\+10ms' is in the future`) {
 		t.Fatal(err)
 	}
 

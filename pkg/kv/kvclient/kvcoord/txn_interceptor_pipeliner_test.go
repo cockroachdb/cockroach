@@ -35,19 +35,19 @@ import (
 // to SendLocked will return the default successful response.
 type mockLockedSender struct {
 	mockFn func(*kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error)
-	// numCalled is the number of times the mock function has been called.
+	// numCalled is the number of times SendLocked function has been called.
 	numCalled int
 }
 
 func (m *mockLockedSender) SendLocked(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvpb.Error) {
+	m.numCalled++
 	if m.mockFn == nil {
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
 		return br, nil
 	}
-	m.numCalled++
 	return m.mockFn(ba)
 }
 
@@ -58,7 +58,7 @@ func (m *mockLockedSender) MockSend(
 	m.mockFn = fn
 }
 
-// NumCalled returns the number of times the mock function has been called.
+// NumCalled returns the number of times the SendLocked function has been called.
 func (m *mockLockedSender) NumCalled() int {
 	return m.numCalled
 }
@@ -208,7 +208,7 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 	require.NotNil(t, br)
 	require.Equal(t, 1, tp.ifWrites.len())
 
-	w := tp.ifWrites.t.Min().(*inFlightWrite)
+	w, _ := tp.ifWrites.t.Min()
 	require.Equal(t, putArgs.Key, w.Key)
 	require.Equal(t, putArgs.Sequence, w.Sequence)
 
@@ -218,9 +218,9 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 	cputArgs := kvpb.ConditionalPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}}
 	cputArgs.Sequence = 2
 	ba.Add(&cputArgs)
-	initPutArgs := kvpb.InitPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyB}}
-	initPutArgs.Sequence = 3
-	ba.Add(&initPutArgs)
+	putArgs = kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyB}}
+	putArgs.Sequence = 3
+	ba.Add(&putArgs)
 	incArgs := kvpb.IncrementRequest{RequestHeader: kvpb.RequestHeader{Key: keyC}}
 	incArgs.Sequence = 4
 	ba.Add(&incArgs)
@@ -235,7 +235,7 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 		require.True(t, ba.AsyncConsensus)
 		require.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &kvpb.ConditionalPutRequest{}, ba.Requests[1].GetInner())
-		require.IsType(t, &kvpb.InitPutRequest{}, ba.Requests[2].GetInner())
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[2].GetInner())
 		require.IsType(t, &kvpb.IncrementRequest{}, ba.Requests[3].GetInner())
 		require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[4].GetInner())
 
@@ -260,16 +260,16 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 	require.NotNil(t, br)
 	require.Len(t, br.Responses, 4) // QueryIntent response stripped
 	require.IsType(t, &kvpb.ConditionalPutResponse{}, br.Responses[0].GetInner())
-	require.IsType(t, &kvpb.InitPutResponse{}, br.Responses[1].GetInner())
+	require.IsType(t, &kvpb.PutResponse{}, br.Responses[1].GetInner())
 	require.IsType(t, &kvpb.IncrementResponse{}, br.Responses[2].GetInner())
 	require.IsType(t, &kvpb.DeleteResponse{}, br.Responses[3].GetInner())
 	require.Nil(t, pErr)
 	require.Equal(t, 4, tp.ifWrites.len())
 
-	wMin := tp.ifWrites.t.Min().(*inFlightWrite)
+	wMin, _ := tp.ifWrites.t.Min()
 	require.Equal(t, cputArgs.Key, wMin.Key)
 	require.Equal(t, cputArgs.Sequence, wMin.Sequence)
-	wMax := tp.ifWrites.t.Max().(*inFlightWrite)
+	wMax, _ := tp.ifWrites.t.Max()
 	require.Equal(t, delArgs.Key, wMax.Key)
 	require.Equal(t, delArgs.Sequence, wMax.Sequence)
 
@@ -384,10 +384,10 @@ func TestTxnPipelinerTrackInFlightWritesPaginatedResponse(t *testing.T) {
 	require.NotNil(t, br)
 	require.Equal(t, 2, tp.ifWrites.len())
 
-	w := tp.ifWrites.t.Min().(*inFlightWrite)
+	w, _ := tp.ifWrites.t.Min()
 	require.Equal(t, putArgs1.Key, w.Key)
 	require.Equal(t, putArgs1.Sequence, w.Sequence)
-	w = tp.ifWrites.t.Max().(*inFlightWrite)
+	w, _ = tp.ifWrites.t.Max()
 	require.Equal(t, putArgs2.Key, w.Key)
 	require.Equal(t, putArgs2.Sequence, w.Sequence)
 
@@ -434,7 +434,7 @@ func TestTxnPipelinerTrackInFlightWritesPaginatedResponse(t *testing.T) {
 	require.Nil(t, pErr)
 	require.Equal(t, 1, tp.ifWrites.len())
 
-	w = tp.ifWrites.t.Min().(*inFlightWrite)
+	w, _ = tp.ifWrites.t.Min()
 	require.Equal(t, putArgs2.Key, w.Key)
 	require.Equal(t, putArgs2.Sequence, w.Sequence)
 }

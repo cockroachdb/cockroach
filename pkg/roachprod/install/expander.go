@@ -38,6 +38,7 @@ var pgHostRe = regexp.MustCompile(`{pghost(:[-,0-9]+|:(?i)lb)?(:[a-z0-9\-]+)?(:[
 var pgPortRe = regexp.MustCompile(`{pgport(:[-,0-9]+)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var uiPortRe = regexp.MustCompile(`{uiport(:[-,0-9]+)}`)
 var ipAddressRe = regexp.MustCompile(`{ip(:\d+([-,]\d+)?)(:public|:private)?}`)
+var hostnameRe = regexp.MustCompile(`{hostname(:\d+([-,]\d+)?)}`)
 var storeDirRe = regexp.MustCompile(`{store-dir(:[0-9]+)?}`)
 var logDirRe = regexp.MustCompile(`{log-dir(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var certsDirRe = regexp.MustCompile(`{certs-dir}`)
@@ -58,6 +59,7 @@ type expander struct {
 	uiPorts    map[Node]string
 	publicIPs  map[Node]string
 	privateIPs map[Node]string
+	hostnames  map[Node]string
 }
 
 // expanderFunc is a function which may expand a string with a templated value.
@@ -81,6 +83,7 @@ func (e *expander) expand(
 			e.maybeExpandLogDir,
 			e.maybeExpandCertsDir,
 			e.maybeExpandIPAddress,
+			e.maybeExpandHostname,
 		}
 		for _, f := range expanders {
 			v, expanded, fErr := f(ctx, l, c, cfg, s)
@@ -368,5 +371,30 @@ func (e *expander) maybeExpandIPAddress(
 
 		s, err = e.maybeExpandMap(c, e.privateIPs, m[1])
 	}
+	return s, err == nil, err
+}
+
+// maybeExpandHostname is an expanderFunc for {hostname:<nodeSpec>}
+func (e *expander) maybeExpandHostname(
+	ctx context.Context, l *logger.Logger, c *SyncedCluster, cfg ExpanderConfig, s string,
+) (string, bool, error) {
+	m := hostnameRe.FindStringSubmatch(s)
+	if m == nil {
+		return s, false, nil
+	}
+
+	if e.hostnames == nil {
+		e.hostnames = make(map[Node]string, len(c.VMs))
+		for _, node := range allNodes(len(c.VMs)) {
+			hostname, err := c.GetHostname(node)
+			if err != nil {
+				return "", false, err
+			}
+			e.hostnames[node] = hostname
+		}
+	}
+
+	s, err := e.maybeExpandMap(c, e.hostnames, m[1])
+
 	return s, err == nil, err
 }

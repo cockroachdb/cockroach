@@ -496,7 +496,7 @@ func batchJobInsertStmt(
 		},
 	}
 
-	if schemaVersion.AtLeast(clusterversion.V25_1_AddJobsColumns.Version()) {
+	if schemaVersion.AtLeast(clusterversion.TODO_Delete_V25_1_AddJobsColumns.Version()) {
 		columns = append(columns, `owner`, `description`)
 		valueFns[`owner`] = func(job *Job) (interface{}, error) { return job.Payload().UsernameProto.Decode().Normalized(), nil }
 		valueFns[`description`] = func(job *Job) (interface{}, error) { return job.Payload().Description, nil }
@@ -596,7 +596,7 @@ func (r *Registry) CreateJobWithTxn(
 		if err != nil {
 			return err
 		}
-		if v.AtLeast(clusterversion.V25_1_AddJobsColumns.Version()) {
+		if v.AtLeast(clusterversion.TODO_Delete_V25_1_AddJobsColumns.Version()) {
 			cols = append(cols, "owner", "description")
 			vals = append(vals, j.mu.payload.UsernameProto.Decode().Normalized(), j.mu.payload.Description)
 		}
@@ -737,7 +737,7 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 		if err != nil {
 			return err
 		}
-		if v.AtLeast(clusterversion.V25_1_AddJobsColumns.Version()) {
+		if v.AtLeast(clusterversion.TODO_Delete_V25_1_AddJobsColumns.Version()) {
 			cols = append(cols, "owner", "description")
 			placeholders = append(placeholders, "$6", "$7")
 			vals = append(vals, j.mu.payload.UsernameProto.Decode().Normalized(), j.mu.payload.Description)
@@ -1070,7 +1070,6 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 				r.cancelAllAdoptedJobs()
 				return
 			case <-lc.timer.C:
-				lc.timer.Read = true
 				cancelLoopTask(ctx)
 				lc.onExecute()
 			}
@@ -1107,7 +1106,6 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			case <-r.drainJobs:
 				return
 			case <-lc.timer.C:
-				lc.timer.Read = true
 				old := timeutil.Now().Add(-1 * retentionDuration())
 				if err := r.cleanupOldJobs(ctx, old); err != nil {
 					log.Warningf(ctx, "error cleaning up old job records: %v", err)
@@ -1145,7 +1143,6 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 				}
 				processClaimedJobs(ctx)
 			case <-lc.timer.C:
-				lc.timer.Read = true
 				claimJobs(ctx)
 				processClaimedJobs(ctx)
 				lc.onExecute()
@@ -1288,7 +1285,7 @@ func (r *Registry) cleanupOldJobsPage(
 					if err != nil {
 						return err
 					}
-					if v.Less(clusterversion.V25_1_AddJobsTables.Version()) {
+					if v.Less(clusterversion.TODO_Delete_V25_1_AddJobsTables.Version()) {
 						return nil
 					}
 				}
@@ -1346,7 +1343,7 @@ func (r *Registry) DeleteTerminalJobByID(ctx context.Context, id jobspb.JobID) e
 					if err != nil {
 						return err
 					}
-					if v.Less(clusterversion.V25_1_AddJobsTables.Version()) {
+					if v.Less(clusterversion.TODO_Delete_V25_1_AddJobsTables.Version()) {
 						break
 					}
 				}

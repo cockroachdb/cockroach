@@ -1,3 +1,5 @@
+# LogicTest: !local-schema-locked
+
 # Check that we can alter the default zone config.
 statement ok
 ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1
@@ -170,7 +172,7 @@ a  CREATE TABLE public.a (
      gc.ttlseconds = 3600,
      num_replicas = 1,
      constraints = '[+region=test]',
-     lease_preferences = '[[+region=test]]'
+     lease_preferences = '[[+region=test]]';
 
 # Check that we can reset the configuration to defaults.
 
@@ -301,19 +303,19 @@ RESET autocommit_before_ddl
 
 user root
 
-onlyif config local-legacy-schema-changer local-mixed-24.3
+onlyif config local-legacy-schema-changer
 statement error pq: user root does not have CREATE or ZONECONFIG privilege on relation pg_type
 ALTER TABLE pg_catalog.pg_type CONFIGURE ZONE USING gc.ttlseconds = 100000
 
-onlyif config local-legacy-schema-changer local-mixed-24.3
+onlyif config local-legacy-schema-changer
 statement error pq: user root does not have CREATE or ZONECONFIG privilege on relation columns
 ALTER TABLE information_schema.columns CONFIGURE ZONE USING gc.ttlseconds = 100000
 
-skipif config local-legacy-schema-changer local-mixed-24.3
+skipif config local-legacy-schema-changer
 statement error pq: pg_type is a system catalog
 ALTER TABLE pg_catalog.pg_type CONFIGURE ZONE USING gc.ttlseconds = 100000
 
-skipif config local-legacy-schema-changer local-mixed-24.3
+skipif config local-legacy-schema-changer
 statement error pq: columns is a virtual object and cannot be modified
 ALTER TABLE information_schema.columns CONFIGURE ZONE USING gc.ttlseconds = 100000
 
@@ -344,7 +346,7 @@ same_table_name  CREATE TABLE public.same_table_name (
                    CONSTRAINT same_table_name_pkey PRIMARY KEY (rowid ASC)
                  );
                  ALTER TABLE test.public.same_table_name CONFIGURE ZONE USING
-                   gc.ttlseconds = 500
+                   gc.ttlseconds = 500;
 
 query TT
 SHOW CREATE TABLE alternative_schema.same_table_name
@@ -354,7 +356,7 @@ alternative_schema.same_table_name  CREATE TABLE alternative_schema.same_table_n
                                       CONSTRAINT same_table_name_pkey PRIMARY KEY (rowid ASC)
                                     );
                                     ALTER TABLE test.alternative_schema.same_table_name CONFIGURE ZONE USING
-                                      gc.ttlseconds = 600
+                                      gc.ttlseconds = 600;
 
 statement ok
 DROP TABLE zc CASCADE
@@ -423,7 +425,7 @@ subtest end
 
 subtest txn_zone_config
 
-skipif config local-mixed-24.3 local-legacy-schema-changer
+skipif config local-legacy-schema-changer
 statement ok
 SET use_declarative_schema_changer = unsafe_always;
 
@@ -464,7 +466,7 @@ subtest zc_backfill
 statement ok
 CREATE TABLE t(i INT, j INT NOT NULL, INDEX idx (j))
 
-skipif config local-mixed-24.3 local-legacy-schema-changer
+skipif config local-legacy-schema-changer
 statement ok
 SET use_declarative_schema_changer = unsafe_always;
 
@@ -494,7 +496,7 @@ FROM subzone_configs
 replicas
 11
 
-skipif config local-mixed-24.3 local-legacy-schema-changer
+skipif config local-legacy-schema-changer
 # Ensure that the subzone config exists on the new primary index. The legacy
 # schema changer does not do this; so, we skip those test configs.
 query B colnames
@@ -548,7 +550,7 @@ ALTER TABLE foo ADD COLUMN j INT NOT NULL DEFAULT 42;
 # Here, we can see that although the index ID changed, our corresponding
 # subzone config has an entry for our new index, along with a corresponding
 # subzone span.
-skipif config local-mixed-24.3 local-legacy-schema-changer
+skipif config local-legacy-schema-changer
 statement ok
 WITH subzones AS (
     SELECT
@@ -585,7 +587,7 @@ FROM index_ids_match WHERE match_found = false;
 # The new primary index should have a subzone. The old primary index and the
 # temporary index also have a subzone, and those will be cleaned up later by the
 # schema change GC job.
-skipif config local-mixed-24.3 local-legacy-schema-changer
+skipif config local-legacy-schema-changer
 query I
 WITH subzones AS (
     SELECT
@@ -608,7 +610,7 @@ ORDER BY indexID;
 2
 3
 
-skipif config local-mixed-24.3 local-legacy-schema-changer
+skipif config local-legacy-schema-changer
 query T
 WITH subzone_spans AS (
     SELECT json_array_elements(crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzoneSpans') ->> 'key' AS key

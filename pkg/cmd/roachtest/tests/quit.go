@@ -252,7 +252,8 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 				q.Fatal(err)
 			}
 			url := fmt.Sprintf("https://%s/_status/ranges/local", adminAddrs[0])
-			client := roachtestutil.DefaultHTTPClient(q.c, q.t.L(), roachtestutil.HTTPTimeout(15*time.Second))
+			// NB: generous HTTP timeout added for #146064.
+			client := roachtestutil.DefaultHTTPClient(q.c, q.t.L(), roachtestutil.HTTPTimeout(120*time.Second))
 			if err != nil {
 				q.Fatal(err)
 			}

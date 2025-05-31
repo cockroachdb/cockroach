@@ -571,7 +571,6 @@ func (s *Storage) RunInstanceIDReclaimLoop(
 			case <-ctx.Done():
 				return
 			case <-timer.Ch():
-				timer.MarkRead()
 
 				// Load the regions each time we attempt to generate rows since
 				// regions can be added/removed to/from the system DB.

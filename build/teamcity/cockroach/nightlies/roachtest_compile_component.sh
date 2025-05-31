@@ -15,7 +15,7 @@ if [ "$#" -eq 0 ]; then
   echo ""
   echo "Usage: $(basename $0) [--with-coverage] <os/arch/component>"
   echo "  where os is one of: linux"
-  echo "        arch is one of: amd64, arm64, amd64-fips"
+  echo "        arch is one of: amd64, arm64, amd64-fips, s390x"
   echo "        component is one of: cockroach, cockroach-ea, workload, libgeos, roachtest"
   echo "  --with-coverage enables go code coverage instrumentation (only applies to cockroach binaries)"
   exit 1

@@ -15,6 +15,7 @@ go_library(
         "//pkg/roachprod/vm/aws",
         "//pkg/roachprod/vm/azure",
         "//pkg/roachprod/vm/gce",
+        "//pkg/roachprod/vm/ibm",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",

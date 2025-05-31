@@ -30,7 +30,7 @@ write *eventpb.DropDatabase to event log:
     statement: DROP DATABASE ‹multi_region_test_db› CASCADE
     tag: DROP DATABASE
     user: root
-## StatementPhase stage 1 of 1 with 65 MutationType ops
+## StatementPhase stage 1 of 1 with 66 MutationType ops
 delete database namespace entry {0 0 multi_region_test_db} -> 104
 delete schema namespace entry {104 0 public} -> 105
 delete object namespace entry {104 105 crdb_internal_region} -> 106
@@ -77,6 +77,7 @@ upsert descriptor #108
   ...
      replacementOf:
        time: {}
+  -  schemaLocked: true
   +  state: DROP
      unexposedParentSchemaId: 105
   -  version: "1"
@@ -86,7 +87,7 @@ upsert descriptor #108
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 72 MutationType ops
+## PreCommitPhase stage 2 of 2 with 73 MutationType ops
 delete database namespace entry {0 0 multi_region_test_db} -> 104
 delete schema namespace entry {104 0 public} -> 105
 delete object namespace entry {104 105 crdb_internal_region} -> 106
@@ -223,6 +224,7 @@ upsert descriptor #108
   ...
      replacementOf:
        time: {}
+  -  schemaLocked: true
   +  state: DROP
      unexposedParentSchemaId: 105
   -  version: "1"

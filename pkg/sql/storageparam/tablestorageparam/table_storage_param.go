@@ -36,18 +36,22 @@ type Setter struct {
 	// UpdatedRowLevelTTL is kept separate from the RowLevelTTL in TableDesc
 	// in case changes need to be made in schema changer.
 	UpdatedRowLevelTTL *catpb.RowLevelTTL
+
+	// NewObject bool tracks if this is a newly created object.
+	NewObject bool
 }
 
 var _ storageparam.Setter = (*Setter)(nil)
 
 // NewSetter returns a new Setter.
-func NewSetter(tableDesc *tabledesc.Mutable) *Setter {
+func NewSetter(tableDesc *tabledesc.Mutable, isNewObject bool) *Setter {
 	var updatedRowLevelTTL *catpb.RowLevelTTL
 	if tableDesc.HasRowLevelTTL() {
 		updatedRowLevelTTL = protoutil.Clone(tableDesc.GetRowLevelTTL()).(*catpb.RowLevelTTL)
 	}
 	return &Setter{
 		TableDesc:          tableDesc,
+		NewObject:          isNewObject,
 		UpdatedRowLevelTTL: updatedRowLevelTTL,
 	}
 }
@@ -58,6 +62,11 @@ func (po *Setter) RunPostChecks() error {
 		return err
 	}
 	return nil
+}
+
+// IsNewTableObject implements the Setter interface.
+func (po *Setter) IsNewTableObject() bool {
+	return po.NewObject
 }
 
 func boolFromDatum(

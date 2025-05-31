@@ -6,6 +6,8 @@
 package eval
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -53,7 +55,8 @@ func (ctx *jsonpathCtx) evalOperation(
 	case jsonpath.OpLogicalAnd, jsonpath.OpLogicalOr, jsonpath.OpLogicalNot,
 		jsonpath.OpCompEqual, jsonpath.OpCompNotEqual, jsonpath.OpCompLess,
 		jsonpath.OpCompLessEqual, jsonpath.OpCompGreater, jsonpath.OpCompGreaterEqual,
-		jsonpath.OpLikeRegex, jsonpath.OpExists, jsonpath.OpIsUnknown:
+		jsonpath.OpLikeRegex, jsonpath.OpExists, jsonpath.OpIsUnknown,
+		jsonpath.OpStartsWith:
 		b, err := ctx.evalBoolean(op, jsonValue)
 		if err != nil {
 			return []json.JSON{convertFromBool(jsonpathBoolUnknown)}, err
@@ -64,6 +67,9 @@ func (ctx *jsonpathCtx) evalOperation(
 		results, err := ctx.evalArithmetic(op, jsonValue)
 		if err != nil {
 			return nil, err
+		}
+		if results == nil {
+			return nil, nil
 		}
 		return []json.JSON{results}, nil
 	case jsonpath.OpPlus, jsonpath.OpMinus:
@@ -82,16 +88,36 @@ func (ctx *jsonpathCtx) evalBoolean(
 	case jsonpath.OpCompEqual, jsonpath.OpCompNotEqual,
 		jsonpath.OpCompLess, jsonpath.OpCompLessEqual,
 		jsonpath.OpCompGreater, jsonpath.OpCompGreaterEqual:
-		return ctx.evalComparison(op, jsonValue)
+		return ctx.evalPredicate(op, jsonValue, evalComparisonFunc, true /* evalRight */, true /* unwrapRight */)
 	case jsonpath.OpLikeRegex:
-		return ctx.evalRegex(op, jsonValue)
+		return ctx.evalPredicate(op, jsonValue, evalRegexFunc, false /* evalRight */, false /* unwrapRight */)
 	case jsonpath.OpExists:
 		return ctx.evalExists(op, jsonValue)
 	case jsonpath.OpIsUnknown:
 		return ctx.evalIsUnknown(op, jsonValue)
+	case jsonpath.OpStartsWith:
+		return ctx.evalPredicate(op, jsonValue, evalStartsWithFunc, true /* evalRight */, false /* unwrapRight */)
 	default:
 		panic(errors.AssertionFailedf("unhandled operation type"))
 	}
+}
+
+func evalStartsWithFunc(_ jsonpath.Operation, l, r json.JSON) (jsonpathBool, error) {
+	if l.Type() != json.StringJSONType || r.Type() != json.StringJSONType {
+		return jsonpathBoolUnknown, nil
+	}
+	left, err := l.AsText()
+	if err != nil {
+		return jsonpathBoolUnknown, err
+	}
+	right, err := r.AsText()
+	if err != nil {
+		return jsonpathBoolUnknown, err
+	}
+	if strings.HasPrefix(*left, *right) {
+		return jsonpathBoolTrue, nil
+	}
+	return jsonpathBoolFalse, nil
 }
 
 func (ctx *jsonpathCtx) evalIsUnknown(
@@ -103,7 +129,7 @@ func (ctx *jsonpathCtx) evalIsUnknown(
 	}
 	leftBool, err := ctx.evalBoolean(leftOp, jsonValue)
 	if err != nil {
-		return jsonpathBoolUnknown, errors.AssertionFailedf("left is not a boolean")
+		return jsonpathBoolUnknown, err
 	}
 	if leftBool == jsonpathBoolUnknown {
 		return jsonpathBoolTrue, nil
@@ -118,7 +144,13 @@ func (ctx *jsonpathCtx) evalExists(
 	// We can optimize this by short-circuiting in lax mode.
 	l, err := ctx.evalAndUnwrapResult(op.Left, jsonValue, false /* unwrap */)
 	if err != nil {
-		return jsonpathBoolUnknown, err
+		return jsonpathBoolUnknown, nil //nolint:returnerrcheck
+	}
+	if l == nil {
+		if !ctx.strict {
+			return jsonpathBoolFalse, nil
+		}
+		return jsonpathBoolUnknown, nil
 	}
 	if len(l) == 0 {
 		return jsonpathBoolFalse, nil
@@ -126,17 +158,13 @@ func (ctx *jsonpathCtx) evalExists(
 	return jsonpathBoolTrue, nil
 }
 
-func (ctx *jsonpathCtx) evalRegex(
-	op jsonpath.Operation, jsonValue json.JSON,
-) (jsonpathBool, error) {
-	l, err := ctx.evalAndUnwrapResult(op.Left, jsonValue, true /* unwrap */)
-	if err != nil {
-		return jsonpathBoolUnknown, err
+func evalRegexFunc(op jsonpath.Operation, l, _ json.JSON) (jsonpathBool, error) {
+	regexOp, ok := op.Right.(jsonpath.Regex)
+	if !ok {
+		return jsonpathBoolUnknown, errors.AssertionFailedf("op.Right is not a regex")
 	}
-	if len(l) != 1 {
-		return jsonpathBoolUnknown, errors.AssertionFailedf("left is not a single string")
-	}
-	if l[0].Type() != json.StringJSONType {
+
+	if l.Type() != json.StringJSONType {
 		return jsonpathBoolUnknown, nil
 	}
 	// AsText() provides the correct string representation for regex pattern
@@ -150,16 +178,16 @@ func (ctx *jsonpathCtx) evalRegex(
 	// - For a JSON string with a newline ("\n"): AsText() returns an actual
 	//   newline character ("\n"), while String() returns "\"\\n\"" (an escaped
 	//   backslash and 'n' enclosed in quotes)
-	text, err := l[0].AsText()
+	text, err := l.AsText()
 	if err != nil {
 		return jsonpathBoolUnknown, err
 	}
 
-	regexOp := op.Right.(jsonpath.Regex)
-	r, err := parser.ReCache.GetRegexp(regexOp)
+	r, err := parser.ReCache.GetRegexpWithFlags(regexOp, regexOp.Flags)
 	if err != nil {
 		return jsonpathBoolUnknown, err
 	}
+
 	res := r.MatchString(*text)
 	if !res {
 		return jsonpathBoolFalse, nil
@@ -176,7 +204,7 @@ func (ctx *jsonpathCtx) evalLogical(
 	}
 	leftBool, err := ctx.evalBoolean(leftOp, jsonValue)
 	if err != nil {
-		return jsonpathBoolUnknown, errors.AssertionFailedf("left is not a boolean")
+		return jsonpathBoolUnknown, err
 	}
 	switch op.Type {
 	case jsonpath.OpLogicalAnd:
@@ -205,7 +233,7 @@ func (ctx *jsonpathCtx) evalLogical(
 	}
 	rightBool, err := ctx.evalBoolean(rightOp, jsonValue)
 	if err != nil {
-		return jsonpathBoolUnknown, errors.AssertionFailedf("right is not a boolean")
+		return jsonpathBoolUnknown, err
 	}
 	switch op.Type {
 	case jsonpath.OpLogicalAnd:
@@ -223,28 +251,50 @@ func (ctx *jsonpathCtx) evalLogical(
 	}
 }
 
-// evalComparison evaluates a comparison operation predicate. Predicates have
-// existence semantics. True is returned if any pair of items from the left and
-// right paths satisfy the condition. In strict mode, even if a pair has been
-// found, all pairs need to be checked for errors.
-func (ctx *jsonpathCtx) evalComparison(
-	op jsonpath.Operation, jsonValue json.JSON,
+func isIgnorableError(err error) bool {
+	return err == nil || (!errors.HasAssertionFailure(err) && !errors.Is(err, &errVariableNotFound{}))
+}
+
+// evalPredicate evaluates a predicate operation. Predicates have existence
+// semantics. True is returned if any pair of items from the left and right
+// paths satisfy the condition. In strict mode, even if a pair has been found,
+// all pairs need to be checked for errors.
+func (ctx *jsonpathCtx) evalPredicate(
+	op jsonpath.Operation,
+	jsonValue json.JSON,
+	exec func(op jsonpath.Operation, l, r json.JSON) (jsonpathBool, error),
+	evalRight, unwrapRight bool,
 ) (jsonpathBool, error) {
-	// The left and right argument results are always auto-unwrapped.
+	// The left argument results are always auto-unwrapped.
 	left, err := ctx.evalAndUnwrapResult(op.Left, jsonValue, true /* unwrap */)
-	if err != nil {
+	if !isIgnorableError(err) {
 		return jsonpathBoolUnknown, err
 	}
-	right, err := ctx.evalAndUnwrapResult(op.Right, jsonValue, true /* unwrap */)
-	if err != nil {
-		return jsonpathBoolUnknown, err
+	if err != nil || left == nil {
+		return jsonpathBoolUnknown, nil //nolint:returnerrcheck
+	}
+	var right []json.JSON
+	if evalRight {
+		// The right argument results are conditionally evaluated and unwrapped.
+		right, err = ctx.evalAndUnwrapResult(op.Right, jsonValue, unwrapRight)
+		if !isIgnorableError(err) {
+			return jsonpathBoolUnknown, err
+		}
+		if err != nil || right == nil {
+			return jsonpathBoolUnknown, nil //nolint:returnerrcheck
+		}
+	} else {
+		// If we don't want to evaluate the right argument, we need to call
+		// the exec function once for each item in the left argument. Currently,
+		// this only includes OpLikeRegex.
+		right = append(right, nil)
 	}
 
 	errored := false
 	found := false
 	for _, l := range left {
 		for _, r := range right {
-			res, err := execComparison(l, r, op.Type)
+			res, err := exec(op, l, r)
 			if err != nil {
 				return jsonpathBoolUnknown, err
 			}
@@ -271,7 +321,8 @@ func (ctx *jsonpathCtx) evalComparison(
 	return jsonpathBoolFalse, nil
 }
 
-func execComparison(l, r json.JSON, op jsonpath.OperationType) (jsonpathBool, error) {
+func evalComparisonFunc(operation jsonpath.Operation, l, r json.JSON) (jsonpathBool, error) {
+	op := operation.Type
 	if l.Type() != r.Type() && !(isBool(l) && isBool(r)) {
 		// Inequality comparison of nulls to non-nulls is true. Everything else
 		// is false.
@@ -334,9 +385,9 @@ func (ctx *jsonpathCtx) evalUnaryArithmetic(
 
 	for i := range len(operands) {
 		if operands[i].Type() != json.NumberJSONType {
-			return nil, pgerror.Newf(pgcode.SingletonSQLJSONItemRequired,
+			return nil, maybeThrowError(ctx, pgerror.Newf(pgcode.SQLJSONNumberNotFound,
 				"operand of unary jsonpath operator %s is not a numeric value",
-				jsonpath.OperationTypeStrings[op.Type])
+				jsonpath.OperationTypeStrings[op.Type]))
 		}
 
 		if op.Type == jsonpath.OpMinus {
@@ -361,20 +412,31 @@ func (ctx *jsonpathCtx) evalArithmetic(
 	}
 
 	if len(left) != 1 || left[0].Type() != json.NumberJSONType {
-		return nil, pgerror.Newf(pgcode.SingletonSQLJSONItemRequired,
+		return nil, maybeThrowError(ctx, pgerror.Newf(pgcode.SingletonSQLJSONItemRequired,
 			"left operand of jsonpath operator %s is not a single numeric value",
-			jsonpath.OperationTypeStrings[op.Type])
+			jsonpath.OperationTypeStrings[op.Type]))
 	}
 	if len(right) != 1 || right[0].Type() != json.NumberJSONType {
-		return nil, pgerror.Newf(pgcode.SingletonSQLJSONItemRequired,
+		return nil, maybeThrowError(ctx, pgerror.Newf(pgcode.SingletonSQLJSONItemRequired,
 			"right operand of jsonpath operator %s is not a single numeric value",
-			jsonpath.OperationTypeStrings[op.Type])
+			jsonpath.OperationTypeStrings[op.Type]))
 	}
 
 	leftNum, _ := left[0].AsDecimal()
 	rightNum, _ := right[0].AsDecimal()
+	res, err := performArithmetic(op, leftNum, rightNum)
+	if err != nil {
+		return nil, maybeThrowError(ctx, err)
+	}
+	return json.FromDecimal(*res), nil
+}
+
+func performArithmetic(
+	op jsonpath.Operation, leftNum, rightNum *apd.Decimal,
+) (*apd.Decimal, error) {
 	var res apd.Decimal
 	var cond apd.Condition
+	var err error
 	switch op.Type {
 	case jsonpath.OpAdd:
 		_, err = tree.DecimalCtx.Add(&res, leftNum, rightNum)
@@ -389,6 +451,16 @@ func (ctx *jsonpathCtx) evalArithmetic(
 			return nil, tree.ErrDivByZero
 		}
 	case jsonpath.OpMod:
+		// In other places where apd.Context.Rem() is called, we first check if
+		// the left value is NaN and the right value is 0, then return ErrDivByZero.
+		// In this case, NaN shouldn't happen because JSON numbers cannot be NaN.
+		// We assert this here, and then check if the right value is 0.
+		if leftNum.Form == apd.NaN || rightNum.Form == apd.NaN {
+			return nil, errors.AssertionFailedf("numbers in jsonpath queries cannot be NaN")
+		}
+		if rightNum.IsZero() {
+			return nil, tree.ErrDivByZero
+		}
 		_, err = tree.DecimalCtx.Rem(&res, leftNum, rightNum)
 	default:
 		panic(errors.AssertionFailedf("unhandled jsonpath arithmetic type"))
@@ -396,5 +468,5 @@ func (ctx *jsonpathCtx) evalArithmetic(
 	if err != nil {
 		return nil, err
 	}
-	return json.FromDecimal(res), nil
+	return &res, nil
 }

@@ -911,6 +911,105 @@
     (OutputCols2 $left $right)
 )
 
+# HoistUnboundFilterFromExistsSubquery pulls a filter condition out of an
+# Exists subquery if the filter condition only depends on columns from the
+# outer query. This is useful because it allows other optimization rules to
+# apply to the filter which was previously hidden inside the subquery.
+[HoistUnboundFilterFromExistsSubquery, Normalize]
+(Select
+    $input:* & (CanHoistUnboundFilterFromExistsSubquery)
+    $filters:[
+        ...
+        $item:(FiltersItem
+            (Exists
+                (Select
+                    $innerInput:*
+                    $innerFilters:[
+                        ...
+                        $innerItem:(FiltersItem $unboundCond:*) &
+                            (IsBoundBy
+                                $innerItem
+                                $inputCols:(OutputCols $input)
+                            )
+                        ...
+                    ]
+                )
+                $existsPrivate:*
+            )
+        )
+        ...
+    ]
+)
+=>
+(Select
+    $input
+    (AppendFiltersItem
+        (ReplaceFiltersItem
+            $filters
+            $item
+            (Exists
+                (Select
+                    $innerInput
+                    (RemoveFiltersItem $innerFilters $innerItem)
+                )
+                $existsPrivate
+            )
+        )
+        $unboundCond
+    )
+)
+
+# HoistUnboundJoinFilterFromExistsSubquery is similar to
+# HoistUnboundFilterFromExistsSubquery, but it applies to a join filter.
+[HoistUnboundJoinFilterFromExistsSubquery, Normalize]
+(Select
+    $input:* & (CanHoistUnboundFilterFromExistsSubquery)
+    $filters:[
+        ...
+        $item:(FiltersItem
+            (Exists
+                $join:(InnerJoin | InnerJoinApply | SemiJoin
+                        | SemiJoinApply
+                    $left:*
+                    $right:*
+                    $joinFilters:[
+                        ...
+                        $innerItem:(FiltersItem $unboundCond:*) &
+                            (IsBoundBy
+                                $innerItem
+                                $inputCols:(OutputCols $input)
+                            )
+                        ...
+                    ]
+                    $joinPrivate:*
+                )
+                $existsPrivate:*
+            )
+        )
+        ...
+    ]
+)
+=>
+(Select
+    $input
+    (AppendFiltersItem
+        (ReplaceFiltersItem
+            $filters
+            $item
+            (Exists
+                ((OpName $join)
+                    $left
+                    $right
+                    (RemoveFiltersItem $joinFilters $innerItem)
+                    $joinPrivate
+                )
+                $existsPrivate
+            )
+        )
+        $unboundCond
+    )
+)
+
 # HoistSelectExists extracts existential subqueries from Select filters,
 # turning them into semi-joins. This eliminates the subquery, which is often
 # expensive to execute and restricts the optimizer's plan choices.

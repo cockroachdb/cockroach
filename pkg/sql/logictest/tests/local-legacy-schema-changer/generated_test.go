@@ -472,13 +472,6 @@ func TestLogic_create_index(
 	runLogicTest(t, "create_index")
 }
 
-func TestLogic_create_statements(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "create_statements")
-}
-
 func TestLogic_create_table(
 	t *testing.T,
 ) {
@@ -561,6 +554,13 @@ func TestLogic_dependencies(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "dependencies")
+}
+
+func TestLogic_direct_columnar_scans(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "direct_columnar_scans")
 }
 
 func TestLogic_discard(
@@ -1116,11 +1116,32 @@ func TestLogic_jsonb_path_exists(
 	runLogicTest(t, "jsonb_path_exists")
 }
 
+func TestLogic_jsonb_path_match(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_match")
+}
+
 func TestLogic_jsonb_path_query(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "jsonb_path_query")
+}
+
+func TestLogic_jsonb_path_query_array(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_query_array")
+}
+
+func TestLogic_jsonb_path_query_first(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_query_first")
 }
 
 func TestLogic_jsonpath(

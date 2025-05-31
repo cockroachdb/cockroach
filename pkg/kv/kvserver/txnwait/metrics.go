@@ -93,6 +93,9 @@ func NewMetrics(histogramWindowInterval time.Duration) *Metrics {
 				Help:        "Number of deadlocks detected by the txn wait queue",
 				Measurement: "Deadlocks",
 				Unit:        metric.Unit_COUNT,
+				Essential:   true,
+				Category:    metric.Metadata_SQL,
+				HowToUse:    `Alert on this metric if its value is greater than zero, especially if transaction throughput is lower than expected. Applications should be able to detect and recover from deadlock errors. However, transaction performance and throughput can be maximized if the application logic avoids deadlock conditions in the first place, for example, by keeping transactions as short as possible.`,
 			},
 		),
 	}

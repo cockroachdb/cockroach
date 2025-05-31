@@ -7,6 +7,7 @@ package server
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/ecdsa"
 	"crypto/rsa"
@@ -19,6 +20,7 @@ import (
 	"os/exec"
 	"reflect"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -122,7 +124,7 @@ const (
 
 type metricMarshaler interface {
 	json.Marshaler
-	PrintAsText(io.Writer, expfmt.Format) error
+	PrintAsText(io.Writer, expfmt.Format, bool) error
 	ScrapeIntoPrometheus(pm *metric.PrometheusExporter)
 }
 
@@ -550,6 +552,8 @@ type StmtDiagnosticsRequester interface {
 	// - expiresAfter, if non-zero, indicates for how long the request should
 	//   stay active.
 	// - redacted, if true, indicates that the redacted bundle is requested.
+	// - username, if set, specifies the user that initiated this request. It
+	//   must be normalized.
 	InsertRequest(
 		ctx context.Context,
 		stmtFingerprint string,
@@ -559,6 +563,7 @@ type StmtDiagnosticsRequester interface {
 		minExecutionLatency time.Duration,
 		expiresAfter time.Duration,
 		redacted bool,
+		username string,
 	) error
 	// CancelRequest updates an entry in system.statement_diagnostics_requests
 	// for tracing a query with the given fingerprint to be expired (thus,
@@ -783,6 +788,22 @@ func (s *statusServer) redactGossipResponse(resp *gossip.InfoStatus) *gossip.Inf
 	}
 
 	return resp
+}
+
+// EngineStats returns statistical information of storage layer on the given node
+// which is crucial for diagnosing issues related to disk usage,compaction efficiency,
+// read/write amplification and other storage engine metrics critical for database
+// performance.
+func (t *statusServer) EngineStats(
+	ctx context.Context, req *serverpb.EngineStatsRequest,
+) (*serverpb.EngineStatsResponse, error) {
+	ctx = t.AnnotateCtx(ctx)
+
+	if err := t.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	return t.sqlServer.tenantConnect.EngineStats(ctx, req)
 }
 
 func (s *systemStatusServer) EngineStats(
@@ -2388,8 +2409,9 @@ func (s *systemStatusServer) RaftDebug(
 }
 
 type varsHandler struct {
-	metricSource metricMarshaler
-	st           *cluster.Settings
+	metricSource    metricMarshaler
+	st              *cluster.Settings
+	useStaticLabels bool
 }
 
 func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
@@ -2397,7 +2419,7 @@ func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
 
 	contentType := expfmt.Negotiate(r.Header)
 	w.Header().Set(httputil.ContentTypeHeader, string(contentType))
-	err := h.metricSource.PrintAsText(w, contentType)
+	err := h.metricSource.PrintAsText(w, contentType, h.useStaticLabels)
 	if err != nil {
 		log.Errorf(ctx, "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -2843,7 +2865,7 @@ func (t *statusServer) HotRangesV2(
 	}
 
 	ti, _ := t.sqlServer.tenantConnect.TenantInfo()
-	if ti.TenantID.IsSet() {
+	if ti.TenantID.IsSet() && !req.StatsOnly {
 		err = t.addDescriptorsToHotRanges(ctx, resp)
 		if err != nil {
 			return nil, err
@@ -2886,20 +2908,30 @@ func (s *systemStatusServer) HotRangesV2(
 		ErrorsByNodeID: make(map[roachpb.NodeID]string),
 	}
 
-	var requestedNodes []roachpb.NodeID
-	if len(req.NodeID) > 0 {
-		requestedNodeID, local, err := s.parseNodeID(req.NodeID)
+	nodes := req.Nodes
+	if req.NodeID != "" {
+		nodes = append(nodes, req.NodeID)
+	}
+	requestedNodes := []roachpb.NodeID{}
+	for _, nodeID := range nodes {
+		requestedNodeID, _, err := s.parseNodeID(nodeID)
 		if err != nil {
 			return nil, err
 		}
-		if local {
-			resp, err := s.localHotRanges(ctx, tenantID, requestedNodeID)
+		// Only execute the local call if the node is explicitly the local string.
+		if localRE.Match([]byte(nodeID)) {
+			// can only call one node if the local string is set.
+			if len(req.Nodes) > 1 {
+				return nil, errors.New("cannot call 'local' mixed with other nodes")
+			}
+
+			resp, err := s.localHotRanges(tenantID, requestedNodeID, int(req.PerNodeLimit))
 			if err != nil {
 				return nil, err
 			}
 
-			// If operating as the system tenant, add descriptor data to the reposnse.
-			if !tenantID.IsSet() {
+			// If explicitly set as the system tenant, or unset, add descriptor data to the reposnse.
+			if !tenantID.IsSet() && !req.StatsOnly {
 				err = s.addDescriptorsToHotRanges(ctx, resp)
 				if err != nil {
 					return nil, err
@@ -2909,10 +2941,16 @@ func (s *systemStatusServer) HotRangesV2(
 			response.Ranges = append(response.Ranges, resp.Ranges...)
 			return response, nil
 		}
-		requestedNodes = []roachpb.NodeID{requestedNodeID}
+
+		requestedNodes = append(requestedNodes, requestedNodeID)
 	}
 
-	remoteRequest := serverpb.HotRangesRequest{NodeID: "local", TenantID: req.TenantID}
+	remoteRequest := serverpb.HotRangesRequest{
+		Nodes:        []string{"local"},
+		TenantID:     req.TenantID,
+		PerNodeLimit: req.PerNodeLimit,
+		StatsOnly:    req.StatsOnly,
+	}
 	nodeFn := func(ctx context.Context, status serverpb.StatusClient, nodeID roachpb.NodeID) ([]*serverpb.HotRangesResponseV2_HotRange, error) {
 		nodeResp, err := status.HotRangesV2(ctx, &remoteRequest)
 		if err != nil {
@@ -2959,7 +2997,7 @@ func (s *systemStatusServer) HotRangesV2(
 // Returns a HotRangesResponseV2 containing detailed information about each hot range,
 // or an error if the operation fails.
 func (s *systemStatusServer) localHotRanges(
-	ctx context.Context, tenantID roachpb.TenantID, requestedNodeID roachpb.NodeID,
+	tenantID roachpb.TenantID, requestedNodeID roachpb.NodeID, localLimit int,
 ) (*serverpb.HotRangesResponseV2, error) {
 	// Initialize response object
 	var resp serverpb.HotRangesResponseV2
@@ -3015,6 +3053,16 @@ func (s *systemStatusServer) localHotRanges(
 
 	if err != nil {
 		return nil, err
+	}
+
+	// sort the slices by cpu
+	slices.SortFunc(resp.Ranges, func(a, b *serverpb.HotRangesResponseV2_HotRange) int {
+		return cmp.Compare(a.CPUTimePerSecond, b.CPUTimePerSecond)
+	})
+
+	// truncate the response if localLimit is set
+	if localLimit != 0 && localLimit < len(resp.Ranges) {
+		resp.Ranges = resp.Ranges[:localLimit]
 	}
 
 	return &resp, nil

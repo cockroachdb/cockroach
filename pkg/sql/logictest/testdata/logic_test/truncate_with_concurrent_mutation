@@ -82,7 +82,7 @@ SET CLUSTER SETTING jobs.debug.pausepoints = '';
 # Make sure that table cannot be truncated is there is a ongoing row level TTL
 # change.
 statement ok
-CREATE TABLE t6(a int primary key, b int);
+CREATE TABLE t6(a int primary key, b int) WITH (schema_locked=false);
 
 statement ok
 SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec,newschemachanger.before.exec';

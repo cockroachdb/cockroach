@@ -6,8 +6,10 @@
 package tpcc
 
 import (
+	"math"
 	"math/rand/v2"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
 )
@@ -30,6 +32,7 @@ const numbersAlphabet = `1234567890`
 
 type tpccRand struct {
 	*rand.Rand
+	*rand.PCG
 
 	aChars, letters, numbers workloadimpl.PrecomputedRand
 }
@@ -37,6 +40,18 @@ type tpccRand struct {
 type aCharsOffset int
 type lettersOffset int
 type numbersOffset int
+
+// Seed resets the RNG with the given seeds.
+func (rng *tpccRand) Seed(seed1, seed2 uint64) {
+	if rng.PCG != nil {
+		// rand.Rand has no state other than the source, so we don't need to
+		// recreate it.
+		rng.PCG.Seed(seed1, seed2)
+		return
+	}
+	rng.PCG = rand.NewPCG(seed1, seed2)
+	rng.Rand = rand.New(rng.PCG)
+}
 
 func randStringFromAlphabet(
 	rng *rand.Rand,
@@ -128,14 +143,32 @@ func randZipInitialDataOnly(rng *tpccRand, no *numbersOffset, a *bufalloc.ByteAl
 
 // randTax produces a random tax between [0.0000..0.2000]
 // See 2.1.5.
-func randTax(rng *rand.Rand) float64 {
-	return float64(randInt(rng, 0, 2000)) / float64(10000.0)
+func randTax(rng *rand.Rand) apd.Decimal {
+	var result apd.Decimal
+	result.SetFinite(randInt(rng, 0, 2000), -4)
+	return result
 }
 
 // randInt returns a number within [min, max] inclusive.
 // See 2.1.4.
 func randInt(rng *rand.Rand, min, max int) int64 {
 	return int64(rng.IntN(max-min+1) + min)
+}
+
+func makeDecimal(value float64, scale int32) apd.Decimal {
+	value = math.Round(value * math.Pow10(int(scale)))
+	var result apd.Decimal
+	result.SetFinite(int64(value), -scale)
+	return result
+}
+
+func randDecimal(rng *rand.Rand, min, max float64, scale int32) apd.Decimal {
+	minInt := int64(min * math.Pow10(int(scale)))
+	maxInt := int64(max * math.Pow10(int(scale)))
+	value := randInt(rng, int(minInt), int(maxInt))
+	var result apd.Decimal
+	result.SetFinite(value, -scale)
+	return result
 }
 
 // randCLastSyllables returns a customer last name string generated according to

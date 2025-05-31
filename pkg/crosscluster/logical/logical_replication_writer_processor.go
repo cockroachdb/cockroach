@@ -37,13 +37,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -93,30 +93,6 @@ var maxChunkSize = settings.RegisterIntSetting(
 	"maximum number of row updates to pass to a flush worker at once (repeated revisions of a row notwithstanding)",
 	1000,
 	settings.NonNegativeInt,
-)
-
-type writerType string
-
-const (
-	// writerTypeSQL uses the SQL layer to write replicated rows.
-	writerTypeSQL writerType = "sql"
-	// writerTypeLegacyKV uses the legacy KV layer to write rows. The KV writer
-	// is deprecated because it does not support the full set of features of the
-	// SQL writer.
-	writerTypeLegacyKV writerType = "legacy-kv"
-)
-
-var immediateModeWriter = settings.RegisterStringSetting(
-	settings.ApplicationLevel,
-	"logical_replication.consumer.immediate_mode_writer",
-	"the writer to use when in immediate mode",
-	metamorphic.ConstantWithTestChoice("logical_replication.consumer.immediate_mode_writer", string(writerTypeSQL), string(writerTypeLegacyKV)),
-	settings.WithValidateString(func(sv *settings.Values, val string) error {
-		if val != string(writerTypeSQL) && val != string(writerTypeLegacyKV) {
-			return errors.Newf("immediate mode writer must be either 'sql' or 'legacy-kv', got '%s'", val)
-		}
-		return nil
-	}),
 )
 
 // logicalReplicationWriterProcessor consumes a cross-cluster replication stream
@@ -414,7 +390,6 @@ func (lrw *logicalReplicationWriterProcessor) Next() (
 			}
 		}
 	case <-lrw.aggTimer.C:
-		lrw.aggTimer.Read = true
 		lrw.aggTimer.Reset(15 * time.Second)
 		return nil, bulk.ConstructTracingAggregatorProducerMeta(lrw.Ctx(),
 			lrw.FlowCtx.NodeID.SQLInstanceID(), lrw.FlowCtx.ID, lrw.agg)
@@ -475,7 +450,11 @@ func (lrw *logicalReplicationWriterProcessor) close() {
 	}
 
 	for _, b := range lrw.bh {
-		b.Close(lrw.Ctx())
+		// The batch handler may be nil if the context was cancelled during
+		// initialization.
+		if b != nil {
+			b.Close(lrw.Ctx())
+		}
 	}
 
 	// Update the global retry queue gauges to reflect that this queue is going
@@ -711,6 +690,17 @@ func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Con
 		b.Close(lrw.Ctx())
 	}
 
+	writer := sqlclustersettings.LDRWriterType(lrw.spec.WriterType)
+	if writer == "" && !lrw.FlowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.V25_2) {
+		var err error
+		writer, err = getWriterType(
+			ctx, lrw.spec.Mode, lrw.FlowCtx.Cfg.Settings,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
 	flowCtx := lrw.FlowCtx
 	lrw.bh = make([]BatchHandler, poolSize)
 	for i := range lrw.bh {
@@ -718,12 +708,8 @@ func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Con
 		var err error
 		sd := sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */)
 
-		writer, err := getWriterType(ctx, lrw.spec.Mode, flowCtx.Cfg.Settings)
-		if err != nil {
-			return err
-		}
 		switch writer {
-		case writerTypeSQL:
+		case sqlclustersettings.LDRWriterTypeSQL:
 			rp, err = makeSQLProcessor(
 				ctx, flowCtx.Cfg.Settings, lrw.configByTable,
 				jobspb.JobID(lrw.spec.JobID),
@@ -738,13 +724,18 @@ func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Con
 			if err != nil {
 				return err
 			}
-		case writerTypeLegacyKV:
+		case sqlclustersettings.LDRWriterTypeLegacyKV:
 			rp, err = newKVRowProcessor(ctx, flowCtx.Cfg, flowCtx.EvalCtx, lrw.spec, lrw.configByTable)
 			if err != nil {
 				return err
 			}
+		case sqlclustersettings.LDRWriterTypeCRUD:
+			rp, err = newCrudSqlWriter(ctx, flowCtx.Cfg, flowCtx.EvalCtx, sd, lrw.spec.Discard, lrw.configByTable, jobspb.JobID(lrw.spec.JobID))
+			if err != nil {
+				return err
+			}
 		default:
-			return errors.AssertionFailedf("unknown logical replication writer type: %s", writer)
+			return errors.AssertionFailedf("unknown logical replication writer type: %s", lrw.spec.WriterType)
 		}
 
 		if streamingKnobs, ok := flowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
@@ -760,17 +751,12 @@ func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Con
 
 func getWriterType(
 	ctx context.Context, mode jobspb.LogicalReplicationDetails_ApplyMode, settings *cluster.Settings,
-) (writerType, error) {
+) (sqlclustersettings.LDRWriterType, error) {
 	switch mode {
 	case jobspb.LogicalReplicationDetails_Immediate:
-		// Require v25.2 to use the sql writer by default to ensure that the
-		// KV origin timestamp validation is available on all nodes.
-		if settings.Version.IsActive(ctx, clusterversion.V25_2) {
-			return writerType(immediateModeWriter.Get(&settings.SV)), nil
-		}
-		return writerTypeSQL, nil
+		return sqlclustersettings.LDRWriterType(sqlclustersettings.LDRImmediateModeWriter.Get(&settings.SV)), nil
 	case jobspb.LogicalReplicationDetails_Validated:
-		return writerTypeSQL, nil
+		return sqlclustersettings.LDRWriterTypeSQL, nil
 	default:
 		return "", errors.Newf("unknown logical replication writer type: %s", mode)
 	}
@@ -1113,7 +1099,6 @@ func (lrw *logicalReplicationWriterProcessor) shouldRetryLater(
 		return tooOld
 	}
 
-	// TODO(dt): maybe this should only be constraint violation errors?
 	return retryAllowed
 }
 

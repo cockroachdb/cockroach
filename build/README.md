@@ -24,8 +24,6 @@ grants 4GB or more of RAM to containers. On some systems, the default
 configuration limits containers to 2GB memory usage and this can be insufficient
 to build/link a CockroachDB executable.
 
-There is a FIPS analogue to this image as well.
-
 ### Deployment
 
 The deploy image is a downsized image containing a minimal environment for
@@ -109,9 +107,8 @@ the following steps:
 - Edit `build/bazelbuilder/Dockerfile` as desired.
 - Build the image by triggering the `Build and Push Bazel Builder Image` build in TeamCity. The generated image will be published to `us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel`.
 - Update `build/.bazelbuilderversion` with the new tag and commit all your changes.
-- Build the FIPS image by triggering the `Build and Push FIPS Bazel Builder Image` build in TeamCity. The generated image will be published to `us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel-fips`.
-- Update `build/.bazelbuilderversion-fips` with the new tag and commit all your changes.
-- Ensure the "Bazel CI" job passes on your PR before merging.
+- In `build/toolchains/BUILD.bazel`, update the Docker image with the correct hashes for `x86_64` and `arm64` respectively. In the `container-image` for the `cross_linux` and `cross_linux_arm` `platform()`s in that file, update the SHA256 hashes to match whatever is in the manifest for the newly generated Docker image. You can check for the new hashes in the artifact registry in GCP ([example link](https://console.cloud.google.com/artifacts/docker/crl-ci-images/us-east1/cockroach/bazel/sha256:733f2353da58a9f910a397b1b9e367ef0a74f3bde4e80552bfcebf0e20f67954;tab=manifest?project=crl-ci-images) -- but make sure to check the manifest for the newly built image!)
+- Ensure the "GitHub Actions Essential CI" job passes on your PR before merging.
 
 #  Dependencies
 

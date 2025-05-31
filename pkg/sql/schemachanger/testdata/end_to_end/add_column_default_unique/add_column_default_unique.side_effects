@@ -25,7 +25,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: db.public.tbl
-## StatementPhase stage 1 of 1 with 10 MutationType ops
+## StatementPhase stage 1 of 1 with 11 MutationType ops
 upsert descriptor #106
   ...
      - columnIds:
@@ -118,7 +118,9 @@ upsert descriptor #106
      nextMutationId: 1
      parentId: 104
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
@@ -127,7 +129,7 @@ upsert descriptor #106
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 14 MutationType ops
+## PreCommitPhase stage 2 of 2 with 15 MutationType ops
 upsert descriptor #106
   ...
      createAsOfTime:
@@ -251,7 +253,9 @@ upsert descriptor #106
      nextMutationId: 1
      parentId: 104
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
@@ -526,7 +530,7 @@ begin transaction #17
 validate forward indexes [2] in table #106
 commit transaction #17
 begin transaction #18
-## PostCommitNonRevertiblePhase stage 1 of 3 with 16 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 4 with 16 MutationType ops
 upsert descriptor #106
   ...
          oid: 20
@@ -728,11 +732,11 @@ upsert descriptor #106
   +  version: "12"
 persist all catalog changes to storage
 adding table for stats refresh: 106
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 2 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 4 with 2 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #18
 begin transaction #19
-## PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 4 with 4 MutationType ops
 upsert descriptor #106
   ...
          version: 4
@@ -747,43 +751,11 @@ upsert descriptor #106
   -  version: "12"
   +  version: "13"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 4 with 4 MutationType ops pending"
 commit transaction #19
 begin transaction #20
-## PostCommitNonRevertiblePhase stage 3 of 3 with 6 MutationType ops
+## PostCommitNonRevertiblePhase stage 3 of 4 with 6 MutationType ops
 upsert descriptor #106
-  ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  -  declarativeSchemaChangerState:
-  -    authorization:
-  -      userName: root
-  -    currentStatuses: <redacted>
-  -    jobId: "1"
-  -    nameMapping:
-  -      columns:
-  -        "1": i
-  -        "2": j
-  -        "4294967292": crdb_internal_origin_timestamp
-  -        "4294967293": crdb_internal_origin_id
-  -        "4294967294": tableoid
-  -        "4294967295": crdb_internal_mvcc_timestamp
-  -      families:
-  -        "0": primary
-  -      id: 106
-  -      indexes:
-  -        "2": tbl_j_key
-  -        "4": tbl_pkey
-  -      name: tbl
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›, now()) AS INT8)
-  -        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year', now()) AS INT8)
-  -        statementTag: ALTER TABLE
-  -    targetRanks: <redacted>
-  -    targets: <redacted>
-     families:
-     - columnIds:
   ...
        version: 4
      modificationTime: {}
@@ -822,12 +794,57 @@ upsert descriptor #106
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year', now()) AS INT8)"
   descriptor IDs: [106]
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 4 of 4 with 1 MutationType op pending"
+commit transaction #20
+notified job registry to adopt jobs: [2]
+begin transaction #21
+## PostCommitNonRevertiblePhase stage 4 of 4 with 3 MutationType ops
+upsert descriptor #106
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "2": j
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 106
+  -      indexes:
+  -        "2": tbl_j_key
+  -        "4": tbl_pkey
+  -      name: tbl
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›, now()) AS INT8)
+  -        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year', now()) AS INT8)
+  -        statementTag: ALTER TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  schemaLocked: true
+     unexposedParentSchemaId: 105
+  -  version: "14"
+  +  version: "15"
+persist all catalog changes to storage
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 106
-commit transaction #20
-notified job registry to adopt jobs: [2]
+commit transaction #21
 # end PostCommitPhase

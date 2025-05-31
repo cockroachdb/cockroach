@@ -63,7 +63,6 @@ var DiscardedStatsLogInterval = settings.RegisterDurationSetting(
 	"sql.metrics.discarded_stats_log.interval",
 	"interval between log emissions for discarded statistics due to SQL statistics memory limit",
 	1*time.Minute,
-	settings.NonNegativeDuration,
 	settings.WithVisibility(settings.Reserved))
 
 func NewSQLStatsAtomicCounters(

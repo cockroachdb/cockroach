@@ -5972,6 +5972,131 @@ project
                      │                                                                     └── const: 0 [as=stmt_return_4:10]
                      └── const: 1
 
+# Case with a FETCH into a composite-typed variable.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS xy LANGUAGE PLpgSQL AS $$
+  DECLARE
+    foo xy;
+    bar REFCURSOR;
+  BEGIN
+    OPEN bar FOR SELECT 1, 2;
+    FETCH bar INTO foo;
+    RETURN foo;
+  END;
+$$;
+----
+
+build format=(show-scalars,show-types)
+SELECT f();
+----
+project
+ ├── columns: f:21(tuple{int AS x, int AS y})
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── udf: f [as=f:21, type=tuple{int AS x, int AS y}]
+           └── body
+                └── limit
+                     ├── columns: "_gen_cursor_name_6":20(tuple{int AS x, int AS y})
+                     ├── project
+                     │    ├── columns: "_gen_cursor_name_6":20(tuple{int AS x, int AS y})
+                     │    ├── barrier
+                     │    │    ├── columns: foo:1(tuple{int AS x, int AS y}) bar:2(refcursor)
+                     │    │    └── project
+                     │    │         ├── columns: bar:2(refcursor) foo:1(tuple{int AS x, int AS y})
+                     │    │         ├── project
+                     │    │         │    ├── columns: foo:1(tuple{int AS x, int AS y})
+                     │    │         │    ├── values
+                     │    │         │    │    └── tuple [type=tuple]
+                     │    │         │    └── projections
+                     │    │         │         └── cast: RECORD [as=foo:1, type=tuple{int AS x, int AS y}]
+                     │    │         │              └── null [type=unknown]
+                     │    │         └── projections
+                     │    │              └── cast: REFCURSOR [as=bar:2, type=refcursor]
+                     │    │                   └── null [type=unknown]
+                     │    └── projections
+                     │         └── udf: _gen_cursor_name_6 [as="_gen_cursor_name_6":20, type=tuple{int AS x, int AS y}]
+                     │              ├── args
+                     │              │    ├── variable: foo:1 [type=tuple{int AS x, int AS y}]
+                     │              │    └── variable: bar:2 [type=refcursor]
+                     │              ├── params: foo:16(tuple{int AS x, int AS y}) bar:17(refcursor)
+                     │              └── body
+                     │                   └── project
+                     │                        ├── columns: "_stmt_open_1":19(tuple{int AS x, int AS y})
+                     │                        ├── barrier
+                     │                        │    ├── columns: bar:18(refcursor)
+                     │                        │    └── project
+                     │                        │         ├── columns: bar:18(refcursor)
+                     │                        │         ├── values
+                     │                        │         │    └── tuple [type=tuple]
+                     │                        │         └── projections
+                     │                        │              └── function: crdb_internal.plpgsql_gen_cursor_name [as=bar:18, type=refcursor]
+                     │                        │                   └── variable: bar:17 [type=refcursor]
+                     │                        └── projections
+                     │                             └── udf: _stmt_open_1 [as="_stmt_open_1":19, type=tuple{int AS x, int AS y}]
+                     │                                  ├── tail-call
+                     │                                  ├── args
+                     │                                  │    ├── variable: foo:16 [type=tuple{int AS x, int AS y}]
+                     │                                  │    └── variable: bar:18 [type=refcursor]
+                     │                                  ├── params: foo:3(tuple{int AS x, int AS y}) bar:4(refcursor)
+                     │                                  └── body
+                     │                                       ├── open-cursor
+                     │                                       │    └── project
+                     │                                       │         ├── columns: "?column?":5(int!null) "?column?":6(int!null)
+                     │                                       │         ├── values
+                     │                                       │         │    └── tuple [type=tuple]
+                     │                                       │         └── projections
+                     │                                       │              ├── const: 1 [as="?column?":5, type=int]
+                     │                                       │              └── const: 2 [as="?column?":6, type=int]
+                     │                                       └── project
+                     │                                            ├── columns: "_stmt_fetch_2":15(tuple{int AS x, int AS y})
+                     │                                            ├── values
+                     │                                            │    └── tuple [type=tuple]
+                     │                                            └── projections
+                     │                                                 └── udf: _stmt_fetch_2 [as="_stmt_fetch_2":15, type=tuple{int AS x, int AS y}]
+                     │                                                      ├── tail-call
+                     │                                                      ├── args
+                     │                                                      │    ├── variable: foo:3 [type=tuple{int AS x, int AS y}]
+                     │                                                      │    └── variable: bar:4 [type=refcursor]
+                     │                                                      ├── params: foo:7(tuple{int AS x, int AS y}) bar:8(refcursor)
+                     │                                                      └── body
+                     │                                                           └── project
+                     │                                                                ├── columns: "_stmt_fetch_ret_4":14(tuple{int AS x, int AS y})
+                     │                                                                ├── barrier
+                     │                                                                │    ├── columns: stmt_fetch_3:9(tuple{int, int}) foo:10(tuple{int AS x, int AS y})
+                     │                                                                │    └── project
+                     │                                                                │         ├── columns: foo:10(tuple{int AS x, int AS y}) stmt_fetch_3:9(tuple{int, int})
+                     │                                                                │         ├── project
+                     │                                                                │         │    ├── columns: stmt_fetch_3:9(tuple{int, int})
+                     │                                                                │         │    ├── values
+                     │                                                                │         │    │    └── tuple [type=tuple]
+                     │                                                                │         │    └── projections
+                     │                                                                │         │         └── function: crdb_internal.plpgsql_fetch [as=stmt_fetch_3:9, type=tuple{int, int}]
+                     │                                                                │         │              ├── variable: bar:8 [type=refcursor]
+                     │                                                                │         │              ├── const: 0 [type=int]
+                     │                                                                │         │              ├── const: 1 [type=int]
+                     │                                                                │         │              └── tuple [type=tuple{int, int}]
+                     │                                                                │         │                   ├── null [type=int]
+                     │                                                                │         │                   └── null [type=int]
+                     │                                                                │         └── projections
+                     │                                                                │              └── cast: RECORD [as=foo:10, type=tuple{int AS x, int AS y}]
+                     │                                                                │                   └── variable: stmt_fetch_3:9 [type=tuple{int, int}]
+                     │                                                                └── projections
+                     │                                                                     └── udf: _stmt_fetch_ret_4 [as="_stmt_fetch_ret_4":14, type=tuple{int AS x, int AS y}]
+                     │                                                                          ├── tail-call
+                     │                                                                          ├── args
+                     │                                                                          │    ├── variable: foo:10 [type=tuple{int AS x, int AS y}]
+                     │                                                                          │    └── variable: bar:8 [type=refcursor]
+                     │                                                                          ├── params: foo:11(tuple{int AS x, int AS y}) bar:12(refcursor)
+                     │                                                                          └── body
+                     │                                                                               └── project
+                     │                                                                                    ├── columns: stmt_return_5:13(tuple{int AS x, int AS y})
+                     │                                                                                    ├── values
+                     │                                                                                    │    └── tuple [type=tuple]
+                     │                                                                                    └── projections
+                     │                                                                                         └── variable: foo:11 [as=stmt_return_5:13, type=tuple{int AS x, int AS y}]
+                     └── const: 1 [type=int]
+
 # Correctly display the OTHERS branch.
 exec-ddl
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
@@ -7751,3 +7876,155 @@ with &1 (foo)
                           │    └── projections
                           │         └── variable: x:7 [as=stmt_return_1:8]
                           └── const: 1
+
+# Set-returning function. Note the "add-to-srf-result" body statements.
+# Also note that the sub-routines are all tail-calls apart from the outermost,
+# since its result is not directly used by "f".
+exec-ddl
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS SETOF INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    RETURN QUERY SELECT random()::INT * 100;
+    WHILE i <= n LOOP
+      RETURN NEXT i;
+      i := i + 1;
+    END LOOP;
+  END
+$$;
+----
+
+build format=show-scalars
+SELECT f(3);
+----
+project-set
+ ├── columns: f:24
+ ├── values
+ │    └── tuple
+ └── zip
+      └── udf: f
+           ├── args
+           │    └── const: 3
+           ├── params: n:1
+           └── body
+                └── project
+                     ├── columns: return_next_1:23
+                     ├── barrier
+                     │    ├── columns: i:2!null
+                     │    └── project
+                     │         ├── columns: i:2!null
+                     │         ├── values
+                     │         │    └── tuple
+                     │         └── projections
+                     │              └── const: 0 [as=i:2]
+                     └── projections
+                          └── udf: return_next_1 [as=return_next_1:23]
+                               ├── args
+                               │    ├── variable: n:1
+                               │    └── variable: i:2
+                               ├── params: n:3 i:4
+                               └── body
+                                    ├── add-to-srf-result
+                                    │    └── project
+                                    │         ├── columns: "?column?":5
+                                    │         ├── values
+                                    │         │    └── tuple
+                                    │         └── projections
+                                    │              └── mult [as="?column?":5]
+                                    │                   ├── cast: INT8
+                                    │                   │    └── function: random
+                                    │                   └── const: 100
+                                    └── project
+                                         ├── columns: stmt_loop_3:22
+                                         ├── values
+                                         │    └── tuple
+                                         └── projections
+                                              └── udf: stmt_loop_3 [as=stmt_loop_3:22]
+                                                   ├── tail-call
+                                                   ├── args
+                                                   │    ├── variable: n:3
+                                                   │    └── variable: i:4
+                                                   ├── params: n:9 i:10
+                                                   └── body
+                                                        └── project
+                                                             ├── columns: stmt_if_7:21
+                                                             ├── values
+                                                             │    └── tuple
+                                                             └── projections
+                                                                  └── case [as=stmt_if_7:21]
+                                                                       ├── true
+                                                                       ├── when
+                                                                       │    ├── le
+                                                                       │    │    ├── variable: i:10
+                                                                       │    │    └── variable: n:9
+                                                                       │    └── subquery
+                                                                       │         ├── tail-call
+                                                                       │         └── project
+                                                                       │              ├── columns: return_next_5:19
+                                                                       │              ├── values
+                                                                       │              │    └── tuple
+                                                                       │              └── projections
+                                                                       │                   └── udf: return_next_5 [as=return_next_5:19]
+                                                                       │                        ├── tail-call
+                                                                       │                        ├── args
+                                                                       │                        │    ├── variable: n:9
+                                                                       │                        │    └── variable: i:10
+                                                                       │                        ├── params: n:14 i:15
+                                                                       │                        └── body
+                                                                       │                             ├── add-to-srf-result
+                                                                       │                             │    └── project
+                                                                       │                             │         ├── columns: stmt_return_next_6:16
+                                                                       │                             │         ├── values
+                                                                       │                             │         │    └── tuple
+                                                                       │                             │         └── projections
+                                                                       │                             │              └── variable: i:15 [as=stmt_return_next_6:16]
+                                                                       │                             └── project
+                                                                       │                                  ├── columns: stmt_if_4:18
+                                                                       │                                  ├── project
+                                                                       │                                  │    ├── columns: i:17
+                                                                       │                                  │    ├── values
+                                                                       │                                  │    │    └── tuple
+                                                                       │                                  │    └── projections
+                                                                       │                                  │         └── plus [as=i:17]
+                                                                       │                                  │              ├── variable: i:15
+                                                                       │                                  │              └── const: 1
+                                                                       │                                  └── projections
+                                                                       │                                       └── udf: stmt_if_4 [as=stmt_if_4:18]
+                                                                       │                                            ├── tail-call
+                                                                       │                                            ├── args
+                                                                       │                                            │    ├── variable: n:14
+                                                                       │                                            │    └── variable: i:17
+                                                                       │                                            ├── params: n:11 i:12
+                                                                       │                                            └── body
+                                                                       │                                                 └── project
+                                                                       │                                                      ├── columns: stmt_loop_3:13
+                                                                       │                                                      ├── values
+                                                                       │                                                      │    └── tuple
+                                                                       │                                                      └── projections
+                                                                       │                                                           └── udf: stmt_loop_3 [as=stmt_loop_3:13]
+                                                                       │                                                                ├── tail-call
+                                                                       │                                                                ├── args
+                                                                       │                                                                │    ├── variable: n:11
+                                                                       │                                                                │    └── variable: i:12
+                                                                       │                                                                └── recursive-call
+                                                                       └── subquery
+                                                                            ├── tail-call
+                                                                            └── project
+                                                                                 ├── columns: loop_exit_2:20
+                                                                                 ├── values
+                                                                                 │    └── tuple
+                                                                                 └── projections
+                                                                                      └── udf: loop_exit_2 [as=loop_exit_2:20]
+                                                                                           ├── tail-call
+                                                                                           ├── args
+                                                                                           │    ├── variable: n:9
+                                                                                           │    └── variable: i:10
+                                                                                           ├── params: n:6 i:7
+                                                                                           └── body
+                                                                                                └── project
+                                                                                                     ├── columns: "_implicit_return":8
+                                                                                                     ├── values
+                                                                                                     │    └── tuple
+                                                                                                     └── projections
+                                                                                                          └── cast: VOID [as="_implicit_return":8]
+                                                                                                               └── null

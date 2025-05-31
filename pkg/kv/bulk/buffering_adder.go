@@ -472,7 +472,6 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 	log.Infof(ctx, "%s adder scattered %d initial split spans in %v",
 		b.name, len(toScatter), timing(scattersWait))
 
-	b.sink.initialSplitDone = true
 	return nil
 }
 

@@ -104,11 +104,6 @@ type Config struct {
 	// for low-volume system ranges, since the worker pool is small (default 2).
 	// Only has an effect when Scheduler is used.
 	Priority bool
-
-	// UnregisterFromReplica is a callback provided from the
-	// replica that this processor can call when shutting down to
-	// remove itself from the replica.
-	UnregisterFromReplica func(Processor)
 }
 
 // SetDefaults initializes unset fields in Config to values
@@ -165,6 +160,9 @@ type Processor interface {
 	//
 	// It is not valid to restart a processor after it has been stopped.
 	StopWithErr(pErr *kvpb.Error)
+
+	// Returns true if a stop event has already been processed by this processor.
+	Stopping() bool
 
 	// Lifecycle of registrations.
 

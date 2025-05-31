@@ -28,7 +28,7 @@ CREATE TABLE public.t_test_hsi_change_locality (
   CONSTRAINT t_test_hsi_change_locality_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
   INDEX idx_b (b ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0 (a, b)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 query ITITTITTB colnames,rowsort
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_test_hsi_change_locality'
@@ -56,7 +56,7 @@ CREATE TABLE public.t_test_hsi_change_locality (
   CONSTRAINT t_test_hsi_change_locality_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
   INDEX idx_b (b ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0 (a, b, crdb_region)
-) LOCALITY REGIONAL BY ROW
+) LOCALITY REGIONAL BY ROW;
 
 query ITITTITTB colnames,rowsort
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_test_hsi_change_locality'
@@ -98,7 +98,7 @@ CREATE TABLE public.t_test_hsi_change_locality (
   CONSTRAINT t_test_hsi_change_locality_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
   INDEX idx_b (b ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0 (a, b, crdb_region)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 query ITITTITTB colnames,rowsort
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_test_hsi_change_locality'
@@ -126,7 +126,7 @@ CREATE TABLE public.t_test_hsi_change_locality (
   CONSTRAINT t_test_hsi_change_locality_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
   INDEX idx_b (b ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0 (a, b, crdb_region)
-) LOCALITY REGIONAL BY ROW
+) LOCALITY REGIONAL BY ROW;
 
 query ITITTITTB colnames,rowsort
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_test_hsi_change_locality'
@@ -174,7 +174,7 @@ CREATE TABLE public.t_parent (
   CONSTRAINT t_parent_pkey PRIMARY KEY (id ASC) USING HASH WITH (bucket_count=16),
   UNIQUE INDEX uniq_id2 (id2 ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_id_id2 (id, id2)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 statement ok
 ALTER TABLE t_parent SET LOCALITY REGIONAL BY ROW
@@ -191,7 +191,7 @@ CREATE TABLE public.t_parent (
   CONSTRAINT t_parent_pkey PRIMARY KEY (id ASC) USING HASH WITH (bucket_count=16),
   UNIQUE INDEX uniq_id2 (id2 ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_id_id2 (id, id2, crdb_region)
-) LOCALITY REGIONAL BY ROW
+) LOCALITY REGIONAL BY ROW;
 
 query TIII
 SELECT crdb_region, crdb_internal_id_shard_16, id, id2
@@ -233,7 +233,7 @@ CREATE TABLE public.t_parent (
   CONSTRAINT t_parent_pkey PRIMARY KEY (id ASC) USING HASH WITH (bucket_count=16),
   UNIQUE INDEX uniq_id2 (id2 ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_id_id2 (id, id2, crdb_region)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 query ITITTITTB colnames,rowsort
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_parent'
@@ -261,7 +261,7 @@ CREATE TABLE public.t_parent (
   CONSTRAINT t_parent_pkey PRIMARY KEY (id ASC) USING HASH WITH (bucket_count=16),
   UNIQUE INDEX uniq_id2 (id2 ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_id_id2 (id, id2, crdb_region)
-) LOCALITY REGIONAL BY ROW
+) LOCALITY REGIONAL BY ROW;
 
 query ITITTITTB colnames,rowsort
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_parent'

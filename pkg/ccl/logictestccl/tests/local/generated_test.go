@@ -264,6 +264,13 @@ func TestCCLLogic_plpgsql_record(
 	runCCLLogicTest(t, "plpgsql_record")
 }
 
+func TestCCLLogic_plpgsql_srf(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "plpgsql_srf")
+}
+
 func TestCCLLogic_plpgsql_txn(
 	t *testing.T,
 ) {

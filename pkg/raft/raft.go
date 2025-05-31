@@ -313,6 +313,10 @@ type raft struct {
 
 	maxMsgSize         entryEncodingSize
 	maxUncommittedSize entryPayloadSize
+	// maxCommittedPageSize limits the size of committed entries that can be
+	// loaded into memory in hasUnappliedConfChanges.
+	// TODO(#131559): avoid this loading in the first place, and remove this.
+	maxCommittedPageSize entryEncodingSize
 
 	config               quorum.Config
 	trk                  tracker.ProgressTracker
@@ -435,7 +439,7 @@ func newRaft(c *Config) *raft {
 	if err := c.validate(); err != nil {
 		panic(err.Error())
 	}
-	raftlog := newLogWithSize(c.Storage, c.Logger, entryEncodingSize(c.MaxCommittedSizePerReady))
+	raftlog := newLog(c.Storage, c.Logger)
 	hs, cs, err := c.Storage.InitialState()
 	if err != nil {
 		panic(err) // TODO(bdarnell)
@@ -447,6 +451,7 @@ func newRaft(c *Config) *raft {
 		raftLog:                     raftlog,
 		maxMsgSize:                  entryEncodingSize(c.MaxSizePerMsg),
 		maxUncommittedSize:          entryPayloadSize(c.MaxUncommittedEntriesSize),
+		maxCommittedPageSize:        entryEncodingSize(c.MaxCommittedSizePerReady),
 		lazyReplication:             c.LazyReplication,
 		electionTimeout:             c.ElectionTick,
 		electionTimeoutJitter:       c.ElectionJitterTick,
@@ -1066,9 +1071,6 @@ func (r *raft) reset(term uint64) {
 			Inflights:   tracker.NewInflights(r.maxInflight, r.maxInflightBytes),
 			IsLearner:   pr.IsLearner,
 		}
-		if id == r.id {
-			pr.Match = r.raftLog.lastIndex()
-		}
 	})
 
 	r.pendingConfIndex = 0
@@ -1465,13 +1467,7 @@ func (r *raft) hasUnappliedConfChanges() bool {
 	// Scan all unapplied committed entries to find a config change. Paginate the
 	// scan, to avoid a potentially unlimited memory spike.
 	lo, hi := r.raftLog.applied, r.raftLog.committed
-	// Reuse the maxApplyingEntsSize limit because it is used for similar purposes
-	// (limiting the read of unapplied committed entries) when raft sends entries
-	// via the Ready struct for application.
-	// TODO(pavelkalinnikov): find a way to budget memory/bandwidth for this scan
-	// outside the raft package.
-	pageSize := r.raftLog.maxApplyingEntsSize
-	if err := r.raftLog.scan(lo, hi, pageSize, func(ents []pb.Entry) error {
+	if err := r.raftLog.scan(lo, hi, r.maxCommittedPageSize, func(ents []pb.Entry) error {
 		for i := range ents {
 			if ents[i].Type == pb.EntryConfChange || ents[i].Type == pb.EntryConfChangeV2 {
 				found = true
@@ -2349,11 +2345,26 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 		return
 	}
 
-	if a.prev.index < r.raftLog.committed {
-		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.committed,
-			Commit: r.raftLog.committed})
+	// If the appended batch has no entries above the committed index, there is no
+	// new information in it. Instruct the leader to at least send a batch above
+	// the committed index.
+	if commit := r.raftLog.committed; a.lastIndex() <= commit {
+		// NB: A prerequisite for sending MsgAppResp, which is met here, is that the
+		// entry at Index is durable and matches the leader's. The durability is
+		// guaranteed due to the way r.send is handled. There is also a guarantee
+		// that all the leaders at term >= r.Term have the same committed prefix.
+		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: commit, Commit: commit})
 		return
+	} else if a.prev.index < commit {
+		// Discard the already committed entries from the appended log slice. They
+		// might have been already compacted out, so we don't try to match against
+		// them, but we could as a matter of an assertion. The maybeAppend call
+		// below still makes sure that the new "prev" entry ID in the appended log
+		// slice matches our log, so, by the Log Matching Property, all the
+		// preceding entries must have matched too.
+		a.LogSlice = a.forward(commit)
 	}
+
 	if r.raftLog.maybeAppend(a) {
 		// TODO(pav-kv): make it possible to commit even if the append did not
 		// succeed or is stale. If accTerm >= m.Term, then our log contains all
@@ -2384,8 +2395,7 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 	// the valid interval, which then will return a valid (index, term) pair with
 	// a non-zero term (unless the log is empty). However, it is safe to send a zero
 	// LogTerm in this response in any case, so we don't verify it here.
-	hintIndex := min(m.Index, r.raftLog.lastIndex())
-	hintIndex, hintTerm := r.raftLog.findConflictByTerm(hintIndex, m.LogTerm)
+	hintIndex, hintTerm := r.raftLog.findConflictByTerm(m.Index, m.LogTerm)
 	r.send(pb.Message{
 		To:    m.From,
 		Type:  pb.MsgAppResp,

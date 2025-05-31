@@ -44,23 +44,14 @@ func CheckPartitionCount(
 	require.Equal(t, expectedCount, count)
 }
 
-// BeginTransaction starts a new transaction for the given store and returns it.
-func BeginTransaction(ctx context.Context, t *testing.T, store cspann.Store) cspann.Txn {
-	txn, err := store.BeginTransaction(ctx)
-	require.NoError(t, err)
-	return txn
-}
-
-// CommitTransaction commits a transaction that was started by BeginTransaction.
-func CommitTransaction(ctx context.Context, t *testing.T, store cspann.Store, txn cspann.Txn) {
-	err := store.CommitTransaction(ctx, txn)
-	require.NoError(t, err)
-}
-
-// AbortTransaction aborts a transaction that was started by BeginTransaction.
-func AbortTransaction(ctx context.Context, t *testing.T, store cspann.Store, txn cspann.Txn) {
-	err := store.AbortTransaction(ctx, txn)
-	require.NoError(t, err)
+// RunTransaction wraps the store.RunTransaction method.
+func RunTransaction(
+	ctx context.Context, t *testing.T, store cspann.Store, fn func(txn cspann.Txn),
+) {
+	require.NoError(t, store.RunTransaction(ctx, func(txn cspann.Txn) error {
+		fn(txn)
+		return nil
+	}))
 }
 
 // RoundResults rounds all float fields in the given set of results, using the
@@ -68,9 +59,8 @@ func AbortTransaction(ctx context.Context, t *testing.T, store cspann.Store, txn
 func RoundResults(results cspann.SearchResults, prec int) cspann.SearchResults {
 	for i := range results {
 		result := &results[i]
-		result.QuerySquaredDistance = float32(scalar.Round(float64(result.QuerySquaredDistance), prec))
+		result.QueryDistance = float32(scalar.Round(float64(result.QueryDistance), prec))
 		result.ErrorBound = float32(scalar.Round(float64(result.ErrorBound), prec))
-		result.CentroidDistance = float32(scalar.Round(float64(result.CentroidDistance), prec))
 		result.Vector = testutils.RoundFloats(result.Vector, prec)
 	}
 	return results
@@ -82,9 +72,8 @@ func ValidatePartitionsEqual(t *testing.T, l, r *cspann.Partition) {
 	require.Equal(t, l.Level(), r.Level(), "levels do not match")
 	require.Equal(t, l.ChildKeys(), r.ChildKeys(), "childKeys do not match")
 	require.Equal(t, l.ValueBytes(), r.ValueBytes(), "valueBytes do not match")
-	require.Equal(t, q1.GetCentroid(), q2.GetCentroid(), "centroids do not match")
+	require.Equal(t, l.Centroid, r.Centroid, "centroids do not match")
 	require.Equal(t, q1.GetCount(), q2.GetCount(), "counts do not match")
-	require.Equal(t, q1.GetCentroidDistances(), q2.GetCentroidDistances(), "distances do not match")
 	if eq, ok := q1.(equaler); ok {
 		require.True(t, eq.Equal(q2))
 	}

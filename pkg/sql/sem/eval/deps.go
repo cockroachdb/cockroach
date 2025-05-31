@@ -535,7 +535,7 @@ type PreparedStatementState interface {
 	// HasActivePortals returns true if there are portals in the session.
 	HasActivePortals() bool
 	// MigratablePreparedStatements returns a mapping of all prepared statements.
-	MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement
+	MigratablePreparedStatements() ([]sessiondatapb.MigratableSession_PreparedStatement, error)
 	// HasPortal returns true if there exists a given named portal in the session.
 	HasPortal(s string) bool
 }
@@ -711,7 +711,6 @@ type GossipOperator interface {
 type SQLStatsController interface {
 	ResetClusterSQLStats(ctx context.Context) error
 	ResetActivityTables(ctx context.Context) error
-	ResetInsightsTables(ctx context.Context) error
 	CreateSQLStatsCompactionSchedule(ctx context.Context) error
 }
 
@@ -741,6 +740,7 @@ type StmtDiagnosticsRequestInsertFunc func(
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 	redacted bool,
+	username string,
 ) error
 
 // AsOfSystemTime represents the result from the evaluation of AS OF SYSTEM TIME

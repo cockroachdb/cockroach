@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 )
 
 // NB: These settings are SystemVisible because they need to be read by e.g.
@@ -22,7 +23,6 @@ var TargetDuration = settings.RegisterDurationSetting(
 	"kv.closed_timestamp.target_duration",
 	"if nonzero, attempt to provide closed timestamp notifications for timestamps trailing cluster time by approximately this duration",
 	3*time.Second,
-	settings.NonNegativeDuration,
 	settings.WithPublic,
 )
 
@@ -33,7 +33,6 @@ var SideTransportCloseInterval = settings.RegisterDurationSetting(
 	"the interval at which the closed timestamp side-transport attempts to "+
 		"advance each range's closed timestamp; set to 0 to disable the side-transport",
 	200*time.Millisecond,
-	settings.NonNegativeDuration,
 	settings.WithPublic,
 )
 
@@ -46,7 +45,6 @@ var LeadForGlobalReadsOverride = settings.RegisterDurationSetting(
 	"kv.closed_timestamp.lead_for_global_reads_override",
 	"if nonzero, overrides the lead time that global_read ranges use to publish closed timestamps",
 	0,
-	settings.NonNegativeDuration,
 	settings.WithPublic,
 )
 
@@ -58,7 +56,6 @@ var RangeClosedTimestampPolicyRefreshInterval = settings.RegisterDurationSetting
 	"kv.closed_timestamp.policy_refresh_interval",
 	"interval at which the system refreshes closed timestamp policies for leaseholders",
 	5*time.Minute,
-	settings.NonNegativeDuration,
 )
 
 // RangeClosedTimestampPolicyLatencyRefreshInterval determines how often the
@@ -70,7 +67,6 @@ var RangeClosedTimestampPolicyLatencyRefreshInterval = settings.RegisterDuration
 	"kv.closed_timestamp.policy_latency_refresh_interval",
 	"interval at which the system refreshes the latency cache based on observed latencies between nodes",
 	4*time.Minute,
-	settings.NonNegativeDuration,
 )
 
 // LeadForGlobalReadsAutoTuneEnabled determines whether ranges configured to
@@ -86,6 +82,19 @@ var LeadForGlobalReadsAutoTuneEnabled = settings.RegisterBoolSetting(
 		"furthest follower will be used to adjust closed timestamp policies for ranges"+
 		"ranges configured to serve global reads. "+
 		"kv.closed_timestamp.lead_for_global_reads_override takes precedence if set.",
-	false,
+	metamorphic.ConstantWithTestBool("kv.closed_timestamp.lead_for_global_reads_auto_tune.enabled", false),
 	settings.WithPublic,
+)
+
+// PolicySwitchWhenLatencyExceedsBucketFraction determines the threshold for
+// changing the closed timestamp policy based on observed latency between
+// leaseholders and their furthest follower. This is used to prevent
+// frequent changes in the closed timestamp policy when the latency is close
+// to the boundary of the policy bucket. By default, this is disabled (0).
+var PolicySwitchWhenLatencyExceedsBucketFraction = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"kv.closed_timestamp.policy_switch_latency_bucket_exceed_threshold",
+	"the fraction of the closed timestamp policy bucket width which need be "+
+		"exceeded before the closed timestamp policy will be changed",
+	0.2,
 )

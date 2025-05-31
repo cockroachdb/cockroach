@@ -236,6 +236,9 @@ func StorageCluster(nodes NodeListOption) StartStopOption {
 
 // NoBackupSchedule can be used to generate StartOpts that skip the
 // creation of the default backup schedule.
+//
+// Note that tests marked as Benchmarks will be opted out of backup
+// schedules automatically, even if scheduled backups remain enabled.
 func NoBackupSchedule(opts interface{}) {
 	switch opts := opts.(type) {
 	case *StartOpts:

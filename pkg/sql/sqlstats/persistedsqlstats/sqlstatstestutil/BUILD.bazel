@@ -7,12 +7,16 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/sql",
         "//pkg/sql/appstatspb",
         "//pkg/sql/isql",
+        "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
+        "//pkg/testutils",
+        "//pkg/testutils/sqlutils",
         "//pkg/util/safesql",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )

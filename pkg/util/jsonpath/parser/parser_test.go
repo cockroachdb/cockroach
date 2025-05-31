@@ -57,7 +57,7 @@ func VerifyParse(t *testing.T, input, pos string) string {
 		t.Fatalf("%s\nunexpected parse error: %v", pos, err)
 	}
 
-	ref := jsonpath.String()
+	ref := jsonpath.AST.String()
 	note := ""
 	if ref != input {
 		note = " -- normalized!"

@@ -1,4 +1,4 @@
-# LogicTest: !local-mixed-24.3 !local-mixed-25.1
+# LogicTest: !local-mixed-25.1
 
 query T
 SELECT jsonb_path_query('{}', '$')
@@ -264,22 +264,25 @@ SELECT jsonb_path_query('[1, 2, 3, 4, 5]', '$[1]');
 ----
 2
 
-# TODO(normanchenn): this will be changed after floats are supported.
-statement error pq: jsonpath array subscript is not a single numeric value
-SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[0.99]')
+query T
+SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[0.99]');
+----
+10
 
-# TODO(normanchenn): this will be changed after floats are supported.
-statement error pq: jsonpath array subscript is not a single numeric value
-SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[1.01]')
+query T
+SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[1.01]');
+----
+9
 
 query T
 SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[$varInt]', '{"varInt": 1, "varFloat": 2.3, "varString": "a", "varBool": true, "varNull": null}')
 ----
 9
 
-# TODO(normanchenn): this will be changed after floats are supported.
-statement error pgcode 22033 jsonpath array subscript is not a single numeric value
-SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[$varFloat]', '{"varInt": 1, "varFloat": 2.3, "varString": "a", "varBool": true, "varNull": null}')
+query T
+SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[$varFloat]', '{"varInt": 1, "varFloat": 2.3, "varString": "a", "varBool": true, "varNull": null}');
+----
+8
 
 statement error pgcode 22033 jsonpath array subscript is not a single numeric value
 SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[$varString]', '{"varInt": 1, "varFloat": 2.3, "varString": "a", "varBool": true, "varNull": null}')
@@ -729,6 +732,9 @@ SELECT jsonb_path_query('{}', '3 % 2');
 ----
 1
 
+statement error pgcode 22012 pq: division by zero
+SELECT jsonb_path_query('{}', '1 % 0');
+
 query T
 SELECT jsonb_path_query('{"a": 4, "b": 5}', '$.a + $.b');
 ----
@@ -914,6 +920,16 @@ SELECT jsonb_path_query('"He said \"Hello\\World!\""', '$ ? (@ like_regex ".*\"H
 ----
 "He said \"Hello\\World!\""
 
+query T
+SELECT jsonb_path_query('["hello", "a"]', '$ like_regex "he"');
+----
+true
+
+query T
+SELECT jsonb_path_query('["hello", "a"]', 'strict $ like_regex "he"');
+----
+null
+
 query T rowsort
 SELECT jsonb_path_query('{"a": [1, 2], "b": "hello"}', '$.a ? ($.b == "hello") ');
 ----
@@ -1005,10 +1021,10 @@ SELECT jsonb_path_query('[1, 2, 3, 4, 5]', '$[-1]');
 statement error pgcode 22033 pq: jsonpath array subscript is out of bounds
 SELECT jsonb_path_query('[1, 2, 3, 4, 5]', 'strict $[-1]');
 
-statement error pgcode 22038 pq: operand of unary jsonpath operator - is not a numeric value
+statement error pgcode 2203B pq: operand of unary jsonpath operator - is not a numeric value
 SELECT jsonb_path_query('[1, 2, 3, 4, "hello"]', '-$[*]');
 
-statement error pgcode 22038 pq: operand of unary jsonpath operator \+ is not a numeric value
+statement error pgcode 2203B pq: operand of unary jsonpath operator \+ is not a numeric value
 SELECT jsonb_path_query('null', '+$');
 
 query T
@@ -1034,8 +1050,11 @@ SELECT jsonb_path_query('[1, 2, 3, 4]', '$[*] ? (@ > +2)');
 3
 4
 
-statement error pgcode 42601 pq: LAST is allowed only in array subscripts
-SELECT jsonb_path_query('{}', 'last');
+statement error pgcode 42601 pq: jsonb_path_query\(\): could not parse "last" as type jsonpath: LAST is allowed only in array subscripts
+SELECT jsonb_path_query('{}', 'last'::JSONPATH);
+
+statement error pgcode 42601 pq: jsonb_path_query\(\): could not parse "@" as type jsonpath: @ is not allowed in root expressions
+SELECT jsonb_path_query('{}', '@'::JSONPATH);
 
 query T
 SELECT jsonb_path_query('[1, 2, 3, 4]', '$[last]');
@@ -1089,3 +1108,795 @@ query T
 SELECT jsonb_path_query('{}', '(null like_regex "^he.*$") is unknown');
 ----
 true
+
+query T
+SELECT jsonb_path_query('"abcdef"', '$ starts with "abc"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"abc"', '$ starts with "abc"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"ab"', '$ starts with "abc"');
+----
+false
+
+query T
+SELECT jsonb_path_query('"abcdef"', '$ starts with $var', '{"var": "abc"}');
+----
+true
+
+query T
+SELECT jsonb_path_query('"abc"', '$ starts with $var', '{"var": "abc"}');
+----
+true
+
+query T
+SELECT jsonb_path_query('"ab"', '$ starts with $var', '{"var": "abc"}');
+----
+false
+
+query T
+SELECT jsonb_path_query('["ab", "abc"]', '$ starts with $var', '{"var": "abc"}');
+----
+true
+
+query T
+SELECT jsonb_path_query('["ab", "a"]', '$ starts with $var', '{"var": "abc"}');
+----
+false
+
+query T
+SELECT jsonb_path_query('["ab", "abc"]', 'strict $ starts with $var', '{"var": "abc"}');
+----
+null
+
+query T
+SELECT jsonb_path_query('["ab", "abc"]', 'strict $ starts with $var', '{"var": 1}');
+----
+null
+
+query T
+SELECT jsonb_path_query('["ab", 1]', 'strict $ starts with $var', '{"var": "abc"}');
+----
+null
+
+query T
+SELECT jsonb_path_query('{}', 'exists(2 + "3")');
+----
+null
+
+query T
+SELECT jsonb_path_query('{}', '2 / 0 > 0');
+----
+null
+
+query T rowsort
+SELECT jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'lax $.g ? ((exists (@.x + "3")) is unknown)');
+----
+{"x": 2}
+{"y": 3}
+
+query T
+SELECT jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'strict $.g[*] ? ((exists (@.x)) is unknown)');
+----
+{"y": 3}
+
+query T
+SELECT jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'strict $.g ? ((exists (@[*].x)) is unknown)');
+----
+[{"x": 2}, {"y": 3}]
+
+query T
+SELECT jsonb_path_query('[1,2,0,3]', '$[*] ? ((2 / @ > 0) is unknown)');
+----
+0
+
+statement error pgcode 2203A pq: JSON object does not contain key "a"
+SELECT jsonb_path_query('{}', 'strict $.a', '{}', false);
+
+query empty
+SELECT jsonb_path_query('{}', 'strict $.a', '{}', true);
+
+query empty
+SELECT jsonb_path_query('{}', '$.a', '{}', false);
+
+query empty
+SELECT jsonb_path_query('{}', '$.a', '{}', true);
+
+query empty
+SELECT jsonb_path_query('{}', 'strict 0 / 0', '{}', true);
+
+statement error pgcode 22012 pq: division by zero
+SELECT jsonb_path_query('{}', 'strict 0 / 0', '{}', false);
+
+query empty
+SELECT jsonb_path_query('{}', '0 / 0', '{}', true);
+
+statement error pgcode 22012 pq: division by zero
+SELECT jsonb_path_query('{}', '0 / 0', '{}', false);
+
+query T
+SELECT jsonb_path_query('{}', 'strict (0 / 0) < (0 / 0)', '{}', true);
+----
+null
+
+query T
+SELECT jsonb_path_query('{}', 'strict (0 / 0) < (0 / 0)', '{}', false);
+----
+null
+
+query T
+SELECT jsonb_path_query('{}', '(0 / 0) < (0 / 0)', '{}', true);
+----
+null
+
+query T
+SELECT jsonb_path_query('{}', '(0 / 0) < (0 / 0)', '{}', false);
+----
+null
+
+query empty
+SELECT jsonb_path_query('{}', 'strict $[*]', '{}', true);
+
+statement error pgcode 22039 pq: jsonpath wildcard array accessor can only be applied to an array
+SELECT jsonb_path_query('{}', 'strict $[*]', '{}', false);
+
+query T
+SELECT jsonb_path_query('{}', '$[*]', '{}', true);
+----
+{}
+
+query T
+SELECT jsonb_path_query('{}', '$[*]', '{}', false);
+----
+{}
+
+query empty
+SELECT jsonb_path_query('{"a": 1}', 'strict $[0]', '{}', true);
+
+statement error pgcode 22039 pq: jsonpath array accessor can only be applied to an array
+SELECT jsonb_path_query('{"a": 1}', 'strict $[0]', '{}', false);
+
+query T
+SELECT jsonb_path_query('{"a": 1}', '$[0]', '{}', true);
+----
+{"a": 1}
+
+query T
+SELECT jsonb_path_query('{"a": 1}', '$[0]', '{}', false);
+----
+{"a": 1}
+
+query empty
+SELECT jsonb_path_query('[1, 2, 3]', 'strict $[3]', '{}', true);
+
+statement error pgcode 22033 pq: jsonpath array subscript is out of bounds
+SELECT jsonb_path_query('[1, 2, 3]', 'strict $[3]', '{}', false);
+
+query empty
+SELECT jsonb_path_query('[1, 2, 3]', '$[3]', '{}', true);
+
+query empty
+SELECT jsonb_path_query('[1, 2, 3]', '$[3]', '{}', false);
+
+query empty
+SELECT jsonb_path_query('[1, 2, 3]', 'strict $["a"]', '{}', true);
+
+statement error pgcode 22033 pq: jsonpath array subscript is not a single numeric value
+SELECT jsonb_path_query('[1, 2, 3]', 'strict $["a"]', '{}', false);
+
+query empty
+SELECT jsonb_path_query('[1, 2, 3]', '$["a"]', '{}', true);
+
+statement error pgcode 22033 pq: jsonpath array subscript is not a single numeric value
+SELECT jsonb_path_query('[1, 2, 3]', '$["a"]', '{}', false);
+
+query empty
+SELECT jsonb_path_query('{"a": "hello"}', 'strict $.a[1 to 3]', '{}', true);
+
+statement error pgcode 22039 pq: jsonpath array accessor can only be applied to an array
+SELECT jsonb_path_query('{"a": "hello"}', 'strict $.a[1 to 3]', '{}', false);
+
+query empty
+SELECT jsonb_path_query('{"a": "hello"}', '$.a[1 to 3]', '{}', true);
+
+query empty
+SELECT jsonb_path_query('{"a": "hello"}', '$.a[1 to 3]', '{}', false);
+
+query empty
+SELECT jsonb_path_query('"abc"', 'strict $.a', '{}', true);
+
+statement error pgcode 2203A pq: jsonpath member accessor can only be applied to an object
+SELECT jsonb_path_query('"abc"', 'strict $.a', '{}', false);
+
+query empty
+SELECT jsonb_path_query('"abc"', '$.a', '{}', true);
+
+query empty
+SELECT jsonb_path_query('"abc"', '$.a', '{}', false);
+
+query empty
+SELECT jsonb_path_query('"abc"', 'strict $.*', '{}', true);
+
+statement error pgcode 2203C pq: jsonpath wildcard member accessor can only be applied to an object
+SELECT jsonb_path_query('"abc"', 'strict $.*', '{}', false);
+
+query empty
+SELECT jsonb_path_query('"abc"', '$.*', '{}', true);
+
+query empty
+SELECT jsonb_path_query('"abc"', '$.*', '{}', false);
+
+query empty
+SELECT jsonb_path_query('{}', 'strict -$', '{}', true);
+
+statement error pgcode 2203B pq: operand of unary jsonpath operator - is not a numeric value
+SELECT jsonb_path_query('{}', 'strict -$', '{}', false);
+
+query empty
+SELECT jsonb_path_query('{}', '-$', '{}', true);
+
+statement error pgcode 2203B pq: operand of unary jsonpath operator - is not a numeric value
+SELECT jsonb_path_query('{}', '-$', '{}', false);
+
+query empty
+SELECT jsonb_path_query('{}', 'strict $ - 1', '{}', true);
+
+statement error pgcode 22038 pq: left operand of jsonpath operator - is not a single numeric value
+SELECT jsonb_path_query('{}', 'strict $ - 1', '{}', false);
+
+query empty
+SELECT jsonb_path_query('{}', '$ - 1', '{}', true);
+
+statement error pgcode 22038 pq: left operand of jsonpath operator - is not a single numeric value
+SELECT jsonb_path_query('{}', '$ - 1', '{}', false);
+
+query empty
+SELECT jsonb_path_query('{}', 'strict 1 - $', '{}', true);
+
+statement error pgcode 22038 pq: right operand of jsonpath operator - is not a single numeric value
+SELECT jsonb_path_query('{}', 'strict 1 - $', '{}', false);
+
+query empty
+SELECT jsonb_path_query('{}', '1 - $', '{}', true);
+
+statement error pgcode 22038 pq: right operand of jsonpath operator - is not a single numeric value
+SELECT jsonb_path_query('{}', '1 - $', '{}', false);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "var"
+SELECT jsonb_path_query('{}', 'strict $var', '{}', true);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "var"
+SELECT jsonb_path_query('{}', 'strict $var', '{}', false);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "var"
+SELECT jsonb_path_query('{}', '$var', '{}', true);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "var"
+SELECT jsonb_path_query('{}', '$var', '{}', false);
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '($[*] > 2) ? (@ == true)');
+----
+true
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '((($[*] > (2)))) ? ((@ == true))');
+----
+true
+
+query T
+SELECT jsonb_path_query('{"a": {"b": {"c": 1}}}', '($.a.b).c');
+----
+1
+
+query T rowsort
+SELECT jsonb_path_query('{"a": {"b": {"c": 1, "d": 2}}}', '($.a.b).*');
+----
+1
+2
+
+query T
+SELECT jsonb_path_query('{"a": [10, 20, 30]}', '($.a)[1]');
+----
+20
+
+query T
+SELECT jsonb_path_query('{"a": {"b": [{"c": 1}, {"c": 2}]}}', '($.a.b[1]).c');
+----
+2
+
+statement error pgcode 22033 pq: jsonpath array subscript is out of integer range
+SELECT jsonb_path_query('[1]', 'lax $[10000000000000000]');
+
+statement error pgcode 22033 pq: jsonpath array subscript is out of integer range
+SELECT jsonb_path_query('[1]', 'lax $[-10000000000000000]');
+
+# MaxInt32
+query empty
+SELECT jsonb_path_query('[1]', '$[2147483647]');
+
+# MaxInt32 + 1
+statement error pgcode 22033 pq: jsonpath array subscript is out of integer range
+SELECT jsonb_path_query('[1]', '$[2147483648]');
+
+# MinInt32
+query empty
+SELECT jsonb_path_query('[1]', '$[-2147483648]');
+
+# MinInt32 - 1
+statement error pgcode 22033 pq: jsonpath array subscript is out of integer range
+SELECT jsonb_path_query('[1]', '$[-2147483649]');
+
+query T
+SELECT jsonb_path_query('[1, 2]', '$.size()');
+----
+2
+
+query T
+SELECT jsonb_path_query('[]', '$.size()');
+----
+0
+
+query T
+SELECT jsonb_path_query('{}', '$.size()');
+----
+1
+
+statement error pgcode 22039 pq: jsonpath item method .size\(\) can only be applied to an array
+SELECT jsonb_path_query('{}', 'strict $.size()');
+
+query T rowsort
+SELECT jsonb_path_query('[1,null,true,"11",[],[1],[1,2,3],{},{"a":1,"b":2}]', 'lax $[*].size()');
+----
+1
+1
+1
+1
+0
+1
+3
+1
+1
+
+statement error pgcode 22039 pq: jsonpath item method .size\(\) can only be applied to an array
+SELECT jsonb_path_query('[1,null,true,"11",[],[1],[1,2,3],{},{"a":1,"b":2}]', 'strict $[*].size()');
+
+query T rowsort
+SELECT jsonb_path_query('[12, {"a": 13}, {"b": 14}, "ccc", true]', '$[2 - 1 to $.size() - 2]');
+----
+{"a": 13}
+{"b": 14}
+"ccc"
+
+query T
+SELECT jsonb_path_query('{}', '$.type()');
+----
+"object"
+
+query T
+SELECT jsonb_path_query('[]', '$.type()');
+----
+"array"
+
+query T
+SELECT jsonb_path_query('"hello"', '$.type()');
+----
+"string"
+
+query T
+SELECT jsonb_path_query('0', '$.type()');
+----
+"number"
+
+query T
+SELECT jsonb_path_query('0.1', '$.type()');
+----
+"number"
+
+query T
+SELECT jsonb_path_query('true', '$.type()');
+----
+"boolean"
+
+query T
+SELECT jsonb_path_query('false', '$.type()');
+----
+"boolean"
+
+query T
+SELECT jsonb_path_query('null', '$.type()');
+----
+"null"
+
+query T
+SELECT jsonb_path_query('null', '"123".type()');
+----
+"string"
+
+query T
+SELECT jsonb_path_query('null', '(123).type()');
+----
+"number"
+
+query T
+SELECT jsonb_path_query('null', 'true.type()');
+----
+"boolean"
+
+query T
+SELECT jsonb_path_query('null', 'null.type()');
+----
+"null"
+
+query T rowsort
+SELECT jsonb_path_query('[null,1,true,"a",[],{}]', '$[*].type()');
+----
+"null"
+"number"
+"boolean"
+"string"
+"array"
+"object"
+
+query T
+SELECT jsonb_path_query('[null,1,true,"a",[],{}]', 'lax $.type()');
+----
+"array"
+
+statement error pgcode 22033 pq: jsonpath array subscript is not a single numeric value
+SELECT jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "string")]');
+
+query T
+SELECT jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "number")]');
+----
+3
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '$[1.1]');
+----
+2
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '$[1.5]');
+----
+2
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '$[1.99999999]');
+----
+2
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '$[2.1]');
+----
+3
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '$[2.5]');
+----
+3
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '$[2.99999999]');
+----
+3
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '$[-0.1]');
+----
+1
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '$[-0.5]');
+----
+1
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '$[-0.99999999]');
+----
+1
+
+query empty
+SELECT jsonb_path_query('[1, 2, 3]', '$[-1.01]');
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', 'strict $[-0.9999999999999]');
+----
+1
+
+statement error pgcode 22033 pq: jsonpath array subscript is out of bounds
+SELECT jsonb_path_query('[1, 2, 3]', 'strict $[-1.01]');
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)');
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{}');
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"other": 10}');
+
+query T
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"value": 11}');
+----
+{"a": 10}
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10, "b": 20}', '$ ? (@.a < $value && @.b > $value)');
+
+statement error pgcode 42704 pq: could not find jsonpath variable "min"
+SELECT jsonb_path_query('{"a": 10, "b": 20}', '$ ? (@.a < $min && @.b > $max)');
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', 'strict $ ? (@.a < $value)', '{}', true);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', 'strict $ ? (@.a < $value)', '{}', false);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{}', true);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{}', false);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "d"
+SELECT jsonb_path_query('{}', '$ ? ($d < $a && @.c > $b)');
+
+query T
+SELECT jsonb_path_query('{"a": 10}', '$ ? ((@.a < 12) || (@.a < $value))');
+----
+{"a": 10}
+
+statement error pgcode 22036 pq: jsonpath item method .abs\(\) can only be applied to a numeric value
+SELECT jsonb_path_query('{}', '$.abs()');
+
+statement error pgcode 22036 pq: jsonpath item method .abs\(\) can only be applied to a numeric value
+SELECT jsonb_path_query('"a"', '$.abs()');
+
+statement error pgcode 22036 pq: jsonpath item method .abs\(\) can only be applied to a numeric value
+SELECT jsonb_path_query('true', '$.abs()');
+
+statement error pgcode 22036 pq: jsonpath item method .abs\(\) can only be applied to a numeric value
+SELECT jsonb_path_query('null', '$.abs()');
+
+query T
+SELECT jsonb_path_query('{}', '(1).abs()');
+----
+1
+
+query T
+SELECT jsonb_path_query('{}', '(-1).abs()');
+----
+1
+
+query T
+SELECT jsonb_path_query('{}', '(0.5).abs()');
+----
+0.5
+
+query T
+SELECT jsonb_path_query('{}', '(-0.5).abs()');
+----
+0.5
+
+query T rowsort
+SELECT jsonb_path_query('[1, -1, 0.5, -0.5]', '$.abs()');
+----
+1
+1
+0.5
+0.5
+
+query T
+SELECT jsonb_path_query('{}', '(1).ceiling()');
+----
+1
+
+query T
+SELECT jsonb_path_query('{}', '(-1).ceiling()');
+----
+-1
+
+query T
+SELECT jsonb_path_query('{}', '(0.5).ceiling()');
+----
+1
+
+query T
+SELECT jsonb_path_query('{}', '(-0.5).ceiling()');
+----
+0
+
+query T
+SELECT jsonb_path_query('{}', '(0.1).ceiling()');
+----
+1
+
+query T
+SELECT jsonb_path_query('{}', '(-0.1).ceiling()');
+----
+0
+
+query T
+SELECT jsonb_path_query('{}', '(0.9).ceiling()');
+----
+1
+
+query T
+SELECT jsonb_path_query('{}', '(-0.9).ceiling()');
+----
+0
+
+query T rowsort
+SELECT jsonb_path_query('[1, -1, 0.5, -0.5, 0.1, -0.1, 0.9, -0.9]', '$.ceiling()');
+----
+1
+-1
+1
+0
+1
+0
+1
+0
+
+query T
+SELECT jsonb_path_query('{}', '(1).floor()');
+----
+1
+
+query T
+SELECT jsonb_path_query('{}', '(-1).floor()');
+----
+-1
+
+query T
+SELECT jsonb_path_query('{}', '(0.5).floor()');
+----
+0
+
+query T
+SELECT jsonb_path_query('{}', '(-0.5).floor()');
+----
+-1
+
+query T
+SELECT jsonb_path_query('{}', '(0.1).floor()');
+----
+0
+
+query T
+SELECT jsonb_path_query('{}', '(-0.1).floor()');
+----
+-1
+
+query T
+SELECT jsonb_path_query('{}', '(0.9).floor()');
+----
+0
+
+query T
+SELECT jsonb_path_query('{}', '(-0.9).floor()');
+----
+-1
+
+query T rowsort
+SELECT jsonb_path_query('[1, -1, 0.5, -0.5, 0.1, -0.1, 0.9, -0.9]', '$.floor()');
+----
+1
+-1
+0
+-1
+0
+-1
+0
+-1
+
+statement error pgcode 22036 pq: jsonpath item method .abs\(\) can only be applied to a numeric value
+SELECT jsonb_path_query('[[1, 2]]', '$.abs()');
+
+statement error pgcode 22036 pq: jsonpath item method .abs\(\) can only be applied to a numeric value
+SELECT jsonb_path_query('[1, 2, [3, 4]]', '$.abs()');
+
+query T
+SELECT jsonb_path_query('{"a": -0.5}', '$.a.abs()')
+----
+0.5
+
+statement error pgcode 22036 pq: jsonpath item method .abs\(\) can only be applied to a numeric value
+SELECT jsonb_path_query('"1"', '$.abs()');
+
+statement error pgcode 22036 pq: jsonpath item method .floor\(\) can only be applied to a numeric value
+SELECT jsonb_path_query('{}', '(null).floor()');
+
+query T
+SELECT jsonb_path_query('"Hello"', '$ like_regex "hello" flag "i"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"HELLO"', '$ like_regex "hello" flag "i"');
+----
+true
+
+# Use the same pattern but different flags to ensure that ReCache recognizes
+# the change of flags.
+query T
+SELECT jsonb_path_query('"HELLO"', '$ like_regex "hello" flag ""');
+----
+false
+
+query T
+SELECT jsonb_path_query('"Hello\nWorld"', '$ like_regex "Hello.World" flag "s"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"Hello\nWorld"', '$ like_regex "Hello.World" flag ""');
+----
+false
+
+query T
+SELECT jsonb_path_query('"Line1\nLine2"', '$ like_regex "^Line2$" flag "m"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"Line1\nLine2"', '$ like_regex "^Line2$" flag ""');
+----
+false
+
+query T
+SELECT jsonb_path_query('"Hello123World"', '$ like_regex "Hello.*World" flag "q"');
+----
+false
+
+query T
+SELECT jsonb_path_query('"Hello123World"', '$ like_regex "Hello.*World" flag ""');
+----
+true
+
+# Case insensitive and dot matches newline
+query T
+SELECT jsonb_path_query('"Hello\nWorld"', '$ like_regex "hello.world" flag "is"');
+----
+true
+
+# Case insensitive and multiline
+query T
+SELECT jsonb_path_query('"Line1\nline2"', '$ like_regex "^LINE2$" flag "im"');
+----
+true
+
+# Case insensitive and literal matching
+query T
+SELECT jsonb_path_query('"Hello123World"', '$ like_regex "HELLO.*WORLD" flag "iq"');
+----
+false
+
+# Dot matches newline and multiline
+query T
+SELECT jsonb_path_query('"Line1\nLine2\nLine3"', '$ like_regex "^Line1.Line2.Line3$" flag "ms"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"Line1\nLine2\nLine3"', '$ like_regex "^Line1.Line2.Line3$" flag "m"');
+----
+false
+
+# Dot matches newline and literal matching
+query T
+SELECT jsonb_path_query('"Hello\nWorld"', '$ like_regex "Hello.World" flag "sq"');
+----
+false
+
+# Multiline and literal matching
+query T
+SELECT jsonb_path_query('"Line1\nLine2"', '$ like_regex "^Line1\nLine2$" flag "mq"');
+----
+false

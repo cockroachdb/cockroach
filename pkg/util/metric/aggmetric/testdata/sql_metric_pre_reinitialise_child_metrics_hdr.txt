@@ -1,0 +1,8 @@
+echo
+----
+test_counter 1
+test_gauge 10
+test_histogram_bucket{le="+Inf"} 1
+test_histogram_bucket{le="10"} 1
+test_histogram_count 1
+test_histogram_sum 10

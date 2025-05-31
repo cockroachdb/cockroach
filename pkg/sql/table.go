@@ -275,6 +275,10 @@ func (p *planner) writeSchemaChange(
 	if catalog.HasConcurrentDeclarativeSchemaChange(tableDesc) {
 		return scerrors.ConcurrentSchemaChangeError(tableDesc)
 	}
+	// Legacy schema changes with schema_locked can wait for one version within a
+	// single job (via connExecutor.maybeDeferDescriptorUpdatesForSchemaLocked),
+	// so no need to create new jobs. These schema changes are white-listed
+	// to only update *metadata*.
 	if !tableDesc.IsNew() {
 		if err := p.createOrUpdateSchemaChangeJob(ctx, tableDesc, jobDesc, mutationID); err != nil {
 			return err

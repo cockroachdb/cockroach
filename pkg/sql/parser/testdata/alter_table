@@ -161,6 +161,22 @@ ALTER TABLE a SET LOCALITY REGIONAL BY ROW AS bobby -- literals removed
 ALTER TABLE _ SET LOCALITY REGIONAL BY ROW AS _ -- identifiers removed
 
 parse
+ALTER TABLE a SET LOGGED
+----
+ALTER TABLE a SET LOGGED
+ALTER TABLE a SET LOGGED -- fully parenthesized
+ALTER TABLE a SET LOGGED -- literals removed
+ALTER TABLE _ SET LOGGED -- identifiers removed
+
+parse
+ALTER TABLE a SET UNLOGGED
+----
+ALTER TABLE a SET UNLOGGED
+ALTER TABLE a SET UNLOGGED -- fully parenthesized
+ALTER TABLE a SET UNLOGGED -- literals removed
+ALTER TABLE _ SET UNLOGGED -- identifiers removed
+
+parse
 ALTER TABLE a ADD COLUMN b INT8, ADD CONSTRAINT a_idx UNIQUE (a)
 ----
 ALTER TABLE a ADD COLUMN b INT8, ADD CONSTRAINT a_idx UNIQUE (a)

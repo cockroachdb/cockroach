@@ -1,7 +1,7 @@
 diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_role.out --label=/mnt/data1/postgres/src/test/regress/results/create_role.out /mnt/data1/postgres/src/test/regress/expected/create_role.out /mnt/data1/postgres/src/test/regress/results/create_role.out
 --- /mnt/data1/postgres/src/test/regress/expected/create_role.out
 +++ /mnt/data1/postgres/src/test/regress/results/create_role.out
-@@ -1,98 +1,184 @@
+@@ -1,44 +1,54 @@
  -- ok, superuser can create users with any set of privileges
  CREATE ROLE regress_role_super SUPERUSER;
 +ERROR:  at or near "superuser": syntax error
@@ -10,11 +10,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_role.out -
 +                               ^
 +HINT:  try \h CREATE ROLE
  CREATE ROLE regress_role_admin CREATEDB CREATEROLE REPLICATION BYPASSRLS;
-+ERROR:  unimplemented: the BYPASSRLS and NOBYPASSRLS options for roles are not currently supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/136910/_version_
  GRANT CREATE ON DATABASE regression TO regress_role_admin WITH GRANT OPTION;
-+ERROR:  role/user "regress_role_admin" does not exist
++ERROR:  database "regression" does not exist
  CREATE ROLE regress_role_limited_admin CREATEROLE;
  CREATE ROLE regress_role_normal;
  -- fail, CREATEROLE user can't give away role attributes without having them
@@ -36,18 +33,12 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_role.out -
  CREATE ROLE regress_nosuch_replication_bypassrls REPLICATION BYPASSRLS;
 -ERROR:  permission denied to create role
 -DETAIL:  Only roles with the REPLICATION attribute may create roles with the REPLICATION attribute.
-+ERROR:  unimplemented: the BYPASSRLS and NOBYPASSRLS options for roles are not currently supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/136910/_version_
  CREATE ROLE regress_nosuch_replication REPLICATION;
 -ERROR:  permission denied to create role
 -DETAIL:  Only roles with the REPLICATION attribute may create roles with the REPLICATION attribute.
  CREATE ROLE regress_nosuch_bypassrls BYPASSRLS;
 -ERROR:  permission denied to create role
 -DETAIL:  Only roles with the BYPASSRLS attribute may create roles with the BYPASSRLS attribute.
-+ERROR:  unimplemented: the BYPASSRLS and NOBYPASSRLS options for roles are not currently supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/136910/_version_
  CREATE ROLE regress_nosuch_createdb CREATEDB;
 -ERROR:  permission denied to create role
 -DETAIL:  Only roles with the CREATEDB attribute may create roles with the CREATEDB attribute.
@@ -71,9 +62,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_role.out -
  ALTER ROLE regress_role_limited BYPASSRLS;
 -ERROR:  permission denied to alter role
 -DETAIL:  Only roles with the BYPASSRLS attribute may change the BYPASSRLS attribute.
-+ERROR:  unimplemented: the BYPASSRLS and NOBYPASSRLS options for roles are not currently supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/136910/_version_
  DROP ROLE regress_role_limited;
  -- ok, can give away these role attributes if you have them
  SET SESSION AUTHORIZATION regress_role_admin;
@@ -84,23 +72,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_role.out -
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/40283/_version_
  CREATE ROLE regress_replication_bypassrls REPLICATION BYPASSRLS;
-+ERROR:  unimplemented: the BYPASSRLS and NOBYPASSRLS options for roles are not currently supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/136910/_version_
  CREATE ROLE regress_replication REPLICATION;
  CREATE ROLE regress_bypassrls BYPASSRLS;
-+ERROR:  unimplemented: the BYPASSRLS and NOBYPASSRLS options for roles are not currently supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/136910/_version_
- CREATE ROLE regress_createdb CREATEDB;
- -- ok, can toggle these role attributes off and on if you have them
- ALTER ROLE regress_replication NOREPLICATION;
- ALTER ROLE regress_replication REPLICATION;
- ALTER ROLE regress_bypassrls NOBYPASSRLS;
-+ERROR:  role/user "regress_bypassrls" does not exist
- ALTER ROLE regress_bypassrls BYPASSRLS;
-+ERROR:  role/user "regress_bypassrls" does not exist
- ALTER ROLE regress_createdb NOCREATEDB;
+@@ -52,47 +62,103 @@
  ALTER ROLE regress_createdb CREATEDB;
  -- fail, can't toggle SUPERUSER
  ALTER ROLE regress_createdb SUPERUSER;
@@ -215,7 +189,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_role.out -
  -- ok, regress_createrole can create new roles
  CREATE ROLE regress_plainrole;
  -- ok, roles with CREATEROLE can create new roles with it
-@@ -100,161 +186,280 @@
+@@ -100,161 +166,274 @@
  -- ok, roles with CREATEROLE can create new roles with different role
  -- attributes, including CREATEROLE
  CREATE ROLE regress_hasprivs CREATEROLE LOGIN INHERIT CONNECTION LIMIT 5;
@@ -295,7 +269,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_role.out -
 -ERROR:  must be owner of table tenant_table
  ALTER VIEW tenant_view OWNER TO regress_role_admin;
 -ERROR:  must be owner of view tenant_view
-+ERROR:  role/user "regress_role_admin" does not exist
  DROP VIEW tenant_view;
 -ERROR:  must be owner of view tenant_view
  -- fail, can't create objects owned as regress_tenant
@@ -459,12 +432,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_role.out -
 +ERROR:  role/user "regress_nosuch_superuser" does not exist
  DROP ROLE regress_nosuch_replication_bypassrls;
 -ERROR:  role "regress_nosuch_replication_bypassrls" does not exist
-+ERROR:  role/user "regress_nosuch_replication_bypassrls" does not exist
  DROP ROLE regress_nosuch_replication;
 -ERROR:  role "regress_nosuch_replication" does not exist
  DROP ROLE regress_nosuch_bypassrls;
 -ERROR:  role "regress_nosuch_bypassrls" does not exist
-+ERROR:  role/user "regress_nosuch_bypassrls" does not exist
  DROP ROLE regress_nosuch_super;
 -ERROR:  role "regress_nosuch_super" does not exist
 +ERROR:  role/user "regress_nosuch_super" does not exist
@@ -486,10 +457,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_role.out -
 +                                                             ^
  -- ok, should be able to drop non-superuser roles we created
  DROP ROLE regress_replication_bypassrls;
-+ERROR:  role/user "regress_replication_bypassrls" does not exist
  DROP ROLE regress_replication;
  DROP ROLE regress_bypassrls;
-+ERROR:  role/user "regress_bypassrls" does not exist
  DROP ROLE regress_createdb;
  DROP ROLE regress_createrole;
 +ERROR:  role/user "regress_createrole" does not exist
@@ -514,7 +483,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_role.out -
 +ERROR:  role/user "regress_role_super" does not exist
  DROP ROLE regress_role_admin;
 -ERROR:  current user cannot be dropped
-+ERROR:  role/user "regress_role_admin" does not exist
  DROP ROLE regress_rolecreator;
 -ERROR:  permission denied to drop role
 -DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on role "regress_rolecreator" may drop this role.

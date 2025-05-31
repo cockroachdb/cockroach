@@ -1,4 +1,4 @@
-# Check if summary is generated correctly
+# Check if a regression is detected correctly
 config old=abcdef123 new=qwerty456
 benchmarks:
   - display_name: Sysbench
@@ -94,8 +94,8 @@ run group=1
 
 | Metric                      | Old Commit     | New Commit     | Delta      | Note         |
 |-----------------------------|----------------|----------------|------------|--------------|
-| 🔴 **sec/op** | 9.862m ±0% | 9.952m ±0% | +0.91% | p=0.000 n=30    |
-| ⚪ **allocs/op** | 10.38k ±0% | 10.38k ±0% | ~ | p=1.000 n=30    |
+| 🔴 **sec/op** | 9.862m ±1% | 9.952m ±0% | +0.91% | p=0.001 n=10    |
+| ⚪ **allocs/op** | 10.38k ±1% | 10.38k ±1% | ~ | p=1.000 n=10    |
 
 <details><summary>Reproduce</summary>
 
@@ -129,16 +129,6 @@ gcloud storage cp gs://cockroach-microbench-ci/artifacts/abcdef123//\* old/
 
 </details>
 
-<details><summary>Legend</summary>
-
-- ⚪ **Neutral:** No significant performance change.
-- 🔴 **Regression:** Likely performance regression, requiring investigation.
-- 🟢 **Improvement:** Likely performance gain.
-
-</details>
-
-A regression has been detected, please investigate further!
-
 _built with commit: [qwerty456](https://github.com/cockroachdb/cockroach/commit/qwerty456)_
 ----
 ----
@@ -150,378 +140,35 @@ tree
 /abcdef123
 /abcdef123/artifacts
 /abcdef123/artifacts/cleaned_Sysbench_SQL_3node_oltp_read_write.log
-/abcdef123/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged.prof
-/abcdef123/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged.prof
-/abcdef123/artifacts/mutex_Sysbench_SQL_3node_oltp_read_write_merged.prof
+/abcdef123/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged_1.prof
+/abcdef123/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged_2.prof
+/abcdef123/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged_3.prof
+/abcdef123/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged_1.prof
+/abcdef123/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged_2.prof
+/abcdef123/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged_3.prof
+/abcdef123/artifacts/mutex_Sysbench_SQL_3node_oltp_read_write_merged_1.prof
+/abcdef123/artifacts/mutex_Sysbench_SQL_3node_oltp_read_write_merged_2.prof
+/abcdef123/artifacts/mutex_Sysbench_SQL_3node_oltp_read_write_merged_3.prof
 /abcdef123/artifacts/raw_Sysbench_SQL_3node_oltp_read_write.log
-/github-summary.md
 /qwerty456
 /qwerty456/artifacts
 /qwerty456/artifacts/Sysbench_SQL_3node_oltp_read_write.REGRESSED
 /qwerty456/artifacts/cleaned_Sysbench_SQL_3node_oltp_read_write.log
-/qwerty456/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged.prof
-/qwerty456/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged.prof
-/qwerty456/artifacts/mutex_Sysbench_SQL_3node_oltp_read_write_merged.prof
+/qwerty456/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged_1.prof
+/qwerty456/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged_2.prof
+/qwerty456/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged_3.prof
+/qwerty456/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged_1.prof
+/qwerty456/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged_2.prof
+/qwerty456/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged_3.prof
+/qwerty456/artifacts/mutex_Sysbench_SQL_3node_oltp_read_write_merged_1.prof
+/qwerty456/artifacts/mutex_Sysbench_SQL_3node_oltp_read_write_merged_2.prof
+/qwerty456/artifacts/mutex_Sysbench_SQL_3node_oltp_read_write_merged_3.prof
 /qwerty456/artifacts/raw_Sysbench_SQL_3node_oltp_read_write.log
 /suite.yml
 /summary.json
 ----
 ----
 
-json
+changed
 ----
-{
-  "Entries": [
-    {
-      "Name": "BenchmarkSysbench/SQL/3node/oltp_read_write",
-      "Count": 10,
-      "Iterations": 3000,
-      "Data": {
-        "new": [
-          {
-            "Metric": "B/op",
-            "Summary": {
-              "Center": 2367667,
-              "Lo": 2365463,
-              "Hi": 2368213,
-              "Confidence": 0.95723,
-              "Warnings": null
-            },
-            "Sample": {
-              "Values": [
-                2352326,
-                2352326,
-                2352326,
-                2358650,
-                2358650,
-                2358650,
-                2364281,
-                2364281,
-                2364281,
-                2365463,
-                2365463,
-                2365463,
-                2367582,
-                2367582,
-                2367582,
-                2367752,
-                2367752,
-                2367752,
-                2368213,
-                2368213,
-                2368213,
-                2369187,
-                2369187,
-                2369187,
-                2370670,
-                2370670,
-                2370670,
-                2375306,
-                2375306,
-                2375306
-              ],
-              "Thresholds": {
-                "CompareAlpha": 0.05000
-              },
-              "Warnings": null
-            }
-          },
-          {
-            "Metric": "allocs/op",
-            "Summary": {
-              "Center": 10378.50000,
-              "Lo": 10377,
-              "Hi": 10386,
-              "Confidence": 0.95723,
-              "Warnings": null
-            },
-            "Sample": {
-              "Values": [
-                10246,
-                10246,
-                10246,
-                10287,
-                10287,
-                10287,
-                10361,
-                10361,
-                10361,
-                10377,
-                10377,
-                10377,
-                10378,
-                10378,
-                10378,
-                10379,
-                10379,
-                10379,
-                10386,
-                10386,
-                10386,
-                10392,
-                10392,
-                10392,
-                10398,
-                10398,
-                10398,
-                10411,
-                10411,
-                10411
-              ],
-              "Thresholds": {
-                "CompareAlpha": 0.05000
-              },
-              "Warnings": null
-            }
-          },
-          {
-            "Metric": "sec/op",
-            "Summary": {
-              "Center": 0.00995,
-              "Lo": 0.00995,
-              "Hi": 0.00997,
-              "Confidence": 0.95723,
-              "Warnings": null
-            },
-            "Sample": {
-              "Values": [
-                0.00991,
-                0.00991,
-                0.00991,
-                0.00993,
-                0.00993,
-                0.00993,
-                0.00995,
-                0.00995,
-                0.00995,
-                0.00995,
-                0.00995,
-                0.00995,
-                0.00995,
-                0.00995,
-                0.00995,
-                0.00995,
-                0.00995,
-                0.00995,
-                0.00997,
-                0.00997,
-                0.00997,
-                0.00998,
-                0.00998,
-                0.00998,
-                0.00998,
-                0.00998,
-                0.00998,
-                0.01000,
-                0.01000,
-                0.01000
-              ],
-              "Thresholds": {
-                "CompareAlpha": 0.05000
-              },
-              "Warnings": null
-            }
-          }
-        ],
-        "old": [
-          {
-            "Metric": "B/op",
-            "Summary": {
-              "Center": 2367667,
-              "Lo": 2365463,
-              "Hi": 2368213,
-              "Confidence": 0.95723,
-              "Warnings": null
-            },
-            "Sample": {
-              "Values": [
-                2352326,
-                2352326,
-                2352326,
-                2358650,
-                2358650,
-                2358650,
-                2364281,
-                2364281,
-                2364281,
-                2365463,
-                2365463,
-                2365463,
-                2367582,
-                2367582,
-                2367582,
-                2367752,
-                2367752,
-                2367752,
-                2368213,
-                2368213,
-                2368213,
-                2369187,
-                2369187,
-                2369187,
-                2370670,
-                2370670,
-                2370670,
-                2375306,
-                2375306,
-                2375306
-              ],
-              "Thresholds": {
-                "CompareAlpha": 0.05000
-              },
-              "Warnings": null
-            }
-          },
-          {
-            "Metric": "allocs/op",
-            "Summary": {
-              "Center": 10378.50000,
-              "Lo": 10377,
-              "Hi": 10386,
-              "Confidence": 0.95723,
-              "Warnings": null
-            },
-            "Sample": {
-              "Values": [
-                10246,
-                10246,
-                10246,
-                10287,
-                10287,
-                10287,
-                10361,
-                10361,
-                10361,
-                10377,
-                10377,
-                10377,
-                10378,
-                10378,
-                10378,
-                10379,
-                10379,
-                10379,
-                10386,
-                10386,
-                10386,
-                10392,
-                10392,
-                10392,
-                10398,
-                10398,
-                10398,
-                10411,
-                10411,
-                10411
-              ],
-              "Thresholds": {
-                "CompareAlpha": 0.05000
-              },
-              "Warnings": null
-            }
-          },
-          {
-            "Metric": "errs/op",
-            "Summary": {
-              "Center": 0,
-              "Lo": 0,
-              "Hi": 0,
-              "Confidence": 0.95723,
-              "Warnings": null
-            },
-            "Sample": {
-              "Values": [
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0
-              ],
-              "Thresholds": {
-                "CompareAlpha": 0.05000
-              },
-              "Warnings": null
-            }
-          },
-          {
-            "Metric": "sec/op",
-            "Summary": {
-              "Center": 0.00986,
-              "Lo": 0.00985,
-              "Hi": 0.00988,
-              "Confidence": 0.95723,
-              "Warnings": null
-            },
-            "Sample": {
-              "Values": [
-                0.00981,
-                0.00981,
-                0.00981,
-                0.00985,
-                0.00985,
-                0.00985,
-                0.00985,
-                0.00985,
-                0.00985,
-                0.00985,
-                0.00985,
-                0.00985,
-                0.00985,
-                0.00985,
-                0.00985,
-                0.00987,
-                0.00987,
-                0.00987,
-                0.00988,
-                0.00988,
-                0.00988,
-                0.00990,
-                0.00990,
-                0.00990,
-                0.00993,
-                0.00993,
-                0.00993,
-                0.00998,
-                0.00998,
-                0.00998
-              ],
-              "Thresholds": {
-                "CompareAlpha": 0.05000
-              },
-              "Warnings": null
-            }
-          }
-        ]
-      }
-    }
-  ],
-  "Revisions": {
-    "new": "qwerty456",
-    "old": "abcdef123"
-  }
-}
+true

@@ -241,7 +241,17 @@ func maybeRewriteIndexAndConstraintID(
 			}
 			return nil
 		})
+		// If there are references to the indexID in the subzones,
+		// then we should rewrite.
+		if zoneConfig, ok := e.(*scpb.TableZoneConfig); ok {
+			for subzoneIdx := range zoneConfig.ZoneConfig.Subzones {
+				if zoneConfig.ZoneConfig.Subzones[subzoneIdx].IndexID == uint32(indexID) {
+					zoneConfig.ZoneConfig.Subzones[subzoneIdx].IndexID = uint32(actualIndexID)
+				}
+			}
+		}
 	})
+
 	return true
 }
 

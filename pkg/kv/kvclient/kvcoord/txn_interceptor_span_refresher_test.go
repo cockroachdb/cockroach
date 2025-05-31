@@ -178,58 +178,6 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			expRefresh: false,
 			expErr:     true,
 		},
-		{
-			name: "write_too_old flag (pending)",
-			onFirstSend: func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-				br := ba.CreateReply()
-				br.Txn = ba.Txn.Clone()
-				br.Txn.Status = roachpb.PENDING
-				br.Txn.WriteTooOld = true
-				br.Txn.WriteTimestamp = txn.WriteTimestamp.Add(20, 1)
-				return br, nil
-			},
-			expRefresh:   true,
-			expRefreshTS: txn.WriteTimestamp.Add(20, 1), // Same as br.Txn.WriteTimestamp.
-		},
-		{
-			name: "write_too_old flag (staging)",
-			onFirstSend: func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-				br := ba.CreateReply()
-				br.Txn = ba.Txn.Clone()
-				br.Txn.Status = roachpb.STAGING
-				br.Txn.WriteTooOld = true
-				br.Txn.WriteTimestamp = txn.WriteTimestamp.Add(20, 1)
-				return br, nil
-			},
-			expRefresh: false,
-			expErr:     false,
-		},
-		{
-			name: "write_too_old flag (committed)",
-			onFirstSend: func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-				br := ba.CreateReply()
-				br.Txn = ba.Txn.Clone()
-				br.Txn.Status = roachpb.COMMITTED
-				br.Txn.WriteTooOld = true
-				br.Txn.WriteTimestamp = txn.WriteTimestamp.Add(20, 1)
-				return br, nil
-			},
-			expRefresh: false,
-			expErr:     false,
-		},
-		{
-			name: "write_too_old flag (aborted)",
-			onFirstSend: func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-				br := ba.CreateReply()
-				br.Txn = ba.Txn.Clone()
-				br.Txn.Status = roachpb.ABORTED
-				br.Txn.WriteTooOld = true
-				br.Txn.WriteTimestamp = txn.WriteTimestamp.Add(20, 1)
-				return br, nil
-			},
-			expRefresh: false,
-			expErr:     false,
-		},
 	}
 	for _, tc := range cases {
 		name := tc.name
@@ -317,7 +265,6 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 				require.Nil(t, pErr)
 				require.NotNil(t, br)
 				require.NotNil(t, br.Txn)
-				require.False(t, br.Txn.WriteTooOld)
 				require.Equal(t, tc.expRefreshTS, br.Txn.WriteTimestamp)
 				require.Equal(t, tc.expRefreshTS, br.Txn.ReadTimestamp)
 				require.Equal(t, tc.expRefreshTS, tsr.refreshedTimestamp)
@@ -333,7 +280,6 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 					require.Nil(t, pErr)
 					require.NotNil(t, br)
 					require.NotNil(t, br.Txn)
-					require.False(t, br.Txn.WriteTooOld)
 				}
 				require.Zero(t, tsr.refreshedTimestamp)
 				require.Equal(t, int64(0), tsr.metrics.ClientRefreshSuccess.Count())

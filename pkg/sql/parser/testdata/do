@@ -364,3 +364,45 @@ at or near "EOF": syntax error
 DETAIL: source SQL:
 BEGIN DO
         ^
+
+parse
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'mood') THEN
+    CREATE TYPE mood AS ENUM ('happy', 'sad', 'neutral');
+  END IF;
+END
+$$;
+----
+DO $$
+BEGIN
+IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'mood') THEN
+	CREATE TYPE mood AS ENUM ('happy', 'sad', 'neutral');
+END IF;
+END;
+$$;
+ -- normalized!
+DO $$
+BEGIN
+IF (NOT (EXISTS (SELECT (1) FROM pg_type WHERE ((typname) = ('mood'))))) THEN
+	CREATE TYPE mood AS ENUM ('happy', 'sad', 'neutral');
+END IF;
+END;
+$$;
+ -- fully parenthesized
+DO $$
+BEGIN
+IF NOT EXISTS (SELECT _ FROM pg_type WHERE typname = '_') THEN
+	CREATE TYPE mood AS ENUM ('happy', 'sad', 'neutral');
+END IF;
+END;
+$$;
+ -- literals removed
+DO $$
+BEGIN
+IF NOT EXISTS (SELECT 1 FROM _ WHERE _ = 'mood') THEN
+	CREATE TYPE _ AS ENUM (_, _, _);
+END IF;
+END;
+$$;
+ -- identifiers removed

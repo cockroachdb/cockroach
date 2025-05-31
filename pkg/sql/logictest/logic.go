@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -965,7 +966,6 @@ type logicQuery struct {
 var allowedKVOpTypes = []string{
 	"CPut",
 	"Put",
-	"InitPut",
 	"Del",
 	"DelRange",
 	"ClearRange",
@@ -1333,6 +1333,8 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 	t.logsDir = logsDir
 
 	var envVars []string
+	// Set crash reporting URL to the empty string to disable Sentry crash reports.
+	envVars = append(envVars, "COCKROACH_CRASH_REPORTS=")
 	if strings.Contains(upgradeBinaryPath, "cockroach-short") {
 		// If we're using a cockroach-short binary, that means it was
 		// locally built, so we need to opt-out of version offsetting to
@@ -1535,7 +1537,6 @@ func (t *logicTest) newCluster(
 					DisableConsistencyQueue:  true,
 					GlobalMVCCRangeTombstone: globalMVCCRangeTombstone,
 					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
-						DisableInitPutFailOnTombstones:    ignoreMVCCRangeTombstoneErrors,
 						UseRangeTombstonesForPointDeletes: shouldUseMVCCRangeTombstonesForPointDeletes,
 					},
 				},
@@ -1798,6 +1799,13 @@ func (t *logicTest) newCluster(
 			}
 		}
 
+		if cfg.UseSchemaLockedByDefault {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.defaults.create_table_with_schema_locked = true",
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
 		// We disable the automatic stats collection in order to have
 		// deterministic tests.
 		//
@@ -1852,6 +1860,22 @@ func (t *logicTest) newCluster(
 			); err != nil {
 				t.Fatal(err)
 			}
+		}
+
+		// Enable vector indexes by default for tests.
+		// TODO(andyk): Remove this once vector indexes are enabled by default.
+		if _, err := conn.Exec(
+			"SET CLUSTER SETTING feature.vector_index.enabled = true",
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		// Ensure that vector index background operations are deterministic, so
+		// that tests don't flake.
+		if _, err := conn.Exec(
+			"SET CLUSTER SETTING sql.vecindex.deterministic_fixups.enabled = true",
+		); err != nil {
+			t.Fatal(err)
 		}
 	}
 
@@ -1983,7 +2007,10 @@ func (t *logicTest) setup(
 		skip.UnderRace(t.t(), "test uses a different binary, so the race detector doesn't work")
 		skip.UnderStress(t.t(), "test takes a long time and downloads release artifacts")
 		if !bazel.BuiltWithBazel() {
-			skip.IgnoreLint(t.t(), "cockroach-go/testserver can only be uzed in bazel builds")
+			skip.IgnoreLint(t.t(), "cockroach-go/testserver can only be used in bazel builds")
+		}
+		if runtime.GOARCH == "s390x" {
+			skip.IgnoreLint(t.t(), "cockroach-go/testserver is not operational on s390x")
 		}
 		if cfg.NumNodes != 3 {
 			t.Fatal("cockroach-go testserver tests must use 3 nodes")
@@ -4437,6 +4464,18 @@ func RunLogicTest(
 	}
 	if *printErrorSummary {
 		defer lt.printErrorSummary()
+	}
+	if config.UseSecondaryTenant == logictestbase.Always {
+		// Under multitenant configs running in EngFlow, we have seen that logic
+		// tests can be flaky due to an overload condition where schema change
+		// transactions do not heartbeat quickly enough. This prevents background
+		// jobs such as the spanconfig reconciler or the job registry "remove claims
+		// from dead sessions" loop from aborting the queries under test.
+		// See https://github.com/cockroachdb/cockroach/pull/140400#issuecomment-2634346278
+		// and https://github.com/cockroachdb/cockroach/issues/140494#issuecomment-2640208187
+		// for a detailed analysis of this issue.
+		cleanup := txnwait.TestingOverrideTxnLivenessThreshold(10 * time.Second)
+		defer cleanup()
 	}
 	// Each test needs a copy because of Parallel
 	serverArgsCopy := serverArgs

@@ -196,7 +196,7 @@ pg_tablespace                    false
 pg_timezone_abbrevs              true
 pg_timezone_names                false
 pg_transform                     true
-pg_trigger                       true
+pg_trigger                       false
 pg_ts_config                     true
 pg_ts_config_map                 true
 pg_ts_dict                       true
@@ -377,7 +377,7 @@ function  signature  category  details  schema  oid
 query ITTITTTTTTTTTBBBB colnames
 SELECT * FROM crdb_internal.create_statements WHERE database_name = ''
 ----
-database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name  create_statement  state  create_nofks  rls_statements  alter_statements  validate_statements  create_redactable  has_partitions  is_multi_region  is_virtual  is_temporary
+database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name  create_statement  state  create_nofks  rls_statements  fk_statements  validate_statements  create_redactable  has_partitions  is_multi_region  is_virtual  is_temporary
 
 query ITITTBTB colnames
 SELECT * FROM crdb_internal.table_columns WHERE descriptor_name = ''
@@ -434,15 +434,15 @@ SELECT * FROM crdb_internal.ranges_no_leases WHERE range_id < 0
 ----
 range_id  start_key  start_pretty  end_key  end_pretty  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until
 
-query TTTBTTTTTIITITTTTTTTTTTTTTITT colnames
+query TTTBTTTTTIITITTTTTTTTTTTTTITTT colnames
 SELECT * FROM crdb_internal.cluster_execution_insights WHERE query = ''
 ----
-session_id  txn_id  txn_fingerprint_id  stmt_id  stmt_fingerprint_id  problem  causes  query  status  start_time  end_time  full_scan  user_name  app_name  database_name  plan_gist  rows_read  rows_written  priority  retries  last_retry_reason  exec_node_ids  kv_node_ids  contention  index_recommendations  implicit_txn  cpu_sql_nanos  error_code  last_error_redactable
+session_id  txn_id  txn_fingerprint_id  stmt_id  stmt_fingerprint_id  problem  causes  query  status  start_time  end_time  full_scan  user_name  app_name  database_name  plan_gist  rows_read  rows_written  priority  retries  last_retry_reason  exec_node_ids  kv_node_ids  contention  index_recommendations  implicit_txn  cpu_sql_nanos  error_code  last_error_redactable  query_tags
 
-query TTTBTTTTTIITITTTTTTTTTTTTTITT colnames
+query TTTBTTTTTIITITTTTTTTTTTTTTITTT colnames
 SELECT * FROM crdb_internal.node_execution_insights WHERE query = ''
 ----
-session_id  txn_id  txn_fingerprint_id  stmt_id  stmt_fingerprint_id  problem  causes  query  status  start_time  end_time  full_scan  user_name  app_name  database_name  plan_gist  rows_read  rows_written  priority  retries  last_retry_reason  exec_node_ids  kv_node_ids  contention  index_recommendations  implicit_txn  cpu_sql_nanos  error_code  last_error_redactable
+session_id  txn_id  txn_fingerprint_id  stmt_id  stmt_fingerprint_id  problem  causes  query  status  start_time  end_time  full_scan  user_name  app_name  database_name  plan_gist  rows_read  rows_written  priority  retries  last_retry_reason  exec_node_ids  kv_node_ids  contention  index_recommendations  implicit_txn  cpu_sql_nanos  error_code  last_error_redactable  query_tags
 
 query TTTBTTTTTIITITTTTTITTT colnames
 SELECT * FROM crdb_internal.cluster_txn_execution_insights WHERE query = ''
@@ -534,13 +534,23 @@ SELECT crdb_internal.unsafe_upsert_descriptor(id, descriptor, true) FROM encoded
 
 # Regression test for #139848. This query used to fail while querying
 # crdb_internal.zones because of the offline database.
+skipif config local-schema-locked
 query TT
 SHOW CREATE empty
 ----
 empty  CREATE TABLE public.empty (
          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
          CONSTRAINT empty_pkey PRIMARY KEY (rowid ASC)
-       )
+       );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE empty
+----
+empty  CREATE TABLE public.empty (
+         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+         CONSTRAINT empty_pkey PRIMARY KEY (rowid ASC)
+       ) WITH (schema_locked = true);
 
 query T
 SELECT raw_config_sql FROM crdb_internal.zones WHERE zone_id = $a_id
@@ -561,7 +571,7 @@ select crdb_internal.force_retry(interval '0s')
 ----
 0
 
-query error pq: crdb_internal.set_vmodule\(\): syntax error: expect comma-separated list of filename=N
+query error pq: syntax error: expect comma-separated list of filename=N
 select crdb_internal.set_vmodule('not anything reasonable')
 
 query I
@@ -587,7 +597,7 @@ select crdb_internal.get_vmodule()
 query T
 SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-25.2
+25.3
 
 query error version '1.0' not supported
 SELECT crdb_internal.release_series('1.0')
@@ -750,7 +760,7 @@ SELECT * FROM crdb_internal.check_consistency(true, b'\x02', b'\x04')
 query T
 SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-25.2
+25.3
 
 user root
 
@@ -798,7 +808,7 @@ RESET application_name
 # different fingerprint on retries is caused by in-place mutation of the AST
 # (#22847).
 #
-query TII
+query TII retry
 SELECT key, max_retries, failure_count
   FROM crdb_internal.node_statement_statistics
  WHERE application_name = 'test_max_retry'
@@ -957,7 +967,7 @@ query error is not less than end
 SELECT crdb_internal.compact_engine_span(1, 1, decode('c0898a', 'hex'), decode('c08989', 'hex'))
 
 user testuser
-query error crdb_internal.compact_engine_span\(\): user testuser does not have REPAIRCLUSTER system privilege
+query error user testuser does not have REPAIRCLUSTER system privilege
 SELECT crdb_internal.compact_engine_span(1, 1, decode('c08989', 'hex'), decode('c0898a', 'hex'))
 
 user root
@@ -1005,7 +1015,10 @@ BEGIN; SELECT * FROM t_53504; COMMIT;
 statement ok
 SELECT * FROM t_53504
 
-query ITTTI colnames
+statement ok
+RESET application_name
+
+query ITTTI colnames,retry
 SELECT node_id, application_name, key, statement_ids, count FROM crdb_internal.node_transaction_statistics where application_name = 'test_txn_statistics' ORDER BY key
 ----
 node_id  application_name     key                   statement_ids                                                  count
@@ -1013,6 +1026,7 @@ node_id  application_name     key                   statement_ids               
 1        test_txn_statistics  17664899828239596829  {6504861979500726978}                                          1
 1        test_txn_statistics  17976145939037309168  {6204733445766643503}                                          1
 1        test_txn_statistics  18364202634803759405  {6504861979500726990,6504861979500726990}                      2
+1        test_txn_statistics  79149212088773624     {12572515814643342375}                                         1
 1        test_txn_statistics  9852458619443781049   {6504861979500726990,6504861979500726990,6504861979500726990}  1
 
 ## crdb_internal.cluster_database_privileges

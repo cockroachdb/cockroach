@@ -12,7 +12,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
@@ -63,6 +62,7 @@ func distImport(
 	walltime int64,
 	testingKnobs importTestingKnobs,
 	procsPerNode int,
+	initialSplitsPerProc int,
 ) (kvpb.BulkOpSummary, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "importer.distImport")
 	defer sp.Finish()
@@ -87,8 +87,10 @@ func distImport(
 			sqlInstanceIDs[i], sqlInstanceIDs[j] = sqlInstanceIDs[j], sqlInstanceIDs[i]
 		})
 
-		inputSpecs := makeImportReaderSpecs(job, tables, typeDescs, from, format, sqlInstanceIDs, walltime,
-			execCtx.User(), procsPerNode)
+		inputSpecs := makeImportReaderSpecs(
+			job, tables, typeDescs, from, format, len(sqlInstanceIDs), /* numSQLInstances */
+			walltime, execCtx.User(), procsPerNode, initialSplitsPerProc,
+		)
 
 		p := planCtx.NewPhysicalPlan()
 
@@ -294,14 +296,15 @@ func makeImportReaderSpecs(
 	typeDescs []*descpb.TypeDescriptor,
 	from []string,
 	format roachpb.IOFileFormat,
-	sqlInstanceIDs []base.SQLInstanceID,
+	numSQLInstances int,
 	walltime int64,
 	user username.SQLUsername,
 	procsPerNode int,
+	initialSplitsPerProc int,
 ) []*execinfrapb.ReadImportDataSpec {
 	details := job.Details().(jobspb.ImportDetails)
 	// For each input file, assign it to a node.
-	inputSpecs := make([]*execinfrapb.ReadImportDataSpec, 0, len(sqlInstanceIDs)*procsPerNode)
+	inputSpecs := make([]*execinfrapb.ReadImportDataSpec, 0, numSQLInstances*procsPerNode)
 	progress := job.Progress()
 	importProgress := progress.GetImport()
 	for i, input := range from {
@@ -322,7 +325,7 @@ func makeImportReaderSpecs(
 				ResumePos:             make(map[int32]int64),
 				UserProto:             user.EncodeProto(),
 				DatabasePrimaryRegion: details.DatabasePrimaryRegion,
-				InitialSplits:         int32(len(sqlInstanceIDs)),
+				InitialSplits:         int32(initialSplitsPerProc),
 			}
 			inputSpecs = append(inputSpecs, spec)
 		}

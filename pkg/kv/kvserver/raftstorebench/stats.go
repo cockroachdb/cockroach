@@ -33,10 +33,8 @@ func statsLoop(t T, ctx context.Context, cfg Config, s *aggStats, raftEng, smEng
 		var raft bool
 		select {
 		case <-tmr.C:
-			tmr.Read = true
 			tmr.Reset(d)
 		case <-raftTmr.C:
-			raftTmr.Read = true
 			raftTmr.Reset(cfg.RaftMetricsInterval)
 			raft = true
 		case <-ctx.Done():
@@ -178,8 +176,10 @@ func writeAmp(m storage.Metrics, payloadBytes int64) WriteAmpStats {
 	var was WriteAmpStats
 	was.WALBytesWritten += int64(m.WAL.BytesWritten)
 	for i := 0; i < len(m.Levels); i++ {
-		was.FlushBytesWritten += int64(m.Levels[i].BytesFlushed) // only populated for L0
-		was.CompactionBytesWritten += int64(m.Levels[i].BytesFlushed + m.Levels[i].BytesCompacted)
+		flushed := m.Levels[i].TableBytesFlushed + m.Levels[i].BlobBytesFlushed // only populated for L0
+		compacted := m.Levels[i].TableBytesCompacted + m.Levels[i].BlobBytesCompacted
+		was.FlushBytesWritten += int64(flushed)
+		was.CompactionBytesWritten += int64(flushed + compacted)
 	}
 	was.PayloadBytes = payloadBytes
 

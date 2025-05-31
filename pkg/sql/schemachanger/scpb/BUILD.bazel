@@ -115,6 +115,7 @@ go_test(
     deps = [
         "//pkg/clusterversion",
         "//pkg/sql/catalog/catpb",
+        "//pkg/sql/sem/catid",
         "//pkg/sql/sem/idxtype",
         "@com_github_stretchr_testify//require",
     ],

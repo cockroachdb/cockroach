@@ -8,16 +8,25 @@ package kvcoord
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"slices"
+	"sort"
+	"strings"
+	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvcceval"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 )
 
@@ -26,14 +35,24 @@ var BufferedWritesEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"kv.transaction.write_buffering.enabled",
 	"if enabled, transactional writes are buffered on the client",
-	false,
+	metamorphic.ConstantWithTestBool("kv.transaction.write_buffering.enabled", false /* defaultValue */),
+	settings.WithPublic,
+)
+
+var bufferedWritesMaxBufferSize = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"kv.transaction.write_buffering.max_buffer_size",
+	"if non-zero, defines that maximum size of the "+
+		"buffer that will be used to buffer transactional writes per-transaction",
+	1<<22, // 4MB
+	settings.NonNegativeInt,
 	settings.WithPublic,
 )
 
 // txnWriteBuffer is a txnInterceptor that buffers transactional writes until
 // commit time. Moreover, it also decomposes read-write KV operations (e.g.
-// CPuts, InitPuts) into separate (locking) read and write operations, buffering
-// the latter until commit time.
+// CPuts) into separate (locking) read and write operations, buffering the
+// latter until commit time.
 //
 // Buffering writes until commit time has four main benefits:
 //
@@ -111,34 +130,132 @@ var BufferedWritesEnabled = settings.RegisterBoolSetting(
 // TODO(arul): In various places below, there's potential to optimize things by
 // batch allocating misc objects and pre-allocating some slices.
 type txnWriteBuffer struct {
+	st *cluster.Settings
+	// enabled indicates whether write buffering is currently enabled for the
+	// transaction or not. Write buffering may only be enabled on RootTxns, and
+	// before the transaction has sent any requests. However, a transaction that
+	// has previously buffered writes may flush its buffer and disable write
+	// buffering for subsequent requests. This can happen for a few different
+	// reasons:
+	//
+	// 1. If the buffer has exceeded its configured budget, or if the transaction
+	// issues a DeleteRange request, we flush the buffer and disable write
+	// buffering going forward. In either case, we're dealing with large writing
+	// transactions, and there isn't much benefit from write buffering.
+	// 2. If the transaction is performing a DDL operation, we flush the buffer
+	// and disable write buffering going forward out of an abundance of caution.
+	// This is opted into by SQL.
+	//
+	// As a result, we have a nice invariant: if write buffering is enabled, then
+	// all writes performed by the transaction are buffered in memory. We can
+	// never have the case where a part of the write set is buffered, and the
+	// other part is replicated.
+	//
+	// In the future, the invariant above allows us to omit checking the AbortSpan
+	// for transactions that have buffered writes enabled. The AbortSpan is used
+	// to ensure we don't violate read-your-own-write semantics for transactions
+	// that have been aborted by a conflicting transaction. As read-your-own-write
+	// semantics are upheld by the client, not the server, for transactions that
+	// use buffered writes, we can skip the AbortSpan check on the server.
+	//
+	// We currently track this via two state variables: `enabled` and `flushed`.
+	// Writes are only buffered if enabled && !flushed.
+	//
+	// `enabled` tracks whether buffering has been enabled/disabled externally via
+	// txn.SetBufferedWritesEnabled or because we are operating on a leaf
+	// transaction.
 	enabled bool
+	//
+	// `flushed` tracks whether the buffer has been previously flushed.
+	flushed bool
+
+	// flushOnNextBatch, if set, indicates that write buffering has just been
+	// disabled, and the interceptor should flush any buffered writes when it
+	// sees the next BatchRequest.
+	flushOnNextBatch bool
 
 	buffer        btree
-	bufferSeek    bufferedWrite // re-use while seeking
 	bufferIDAlloc uint64
+	bufferSize    int64
 
-	wrapped lockedSender
+	bufferSeek bufferedWrite // re-use while seeking
+
+	wrapped    lockedSender
+	txnMetrics *TxnMetrics
 
 	// testingOverrideCPutEvalFn is used to mock the evaluation function for
 	// conditional puts. Intended only for tests.
 	testingOverrideCPutEvalFn func(expBytes []byte, actVal *roachpb.Value, actValPresent bool, allowNoExisting bool) *kvpb.ConditionFailedError
 }
 
+func (twb *txnWriteBuffer) setEnabled(enabled bool) {
+	if !enabled && twb.buffer.Len() > 0 {
+		// When disabling write buffering, if we evaluated any requests, we need
+		// to ensure to flush the buffer.
+		twb.flushOnNextBatch = true
+	}
+	if enabled {
+		twb.txnMetrics.TxnWriteBufferEnabled.Inc(1)
+	}
+	twb.enabled = enabled
+}
+
 func (twb *txnWriteBuffer) SendLocked(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (_ *kvpb.BatchResponse, pErr *kvpb.Error) {
-	if !twb.enabled {
+	if twb.flushOnNextBatch {
+		twb.flushOnNextBatch = false
+		return twb.flushBufferAndSendBatch(ctx, ba)
+	}
+
+	if !twb.shouldBuffer() {
 		return twb.wrapped.SendLocked(ctx, ba)
 	}
 
-	if _, ok := ba.GetArg(kvpb.EndTxn); ok {
-		// TODO(arul): should we only flush if the transaction is being committed?
-		// If the transaction is being rolled back, we shouldn't needlessly flush
-		// writes.
-		return twb.flushWithEndTxn(ctx, ba)
+	if etArg, ok := ba.GetArg(kvpb.EndTxn); ok {
+		if !etArg.(*kvpb.EndTxnRequest).Commit {
+			// We're performing a rollback, so there is no point in flushing
+			// anything.
+			return twb.wrapped.SendLocked(ctx, ba)
+		}
+		return twb.flushBufferAndSendBatch(ctx, ba)
 	}
 
-	transformedBa, ts := twb.applyTransformations(ctx, ba)
+	if twb.batchRequiresFlush(ctx, ba) {
+		return twb.flushBufferAndSendBatch(ctx, ba)
+	}
+
+	// Check if buffering writes from the supplied batch will run us over
+	// budget. If it will, we shouldn't buffer writes from the current batch,
+	// and flush the buffer.
+	maxSize := bufferedWritesMaxBufferSize.Get(&twb.st.SV)
+	bufSize := twb.estimateSize(ba) + twb.bufferSize
+	// NB: if bufferedWritesMaxBufferSize is set to 0 then we effectively disable
+	// any buffer limiting.
+	if maxSize != 0 && bufSize > maxSize {
+		twb.txnMetrics.TxnWriteBufferMemoryLimitExceeded.Inc(1)
+		log.VEventf(ctx, 2, "flushing buffer because buffer size (%s) exceeds max size (%s)",
+			humanizeutil.IBytes(bufSize),
+			humanizeutil.IBytes(maxSize))
+		return twb.flushBufferAndSendBatch(ctx, ba)
+	}
+
+	if err := twb.validateBatch(ba); err != nil {
+		// We could choose to twb.flushBufferAndSendBatch
+		// here. For now, we return an error.
+		return nil, kvpb.NewError(err)
+	}
+
+	transformedBa, rr, pErr := twb.applyTransformations(ctx, ba)
+	if pErr != nil {
+		return nil, pErr
+	}
+
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		if summary := rr.Summary(); summary != "" {
+			log.VEventf(ctx, 2, "txn write buffer modified the batch; %s", summary)
+		}
+	}
 
 	if len(transformedBa.Requests) == 0 {
 		// Lower layers (the DistSender and the KVServer) do not expect/handle empty
@@ -146,27 +263,196 @@ func (twb *txnWriteBuffer) SendLocked(
 		// left with an empty batch after applying transformations, eschew sending
 		// anything to KV.
 		br := ba.CreateReply()
-		for i, t := range ts {
-			br.Responses[i], pErr = t.toResp(ctx, twb, kvpb.ResponseUnion{}, ba.Txn)
+		for i, record := range rr {
+			br.Responses[i], pErr = record.toResp(ctx, twb, kvpb.ResponseUnion{}, ba.Txn)
 			if pErr != nil {
 				return nil, pErr
 			}
 		}
+		twb.txnMetrics.TxnWriteBufferFullyHandledBatches.Inc(1)
 		return br, nil
 	}
 
 	br, pErr := twb.wrapped.SendLocked(ctx, transformedBa)
 	if pErr != nil {
-		return nil, twb.adjustError(ctx, transformedBa, ts, pErr)
+		return nil, twb.adjustError(ctx, rr, pErr)
 	}
 
-	return twb.mergeResponseWithTransformations(ctx, ts, br)
+	return twb.mergeResponseWithRequestRecords(ctx, rr, br)
+}
+
+func (twb *txnWriteBuffer) batchRequiresFlush(ctx context.Context, ba *kvpb.BatchRequest) bool {
+	for _, ru := range ba.Requests {
+		req := ru.GetInner()
+		switch req.(type) {
+		case *kvpb.IncrementRequest:
+			// We don't typically see IncrementRequest in transactional batches that
+			// haven't already had write buffering disabled becuase of DDL statements.
+			//
+			// However, we do have at least a few users of the NewTransactionalGenerator
+			// in test code and builtins.
+			//
+			// We could handle this similar to how we handle ConditionalPut, but its
+			// not clear there is much value in that.
+			log.VEventf(ctx, 2, "%s forcing flush of write buffer", req.Method())
+			return true
+		case *kvpb.DeleteRangeRequest:
+			// DeleteRange requests can delete an arbitrary number of keys over a
+			// given keyspan. We won't know the exact scope of the delete until
+			// we've scanned the keyspan, which must happen on the server. We've got
+			// a couple of options here:
+			//
+			// 1. We decompose the DeleteRange request into a (potentially
+			//    locking) Scan followed by buffered point Deletes for each
+			//    key in the scan's result.
+			//
+			// 2. We flush the buffer[1] and send the DeleteRange request to
+			//    the KV layer.
+			//
+			// We choose option 2, as typically the number of keys deleted is large,
+			// and we may realize we're over budget after performing the initial
+			// scan of the keyspan. At that point, we'll have to flush the buffer
+			// anyway. Moreover, buffered writes are most impactful when a
+			// transaction is writing to a small number of keys. As such, it's fine
+			// to not optimize the DeleteRange case, as typically it results in a
+			// large writing transaction.
+			//
+			// [1] Technically, we only need to flush the overlapping portion of the
+			// buffer. However, for simplicity, the txnWriteBuffer doesn't support
+			// transactions with partially buffered writes and partially flushed
+			// writes. We could change this in the future if there's benefit to
+			// doing so.
+
+			log.VEventf(ctx, 2, "%s forcing flush of write buffer", req.Method())
+			return true
+		}
+	}
+	return false
+}
+
+// validateBatch returns an error if the batch is unsupported
+// by the txnWriteBuffer.
+func (twb *txnWriteBuffer) validateBatch(ba *kvpb.BatchRequest) error {
+	if ba.WriteOptions != nil {
+		// OriginTimestamp and OriginID are currently only used by Logical Data
+		// Replication (LDR). These options are unsupported at the moment as we
+		// don't store the inbound batch options in the buffer.
+		if ba.WriteOptions.OriginTimestamp.IsSet() {
+			return errors.AssertionFailedf("transaction write buffer does not support batches with OriginTimestamp set")
+		}
+		if ba.WriteOptions.OriginID != 0 {
+			return errors.AssertionFailedf("transaction write buffer does not support batches with OriginID set")
+		}
+	}
+	return twb.validateRequests(ba)
+}
+
+// validateRequests returns an error if any of the requests in the batch
+// are unsupported by the txnWriteBuffer.
+func (twb *txnWriteBuffer) validateRequests(ba *kvpb.BatchRequest) error {
+	for _, ru := range ba.Requests {
+		req := ru.GetInner()
+		switch t := req.(type) {
+		case *kvpb.ConditionalPutRequest:
+			// Our client side ConditionalPutRequest evaluation does not know how to
+			// handle the origin timestamp setting. Doing so would require sending a
+			// GetRequest with RawMVCCValues set and parsing the MVCCValueHeader.
+			if t.OriginTimestamp.IsSet() {
+				return unsupportedOptionError(t.Method(), "OriginTimestamp")
+			}
+		case *kvpb.PutRequest:
+		case *kvpb.DeleteRequest:
+		case *kvpb.GetRequest:
+			// ReturnRawMVCCValues is unsupported because we don't know how to serve
+			// such reads from the write buffer currently.
+			if t.ReturnRawMVCCValues {
+				return unsupportedOptionError(t.Method(), "ReturnRawMVCCValues")
+			}
+		case *kvpb.ScanRequest:
+			// ReturnRawMVCCValues is unsupported because we don't know how to serve
+			// such reads from the write buffer currently.
+			if t.ReturnRawMVCCValues {
+				return unsupportedOptionError(t.Method(), "ReturnRawMVCCValues")
+			}
+			if t.ScanFormat == kvpb.COL_BATCH_RESPONSE {
+				return unsupportedOptionError(t.Method(), "COL_BATCH_RESPONSE scan format")
+			}
+		case *kvpb.ReverseScanRequest:
+			// ReturnRawMVCCValues is unsupported because we don't know how to serve
+			// such reads from the write buffer currently.
+			if t.ReturnRawMVCCValues {
+				return unsupportedOptionError(t.Method(), "ReturnRawMVCCValues")
+			}
+			if t.ScanFormat == kvpb.COL_BATCH_RESPONSE {
+				return unsupportedOptionError(t.Method(), "COL_BATCH_RESPONSE scan format")
+			}
+		case *kvpb.QueryLocksRequest, *kvpb.LeaseInfoRequest:
+		default:
+			// All other requests are unsupported. Note that we assume that requests
+			// that should result in a buffer flush are handled explicitly before this
+			// method was called.
+			return unsupportedMethodError(t.Method())
+		}
+	}
+	return nil
+}
+
+func unsupportedMethodError(m kvpb.Method) error {
+	return errors.AssertionFailedf("transaction write buffer does not support %s requests", m)
+}
+
+func unsupportedOptionError(m kvpb.Method, option string) error {
+	return errors.AssertionFailedf("transaction write buffer does not support %s requests with %s", m, option)
+}
+
+// estimateSize returns a conservative estimate by which the buffer will grow in
+// size if the writes from the supplied batch request are buffered.
+func (twb *txnWriteBuffer) estimateSize(ba *kvpb.BatchRequest) int64 {
+	var scratch bufferedWrite
+	estimate := int64(0)
+	scratch.vals = make([]bufferedValue, 1)
+	for _, ru := range ba.Requests {
+		req := ru.GetInner()
+		switch t := req.(type) {
+		case *kvpb.ConditionalPutRequest:
+			// At this point, we don't know whether the condition will evaluate
+			// successfully or not, and by extension, whether the KV will be added to
+			// the buffer. We therefore assume the worst case scenario (where the KV
+			// is added to the buffer) in our estimate.
+			scratch.key = t.Key
+			scratch.vals[0] = bufferedValue{
+				val: t.Value,
+				seq: t.Sequence,
+			}
+			estimate += scratch.size()
+		case *kvpb.PutRequest:
+			// NB: when estimating, we're being conservative by assuming the Put is to
+			// a key that isn't already present in the buffer. If it were, we could
+			// omit the key's size from the estimate.
+			scratch.key = t.Key
+			scratch.vals[0] = bufferedValue{
+				val: t.Value,
+				seq: t.Sequence,
+			}
+			estimate += scratch.size()
+		case *kvpb.DeleteRequest:
+			// NB: Similar to Put, we're assuming we're deleting a key that isn't
+			// already present in the buffer.
+			scratch.key = t.Key
+			scratch.vals[0] = bufferedValue{
+				seq: t.Sequence,
+			}
+			estimate += scratch.size()
+		}
+		// No other request is buffered.
+	}
+	return estimate
 }
 
 // adjustError adjusts the provided error based on the transformations made by
 // the txnWriteBuffer to the batch request before sending it to KV.
 func (twb *txnWriteBuffer) adjustError(
-	ctx context.Context, ba *kvpb.BatchRequest, ts transformations, pErr *kvpb.Error,
+	ctx context.Context, rr requestRecords, pErr *kvpb.Error,
 ) *kvpb.Error {
 	// Fix the error index to hide the impact of any requests that were
 	// transformed.
@@ -176,27 +462,31 @@ func (twb *txnWriteBuffer) adjustError(
 		// therefore weren't sent to the KV layer. We can then adjust the error
 		// index accordingly.
 		numStripped := int32(0)
-		numOriginalRequests := len(ba.Requests) + len(ts)
 		baIdx := int32(0)
-		for i := range numOriginalRequests {
-			if len(ts) > 0 && ts[0].index == i {
-				if ts[0].stripped {
-					numStripped++
-				} else {
-					// TODO(arul): If the error index points to a request that we've
-					// transformed, returning this back to the client is weird -- the
-					// client doesn't know we're making transformations. We should
-					// probably just log a warning and clear out the error index for such
-					// cases.
-					log.Fatal(ctx, "unhandled")
+		// Note that all requests in the batch are guaranteed to be in the list of
+		// request records.
+		for _, record := range rr {
+			if record.stripped {
+				numStripped++
+			} else {
+				// If this is a transformed request (for example a LockingGet that was
+				// sent instead of a Del), the error might be a bit confusing to the
+				// client since the request that had an error isn't exactly the request
+				// the user sent.
+				//
+				// For now, we handle this by logging and removing the error index.
+				//
+				// For requests that were not transformed, attributing an error to them
+				// shouldn't confuse the client.
+				if baIdx == pErr.Index.Index && record.transformed {
+					log.Warningf(ctx, "error index %d is part of a transformed request", pErr.Index.Index)
+					pErr.Index = nil
+					return pErr
+				} else if baIdx == pErr.Index.Index {
+					break
 				}
-				ts = ts[1:]
-				continue
+				baIdx++
 			}
-			if baIdx == pErr.Index.Index {
-				break
-			}
-			baIdx++
 		}
 
 		pErr.Index.Index += numStripped
@@ -232,7 +522,14 @@ func (twb *txnWriteBuffer) setWrapped(wrapped lockedSender) {
 
 // populateLeafInputState is part of the txnInterceptor interface.
 func (twb *txnWriteBuffer) populateLeafInputState(tis *roachpb.LeafTxnInputState) {
-	if !twb.enabled || twb.buffer.Len() == 0 {
+	// Note that we don't short-circuit this method if twb.enabled is false in
+	// case write buffering was just disabled, yet we haven't flushed the
+	// buffer.
+	//
+	// At the time of writing, this could only happen when we encountered a DDL
+	// stmt which shouldn't need the LeafTxn support, but we choose to lean on
+	// the safe side and simply ignore twb.enabled boolean.
+	if twb.buffer.Len() == 0 {
 		return
 	}
 	tis.BufferedWrites = make([]roachpb.BufferedWrite, 0, twb.buffer.Len())
@@ -295,36 +592,72 @@ func (twb *txnWriteBuffer) importLeafFinalState(context.Context, *roachpb.LeafTx
 }
 
 // epochBumpedLocked implements the txnInterceptor interface.
-func (twb *txnWriteBuffer) epochBumpedLocked() {}
+func (twb *txnWriteBuffer) epochBumpedLocked() {
+	twb.resetBuffer()
+}
+
+func (twb *txnWriteBuffer) resetBuffer() {
+	twb.buffer.Reset()
+	twb.bufferSize = 0
+}
 
 // createSavepointLocked is part of the txnInterceptor interface.
 func (twb *txnWriteBuffer) createSavepointLocked(context.Context, *savepoint) {}
 
 // rollbackToSavepointLocked is part of the txnInterceptor interface.
-func (twb *txnWriteBuffer) rollbackToSavepointLocked(ctx context.Context, s savepoint) {}
+func (twb *txnWriteBuffer) rollbackToSavepointLocked(ctx context.Context, s savepoint) {
+	toDelete := make([]*bufferedWrite, 0)
+	it := twb.buffer.MakeIter()
+	for it.First(); it.Valid(); it.Next() {
+		bufferedVals := it.Cur().vals
+		// NB: the savepoint is being rolled back to s.seqNum (inclusive). So,
+		// idx is the index of the first value that is considered rolled back.
+		idx := sort.Search(len(bufferedVals), func(i int) bool {
+			return bufferedVals[i].seq >= s.seqNum
+		})
+		if idx == len(bufferedVals) {
+			// No writes are being rolled back.
+			continue
+		}
+		// Update size bookkeeping for the values we're rolling back.
+		for i := idx; i < len(bufferedVals); i++ {
+			twb.bufferSize -= bufferedVals[i].size()
+		}
+		// Rollback writes by truncating the buffered values.
+		it.Cur().vals = bufferedVals[:idx]
+		if len(it.Cur().vals) == 0 {
+			// All writes have been rolled back; we should remove this key from
+			// the buffer entirely.
+			toDelete = append(toDelete, it.Cur())
+		}
+	}
+	for _, bw := range toDelete {
+		twb.removeFromBuffer(bw)
+	}
+}
 
 // closeLocked implements the txnInterceptor interface.
 func (twb *txnWriteBuffer) closeLocked() {}
 
 // applyTransformations applies any applicable transformations to the supplied
 // batch request. In doing so, a new batch request with transformations applied
-// along with a list of transformations that were applied is returned. The
-// caller must handle these transformations on the response path.
+// along with a list of requestRecords is returned. The caller must handle the
+// transformations on the response path.
 //
 // Some examples of transformations include:
 //
-// 1. Blind writes (Put/Delete requests) are buffered locally. When they the
-// original request has MustAcquireExclusiveLock set, a locking Get is used to
-// acquire the lock.
+// 1. Blind writes (Put/Delete requests) are buffered locally. When the original
+// request has MustAcquireExclusiveLock set, a locking Get is used to acquire
+// the lock.
 // 2. Point reads (Get requests) are served from the buffer and stripped from
 // the batch iff the key has seen a buffered write.
 // 3. Scans are always sent to the KV layer, but if the key span being scanned
 // overlaps with any buffered writes, then the response from the KV layer needs
-// to be merged with buffered writes. These are collected as transformations.
+// to be merged with buffered writes. These are collected as requestRecords.
 // 4. ReverseScans, similar to scans, are also always sent to the KV layer and
 // their response needs to be merged with any buffered writes. The only
 // difference is the direction in which the buffer is iterated when doing the
-// merge. As a result, they're also collected as tranformations.
+// merge. As a result, they're also collected as requestRecords.
 // 5. Conditional Puts are decomposed into a locking Get followed by a Put. The
 // Put is buffered locally if the condition evaluates successfully using the
 // Get's response. Otherwise, a ConditionFailedError is returned.
@@ -332,36 +665,44 @@ func (twb *txnWriteBuffer) closeLocked() {}
 // TODO(arul): Augment this comment as these expand.
 func (twb *txnWriteBuffer) applyTransformations(
 	ctx context.Context, ba *kvpb.BatchRequest,
-) (*kvpb.BatchRequest, transformations) {
+) (*kvpb.BatchRequest, requestRecords, *kvpb.Error) {
 	baRemote := ba.ShallowCopy()
 	// TODO(arul): We could improve performance here by pre-allocating
 	// baRemote.Requests to the correct size by counting the number of Puts/Dels
-	// in ba.Requests. The same for the transformations slice. We could also
-	// allocate the right number of ResponseUnion, PutResponse, and DeleteResponse
-	// objects as well.
+	// in ba.Requests. We could also allocate the right number of ResponseUnion,
+	// PutResponse, and DeleteResponse objects as well.
 	baRemote.Requests = nil
 
-	var ts transformations
+	rr := make(requestRecords, 0, len(ba.Requests))
 	for i, ru := range ba.Requests {
 		req := ru.GetInner()
+		// Track a requestRecord for the request regardless of the type, and
+		// regardless of whether it was served from the buffer or not. For
+		// transformed requests (e.g. CPut) this is expected. For Gets and Scans, we
+		// need to track a requestRecord because we haven't buffered any writes
+		// from our current batch in the buffer yet, so checking the buffer here, at
+		// request time, isn't sufficient to determine whether the request needs to
+		// serve a read from the buffer before returning a response or not.
+		//
+		// Only QueryLocksRequest and LeaseInfoRequest don't require a tracking
+		// requestRecord, but it's harmless to add one, and it simplifies the code.
+		//
+		// The stripped and transformed fields will be set below for specific
+		// requests.
+		record := requestRecord{
+			stripped:    false,
+			transformed: false,
+			index:       i,
+			origRequest: req,
+		}
 		switch t := req.(type) {
 		case *kvpb.ConditionalPutRequest:
-			var resp kvpb.ResponseUnion
-			val, served := twb.maybeServeRead(t.Key, t.Sequence)
-			if served {
-				// TODO(ssd): If we tracked locked information here, we could avoid the
-				// locking Get below.
-				log.VEventf(ctx, 2, "serving read portion of %s on key %s from the buffer", t.Method(), t.Key)
-				resp.MustSetInner(&kvpb.GetResponse{
-					Value: val,
-				})
-			}
-			ts = append(ts, transformation{
-				stripped:    false,
-				index:       i,
-				origRequest: req,
-				resp:        resp,
-			})
+			record.transformed = true
+			// NB: Regardless of whether there is already a buffered write on
+			// this key or not, we need to send a locking Get to the KV layer to
+			// acquire a lock. However, if we had knowledge of what locks the
+			// transaction already holds, we could avoid the locking Get in some
+			// cases.
 			getReq := &kvpb.GetRequest{
 				RequestHeader: kvpb.RequestHeader{
 					Key:      t.Key,
@@ -377,12 +718,13 @@ func (twb *txnWriteBuffer) applyTransformations(
 			baRemote.Requests = append(baRemote.Requests, getReqU)
 
 		case *kvpb.PutRequest:
-			// If the MustAcquireExclusiveLock flag is set on the Put, then we need to
-			// add a locking Get to the BatchRequest, including if the key doesn't
-			// exist.
+			// If the MustAcquireExclusiveLock flag is set on the Put, then we
+			// need to add a locking Get to the BatchRequest, including if the
+			// key doesn't exist.
 			if t.MustAcquireExclusiveLock {
-				// TODO(yuzefovich,ssd): ensure that we elide the lock acquisition
-				// whenever possible (e.g. blind UPSERT in an implicit txn).
+				// TODO(yuzefovich,ssd): ensure that we elide the lock
+				// acquisition whenever possible (e.g. blind UPSERT in an
+				// implicit txn).
 				var getReqU kvpb.RequestUnion
 				getReqU.MustSetInner(&kvpb.GetRequest{
 					RequestHeader: kvpb.RequestHeader{
@@ -394,30 +736,13 @@ func (twb *txnWriteBuffer) applyTransformations(
 				})
 				baRemote.Requests = append(baRemote.Requests, getReqU)
 			}
-
-			var ru kvpb.ResponseUnion
-			ru.MustSetInner(&kvpb.PutResponse{})
-			ts = append(ts, transformation{
-				stripped:    !t.MustAcquireExclusiveLock,
-				index:       i,
-				origRequest: req,
-				resp:        ru,
-			})
-			twb.addToBuffer(t.Key, t.Value, t.Sequence)
+			record.stripped = !t.MustAcquireExclusiveLock
+			record.transformed = t.MustAcquireExclusiveLock
 
 		case *kvpb.DeleteRequest:
-			// To correctly populate FoundKey in the response, we need to look in our
-			// write buffer to see if there is a tombstone.
-			var foundKey bool
-			val, served := twb.maybeServeRead(t.Key, t.Sequence)
-			if served {
-				log.VEventf(ctx, 2, "serving read portion of %s on key %s from the buffer", t.Method(), t.Key)
-				foundKey = val.IsPresent()
-			}
-
-			// If MustAcquireExclusiveLock flag is set on the DeleteRequest, then we
-			// need to add a locking Get to the BatchRequest, including if the key
-			// doesn't exist.
+			// If MustAcquireExclusiveLock flag is set on the DeleteRequest,
+			// then we need to add a locking Get to the BatchRequest, including
+			// if the key doesn't exist.
 			if t.MustAcquireExclusiveLock {
 				// TODO(ssd): ensure that we elide the lock acquisition
 				// whenever possible.
@@ -432,104 +757,57 @@ func (twb *txnWriteBuffer) applyTransformations(
 				})
 				baRemote.Requests = append(baRemote.Requests, getReqU)
 			}
-
-			// If we found a key in our write buffer we use that
-			// result regardless of what the GetResponse that we
-			// might have sent says.
-			//
-			// NOTE(ssd): We are assuming that callers who care
-			// about an accurate value of FoundKey also set
-			// MustAcquireExclusiveLock.
-			var ru kvpb.ResponseUnion
-			if served || !t.MustAcquireExclusiveLock {
-				ru.MustSetInner(&kvpb.DeleteResponse{
-					FoundKey: foundKey,
-				})
-			}
-
-			ts = append(ts, transformation{
-				stripped:    !t.MustAcquireExclusiveLock,
-				index:       i,
-				origRequest: req,
-				resp:        ru,
-			})
-			twb.addToBuffer(t.Key, roachpb.Value{}, t.Sequence)
+			record.stripped = !t.MustAcquireExclusiveLock
+			record.transformed = t.MustAcquireExclusiveLock
 
 		case *kvpb.GetRequest:
 			// If the key is in the buffer, we must serve the read from the buffer.
-			val, served := twb.maybeServeRead(t.Key, t.Sequence)
+			// The actual serving of the read will happen on the response path though.
+			stripped := false
+			_, served := twb.maybeServeRead(t.Key, t.Sequence)
 			if served {
-				log.VEventf(ctx, 2, "serving %s on key %s from the buffer", t.Method(), t.Key)
-				var resp kvpb.ResponseUnion
-				getResp := &kvpb.GetResponse{}
-				if val.IsPresent() {
-					getResp.Value = val
-				}
-				resp.MustSetInner(getResp)
-
-				stripped := true
 				if t.KeyLockingStrength != lock.None {
 					// Even though the Get request must be served from the buffer, as the
 					// transaction performed a previous write to the key, we still need to
 					// acquire a lock at the leaseholder. As a result, we can't strip the
-					// request from the batch.
+					// request from the remote batch.
 					//
 					// TODO(arul): we could eschew sending this request if we knew there
 					// was a sufficiently strong lock already present on the key.
-					stripped = false
+					log.VEventf(ctx, 2, "locking %s on key %s must be sent to the server", t.Method(), t.Key)
 					baRemote.Requests = append(baRemote.Requests, ru)
+				} else {
+					// We'll synthesize the response from the buffer on the response path;
+					// eschew sending the request to the KV layer as we don't need to
+					// acquire a lock.
+					stripped = true
+					log.VEventf(
+						ctx, 2, "non-locking %s on key %s can be fully served by the client; not sending to KV", t.Method(), t.Key,
+					)
 				}
-
-				ts = append(ts, transformation{
-					stripped:    stripped,
-					index:       i,
-					origRequest: req,
-					resp:        resp,
-				})
-				// We've constructed a response that we'll stitch together with the
-				// result on the response path; eschew sending the request to the KV
-				// layer.
-				//
-				// TODO(arul): if the ReturnRawMVCCValues flag is set, we'll need to
-				// flush the buffer.
-				continue
+			} else {
+				// Wasn't served locally; send the request to the KV layer.
+				baRemote.Requests = append(baRemote.Requests, ru)
 			}
-			// Wasn't served locally; send the request to the KV layer.
-			baRemote.Requests = append(baRemote.Requests, ru)
+			record.stripped = stripped
 
-		case *kvpb.ScanRequest:
-			overlaps := twb.scanOverlaps(t.Key, t.EndKey)
-			if overlaps {
-				ts = append(ts, transformation{
-					stripped:    false,
-					index:       i,
-					origRequest: req,
-				})
-			}
+		case *kvpb.ScanRequest, *kvpb.ReverseScanRequest:
 			// Regardless of whether the scan overlaps with any writes in the buffer
 			// or not, we must send the request to the KV layer. We can't know for
 			// sure that there's nothing else to read.
 			baRemote.Requests = append(baRemote.Requests, ru)
 
-		case *kvpb.ReverseScanRequest:
-			overlaps := twb.scanOverlaps(t.Key, t.EndKey)
-			if overlaps {
-				ts = append(ts, transformation{
-					stripped:    false,
-					index:       i,
-					origRequest: req,
-				})
-			}
-			// Similar to the reasoning above, regardless of whether the reverse
-			// scan overlaps with any writes in the buffer or not, we must send
-			// the request to the KV layer.
+		case *kvpb.QueryLocksRequest, *kvpb.LeaseInfoRequest:
+			// These requests don't interact with buffered writes, so we simply
+			// let them through.
 			baRemote.Requests = append(baRemote.Requests, ru)
 
 		default:
-			baRemote.Requests = append(baRemote.Requests, ru)
+			return nil, nil, kvpb.NewError(unsupportedMethodError(t.Method()))
 		}
+		rr = append(rr, record)
 	}
-	return baRemote, ts
+	return baRemote, rr, nil
 }
 
 // seekItemForSpan returns a bufferedWrite appropriate for use with a
@@ -573,14 +851,6 @@ func (twb *txnWriteBuffer) maybeServeRead(
 		return nil, false
 	}
 	return nil, false
-}
-
-// scanOverlaps returns whether the given key range overlaps with any buffered
-// write.
-func (twb *txnWriteBuffer) scanOverlaps(key roachpb.Key, endKey roachpb.Key) bool {
-	it := twb.buffer.MakeIter()
-	it.FirstOverlap(twb.seekItemForSpan(key, endKey))
-	return it.Valid()
 }
 
 // mergeWithScanResp takes a ScanRequest, that was sent to the KV layer, and the
@@ -657,6 +927,10 @@ func (twb *txnWriteBuffer) mergeBufferAndResp(
 		it.FirstOverlap(seek)
 	}
 	bufferNext := func() {
+		// NB: we must reset seek before every use, as it's shared across multiple
+		// methods on the txnWriteBuffer. In particular, it's used by
+		// maybeServeRead, which we may call below.
+		seek = twb.seekItemForSpan(respIter.startKey(), respIter.endKey())
 		if reverse {
 			it.PrevOverlap(seek)
 		} else {
@@ -733,88 +1007,71 @@ func (twb *txnWriteBuffer) mergeBufferAndResp(
 	}
 }
 
-// mergeResponsesWithTransformations merges responses from the KV layer with the
-// transformations that were applied by the txnWriteBuffer before sending the
-// batch request. As a result, interceptors above the txnWriteBuffer remain
-// oblivious to its decision to buffer any writes.
-func (twb *txnWriteBuffer) mergeResponseWithTransformations(
-	ctx context.Context, ts transformations, br *kvpb.BatchResponse,
+// mergeResponseWithRequestRecords merges responses from the KV layer with the
+// requestRecords and potential transformations applied by the txnWriteBuffer
+// before sending the batch request. As a result, interceptors above the
+// txnWriteBuffer remain oblivious to its decision to buffer any writes.
+func (twb *txnWriteBuffer) mergeResponseWithRequestRecords(
+	ctx context.Context, rr requestRecords, br *kvpb.BatchResponse,
 ) (_ *kvpb.BatchResponse, pErr *kvpb.Error) {
-	if ts.Empty() && br == nil {
+	if rr.Empty() && br == nil {
 		log.Fatal(ctx, "unexpectedly found no transformations and no batch response")
-	} else if ts.Empty() {
+	} else if rr.Empty() {
 		return br, nil
 	}
 
-	// Figure out the length of the merged responses slice.
-	mergedRespsLen := len(br.Responses)
-	for _, t := range ts {
-		if t.stripped {
-			mergedRespsLen++
-		}
-	}
-	mergedResps := make([]kvpb.ResponseUnion, mergedRespsLen)
-	for i := range mergedResps {
-		if len(ts) > 0 && ts[0].index == i {
-			if !ts[0].stripped {
-				// If the transformation wasn't stripped from the batch we sent to KV,
-				// we received a response for it, which then needs to be combined with
-				// what's in the write buffer.
-				resp := br.Responses[0]
-				mergedResps[i], pErr = ts[0].toResp(ctx, twb, resp, br.Txn)
-				if pErr != nil {
-					return nil, pErr
-				}
-				br.Responses = br.Responses[1:]
-			} else {
-				mergedResps[i], pErr = ts[0].toResp(ctx, twb, kvpb.ResponseUnion{}, br.Txn)
-				if pErr != nil {
-					return nil, pErr
-				}
+	// All original requests are guaranteed to be in the list of requestRecords,
+	// so the length of the merged responses is the same length as rr.
+	mergedResps := make([]kvpb.ResponseUnion, 0, len(rr))
+	for _, record := range rr {
+		brResp := kvpb.ResponseUnion{}
+		if !record.stripped {
+			if len(br.Responses) == 0 {
+				log.Fatal(ctx, "unexpectedly found a non-stripped request and no batch response")
 			}
-
-			ts = ts[1:]
-			continue
+			// If the request wasn't stripped from the batch we sent to KV, we
+			// received a response for it, which then needs to be combined with
+			// what's in the write buffer.
+			brResp = br.Responses[0]
+			br.Responses = br.Responses[1:]
 		}
-
-		// No transformation applies at this index. Copy over the response as is.
-		mergedResps[i] = br.Responses[0]
-		br.Responses = br.Responses[1:]
+		resp, pErr := record.toResp(ctx, twb, brResp, br.Txn)
+		if pErr != nil {
+			return nil, pErr
+		}
+		mergedResps = append(mergedResps, resp)
 	}
+
 	br.Responses = mergedResps
 	return br, nil
 }
 
-// transformation is a modification applied by the txnWriteBuffer on a batch
-// request that needs to be accounted for when returning the response.
-type transformation struct {
+// requestRecord stores a set of metadata fields about potential transformations
+// applied by the txnWriteBuffer on a batch request that needs to be accounted
+// for when returning the response.
+type requestRecord struct {
 	// stripped, if true, indicates that the request was stripped from the batch
 	// and never sent to the KV layer.
 	stripped bool
-	// index of the request in the original batch to which the transformation
+	// transformed, if true, indicates that the request was transformed into a
+	// different request to be sent to the KV layer. If stripped is true, then
+	// transformed is always false; i.e. if the request was completely dropped,
+	// then it's not considered transformed.
+	transformed bool
+	// index of the request in the original batch to which the requestRecord
 	// applies.
 	index int
 	// origRequest is the original request that was transformed.
 	origRequest kvpb.Request
-	// resp is locally produced response that needs to be merged with any
-	// responses returned by the KV layer. This is set for requests that can be
-	// evaluated locally (e.g. blind writes, reads that can be served entirely
-	// from the buffer). Must be set if stripped is true, but the converse doesn't
-	// hold.
-	resp kvpb.ResponseUnion
 }
 
 // toResp returns the response that should be added to the batch response as
-// a result of applying the transformation.
-func (t transformation) toResp(
+// a result of applying the requestRecord.
+func (rr requestRecord) toResp(
 	ctx context.Context, twb *txnWriteBuffer, br kvpb.ResponseUnion, txn *roachpb.Transaction,
 ) (kvpb.ResponseUnion, *kvpb.Error) {
-	if t.stripped {
-		return t.resp, nil
-	}
-
 	var ru kvpb.ResponseUnion
-	switch req := t.origRequest.(type) {
+	switch req := rr.origRequest.(type) {
 	case *kvpb.ConditionalPutRequest:
 		// Evaluate the condition.
 		evalFn := mvcceval.MaybeConditionFailedError
@@ -822,60 +1079,90 @@ func (t transformation) toResp(
 			evalFn = twb.testingOverrideCPutEvalFn
 		}
 
-		var getResp *kvpb.GetResponse
-		if bufResp := t.resp.GetGet(); bufResp != nil {
-			// If we served the response out of the buffer, we don't care what came
-			// back from KV.
-			getResp = bufResp
-		} else {
-			getResp = br.GetInner().(*kvpb.GetResponse)
+		var val *roachpb.Value
+		var served bool
+		val, served = twb.maybeServeRead(req.Key, req.Sequence)
+		if !served {
+			// We only use the response from KV if there wasn't already a
+			// buffered value for this key that our transaction wrote
+			// previously.
+			val = br.GetInner().(*kvpb.GetResponse).Value
 		}
 
 		condFailedErr := evalFn(
 			req.ExpBytes,
-			getResp.Value,
-			getResp.Value.IsPresent(),
+			val,
+			val.IsPresent(),
 			req.AllowIfDoesNotExist,
 		)
 		if condFailedErr != nil {
 			pErr := kvpb.NewErrorWithTxn(condFailedErr, txn)
-			pErr.SetErrorIndex(int32(t.index))
+			pErr.SetErrorIndex(int32(rr.index))
 			return kvpb.ResponseUnion{}, pErr
 		}
-		// The condition was satisfied; buffer a Put, and return a synthesized
-		// response.
-		twb.addToBuffer(req.Key, req.Value, req.Sequence)
+		// The condition was satisfied; buffer the write and return a
+		// synthesized response.
 		ru.MustSetInner(&kvpb.ConditionalPutResponse{})
+		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq)
 
 	case *kvpb.PutRequest:
-		ru = t.resp
+		ru.MustSetInner(&kvpb.PutResponse{})
+		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq)
 
 	case *kvpb.DeleteRequest:
-		ru = t.resp
-		// If the deletion response is already set, it means we served response from
-		// the write buffer. We can still be here because we happened to need to
-		// send a GetRequest solely for the locking behaviour.
-		if ru.GetDelete() == nil {
+		// To correctly populate FoundKey in the response, we must prefer any
+		// buffered values (if they exist).
+		var foundKey bool
+		val, served := twb.maybeServeRead(req.Key, req.Sequence)
+		if served {
+			log.VEventf(ctx, 2, "serving read portion of %s on key %s from the buffer", req.Method(), req.Key)
+			foundKey = val.IsPresent()
+		} else if req.MustAcquireExclusiveLock {
+			// We sent a GetRequest to the KV layer to acquire an exclusive lock
+			// on the key, regardless of whether the key already exists or not.
+			// Populate FoundKey using the response.
 			getResp := br.GetInner().(*kvpb.GetResponse)
 			if log.ExpensiveLogEnabled(ctx, 2) {
 				log.Eventf(ctx, "synthesizing DeleteResponse from GetResponse: %#v", getResp)
 			}
-			ru.MustSetInner(&kvpb.DeleteResponse{
-				FoundKey: getResp.Value.IsPresent(),
-			})
+			foundKey = getResp.Value.IsPresent()
+		} else {
+			// NB: If MustAcquireExclusiveLock wasn't set by the client then we
+			// eschew sending a Get request to the KV layer just to populate
+			// FoundKey correctly. So we're assuming that callers who care
+			// whether a key is found or not also want to acquire an exclusive
+			// lock on it. While this is true as of the time of writing, the
+			// behaviour here is less than ideal.
+			//
+			// TODO(arul): improve the FoundKey semantics to have callers opt
+			// into whether the care about the key being found. Alternatively,
+			// clarify the behaviour on DeleteRequest.
+			foundKey = false
 		}
+		ru.MustSetInner(&kvpb.DeleteResponse{
+			FoundKey: foundKey,
+		})
+		twb.addToBuffer(req.Key, roachpb.Value{}, req.Sequence, req.KVNemesisSeq)
+
 	case *kvpb.GetRequest:
-		// Get requests must be served from the local buffer if a transaction
-		// performed a previous write to the key being read. However, Get requests
-		// must be sent to the KV layer (i.e. not be stripped) iff they are locking
-		// in nature.
-		assertTrue(t.stripped == (req.KeyLockingStrength == lock.None),
-			"Get requests should either be stripped or be locking")
-		ru = t.resp
+		val, served := twb.maybeServeRead(req.Key, req.Sequence)
+		if served {
+			getResp := &kvpb.GetResponse{}
+			if val.IsPresent() {
+				getResp.Value = val
+			}
+			ru.MustSetInner(getResp)
+			log.VEventf(ctx, 2, "serving %s on key %s from the buffer", req.Method(), req.Key)
+		} else {
+			// The request wasn't served from the buffer; return the response from the
+			// KV layer.
+			assertTrue(!rr.stripped, "we shouldn't be stripping requests that aren't served from the buffer")
+			ru = br
+		}
 
 	case *kvpb.ScanRequest:
 		scanResp, err := twb.mergeWithScanResp(
-			t.origRequest.(*kvpb.ScanRequest), br.GetInner().(*kvpb.ScanResponse),
+			rr.origRequest.(*kvpb.ScanRequest), br.GetInner().(*kvpb.ScanResponse),
 		)
 		if err != nil {
 			return kvpb.ResponseUnion{}, kvpb.NewError(err)
@@ -884,37 +1171,76 @@ func (t transformation) toResp(
 
 	case *kvpb.ReverseScanRequest:
 		reverseScanResp, err := twb.mergeWithReverseScanResp(
-			t.origRequest.(*kvpb.ReverseScanRequest), br.GetInner().(*kvpb.ReverseScanResponse),
+			rr.origRequest.(*kvpb.ReverseScanRequest), br.GetInner().(*kvpb.ReverseScanResponse),
 		)
 		if err != nil {
 			return kvpb.ResponseUnion{}, kvpb.NewError(err)
 		}
 		ru.MustSetInner(reverseScanResp)
 
+	case *kvpb.QueryLocksRequest, *kvpb.LeaseInfoRequest:
+		// These requests don't interact with buffered writes, so we simply
+		// let the response through unchanged.
+		ru = br
+
 	default:
-		// This is only possible once we start decomposing read-write requests into
-		// separate bits.
-		panic("unimplemented")
+		return ru, kvpb.NewError(unsupportedMethodError(req.Method()))
 	}
 
-	// TODO(arul): in the future, when we'll evaluate CPuts locally, we'll have
-	// this function take in the result of the KVGet, save the CPut function
-	// locally on the transformation, and use these two things to evaluate the
-	// condition here, on the client. We'll then construct and return the
-	// appropriate response.
+	if buildutil.CrdbTestBuild {
+		if ru.GetInner() == nil {
+			panic(errors.AssertionFailedf("expected response to be set for type %T", rr.origRequest))
+		}
+	}
 
 	return ru, nil
 }
 
-// transformations is a list of transformations applied by the txnWriteBuffer.
-type transformations []transformation
+// requestRecords is a slice of requestRecord.
+type requestRecords []requestRecord
 
-func (t transformations) Empty() bool {
-	return len(t) == 0
+func (rr requestRecords) Empty() bool {
+	return len(rr) == 0
+}
+
+// Summary returns a string summarizing the modifications made to the original
+// batch that generated this set of request records. An empty string indicates
+// that the original batch was not modified.
+func (rr requestRecords) Summary() string {
+	fullyBuffered := make(map[kvpb.Method]int)
+	transformed := make(map[kvpb.Method]int)
+	for _, rec := range rr {
+		if rec.stripped {
+			fullyBuffered[rec.origRequest.Method()]++
+		} else if rec.transformed {
+			transformed[rec.origRequest.Method()]++
+		}
+	}
+	if len(fullyBuffered) == 0 && len(transformed) == 0 {
+		return ""
+	}
+	b := &strings.Builder{}
+	sep := ""
+	if len(fullyBuffered) > 0 {
+		b.WriteString("fully buffered:")
+		for method, count := range fullyBuffered {
+			fmt.Fprintf(b, " %s:%d", method, count)
+		}
+		sep = "; "
+	}
+	if len(transformed) > 0 {
+		fmt.Fprintf(b, "%stransformed:", sep)
+		for method, count := range transformed {
+			fmt.Fprintf(b, " %s:%d", method, count)
+		}
+	}
+	return b.String()
 }
 
 // addToBuffer adds a write to the given key to the buffer.
-func (twb *txnWriteBuffer) addToBuffer(key roachpb.Key, val roachpb.Value, seq enginepb.TxnSeq) {
+func (twb *txnWriteBuffer) addToBuffer(
+	key roachpb.Key, val roachpb.Value, seq enginepb.TxnSeq, kvNemSeq kvnemesisutil.Container,
+) {
 	it := twb.buffer.MakeIter()
 	seek := twb.seekItemForSpan(key, nil)
 
@@ -922,41 +1248,85 @@ func (twb *txnWriteBuffer) addToBuffer(key roachpb.Key, val roachpb.Value, seq e
 	if it.Valid() {
 		// We've already seen a write for this key.
 		bw := it.Cur()
-		bw.vals = append(bw.vals, bufferedValue{val: val, seq: seq})
+		val := bufferedValue{val: val, seq: seq, kvNemesisSeq: kvNemSeq}
+		bw.vals = append(bw.vals, val)
+		twb.bufferSize += val.size()
 	} else {
 		twb.bufferIDAlloc++
-		twb.buffer.Set(&bufferedWrite{
+		bw := &bufferedWrite{
 			id:   twb.bufferIDAlloc,
 			key:  key,
-			vals: []bufferedValue{{val: val, seq: seq}},
-		})
+			vals: []bufferedValue{{val: val, seq: seq, kvNemesisSeq: kvNemSeq}},
+		}
+		twb.buffer.Set(bw)
+		twb.bufferSize += bw.size()
 	}
 }
 
-// flushWithEndTxn flushes all buffered writes to the KV layer along with the
-// EndTxn request. Responses from the flushing are stripped before returning.
-func (twb *txnWriteBuffer) flushWithEndTxn(
+// removeFromBuffer removes all buffered writes on a given key from the buffer.
+func (twb *txnWriteBuffer) removeFromBuffer(bw *bufferedWrite) {
+	twb.buffer.Delete(bw)
+	twb.bufferSize -= bw.size()
+}
+
+// flushBufferAndSendBatch flushes all buffered writes when sending the supplied
+// batch request to the KV layer. This is done by pre-pending the buffered
+// writes to the requests in the batch.
+//
+// The response is transformed to hide the fact that requests were added to the
+// batch to flush the buffer. Upper layers remain oblivious to the flush and any
+// buffering in general.
+func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvpb.Error) {
-	numBuffered := twb.buffer.Len()
-	if numBuffered == 0 {
+	defer func() {
+		assertTrue(twb.buffer.Len() == 0, "buffer should be empty after flush")
+		assertTrue(twb.bufferSize == 0, "buffer size should be 0 after flush")
+		assertTrue(twb.flushed, "flushed should be true after flush")
+	}()
+
+	// Once we've flushed the buffer, we disable write buffering going forward. We
+	// do this even if the buffer is empty since once we've called this function,
+	// our buffer no longer represents all of the writes in the transaction.
+	log.VEventf(ctx, 2, "disabling write buffering for this epoch")
+	twb.flushed = true
+
+	numKeysBuffered := twb.buffer.Len()
+	if numKeysBuffered == 0 {
 		return twb.wrapped.SendLocked(ctx, ba) // nothing to flush
 	}
-	// Iterate over the buffered writes and flush all buffered writes to the KV
-	// layer by adding them to the batch.
-	//
-	// TODO(arul): If the batch request with the EndTxn request also contains an
-	// overlapping write to a key that's already in the buffer, we could exclude
-	// that write from the buffer.
-	reqs := make([]kvpb.RequestUnion, 0, numBuffered+len(ba.Requests))
-	it := twb.buffer.MakeIter()
-	for it.First(); it.Valid(); it.Next() {
-		reqs = append(reqs, it.Cur().toRequest())
+
+	_, hasEndTxn := ba.GetArg(kvpb.EndTxn)
+	if !hasEndTxn {
+		// We're flushing the buffer even though the batch doesn't contain an EndTxn
+		// request. That means we buffered some writes and decided to disable write
+		// buffering mid-way through the transaction, thus necessitating this flush.
+		twb.txnMetrics.TxnWriteBufferDisabledAfterBuffering.Inc(1)
 	}
+
+	// Flush all buffered writes by pre-pending them to the requests being sent
+	// in the batch.
+	//
+	// TODO(ssd): We can maintain the revision count in the buffer as well to
+	// allocate this more accurately.
+	reqs := make([]kvpb.RequestUnion, 0, numKeysBuffered+len(ba.Requests))
+	it := twb.buffer.MakeIter()
+	numRevisionsBuffered := 0
+	for it.First(); it.Valid(); it.Next() {
+		if !hasEndTxn {
+			revs := it.Cur().toAllRevisionRequests()
+			numRevisionsBuffered += len(revs)
+			reqs = append(reqs, revs...)
+		} else {
+			numRevisionsBuffered++
+			reqs = append(reqs, it.Cur().toRequest())
+		}
+	}
+	twb.resetBuffer()
 
 	// Layers below us expect that writes inside a batch are in sequence number
 	// order but the iterator above returns data in key order. Here we re-sort it
-	// which is unfortunate but required we make a change to the pipeliner.
+	// which is unfortunate but required unless we make a change to the pipeliner.
 	slices.SortFunc(reqs, func(a kvpb.RequestUnion, b kvpb.RequestUnion) int {
 		aHeader := a.GetInner().Header()
 		bHeader := b.GetInner().Header()
@@ -970,15 +1340,14 @@ func (twb *txnWriteBuffer) flushWithEndTxn(
 	})
 
 	ba = ba.ShallowCopy()
-	reqs = append(reqs, ba.Requests...)
-	ba.Requests = reqs
-
+	ba.Requests = append(reqs, ba.Requests...)
 	br, pErr := twb.wrapped.SendLocked(ctx, ba)
 	if pErr != nil {
-		return nil, twb.adjustErrorUponFlush(ctx, numBuffered, pErr)
+		return nil, twb.adjustErrorUponFlush(ctx, numRevisionsBuffered, pErr)
 	}
+
 	// Strip out responses for all the flushed buffered writes.
-	br.Responses = br.Responses[numBuffered:]
+	br.Responses = br.Responses[numRevisionsBuffered:]
 	return br, nil
 }
 
@@ -986,6 +1355,12 @@ func (twb *txnWriteBuffer) flushWithEndTxn(
 // locally.
 func (twb *txnWriteBuffer) hasBufferedWrites() bool {
 	return twb.buffer.Len() > 0
+}
+
+// shouldBuffer returns true if SendLocked() should attempt to buffer parts of
+// the batch.
+func (twb *txnWriteBuffer) shouldBuffer() bool {
+	return twb.enabled && !twb.flushed
 }
 
 // testingBufferedWritesAsSlice returns all buffered writes, in key order, as a
@@ -1002,6 +1377,8 @@ func (twb *txnWriteBuffer) testingBufferedWritesAsSlice() []bufferedWrite {
 	}
 	return writes
 }
+
+const bufferedWriteStructOverhead = int64(unsafe.Sizeof(bufferedWrite{}))
 
 // bufferedWrite is a buffered write operation to a given key. It maps a key to
 // possibly multiple values[1], each with an associated sequence number.
@@ -1022,10 +1399,23 @@ type bufferedWrite struct {
 	vals []bufferedValue // sorted in increasing sequence number order
 }
 
+func (bw *bufferedWrite) size() int64 {
+	size := keySize(bw.key) + keySize(bw.endKey) + bufferedWriteStructOverhead
+	for _, v := range bw.vals {
+		size += v.size()
+	}
+	return size
+}
+
+const bufferedValueStructOverhead = int64(unsafe.Sizeof(bufferedValue{}))
+
 // bufferedValue is a value written to a key at a given sequence number.
 type bufferedValue struct {
-	val roachpb.Value
-	seq enginepb.TxnSeq
+	// NB: Keep this at the start of the struct so that it is zero (size) cost in
+	// production.
+	kvNemesisSeq kvnemesisutil.Container
+	val          roachpb.Value
+	seq          enginepb.TxnSeq
 }
 
 // valPtr returns a pointer to the buffered value.
@@ -1035,6 +1425,43 @@ func (bv *bufferedValue) valPtr() *roachpb.Value {
 	// be fine; just have them opt into it.
 	valCpy := bv.val
 	return &valCpy
+}
+
+func (bv *bufferedValue) size() int64 {
+	return int64(len(bv.val.RawBytes)) + bufferedValueStructOverhead
+}
+
+func (bv *bufferedValue) toRequestUnion(key roachpb.Key) kvpb.RequestUnion {
+	var ru kvpb.RequestUnion
+	if bv.val.IsPresent() {
+		// TODO(arul): we could allocate PutRequest objects all at once when we're
+		// about to flush the buffer. We'll probably want to keep track of the
+		// number of each request type in the btree to avoid iterating and counting
+		// each request type.
+		//
+		// TODO(arul): should we use a sync.Pool here?
+		putAlloc := new(struct {
+			put   kvpb.PutRequest
+			union kvpb.RequestUnion_Put
+		})
+		putAlloc.put.Key = key
+		putAlloc.put.Value = bv.val
+		putAlloc.put.Sequence = bv.seq
+		putAlloc.put.KVNemesisSeq = bv.kvNemesisSeq
+		putAlloc.union.Put = &putAlloc.put
+		ru.Value = &putAlloc.union
+	} else {
+		delAlloc := new(struct {
+			del   kvpb.DeleteRequest
+			union kvpb.RequestUnion_Delete
+		})
+		delAlloc.del.Key = key
+		delAlloc.del.Sequence = bv.seq
+		delAlloc.del.KVNemesisSeq = bv.kvNemesisSeq
+		delAlloc.union.Delete = &delAlloc.del
+		ru.Value = &delAlloc.union
+	}
+	return ru
 }
 
 //go:generate ../../../util/interval/generic/gen.sh *bufferedWrite kvcoord
@@ -1050,41 +1477,27 @@ func (bw *bufferedWrite) SetID(v uint64)      { bw.id = v }
 func (bw *bufferedWrite) SetKey(v []byte)     { bw.key = v }
 func (bw *bufferedWrite) SetEndKey(v []byte)  { bw.endKey = v }
 
+// toRequest() returns a request for the most recent revision of the buffered
+// writes for the key. A key may be written to multiple times during the course
+// of a transaction. However, when flushing to KV at the end of a transaction,
+// we only need to flush the most recent write (read: the one with the highest
+// sequence number).
 func (bw *bufferedWrite) toRequest() kvpb.RequestUnion {
-	var ru kvpb.RequestUnion
-	// A key may be written to multiple times during the course of a transaction.
-	// However, when flushing to KV, we only need to flush the most recent write
-	// (read: the one with the highest sequence number). As we store values in
-	// increasing sequence number order, this should be the last value in the
-	// slice.
-	val := bw.vals[len(bw.vals)-1]
-	if val.val.IsPresent() {
-		// TODO(arul): we could allocate PutRequest objects all at once when we're
-		// about to flush the buffer. We'll probably want to keep track of the
-		// number of each request type in the btree to avoid iterating and counting
-		// each request type.
-		//
-		// TODO(arul): should we use a sync.Pool here?
-		putAlloc := new(struct {
-			put   kvpb.PutRequest
-			union kvpb.RequestUnion_Put
-		})
-		putAlloc.put.Key = bw.key
-		putAlloc.put.Value = val.val
-		putAlloc.put.Sequence = val.seq
-		putAlloc.union.Put = &putAlloc.put
-		ru.Value = &putAlloc.union
-	} else {
-		delAlloc := new(struct {
-			del   kvpb.DeleteRequest
-			union kvpb.RequestUnion_Delete
-		})
-		delAlloc.del.Key = bw.key
-		delAlloc.del.Sequence = val.seq
-		delAlloc.union.Delete = &delAlloc.del
-		ru.Value = &delAlloc.union
+	// As we store values in increasing sequence number order, the most recent
+	// write should be the last value in the slice.
+	return bw.vals[len(bw.vals)-1].toRequestUnion(bw.key)
+}
+
+// toAllRevisionRequests returns requests for all revisions of the buffered
+// writes for the key. When the buffer is flushed before the end of a
+// transaction, all revisions must be written to storage to ensure that a future
+// savepoint rollback is properly handled.
+func (bw *bufferedWrite) toAllRevisionRequests() []kvpb.RequestUnion {
+	rus := make([]kvpb.RequestUnion, 0, len(bw.vals))
+	for _, val := range bw.vals {
+		rus = append(rus, val.toRequestUnion(bw.key))
 	}
-	return ru
+	return rus
 }
 
 // getKey reads the key for the next KV from a slice of BatchResponses field of
@@ -1145,6 +1558,11 @@ type respIter struct {
 	// BATCH_RESPONSE are supported right now.
 	scanFormat kvpb.ScanFormat
 
+	// resumeSpan, if set, is the ResumeSpan of the response. When non-nil, it
+	// means that the response is being paginated, so we need to overlap the
+	// buffer only with the part of the original span that was actually scanned.
+	resumeSpan *roachpb.Span
+
 	// rows is the Rows field of the corresponding response.
 	//
 	// Only set with KEY_VALUES scan format.
@@ -1182,6 +1600,7 @@ func newScanRespIter(req *kvpb.ScanRequest, resp *kvpb.ScanResponse) *respIter {
 	return &respIter{
 		scanReq:        req,
 		scanFormat:     req.ScanFormat,
+		resumeSpan:     resp.ResumeSpan,
 		rows:           resp.Rows,
 		batchResponses: resp.BatchResponses,
 	}
@@ -1198,6 +1617,7 @@ func newReverseScanRespIter(
 	return &respIter{
 		reverseScanReq: req,
 		scanFormat:     req.ScanFormat,
+		resumeSpan:     resp.ResumeSpan,
 		rows:           resp.Rows,
 		batchResponses: resp.BatchResponses,
 	}
@@ -1251,6 +1671,14 @@ func (s *respIter) startKey() roachpb.Key {
 	if s.scanReq != nil {
 		return s.scanReq.Key
 	}
+	// For ReverseScans, the EndKey of the ResumeSpan is updated to indicate the
+	// start key for the "next" page, which is exactly the last key that was
+	// reverse-scanned for the current response.
+	// TODO(yuzefovich): we should have some unit tests that exercise the
+	// ResumeSpan case.
+	if s.resumeSpan != nil {
+		return s.resumeSpan.EndKey
+	}
 	return s.reverseScanReq.Key
 }
 
@@ -1258,6 +1686,12 @@ func (s *respIter) startKey() roachpb.Key {
 // was created.
 func (s *respIter) endKey() roachpb.Key {
 	if s.scanReq != nil {
+		// For Scans, the Key of the ResumeSpan is updated to indicate the start
+		// key for the "next" page, which is exactly the last key that was
+		// scanned for the current response.
+		if s.resumeSpan != nil {
+			return s.resumeSpan.Key
+		}
 		return s.scanReq.EndKey
 	}
 	return s.reverseScanReq.EndKey
@@ -1474,7 +1908,7 @@ func (m *respMerger) toReverseScanResp(
 
 // assertTrue panics with a message if the supplied condition isn't true.
 func assertTrue(cond bool, msg string) {
-	if !cond {
+	if !cond && buildutil.CrdbTestBuild {
 		panic(msg)
 	}
 }

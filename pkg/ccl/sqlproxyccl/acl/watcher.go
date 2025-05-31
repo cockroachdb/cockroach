@@ -33,7 +33,7 @@ type Watcher struct {
 	options *aclOptions
 
 	// All of the listeners waiting for changes to the access control list.
-	listeners *btree.BTree
+	listeners *btree.BTreeG[*listener]
 
 	// These control whether or not a connection is allowd based on it's
 	// ConnectionTags.
@@ -128,7 +128,7 @@ func NewWatcher(ctx context.Context, opts ...Option) (*Watcher, error) {
 		opt(options)
 	}
 	w := &Watcher{
-		listeners:   btree.New(8),
+		listeners:   btree.NewG[*listener](8, func(a, b *listener) bool { return a.id < b.id }),
 		options:     options,
 		controllers: make([]AccessController, 0),
 	}
@@ -235,7 +235,7 @@ func (w *Watcher) addAccessController(
 func (w *Watcher) updateAccessController(
 	ctx context.Context, index int, controller AccessController,
 ) {
-	var copy *btree.BTree
+	var copy *btree.BTreeG[*listener]
 	var controllers []AccessController
 	func() {
 		w.mu.Lock()
@@ -304,14 +304,10 @@ func (w *Watcher) removeListener(l *listener) {
 	w.listeners.Delete(l)
 }
 
-// Less implements the btree.Item interface for listener.
-func (l *listener) Less(than btree.Item) bool {
-	return l.id < than.(*listener).id
-}
-
-func checkListeners(ctx context.Context, listeners *btree.BTree, controllers []AccessController) {
-	listeners.Ascend(func(i btree.Item) bool {
-		lst := i.(*listener)
+func checkListeners(
+	ctx context.Context, listeners *btree.BTreeG[*listener], controllers []AccessController,
+) {
+	listeners.Ascend(func(lst *listener) bool {
 		if err := checkConnection(ctx, lst.connection, controllers); err != nil {
 			lst.mu.Lock()
 			defer lst.mu.Unlock()
@@ -362,7 +358,6 @@ func pollAndUpdateChan(
 				log.Errorf(ctx, "WatchList daemon stopped: %v", ctx.Err())
 				return
 			case <-t.Ch():
-				t.MarkRead()
 				result <- accessController
 			}
 		}

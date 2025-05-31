@@ -1,5 +1,8 @@
 # LogicTest: 3node-tenant
 
+statement ok
+SET kv_transaction_buffered_writes_enabled = false;
+
 # Create a table, write a row, lock it, then switch users.
 statement ok
 CREATE TABLE t (k STRING PRIMARY KEY, v STRING, FAMILY (k,v))
@@ -34,6 +37,9 @@ let $root_session
 SHOW session_id
 
 user testuser
+
+statement ok
+SET kv_transaction_buffered_writes_enabled = false;
 
 let $testuser_session
 SHOW session_id

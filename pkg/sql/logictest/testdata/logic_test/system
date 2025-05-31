@@ -6,7 +6,6 @@ postgres   root  NULL  NULL  {}  NULL
 system     node  NULL  NULL  {}  NULL
 test       root  NULL  NULL  {}  NULL
 
-skipif config local-mixed-24.3
 query TTTTT
 SELECT schema_name, table_name, type, owner, locality FROM [SHOW TABLES FROM system] 
 where table_name IN ('descriptor_id_seq', 'comments', 'locations', 'span_configurations')
@@ -17,7 +16,6 @@ public  descriptor_id_seq    sequence  node  NULL
 public  locations            table     node  NULL
 public  span_configurations  table     node  NULL
 
-skipif config local-mixed-24.3
 query I rowsort
 SELECT count(id) FROM system.descriptor
 ----
@@ -80,16 +78,17 @@ session_id       BYTES  false  NULL  ·  {primary}  false
 crdb_region      BYTES  false  NULL  ·  {primary}  false
 
 
-
+skipif config local-mixed-25.1 local-mixed-25.2
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.eventlog
 ----
-timestamp    TIMESTAMP  false  NULL       ·  {primary}  false
-eventType    STRING     false  NULL       ·  {primary}  false
-targetID     INT8       false  NULL       ·  {primary}  false
-reportingID  INT8       false  NULL       ·  {primary}  false
-info         STRING     true   NULL       ·  {primary}  false
-uniqueID     BYTES      false  uuid_v4()  ·  {primary}  false
+timestamp    TIMESTAMP  false  NULL       ·  {event_type_idx,primary}  false
+eventType    STRING     false  NULL       ·  {event_type_idx,primary}  false
+targetID     INT8       false  NULL       ·  {primary}                 false
+reportingID  INT8       false  NULL       ·  {primary}                 false
+info         STRING     true   NULL       ·  {primary}                 false
+uniqueID     BYTES      false  uuid_v4()  ·  {event_type_idx,primary}  false
+payload      JSONB      true   NULL       ·  {primary}                 false
 
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.rangelog
@@ -109,7 +108,6 @@ key          STRING     false  NULL  ·  {primary}  false
 value        BYTES      true   NULL  ·  {primary}  false
 lastUpdated  TIMESTAMP  false  NULL  ·  {primary}  false
 
-skipif config local-mixed-24.3
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.jobs
 ----
@@ -154,7 +152,6 @@ SHOW GRANTS ON DATABASE system
 system  admin  CONNECT  true
 system  root   CONNECT  true
 
-skipif config local-mixed-24.3
 query TTTTTB rowsort
 WITH grants AS (SHOW GRANTS ON system.*) SELECT * FROM grants WHERE
   table_name IN ('comments', 'locations', 'tenants')
@@ -313,7 +310,9 @@ ORDER BY name
 ----
 cluster.secret
 diagnostics.reporting.enabled
+feature.vector_index.enabled
 sql.crdb_internal.table_row_statistics.as_of_time
+sql.vecindex.deterministic_fixups.enabled
 version
 
 onlyif config 3node-tenant-default-configs
@@ -329,7 +328,9 @@ ORDER BY name
 ----
 cluster.secret
 diagnostics.reporting.enabled
+feature.vector_index.enabled
 sql.crdb_internal.table_row_statistics.as_of_time
+sql.vecindex.deterministic_fixups.enabled
 version
 
 statement ok
@@ -350,8 +351,10 @@ AND name NOT IN ('version', 'cluster.secret', 'kv.range_merge.queue_enabled')
 ORDER BY name
 ----
 diagnostics.reporting.enabled                      true
+feature.vector_index.enabled                       true
 somesetting                                        somevalue
 sql.crdb_internal.table_row_statistics.as_of_time  -1µs
+sql.vecindex.deterministic_fixups.enabled          true
 
 onlyif config 3node-tenant-default-configs
 query TT
@@ -366,8 +369,10 @@ AND name NOT IN ('version', 'cluster.secret')
 ORDER BY name
 ----
 diagnostics.reporting.enabled                      true
+feature.vector_index.enabled                       true
 somesetting                                        somevalue
 sql.crdb_internal.table_row_statistics.as_of_time  -1µs
+sql.vecindex.deterministic_fixups.enabled          true
 
 user testuser
 

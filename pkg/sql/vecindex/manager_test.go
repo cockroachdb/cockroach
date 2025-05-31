@@ -7,17 +7,13 @@ package vecindex_test
 
 import (
 	"context"
-	"os"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
-	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -34,17 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
-
-func TestMain(m *testing.M) {
-	securityassets.SetLoader(securitytest.EmbeddedAssets)
-	randutil.SeedForTests()
-	serverutils.InitTestServerFactory(server.TestServerFactory)
-
-	os.Exit(m.Run())
-}
 
 func buildTestTable(tableID catid.DescID, tableName string) catalog.MutableTableDescriptor {
 	return tabledesc.NewBuilder(&descpb.TableDescriptor{
@@ -88,7 +75,15 @@ func buildTestTable(tableID catid.DescID, tableName string) catalog.MutableTable
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				EncodingType:        catenumpb.SecondaryIndexEncoding,
 				Version:             descpb.LatestIndexDescriptorVersion,
-				VecConfig:           vecpb.Config{Dims: 2, Seed: 342},
+				VecConfig: vecpb.Config{
+					Dims:             2,
+					Seed:             342,
+					MinPartitionSize: 2,
+					MaxPartitionSize: 8,
+					BuildBeamSize:    4,
+					IsDeterministic:  true,
+					RotAlgorithm:     int32(cspann.RotGivens),
+				},
 			},
 		},
 		Privileges:       catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
@@ -150,10 +145,17 @@ func TestVectorManager(t *testing.T) {
 	settings := srv.ApplicationLayer().ClusterSettings()
 	vectorMgr := vecindex.NewManager(ctx, stopper, &settings.SV, codec, internalDB)
 
+	t.Run("test index options", func(t *testing.T) {
+		idx, err := vectorMgr.Get(ctx, catid.DescID(140), 2)
+		require.NoError(t, err)
+		require.Equal(t, idx.Options().MinPartitionSize, 2)
+		require.Equal(t, idx.Options().MaxPartitionSize, 8)
+		require.Equal(t, idx.Options().BaseBeamSize, 4)
+	})
+
 	t.Run("test metrics", func(t *testing.T) {
 		idx, err := vectorMgr.Get(ctx, catid.DescID(140), 2)
 		require.NoError(t, err)
-		idx.SuspendFixups()
 		idx.ForceSplit(ctx, nil, 0, cspann.RootKey, false /* singleStep */)
 
 		metrics := vectorMgr.Metrics().(*vecindex.Metrics)
@@ -182,6 +184,29 @@ func TestVectorManager(t *testing.T) {
 		// Attempt to pull a nonexistent index.
 		_, err = vectorMgr.Get(ctx, 142, 3)
 		require.Error(t, err)
+	})
+
+	t.Run("test GetWithDesc functionality", func(t *testing.T) {
+		var tableDesc catalog.TableDescriptor
+		err := internalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+			var err error
+			tableDesc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, 141)
+			return err
+		})
+		require.NoError(t, err)
+		var idxDesc catalog.Index
+		for _, desc := range tableDesc.DeletableNonPrimaryIndexes() {
+			if desc.GetID() == 2 {
+				idxDesc = desc
+				break
+			}
+		}
+		// Pull an index using descriptors.
+		_, err = vectorMgr.GetWithDesc(ctx, tableDesc, idxDesc)
+		require.NoError(t, err)
+		// Pull the index again.
+		_, err = vectorMgr.GetWithDesc(ctx, tableDesc, idxDesc)
+		require.NoError(t, err)
 	})
 
 	t.Run("test multiple threaded functionality", func(t *testing.T) {

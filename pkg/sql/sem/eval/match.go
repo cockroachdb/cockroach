@@ -81,7 +81,17 @@ func matchLike(ctx *Context, left, right tree.Datum, caseInsensitive bool) (tree
 	if left == tree.DNull || right == tree.DNull {
 		return tree.DNull, nil
 	}
-	s, pattern := string(tree.MustBeDString(left)), string(tree.MustBeDString(right))
+	var s, pattern string
+	var err error
+	s, err = matchStringFromDatum(left)
+	if err != nil {
+		return tree.DBoolFalse, err
+	}
+	pattern, err = matchStringFromDatum(right)
+	if err != nil {
+		return tree.DBoolFalse, err
+	}
+
 	if len(s) == 0 {
 		// An empty string only matches with an empty pattern or a pattern
 		// consisting only of '%'. To match PostgreSQL's behavior, we have a
@@ -111,6 +121,18 @@ func matchLike(ctx *Context, left, right tree.Datum, caseInsensitive bool) (tree
 	}
 	matches, err := like(s)
 	return tree.MakeDBool(tree.DBool(matches)), err
+}
+
+func matchStringFromDatum(datum tree.Datum) (string, error) {
+	switch d := datum.(type) {
+	case *tree.DCollatedString:
+		if !d.Deterministic {
+			return "", pgerror.New(pgcode.FeatureNotSupported, "nondeterministic collations are not supported for LIKE")
+		}
+		return d.Contents, nil
+	default:
+		return string(tree.MustBeDString(d)), nil
+	}
 }
 
 func matchRegexpWithKey(ctx *Context, str tree.Datum, key tree.RegexpCacheKey) (tree.Datum, error) {
@@ -314,6 +336,8 @@ type likeKey struct {
 	caseInsensitive bool
 	escape          rune
 }
+
+var _ tree.RegexpCacheKey = likeKey{}
 
 // LikeEscape converts a like pattern to a regexp pattern.
 func LikeEscape(pattern string) (string, error) {
@@ -770,7 +794,8 @@ func (k likeKey) patternNoAnchor() (string, error) {
 	return pattern, nil
 }
 
-// Pattern implements the RegexpCacheKey interface.
+// Pattern implements the tree.RegexpCacheKey interface.
+//
 // The strategy for handling custom escape character
 // is to convert all unescaped escape character into '\'.
 // k.escape can either be empty or a single character.
@@ -787,7 +812,9 @@ type similarToKey struct {
 	escape rune
 }
 
-// Pattern implements the RegexpCacheKey interface.
+var _ tree.RegexpCacheKey = similarToKey{}
+
+// Pattern implements the tree.RegexpCacheKey interface.
 func (k similarToKey) Pattern() (string, error) {
 	pattern := similarEscapeCustomChar(k.s, k.escape, k.escape != 0)
 	return anchorPattern(pattern, false), nil
@@ -834,7 +861,9 @@ type regexpKey struct {
 	caseInsensitive bool
 }
 
-// Pattern implements the RegexpCacheKey interface.
+var _ tree.RegexpCacheKey = regexpKey{}
+
+// Pattern implements the tree.RegexpCacheKey interface.
 func (k regexpKey) Pattern() (string, error) {
 	if k.caseInsensitive {
 		return caseInsensitive(k.s), nil

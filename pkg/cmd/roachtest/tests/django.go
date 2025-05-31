@@ -148,6 +148,17 @@ func registerDjango(r registry.Registry) {
 
 		if err := repeatRunE(
 			ctx, t, c, node, "install django's dependencies", `
+				if [ $(arch) == "s390x" ]; then
+					# s390x doesn't have a prebuilt wheel for bcrypt, so we need
+					# to build it from source. This requires rust.
+					# Install rust and set the default toolchain to stable.
+					curl https://sh.rustup.rs -sSf | sh -s -- -y
+					source $HOME/.cargo/env
+
+					# s390x doesn't have a prebuilt wheel for pillow, so we need
+					# to build it from source. This requires libjpeg-dev.
+					sudo apt-get install -y libjpeg-dev
+				fi
 				source venv/bin/activate &&
 				cd /mnt/data1/django/tests &&
 				pip3 install -e .. &&

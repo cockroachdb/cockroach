@@ -305,6 +305,14 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA s1, s2 TO root, bar -- literals removed
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA _, _ TO _, _ -- identifiers removed
 
 parse
+GRANT EXECUTE ON ALL ROUTINES IN SCHEMA s1, s2 TO root, bar
+----
+GRANT EXECUTE ON ALL ROUTINES IN SCHEMA s1, s2 TO root, bar
+GRANT EXECUTE ON ALL ROUTINES IN SCHEMA s1, s2 TO root, bar -- fully parenthesized
+GRANT EXECUTE ON ALL ROUTINES IN SCHEMA s1, s2 TO root, bar -- literals removed
+GRANT EXECUTE ON ALL ROUTINES IN SCHEMA _, _ TO _, _ -- identifiers removed
+
+parse
 GRANT EXECUTE ON PROCEDURE f1 TO root, bar
 ----
 GRANT EXECUTE ON PROCEDURE f1 TO root, bar
@@ -640,6 +648,22 @@ REVOKE EXECUTE ON ALL PROCEDURES IN SCHEMA s1, s2 FROM root, bar -- normalized!
 REVOKE EXECUTE ON ALL PROCEDURES IN SCHEMA s1, s2 FROM root, bar -- fully parenthesized
 REVOKE EXECUTE ON ALL PROCEDURES IN SCHEMA s1, s2 FROM root, bar -- literals removed
 REVOKE EXECUTE ON ALL PROCEDURES IN SCHEMA _, _ FROM _, _ -- identifiers removed
+
+parse
+REVOKE EXECUTE ON ALL ROUTINES IN SCHEMA s1, s2 FROM root, bar
+----
+REVOKE EXECUTE ON ALL ROUTINES IN SCHEMA s1, s2 FROM root, bar
+REVOKE EXECUTE ON ALL ROUTINES IN SCHEMA s1, s2 FROM root, bar -- fully parenthesized
+REVOKE EXECUTE ON ALL ROUTINES IN SCHEMA s1, s2 FROM root, bar -- literals removed
+REVOKE EXECUTE ON ALL ROUTINES IN SCHEMA _, _ FROM _, _ -- identifiers removed
+
+parse
+REVOKE GRANT OPTION FOR EXECUTE ON ALL ROUTINES IN SCHEMA s1, s2 FROM root, bar
+----
+REVOKE EXECUTE ON ALL ROUTINES IN SCHEMA s1, s2 FROM root, bar -- normalized!
+REVOKE EXECUTE ON ALL ROUTINES IN SCHEMA s1, s2 FROM root, bar -- fully parenthesized
+REVOKE EXECUTE ON ALL ROUTINES IN SCHEMA s1, s2 FROM root, bar -- literals removed
+REVOKE EXECUTE ON ALL ROUTINES IN SCHEMA _, _ FROM _, _ -- identifiers removed
 
 # Ensure that the support for ON ROLE <namelist> doesn't leak
 # where it should not be recognized.

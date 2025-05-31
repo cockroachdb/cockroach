@@ -40,6 +40,7 @@ go_test(
         "//pkg/sql/opt/indexrec",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlstats",
+        "//pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",

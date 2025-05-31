@@ -4076,46 +4076,63 @@ project
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── semi-join (cross)
+ └── select
       ├── columns: pk:1!null col0:2!null col2:4!null col4:5!null
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1,2,4,5)
-      ├── select
-      │    ├── columns: pk:1!null col0:2!null col2:4!null col4:5!null
+      ├── index-join t
+      │    ├── columns: pk:1!null col0:2 col2:4 col4:5
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(1,2,4,5)
-      │    ├── index-join t
-      │    │    ├── columns: pk:1!null col0:2 col2:4 col4:5
-      │    │    ├── cardinality: [0 - 1]
-      │    │    ├── key: ()
-      │    │    ├── fd: ()-->(1,2,4,5)
-      │    │    └── scan t@t_col2_key
-      │    │         ├── columns: pk:1!null col2:4!null
-      │    │         ├── constraint: /4: [/1 - /1]
-      │    │         ├── cardinality: [0 - 1]
-      │    │         ├── key: ()
-      │    │         └── fd: ()-->(1,4)
-      │    └── filters
-      │         ├── col4:5 = 1 [outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
-      │         └── col0:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-      ├── select
-      │    ├── columns: col0:9!null col2:11
-      │    ├── lax-key: (11)
-      │    ├── fd: ()-->(9,11)
-      │    ├── index-join t
-      │    │    ├── columns: col0:9 col2:11
-      │    │    ├── lax-key: (9,11)
-      │    │    ├── fd: ()-->(11), (11)~~>(9)
-      │    │    └── scan t@t_col2_key
-      │    │         ├── columns: pk:8!null col2:11
-      │    │         ├── constraint: /11: [/NULL - /NULL]
-      │    │         ├── key: (8)
-      │    │         └── fd: ()-->(11), (11)~~>(8)
-      │    └── filters
-      │         └── col0:9 = 1 [outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
-      └── filters (true)
+      │    └── select
+      │         ├── columns: pk:1!null col2:4!null
+      │         ├── cardinality: [0 - 1]
+      │         ├── key: ()
+      │         ├── fd: ()-->(1,4)
+      │         ├── scan t@t_col2_key
+      │         │    ├── columns: pk:1!null col2:4!null
+      │         │    ├── constraint: /4: [/1 - /1]
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(1,4)
+      │         └── filters
+      │              └── coalesce [subquery]
+      │                   ├── subquery
+      │                   │    └── project
+      │                   │         ├── columns: column16:16!null
+      │                   │         ├── cardinality: [0 - 1]
+      │                   │         ├── key: ()
+      │                   │         ├── fd: ()-->(16)
+      │                   │         ├── limit
+      │                   │         │    ├── columns: col0:9!null col2:11
+      │                   │         │    ├── cardinality: [0 - 1]
+      │                   │         │    ├── key: ()
+      │                   │         │    ├── fd: ()-->(9,11)
+      │                   │         │    ├── select
+      │                   │         │    │    ├── columns: col0:9!null col2:11
+      │                   │         │    │    ├── lax-key: (11)
+      │                   │         │    │    ├── fd: ()-->(9,11)
+      │                   │         │    │    ├── limit hint: 1.00
+      │                   │         │    │    ├── index-join t
+      │                   │         │    │    │    ├── columns: col0:9 col2:11
+      │                   │         │    │    │    ├── lax-key: (9,11)
+      │                   │         │    │    │    ├── fd: ()-->(11), (11)~~>(9)
+      │                   │         │    │    │    └── scan t@t_col2_key
+      │                   │         │    │    │         ├── columns: pk:8!null col2:11
+      │                   │         │    │    │         ├── constraint: /11: [/NULL - /NULL]
+      │                   │         │    │    │         ├── key: (8)
+      │                   │         │    │    │         └── fd: ()-->(11), (11)~~>(8)
+      │                   │         │    │    └── filters
+      │                   │         │    │         └── col0:9 = 1 [outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
+      │                   │         │    └── 1
+      │                   │         └── projections
+      │                   │              └── true [as=column16:16]
+      │                   └── false
+      └── filters
+           ├── col4:5 = 1 [outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+           └── col0:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
 
 # Lookup semi-join with covering index.
 opt expect=GenerateLookupJoinsWithFilter

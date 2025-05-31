@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"slices"
 	"sync"
 	"time"
 
@@ -215,6 +216,12 @@ func (fp *FixupProcessor) Init(
 
 	fp.mu.pendingFixups = make(map[fixupKey]bool, maxFixups)
 	fp.mu.waitForFixups.L = &fp.mu
+
+	if index.options.IsDeterministic {
+		// A deterministic index should be suspended until an explicit call to
+		// Process is called.
+		fp.Suspend()
+	}
 }
 
 // OnSuccessfulSplit sets a callback function that's invoked when a partition is
@@ -287,9 +294,11 @@ func (fp *FixupProcessor) DelayInsertOrDelete(ctx context.Context) error {
 
 // AddDeleteVector enqueues a vector deletion fixup for later processing.
 func (fp *FixupProcessor) AddDeleteVector(
-	ctx context.Context, partitionKey PartitionKey, vectorKey KeyBytes,
+	ctx context.Context, treeKey TreeKey, partitionKey PartitionKey, vectorKey KeyBytes,
 ) {
 	fp.addFixup(ctx, fixup{
+		// Clone the tree key, since we don't own the memory.
+		TreeKey:      slices.Clone(treeKey),
 		Type:         vectorDeleteFixup,
 		PartitionKey: partitionKey,
 		VectorKey:    vectorKey,
@@ -305,7 +314,8 @@ func (fp *FixupProcessor) AddSplit(
 	singleStep bool,
 ) {
 	fp.addFixup(ctx, fixup{
-		TreeKey:            treeKey,
+		// Clone the tree key, since we don't own the memory.
+		TreeKey:            slices.Clone(treeKey),
 		Type:               splitFixup,
 		ParentPartitionKey: parentPartitionKey,
 		PartitionKey:       partitionKey,
@@ -322,7 +332,8 @@ func (fp *FixupProcessor) AddMerge(
 	singleStep bool,
 ) {
 	fp.addFixup(ctx, fixup{
-		TreeKey:            treeKey,
+		// Clone the tree key, since we don't own the memory.
+		TreeKey:            slices.Clone(treeKey),
 		Type:               mergeFixup,
 		ParentPartitionKey: parentPartitionKey,
 		PartitionKey:       partitionKey,
@@ -378,6 +389,12 @@ func (fp *FixupProcessor) Process(discard bool) {
 // already a duplicate fixup that's pending. It also starts a background worker
 // to process the fixup, if needed and allowed.
 func (fp *FixupProcessor) addFixup(ctx context.Context, fixup fixup) {
+	if fp.index.options.ReadOnly {
+		// Don't enqueue fixups if the index is read-only.
+		log.VEvent(ctx, 2, "discarding fixup because index is read-only")
+		return
+	}
+
 	fp.mu.Lock()
 	defer fp.mu.Unlock()
 

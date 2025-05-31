@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -70,6 +71,12 @@ func (cq catalogQuery) query(
 				err = cq.processDescriptorResultRow(row, out)
 			case keys.CommentsTableID:
 				err = cq.processCommentsResultRow(row, out)
+				// Any errors processing comments can be ignored these are not fatal.
+				if err != nil {
+					log.VInfof(ctx, 2, "unable to process a comment : %v", err)
+					err = nil
+					continue
+				}
 			case keys.ZonesTableID:
 				err = cq.processZonesResultRow(row, out)
 			default:

@@ -46,7 +46,7 @@ put: lock acquisition = {d id=00000001 key=/Min iso=Serializable pri=0.00000000 
 put: lock acquisition = {j id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
 put: lock acquisition = {l id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 gul=0,0
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]

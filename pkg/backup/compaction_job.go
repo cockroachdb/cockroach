@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -40,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
@@ -52,7 +52,7 @@ var (
 		"the required backup chain length for compaction to be triggered (0 to disable compactions)",
 		0,
 		settings.WithVisibility(settings.Reserved),
-		settings.IntInRangeOrZeroDisable(3, math.MaxInt64),
+		settings.IntInRangeOrZeroDisable(4, math.MaxInt64),
 	)
 )
 
@@ -83,6 +83,8 @@ func maybeStartCompactionJob(
 		return 0, errors.New("custom incremental storage location not supported for compaction")
 	case len(triggerJob.SpecificTenantIds) != 0 || triggerJob.IncludeAllSecondaryTenants:
 		return 0, errors.New("backups of tenants not supported for compaction")
+	case len(triggerJob.URIsByLocalityKV) != 0:
+		return 0, errors.New("locality aware backups not supported for compaction")
 	}
 
 	env := scheduledjobs.ProdJobSchedulerEnv
@@ -96,6 +98,7 @@ func maybeStartCompactionJob(
 		execCfg.InternalDB,
 		user,
 	)
+
 	chain, _, _, _, err := getBackupChain(
 		ctx, execCfg, user, triggerJob.Destination, triggerJob.EncryptionOptions,
 		triggerJob.EndTime, &kmsEnv,
@@ -106,8 +109,16 @@ func maybeStartCompactionJob(
 	if int64(len(chain)) < threshold {
 		return 0, nil
 	}
-	var backupStmt string
-	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+
+	start, end, err := minSizeDeltaHeuristic(ctx, execCfg, chain)
+	if err != nil {
+		return 0, err
+	}
+	startTS, endTS := chain[start].StartTime, chain[end-1].EndTime
+	log.Infof(ctx, "compacting backups from %s to %s", startTS, endTS)
+
+	var jobID jobspb.JobID
+	err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		_, args, err := getScheduledBackupExecutionArgsFromSchedule(
 			ctx, env, jobs.ScheduledJobTxn(txn), triggerJob.ScheduleID,
 		)
@@ -116,27 +127,20 @@ func maybeStartCompactionJob(
 				err, "failed to get scheduled backup execution args for schedule %d", triggerJob.ScheduleID,
 			)
 		}
-		backupStmt = args.BackupStatement
-		return nil
-	}); err != nil {
-		return 0, err
-	}
-	start, end, err := minSizeDeltaHeuristic(ctx, execCfg, chain)
-	if err != nil {
-		return 0, err
-	}
-	startTS, endTS := chain[start].StartTime, chain[end-1].EndTime
-	log.Infof(ctx, "compacting backups from %s to %s", startTS, endTS)
-	var jobID jobspb.JobID
-	err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context,
-		txn isql.Txn) error {
+		if args.CompactionJobID != 0 {
+			return errors.Newf(
+				"compaction job %d already running for schedule %d",
+				args.CompactionJobID, triggerJob.ScheduleID,
+			)
+		}
 		datums, err := txn.QueryRowEx(
 			ctx,
 			"start-compaction-job",
 			txn.KV(),
 			sessiondata.NoSessionDataOverride,
-			`SELECT crdb_internal.backup_compaction($1, $2, $3::DECIMAL, $4::DECIMAL)`,
-			backupStmt,
+			`SELECT crdb_internal.backup_compaction($1, $2, $3, $4::DECIMAL, $5::DECIMAL)`,
+			triggerJob.ScheduleID,
+			args.BackupStatement,
 			triggerJob.Destination.Subdir,
 			startTS.AsOfSystemTime(),
 			endTS.AsOfSystemTime(),
@@ -149,7 +153,23 @@ func maybeStartCompactionJob(
 			return errors.Newf("expected job ID: unexpected result type %T", datums[0])
 		}
 		jobID = jobspb.JobID(idDatum)
-		return nil
+
+		scheduledJob := jobs.ScheduledJobTxn(txn)
+		backupSchedule, args, err := getScheduledBackupExecutionArgsFromSchedule(
+			ctx, env, scheduledJob, triggerJob.ScheduleID,
+		)
+		if err != nil {
+			return errors.Wrapf(err, "unable to load backup schedule %d", triggerJob.ScheduleID)
+		}
+		args.CompactionJobID = jobID
+		any, err := types.MarshalAny(args)
+		if err != nil {
+			return errors.Wrap(err, "marshaling args")
+		}
+		backupSchedule.SetExecutionDetails(
+			backupSchedule.ExecutorType(), jobspb.ExecutionArguments{Args: any},
+		)
+		return scheduledJob.Update(ctx, backupSchedule)
 	})
 	return jobID, err
 }
@@ -162,6 +182,7 @@ func maybeStartCompactionJob(
 func StartCompactionJob(
 	ctx context.Context,
 	planner interface{},
+	scheduleID jobspb.ScheduleID,
 	collectionURI, incrLoc []string,
 	fullBackupPath string,
 	encryptionOpts jobspb.BackupEncryptionOptions,
@@ -172,8 +193,9 @@ func StartCompactionJob(
 		return 0, errors.New("missing job execution context")
 	}
 	details := jobspb.BackupDetails{
-		StartTime: start,
-		EndTime:   end,
+		ScheduleID: scheduleID,
+		StartTime:  start,
+		EndTime:    end,
 		Destination: jobspb.BackupDetails_Destination{
 			To:                 collectionURI,
 			IncrementalStorage: incrLoc,
@@ -188,6 +210,12 @@ func StartCompactionJob(
 	if err != nil {
 		return 0, err
 	}
+	// Note: We do not set the `CreatedBy` field in the job record to the schedule
+	// that created it because doing so creates a dependency between the record in
+	// `system.scheduled_jobs` and this compaction job. This dependency would mean
+	// that until the compaction job completes, the `system.scheduled_jobs` record
+	// for backup would not be marked ready, which would block all future
+	// scheduled backups until the compaction completes.
 	jobRecord := jobs.Record{
 		Description: description,
 		Details:     details,
@@ -211,7 +239,7 @@ func (b *backupResumer) ResumeCompaction(
 	// We interleave the computation of the compaction chain between the destination
 	// resolution and writing of backup lock due to the need to verify that the
 	// compaction chain is a valid chain.
-	prevManifests, localityInfo, encryption, allIters, err := getBackupChain(
+	prevManifests, localityInfo, baseEncryptionOpts, allIters, err := getBackupChain(
 		ctx, execCtx.ExecCfg(), execCtx.User(), initialDetails.Destination,
 		initialDetails.EncryptionOptions, initialDetails.EndTime, kmsEnv,
 	)
@@ -231,8 +259,8 @@ func (b *backupResumer) ResumeCompaction(
 
 	var backupManifest *backuppb.BackupManifest
 	updatedDetails := initialDetails
+	testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
 	if initialDetails.URI == "" {
-		testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
 		if testingKnobs != nil && testingKnobs.RunBeforeResolvingCompactionDest != nil {
 			if err := testingKnobs.RunBeforeResolvingCompactionDest(); err != nil {
 				return err
@@ -253,17 +281,13 @@ func (b *backupResumer) ResumeCompaction(
 			return err
 		}
 		updatedDetails, err = updateCompactionBackupDetails(
-			ctx, compactChain, initialDetails, backupDest, encryption, kmsEnv,
+			ctx, compactChain, initialDetails, backupDest, baseEncryptionOpts,
 		)
 		if err != nil {
 			return err
 		}
-		backupManifest, err = createCompactionManifest(ctx, execCtx, updatedDetails, compactChain)
+		backupManifest, err = compactChain.createCompactionManifest(ctx, updatedDetails)
 		if err != nil {
-			return err
-		}
-
-		if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint("backup.before.write_first_checkpoint"); err != nil {
 			return err
 		}
 
@@ -271,10 +295,6 @@ func (b *backupResumer) ResumeCompaction(
 			ctx, updatedDetails.URI, updatedDetails.EncryptionOptions, kmsEnv,
 			backupManifest, execCtx.ExecCfg(), execCtx.User(),
 		); err != nil {
-			return err
-		}
-
-		if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint("backup.after.write_first_checkpoint"); err != nil {
 			return err
 		}
 
@@ -297,7 +317,7 @@ func (b *backupResumer) ResumeCompaction(
 			return err
 		}
 
-		if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint("backup.after.details_has_checkpoint"); err != nil {
+		if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint("backup_compaction.after.details_has_checkpoint"); err != nil {
 			return err
 		}
 		// TODO (kev-cao): Add telemetry for backup compactions.
@@ -347,6 +367,10 @@ func (b *backupResumer) ResumeCompaction(
 		}
 	}
 
+	if testingKnobs != nil && testingKnobs.AfterLoadingCompactionManifestOnResume != nil {
+		testingKnobs.AfterLoadingCompactionManifestOnResume(backupManifest)
+	}
+
 	// We retry on pretty generic failures -- any rpc error. If a worker node were
 	// to restart, it would produce this kind of error, but there may be other
 	// errors that are also rpc errors. Don't retry too aggressively.
@@ -355,13 +379,8 @@ func (b *backupResumer) ResumeCompaction(
 		MaxRetries: 5,
 	}
 
-	if execCtx.ExecCfg().BackupRestoreTestingKnobs != nil &&
-		execCtx.ExecCfg().BackupRestoreTestingKnobs.BackupDistSQLRetryPolicy != nil {
-		retryOpts = *execCtx.ExecCfg().BackupRestoreTestingKnobs.BackupDistSQLRetryPolicy
-	}
-
-	if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint("backup.before.flow"); err != nil {
-		return err
+	if testingKnobs != nil && testingKnobs.BackupDistSQLRetryPolicy != nil {
+		retryOpts = *testingKnobs.BackupDistSQLRetryPolicy
 	}
 
 	// We want to retry a backup if there are transient failures (i.e. worker nodes
@@ -389,8 +408,6 @@ func (b *backupResumer) ResumeCompaction(
 
 		// Reload the backup manifest to pick up any spans we may have completed on
 		// previous attempts.
-		// TODO (kev-cao): Compactions currently do not create checkpoints, but this
-		// can be used to reload the manifest once we add checkpointing.
 		var reloadBackupErr error
 		mem.Shrink(ctx, memSize)
 		backupManifest, memSize, reloadBackupErr = b.readManifestOnResume(ctx, &mem, execCtx.ExecCfg(),
@@ -410,12 +427,43 @@ func (b *backupResumer) ResumeCompaction(
 	return b.processScheduledBackupCompletion(ctx, jobs.StateSucceeded, execCtx, updatedDetails)
 }
 
+func (b *backupResumer) processCompactionCompletion(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	env scheduledjobs.JobSchedulerEnv,
+	details jobspb.BackupDetails,
+) error {
+	if details.ScheduleID == 0 {
+		return nil
+	}
+	return execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		scheduledJob := jobs.ScheduledJobTxn(txn)
+		backupSchedule, args, err := getScheduledBackupExecutionArgsFromSchedule(
+			ctx, env, scheduledJob, details.ScheduleID,
+		)
+		if err != nil {
+			return errors.Wrapf(err, "unable to load backup schedule %d", details.ScheduleID)
+		}
+		args.CompactionJobID = 0
+		any, err := types.MarshalAny(args)
+		if err != nil {
+			return errors.Wrap(err, "marshaling args")
+		}
+		backupSchedule.SetExecutionDetails(
+			backupSchedule.ExecutorType(), jobspb.ExecutionArguments{Args: any},
+		)
+		return scheduledJob.Update(ctx, backupSchedule)
+	})
+}
+
 type compactionChain struct {
 	// backupChain is the linear chain of backups up to the end time required
 	// for a restore.
 	backupChain    []backuppb.BackupManifest
 	chainToCompact []backuppb.BackupManifest
-	// start refers to the start time of the first backup to be compacted.
+	// start refers to the start time of the first backup to be compacted. This
+	// will always be greater than 0 as a full backup is not a candidate for
+	// compaction.
 	// end refers to the end time of the last backup to be compacted.
 	start, end hlc.Timestamp
 	// Inclusive startIdx and exclusive endIdx of the sub-chain to compact.
@@ -442,6 +490,11 @@ func newCompactionChain(
 	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	layerToIterFactory backupinfo.LayerToBackupManifestFileIterFactory,
 ) (compactionChain, error) {
+	if !manifests[0].StartTime.IsEmpty() {
+		return compactionChain{}, errors.AssertionFailedf(
+			"full backup must be passed in as the first backup in the chain",
+		)
+	}
 	// The start and end timestamps indicate a chain of incrementals and therefore should not
 	// include the full backup.
 	if start.Less(manifests[0].EndTime) {
@@ -450,7 +503,7 @@ func newCompactionChain(
 			start, manifests[0].EndTime,
 		)
 	}
-	var startIdx, endIdx int
+	startIdx, endIdx := -1, -1
 	for idx, m := range manifests {
 		if m.StartTime.Equal(start) {
 			startIdx = idx
@@ -459,12 +512,18 @@ func newCompactionChain(
 			endIdx = idx + 1
 		}
 	}
-	if startIdx == 0 {
+	if startIdx == -1 {
 		return compactionChain{}, errors.Newf(
 			"no incrementals found with the specified start time %s", start,
 		)
-	} else if endIdx == 0 {
+	} else if endIdx == -1 {
 		return compactionChain{}, errors.Newf("no incrementals found with the specified end time %s", end)
+	}
+
+	if startIdx >= endIdx {
+		return compactionChain{}, errors.AssertionFailedf(
+			"start index %d must be less than end index %d", startIdx, endIdx,
+		)
 	}
 
 	compactedIters := make(backupinfo.LayerToBackupManifestFileIterFactory)
@@ -492,21 +551,10 @@ func updateCompactionBackupDetails(
 	compactionChain compactionChain,
 	initialDetails jobspb.BackupDetails,
 	resolvedDest backupdest.ResolvedDestination,
-	encryption *jobspb.BackupEncryptionOptions,
-	kmsEnv cloud.KMSEnv,
+	baseEncryptOpts *jobspb.BackupEncryptionOptions,
 ) (jobspb.BackupDetails, error) {
 	if len(compactionChain.chainToCompact) == 0 {
 		return jobspb.BackupDetails{}, errors.New("no backup manifests to compact")
-	}
-	var encryptionInfo *jobspb.EncryptionInfo
-	if encryption != nil {
-		var err error
-		_, encryptionInfo, err = backupencryption.MakeNewEncryptionOptions(
-			ctx, encryption, kmsEnv,
-		)
-		if err != nil {
-			return jobspb.BackupDetails{}, err
-		}
 	}
 	lastBackup := compactionChain.lastBackup()
 	allDescs, _, err := backupinfo.LoadSQLDescsFromBackupsAtTime(
@@ -524,35 +572,70 @@ func updateCompactionBackupDetails(
 	destination := initialDetails.Destination
 	destination.Subdir = resolvedDest.ChosenSubdir
 	compactedDetails := jobspb.BackupDetails{
-		Destination:         destination,
-		StartTime:           compactionChain.start,
-		EndTime:             compactionChain.end,
-		URI:                 resolvedDest.DefaultURI,
-		URIsByLocalityKV:    resolvedDest.URIsByLocalityKV,
-		EncryptionOptions:   encryption,
-		EncryptionInfo:      encryptionInfo,
+		Destination:      destination,
+		StartTime:        compactionChain.start,
+		EndTime:          compactionChain.end,
+		URI:              resolvedDest.DefaultURI,
+		URIsByLocalityKV: resolvedDest.URIsByLocalityKV,
+		// Because we cannot have nice things, we persist a semi hydrated version of
+		// EncryptionOptions at planning, and then add the key at the beginning of
+		// resume using the same data structure in details. NB: EncryptionInfo is
+		// left blank and only added on the full backup (i think).
+		EncryptionOptions:   baseEncryptOpts,
 		CollectionURI:       resolvedDest.CollectionURI,
 		ResolvedTargets:     allDescsPb,
 		ResolvedCompleteDbs: lastBackup.CompleteDbs,
 		FullCluster:         lastBackup.DescriptorCoverage == tree.AllDescriptors,
+		ScheduleID:          initialDetails.ScheduleID,
 		Compact:             true,
 	}
 	return compactedDetails, nil
 }
 
-// compactIntroducedSpans takes a compacted backup manifest and the full chain of backups it belongs
-// to and computes the introduced spans for the compacted backup.
-func compactIntroducedSpans(
-	ctx context.Context, manifest backuppb.BackupManifest, chain compactionChain,
-) (roachpb.Spans, error) {
-	if err := checkCoverage(ctx, manifest.Spans, chain.backupChain); err != nil {
-		return roachpb.Spans{}, err
+// createCompactionManifest creates a new manifest for a compaction job and its
+// compacted chain. The details should have its targets resolved.
+func (c compactionChain) createCompactionManifest(
+	ctx context.Context, details jobspb.BackupDetails,
+) (*backuppb.BackupManifest, error) {
+	// TODO (kev-cao): Will need to update the SSTSinkKeyWriter to support
+	// range keys.
+	lastBackup := c.lastBackup()
+	if len(lastBackup.Tenants) != 0 {
+		return nil, errors.New("backup compactions does not support range keys")
 	}
-	return filterSpans(
-			manifest.Spans,
-			chain.backupChain[chain.startIdx-1].Spans,
-		),
-		nil
+	if err := checkCoverage(ctx, c.lastBackup().Spans, c.backupChain); err != nil {
+		return nil, err
+	}
+	// In compaction, any span that is not included in the backup *preceding* the
+	// compaction chain is considered introduced.
+	introducedSpans := filterSpans(
+		c.lastBackup().Spans,
+		c.backupChain[c.startIdx-1].Spans,
+	)
+	cManifest := lastBackup
+	cManifest.ID = uuid.MakeV4()
+	cManifest.StartTime = c.start
+	cManifest.Descriptors = details.ResolvedTargets
+	cManifest.IntroducedSpans = introducedSpans
+	cManifest.IsCompacted = true
+
+	cManifest.Dir = cloudpb.ExternalStorage{}
+	// As this manifest will be used prior to the manifest actually being written
+	// (and therefore its external files being created) we first set
+	// HasExternalManifestSSTs to false and allow it to be set to true later when
+	// it is written to storage.
+	cManifest.HasExternalManifestSSTs = false
+	// While we do not compaction on revision history backups, we still need to
+	// nil out DescriptorChanges to avoid the placeholder descriptor from the
+	// manifest of the last incremental.
+	cManifest.DescriptorChanges = nil
+	cManifest.Files = nil
+	cManifest.EntryCounts = roachpb.RowCount{}
+
+	// The StatisticsFileNames is inherited from the stats of the latest
+	// incremental we are compacting as the compacted manifest will have the same
+	// targets as the last incremental.
+	return &cManifest, nil
 }
 
 // resolveBackupSubdir returns the resolved base full backup subdirectory from a
@@ -605,49 +688,8 @@ func resolveBackupDirs(
 	return resolvedBaseDirs, resolvedIncDirs, resolvedSubdir, nil
 }
 
-// createCompactionManifest creates a new manifest for a compaction job and its
-// compacted chain.
-func createCompactionManifest(
-	ctx context.Context,
-	execCtx sql.JobExecContext,
-	details jobspb.BackupDetails,
-	compactChain compactionChain,
-) (*backuppb.BackupManifest, error) {
-	var tenantSpans []roachpb.Span
-	var tenantInfos []mtinfopb.TenantInfoWithUsage
-	if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		var err error
-		tenantSpans, tenantInfos, err = getTenantInfo(ctx, execCtx.ExecCfg().Codec, txn, details)
-		return err
-	}); err != nil {
-		return nil, err
-	}
-	// TODO (kev-cao): Will need to update the SSTSinkKeyWriter to support
-	// range keys.
-	if len(tenantSpans) != 0 || len(tenantInfos) != 0 {
-		return nil, errors.New("backup compactions does not yet support range keys")
-	}
-	m, err := createBackupManifest(
-		ctx,
-		execCtx.ExecCfg(),
-		tenantSpans,
-		tenantInfos,
-		details,
-		compactChain.backupChain,
-		compactChain.allIters,
-	)
-	if err != nil {
-		return nil, err
-	}
-	m.IntroducedSpans, err = compactIntroducedSpans(ctx, m, compactChain)
-	if err != nil {
-		return nil, err
-	}
-	return &m, nil
-}
-
 // getBackupChain fetches the current shortest chain of backups (and its
-// associated info) required to restore the to the end time specified in the details.
+// associated info) required to restore to the end time specified in the details.
 func getBackupChain(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
@@ -692,29 +734,23 @@ func getBackupChain(
 			log.Warningf(ctx, "failed to cleanup incremental backup stores: %+v", err)
 		}
 	}()
-	// If encryption keys have not already been computed, then we will compute
-	// it using the base store.
-	// TODO (kev-cao): Once we resolve #143725, we can remove this check and
-	// expect `GetEncryptionFromBaseStore` to be idempotent.
-	var encryption *jobspb.BackupEncryptionOptions
-	if encryptionOpts != nil && encryptionOpts.Mode != jobspb.EncryptionMode_None &&
-		(encryptionOpts.Key != nil || encryptionOpts.KMSInfo != nil) {
-		encryption = encryptionOpts
-	} else {
-		encryption, err = backupencryption.GetEncryptionFromBaseStore(
+	baseEncryptionInfo := encryptionOpts
+	if encryptionOpts != nil && !encryptionOpts.HasKey() {
+		baseEncryptionInfo, err = backupencryption.GetEncryptionFromBaseStore(
 			ctx, baseStores[0], encryptionOpts, kmsEnv,
 		)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
 	}
+
 	mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 
 	_, manifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
 		ctx, &mem, baseStores, incStores, mkStore, resolvedBaseDirs,
-		resolvedIncDirs, endTime, encryption, kmsEnv,
-		user, false,
+		resolvedIncDirs, endTime, baseEncryptionInfo, kmsEnv,
+		user, false /*includeSkipped */, true, /*includeCompacted */
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -723,12 +759,12 @@ func getBackupChain(
 		mem.Shrink(ctx, memReserved)
 	}()
 	allIters, err := backupinfo.GetBackupManifestIterFactories(
-		ctx, execCfg.DistSQLSrv.ExternalStorage, manifests, encryption, kmsEnv,
+		ctx, execCfg.DistSQLSrv.ExternalStorage, manifests, baseEncryptionInfo, kmsEnv,
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	return manifests, localityInfo, encryption, allIters, nil
+	return manifests, localityInfo, baseEncryptionInfo, allIters, nil
 }
 
 // concludeBackupCompaction completes the backup compaction process after the backup has been
@@ -765,9 +801,13 @@ func concludeBackupCompaction(
 // the associated manifest.
 func processProgress(
 	ctx context.Context,
+	execCtx sql.JobExecContext,
+	details jobspb.BackupDetails,
 	manifest *backuppb.BackupManifest,
 	progCh <-chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+	kmsEnv cloud.KMSEnv,
 ) error {
+	var lastCheckpointTime time.Time
 	// When a processor is done exporting a span, it will send a progress update
 	// to progCh.
 	for progress := range progCh {
@@ -780,11 +820,24 @@ func processProgress(
 			manifest.Files = append(manifest.Files, file)
 			manifest.EntryCounts.Add(file.EntryCounts)
 		}
+
 		// TODO (kev-cao): Add per node progress updates.
+
+		if wroteCheckpoint, err := maybeWriteBackupCheckpoint(
+			ctx, execCtx, details, manifest, lastCheckpointTime, kmsEnv,
+		); err != nil {
+			log.Errorf(ctx, "unable to checkpoint compaction: %+v", err)
+		} else if wroteCheckpoint {
+			lastCheckpointTime = timeutil.Now()
+			if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint("backup_compaction.after.write_checkpoint"); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
 
+// compactionJobDescription generates a redacted description of the job.
 func compactionJobDescription(details jobspb.BackupDetails) (string, error) {
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
 	redactedURIs, err := sanitizeURIList(details.Destination.To)
@@ -835,8 +888,7 @@ func doCompaction(
 		)
 	}
 	checkpointLoop := func(ctx context.Context) error {
-		// TODO (kev-cao): Add logic for checkpointing during loop.
-		return processProgress(ctx, manifest, progCh)
+		return processProgress(ctx, execCtx, details, manifest, progCh, kmsEnv)
 	}
 	// TODO (kev-cao): Add trace aggregator loop.
 
@@ -849,6 +901,34 @@ func doCompaction(
 	return concludeBackupCompaction(
 		ctx, execCtx, defaultStore, details.EncryptionOptions, kmsEnv, manifest,
 	)
+}
+
+// maybeWriteBackupCheckpoint writes a checkpoint for the backup if
+// the time since the last checkpoint exceeds the configured interval. If a
+// checkpoint is written, the function returns true.
+func maybeWriteBackupCheckpoint(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	details jobspb.BackupDetails,
+	manifest *backuppb.BackupManifest,
+	lastCheckpointTime time.Time,
+	kmsEnv cloud.KMSEnv,
+) (bool, error) {
+	if details.URI == "" {
+		return false, errors.New("backup details does not contain a default URI")
+	}
+	execCfg := execCtx.ExecCfg()
+	interval := BackupCheckpointInterval.Get(&execCfg.Settings.SV)
+	if timeutil.Since(lastCheckpointTime) < interval {
+		return false, nil
+	}
+	if err := backupinfo.WriteBackupManifestCheckpoint(
+		ctx, details.URI, details.EncryptionOptions, kmsEnv,
+		manifest, execCfg, execCtx.User(),
+	); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func init() {

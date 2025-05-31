@@ -36,7 +36,11 @@ import (
 // //   /etc/malloc.conf and MALLOC_CONF can be safely set any time prior to
 // //   program invocation.
 // #ifdef __linux__
+// #  ifdef __s390x__
+// const char *je_malloc_conf = "background_thread:true,dirty_decay_ms:2000,muzzy_decay_ms:0";
+// #  else
 // const char *je_malloc_conf = "background_thread:true,thp:never,metadata_thp:disabled,dirty_decay_ms:2000,muzzy_decay_ms:0";
+// #  endif
 // #endif
 //
 // // Checks whether jemalloc profiling is enabled and active.

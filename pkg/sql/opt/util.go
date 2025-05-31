@@ -160,3 +160,17 @@ func GetAllFKsAmongTables(
 	}
 	return addFKs
 }
+
+// FamiliesForCols returns the set of column families for the set of cols.
+func FamiliesForCols(tab cat.Table, tabID TableID, cols ColSet) (families intsets.Fast) {
+	for i, n := 0, tab.FamilyCount(); i < n; i++ {
+		family := tab.Family(i)
+		for j, m := 0, family.ColumnCount(); j < m; j++ {
+			if cols.Contains(tabID.ColumnID(family.Column(j).Ordinal)) {
+				families.Add(i)
+				break
+			}
+		}
+	}
+	return families
+}

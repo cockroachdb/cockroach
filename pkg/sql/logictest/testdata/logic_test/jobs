@@ -1,3 +1,5 @@
+# LogicTest: !local-schema-locked
+
 # Disable declarative schema changer for this test.
 statement ok
 SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';

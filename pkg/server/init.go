@@ -155,33 +155,6 @@ func (i *initState) validate() error {
 	return nil
 }
 
-// initialStoreIDs returns the initial set of store IDs a node starts off with.
-// If it's a restarting node, restarted with no additional stores, this is just
-// all the local store IDs. If there's an additional store post-restart that's
-// yet to be initialized, it's not found in this list. For nodes newly added to
-// the cluster, it's just the first initialized store. For the remaining stores
-// in all these cases, they're accessible through
-// (*initState).additionalStoreIDs once they're initialized.
-func (i *initState) initialStoreIDs() ([]roachpb.StoreID, error) {
-	return getStoreIDsInner(i.initializedEngines)
-}
-
-func (i *initState) additionalStoreIDs() ([]roachpb.StoreID, error) {
-	return getStoreIDsInner(i.uninitializedEngines)
-}
-
-func getStoreIDsInner(engines []storage.Engine) ([]roachpb.StoreID, error) {
-	storeIDs := make([]roachpb.StoreID, 0, len(engines))
-	for _, eng := range engines {
-		storeID, err := eng.GetStoreID()
-		if err != nil {
-			return nil, err
-		}
-		storeIDs = append(storeIDs, roachpb.StoreID(storeID))
-	}
-	return storeIDs, nil
-}
-
 // joinResult is used to represent the result of a node attempting to join
 // an already bootstrapped cluster.
 type joinResult struct {

@@ -7,6 +7,7 @@ package vecindex
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -63,8 +65,9 @@ func TestSearcher(t *testing.T) {
 		EncodingType:        catenumpb.SecondaryIndexEncoding,
 	}
 
-	quantizer := quantize.NewUnQuantizer(2)
+	quantizer := quantize.NewUnQuantizer(2, vecdist.L2Squared)
 	store, err := vecstore.NewWithColumnID(
+		ctx,
 		internalDB,
 		quantizer,
 		codec,
@@ -75,10 +78,13 @@ func TestSearcher(t *testing.T) {
 	require.NoError(t, err)
 
 	options := cspann.IndexOptions{
+		RotAlgorithm:     cspann.RotGivens,
 		MinPartitionSize: 2,
 		MaxPartitionSize: 4,
 		BaseBeamSize:     1,
 		IsDeterministic:  true,
+		// Disable adaptive search until it's extended to work with vecstore.
+		DisableAdaptiveSearch: true,
 	}
 	idx, err := cspann.NewIndex(ctx, store, quantizer, 42 /* seed */, &options, srv.Stopper())
 	require.NoError(t, err)
@@ -88,52 +94,101 @@ func TestSearcher(t *testing.T) {
 	// Insert two vectors into root partition.
 	var mutator MutationSearcher
 	mutator.Init(idx, tx)
-	prefix := keys.MakeFamilyKey(encoding.EncodeVarintAscending([]byte{}, 100), 0 /* famID */)
+
+	// Reuse prefix, key bytes, value bytes and vector memory, to ensure it's
+	// allowed.
+	var prefix, keyBytes, valueBytes []byte
+	var original, randomized vector.T
 
 	insertVector := func(vec vector.T, key int64, val cspann.ValueBytes) vector.T {
+		prefix = prefix[:0]
+		keyBytes = keyBytes[:0]
+		randomized = randomized[:0]
+
+		prefix = encoding.EncodeVarintAscending(prefix, 100)
 		require.NoError(t, mutator.SearchForInsert(ctx, prefix, vec))
+
 		partitionKey := cspann.PartitionKey(*mutator.PartitionKey().(*tree.DInt))
-		keyBytes := keys.MakeFamilyKey(encoding.EncodeVarintAscending([]byte{}, key), 0 /* famID */)
-		randomizedVec := make(vector.T, len(vec))
-		idx.RandomizeVector(vec, randomizedVec)
+		keyBytes = keys.MakeFamilyKey(encoding.EncodeVarintAscending(keyBytes, key), 0 /* famID */)
+
+		randomized = slices.Grow(randomized, len(vec))[:len(vec)]
+		idx.TransformVector(vec, randomized)
 		err = mutator.txn.AddToPartition(ctx, cspann.TreeKey(prefix), partitionKey, cspann.LeafLevel,
-			randomizedVec, cspann.ChildKey{KeyBytes: keyBytes}, val)
+			randomized, cspann.ChildKey{KeyBytes: keyBytes}, val)
 		require.NoError(t, err)
-		return randomizedVec
+		return randomized
 	}
 
-	insertVector(vector.T{1, 2}, 1, cspann.ValueBytes{1, 2})
-	randomizedVec := insertVector(vector.T{5, 3}, 2, cspann.ValueBytes{3, 4})
+	// Reuse vector and value memory, to ensure it's allowed.
+	original = vector.T{1, 2}
+	valueBytes = []byte{1, 2}
+	insertVector(original, 1, cspann.ValueBytes(valueBytes))
+	original[0] = 5
+	original[1] = 3
+	valueBytes[0] = 3
+	valueBytes[1] = 4
+	randomized = insertVector(original, 2, cspann.ValueBytes(valueBytes))
 
 	// Validate that search vector was correctly encoded and quantized.
 	encodedVec := mutator.EncodedVector()
 	vecSet := quantize.UnQuantizedVectorSet{Vectors: vector.MakeSet(2)}
-	remainder, err := vecencoding.DecodeUnquantizedVectorToSet(
+	remainder, err := vecencoding.DecodeUnquantizerVectorToSet(
 		[]byte(*encodedVec.(*tree.DBytes)), &vecSet)
 	require.NoError(t, err)
 	require.Empty(t, remainder)
-	require.Equal(t, randomizedVec, vecSet.Vectors.At(0))
+	require.Equal(t, randomized, vecSet.Vectors.At(0))
 
-	// Use the Searcher.
+	// Search for a vector that doesn't exist in the tree (reuse memory).
+	prefix = prefix[:0]
+	prefix = encoding.EncodeVarintAscending(prefix, 200)
+	original[0] = 1
+	original[1] = 1
 	var searcher Searcher
-	searcher.Init(idx, tx)
-	require.NoError(t, searcher.Search(ctx, prefix, vector.T{1, 1}, 2))
-	res := searcher.NextResult()
-	require.InDelta(t, float32(1), res.QuerySquaredDistance, 0.01)
-	res = searcher.NextResult()
-	require.InDelta(t, float32(20), res.QuerySquaredDistance, 0.01)
+	searcher.Init(idx, tx, 8 /* baseBeamSize */, 2 /* maxResults */)
+	require.NoError(t, searcher.Search(ctx, prefix, original))
 	require.Nil(t, searcher.NextResult())
 
-	// Search for a vector to delete.
-	keyBytes := keys.MakeFamilyKey(encoding.EncodeVarintAscending([]byte{}, 1), 0 /* famID */)
-	require.NoError(t, mutator.SearchForDelete(ctx, prefix, vector.T{1, 2}, keyBytes))
-	require.Equal(t, tree.NewDInt(tree.DInt(1)), mutator.PartitionKey())
+	// Search for a vector that does exist (reuse memory).
+	prefix = prefix[:0]
+	prefix = encoding.EncodeVarintAscending(prefix, 100)
+	require.NoError(t, searcher.Search(ctx, prefix, original))
+	res := searcher.NextResult()
+	require.InDelta(t, float32(1), res.QueryDistance, 0.01)
+	res = searcher.NextResult()
+	require.InDelta(t, float32(20), res.QueryDistance, 0.01)
+	require.Nil(t, searcher.NextResult())
+
+	// Search again to ensure search state is reset.
+	require.NoError(t, searcher.Search(ctx, prefix, original))
+	res = searcher.NextResult()
+	require.InDelta(t, float32(1), res.QueryDistance, 0.01)
+	res = searcher.NextResult()
+	require.InDelta(t, float32(20), res.QueryDistance, 0.01)
+	require.Nil(t, searcher.NextResult())
+
+	// Search for a vector to delete that doesn't exist (reuse memory).
+	keyBytes = keyBytes[:0]
+	original[0] = 1
+	original[1] = 2
+	keyBytes = keys.MakeFamilyKey(encoding.EncodeVarintAscending(keyBytes, 123), 0 /* famID */)
+	require.NoError(t, mutator.SearchForDelete(ctx, prefix, original, keyBytes))
+	require.Equal(t, tree.DNull, mutator.PartitionKey())
 	require.Nil(t, mutator.EncodedVector())
 
-	// Search for a vector to delete that doesn't exist.
-	keyBytes = keys.MakeFamilyKey(encoding.EncodeVarintAscending([]byte{}, 123), 0 /* famID */)
-	require.NoError(t, mutator.SearchForDelete(ctx, prefix, vector.T{1, 2}, keyBytes))
+	// Search for a vector to delete that doesn't exist in the tree (reuse memory).
+	prefix = prefix[:0]
+	prefix = encoding.EncodeVarintAscending(prefix, 200)
+	require.NoError(t, mutator.SearchForDelete(ctx, prefix, original, keyBytes))
 	require.Equal(t, tree.DNull, mutator.PartitionKey())
+	require.Nil(t, mutator.EncodedVector())
+
+	// Search for a vector to delete (reuse memory).
+	prefix = prefix[:0]
+	prefix = encoding.EncodeVarintAscending(prefix, 100)
+	keyBytes = keyBytes[:0]
+	keyBytes = keys.MakeFamilyKey(encoding.EncodeVarintAscending(keyBytes, 1), 0 /* famID */)
+	require.NoError(t, mutator.SearchForDelete(ctx, prefix, original, keyBytes))
+	require.Equal(t, tree.NewDInt(tree.DInt(1)), mutator.PartitionKey())
 	require.Nil(t, mutator.EncodedVector())
 
 	require.NoError(t, tx.Commit(ctx))

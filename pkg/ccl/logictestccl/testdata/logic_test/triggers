@@ -925,7 +925,7 @@ statement ok
 CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION trigger_func();
 
 # Relations are referenced by name, so renaming the table is not allowed.
-statement error pgcode 2BP01 cannot rename relation "t" because view "xy" depends on it
+statement error pgcode 2BP01 cannot rename relation "t" because table "xy" depends on it
 ALTER TABLE t RENAME TO t2;
 
 # Sequences are remapped to their IDs, so renaming is allowed.
@@ -4016,7 +4016,7 @@ CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
 
 # Verify we log to the event log.
 query T retry
-select "eventType" from system.eventlog order by timestamp desc limit 1;
+select "eventType" from system.eventlog WHERE "eventType" <> 'finish_schema_change' order by timestamp desc limit 1;
 ----
 create_trigger
 
@@ -4037,7 +4037,7 @@ statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
 
 # ==============================================================================
-# Test that descriptor backreferences are cleaned up
+# Test that descriptor backreferences are cleaned up.
 # ==============================================================================
 
 subtest ensure_back_ref_cleanup
@@ -4085,6 +4085,100 @@ DROP FUNCTION update_listing_balance ;
 # Sanity to verify the dependency no longer exists.
 statement ok
 drop table listings_balance cascade;
+
+# ==============================================================================
+# Test trigger arguments.
+# ==============================================================================
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'NEW: %', NEW;
+    RAISE NOTICE 'OLD: %', OLD;
+    RAISE NOTICE 'TG_NAME: %', TG_NAME;
+    RAISE NOTICE 'TG_WHEN: %', TG_WHEN;
+    RAISE NOTICE 'TG_LEVEL: %', TG_LEVEL;
+    RAISE NOTICE 'TG_OP: %', TG_OP;
+    RAISE NOTICE 'TG_RELID: %', TG_RELID;
+    RAISE NOTICE 'TG_RELNAME: %', TG_RELNAME;
+    RAISE NOTICE 'TG_TABLE_NAME: %', TG_TABLE_NAME;
+    RAISE NOTICE 'TG_TABLE_SCHEMA: %', TG_TABLE_SCHEMA;
+    RAISE NOTICE 'TG_NARGS: %', TG_NARGS;
+    -- TODO(#135311): uncomment this when we support TG_ARGV.
+    --RAISE NOTICE 'TG_ARGV: %s', TG_ARGV;
+    RETURN NEW;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE ON xy FOR EACH ROW WHEN ((NEW).x = 1) EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT OR UPDATE ON xy FOR EACH ROW WHEN ((NEW).x = 1) EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 2);
+----
+NOTICE: NEW: (1,2)
+NOTICE: OLD: <NULL>
+NOTICE: TG_NAME: foo
+NOTICE: TG_WHEN: BEFORE
+NOTICE: TG_LEVEL: ROW
+NOTICE: TG_OP: INSERT
+NOTICE: TG_RELID: 106
+NOTICE: TG_RELNAME: xy
+NOTICE: TG_TABLE_NAME: xy
+NOTICE: TG_TABLE_SCHEMA: public
+NOTICE: TG_NARGS: 0
+NOTICE: NEW: (1,2)
+NOTICE: OLD: <NULL>
+NOTICE: TG_NAME: bar
+NOTICE: TG_WHEN: AFTER
+NOTICE: TG_LEVEL: ROW
+NOTICE: TG_OP: INSERT
+NOTICE: TG_RELID: 106
+NOTICE: TG_RELNAME: xy
+NOTICE: TG_TABLE_NAME: xy
+NOTICE: TG_TABLE_SCHEMA: public
+NOTICE: TG_NARGS: 0
+
+query T noticetrace
+UPDATE xy SET y = 3 WHERE x = 1;
+----
+NOTICE: NEW: (1,3)
+NOTICE: OLD: (1,2)
+NOTICE: TG_NAME: foo
+NOTICE: TG_WHEN: BEFORE
+NOTICE: TG_LEVEL: ROW
+NOTICE: TG_OP: UPDATE
+NOTICE: TG_RELID: 106
+NOTICE: TG_RELNAME: xy
+NOTICE: TG_TABLE_NAME: xy
+NOTICE: TG_TABLE_SCHEMA: public
+NOTICE: TG_NARGS: 0
+NOTICE: NEW: (1,3)
+NOTICE: OLD: (1,2)
+NOTICE: TG_NAME: bar
+NOTICE: TG_WHEN: AFTER
+NOTICE: TG_LEVEL: ROW
+NOTICE: TG_OP: UPDATE
+NOTICE: TG_RELID: 106
+NOTICE: TG_RELNAME: xy
+NOTICE: TG_TABLE_NAME: xy
+NOTICE: TG_TABLE_SCHEMA: public
+NOTICE: TG_NARGS: 0
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP TRIGGER bar ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DELETE FROM xy WHERE true;
 
 # ==============================================================================
 # Regression tests.
@@ -4202,5 +4296,526 @@ DROP TRIGGER foo ON xy;
 
 statement ok
 DROP FUNCTION g;
+
+subtest end
+
+subtest regression_146889
+
+statement ok
+CREATE TABLE parent146889 (k INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE child146889 (ref INT REFERENCES parent146889(k) ON DELETE CASCADE)
+
+statement ok
+INSERT INTO parent146889 VALUES (1);
+INSERT INTO child146889 VALUES (1);
+
+statement ok
+CREATE FUNCTION f146889() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', (SELECT count(*) FROM parent146889);
+    RETURN NULL;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER t AFTER DELETE ON parent146889 FOR EACH ROW EXECUTE FUNCTION f146889();
+
+query T noticetrace
+DELETE FROM parent146889 WHERE k = 1;
+----
+NOTICE: 0
+
+subtest end
+
+subtest dependency_142370
+
+statement ok
+create table t1(n int primary key, j int, k int);
+
+statement ok
+create index i1 on t1(k ASC);
+
+statement ok
+create index i2 on t1(k DESC);
+
+statement ok
+create table other(n int primary key, j int, k int);
+
+statement ok
+create index i1 on other(k ASC);
+
+statement ok
+create index i2 on other(k DESC);
+
+statement ok
+CREATE FUNCTION f1 ()
+RETURNS VOID
+LANGUAGE SQL
+AS $$
+  SELECT 1
+$$;
+
+statement ok
+CREATE TYPE e AS ENUM('a');
+
+statement ok
+CREATE OR REPLACE FUNCTION audit_changes()
+                                RETURNS TRIGGER AS $$
+                                BEGIN
+                                 SELECT f1();
+                                 SELECT *, 'a'::e FROM t1@i1 WHERE j=32;
+                                 SELECT *, 'a'::e FROM t1@i2 WHERE j=32;
+                                 SELECT *, 'a'::e FROM other@i1 WHERE j=32;
+                                 SELECT *, 'a'::e FROM other@i2 WHERE j=32;
+                                 RETURN NULL;
+                                END;
+                                $$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER audit_trigger AFTER INSERT OR UPDATE OR DELETE ON t1 FOR EACH ROW EXECUTE FUNCTION audit_changes();
+
+statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
+alter table t1 drop column j;
+
+statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
+alter table other drop column j;
+
+statement error pq: cannot alter type of column "j" because trigger "audit_trigger" on table "t1" depends on it
+alter table t1 alter column j set data type text;
+
+statement error pq: cannot alter type of column "j" because trigger "audit_trigger" on table "t1" depends on it
+alter table other alter column j set data type text;
+
+# TODO(142370): This should be blocked because the trigger references the table,
+# but we currently don't detect self-dependencies.
+statement ok
+drop index t1@i1;
+
+statement error pq: cannot drop index "i1" because trigger "audit_trigger" on table "t1" depends on it
+drop index other@i1;
+
+statement error pq: unimplemented: DROP INDEX cascade is not supported with triggers
+drop index other@i1 cascade;
+
+statement error pq: cannot drop function "f1" because other objects \(\[test.public.t1\]\) still depend on it
+DROP FUNCTION f1;
+
+statement error pq: unimplemented: drop function cascade not supported
+DROP FUNCTION f1 CASCADE;
+
+statement error pq: cannot drop type "e" because other objects \(\[test.public.t1\]\) still depend on it
+DROP TYPE e;
+
+statement error pq: unimplemented: DROP TYPE CASCADE is not yet supported
+DROP TYPE e CASCADE;
+
+statement error pq: cannot drop table other because other objects depend on it
+DROP TABLE other;
+
+# Verify the trigger still works
+# TODO(142370): this fails for now because we were allowed to drop the index earlier.
+statement error pq: while building trigger expression: index "i1" not found
+INSERT INTO t1 VALUES (0,0,0);
+
+statement ok
+create index i1 on t1(k);
+
+# This test doesn't run with the legacy schema config because CREATE/DROP
+# trigger isn't implemented there. We enable legacy to run DDL to verify
+# the dependencies.
+let $use_decl_sc
+SHOW use_declarative_schema_changer
+
+statement ok
+set use_declarative_schema_changer = 'off';
+
+# Disable schema locking to ensure that errors from it do not interfere
+# with dependency checking.
+statement ok
+ALTER TABLE t1 SET (schema_locked = false);
+
+statement ok
+ALTER TABLE other SET (schema_locked = false);
+
+statement error pq: ALTER COLUMN TYPE is only implemented in the declarative schema changer
+alter table t1 alter column j set data type text;
+
+statement error pq: cannot alter type of column "j" because table "t1" depends on it
+alter table other alter column j set data type text;
+
+# TODO(142370): allowed because we don't pick up self-dependencies yet
+statement ok
+alter table t1 drop column j;
+
+statement error pq: cannot drop column "j" because table "t1" depends on it
+alter table other drop column j;
+
+# TODO(142370): allowed because we don't pick up self-dependencies yet
+statement ok
+drop index t1@i1;
+
+statement error pq: index "i1" does not exist
+drop index t1@i1 CASCADE;
+
+statement error pq: cannot drop index "i1" because table "t1" depends on it
+drop index other@i1;
+
+statement error pq: cannot drop function "f1" because other objects \(\[test.public.t1\]\) still depend on it
+DROP FUNCTION f1;
+
+statement error pq: unimplemented: drop function cascade not supported
+DROP FUNCTION f1 CASCADE;
+
+statement error pq: cannot drop type "e" because other objects \(\[test.public.t1\]\) still depend on it
+DROP TYPE e;
+
+statement error pq: unimplemented: DROP TYPE CASCADE is not yet supported
+DROP TYPE e CASCADE;
+
+statement error pq: cannot drop relation "other" because table "t1" depends on it
+DROP TABLE other;
+
+statement ok
+set use_declarative_schema_changer = $use_decl_sc;
+
+# Verify the trigger still works
+# TODO(142370): this fails because we were wrongly allowed to drop index i1 earlier
+statement error pq: while building trigger expression: index "i1" not found
+INSERT INTO t1(n,k) VALUES (1,1);
+
+statement ok
+DROP TABLE other CASCADE;
+
+statement error pq: relation "t1" does not exist
+DROP TRIGGER audit_trigger ON t1;
+
+statement ok
+DROP TYPE e;
+
+statement ok
+DROP FUNCTION f1;
+
+subtest end
+
+# ==============================================================================
+# Test information_schema.triggers and pg_catalog.pg_trigger
+# ==============================================================================
+
+subtest trigger_introspection
+
+# Create test tables and trigger functions.
+statement ok
+CREATE TABLE test_triggers (
+    id INT PRIMARY KEY,
+    name TEXT,
+    value INT
+);
+
+statement ok
+CREATE TABLE audit_log (
+    id SERIAL PRIMARY KEY,
+    table_name TEXT,
+    operation TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+statement ok
+CREATE FUNCTION trigger_func1() RETURNS TRIGGER AS $$
+  BEGIN
+    INSERT INTO audit_log (table_name, operation)
+    VALUES (TG_TABLE_NAME, TG_OP);
+    RETURN NEW;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE FUNCTION trigger_func2() RETURNS TRIGGER AS $$
+  BEGIN
+    RAISE NOTICE 'Trigger fired';
+    RETURN NEW;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER after_insert_row
+AFTER INSERT ON test_triggers
+FOR EACH ROW
+EXECUTE FUNCTION trigger_func1();
+
+statement ok
+CREATE TRIGGER before_update_row
+BEFORE UPDATE ON test_triggers
+FOR EACH ROW
+WHEN ((NEW).value > 100)
+EXECUTE FUNCTION trigger_func2();
+
+statement ok
+CREATE TRIGGER after_delete_row
+AFTER DELETE ON test_triggers
+FOR EACH ROW
+EXECUTE FUNCTION trigger_func1();
+
+query TTTTTTITTTTT colnames
+SELECT 
+    trigger_catalog,
+    trigger_schema,
+    trigger_name,
+    event_manipulation,
+    event_object_schema,
+    event_object_table,
+    action_order,
+    action_orientation,
+    action_timing,
+    action_reference_old_table,
+    action_reference_new_table,
+    created
+FROM information_schema.triggers
+WHERE event_object_table = 'test_triggers'
+ORDER BY trigger_name;
+----
+trigger_catalog  trigger_schema  trigger_name       event_manipulation  event_object_schema  event_object_table  action_order  action_orientation  action_timing  action_reference_old_table  action_reference_new_table  created
+test             public          after_delete_row   DELETE              public               test_triggers       NULL          ROW                 AFTER          NULL                        NULL                        NULL
+test             public          after_insert_row   INSERT              public               test_triggers       NULL          ROW                 AFTER          NULL                        NULL                        NULL
+test             public          before_update_row  UPDATE              public               test_triggers       NULL          ROW                 BEFORE         NULL                        NULL                        NULL
+
+# Test trigger with WHEN condition.
+query TTT colnames
+SELECT 
+    trigger_name,
+    action_condition,
+    action_statement
+FROM information_schema.triggers
+WHERE trigger_name = 'before_update_row';
+----
+trigger_name       action_condition     action_statement
+before_update_row  ((new).value > 100)  EXECUTE FUNCTION trigger_func2()
+
+# Create trigger with transition tables.
+statement ok
+CREATE FUNCTION trigger_func3() RETURNS TRIGGER AS $$
+  BEGIN
+    RETURN NULL;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+# TODO(#126362, #135655): Enable tests for statement-level triggers when supported.
+statement error statement-level triggers are not yet supported
+CREATE TRIGGER after_update_transition
+AFTER UPDATE ON test_triggers
+REFERENCING OLD TABLE AS old_data NEW TABLE AS new_data
+FOR EACH STATEMENT
+EXECUTE FUNCTION trigger_func3();
+
+# TODO(#126362, #135655): Enable tests for statement-level triggers when supported.
+# The expected results are:
+# trigger_name             action_orientation  action_reference_old_table  action_reference_new_table  action_reference_old_row
+# after_update_transition  STATEMENT           old_data                    new_data                    NULL
+query TTTTT colnames
+SELECT
+    trigger_name,
+    action_orientation,
+    action_reference_old_table,
+    action_reference_new_table,
+    action_reference_old_row
+FROM information_schema.triggers
+WHERE trigger_name = 'after_update_transition';
+----
+trigger_name  action_orientation  action_reference_old_table  action_reference_new_table  action_reference_old_row
+
+# TODO(#126362, #135655): Populate tgoldtable and tgnewtable.
+# The expected results are:
+# tgname                   tgoldtable  tgnewtable
+# after_update_transition  old_data    new_data
+query TTT colnames
+SELECT tgname, tgoldtable, tgnewtable
+FROM pg_catalog.pg_trigger
+WHERE tgname = 'after_update_transition';
+----
+tgname  tgoldtable  tgnewtable
+
+# Test multiple event types (create a trigger for multiple events).
+statement ok
+CREATE TRIGGER multi_event_trigger
+BEFORE INSERT OR UPDATE OR DELETE ON test_triggers
+FOR EACH ROW
+EXECUTE FUNCTION trigger_func1();
+
+# Each event should appear as a separate row.
+query TTT colnames
+SELECT 
+    trigger_name,
+    event_manipulation,
+    action_timing
+FROM information_schema.triggers
+WHERE trigger_name = 'multi_event_trigger'
+ORDER BY event_manipulation;
+----
+trigger_name         event_manipulation  action_timing
+multi_event_trigger  DELETE              BEFORE
+multi_event_trigger  INSERT              BEFORE
+multi_event_trigger  UPDATE              BEFORE
+
+# Create a schema and add a trigger there.
+statement ok
+CREATE SCHEMA other_schema;
+
+statement ok
+CREATE TABLE other_schema.test_table (id INT PRIMARY KEY, data TEXT);
+
+statement ok
+CREATE TRIGGER other_schema_trigger
+AFTER INSERT ON other_schema.test_table
+FOR EACH ROW
+EXECUTE FUNCTION trigger_func1();
+
+query TI colnames
+SELECT 
+    trigger_schema,
+    count(*) AS trigger_count
+FROM information_schema.triggers
+WHERE trigger_catalog = 'test'
+GROUP BY trigger_schema
+ORDER BY trigger_schema;
+----
+trigger_schema  trigger_count
+other_schema    1
+public          7
+
+# Create a trigger with arguments to test tgnargs and tgargs.
+statement ok
+CREATE TRIGGER trigger_with_args
+AFTER INSERT ON test_triggers
+FOR EACH ROW
+EXECUTE FUNCTION trigger_func1('arg1', 'arg2', 'test value with spaces');
+
+# Test pg_catalog.pg_trigger.
+query TIBITTT colnames
+SELECT 
+    tgname,
+    tgtype,
+    tgfoid > 0 AS has_func_oid,
+    tgnargs,
+    tgenabled,
+    tgoldtable,
+    tgnewtable
+FROM pg_catalog.pg_trigger
+WHERE tgrelid = 'test_triggers'::regclass
+ORDER BY tgname;
+----
+tgname              tgtype  has_func_oid  tgnargs  tgenabled  tgoldtable  tgnewtable
+after_delete_row    9       true          0        A          NULL        NULL
+after_insert_row    5       true          0        A          NULL        NULL
+before_update_row   19      true          0        A          NULL        NULL
+multi_event_trigger 31      true          0        A          NULL        NULL
+trigger_with_args   5       true          3        A          NULL        NULL
+
+# Test INSTEAD OF triggers (not yet implemented)
+statement error pgcode 42809 "test_triggers" is a table\nDETAIL: Tables cannot have INSTEAD OF triggers.
+CREATE TRIGGER instead_of_trigger INSTEAD OF INSERT ON test_triggers
+FOR EACH ROW EXECUTE FUNCTION trigger_func1();
+
+statement error pgcode 42809 "test_triggers" is a table\nDETAIL: Tables cannot have INSTEAD OF triggers.
+CREATE TRIGGER instead_of_update_trigger INSTEAD OF UPDATE ON test_triggers
+FOR EACH ROW EXECUTE FUNCTION trigger_func1();
+
+statement error pgcode 42809 "test_triggers" is a table\nDETAIL: Tables cannot have INSTEAD OF triggers.
+CREATE TRIGGER instead_of_delete_trigger INSTEAD OF DELETE ON test_triggers
+FOR EACH ROW EXECUTE FUNCTION trigger_func1();
+
+# Test TRUNCATE triggers (not yet implemented)
+statement error statement-level triggers are not yet supported
+CREATE TRIGGER truncate_trigger AFTER TRUNCATE ON test_triggers
+FOR EACH STATEMENT EXECUTE FUNCTION trigger_func1();
+
+statement error statement-level triggers are not yet supported
+CREATE TRIGGER before_truncate_trigger BEFORE TRUNCATE ON test_triggers
+FOR EACH STATEMENT EXECUTE FUNCTION trigger_func1();
+
+# Test tgtype bitmap calculation
+# Bit 0: FOR EACH ROW (1) or FOR EACH STATEMENT (0)
+# Bit 1: BEFORE (2) or AFTER (0)
+# Bits 2-4: INSERT (4), DELETE (8), UPDATE (16)
+# TODO(#126363, #135657): Add tests for INSTEAD OF and TRUNCATE triggers here when supported.
+query TBBBBBBB colnames
+SELECT 
+    tgname,
+    (tgtype::INT & 1) > 0 AS is_row_level,
+    (tgtype::INT & 2) > 0 AS is_before,
+    (tgtype::INT & 4) > 0 AS has_insert,
+    (tgtype::INT & 8) > 0 AS has_delete,
+    (tgtype::INT & 16) > 0 AS has_update,
+    (tgtype::INT & 32) > 0 AS has_instead,
+    (tgtype::INT & 64) > 0 AS has_truncate
+FROM pg_catalog.pg_trigger
+WHERE tgrelid = 'test_triggers'::regclass
+ORDER BY tgname;
+----
+tgname               is_row_level  is_before  has_insert  has_delete  has_update  has_instead  has_truncate
+after_delete_row     true          false      false       true        false       false        false
+after_insert_row     true          false      true        false       false       false        false
+before_update_row    true          true       false       false       true        false        false
+multi_event_trigger  true          true       true        true        true        false        false
+trigger_with_args    true          false      true        false       false       false        false
+
+# Check trigger arguments and column attributes.
+# TODO(#135656): Populate the tgattr column.
+query TITT colnames
+SELECT 
+    tgname,
+    tgnargs,
+    encode(tgargs, 'escape') AS tgargs,
+    tgattr
+FROM pg_catalog.pg_trigger
+WHERE tgrelid = 'test_triggers'::regclass
+ORDER BY tgname;
+----
+tgname               tgnargs  tgargs                                      tgattr
+after_delete_row     0        ·                                           ·
+after_insert_row     0        ·                                           ·
+before_update_row    0        ·                                           ·
+multi_event_trigger  0        ·                                           ·
+trigger_with_args    3        arg1\000arg2\000test value with spaces\000  ·
+
+# Test trigger with WHEN condition.
+query TTT colnames
+SELECT 
+    tgname,
+    tgqual,
+    tgattr
+FROM pg_catalog.pg_trigger
+WHERE tgrelid = 'test_triggers'::regclass AND tgqual IS NOT NULL;
+----
+tgname             tgqual               tgattr
+before_update_row  ((new).value > 100)  ·
+
+# Test cross-schema trigger.
+query TTT colnames
+SELECT 
+    tgname,
+    tgrelid::regclass::text AS table_name,
+    tgfoid::regproc::text AS trigger_func_name
+FROM pg_catalog.pg_trigger
+WHERE tgrelid = 'other_schema.test_table'::regclass;
+----
+tgname                table_name  trigger_func_name
+other_schema_trigger  test_table  trigger_func1
+
+# Clean up
+statement ok
+DROP TABLE test_triggers CASCADE;
+
+statement ok
+DROP TABLE other_schema.test_table CASCADE;
+
+statement ok
+DROP SCHEMA other_schema;
+
+statement ok
+DROP TABLE audit_log CASCADE;
+
+statement ok
+DROP FUNCTION trigger_func1, trigger_func2, trigger_func3;
 
 subtest end

@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -71,9 +70,6 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 		hlc.NewClockForTesting(nil),
 		nodedialer.New(rpcC, resolver),
 		grpcServer,
-		kvflowdispatch.NewDummyDispatch(),
-		NoopStoresFlowControlIntegration{},
-		NoopRaftTransportDisconnectListener{},
 		(*node_rac2.AdmittedPiggybacker)(nil),
 		nil, /* PiggybackedAdmittedResponseScheduler */
 		nil, /* knobs */

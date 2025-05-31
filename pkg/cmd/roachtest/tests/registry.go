@@ -25,6 +25,7 @@ func RegisterTests(r registry.Registry) {
 	registerBackupMixedVersion(r)
 	registerBackupNodeShutdown(r)
 	registerBackupRestoreRoundTrip(r)
+	registerOnlineRestoreRecovery(r)
 	registerBackupFixtures(r)
 	registerBackupS3Clones(r)
 	registerBlobFixtureGC(r)
@@ -172,5 +173,6 @@ func RegisterTests(r registry.Registry) {
 	registerMultiRegionSystemDatabase(r)
 	registerSqlStatsMixedVersion(r)
 	registerDbConsole(r)
+	registerTTLRestart(r)
 	perturbation.RegisterTests(r)
 }

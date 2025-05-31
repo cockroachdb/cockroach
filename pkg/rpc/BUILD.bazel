@@ -5,7 +5,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test", "gomock")
 go_library(
     name = "rpc",
     srcs = [
-        "addjoin.go",
         "auth.go",
         "auth_tenant.go",
         "client.go",
@@ -17,6 +16,7 @@ go_library(
         "context_testutils.go",
         "drpc.go",
         "errors.go",
+        "grpc.go",
         "heartbeat.go",
         "keepalive.go",
         "metrics.go",
@@ -81,9 +81,7 @@ go_library(
         "@io_storj_drpc//drpcconn",
         "@io_storj_drpc//drpcmanager",
         "@io_storj_drpc//drpcmigrate",
-        "@io_storj_drpc//drpcmux",
         "@io_storj_drpc//drpcpool",
-        "@io_storj_drpc//drpcserver",
         "@io_storj_drpc//drpcstream",
         "@io_storj_drpc//drpcwire",
         "@org_golang_google_grpc//:grpc",
@@ -98,22 +96,6 @@ go_library(
         "@org_golang_google_grpc//peer",
         "@org_golang_google_grpc//stats",
         "@org_golang_google_grpc//status",
-    ],
-)
-
-gomock(
-    name = "mock_rpc",
-    out = "mocks_generated_test.go",
-    interfaces = [
-        "BatchStreamClient",
-        "Dialbacker",
-    ],
-    library = ":rpc",
-    package = "rpc",
-    self_package = "github.com/cockroachdb/cockroach/pkg/rpc",
-    visibility = [
-        ":__pkg__",
-        "//pkg/gen:__pkg__",
     ],
 )
 
@@ -132,10 +114,10 @@ go_test(
         "main_test.go",
         "metrics_test.go",
         "peer_test.go",
+        "rpc_mock_test.go",
         "snappy_test.go",
         "stream_pool_test.go",
         "tls_test.go",
-        ":mock_rpc",  # keep
     ],
     data = glob(["testdata/**"]),
     embed = [":rpc"],
@@ -152,6 +134,7 @@ go_test(
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer",
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
+        "//pkg/rpc/rpcpb",
         "//pkg/security",
         "//pkg/security/certnames",
         "//pkg/security/securityassets",
@@ -210,7 +193,10 @@ proto_library(
 
 go_proto_library(
     name = "rpc_go_proto",
-    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler"],
+    compilers = [
+        "//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
+        "//pkg/cmd/protoc-gen-go-drpc:protoc-gen-go-drpc_compiler",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/rpc",
     proto = ":rpc_proto",
     visibility = ["//visibility:public"],

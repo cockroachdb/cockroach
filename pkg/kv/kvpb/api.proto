@@ -347,8 +347,29 @@ message ConditionalPutRequest {
   // the use of this value with transactions.
   bool inline = 7;
 
-  // OriginTimestamp is deprecated. If set, it must be equal to the
-  // OriginTimestamp in the batch's WriteOptions.
+  // OriginTimestamp, if set, indicates that the ConditionalPut should
+  // only succeed if the provided timestamp is greater than the
+  // OriginTimestamp field in the MVCCValueHeader of the existing
+  // value (if the value has a non-zero OriginTimestamp) or the MVCC
+  // timestamp of the existing value. If there is no existing value,
+  // the timestamp check succeeds.
+  //
+  // The conditional put request will only succeed if this timestamp
+  // comparison is successful and the expected bytes matches the
+  // actual bytes.
+  //
+  // On success, this timestamp will also be stored in the
+  // OriginTimestamp field of the the MVCCValueHeader for the newly
+  // written value.
+  //
+  // In the proposed use case, the OriginTimestamp is the MVCC version
+  // timestamp of the row on the source cluster and the semantics lead
+  // to idempotent last-write-wins semantics against the "original
+  // MVCC timestamp" of the value on the destination, which is its
+  // MVCC timestamp or, if set, the OriginTimestamp (reflecting that
+  // this value originated from the source cluster).
+  //
+  // Used by logical data replication.
   util.hlc.Timestamp origin_timestamp = 8 [(gogoproto.nullable) = false];
 
   reserved 9;
@@ -357,30 +378,6 @@ message ConditionalPutRequest {
 // A ConditionalPutResponse is the return value from the
 // ConditionalPut() method.
 message ConditionalPutResponse {
-  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
-// An InitPutRequest is the argument to the InitPut() method.
-//
-// - If key doesn't exist, sets value.
-// - If key exists, returns a ConditionFailedError if value != existing value
-//   If failOnTombstones is set to true, tombstone values count as mismatched
-//   values and will cause a ConditionFailedError.
-// TODO(yuzefovich): this can be removed once the compatibility with 24.3 is no
-// longer needed.
-message InitPutRequest {
-  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  Value value = 2 [(gogoproto.nullable) = false];
-  // NOTE: For internal use only! Set to indicate that the put is
-  // writing to virgin keyspace and no reads are necessary to
-  // rationalize MVCC.
-  bool blind = 3;
-  // If true, tombstones cause ConditionFailedErrors.
-  bool failOnTombstones = 4;
-}
-
-// A InitPutResponse is the return value from the InitPut() method.
-message InitPutResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
@@ -1945,8 +1942,7 @@ message ExportResponse {
 
 // AdminScatterRequest is the argument to the AdminScatter() method, which moves
 // replicas and leaseholders for a selection of ranges. Scatter is best-effort;
-// ranges that cannot be moved will include an error detail in the response and
-// won't fail the request.
+// ranges that cannot be moved won't fail the request.
 message AdminScatterRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bool randomize_leases = 2;
@@ -1976,49 +1972,6 @@ message AdminScatterResponse {
   int64 replicas_scattered_bytes = 5;
 
   // NB: if you add a field here, don't forget to update combine().
-}
-
-// AdminVerifyProtectedTimestampRequest is the argument to the
-// AdminVerifyProtectedTimestamp method which ensures that the specified record
-// will be seen before data can be garbage collected at the timestamp.
-message AdminVerifyProtectedTimestampRequest {
-  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-
-  // RecordID is the ID of the protected timestamp Record being verified.
-  bytes record_id = 4 [
-      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
-      (gogoproto.nullable) = false,
-      (gogoproto.customname) = "RecordID"
-  ];
-
-  // Protected is the timestamp at which the record with RecordID protects.
-  util.hlc.Timestamp protected = 2 [(gogoproto.nullable) = false];
-
-  // RecordAliveAt is a an hlc timestamp at which the record being verified is
-  // known to exist. A value for RecordAliveAt is generally determined by
-  // reading a Record from the database and using the timestamp at which that
-  // read occurred.
-  util.hlc.Timestamp record_alive_at = 3 [(gogoproto.nullable) = false];
-}
-
-
-// AdminVerifyProtectedTimestampResponse is the argument to the
-// AdminVerifyProtectedTimestamp method which ensures that the specified record
-// will be seen before data can be garbage collected at the timestamp.
-message AdminVerifyProtectedTimestampResponse {
-
-  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  bool verified = 2;
-
-  // TODO(adityamaru): Remove in 21.2.
-  repeated RangeDescriptor deprecated_failed_ranges = 3 [(gogoproto.nullable) = false];
-  message FailedRange {
-    int64 range_id = 1 [(gogoproto.customname) = "RangeID"];
-    bytes start_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
-    bytes end_key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
-    string reason = 4;
-  }
-  repeated FailedRange verification_failed_ranges = 4 [(gogoproto.nullable) = false];
 }
 
 // AddSSTableRequest contains arguments to the AddSSTable method, which links an
@@ -2534,7 +2487,6 @@ message RequestUnion {
     ReverseScanRequest reverse_scan = 21;
     ComputeChecksumRequest compute_checksum = 22;
     CheckConsistencyRequest check_consistency = 24;
-    InitPutRequest init_put = 26;
     TransferLeaseRequest transfer_lease = 28;
     LeaseInfoRequest lease_info = 30;
     ExportRequest export = 32;
@@ -2548,7 +2500,6 @@ message RequestUnion {
     RefreshRangeRequest refresh_range = 41;
     SubsumeRequest subsume = 43;
     RangeStatsRequest range_stats = 44;
-    AdminVerifyProtectedTimestampRequest admin_verify_protected_timestamp = 49;
     MigrateRequest migrate = 50;
     QueryResolvedTimestampRequest query_resolved_timestamp = 51;
     BarrierRequest barrier = 53;
@@ -2557,7 +2508,7 @@ message RequestUnion {
     LinkExternalSSTableRequest link_external_sstable = 57;
     ExciseRequest excise = 58;
   }
-  reserved 8, 15, 23, 25, 27, 31, 34, 52;
+  reserved 8, 15, 23, 25, 26, 27, 31, 34, 49, 52;
 }
 
 // A ResponseUnion contains exactly one of the responses.
@@ -2592,7 +2543,6 @@ message ResponseUnion {
     ReverseScanResponse reverse_scan = 21;
     ComputeChecksumResponse compute_checksum = 22;
     CheckConsistencyResponse check_consistency = 24;
-    InitPutResponse init_put = 26;
     LeaseInfoResponse lease_info = 30;
     ExportResponse export = 32;
     QueryTxnResponse query_txn = 33;
@@ -2605,7 +2555,6 @@ message ResponseUnion {
     RefreshRangeResponse refresh_range = 41;
     SubsumeResponse subsume = 43;
     RangeStatsResponse range_stats = 44;
-    AdminVerifyProtectedTimestampResponse admin_verify_protected_timestamp = 49;
     MigrateResponse migrate = 50;
     QueryResolvedTimestampResponse query_resolved_timestamp = 51;
     BarrierResponse barrier = 53;
@@ -2614,7 +2563,7 @@ message ResponseUnion {
     LinkExternalSSTableResponse link_external_sstable = 57;
     ExciseResponse excise = 58;
   }
-  reserved 8, 15, 23, 25, 27, 28, 31, 34, 52;
+  reserved 8, 15, 23, 25, 26, 27, 28, 31, 34, 49, 52;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary
@@ -3001,26 +2950,9 @@ message Header {
 
 message WriteOptions {
   uint32 origin_id = 1[(gogoproto.customname) = "OriginID"];
-  // OriginTimestamp is used by logical data replication. It is the MVCC
-  // timestamp of the row in the source cluster.
-  //
-  // If set the write will only succeed if the provided timestamp is greater than
-  // the OriginTimestamp field in the MVCCValueHeader of the existing value (if
-  // the value has a non-zero OriginTimestamp) or the MVCC timestamp of the
-  // existing value. If there is no existing value, the timestamp check succeeds.
-	//
-	// The origin_timestamp header is only handled by the put, cput, delete, and
-	// range delete commands.
-  //
-  // On success, this timestamp will also be stored in the
-  // OriginTimestamp field of the the MVCCValueHeader for the newly
-  // written value.
-  //
-  // In LDR, the OriginTimestamp is the MVCC version timestamp of the row on the
-  // source cluster and the semantics leads to idempotent last-write-wins
-  // semantics against the "original" MVCC timestamp of the value on the
-  // destination, which is its MVCC timestamp or, if set, the OriginTimestamp
-  // (reflecting that this value originated from the source cluster).
+  // OriginTimestamp is bound to the MVCCValueHeader of written key in the
+  // batch. Note that a kv client cannot set this if they use CPut's origin
+  // timestamp arg.
   util.hlc.Timestamp origin_timestamp = 2 [(gogoproto.nullable) = false];
 }
 

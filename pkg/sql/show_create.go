@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -112,7 +111,22 @@ func ShowCreateTable(
 		f.WriteString(",\n\tCONSTRAINT ")
 		formatQuoteNames(&f.Buffer, desc.GetPrimaryIndex().GetName())
 		f.WriteString(" ")
-		f.WriteString(tabledesc.PrimaryKeyString(desc))
+		primaryIdxStr, err := catformat.IndexForDisplay(
+			ctx,
+			desc,
+			&descpb.AnonymousTable,
+			desc.GetPrimaryIndex(),
+			"", /* partition */
+			fmtFlags,
+			p.EvalContext(),
+			p.SemaCtx(),
+			p.SessionData(),
+			catformat.IndexDisplayDefOnly,
+		)
+		if err != nil {
+			return "", err
+		}
+		f.WriteString(primaryIdxStr)
 	}
 
 	// TODO (lucy): Possibly include FKs in the mutations list here, or else
@@ -208,9 +222,7 @@ func ShowCreateTable(
 }
 
 // showRLSAlterStatement returns a string of the ALTER TABLE ... ROW LEVEL SECURITY statements
-func showRLSAlterStatement(
-	tn *tree.TableName, table catalog.TableDescriptor, addNewLine bool,
-) (string, error) {
+func showRLSAlterStatement(tn *tree.TableName, table catalog.TableDescriptor) (string, error) {
 	if !table.IsRowLevelSecurityEnabled() && !table.IsRowLevelSecurityForced() {
 		return "", nil
 	}
@@ -233,9 +245,6 @@ func showRLSAlterStatement(
 		cmds = append(cmds, forcedCmd)
 	}
 
-	if addNewLine {
-		f.WriteString(";\n")
-	}
 	f.FormatNode(&tree.AlterTable{
 		Table: un,
 		Cmds:  cmds,
@@ -253,7 +262,6 @@ func showPolicyStatement(
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
 	policy descpb.PolicyDescriptor,
-	addNewLine bool,
 ) (string, error) {
 	un := tn.ToUnresolvedObjectName()
 
@@ -294,9 +302,6 @@ func showPolicyStatement(
 		}
 	}
 
-	if addNewLine {
-		f.WriteString(";\n")
-	}
 	f.FormatNode(&tree.CreatePolicy{
 		PolicyName: tree.Name(policy.Name),
 		TableName:  un,

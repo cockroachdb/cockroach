@@ -455,7 +455,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/misc_functions.ou
 - f
 -(1 row)
 -
-+ERROR:  has_function_privilege(): unknown function: pg_log_backend_memory_contexts()
++ERROR:  unknown function: pg_log_backend_memory_contexts()
  GRANT EXECUTE ON FUNCTION pg_log_backend_memory_contexts(integer)
    TO regress_log_memory;
 +ERROR:  unknown function: pg_log_backend_memory_contexts()
@@ -466,7 +466,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/misc_functions.ou
 - t
 -(1 row)
 -
-+ERROR:  has_function_privilege(): unknown function: pg_log_backend_memory_contexts()
++ERROR:  unknown function: pg_log_backend_memory_contexts()
  SET ROLE regress_log_memory;
  SELECT pg_log_backend_memory_contexts(pg_backend_pid());
 - pg_log_backend_memory_contexts 
@@ -674,7 +674,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/misc_functions.ou
 - f
 -(1 row)
 -
-+ERROR:  has_function_privilege(): unknown function: pg_ls_logicalsnapdir()
++ERROR:  unknown function: pg_ls_logicalsnapdir()
  SELECT has_function_privilege('regress_slot_dir_funcs',
    'pg_ls_logicalmapdir()', 'EXECUTE');
 - has_function_privilege 
@@ -682,7 +682,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/misc_functions.ou
 - f
 -(1 row)
 -
-+ERROR:  has_function_privilege(): unknown function: pg_ls_logicalmapdir()
++ERROR:  unknown function: pg_ls_logicalmapdir()
  SELECT has_function_privilege('regress_slot_dir_funcs',
    'pg_ls_replslotdir(text)', 'EXECUTE');
 - has_function_privilege 
@@ -690,7 +690,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/misc_functions.ou
 - f
 -(1 row)
 -
-+ERROR:  has_function_privilege(): unknown function: pg_ls_replslotdir()
++ERROR:  unknown function: pg_ls_replslotdir()
  GRANT pg_monitor TO regress_slot_dir_funcs;
 +ERROR:  role/user "pg_monitor" does not exist
  -- Role is now part of pg_monitor, so these are available.
@@ -701,7 +701,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/misc_functions.ou
 - t
 -(1 row)
 -
-+ERROR:  has_function_privilege(): unknown function: pg_ls_logicalsnapdir()
++ERROR:  unknown function: pg_ls_logicalsnapdir()
  SELECT has_function_privilege('regress_slot_dir_funcs',
    'pg_ls_logicalmapdir()', 'EXECUTE');
 - has_function_privilege 
@@ -709,7 +709,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/misc_functions.ou
 - t
 -(1 row)
 -
-+ERROR:  has_function_privilege(): unknown function: pg_ls_logicalmapdir()
++ERROR:  unknown function: pg_ls_logicalmapdir()
  SELECT has_function_privilege('regress_slot_dir_funcs',
    'pg_ls_replslotdir(text)', 'EXECUTE');
 - has_function_privilege 
@@ -717,7 +717,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/misc_functions.ou
 - t
 -(1 row)
 -
-+ERROR:  has_function_privilege(): unknown function: pg_ls_replslotdir()
++ERROR:  unknown function: pg_ls_replslotdir()
  DROP ROLE regress_slot_dir_funcs;
  --
  -- Test adding a support function to a subject function

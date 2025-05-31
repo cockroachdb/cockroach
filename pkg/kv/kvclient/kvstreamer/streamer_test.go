@@ -50,7 +50,7 @@ func getStreamer(
 	if err != nil {
 		panic(err)
 	}
-	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.DistSQLPlanningNodeID(), leafInputState)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.DistSQLPlanningNodeID(), leafInputState, nil /* header */)
 	metrics := kvstreamer.MakeMetrics()
 	return kvstreamer.NewStreamer(
 		s.DistSenderI().(*kvcoord.DistSender),

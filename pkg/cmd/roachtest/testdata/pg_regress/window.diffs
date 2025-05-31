@@ -3985,11 +3985,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/window.out --labe
  SELECT i, b, bool_and(b) OVER w, bool_or(b) OVER w
    FROM (VALUES (1,true), (2,true), (3,false), (4,false), (5,true)) v(i,b)
    WINDOW w AS (ORDER BY i ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING);
-@@ -4830,23 +4413,12 @@
+@@ -4830,23 +4413,14 @@
        FROM generate_series(1,5) s
      WINDOW w AS (ORDER BY s ROWS BETWEEN CURRENT ROW AND GROUP_SIZE FOLLOWING)
  $$ LANGUAGE SQL STABLE;
-+ERROR:  argument of ROWS must not contain variables
++ERROR:  unimplemented: cannot create user-defined functions under a temporary schema
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/104687/_version_
  EXPLAIN (costs off) SELECT * FROM pg_temp.f(2);
 -                      QUERY PLAN                      
 -------------------------------------------------------

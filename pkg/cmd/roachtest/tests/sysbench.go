@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,13 +23,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	roachprodErrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/google/pprof/profile"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -258,6 +262,67 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 			return err
 		}
 
+		t.Status("running 75 second workload to collect profiles")
+		{
+			// Create the profiles directory in the artifacts directory.
+			profilesDir := filepath.Join(t.ArtifactsDir(), "profiles")
+			require.NoError(t, os.MkdirAll(profilesDir, 0755))
+
+			// Start a short sysbench test in order to collect the profiles from an
+			// active cluster.
+			m := t.NewErrorGroup(task.WithContext(ctx))
+			m.Go(
+				func(ctx context.Context, l *logger.Logger) error {
+					opts := opts
+					opts.duration = 75 * time.Second
+					result, err = c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()),
+						opts.cmd(useHAProxy)+" run")
+
+					if msg, crashed := detectSysbenchCrash(result); crashed {
+						t.L().Printf("%s; sysbench run to collect profiles failed", msg)
+					}
+					return err
+				},
+			)
+
+			// Wait for 30 seconds to give a chance to the workload to start, and then
+			// collect CPU, mutex diffs, allocs diffs profiles.
+			time.Sleep(30 * time.Second)
+			collectionDuration := 30 * time.Second
+
+			// Collect the profiles.
+			profiles := map[string][]*profile.Profile{"cpu": {}, "allocs": {}, "mutex": {}}
+			for typ := range profiles {
+				m.Go(
+					func(ctx context.Context, l *logger.Logger) error {
+						var err error
+						profiles[typ], err = roachtestutil.GetProfile(ctx, c, l, typ,
+							collectionDuration, c.CRDBNodes())
+						return err
+					},
+				)
+			}
+
+			// If there is a problem executing the workload or there is a problem
+			// collecting the profiles we need to clean up the directory and return
+			// the error.
+			if err := m.WaitE(); err != nil {
+				require.NoError(t, os.RemoveAll(profilesDir))
+				return err
+			}
+
+			// At this point we know that the workload has not crashed, and we have
+			// collected all the individual profiles. We can now merge and export
+			// them. If exporting or merging fails for some reason, we clean up the
+			// profiles directory and return the error to avoid leaving potentially
+			// corrupt profiles.
+			if err := mergeAndExportSysbenchProfiles(c, collectionDuration, profiles,
+				profilesDir); err != nil {
+				require.NoError(t, os.RemoveAll(profilesDir))
+				return err
+			}
+		}
+
 		return nil
 	}
 	if opts.usePostgres {
@@ -296,7 +361,6 @@ func registerSysbench(r registry.Registry) {
 					`set cluster setting sql.stats.flush.enabled = false`,
 					`set cluster setting sql.metrics.statement_details.enabled = false`,
 					`set cluster setting kv.split_queue.enabled = false`,
-					`set cluster setting kv.consistency_queue.enabled = false`,
 					`set cluster setting kv.transaction.write_buffering.enabled = true`,
 				},
 				useDRPC: true,
@@ -436,6 +500,11 @@ func exportSysbenchResults(
 	}
 	labelString := roachtestutil.GetOpenmetricsLabelString(t, c, labels)
 	openmetricsMap := make(map[string][]openmetricsValues)
+
+	// Counters for aggregated metrics
+	var totalQpsSum, readQpsSum, writeQpsSum, otherQpsSum float64
+	var sampleCount int64
+
 	tick := func(fields []string, qpsByType []string) error {
 		snapshotTick := sysbenchMetrics{
 			Time:         start.Unix(),
@@ -449,6 +518,18 @@ func exportSysbenchResults(
 			Errors:       fields[12],
 			Reconnects:   fields[14],
 		}
+
+		// Add to aggregation counters
+		qpsVal, _ := strconv.ParseFloat(fields[5], 64)
+		readQpsVal, _ := strconv.ParseFloat(qpsByType[0], 64)
+		writeQpsVal, _ := strconv.ParseFloat(qpsByType[1], 64)
+		otherQpsVal, _ := strconv.ParseFloat(qpsByType[2], 64)
+
+		totalQpsSum += qpsVal
+		readQpsSum += readQpsVal
+		writeQpsSum += writeQpsVal
+		otherQpsSum += otherQpsVal
+		sampleCount++
 
 		if t.ExportOpenmetrics() {
 			addCurrentSnapshotToOpenmetrics(snapshotTick, openmetricsMap)
@@ -508,7 +589,115 @@ func exportSysbenchResults(
 	if t.ExportOpenmetrics() {
 		metricBytes = getOpenmetricsBytes(openmetricsMap, labelString)
 	}
-	return os.WriteFile(fmt.Sprintf("%s/%s", perfDir, roachtestutil.GetBenchmarkMetricsFileName(t)), metricBytes, 0666)
+
+	// Write the standard metrics file
+	if err := os.WriteFile(fmt.Sprintf("%s/%s", perfDir, roachtestutil.GetBenchmarkMetricsFileName(t)), metricBytes, 0666); err != nil {
+		return err
+	}
+
+	// If using OpenMetrics, also calculate and write aggregated metrics
+	if t.ExportOpenmetrics() && sampleCount > 0 {
+		floatSampleCount := float64(sampleCount)
+		avgTotalQps := totalQpsSum / floatSampleCount
+		avgReadQps := readQpsSum / floatSampleCount
+		avgWriteQps := writeQpsSum / floatSampleCount
+		avgOtherQps := otherQpsSum / floatSampleCount
+
+		// Create aggregated metrics exactly matching roachperf's expected format
+		aggregatedMetrics := roachtestutil.AggregatedPerfMetrics{
+			{
+				Name:           "total_qps",
+				Value:          roachtestutil.MetricPoint(avgTotalQps),
+				Unit:           "ops/s",
+				IsHigherBetter: true,
+			},
+			{
+				Name:           "read_qps",
+				Value:          roachtestutil.MetricPoint(avgReadQps),
+				Unit:           "ops/s",
+				IsHigherBetter: true,
+			},
+			{
+				Name:           "write_qps",
+				Value:          roachtestutil.MetricPoint(avgWriteQps),
+				Unit:           "ops/s",
+				IsHigherBetter: true,
+			},
+			{
+				Name:           "other_qps",
+				Value:          roachtestutil.MetricPoint(avgOtherQps),
+				Unit:           "ops/s",
+				IsHigherBetter: true,
+			},
+		}
+
+		aggregatedBuf := &bytes.Buffer{}
+
+		labels, err := roachtestutil.GetLabels(labelString)
+		if err != nil {
+			return errors.Wrap(err, "failed to get labels")
+		}
+		// Convert aggregated metrics to OpenMetrics format
+		if err := roachtestutil.GetAggregatedMetricBytes(
+			aggregatedMetrics,
+			labels,
+			timeutil.Now(),
+			aggregatedBuf,
+		); err != nil {
+			return errors.Wrap(err, "failed to format aggregated metrics")
+		}
+
+		// Write aggregated metrics
+		aggregatedFileName := "aggregated_" + roachtestutil.GetBenchmarkMetricsFileName(t)
+		aggregatedPath := filepath.Join(perfDir, aggregatedFileName)
+		if err := os.WriteFile(aggregatedPath, aggregatedBuf.Bytes(), 0644); err != nil {
+			return errors.Wrap(err, "failed to write aggregated metrics")
+		}
+
+		t.L().Printf("Wrote aggregated metrics to %s", aggregatedPath)
+	}
+
+	return nil
+}
+
+// mergeAndExportSysbenchProfiles accepts a map of individual profiles of each
+// node of different types (cpu, allocs, mutex), and exports them to the
+// specified directory. Also, it merges them and exports the merged profiles
+// to the same directory.
+func mergeAndExportSysbenchProfiles(
+	c cluster.Cluster,
+	duration time.Duration,
+	profiles map[string][]*profile.Profile,
+	profilesDir string,
+) error {
+	// Merge the profiles.
+	mergedProfiles := map[string]*profile.Profile{"cpu": {}, "allocs": {}, "mutex": {}}
+	for typ := range mergedProfiles {
+		var err error
+		if mergedProfiles[typ], err = profile.Merge(profiles[typ]); err != nil {
+			return errors.Wrapf(err, "failed to merge profiles type: %s", typ)
+		}
+	}
+
+	// Export the merged profiles.
+	for typ := range mergedProfiles {
+		if err := roachtestutil.ExportProfile(mergedProfiles[typ], profilesDir,
+			fmt.Sprintf("merged.%s.pb.gz", typ)); err != nil {
+			return errors.Wrapf(err, "failed to export merged profiles: %s", typ)
+		}
+	}
+
+	// Export the individual profiles as well.
+	for i := range len(c.CRDBNodes()) {
+		for typ := range profiles {
+			if err := roachtestutil.ExportProfile(profiles[typ][i], profilesDir,
+				fmt.Sprintf("n%d.%s%s.pb.gz", i+1, typ, duration)); err != nil {
+				return errors.Wrapf(err, "failed to export individual profile type: %s", typ)
+			}
+		}
+	}
+
+	return nil
 }
 
 // Add sysbenchMetrics to the openmetricsMap

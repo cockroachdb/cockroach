@@ -9,16 +9,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
 	"github.com/cockroachdb/errors"
 )
 
 func init() {
-	tree.ValidateJSONPath = func(jsonpath string) (string, error) {
+	tree.ValidateJSONPath = func(jsonpath string) (*jsonpath.Jsonpath, error) {
 		jp, err := Parse(jsonpath)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-		return jp.AST.String(), nil
+		return jp.AST, nil
 	}
 }
 
@@ -99,7 +100,16 @@ func (p *Parser) Parse(jsonpath string) (statements.JsonpathStatement, error) {
 }
 
 // Parse parses a jsonpath string and returns a jsonpath.Jsonpath object.
-func Parse(jsonpath string) (statements.JsonpathStatement, error) {
+func Parse(path string) (statements.JsonpathStatement, error) {
 	var p Parser
-	return p.Parse(jsonpath)
+	stmt, err := p.Parse(path)
+	if err != nil {
+		return statements.JsonpathStatement{}, err
+	}
+	// Similar to flattenJsonPathParseItem in postgres, we do a pass over the AST
+	// to perform some semantic checks.
+	if err := stmt.AST.Validate(); err != nil {
+		return statements.JsonpathStatement{}, err
+	}
+	return stmt, nil
 }

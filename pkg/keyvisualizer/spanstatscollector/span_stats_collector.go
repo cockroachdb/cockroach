@@ -94,7 +94,6 @@ func (s *SpanStatsCollector) Start(ctx context.Context, stopper *stop.Stopper) {
 				t.Reset(nextTick.Sub(now))
 				select {
 				case <-t.C:
-					t.Read = true
 					s.rolloverSample(nextTick)
 					s.reset()
 				case <-stopper.ShouldQuiesce():

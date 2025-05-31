@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -178,6 +179,61 @@ func TestLogicalStreamIngestionJobNameResolution(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestOptimsitcInsertCorruption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	// This is a regression test for #144645. Running the optimistic insert code
+	// path could corrupt indexes if the insert is not wrapped in a savepoint.
+
+	ctx := context.Background()
+
+	server, s, dbSource, dbDest := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbSource.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled = true")
+
+	createTableStmt := `CREATE TABLE indexed (
+		a INT,
+		b INT,
+		c INT,
+		PRIMARY KEY (a, b)
+	)`
+	dbSource.Exec(t, createTableStmt)
+	dbDest.Exec(t, createTableStmt)
+
+	createIdxStmt := `CREATE INDEX c ON indexed (c)`
+	dbSource.Exec(t, createIdxStmt)
+	dbDest.Exec(t, createIdxStmt)
+
+	// Insert initial data into destination that should be overwritten. This
+	// gives more opportunities for corruption.
+	dbDest.Exec(t, "INSERT INTO indexed (a, b, c) VALUES (1, 2, 3), (3, 4, 5)")
+	dbSource.Exec(t, "INSERT INTO indexed (a, b, c) VALUES (1, 2, 6), (3, 4, 7)")
+
+	// Create logical replication stream from source to destination
+	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+	var jobID jobspb.JobID
+	dbDest.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE indexed ON $1 INTO TABLE indexed",
+		sourceURL.String(),
+	).Scan(&jobID)
+
+	WaitUntilReplicatedTime(t, s.Clock().Now(), dbDest, jobID)
+
+	dbSource.CheckQueryResults(t, "SELECT * FROM indexed", [][]string{
+		{"1", "2", "6"},
+		{"3", "4", "7"},
+	})
+	dbDest.CheckQueryResults(t, "SELECT * FROM indexed", [][]string{
+		{"1", "2", "6"},
+		{"3", "4", "7"},
+	})
+
+	compareReplicatedTables(t, s, "a", "b", "indexed", dbSource, dbDest)
 }
 
 type fatalDLQ struct{ *testing.T }
@@ -519,16 +575,8 @@ func TestLogicalStreamIngestionAdvancePTS(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	clusterArgs := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestControlsTenantsExplicitly,
-			Knobs: base.TestingKnobs{
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-			},
-		},
-	}
 
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
 	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
@@ -779,16 +827,8 @@ func TestFilterRangefeedInReplicationStream(t *testing.T) {
 	skip.UnderRace(t, "multi cluster/node config exhausts hardware")
 
 	ctx := context.Background()
-	clusterArgs := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestControlsTenantsExplicitly,
-			Knobs: base.TestingKnobs{
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-			},
-		},
-	}
 
-	server, s, dbs, _ := setupServerWithNumDBs(t, ctx, clusterArgs, 1, 3)
+	server, s, dbs, _ := setupServerWithNumDBs(t, ctx, testClusterBaseClusterArgs, 1, 3)
 	defer server.Stopper().Stop(ctx)
 
 	dbA, dbB, dbC := dbs[0], dbs[1], dbs[2]
@@ -1154,18 +1194,9 @@ func TestLogicalJobResiliency(t *testing.T) {
 
 	skip.WithIssue(t, 131184)
 
-	clusterArgs := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestControlsTenantsExplicitly,
-			Knobs: base.TestingKnobs{
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-			},
-		},
-	}
-
 	ctx := context.Background()
 
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 3)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 3)
 	defer server.Stopper().Stop(ctx)
 
 	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
@@ -1252,17 +1283,7 @@ func TestMultipleSourcesIntoSingleDest(t *testing.T) {
 
 	ctx := context.Background()
 
-	clusterArgs := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestControlsTenantsExplicitly,
-			Knobs: base.TestingKnobs{
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-				DistSQL:          &execinfra.TestingKnobs{},
-			},
-		},
-	}
-
-	server, s, runners, dbNames := setupServerWithNumDBs(t, ctx, clusterArgs, 1, 3)
+	server, s, runners, dbNames := setupServerWithNumDBs(t, ctx, testClusterBaseClusterArgs, 1, 3)
 	defer server.Stopper().Stop(ctx)
 
 	PGURLs := GetPGURLs(t, s, dbNames)
@@ -1315,15 +1336,6 @@ func TestThreeWayReplication(t *testing.T) {
 
 	ctx := context.Background()
 
-	clusterArgs := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestControlsTenantsExplicitly,
-			Knobs: base.TestingKnobs{
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-			},
-		},
-	}
-
 	verifyExpectedRowAllServers := func(
 		t *testing.T, runners []*sqlutils.SQLRunner, expectedRows [][]string, dbNames []string,
 	) {
@@ -1349,7 +1361,7 @@ func TestThreeWayReplication(t *testing.T) {
 	}
 
 	numDBs := 3
-	server, s, runners, dbNames := setupServerWithNumDBs(t, ctx, clusterArgs, 1, numDBs)
+	server, s, runners, dbNames := setupServerWithNumDBs(t, ctx, testClusterBaseClusterArgs, 1, numDBs)
 	defer server.Stopper().Stop(ctx)
 
 	PGURLs := GetPGURLs(t, s, dbNames)
@@ -1415,17 +1427,8 @@ func TestTombstoneUpdate(t *testing.T) {
 
 	ctx := context.Background()
 
-	clusterArgs := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestControlsTenantsExplicitly,
-			Knobs: base.TestingKnobs{
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-			},
-		},
-	}
-
 	numDBs := 3
-	server, s, runners, dbNames := setupServerWithNumDBs(t, ctx, clusterArgs, 1, numDBs)
+	server, s, runners, dbNames := setupServerWithNumDBs(t, ctx, testClusterBaseClusterArgs, 1, numDBs)
 	defer server.Stopper().Stop(ctx)
 	PGURLs := GetPGURLs(t, s, dbNames)
 
@@ -1456,18 +1459,76 @@ func TestTombstoneUpdate(t *testing.T) {
 
 	// 5. Replicate the delete from 'src-a' -> 'dst'
 	var jobIDSrcA jobspb.JobID
-	dst.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = VALIDATED, CURSOR = $2",
+	dst.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH CURSOR = $2",
 		urlSrcA, start.AsOfSystemTime()).Scan(&jobIDSrcA)
 	WaitUntilReplicatedTime(t, s.Clock().Now(), dst, jobIDSrcA)
 
 	// 6. Replicate the update from 'src-b' -> 'dst'
 	var jobIDSrcB jobspb.JobID
-	dst.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = VALIDATED, CURSOR = $2",
+	dst.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH CURSOR = $2",
 		urlSrcB, start.AsOfSystemTime()).Scan(&jobIDSrcB)
 	WaitUntilReplicatedTime(t, s.Clock().Now(), dst, jobIDSrcB)
 
 	// Verify that the delete won LWW since it has the highest mvcc value
 	dst.CheckQueryResults(t, "SELECT * FROM tab WHERE pk = 1", [][]string{})
+}
+
+func TestReplicateComputedColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	server, s, dbSource, dbDest := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	// Note: the primary key is basicaly (a, b), but with a computed column that
+	// is d=a+b.
+	createTableStmt := `CREATE TABLE computed_cols (
+		a INT,
+		b INT,
+		c INT,
+		d INT AS (a + b) STORED,
+		cIsOdd BOOLEAN AS (c % 2 = 1) VIRTUAL,
+		PRIMARY KEY (a, d)
+	)`
+	dbSource.Exec(t, createTableStmt)
+	dbDest.Exec(t, createTableStmt)
+
+	var writer string
+	dbSource.QueryRow(t, "SHOW CLUSTER SETTING logical_replication.consumer.immediate_mode_writer").Scan(&writer)
+	if writer != "legacy-kv" {
+		createIdxStmt := `CREATE INDEX c ON computed_cols (c) WHERE cIsOdd`
+		dbSource.Exec(t, createIdxStmt)
+		dbDest.Exec(t, createIdxStmt)
+	}
+
+	// Insert initial data into destination that should be overwritten. This
+	// tests the conflict case which is more error prone.
+	dbDest.Exec(t, "INSERT INTO computed_cols (a, b, c) VALUES (1, 2, 3), (3, 4, 5)")
+	dbSource.Exec(t, "INSERT INTO computed_cols (a, b, c) VALUES (1, 2, 6), (3, 4, 7)")
+
+	// Create logical replication stream from source to destination
+	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+	var jobID jobspb.JobID
+	dbDest.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE computed_cols ON $1 INTO TABLE computed_cols",
+		sourceURL.String(),
+	).Scan(&jobID)
+
+	WaitUntilReplicatedTime(t, s.Clock().Now(), dbDest, jobID)
+
+	dbSource.CheckQueryResults(t, "SELECT * FROM computed_cols", [][]string{
+		{"1", "2", "6", "3", "false"},
+		{"3", "4", "7", "7", "true"},
+	})
+	dbDest.CheckQueryResults(t, "SELECT * FROM computed_cols", [][]string{
+		{"1", "2", "6", "3", "false"},
+		{"3", "4", "7", "7", "true"},
+	})
+
+	compareReplicatedTables(t, s, "a", "b", "computed_cols", dbSource, dbDest)
 }
 
 func TestForeignKeyConstraints(t *testing.T) {
@@ -1477,16 +1538,7 @@ func TestForeignKeyConstraints(t *testing.T) {
 
 	ctx := context.Background()
 
-	clusterArgs := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestControlsTenantsExplicitly,
-			Knobs: base.TestingKnobs{
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-			},
-		},
-	}
-
-	server, s, dbA, _ := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	server, s, dbA, _ := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
 	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
@@ -1782,14 +1834,7 @@ func TestLogicalStreamIngestionJobWithFallbackUDF(t *testing.T) {
 	skip.WithIssue(t, 129569, "flakey test")
 
 	ctx := context.Background()
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestControlsTenantsExplicitly,
-			Knobs: base.TestingKnobs{
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-			},
-		},
-	}, 1)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
 	lwwFunc := `CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tab, existing tab, prev tab, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL, proposed_mvcc_timestamp DECIMAL)
@@ -2072,17 +2117,9 @@ func TestUserPrivileges(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	clusterArgs := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestControlsTenantsExplicitly,
-			Knobs: base.TestingKnobs{
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-			},
-		},
-	}
 	rng, _ := randutil.NewPseudoRand()
 
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
 	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
@@ -2224,16 +2261,8 @@ func TestLogicalReplicationSchemaChanges(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	clusterArgs := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestControlsTenantsExplicitly,
-			Knobs: base.TestingKnobs{
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-			},
-		},
-	}
 
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
 	// Add some stuff to tables in prep for schema change testing.
@@ -2264,7 +2293,6 @@ func TestLogicalReplicationSchemaChanges(t *testing.T) {
 		// adding unsuppored indexes disallowed
 		{"add virtual column index", "CREATE INDEX virtual_col_idx ON tab(virtual_col)", false},
 		{"add hash index", "CREATE INDEX hash_idx ON tab(pk) USING HASH WITH (bucket_count = 4)", false},
-		{"add partial index", "CREATE INDEX partial_idx ON tab(composite_col) WHERE pk > 0", false},
 		{"add unique index", "CREATE UNIQUE INDEX unique_idx ON tab(composite_col)", false},
 
 		// Drop table is blocked
@@ -2312,16 +2340,8 @@ func TestUserDefinedTypes(t *testing.T) {
 	skip.UnderDuress(t, "this needs to be multi-node but that tends to be too slow for duressed builds")
 
 	ctx := context.Background()
-	clusterArgs := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestControlsTenantsExplicitly,
-			Knobs: base.TestingKnobs{
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-			},
-		},
-	}
 
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 3)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 3)
 	defer server.Stopper().Stop(ctx)
 
 	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
@@ -2428,7 +2448,17 @@ func TestMismatchColIDs(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc, s, sqlA, sqlB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+
+	streamingKnobs := &sql.StreamingTestingKnobs{
+		DistSQLRetryPolicy: &retry.Options{
+			InitialBackoff: time.Microsecond,
+			MaxBackoff:     2 * time.Microsecond,
+			MaxRetries:     1,
+		},
+	}
+	args := testClusterBaseClusterArgs
+	args.ServerArgs.Knobs.Streaming = streamingKnobs
+	tc, s, sqlA, sqlB := setupLogicalTestServer(t, ctx, args, 1)
 	defer tc.Stopper().Stop(ctx)
 
 	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
@@ -2449,17 +2479,71 @@ func TestMismatchColIDs(t *testing.T) {
 	sqlB.Exec(t, "ALTER TABLE foo DROP COLUMN bar")
 	sqlB.Exec(t, "INSERT INTO foo VALUES (4, 'world')")
 
-	// LDR immediate mode creation should fail because of mismatched column IDs.
+	// When using the kv writer, LDR immediate mode creation should fail because of mismatched column IDs.
+	sqlA.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.immediate_mode_writer = 'legacy-kv'")
 	sqlA.ExpectErr(t,
 		"destination table foo column baz has ID 3, but the source table foo has ID 4",
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE foo ON $1 INTO TABLE foo WITH MODE = 'immediate'", dbBURL.String())
 
-	// LDR validated mode creation should succeed because the SQL writer supports mismatched column IDs.
 	var jobID jobspb.JobID
 	sqlA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE foo ON $1 INTO TABLE foo WITH MODE = 'validated'", dbBURL.String()).Scan(&jobID)
-
 	now := s.Clock().Now()
 	WaitUntilReplicatedTime(t, now, sqlA, jobID)
+
+	sqlA.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.immediate_mode_writer = 'sql'")
+	sqlA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE foo ON $1 INTO TABLE foo WITH MODE = 'immediate'", dbBURL.String()).Scan(&jobID)
+	now = s.Clock().Now()
+	WaitUntilReplicatedTime(t, now, sqlA, jobID)
+
+	// Ensure the validation works on resumption as well.
+	sqlA.Exec(t, "PAUSE JOB $1", jobID)
+	jobutils.WaitForJobToPause(t, sqlA, jobID)
+
+	sqlA.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.immediate_mode_writer = 'legacy-kv'")
+	sqlA.Exec(t, "RESUME JOB $1", jobID)
+	jobutils.WaitForJobToPause(t, sqlA, jobID)
+}
+
+func TestPartialIndexes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbA.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.immediate_mode_writer = 'sql'")
+
+	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
+
+	dbA.Exec(t, "CREATE TABLE foo (pk INT PRIMARY KEY, pi INT, payload STRING)")
+	dbA.Exec(t, "CREATE INDEX idx ON foo (pi) WHERE pk > 0")
+	dbB.Exec(t, "CREATE TABLE b.foo (pk INT PRIMARY KEY, pi INT, payload STRING)")
+	dbB.Exec(t, "CREATE INDEX idx ON b.foo (pi) WHERE pk < 0")
+	dbB.Exec(t, "INSERT INTO foo VALUES (1, 2, 'hello')")
+	dbB.Exec(t, "INSERT INTO foo VALUES (-1, -2, 'world')")
+
+	var jobAID jobspb.JobID
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE foo ON $1 INTO TABLE foo", dbBURL.String()).Scan(&jobAID)
+	now := s.Clock().Now()
+	WaitUntilReplicatedTime(t, now, dbA, jobAID)
+
+	dbA.CheckQueryResultsRetry(t, "SELECT * FROM foo WHERE pi = 2", [][]string{{"1", "2", "hello"}})
+	dbA.CheckQueryResultsRetry(t, "SELECT * FROM foo WHERE pi = -2", [][]string{{"-1", "-2", "world"}})
+
+	// Check that dbA and dbB can add an additional partial index, enabled when using the sql writer.
+	dbA.Exec(t, "CREATE INDEX idx2 ON a.foo (pi) WHERE pk = 0")
+	dbB.Exec(t, "CREATE INDEX idx2 ON b.foo (pi) WHERE pk = 0")
+
+	// Check for partial indexes when using legacy kv writer.
+	dbA.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.immediate_mode_writer = 'legacy-kv'")
+	dbA.ExpectErr(t, "cannot create logical replication stream: table foo has a partial index idx", "CREATE LOGICAL REPLICATION STREAM FROM TABLE foo ON $1 INTO TABLE foo", dbBURL.String())
+
+	// With the kv writer set, we can no longer create partial indexes on the replicating tables.
+	dbA.ExpectErr(t, " this schema change is disallowed on table foo because it is referenced by one or more logical replication jobs", "CREATE INDEX idx3 ON a.foo (pi) WHERE pk = 0")
+	dbB.ExpectErr(t, " this schema change is disallowed on table foo because it is referenced by one or more logical replication jobs", "CREATE INDEX idx3 ON b.foo (pi) WHERE pk = 0")
 }
 
 // TestLogicalReplicationCreationChecks verifies that we check that the table
@@ -2470,16 +2554,8 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	clusterArgs := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestControlsTenantsExplicitly,
-			Knobs: base.TestingKnobs{
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-			},
-		},
-	}
 
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
 	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
@@ -2521,15 +2597,17 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	dbA.Exec(t, "ALTER TABLE tab ALTER PRIMARY KEY USING COLUMNS (pk, composite_col)")
 	expectErr(t, "tab", `cannot create logical replication stream: table tab has a primary key column \(composite_col\) with composite encoding`)
 	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
-
-	// Check for partial indexes.
 	dbA.Exec(t, "ALTER TABLE tab ALTER PRIMARY KEY USING COLUMNS (pk)")
-	dbA.Exec(t, "CREATE INDEX partial_idx ON tab(composite_col) WHERE pk > 0")
-	expectErr(t, "tab", "cannot create logical replication stream: table tab has a partial index partial_idx")
+
+	// Check for hash sharded indexes.
+	dbA.Exec(t, "CREATE INDEX hash_idx ON tab(pk) USING HASH WITH (bucket_count = 4)")
+	dbB.Exec(t, "CREATE INDEX hash_idx ON b.tab(pk) USING HASH WITH (bucket_count = 4)")
+	expectErr(t, "tab", "tab has a virtual computed column crdb_internal_pk_shard_4 that is a key of index hash_idx")
 	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
+	dbA.Exec(t, "DROP INDEX hash_idx")
+	dbB.Exec(t, "DROP INDEX hash_idx")
 
 	// Check for virtual computed columns that are a key of a secondary index.
-	dbA.Exec(t, "DROP INDEX partial_idx")
 	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN virtual_col INT NOT NULL AS (pk + 1) VIRTUAL")
 	dbB.Exec(t, "ALTER TABLE b.tab ADD COLUMN virtual_col INT NOT NULL AS (pk + 1) VIRTUAL")
 	dbA.Exec(t, "CREATE INDEX virtual_col_idx ON tab(virtual_col)")
@@ -2709,7 +2787,7 @@ func TestGetWriterType(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		wt, err := getWriterType(ctx, jobspb.LogicalReplicationDetails_Validated, st)
 		require.NoError(t, err)
-		require.Equal(t, writerTypeSQL, wt)
+		require.Equal(t, sqlclustersettings.LDRWriterTypeSQL, wt)
 	})
 
 	t.Run("immediate-mode-pre-25.2", func(t *testing.T) {
@@ -2720,7 +2798,7 @@ func TestGetWriterType(t *testing.T) {
 		)
 		wt, err := getWriterType(ctx, jobspb.LogicalReplicationDetails_Immediate, st)
 		require.NoError(t, err)
-		require.Equal(t, writerTypeSQL, wt)
+		require.Equal(t, sqlclustersettings.LDRWriterTypeLegacyKV, wt)
 	})
 
 	t.Run("immediate-mode-post-25.2", func(t *testing.T) {
@@ -2729,14 +2807,14 @@ func TestGetWriterType(t *testing.T) {
 			clusterversion.PreviousRelease.Version(),
 			true, /* initializeVersion */
 		)
-		immediateModeWriter.Override(ctx, &st.SV, string(writerTypeSQL))
+		sqlclustersettings.LDRImmediateModeWriter.Override(ctx, &st.SV, string(sqlclustersettings.LDRWriterTypeSQL))
 		wt, err := getWriterType(ctx, jobspb.LogicalReplicationDetails_Immediate, st)
 		require.NoError(t, err)
-		require.Equal(t, writerTypeSQL, wt)
+		require.Equal(t, sqlclustersettings.LDRWriterTypeSQL, wt)
 
-		immediateModeWriter.Override(ctx, &st.SV, string(writerTypeLegacyKV))
+		sqlclustersettings.LDRImmediateModeWriter.Override(ctx, &st.SV, string(sqlclustersettings.LDRWriterTypeSQL))
 		wt, err = getWriterType(ctx, jobspb.LogicalReplicationDetails_Immediate, st)
 		require.NoError(t, err)
-		require.Equal(t, writerTypeLegacyKV, wt)
+		require.Equal(t, sqlclustersettings.LDRWriterTypeSQL, wt)
 	})
 }

@@ -205,6 +205,8 @@ type Memo struct {
 	planLookupJoinsWithReverseScans            bool
 	useInsertFastPath                          bool
 	internal                                   bool
+	usePre_25_2VariadicBuiltins                bool
+	useExistsFilterHoistRule                   bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -216,6 +218,10 @@ type Memo struct {
 
 	// curWithID is the highest currently in-use WITH ID.
 	curWithID opt.WithID
+
+	// curRoutineResultBufferID is the highest currently in-use routine result
+	// buffer ID. See the RoutineResultBufferID comment for more details.
+	curRoutineResultBufferID RoutineResultBufferID
 
 	newGroupFn func(opt.Expr)
 
@@ -303,6 +309,8 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		planLookupJoinsWithReverseScans:            evalCtx.SessionData().OptimizerPlanLookupJoinsWithReverseScans,
 		useInsertFastPath:                          evalCtx.SessionData().InsertFastPath,
 		internal:                                   evalCtx.SessionData().Internal,
+		usePre_25_2VariadicBuiltins:                evalCtx.SessionData().UsePre_25_2VariadicBuiltins,
+		useExistsFilterHoistRule:                   evalCtx.SessionData().OptimizerUseExistsFilterHoistRule,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -478,6 +486,8 @@ func (m *Memo) IsStale(
 		m.planLookupJoinsWithReverseScans != evalCtx.SessionData().OptimizerPlanLookupJoinsWithReverseScans ||
 		m.useInsertFastPath != evalCtx.SessionData().InsertFastPath ||
 		m.internal != evalCtx.SessionData().Internal ||
+		m.usePre_25_2VariadicBuiltins != evalCtx.SessionData().UsePre_25_2VariadicBuiltins ||
+		m.useExistsFilterHoistRule != evalCtx.SessionData().OptimizerUseExistsFilterHoistRule ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
@@ -563,14 +573,12 @@ func (m *Memo) NextRank() opt.ScalarRank {
 	return m.curRank
 }
 
-// CopyNextRankFrom copies the next ScalarRank from the other memo.
-func (m *Memo) CopyNextRankFrom(other *Memo) {
+// CopyRankAndIDsFrom copies the next ScalarRank, WithID, and
+// RoutineResultBufferID from the other memo.
+func (m *Memo) CopyRankAndIDsFrom(other *Memo) {
 	m.curRank = other.curRank
-}
-
-// CopyNextWithIDFrom copies the next WithID from the other memo.
-func (m *Memo) CopyNextWithIDFrom(other *Memo) {
 	m.curWithID = other.curWithID
+	m.curRoutineResultBufferID = other.curRoutineResultBufferID
 }
 
 // RequestColStat calculates and returns the column statistic calculated on the
@@ -614,11 +622,20 @@ func (m *Memo) NextWithID() opt.WithID {
 	return m.curWithID
 }
 
+// NextRoutineResultBufferID returns a not-yet-assigned identifier for the
+// result buffer of a PL/pgSQL set-returning function.
+func (m *Memo) NextRoutineResultBufferID() RoutineResultBufferID {
+	m.curRoutineResultBufferID++
+	return m.curRoutineResultBufferID
+}
+
 // Detach is used when we detach a memo that is to be reused later (either for
 // execbuilding or with AssignPlaceholders). New expressions should no longer be
 // constructed in this memo.
 func (m *Memo) Detach() {
 	m.interner = interner{}
+	m.replacer = nil
+
 	// It is important to not hold on to the EvalCtx in the logicalPropsBuilder
 	// (#57059).
 	m.logPropsBuilder = logicalPropsBuilder{}

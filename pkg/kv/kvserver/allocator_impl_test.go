@@ -406,13 +406,13 @@ func TestAllocatorThrottled(t *testing.T) {
 
 	// Finally, set that store to be throttled and ensure we don't send the
 	// replica to purgatory.
-	sp.DetailsMu.Lock()
-	storeDetail, ok := sp.DetailsMu.StoreDetails[singleStore[0].StoreID]
+	storeDetail, ok := sp.Details.StoreDetails.Load(singleStore[0].StoreID)
 	if !ok {
 		t.Fatalf("store:%d was not found in the store pool", singleStore[0].StoreID)
 	}
+	storeDetail.Lock()
 	storeDetail.ThrottledUntil = hlc.Timestamp{WallTime: timeutil.Now().Add(24 * time.Hour).UnixNano()}
-	sp.DetailsMu.Unlock()
+	storeDetail.Unlock()
 	_, _, err = a.AllocateVoter(ctx, sp, simpleSpanConfig, []roachpb.ReplicaDescriptor{}, nil, nil, allocatorimpl.Dead)
 	if _, ok := IsPurgatoryError(err); ok {
 		t.Fatalf("expected a non purgatory error, got: %+v", err)

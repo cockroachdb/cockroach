@@ -927,6 +927,17 @@ provided for node user if this flag is set.
 `,
 	}
 
+	TLSCipherSuites = FlagInfo{
+		Name: "tls-cipher-suites",
+		Description: `
+A string of comma separated list of cipher suites to be used for all incoming
+TLS connections to the node. For TLS 1.2, this should strictly be a subset of
+suites defined in security/tls_ciphersuites.go as RecommendedCipherSuites or
+OldCipherSuites. For TLS 1.3, this should be configured to a subset of ciphers
+in crypto/tls/cipher_suites.go, e.g. TLS_AES_256_GCM_SHA384.
+`,
+	}
+
 	CAKey = FlagInfo{
 		Name:        "ca-key",
 		EnvVar:      "COCKROACH_CA_KEY",
@@ -1781,6 +1792,14 @@ The zip command will block for the duration specified. Zero disables this featur
 		Description: `
 The maximum number of nodes to request data from simultaneously.
 Can be set to 1 to ensure only one node is polled for data at a time.
+`,
+	}
+
+	ZipValidateFile = FlagInfo{
+		Name: "validate-zip-file",
+		Description: `
+Validate debug zip file after generation. This is a quick check to validate
+whether the generated zip file is valid and not corrupted.
 `,
 	}
 

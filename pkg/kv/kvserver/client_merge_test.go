@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -2483,9 +2482,6 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 		nodedialer.New(tc.Servers[0].RPCContext(),
 			gossip.AddressResolver(tc.Servers[0].GossipI().(*gossip.Gossip))),
 		nil, /* grpcServer */
-		kvflowdispatch.NewDummyDispatch(),
-		kvserver.NoopStoresFlowControlIntegration{},
-		kvserver.NoopRaftTransportDisconnectListener{},
 		(*node_rac2.AdmittedPiggybacker)(nil),
 		nil, /* PiggybackedAdmittedResponseScheduler */
 		nil, /* knobs */
@@ -2553,21 +2549,12 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 
 	// Be extra paranoid and verify the exact value of the replica tombstone.
 	checkTombstone := func(eng storage.Engine) {
-		var rhsTombstone kvserverpb.RangeTombstone
-		rhsTombstoneKey := keys.RangeTombstoneKey(rhsDesc.RangeID)
-		ok, err = storage.MVCCGetProto(ctx, eng, rhsTombstoneKey, hlc.Timestamp{},
-			&rhsTombstone, storage.MVCCGetOptions{})
-		if err != nil {
-			t.Fatal(err)
-		} else if !ok {
-			t.Fatalf("missing range tombstone at key %s", rhsTombstoneKey)
-		}
-		if e, a := roachpb.ReplicaID(math.MaxInt32), rhsTombstone.NextReplicaID; e != a {
-			t.Fatalf("expected next replica ID to be %d, but got %d", e, a)
-		}
+		ts, err := stateloader.Make(rhsDesc.RangeID).LoadRangeTombstone(ctx, eng)
+		require.NoError(t, err)
+		require.Equal(t, roachpb.ReplicaID(math.MaxInt32), ts.NextReplicaID)
 	}
-	checkTombstone(store0.TODOEngine())
-	checkTombstone(store1.TODOEngine())
+	checkTombstone(store0.StateEngine())
+	checkTombstone(store1.StateEngine())
 }
 
 // TestStoreRangeMergeAddReplicaRace verifies that when an add replica request
@@ -3890,8 +3877,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 
 		// Construct SSTs for the the first 4 bullets as numbered above, but only
 		// ultimately keep the last one.
-		sendingEngSnapshot := sendingEng.NewSnapshot()
-		defer sendingEngSnapshot.Close()
+		snapReader := sendingEng.NewSnapshot()
+		defer snapReader.Close()
 
 		// Write a Pebble range deletion tombstone to each of the SSTs then put in
 		// the kv entries from the sender of the snapshot.
@@ -3905,11 +3892,15 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		}
 		keySpans := rditer.MakeReplicatedKeySpans(inSnap.Desc)
 		sstFileWriters := map[string]sstFileWriter{}
-		for _, span := range keySpans {
+		for i, span := range keySpans {
 			file := &storage.MemObject{}
 			writer := storage.MakeIngestionSSTWriter(ctx, st, file)
-			if err := writer.ClearRawRange(span.Key, span.EndKey, true /* pointKeys */, true /* rangeKeys */); err != nil {
-				return err
+			if i < len(keySpans)-1 {
+				// The last span is the MVCC span, and is always cleared via Excise.
+				// See MultiSSTWriter.
+				if err := writer.ClearRawRange(span.Key, span.EndKey, true /* pointKeys */, true /* rangeKeys */); err != nil {
+					return err
+				}
 			}
 			sstFileWriters[string(span.Key)] = sstFileWriter{
 				span:   span,
@@ -3918,33 +3909,38 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			}
 		}
 
-		err := rditer.IterateReplicaKeySpans(
-			context.Background(), inSnap.Desc, sendingEngSnapshot, true /* replicatedOnly */, rditer.ReplicatedSpansAll,
-			func(iter storage.EngineIterator, span roachpb.Span) error {
-				fw, ok := sstFileWriters[string(span.Key)]
-				if !ok || !fw.span.Equal(span) {
-					return errors.Errorf("unexpected span %s", span)
+		if err := rditer.IterateReplicaKeySpans(ctx, inSnap.Desc, snapReader, rditer.SelectOpts{
+			Ranged: rditer.SelectRangedOptions{
+				SystemKeys: true,
+				LockTable:  true,
+				UserKeys:   true,
+			},
+			ReplicatedByRangeID:   true,
+			UnreplicatedByRangeID: false,
+		}, func(iter storage.EngineIterator, span roachpb.Span) error {
+			fw, ok := sstFileWriters[string(span.Key)]
+			if !ok || !fw.span.Equal(span) {
+				return errors.Errorf("unexpected span %s", span)
+			}
+			var err error
+			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
+				var key storage.EngineKey
+				if key, err = iter.UnsafeEngineKey(); err != nil {
+					return err
 				}
-				var err error
-				for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
-					var key storage.EngineKey
-					if key, err = iter.UnsafeEngineKey(); err != nil {
-						return err
-					}
-					v, err := iter.UnsafeValue()
-					if err != nil {
-						return err
-					}
-					if err := fw.writer.PutEngineKey(key, v); err != nil {
-						return err
-					}
-				}
+				v, err := iter.UnsafeValue()
 				if err != nil {
 					return err
 				}
-				return nil
-			})
-		if err != nil {
+				if err := fw.writer.PutEngineKey(key, v); err != nil {
+					return err
+				}
+			}
+			if err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
 			return err
 		}
 
@@ -3996,15 +3992,13 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				require.NoError(t, sst.ClearRawRange(keys.RaftHardStateKey(rangeID), s.EndKey, true, false))
 			}
 
-			tombstoneKey := keys.RangeTombstoneKey(rangeID)
-			tombstoneValue := &kvserverpb.RangeTombstone{NextReplicaID: math.MaxInt32}
-			if err := storage.MVCCBlindPutProto(
-				context.Background(), &sst, tombstoneKey, hlc.Timestamp{}, tombstoneValue, storage.MVCCWriteOptions{},
+			if err := stateloader.Make(rangeID).SetRangeTombstone(
+				context.Background(), &sst,
+				kvserverpb.RangeTombstone{NextReplicaID: math.MaxInt32},
 			); err != nil {
 				return err
 			}
-			err := sst.Finish()
-			if err != nil {
+			if err := sst.Finish(); err != nil {
 				return err
 			}
 			expectedSSTs = append(expectedSSTs, sstFile.Data())
@@ -4019,11 +4013,10 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			EndKey:   roachpb.RKey(keyEnd),
 		}
 		if err := storage.ClearRangeWithHeuristic(
-			ctx, receivingEng, &sst, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey(), 64, 8,
+			ctx, receivingEng, &sst, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey(), 64,
 		); err != nil {
 			return err
-		}
-		if err = sst.Finish(); err != nil {
+		} else if err := sst.Finish(); err != nil {
 			return err
 		}
 		expectedSSTs = append(expectedSSTs, sstFile.Data())

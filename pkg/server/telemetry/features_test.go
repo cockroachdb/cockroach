@@ -92,11 +92,16 @@ func TestBucket(t *testing.T) {
 // for example, a report is created.
 func TestCounterWithMetric(t *testing.T) {
 	cm := telemetry.NewCounterWithMetric(metric.Metadata{Name: "test-metric"})
+	cag := telemetry.NewCounterWithAggMetric(metric.Metadata{Name: "test-agg-metric"})
+
 	cm.Inc()
+	cag.Inc("test-db", "test-app")
 
 	// Using GetFeatureCounts to read the telemetry value.
 	m1 := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ReadOnly)
 	require.Equal(t, int32(1), m1["test-metric"])
+	require.Equal(t, int64(1), cm.Count())
+	require.Equal(t, int32(1), m1["test-agg-metric"])
 	require.Equal(t, int64(1), cm.Count())
 
 	// Reset the telemetry.
@@ -105,5 +110,7 @@ func TestCounterWithMetric(t *testing.T) {
 	// Verify only the telemetry is back to 0.
 	m2 := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ReadOnly)
 	require.Equal(t, int32(0), m2["test-metric"])
+	require.Equal(t, int64(1), cm.Count())
+	require.Equal(t, int32(0), m2["test-agg-metric"])
 	require.Equal(t, int64(1), cm.Count())
 }

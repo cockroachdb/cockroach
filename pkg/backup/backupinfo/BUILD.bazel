@@ -80,6 +80,7 @@ go_test(
         "//pkg/sql/isql",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util",
         "//pkg/util/bulk",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",

@@ -18,7 +18,6 @@ go_library(
         "//pkg/testutils/lint/passes/nocopy",
         "//pkg/testutils/lint/passes/redactcheck",
         "//pkg/testutils/lint/passes/returnerrcheck",
-        "//pkg/testutils/lint/passes/timer",
         "//pkg/testutils/lint/passes/unconvert",
         "@org_golang_x_tools//go/analysis",
         "@org_golang_x_tools//go/analysis/passes/asmdecl",

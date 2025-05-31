@@ -1,3 +1,5 @@
+# LogicTest: !local-schema-locked
+
 # This test reproduces https://github.com/cockroachdb/cockroach/issues/23979
 
 # Schema changes that experienced retriable errors in RELEASE

@@ -75,7 +75,7 @@ export const idleTransactionSession: SessionInfo = {
         nanos: 134293000,
       },
       txn_description:
-        '"sql txn" meta={id=2c3ce6bc key=/Min pri=0.04688813 epo=0 ts=1596816673.134285000,0 min=1596816673.134285000,0 seq=0} lock=false stat=PENDING rts=1596816673.134285000,0 wto=false max=1596816673.634285000,0',
+        '"sql txn" meta={id=2c3ce6bc key=/Min pri=0.04688813 epo=0 ts=1596816673.134285000,0 min=1596816673.134285000,0 seq=0} lock=false stat=PENDING rts=1596816673.134285000,0 max=1596816673.634285000,0',
       num_statements_executed: 2,
       deadline: {
         seconds: Long.fromNumber(-62135596800),
@@ -130,7 +130,7 @@ export const activeSession: SessionInfo = {
         nanos: 320351000,
       },
       txn_description:
-        '"sql txn" meta={id=7bc353be key=/Min pri=0.05293838 epo=0 ts=1596816677.320344000,0 min=1596816677.320344000,0 seq=0} lock=false stat=PENDING rts=1596816677.320344000,0 wto=false max=1596816677.820344000,0',
+        '"sql txn" meta={id=7bc353be key=/Min pri=0.05293838 epo=0 ts=1596816677.320344000,0 min=1596816677.320344000,0 seq=0} lock=false stat=PENDING rts=1596816677.320344000,0 max=1596816677.820344000,0',
       num_statements_executed: 4,
       deadline: {
         seconds: Long.fromNumber(-62135596800),

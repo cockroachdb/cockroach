@@ -52,7 +52,7 @@ go_library(
 
 go_test(
     name = "explain_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "explain_factory_test.go",
         "main_test.go",

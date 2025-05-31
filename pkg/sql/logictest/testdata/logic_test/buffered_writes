@@ -78,7 +78,433 @@ INSERT INTO t1 VALUES (1,1)
 statement ok
 COMMIT
 
-query II
+query II rowsort
 SELECT * FROM t1
 ----
 1 1
+
+statement ok
+CREATE TABLE t2 (k INT PRIMARY KEY);
+
+statement ok
+BEGIN;
+
+statement error pgcode 23505 duplicate key value violates unique constraint "t2_pkey"
+INSERT INTO t2 VALUES (1), (1);
+
+statement ok
+ROLLBACK;
+
+statement ok
+BEGIN;
+
+statement ok
+INSERT INTO t2 VALUES (1);
+
+statement error pgcode 23505 duplicate key value violates unique constraint "t2_pkey"
+INSERT INTO t2 VALUES (1);
+
+statement ok
+ROLLBACK;
+
+statement ok
+BEGIN;
+
+statement ok
+INSERT INTO t2 VALUES (1);
+
+statement ok
+DELETE FROM t2 WHERE k = 1;
+
+statement ok
+INSERT INTO t2 VALUES (1);
+
+statement ok
+COMMIT;
+
+query I rowsort
+SELECT * FROM t2
+----
+1
+
+# Ensure that DeleteRange requests work correctly with buffered writes. In
+# particular, a DeleteRange request results in a buffer flush.
+
+statement ok
+CREATE TABLE t3 (k INT PRIMARY KEY)
+
+statement ok
+INSERT INTO t3 VALUES (1)
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO t3 VALUES (2)
+
+statement count 0
+DELETE FROM t3 WHERE k = 3
+
+statement count 2
+DELETE FROM t3 WHERE k < 10 AND k > 0
+
+statement ok
+COMMIT
+
+query I rowsort
+SELECT count(*) from t3
+----
+0
+
+# Test savepoints, and in particular savepoint rollbacks, with buffered writes.
+# We test both intermediate selects after rollbacks and the final state
+# the transaction has been committed.
+subtest savepoint_rollbacks
+
+# First, create a new table with a secondary index on it. That way, the DELETE
+# statements below will not use DeleteRange requets which cause the buffer to
+# be flushed.
+statement ok
+CREATE TABLE t4 (k INT PRIMARY KEY, v INT)
+
+statement ok
+CREATE INDEX idx ON t4 (v)
+
+statement ok
+BEGIN;
+INSERT INTO t4 VALUES(1, 100), (2, 200), (3, 300);
+SAVEPOINT s1;
+INSERT INTO t4 VALUES(4, 400), (5, 500), (6, 600)
+
+query II rowsort
+SELECT * FROM t4
+----
+1  100
+2  200
+3  300
+4  400
+5  500
+6  600
+
+statement ok
+SAVEPOINT s2;
+INSERT INTO t4 VALUES(7, 700), (8, 800), (9, 900)
+
+query II rowsort
+SELECT * FROM t4
+----
+1  100
+2  200
+3  300
+4  400
+5  500
+6  600
+7  700
+8  800
+9  900
+
+# Throw in some Deletes.
+statement ok
+DELETE FROM t4 WHERE k = 1;
+DELETE FROM t4 WHERE k = 2;
+DELETE FROM t4 WHERE k = 3;
+
+query II rowsort
+SELECT * FROM t4
+----
+4  400
+5  500
+6  600
+7  700
+8  800
+9  900
+
+statement ok
+ROLLBACK TO SAVEPOINT s2
+
+query II rowsort
+SELECT * FROM t4
+----
+1  100
+2  200
+3  300
+4  400
+5  500
+6  600
+
+statement ok
+ROLLBACK TO SAVEPOINT s1;
+
+query II rowsort
+SELECT * FROM t4
+----
+1  100
+2  200
+3  300
+
+statement ok
+COMMIT
+
+query II rowsort
+SELECT * FROM t4
+----
+1  100
+2  200
+3  300
+
+subtest regression
+
+# Regression test for #144274.
+statement ok
+EXPLAIN CREATE DATABASE foo
+
+statement ok
+EXPLAIN ANALYZE CREATE DATABASE foo
+
+# Regression test for #144273 (not supporting ReturnRawMVCCValues option).
+
+# Get request.
+statement ok
+SELECT k, crdb_internal_origin_id FROM t4 WHERE k = 1
+
+# Scan request.
+statement ok
+SELECT k, crdb_internal_origin_id FROM t4
+
+# ReverseScan request.
+statement ok
+SELECT k, crdb_internal_origin_id FROM t4 ORDER BY k DESC
+
+statement ok
+CREATE TABLE uvw (
+  u INT,
+  v INT,
+  w INT
+)
+
+statement ok
+BEGIN;
+INSERT INTO uvw SELECT u, v, w FROM
+  generate_series(0, 3) AS u,
+  generate_series(0, 3) AS v,
+  generate_series(0, 3) AS w;
+
+query I
+SELECT count(*) FROM uvw
+----
+64
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE uvw
+
+statement ok
+CREATE TABLE uvw (
+  u INT,
+  v INT,
+  w INT,
+  INDEX (u,v,w)
+)
+
+statement ok
+BEGIN;
+INSERT INTO uvw SELECT u, v, w FROM
+  generate_series(0, 3) AS u,
+  generate_series(0, 3) AS v,
+  generate_series(0, 3) AS w;
+UPDATE uvw SET u = NULL WHERE u = 0;
+UPDATE uvw SET v = NULL WHERE v = 0;
+UPDATE uvw SET w = NULL WHERE w = 0
+
+query III colnames
+SELECT * FROM uvw ORDER BY u, v, w
+----
+u     v     w
+NULL  NULL  NULL
+NULL  NULL  1
+NULL  NULL  2
+NULL  NULL  3
+NULL  1     NULL
+NULL  1     1
+NULL  1     2
+NULL  1     3
+NULL  2     NULL
+NULL  2     1
+NULL  2     2
+NULL  2     3
+NULL  3     NULL
+NULL  3     1
+NULL  3     2
+NULL  3     3
+1     NULL  NULL
+1     NULL  1
+1     NULL  2
+1     NULL  3
+1     1     NULL
+1     1     1
+1     1     2
+1     1     3
+1     2     NULL
+1     2     1
+1     2     2
+1     2     3
+1     3     NULL
+1     3     1
+1     3     2
+1     3     3
+2     NULL  NULL
+2     NULL  1
+2     NULL  2
+2     NULL  3
+2     1     NULL
+2     1     1
+2     1     2
+2     1     3
+2     2     NULL
+2     2     1
+2     2     2
+2     2     3
+2     3     NULL
+2     3     1
+2     3     2
+2     3     3
+3     NULL  NULL
+3     NULL  1
+3     NULL  2
+3     NULL  3
+3     1     NULL
+3     1     1
+3     1     2
+3     1     3
+3     2     NULL
+3     2     1
+3     2     2
+3     2     3
+3     3     NULL
+3     3     1
+3     3     2
+3     3     3
+
+statement ok
+COMMIT
+
+query I
+SELECT count(*) FROM uvw
+----
+64
+
+# Increase the closed timestamp interval since the transaction below can take
+# long time under race which could result in a RETRY_SERIALIZABLE error on
+# COMMIT (#145065).
+#
+# The cluster setting is SystemVisible, so we must run this query on the host
+# cluster in multi-tenant environment.
+user host-cluster-root
+
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '99999s'
+
+user root
+
+# Create some large blobs that will require the scans to be paginated (in 10MiB
+# chunks).
+statement ok
+CREATE TABLE large (k PRIMARY KEY, blob) AS SELECT i * 100, repeat('a', 11 * 1024 * 1024) FROM generate_series(1, 4) AS g(i);
+
+statement ok
+BEGIN;
+
+statement ok
+INSERT INTO large SELECT 11 + i * 100, 'b' FROM generate_series(1, 4) AS g(i);
+
+# Forward scan.
+query I
+SELECT k FROM large ORDER BY k;
+----
+100
+111
+200
+211
+300
+311
+400
+411
+
+# Reverse scan.
+query I
+SELECT k FROM large ORDER BY k DESC;
+----
+411
+400
+311
+300
+211
+200
+111
+100
+
+statement ok
+COMMIT;
+
+subtest rollback_after_mid_txn_flush
+
+statement ok
+CREATE TABLE t5 (pk int primary key, v int, FAMILY (pk, v))
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO t5 VALUES (1,1);
+
+statement ok
+SAVEPOINT rollback_target
+
+statement ok
+UPDATE t5 SET v = 2 WHERE pk = 1
+
+# Force a flush before commit with DeleteRange
+statement ok
+DELETE FROM t5 WHERE pk > 5
+
+statement ok
+ROLLBACK TO rollback_target
+
+statement ok
+COMMIT;
+
+query II
+SELECT pk,v FROM t5 WHERE pk = 1
+----
+1  1
+
+subtest tracing
+
+statement ok
+CREATE TABLE t6 (pk INT PRIMARY KEY, v INT, FAMILY (pk, v), INDEX (v), INDEX ((v+5)))
+
+statement ok
+BEGIN
+
+statement ok
+SET TRACING = "on"
+
+statement ok
+INSERT INTO t6 VALUES (1,1)
+
+# This assertion depends on write buffering not being disabled because
+# of the version or transaction isolation level. Skip configurations
+# that result in buffered writes being disabled.
+skipif config local-read-committed local-repeatable-read local-mixed-25.1
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE location LIKE '%write_buffer.go%'
+----
+txn write buffer modified the batch; fully buffered: Put:2; transformed: ConditionalPut:1
+
+statement ok
+SET TRACING = "off"
+
+statement ok
+COMMIT

@@ -34,7 +34,7 @@ del: "f": found key false
 del: "n": found key false
 put: lock acquisition = {i id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=6.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=6.000000000,0 gul=0,0
 rangekey: {a-d}/[3.000000000,0=/<empty>]
 rangekey: {k-m}/[4.000000000,0=/<empty>]
 rangekey: {m-o}/[4.000000000,0=/<empty> 2.000000000,0=/<empty>]

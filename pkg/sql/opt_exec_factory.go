@@ -183,7 +183,12 @@ func generateScanSpans(
 	if params.InvertedConstraint != nil {
 		return sb.SpansFromInvertedSpans(ctx, params.InvertedConstraint, params.IndexConstraint, nil /* scratch */)
 	}
-	splitter := span.MakeSplitter(tabDesc, index, params.NeededCols)
+	var splitter span.Splitter
+	if params.Locking.MustLockAllRequestedColumnFamilies() {
+		splitter = span.MakeSplitterForSideEffect(tabDesc, index, params.NeededCols)
+	} else {
+		splitter = span.MakeSplitter(tabDesc, index, params.NeededCols)
+	}
 	return sb.SpansFromConstraint(params.IndexConstraint, splitter)
 }
 
@@ -1262,7 +1267,7 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 	ie := ef.planner.extendedEvalCtx.ExecCfg.InternalDB.NewInternalExecutor(
 		ef.planner.SessionData(),
 	)
-	c := makeStmtEnvCollector(ef.ctx, ef.planner, ie.(*InternalExecutor))
+	c := makeStmtEnvCollector(ef.ctx, ef.planner, ie.(*InternalExecutor), "" /* requesterUsername */)
 
 	// Show the version of Cockroach running.
 	if err := c.PrintVersion(&out.buf); err != nil {
@@ -1860,7 +1865,9 @@ func (ef *execFactory) ConstructVectorSearch(
 
 	// Encode the prefix constraint as a list of roachpb.Keys.
 	var sb span.Builder
-	sb.Init(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, indexDesc)
+	sb.InitAllowingExternalRowData(
+		ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, indexDesc,
+	)
 	prefixKeys, err := sb.KeysFromVectorPrefixConstraint(ef.ctx, prefixConstraint)
 	if err != nil {
 		return nil, err
@@ -1967,7 +1974,7 @@ func (ef *execFactory) ConstructCreateView(
 		return nil, err
 	}
 
-	planDeps, typeDepSet, _, err := toPlanDependencies(deps, typeDeps, intsets.Fast{} /* funcDeps */)
+	planDeps, typeDepSet, funcDepSet, err := toPlanDependencies(deps, typeDeps, intsets.Fast{} /* funcDeps */)
 	if err != nil {
 		return nil, err
 	}
@@ -1979,6 +1986,7 @@ func (ef *execFactory) ConstructCreateView(
 		columns:    columns,
 		planDeps:   planDeps,
 		typeDeps:   typeDepSet,
+		funcDeps:   funcDepSet,
 	}, nil
 }
 

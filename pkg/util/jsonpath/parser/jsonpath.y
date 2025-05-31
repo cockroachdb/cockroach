@@ -118,7 +118,10 @@ func binaryOp(op jsonpath.OperationType, left jsonpath.Path, right jsonpath.Path
   }
 }
 
-func unaryOp(op jsonpath.OperationType, left jsonpath.Path) jsonpath.Operation {
+func unaryOp(op jsonpath.OperationType, left jsonpath.Path) jsonpath.Path {
+  if scalar, ok := maybeNormalizeUnaryOp(op, left); ok {
+    return scalar
+  }
   return jsonpath.Operation{
     Type:  op,
     Left:  left,
@@ -126,9 +129,55 @@ func unaryOp(op jsonpath.OperationType, left jsonpath.Path) jsonpath.Operation {
   }
 }
 
-func regexBinaryOp(left jsonpath.Path, regex string) (jsonpath.Operation, error) {
-  r := jsonpath.Regex{Regex: regex}
-  _, err := ReCache.GetRegexp(r)
+func maybeNormalizeUnaryOp(op jsonpath.OperationType, expr jsonpath.Path) (jsonpath.Scalar, bool) {
+  // Return if not unary plus or unary minus.
+  if op != jsonpath.OpPlus && op != jsonpath.OpMinus {
+    return jsonpath.Scalar{}, false
+  }
+
+  scalar, ok := extractNumericScalar(expr)
+  if !ok {
+    return jsonpath.Scalar{}, false
+  }
+  if op == jsonpath.OpMinus {
+    dec, _ := scalar.Value.AsDecimal()
+    dec.Neg(dec)
+    scalar.Value = json.FromDecimal(*dec)
+  }
+  return scalar, true
+}
+
+// extractNumericScalar attempts to extract a numeric scalar value from a
+// jsonpath.Path. It handles two cases:
+// - Direct scalar values.
+// - Scalar values wrapped in a jsonpath.Paths object of length 1.
+// The function returns the scalar and true if the path contains a valid numeric
+// value (integer or float), otherwise returns an empty scalar and false.
+func extractNumericScalar(expr jsonpath.Path) (jsonpath.Scalar, bool) {
+  potentialScalar := expr
+  if paths, ok := expr.(jsonpath.Paths); ok {
+    if len(paths) != 1 {
+      return jsonpath.Scalar{}, false
+    }
+    potentialScalar = paths[0]
+  }
+  scalar, ok := potentialScalar.(jsonpath.Scalar)
+  if !ok {
+    return jsonpath.Scalar{}, false
+  }
+  if scalar.Type != jsonpath.ScalarFloat && scalar.Type != jsonpath.ScalarInt {
+    return jsonpath.Scalar{}, false
+  }
+  return scalar, true
+}
+
+func regexBinaryOp(left jsonpath.Path, regex string, flags string) (jsonpath.Operation, error) {
+  goFlags, err := jsonpath.RegexFlagsToGoFlags(flags)
+  if err != nil {
+    return jsonpath.Operation{}, err
+  }
+  r := jsonpath.Regex{Regex: regex, Flags: goFlags}
+  _, err = ReCache.GetRegexpWithFlags(r, goFlags)
   if err != nil {
     return jsonpath.Operation{}, pgerror.Wrapf(err, pgcode.InvalidRegularExpression,
       "invalid regular expression")
@@ -159,40 +208,20 @@ func regexBinaryOp(left jsonpath.Path, regex string) (jsonpath.Operation, error)
 %token <str> LESS_EQUALS GREATER_EQUALS NOT_EQUALS
 %token <str> ERROR
 
-%token <str> STRICT
-%token <str> LAX
-
-%token <str> VARIABLE
-%token <str> TO
-
-%token <str> TRUE
-%token <str> FALSE
-
-%token <str> EQUAL
-%token <str> NOT_EQUAL
-%token <str> LESS
-%token <str> LESS_EQUAL
-%token <str> GREATER
-%token <str> GREATER_EQUAL
-
-%token <str> ROOT
-
-%token <str> AND
-%token <str> OR
-%token <str> NOT
-
-%token <str> CURRENT
-
-%token <str> STRING
-%token <str> NULL
-
-%token <str> LIKE_REGEX
-%token <str> FLAG
-
-%token <str> LAST
-%token <str> EXISTS
-%token <str> IS
-%token <str> UNKNOWN
+%token <str> STRICT LAX
+%token <str> ROOT CURRENT
+%token <str> VARIABLE STR NULL
+%token <str> TRUE FALSE
+%token <str> EQUAL NOT_EQUAL LESS LESS_EQUAL GREATER GREATER_EQUAL
+%token <str> AND OR NOT
+%token <str> LIKE_REGEX FLAG
+%token <str> TO LAST
+%token <str> EXISTS IS UNKNOWN STARTS WITH
+%token <str> ANY
+%token <str> SIZE TYPE KEYVALUE
+%token <str> ABS CEILING FLOOR
+%token <str> BIGINT BOOLEAN DATE DOUBLE INTEGER NUMBER STRING
+%token <str> DECIMAL DATETIME TIME TIME_TZ TIMESTAMP TIMESTAMP_TZ
 
 %type <jsonpath.Jsonpath> jsonpath
 %type <jsonpath.Path> expr_or_predicate
@@ -205,6 +234,8 @@ func regexBinaryOp(left jsonpath.Path, regex string) (jsonpath.Operation, error)
 %type <jsonpath.Path> index_elem
 %type <jsonpath.Path> predicate
 %type <jsonpath.Path> delimited_predicate
+%type <jsonpath.Path> starts_with_initial
+%type <jsonpath.Path> method
 %type <[]jsonpath.Path> accessor_expr
 %type <[]jsonpath.Path> index_list
 %type <jsonpath.OperationType> comp_op
@@ -301,6 +332,14 @@ accessor_expr:
   {
     $$.val = []jsonpath.Path{$1.path()}
   }
+| '(' expr ')' accessor_op
+  {
+    $$.val = []jsonpath.Path{$2.path(), $4.path()}
+  }
+| '(' predicate ')' accessor_op
+  {
+    $$.val = []jsonpath.Path{$2.path(), $4.path()}
+  }
 | accessor_expr accessor_op
   {
     $$.val = append($1.pathArr(), $2.path())
@@ -342,6 +381,38 @@ accessor_op:
 | '.' '*'
   {
     $$.val = jsonpath.AnyKey{}
+  }
+| '.' method '(' ')'
+  {
+    $$.val = $2.path()
+  }
+| '.' any_path
+  {
+    return unimplemented(jsonpathlex, ".**")
+  }
+| '.' DECIMAL '(' opt_csv_list ')'
+  {
+    return unimplemented(jsonpathlex, ".decimal()")
+  }
+| '.' DATETIME '(' opt_datetime_template ')'
+  {
+    return unimplemented(jsonpathlex, ".datetime()")
+  }
+| '.' TIME '(' opt_datetime_precision ')'
+  {
+    return unimplemented(jsonpathlex, ".time()")
+  }
+| '.' TIME_TZ '(' opt_datetime_precision ')'
+  {
+    return unimplemented(jsonpathlex, ".time_tz()")
+  }
+| '.' TIMESTAMP '(' opt_datetime_precision ')'
+  {
+    return unimplemented(jsonpathlex, ".timestamp()")
+  }
+| '.' TIMESTAMP_TZ '(' opt_datetime_precision ')'
+  {
+    return unimplemented(jsonpathlex, ".timestamp_tz()")
   }
 ;
 
@@ -420,18 +491,25 @@ predicate:
   {
     $$.val = unaryOp(jsonpath.OpIsUnknown, $2.path())
   }
-| expr LIKE_REGEX STRING
+| expr STARTS WITH starts_with_initial
   {
-    regex, err := regexBinaryOp($1.path(), $3)
+    $$.val = binaryOp(jsonpath.OpStartsWith, $1.path(), $4.path())
+  }
+| expr LIKE_REGEX STR
+  {
+    regex, err := regexBinaryOp($1.path(), $3, "")
     if err != nil {
       return setErr(jsonpathlex, err)
     }
     $$.val = regex
   }
-| expr LIKE_REGEX STRING FLAG STRING
+| expr LIKE_REGEX STR FLAG STR
   {
-    // TODO(normanchenn): implement regex flags.
-    return unimplemented(jsonpathlex, "regex with flags")
+    regex, err := regexBinaryOp($1.path(), $3, $5)
+    if err != nil {
+      return setErr(jsonpathlex, err)
+    }
+    $$.val = regex
   }
 ;
 
@@ -443,6 +521,17 @@ delimited_predicate:
 | EXISTS '(' expr ')'
   {
     $$.val = unaryOp(jsonpath.OpExists, $3.path())
+  }
+;
+
+starts_with_initial:
+  STR
+  {
+    $$.val = jsonpath.Scalar{Type: jsonpath.ScalarString, Value: json.FromString($1)}
+  }
+| VARIABLE
+  {
+    $$.val = jsonpath.Scalar{Type: jsonpath.ScalarVariable, Variable: $1}
   }
 ;
 
@@ -470,6 +559,160 @@ comp_op:
 | GREATER_EQUAL
   {
     $$.val = jsonpath.OpCompGreaterEqual
+  }
+;
+
+method:
+  SIZE
+  {
+    $$.val = jsonpath.Method{Type: jsonpath.SizeMethod}
+  }
+| TYPE
+  {
+    $$.val = jsonpath.Method{Type: jsonpath.TypeMethod}
+  }
+| KEYVALUE
+  {
+    return unimplemented(jsonpathlex, ".keyvalue()")
+  }
+| ABS
+  {
+    $$.val = jsonpath.Method{Type: jsonpath.AbsMethod}
+  }
+| CEILING
+  {
+    $$.val = jsonpath.Method{Type: jsonpath.CeilingMethod}
+  }
+| FLOOR
+  {
+    $$.val = jsonpath.Method{Type: jsonpath.FloorMethod}
+  }
+| BIGINT
+  {
+    return unimplemented(jsonpathlex, ".bigint()")
+  }
+| BOOLEAN
+  {
+    return unimplemented(jsonpathlex, ".boolean()")
+  }
+| DATE
+  {
+    return unimplemented(jsonpathlex, ".date()")
+  }
+| DOUBLE
+  {
+    return unimplemented(jsonpathlex, ".double()")
+  }
+| INTEGER
+  {
+    return unimplemented(jsonpathlex, ".integer()")
+  }
+| NUMBER
+  {
+    return unimplemented(jsonpathlex, ".number()")
+  }
+| STRING
+  {
+    return unimplemented(jsonpathlex, ".string()")
+  }
+;
+
+any_path:
+  ANY
+  {
+    // Unimplemented from .**.
+  }
+| ANY '{' any_level '}'
+  {
+    // Unimplemented from .**.
+  }
+| ANY '{' any_level TO any_level '}'
+  {
+    // Unimplemented from .**.
+  }
+;
+
+any_level:
+  ICONST
+  {
+    // Unimplemented from .**.
+  }
+| LAST
+  {
+    // Unimplemented from .**.
+  }
+;
+
+opt_csv_list:
+  csv_list
+  {
+    // Unimplemented from .decimal().
+  }
+| /* empty */
+  {
+    // Unimplemented from .decimal().
+  }
+;
+
+csv_list:
+  csv_elem
+  {
+    // Unimplemented from .decimal().
+  }
+| csv_list ',' csv_elem
+  {
+    // Unimplemented from .decimal().
+  }
+;
+
+csv_elem:
+  ICONST
+  {
+    // Unimplemented from .decimal().
+  }
+| '+' ICONST %prec UMINUS
+  {
+    // Unimplemented from .decimal().
+  }
+| '-' ICONST %prec UMINUS
+  {
+    // Unimplemented from .decimal().
+  }
+;
+
+opt_datetime_template:
+  datetime_template
+  {
+    // Unimplemented from .datetime().
+  }
+| /* empty */
+  {
+    // Unimplemented from .datetime().
+  }
+;
+
+datetime_template:
+  STR
+  {
+    // Unimplemented from .datetime().
+  }
+;
+
+opt_datetime_precision:
+  datetime_precision
+  {
+    // Unimplemented from .time(), time_tz(), .timestamp(), .timestamp_tz().
+  }
+| /* empty */
+  {
+    // Unimplemented from .time(), time_tz(), .timestamp(), .timestamp_tz().
+  }
+;
+
+datetime_precision:
+  ICONST
+  {
+    // Unimplemented from .time(), time_tz(), .timestamp(), .timestamp_tz().
   }
 ;
 
@@ -506,7 +749,7 @@ scalar_value:
   {
     $$.val = jsonpath.Scalar{Type: jsonpath.ScalarBool, Value: json.FromBool(false)}
   }
-| STRING
+| STR
   {
     $$.val = jsonpath.Scalar{Type: jsonpath.ScalarString, Value: json.FromString($1)}
   }
@@ -518,23 +761,44 @@ scalar_value:
 
 any_identifier:
   IDENT
-| STRING
+| STR
 | unreserved_keyword
 ;
 
 unreserved_keyword:
-  EXISTS
+  ABS
+| BIGINT
+| BOOLEAN
+| CEILING
+| DATE
+| DATETIME
+| DECIMAL
+| DOUBLE
+| EXISTS
 | FALSE
 | FLAG
+| FLOOR
+| INTEGER
 | IS
+| KEYVALUE
 | LAST
 | LAX
 | LIKE_REGEX
 | NULL
+| NUMBER
+| SIZE
+| STARTS
 | STRICT
+| STRING
+| TIME
+| TIMESTAMP
+| TIMESTAMP_TZ
+| TIME_TZ
 | TO
 | TRUE
+| TYPE
 | UNKNOWN
+| WITH
 ;
 
 %%

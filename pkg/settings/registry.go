@@ -259,6 +259,7 @@ var retiredSettings = map[InternalKey]struct{}{
 
 	// removed as of 25.2
 	"kv.snapshot_receiver.excise.enabled":                    {},
+	"kv.mvcc_gc.queue_kv_admission_control.enabled":          {},
 	"sql.catalog.experimental_use_session_based_leasing":     {},
 	"bulkio.backup.merge_file_buffer_size":                   {},
 	"changefeed.new_webhook_sink_enabled":                    {},
@@ -270,8 +271,13 @@ var retiredSettings = map[InternalKey]struct{}{
 
 // grandfatheredDefaultSettings is the list of "grandfathered" existing sql.defaults
 // cluster settings. In 22.2 and later, new session settings do not need an
-// associated sql.defaults cluster setting. Instead they can have their default
-// changed with ALTER ROLE ... SET.
+// associated sql.defaults cluster setting (see the `vector_search_beam_size`
+// setting in vars.go for an example). A session setting can have its default
+// changed with ALTER ROLE ... SET, similar to this (the example assumes that
+// all roles should use the new default):
+//
+//	ALTER ROLE ALL SET vector_search_beam_size=128;
+//
 // Caveat: in some cases, we may still add new sql.defaults cluster settings,
 // but the new ones *must* be marked as non-public. Undocumented settings are
 // excluded from the check that prevents new sql.defaults settings. The

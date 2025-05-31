@@ -27,7 +27,7 @@ d.public.t1 CREATE TABLE public.t1 (
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC)
 );
-COMMENT ON TABLE public.t1 IS 'This comment better get restored from the backed up system table!'
+COMMENT ON TABLE public.t1 IS 'This comment better get restored from the backed up system table!';
 
 # drop and create defaultDB to ensure it has a higher ID than by default. We will check that when
 # this cluster is restored, the default db with the higher id was also restored
@@ -112,7 +112,7 @@ d.public.t1 CREATE TABLE public.t1 (
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC)
 );
-COMMENT ON TABLE public.t1 IS 'This comment better get restored from the backed up system table!'
+COMMENT ON TABLE public.t1 IS 'This comment better get restored from the backed up system table!';
 
 # Ensure the defaultdb from the backed up cluster was restored.
 query-sql

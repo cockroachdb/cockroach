@@ -507,7 +507,7 @@ func (s *Store) processRaftSnapshotRequest(
 		typ := removePlaceholderFailed
 		defer func() {
 			// In the typical case, handleRaftReadyRaftMuLocked calls through to
-			// applySnapshot which will apply the snapshot and also converts the
+			// applySnapshotRaftMuLocked which will apply the snapshot and also converts the
 			// placeholder entry (if any) to the now-initialized replica. However we
 			// may also error out below, or raft may also ignore the snapshot, and so
 			// the placeholder would remain.
@@ -641,7 +641,7 @@ func (s *Store) HandleRaftResponse(
 
 				repl.mu.Unlock()
 				nextReplicaID := tErr.ReplicaID + 1
-				return s.removeReplicaRaftMuLocked(ctx, repl, nextReplicaID, RemoveOptions{
+				return s.removeReplicaRaftMuLocked(ctx, repl, nextReplicaID, "received ReplicaTooOldError", RemoveOptions{
 					DestroyData: true,
 				})
 			case *kvpb.RaftGroupDeletedError:
@@ -662,7 +662,13 @@ func (s *Store) HandleRaftResponse(
 			case *kvpb.StoreNotFoundError:
 				log.Warningf(ctx, "raft error: node %d claims to not contain store %d for replica %s: %s",
 					resp.FromReplica.NodeID, resp.FromReplica.StoreID, resp.FromReplica, val)
-				return val.GetDetail() // close Raft connection
+				// This error is expected if the remote node restarted with fewer stores
+				// (before rebalancing off that now dead store is complete).
+				//
+				// Fall through intentionally.
+				//
+				// NB: as of v25.2, receivers no longer return this error in this situation
+				// and eventually, this case can be removed.
 			default:
 				log.Warningf(ctx, "got error from r%d, replica %s: %s",
 					resp.RangeID, resp.FromReplica, val)
@@ -883,18 +889,17 @@ func (s *Store) processRaft(ctx context.Context) {
 
 	_ = s.stopper.RunAsyncTask(ctx, "sched-tick-loop", s.raftTickLoop)
 	_ = s.stopper.RunAsyncTask(ctx, "coalesced-hb-loop", s.coalescedHeartbeatsLoop)
-	s.stopper.AddCloser(stop.CloserFn(func() {
-		s.cfg.Transport.StopIncomingRaftMessages(s.StoreID())
-		s.cfg.Transport.StopOutgoingMessage(s.StoreID())
-	}))
 
 	for _, w := range s.syncWaiters {
 		w.Start(ctx, s.stopper)
 	}
 
-	// We'll want to cancel all in-flight proposals. Proposals embed tracing
-	// spans in them, and we don't want to be leaking any.
 	s.stopper.AddCloser(stop.CloserFn(func() {
+		s.cfg.Transport.StopIncomingRaftMessages(s.StoreID())
+		s.cfg.Transport.StopOutgoingMessage(s.StoreID())
+
+		// We'll want to cancel all in-flight proposals. Proposals embed tracing
+		// spans in them, and we don't want to be leaking any.
 		s.VisitReplicas(func(r *Replica) (more bool) {
 			r.mu.Lock()
 			r.mu.proposalBuf.FlushLockedWithoutProposing(ctx)
@@ -926,7 +931,6 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 		}
 		timer.Reset(until.Sub(now))
 		<-timer.C
-		timer.Read = true
 	}
 
 	// Create a config that will be used by the taskPacer, which allows us to pace

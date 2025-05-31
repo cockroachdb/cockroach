@@ -346,10 +346,14 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 		sd.SessionData = *sc.sessionData
 		// Create an internal planner as the planner used to serve the user query
 		// would have committed by this point.
+		//
+		// Note: the planner is created using the session’s user. This is important
+		// for row-level security (RLS), ensuring that the backfill query runs with
+		// the same visibility and access restrictions as the user who initiated it.
 		p, cleanup := NewInternalPlanner(
 			opName,
 			txn.KV(),
-			username.NodeUserName(),
+			sc.sessionData.User(),
 			&MemoryMetrics{},
 			sc.execCfg,
 			sd,
@@ -1160,10 +1164,11 @@ func (sc *SchemaChanger) dropViewDeps(
 				log.Warningf(ctx, "error resolving type dependency %d", id)
 				continue
 			}
-			typeDesc.RemoveReferencingDescriptorID(viewDesc.GetID())
-			if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace*/, typeDesc, b); err != nil {
-				log.Warningf(ctx, "error removing dependency from type ID %d", id)
-				return err
+			if typeDesc.RemoveReferencingDescriptorID(viewDesc.GetID()) {
+				if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace*/, typeDesc, b); err != nil {
+					log.Warningf(ctx, "error removing dependency from type ID %d", id)
+					return err
+				}
 			}
 		}
 		for i := 0; i < col.NumUsesSequences(); i++ {
@@ -1878,9 +1883,9 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					return err
 				}
 				if isAddition {
-					typ.AddReferencingDescriptorID(scTable.ID)
+					_ = typ.AddReferencingDescriptorID(scTable.ID)
 				} else {
-					typ.RemoveReferencingDescriptorID(scTable.ID)
+					_ = typ.RemoveReferencingDescriptorID(scTable.ID)
 				}
 				if err := txn.Descriptors().WriteDescToBatch(ctx, kvTrace, typ, b); err != nil {
 					return err

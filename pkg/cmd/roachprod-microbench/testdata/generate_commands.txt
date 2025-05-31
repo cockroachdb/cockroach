@@ -1,0 +1,99 @@
+# Test with default configuration (affinity=true, iterations=1)
+generate
+pkg1 BenchmarkTest1
+pkg2 BenchmarkTest2
+----
+Command Group 1:
+	Package: pkg1
+	Benchmark: BenchmarkTest1
+	Binary Key: experiment
+Command Group 2:
+	Package: pkg2
+	Benchmark: BenchmarkTest2
+	Binary Key: experiment
+
+# Test with multiple iterations (affinity=true, iterations=2)
+generate iterations=2
+pkg1 BenchmarkTest1
+----
+Command Group 1:
+	Package: pkg1
+	Benchmark: BenchmarkTest1
+	Binary Key: experiment
+Command Group 2:
+	Package: pkg1
+	Benchmark: BenchmarkTest1
+	Binary Key: experiment
+
+# Test with affinity disabled (affinity=false, iterations=1)
+generate affinity=false
+pkg1 BenchmarkTest1
+pkg2 BenchmarkTest2
+----
+Command Group 1:
+	Package: pkg1
+	Benchmark: BenchmarkTest1
+	Binary Key: experiment
+Command Group 2:
+	Package: pkg2
+	Benchmark: BenchmarkTest2
+	Binary Key: experiment
+
+# Test with multiple binaries (affinity=true, iterations=1)
+generate binaries=(baseline, experiment)
+pkg1 BenchmarkTest1
+----
+Command Group 1:
+	Package: pkg1
+	Benchmark: BenchmarkTest1
+	Binary Key: baseline
+	Package: pkg1
+	Benchmark: BenchmarkTest1
+	Binary Key: experiment
+
+# Test with multiple binaries and affinity disabled (affinity=false, iterations=1)
+generate binaries=(baseline, experiment) affinity=false
+pkg1 BenchmarkTest1
+----
+Command Group 1:
+	Package: pkg1
+	Benchmark: BenchmarkTest1
+	Binary Key: baseline
+Command Group 2:
+	Package: pkg1
+	Benchmark: BenchmarkTest1
+	Binary Key: experiment
+
+# Test with multiple iterations, multiple binaries, and multiple benchmarks (affinity=true)
+generate iterations=2 binaries=(baseline, experiment)
+pkg1 BenchmarkTest1
+pkg2 BenchmarkTest2
+----
+Command Group 1:
+	Package: pkg1
+	Benchmark: BenchmarkTest1
+	Binary Key: baseline
+	Package: pkg1
+	Benchmark: BenchmarkTest1
+	Binary Key: experiment
+Command Group 2:
+	Package: pkg2
+	Benchmark: BenchmarkTest2
+	Binary Key: baseline
+	Package: pkg2
+	Benchmark: BenchmarkTest2
+	Binary Key: experiment
+Command Group 3:
+	Package: pkg1
+	Benchmark: BenchmarkTest1
+	Binary Key: baseline
+	Package: pkg1
+	Benchmark: BenchmarkTest1
+	Binary Key: experiment
+Command Group 4:
+	Package: pkg2
+	Benchmark: BenchmarkTest2
+	Binary Key: baseline
+	Package: pkg2
+	Benchmark: BenchmarkTest2
+	Binary Key: experiment

@@ -1100,7 +1100,7 @@ func TestUpdateRootWithLeafFinalStateReadsBelowRefreshTimestamp(t *testing.T) {
 		// Fork off a leaf transaction before the root is refreshed.
 		leafInputState, err := txn.GetLeafTxnInputState(ctx)
 		require.NoError(t, err)
-		leafTxn := kv.NewLeafTxn(ctx, db, 0, leafInputState)
+		leafTxn := kv.NewLeafTxn(ctx, db, 0, leafInputState, nil /* header */)
 
 		writeTS, err := performConflictingWrite(ctx, keyB)
 		require.NoError(t, err)

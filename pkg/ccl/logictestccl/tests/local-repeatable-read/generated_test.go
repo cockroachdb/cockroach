@@ -608,6 +608,13 @@ func TestRepeatableReadLogic_dependencies(
 	runLogicTest(t, "dependencies")
 }
 
+func TestRepeatableReadLogic_direct_columnar_scans(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "direct_columnar_scans")
+}
+
 func TestRepeatableReadLogic_discard(
 	t *testing.T,
 ) {
@@ -1168,11 +1175,32 @@ func TestRepeatableReadLogic_jsonb_path_exists(
 	runLogicTest(t, "jsonb_path_exists")
 }
 
+func TestRepeatableReadLogic_jsonb_path_match(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_match")
+}
+
 func TestRepeatableReadLogic_jsonb_path_query(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "jsonb_path_query")
+}
+
+func TestRepeatableReadLogic_jsonb_path_query_array(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_query_array")
+}
+
+func TestRepeatableReadLogic_jsonb_path_query_first(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_query_first")
 }
 
 func TestRepeatableReadLogic_jsonpath(
@@ -2748,6 +2776,13 @@ func TestRepeatableReadLogicCCL_plpgsql_record(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_record")
+}
+
+func TestRepeatableReadLogicCCL_plpgsql_srf(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "plpgsql_srf")
 }
 
 func TestRepeatableReadLogicCCL_plpgsql_txn(

@@ -152,7 +152,7 @@ SHOW CREATE VIEW t1
 table_name  create_statement
 t1          CREATE VIEW public.t1 (
               "array"
-            ) AS SELECT ARRAY[]:::STRING[]
+            ) AS SELECT ARRAY[]:::STRING[];
 
 query TT colnames
 SHOW CREATE VIEW t1 WITH REDACT
@@ -160,7 +160,7 @@ SHOW CREATE VIEW t1 WITH REDACT
 table_name  create_statement
 t1          CREATE VIEW public.t1 (
               "array"
-            ) AS SELECT ARRAY[]:::STRING[]
+            ) AS SELECT ARRAY[]:::STRING[];
 
 query TT colnames
 SHOW CREATE VIEW t2
@@ -168,7 +168,7 @@ SHOW CREATE VIEW t2
 table_name  create_statement
 t2          CREATE VIEW public.t2 (
               "array"
-            ) AS SELECT ARRAY[1:::INT8, 2:::INT8, 3:::INT8]:::INT8[]
+            ) AS SELECT ARRAY[1:::INT8, 2:::INT8, 3:::INT8]:::INT8[];
 
 query TT colnames
 SHOW CREATE VIEW t2 WITH REDACT
@@ -176,7 +176,7 @@ SHOW CREATE VIEW t2 WITH REDACT
 table_name  create_statement
 t2          CREATE VIEW public.t2 (
               "array"
-            ) AS SELECT ARRAY[‹×›:::INT8, ‹×›:::INT8, ‹×›:::INT8]:::INT8[]
+            ) AS SELECT ARRAY[‹×›:::INT8, ‹×›:::INT8, ‹×›:::INT8]:::INT8[];
 
 query II colnames,rowsort
 SELECT * FROM test.v1
@@ -235,7 +235,7 @@ SHOW CREATE VIEW v1
 v1  CREATE VIEW public.v1 (
       a,
       b
-    ) AS SELECT a, b FROM test.public.t
+    ) AS SELECT a, b FROM test.public.t;
 
 query TT
 SHOW CREATE VIEW v2
@@ -243,7 +243,7 @@ SHOW CREATE VIEW v2
 v2  CREATE VIEW public.v2 (
       x,
       y
-    ) AS SELECT a, b FROM test.public.t
+    ) AS SELECT a, b FROM test.public.t;
 
 query TT
 SHOW CREATE VIEW v6
@@ -251,7 +251,7 @@ SHOW CREATE VIEW v6
 v6  CREATE VIEW public.v6 (
       x,
       y
-    ) AS SELECT a, b FROM test.public.v1
+    ) AS SELECT a, b FROM test.public.v1;
 
 query TT
 SHOW CREATE VIEW v7
@@ -259,7 +259,7 @@ SHOW CREATE VIEW v7
 v7  CREATE VIEW public.v7 (
       x,
       y
-    ) AS SELECT a, b FROM test.public.v1 ORDER BY a DESC LIMIT 2
+    ) AS SELECT a, b FROM test.public.v1 ORDER BY a DESC LIMIT 2;
 
 query TT
 SHOW CREATE VIEW v7 WITH REDACT
@@ -267,7 +267,7 @@ SHOW CREATE VIEW v7 WITH REDACT
 v7  CREATE VIEW public.v7 (
       x,
       y
-    ) AS SELECT a, b FROM test.public.v1 ORDER BY a DESC LIMIT ‹×›
+    ) AS SELECT a, b FROM test.public.v1 ORDER BY a DESC LIMIT ‹×›;
 
 query TT
 SHOW CREATE VIEW test2.v1
@@ -275,7 +275,7 @@ SHOW CREATE VIEW test2.v1
 test2.public.v1  CREATE VIEW public.v1 (
                    x,
                    y
-                 ) AS SELECT x, y FROM test.public.v2
+                 ) AS SELECT x, y FROM test.public.v2;
 
 statement ok
 GRANT SELECT ON t TO testuser
@@ -327,7 +327,7 @@ SHOW CREATE VIEW v1
 v1  CREATE VIEW public.v1 (
       a,
       b
-    ) AS SELECT a, b FROM test.public.t
+    ) AS SELECT a, b FROM test.public.t;
 
 user root
 
@@ -693,7 +693,7 @@ SHOW CREATE VIEW dt
 dt  CREATE VIEW public.dt (
       d,
       t
-    ) AS SELECT d, t FROM test.public.t WHERE d > DATE '1988-11-12' AND t < TIMESTAMP '2017-01-01'
+    ) AS SELECT d, t FROM test.public.t WHERE d > DATE '1988-11-12' AND t < TIMESTAMP '2017-01-01';
 
 query TT
 SHOW CREATE VIEW dt WITH REDACT
@@ -706,7 +706,7 @@ dt  CREATE VIEW public.dt (
       FROM
         test.public.t
       WHERE
-        d > DATE ‹×› AND t < TIMESTAMP ‹×›
+        d > DATE ‹×› AND t < TIMESTAMP ‹×›;
 
 statement ok
 SELECT * FROM dt
@@ -720,7 +720,7 @@ SHOW CREATE VIEW dt2
 dt2  CREATE VIEW public.dt2 (
        d,
        t
-     ) AS SELECT d, t FROM test.public.t WHERE d > (d + '10h'::INTERVAL)
+     ) AS SELECT d, t FROM test.public.t WHERE d > (d + '10h'::INTERVAL);
 
 query TT
 SHOW CREATE VIEW dt2 WITH REDACT
@@ -728,7 +728,7 @@ SHOW CREATE VIEW dt2 WITH REDACT
 dt2  CREATE VIEW public.dt2 (
        d,
        t
-     ) AS SELECT d, t FROM test.public.t WHERE d > (d + ‹×›::INTERVAL)
+     ) AS SELECT d, t FROM test.public.t WHERE d > (d + ‹×›::INTERVAL);
 
 statement ok
 SELECT * FROM dt2
@@ -806,14 +806,14 @@ SELECT create_statement FROM [SHOW CREATE w]
 ----
 CREATE VIEW public.w (
   x
-) AS WITH a AS (SELECT 1 AS x) SELECT x FROM a
+) AS WITH a AS (SELECT 1 AS x) SELECT x FROM a;
 
 query T
 SELECT create_statement FROM [SHOW CREATE w WITH REDACT]
 ----
 CREATE VIEW public.w (
   x
-) AS WITH a AS (SELECT ‹×› AS x) SELECT x FROM a
+) AS WITH a AS (SELECT ‹×› AS x) SELECT x FROM a;
 
 statement ok
 CREATE VIEW w2 AS WITH t AS (SELECT x FROM w) SELECT x FROM t
@@ -823,7 +823,7 @@ SELECT create_statement FROM [SHOW CREATE w2]
 ----
 CREATE VIEW public.w2 (
   x
-) AS WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t
+) AS WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t;
 
 statement ok
 CREATE VIEW w3 AS (WITH t AS (SELECT x FROM w) SELECT x FROM t)
@@ -833,7 +833,7 @@ SELECT create_statement FROM [SHOW CREATE w3]
 ----
 CREATE VIEW public.w3 (
   x
-) AS (WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t)
+) AS (WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t);
 
 statement ok
 CREATE TABLE ab (a INT PRIMARY KEY, b INT)
@@ -882,7 +882,7 @@ CREATE VIEW public.v47704 (
 ) AS SELECT
     first_value(a47704.foo) OVER (PARTITION BY a47704.foo ORDER BY a47704.foo)
   FROM
-    test.public.a47704 JOIN test.public.b47704 ON a47704.foo = b47704.foo
+    test.public.a47704 JOIN test.public.b47704 ON a47704.foo = b47704.foo;
 
 statement ok
 SELECT * FROM v47704
@@ -1379,14 +1379,14 @@ SHOW CREATE VIEW v10
 ----
 v10  CREATE VIEW public.v10 (
        view_typ
-     ) AS SELECT 'a':::public.view_typ_new
+     ) AS SELECT 'a':::public.view_typ_new;
 
 query TT
 SHOW CREATE VIEW v10 WITH REDACT
 ----
 v10  CREATE VIEW public.v10 (
        view_typ
-     ) AS SELECT ‹×›:::public.view_typ_new
+     ) AS SELECT ‹×›:::public.view_typ_new;
 
 query T
 SELECT * FROM v10
@@ -1404,14 +1404,14 @@ SHOW CREATE VIEW v11
 ----
 v11  CREATE VIEW public.v11 (
        k
-     ) AS (SELECT 'a':::public.view_typ < 'a':::public.view_typ AS k)
+     ) AS (SELECT 'a':::public.view_typ < 'a':::public.view_typ AS k);
 
 query TT
 SHOW CREATE VIEW v11 WITH REDACT
 ----
 v11  CREATE VIEW public.v11 (
        k
-     ) AS (SELECT ‹×›:::public.view_typ < ‹×›:::public.view_typ AS k)
+     ) AS (SELECT ‹×›:::public.view_typ < ‹×›:::public.view_typ AS k);
 
 query B
 SELECT * FROM v11
@@ -1429,14 +1429,14 @@ SHOW CREATE VIEW v12
 ----
 v12  CREATE VIEW public.v12 (
        k
-     ) AS (SELECT k FROM (SELECT 'a':::public.view_type_new AS k) AS "?subquery1?")
+     ) AS (SELECT k FROM (SELECT 'a':::public.view_type_new AS k) AS "?subquery1?");
 
 query TT
 SHOW CREATE VIEW v12 WITH REDACT
 ----
 v12  CREATE VIEW public.v12 (
        k
-     ) AS (SELECT k FROM (SELECT ‹×›:::public.view_type_new AS k) AS "?subquery1?")
+     ) AS (SELECT k FROM (SELECT ‹×›:::public.view_type_new AS k) AS "?subquery1?");
 
 query T
 SELECT * FROM v12
@@ -1454,14 +1454,14 @@ SHOW CREATE VIEW v13
 ----
 v13  CREATE VIEW public.v13 (
        k
-     ) AS (SELECT 'a':::public.view_type AS k UNION SELECT 'b':::public.view_type)
+     ) AS (SELECT 'a':::public.view_type AS k UNION SELECT 'b':::public.view_type);
 
 query TT
 SHOW CREATE VIEW v13 WITH REDACT
 ----
 v13  CREATE VIEW public.v13 (
        k
-     ) AS (SELECT ‹×›:::public.view_type AS k UNION SELECT ‹×›:::public.view_type)
+     ) AS (SELECT ‹×›:::public.view_type AS k UNION SELECT ‹×›:::public.view_type);
 
 query T
 SELECT * FROM v13 ORDER BY k
@@ -1480,7 +1480,7 @@ SHOW CREATE VIEW v14
 ----
 v14  CREATE VIEW public.v14 (
        "array"
-     ) AS (SELECT ARRAY['a':::public.view_type_new, 'b':::public.view_type_new]:::public.view_type_new[])
+     ) AS (SELECT ARRAY['a':::public.view_type_new, 'b':::public.view_type_new]:::public.view_type_new[]);
 
 query TT
 SHOW CREATE VIEW v14 WITH REDACT
@@ -1490,7 +1490,7 @@ v14  CREATE VIEW public.v14 (
      ) AS (
          SELECT
            ARRAY[‹×›:::public.view_type_new, ‹×›:::public.view_type_new]:::public.view_type_new[]
-       )
+       );
 
 query T
 SELECT * FROM v14
@@ -1508,7 +1508,7 @@ SHOW CREATE VIEW v15
 ----
 v15  CREATE VIEW public.v15 (
        view_type_new
-     ) AS (SELECT ARRAY['a':::public.view_type, 'b':::public.view_type][2:::INT8] AS view_type_new)
+     ) AS (SELECT ARRAY['a':::public.view_type, 'b':::public.view_type][2:::INT8] AS view_type_new);
 
 query TT
 SHOW CREATE VIEW v15 WITH REDACT
@@ -1519,7 +1519,7 @@ v15  CREATE VIEW public.v15 (
          SELECT
            ARRAY[‹×›:::public.view_type, ‹×›:::public.view_type][‹×›:::INT8]
              AS view_type_new
-       )
+       );
 
 query T
 SELECT * FROM v15
@@ -1576,7 +1576,7 @@ SHOW CREATE VIEW li
 li  CREATE MATERIALIZED VIEW public.li (
       test_t1,
       rowid
-    ) AS (SELECT 1 AS test_t1)
+    ) AS (SELECT 1 AS test_t1);
 
 statement ok
 CREATE TABLE test_view (a INT PRIMARY KEY, b INT)

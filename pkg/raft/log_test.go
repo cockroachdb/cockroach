@@ -82,7 +82,7 @@ func TestFindConflictByTerm(t *testing.T) {
 		want  uint64
 	}{
 		// Log starts from index 1.
-		{sl: noSnap.append(2, 2, 5, 5, 5), index: 100, term: 2, want: 100}, // ErrUnavailable
+		{sl: noSnap.append(2, 2, 5, 5, 5), index: 100, term: 2, want: 2},
 		{sl: noSnap.append(2, 2, 5, 5, 5), index: 5, term: 6, want: 5},
 		{sl: noSnap.append(2, 2, 5, 5, 5), index: 5, term: 5, want: 5},
 		{sl: noSnap.append(2, 2, 5, 5, 5), index: 5, term: 4, want: 2},
@@ -92,7 +92,7 @@ func TestFindConflictByTerm(t *testing.T) {
 		{sl: noSnap.append(2, 2, 5, 5, 5), index: 1, term: 1, want: 0},
 		{sl: noSnap.append(2, 2, 5, 5, 5), index: 0, term: 0, want: 0},
 		// Log with compacted entries.
-		{sl: snap10.append(3, 3, 4, 4, 4), index: 30, term: 3, want: 30}, // ErrUnavailable
+		{sl: snap10.append(3, 3, 4, 4, 4), index: 30, term: 3, want: 12},
 		{sl: snap10.append(3, 3, 4, 4, 4), index: 14, term: 9, want: 14},
 		{sl: snap10.append(3, 3, 4, 4, 4), index: 14, term: 4, want: 14},
 		{sl: snap10.append(3, 3, 4, 4, 4), index: 14, term: 3, want: 12},
@@ -373,7 +373,6 @@ func TestNextCommittedEnts(t *testing.T) {
 }
 
 func TestAcceptApplying(t *testing.T) {
-	maxSize := entryEncodingSize(100)
 	snap := pb.Snapshot{
 		Metadata: pb.SnapshotMetadata{Term: 1, Index: 3},
 	}
@@ -398,7 +397,7 @@ func TestAcceptApplying(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			storage := NewMemoryStorage()
 			require.NoError(t, storage.ApplySnapshot(snap))
-			raftLog := newLogWithSize(storage, raftlogger.DiscardLogger, maxSize)
+			raftLog := newLog(storage, raftlogger.DiscardLogger)
 			require.True(t, raftLog.append(init))
 			require.NoError(t, storage.Append(init.sub(3, 4)))
 			raftLog.checkInvariants(t)
@@ -1000,25 +999,28 @@ func (i index) terms(terms ...uint64) []pb.Entry {
 	return entries
 }
 
-// append generates a valid LeadSlice of entries appended after the given entry
-// ID, at indices [id.index+1, id.index+len(terms)], with the given terms of
-// each entry. Terms must be >= id.term, and non-decreasing.
-func (id entryID) append(terms ...uint64) LeadSlice {
-	term := id.term
-	if ln := len(terms); ln != 0 {
-		term = terms[ln-1]
-	}
-	ls := LeadSlice{
-		term: term,
-		LogSlice: LogSlice{
-			prev:    id,
-			entries: index(id.index + 1).terms(terms...),
-		},
+// terms generates a LogSlice of entries with the given terms appended after the
+// given entry ID.
+func (id entryID) terms(terms ...uint64) LogSlice {
+	ls := LogSlice{
+		prev:    id,
+		entries: index(id.index + 1).terms(terms...),
 	}
 	if err := ls.valid(); err != nil {
 		panic(err)
 	}
 	return ls
+}
+
+// append generates a valid LeadSlice of entries appended after the given entry
+// ID, at indices [id.index+1, id.index+len(terms)], with the given terms of
+// each entry. Terms must be >= id.term, and non-decreasing.
+func (id entryID) append(terms ...uint64) LeadSlice {
+	ls := id.terms(terms...)
+	return LeadSlice{
+		term:     ls.lastEntryID().term,
+		LogSlice: ls,
+	}
 }
 
 // intRange returns a slice containing integers in [from, to) interval.

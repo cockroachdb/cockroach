@@ -12,6 +12,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -43,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
@@ -329,26 +332,24 @@ func TestErrorOnRollback(t *testing.T) {
 	params := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				TestingProposalFilter: func(fArgs kvserverbase.ProposalFilterArgs) *kvpb.Error {
-					if !fArgs.Req.IsSingleRequest() {
-						return nil
-					}
-					req := fArgs.Req.Requests[0]
-					etReq, ok := req.GetInner().(*kvpb.EndTxnRequest)
-					// We only inject the error once. Turns out that during the
-					// life of the test there's two EndTxns being sent - one is
-					// the direct result of the test's call to tx.Rollback(),
-					// the second is sent by the TxnCoordSender - indirectly
-					// triggered by the fact that, on the server side, the
-					// transaction's context gets canceled at the SQL layer.
-					if ok &&
-						etReq.Header().Key.String() == targetKeyString.Load().(string) &&
-						atomic.LoadInt64(&injectedErr) == 0 {
+				EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+					TestingPostEvalFilter: func(fArgs kvserverbase.FilterArgs) *kvpb.Error {
+						etReq, ok := fArgs.Req.(*kvpb.EndTxnRequest)
+						// We only inject the error once. Turns out that during the life of
+						// the test there's two EndTxns being sent - one is the direct
+						// result of the test's call to tx.Rollback(), the second is sent by
+						// the TxnCoordSender - indirectly triggered by the fact that, on
+						// the server side, the transaction's context gets canceled at the
+						// SQL layer.
+						if ok &&
+							etReq.Header().Key.String() == targetKeyString.Load().(string) &&
+							atomic.LoadInt64(&injectedErr) == 0 {
 
-						atomic.StoreInt64(&injectedErr, 1)
-						return kvpb.NewErrorf("test injected error")
-					}
-					return nil
+							atomic.StoreInt64(&injectedErr, 1)
+							return kvpb.NewErrorf("test injected error")
+						}
+						return nil
+					},
 				},
 			},
 		},
@@ -511,6 +512,8 @@ func TestAppNameStatisticsInitialization(t *testing.T) {
 	// Issue a query to be registered in stats.
 	sqlDB.Exec(t, "SELECT version()")
 
+	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, sqlDB, 1)
+
 	// Verify the query shows up in stats.
 	rows := sqlDB.Query(t, "SELECT application_name, key FROM crdb_internal.node_statement_statistics")
 	defer rows.Close()
@@ -544,6 +547,7 @@ func TestPrepareStatisticsMetadata(t *testing.T) {
 	_, err = stmt.Exec(3)
 	require.NoError(t, err)
 
+	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, sqlutils.MakeSQLRunner(sqlDB), 1)
 	// Verify that query and querySummary are equal in crdb_internal.statement_statistics.metadata.
 	rows, err := sqlDB.Query(`SELECT metadata->>'query', metadata->>'querySummary' FROM crdb_internal.statement_statistics WHERE metadata->>'query' LIKE 'SELECT _::INT8'`)
 	if err != nil {
@@ -899,6 +903,9 @@ func TestRetriableErrorDuringUpgradedTransaction(t *testing.T) {
 
 	var fooTableId uint32
 	testDB.Exec(t, "SET enable_implicit_transaction_for_batch_statements = true")
+	// The test injects a retry error after the interceptors, so we need to
+	// disable write buffers for the request to make it to the server.
+	testDB.Exec(t, "SET kv_transaction_buffered_writes_enabled = false")
 	testDB.Exec(t, "CREATE TABLE bar (a INT PRIMARY KEY)")
 	testDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
 	testDB.QueryRow(t, "SELECT 'foo'::regclass::oid").Scan(&fooTableId)
@@ -1470,7 +1477,7 @@ func TestShowLastQueryStatistics(t *testing.T) {
 			expectNonTrivialSchemaChangeTime: false,
 		},
 		{
-			stmt: `CREATE TABLE t1(a INT); 
+			stmt: `CREATE TABLE t1(a INT);
 INSERT INTO t1 SELECT i FROM generate_series(1, 10000) AS g(i);
 ALTER TABLE t1 ADD COLUMN b INT DEFAULT 1`,
 			usesExecEngine:                   true,
@@ -1965,7 +1972,18 @@ func TestAbortedTxnLocks(t *testing.T) {
 		require.ErrorContains(t, err, "query execution canceled due to statement timeout")
 
 		_, err = conn1.ExecContext(ctx, `RELEASE SAVEPOINT cockroach_restart`)
-		require.ErrorContains(t, err, "failed preemptive refresh due to encountered recently written committed value")
+		// When buffered writes are enabled the `UPDATE t SET v = 60 WHERE k = 6`
+		// above results in a locking Get (rather than an immediate Put). The Get
+		// does not observe the timestamp cache bump caused by conn 2's SELECT on
+		// the same key. As a result, we don't deal with the serialization failure
+		// until commit time. At commit time our WriteTimestamp is pushed when we
+		// finally evaluate the (buffered) Put and then the EndTxn returns an error
+		// because of the mismatch between the read and write timestamp.
+		if kvcoord.BufferedWritesEnabled.Get(&s.ClusterSettings().SV) {
+			require.ErrorContains(t, err, "RETRY_SERIALIZABLE")
+		} else {
+			require.ErrorContains(t, err, "failed preemptive refresh due to encountered recently written committed value")
+		}
 
 		// Confirm that a lock is still held after the RELEASE.
 		_, err = conn2.ExecContext(ctx, `UPDATE t SET v = 600 WHERE k = 6`)
@@ -2008,91 +2026,115 @@ func TestRetriableErrorDuringTransactionHoldsLocks(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	filter := newDynamicRequestFilter()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: filter.filter,
+	testutils.RunTrueAndFalse(t, "buffered_writes", func(t *testing.T, bufferedWrites bool) {
+		st := cluster.MakeClusterSettings()
+
+		kvcoord.BufferedWritesEnabled.Override(ctx, &st.SV, bufferedWrites)
+		filter := newDynamicRequestFilter()
+		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+			Settings: st,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					TestingRequestFilter: filter.filter,
+				},
 			},
-		},
-	})
-	defer s.Stopper().Stop(ctx)
-	codec := s.ApplicationLayer().Codec()
+		})
+		defer s.Stopper().Stop(ctx)
+		codec := s.ApplicationLayer().Codec()
 
-	conn, err := sqlDB.Conn(ctx)
-	require.NoError(t, err)
-	testDB := sqlutils.MakeSQLRunner(conn)
+		conn, err := sqlDB.Conn(ctx)
+		require.NoError(t, err)
+		testDB := sqlutils.MakeSQLRunner(conn)
 
-	var barTableID uint32
-	testDB.Exec(t, "SET enable_implicit_transaction_for_batch_statements = true")
-	testDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY, b INT)")
-	testDB.Exec(t, "INSERT INTO foo VALUES(1, 1)")
-	testDB.Exec(t, "CREATE TABLE bar (a INT PRIMARY KEY)")
-	testDB.QueryRow(t, "SELECT 'bar'::regclass::oid").Scan(&barTableID)
+		var barTableID uint32
+		testDB.Exec(t, "SET enable_implicit_transaction_for_batch_statements = true")
+		testDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY, b INT)")
+		testDB.Exec(t, "INSERT INTO foo VALUES(1, 1)")
+		testDB.Exec(t, "CREATE TABLE bar (a INT PRIMARY KEY)")
+		testDB.QueryRow(t, "SELECT 'bar'::regclass::oid").Scan(&barTableID)
 
-	// Inject an error that will happen during execution.
-	injectedRetry := false
-	var injectedRetryWG, secondConnWG sync.WaitGroup
-	injectedRetryWG.Add(1)
-	secondConnWG.Add(1)
-	filter.setFilter(func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
-		if ba.Txn == nil {
-			return nil
+		// Inject an error that will happen during execution.
+		injectedRetry := false
+		var injectedRetryWG, secondConnWG sync.WaitGroup
+		injectedRetryWG.Add(1)
+		secondConnWG.Add(1)
+
+		interceptedMethods := []kvpb.Method{kvpb.ConditionalPut}
+		if bufferedWrites {
+			interceptedMethods = []kvpb.Method{kvpb.ConditionalPut, kvpb.Put}
 		}
-		if req, ok := ba.GetArg(kvpb.ConditionalPut); ok {
-			put := req.(*kvpb.ConditionalPutRequest)
-			_, tableID, err := codec.DecodeTablePrefix(put.Key)
-			if err != nil || tableID != barTableID {
+		filter.setFilter(func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+			if ba.Txn == nil {
 				return nil
 			}
-			if !injectedRetry {
-				injectedRetry = true
-				defer injectedRetryWG.Done()
-				return kvpb.NewErrorWithTxn(
-					kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN, "injected retry error"), ba.Txn,
-				)
-			} else {
-				secondConnWG.Wait()
+
+			maybeInject := func(r kvpb.Request) *kvpb.Error {
+				_, tableID, err := codec.DecodeTablePrefix(r.Header().Key)
+				if err != nil || tableID != barTableID {
+					return nil
+				}
+				if !injectedRetry {
+					t.Logf("injecting error for %s on %s", r.Method(), r.Header().Key)
+					injectedRetry = true
+					defer injectedRetryWG.Done()
+					return kvpb.NewErrorWithTxn(
+						kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN, "injected retry error"), ba.Txn,
+					)
+				} else {
+					t.Logf("waiting on second conn for %s on %s", r.Method(), r.Header().Key)
+					secondConnWG.Wait()
+					return nil
+				}
 			}
-		}
-		return nil
+			for _, ru := range ba.Requests {
+				req := ru.GetInner()
+				if slices.Contains(interceptedMethods, req.Method()) {
+					if err := maybeInject(req); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		})
+
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(func(ctx context.Context) error {
+			defer secondConnWG.Done()
+			conn2, err := sqlDB.Conn(ctx)
+			if err != nil {
+				return err
+			}
+			_, err = conn2.ExecContext(ctx, "SET statement_timeout = '1s'")
+			if err != nil {
+				return err
+			}
+
+			t.Log("second conn: waiting on injection")
+			injectedRetryWG.Wait()
+			t.Log("second conn: running UPDATE")
+			_, err = conn2.ExecContext(ctx, "UPDATE foo SET b = 100 WHERE a = 1")
+			if !testutils.IsError(err, "query execution canceled due to statement timeout") {
+				// NB: errors.Wrapf(nil, ...) returns nil.
+				// nolint:errwrap
+				return errors.Newf("expected a statement timeout error, got: %v", err)
+			}
+
+			return nil
+		})
+
+		t.Log("first conn: running txn")
+		testDB.Exec(t, "UPDATE foo SET b = 10 WHERE a = 1; INSERT INTO bar VALUES(2); COMMIT;")
+
+		// Verify that the implicit transaction completed successfully, and the second
+		// transaction did not.
+		var x int
+		testDB.QueryRow(t, "SELECT b FROM foo WHERE a = 1").Scan(&x)
+		require.Equal(t, 10, x)
+		testDB.QueryRow(t, "SELECT a FROM bar").Scan(&x)
+		require.Equal(t, 2, x)
+
+		require.NoError(t, g.Wait())
 	})
-
-	g := ctxgroup.WithContext(ctx)
-	g.GoCtx(func(ctx context.Context) error {
-		defer secondConnWG.Done()
-		conn2, err := sqlDB.Conn(ctx)
-		if err != nil {
-			return err
-		}
-		_, err = conn2.ExecContext(ctx, "SET statement_timeout = '1s'")
-		if err != nil {
-			return err
-		}
-
-		injectedRetryWG.Wait()
-		_, err = conn2.ExecContext(ctx, "UPDATE foo SET b = 100 WHERE a = 1")
-		if !testutils.IsError(err, "query execution canceled due to statement timeout") {
-			// NB: errors.Wrapf(nil, ...) returns nil.
-			// nolint:errwrap
-			return errors.Newf("expected a statement timeout error, got: %v", err)
-		}
-
-		return nil
-	})
-
-	fmt.Printf("running txn\n")
-	testDB.Exec(t, "UPDATE foo SET b = 10 WHERE a = 1; INSERT INTO bar VALUES(2); COMMIT;")
-
-	// Verify that the implicit transaction completed successfully, and the second
-	// transaction did not.
-	var x int
-	testDB.QueryRow(t, "SELECT b FROM foo WHERE a = 1").Scan(&x)
-	require.Equal(t, 10, x)
-	testDB.QueryRow(t, "SELECT a FROM bar").Scan(&x)
-	require.Equal(t, 2, x)
-
-	require.NoError(t, g.Wait())
 }
 
 func TestTrackOnlyUserOpenTransactionsAndActiveStatements(t *testing.T) {
@@ -2414,7 +2456,7 @@ func noopRequestFilter(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Er
 func getTxnID(t *testing.T, tx *gosql.Tx) (id string) {
 	t.Helper()
 	sqlutils.MakeSQLRunner(tx).QueryRow(t, `
-SELECT id 
+SELECT id
   FROM crdb_internal.node_transactions a
   JOIN [SHOW session_id] b ON a.session_id = b.session_id
 `,
@@ -2457,11 +2499,11 @@ func TestInternalAppNamePrefix(t *testing.T) {
 		initialInternalMetrics := sqlServer.InternalMetrics.ExecutedStatementCounters.InsertCount.Count()
 		initialUserMetrics := sqlServer.Metrics.ExecutedStatementCounters.InsertCount.Count()
 		runner.Exec(t, "INSERT into test values (1, 1)")
-		// Confirm only internal metrics increased.
+		// Confirm user metrics did not increase.
 		finalInternalMetrics := sqlServer.InternalMetrics.ExecutedStatementCounters.InsertCount.Count()
 		finalUserMetrics := sqlServer.Metrics.ExecutedStatementCounters.InsertCount.Count()
 		require.Equal(t, initialUserMetrics, finalUserMetrics)
-		require.Equal(t, initialInternalMetrics+1, finalInternalMetrics)
+		require.Greater(t, finalInternalMetrics, initialInternalMetrics)
 	})
 
 	t.Run("app name set in session", func(t *testing.T) {
@@ -2486,20 +2528,18 @@ func TestInternalAppNamePrefix(t *testing.T) {
 		runner.Exec(t, fmt.Sprintf("set application_name='%v'", catconstants.InternalAppNamePrefix+"mytest"))
 		runner.Exec(t, "INSERT into test values (2, 1)")
 
-		// Confirm only internal metrics increased.
+		// Confirm user metrics did not increase.
 		finalInternalMetrics := sqlServer.InternalMetrics.ExecutedStatementCounters.InsertCount.Count()
 		finalUserMetrics := sqlServer.Metrics.ExecutedStatementCounters.InsertCount.Count()
 		require.Equal(t, initialUserMetrics, finalUserMetrics)
-		require.Equal(t, initialInternalMetrics+1, finalInternalMetrics)
+		require.Greater(t, finalInternalMetrics, initialInternalMetrics)
 
 		// Reset app name.
 		runner.Exec(t, "set application_name='mytest'")
 		runner.Exec(t, "INSERT into test values (3, 1)")
 
-		// Confirm only user metrics increased.
-		finalInternalMetrics = sqlServer.InternalMetrics.ExecutedStatementCounters.InsertCount.Count()
+		// Confirm user metrics increased.
 		finalUserMetrics = sqlServer.Metrics.ExecutedStatementCounters.InsertCount.Count()
-		require.Equal(t, initialUserMetrics+1, finalUserMetrics)
-		require.Equal(t, initialInternalMetrics+1, finalInternalMetrics)
+		require.Greater(t, finalUserMetrics, initialUserMetrics)
 	})
 }

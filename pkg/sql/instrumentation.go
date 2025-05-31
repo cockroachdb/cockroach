@@ -328,7 +328,6 @@ var inFlightTraceCollectorPollInterval = settings.RegisterDurationSetting(
 	"determines the interval between polling done by the in-flight trace "+
 		"collector for the statement bundle, set to zero to disable",
 	0,
-	settings.NonNegativeDuration,
 )
 
 var timeoutTraceCollectionEnabled = settings.RegisterBoolSetting(
@@ -699,7 +698,7 @@ func (ih *instrumentationHelper) Finish(
 				planString = "-- plan is missing, probably hit an error with gist matching: " + ih.planGist.String()
 			}
 			bundle = buildStatementBundle(
-				bundleCtx, ih.explainFlags, cfg.DB, p, ie.(*InternalExecutor),
+				bundleCtx, ih.explainFlags, cfg.DB, p, ie.(*InternalExecutor), ih.diagRequest.Username(),
 				stmtRawSQL, &p.curPlan, planString, trace, placeholders, res.ErrAllowReleased(),
 				payloadErr, retErr, &p.extendedEvalCtx.Settings.SV, ih.inFlightTraceCollector,
 			)

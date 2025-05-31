@@ -169,6 +169,7 @@ func parseDDInput(t *testing.T, input string, w *datadogWriter) {
 			}
 			data = &DatadogSeries{
 				Metric: metricName,
+				Type:   w.resolveMetricType(metricName),
 			}
 			source = nameValueTimestamp[1]
 			data.Tags = append(data.Tags, fmt.Sprintf("%s:%s", storeNodeKey, nameValueTimestamp[1]))
@@ -197,7 +198,7 @@ func TestTsDumpFormatsDataDriven(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var w tsWriter
 			switch d.Cmd {
-			case "format-datadog":
+			case "format-datadog", "format-datadog-init":
 				debugTimeSeriesDumpOpts.clusterLabel = "test-cluster"
 				debugTimeSeriesDumpOpts.clusterID = "test-cluster-id"
 				debugTimeSeriesDumpOpts.zendeskTicket = "zd-test"
@@ -206,10 +207,12 @@ func TestTsDumpFormatsDataDriven(t *testing.T) {
 				var testReqs []*http.Request
 				var series int
 				d.ScanArgs(t, "series-threshold", &series)
-				var ddwriter = makeDatadogWriter("https://example.com/data", false, "api-key", series, func(req *http.Request) error {
-					testReqs = append(testReqs, req)
-					return nil
-				})
+				var ddwriter = makeDatadogWriter(
+					"https://example.com/data", d.Cmd == "format-datadog-init", "api-key", series, func(req *http.Request,
+					) error {
+						testReqs = append(testReqs, req)
+						return nil
+					})
 
 				parseDDInput(t, d.Input, ddwriter)
 

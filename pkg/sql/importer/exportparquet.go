@@ -170,10 +170,8 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context, output execinfra.RowR
 					if err := memAcc.Grow(ctx, datumAllocSize); err != nil {
 						return err
 					}
-					if !ed.IsNull() {
-						if err := ed.EnsureDecoded(typs[i], alloc); err != nil {
-							return err
-						}
+					if err := ed.EnsureDecoded(typs[i], alloc); err != nil {
+						return err
 					}
 					// If we're encoding a DOidWrapper, then we want to cast
 					// the wrapped datum. Note that we don't use

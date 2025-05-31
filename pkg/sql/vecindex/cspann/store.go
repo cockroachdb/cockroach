@@ -33,6 +33,8 @@ type PartitionToSearch struct {
 	// partition metadata is scanned, it is not known whether a root partition is
 	// a leaf partition.
 	ExcludeLeafVectors bool
+	// Level returns the partition's level in the K-means tree.
+	Level Level
 	// StateDetails returns the latest state information from the partition
 	// metadata. This is used by fixup workers to detect interference from other
 	// agents that are updating the partition.
@@ -50,18 +52,6 @@ type PartitionToSearch struct {
 // Store implementations must be thread-safe. There should typically be only one
 // Store instance in the process for each index.
 type Store interface {
-	// BeginTransaction creates a new transaction that can be used to read and
-	// write the store in a transactional context.
-	BeginTransaction(ctx context.Context) (Txn, error)
-
-	// CommitTransaction commits a transaction previously started by a call to
-	// Begin.
-	CommitTransaction(ctx context.Context, txn Txn) error
-
-	// AbortTransaction aborts a transaction previously started by a call to
-	// Begin.
-	AbortTransaction(ctx context.Context, txn Txn) error
-
 	// RunTransaction invokes the given function in the scope of a new
 	// transaction. If the function returns an error, the transaction is aborted,
 	// else it is committed.
@@ -122,17 +112,16 @@ type Store interface {
 	) error
 
 	// TryAddToPartition adds the given vectors (and associated keys/values) to
-	// the specified partition. If a vector's key already exists in
-	// the partition, the vector is not added.
+	// the specified partition and returns true if at least one vector was added.
+	// If a vector's key already exists in the partition, the vector is not added.
 	//
 	// Before performing any action, TryAddToPartition checks the partition's
 	// metadata and returns a ConditionFailedError if it is not the same as the
 	// expected metadata. If the partition does not exist, it returns
 	// ErrPartitionNotFound.
 	//
-	// NOTE: Individual adds do not need to share a transaction. If an error
-	// occurs in the middle of the operation, vectors that have already been added
-	// are not guaranteed to roll back.
+	// NOTE: The caller owns the vectors, childKeys, and valueBytes memory. The
+	// Store implementation should not try to use it after returning.
 	TryAddToPartition(
 		ctx context.Context,
 		treeKey TreeKey,
@@ -144,18 +133,13 @@ type Store interface {
 	) (added bool, err error)
 
 	// TryRemoveFromPartition removes vectors from the given partition by their
-	// child keys. If a key is not present in the partition, it is a no-op. If
-	// an attempt is made to remove all vectors in a non-leaf partition, then
-	// ErrRemoveNotAllowed is returned.
+	// child keys and returns true if any vector is removed. If a key is not
+	// present in the partition, it is a no-op.
 	//
 	// Before performing any action, TryRemoveFromPartition checks the partition's
 	// metadata and returns a ConditionFailedError if it is not the same as the
 	// expected metadata. If the partition does not exist, it returns
 	// ErrPartitionNotFound.
-	//
-	// NOTE: Individual removes do not need to share a transaction. If an error
-	// occurs in the middle of the operation, vectors that have already been
-	// removed are not guaranteed to roll back.
 	TryRemoveFromPartition(
 		ctx context.Context,
 		treeKey TreeKey,
@@ -188,32 +172,6 @@ type Store interface {
 //
 // Txn implementations are not thread-safe.
 type Txn interface {
-	// GetPartition returns the partition identified by the given key, or
-	// ErrPartitionNotFound if the key cannot be found. The returned partition's
-	// memory is owned by the caller - it can be modified as needed.
-	// TODO(andyk): Remove this method once we switch to non-transactional
-	// splits/merges.
-	GetPartition(ctx context.Context, treeKey TreeKey, partitionKey PartitionKey) (*Partition, error)
-
-	// SetRootPartition makes the given partition the root partition in the store.
-	// If the root partition already exists, it is replaced, else it is newly
-	// inserted into the store.
-	// TODO(andyk): Remove this method once we switch to non-transactional
-	// splits/merges.
-	SetRootPartition(ctx context.Context, treeKey TreeKey, partition *Partition) error
-
-	// InsertPartition inserts the given partition into the store and returns a
-	// new key that identifies it.
-	// TODO(andyk): Remove this method once we switch to non-transactional
-	// splits/merges.
-	InsertPartition(ctx context.Context, treeKey TreeKey, partition *Partition) (PartitionKey, error)
-
-	// DeletePartition deletes the partition with the given key from the store,
-	// or returns ErrPartitionNotFound if the key cannot be found.
-	// TODO(andyk): Remove this method once we switch to non-transactional
-	// splits/merges.
-	DeletePartition(ctx context.Context, treeKey TreeKey, partitionKey PartitionKey) error
-
 	// GetPartitionMetadata returns metadata for the given partition, including
 	// its size, its centroid, and its level in the K-means tree. If "forUpdate"
 	// is true, fetching the metadata is part of a mutation operation; the store
@@ -229,13 +187,16 @@ type Txn interface {
 	) (PartitionMetadata, error)
 
 	// AddToPartition adds the given vector and its associated child key and value
-	// bytes to the partition with the given key. If the vector already exists, it
-	// is overwritten with the new key.
+	// bytes to the given partition. If a vector with the given child key already
+	// exists, it is overwritten.
 	//
 	// AddToPartition returns ConditionalFailedError if the partition is in a
 	// state that does not allow adds. It returns ErrPartitionNotFound if the
 	// partition cannot be found, or ErrRestartOperation if the caller should
 	// retry the insert operation that triggered this call.
+	//
+	// NOTE: The caller owns the vec, childKey, and valueBytes memory. The Store
+	// implementation should not try to use it after returning.
 	AddToPartition(
 		ctx context.Context,
 		treeKey TreeKey,
@@ -266,28 +227,28 @@ type Txn interface {
 	// partition with the number of quantized vectors in that searched partition.
 	// This is used to determine if a partition needs to be split or merged.
 	//
-	// If one or more partitions cannot be found, SearchPartitions returns
-	// ErrPartitionNotFound, or ErrRestartOperation if the caller should retry
-	// the search operation that triggered this call.
+	// If a partition cannot be found, SearchPartitions returns InvalidLevel,
+	// MissingState, and Count=0 for it. SearchPartitions returns
+	// ErrRestartOperation if the caller should retry the search operation that
+	// triggered this call.
 	SearchPartitions(
 		ctx context.Context,
 		treeKey TreeKey,
 		toSearch []PartitionToSearch,
 		queryVector vector.T,
 		searchSet *SearchSet,
-	) (level Level, err error)
+	) error
 
 	// GetFullVectors fetches the original full-size vectors that are referenced
-	// by the given child keys and stores them in "refs". If a vector has been
-	// deleted, then its corresponding reference will be set to nil. If a
-	// partition cannot be found, GetFullVectors returns ErrPartitionNotFound.
+	// by the given child keys and stores them in "refs". This can either be
+	// interior partition centroids or leaf primary index vectors, depending on
+	// whether the child key's PartitionKey or KeyBytes field is set. Each call
+	// to GetFullVectors can only request one or the other; it cannot interleave
+	// requests for both in "refs". If a vector has been deleted, then its
+	// corresponding reference will be set to nil. If a partition cannot be found,
+	// GetFullVectors returns ErrPartitionNotFound.
 	//
-	// NOTE: The caller takes ownership of any vector memory returned in "refs".
-	// The Store implementation should not try to use it after returning it.
-	//
-	// TODO(andyk): what if the row exists but the vector column is NULL? Right
-	// now, this whole library expects vectors passed to it to be non-nil and have
-	// the same number of dims. We should look into how pgvector handles NULL
-	// values - could we just treat them as if they were missing, for example?
+	// NOTE: Returned vectors should be treated as immutable. Neither the caller
+	// or the Store implementation should modify the memory.
 	GetFullVectors(ctx context.Context, treeKey TreeKey, refs []VectorWithKey) error
 }

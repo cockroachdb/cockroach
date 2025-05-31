@@ -195,10 +195,12 @@ func (b *Builder) analyzeSelectList(
 // expressions in projectionsScope.
 //
 // See Builder.buildStmt for a description of the remaining input values.
-func (b *Builder) buildProjectionList(inScope *scope, projectionsScope *scope) {
+func (b *Builder) buildProjectionList(
+	inScope *scope, projectionsScope *scope, colRefs *opt.ColSet,
+) {
 	for i := range projectionsScope.cols {
 		col := &projectionsScope.cols[i]
-		b.buildScalar(col.getExpr(), inScope, projectionsScope, col, nil)
+		b.buildScalar(col.getExpr(), inScope, projectionsScope, col, colRefs)
 	}
 }
 

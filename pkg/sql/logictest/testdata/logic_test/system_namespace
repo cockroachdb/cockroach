@@ -1,4 +1,3 @@
-skipif config local-mixed-24.3
 query IITI rowsort
 SELECT * FROM system.namespace WHERE id >= 100 OR name IN ('comments', 'locations', 'descriptor_id_seq')
 ----

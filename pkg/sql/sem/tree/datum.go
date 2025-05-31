@@ -32,10 +32,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
+	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
@@ -95,7 +97,7 @@ var (
 	MinSupportedTimeSec = float64(MinSupportedTime.Unix())
 
 	// ValidateJSONPath is injected from pkg/util/jsonpath/parser/parse.go.
-	ValidateJSONPath func(string) (string, error)
+	ValidateJSONPath func(string) (*jsonpath.Jsonpath, error)
 
 	// EmptyDJSON is an empty JSON object.
 	EmptyDJSON = *NewDJSON(json.EmptyJSONValue)
@@ -1321,7 +1323,8 @@ type DCollatedString struct {
 	Contents string
 	Locale   string
 	// Key is the collation key.
-	Key []byte
+	Key           []byte
+	Deterministic bool
 }
 
 // CollationEnvironment stores the state needed by NewDCollatedString to
@@ -1335,7 +1338,8 @@ type collationEnvironmentCacheEntry struct {
 	// locale is interned.
 	locale string
 	// collator is an expensive factory.
-	collator *collate.Collator
+	collator      *collate.Collator
+	deterministic bool
 }
 
 func (env *CollationEnvironment) getCacheEntry(
@@ -1352,7 +1356,7 @@ func (env *CollationEnvironment) getCacheEntry(
 			return collationEnvironmentCacheEntry{}, err
 		}
 
-		entry = collationEnvironmentCacheEntry{locale, collate.New(tag)}
+		entry = collationEnvironmentCacheEntry{locale, collate.New(tag), collatedstring.IsDeterministicCollation(tag)}
 		env.cache[locale] = entry
 	}
 	return entry, nil
@@ -1371,7 +1375,7 @@ func NewDCollatedString(
 		env.buffer = &collate.Buffer{}
 	}
 	key := entry.collator.KeyFromString(env.buffer, contents)
-	d := DCollatedString{contents, entry.locale, make([]byte, len(key))}
+	d := DCollatedString{contents, entry.locale, make([]byte, len(key)), entry.deterministic}
 	copy(d.Key, key)
 	env.buffer.Reset()
 	return &d, nil
@@ -1444,7 +1448,7 @@ func (d *DCollatedString) IsMin(ctx context.Context, cmpCtx CompareContext) bool
 
 // Min implements the Datum interface.
 func (d *DCollatedString) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
-	return &DCollatedString{"", d.Locale, nil}, true
+	return &DCollatedString{"", d.Locale, nil, false}, true
 }
 
 // Max implements the Datum interface.
@@ -3877,18 +3881,12 @@ func (d *DBox2D) Size() uintptr {
 }
 
 // DJsonpath is the Datum representation of the Jsonpath type.
-type DJsonpath string
-
-func NewDJsonpath(d string) *DJsonpath {
-	jsonpath := DJsonpath(d)
-	return &jsonpath
+type DJsonpath struct {
+	jsonpath.Jsonpath
 }
 
-// UnsafeBytes returns the raw bytes avoiding allocation. It is "unsafe" because
-// the contract is that callers must not to mutate the bytes but there is
-// nothing stopping that from happening.
-func (d *DJsonpath) UnsafeBytes() []byte {
-	return encoding.UnsafeConvertStringToBytes(string(*d))
+func NewDJsonpath(d jsonpath.Jsonpath) *DJsonpath {
+	return &DJsonpath{Jsonpath: d}
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -3907,15 +3905,7 @@ func (d *DJsonpath) Compare(ctx context.Context, cmpCtx CompareContext, other Da
 	if !ok {
 		return 0, makeUnsupportedComparisonMessage(d, other)
 	}
-	dParsed, err := ValidateJSONPath(string(*d))
-	if err != nil {
-		return 0, err
-	}
-	vParsed, err := ValidateJSONPath(string(*v))
-	if err != nil {
-		return 0, err
-	}
-	return strings.Compare(dParsed, vParsed), nil
+	return strings.Compare(d.String(), v.String()), nil
 }
 
 // Prev implements the Datum interface.
@@ -3953,16 +3943,17 @@ func (*DJsonpath) AmbiguousFormat() bool { return true }
 
 // Size implements the Datum interface.
 func (d *DJsonpath) Size() uintptr {
-	return unsafe.Sizeof(*d) + uintptr(len(*d))
+	// TODO(#22513): add size method for JSONPath
+	return unsafe.Sizeof(*d)
 }
 
 // Format implements the NodeFormatter interface.
 func (d *DJsonpath) Format(ctx *FmtCtx) {
 	buf, f := &ctx.Buffer, ctx.flags
 	if f.HasFlags(fmtRawStrings) || f.HasFlags(fmtPgwireFormat) {
-		buf.WriteString(string(*d))
+		buf.WriteString(d.Jsonpath.String())
 	} else {
-		lexbase.EncodeSQLStringWithFlags(buf, string(*d), f.EncodeFlags())
+		lexbase.EncodeSQLStringWithFlags(buf, d.Jsonpath.String(), f.EncodeFlags())
 	}
 }
 
@@ -3971,7 +3962,7 @@ func ParseDJsonpath(s string) (Datum, error) {
 	if err != nil {
 		return nil, MakeParseError(s, types.Jsonpath, err)
 	}
-	return NewDJsonpath(jp), nil
+	return NewDJsonpath(*jp), nil
 }
 
 // AsDJsonpath attempts to retrieve a *DJsonpath from an Expr, returning a *DJsonpath and
@@ -4118,8 +4109,6 @@ func AsJSON(
 		return json.FromString(t.LogicalRep), nil
 	case *DJSON:
 		return t.JSON, nil
-	case *DJsonpath:
-		return json.FromString(string(*t)), nil
 	case *DArray:
 		builder := json.NewArrayBuilder(t.Len())
 		for _, e := range t.Array {
@@ -5474,7 +5463,7 @@ func (d *DEnum) ResolvedType() *types.T {
 	return d.EnumTyp
 }
 
-// PlanCistFromCtx returns the plan gist if it is stored in the context. It is
+// PlanGistFromCtx returns the plan gist if it is stored in the context. It is
 // injected from the sql package to avoid import cycle.
 var PlanGistFromCtx func(context.Context) string
 
@@ -5501,11 +5490,11 @@ func (d *DEnum) Compare(ctx context.Context, cmpCtx CompareContext, other Datum)
 			// safe string.
 			gist = redact.SafeString(PlanGistFromCtx(ctx))
 		}
-		panic(errors.AssertionFailedf(
+		return 0, errors.AssertionFailedf(
 			"comparison of two different versions of enum %s oid %d: versions %d and %d, gist %q",
 			d.EnumTyp.SQLStringForError(), errors.Safe(d.EnumTyp.Oid()), d.EnumTyp.TypeMeta.Version,
 			v.EnumTyp.TypeMeta.Version, gist,
-		))
+		)
 	}
 
 	res := bytes.Compare(d.PhysicalRep, v.PhysicalRep)
@@ -6218,7 +6207,7 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.FloatFamily:          {unsafe.Sizeof(DFloat(0.0)), fixedSize},
 	types.DecimalFamily:        {unsafe.Sizeof(DDecimal{}), variableSize},
 	types.StringFamily:         {unsafe.Sizeof(DString("")), variableSize},
-	types.CollatedStringFamily: {unsafe.Sizeof(DCollatedString{"", "", nil}), variableSize},
+	types.CollatedStringFamily: {unsafe.Sizeof(DCollatedString{"", "", nil, false}), variableSize},
 	types.BytesFamily:          {unsafe.Sizeof(DBytes("")), variableSize},
 	types.EncodedKeyFamily:     {unsafe.Sizeof(DBytes("")), variableSize},
 	types.DateFamily:           {unsafe.Sizeof(DDate{}), fixedSize},
@@ -6235,7 +6224,7 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.TSVectorFamily:       {unsafe.Sizeof(DTSVector{}), variableSize},
 	types.IntervalFamily:       {unsafe.Sizeof(DInterval{}), fixedSize},
 	types.JsonFamily:           {unsafe.Sizeof(DJSON{}), variableSize},
-	types.JsonpathFamily:       {unsafe.Sizeof(DJsonpath("")), variableSize},
+	types.JsonpathFamily:       {unsafe.Sizeof(DJsonpath{}), variableSize},
 	types.UuidFamily:           {unsafe.Sizeof(DUuid{}), fixedSize},
 	types.INetFamily:           {unsafe.Sizeof(DIPAddr{}), fixedSize},
 	types.OidFamily:            {unsafe.Sizeof(DOid{}.Oid), fixedSize},

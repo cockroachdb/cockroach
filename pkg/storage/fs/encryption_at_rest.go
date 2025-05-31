@@ -10,16 +10,16 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/vfs"
 )
 
 // NewEncryptedEnvFunc creates an encrypted environment and returns the vfs.FS to use for reading
 // and writing data. This should be initialized by calling engineccl.Init() before calling
-// NewPebble(). The optionBytes is a binary serialized storagepb.EncryptionOptions.
+// NewPebble(). The optionBytes is a binary serialized storageconfig.EncryptionOptions.
 var NewEncryptedEnvFunc func(
-	fs vfs.FS, fr *FileRegistry, dbDir string, readOnly bool, encryptionOptions *storagepb.EncryptionOptions,
+	fs vfs.FS, fr *FileRegistry, dbDir string, readOnly bool, encryptionOptions *storageconfig.EncryptionOptions,
 ) (*EncryptionEnv, error)
 
 // resolveEncryptedEnvOptions creates the EncryptionEnv and associated file
@@ -29,7 +29,7 @@ func resolveEncryptedEnvOptions(
 	ctx context.Context,
 	unencryptedFS vfs.FS,
 	dir string,
-	encryptionOpts *storagepb.EncryptionOptions,
+	encryptionOpts *storageconfig.EncryptionOptions,
 	rw RWMode,
 ) (*FileRegistry, *EncryptionEnv, error) {
 	if encryptionOpts == nil {

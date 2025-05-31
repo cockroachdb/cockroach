@@ -32,10 +32,12 @@ import (
 // paces the traffic at the set bandwidth limit.
 func registerDiskBandwidthOverload(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:             "admission-control/disk-bandwidth-limiter",
-		Owner:            registry.OwnerAdmissionControl,
-		Timeout:          3 * time.Hour,
-		Benchmark:        true,
+		Name:      "admission-control/disk-bandwidth-limiter",
+		Owner:     registry.OwnerAdmissionControl,
+		Timeout:   3 * time.Hour,
+		Benchmark: true,
+		// Disabled on IBM only because the Azure test suite was used as a base
+		// for IBM tests, and this test was disabled on Azure as of 05/2025.
 		CompatibleClouds: registry.AllExceptAzure,
 		// TODO(aaditya): change to weekly once the test stabilizes.
 		Suites:  registry.Suites(registry.Nightly),

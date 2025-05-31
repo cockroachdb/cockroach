@@ -769,6 +769,17 @@ func (c *CustomFuncs) RemoveFiltersItem(
 	return filters.RemoveFiltersItem(search)
 }
 
+// AppendFiltersItem returns a new list that is a copy of the given list, except
+// that the given item has been appended to the end of the list.
+func (c *CustomFuncs) AppendFiltersItem(
+	filters memo.FiltersExpr, toAppend opt.ScalarExpr,
+) memo.FiltersExpr {
+	newFilters := make(memo.FiltersExpr, len(filters)+1)
+	copy(newFilters, filters)
+	newFilters[len(filters)] = c.f.ConstructFiltersItem(toAppend)
+	return newFilters
+}
+
 // ReplaceFiltersItem returns a new list that is a copy of the given list,
 // except that the given search item has been replaced by the given replace
 // item. If the list contains the search item multiple times, then only the

@@ -398,7 +398,6 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (CollectChecksu
 		return CollectChecksumResponse{},
 			errors.Wrapf(ctx.Err(), "while waiting for compute checksum (ID = %s)", id)
 	case <-t.C:
-		t.Read = true
 		return CollectChecksumResponse{},
 			errors.Errorf("checksum computation did not start in time for (ID = %s, wait=%s)", id, dur)
 	case taskCancel = <-c.started:

@@ -13,6 +13,7 @@ go_library(
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/types",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -23,6 +24,7 @@ go_test(
     embed = [":ttlbase"],
     deps = [
         "//pkg/sql/catalog/catenumpb",
+        "//pkg/sql/types",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "@com_github_stretchr_testify//require",

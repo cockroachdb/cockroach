@@ -76,6 +76,8 @@ message MetricSnap {
   int64 bytes_sent = 3;
   int64 infos_received = 4;
   int64 infos_sent = 5;
+  int64 messages_received = 7;
+  int64 messages_sent = 8;
   int64 conns_refused = 6;
 }
 

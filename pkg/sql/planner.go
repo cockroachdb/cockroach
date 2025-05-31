@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
@@ -497,7 +498,6 @@ func internalExtendedEvalCtx(
 	evalContextTestingKnobs := execCfg.EvalContextTestingKnobs
 
 	var indexUsageStats *idxusage.LocalIndexUsageStats
-	var sqlStatsController eval.SQLStatsController
 	var schemaTelemetryController eval.SchemaTelemetryController
 	var indexUsageStatsController eval.IndexUsageStatsController
 	var sqlStatsProvider *persistedsqlstats.PersistedSQLStats
@@ -505,9 +505,7 @@ func internalExtendedEvalCtx(
 	if ief := execCfg.InternalDB; ief != nil {
 		if ief.server != nil {
 			indexUsageStats = ief.server.indexUsageStats
-			sqlStatsController = ief.server.sqlStatsController
 			schemaTelemetryController = ief.server.schemaTelemetryController
-			indexUsageStatsController = ief.server.indexUsageStatsController
 			sqlStatsProvider = ief.server.sqlStats
 			localSqlStatsProvider = ief.server.localSqlStats
 		} else {
@@ -517,7 +515,6 @@ func internalExtendedEvalCtx(
 			indexUsageStats = idxusage.NewLocalIndexUsageStats(&idxusage.Config{
 				Setting: execCfg.Settings,
 			})
-			sqlStatsController = &persistedsqlstats.Controller{}
 			schemaTelemetryController = &schematelemetrycontroller.Controller{}
 			indexUsageStatsController = &idxusage.Controller{}
 			sqlStatsProvider = &persistedsqlstats.PersistedSQLStats{}
@@ -534,7 +531,7 @@ func internalExtendedEvalCtx(
 			TestingKnobs:                   evalContextTestingKnobs,
 			StmtTimestamp:                  stmtTimestamp,
 			TxnTimestamp:                   txnTimestamp,
-			SQLStatsController:             sqlStatsController,
+			SQLStatsController:             sqlStatsProvider,
 			SchemaTelemetryController:      schemaTelemetryController,
 			IndexUsageStatsController:      indexUsageStatsController,
 			ConsistencyChecker:             execCfg.ConsistencyChecker,
@@ -741,8 +738,7 @@ func (p *planner) CheckPrivilegeForTableID(
 	return p.CheckPrivilegeForUser(ctx, desc, privilege, p.User())
 }
 
-// LookupTableByID looks up a table, by the given descriptor ID. Based on the
-// CommonLookupFlags, it could use or skip the Collection cache.
+// LookupTableByID looks up a table, by the given descriptor ID.
 func (p *planner) LookupTableByID(
 	ctx context.Context, tableID descpb.ID,
 ) (catalog.TableDescriptor, error) {
@@ -751,6 +747,28 @@ func (p *planner) LookupTableByID(
 		return nil, err
 	}
 	return table, nil
+}
+
+// LookupSchemaByID looks up a schema by the given descriptor ID.
+func (p *planner) LookupSchemaByID(
+	ctx context.Context, schemaID descpb.ID,
+) (catalog.SchemaDescriptor, error) {
+	schema, err := p.byIDGetterBuilder().WithoutNonPublic().Get().Schema(ctx, schemaID)
+	if err != nil {
+		return nil, err
+	}
+	return schema, nil
+}
+
+// LookupDatabaseByID looks up a database by the given descriptor ID.
+func (p *planner) LookupDatabaseByID(
+	ctx context.Context, databaseID descpb.ID,
+) (catalog.DatabaseDescriptor, error) {
+	database, err := p.byIDGetterBuilder().WithoutNonPublic().Get().Database(ctx, databaseID)
+	if err != nil {
+		return nil, err
+	}
+	return database, nil
 }
 
 // SessionData is part of the PlanHookState interface.
@@ -784,8 +802,8 @@ type statementPreparer interface {
 		stmt Statement,
 		placeholderHints tree.PlaceholderTypes,
 		rawTypeHints []oid.Oid,
-		origin PreparedStatementOrigin,
-	) (*PreparedStatement, error)
+		origin prep.StatementOrigin,
+	) (*prep.Statement, error)
 }
 
 var _ statementPreparer = &connExecutor{}
@@ -912,12 +930,16 @@ func (p *planner) resetPlanner(
 
 	p.cancelChecker.Reset(ctx)
 
+	utc := p.semaCtx.UnsupportedTypeChecker
 	p.semaCtx = tree.MakeSemaContext(p)
 	p.semaCtx.SearchPath = &sd.SearchPath
 	p.semaCtx.Annotations = nil
 	p.semaCtx.DateStyle = sd.GetDateStyle()
 	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
-	p.semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(p.execCfg.Settings.Version)
+	p.semaCtx.UnsupportedTypeChecker = eval.ResetUnsupportedTypeChecker(
+		p.execCfg.Settings.Version, utc,
+	)
+	p.semaCtx.UsePre_25_2VariadicBuiltins = sd.UsePre_25_2VariadicBuiltins
 
 	p.autoCommit = false
 

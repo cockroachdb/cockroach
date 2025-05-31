@@ -250,20 +250,18 @@ func CountVertices(t geom.T) int {
 // lineString does not have a z-coordinate.
 func length3DLineString(lineString *geom.LineString) (float64, error) {
 	lineCoords := lineString.Coords()
-	prevPoint := lineCoords[0]
-	lineLength := float64(0)
 	zIndex := lineString.Layout().ZIndex()
 	if zIndex < 0 || zIndex >= lineString.Stride() {
 		return 0, errors.AssertionFailedf("Z-Index for LINESTRING is out-of-bounds")
 	}
-	for i := 0; i < lineString.NumCoords(); i++ {
-		curPoint := lineCoords[i]
+	lineLength := float64(0)
+	for i := 1; i < len(lineCoords); i++ {
+		prevPoint, curPoint := lineCoords[i-1], lineCoords[i]
 		deltaX := curPoint.X() - prevPoint.X()
 		deltaY := curPoint.Y() - prevPoint.Y()
 		deltaZ := curPoint[zIndex] - prevPoint[zIndex]
 		distBetweenPoints := math.Sqrt(deltaX*deltaX + deltaY*deltaY + deltaZ*deltaZ)
 		lineLength += distBetweenPoints
-		prevPoint = curPoint
 	}
 
 	return lineLength, nil

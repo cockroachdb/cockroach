@@ -45,7 +45,7 @@ type Registry struct {
 	// <uri>/metadata/<kind>/<timestamp> contains metadata for a fixture instance
 	// <uri>/<kind>/<timestamp> contains the actual fixture data
 	//
-	// The uri ispassed to the registry at construction time. The baseURI is
+	// The uri is passed to the registry at construction time. The baseURI is
 	// expected to be of the form "scheme://<bucket>/roachprod/<version>". So a
 	// full metadata path looks like:
 	// gs://cockroach-fixtures/roachprod/v25.1/metadata/backup-tpcc-30k/20220101-1504
@@ -124,7 +124,7 @@ func (r *Registry) Create(
 	}
 
 	now := r.clock().UTC()
-	basename := now.Format("20060102-1504")
+	basename := now.Format("20060102-150405.000")
 
 	metadata := FixtureMetadata{
 		CreatedAt:    now,

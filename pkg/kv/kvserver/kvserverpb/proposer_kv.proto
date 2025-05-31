@@ -299,6 +299,7 @@ message ReplicatedEvalResult {
 // can be distinguished from a zero-length batch, and so structs
 // containing pointers to it can be compared with the == operator.
 message WriteBatch {
+  option (gogoproto.goproto_getters) = true;
   bytes data = 1;
 }
 

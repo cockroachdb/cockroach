@@ -204,7 +204,6 @@ subtest end
 
 subtest rewrite_udf_do_block
 
-skipif config local-mixed-24.3
 statement ok
 CREATE OR REPLACE FUNCTION f_rewrite() RETURNS INT AS $$
   DO $foo$
@@ -220,7 +219,6 @@ CREATE OR REPLACE FUNCTION f_rewrite() RETURNS INT AS $$
   SELECT 1;
 $$ LANGUAGE SQL
 
-skipif config local-mixed-24.3
 query T
 SELECT get_body_str('f_rewrite');
 ----

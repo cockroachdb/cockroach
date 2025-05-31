@@ -478,7 +478,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(2, 3).Results(2),
 			baseTest.SetArgs(true, 0).Error(`error in argument for \$1: could not parse "true" as type int: strconv.ParseInt: parsing "true": invalid syntax`),
 		}},
-		{"SELECT $1[2] LIKE 'b'", []preparedQueryTest{
+		{"SELECT ($1::TEXT[])[2] LIKE 'b'", []preparedQueryTest{
 			baseTest.SetArgs(pq.Array([]string{"a", "b", "c"})).Results(true),
 			baseTest.SetArgs(pq.Array([]gosql.NullString{{String: "a", Valid: true}, {Valid: false}, {String: "c", Valid: true}})).Results(gosql.NullBool{Valid: false}),
 		}},

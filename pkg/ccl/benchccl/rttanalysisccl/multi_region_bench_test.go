@@ -7,7 +7,9 @@ package rttanalysisccl
 
 import (
 	gosql "database/sql"
+	"fmt"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -68,6 +70,37 @@ CREATE TABLE test41 (p int) LOCALITY REGIONAL BY TABLE IN "us-east2";
 CREATE TABLE test42 (p int) LOCALITY REGIONAL BY TABLE IN "us-east2";
 `
 )
+
+// multipleTableFixtures creates multiple tables with different localities.
+func multipleTableFixtures(n int) string {
+	b := strings.Builder{}
+
+	b.WriteString(`CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3";
+USE test;`)
+	b.WriteString("BEGIN;\n")
+	b.WriteString("SET LOCAL autocommit_before_ddl = false;\n")
+	for i := 0; i < n; i++ {
+		b.WriteString(fmt.Sprintf("CREATE TABLE test%d (p int)", i))
+
+		locality := i % 5
+
+		switch locality {
+		case 0:
+			b.WriteString(" LOCALITY GLOBAL")
+		case 1:
+			b.WriteString(" LOCALITY REGIONAL BY ROW")
+		case 2:
+			b.WriteString(" LOCALITY REGIONAL BY TABLE IN \"us-east1\"")
+		case 3:
+			b.WriteString(" LOCALITY REGIONAL BY TABLE IN \"us-east2\"")
+		case 4:
+			b.WriteString(" LOCALITY REGIONAL BY TABLE IN \"us-east3\"")
+		}
+		b.WriteString(";\n")
+	}
+	b.WriteString("COMMIT;\n")
+	return b.String()
+}
 
 func BenchmarkAlterRegions(b *testing.B) { reg.Run(b) }
 func init() {
@@ -234,6 +267,31 @@ USE test;
 CREATE TABLE test (p int) LOCALITY REGIONAL BY ROW;
 `,
 			Stmt:  `ALTER TABLE test SET LOCALITY GLOBAL`,
+			Reset: "DROP DATABASE test",
+		},
+	})
+}
+
+func BenchmarkVirtualTableQueries(b *testing.B) { reg.Run(b) }
+func init() {
+	reg.Register("VirtualTableQueries", []rttanalysis.RoundTripBenchTestCase{
+		{
+			Name:  "select from crdb_internal.zones (10 tables)",
+			Setup: multipleTableFixtures(10),
+			Stmt:  `select * from crdb_internal.zones`,
+			Reset: "DROP DATABASE test",
+		},
+		{
+			Name:  "select from crdb_internal.zones (50 tables)",
+			Setup: multipleTableFixtures(50),
+			Stmt:  `select * from crdb_internal.zones`,
+			Reset: "DROP DATABASE test",
+		},
+
+		{
+			Name:  "select from crdb_internal.zones (100 tables)",
+			Setup: multipleTableFixtures(100),
+			Stmt:  `select * from crdb_internal.zones`,
 			Reset: "DROP DATABASE test",
 		},
 	})

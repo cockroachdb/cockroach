@@ -602,6 +602,10 @@ func TestLargeDynamicRows(t *testing.T) {
 	err = conn.Exec(ctx, "CREATE TABLE t (s STRING)")
 	require.NoError(t, err)
 
+	// Enable tracing for this run to ensure that the vectorized fast-path is
+	// used.
+	require.NoError(t, conn.Exec(ctx, `SET tracing = on`))
+
 	rng, _ := randutil.NewTestRand()
 	str := randutil.RandString(rng, (2<<20)+1, "asdf")
 
@@ -614,6 +618,16 @@ func TestLargeDynamicRows(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, 4, batchNumber)
 	batchNumber = 0
+
+	require.NoError(t, conn.Exec(ctx, `SET tracing = off`))
+	// Examine the trace to sanity-check that the vectorized fast-path is used.
+	// This log message is emitted by the vectorInserter on each BatchRequest,
+	// so we expect to see it at least once.
+	row, err := conn.QueryRow(ctx, `SELECT count(*) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%copy running batch%'`)
+	require.NoError(t, err)
+	count, err := strconv.Atoi(row[0].(string))
+	require.NoError(t, err)
+	require.GreaterOrEqualf(t, count, 1, "was vectorized fast-path not used?")
 
 	// Reset and make sure we use 1 batch.
 	kvserverbase.MaxCommandSize.Override(ctx, &s.ClusterSettings().SV, kvserverbase.MaxCommandSizeDefault)

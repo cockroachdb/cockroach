@@ -548,8 +548,8 @@ func (f *jobFeed) HighWaterMark() (hlc.Timestamp, error) {
 	return hwm, nil
 }
 
-// TickHighWaterMark implements the TestFeed interface.
-func (f *jobFeed) TickHighWaterMark(minHWM hlc.Timestamp) error {
+// WaitForHighWaterMark implements the TestFeed interface.
+func (f *jobFeed) WaitForHighWaterMark(minHWM hlc.Timestamp) error {
 	return testutils.SucceedsWithinError(func() error {
 		current, err := f.HighWaterMark()
 		if err != nil {
@@ -559,7 +559,7 @@ func (f *jobFeed) TickHighWaterMark(minHWM hlc.Timestamp) error {
 			return nil
 		}
 		return errors.Newf("waiting to tick: current=%s min=%s", current, minHWM)
-	}, 10*time.Second)
+	}, timeout())
 }
 
 // FetchTerminalJobErr retrieves the error message from changefeed job.
@@ -1876,12 +1876,16 @@ func (s *fakeKafkaSinkV2) Dial() error {
 				})
 			}
 
-			s.feedCh <- &sarama.ProducerMessage{
+			select {
+			case <-ctx.Done():
+				return kgo.ProduceResults{kgo.ProduceResult{Err: ctx.Err()}}
+			case s.feedCh <- &sarama.ProducerMessage{
 				Topic:     m.Topic,
 				Key:       key,
 				Value:     sarama.ByteEncoder(m.Value),
 				Partition: m.Partition,
 				Headers:   headers,
+			}:
 			}
 		}
 		return nil
@@ -2558,6 +2562,7 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 	mockServer := makeFakePubsubServer()
 
 	ss := &sinkSynchronizer{}
+	var startedConn *grpc.ClientConn
 	var mu syncutil.Mutex
 	wrapSink := func(s Sink) Sink {
 		mu.Lock() // Called concurrently due to getEventSink and getResolvedTimestampSink
@@ -2565,6 +2570,7 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 		if batchingSink, ok := s.(*batchingSink); ok {
 			if sinkClient, ok := batchingSink.client.(*pubsubSinkClient); ok {
 				conn, _ := mockServer.Dial()
+				startedConn = conn
 				mockClient, _ := pubsubv1.NewPublisherClient(context.Background(), option.WithGRPCConn(conn))
 				sinkClient.client = mockClient
 			}
@@ -2578,9 +2584,13 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 		seenTrackerMap: make(map[string]struct{}),
 		ss:             ss,
 		mockServer:     mockServer,
+		startedConn:    startedConn,
 	}
 
 	if err := p.startFeedJob(c.jobFeed, tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...); err != nil {
+		if startedConn != nil {
+			_ = startedConn.Close() // nolint:grpcconnclose
+		}
 		_ = mockServer.Close()
 		return nil, err
 	}
@@ -2595,8 +2605,9 @@ func (p *pubsubFeedFactory) Server() serverutils.ApplicationLayerInterface {
 type pubsubFeed struct {
 	*jobFeed
 	seenTrackerMap
-	ss         *sinkSynchronizer
-	mockServer *fakePubsubServer
+	ss          *sinkSynchronizer
+	mockServer  *fakePubsubServer
+	startedConn *grpc.ClientConn
 }
 
 var _ cdctest.TestFeed = (*pubsubFeed)(nil)
@@ -2694,13 +2705,13 @@ func (p *pubsubFeed) waitForMessage() error {
 }
 
 // Close implements TestFeed
-func (p *pubsubFeed) Close() error {
-	err := p.jobFeed.Close()
-	if err != nil {
-		return err
+func (p *pubsubFeed) Close() (err error) {
+	err = errors.Join(err, p.jobFeed.Close())
+	if p.startedConn != nil {
+		err = errors.Join(err, p.startedConn.Close()) // nolint:grpcconnclose
 	}
-	_ = p.mockServer.Close()
-	return nil
+	err = errors.Join(err, p.mockServer.Close())
+	return err
 }
 
 type mockPulsarServer struct {

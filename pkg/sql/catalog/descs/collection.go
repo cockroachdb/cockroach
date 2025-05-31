@@ -258,6 +258,15 @@ func (tc *Collection) HasUncommittedDescriptors() bool {
 	return tc.uncommitted.uncommitted.Len() > 0
 }
 
+// IsNewUncommitedDescriptor returns true if the descriptor is newly created
+// within this txn.
+func (tc *Collection) IsNewUncommitedDescriptor(id descpb.ID) bool {
+	if desc := tc.uncommitted.mutable.Get(id); desc != nil && desc.(catalog.MutableDescriptor).IsNew() {
+		return true
+	}
+	return false
+}
+
 // HasUncommittedNewOrDroppedDescriptors returns true if the collection contains
 // any uncommitted descriptors that are newly created or dropped.
 func (tc *Collection) HasUncommittedNewOrDroppedDescriptors() bool {
@@ -334,8 +343,9 @@ func (tc *Collection) WriteDescToBatch(
 	}
 	desc.MaybeIncrementVersion()
 	// Replicated PCR descriptors cannot be modified unless the collection
-	// is setup for updating them.
-	if !tc.readerCatalogSetup && desc.GetReplicatedPCRVersion() != 0 {
+	// is setup for updating them. If write validation is disabled then, allow
+	// PCR reader catalog descriptors to be modified, otherwise repair is impossible.
+	if !tc.readerCatalogSetup && desc.GetReplicatedPCRVersion() != 0 && !tc.skipValidationOnWrite {
 		return pgerror.Newf(pgcode.ReadOnlySQLTransaction,
 			"replicated %s %s (%d) cannot be mutated",
 			desc.GetObjectTypeString(),
@@ -492,6 +502,11 @@ func (tc *Collection) WriteCommentToBatch(
 			tree.NewDInt(tree.DInt(key.SubID)),
 			tree.NewDString(oldCmt),
 		}
+	}
+
+	// Validate the values being used when updating the table.
+	if !catalogkeys.IsValidCommentType(key.CommentType) {
+		return errors.AssertionFailedf("invalid comment type %d", key.CommentType)
 	}
 
 	var err error

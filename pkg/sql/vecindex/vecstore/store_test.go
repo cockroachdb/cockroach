@@ -16,15 +16,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/commontest"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -39,6 +42,9 @@ import (
 type testStore struct {
 	*Store
 
+	kvDB      *kv.DB
+	codec     keys.SQLCodec
+	tableDesc catalog.TableDescriptor
 	inserted  int64
 	usePrefix bool
 	runner    *sqlutils.SQLRunner
@@ -46,10 +52,6 @@ type testStore struct {
 
 func (ts *testStore) AllowMultipleTrees() bool {
 	return ts.usePrefix
-}
-
-func (ts *testStore) SupportsTry() bool {
-	return false
 }
 
 func (ts *testStore) MakeTreeKey(t *testing.T, treeID int) cspann.TreeKey {
@@ -66,6 +68,22 @@ func (ts *testStore) InsertVector(t *testing.T, treeID int, vec vector.T) cspann
 	// below.
 	ts.inserted++
 	return keys.MakeFamilyKey(encoding.EncodeVarintAscending([]byte{}, ts.inserted), 0 /* famID */)
+}
+
+func (ts *testStore) Close(t *testing.T) {
+	// Validate that all index keys are suffixed by the zero byte (136 in
+	// encoded form). This is required for KV splits to work properly.
+	validate := func(indexID descpb.IndexID) {
+		prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(ts.codec, ts.tableDesc.GetID(), indexID))
+		keyVals, err := ts.kvDB.Scan(context.Background(), prefix, prefix.PrefixEnd(), 0)
+		require.NoError(t, err)
+		for _, kv := range keyVals {
+			require.Equal(t, byte(136), kv.Key[len(kv.Key)-1])
+		}
+	}
+
+	validate(42)
+	validate(43)
 }
 
 func TestStore(t *testing.T) {
@@ -104,7 +122,8 @@ func TestStore(t *testing.T) {
 		require.NoError(t, err)
 
 		indexDesc1 := descpb.IndexDescriptor{
-			ID: 42, Name: "t_idx1",
+			ID:                  42,
+			Name:                "t_idx1",
 			Type:                idxtype.VECTOR,
 			KeyColumnIDs:        []descpb.ColumnID{vCol.GetID()},
 			KeyColumnNames:      []string{vCol.GetName()},
@@ -115,7 +134,8 @@ func TestStore(t *testing.T) {
 		}
 
 		indexDesc2 := descpb.IndexDescriptor{
-			ID: 43, Name: "t_idx2",
+			ID:                  43,
+			Name:                "t_idx2",
 			Type:                idxtype.VECTOR,
 			KeyColumnIDs:        []descpb.ColumnID{prefixCol.GetID(), vCol.GetID()},
 			KeyColumnNames:      []string{prefixCol.GetName(), vCol.GetName()},
@@ -131,6 +151,7 @@ func TestStore(t *testing.T) {
 		}
 
 		store, err := NewWithColumnID(
+			ctx,
 			internalDB,
 			quantizer,
 			codec,
@@ -143,7 +164,15 @@ func TestStore(t *testing.T) {
 		// Use CONSISTENT reads to ensure test is deterministic.
 		store.SetMinimumConsistency(kvpb.CONSISTENT)
 
-		return &testStore{Store: store, usePrefix: usePrefix, runner: runner}
+		return &testStore{
+			Store: store,
+
+			kvDB:      kvDB,
+			codec:     srv.ApplicationLayer().Codec(),
+			tableDesc: tableDesc,
+			usePrefix: usePrefix,
+			runner:    runner,
+		}
 	}
 
 	// Run tests with a non-prefixed index.
@@ -156,37 +185,29 @@ func TestStore(t *testing.T) {
 	// Ensure that races to create partition metadata either do not error, or
 	// they error with WriteTooOldError.
 	t.Run("race to create partition metadata", func(t *testing.T) {
-		store := makeStore(quantize.NewUnQuantizer(2)).(*testStore)
+		store := makeStore(quantize.NewUnQuantizer(2, vecdist.L2Squared)).(*testStore)
 
 		var done atomic.Int64
 		getMetadata := func(treeKey cspann.TreeKey) {
-			var err error
-			tx, err := store.BeginTransaction(ctx)
-			require.NoError(t, err)
-			defer func() {
+			_ = store.RunTransaction(ctx, func(txn cspann.Txn) error {
+				// Enable stepping in the txn, which is what SQL does.
+				txn.(*Txn).kv.ConfigureStepping(ctx, kv.SteppingEnabled)
+
+				_, err := txn.GetPartitionMetadata(ctx, treeKey, cspann.RootKey, true /* forUpdate */)
 				if err != nil {
-					err = store.AbortTransaction(ctx, tx)
+					// Returning the error will cause the transaction to abort.
+					require.ErrorContains(t, err, "WriteTooOldError")
+					done.Store(1)
+					return err
 				}
-			}()
 
-			// Enable stepping in the txn, which is what SQL does.
-			tx.(*Txn).kv.ConfigureStepping(ctx, kv.SteppingEnabled)
-
-			_, err = tx.GetPartitionMetadata(ctx, treeKey, cspann.RootKey, true /* forUpdate */)
-			if err != nil {
-				require.ErrorContains(t, err, "WriteTooOldError")
-				done.Store(1)
-				return
-			}
-
-			// Run GetPartitionMetadata again, to ensure that it succeeds, as a
-			// way of simulating multiple vectors being inserted in the same
-			// SQL statement.
-			_, err = tx.GetPartitionMetadata(ctx, treeKey, cspann.RootKey, true /* forUpdate */)
-			require.NoError(t, err)
-
-			err = store.CommitTransaction(ctx, tx)
-			require.NoError(t, err)
+				// Run GetPartitionMetadata again, to ensure that it succeeds, as a
+				// way of simulating multiple vectors being inserted in the same
+				// SQL statement.
+				_, err = txn.GetPartitionMetadata(ctx, treeKey, cspann.RootKey, true /* forUpdate */)
+				require.NoError(t, err)
+				return nil
+			})
 		}
 
 		for i := range 100 {
@@ -233,14 +254,12 @@ func TestQuantizeAndEncode(t *testing.T) {
 	vec2 := vector.T{-1.0, -2.0, -3.0, -4.0}
 	centroid := vector.T{0.0, 0.0, 0.0, 0.0}
 
-	// Create a RaBitQuantizer.
-	quantizer := quantize.NewRaBitQuantizer(dims, seed)
+	// Create quantizers.
+	rootQuantizer := quantize.NewUnQuantizer(dims, vecdist.L2Squared)
+	quantizer := quantize.NewRaBitQuantizer(dims, seed, vecdist.L2Squared)
 
-	// Create a transaction.
-	tx := &Txn{
-		codec:     makeStoreCodec(quantizer),
-		rootCodec: makeStoreCodec(quantize.NewUnQuantizer(dims)),
-	}
+	// Create a transaction and metadata.
+	tx := &Txn{codec: makePartitionCodec(rootQuantizer, quantizer)}
 
 	// Test encoding with non-root partition key (uses RaBitQuantizer).
 	partitionKey := cspann.PartitionKey(123)
@@ -249,11 +268,11 @@ func TestQuantizeAndEncode(t *testing.T) {
 	require.NotEmpty(t, encoded1)
 
 	// Verify we can decode the encoded vector.
-	codec := tx.getCodecForPartitionKey(partitionKey)
-	codec.clear(1, centroid)
-	_, err = codec.decodeVector(encoded1)
+	codec := makeStoreCodec(quantizer)
+	codec.Init(centroid, 1)
+	_, err = codec.DecodeVector(encoded1)
 	require.NoError(t, err)
-	vs := codec.getVectorSet().(*quantize.RaBitQuantizedVectorSet)
+	vs := codec.GetVectorSet().(*quantize.RaBitQuantizedVectorSet)
 	require.Equal(t, 1, vs.GetCount())
 
 	// Encode a different vector with root partition key (uses UnQuantizer).
@@ -262,10 +281,10 @@ func TestQuantizeAndEncode(t *testing.T) {
 	require.NotEmpty(t, encoded2)
 
 	// Verify we can decode the encoded vector.
-	codec = tx.getCodecForPartitionKey(partitionKey)
-	codec.clear(1, centroid)
-	_, err = codec.decodeVector(encoded1)
+	codec = makeStoreCodec(rootQuantizer)
+	codec.Init(centroid, 1)
+	_, err = codec.DecodeVector(encoded2)
 	require.NoError(t, err)
-	vs = codec.getVectorSet().(*quantize.RaBitQuantizedVectorSet)
-	require.Equal(t, 1, vs.GetCount())
+	vs2 := codec.GetVectorSet().(*quantize.UnQuantizedVectorSet)
+	require.Equal(t, 1, vs2.GetCount())
 }

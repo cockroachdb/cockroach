@@ -9,6 +9,7 @@ go_library(
         "//pkg/keys",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/util/metamorphic",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

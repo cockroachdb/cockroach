@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -57,6 +58,18 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 	); err != nil {
 		return nil, err
 	}
+
+	// Check if sql_safe_updates is enabled and this is a vector index
+	if n.Type == idxtype.VECTOR {
+		if !p.EvalContext().Settings.Version.ActiveVersion(ctx).AtLeast(clusterversion.V25_2.Version()) {
+			return nil, pgerror.Newf(pgcode.FeatureNotSupported, "cannot create a vector index until finalizing on 25.2")
+		} else if p.EvalContext().SessionData().SafeUpdates {
+			return nil, pgerror.DangerousStatementf("CREATE VECTOR INDEX will disable writes to the table while the index is being built")
+		} else {
+			p.BufferClientNotice(ctx, pgnotice.Newf("CREATE VECTOR INDEX will disable writes to the table while the index is being built"))
+		}
+	}
+
 	_, tableDesc, err := p.ResolveMutableTableDescriptor(
 		ctx, &n.Table, true /*required*/, tree.ResolveRequireTableOrViewDesc,
 	)
@@ -90,7 +103,7 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 	}
 
 	// Disallow schema changes if this table's schema is locked.
-	if err := checkSchemaChangeIsAllowed(tableDesc, n); err != nil {
+	if err := p.checkSchemaChangeIsAllowed(ctx, tableDesc, n); err != nil {
 		return nil, err
 	}
 
@@ -238,13 +251,29 @@ func makeIndexDescriptor(
 	}
 
 	if n.Type == idxtype.VECTOR {
+		// Disable vector indexes by default in 25.2.
+		// TODO(andyk): Remove this check after 25.2.
+		if err = vecindex.CheckEnabled(&params.EvalContext().Settings.SV); err != nil {
+			return nil, err
+		}
+
 		vecCol := columns[len(columns)-1]
+		switch vecCol.OpClass {
+		case "vector_l2_ops", "":
+			// vector_l2_ops is the default operator class. This allows users to omit
+			// the operator class in index definitions.
+		case "vector_l1_ops", "vector_ip_ops", "vector_cosine_ops",
+			"bit_hamming_ops", "bit_jaccard_ops":
+			return nil, unimplemented.NewWithIssuef(144016,
+				"operator class %v is not supported", vecCol.OpClass)
+		default:
+			return nil, newUndefinedOpclassError(vecCol.OpClass)
+		}
 		column, err := catalog.MustFindColumnByTreeName(tableDesc, vecCol.Column)
 		if err != nil {
 			return nil, err
 		}
-		indexDesc.VecConfig.Dims = column.GetType().Width()
-		indexDesc.VecConfig.Seed = params.extendedEvalCtx.GetRNG().Int63()
+		indexDesc.VecConfig = vecindex.MakeVecConfig(params.EvalContext(), column.GetType())
 	}
 
 	if n.Sharded != nil {
@@ -356,7 +385,7 @@ func checkIndexColumns(
 		}
 		if colDef.OpClass != "" && (i < len(columns)-1 || !indexType.SupportsOpClass()) {
 			return pgerror.New(pgcode.DatatypeMismatch,
-				"operator classes are only allowed for the last column of an inverted index")
+				"operator classes are only allowed for the last column of an inverted or vector index")
 		}
 	}
 	for i, colName := range storing {

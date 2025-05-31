@@ -205,6 +205,9 @@ func (tr *tableReader) Start(ctx context.Context) {
 }
 
 func (tr *tableReader) startScan(ctx context.Context) error {
+	if cb := tr.FlowCtx.Cfg.TestingKnobs.TableReaderStartScanCb; cb != nil {
+		cb()
+	}
 	limitBatches := !tr.parallelize
 	var bytesLimit rowinfra.BytesLimit
 	if !limitBatches {

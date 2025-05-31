@@ -31,9 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -67,7 +67,7 @@ import (
 	"github.com/cockroachdb/pebble/tool"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/ttycolor"
-	humanize "github.com/dustin/go-humanize"
+	"github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/kr/pretty"
 	"github.com/spf13/cobra"
@@ -312,13 +312,13 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 			}
 			return strings.Join(pairs, ", "), nil
 		}
-		kvserver.DebugSprintMVCCKeyValueDecoders = append(kvserver.DebugSprintMVCCKeyValueDecoders, fn)
+		print.DebugSprintMVCCKeyValueDecoders = append(print.DebugSprintMVCCKeyValueDecoders, fn)
 	}
 	printer := printKey
 	rangeKeyPrinter := printRangeKey
 	if debugCtx.values {
-		printer = kvserver.PrintMVCCKeyValue
-		rangeKeyPrinter = kvserver.PrintMVCCRangeKeyValue
+		printer = print.PrintMVCCKeyValue
+		rangeKeyPrinter = print.PrintMVCCRangeKeyValue
 	}
 
 	keyTypeOptions := keyTypeParams[debugCtx.keyTypes]
@@ -495,43 +495,49 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	defer snapshot.Close()
 
 	var results int
-	return rditer.IterateReplicaKeySpans(cmd.Context(), &desc, snapshot, debugCtx.replicated,
-		rditer.ReplicatedSpansAll,
-		func(iter storage.EngineIterator, _ roachpb.Span) error {
-			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
-				hasPoint, hasRange := iter.HasPointAndRange()
-				if hasPoint {
-					key, err := iter.UnsafeEngineKey()
-					if err != nil {
-						return err
-					}
-					v, err := iter.UnsafeValue()
-					if err != nil {
-						return err
-					}
-					kvserver.PrintEngineKeyValue(key, v)
+	return rditer.IterateReplicaKeySpans(cmd.Context(), &desc, snapshot, rditer.SelectOpts{
+		Ranged: rditer.SelectRangedOptions{
+			SystemKeys: true,
+			LockTable:  true,
+			UserKeys:   true,
+		},
+		ReplicatedByRangeID:   true,
+		UnreplicatedByRangeID: !debugCtx.replicated,
+	}, func(iter storage.EngineIterator, _ roachpb.Span) error {
+		for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
+			hasPoint, hasRange := iter.HasPointAndRange()
+			if hasPoint {
+				key, err := iter.UnsafeEngineKey()
+				if err != nil {
+					return err
+				}
+				v, err := iter.UnsafeValue()
+				if err != nil {
+					return err
+				}
+				print.PrintEngineKeyValue(key, v)
+				results++
+				if results == debugCtx.maxResults {
+					return iterutil.StopIteration()
+				}
+			}
+
+			if hasRange && iter.RangeKeyChanged() {
+				bounds, err := iter.EngineRangeBounds()
+				if err != nil {
+					return err
+				}
+				for _, v := range iter.EngineRangeKeys() {
+					print.PrintEngineRangeKeyValue(bounds, v)
 					results++
 					if results == debugCtx.maxResults {
 						return iterutil.StopIteration()
 					}
 				}
-
-				if hasRange && iter.RangeKeyChanged() {
-					bounds, err := iter.EngineRangeBounds()
-					if err != nil {
-						return err
-					}
-					for _, v := range iter.EngineRangeKeys() {
-						kvserver.PrintEngineRangeKeyValue(bounds, v)
-						results++
-						if results == debugCtx.maxResults {
-							return iterutil.StopIteration()
-						}
-					}
-				}
 			}
-			return err
-		})
+		}
+		return err
+	})
 }
 
 var debugRangeDescriptorsCmd = &cobra.Command{
@@ -553,7 +559,7 @@ func loadRangeDescriptor(
 			// We only want values, not MVCCMetadata.
 			return nil
 		}
-		if err := kvserver.IsRangeDescriptorKey(kv.Key); err != nil {
+		if err := print.IsRangeDescriptorKey(kv.Key); err != nil {
 			// Range descriptor keys are interleaved with others, so if it
 			// doesn't parse as a range descriptor just skip it.
 			return nil //nolint:returnerrcheck
@@ -609,10 +615,10 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	return db.MVCCIterate(cmd.Context(), start, end, storage.MVCCKeyAndIntentsIterKind,
 		storage.IterKeyTypePointsOnly, fs.UnknownReadCategory,
 		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
-			if kvserver.IsRangeDescriptorKey(kv.Key) != nil {
+			if print.IsRangeDescriptorKey(kv.Key) != nil {
 				return nil
 			}
-			kvserver.PrintMVCCKeyValue(kv)
+			print.PrintMVCCKeyValue(kv)
 			return nil
 		})
 }
@@ -693,7 +699,7 @@ Decode and print a hexadecimal-encoded key-value pair.
 			//   is already a roachpb.Key, so make a half-assed attempt to support both.
 			if !isTS {
 				if k, ok := storage.DecodeEngineKey(bs[0]); ok {
-					kvserver.PrintEngineKeyValue(k, bs[1])
+					print.PrintEngineKeyValue(k, bs[1])
 					return nil
 				}
 				fmt.Printf("unable to decode key: %v, assuming it's a roachpb.Key with fake timestamp;\n"+
@@ -705,7 +711,7 @@ Decode and print a hexadecimal-encoded key-value pair.
 			}
 		}
 
-		kvserver.PrintMVCCKeyValue(storage.MVCCKeyValue{
+		print.PrintMVCCKeyValue(storage.MVCCKeyValue{
 			Key:   k,
 			Value: bs[1],
 		})
@@ -787,7 +793,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 	return db.MVCCIterate(cmd.Context(), start, end, storage.MVCCKeyIterKind,
 		storage.IterKeyTypePointsOnly, fs.UnknownReadCategory,
 		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
-			kvserver.PrintMVCCKeyValue(kv)
+			print.PrintMVCCKeyValue(kv)
 			return nil
 		})
 }
@@ -878,24 +884,25 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	for _, desc := range descs {
-		snap := db.NewSnapshot()
-		//nolint:deferloop TODO(#137605)
-		defer snap.Close()
-		now := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		thresh := gc.CalculateThreshold(now, gcTTL)
-		info, err := gc.Run(
-			context.Background(),
-			&desc, snap,
-			now, thresh,
-			gc.RunOptions{
-				LockAgeThreshold:              lockAgeThreshold,
-				MaxLocksPerIntentCleanupBatch: lockBatchSize,
-				TxnCleanupThreshold:           txnCleanupThreshold,
-			},
-			gcTTL, gc.NoopGCer{},
-			func(_ context.Context, _ []roachpb.Lock) error { return nil },
-			func(_ context.Context, _ *roachpb.Transaction) error { return nil },
-		)
+		info, err := func() (gc.Info, error) {
+			snap := db.NewSnapshot()
+			defer snap.Close()
+			now := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+			thresh := gc.CalculateThreshold(now, gcTTL)
+			return gc.Run(
+				context.Background(),
+				&desc, snap,
+				now, thresh,
+				gc.RunOptions{
+					LockAgeThreshold:              lockAgeThreshold,
+					MaxLocksPerIntentCleanupBatch: lockBatchSize,
+					TxnCleanupThreshold:           txnCleanupThreshold,
+				},
+				gcTTL, gc.NoopGCer{},
+				func(_ context.Context, _ []roachpb.Lock) error { return nil },
+				func(_ context.Context, _ *roachpb.Transaction) error { return nil },
+			)
+		}()
 		if err != nil {
 			return err
 		}
@@ -972,7 +979,7 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 	// Begin compacting the store in a separate goroutine.
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- errors.Wrap(db.Compact(), "while compacting")
+		errCh <- errors.Wrap(db.Compact(context.Background()), "while compacting")
 	}()
 
 	// Print the current LSM every minute.
@@ -1380,7 +1387,7 @@ func (m mvccValueFormatter) Format(f fmt.State, c rune) {
 		errors.FormatError(m.err, f, c)
 		return
 	}
-	fmt.Fprint(f, kvserver.SprintMVCCKeyValue(m.kv, false /* printKey */))
+	fmt.Fprint(f, print.SprintMVCCKeyValue(m.kv, false /* printKey */))
 }
 
 // lockValueFormatter is a fmt.Formatter for lock values.
@@ -1390,7 +1397,7 @@ type lockValueFormatter struct {
 
 // Format implements the fmt.Formatter interface.
 func (m lockValueFormatter) Format(f fmt.State, c rune) {
-	fmt.Fprint(f, kvserver.SprintIntent(m.value))
+	fmt.Fprint(f, print.SprintIntent(m.value))
 }
 
 // pebbleToolFS is the vfs.FS that the pebble tool should use.
@@ -1603,6 +1610,7 @@ func init() {
 	f.StringVar(&debugTimeSeriesDumpOpts.zendeskTicket, "zendesk-ticket", "", "zendesk ticket to use in datadog upload")
 	f.StringVar(&debugTimeSeriesDumpOpts.organizationName, "org-name", "", "organization name to use in datadog upload")
 	f.StringVar(&debugTimeSeriesDumpOpts.userName, "user-name", "", "name of the user to perform datadog upload")
+	f.StringVar(&debugTimeSeriesDumpOpts.storeToNodeMapYAMLFile, "store-to-node-map-file", "", "yaml file path which contains the mapping of store ID to node ID for datadog upload.")
 
 	f = debugSendKVBatchCmd.Flags()
 	f.StringVar(&debugSendKVBatchContext.traceFormat, "trace", debugSendKVBatchContext.traceFormat,

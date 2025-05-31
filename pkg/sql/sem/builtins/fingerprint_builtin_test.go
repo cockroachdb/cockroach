@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
@@ -286,4 +287,46 @@ func TestFingerprintStripped(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, fingerprints["test"], fingerprints["test2"])
+}
+
+// TestFingerprintCancellation verifies that all goroutines used by the
+// fingerprint builtin respect the cancellation signal. It's a regression for
+// #146320.
+func TestFingerprintCancellation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	rng, _ := randutil.NewTestRand()
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Create a table with decent number of ranges with some data in each range.
+	db.Exec(t, "CREATE TABLE t_cancel (k INT PRIMARY KEY, blob STRING)")
+	db.Exec(t, "INSERT INTO t_cancel SELECT i, repeat(i::STRING, 10000) FROM generate_series(1, 1000) AS g(i)")
+	db.Exec(t, "ALTER TABLE t_cancel SPLIT AT SELECT generate_series(1, 1000, 50)")
+
+	const query = `
+SELECT *
+FROM
+	crdb_internal.fingerprint(
+		crdb_internal.table_span((SELECT id FROM system.namespace WHERE name = 't_cancel')),
+		0::TIMESTAMPTZ,
+		false
+	)
+`
+	// Run the query a few times with different statement timeout.
+	conn, err := sqlDB.Conn(ctx)
+	require.NoError(t, err)
+	for i := 0; i < 5; i++ {
+		timeout := rng.Intn(30) + 1
+		_, err = conn.ExecContext(ctx, fmt.Sprintf("SET statement_timeout = '%dms'", timeout))
+		require.NoError(t, err)
+		_, err = conn.ExecContext(ctx, query)
+		// No error is ok, only an unexpected error is problematic.
+		if err != nil {
+			require.ErrorContains(t, err, "query execution canceled")
+		}
+	}
 }

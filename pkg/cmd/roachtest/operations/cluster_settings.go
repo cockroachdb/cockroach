@@ -108,6 +108,12 @@ func registerClusterSettings(r registry.Registry) {
 			Generator: timeBasedValues(timeutil.Now, []string{"true", "false"}, 12*time.Hour),
 			Owner:     registry.OwnerObservability,
 		},
+		{
+			// Periodically switch between two transaction protocol variants.
+			Name:      "kv.transaction.write_buffering.enabled",
+			Generator: timeBasedValues(timeutil.Now, []string{"true", "false"}, 6*time.Hour),
+			Owner:     registry.OwnerKV,
+		},
 	}
 	sanitizeOpName := func(name string) string {
 		return strings.ReplaceAll(name, ".", "_")

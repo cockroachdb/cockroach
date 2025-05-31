@@ -7,6 +7,7 @@ package storage
 
 import (
 	"context"
+	"io"
 	"os"
 	"testing"
 
@@ -14,7 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble/vfs"
@@ -119,7 +120,7 @@ func TestMinVersion_IsNotEncrypted(t *testing.T) {
 	st := cluster.MakeClusterSettings()
 	baseFS := vfs.NewMem()
 	env, err := fs.InitEnv(ctx, baseFS, "", fs.EnvConfig{
-		EncryptionOptions: &storagepb.EncryptionOptions{},
+		EncryptionOptions: &storageconfig.EncryptionOptions{},
 	}, nil /* statsCollector */)
 	require.NoError(t, err)
 
@@ -141,7 +142,7 @@ func fauxNewEncryptedEnvFunc(
 	fr *fs.FileRegistry,
 	dbDir string,
 	readOnly bool,
-	_ *storagepb.EncryptionOptions,
+	_ *storageconfig.EncryptionOptions,
 ) (*fs.EncryptionEnv, error) {
 	return &fs.EncryptionEnv{
 		Closer: nopCloser{},
@@ -198,4 +199,48 @@ func (f fauxEncryptedFile) ReadAt(p []byte, off int64) (int, error) {
 		p[i] = p[i] - 1
 	}
 	return n, err
+}
+
+func TestSafeWriteToFile(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Use an in-memory FS that strictly enforces syncs.
+	mem := vfs.NewCrashableMem()
+	syncDir := func(dir string) {
+		fdir, err := mem.OpenDir(dir)
+		require.NoError(t, err)
+		require.NoError(t, fdir.Sync())
+		require.NoError(t, fdir.Close())
+	}
+	readFile := func(mem *vfs.MemFS, filename string) []byte {
+		f, err := mem.Open("foo/bar")
+		require.NoError(t, err)
+		b, err := io.ReadAll(f)
+		require.NoError(t, err)
+		require.NoError(t, f.Close())
+		return b
+	}
+
+	require.NoError(t, mem.MkdirAll("foo", os.ModePerm))
+	syncDir("")
+	f, err := mem.Create("foo/bar", fs.UnspecifiedWriteCategory)
+	require.NoError(t, err)
+	_, err = io.WriteString(f, "Hello world")
+	require.NoError(t, err)
+	require.NoError(t, f.Sync())
+	require.NoError(t, f.Close())
+	syncDir("foo")
+
+	// Discard any unsynced writes to make sure we set up the test
+	// preconditions correctly.
+	crashFS := mem.CrashClone(vfs.CrashCloneCfg{})
+	require.Equal(t, []byte("Hello world"), readFile(crashFS, "foo/bar"))
+
+	// Use SafeWriteToFile to atomically, durably change the contents of the
+	// file.
+	require.NoError(t, safeWriteToUnencryptedFile(crashFS, "foo", "foo/bar", []byte("Hello everyone"), fs.UnspecifiedWriteCategory))
+
+	// Discard any unsynced writes.
+	crashFS = crashFS.CrashClone(vfs.CrashCloneCfg{})
+	require.Equal(t, []byte("Hello everyone"), readFile(crashFS, "foo/bar"))
 }

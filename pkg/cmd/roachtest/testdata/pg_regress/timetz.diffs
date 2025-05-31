@@ -234,10 +234,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timetz.out --labe
  
  SELECT EXTRACT(DAY         FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');  -- error
 -ERROR:  unit "day" not supported for type time with time zone
-+ERROR:  extract(): unsupported timespan: day
++ERROR:  unsupported timespan: day
  SELECT EXTRACT(FORTNIGHT   FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');  -- error
 -ERROR:  unit "fortnight" not recognized for type time with time zone
-+ERROR:  extract(): unsupported timespan: fortnight
++ERROR:  unsupported timespan: fortnight
  SELECT EXTRACT(TIMEZONE    FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04:30');
   extract 
  ---------

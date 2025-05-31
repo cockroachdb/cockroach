@@ -59,11 +59,11 @@ var upgrades = []upgradebase.Upgrade{
 		bootstrapCluster,
 		upgrade.RestoreActionNotRequired("initialization runs before restore")),
 
-	newFirstUpgrade(clusterversion.V25_1_Start.Version()),
+	newFirstUpgrade(clusterversion.TODO_Delete_V25_1_Start.Version()),
 
 	upgrade.NewTenantUpgrade(
 		"add new jobs tables",
-		clusterversion.V25_1_AddJobsTables.Version(),
+		clusterversion.TODO_Delete_V25_1_AddJobsTables.Version(),
 		upgrade.NoPrecondition,
 		addJobsTables,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the new field"),
@@ -71,21 +71,21 @@ var upgrades = []upgradebase.Upgrade{
 
 	upgrade.NewTenantUpgrade(
 		"create prepared_transactions table",
-		clusterversion.V25_1_PreparedTransactionsTable.Version(),
+		clusterversion.TODO_Delete_V25_1_PreparedTransactionsTable.Version(),
 		upgrade.NoPrecondition,
 		createPreparedTransactionsTable,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
 	),
 	upgrade.NewTenantUpgrade(
 		"add new jobs tables",
-		clusterversion.V25_1_AddJobsColumns.Version(),
+		clusterversion.TODO_Delete_V25_1_AddJobsColumns.Version(),
 		upgrade.NoPrecondition,
 		addJobsColumns,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the new field"),
 	),
 	upgrade.NewTenantUpgrade(
 		"backfill new jobs tables",
-		clusterversion.V25_1_JobsBackfill.Version(),
+		clusterversion.TODO_Delete_V25_1_JobsBackfill.Version(),
 		upgrade.NoPrecondition,
 		backfillJobsTablesAndColumns,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore jobs tables"),
@@ -107,6 +107,24 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		setUiDefaultTimezone,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this setting"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"add 'username' column to stmt diagnostics requests table",
+		clusterversion.V25_2_AddUsernameToStmtDiagRequest.Version(),
+		upgrade.NoPrecondition,
+		stmtDiagAddUsernameMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column"),
+	),
+
+	newFirstUpgrade(clusterversion.V25_3_Start.Version()),
+
+	upgrade.NewTenantUpgrade(
+		"add 'payload' column to system.eventlog table and add new index on eventType column",
+		clusterversion.V25_3_AddEventLogColumnAndIndex.Version(),
+		upgrade.NoPrecondition,
+		eventLogTableMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column or index"),
 	),
 
 	// Note: when starting a new release version, the first upgrade (for

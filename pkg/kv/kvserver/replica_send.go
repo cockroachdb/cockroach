@@ -428,7 +428,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 	for {
 		// Exit loop if context has been canceled or timed out.
 		if err := ctx.Err(); err != nil {
-			return nil, nil, kvpb.NewError(errors.Wrap(err, "aborted during Replica.Send"))
+			return nil, nil, kvpb.NewError(err)
 		}
 
 		// Determine the maximal set of key spans that the batch will operate on.
@@ -986,11 +986,6 @@ func (r *Replica) executeAdminBatch(
 
 	case *kvpb.AdminScatterRequest:
 		reply, err := r.adminScatter(ctx, *tArgs)
-		pErr = kvpb.NewError(err)
-		resp = &reply
-
-	case *kvpb.AdminVerifyProtectedTimestampRequest:
-		reply, err := r.adminVerifyProtectedTimestamp(ctx, *tArgs)
 		pErr = kvpb.NewError(err)
 		resp = &reply
 

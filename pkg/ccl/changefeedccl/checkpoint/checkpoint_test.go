@@ -165,10 +165,12 @@ func TestCheckpointMake(t *testing.T) {
 			if actualCheckpoint != nil {
 				require.Greater(t, aggMetrics.CreateNanos.CumulativeSnapshot().Mean(), float64(0))
 				require.Equal(t, aggMetrics.TotalBytes.CumulativeSnapshot().Mean(), float64(actualCheckpoint.Size()))
+				require.Equal(t, aggMetrics.TimestampCount.CumulativeSnapshot().Mean(), float64(actualCheckpoint.TimestampCount()))
 				require.Equal(t, aggMetrics.SpanCount.CumulativeSnapshot().Mean(), float64(actualCheckpoint.SpanCount()))
 			} else {
 				require.True(t, math.IsNaN(aggMetrics.CreateNanos.CumulativeSnapshot().Mean()))
 				require.True(t, math.IsNaN(aggMetrics.TotalBytes.CumulativeSnapshot().Mean()))
+				require.True(t, math.IsNaN(aggMetrics.TimestampCount.CumulativeSnapshot().Mean()))
 				require.True(t, math.IsNaN(aggMetrics.SpanCount.CumulativeSnapshot().Mean()))
 			}
 		})

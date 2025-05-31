@@ -13,32 +13,50 @@ Schema change plan for CREATE POLICY ‹"policy 1"› ON ‹t1› AS PERMISSIVE 
  │         │    ├── ABSENT → PUBLIC PolicyRole:{DescID: 104 (t1), Name: "public", PolicyID: 1}
  │         │    ├── ABSENT → PUBLIC PolicyUsingExpr:{DescID: 104 (t1), Expr: tenant_id = '01538898-f55c-44db-a306-89078e2c430e':::UUID, PolicyID: 1}
  │         │    └── ABSENT → PUBLIC PolicyDeps:{DescID: 104 (t1), PolicyID: 1}
- │         └── 5 Mutation operations
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (t1)}
+ │         └── 6 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── AddPolicy {"Policy":{"Command":2,"PolicyID":1,"TableID":104,"Type":1}}
  │              ├── SetPolicyName {"Name":"policy 1","PolicyID":1,"TableID":104}
  │              ├── AddPolicyRole {"Role":{"PolicyID":1,"RoleName":"public","TableID":104}}
  │              ├── SetPolicyUsingExpression {"Expr":"tenant_id = '015...","PolicyID":1,"TableID":104}
  │              └── SetPolicyForwardReferences {"Deps":{"PolicyID":1,"TableID":104}}
- └── PreCommitPhase
-      ├── Stage 1 of 2 in PreCommitPhase
-      │    ├── 5 elements transitioning toward PUBLIC
-      │    │    ├── PUBLIC → ABSENT Policy:{DescID: 104 (t1), PolicyID: 1}
-      │    │    ├── PUBLIC → ABSENT PolicyName:{DescID: 104 (t1), Name: "policy 1", PolicyID: 1}
-      │    │    ├── PUBLIC → ABSENT PolicyRole:{DescID: 104 (t1), Name: "public", PolicyID: 1}
-      │    │    ├── PUBLIC → ABSENT PolicyUsingExpr:{DescID: 104 (t1), Expr: tenant_id = '01538898-f55c-44db-a306-89078e2c430e':::UUID, PolicyID: 1}
-      │    │    └── PUBLIC → ABSENT PolicyDeps:{DescID: 104 (t1), PolicyID: 1}
-      │    └── 1 Mutation operation
-      │         └── UndoAllInTxnImmediateMutationOpSideEffects
-      └── Stage 2 of 2 in PreCommitPhase
-           ├── 5 elements transitioning toward PUBLIC
-           │    ├── ABSENT → PUBLIC Policy:{DescID: 104 (t1), PolicyID: 1}
-           │    ├── ABSENT → PUBLIC PolicyName:{DescID: 104 (t1), Name: "policy 1", PolicyID: 1}
-           │    ├── ABSENT → PUBLIC PolicyRole:{DescID: 104 (t1), Name: "public", PolicyID: 1}
-           │    ├── ABSENT → PUBLIC PolicyUsingExpr:{DescID: 104 (t1), Expr: tenant_id = '01538898-f55c-44db-a306-89078e2c430e':::UUID, PolicyID: 1}
-           │    └── ABSENT → PUBLIC PolicyDeps:{DescID: 104 (t1), PolicyID: 1}
-           └── 5 Mutation operations
-                ├── AddPolicy {"Policy":{"Command":2,"PolicyID":1,"TableID":104,"Type":1}}
-                ├── SetPolicyName {"Name":"policy 1","PolicyID":1,"TableID":104}
-                ├── AddPolicyRole {"Role":{"PolicyID":1,"RoleName":"public","TableID":104}}
-                ├── SetPolicyUsingExpression {"Expr":"tenant_id = '015...","PolicyID":1,"TableID":104}
-                └── SetPolicyForwardReferences {"Deps":{"PolicyID":1,"TableID":104}}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 5 elements transitioning toward PUBLIC
+ │    │    │    ├── PUBLIC → ABSENT Policy:{DescID: 104 (t1), PolicyID: 1}
+ │    │    │    ├── PUBLIC → ABSENT PolicyName:{DescID: 104 (t1), Name: "policy 1", PolicyID: 1}
+ │    │    │    ├── PUBLIC → ABSENT PolicyRole:{DescID: 104 (t1), Name: "public", PolicyID: 1}
+ │    │    │    ├── PUBLIC → ABSENT PolicyUsingExpr:{DescID: 104 (t1), Expr: tenant_id = '01538898-f55c-44db-a306-89078e2c430e':::UUID, PolicyID: 1}
+ │    │    │    └── PUBLIC → ABSENT PolicyDeps:{DescID: 104 (t1), PolicyID: 1}
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT → PUBLIC TableSchemaLocked:{DescID: 104 (t1)}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 5 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → PUBLIC Policy:{DescID: 104 (t1), PolicyID: 1}
+ │         │    ├── ABSENT → PUBLIC PolicyName:{DescID: 104 (t1), Name: "policy 1", PolicyID: 1}
+ │         │    ├── ABSENT → PUBLIC PolicyRole:{DescID: 104 (t1), Name: "public", PolicyID: 1}
+ │         │    ├── ABSENT → PUBLIC PolicyUsingExpr:{DescID: 104 (t1), Expr: tenant_id = '01538898-f55c-44db-a306-89078e2c430e':::UUID, PolicyID: 1}
+ │         │    └── ABSENT → PUBLIC PolicyDeps:{DescID: 104 (t1), PolicyID: 1}
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (t1)}
+ │         └── 8 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
+ │              ├── AddPolicy {"Policy":{"Command":2,"PolicyID":1,"TableID":104,"Type":1}}
+ │              ├── SetPolicyName {"Name":"policy 1","PolicyID":1,"TableID":104}
+ │              ├── AddPolicyRole {"Role":{"PolicyID":1,"RoleName":"public","TableID":104}}
+ │              ├── SetPolicyUsingExpression {"Expr":"tenant_id = '015...","PolicyID":1,"TableID":104}
+ │              ├── SetPolicyForwardReferences {"Deps":{"PolicyID":1,"TableID":104}}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ └── PostCommitPhase
+      └── Stage 1 of 1 in PostCommitPhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t1)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

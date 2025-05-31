@@ -5,7 +5,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/insert_conflict.o
  -- named collations
  --
  create unique index op_index_key on insertconflicttest(key, fruit text_pattern_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  create unique index collation_index_key on insertconflicttest(key, fruit collate "C");
 +ERROR:  at or near "collate": syntax error
 +DETAIL:  source SQL:

@@ -40,6 +40,7 @@ go_test(
         "//pkg/util/metric",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
+        "//pkg/workload/workloadimpl",
         "//pkg/workload/ycsb",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//assert",

@@ -338,7 +338,7 @@ func (s storage) release(
 // a version of the descriptor. A descriptorVersionState with the
 // expiration time set to expiration is returned.
 //
-// This returns an error when Replica.checkTSAboveGCThresholdRLocked()
+// This returns an error when Replica.checkTSAboveGCThreshold()
 // returns an error when the expiration timestamp is less than the storage
 // layer GC threshold.
 func (s storage) getForExpiration(

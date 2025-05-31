@@ -204,6 +204,7 @@ func init() {
 var StartCompactionJob func(
 	ctx context.Context,
 	planner interface{},
+	scheduleID jobspb.ScheduleID,
 	collectionURI, incrLoc []string,
 	fullBackupPath string,
 	encryptionOpts jobspb.BackupEncryptionOptions,
@@ -421,11 +422,11 @@ var regularBuiltins = map[string]builtinDefinition{
 				}
 
 				// If count is negative, return the last 'abs(count)' parts joined by delim
-				count = -count
-				if count >= length {
+				if -count >= length || count == math.MinInt {
 					return tree.NewDString(input), nil // If count exceeds occurrences, return the full string
 				}
-				return tree.NewDString(strings.Join(parts[length-count:], delim)), nil
+				start := length + count // count is negative
+				return tree.NewDString(strings.Join(parts[start:], delim)), nil
 			},
 			Info: "Returns a substring of `input` before `count` occurrences of `delim`.\n" +
 				"If `count` is positive, the leftmost part is returned. If `count` is negative, the rightmost part is returned.",
@@ -1189,7 +1190,7 @@ var regularBuiltins = map[string]builtinDefinition{
 				}
 
 				splits := strings.Split(text, sep)
-				if field > len(splits) || -1*field > len(splits) {
+				if field > len(splits) || (field < 0 && field < -len(splits)) {
 					return tree.NewDString(""), nil
 				}
 
@@ -4181,11 +4182,148 @@ value if you rely on the HLC for accuracy.`,
 			Volatility: volatility.Immutable,
 		},
 	),
-	"jsonb_path_exists_opr":  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
-	"jsonb_path_match":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
-	"jsonb_path_match_opr":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
-	"jsonb_path_query_array": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
-	"jsonb_path_query_first": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
+	"jsonb_path_exists_opr": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
+	"jsonb_path_match": makeBuiltin(jsonpathProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "target", Typ: types.Jsonb},
+				{Name: "path", Typ: types.Jsonpath},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn:         makeJsonpathMatch,
+			Info: `Returns the SQL boolean result of a JSON path predicate check
+			for the specified JSON value. (This is useful only with predicate check
+			expressions, not SQL-standard JSON path expressions, since it will
+			either fail or return NULL if the path result is not a single boolean
+			value.)`,
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "target", Typ: types.Jsonb},
+				{Name: "path", Typ: types.Jsonpath},
+				{Name: "vars", Typ: types.Jsonb},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn:         makeJsonpathMatch,
+			Info: `Returns the SQL boolean result of a JSON path predicate check
+			for the specified JSON value. (This is useful only with predicate check
+			expressions, not SQL-standard JSON path expressions, since it will
+			either fail or return NULL if the path result is not a single boolean
+			value.) The vars argument must be a JSON object, and its fields provide
+			named values to be substituted into the jsonpath expression.`,
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "target", Typ: types.Jsonb},
+				{Name: "path", Typ: types.Jsonpath},
+				{Name: "vars", Typ: types.Jsonb},
+				{Name: "silent", Typ: types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn:         makeJsonpathMatch,
+			Info: `Returns the SQL boolean result of a JSON path predicate check
+			for the specified JSON value. (This is useful only with predicate check
+			expressions, not SQL-standard JSON path expressions, since it will
+			either fail or return NULL if the path result is not a single boolean
+			value.) The vars argument must be a JSON object, and its fields provide
+			named values to be substituted into the jsonpath expression. If the
+			silent argument is true, the function suppresses the following errors:
+			missing object field or array element, unexpected JSON item type,
+			datetime and numeric errors.`,
+			Volatility: volatility.Immutable,
+		},
+	),
+	"jsonb_path_match_opr": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
+	"jsonb_path_query_array": makeBuiltin(jsonpathProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "target", Typ: types.Jsonb},
+				{Name: "path", Typ: types.Jsonpath},
+			},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn:         makeJsonpathQueryArray,
+			Info: `Returns all JSON items returned by the JSON path for the
+			specified JSON value, as a JSON array.`,
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "target", Typ: types.Jsonb},
+				{Name: "path", Typ: types.Jsonpath},
+				{Name: "vars", Typ: types.Jsonb},
+			},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn:         makeJsonpathQueryArray,
+			Info: `Returns all JSON items returned by the JSON path for the
+			specified JSON value, as a JSON array. The vars argument must be a
+			JSON object, and its fields provide named values to be substituted
+			into the jsonpath expression.`,
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "target", Typ: types.Jsonb},
+				{Name: "path", Typ: types.Jsonpath},
+				{Name: "vars", Typ: types.Jsonb},
+				{Name: "silent", Typ: types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn:         makeJsonpathQueryArray,
+			Info: `Returns all JSON items returned by the JSON path for the
+			specified JSON value, as a JSON array. The vars argument must be a
+			JSON object, and its fields provide named values to be substituted
+			into the jsonpath expression. If the silent argument is true, the
+			function suppresses the following errors: missing object field or
+			array element, unexpected JSON item type, datetime and numeric errors.`,
+			Volatility: volatility.Immutable,
+		},
+	),
+	"jsonb_path_query_first": makeBuiltin(jsonpathProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "target", Typ: types.Jsonb},
+				{Name: "path", Typ: types.Jsonpath},
+			},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn:         makeJsonpathQueryFirst,
+			Info: `Returns the first JSON item returned by the JSON path for the
+			specified JSON value, or NULL if there are no results.`,
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "target", Typ: types.Jsonb},
+				{Name: "path", Typ: types.Jsonpath},
+				{Name: "vars", Typ: types.Jsonb},
+			},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn:         makeJsonpathQueryFirst,
+			Info: `Returns the first JSON item returned by the JSON path for the
+			specified JSON value, or NULL if there are no results. The vars
+			argument must be a JSON object, and its fields provide named values
+			to be substituted into the jsonpath expression.`,
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "target", Typ: types.Jsonb},
+				{Name: "path", Typ: types.Jsonpath},
+				{Name: "vars", Typ: types.Jsonb},
+				{Name: "silent", Typ: types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn:         makeJsonpathQueryFirst,
+			Info: `Returns the first JSON item returned by the JSON path for the
+			specified JSON value, or NULL if there are no results. The vars
+			argument must be a JSON object, and its fields provide named values
+			to be substituted into the jsonpath expression. If the silent argument is true, the
+			function suppresses the following errors: missing object field or
+			array element, unexpected JSON item type, datetime and numeric errors.`,
+			Volatility: volatility.Immutable,
+		},
+	),
 
 	"json_remove_path": makeBuiltin(jsonProps(),
 		tree.Overload{
@@ -5834,12 +5972,33 @@ SELECT
 					msg += strconv.Itoa(len(msg) / len(foo))
 				case "contextCanceled":
 					panic(context.Canceled)
+				case "stackOverflow":
+					// Cause a stack overflow with infinite recursion.
+					var recurse func(int) int
+					recurse = func(i int) int {
+						if i < 0 {
+							return i
+						}
+						return recurse(i+1) + recurse(i+2) // avoid TCO
+					}
+					return tree.NewDInt(tree.DInt(recurse(0))), nil
+				case "oom":
+					var mem [][]byte
+					// Try to allocate 128 TiB of memory.
+					for range 1024 * 1024 {
+						block := make([]byte, 128*1024*1024) // 128 MiB
+						for j := range 32 * 1024 {
+							block[j*4*1024] = 0xaa // touch each 4 KiB page
+						}
+						mem = append(mem, block)
+					}
+					return tree.NewDInt(tree.DInt(len(mem))), nil
 				default:
 					return nil, errors.Newf(
-						"expected mode to be one of: internalAssertion, indexOutOfRange, divideByZero, contextCanceled",
+						"expected mode to be one of: internalAssertion, indexOutOfRange, divideByZero, " +
+							"contextCanceled, stackOverflow, oom",
 					)
 				}
-				// This code is unreachable.
 				panic(msg)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
@@ -7617,32 +7776,6 @@ table's zone configuration this will return NULL.`,
 			Volatility: volatility.Volatile,
 		},
 	),
-	"crdb_internal.reset_insights_tables": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
-		},
-		tree.Overload{
-			Types:      tree.ParamTypes{},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
-				); err != nil {
-					return nil, err
-				}
-				if evalCtx.SQLStatsController == nil {
-					return nil, errors.AssertionFailedf("sql stats controller not set")
-				}
-				if err := evalCtx.SQLStatsController.ResetInsightsTables(ctx); err != nil {
-					return nil, err
-				}
-				return tree.MakeDBool(true), nil
-			},
-			Info:       `This function is used to clear the statement and transaction insights statistics.`,
-			Volatility: volatility.Volatile,
-		},
-	),
 	// Deletes the underlying spans backing a table, only
 	// if the user provides explicit acknowledgement of the
 	// form "I acknowledge this will irrevocably delete all revisions
@@ -7870,7 +8003,8 @@ in the current database. Returns an error if validation fails.`,
 
 	"crdb_internal.revalidate_unique_constraints_in_table": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "table_name", Typ: types.String}},
@@ -7894,7 +8028,8 @@ table. Returns an error if validation fails.`,
 
 	"crdb_internal.revalidate_unique_constraint": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "table_name", Typ: types.String}, {Name: "constraint_name", Typ: types.String}},
@@ -7920,7 +8055,8 @@ table. Returns an error if validation fails.`,
 	),
 	"crdb_internal.is_constraint_active": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "table_name", Typ: types.String}, {Name: "constraint_name", Typ: types.String}},
@@ -9090,58 +9226,7 @@ WHERE object_id = table_descriptor_id
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{Name: "collection_uri", Typ: types.StringArray},
-				{Name: "full_backup_path", Typ: types.String},
-				{Name: "encryption_opts", Typ: types.Bytes},
-				{Name: "start_time", Typ: types.Decimal},
-				{Name: "end_time", Typ: types.Decimal},
-			},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Info:       "Compacts the chain of incremental backups described by the start and end times (nanosecond epoch).",
-			Volatility: volatility.Volatile,
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if StartCompactionJob == nil {
-					return nil, errors.Newf("missing StartCompactionJob")
-				}
-				ary := *tree.MustBeDArray(args[0])
-				collectionURI, ok := darrayToStringSlice(ary)
-				if !ok {
-					return nil, errors.Newf("expected array value, got %T", args[0])
-				}
-				var encryption jobspb.BackupEncryptionOptions
-				encryptionBytes := []byte(tree.MustBeDBytes(args[2]))
-				if len(encryptionBytes) == 0 {
-					encryption = jobspb.BackupEncryptionOptions{Mode: jobspb.EncryptionMode_None}
-				} else if err := protoutil.Unmarshal([]byte(tree.MustBeDBytes(args[2])), &encryption); err != nil {
-					return nil, err
-				}
-				// We use an explicit full path instead of extracting it from the backup
-				// statement in the event that the backup statement specifies LATEST
-				// as its subdir. This can lead to race conditions where an incremental
-				// backup triggers the compaction, but before the compaction job resolves
-				// its destination, a full backup completes and overwrites the LATEST.
-				fullPath := string(tree.MustBeDString(args[1]))
-				if fullPath == "LATEST" {
-					return nil, errors.Newf("full_backup_path must be explicitly specified and not LATEST")
-				}
-				start := tree.MustBeDDecimal(args[3])
-				startTs, err := hlc.DecimalToHLC(&start.Decimal)
-				if err != nil {
-					return nil, err
-				}
-				end := tree.MustBeDDecimal(args[4])
-				endTs, err := hlc.DecimalToHLC(&end.Decimal)
-				if err != nil {
-					return nil, err
-				}
-				jobID, err := StartCompactionJob(
-					ctx, evalCtx.Planner, collectionURI, nil, fullPath, encryption, startTs, endTs,
-				)
-				return tree.NewDInt(tree.DInt(jobID)), err
-			},
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
+				{Name: "schedule_id", Typ: types.Int},
 				{Name: "backup_stmt", Typ: types.String},
 				{Name: "full_backup_path", Typ: types.String},
 				{Name: "start_time", Typ: types.Decimal},
@@ -9154,55 +9239,30 @@ WHERE object_id = table_descriptor_id
 				if StartCompactionJob == nil {
 					return nil, errors.Newf("missing StartCompactionJob")
 				}
-				stmt := string(tree.MustBeDString(args[0]))
-				ast, err := parser.ParseOne(stmt)
+				backupAST, encryption, err := makeBackupASTFromStmt(args[1])
 				if err != nil {
 					return nil, err
 				}
-				backupAST, ok := ast.AST.(*tree.Backup)
-				if !ok {
-					return nil, errors.Newf("expected BACKUP statement, got %s", stmt)
-				}
-				opts := backupAST.Options
-				exprSliceToStrSlice := func(exprs []tree.Expr) []string {
-					return util.Map(exprs, func(expr tree.Expr) string {
-						return tree.AsStringWithFlags(expr, tree.FmtBareStrings)
-					})
-				}
-				encryption := jobspb.BackupEncryptionOptions{
-					Mode: jobspb.EncryptionMode_None,
-				}
-				if opts.EncryptionPassphrase != nil {
-					encryption.Mode = jobspb.EncryptionMode_Passphrase
-					encryption.RawPassphrase = tree.AsStringWithFlags(
-						opts.EncryptionPassphrase,
-						tree.FmtBareStrings,
-					)
-				} else if opts.EncryptionKMSURI != nil {
-					if encryption.Mode != jobspb.EncryptionMode_None {
-						return nil, errors.Newf("only one encryption mode can be specified")
-					}
-					encryption.RawKmsUris = exprSliceToStrSlice(opts.EncryptionKMSURI)
-				}
+				scheduleID := jobspb.ScheduleID(tree.MustBeDInt(args[0]))
 				collectionURI := exprSliceToStrSlice(backupAST.To)
 				incrLoc := exprSliceToStrSlice(backupAST.Options.IncrementalStorage)
-				start := tree.MustBeDDecimal(args[2])
+				start := tree.MustBeDDecimal(args[3])
 				startTs, err := hlc.DecimalToHLC(&start.Decimal)
 				if err != nil {
 					return nil, err
 				}
-				end := tree.MustBeDDecimal(args[3])
+				end := tree.MustBeDDecimal(args[4])
 				endTs, err := hlc.DecimalToHLC(&end.Decimal)
 				if err != nil {
 					return nil, err
 				}
-				fullPath := string(tree.MustBeDString(args[1]))
+				fullPath := string(tree.MustBeDString(args[2]))
 				// See comment above override about why full path cannot be LATEST.
 				if fullPath == "LATEST" {
 					return nil, errors.Newf("full_backup_path must be explicitly specified and not LATEST")
 				}
 				jobID, err := StartCompactionJob(
-					ctx, evalCtx.Planner, collectionURI, incrLoc, fullPath, encryption, startTs, endTs,
+					ctx, evalCtx.Planner, scheduleID, collectionURI, incrLoc, fullPath, encryption, startTs, endTs,
 				)
 				return tree.NewDInt(tree.DInt(jobID)), err
 			},
@@ -9271,7 +9331,7 @@ func makeSubStringImpls() builtinDefinition {
 				start := int(tree.MustBeDInt(args[1]))
 				length := int(tree.MustBeDInt(args[2]))
 
-				substring, err := getSubstringFromIndexOfLength(str, "substring", start, length)
+				substring, err := getSubstringFromIndexOfLength(str, start, length)
 				if err != nil {
 					return nil, err
 				}
@@ -9339,7 +9399,7 @@ func makeSubStringImpls() builtinDefinition {
 				start := int(tree.MustBeDInt(args[1]))
 				length := int(tree.MustBeDInt(args[2]))
 
-				substring, err := getSubstringFromIndexOfLength(bitString.BitArray.String(), "bit subarray", start, length)
+				substring, err := getSubstringFromIndexOfLength(bitString.BitArray.String(), start, length)
 				if err != nil {
 					return nil, err
 				}
@@ -9376,7 +9436,7 @@ func makeSubStringImpls() builtinDefinition {
 				start := int(tree.MustBeDInt(args[1]))
 				length := int(tree.MustBeDInt(args[2]))
 
-				substring, err := getSubstringFromIndexOfLengthBytes(byteString, "byte subarray", start, length)
+				substring, err := getSubstringFromIndexOfLengthBytes(byteString, start, length)
 				if err != nil {
 					return nil, err
 				}
@@ -9424,16 +9484,21 @@ func getSubstringFromIndex(str string, start int) string {
 	return string(runes[start:])
 }
 
+// NegativeSubstringLengthErr should be thrown when the substring builtin
+// is given a value of 'length' less than zero.
+var NegativeSubstringLengthErr = pgerror.New(
+	pgcode.InvalidParameterValue, "negative substring length not allowed",
+)
+
 // Returns a substring of given string starting at given position and
 // include up to a certain length.
-func getSubstringFromIndexOfLength(str, errMsg string, start, length int) (string, error) {
+func getSubstringFromIndexOfLength(str string, start, length int) (string, error) {
 	runes := []rune(str)
 	// SQL strings are 1-indexed.
 	start--
 
 	if length < 0 {
-		return "", pgerror.Newf(
-			pgcode.InvalidParameterValue, "negative %s length %d not allowed", errMsg, length)
+		return "", NegativeSubstringLengthErr
 	}
 
 	end := start + length
@@ -9471,14 +9536,13 @@ func getSubstringFromIndexBytes(str string, start int) string {
 
 // Returns a substring of given string starting at given position and include up
 // to a certain length by interpreting the string as raw bytes.
-func getSubstringFromIndexOfLengthBytes(str, errMsg string, start, length int) (string, error) {
+func getSubstringFromIndexOfLengthBytes(str string, start, length int) (string, error) {
 	bytes := []byte(str)
 	// SQL strings are 1-indexed.
 	start--
 
 	if length < 0 {
-		return "", pgerror.Newf(
-			pgcode.InvalidParameterValue, "negative %s length %d not allowed", errMsg, length)
+		return "", NegativeSubstringLengthErr
 	}
 
 	end := start + length
@@ -10669,7 +10733,9 @@ type regexpEscapeKey struct {
 	sqlEscape  string
 }
 
-// Pattern implements the RegexpCacheKey interface.
+var _ tree.RegexpCacheKey = regexpEscapeKey{}
+
+// Pattern implements the tree.RegexpCacheKey interface.
 func (k regexpEscapeKey) Pattern() (string, error) {
 	pattern := k.sqlPattern
 	if k.sqlEscape != `\` {
@@ -10701,7 +10767,9 @@ type regexpFlagKey struct {
 	sqlFlags   string
 }
 
-// Pattern implements the RegexpCacheKey interface.
+var _ tree.RegexpCacheKey = regexpFlagKey{}
+
+// Pattern implements the tree.RegexpCacheKey interface.
 func (k regexpFlagKey) Pattern() (string, error) {
 	return regexpEvalFlags(k.sqlPattern, k.sqlFlags)
 }
@@ -12048,6 +12116,10 @@ argument is true, then the bundle will be redacted`
 					redacted = bool(tree.MustBeDBool(args[eaIdx+1]))
 				}
 			}
+			var username string
+			if sd := evalCtx.SessionData(); sd != nil {
+				username = sd.User().Normalized()
+			}
 
 			hasPriv, shouldRedact, err := evalCtx.SessionAccessor.HasViewActivityOrViewActivityRedactedRole(ctx)
 			if err != nil {
@@ -12076,6 +12148,7 @@ argument is true, then the bundle will be redacted`
 				minExecutionLatency,
 				expiresAfter,
 				redacted,
+				username,
 			); err != nil {
 				return nil, err
 			}
@@ -12184,20 +12257,103 @@ func makeTimestampStatementBuiltinOverload(withOutputTZ bool, withInputTZ bool) 
 	}
 }
 
-func makeJsonpathExists(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-	target := tree.MustBeDJSON(args[0])
-	path := tree.MustBeDJsonpath(args[1])
-	vars := tree.EmptyDJSON
-	silent := tree.DBool(false)
+func jsonpathArgs(
+	args tree.Datums,
+) (target tree.DJSON, path tree.DJsonpath, vars tree.DJSON, silent tree.DBool, err error) {
+	target = tree.MustBeDJSON(args[0])
+	path = tree.MustBeDJsonpath(args[1])
+	vars = tree.EmptyDJSON
+	silent = tree.DBool(false)
 	if len(args) > 2 {
 		vars = tree.MustBeDJSON(args[2])
+		if vars.Type() != json.ObjectJSONType {
+			err = pgerror.Newf(pgcode.InvalidParameterValue, `"vars" argument is not an object`)
+			return
+		}
 	}
 	if len(args) > 3 {
 		silent = tree.MustBeDBool(args[3])
+	}
+	return target, path, vars, silent, nil
+}
+
+func makeJsonpathExists(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+	target, path, vars, silent, err := jsonpathArgs(args)
+	if err != nil {
+		return nil, err
 	}
 	exists, err := jsonpath.JsonpathExists(target, path, vars, silent)
 	if err != nil {
 		return nil, err
 	}
 	return tree.MakeDBool(exists), nil
+}
+
+func makeJsonpathQueryArray(
+	_ context.Context, _ *eval.Context, args tree.Datums,
+) (tree.Datum, error) {
+	target, path, vars, silent, err := jsonpathArgs(args)
+	if err != nil {
+		return nil, err
+	}
+	j, err := jsonpath.JsonpathQueryArray(target, path, vars, silent)
+	if err != nil {
+		return nil, err
+	}
+	return &j, nil
+}
+
+func makeJsonpathQueryFirst(
+	_ context.Context, _ *eval.Context, args tree.Datums,
+) (tree.Datum, error) {
+	target, path, vars, silent, err := jsonpathArgs(args)
+	if err != nil {
+		return nil, err
+	}
+	return jsonpath.JsonpathQueryFirst(target, path, vars, silent)
+}
+
+func makeJsonpathMatch(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+	target, path, vars, silent, err := jsonpathArgs(args)
+	if err != nil {
+		return nil, err
+	}
+	return jsonpath.JsonpathMatch(target, path, vars, silent)
+}
+
+func makeBackupASTFromStmt(
+	backupStmt tree.Datum,
+) (*tree.Backup, jobspb.BackupEncryptionOptions, error) {
+	stmt := string(tree.MustBeDString(backupStmt))
+	ast, err := parser.ParseOne(stmt)
+	if err != nil {
+		return nil, jobspb.BackupEncryptionOptions{}, err
+	}
+	backupAST, ok := ast.AST.(*tree.Backup)
+	if !ok {
+		return nil, jobspb.BackupEncryptionOptions{}, errors.Newf("expected BACKUP statement, got %s", stmt)
+	}
+	opts := backupAST.Options
+	encryption := jobspb.BackupEncryptionOptions{
+		Mode: jobspb.EncryptionMode_None,
+	}
+	if opts.EncryptionPassphrase != nil {
+		encryption.Mode = jobspb.EncryptionMode_Passphrase
+		encryption.RawPassphrase = tree.AsStringWithFlags(
+			opts.EncryptionPassphrase,
+			tree.FmtBareStrings,
+		)
+	} else if opts.EncryptionKMSURI != nil {
+		if encryption.Mode != jobspb.EncryptionMode_None {
+			return nil, jobspb.BackupEncryptionOptions{}, errors.Newf("only one encryption mode can be specified")
+		}
+		encryption.RawKmsUris = exprSliceToStrSlice(opts.EncryptionKMSURI)
+	}
+	return backupAST, encryption, nil
+}
+
+func exprSliceToStrSlice(exprs []tree.Expr) []string {
+	return util.Map(exprs, func(expr tree.Expr) string {
+		return tree.AsStringWithFlags(expr, tree.FmtBareStrings)
+	})
 }

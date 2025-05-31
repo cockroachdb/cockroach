@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -104,7 +105,7 @@ func maybeDropIndex(
 			"use CASCADE if you really want to drop it.",
 		))
 	}
-	dropSecondaryIndex(b, indexName, n.DropBehavior, sie)
+	dropSecondaryIndex(b, indexName, n.DropBehavior, sie, n)
 	return sie
 }
 
@@ -115,6 +116,7 @@ func dropSecondaryIndex(
 	indexName *tree.TableIndexName,
 	dropBehavior tree.DropBehavior,
 	sie *scpb.SecondaryIndex,
+	stmt tree.Statement,
 ) {
 	{
 		next := b.WithNewSourceElementID()
@@ -141,11 +143,16 @@ func dropSecondaryIndex(
 
 		// If shard index, also drop the shard column and all check constraints that
 		// uses this shard column if no other index uses the shard column.
-		maybeDropAdditionallyForShardedIndex(next, sie, indexName.Index.String(), dropBehavior)
+		maybeDropAdditionallyForShardedIndex(
+			next, sie, indexName.Index.String(), stmt, dropBehavior,
+		)
 
 		// If expression index, also drop the expression column if no other index is
 		// using the expression column.
 		dropAdditionallyForExpressionIndex(next, sie)
+
+		// This handles if the index is referenced in a trigger.
+		maybeDropTriggers(b, sie.TableID, sie.IndexID, indexName.Index.String(), dropBehavior)
 	}
 	// Finally, drop all elements associated with this index.
 	tblElts := b.QueryByID(sie.TableID)
@@ -208,7 +215,7 @@ func maybeDropDependentFunctions(
 			if forwardRef.IndexID != toBeDroppedIndex.IndexID {
 				continue
 			}
-			// This view depends on the to-be-dropped index;
+			// This function depends on the to-be-dropped index.
 			if dropBehavior != tree.DropCascade {
 				// Get view name for the error message
 				_, _, fnName := scpb.FindFunctionName(b.QueryByID(e.FunctionID))
@@ -292,6 +299,7 @@ func maybeDropAdditionallyForShardedIndex(
 	b BuildCtx,
 	toBeDroppedIndex *scpb.SecondaryIndex,
 	toBeDroppedIndexName string,
+	stmt tree.Statement,
 	dropBehavior tree.DropBehavior,
 ) {
 	if toBeDroppedIndex.Sharding == nil || !toBeDroppedIndex.Sharding.IsSharded {
@@ -347,6 +355,45 @@ func maybeDropAdditionallyForShardedIndex(
 	shardColElms.ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		if target != scpb.ToAbsent {
 			b.Drop(e)
+		}
+	})
+	tbl := b.QueryByID(toBeDroppedIndex.TableID).FilterTable().MustGetOneElement()
+	ns := b.QueryByID(toBeDroppedIndex.TableID).FilterNamespace().MustGetOneElement()
+	tn := tree.MakeTableNameFromPrefix(b.NamePrefix(tbl), tree.Name(ns.Name))
+	shardCol := shardColElms.FilterColumn().MustGetOneElement()
+	dropColumn(b, &tn, tbl, stmt, stmt, shardCol, shardColElms, dropBehavior)
+}
+
+// maybeDropTriggers attempts to drop all triggers that depend on the index
+// being dropped, but only if the drop behavior is CASCADE. It panics if any
+// dependent trigger exists and the drop behavior is not CASCADE.
+func maybeDropTriggers(
+	b BuildCtx,
+	tableID catid.DescID,
+	indexID catid.IndexID,
+	indexName string,
+	behavior tree.DropBehavior,
+) {
+	undroppedBackrefs(b, tableID).ForEach(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		switch elt := e.(type) {
+		case *scpb.TriggerDeps:
+			for _, ref := range elt.UsesRelations {
+				if ref.ID == tableID && ref.IndexID == indexID {
+					if behavior == tree.DropCascade {
+						panic(unimplemented.NewWithIssuef(
+							146667, "DROP INDEX cascade is not supported with triggers"))
+					}
+					tableElts := b.QueryByID(elt.TableID)
+					tableName := tableElts.FilterNamespace().MustGetOneElement()
+					triggerName := tableElts.FilterTriggerName().Filter(
+						func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TriggerName) bool {
+							return e.TriggerID == elt.TriggerID
+						}).MustGetOneElement()
+					panic(sqlerrors.NewDependentObjectErrorf(
+						"cannot drop index %q because trigger %q on table %q depends on it",
+						indexName, triggerName.Name, tableName.Name))
+				}
+			}
 		}
 	})
 }

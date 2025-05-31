@@ -33,13 +33,11 @@ import (
 	aload "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
@@ -71,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -237,9 +236,6 @@ func createTestStoreWithoutStart(
 		cfg.Clock,
 		cfg.NodeDialer,
 		server,
-		kvflowdispatch.NewDummyDispatch(),
-		NoopStoresFlowControlIntegration{},
-		NoopRaftTransportDisconnectListener{},
 		(*node_rac2.AdmittedPiggybacker)(nil),
 		nil, /* PiggybackedAdmittedResponseScheduler */
 		nil, /* knobs */
@@ -414,11 +410,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 			wanted = append(wanted, seenT{rangeID: rangeID, tombstone: tombstone})
 
 			t.Logf("writing tombstone at rangeID=%d", rangeID)
-			if err := storage.MVCCPutProto(
-				ctx, eng, keys.RangeTombstoneKey(rangeID), hlc.Timestamp{}, &tombstone, storage.MVCCWriteOptions{},
-			); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, stateloader.Make(rangeID).SetRangeTombstone(ctx, eng, tombstone))
 
 			if len(wanted) >= rangeCount {
 				break
@@ -623,7 +615,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 		t.Error(err)
 	}
 	// Remove range 1.
-	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name()), RemoveOptions{
 		DestroyData: true,
 	}); err != nil {
 		t.Error(err)
@@ -639,7 +631,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 		t.Fatal("expected error re-adding same range")
 	}
 	// Try to remove range 1 again.
-	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name()), RemoveOptions{
 		DestroyData: true,
 	}); err != nil {
 		t.Fatalf("didn't expect error re-removing same range: %v", err)
@@ -747,7 +739,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 
 	// Can't remove Replica with DestroyData false because this requires the destroyStatus
 	// to already have been set by the caller (but we didn't).
-	require.ErrorContains(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+	require.ErrorContains(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name()), RemoveOptions{
 		DestroyData: false,
 	}), `replica not marked as destroyed`)
 
@@ -755,14 +747,14 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	// NB: we rely on this idempotency today (as @tbg found out when he accidentally
 	// removed it).
 	for i := 0; i < 2; i++ {
-		require.NoError(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+		require.NoError(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name()), RemoveOptions{
 			DestroyData: true,
 		}), "%d", i)
 	}
 
 	// However, if we have DestroyData=false, caller is expected to be the unique first "destroyer"
 	// of the Replica.
-	require.ErrorContains(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+	require.ErrorContains(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name()), RemoveOptions{
 		DestroyData: false,
 	}), `does not exist`)
 
@@ -805,7 +797,7 @@ func TestStoreReplicaVisitor(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name()), RemoveOptions{
 		DestroyData: true,
 	}); err != nil {
 		t.Error(err)
@@ -889,7 +881,7 @@ func TestMarkReplicaInitialized(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name()), RemoveOptions{
 		DestroyData: true,
 	}); err != nil {
 		t.Error(err)
@@ -902,8 +894,7 @@ func TestMarkReplicaInitialized(t *testing.T) {
 
 	newRangeID := roachpb.RangeID(3)
 	const replicaID = 1
-	require.NoError(t,
-		logstore.NewStateLoader(newRangeID).SetRaftReplicaID(ctx, store.TODOEngine(), replicaID))
+	require.NoError(t, stateloader.Make(newRangeID).SetRaftReplicaID(ctx, store.TODOEngine(), replicaID))
 
 	r, err := newUninitializedReplica(store, newRangeID, replicaID)
 	require.NoError(t, err)
@@ -2761,7 +2752,7 @@ func TestMaybeRemove(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := store.RemoveReplica(ctx, repl, repl.Desc().NextReplicaID, RemoveOptions{
+	if err := store.RemoveReplica(ctx, repl, repl.Desc().NextReplicaID, redact.SafeString(t.Name()), RemoveOptions{
 		DestroyData: true,
 	}); err != nil {
 		t.Error(err)
@@ -2790,7 +2781,8 @@ func TestStoreGCThreshold(t *testing.T) {
 		}
 		repl.mu.Lock()
 		gcThreshold := *repl.shMu.state.GCThreshold
-		pgcThreshold, err := repl.mu.stateLoader.LoadGCThreshold(context.Background(), store.TODOEngine())
+		pgcThreshold, err := stateloader.Make(repl.RangeID).LoadGCThreshold(
+			context.Background(), store.StateEngine())
 		repl.mu.Unlock()
 		if err != nil {
 			t.Fatal(err)
@@ -2878,7 +2870,7 @@ func TestStoreRangePlaceholders(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := s.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+	if err := s.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name()), RemoveOptions{
 		DestroyData: true,
 	}); err != nil {
 		t.Error(err)
@@ -3014,7 +3006,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	repl1, err := s.GetReplica(1)
 	desc := repl1.Desc()
 	require.NoError(t, err)
-	require.NoError(t, s.RemoveReplica(ctx, repl1, desc.NextReplicaID, RemoveOptions{
+	require.NoError(t, s.RemoveReplica(ctx, repl1, desc.NextReplicaID, redact.SafeString(t.Name()), RemoveOptions{
 		DestroyData: true,
 	}))
 
@@ -3385,9 +3377,10 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	desc.Capacity.Available = 1
 	desc.Capacity.Used = desc.Capacity.Capacity - desc.Capacity.Available
 
-	s.cfg.StorePool.DetailsMu.Lock()
-	s.cfg.StorePool.GetStoreDetailLocked(desc.StoreID).Desc = desc
-	s.cfg.StorePool.DetailsMu.Unlock()
+	sd := s.cfg.StorePool.GetStoreDetail(desc.StoreID)
+	sd.Lock()
+	sd.Desc = desc
+	sd.Unlock()
 
 	if n := s.ReservationCount(); n != 0 {
 		t.Fatalf("expected 0 reservations, but found %d", n)
@@ -3409,9 +3402,10 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	// available disk space should be rejected.
 	desc.Capacity.Available = desc.Capacity.Capacity / 2
 	desc.Capacity.Used = desc.Capacity.Capacity - desc.Capacity.Available
-	s.cfg.StorePool.DetailsMu.Lock()
-	s.cfg.StorePool.GetStoreDetailLocked(desc.StoreID).Desc = desc
-	s.cfg.StorePool.DetailsMu.Unlock()
+	sd = s.cfg.StorePool.GetStoreDetail(desc.StoreID)
+	sd.Lock()
+	sd.Desc = desc
+	sd.Unlock()
 
 	if n := s.ReservationCount(); n != 0 {
 		t.Fatalf("expected 0 reservations, but found %d", n)
@@ -3471,6 +3465,11 @@ func TestReserveSnapshotQueueTimeoutAvoidsStarvation(t *testing.T) {
 					cleanup, err := s.reserveReceiveSnapshot(snapCtx, &kvserverpb.SnapshotRequest_Header{RangeSize: 1})
 					if err != nil {
 						if errors.Is(err, context.DeadlineExceeded) {
+							return nil
+						}
+						// Also handle the new SnapshotReservationTimeoutError as a timeout condition
+						var snapshotTimeoutErr *kvpb.SnapshotReservationTimeoutError
+						if errors.As(err, &snapshotTimeoutErr) {
 							return nil
 						}
 						return err
@@ -4124,9 +4123,10 @@ func TestStoreGetOrCreateReplicaWritesRaftReplicaID(t *testing.T) {
 		})
 	require.NoError(t, err)
 	require.True(t, created)
-	replicaID, err := repl.mu.stateLoader.LoadRaftReplicaID(ctx, tc.store.TODOEngine())
+	replicaID, err := stateloader.Make(repl.RangeID).LoadRaftReplicaID(
+		ctx, tc.store.StateEngine())
 	require.NoError(t, err)
-	require.Equal(t, &kvserverpb.RaftReplicaID{ReplicaID: 7}, replicaID)
+	require.Equal(t, kvserverpb.RaftReplicaID{ReplicaID: 7}, replicaID)
 }
 
 func BenchmarkStoreGetReplica(b *testing.B) {

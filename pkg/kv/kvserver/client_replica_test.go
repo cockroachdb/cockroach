@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -1974,7 +1975,7 @@ func TestLeaseExpirationBelowFutureTimeRequest(t *testing.T) {
 		now := l.tc.Servers[1].Clock().Now()
 
 		// Construct a future-time request timestamp past the current lease's
-		// expiration. See Replica.checkRequestTimeRLocked for the determination
+		// expiration. See Replica.checkRequestTime for the determination
 		// of whether a request timestamp is too far in the future or not.
 		leaseRenewal := l.tc.Servers[1].RaftConfig().RangeLeaseRenewalDuration()
 		leaseRenewalMinusStasis := leaseRenewal - l.tc.Servers[1].Clock().MaxOffset()
@@ -2505,6 +2506,141 @@ func TestRemoveLeaseholder(t *testing.T) {
 	require.NotEqual(t, tc.Target(0), leaseHolder)
 }
 
+// TestConsistencyQueueDelaysProcessingNewRanges verifies that the consistency
+// queue delays processing of new ranges.
+func TestConsistencyQueueDelaysProcessingNewRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+
+	// checkConsistency runs a consistency check on the specified key range and
+	// verifies that all ranges are consistent. Useful to verify that we don't
+	// break the consistency after splits/merges.
+	checkConsistency := func() error {
+		req := kvpb.CheckConsistencyRequest{
+			RequestHeader: kvpb.RequestHeader{
+				Key:    roachpb.Key("a"),
+				EndKey: roachpb.Key("z"),
+			},
+			Mode: kvpb.ChecksumMode_CHECK_FULL,
+		}
+
+		b := kv.Batch{}
+		b.AddRawRequest(&req)
+		err := s.DB().Run(ctx, &b)
+		require.NoError(t, err)
+
+		if len(b.RawResponse().Responses) == 0 {
+			return errors.Errorf("received 0 responses")
+		}
+
+		constResp := b.RawResponse().Responses[0].GetInner().(*kvpb.CheckConsistencyResponse)
+		for i := range len(b.RawResponse().Responses) {
+			if constResp.Result[i].Status != kvpb.CheckConsistencyResponse_RANGE_CONSISTENT &&
+				constResp.Result[i].Status !=
+					kvpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_ESTIMATED {
+				return errors.Errorf("expected range to be consistent, but found: %+v", constResp.Result[i])
+			}
+		}
+		return nil
+	}
+
+	// splitHelper helps create splits for TestServerInterface.
+	splitHelper := func(key roachpb.Key) error {
+		rngID := store.LookupReplica(roachpb.RKey(key)).RangeID
+		h := kvpb.Header{RangeID: rngID}
+		args := adminSplitArgs(key)
+		if _, pErr := kv.SendWrappedWith(ctx, store, h, args); pErr != nil {
+			return pErr.GoError()
+		}
+		return nil
+	}
+
+	// splitHelper helps create merges for TestServerInterface.
+	mergeHelper := func(key roachpb.Key) error {
+		rngID := store.LookupReplica(roachpb.RKey(key)).RangeID
+		h := kvpb.Header{RangeID: rngID}
+		args := adminMergeArgs(key)
+		if _, pErr := kv.SendWrappedWith(ctx, store, h, args); pErr != nil {
+			return pErr.GoError()
+		}
+		return nil
+	}
+
+	keyA := roachpb.Key("a")
+	require.NoError(t, splitHelper(keyA))
+	_, replA := getFirstStoreReplica(t, s, keyA)
+	lastConsistencyTSReplA, err := replA.GetQueueLastProcessed(ctx, "consistencyChecker")
+	require.NoError(t, err)
+
+	// Assert that the last consistency check was set to a recent timestamp.
+	require.LessOrEqual(t, timeutil.Since(lastConsistencyTSReplA.GoTime()), time.Minute)
+
+	// Assert that the range is consistent.
+	require.NoError(t, checkConsistency())
+
+	// Assert that splitting the range copied the last consistency check timestamp
+	// from the LHS to the RHS.
+	keyB := roachpb.Key("b")
+	require.NoError(t, splitHelper(keyB))
+	_, replB := getFirstStoreReplica(t, s, keyB)
+	lastConsistencyTSReplB, err := replB.GetQueueLastProcessed(ctx, "consistencyChecker")
+	require.NoError(t, err)
+	require.Equal(t, lastConsistencyTSReplA, lastConsistencyTSReplB)
+
+	// Assert that ranges are still consistent.
+	require.NoError(t, checkConsistency())
+
+	// isEligibleForConsistencyQueue returns true if the range is eligible for the consistency queue.
+	isEligibleForConsistencyQueue := func(
+		ctx context.Context, manualClock *hlc.HybridManualClock, desc *roachpb.RangeDescriptor,
+	) bool {
+		getQueueLastProcessed := func(ctx context.Context) (hlc.Timestamp, error) {
+			_, repl := getFirstStoreReplica(t, s, roachpb.Key(desc.StartKey))
+			lastConsistencyTSRepl, err := repl.GetQueueLastProcessed(ctx, "consistencyChecker")
+			require.NoError(t, err)
+			return lastConsistencyTSRepl, nil
+		}
+
+		isNodeAvailable := func(nodeID roachpb.NodeID) bool {
+			return true
+		}
+
+		shouldQ, _ := kvserver.ConsistencyQueueShouldQueue(
+			ctx, hlc.ClockTimestamp{WallTime: manualClock.Now().UnixNano()}, desc, getQueueLastProcessed,
+			isNodeAvailable, false, 24*time.Hour)
+		return shouldQ
+	}
+
+	// Assert that the ranges are not eligible for the consistency queue.
+	manualClock := hlc.NewHybridManualClock()
+	lhsDesc := store.LookupReplica(roachpb.RKey(keyA)).Desc()
+	rhsDesc := store.LookupReplica(roachpb.RKey(keyB)).Desc()
+	require.False(t, isEligibleForConsistencyQueue(context.Background(), manualClock, lhsDesc))
+	require.False(t, isEligibleForConsistencyQueue(context.Background(), manualClock, rhsDesc))
+
+	// Advance the clock to simulate enough time passing to make the ranges
+	// eligible for the consistency queue.
+	manualClock.Increment(24 * time.Hour.Nanoseconds())
+	require.True(t, isEligibleForConsistencyQueue(context.Background(), manualClock, lhsDesc))
+	require.True(t, isEligibleForConsistencyQueue(context.Background(), manualClock, rhsDesc))
+
+	// Merge the two ranges together, and make sure that the last consistency check remains the same.
+	require.NoError(t, mergeHelper(keyA))
+	_, replMerged := getFirstStoreReplica(t, s, keyA)
+	lastConsistencyTSMergedRepl, err := replMerged.GetQueueLastProcessed(ctx, "consistencyChecker")
+	require.NoError(t, err)
+	require.Equal(t, lastConsistencyTSReplA, lastConsistencyTSMergedRepl)
+
+	// Assert that ranges are still consistent.
+	require.NoError(t, checkConsistency())
+}
+
 func TestLeaseInfoRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2775,12 +2911,12 @@ func TestChangeReplicasGeneration(t *testing.T) {
 	assert.EqualValues(t, repl.Desc().Generation, oldGeneration+3, "\nold: %+v\nnew: %+v", oldDesc, newDesc)
 }
 
-// TestLossQuorumCauseLeaderlessWatcherToSignalUnavailable checks that if a range
-// lost its quorum, the remaining replicas in that range will have their
+// TestLossQuorumCauseLeaderlessWatcherToSignalUnavailable checks that if a
+// range lost its quorum, the remaining replicas in that range will have their
 // leaderlessWatcher indicate that the range is unavailable. Also, it checks
 // that when the range regains quorum, the leaderlessWatcher will indicate that
 // the range is available.
-func TestLossQuorumCauseLeaderWatcherToSignalUnavailable(t *testing.T) {
+func TestLossQuorumCauseLeaderlessWatcherToSignalUnavailable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -2788,7 +2924,6 @@ func TestLossQuorumCauseLeaderWatcherToSignalUnavailable(t *testing.T) {
 	require.NoError(t, log.SetVModule("replica_range_lease=3,raft=4"))
 
 	ctx := context.Background()
-	manualClock := hlc.NewHybridManualClock()
 	stickyVFSRegistry := fs.NewStickyRegistry()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
@@ -2812,6 +2947,12 @@ func TestLossQuorumCauseLeaderWatcherToSignalUnavailable(t *testing.T) {
 				},
 			},
 			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					// Make sure that we don't depend on the consistency queue
+					// running. It could cause replicas to attempt to acquire the
+					// lease, which might unintentionally unquiesce replicas. See #146188.
+					DisableConsistencyQueue: true,
+				},
 				Server: &server.TestingKnobs{
 					StickyVFSRegistry: stickyVFSRegistry,
 				},
@@ -2833,6 +2974,16 @@ func TestLossQuorumCauseLeaderWatcherToSignalUnavailable(t *testing.T) {
 	desc, err := tc.LookupRange(key)
 	require.NoError(t, err)
 
+	// Make sure that the range is up and functional.
+	// Make sure that there is a fully functioning quorum before it introduce a
+	// temporary unavailability. This deflakes the test especially for epoch
+	// leases because the node that we haven't restarted is guaranteed to not be a
+	// learner, and therefore it can campaign and unquiesce the recently restarted
+	// node.
+	_, pErr := kv.SendWrapped(context.Background(),
+		tc.GetFirstStoreFromServer(t, 0).TestSender(), putArgs(key, []byte("init")))
+	require.NoError(t, pErr.GoError())
+
 	// Randomly stop server index 0 or 1.
 	stoppedNodeInx := rand.Intn(2)
 	aliveNodeIdx := 1 - stoppedNodeInx
@@ -2851,12 +3002,8 @@ func TestLossQuorumCauseLeaderWatcherToSignalUnavailable(t *testing.T) {
 		return nil
 	})
 
-	// Increment the clock by the leaderlessWatcher unavailable threshold.
-	manualClock.Increment(threshold.Nanoseconds())
-
 	// Wait for the leaderlessWatcher to indicate that the range is unavailable.
 	testutils.SucceedsSoon(t, func() error {
-		tc.GetFirstStoreFromServer(t, aliveNodeIdx).LookupReplica(roachpb.RKey(key))
 		if !repl.LeaderlessWatcher.IsUnavailable() {
 			return errors.New("range is still available")
 		}
@@ -2913,6 +3060,77 @@ func TestLossQuorumCauseLeaderWatcherToSignalUnavailable(t *testing.T) {
 		}
 		return pErr.GoError()
 	})
+}
+
+// TestLeaderlessWatcherUnavailabilityErrorRefreshedOnUnavailabilityTransition
+// ensures that the leaderless watcher constructs a new error every time it
+// transitions to the unavailable state. In particular, the descriptor used
+// in the error should be the latest descriptor.
+// Serves as a regression test for
+// https://github.com/cockroachdb/cockroach/issues/144639.
+func TestLeaderlessWatcherErrorRefreshedOnUnavailabilityTransition(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	manual := hlc.NewHybridManualClock()
+	st := cluster.MakeTestingClusterSettings()
+	// Set the leaderless threshold to 10 second.
+	kvserver.ReplicaLeaderlessUnavailableThreshold.Override(ctx, &st.SV, 10*time.Second)
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: st,
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					WallClock: manual,
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+	key := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, key, tc.Targets(1)...)
+	repl := tc.GetFirstStoreFromServer(t, 1).LookupReplica(roachpb.RKey(key))
+
+	// The leaderlessWatcher starts off as available.
+	require.False(t, repl.LeaderlessWatcher.IsUnavailable())
+	// Let it know it's leaderless.
+	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, raft.None, manual.Now(), st)
+	// Even though the replica is leaderless, enough time hasn't passed for it to
+	// be considered unavailable.
+	require.False(t, repl.LeaderlessWatcher.IsUnavailable())
+	// The error should be nil as we're not considered leaderless at this point.
+	require.NoError(t, repl.LeaderlessWatcher.Err())
+	// Let enough time pass.
+	manual.Increment(10 * time.Second.Nanoseconds())
+	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, raft.None, manual.Now(), st)
+	// Now the replica is considered unavailable.
+	require.True(t, repl.LeaderlessWatcher.IsUnavailable())
+	require.Error(t, repl.LeaderlessWatcher.Err())
+	// Regex to ensure we've got a replica unavailable error with n1 and n2 in the
+	// range descriptor.
+	require.Regexp(t, "replica unavailable.*n1.*n2.*", repl.LeaderlessWatcher.Err().Error())
+
+	// Next up, let the replica know there's a leader. This should make it
+	// available again.
+	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, 1, manual.Now(), st)
+	require.False(t, repl.LeaderlessWatcher.IsUnavailable())
+	// Change the range descriptor. Mark it leaderless and let enough time pass
+	// for it to be considered unavailable again.
+	tc.AddVotersOrFatal(t, key, tc.Targets(2)...)
+	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, raft.None, manual.Now(), st)
+	manual.Increment(10 * time.Second.Nanoseconds())
+	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, raft.None, manual.Now(), st)
+	// The replica should now be considered unavailable again.
+	require.True(t, repl.LeaderlessWatcher.IsUnavailable())
+	require.Error(t, repl.LeaderlessWatcher.Err())
+	// Ensure that the range descriptor now contains n1, n2, and n3 -- i.e, we're
+	// updating the error with the latest descriptor on the latest transition.
+	require.Regexp(t, "replica unavailable.*n1.*n2.*n3.*", repl.LeaderlessWatcher.Err().Error())
 }
 
 func TestClearRange(t *testing.T) {
@@ -3002,7 +3220,7 @@ func TestClearRange(t *testing.T) {
 // significantly more rare. This test uses a knob to disable the new protection
 // so that it can create the scenario where a replica learns that it holds the
 // lease through a snapshot. We'll want to keep the test and the corresponding
-// logic in applySnapshot around until we can eliminate the scenario entirely.
+// logic in applySnapshotRaftMuLocked around until we can eliminate the scenario entirely.
 // See the commentary in github.com/cockroachdb/cockroach/issues/81561 about
 // sending Raft logs in Raft snapshots for a discussion about why this may not
 // be worth eliminating.
@@ -3535,7 +3753,7 @@ func TestReplicaTombstone(t *testing.T) {
 					unreliableRaftHandlerFuncs: funcs,
 				})
 				tc.RemoveVotersOrFatal(t, key, tc.Target(1))
-				tombstone := waitForTombstone(t, store.TODOEngine(), rangeID)
+				tombstone := waitForTombstone(t, store.StateEngine(), rangeID)
 				require.Equal(t, roachpb.ReplicaID(3), tombstone.NextReplicaID)
 			})
 			t.Run("(2) ReplicaTooOldError", func(t *testing.T) {
@@ -3610,7 +3828,7 @@ func TestReplicaTombstone(t *testing.T) {
 				// Wait until we're sure that the replica has seen ReplicaTooOld,
 				// then go look for the tombstone.
 				<-sawTooOld
-				tombstone := waitForTombstone(t, store.TODOEngine(), rangeID)
+				tombstone := waitForTombstone(t, store.StateEngine(), rangeID)
 				require.Equal(t, roachpb.ReplicaID(4), tombstone.NextReplicaID)
 			})
 			t.Run("(3) ReplicaGCQueue", func(t *testing.T) {
@@ -3649,7 +3867,7 @@ func TestReplicaTombstone(t *testing.T) {
 				repl, err := store.GetReplica(desc.RangeID)
 				require.NoError(t, err)
 				require.NoError(t, store.ManualReplicaGC(repl))
-				tombstone := waitForTombstone(t, store.TODOEngine(), rangeID)
+				tombstone := waitForTombstone(t, store.StateEngine(), rangeID)
 				require.Equal(t, roachpb.ReplicaID(4), tombstone.NextReplicaID)
 			})
 			// This case also detects the tombstone for nodes which processed the merge.
@@ -3699,11 +3917,11 @@ func TestReplicaTombstone(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, store.ManualReplicaGC(repl))
 				// Verify the tombstone generated from replica GC of a merged range.
-				tombstone := waitForTombstone(t, store.TODOEngine(), rangeID)
+				tombstone := waitForTombstone(t, store.StateEngine(), rangeID)
 				require.Equal(t, roachpb.ReplicaID(math.MaxInt32), tombstone.NextReplicaID)
 				// Verify the tombstone generated from processing a merge trigger.
 				store3, _ := getFirstStoreReplica(t, tc.Server(0), key)
-				tombstone = waitForTombstone(t, store3.TODOEngine(), rangeID)
+				tombstone = waitForTombstone(t, store3.StateEngine(), rangeID)
 				require.Equal(t, roachpb.ReplicaID(math.MaxInt32), tombstone.NextReplicaID)
 			})
 			t.Run("(4) (4.1) raft messages to newer replicaID ", func(t *testing.T) {
@@ -3809,7 +4027,7 @@ func TestReplicaTombstone(t *testing.T) {
 					ctx, key, tc.LookupRangeOrFatal(t, key), kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(2)),
 				)
 				require.Regexp(t, "boom", err)
-				tombstone := waitForTombstone(t, store.TODOEngine(), rangeID)
+				tombstone := waitForTombstone(t, store.StateEngine(), rangeID)
 				require.Equal(t, roachpb.ReplicaID(4), tombstone.NextReplicaID)
 				// Try adding it again and again block the snapshot until a heartbeat
 				// at a higher ID has been sent. This is case (4.1) where a raft message
@@ -3829,7 +4047,7 @@ func TestReplicaTombstone(t *testing.T) {
 				require.Regexp(t, "boom", err)
 				// We will start out reading the old tombstone so keep retrying.
 				testutils.SucceedsSoon(t, func() error {
-					tombstone = waitForTombstone(t, store.TODOEngine(), rangeID)
+					tombstone = waitForTombstone(t, store.StateEngine(), rangeID)
 					if tombstone.NextReplicaID != 5 {
 						return errors.Errorf("read tombstone with NextReplicaID %d, want %d",
 							tombstone.NextReplicaID, 5)
@@ -3917,14 +4135,14 @@ func TestReplicaTombstone(t *testing.T) {
 					if err != nil {
 						return err
 					}
-					tombstoneKey := keys.RangeTombstoneKey(rhsDesc.RangeID)
-					ok, err := storage.MVCCGetProto(
-						context.Background(), store.TODOEngine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
+					ts, err := stateloader.Make(rhsDesc.RangeID).LoadRangeTombstone(
+						context.Background(), store.StateEngine(),
 					)
 					require.NoError(t, err)
-					if !ok {
+					if ts.NextReplicaID == 0 {
 						return errors.New("no tombstone found")
 					}
+					tombstone = ts
 					return nil
 				})
 				require.Equal(t, roachpb.ReplicaID(math.MaxInt32), tombstone.NextReplicaID)
@@ -5495,7 +5713,6 @@ func TestOptimisticEvalRetry(t *testing.T) {
 			require.True(t, removedLocks)
 			done = true
 		case <-timer.C:
-			timer.Read = true
 			require.NoError(t, txn1.Commit(ctx))
 			removedLocks = true
 		}
@@ -5796,6 +6013,17 @@ func BenchmarkEmptyRebalance(b *testing.B) {
 	defer tc.Stopper().Stop(ctx)
 
 	scratchRange := tc.ScratchRange(b)
+
+	// Before actually starting the benchmark, we need to make sure that the raft
+	// group is able to add/remove voters. This is important because in leader
+	// leases, it takes a few seconds for store liveness heartbeats to start.
+	// We need store liveness heartbeats for two reasons: (1) By default,
+	// followers won't campaign unless they are supported by a quorum of peers,
+	// and (2) The leader won't be able to propose config changes unless the new
+	// config doesn't cause a regression in the LeadSupportUntil.
+	tc.AddVotersOrFatal(b, scratchRange, tc.Target(1))
+	tc.RemoveVotersOrFatal(b, scratchRange, tc.Target(1))
+
 	b.Run("add-remove", func(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
@@ -5911,9 +6139,121 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	require.NoError(t, g.Wait())
 }
 
-func TestMergeReplicatesLocks(t *testing.T) {
+func TestLeaseTransferDropsLocksIfLargerThanCommandSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	require.NoError(t, log.SetVModule("cmd_lease=2"))
+
+	// Test Plan:
+	//
+	// - Reduce MaxRaftCommandSize
+	// - Move scratch range to known location.
+	// - Take out a large number of unreplicated locks
+	// - Transfer lease without an error
+	//
+	ctx := context.Background()
+	st := cluster.MakeClusterSettings()
+	concurrency.UnreplicatedLockReliabilityLeaseTransfer.Override(ctx, &st.SV, true)
+	kvserverbase.MaxCommandSize.Override(ctx, &st.SV, 1<<20)
+	// To see the test fail:
+	// concurrency.MaxLockFlushSize.Override(ctx, &st.SV, 2<<20)
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{Settings: st},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratch := tc.ScratchRange(t)
+	desc, err := tc.LookupRange(scratch)
+	require.NoError(t, err)
+
+	// Start with the lease on store 1.
+	t.Logf("transfering to s1")
+	require.NoError(t, tc.TransferRangeLease(desc, tc.Target(0)))
+	t.Logf("done transfering to s1")
+
+	mkRandomScratchKey := func() roachpb.Key {
+		return append(scratch.Clone(), uuid.MakeV4().String()...)
+	}
+
+	numLocks := 9000
+	txn := tc.Server(1).DB().NewTxn(ctx, "test-lots-o-locks")
+	b := txn.NewBatch()
+	for range numLocks {
+		b.GetForUpdate(mkRandomScratchKey(), kvpb.BestEffort)
+		b.Requests()[len(b.Requests())-1].GetGet().LockNonExisting = true
+	}
+	require.NoError(t, txn.Run(ctx, b))
+
+	t.Log("transfering lease from s1 -> s2")
+	require.NoError(t, tc.TransferRangeLease(desc, tc.Target(1)))
+}
+
+func TestMergeDropsLocksIfLargerThanMax(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	require.NoError(t, log.SetVModule("cmd_subsume=2"))
+
+	// Test Plan:
+	//
+	// - Reduce MaxRaftCommandSize
+	// - Move scratch range to known location.
+	// - Take out a large number of unreplicated locks
+	// - Merge range without an error
+	//
+	var (
+		splitPoint = "b"
+		ctx        = context.Background()
+		st         = cluster.MakeClusterSettings()
+	)
+
+	concurrency.UnreplicatedLockReliabilityMerge.Override(ctx, &st.SV, true)
+	kvserverbase.MaxCommandSize.Override(ctx, &st.SV, 1<<20)
+	// To see the test fail:
+	// concurrency.MaxLockFlushSize.Override(ctx, &st.SV, 2<<20)
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{Settings: st},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratch := tc.ScratchRange(t)
+
+	mkKey := func(s string) roachpb.Key {
+		prefix := scratch.Clone()
+		return append(prefix[:len(prefix):len(prefix)], s...)
+	}
+
+	splitKey := mkKey(splitPoint)
+	tc.SplitRangeOrFatal(t, splitKey)
+
+	mkRandomScratchKey := func() roachpb.Key {
+		return append(mkKey(splitPoint), uuid.MakeV4().String()...)
+	}
+
+	numLocks := 6000
+	txn := tc.Server(0).DB().NewTxn(ctx, "test-lots-o-locks")
+	b := txn.NewBatch()
+	for range numLocks {
+		b.GetForUpdate(mkRandomScratchKey(), kvpb.BestEffort)
+		b.Requests()[len(b.Requests())-1].GetGet().LockNonExisting = true
+	}
+	require.NoError(t, txn.Run(ctx, b))
+
+	// Merge Range
+	t.Logf("merging range %s", scratch)
+	_, err := tc.MergeRanges(scratch)
+	require.NoError(t, err)
+}
+
+func TestMergeReplicatesLocks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	scope := log.Scope(t)
+	defer scope.Close(t)
+
+	skip.UnderDuress(t, "too slow for testrace")
 
 	// Test Setup:
 	//
@@ -5951,9 +6291,25 @@ func TestMergeReplicatesLocks(t *testing.T) {
 					Settings: st,
 				},
 			})
+			defer tc.Stopper().Stop(ctx)
+
+			defer func() {
+				if !t.Failed() {
+					return
+				}
+				d := kvtestutils.RaftLogDumper{Dir: scope.GetDirectory()}
+				for _, srv := range tc.Servers {
+					require.NoError(t, srv.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+						s.VisitReplicas(func(replica *kvserver.Replica) (wantMore bool) {
+							d.Dump(t, s.LogEngine(), s.StoreID(), replica.RangeID)
+							return true // more
+						})
+						return nil
+					}))
+				}
+			}()
 
 			sql := tc.ServerConn(0)
-			defer tc.Stopper().Stop(ctx)
 			scratch := tc.ScratchRange(t)
 			mkKey := func(s string) roachpb.Key {
 				prefix := scratch.Clone()

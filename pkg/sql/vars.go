@@ -4036,6 +4036,99 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
+	// CockroachDB extension.
+	`create_table_with_schema_locked`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`create_table_with_schema_locked`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("create_table_with_schema_locked", s)
+			if err != nil {
+				return err
+			}
+			m.SetCreateTableWithSchemaLocked(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().CreateTableWithSchemaLocked), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(CreateTableWithSchemaLocked.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
+	`use_pre_25_2_variadic_builtins`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`use_pre_25_2_variadic_builtins`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("use_pre_25_2_variadic_builtins", s)
+			if err != nil {
+				return err
+			}
+			m.SetUsePre_25_2VariadicBuiltins(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().UsePre_25_2VariadicBuiltins), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
+	`vector_search_beam_size`: {
+		GetStringVal: makeIntGetStringValFn(`vector_search_beam_size`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := strconv.ParseInt(s, 10, 32)
+			if err != nil {
+				return err
+			}
+			if b < 1 || b > 512 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"vector_search_beam_size cannot be less than 1 or greater than 512")
+			}
+			m.SetVectorSearchBeamSize(int32(b))
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.FormatInt(int64(evalCtx.SessionData().VectorSearchBeamSize), 10), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "32"
+		},
+	},
+
+	// CockroachDB extension.
+	`propagate_admission_header_to_leaf_transactions`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`propagate_admission_header_to_leaf_transactions`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("propagate_admission_header_to_leaf_transactions", s)
+			if err != nil {
+				return err
+			}
+			m.SetPropagateAdmissionHeaderToLeafTransactions(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().PropagateAdmissionHeaderToLeafTransactions), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
+	`optimizer_use_exists_filter_hoist_rule`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_exists_filter_hoist_rule`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_exists_filter_hoist_rule", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseExistsFilterHoistRule(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseExistsFilterHoistRule), nil
+		},
+		GlobalDefault: globalTrue,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {

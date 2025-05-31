@@ -20,11 +20,15 @@ if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
 fi
 
 arch=amd64
-if [[ ${FIPS_ENABLED:-0} == 1 ]]; then
+if [[ ${CLOUD} == "ibm" ]]; then
+  arch=s390x
+elif [[ ${FIPS_ENABLED:-0} == 1 ]]; then
   arch=amd64-fips
 fi
 $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh $arch
-$root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh arm64
+if [[ $arch != "s390x" ]]; then
+  $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh arm64
+fi
 
 artifacts=/artifacts
 source $root/build/teamcity/util/roachtest_util.sh
@@ -98,8 +102,7 @@ build/teamcity-roachtest-invoke.sh \
   --slack-token="${SLACK_TOKEN}" \
   --suite nightly \
   --selective-tests="${selective_tests:-false}" \
-  --side-eye-token="${SIDE_EYE_API_TOKEN}" \
   --export-openmetrics="${EXPORT_OPENMETRICS:-false}" \
-  --openmetrics-labels="branch=$(tc_build_branch), cpu-arch=${arch}, suite=nightly" \
+  --openmetrics-labels="branch=$(tc_build_branch), goarch=${arch}, goos=linux, commit=${COMMIT_SHA}, suite=nightly" \
   ${EXTRA_ROACHTEST_ARGS:+$EXTRA_ROACHTEST_ARGS} \
   "${TESTS}"

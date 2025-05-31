@@ -2829,7 +2829,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/partition_prune.o
  --
  -- Test Partition pruning for HASH partitioning
  --
-@@ -1745,402 +1384,393 @@
+@@ -1745,402 +1384,394 @@
  --
  create table hp (a int, b text, c int)
    partition by hash (a part_test_int4_ops, b part_test_text_ops);
@@ -3449,6 +3449,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/partition_prune.o
  -- Test run-time pruning using stable functions
  create function list_part_fn(int) returns int as $$ begin return $1; end;$$ language plpgsql stable;
 +NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
++ERROR:  no value provided for placeholder: $1
  -- Ensure pruning works using a stable function containing no Vars
  explain (analyze, costs off, summary off, timing off) select * from list_part where a = list_part_fn(1);
 -                            QUERY PLAN                            
@@ -3515,13 +3516,28 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/partition_prune.o
  -- Parallel append
  -- Parallel queries won't necessarily get as many workers as the planner
  -- asked for.  This affects not only the "Workers Launched:" field of EXPLAIN
-@@ -2167,111 +1797,81 @@
+@@ -2167,111 +1798,96 @@
      end loop;
  end;
  $$;
-+ERROR:  unimplemented: set-returning PL/pgSQL functions are not yet supported
++ERROR:  at or near "in": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++declare
++    ln text;
++begin
++    for ln in
++           ^
 +HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/105240/_version_
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
  prepare ab_q4 (int, int) as
  select avg(a) from ab where a between $1 and $2 and b < 4;
 +ERROR:  relation "ab" does not exist
@@ -3592,9 +3608,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/partition_prune.o
 +
 +If you would rather not post publicly, please contact us directly
 +using the support form.
-+
-+We appreciate your feedback.
  
++We appreciate your feedback.
++
 +select explain_parallel_append('execute ab_q4 (2, 2)');
 +ERROR:  unknown function: explain_parallel_append()
  -- Test run-time pruning with IN lists.
@@ -3685,7 +3701,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/partition_prune.o
  -- Test pruning during parallel nested loop query
  create table lprt_a (a int not null);
  -- Insert some values we won't find in ab
-@@ -2280,344 +1880,198 @@
+@@ -2280,344 +1896,198 @@
  insert into lprt_a values(1),(1);
  analyze lprt_a;
  create index ab_a2_b1_a_idx on ab_a2_b1 (a);
@@ -4181,7 +4197,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/partition_prune.o
  prepare ab_q6 as
  select * from (
  	select tableoid::regclass,a,b from ab
-@@ -2626,587 +2080,522 @@
+@@ -2626,587 +2096,522 @@
  union all
  	select tableoid::regclass,a,b from ab
  ) ab where a = $1 and b = (select -10);
@@ -5110,7 +5126,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/partition_prune.o
  --
  -- Check that pruning with composite range partitioning works correctly when
  -- a combination of runtime parameters is specified, not all of whose values
-@@ -3214,529 +2603,666 @@
+@@ -3214,529 +2619,666 @@
  --
  prepare ps1 as
    select * from mc3p where a = $1 and abs(b) < (select 3);
@@ -5892,9 +5908,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/partition_prune.o
 +
 +If you would rather not post publicly, please contact us directly
 +using the support form.
-+
-+We appreciate your feedback.
  
++We appreciate your feedback.
++
 +explain (costs off) select * from pp_lp where a = 1;
 +ERROR:  at or near "off": syntax error
 +DETAIL:  source SQL:
@@ -6147,7 +6163,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/partition_prune.o
  explain (costs off)
  select *
  from (
-@@ -3747,19 +3273,11 @@
+@@ -3747,19 +3289,11 @@
        select 1, 1, 1
       ) s(a, b, c)
  where s.a = 1 and s.b = 1 and s.c = (select 1);
@@ -6172,7 +6188,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/partition_prune.o
  select *
  from (
        select * from p
-@@ -3769,11 +3287,7 @@
+@@ -3769,11 +3303,7 @@
        select 1, 1, 1
       ) s(a, b, c)
  where s.a = 1 and s.b = 1 and s.c = (select 1);
@@ -6185,7 +6201,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/partition_prune.o
  prepare q (int, int) as
  select *
  from (
-@@ -3784,116 +3298,186 @@
+@@ -3784,116 +3314,186 @@
        select 1, 1, 1
       ) s(a, b, c)
  where s.a = $1 and s.b = $2 and s.c = (select 1);
@@ -6291,9 +6307,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/partition_prune.o
 +
 +If you would rather not post publicly, please contact us directly
 +using the support form.
- 
-+We appreciate your feedback.
 +
++We appreciate your feedback.
+ 
 +explain (costs off) select * from listp1 where a = 2;
 +ERROR:  at or near "off": syntax error
 +DETAIL:  source SQL:
@@ -6327,10 +6343,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/partition_prune.o
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
-+
+ 
 +If you would rather not post publicly, please contact us directly
 +using the support form.
- 
++
 +We appreciate your feedback.
 +
 +explain (costs off) select * from listp1 where a = 2;
@@ -6440,7 +6456,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/partition_prune.o
  -- Like the above but throw some more complexity at the planner by adding
  -- a UNION ALL.  We expect both sides of the union not to scan the
  -- non-required partitions.
-@@ -3901,136 +3485,236 @@
+@@ -3901,136 +3501,236 @@
  'select * from listp where a = (select 1)
    union all
  select * from listp where a = (select 2);');
@@ -6753,7 +6769,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/partition_prune.o
  --
  -- Check that gen_partprune_steps() detects self-contradiction from clauses
  -- regardless of the order of the clauses (Here we use a custom operator to
-@@ -4043,28 +3727,84 @@
+@@ -4043,28 +3743,84 @@
     commutator = ===,
     hashes
  );

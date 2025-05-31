@@ -1566,3 +1566,9 @@ func (c *CustomFuncs) MakeAnyNotNullScalarGroupBy(input memo.RelExpr) memo.RelEx
 		memo.EmptyGroupingPrivate,
 	)
 }
+
+// CanHoistUnboundFilterFromExistsSubquery returns true if the
+// HoistUnboundFilterFromExistsSubquery rule is enabled by session-setting.
+func (c *CustomFuncs) CanHoistUnboundFilterFromExistsSubquery() bool {
+	return c.f.evalCtx.SessionData().OptimizerUseExistsFilterHoistRule
+}

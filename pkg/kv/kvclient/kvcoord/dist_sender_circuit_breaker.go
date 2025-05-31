@@ -113,14 +113,9 @@ var (
 			"(these can't retry internally, so should be long enough to allow quorum/lease recovery)",
 		10*time.Second,
 		settings.WithPublic,
-		settings.WithValidateDuration(func(t time.Duration) error {
-			// This prevents probes from exiting when idle, which can lead to buildup
-			// of probe goroutines, so cap it at 1 minute.
-			if t > time.Minute {
-				return errors.New("grace period can't be more than 1 minute")
-			}
-			return nil
-		}),
+		// This prevents probes from exiting when idle, which can lead to
+		// buildup of probe goroutines, so cap it at 1 minute.
+		settings.DurationInRange(0 /* minVal */, time.Minute),
 	)
 )
 
@@ -287,7 +282,6 @@ func (d *DistSenderCircuitBreakers) probeStallLoop(ctx context.Context) {
 	for {
 		select {
 		case <-timer.C:
-			timer.Read = true
 			// Eagerly reset the timer, to avoid skewing the interval.
 			timer.Reset(CircuitBreakerProbeInterval.Get(&d.settings.SV))
 		case <-d.stopper.ShouldQuiesce():
@@ -913,13 +907,12 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 				cancelRequests(cbCancelAfterGracePeriod)
 			}
 
-			for !timer.Read { // select until probe interval timer fires
+			for done := false; !done; { // select until probe interval timer fires
 				select {
 				case <-timer.C:
-					timer.Read = true
+					done = true
 				case <-writeGraceTimer.C:
 					cancelRequests(cbCancelAfterGracePeriod)
-					writeGraceTimer.Read = true
 					writeGraceTimer.Stop() // sets C = nil
 				case <-r.closedC:
 					// The circuit breaker has been GCed, exit. We could cancel the context

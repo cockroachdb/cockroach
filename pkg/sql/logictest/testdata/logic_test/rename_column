@@ -1,3 +1,5 @@
+# LogicTest: !local-schema-locked
+
 statement ok
 CREATE TABLE users (
   uid    INT PRIMARY KEY,

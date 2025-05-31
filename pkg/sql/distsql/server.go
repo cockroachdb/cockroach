@@ -260,7 +260,8 @@ func (ds *ServerImpl) setupFlow(
 		}
 		// The flow will run in a LeafTxn because we do not want each distributed
 		// Txn to heartbeat the transaction.
-		return kv.NewLeafTxn(ctx, ds.DB.KV(), roachpb.NodeID(req.Flow.Gateway), tis), nil
+		nodeID := roachpb.NodeID(req.Flow.Gateway)
+		return kv.NewLeafTxn(ctx, ds.DB.KV(), nodeID, tis, &req.LeafTxnAdmissionHeader), nil
 	}
 
 	var evalCtx *eval.Context
@@ -353,6 +354,7 @@ func (ds *ServerImpl) setupFlow(
 		}
 		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
+		evalCtx.TestingKnobs.ForceProductionValues = req.EvalContext.TestingKnobsForceProductionValues
 	}
 
 	// Create the FlowCtx for the flow.
@@ -383,7 +385,7 @@ func (ds *ServerImpl) setupFlow(
 
 	if !f.IsLocal() {
 		bld := logtags.BuildBuffer()
-		bld.Add("f", flowCtx.ID.Short().String())
+		bld.Add("f", flowCtx.ID.Short())
 		if req.JobTag != "" {
 			bld.Add("job", req.JobTag)
 		}
@@ -624,6 +626,10 @@ func (ds *ServerImpl) SetupFlow(
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow since it outlives the RPC.
 	ctx = ds.AnnotateCtx(context.Background())
+	// Ensure that the flow respects the node being shut down. Note that since
+	// the flow outlives the RPC, we cannot defer the cancel function, so we
+	// simply ignore it.
+	ctx, _ = ds.Stopper.WithCancelOnQuiesce(ctx)
 	if err := func() error {
 		// Reserve some memory for this remote flow which is a poor man's
 		// admission control based on the RAM usage.

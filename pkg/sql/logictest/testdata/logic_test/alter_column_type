@@ -1,4 +1,4 @@
-# LogicTest: !local-legacy-schema-changer
+# LogicTest: !local-legacy-schema-changer !local-schema-locked
 
 # A basic sanity check to demonstrate column type changes.
 subtest SanityCheck
@@ -67,7 +67,10 @@ statement ok
 CREATE INDEX idx2 ON t (i)
 
 statement ok
-ALTER TABLE t ALTER COLUMN i DROP STORED, DROP COLUMN b CASCADE
+ALTER TABLE t ALTER COLUMN i DROP STORED
+
+statement ok
+ALTER TABLE t DROP COLUMN b CASCADE
 
 query TT colnames
 show create table t
@@ -78,7 +81,7 @@ t           CREATE TABLE public.t (
               i INT8 NULL,
               CONSTRAINT t_pkey PRIMARY KEY (a ASC),
               INDEX idx2 (i ASC)
-            )
+            );
 
 statement ok
 ALTER TABLE t RENAME COLUMN i TO b
@@ -172,10 +175,6 @@ CREATE TABLE t1 (date string)
 statement ok
 INSERT INTO t1 VALUES ('2024-07-26')
 
-onlyif config local-mixed-24.3
-statement error pq: ALTER COLUMN TYPE from string to date is only supported experimentally
-ALTER TABLE t1 ALTER COLUMN date TYPE DATE USING date::DATE
-
 # After setting enable_experimental_alter_column_type_general, ALTER COLUMN TYPE should work.
 statement ok
 SET enable_experimental_alter_column_type_general = true
@@ -235,7 +234,7 @@ t3          CREATE TABLE public.t3 (
               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
               CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC),
               FAMILY f1 (id3, id2, id, rowid)
-            )
+            );
 
 statement ok
 INSERT INTO t3 VALUES (4,'4',4)
@@ -321,7 +320,7 @@ t8  CREATE TABLE public.t8 (
       x STRING NULL,
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
       CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC)
-    )
+    );
 
 # Ensure ALTER COLUMN TYPE is disallowed if column is part of primary key.
 statement ok
@@ -420,7 +419,7 @@ t17         CREATE TABLE public.t17 (
               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
               CONSTRAINT t17_pkey PRIMARY KEY (rowid ASC),
               FAMILY f1 (x, y, rowid)
-            )
+            );
 
 
 # Ensure ALTER COLUMN TYPE fails if the column is part of an FK relationship.
@@ -526,7 +525,7 @@ t24         CREATE TABLE public.t24 (
               x STRING NULL,
               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
               CONSTRAINT t24_pkey PRIMARY KEY (rowid ASC)
-            )
+            );
 
 # Ensure USING EXPRESSION rolls back if the USING EXPRESSION does not conform
 # to the new type of the column.
@@ -758,7 +757,7 @@ t_with_hidden  CREATE TABLE public.t_with_hidden (
                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                  CONSTRAINT t_with_hidden_pkey PRIMARY KEY (rowid ASC),
                  FAMILY f1 (vis1, hid1, rowid)
-               )
+               );
 
 statement ok
 DROP TABLE t_with_hidden;
@@ -824,7 +823,7 @@ t_with_on_update  CREATE TABLE public.t_with_on_update (
                     b STRING NULL ON UPDATE 3:::INT8,
                     CONSTRAINT t_with_on_update_pkey PRIMARY KEY (a ASC),
                     FAMILY f1 (a, b)
-                  )
+                  );
 
 statement ok
 DROP TABLE t_with_on_update;
@@ -861,7 +860,7 @@ t_with_default  CREATE TABLE public.t_with_default (
                   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                   CONSTRAINT t_with_default_pkey PRIMARY KEY (rowid ASC),
                   FAMILY f1 (rowid, c1)
-                )
+                );
 
 statement ok
 DROP TABLE t_with_default;
@@ -1016,7 +1015,7 @@ t_bytes     CREATE TABLE public.t_bytes (
               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
               CONSTRAINT t_bytes_pkey PRIMARY KEY (rowid ASC),
               FAMILY f1 (c1, c2, c3, rowid)
-            )
+            );
 
 statement ok
 DROP TABLE t_bytes;
@@ -1084,7 +1083,7 @@ t_decimal   CREATE TABLE public.t_decimal (
               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
               CONSTRAINT t_decimal_pkey PRIMARY KEY (rowid ASC),
               FAMILY f1 (c1, c2, c3, rowid)
-            )
+            );
 
 statement ok
 DROP TABLE t_decimal;
@@ -1381,7 +1380,7 @@ stored1  CREATE TABLE public.stored1 (
            comp1 INT8 NOT NULL AS (a) STORED,
            CONSTRAINT stored1_pkey PRIMARY KEY (a ASC),
            FAMILY f1 (a, comp1)
-         )
+         );
 
 query II
 SELECT * FROM stored1 ORDER BY A;
@@ -1412,7 +1411,7 @@ stored1  CREATE TABLE public.stored1 (
            comp1 INT4 NOT NULL AS (a) STORED,
            CONSTRAINT stored1_pkey PRIMARY KEY (a ASC),
            FAMILY f1 (a, comp1)
-         )
+         );
 
 query II
 SELECT * FROM stored1 ORDER BY A;
@@ -1432,14 +1431,12 @@ ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE TEXT;
 
 # Convert the type to something compatible, but specify a custom value for the
 # column with the USING expression. This will force a type conversion with a backfill.
-skipif config local-mixed-24.3
 statement ok
 ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE INT2 USING -1;
 
 statement ok
 INSERT INTO stored1 VALUES (-1000);
 
-skipif config local-mixed-24.3
 query TT
 SHOW CREATE TABLE stored1;
 ----
@@ -1448,9 +1445,8 @@ stored1  CREATE TABLE public.stored1 (
            comp1 INT2 NOT NULL AS (a) STORED,
            CONSTRAINT stored1_pkey PRIMARY KEY (a ASC),
            FAMILY f1 (a, comp1)
-         )
+         );
 
-skipif config local-mixed-24.3
 query II
 SELECT * FROM stored1 ORDER BY A;
 ----
@@ -1462,7 +1458,6 @@ SELECT * FROM stored1 ORDER BY A;
 2147483647  -1
 
 # Attempt to drop stored along with changing the column type
-skipif config local-mixed-24.3
 statement error pq: unimplemented: ALTER COLUMN TYPE operations that require rewriting on-disk data cannot be combined with other ALTER TABLE commands
 ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE INT4 USING -1, ALTER COLUMN comp1 drop stored;
 
@@ -1493,11 +1488,11 @@ SELECT * from virt1 ORDER BY c1;
 query TT
 SHOW CREATE TABLE virt1;
 ----
-virt1      CREATE TABLE public.virt1 (
-             c1 INT8 NOT NULL,
-             v1 INT4 NOT NULL AS (c1) VIRTUAL,
-             CONSTRAINT virt1_pkey PRIMARY KEY (c1 ASC)
-           )
+virt1  CREATE TABLE public.virt1 (
+         c1 INT8 NOT NULL,
+         v1 INT4 NOT NULL AS (c1) VIRTUAL,
+         CONSTRAINT virt1_pkey PRIMARY KEY (c1 ASC)
+       );
 
 statement error pq: validate check constraint: integer out of range for type int2
 ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE INT2;
@@ -1520,11 +1515,11 @@ SELECT * from virt1 ORDER BY c1;
 query TT
 SHOW CREATE TABLE virt1;
 ----
-virt1      CREATE TABLE public.virt1 (
-             c1 INT8 NOT NULL,
-             v1 INT2 NOT NULL AS (c1) VIRTUAL,
-             CONSTRAINT virt1_pkey PRIMARY KEY (c1 ASC)
-           )
+virt1  CREATE TABLE public.virt1 (
+         c1 INT8 NOT NULL,
+         v1 INT2 NOT NULL AS (c1) VIRTUAL,
+         CONSTRAINT virt1_pkey PRIMARY KEY (c1 ASC)
+       );
 
 statement error pq: expected STORED COMPUTED COLUMN expression to have type string, but 'c1' has type int
 ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE TEXT;
@@ -1559,11 +1554,11 @@ SELECT * FROM virt2 ORDER BY c1;
 query TT
 SHOW CREATE TABLE virt2;
 ----
-virt2      CREATE TABLE public.virt2 (
-             c1 TIMESTAMP(6) NOT NULL,
-             v1 TIMESTAMP(2) NULL AS (c1) VIRTUAL,
-             CONSTRAINT virt2_pkey PRIMARY KEY (c1 ASC)
-           )
+virt2  CREATE TABLE public.virt2 (
+         c1 TIMESTAMP(6) NOT NULL,
+         v1 TIMESTAMP(2) NULL AS (c1) VIRTUAL,
+         CONSTRAINT virt2_pkey PRIMARY KEY (c1 ASC)
+       );
 
 statement ok
 ALTER TABLE virt2 ALTER COLUMN v1 SET DATA TYPE TIMESTAMP(5);
@@ -1576,11 +1571,11 @@ SELECT * FROM virt2 ORDER BY c1;
 query TT
 SHOW CREATE TABLE virt2;
 ----
-virt2      CREATE TABLE public.virt2 (
-             c1 TIMESTAMP(6) NOT NULL,
-             v1 TIMESTAMP(5) NULL AS (c1) VIRTUAL,
-             CONSTRAINT virt2_pkey PRIMARY KEY (c1 ASC)
-           )
+virt2  CREATE TABLE public.virt2 (
+         c1 TIMESTAMP(6) NOT NULL,
+         v1 TIMESTAMP(5) NULL AS (c1) VIRTUAL,
+         CONSTRAINT virt2_pkey PRIMARY KEY (c1 ASC)
+       );
 
 statement ok
 DROP TABLE virt2;
@@ -1613,11 +1608,11 @@ SELECT * FROM virt3 ORDER BY c1;
 query TT
 SHOW CREATE TABLE virt3;
 ----
-virt3      CREATE TABLE public.virt3 (
-             c1 DECIMAL(6,3) NOT NULL,
-             v1 DECIMAL(6,2) NULL AS (c1) VIRTUAL,
-             CONSTRAINT virt3_pkey PRIMARY KEY (c1 ASC)
-           )
+virt3  CREATE TABLE public.virt3 (
+         c1 DECIMAL(6,3) NOT NULL,
+         v1 DECIMAL(6,2) NULL AS (c1) VIRTUAL,
+         CONSTRAINT virt3_pkey PRIMARY KEY (c1 ASC)
+       );
 
 statement error pq: validate check constraint: .*value with precision 5, scale 4 must round to an absolute value less than 10\^1
 ALTER TABLE virt3 ALTER COLUMN v1 SET DATA TYPE DECIMAL(5,4);
@@ -1635,11 +1630,11 @@ SELECT * FROM virt3 ORDER BY c1;
 query TT
 SHOW CREATE TABLE virt3;
 ----
-virt3      CREATE TABLE public.virt3 (
-             c1 DECIMAL(6,3) NOT NULL,
-             v1 DECIMAL(8,4) NULL AS (c1) VIRTUAL,
-             CONSTRAINT virt3_pkey PRIMARY KEY (c1 ASC)
-           )
+virt3  CREATE TABLE public.virt3 (
+         c1 DECIMAL(6,3) NOT NULL,
+         v1 DECIMAL(8,4) NULL AS (c1) VIRTUAL,
+         CONSTRAINT virt3_pkey PRIMARY KEY (c1 ASC)
+       );
 
 statement ok
 DROP TABLE virt3;
@@ -1677,11 +1672,11 @@ RESET autocommit_before_ddl
 query TT
 SHOW CREATE TABLE t_droppedcol;
 ----
-t_droppedcol CREATE TABLE public.t_droppedcol (
-               dropme INT8 NULL,
-               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-               CONSTRAINT t_droppedcol_pkey PRIMARY KEY (rowid ASC)
-             )
+t_droppedcol  CREATE TABLE public.t_droppedcol (
+                dropme INT8 NULL,
+                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                CONSTRAINT t_droppedcol_pkey PRIMARY KEY (rowid ASC)
+              );
 
 statement ok
 DROP TABLE t_droppedcol;
@@ -1708,46 +1703,41 @@ INSERT INTO t_multi_alter VALUES (10,'ten','1984-09-06'),(20,'twenty','2024-08-1
 # The add column operation creates multiple primary keys, with all but one being
 # temporary. Previously, this caused the alter type to fail because it
 # encountered more primary keys than expected.
-skipif config local-mixed-24.3
 statement ok
 begin;
 ALTER TABLE t_multi_alter ADD COLUMN c3 TEXT DEFAULT '<default>', DROP COLUMN drop;
 ALTER TABLE t_multi_alter ALTER COLUMN c2 SET DATA TYPE BIGINT USING c1::BIGINT;
 commit;
 
-skipif config local-mixed-24.3
 query IIT
 select * from t_multi_alter order by c1;
 ----
 10 10 <default>
 20 20 <default>
 
-skipif config local-mixed-24.3
 statement ok
 begin;
 ALTER TABLE t_multi_alter ALTER COLUMN c3 SET DEFAULT NULL;
 ALTER TABLE t_multi_alter ALTER COLUMN c3 SET DATA TYPE DATE USING '2024-04-22'::DATE;
 commit;
 
-skipif config local-mixed-24.3
 query IIT
 select * from t_multi_alter order by c1;
 ----
 10 10 2024-04-22 00:00:00 +0000 +0000
 20 20 2024-04-22 00:00:00 +0000 +0000
 
-skipif config local-mixed-24.3
 query TT colnames
 show create table t_multi_alter
 ----
-table_name  create_statement
-t_multi_alter   CREATE TABLE public.t_multi_alter (
-              c1 INT8 NOT NULL,
-              c2 INT8 NOT NULL,
-              c3 DATE NULL,
-              CONSTRAINT t_multi_alter_pkey PRIMARY KEY (c1 ASC),
-              FAMILY f1 (c1, c2, c3)
-            )
+table_name     create_statement
+t_multi_alter  CREATE TABLE public.t_multi_alter (
+                 c1 INT8 NOT NULL,
+                 c2 INT8 NOT NULL,
+                 c3 DATE NULL,
+                 CONSTRAINT t_multi_alter_pkey PRIMARY KEY (c1 ASC),
+                 FAMILY f1 (c1, c2, c3)
+               );
 
 statement ok
 drop table t_multi_alter;

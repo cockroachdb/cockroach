@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -89,9 +88,6 @@ func newMysqldumpReader(
 	}
 	res.tables = converters
 	return res, nil
-}
-
-func (m *mysqldumpReader) start(ctx ctxgroup.Group) {
 }
 
 func (m *mysqldumpReader) readFiles(

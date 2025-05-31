@@ -27,7 +27,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: db.public.tbl
-## StatementPhase stage 1 of 1 with 5 MutationType ops
+## StatementPhase stage 1 of 1 with 6 MutationType ops
 upsert descriptor #106
    table:
   +  checks:
@@ -80,7 +80,9 @@ upsert descriptor #106
      nextFamilyId: 1
      nextIndexId: 2
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
@@ -89,7 +91,7 @@ upsert descriptor #106
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 7 MutationType ops
+## PreCommitPhase stage 2 of 2 with 8 MutationType ops
 upsert descriptor #106
    table:
   +  checks:
@@ -175,7 +177,9 @@ upsert descriptor #106
      nextFamilyId: 1
      nextIndexId: 2
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
@@ -341,11 +345,11 @@ upsert descriptor #106
   +  version: "4"
 persist all catalog changes to storage
 adding table for stats refresh: 106
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 1 MutationType op pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #6
 begin transaction #7
-## PostCommitNonRevertiblePhase stage 2 of 2 with 3 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
 upsert descriptor #106
    table:
   -  checks:
@@ -414,7 +418,9 @@ upsert descriptor #106
      name: tbl
      nextColumnId: 4
   ...
+     replacementOf:
        time: {}
+  +  schemaLocked: true
      unexposedParentSchemaId: 105
   -  version: "4"
   +  version: "5"

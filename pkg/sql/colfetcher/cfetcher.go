@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -202,6 +203,8 @@ type cFetcherArgs struct {
 	// the last one returned on the NextBatch calls if the caller wishes to keep
 	// multiple batches at the same time.
 	alwaysReallocate bool
+	// Txn is the txn for the fetch. It might be nil.
+	txn *kv.Txn
 }
 
 // noOutputColumn is a sentinel value to denote that a system column is not
@@ -437,6 +440,14 @@ func (cf *cFetcher) Init(
 				table.oidOutputIdx = idx
 				table.neededValueColsByIdx.Remove(idx)
 			}
+		}
+	}
+
+	// Disable buffered writes if any system columns are needed that require
+	// MVCC decoding.
+	if cf.mvccDecodeStrategy == storage.MVCCDecodingRequired {
+		if cf.txn != nil && cf.txn.BufferedWritesEnabled() {
+			cf.txn.SetBufferedWritesEnabled(false /* enabled */)
 		}
 	}
 

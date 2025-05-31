@@ -501,7 +501,6 @@ CREATE VECTOR INDEX a ON b (c) STORING (d) -- fully parenthesized
 CREATE VECTOR INDEX a ON b (c) STORING (d) -- literals removed
 CREATE VECTOR INDEX _ ON _ (_) STORING (_) -- identifiers removed
 
-
 parse
 CREATE VECTOR INDEX a ON b (c) WHERE d > 3
 ----
@@ -520,6 +519,22 @@ CREATE VECTOR INDEX IF NOT EXISTS _ ON _ (_) WHERE _ > 3 -- identifiers removed
 
 parse
 CREATE INDEX a ON b USING CSPANN (c)
+----
+CREATE VECTOR INDEX a ON b (c) -- normalized!
+CREATE VECTOR INDEX a ON b (c) -- fully parenthesized
+CREATE VECTOR INDEX a ON b (c) -- literals removed
+CREATE VECTOR INDEX _ ON _ (_) -- identifiers removed
+
+parse
+CREATE VECTOR INDEX a ON b (c) WITH (build_beam_size = 16, min_partition_size = 8, max_partition_size = 32)
+----
+CREATE VECTOR INDEX a ON b (c) WITH ('build_beam_size' = 16, 'min_partition_size' = 8, 'max_partition_size' = 32) -- normalized!
+CREATE VECTOR INDEX a ON b (c) WITH ('build_beam_size' = (16), 'min_partition_size' = (8), 'max_partition_size' = (32)) -- fully parenthesized
+CREATE VECTOR INDEX a ON b (c) WITH ('build_beam_size' = _, 'min_partition_size' = _, 'max_partition_size' = _) -- literals removed
+CREATE VECTOR INDEX _ ON _ (_) WITH ('build_beam_size' = 16, 'min_partition_size' = 8, 'max_partition_size' = 32) -- identifiers removed
+
+parse
+CREATE INDEX a ON b USING HNSW (c)
 ----
 CREATE VECTOR INDEX a ON b (c) -- normalized!
 CREATE VECTOR INDEX a ON b (c) -- fully parenthesized

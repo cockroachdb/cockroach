@@ -88,7 +88,7 @@ func (g *queryBench) Hooks() workload.Hooks {
 			if g.queryFile == "" {
 				return errors.Errorf("Missing required argument '--query-file'")
 			}
-			stmts, err := GetQueries(g.queryFile, g.separator)
+			stmts, err := getQueries(g.queryFile, g.separator)
 			if err != nil {
 				return err
 			}
@@ -148,9 +148,9 @@ func (g *queryBench) Ops(
 	return ql, nil
 }
 
-// GetQueries returns the queries in a file as a slice of named statements. If
+// getQueries returns the queries in a file as a slice of named statements. If
 // no separator is given, splits by newlines.
-func GetQueries(path, separator string) ([]namedStmt, error) {
+func getQueries(path, separator string) ([]namedStmt, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err

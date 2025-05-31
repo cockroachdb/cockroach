@@ -231,7 +231,11 @@ func NewTxnFromProto(
 
 // NewLeafTxn instantiates a new leaf transaction.
 func NewLeafTxn(
-	ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID, tis *roachpb.LeafTxnInputState,
+	ctx context.Context,
+	db *DB,
+	gatewayNodeID roachpb.NodeID,
+	tis *roachpb.LeafTxnInputState,
+	header *kvpb.AdmissionHeader,
 ) *Txn {
 	if db == nil {
 		panic(errors.WithContextTags(
@@ -246,6 +250,19 @@ func NewLeafTxn(
 	txn.mu.ID = tis.Txn.ID
 	txn.mu.userPriority = roachpb.NormalUserPriority
 	txn.mu.sender = db.factory.LeafTransactionalSender(tis)
+	if header != nil {
+		if admissionpb.WorkPriority(header.Priority) != admissionpb.NormalPri {
+			log.VEventf(ctx, 2,
+				"initializing leaf txn admission control header with priority: %v",
+				admissionpb.WorkPriority(header.Priority),
+			)
+		}
+		txn.admissionHeader = kvpb.AdmissionHeader{
+			CreateTime: header.CreateTime,
+			Priority:   header.Priority,
+			Source:     header.Source,
+		}
+	}
 	return txn
 }
 
@@ -941,6 +958,10 @@ func (txn *Txn) DeadlineLikelySufficient() bool {
 		lagTargetDuration := closedts.TargetDuration.Get(sv)
 		leadTargetOverride := closedts.LeadForGlobalReadsOverride.Get(sv)
 		sideTransportCloseInterval := closedts.SideTransportCloseInterval.Get(sv)
+		// Pass the DefaultMaxNetworkRTT regardless of leadTargetAutoTune because we
+		// don't have a good way to estimate the network RTT here. We choose to be
+		// more conservative as this is just for an optimization if the deadline is
+		// far in the future. Missing the optimization is not a big deal.
 		return closedts.TargetForPolicy(now, maxClockOffset,
 			lagTargetDuration, leadTargetOverride, sideTransportCloseInterval,
 			ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO).Add(int64(time.Second), 0)

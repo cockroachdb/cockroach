@@ -99,6 +99,7 @@ CREATE TABLE t(
 statement ok
 COMMENT ON TABLE t IS 'table t';
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -110,11 +111,26 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON TABLE public.t IS 'table t'
+COMMENT ON TABLE public.t IS 'table t';
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+) WITH (schema_locked = true);
+COMMENT ON TABLE public.t IS 'table t';
 
 statement ok
 COMMENT ON TABLE t IS 'table t AGAIN';
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -126,26 +142,26 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON TABLE public.t IS 'table t AGAIN'
+COMMENT ON TABLE public.t IS 'table t AGAIN';
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+) WITH (schema_locked = true);
+COMMENT ON TABLE public.t IS 'table t AGAIN';
 
 statement ok
 COMMENT ON TABLE t IS NULL;
 
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t];
-----
-CREATE TABLE public.t (
-  a INT8 NOT NULL,
-  b INT8 NOT NULL,
-  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-  INDEX idxb (b ASC),
-  FAMILY fam_0_b_a (a, b),
-  CONSTRAINT ckb CHECK (b > 1:::INT8)
-)
-
-statement ok
-COMMENT ON COLUMN t.b IS 'column b';
-
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -157,7 +173,50 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON COLUMN public.t.b IS 'column b'
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+) WITH (schema_locked = true);
+
+statement ok
+COMMENT ON COLUMN t.b IS 'column b';
+
+skipif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+);
+COMMENT ON COLUMN public.t.b IS 'column b';
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+) WITH (schema_locked = true);
+COMMENT ON COLUMN public.t.b IS 'column b';
 
 statement ok
 COMMENT ON COLUMN t.b IS 'column b AGAIN';
@@ -165,6 +224,7 @@ COMMENT ON COLUMN t.b IS 'column b AGAIN';
 statement error column name must be qualified
 COMMENT ON COLUMN b IS 'unqualified column b';
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -176,11 +236,26 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON COLUMN public.t.b IS 'column b AGAIN'
+COMMENT ON COLUMN public.t.b IS 'column b AGAIN';
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+) WITH (schema_locked = true);
+COMMENT ON COLUMN public.t.b IS 'column b AGAIN';
 
 statement ok
 COMMENT ON COLUMN t.b IS NULL;
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -191,11 +266,25 @@ CREATE TABLE public.t (
   INDEX idxb (b ASC),
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
-)
+);
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+) WITH (schema_locked = true);
 
 statement ok
 COMMENT ON INDEX t@idxb IS 'index b';
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -207,11 +296,26 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON INDEX public.t@idxb IS 'index b'
+COMMENT ON INDEX public.t@idxb IS 'index b';
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+) WITH (schema_locked = true);
+COMMENT ON INDEX public.t@idxb IS 'index b';
 
 statement ok
 COMMENT ON INDEX t@idxb IS 'index b AGAIN';
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -223,11 +327,26 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON INDEX public.t@idxb IS 'index b AGAIN'
+COMMENT ON INDEX public.t@idxb IS 'index b AGAIN';
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+) WITH (schema_locked = true);
+COMMENT ON INDEX public.t@idxb IS 'index b AGAIN';
 
 statement ok
 COMMENT ON INDEX t@idxb IS NULL;
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -238,11 +357,25 @@ CREATE TABLE public.t (
   INDEX idxb (b ASC),
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
-)
+);
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+) WITH (schema_locked = true);
 
 statement ok
 COMMENT ON CONSTRAINT ckb ON t IS 'cst b';
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -254,11 +387,26 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON CONSTRAINT ckb ON public.t IS 'cst b'
+COMMENT ON CONSTRAINT ckb ON public.t IS 'cst b';
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+) WITH (schema_locked = true);
+COMMENT ON CONSTRAINT ckb ON public.t IS 'cst b';
 
 statement ok
 COMMENT ON CONSTRAINT ckb ON t IS 'cst b AGAIN';
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -270,11 +418,9 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON CONSTRAINT ckb ON public.t IS 'cst b AGAIN'
+COMMENT ON CONSTRAINT ckb ON public.t IS 'cst b AGAIN';
 
-statement ok
-COMMENT ON CONSTRAINT ckb ON t IS NULL;
-
+onlyif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -285,7 +431,37 @@ CREATE TABLE public.t (
   INDEX idxb (b ASC),
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
-)
+) WITH (schema_locked = true);
+COMMENT ON CONSTRAINT ckb ON public.t IS 'cst b AGAIN';
+
+statement ok
+COMMENT ON CONSTRAINT ckb ON t IS NULL;
+
+skipif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+);
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX idxb (b ASC),
+  FAMILY fam_0_b_a (a, b),
+  CONSTRAINT ckb CHECK (b > 1:::INT8)
+) WITH (schema_locked = true);
 
 # Make sure invalid comment type does not crash a server.
 subtest regression_99316
@@ -296,8 +472,15 @@ CREATE TABLE t_99316(a INT);
 statement ok
 INSERT INTO system.comments VALUES (4294967122, 't_99316'::regclass::OID, 0, 'bar');
 
-statement error pgcode XX000 internal error: invalid comment type 4294967122
+# Invalid comments will be ignored
+statement ok
 SELECT * FROM pg_catalog.pg_description WHERE objoid = 't'::regclass::OID;
+
+# Validation errors will be generated for them in invalid_objects.
+query ITTTT
+SELECT * FROM crdb_internal.invalid_objects ORDER BY id;
+----
+111  test  public  t_99316  invalid comment type: 4294967122 on object ID: 111
 
 statement ok
 DELETE FROM system.comments WHERE type = 4294967122
@@ -368,3 +551,87 @@ SELECT * FROM SYSTEM.COMMENTS;
 ----
 type  object_id  sub_id  comment
 4     109        0       Database_Schema
+
+# Test what happens if a user intentionally adds invalid comments.
+subtest validate_invalid_comments
+
+statement ok
+INSERT INTO system.comments VALUES (32, 11111, 0, 'abc');
+INSERT INTO system.comments VALUES (32, 1, 0, 'abc');
+
+# Validate we can scan pg_description fine even if an invalid
+# comment exists.
+statement ok
+SELECT count(*) FROM pg_catalog.pg_description
+
+query ITTTT
+SELECT * FROM crdb_internal.invalid_objects ORDER BY id;
+----
+1      system  ·  ·  invalid comment type: 32 on object ID: 1
+11111  ·       ·  ·  comment exists for non-existent descriptor 11111
+
+statement ok
+DELETE FROM system.comments WHERE type=32;
+
+query ITTTT
+SELECT * FROM crdb_internal.invalid_objects ORDER BY id;
+----
+
+subtest end
+
+# Test for issue #146516: Ensure type comments are cleaned up when dropping types
+# This test verifies that COMMENT ON TYPE followed by DROP DATABASE CASCADE
+# properly cleans up orphaned comments to avoid "invalid objects" errors.
+subtest type_comment_cleanup_on_drop_database_cascade
+
+statement ok
+CREATE DATABASE test_db
+
+statement ok
+USE test_db
+
+statement ok
+CREATE TYPE roach_type AS ENUM ('option1', 'option2')
+
+# Skip for legacy schema changer as COMMENT ON TYPE is not supported
+skipif config local-legacy-schema-changer
+statement ok
+COMMENT ON TYPE roach_type IS 'This is a test comment on a type'
+
+skipif config local-legacy-schema-changer
+query TTTT colnames
+SHOW TYPES WITH COMMENT
+----
+schema  name        owner  comment
+public  roach_type  root   This is a test comment on a type
+
+# Now drop the database with CASCADE, which should clean up type comments
+statement ok
+USE defaultdb
+
+let $schema_changer_state
+SHOW use_declarative_schema_changer
+
+statement ok
+SET use_declarative_schema_changer = 'off'
+
+statement ok
+DROP DATABASE test_db CASCADE
+
+# Restore the schema changer state back.
+statement ok
+SET use_declarative_schema_changer = $schema_changer_state
+
+# Check that no invalid objects exist - this should be empty
+# The issue was that type comments were not being cleaned up,
+# leaving orphaned entries in system.comments
+query ITTTT
+SELECT id, database_name, schema_name, obj_name, error FROM "".crdb_internal.invalid_objects
+----
+
+# Verify the database is actually gone
+query T
+SELECT database_name FROM [SHOW DATABASES] WHERE database_name = 'test_db'
+----
+
+subtest end

@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -34,7 +35,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 // TODO(ajwerner): Ideally we could have a centralized worker which reads the
@@ -236,8 +239,22 @@ func (tf *schemaFeed) init() error {
 	return nil
 }
 
+// targetsTableIDsString returns a comma-separated string of table IDs in the targets.
+func targetsTableIDsString(ts changefeedbase.Targets) string {
+	var ids []string
+	_ = ts.EachTableID(func(id descpb.ID) error {
+		ids = append(ids, fmt.Sprintf("%d", id))
+		return nil
+	})
+	return strings.Join(ids, ",")
+}
+
 // Run will run the SchemaFeed. It is an error to run a feed more than once.
 func (tf *schemaFeed) Run(ctx context.Context) error {
+	ctx = logtags.AddTag(ctx, "table_ids", targetsTableIDsString(tf.targets))
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.schemafeed.run")
+	defer sp.Finish()
+
 	if err := tf.init(); err != nil {
 		return err
 	}
@@ -317,6 +334,8 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 // the periodic polling can be paused and Peek/Pop will always just return nil.
 // Read commentary in peekOrPop for more explanations.
 func (tf *schemaFeed) periodicallyMaybePollTableHistory(ctx context.Context) error {
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.schemafeed.periodically_maybe_poll_table_history")
+	defer sp.Finish()
 	for {
 		if !tf.pollingPaused() {
 			if err := tf.updateTableHistory(ctx, tf.clock.Now()); err != nil {
@@ -338,6 +357,9 @@ func (tf *schemaFeed) periodicallyMaybePollTableHistory(ctx context.Context) err
 // updateTableHistory attempts to advance `frontier` to `endTS` by fetching
 // descriptor versions from the current `frontier` to `endTS`.
 func (tf *schemaFeed) updateTableHistory(ctx context.Context, endTS hlc.Timestamp) error {
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.schemafeed.update_table_history")
+	defer sp.Finish()
+
 	startTS := func() hlc.Timestamp {
 		tf.mu.Lock()
 		defer tf.mu.Unlock()

@@ -138,12 +138,10 @@ type JSON interface {
 	// produced if this JSON gets included in an inverted index.
 	numInvertedIndexEntries() (int, error)
 
-	// allPathsWithDepth returns a slice of new JSON documents, each a path
-	// through the receiver. The depth parameter specifies the maximum depth of
-	// the paths to return. If the depth is negative, all paths of any depth are
-	// returned. If the depth is 0, the receiver itself is returned. Note that
-	// leaves include the empty object and array in addition to scalars.
-	allPathsWithDepth(depth int) ([]JSON, error)
+	// allPaths returns a slice of new JSON documents, each a path to a leaf
+	// through the receiver. Note that leaves include the empty object and array
+	// in addition to scalars.
+	allPaths() ([]JSON, error)
 
 	// FetchValKey implements the `->` operator for strings, returning nil if the
 	// key is not found.
@@ -1795,51 +1793,36 @@ func (j jsonObject) numInvertedIndexEntries() (int, error) {
 // through the input. Note that leaves include the empty object and array
 // in addition to scalars.
 func AllPaths(j JSON) ([]JSON, error) {
-	return j.allPathsWithDepth(-1)
+	return j.allPaths()
 }
 
-// AllPathsWithDepth returns a slice of new JSON documents, each a path
-// through the receiver. The depth parameter specifies the maximum depth of
-// the paths to return. If the depth is negative, all paths of any depth are
-// returned. If the depth is 0, the receiver itself is returned. Note that
-// leaves include the empty object and array in addition to scalars.
-func AllPathsWithDepth(j JSON, depth int) ([]JSON, error) {
-	return j.allPathsWithDepth(depth)
-}
-
-func (j jsonNull) allPathsWithDepth(depth int) ([]JSON, error) {
+func (j jsonNull) allPaths() ([]JSON, error) {
 	return []JSON{j}, nil
 }
 
-func (j jsonTrue) allPathsWithDepth(depth int) ([]JSON, error) {
+func (j jsonTrue) allPaths() ([]JSON, error) {
 	return []JSON{j}, nil
 }
 
-func (j jsonFalse) allPathsWithDepth(depth int) ([]JSON, error) {
+func (j jsonFalse) allPaths() ([]JSON, error) {
 	return []JSON{j}, nil
 }
 
-func (j jsonString) allPathsWithDepth(depth int) ([]JSON, error) {
+func (j jsonString) allPaths() ([]JSON, error) {
 	return []JSON{j}, nil
 }
 
-func (j jsonNumber) allPathsWithDepth(depth int) ([]JSON, error) {
+func (j jsonNumber) allPaths() ([]JSON, error) {
 	return []JSON{j}, nil
 }
 
-func (j jsonArray) allPathsWithDepth(depth int) ([]JSON, error) {
-	if len(j) == 0 || depth == 0 {
+func (j jsonArray) allPaths() ([]JSON, error) {
+	if len(j) == 0 {
 		return []JSON{j}, nil
 	}
 	ret := make([]JSON, 0, len(j))
 	for i := range j {
-		var paths []JSON
-		var err error
-		if depth > 0 {
-			paths, err = j[i].allPathsWithDepth(depth - 1)
-		} else {
-			paths, err = j[i].allPathsWithDepth(depth)
-		}
+		paths, err := j[i].allPaths()
 		if err != nil {
 			return nil, err
 		}
@@ -1850,19 +1833,13 @@ func (j jsonArray) allPathsWithDepth(depth int) ([]JSON, error) {
 	return ret, nil
 }
 
-func (j jsonObject) allPathsWithDepth(depth int) ([]JSON, error) {
-	if len(j) == 0 || depth == 0 {
+func (j jsonObject) allPaths() ([]JSON, error) {
+	if len(j) == 0 {
 		return []JSON{j}, nil
 	}
 	ret := make([]JSON, 0, len(j))
 	for i := range j {
-		var paths []JSON
-		var err error
-		if depth > 0 {
-			paths, err = j[i].v.allPathsWithDepth(depth - 1)
-		} else {
-			paths, err = j[i].v.allPathsWithDepth(depth)
-		}
+		paths, err := j[i].v.allPaths()
 		if err != nil {
 			return nil, err
 		}

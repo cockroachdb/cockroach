@@ -9,13 +9,16 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/NYTimes/gziphandler"
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/inspectz"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
@@ -213,8 +216,9 @@ func (s *httpServer) setupRoutes(
 	// Exempt the 2nd health check endpoint from authentication.
 	// (This simply mirrors /health and exists for backward compatibility.)
 	s.mux.Handle(apiconstants.AdminHealth, handleRequestsUnauthenticated)
-	// The /_status/vars endpoint is not authenticated either. Useful for monitoring.
-	s.mux.Handle(apiconstants.StatusVars, http.HandlerFunc(varsHandler{metricSource, s.cfg.Settings}.handleVars))
+	// The /_status/vars and /metrics endpoint is not authenticated either. Useful for monitoring.
+	s.mux.Handle(apiconstants.StatusVars, http.HandlerFunc(varsHandler{metricSource, s.cfg.Settings, false /* useStaticLabels */}.handleVars))
+	s.mux.Handle(apiconstants.MetricsPath, http.HandlerFunc(varsHandler{metricSource, s.cfg.Settings, true /* useStaticLabels */}.handleVars))
 	// Same for /_status/load.
 	le, err := newLoadEndpoint(runtimeStatSampler, metricSource)
 	if err != nil {
@@ -298,7 +302,7 @@ func startHTTPService(
 	}
 
 	if uiTLSConfig != nil {
-		httpMux := cmux.New(httpLn)
+		httpMux := cmux.NewWithTimeout(httpLn, time.Minute)
 		clearL := httpMux.Match(cmux.HTTP1())
 		tlsL := httpMux.Match(cmux.Any())
 
@@ -330,7 +334,7 @@ func startHTTPService(
 			return err
 		}
 
-		httpLn = tls.NewListener(tlsL, uiTLSConfig)
+		httpLn = newTLSRestrictLn(tlsL, uiTLSConfig)
 	}
 
 	// The connManager is responsible for tearing down the net.Conn
@@ -344,6 +348,28 @@ func startHTTPService(
 	return stopper.RunAsyncTask(workersCtx, "server-http", func(context.Context) {
 		netutil.FatalIfUnexpected(connManager.Serve(httpLn))
 	})
+}
+
+type tlsRestrictLn struct {
+	net.Listener
+}
+
+// Accept wraps the net.Listener Accept method to apply http based tls
+// constraints on the incoming connection.
+func (l tlsRestrictLn) Accept() (c net.Conn, err error) {
+	if c, err = l.Listener.Accept(); err == nil {
+		if err = security.TLSCipherRestrict(c); err != nil {
+			_ = c.Close()
+			return
+		}
+	}
+	return
+}
+
+func newTLSRestrictLn(ln net.Listener, config *tls.Config) tlsRestrictLn {
+	return tlsRestrictLn{
+		Listener: tls.NewListener(ln, config),
+	}
 }
 
 // baseHandler is the top-level HTTP handler for all HTTP traffic, before

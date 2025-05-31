@@ -165,11 +165,6 @@ echo "kernel.core_pattern=$CORE_PATTERN" >> /etc/sysctl.conf
 sysctl --system  # reload sysctl settings`
 
 const startupScriptCron = `
-# Uninstall some packages to prevent them running cronjobs and similar jobs in parallel
-systemctl stop unattended-upgrades
-sudo rm -rf /var/log/unattended-upgrades
-apt-get purge -y unattended-upgrades
-
 {{ if not .EnableCron }}
 systemctl stop cron
 systemctl mask cron
@@ -197,6 +192,16 @@ echo "startup script starting: $(date -u)"
 if [ -e {{ .DisksInitializedFile }} ]; then
 	echo "Already initialized, exiting."
 	exit 0
+fi
+
+# Uninstall some packages to prevent them running cronjobs and similar jobs in
+# parallel Check if the service exists before trying to stop it, because it may
+# have been removed during a previous invocation of this script.
+if systemctl list-unit-files | grep -q '^unattended-upgrades.service'; then
+    echo "unattended-upgrades service exists. Proceeding with uninstallation."
+    systemctl stop unattended-upgrades
+    sudo rm -rf /var/log/unattended-upgrades
+    apt-get purge -y unattended-upgrades
 fi`
 
 const startupScriptHostname = `
@@ -286,6 +291,7 @@ sudo sh -c 'echo "PubkeyAcceptedAlgorithms +ssh-rsa" >> /etc/ssh/sshd_config'
 {{ end }}
 
 sudo sed -i 's/#LoginGraceTime .*/LoginGraceTime 0/g' /etc/ssh/sshd_config
+sudo sed -i 's/TCPKeepAlive no/TCPKeepAlive yes/g' /etc/ssh/sshd_config
 
 sudo service sshd restart
 sudo service ssh restart`

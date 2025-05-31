@@ -92,7 +92,6 @@ func runJobsStress(ctx context.Context, t test.Test, c cluster.Cluster) {
 		select {
 		case <-earlyExit:
 		case <-testTimer.C:
-			testTimer.Read = true
 		}
 		return nil
 	})
@@ -111,7 +110,6 @@ func runJobsStress(ctx context.Context, t test.Test, c cluster.Cluster) {
 				case <-done:
 					return nil
 				case <-pTimer.C:
-					pTimer.Read = true
 					if err := f(ctx, t, c, rng); err != nil {
 						earlyExit <- struct{}{}
 						return err

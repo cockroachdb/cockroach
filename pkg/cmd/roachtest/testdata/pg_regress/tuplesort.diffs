@@ -1,7 +1,7 @@
 diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tuplesort.out --label=/mnt/data1/postgres/src/test/regress/results/tuplesort.out /mnt/data1/postgres/src/test/regress/expected/tuplesort.out /mnt/data1/postgres/src/test/regress/results/tuplesort.out
 --- /mnt/data1/postgres/src/test/regress/expected/tuplesort.out
 +++ /mnt/data1/postgres/src/test/regress/results/tuplesort.out
-@@ -1,12 +1,27 @@
+@@ -1,12 +1,26 @@
  -- only use parallelism when explicitly intending to do so
  SET max_parallel_maintenance_workers = 0;
 +ERROR:  unrecognized configuration parameter "max_parallel_maintenance_workers"
@@ -23,14 +23,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tuplesort.out --l
  -- have the same prefix, as abbreviated keys for uuids just use the
  -- first sizeof(Datum) bytes.
 +CREATE TEMP SEQUENCE id_seq;
-+ERROR:  relation "root.public.id_seq" already exists
  CREATE TEMP TABLE abbrev_abort_uuids (
 -    id serial not null,
 +    id int not null default nextval('id_seq'),
      abort_increasing uuid,
      abort_decreasing uuid,
      noabort_increasing uuid,
-@@ -18,6 +33,8 @@
+@@ -18,6 +32,8 @@
          (to_char(g.i % 10009, '00000000FM')||'-0000-0000-0000-'||to_char(g.i, '000000000000FM'))::uuid noabort_increasing,
          (to_char(((20000 - g.i) % 10009), '00000000FM')||'-0000-0000-0000-'||to_char(20000 - g.i, '000000000000FM'))::uuid noabort_decreasing
      FROM generate_series(0, 20000, 1) g(i);
@@ -39,7 +38,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tuplesort.out --l
  -- and a few NULLs
  INSERT INTO abbrev_abort_uuids(id) VALUES(0);
  INSERT INTO abbrev_abort_uuids DEFAULT VALUES;
-@@ -32,106 +49,42 @@
+@@ -32,106 +48,42 @@
  ----
  -- plain sort triggering abbreviated abort
  SELECT abort_increasing, abort_decreasing FROM abbrev_abort_uuids ORDER BY abort_increasing OFFSET 20000 - 4;
@@ -170,7 +169,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tuplesort.out --l
  
  ----
  -- Check index creation uses of tuplesort wrt. abbreviated keys
-@@ -142,39 +95,33 @@
+@@ -142,39 +94,33 @@
  -- verify
  EXPLAIN (COSTS OFF)
  SELECT id, noabort_increasing, noabort_decreasing FROM abbrev_abort_uuids ORDER BY noabort_increasing LIMIT 5;
@@ -197,8 +196,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tuplesort.out --l
 + id | noabort_increasing | noabort_decreasing 
 +----+--------------------+--------------------
 +  0 |                    | 
-+ 22 |                    | 
-+ 23 |                    | 
++  1 |                    | 
++  2 |                    | 
 +(3 rows)
  
  EXPLAIN (COSTS OFF)
@@ -226,13 +225,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tuplesort.out --l
 + id | noabort_increasing | noabort_decreasing 
 +----+--------------------+--------------------
 +  0 |                    | 
-+ 22 |                    | 
-+ 23 |                    | 
++  1 |                    | 
++  2 |                    | 
 +(3 rows)
  
  -- index creation using abbreviated keys, hitting abort
  CREATE INDEX abbrev_abort_uuids__abort_increasing_idx ON abbrev_abort_uuids (abort_increasing);
-@@ -182,39 +129,33 @@
+@@ -182,39 +128,33 @@
  -- verify
  EXPLAIN (COSTS OFF)
  SELECT id, abort_increasing, abort_decreasing FROM abbrev_abort_uuids ORDER BY abort_increasing LIMIT 5;
@@ -259,8 +258,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tuplesort.out --l
 + id | abort_increasing | abort_decreasing 
 +----+------------------+------------------
 +  0 |                  | 
-+ 22 |                  | 
-+ 23 |                  | 
++  1 |                  | 
++  2 |                  | 
 +(3 rows)
  
  EXPLAIN (COSTS OFF)
@@ -288,13 +287,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tuplesort.out --l
 + id | abort_increasing | abort_decreasing 
 +----+------------------+------------------
 +  0 |                  | 
-+ 22 |                  | 
-+ 23 |                  | 
++  1 |                  | 
++  2 |                  | 
 +(3 rows)
  
  ----
  -- Check CLUSTER uses of tuplesort wrt. abbreviated keys
-@@ -222,126 +163,126 @@
+@@ -222,126 +162,126 @@
  -- when aborting, increasing order
  BEGIN;
  SET LOCAL enable_indexscan = false;
@@ -493,7 +492,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tuplesort.out --l
  ROLLBACK;
  ----
  -- test forward and backward scans for in-memory and disk based tuplesort
-@@ -349,195 +290,118 @@
+@@ -349,195 +289,118 @@
  -- in-memory
  BEGIN;
  SET LOCAL enable_indexscan = false;
@@ -754,7 +753,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tuplesort.out --l
  COMMIT;
  ----
  -- test tuplesort using both in-memory and disk sort
-@@ -564,14 +428,41 @@
+@@ -564,14 +427,41 @@
      SELECT * FROM abbrev_abort_uuids
      UNION ALL
      SELECT NULL, NULL, NULL, NULL, NULL) s;
@@ -801,7 +800,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tuplesort.out --l
  SELECT
      (array_agg(id ORDER BY id DESC NULLS FIRST))[0:5],
      (array_agg(abort_increasing ORDER BY abort_increasing DESC NULLS LAST))[0:5],
-@@ -585,11 +476,18 @@
+@@ -585,11 +475,18 @@
      SELECT * FROM abbrev_abort_uuids
      UNION ALL
      SELECT NULL, NULL, NULL, NULL, NULL) s;
@@ -825,7 +824,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tuplesort.out --l
  ROLLBACK;
  ----
  -- test tuplesort mark/restore
-@@ -600,8 +498,22 @@
+@@ -600,8 +497,22 @@
     SELECT a.i, b.i, a.i * b.i FROM generate_series(1, 500) a(i), generate_series(1, 5) b(i);
  BEGIN;
  SET LOCAL enable_nestloop = off;
@@ -848,7 +847,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tuplesort.out --l
  -- set query into variable once, to avoid repetition of the fairly long query
  SELECT $$
      SELECT col12, count(distinct a.col1), count(distinct a.col2), count(distinct b.col1), count(distinct b.col2), count(*)
-@@ -612,81 +524,31 @@
+@@ -612,81 +523,31 @@
      ORDER BY 2 DESC, 1 DESC, 3 DESC, 4 DESC, 5 DESC, 6 DESC
      LIMIT 10
  $$ AS qry \gset

@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -520,7 +521,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			if err != nil {
 				return errors.Wrap(err, "error resolving multi-region enum")
 			}
-			typeDesc.AddReferencingDescriptorID(desc.ID)
+			_ = typeDesc.AddReferencingDescriptorID(desc.ID)
 			err = params.p.writeTypeSchemaChange(
 				params.ctx, typeDesc, "add REGIONAL BY TABLE back reference")
 			if err != nil {
@@ -1419,8 +1420,7 @@ func NewTableDesc(
 	desc := tabledesc.InitTableDescriptor(
 		id, dbID, sc.GetID(), n.Table.Table(), creationTime, privileges, persistence,
 	)
-
-	setter := tablestorageparam.NewSetter(&desc)
+	setter := tablestorageparam.NewSetter(&desc, true /* isNewObject */)
 	if err := storageparam.Set(
 		ctx,
 		semaCtx,
@@ -1964,12 +1964,19 @@ func NewTableDesc(
 				}
 			}
 			if d.Type == idxtype.VECTOR {
+				if !evalCtx.Settings.Version.ActiveVersion(ctx).AtLeast(clusterversion.V25_2.Version()) {
+					return nil, pgerror.Newf(pgcode.FeatureNotSupported, "cannot create a vector index until finalizing on 25.2")
+				}
+				// Disable vector indexes by default in 25.2.
+				// TODO(andyk): Remove this check after 25.2.
+				if err := vecindex.CheckEnabled(&st.SV); err != nil {
+					return nil, err
+				}
 				column, err := catalog.MustFindColumnByName(&desc, idx.VectorColumnName())
 				if err != nil {
 					return nil, err
 				}
-				idx.VecConfig.Dims = column.GetType().Width()
-				idx.VecConfig.Seed = evalCtx.GetRNG().Int63()
+				idx.VecConfig = vecindex.MakeVecConfig(evalCtx, column.GetType())
 			}
 
 			var idxPartitionBy *tree.PartitionBy
@@ -2567,6 +2574,17 @@ func newTableDesc(
 		}
 		ttl.ScheduleID = j.ScheduleID()
 	}
+
+	// For tables set schema_locked by default if it hasn't been set, and we
+	// aren't running under an internal executor.
+	if !ret.IsView() && !ret.IsSequence() && !ret.IsTemporary() &&
+		n.StorageParams.GetVal("schema_locked") == nil &&
+		!params.p.SessionData().Internal &&
+		params.p.SessionData().CreateTableWithSchemaLocked &&
+		params.p.IsActive(params.ctx, clusterversion.V25_2) {
+		ret.SchemaLocked = true
+	}
+
 	return ret, nil
 }
 

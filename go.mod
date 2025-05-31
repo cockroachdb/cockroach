@@ -34,7 +34,7 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.4
 	github.com/golang/snappy v0.0.5-0.20231225225746-43d5d4cd4e0e
-	github.com/google/btree v1.0.1
+	github.com/google/btree v1.1.3
 	github.com/google/pprof v0.0.0-20240227163752-401108e1b7e7
 	github.com/google/uuid v1.6.0 // indirect
 	google.golang.org/api v0.114.0
@@ -92,21 +92,25 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.7.0
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azkeys v0.9.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute v1.0.0
+	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/monitor/armmonitor v0.11.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.0
 	github.com/Azure/go-autorest/autorest/adal v0.9.15
 	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/DataDog/datadog-api-client-go/v2 v2.15.0
-	github.com/DataExMachina-dev/side-eye-go v0.0.0-20250129155449-07ef0520771b
+	github.com/IBM/go-sdk-core/v5 v5.19.0
+	github.com/IBM/networking-go-sdk v0.51.3
+	github.com/IBM/platform-services-go-sdk v0.79.0
 	github.com/IBM/sarama v1.43.1
+	github.com/IBM/vpc-go-sdk v0.65.0
 	github.com/Masterminds/semver/v3 v3.1.1
 	github.com/MichaelTJones/walk v0.0.0-20161122175330-4748e29d5718
 	github.com/NYTimes/gziphandler v0.0.0-20170623195520-56545f4a5d46
 	github.com/PuerkitoBio/goquery v1.5.1
+	github.com/RaduBerinde/btreemap v0.0.0-20250419174037-3d62b7205d54
 	github.com/VividCortex/ewma v1.1.1
 	github.com/alessio/shellescape v1.4.1
 	github.com/andy-kimball/arenaskl v0.0.0-20200617143215-f701008588b9
-	github.com/andygrunwald/go-jira v1.14.0
 	github.com/apache/arrow/go/arrow v0.0.0-20200923215132-ac86123a3f01
 	github.com/apache/arrow/go/v11 v11.0.0
 	github.com/apache/pulsar-client-go v0.12.0
@@ -127,20 +131,20 @@ require (
 	github.com/charmbracelet/bubbles v0.15.1-0.20230123181021-a6a12c4a31eb
 	github.com/client9/misspell v0.3.4
 	github.com/cockroachdb/apd/v3 v3.2.1
-	github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292
+	github.com/cockroachdb/cmux v0.0.0-20250514152509-914d3bf9ec58
 	github.com/cockroachdb/cockroach-go/v2 v2.3.7
 	github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548
 	github.com/cockroachdb/crlib v0.0.0-20241205160938-4a90b184f49c
-	github.com/cockroachdb/datadriven v1.0.3-0.20240530155848-7682d40af056
-	github.com/cockroachdb/errors v1.11.3
+	github.com/cockroachdb/datadriven v1.0.3-0.20250407164829-2945557346d5
+	github.com/cockroachdb/errors v1.12.0
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.19.0
 	github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506
-	github.com/cockroachdb/pebble v0.0.0-20250328210930-0f1c564b0912
+	github.com/cockroachdb/pebble v0.0.0-20250530172448-9360e681647e
 	github.com/cockroachdb/redact v1.1.6
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b
-	github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06
+	github.com/cockroachdb/tokenbucket v0.0.0-20250429170803-42689b6311bb
 	github.com/cockroachdb/tools v0.0.0-20211112185054-642e51449b40
 	github.com/cockroachdb/ttycolor v0.0.0-20210902133924-c7d7dcdde4e8
 	github.com/cockroachdb/version v0.0.0-20250314144055-3860cd14adf2
@@ -156,19 +160,19 @@ require (
 	github.com/edsrzf/mmap-go v1.0.0
 	github.com/elastic/gosigar v0.14.3
 	github.com/emicklei/dot v0.15.0
-	github.com/fatih/color v1.9.0
+	github.com/fatih/color v1.16.0
+	github.com/fatih/structs v1.1.0
 	github.com/felixge/fgprof v0.9.5
-	github.com/fsnotify/fsnotify v1.5.1
+	github.com/fsnotify/fsnotify v1.6.0
 	github.com/getsentry/sentry-go v0.27.0
 	github.com/ghemawat/stream v0.0.0-20171120220530-696b145b53b9
 	github.com/go-ldap/ldap/v3 v3.4.6
-	github.com/go-openapi/strfmt v0.22.0
+	github.com/go-openapi/strfmt v0.23.0
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/gogo/status v1.1.0
 	github.com/google/flatbuffers v23.1.21+incompatible
 	github.com/google/go-cmp v0.6.0
 	github.com/google/go-github v17.0.0+incompatible
-	github.com/google/go-github/v42 v42.0.0
 	github.com/google/go-github/v61 v61.0.0
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/google/skylark v0.0.0-20181101142754-a5f7082aabed
@@ -187,7 +191,7 @@ require (
 	github.com/kevinburke/go-bindata v3.13.0+incompatible
 	github.com/kisielk/errcheck v1.8.0
 	github.com/kisielk/gotool v1.0.0
-	github.com/klauspost/compress v1.17.8
+	github.com/klauspost/compress v1.17.11
 	github.com/klauspost/pgzip v1.2.5
 	github.com/knz/bubbline v0.0.0-20230422210153-e176cdfe1c43
 	github.com/knz/strtime v0.0.0-20200318182718-be999391ffa9
@@ -201,13 +205,13 @@ require (
 	github.com/lufia/iostat v1.2.1
 	github.com/maruel/panicparse/v2 v2.2.2
 	github.com/marusama/semaphore v0.0.0-20190110074507-6952cef993b2
-	github.com/mattn/go-isatty v0.0.17
+	github.com/mattn/go-isatty v0.0.20
 	github.com/mattn/goveralls v0.0.2
 	github.com/mibk/dupl v1.0.0
 	github.com/mitchellh/reflectwalk v1.0.0
 	github.com/mkungla/bexp/v3 v3.0.1
 	github.com/mmatczuk/go_generics v0.0.0-20181212143635-0aaa050f9bab
-	github.com/montanaflynn/stats v0.7.0
+	github.com/montanaflynn/stats v0.7.1
 	github.com/mozillazg/go-slugify v0.2.0
 	github.com/nightlyone/lockfile v1.0.0
 	github.com/olekukonko/tablewriter v0.0.5
@@ -287,6 +291,7 @@ require (
 	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Masterminds/sprig v2.22.0+incompatible // indirect
 	github.com/Microsoft/go-winio v0.5.2 // indirect
+	github.com/RaduBerinde/axisds v0.0.0-20250419182453-5135a0650657 // indirect
 	github.com/abbot/go-http-auth v0.4.1-0.20181019201920-860ed7f246ff // indirect
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794 // indirect
 	github.com/ajstarks/svgo v0.0.0-20211024235047-1546f124cd8b // indirect
@@ -323,9 +328,8 @@ require (
 	github.com/eapache/go-resiliency v1.6.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
-	github.com/fatih/structs v1.1.0 // indirect
 	github.com/form3tech-oss/jwt-go v3.2.5+incompatible // indirect
-	github.com/gabriel-vasile/mimetype v1.4.2 // indirect
+	github.com/gabriel-vasile/mimetype v1.4.8 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-asn1-ber/asn1-ber v1.5.5 // indirect
 	github.com/go-fonts/liberation v0.3.2 // indirect
@@ -336,7 +340,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/go-openapi/analysis v0.22.2 // indirect
-	github.com/go-openapi/errors v0.21.0 // indirect
+	github.com/go-openapi/errors v0.22.0 // indirect
 	github.com/go-openapi/jsonpointer v0.20.2 // indirect
 	github.com/go-openapi/jsonreference v0.20.4 // indirect
 	github.com/go-openapi/loads v0.21.5 // indirect
@@ -345,6 +349,9 @@ require (
 	github.com/go-openapi/swag v0.22.9 // indirect
 	github.com/go-openapi/validate v0.23.0 // indirect
 	github.com/go-pdf/fpdf v0.9.0 // indirect
+	github.com/go-playground/locales v0.14.1 // indirect
+	github.com/go-playground/universal-translator v0.18.1 // indirect
+	github.com/go-playground/validator/v10 v10.24.0 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/godbus/dbus v0.0.0-20190726142602-4481cbc300e2 // indirect
 	github.com/gofrs/flock v0.8.1 // indirect
@@ -360,7 +367,9 @@ require (
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
 	github.com/gsterjov/go-libsecret v0.0.0-20161001094733-a6f4afe4910c // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
+	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
+	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/huandu/xstrings v1.3.0 // indirect
 	github.com/ianlancetaylor/demangle v0.0.0-20230524184225-eabc099b10ab // indirect
@@ -381,6 +390,7 @@ require (
 	github.com/kamstrup/intmap v0.5.1 // indirect
 	github.com/klauspost/asmfmt v1.3.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.3 // indirect
+	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.2 // indirect
 	github.com/lestrrat-go/httpcc v1.0.1 // indirect
 	github.com/lestrrat-go/httprc v1.0.6 // indirect
@@ -394,9 +404,9 @@ require (
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/minio/asm2plan9s v0.0.0-20200509001527-cdd76441f9d8 // indirect
 	github.com/minio/c2goasm v0.0.0-20190812172519-36a3d3bbc4f3 // indirect
-	github.com/minio/highwayhash v1.0.2 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/minio/minio-go/v7 v7.0.21 // indirect
+	github.com/minio/minlz v1.0.1-0.20250507153514-87eb42fe8882 // indirect
 	github.com/minio/sha256-simd v1.0.0 // indirect
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
@@ -431,7 +441,6 @@ require (
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.9 // indirect
 	github.com/tklauser/numcpus v0.3.0 // indirect
-	github.com/trivago/tgo v1.0.7 // indirect
 	github.com/twitchtv/twirp v8.1.0+incompatible // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.9.0 // indirect
 	github.com/twpayne/go-kml v1.5.2 // indirect
@@ -443,7 +452,7 @@ require (
 	gitlab.com/golang-commonmark/linkify v0.0.0-20191026162114-a0c2df6c8f82 // indirect
 	gitlab.com/golang-commonmark/mdurl v0.0.0-20191124015652-932350d1cb84 // indirect
 	gitlab.com/golang-commonmark/puny v0.0.0-20191124015043-9f83538fa04f // indirect
-	go.mongodb.org/mongo-driver v1.13.1 // indirect
+	go.mongodb.org/mongo-driver v1.17.2 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.3.0 // indirect
 	go.opentelemetry.io/otel/metric v1.17.0 // indirect
@@ -460,11 +469,11 @@ require (
 )
 
 require (
-	github.com/DataDog/zstd v1.5.6-0.20230824185856-869dae002e5e // indirect
+	github.com/DataDog/zstd v1.5.7 // indirect
 	github.com/andybalholm/cascadia v1.2.0 // indirect
 	github.com/containerd/console v1.0.3 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
-	github.com/dgryski/go-metro v0.0.0-20180109044635-280f6062b5bc // indirect
+	github.com/dgryski/go-metro v0.0.0-20250106013310-edb8663e5e33 // indirect
 	github.com/envoyproxy/protoc-gen-validate v0.10.1 // indirect
 	github.com/golang/glog v1.1.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
@@ -495,6 +504,8 @@ replace github.com/docker/docker => github.com/moby/moby v24.0.6+incompatible
 replace golang.org/x/time => github.com/cockroachdb/x-time v0.3.1-0.20230525123634-71747adb5d5c
 
 replace github.com/gogo/protobuf => github.com/cockroachdb/gogoproto v1.3.3-0.20241216150617-2358cdb156a1
+
+replace storj.io/drpc => github.com/cockroachdb/drpc v0.0.0-20250507084558-a793c5c40d3d
 
 // TODO(yuzefovich): remove this version once compatibility with 24.3 is no
 // longer needed.

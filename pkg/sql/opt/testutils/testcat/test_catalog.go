@@ -43,7 +43,8 @@ import (
 
 const (
 	// testDB is the default current database for testing purposes.
-	testDB = "t"
+	testDB       = "t"
+	testSchemaID = 1
 )
 
 // Catalog implements the cat.Catalog interface for testing purposes.
@@ -78,7 +79,7 @@ func New() *Catalog {
 
 	return &Catalog{
 		testSchema: Schema{
-			SchemaID: 1,
+			SchemaID: testSchemaID,
 			SchemaName: cat.SchemaName{
 				CatalogName:     testDB,
 				SchemaName:      catconstants.PublicSchemaName,
@@ -133,6 +134,17 @@ func (tc *Catalog) ResolveSchema(
 	toResolve.CatalogName = tree.Name(testDB)
 	toResolve.SchemaName = catconstants.PublicSchemaName
 	return tc.resolveSchema(&toResolve)
+}
+
+// ResolveSchemaByID is part of the cat.Catalog interface.
+func (tc *Catalog) ResolveSchemaByID(
+	_ context.Context, _ cat.Flags, id cat.StableID,
+) (cat.Schema, error) {
+	if id != testSchemaID {
+		return nil, pgerror.Newf(pgcode.InvalidSchemaName,
+			"target database or schema does not exist")
+	}
+	return &tc.testSchema, nil
 }
 
 // GetAllSchemaNamesForDB is part of the cat.Catalog interface.
@@ -331,9 +343,26 @@ func (tc *Catalog) UserHasAdminRole(ctx context.Context, user username.SQLUserna
 	return roleMembership.isMemberOfAdminRole, nil
 }
 
+// UserIsMemberOfAnyRole is part of the cat.Catalog interface.
+func (tc *Catalog) UserIsMemberOfAnyRole(
+	ctx context.Context, user username.SQLUsername, roles map[username.SQLUsername]struct{},
+) (bool, error) {
+	if _, found := roles[user]; found {
+		return true, nil
+	}
+	return false, nil
+}
+
 // HasRoleOption is part of the cat.Catalog interface.
 func (tc *Catalog) HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error) {
 	return true, nil
+}
+
+// UserHasGlobalPrivilegeOrRoleOption is part of the cat.Catalog interface.
+func (tc *Catalog) UserHasGlobalPrivilegeOrRoleOption(
+	ctx context.Context, privilege privilege.Kind, user username.SQLUsername,
+) (bool, error) {
+	return false, nil
 }
 
 // FullyQualifiedName is part of the cat.Catalog interface.
@@ -837,6 +866,7 @@ func (tv *View) Trigger(i int) cat.Trigger {
 type Table struct {
 	TabID      cat.StableID
 	DatabaseID descpb.ID
+	SchemaID   descpb.ID
 	TabVersion int
 	TabName    tree.TableName
 	Columns    []cat.Column
@@ -1076,6 +1106,11 @@ func (tt *Table) HomeRegionColName() (colName string, ok bool) {
 // GetDatabaseID is part of the cat.Table interface.
 func (tt *Table) GetDatabaseID() descpb.ID {
 	return tt.DatabaseID
+}
+
+// GetSchemaID is part of the cat.Table interface.
+func (tt *Table) GetSchemaID() descpb.ID {
+	return tt.SchemaID
 }
 
 // IsHypothetical is part of the cat.Table interface.
@@ -1425,6 +1460,10 @@ func (ti *Index) PartitionCount() int {
 // Partition is part of the cat.Index interface.
 func (ti *Index) Partition(i int) cat.Partition {
 	return &ti.partitions[i]
+}
+
+func (ti *Index) IsTemporaryIndexForBackfill() bool {
+	return false
 }
 
 // SetPartitions manually sets the partitions.

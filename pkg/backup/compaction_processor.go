@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -251,7 +252,7 @@ func (p *compactBackupsProcessor) processSpanEntries(
 		Settings:  &execCfg.Settings.SV,
 		ElideMode: p.spec.ElideMode,
 	}
-	sink, err := backupsink.MakeSSTSinkKeyWriter(sinkConf, store, nil)
+	sink, err := backupsink.MakeSSTSinkKeyWriter(sinkConf, store)
 	if err != nil {
 		return err
 	}
@@ -261,6 +262,11 @@ func (p *compactBackupsProcessor) processSpanEntries(
 			logClose(ctx, sink, "SST sink")
 		}
 	}()
+	pacer := newBackupPacer(
+		ctx, p.FlowCtx.Cfg.AdmissionPacerFactory, p.FlowCtx.Cfg.Settings,
+	)
+	// It is safe to close a nil pacer.
+	defer pacer.Close()
 
 	for {
 		select {
@@ -280,7 +286,7 @@ func (p *compactBackupsProcessor) processSpanEntries(
 				return errors.Wrap(err, "opening SSTs")
 			}
 
-			if err := compactSpanEntry(ctx, sstIter, sink); err != nil {
+			if err := compactSpanEntry(ctx, sstIter, sink, pacer); err != nil {
 				return errors.Wrap(err, "compacting span entry")
 			}
 		}
@@ -341,11 +347,31 @@ func openSSTs(
 	entry execinfrapb.RestoreSpanEntry,
 	encryptionOptions *kvpb.FileEncryptionOptions,
 	endTime hlc.Timestamp,
-) (mergedSST, error) {
+) (ssts mergedSST, err error) {
 	var dirs []cloud.ExternalStorage
+	cleanupDirs := func() {
+		for _, dir := range dirs {
+			if err := dir.Close(); err != nil {
+				log.Warningf(ctx, "close export storage failed: %v", err)
+			}
+		}
+	}
+	// If we bail early due to an error, cleanup any external storage that was
+	// opened. Otherwise, leave it to the caller to perform cleanup.
+	defer func() {
+		if err != nil {
+			cleanupDirs()
+		}
+	}()
+
 	storeFiles := make([]storageccl.StoreFile, 0, len(entry.Files))
 	for idx := range entry.Files {
 		file := entry.Files[idx]
+		if file.HasRangeKeys {
+			// TODO (kev-cao): Come back and update this to range keys when
+			// SSTSinkKeyWriter has been updated to support range keys.
+			return mergedSST{}, errors.New("backup compactions does not support range keys")
+		}
 		dir, err := execCfg.DistSQLSrv.ExternalStorage(ctx, file.Dir)
 		if err != nil {
 			return mergedSST{}, err
@@ -354,8 +380,6 @@ func openSSTs(
 		storeFiles = append(storeFiles, storageccl.StoreFile{Store: dir, FilePath: file.Path})
 	}
 	iterOpts := storage.IterOptions{
-		// TODO (kev-cao): Come back and update this to range keys when
-		// SSTSinkKeyWriter has been updated to support range keys.
 		KeyTypes:   storage.IterKeyTypePointsOnly,
 		LowerBound: keys.LocalMax,
 		UpperBound: keys.MaxKey,
@@ -374,21 +398,20 @@ func openSSTs(
 		cleanup: func() {
 			log.VInfof(ctx, 1, "finished with and closing %d files in span %d %v", len(entry.Files), entry.ProgressIdx, entry.Span.String())
 			compactionIter.Close()
-			for _, dir := range dirs {
-				if err := dir.Close(); err != nil {
-					log.Warningf(ctx, "close export storage failed: %v", err)
-				}
-			}
+			cleanupDirs()
 		},
 		completeUpTo: endTime,
 	}, nil
 }
 
 func compactSpanEntry(
-	ctx context.Context, sstIter mergedSST, sink *backupsink.SSTSinkKeyWriter,
+	ctx context.Context, sstIter mergedSST, sink *backupsink.SSTSinkKeyWriter, pacer *admission.Pacer,
 ) error {
 	defer sstIter.cleanup()
 	entry := sstIter.entry
+	if err := assertCommonPrefix(entry.Span, entry.ElidedPrefix); err != nil {
+		return err
+	}
 	prefix, err := backupsink.ElidedPrefix(entry.Span.Key, entry.ElidedPrefix)
 	if err != nil {
 		return err
@@ -404,6 +427,9 @@ func compactSpanEntry(
 	scratch = append(scratch, prefix...)
 	iter := sstIter.iter
 	for iter.SeekGE(trimmedStart); ; iter.NextKey() {
+		if err := pacer.Pace(ctx); err != nil {
+			return err
+		}
 		var key storage.MVCCKey
 		if ok, err := iter.Valid(); err != nil {
 			return err

@@ -24,7 +24,7 @@ db.public.rbr  CREATE TABLE public.rbr (
                  s STRING NULL,
                  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region ON UPDATE rehome_row()::public.crdb_internal_region,
                  CONSTRAINT rbr_pkey PRIMARY KEY (p ASC)
-               ) LOCALITY REGIONAL BY ROW
+               ) LOCALITY REGIONAL BY ROW;
 
 
 statement ok
@@ -40,4 +40,4 @@ db.public.rbr_altered  CREATE TABLE public.rbr_altered (
                          p INT8 NOT NULL,
                          crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region ON UPDATE rehome_row()::public.crdb_internal_region,
                          CONSTRAINT rbr_altered_pkey PRIMARY KEY (p ASC)
-                       ) LOCALITY REGIONAL BY ROW
+                       ) LOCALITY REGIONAL BY ROW;

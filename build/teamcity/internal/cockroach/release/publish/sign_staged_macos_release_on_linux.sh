@@ -5,8 +5,13 @@
 # Use of this software is governed by the CockroachDB Software License
 # included in the /LICENSE file.
 
-
 set -xeuo pipefail
+
+service_account=$(curl --header "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email" || echo "")
+if [[ $service_account != "signing-agent@crl-teamcity-agents.iam.gserviceaccount.com" ]]; then
+  echo "Not running on a signing agent, skipping signing"
+  exit 1
+fi
 
 dir="$(dirname $(dirname $(dirname $(dirname $(dirname $(dirname "${0}"))))))"
 source "$dir/teamcity-support.sh"  # For log_into_gcloud
@@ -20,6 +25,9 @@ remove_files_on_exit() {
 trap remove_files_on_exit EXIT
 
 mkdir -p .secrets
+# Explicitly set the account to the signing agent. This is helpful if one of the previous
+# commands failed and left the account set to something else.
+gcloud config set account "signing-agent@crl-teamcity-agents.iam.gserviceaccount.com"
 gcloud secrets versions access latest --secret=apple-signing-cert | base64 -d > "$curr_dir/.secrets/cert.p12"
 gcloud secrets versions access latest --secret=apple-signing-cert-password > "$curr_dir/.secrets/cert.pass"
 gcloud secrets versions access latest --secret=appstoreconnect-api-key > "$curr_dir/.secrets/api_key.json"

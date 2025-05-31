@@ -13,7 +13,7 @@ write *eventpb.CreateSequence to event log:
   sequenceName: defaultdb.pg_temp_123_456.sq1
   sql:
     descriptorId: 105
-    statement: CREATE TEMPORARY SEQUENCE ‹defaultdb›.‹public›.‹sq1› MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32
+    statement: CREATE TEMPORARY SEQUENCE ‹defaultdb›.‹pg_temp_123_456›.‹sq1› MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32
     tag: CREATE SEQUENCE
     user: root
 ## StatementPhase stage 1 of 1 with 27 MutationType ops

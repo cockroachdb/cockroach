@@ -2,10 +2,16 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "structlogging",
-    srcs = ["hot_ranges_log.go"],
+    srcs = [
+        "hot_ranges_log.go",
+        "hot_ranges_log_job.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/structlogging",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/multitenant/tenantcapabilities",
         "//pkg/server/serverpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -16,6 +22,7 @@ go_library(
         "//pkg/util/log/logutil",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -34,9 +41,11 @@ go_test(
         "//pkg/base",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/allocator/plan",
+        "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
@@ -47,5 +56,6 @@ go_test(
         "//pkg/util/log/logpb",
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
+        "@com_github_stretchr_testify//require",
     ],
 )

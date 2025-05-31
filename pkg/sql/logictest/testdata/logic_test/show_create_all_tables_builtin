@@ -41,30 +41,64 @@ CREATE SEQUENCE d.s
 # parent should come before full_test due to dependency ordering.
 # if dependency's aren't considered, full_test will appear first due to
 # lexicographical ordering.
+onlyif config local-schema-locked
 query T nosort
 SELECT crdb_internal.show_create_all_tables('d')
 ----
 CREATE TABLE public.parent (
-    x INT8 NULL,
-    y INT8 NULL,
-    z INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT parent_pkey PRIMARY KEY (rowid ASC),
-    UNIQUE INDEX parent_x_y_z_key (x ASC, y ASC, z ASC),
-    UNIQUE INDEX parent_x_key (x ASC),
-    FAMILY f1 (x, y, z, rowid)
+  x INT8 NULL,
+  y INT8 NULL,
+  z INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT parent_pkey PRIMARY KEY (rowid ASC),
+  UNIQUE INDEX parent_x_y_z_key (x ASC, y ASC, z ASC),
+  UNIQUE INDEX parent_x_key (x ASC),
+  FAMILY f1 (x, y, z, rowid)
+) WITH (schema_locked = true);
+CREATE TABLE public.full_test (
+  x INT8 NULL,
+  y INT8 NULL,
+  z INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT full_test_pkey PRIMARY KEY (rowid ASC),
+  UNIQUE INDEX full_test_x_key (x ASC),
+  FAMILY f1 (x, y, z, rowid)
+) WITH (schema_locked = true);
+CREATE VIEW public.vx (
+  "?column?"
+) AS SELECT 1;
+CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+ALTER TABLE public.full_test ADD CONSTRAINT full_test_x_y_z_fkey FOREIGN KEY (x, y, z) REFERENCES public.parent(x, y, z) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE public.full_test ADD CONSTRAINT test_fk FOREIGN KEY (x) REFERENCES public.parent(x) ON DELETE CASCADE;
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the SHOW CREATE ALL TABLES
+ALTER TABLE public.full_test VALIDATE CONSTRAINT full_test_x_y_z_fkey;
+ALTER TABLE public.full_test VALIDATE CONSTRAINT test_fk;
+
+skipif config local-schema-locked
+query T nosort
+SELECT crdb_internal.show_create_all_tables('d')
+----
+CREATE TABLE public.parent (
+  x INT8 NULL,
+  y INT8 NULL,
+  z INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT parent_pkey PRIMARY KEY (rowid ASC),
+  UNIQUE INDEX parent_x_y_z_key (x ASC, y ASC, z ASC),
+  UNIQUE INDEX parent_x_key (x ASC),
+  FAMILY f1 (x, y, z, rowid)
 );
 CREATE TABLE public.full_test (
-    x INT8 NULL,
-    y INT8 NULL,
-    z INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT full_test_pkey PRIMARY KEY (rowid ASC),
-    UNIQUE INDEX full_test_x_key (x ASC),
-    FAMILY f1 (x, y, z, rowid)
+  x INT8 NULL,
+  y INT8 NULL,
+  z INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT full_test_pkey PRIMARY KEY (rowid ASC),
+  UNIQUE INDEX full_test_x_key (x ASC),
+  FAMILY f1 (x, y, z, rowid)
 );
 CREATE VIEW public.vx (
-                                                                                                                                                                          "?column?"
+  "?column?"
 ) AS SELECT 1;
 CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
 ALTER TABLE public.full_test ADD CONSTRAINT full_test_x_y_z_fkey FOREIGN KEY (x, y, z) REFERENCES public.parent(x, y, z) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE;
@@ -89,30 +123,64 @@ GRANT CREATE on DATABASE d TO testuser
 # CREATE privilege on the database.
 # TODO(richardjcai): Replace this with CONNECT and
 # add CONNECT privilege required on the builtin description once #59676 is in.
+onlyif config local-schema-locked
 query T nosort
 SELECT crdb_internal.show_create_all_tables('d')
 ----
 CREATE TABLE public.parent (
-    x INT8 NULL,
-    y INT8 NULL,
-    z INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT parent_pkey PRIMARY KEY (rowid ASC),
-    UNIQUE INDEX parent_x_y_z_key (x ASC, y ASC, z ASC),
-    UNIQUE INDEX parent_x_key (x ASC),
-    FAMILY f1 (x, y, z, rowid)
+  x INT8 NULL,
+  y INT8 NULL,
+  z INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT parent_pkey PRIMARY KEY (rowid ASC),
+  UNIQUE INDEX parent_x_y_z_key (x ASC, y ASC, z ASC),
+  UNIQUE INDEX parent_x_key (x ASC),
+  FAMILY f1 (x, y, z, rowid)
+) WITH (schema_locked = true);
+CREATE TABLE public.full_test (
+  x INT8 NULL,
+  y INT8 NULL,
+  z INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT full_test_pkey PRIMARY KEY (rowid ASC),
+  UNIQUE INDEX full_test_x_key (x ASC),
+  FAMILY f1 (x, y, z, rowid)
+) WITH (schema_locked = true);
+CREATE VIEW public.vx (
+  "?column?"
+) AS SELECT 1;
+CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+ALTER TABLE public.full_test ADD CONSTRAINT full_test_x_y_z_fkey FOREIGN KEY (x, y, z) REFERENCES public.parent(x, y, z) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE public.full_test ADD CONSTRAINT test_fk FOREIGN KEY (x) REFERENCES public.parent(x) ON DELETE CASCADE;
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the SHOW CREATE ALL TABLES
+ALTER TABLE public.full_test VALIDATE CONSTRAINT full_test_x_y_z_fkey;
+ALTER TABLE public.full_test VALIDATE CONSTRAINT test_fk;
+
+skipif config local-schema-locked
+query T nosort
+SELECT crdb_internal.show_create_all_tables('d')
+----
+CREATE TABLE public.parent (
+  x INT8 NULL,
+  y INT8 NULL,
+  z INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT parent_pkey PRIMARY KEY (rowid ASC),
+  UNIQUE INDEX parent_x_y_z_key (x ASC, y ASC, z ASC),
+  UNIQUE INDEX parent_x_key (x ASC),
+  FAMILY f1 (x, y, z, rowid)
 );
 CREATE TABLE public.full_test (
-    x INT8 NULL,
-    y INT8 NULL,
-    z INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT full_test_pkey PRIMARY KEY (rowid ASC),
-    UNIQUE INDEX full_test_x_key (x ASC),
-    FAMILY f1 (x, y, z, rowid)
+  x INT8 NULL,
+  y INT8 NULL,
+  z INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT full_test_pkey PRIMARY KEY (rowid ASC),
+  UNIQUE INDEX full_test_x_key (x ASC),
+  FAMILY f1 (x, y, z, rowid)
 );
 CREATE VIEW public.vx (
-                                                                                                                                                                          "?column?"
+  "?column?"
 ) AS SELECT 1;
 CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
 ALTER TABLE public.full_test ADD CONSTRAINT full_test_x_y_z_fkey FOREIGN KEY (x, y, z) REFERENCES public.parent(x, y, z) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE;
@@ -170,50 +238,109 @@ statement ok
 RESET autocommit_before_ddl
 
 # Table order should be B, A, E, G, F, D, C, sequence s, s_tbl.
+onlyif config local-schema-locked
 query T nosort
 SELECT crdb_internal.show_create_all_tables('test_fk_order')
 ----
 CREATE TABLE public.b (
-    i INT8 NOT NULL,
-    CONSTRAINT b_pkey PRIMARY KEY (i ASC)
+  i INT8 NOT NULL,
+  CONSTRAINT b_pkey PRIMARY KEY (i ASC)
+) WITH (schema_locked = true);
+CREATE TABLE public.a (
+  i INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
+) WITH (schema_locked = true);
+CREATE TABLE public.g (
+  i INT8 NOT NULL,
+  CONSTRAINT g_pkey PRIMARY KEY (i ASC)
+) WITH (schema_locked = true);
+CREATE TABLE public.f (
+  i INT8 NOT NULL,
+  g INT8 NULL,
+  CONSTRAINT f_pkey PRIMARY KEY (i ASC),
+  FAMILY f1 (i, g)
+) WITH (schema_locked = true);
+CREATE TABLE public.e (
+  i INT8 NOT NULL,
+  CONSTRAINT e_pkey PRIMARY KEY (i ASC)
+) WITH (schema_locked = true);
+CREATE TABLE public.d (
+  i INT8 NOT NULL,
+  e INT8 NULL,
+  f INT8 NULL,
+  CONSTRAINT d_pkey PRIMARY KEY (i ASC),
+  FAMILY f1 (i, e, f)
+) WITH (schema_locked = true);
+CREATE TABLE public.c (
+  i INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT c_pkey PRIMARY KEY (rowid ASC)
+) WITH (schema_locked = true);
+CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+CREATE TABLE public.s_tbl (
+  id INT8 NOT NULL DEFAULT nextval('public.s'::REGCLASS),
+  v INT8 NULL,
+  CONSTRAINT s_tbl_pkey PRIMARY KEY (id ASC),
+  FAMILY f1 (id, v)
+) WITH (schema_locked = true);
+ALTER TABLE public.a ADD CONSTRAINT a_i_fkey FOREIGN KEY (i) REFERENCES public.b(i);
+ALTER TABLE public.f ADD CONSTRAINT f_g_fkey FOREIGN KEY (g) REFERENCES public.g(i);
+ALTER TABLE public.d ADD CONSTRAINT d_e_fkey FOREIGN KEY (e) REFERENCES public.e(i);
+ALTER TABLE public.d ADD CONSTRAINT d_f_fkey FOREIGN KEY (f) REFERENCES public.f(i);
+ALTER TABLE public.c ADD CONSTRAINT c_i_fkey FOREIGN KEY (i) REFERENCES public.d(i);
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the SHOW CREATE ALL TABLES
+ALTER TABLE public.a VALIDATE CONSTRAINT a_i_fkey;
+ALTER TABLE public.f VALIDATE CONSTRAINT f_g_fkey;
+ALTER TABLE public.d VALIDATE CONSTRAINT d_e_fkey;
+ALTER TABLE public.d VALIDATE CONSTRAINT d_f_fkey;
+ALTER TABLE public.c VALIDATE CONSTRAINT c_i_fkey;
+
+skipif config local-schema-locked
+query T nosort
+SELECT crdb_internal.show_create_all_tables('test_fk_order')
+----
+CREATE TABLE public.b (
+  i INT8 NOT NULL,
+  CONSTRAINT b_pkey PRIMARY KEY (i ASC)
 );
 CREATE TABLE public.a (
-    i INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
+  i INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
 );
 CREATE TABLE public.g (
-    i INT8 NOT NULL,
-    CONSTRAINT g_pkey PRIMARY KEY (i ASC)
+  i INT8 NOT NULL,
+  CONSTRAINT g_pkey PRIMARY KEY (i ASC)
 );
 CREATE TABLE public.f (
-    i INT8 NOT NULL,
-    g INT8 NULL,
-    CONSTRAINT f_pkey PRIMARY KEY (i ASC),
-    FAMILY f1 (i, g)
+  i INT8 NOT NULL,
+  g INT8 NULL,
+  CONSTRAINT f_pkey PRIMARY KEY (i ASC),
+  FAMILY f1 (i, g)
 );
 CREATE TABLE public.e (
-    i INT8 NOT NULL,
-    CONSTRAINT e_pkey PRIMARY KEY (i ASC)
+  i INT8 NOT NULL,
+  CONSTRAINT e_pkey PRIMARY KEY (i ASC)
 );
 CREATE TABLE public.d (
-    i INT8 NOT NULL,
-    e INT8 NULL,
-    f INT8 NULL,
-    CONSTRAINT d_pkey PRIMARY KEY (i ASC),
-    FAMILY f1 (i, e, f)
+  i INT8 NOT NULL,
+  e INT8 NULL,
+  f INT8 NULL,
+  CONSTRAINT d_pkey PRIMARY KEY (i ASC),
+  FAMILY f1 (i, e, f)
 );
 CREATE TABLE public.c (
-                                                                                       i INT8 NULL,
-                                                                                       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                                                                       CONSTRAINT c_pkey PRIMARY KEY (rowid ASC)
+  i INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT c_pkey PRIMARY KEY (rowid ASC)
 );
 CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
 CREATE TABLE public.s_tbl (
-                                                                                                                     id INT8 NOT NULL DEFAULT nextval('public.s'::REGCLASS),
-                                                                                                                     v INT8 NULL,
-                                                                                                                     CONSTRAINT s_tbl_pkey PRIMARY KEY (id ASC),
-                                                                                                                     FAMILY f1 (id, v)
+  id INT8 NOT NULL DEFAULT nextval('public.s'::REGCLASS),
+  v INT8 NULL,
+  CONSTRAINT s_tbl_pkey PRIMARY KEY (id ASC),
+  FAMILY f1 (id, v)
 );
 ALTER TABLE public.a ADD CONSTRAINT a_i_fkey FOREIGN KEY (i) REFERENCES public.b(i);
 ALTER TABLE public.f ADD CONSTRAINT f_g_fkey FOREIGN KEY (g) REFERENCES public.g(i);
@@ -253,21 +380,45 @@ statement ok
 ALTER TABLE loop_a ADD CONSTRAINT b_id_delete_constraint
 FOREIGN KEY (b_id) REFERENCES loop_b (id) ON DELETE CASCADE;
 
+onlyif config local-schema-locked
 query T nosort
 SELECT crdb_internal.show_create_all_tables('test_cycle')
 ----
 CREATE TABLE public.loop_b (
-    id INT8 NOT NULL,
-    a_id INT8 NULL,
-    CONSTRAINT loop_b_pkey PRIMARY KEY (id ASC),
-    FAMILY f1 (id, a_id)
+  id INT8 NOT NULL,
+  a_id INT8 NULL,
+  CONSTRAINT loop_b_pkey PRIMARY KEY (id ASC),
+  FAMILY f1 (id, a_id)
+) WITH (schema_locked = true);
+CREATE TABLE public.loop_a (
+  id INT8 NOT NULL,
+  b_id INT8 NULL,
+  CONSTRAINT loop_a_pkey PRIMARY KEY (id ASC),
+  INDEX loop_a_b_id_idx (b_id ASC),
+  FAMILY f1 (id, b_id)
+) WITH (schema_locked = true);
+ALTER TABLE public.loop_b ADD CONSTRAINT loop_b_a_id_fkey FOREIGN KEY (a_id) REFERENCES public.loop_a(id) ON DELETE CASCADE;
+ALTER TABLE public.loop_a ADD CONSTRAINT b_id_delete_constraint FOREIGN KEY (b_id) REFERENCES public.loop_b(id) ON DELETE CASCADE;
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the SHOW CREATE ALL TABLES
+ALTER TABLE public.loop_b VALIDATE CONSTRAINT loop_b_a_id_fkey;
+ALTER TABLE public.loop_a VALIDATE CONSTRAINT b_id_delete_constraint;
+
+skipif config local-schema-locked
+query T nosort
+SELECT crdb_internal.show_create_all_tables('test_cycle')
+----
+CREATE TABLE public.loop_b (
+  id INT8 NOT NULL,
+  a_id INT8 NULL,
+  CONSTRAINT loop_b_pkey PRIMARY KEY (id ASC),
+  FAMILY f1 (id, a_id)
 );
 CREATE TABLE public.loop_a (
-                                                                                                                                    id INT8 NOT NULL,
-                                                                                                                                    b_id INT8 NULL,
-                                                                                                                                    CONSTRAINT loop_a_pkey PRIMARY KEY (id ASC),
-                                                                                                                                    INDEX loop_a_b_id_idx (b_id ASC),
-                                                                                                                                    FAMILY f1 (id, b_id)
+  id INT8 NOT NULL,
+  b_id INT8 NULL,
+  CONSTRAINT loop_a_pkey PRIMARY KEY (id ASC),
+  INDEX loop_a_b_id_idx (b_id ASC),
+  FAMILY f1 (id, b_id)
 );
 ALTER TABLE public.loop_b ADD CONSTRAINT loop_b_a_id_fkey FOREIGN KEY (a_id) REFERENCES public.loop_a(id) ON DELETE CASCADE;
 ALTER TABLE public.loop_a ADD CONSTRAINT b_id_delete_constraint FOREIGN KEY (b_id) REFERENCES public.loop_b(id) ON DELETE CASCADE;
@@ -285,12 +436,22 @@ CREATE TABLE test_primary_key.t (
 	CONSTRAINT pk_name PRIMARY KEY (i)
 );
 
+onlyif config local-schema-locked
 query T
 SELECT crdb_internal.show_create_all_tables('test_primary_key')
 ----
 CREATE TABLE public.t (
-    i INT8 NOT NULL,
-    CONSTRAINT pk_name PRIMARY KEY (i ASC)
+  i INT8 NOT NULL,
+  CONSTRAINT pk_name PRIMARY KEY (i ASC)
+) WITH (schema_locked = true);
+
+skipif config local-schema-locked
+query T
+SELECT crdb_internal.show_create_all_tables('test_primary_key')
+----
+CREATE TABLE public.t (
+  i INT8 NOT NULL,
+  CONSTRAINT pk_name PRIMARY KEY (i ASC)
 );
 
 # Test that computed columns are shown correctly.
@@ -302,14 +463,26 @@ CREATE TABLE test_computed_column.t (
 	FAMILY f1 (a, b)
 );
 
+onlyif config local-schema-locked
 query T
 SELECT crdb_internal.show_create_all_tables('test_computed_column')
 ----
 CREATE TABLE public.t (
-    a INT8 NOT NULL,
-    b INT8 NULL AS (a + 1:::INT8) STORED,
-    CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-    FAMILY f1 (a, b)
+  a INT8 NOT NULL,
+  b INT8 NULL AS (a + 1:::INT8) STORED,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  FAMILY f1 (a, b)
+) WITH (schema_locked = true);
+
+skipif config local-schema-locked
+query T
+SELECT crdb_internal.show_create_all_tables('test_computed_column')
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NULL AS (a + 1:::INT8) STORED,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  FAMILY f1 (a, b)
 );
 
 # Test showing a table with a semicolon in the table, index, and
@@ -319,14 +492,26 @@ CREATE DATABASE test_escaping;
 CREATE TABLE test_escaping.";" (";" int, index (";"));
 INSERT INTO test_escaping.";" VALUES (1);
 
+onlyif config local-schema-locked
 query T
 SELECT crdb_internal.show_create_all_tables('test_escaping')
 ----
 CREATE TABLE public.";" (
-    ";" INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT ";_pkey" PRIMARY KEY (rowid ASC),
-    INDEX ";_;_idx" (";" ASC)
+  ";" INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT ";_pkey" PRIMARY KEY (rowid ASC),
+  INDEX ";_;_idx" (";" ASC)
+) WITH (schema_locked = true);
+
+skipif config local-schema-locked
+query T
+SELECT crdb_internal.show_create_all_tables('test_escaping')
+----
+CREATE TABLE public.";" (
+  ";" INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT ";_pkey" PRIMARY KEY (rowid ASC),
+  INDEX ";_;_idx" (";" ASC)
 );
 
 # Ensure quotes in comments are properly escaped, also that the object names
@@ -338,6 +523,19 @@ COMMENT ON TABLE test_comment."t   t" IS 'has '' quotes';
 COMMENT ON INDEX test_comment."t   t"@"t   t_pkey" IS 'has '' more '' quotes';
 COMMENT ON COLUMN test_comment."t   t"."x'" IS 'i '' just '' love '' quotes';
 
+onlyif config local-schema-locked
+query T
+SELECT crdb_internal.show_create_all_tables('test_comment')
+----
+CREATE TABLE public."t   t" (
+  "x'" INT8 NOT NULL,
+  CONSTRAINT "t   t_pkey" PRIMARY KEY ("x'" ASC)
+) WITH (schema_locked = true);
+COMMENT ON TABLE public."t   t" IS e'has \' quotes';
+COMMENT ON COLUMN public."t   t"."x'" IS e'i \' just \' love \' quotes';
+COMMENT ON INDEX public."t   t"@"t   t_pkey" IS e'has \' more \' quotes';
+
+skipif config local-schema-locked
 query T
 SELECT crdb_internal.show_create_all_tables('test_comment')
 ----
@@ -358,18 +556,34 @@ CREATE SCHEMA sc2;
 CREATE TABLE sc1.t (x int);
 CREATE TABLE sc2.t (x int);
 
+onlyif config local-schema-locked
 query T nosort
 SELECT crdb_internal.show_create_all_tables('test_schema')
 ----
 CREATE TABLE sc1.t (
-    x INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+  x INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+) WITH (schema_locked = true);
+CREATE TABLE sc2.t (
+  x INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+) WITH (schema_locked = true);
+
+skipif config local-schema-locked
+query T nosort
+SELECT crdb_internal.show_create_all_tables('test_schema')
+----
+CREATE TABLE sc1.t (
+  x INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
 CREATE TABLE sc2.t (
-    x INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+  x INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
 
 # Ensure sequences are shown correctly.
@@ -388,22 +602,41 @@ CREATE SEQUENCE public.s1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 123 
 statement ok
 USE test_schema;
 
+onlyif config local-schema-locked
 query T nosort
 BEGIN;
 SELECT crdb_internal.show_create_all_tables('test_schema');
 COMMIT;
 ----
 CREATE TABLE sc1.t (
-    x INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+  x INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+) WITH (schema_locked = true);
+CREATE TABLE sc2.t (
+  x INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+) WITH (schema_locked = true);
+
+skipif config local-schema-locked
+query T nosort
+BEGIN;
+SELECT crdb_internal.show_create_all_tables('test_schema');
+COMMIT;
+----
+CREATE TABLE sc1.t (
+  x INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
 CREATE TABLE sc2.t (
-    x INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+  x INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
 
+onlyif config local-schema-locked
 query T nosort
 BEGIN;
 SELECT * FROM sc1.t;
@@ -411,14 +644,32 @@ SELECT crdb_internal.show_create_all_tables('test_schema');
 COMMIT;
 ----
 CREATE TABLE sc1.t (
-    x INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+  x INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+) WITH (schema_locked = true);
+CREATE TABLE sc2.t (
+  x INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+) WITH (schema_locked = true);
+
+skipif config local-schema-locked
+query T nosort
+BEGIN;
+SELECT * FROM sc1.t;
+SELECT crdb_internal.show_create_all_tables('test_schema');
+COMMIT;
+----
+CREATE TABLE sc1.t (
+  x INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
 CREATE TABLE sc2.t (
-    x INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+  x INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
 
 # Regression test for not closing the ValueGenerators when they are recreated

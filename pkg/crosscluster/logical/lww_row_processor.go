@@ -388,8 +388,9 @@ func (srp *sqlRowProcessor) GetLastRow() cdcevent.Row {
 }
 
 var (
-	forceGenericPlan = sessiondatapb.PlanCacheModeForceGeneric
-	ieOverrideBase   = sessiondata.InternalExecutorOverride{
+	bufferedWritesEnabled = false
+	forceGenericPlan      = sessiondatapb.PlanCacheModeForceGeneric
+	ieOverrideBase        = sessiondata.InternalExecutorOverride{
 		// The OriginIDForLogicalDataReplication session variable will bind the
 		// origin ID 1 to each per-statement batch request header sent by the
 		// internal executor. This metadata will be plumbed to the MVCCValueHeader
@@ -412,8 +413,9 @@ var (
 		GrowStackSize: true,
 		// We don't get any benefits from generating plan gists for internal
 		// queries, so we disable them.
-		DisablePlanGists: true,
-		QualityOfService: &sessiondatapb.BulkLowQoS,
+		DisablePlanGists:      true,
+		QualityOfService:      &sessiondatapb.BulkLowQoS,
+		BufferedWritesEnabled: &bufferedWritesEnabled,
 	}
 )
 
@@ -638,7 +640,11 @@ func (lww *lwwQuerier) InsertRow(
 		if !useLowPriority.Get(&lww.settings.SV) {
 			sess.QualityOfService = nil
 		}
-		if _, err = ie.ExecParsed(ctx, replicatedOptimisticInsertOpName, kvTxn, sess, stmt, datums...); err != nil {
+		err = withSavepoint(ctx, kvTxn, func() error {
+			_, err = ie.ExecParsed(ctx, replicatedOptimisticInsertOpName, kvTxn, sess, stmt, datums...)
+			return err
+		})
+		if err != nil {
 			if isLwwLoser(err) {
 				return batchStats{}, nil
 			}
@@ -665,7 +671,10 @@ func (lww *lwwQuerier) InsertRow(
 		sess.QualityOfService = nil
 	}
 	sess.OriginTimestampForLogicalDataReplication = row.MvccTimestamp
-	_, err = ie.ExecParsed(ctx, replicatedInsertOpName, kvTxn, sess, stmt, datums...)
+	err = withSavepoint(ctx, kvTxn, func() error {
+		_, err = ie.ExecParsed(ctx, replicatedInsertOpName, kvTxn, sess, stmt, datums...)
+		return err
+	})
 	if isLwwLoser(err) {
 		return batchStats{}, nil
 	}
@@ -711,7 +720,7 @@ func (lww *lwwQuerier) DeleteRow(
 		// NOTE: at this point we don't know if we are updating a tombstone or if
 		// we are losing LWW. As long as it is a LWW loss or a tombstone update,
 		// updateTombstone will return okay.
-		return lww.tombstoneUpdaters[row.TableID].updateTombstone(ctx, txn, row)
+		return lww.tombstoneUpdaters[row.TableID].updateTombstoneAny(ctx, txn, row.MvccTimestamp, datums)
 	}
 	return batchStats{}, nil
 }

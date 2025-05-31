@@ -93,11 +93,11 @@ SET ROLE rls_accessor
 # ----------------------------------------------------------------------
 
 exec-ddl
-CREATE POLICY "policy 1" ON t1 USING (true);
+CREATE POLICY "policy 1" ON t1 USING (c1 > 0);
 ----
 
 exec-ddl
-CREATE POLICY t2_pol_1 on t2 FOR SELECT USING (true);
+CREATE POLICY t2_pol_1 on t2 FOR SELECT USING (c1 > 0);
 ----
 
 plan
@@ -108,15 +108,32 @@ select count(*) from t1,t2 where t1.c1 = t2.c1;
 └── • hash join
     │ equality: (c1) = (c1)
     │
-    ├── • scan
-    │     table: t1@t1_pkey
-    │     spans: FULL SCAN
-    │     policies: policy 1
+    ├── • filter
+    │   │ filter: c1 > _
+    │   │
+    │   └── • scan
+    │         table: t1@t1_pkey
+    │         spans: FULL SCAN
+    │         policies: policy 1
     │
-    └── • scan
-          table: t2@t2_pkey
-          spans: FULL SCAN
-          policies: t2_pol_1
+    └── • filter
+        │ filter: c1 > _
+        │
+        └── • scan
+              table: t2@t2_pkey
+              spans: FULL SCAN
+              policies: t2_pol_1
+
+# Ensure that when the optimizer replaces a scan with a "norows" VALUES clause
+# due to RLS filtering, the plan still includes appropriate policy information.
+# ----------------------------------------------------------------------
+plan
+select count(*) from t1,t2 where t1.c1 = t2.c1 and t1.c1 < 0;
+----
+• group (scalar)
+│
+└── • norows
+      policies: applied (filtered all rows)
 
 # Add multiple policies on the same table
 # ----------------------------------------------------------------------
@@ -219,6 +236,29 @@ INSERT INTO writer VALUES (3, 'three');
   auto commit
   size: 3 columns, 1 row
   policies: p_insert
+
+# The next two show that the SELECT policy is applied when using the RETURNING
+# clause, but only if it references the columns in the table.
+
+plan
+INSERT INTO writer VALUES (4, 'four') RETURNING *;
+----
+• insert fast path
+  into: writer(key, value)
+  auto commit
+  size: 3 columns, 1 row
+  policies: p_select, p_insert
+
+plan
+INSERT INTO writer VALUES (4, 'four') RETURNING 'foo'
+----
+• render
+│
+└── • insert fast path
+      into: writer(key, value)
+      auto commit
+      size: 3 columns, 1 row
+      policies: p_insert
 
 exec-ddl
 CREATE TABLE populator (key int not null primary key, value text);
@@ -333,6 +373,26 @@ UPDATE writer SET value = value WHERE key = 5;
           locking strength: for update
           policies: p_select, p_update1
 
+# Should not apply select policy for the new row because columns weren't
+# referenced in the SET or WHERE clause.
+plan
+UPDATE writer SET key = 10 WHERE true;
+----
+• update
+│ table: writer
+│ set: key
+│ auto commit
+│ policies: p_update1, p_update2
+│
+└── • render
+    │
+    └── • scan
+          table: writer@writer_pkey
+          spans: 1+ spans
+          locking strength: for update
+          policies: p_select, p_update1
+
+
 # Show policy information for delete
 # ----------------------------------------------------------------------
 
@@ -395,10 +455,13 @@ select count(*) from t1,t2 where t1.c1 = t2.c1;
     │     spans: FULL SCAN
     │     policies: exempt for role
     │
-    └── • scan
-          table: t2@t2_pkey
-          spans: FULL SCAN
-          policies: t2_pol_1
+    └── • filter
+        │ filter: c1 > _
+        │
+        └── • scan
+              table: t2@t2_pkey
+              spans: FULL SCAN
+              policies: t2_pol_1
 
 exec-ddl
 ALTER TABLE t1 FORCE ROW LEVEL SECURITY
@@ -417,7 +480,101 @@ select count(*) from t1,t2 where t1.c1 = t2.c1;
     │     spans: FULL SCAN
     │     policies: policy 1, p2, p3, r1, r2
     │
-    └── • scan
-          table: t2@t2_pkey
-          spans: FULL SCAN
-          policies: t2_pol_1
+    └── • filter
+        │ filter: c1 > _
+        │
+        └── • scan
+              table: t2@t2_pkey
+              spans: FULL SCAN
+              policies: t2_pol_1
+
+# Show that policies are shown for UPSERT (and its variations).
+# ----------------------------------------------------------------------
+
+exec-ddl
+CREATE TABLE ups (pk int not null primary key, comment text);
+----
+
+exec-ddl
+ALTER TABLE ups OWNER TO rls_accessor
+----
+
+exec-ddl
+ALTER TABLE ups ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+----
+
+exec-ddl
+CREATE POLICY p_ins ON ups FOR INSERT USING (comment = 'insert');
+----
+
+exec-ddl
+CREATE POLICY p_sel ON ups FOR SELECT USING (comment = 'select');
+----
+
+exec-ddl
+CREATE POLICY p_upd ON ups FOR UPDATE USING (comment = 'update');
+----
+
+plan
+UPSERT INTO ups VALUES (1, 'first value');
+----
+• upsert
+│ into: ups(pk, comment)
+│ auto commit
+│ arbiter indexes: ups_pkey
+│ policies: p_ins, p_sel, p_upd
+│
+└── • render
+    │
+    └── • cross join (left outer)
+        │
+        ├── • values
+        │     size: 2 columns, 1 row
+        │
+        └── • scan
+              table: ups@ups_pkey
+              spans: 1+ spans
+              locking strength: for update
+
+plan
+INSERT INTO ups VALUES (1, 'first value') ON CONFLICT (pk) DO UPDATE SET comment = 'second value';
+----
+• upsert
+│ into: ups(pk, comment)
+│ auto commit
+│ arbiter indexes: ups_pkey
+│ policies: p_ins, p_sel, p_upd
+│
+└── • render
+    │
+    └── • render
+        │
+        └── • cross join (left outer)
+            │
+            ├── • values
+            │     size: 2 columns, 1 row
+            │
+            └── • scan
+                  table: ups@ups_pkey
+                  spans: 1+ spans
+                  locking strength: for update
+
+plan
+INSERT INTO ups VALUES (1, 'first value') ON CONFLICT (pk) DO NOTHING;
+----
+• insert
+│ into: ups(pk, comment)
+│ auto commit
+│ arbiter indexes: ups_pkey
+│ policies: p_ins, p_sel
+│
+└── • render
+    │
+    └── • cross join (anti)
+        │
+        ├── • values
+        │     size: 2 columns, 1 row
+        │
+        └── • scan
+              table: ups@ups_pkey
+              spans: 1+ spans

@@ -457,7 +457,7 @@ subtest cast_error
 statement ok
 CREATE TABLE v0 (c1 BIT PRIMARY KEY );
 
-statement error pgcode 42846 pq: crdb_internal.encode_key\(\): invalid cast: bytes -> bit
+statement error pgcode 42846 pq: invalid cast: bytes -> bit
 SHOW RANGE FROM TABLE v0 FOR ROW ( b'\x68')
 
 subtest prev_interface_error_hints

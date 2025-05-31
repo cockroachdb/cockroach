@@ -44,7 +44,9 @@ import (
 //	12  I/Os currently in progress
 //	13  time spent doing I/Os (ms)
 //	14  weighted time spent doing I/Os (ms)
-func parseDiskStats(contents []byte, disks []*monitoredDisk, measuredAt time.Time) error {
+func parseDiskStats(
+	contents []byte, disks []*monitoredDisk, measuredAt time.Time,
+) (countCollected int, err error) {
 	for lineNum := 0; len(contents) > 0; lineNum++ {
 		lineBytes, rest := splitLine(contents)
 		line := unsafe.String(&lineBytes[0], len(lineBytes))
@@ -54,13 +56,13 @@ func parseDiskStats(contents []byte, disks []*monitoredDisk, measuredAt time.Tim
 
 		var deviceID DeviceID
 		if devMajor, rest, err := mustParseUint(line, 32, "deviceID.major"); err != nil {
-			return errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
+			return 0, errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
 		} else {
 			line = rest
 			deviceID.major = uint32(devMajor)
 		}
 		if devMinor, rest, err := mustParseUint(line, 32, "deviceID.minor"); err != nil {
-			return errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
+			return 0, errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
 		} else {
 			line = rest
 			deviceID.minor = uint32(devMinor)
@@ -78,46 +80,46 @@ func parseDiskStats(contents []byte, disks []*monitoredDisk, measuredAt time.Tim
 		var err error
 		stats.DeviceName, line = splitFieldDelim(line)
 		if stats.ReadsCount, line, err = mustParseUint(line, 64, "reads count"); err != nil {
-			return errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
+			return 0, errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
 		}
 		if stats.ReadsMerged, line, err = mustParseUint(line, 64, "reads merged"); err != nil {
-			return errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
+			return 0, errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
 		}
 		if stats.ReadsSectors, line, err = mustParseUint(line, 64, "reads sectors"); err != nil {
-			return errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
+			return 0, errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
 		}
 		if millis, rest, err := mustParseUint(line, 64, "reads duration"); err != nil {
-			return errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
+			return 0, errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
 		} else {
 			line = rest
 			stats.ReadsDuration = time.Duration(millis) * time.Millisecond
 		}
 		if stats.WritesCount, line, err = mustParseUint(line, 64, "writes count"); err != nil {
-			return errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
+			return 0, errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
 		}
 		if stats.WritesMerged, line, err = mustParseUint(line, 64, "writes merged"); err != nil {
-			return errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
+			return 0, errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
 		}
 		if stats.WritesSectors, line, err = mustParseUint(line, 64, "writes sectors"); err != nil {
-			return errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
+			return 0, errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
 		}
 		if millis, rest, err := mustParseUint(line, 64, "writes duration"); err != nil {
-			return errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
+			return 0, errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
 		} else {
 			line = rest
 			stats.WritesDuration = time.Duration(millis) * time.Millisecond
 		}
 		if stats.InProgressCount, line, err = mustParseUint(line, 64, "inprogress iops"); err != nil {
-			return errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
+			return 0, errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
 		}
 		if millis, rest, err := mustParseUint(line, 64, "time doing IO"); err != nil {
-			return errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
+			return 0, errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
 		} else {
 			line = rest
 			stats.CumulativeDuration = time.Duration(millis) * time.Millisecond
 		}
 		if millis, rest, err := mustParseUint(line, 64, "weighted IO duration"); err != nil {
-			return errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
+			return 0, errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
 		} else {
 			line = rest
 			stats.WeightedIODuration = time.Duration(millis) * time.Millisecond
@@ -125,31 +127,32 @@ func parseDiskStats(contents []byte, disks []*monitoredDisk, measuredAt time.Tim
 
 		// The below fields are optional.
 		if stats.DiscardsCount, _, line, err = tryParseUint(line, 64); err != nil {
-			return errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
+			return 0, errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
 		}
 		if stats.DiscardsMerged, _, line, err = tryParseUint(line, 64); err != nil {
-			return errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
+			return 0, errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
 		}
 		if stats.DiscardsSectors, _, line, err = tryParseUint(line, 64); err != nil {
-			return errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
+			return 0, errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
 		}
 		if millis, ok, rest, err := tryParseUint(line, 64); err != nil {
-			return errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
+			return 0, errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
 		} else if ok {
 			line = rest
 			stats.DiscardsDuration = time.Duration(millis) * time.Millisecond
 		}
 		if stats.FlushesCount, _, line, err = tryParseUint(line, 64); err != nil {
-			return errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
+			return 0, errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
 		}
 		if millis, ok, _, err := tryParseUint(line, 64); err != nil {
-			return errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
+			return 0, errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
 		} else if ok {
 			stats.FlushesDuration = time.Duration(millis) * time.Millisecond
 		}
 		disks[diskIdx].recordStats(measuredAt, stats)
+		countCollected++
 	}
-	return nil
+	return countCollected, nil
 }
 
 func splitLine(b []byte) (line, rest []byte) {

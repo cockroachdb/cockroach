@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
@@ -62,7 +62,7 @@ var storeSpecs base.StoreSpecList
 var goMemLimit int64
 var tenantIDFile string
 var localityFile string
-var encryptionSpecs storagepb.EncryptionSpecList
+var encryptionSpecs storageconfig.EncryptionSpecList
 
 // initPreFlagsDefaults initializes the values of the global variables
 // defined above.
@@ -555,6 +555,9 @@ func init() {
 		// Node cert distinguished name
 		cliflagcfg.StringFlag(f, &startCtx.serverNodeCertDN, cliflags.NodeCertDistinguishedName)
 
+		// TLS Cipher Suites configured
+		cliflagcfg.StringSliceFlag(f, &startCtx.serverTLSCipherSuites, cliflags.TLSCipherSuites)
+
 		// Cluster name verification.
 		cliflagcfg.VarFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
 		cliflagcfg.BoolFlag(f, &baseCfg.DisableClusterNameVerification, cliflags.DisableClusterNameVerification)
@@ -761,6 +764,7 @@ func init() {
 		cliflagcfg.BoolFlag(f, &zipCtx.includeRangeInfo, cliflags.ZipIncludeRangeInfo)
 		cliflagcfg.BoolFlag(f, &zipCtx.includeStacks, cliflags.ZipIncludeGoroutineStacks)
 		cliflagcfg.BoolFlag(f, &zipCtx.includeRunningJobTraces, cliflags.ZipIncludeRunningJobTraces)
+		cliflagcfg.BoolFlag(f, &zipCtx.validateZipFile, cliflags.ZipValidateFile)
 	}
 	// List-files + Zip commands.
 	for _, cmd := range []*cobra.Command{debugZipCmd, debugListFilesCmd} {
@@ -1161,6 +1165,12 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	if err := security.SetNodeSubject(startCtx.serverNodeCertDN); err != nil {
 		return err
 	}
+	// Currently we don't handle the case where we are setting the --insecure flag
+	// as well as providing the --tls-cipher-suites, we should probably error out
+	// if both are set, issue: #144935.
+	if err := security.SetTLSCipherSuitesConfigured(startCtx.serverTLSCipherSuites); err != nil {
+		return err
+	}
 	serverCfg.User = username.NodeUserName()
 	serverCfg.Insecure = startCtx.serverInsecure
 	serverCfg.SSLCertsDir = startCtx.serverSSLCertsDir
@@ -1490,7 +1500,7 @@ func mtStartSQLFlagsInit(cmd *cobra.Command) error {
 		if spec.BallastSize == nil {
 			// Only override if there was no ballast size specified to start
 			// with.
-			zero := storagepb.SizeSpec{Capacity: 0, Percent: 0}
+			zero := storageconfig.SizeSpec{Capacity: 0, Percent: 0}
 			spec.BallastSize = &zero
 		}
 	}

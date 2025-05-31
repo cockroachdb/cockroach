@@ -381,7 +381,7 @@ func evaluateZoneOptions(
 					pgerror.Newf(pgcode.InvalidParameterValue, "unsupported NULL value for %q",
 						tree.ErrString(name))
 			}
-			opt := zone.SupportedZoneConfigOptions[*name] // Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
+			opt := zone.SupportedZoneConfigOptions[*name]
 			if opt.CheckAllowed != nil {
 				if err := opt.CheckAllowed(b, b.ClusterSettings(), datum); err != nil {
 					return nil, nil, nil, err
@@ -601,6 +601,9 @@ func validateZoneLocalitiesForSecondaryTenants(
 	settings *cluster.Settings,
 ) error {
 	toValidate := accumulateNewUniqueConstraints(currentZone, newZone)
+	if err := zonepb.ValidateNewUniqueConstraintsForSecondaryTenants(&settings.SV, currentZone, newZone); err != nil {
+		return err
+	}
 
 	// rs and zs will be lazily populated with regions and zones, respectively.
 	// These should not be accessed directly - use getRegionsAndZones helper
@@ -1418,18 +1421,37 @@ func configureZoneConfigForNewIndexBackfill(
 		return errors.AssertionFailedf("attempting to modify subzone configs for indexID %d"+
 			" on tableID %d that does not a zone config set", oldIndexID, tableID)
 	}
-	newIndex := getLatestPrimaryIndex(b, tableID)
-	tempIndex := findCorrespondingTemporaryIndexByID(b, tableID, newIndex.IndexID)
-	newIndexesForBackfill := []catid.IndexID{tempIndex.IndexID, newIndex.IndexID}
+	// Extract all the new indexes that exist in the primary index chain,
+	// which will all have the zone config applied.
+	chain := getPrimaryIndexChain(b, tableID)
+	var newIndexesForBackfill []catid.IndexID
+	for _, idxSpec := range chain.allPrimaryIndexSpecs(nonNilPrimaryIndexSpecSelector) {
+		// Skip the old primary index spec.
+		if idxSpec == &chain.oldSpec {
+			continue
+		}
+		newIndexesForBackfill = append(newIndexesForBackfill, idxSpec.primary.IndexID)
+		newIndexesForBackfill = append(newIndexesForBackfill, idxSpec.primary.TemporaryIndexID)
+	}
+
 	newZoneConfig := *mostRecentTableZoneConfig.ZoneConfig
 	newSubzones := make([]zonepb.Subzone, 0)
 	newSubzones = append(newSubzones, newZoneConfig.Subzones...)
+	// Track which subzones are already referenced.
+	indexesAlreadyMapped := make(map[uint32]struct{})
+	for _, subZone := range newZoneConfig.Subzones {
+		indexesAlreadyMapped[subZone.IndexID] = struct{}{}
+	}
 	// For the indexes we will use as a part of the backfill, ensure we copy
 	// over each subzone config from the old index to the backfill-related ones.
 	// NOTE: The subzones for the old index and temporary index will eventually
 	// be removed by the schema change GC job, but we need them to be present
 	// for the duration of this schema change.
 	for _, idxToAdd := range newIndexesForBackfill {
+		// Only update new subzone references.
+		if _, found := indexesAlreadyMapped[uint32(idxToAdd)]; found {
+			continue
+		}
 		for _, subzone := range newZoneConfig.Subzones {
 			if subzone.IndexID == uint32(oldIndexID) {
 				subzone.IndexID = uint32(idxToAdd)
@@ -1492,11 +1514,19 @@ func applyZoneConfigForMultiRegionTable(
 	tableID catid.DescID,
 	opts ...applyZoneConfigForMultiRegionTableOption,
 ) error {
-	currentZoneConfigWithRaw, err := b.ZoneConfigGetter().GetZoneConfig(b, tableID)
-	if err != nil {
-		return err
+	// Base the zone config on the most recent copy of the table
+	// zone config.
+	mostRecentSeqNum := uint32(0)
+	mostRecentTableZoneConfig := getMostRecentTableZoneConfig(b, tableID)
+	if mostRecentTableZoneConfig != nil {
+		mostRecentSeqNum = mostRecentTableZoneConfig.SeqNum
 	}
-	if currentZoneConfigWithRaw == nil {
+	var currentZoneConfigWithRaw *zone.ZoneConfigWithRawBytes
+	var err error
+	if mostRecentTableZoneConfig != nil {
+		zc := protoutil.Clone(mostRecentTableZoneConfig.ZoneConfig).(*zonepb.ZoneConfig)
+		currentZoneConfigWithRaw = zone.NewZoneConfigWithRawBytes(zc, nil)
+	} else {
 		currentZoneConfigWithRaw = zone.NewZoneConfigWithRawBytes(zonepb.NewZoneConfig(), nil)
 	}
 	newZoneConfig := *currentZoneConfigWithRaw.ZoneConfigProto()
@@ -1576,11 +1606,6 @@ func applyZoneConfigForMultiRegionTable(
 	}
 	if newZoneConfig.IsSubzonePlaceholder() && len(newZoneConfig.Subzones) == 0 {
 		return nil
-	}
-	mostRecentSeqNum := uint32(0)
-	mostRecentTableZoneConfig := getMostRecentTableZoneConfig(b, tableID)
-	if mostRecentTableZoneConfig != nil {
-		mostRecentSeqNum = mostRecentTableZoneConfig.SeqNum
 	}
 	tzc := &scpb.TableZoneConfig{
 		TableID:    tableID,

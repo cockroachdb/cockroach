@@ -181,5 +181,4 @@ var continuousTelemetryInterval = settings.RegisterDurationSetting(
 	"determines the interval at which each node emits continuous telemetry events"+
 		" during the lifespan of every changefeed; setting a zero value disables logging",
 	24*time.Hour,
-	settings.NonNegativeDuration,
 )

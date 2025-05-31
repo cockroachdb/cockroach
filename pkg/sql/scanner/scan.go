@@ -100,6 +100,10 @@ func (s *Scanner) RetainComments() {
 	s.retainComments = true
 }
 
+func (s *Scanner) ResetComments() {
+	s.Comments = nil
+}
+
 // Cleanup is used to avoid holding on to memory unnecessarily (for the cases
 // where we reuse a Scanner).
 func (s *Scanner) Cleanup() {
@@ -141,14 +145,14 @@ func (s *Scanner) finishString(buf []byte) string {
 	return str
 }
 
-func (s *Scanner) scanSetup(lval ScanSymType) (int, bool) {
+func (s *Scanner) scanSetup(lval ScanSymType, allowComments bool) (int, bool) {
 	lval.SetID(0)
 	lval.SetPos(int32(s.pos))
 	lval.SetStr("EOF")
 	s.quoted = false
 	s.lastAttemptedID = 0
 
-	if _, ok := s.skipWhitespace(lval, true); !ok {
+	if _, ok := s.skipWhitespace(lval, allowComments); !ok {
 		return 0, true
 	}
 
@@ -167,7 +171,7 @@ func (s *Scanner) scanSetup(lval ScanSymType) (int, bool) {
 
 // Scan scans the next token and populates its information into lval.
 func (s *SQLScanner) Scan(lval ScanSymType) {
-	ch, skipWhiteSpace := s.scanSetup(lval)
+	ch, skipWhiteSpace := s.scanSetup(lval, true /* allowComments */)
 
 	if skipWhiteSpace {
 		return
@@ -281,6 +285,10 @@ func (s *SQLScanner) Scan(lval ScanSymType) {
 			case '*': // !~*
 				s.pos++
 				lval.SetID(lexbase.NOT_REGIMATCH)
+				return
+			case '~': // !~~ or !~~*
+				s.pos--
+				lval.SetID(lexbase.NOT)
 				return
 			}
 			lval.SetID(lexbase.NOT_REGMATCH)
@@ -419,6 +427,16 @@ func (s *SQLScanner) Scan(lval ScanSymType) {
 		case '*': // ~*
 			s.pos++
 			lval.SetID(lexbase.REGIMATCH)
+			return
+		case '~': // ~~
+			s.pos++
+			switch s.peek() {
+			case '*': // ~~*
+				s.pos++
+				lval.SetID(lexbase.ILIKE)
+				return
+			}
+			lval.SetID(lexbase.LIKE)
 			return
 		}
 		return
@@ -596,8 +614,13 @@ func (s *Scanner) ScanComment(lval ScanSymType) (present, ok bool) {
 			return false, true
 		}
 		for {
-			switch s.next() {
-			case eof, '\n':
+			next := s.next()
+			switch next {
+			case eof:
+				return true, true
+			case '\n':
+				// Don't include the new-line character in in-line comments.
+				s.pos--
 				return true, true
 			}
 		}

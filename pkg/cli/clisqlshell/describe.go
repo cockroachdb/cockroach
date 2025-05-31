@@ -734,7 +734,8 @@ func describeTableDetails() string {
           c.relhasindex,
           EXISTS(SELECT 1 FROM pg_catalog.pg_constraint WHERE conrelid = c.oid AND contype = 'f') AS relhasfkey,
           EXISTS(SELECT 1 FROM pg_catalog.pg_constraint WHERE confrelid = c.oid AND contype = 'f') AS relhasifkey,
-          EXISTS(SELECT 1 FROM pg_catalog.pg_statistic_ext WHERE stxrelid = c.oid)
+          EXISTS(SELECT 1 FROM pg_catalog.pg_statistic_ext WHERE stxrelid = c.oid),
+          EXISTS(SELECT 1 FROM pg_catalog.pg_policy WHERE polrelid = c.oid) AS relhaspolicies
      FROM pg_catalog.pg_class c
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
     WHERE c.relname LIKE %[1]s
@@ -758,6 +759,7 @@ func describeOneTableDetails(verbose bool) func([]string) (extraStages []describ
 		relhasfkey := selectedTable[7]
 		relhasifkey := selectedTable[8]
 		relhasstats := selectedTable[9]
+		relhaspolicies := selectedTable[10]
 
 		var buf strings.Builder
 
@@ -974,6 +976,69 @@ SELECT IF(indisprimary, 'primary key, ',
 
 		switch relkind {
 		case "r", "m", "f", "p", "I", "t":
+			// Check for RLS policies, only if the table has policies.
+			if relhaspolicies == "t" {
+				// Combined query for RLS status and policies
+				buf.Reset()
+				buf.WriteString(`
+WITH rls_status AS (
+  SELECT 
+    CASE 
+       WHEN c.relrowsecurity = true AND c.relforcerowsecurity = true THEN 
+          'Policies (forced row security enabled):'
+       WHEN c.relrowsecurity = false THEN 
+          'Policies (row security disabled):'
+       ELSE 
+          'Policies:'
+    END as status
+  FROM pg_catalog.pg_class c
+  WHERE c.oid = %[1]s
+),
+all_rows AS (
+  -- First row: RLS status header
+  SELECT 1 as display_order, status as policy_def
+  FROM rls_status
+  UNION ALL
+  -- Policy rows with indentation and formatting
+  SELECT 2 as display_order,
+    '    POLICY "' || policyname || '"' || 
+    CASE WHEN permissive = 'restrictive' THEN ' AS RESTRICTIVE' ELSE '' END ||
+    CASE cmd
+      WHEN 'SELECT' THEN ' FOR SELECT'
+      WHEN 'INSERT' THEN ' FOR INSERT'
+      WHEN 'UPDATE' THEN ' FOR UPDATE'
+      WHEN 'DELETE' THEN ' FOR DELETE'
+      ELSE ''
+    END ||
+    CASE 
+      WHEN array_length(roles, 1) > 0 AND NOT (array_length(roles, 1) = 1 AND roles[1] = 'public') THEN
+        ' TO ' || array_to_string(roles, ', ')
+      WHEN array_length(roles, 1) = 1 AND roles[1] = 'public' THEN ' TO public'
+      ELSE ''
+    END ||
+    CASE 
+      WHEN qual IS NOT NULL AND qual <> '' THEN E'\n      USING (' || qual || ')'
+      ELSE ''
+    END ||
+    CASE 
+      WHEN with_check IS NOT NULL AND with_check <> '' THEN E'\n      WITH CHECK (' || with_check || ')'
+      ELSE ''
+    END
+  FROM pg_catalog.pg_policies
+  WHERE schemaname = %[2]s AND tablename = %[3]s
+)
+SELECT policy_def as "Row Level Security"
+FROM all_rows
+ORDER BY display_order, policy_def`)
+
+				policyStage := describeStage{
+					title: "",
+					sql:   buf.String(),
+					qargs: []interface{}{oid, lexbase.EscapeSQLString(scName), lexbase.EscapeSQLString(tName)},
+				}
+				extraStages = append(extraStages, policyStage)
+			}
+
 			// print indexes.
 			if relhasindex == "t" {
 				buf.Reset()

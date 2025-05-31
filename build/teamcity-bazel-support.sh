@@ -56,10 +56,6 @@ run_bazel() {
     return $exit_status
 }
 
-run_bazel_fips() {
-  BAZEL_IMAGE="$(cat $root/build/.bazelbuilderversion-fips)" run_bazel "$@"
-}
-
 # local copy of _tc_build_branch from teamcity-support.sh to avoid imports.
 _tc_build_branch() {
     echo "${TC_BUILD_BRANCH#refs/heads/}"

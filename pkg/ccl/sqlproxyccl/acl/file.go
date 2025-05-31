@@ -106,7 +106,6 @@ func watchForUpdate[T FromFile](
 				log.Errorf(ctx, "WatchList daemon stopped: %v", ctx.Err())
 				return
 			case <-t.Ch():
-				t.MarkRead()
 				list, err := readFile[T](ctx, filename, postRead)
 				if err != nil {
 					if !hasError && errorCount != nil {

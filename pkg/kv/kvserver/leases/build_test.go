@@ -26,10 +26,12 @@ var (
 	cts10 = hlc.ClockTimestamp{WallTime: 10}
 	cts20 = hlc.ClockTimestamp{WallTime: 20}
 	cts30 = hlc.ClockTimestamp{WallTime: 30}
+	cts35 = hlc.ClockTimestamp{WallTime: 35}
 	cts40 = hlc.ClockTimestamp{WallTime: 40}
 	cts50 = hlc.ClockTimestamp{WallTime: 50}
 	ts10  = cts10.ToTimestamp()
 	ts30  = cts30.ToTimestamp()
+	ts35  = cts35.ToTimestamp()
 	ts40  = cts40.ToTimestamp()
 	ts50  = cts50.ToTimestamp()
 )
@@ -203,6 +205,7 @@ func defaultSettings() Settings {
 		ExpToEpochEquiv:                   true,
 		MinExpirationSupported:            true,
 		RangeLeaseDuration:                20,
+		FortificationGracePeriod:          15,
 	}
 }
 
@@ -443,7 +446,7 @@ func TestBuild(t *testing.T) {
 						Term:            5,
 						Sequence:        8,
 						AcquisitionType: roachpb.LeaseAcquisitionType_Request,
-						MinExpiration:   ts40,
+						MinExpiration:   ts35,
 					},
 				},
 			},
@@ -460,7 +463,7 @@ func TestBuild(t *testing.T) {
 						Term:            5,
 						Sequence:        8,
 						AcquisitionType: roachpb.LeaseAcquisitionType_Request,
-						MinExpiration:   ts40,
+						MinExpiration:   ts35,
 					},
 				},
 			},
@@ -723,7 +726,7 @@ func TestBuild(t *testing.T) {
 						Term:            5,
 						Sequence:        7, // sequence not changed
 						AcquisitionType: roachpb.LeaseAcquisitionType_Request,
-						MinExpiration:   ts40,
+						MinExpiration:   ts35,
 					},
 				},
 			},
@@ -819,7 +822,7 @@ func TestBuild(t *testing.T) {
 						Term:            5,
 						Sequence:        7, // sequence not changed
 						AcquisitionType: roachpb.LeaseAcquisitionType_Request,
-						MinExpiration:   ts40,
+						MinExpiration:   ts35,
 					},
 				},
 			},
@@ -927,7 +930,7 @@ func TestBuild(t *testing.T) {
 						Term:            5,
 						Sequence:        8, // sequence changed
 						AcquisitionType: roachpb.LeaseAcquisitionType_Request,
-						MinExpiration:   ts40,
+						MinExpiration:   ts35,
 					},
 					PrevLeaseManipulation: PrevLeaseManipulation{
 						RevokeAndForwardNextExpiration: true,

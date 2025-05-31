@@ -46,6 +46,7 @@ type DatumAlloc struct {
 	duuidAlloc        []DUuid
 	dipnetAlloc       []DIPAddr
 	djsonAlloc        []DJSON
+	djsonpathAlloc    []DJsonpath
 	dtupleAlloc       []DTuple
 	doidAlloc         []DOid
 	dvoidAlloc        []DVoid
@@ -692,8 +693,17 @@ func (a *DatumAlloc) NewDJsonpath(v DJsonpath) *DJsonpath {
 		*r = v
 		return r
 	}
-	r := (*DJsonpath)(a.newString())
+	buf := &a.djsonpathAlloc
+	if len(*buf) == 0 {
+		allocSize := defaultDatumAllocSize
+		if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DJsonpath, allocSize)
+	}
+	r := &(*buf)[0]
 	*r = v
+	*buf = (*buf)[1:]
 	return r
 }
 

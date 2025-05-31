@@ -163,7 +163,7 @@ CREATE TEMP TABLE t_102964 (i INT PRIMARY KEY);
 let $temp_schema_102964
 SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name LIKE 'pg_temp_%';
 
-statement error pgcode 0A000 unimplemented: cannot create UDFs under a temporary schema
+statement error pgcode 0A000 unimplemented: cannot create user-defined functions under a temporary schema
 CREATE FUNCTION $temp_schema_102964.f_102964 () RETURNS INT AS 'SELECT 1' LANGUAGE sql;
 
 subtest end

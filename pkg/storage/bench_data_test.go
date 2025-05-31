@@ -186,7 +186,7 @@ func (e extendedInitial) Build(ctx context.Context, b *testing.B, eng Engine) er
 func withCompactedDB(base initialState) initialState {
 	return extendInitialConditions(base,
 		func(ctx context.Context, b *testing.B, eng Engine) error {
-			return eng.Compact()
+			return eng.Compact(ctx)
 		}, "compacted")
 }
 

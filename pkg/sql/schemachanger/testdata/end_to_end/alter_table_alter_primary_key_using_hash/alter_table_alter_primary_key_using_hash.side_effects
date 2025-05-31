@@ -20,7 +20,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 12 MutationType ops
+## StatementPhase stage 1 of 1 with 13 MutationType ops
 upsert descriptor #104
   ...
      id: 104
@@ -122,7 +122,9 @@ upsert descriptor #104
      nextMutationId: 1
      parentId: 100
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -131,7 +133,7 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 16 MutationType ops
+## PreCommitPhase stage 2 of 2 with 17 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -269,7 +271,9 @@ upsert descriptor #104
      nextMutationId: 1
      parentId: 100
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -797,11 +801,11 @@ upsert descriptor #104
   +  version: "12"
 persist all catalog changes to storage
 adding table for stats refresh: 104
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 1 of 3 with 14 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 1 of 4 with 14 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #18
 begin transaction #19
-## PostCommitNonRevertiblePhase stage 1 of 3 with 16 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 4 with 16 MutationType ops
 upsert descriptor #104
    table:
   -  checks: []
@@ -939,14 +943,14 @@ upsert descriptor #104
   +  version: "13"
 persist all catalog changes to storage
 adding table for stats refresh: 104
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 1 ValidationType op pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 4 with 1 ValidationType op pending"
 commit transaction #19
 begin transaction #20
-## PostCommitNonRevertiblePhase stage 2 of 3 with 1 ValidationType op
+## PostCommitNonRevertiblePhase stage 2 of 4 with 1 ValidationType op
 validate CHECK constraint check_crdb_internal_j_shard_3 in table #104
 commit transaction #20
 begin transaction #21
-## PostCommitNonRevertiblePhase stage 3 of 3 with 7 MutationType ops
+## PostCommitNonRevertiblePhase stage 3 of 4 with 7 MutationType ops
 upsert descriptor #104
   ...
        fromHashShardedColumn: true
@@ -954,41 +958,6 @@ upsert descriptor #104
   -    validity: Validating
      columns:
      - id: 1
-  ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  -  declarativeSchemaChangerState:
-  -    authorization:
-  -      userName: root
-  -    currentStatuses: <redacted>
-  -    jobId: "1"
-  -    nameMapping:
-  -      columns:
-  -        "1": i
-  -        "2": j
-  -        "3": crdb_internal_j_shard_3
-  -        "4294967292": crdb_internal_origin_timestamp
-  -        "4294967293": crdb_internal_origin_id
-  -        "4294967294": tableoid
-  -        "4294967295": crdb_internal_mvcc_timestamp
-  -      constraints:
-  -        "2": check_crdb_internal_j_shard_3
-  -      families:
-  -        "0": primary
-  -      id: 104
-  -      indexes:
-  -        "2": t_i_key
-  -        "4": t_pkey
-  -      name: t
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›) USING HASH WITH ('bucket_count' = ‹3›)
-  -        statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH ('bucket_count' = 3)
-  -        statementTag: ALTER TABLE
-  -    targetRanks: <redacted>
-  -    targets: <redacted>
-     families:
-     - columnIds:
   ...
        version: 4
      modificationTime: {}
@@ -1045,12 +1014,60 @@ upsert descriptor #104
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH ('bucket_count' = 3)"
   descriptor IDs: [104]
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 4 of 4 with 1 MutationType op pending"
+commit transaction #21
+notified job registry to adopt jobs: [2]
+begin transaction #22
+## PostCommitNonRevertiblePhase stage 4 of 4 with 3 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "2": j
+  -        "3": crdb_internal_j_shard_3
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      constraints:
+  -        "2": check_crdb_internal_j_shard_3
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "2": t_i_key
+  -        "4": t_pkey
+  -      name: t
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›) USING HASH WITH ('bucket_count' = ‹3›)
+  -        statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH ('bucket_count' = 3)
+  -        statementTag: ALTER TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "14"
+  +  version: "15"
+persist all catalog changes to storage
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 104
-commit transaction #21
-notified job registry to adopt jobs: [2]
+commit transaction #22
 # end PostCommitPhase

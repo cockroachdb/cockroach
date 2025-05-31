@@ -113,7 +113,7 @@ jobs:
             jq -n --arg err "$msg" '{error: $err}' > artifacts/cover-${PR}-${HEAD_SHA}.json 
             BASE_SHA=${{ env.BASE_SHA }}
             if [ -n "$BASE_SHA" ]; then
-              jq -n --arg err "$msg" '{error: $err}' > artifacts/cover-${PR}-${BASE_SHA}.json 
+              jq -n --arg err "$msg" '{error: $err}' > artifacts/cover-${PR}-${BASE_SHA}.json
             fi
           fi
 
@@ -122,3 +122,8 @@ jobs:
         with:
           name: cover
           path: artifacts/cover-*.json
+
+      - name: 'Call DeadManSnitch'
+        if: env.ERROR == ''
+        run: |
+          curl -X GET 'https://nosnch.in/54f81030dc' -d 'message=Code coverage generated'

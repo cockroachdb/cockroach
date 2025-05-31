@@ -32,7 +32,17 @@ func (b *Benchmark) command(revision Revision, profileSuffix string) *exec.Cmd {
 		path.Join(suite.binDir(revision), b.binaryName()),
 		b.args(suite.artifactsDir(revision), profileSuffix)...,
 	)
-	cmd.Env = append(os.Environ(), "COCKROACH_RANDOM_SEED=1")
+	env := os.Environ()
+	envGodebug := os.Getenv("GODEBUG")
+	if envGodebug != "" {
+		envGodebug += ","
+	}
+	// Ensure that GODEBUG=[...,]runtimecontentionstacks=1 is set to improve
+	// mutex profiles.
+	envGodebug += "runtimecontentionstacks=1"
+	env = append(env, "GODEBUG="+envGodebug)
+	env = append(env, "COCKROACH_RANDOM_SEED=1")
+	cmd.Env = env
 	return cmd
 }
 
@@ -77,7 +87,12 @@ func (b *Benchmark) run() error {
 			return err
 		}
 	}
-	status := NoChange
+
+	status := make(map[string]Status)
+	for _, metric := range b.Metrics {
+		status[metric.Name] = NoChange
+	}
+
 	tries := 0
 	for retries := 0; retries < b.Retries; retries++ {
 		log.Printf("Running benchmark %q for %d iterations (attempt %d)", b.Name, b.Count, retries+1)
@@ -98,55 +113,85 @@ func (b *Benchmark) run() error {
 		if err != nil {
 			return err
 		}
-		currentStatus := compareResult.top()
-		// If the benchmark shows no change, we can stop running additional retry
-		// iterations. Retries are run once a benchmark has regressed or improved,
-		// on the first try, to ensure that the change is not a fluke.
-		if currentStatus == NoChange {
-			status = currentStatus
-			break
+
+		// Loop through all metrics and check if they have a consistent status.
+		// As long as one metric maintains a consistent status (other than
+		// NoChange), we continue running additional retry iterations.
+		keepRunning := false
+		for _, metric := range b.Metrics {
+			currentStatus := compareResult.status(metric.Name)
+			// If this is the first run, we set the status to the current
+			// status. Only continue running if a metric has regressed or
+			// improved.
+			if retries == 0 {
+				status[metric.Name] = currentStatus
+				if currentStatus != NoChange {
+					keepRunning = true
+				}
+				continue
+			}
+
+			// On a retry, if any metric continues having a consistent state (other
+			// than NoChange), we run additional retries.
+			if status[metric.Name] != NoChange {
+				if status[metric.Name] == currentStatus {
+					keepRunning = true
+				} else {
+					// The metric previously indicated a change, but now
+					// indicates a change in the opposite direction. Reset the
+					// status to NoChange to indicate that the benchmark did not
+					// change.
+					status[metric.Name] = NoChange
+				}
+			}
 		}
 
-		// If this is the first run, we set the status to the current status.
-		// Otherwise, we check if the regression or improvement is persistent and
-		// continue running until all retries are exhausted. If the status flips
-		// from a regression to an improvement or vice versa, we set the status to
-		// NoChange and stop running, as the results are inconclusive.
-		if status == NoChange {
-			status = currentStatus
-		} else if status != currentStatus {
-			// If the benchmark shows a different change, the results are inconclusive.
-			status = NoChange
+		if !keepRunning {
+			// Reset all metrics to NoChange to indicate that the benchmark did
+			// not change, and we can stop running additional retries.
+			for _, metric := range b.Metrics {
+				status[metric.Name] = NoChange
+			}
 			break
 		}
 	}
 
-	// Write change marker file if the benchmark changed.
-	if status != NoChange {
-		marker := strings.ToUpper(status.String())
-		err := os.WriteFile(path.Join(suite.artifactsDir(New), b.sanitizedName()+"."+marker), nil, 0644)
-		if err != nil {
-			return err
+	// Write change marker file (per metric) if the benchmark changed. It's
+	// possible that both a regression and an improvement occurred, for
+	// different metrics of the same benchmark, in which case both markers will
+	// be written.
+	for _, metric := range b.Metrics {
+		if status[metric.Name] != NoChange {
+			err := os.WriteFile(path.Join(suite.artifactsDir(New), b.markerName(status[metric.Name])), nil, 0644)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
 	// Concat profiles.
 	for _, profileType := range []ProfileType{ProfileCPU, ProfileMemory, ProfileMutex} {
-		err := b.concatProfile(profileType, tries*b.Count)
-		if err != nil {
-			return errors.Wrapf(err, "failed to concat %s profiles", profileType)
+		for try := range tries {
+			err := b.concatProfile(profileType, try, b.Count)
+			if err != nil {
+				return errors.Wrapf(err, "failed to concat %s profiles", profileType)
+			}
 		}
 	}
 	return nil
 }
 
-func (b *Benchmark) concatProfile(profileType ProfileType, count int) error {
+// concatProfile concatenates the profiles for the given profile type and
+// revision. Start is the try number, and count is the number of iterations
+// per try.
+func (b *Benchmark) concatProfile(profileType ProfileType, start, count int) error {
+	offset := start * b.Count
 	for _, revision := range []Revision{New, Old} {
 		profiles := make([]*profile.Profile, 0, b.Count)
-		deleteProfiles := make([]func() error, 0)
+		deleteProfiles := make([]string, 0)
 		for i := 1; i <= count; i++ {
 			profilePath := path.Join(suite.artifactsDir(revision),
-				b.profile(profileType, fmt.Sprintf("%d", i)))
+				b.profile(profileType, fmt.Sprintf("%d", offset+i)))
 			profileData, err := os.ReadFile(profilePath)
 			if err != nil {
 				return err
@@ -156,15 +201,13 @@ func (b *Benchmark) concatProfile(profileType ProfileType, count int) error {
 				return err
 			}
 			profiles = append(profiles, p)
-			deleteProfiles = append(deleteProfiles, func() error {
-				return os.Remove(profilePath)
-			})
+			deleteProfiles = append(deleteProfiles, profilePath)
 		}
 		merged, err := profile.Merge(profiles)
 		if err != nil {
 			return err
 		}
-		mergedPath := path.Join(suite.artifactsDir(revision), b.profile(profileType, "merged"))
+		mergedPath := path.Join(suite.artifactsDir(revision), b.profile(profileType, fmt.Sprintf("merged_%d", start+1)))
 		f, err := os.Create(mergedPath)
 		if err != nil {
 			return err
@@ -176,8 +219,8 @@ func (b *Benchmark) concatProfile(profileType ProfileType, count int) error {
 		if err = f.Close(); err != nil {
 			return err
 		}
-		for _, deleteProfile := range deleteProfiles {
-			if err = deleteProfile(); err != nil {
+		for _, path := range deleteProfiles {
+			if err = os.Remove(path); err != nil {
 				return err
 			}
 		}

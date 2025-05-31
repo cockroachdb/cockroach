@@ -225,7 +225,7 @@ func (p *planner) SetClusterSetting(
 	}
 
 	if st.OverridesInformer != nil && st.OverridesInformer.IsOverridden(setting.InternalKey()) {
-		return nil, errors.Errorf("cluster setting '%s' is currently overridden by the operator", name)
+		return nil, errors.Wrapf(cluster.SettingOverrideErr, "cluster setting '%s' cannot be set", name)
 	}
 
 	value, err := p.getAndValidateTypedClusterSetting(ctx, name, n.Value, setting)

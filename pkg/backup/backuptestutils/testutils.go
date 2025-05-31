@@ -18,10 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
@@ -216,8 +216,8 @@ func setTestClusterDefaults(params *base.TestClusterArgs, dataDir string, useDat
 			SkipZoneConfigBootstrap: true,
 		}
 	}
-	if params.ServerArgs.Knobs.SQLStatsKnobs == nil {
-		params.ServerArgs.Knobs.SQLStatsKnobs = &sqlstats.TestingKnobs{
+	if params.ServerArgs.Knobs.UpgradeManager == nil {
+		params.ServerArgs.Knobs.UpgradeManager = &upgradebase.TestingKnobs{
 			SkipZoneConfigBootstrap: true,
 		}
 	}

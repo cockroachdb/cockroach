@@ -81,7 +81,7 @@ func (n *createFunctionNode) startExec(params runParams) error {
 		return err
 	}
 	if scDesc.SchemaKind() == catalog.SchemaTemporary {
-		return unimplemented.NewWithIssue(104687, "cannot create UDFs under a temporary schema")
+		return unimplemented.NewWithIssue(104687, "cannot create user-defined functions under a temporary schema")
 	}
 
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("function"))

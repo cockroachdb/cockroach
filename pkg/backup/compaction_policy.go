@@ -20,10 +20,10 @@ var (
 	backupCompactionWindow = settings.RegisterIntSetting(
 		settings.ApplicationLevel,
 		"backup.compaction.window_size",
-		"the number of backups to compact per compaction (must be greater than one and less than threshold)",
+		"the number of backups to compact per compaction (must be greater than two and less than threshold)",
 		3,
 		settings.WithVisibility(settings.Reserved),
-		settings.IntWithMinimum(2),
+		settings.IntWithMinimum(3),
 	)
 )
 

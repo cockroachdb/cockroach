@@ -31,7 +31,7 @@ type ProviderOpts struct {
 // These default locations support availability zones. At the time of
 // this comment, `westus` did not and `westus2` is consistently out of
 // capacity.
-var DefaultZones = []string{
+var defaultZones = []string{
 	"eastus-1",
 	"canadacentral-1",
 	"westus3-1",
@@ -79,7 +79,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			"and availability zone seperated by a dash. If zones are formatted as Location-AZ:N where N is an integer,\n"+
 			"the zone will be repeated N times. If > 1 zone specified, nodes will be geo-distributed\n"+
 			"regardless of geo (default [%s])",
-			strings.Join(DefaultZones, ",")))
+			strings.Join(DefaultZones(true), ",")))
 	flags.StringVar(&o.VnetName, ProviderName+"-vnet-name", "common",
 		"The name of the VNet to use")
 	flags.StringVar(&o.NetworkDiskType, ProviderName+"-network-disk-type", "premium-disk",

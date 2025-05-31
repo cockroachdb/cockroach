@@ -1017,21 +1017,26 @@ func ParseJSONValueTimestamps(v []byte) (updated, resolved hlc.Timestamp, err er
 	var valueRaw struct {
 		Resolved string `json:"resolved"`
 		Updated  string `json:"updated"`
+		Source   struct {
+			TsHLC string `json:"ts_hlc"`
+		} `json:"source"`
 	}
 	if err := gojson.Unmarshal(v, &valueRaw); err != nil {
 		return hlc.Timestamp{}, hlc.Timestamp{}, errors.Wrapf(err, "parsing [%s] as json", v)
 	}
+
 	if valueRaw.Updated != `` {
-		var err error
-		updated, err = hlc.ParseHLC(valueRaw.Updated)
-		if err != nil {
+		if updated, err = hlc.ParseHLC(valueRaw.Updated); err != nil {
 			return hlc.Timestamp{}, hlc.Timestamp{}, err
 		}
 	}
 	if valueRaw.Resolved != `` {
-		var err error
-		resolved, err = hlc.ParseHLC(valueRaw.Resolved)
-		if err != nil {
+		if resolved, err = hlc.ParseHLC(valueRaw.Resolved); err != nil {
+			return hlc.Timestamp{}, hlc.Timestamp{}, err
+		}
+	}
+	if valueRaw.Source.TsHLC != `` {
+		if updated, err = hlc.ParseHLC(valueRaw.Source.TsHLC); err != nil {
 			return hlc.Timestamp{}, hlc.Timestamp{}, err
 		}
 	}

@@ -474,6 +474,7 @@ object TriggerDeps
 TriggerDeps :  TableID
 TriggerDeps :  TriggerID
 TriggerDeps : []UsesRelationIDs
+TriggerDeps : []UsesRelations
 TriggerDeps : []UsesTypeIDs
 TriggerDeps : []UsesRoutineIDs
 

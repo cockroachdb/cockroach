@@ -569,6 +569,16 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().Internal = false
 	notStale()
 
+	evalCtx.SessionData().UsePre_25_2VariadicBuiltins = true
+	stale()
+	evalCtx.SessionData().UsePre_25_2VariadicBuiltins = false
+	notStale()
+
+	evalCtx.SessionData().OptimizerUseExistsFilterHoistRule = true
+	stale()
+	evalCtx.SessionData().OptimizerUseExistsFilterHoistRule = false
+	notStale()
+
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
 	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)
@@ -639,7 +649,8 @@ func TestMemoIsStale(t *testing.T) {
 
 	// User changes (with RLS)
 	o.Memo().Metadata().SetRLSEnabled(evalCtx.SessionData().User(), true, /* admin */
-		1 /* tableID */, false /* isTableOwnerAndNotForced */)
+		1 /* tableID */, false, /* isTableOwnerAndNotForced */
+		false /* bypassRLS */)
 	notStale()
 	evalCtx.SessionData().UserProto = newUser
 	stale()

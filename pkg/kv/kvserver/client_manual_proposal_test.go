@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -20,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
@@ -35,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
 )
@@ -215,9 +212,6 @@ LIMIT
 			Responses: []raftpb.Message{{}}, // need >0 responses so StoreEntries will sync
 		}
 
-		fakeMeta := metric.Metadata{
-			Name: "fake.meta",
-		}
 		swl := logstore.NewSyncWaiterLoop()
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
@@ -228,16 +222,7 @@ LIMIT
 			Sideload:    nil,
 			StateLoader: rsl,
 			SyncWaiter:  swl,
-			EntryCache:  raftentry.NewCache(1024),
 			Settings:    st,
-			Metrics: logstore.Metrics{
-				RaftLogCommitLatency: metric.NewHistogram(metric.HistogramOptions{
-					Mode:         metric.HistogramModePrometheus,
-					Metadata:     fakeMeta,
-					Duration:     time.Millisecond,
-					BucketConfig: metric.IOLatencyBuckets,
-				}),
-			},
 		}
 
 		wg := &sync.WaitGroup{}
@@ -257,8 +242,6 @@ LIMIT
 
 type wgSyncCallback sync.WaitGroup
 
-func (w *wgSyncCallback) OnLogSync(
-	context.Context, raft.StorageAppendAck, storage.BatchCommitStats,
-) {
+func (w *wgSyncCallback) OnLogSync(context.Context, raft.StorageAppendAck, logstore.WriteStats) {
 	(*sync.WaitGroup)(w).Done()
 }

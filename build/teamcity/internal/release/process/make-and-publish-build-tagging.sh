@@ -104,6 +104,7 @@ Build ID: ${build_name}
 The binaries are available at:
   https://storage.googleapis.com/$gcs_bucket/cockroach-$build_name.linux-amd64.tgz
   https://storage.googleapis.com/$gcs_bucket/cockroach-$build_name.linux-arm64.tgz
+  https://storage.googleapis.com/$gcs_bucket/cockroach-$build_name.darwin-11.0-arm64.tgz
   https://storage.googleapis.com/$gcs_bucket/cockroach-$build_name.darwin-10.9-amd64.tgz
   https://storage.googleapis.com/$gcs_bucket/cockroach-$build_name.windows-6.2-amd64.zip
 

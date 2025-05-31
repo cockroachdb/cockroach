@@ -69,17 +69,32 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/incremental_sort.
  create table t(a integer, b integer);
  create or replace function explain_analyze_without_memory(query text)
  returns table (out_line text) language plpgsql
-@@ -46,6 +59,9 @@
+@@ -46,6 +59,24 @@
    end loop;
  end;
  $$;
-+ERROR:  unimplemented: set-returning PL/pgSQL functions are not yet supported
++ERROR:  at or near "in": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++declare
++  line text;
++begin
++  for line in
++           ^
 +HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/105240/_version_
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
  create or replace function explain_analyze_inc_sort_nodes(query text)
  returns jsonb language plpgsql
  as
-@@ -82,6 +98,19 @@
+@@ -82,6 +113,19 @@
    return matching_nodes;
  end;
  $$;
@@ -99,7 +114,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/incremental_sort.
  create or replace function explain_analyze_inc_sort_nodes_without_memory(query text)
  returns jsonb language plpgsql
  as
-@@ -104,6 +133,27 @@
+@@ -104,6 +148,27 @@
    return nodes;
  end;
  $$;
@@ -127,7 +142,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/incremental_sort.
  create or replace function explain_analyze_inc_sort_nodes_verify_invariants(query text)
  returns bool language plpgsql
  as
-@@ -127,467 +177,119 @@
+@@ -127,467 +192,119 @@
    return true;
  end;
  $$;
@@ -674,7 +689,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/incremental_sort.
  select * from (select * from t order by a) s order by a, b limit 70;
   a | b  
  ---+----
-@@ -668,17 +370,11 @@
+@@ -668,17 +385,11 @@
  -- transition point) but only retain 5. Thus when we transition modes, all
  -- tuples in the full sort state have different prefix keys.
  explain (costs off) select * from (select * from t order by a) s order by a, b limit 5;
@@ -697,7 +712,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/incremental_sort.
  select * from (select * from t order by a) s order by a, b limit 5;
   a | b 
  ---+---
-@@ -694,429 +390,110 @@
+@@ -694,429 +405,110 @@
  -- We force the planner to choose a plan with incremental sort on the right side
  -- of a nested loop join node. That way we trigger the rescan code path.
  set local enable_hashjoin = off;
@@ -1197,7 +1212,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/incremental_sort.
  select * from (select * from t order by a) s order by a, b limit 31;
   a  | b  
  ----+----
-@@ -1154,17 +531,11 @@
+@@ -1154,17 +546,11 @@
  (31 rows)
  
  explain (costs off) select * from (select * from t order by a) s order by a, b limit 32;
@@ -1220,7 +1235,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/incremental_sort.
  select * from (select * from t order by a) s order by a, b limit 32;
   a  | b  
  ----+----
-@@ -1203,17 +574,11 @@
+@@ -1203,17 +589,11 @@
  (32 rows)
  
  explain (costs off) select * from (select * from t order by a) s order by a, b limit 33;
@@ -1243,7 +1258,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/incremental_sort.
  select * from (select * from t order by a) s order by a, b limit 33;
   a  | b  
  ----+----
-@@ -1253,17 +618,11 @@
+@@ -1253,17 +633,11 @@
  (33 rows)
  
  explain (costs off) select * from (select * from t order by a) s order by a, b limit 65;
@@ -1266,7 +1281,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/incremental_sort.
  select * from (select * from t order by a) s order by a, b limit 65;
   a  | b  
  ----+----
-@@ -1335,17 +694,11 @@
+@@ -1335,17 +709,11 @@
  (65 rows)
  
  explain (costs off) select * from (select * from t order by a) s order by a, b limit 66;
@@ -1289,7 +1304,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/incremental_sort.
  select * from (select * from t order by a) s order by a, b limit 66;
   a  | b  
  ----+----
-@@ -1421,150 +774,224 @@
+@@ -1421,150 +789,224 @@
  drop table t;
  -- Incremental sort vs. parallel queries
  set min_parallel_table_scan_size = '1kB';
@@ -1426,11 +1441,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/incremental_sort.
 -(11 rows)
 +ERROR:  unimplemented: the configuration setting "enable_hashagg" is not supported
 +HINT:  You have attempted to use a feature that is not yet implemented.
-+
+ 
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
- 
++
 +If you would rather not post publicly, please contact us directly
 +using the support form.
 +
@@ -1616,7 +1631,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/incremental_sort.
  -- Parallel sort with an aggregate that can be safely generated in parallel,
  -- but we can't sort by partial aggregate values.
  explain (costs off) select count(*)
-@@ -1572,91 +999,45 @@
+@@ -1572,91 +1014,45 @@
  join tenk1 t2 on t1.unique1 = t2.unique2
  join tenk1 t3 on t2.unique1 = t3.unique1
  order by count(*);

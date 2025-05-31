@@ -6,6 +6,7 @@
 package scbuildstmt
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -23,11 +24,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
 // CreatePolicy implements CREATE POLICY.
 func CreatePolicy(b BuildCtx, n *tree.CreatePolicy) {
+	if !b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V25_2) {
+		panic(unimplemented.NewWithIssue(136696, "CREATE POLICY is not yet implemented"))
+	}
 	b.IncrementSchemaChangeCreateCounter("policy")
 
 	tableElems := b.ResolveTable(n.TableName, ResolveParams{

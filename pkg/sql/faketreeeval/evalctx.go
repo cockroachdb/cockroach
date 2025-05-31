@@ -705,8 +705,11 @@ func (ps *DummyPreparedStatementState) HasActivePortals() bool {
 }
 
 // MigratablePreparedStatements is part of the tree.PreparedStatementState interface.
-func (ps *DummyPreparedStatementState) MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement {
-	return nil
+func (ps *DummyPreparedStatementState) MigratablePreparedStatements() (
+	[]sessiondatapb.MigratableSession_PreparedStatement,
+	error,
+) {
+	return nil, nil
 }
 
 // HasPortal is part of the tree.PreparedStatementState interface.

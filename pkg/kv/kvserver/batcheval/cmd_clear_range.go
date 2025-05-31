@@ -150,9 +150,9 @@ func ClearRange(
 	// If we're writing Pebble range tombstones, use ClearRangeWithHeuristic to
 	// avoid writing tombstones across empty spans -- in particular, across the
 	// range key span, since we expect range keys to be rare.
-	const pointKeyThreshold, rangeKeyThreshold = 2, 2
+	const pointKeyThreshold = 2
 	if err := storage.ClearRangeWithHeuristic(
-		ctx, readWriter, readWriter, from, to, pointKeyThreshold, rangeKeyThreshold,
+		ctx, readWriter, readWriter, from, to, pointKeyThreshold,
 	); err != nil {
 		return result.Result{}, err
 	}

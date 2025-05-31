@@ -109,10 +109,10 @@ SHOW CLUSTER SETTING sql.notices.enabled
 true
 
 # Verify that we disallow setting a ApplicationLevel setting that is overridden.
-statement error cluster setting 'sql.notices.enabled' is currently overridden by the operator
+statement error cluster setting 'sql.notices.enabled' cannot be set: cluster setting is overridden by system virtual cluster
 SET CLUSTER SETTING sql.notices.enabled = false
 
-statement error cluster setting 'sql.notices.enabled' is currently overridden by the operator
+statement error cluster setting 'sql.notices.enabled' cannot be set: cluster setting is overridden by system virtual cluster
 RESET CLUSTER SETTING sql.notices.enabled
 
 user host-cluster-root

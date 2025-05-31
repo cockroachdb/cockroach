@@ -12,8 +12,10 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/util/metric",
+        "//pkg/util/metric/aggmetric",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_prometheus_client_model//go",
     ],
 )
 

@@ -27,7 +27,7 @@ func init() {
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.TriggerTransition) *scop.NotImplementedForPublicObjects {
-					return notImplementedForPublicObjects(this)
+					return notImplementedForPublicTriggers(this, this.TriggerID)
 				}),
 			),
 		),

@@ -58,6 +58,7 @@ go_library(
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondatapb",
+        "//pkg/sql/sqlcommenter",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",
         "//pkg/util",

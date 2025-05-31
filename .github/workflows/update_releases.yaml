@@ -31,6 +31,7 @@ jobs:
           - "release-24.1"
           - "release-24.3"
           - "release-25.1"
+          - "release-25.2"
     name: Update pkg/testutils/release/cockroach_releases.yaml on ${{ matrix.branch }}
     runs-on: ubuntu-latest
     steps:

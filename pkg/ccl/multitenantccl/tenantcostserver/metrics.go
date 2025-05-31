@@ -27,16 +27,16 @@ import (
 type Metrics struct {
 	TotalRU                     *aggmetric.AggCounterFloat64
 	TotalKVRU                   *aggmetric.AggCounterFloat64
-	TotalReadBatches            *aggmetric.AggGauge
-	TotalReadRequests           *aggmetric.AggGauge
-	TotalReadBytes              *aggmetric.AggGauge
-	TotalWriteBatches           *aggmetric.AggGauge
-	TotalWriteRequests          *aggmetric.AggGauge
-	TotalWriteBytes             *aggmetric.AggGauge
-	TotalSQLPodsCPUSeconds      *aggmetric.AggGaugeFloat64
-	TotalPGWireEgressBytes      *aggmetric.AggGauge
-	TotalExternalIOEgressBytes  *aggmetric.AggGauge
-	TotalExternalIOIngressBytes *aggmetric.AggGauge
+	TotalReadBatches            *aggmetric.AggCounter
+	TotalReadRequests           *aggmetric.AggCounter
+	TotalReadBytes              *aggmetric.AggCounter
+	TotalWriteBatches           *aggmetric.AggCounter
+	TotalWriteRequests          *aggmetric.AggCounter
+	TotalWriteBytes             *aggmetric.AggCounter
+	TotalSQLPodsCPUSeconds      *aggmetric.AggCounterFloat64
+	TotalPGWireEgressBytes      *aggmetric.AggCounter
+	TotalExternalIOEgressBytes  *aggmetric.AggCounter
+	TotalExternalIOIngressBytes *aggmetric.AggCounter
 	TotalCrossRegionNetworkRU   *aggmetric.AggCounterFloat64
 
 	mu struct {
@@ -139,16 +139,16 @@ func (m *Metrics) init() {
 	*m = Metrics{
 		TotalRU:                     b.CounterFloat64(metaTotalRU),
 		TotalKVRU:                   b.CounterFloat64(metaTotalKVRU),
-		TotalReadBatches:            b.Gauge(metaTotalReadBatches),
-		TotalReadRequests:           b.Gauge(metaTotalReadRequests),
-		TotalReadBytes:              b.Gauge(metaTotalReadBytes),
-		TotalWriteBatches:           b.Gauge(metaTotalWriteBatches),
-		TotalWriteRequests:          b.Gauge(metaTotalWriteRequests),
-		TotalWriteBytes:             b.Gauge(metaTotalWriteBytes),
-		TotalSQLPodsCPUSeconds:      b.GaugeFloat64(metaTotalSQLPodsCPUSeconds),
-		TotalPGWireEgressBytes:      b.Gauge(metaTotalPGWireEgressBytes),
-		TotalExternalIOEgressBytes:  b.Gauge(metaTotalExternalIOEgressBytes),
-		TotalExternalIOIngressBytes: b.Gauge(metaTotalExternalIOIngressBytes),
+		TotalReadBatches:            b.Counter(metaTotalReadBatches),
+		TotalReadRequests:           b.Counter(metaTotalReadRequests),
+		TotalReadBytes:              b.Counter(metaTotalReadBytes),
+		TotalWriteBatches:           b.Counter(metaTotalWriteBatches),
+		TotalWriteRequests:          b.Counter(metaTotalWriteRequests),
+		TotalWriteBytes:             b.Counter(metaTotalWriteBytes),
+		TotalSQLPodsCPUSeconds:      b.CounterFloat64(metaTotalSQLPodsCPUSeconds),
+		TotalPGWireEgressBytes:      b.Counter(metaTotalPGWireEgressBytes),
+		TotalExternalIOEgressBytes:  b.Counter(metaTotalExternalIOEgressBytes),
+		TotalExternalIOIngressBytes: b.Counter(metaTotalExternalIOIngressBytes),
 		TotalCrossRegionNetworkRU:   b.CounterFloat64(metaTotalCrossRegionNetworkRU),
 	}
 	m.mu.tenantMetrics = make(map[roachpb.TenantID]tenantMetrics)
@@ -158,16 +158,16 @@ func (m *Metrics) init() {
 type tenantMetrics struct {
 	totalRU                     *aggmetric.CounterFloat64
 	totalKVRU                   *aggmetric.CounterFloat64
-	totalReadBatches            *aggmetric.Gauge
-	totalReadRequests           *aggmetric.Gauge
-	totalReadBytes              *aggmetric.Gauge
-	totalWriteBatches           *aggmetric.Gauge
-	totalWriteRequests          *aggmetric.Gauge
-	totalWriteBytes             *aggmetric.Gauge
-	totalSQLPodsCPUSeconds      *aggmetric.GaugeFloat64
-	totalPGWireEgressBytes      *aggmetric.Gauge
-	totalExternalIOEgressBytes  *aggmetric.Gauge
-	totalExternalIOIngressBytes *aggmetric.Gauge
+	totalReadBatches            *aggmetric.Counter
+	totalReadRequests           *aggmetric.Counter
+	totalReadBytes              *aggmetric.Counter
+	totalWriteBatches           *aggmetric.Counter
+	totalWriteRequests          *aggmetric.Counter
+	totalWriteBytes             *aggmetric.Counter
+	totalSQLPodsCPUSeconds      *aggmetric.CounterFloat64
+	totalPGWireEgressBytes      *aggmetric.Counter
+	totalExternalIOEgressBytes  *aggmetric.Counter
+	totalExternalIOIngressBytes *aggmetric.Counter
 	totalCrossRegionNetworkRU   *aggmetric.CounterFloat64
 
 	// Mutex is used to atomically update metrics together with a corresponding

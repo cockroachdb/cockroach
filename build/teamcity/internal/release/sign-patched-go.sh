@@ -8,6 +8,12 @@
 
 set -xeuo pipefail
 
+service_account=$(curl --header "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email" || echo "")
+if [[ $service_account != "signing-agent@crl-teamcity-agents.iam.gserviceaccount.com" ]]; then
+  echo "Not running on a signing agent, skipping signing"
+  exit 1
+fi
+
 cleanup() {
     rm -rf darwin.zip staging darwin-amd64 darwin-arm64 ./*.tar.gz TIMESTAMP.txt
     rm -rf .secrets
@@ -15,6 +21,9 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p .secrets
+# Explicitly set the account to the signing agent. This is helpful if one of the previous
+# commands failed and left the account set to something else.
+gcloud config set account "signing-agent@crl-teamcity-agents.iam.gserviceaccount.com"
 gcloud secrets versions access latest --secret=apple-signing-cert | base64 -d > .secrets/cert.p12
 gcloud secrets versions access latest --secret=apple-signing-cert-password > .secrets/cert.pass
 gcloud secrets versions access latest --secret=appstoreconnect-api-key > .secrets/api_key.json

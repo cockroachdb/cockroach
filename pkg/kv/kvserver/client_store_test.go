@@ -211,3 +211,60 @@ func TestStoreLoadReplicaQuiescent(t *testing.T) {
 		}
 	})
 }
+
+// BenchmarkStorePoolReadsWithConcurrentUpdates checks the performance of
+// querying the store pool while there are concurrent updates to the store
+// details.
+func BenchmarkStorePoolReadsWithConcurrentUpdates(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+
+	// Create cluster with 3 nodes.
+	numNodes := 3
+	cluster := testcluster.StartTestCluster(b, numNodes, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer cluster.Stopper().Stop(ctx)
+
+	// Start a goroutine that continuously takes the write lock on storepool for
+	// updating the store details. This is to simulate the gossip callback that
+	// periodically updates the store details.
+	stopCh := make(chan struct{})
+	go func() {
+		store := cluster.GetFirstStoreFromServer(b, 0)
+		for {
+			select {
+			case <-stopCh:
+				return
+			default:
+				for i := range numNodes {
+					// Skip the updates to the store idx 1. This is to test the
+					// performance for updates to other stores while checking if the
+					// store is ready for routine replica transfer below.
+					if i == 1 {
+						continue
+					}
+					// Note that we have to lock the whole store pool just to update one
+					// store detail.
+					detail := store.StorePool().GetStoreDetail(roachpb.StoreID(i))
+					detail.Lock()
+					detail.LastUpdatedTime = detail.LastUpdatedTime.AddDuration(100 * time.Millisecond)
+					time.Sleep(100 * time.Millisecond)
+					detail.Unlock()
+				}
+			}
+		}
+	}()
+
+	// Ensure the goroutine is stopped when the benchmark completes.
+	defer close(stopCh)
+
+	b.ResetTimer()
+	store := cluster.GetFirstStoreFromServer(b, 0)
+	for n := 0; n < b.N; n++ {
+		// Check if the store is ready for routine replica transfer. This function
+		// is periodically called from the replicate queue.
+		store.StorePool().IsStoreReadyForRoutineReplicaTransfer(ctx, roachpb.StoreID(1))
+	}
+}

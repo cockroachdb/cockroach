@@ -89,12 +89,13 @@ func (s *statusServer) ResetSQLStats(
 	}
 
 	response := &serverpb.ResetSQLStatsResponse{}
-	controller := s.sqlServer.pgServer.SQLServer.GetSQLStatsController()
+	localSQLStats := s.sqlServer.pgServer.SQLServer.GetLocalSQLStatsProvider()
+	persistedSQLStats := s.sqlServer.pgServer.SQLServer.GetSQLStatsProvider()
 
-	// If we need to reset persisted stats, we delegate to SQLStatsController,
+	// If we need to reset persisted stats, we delegate to persisted sql stats,
 	// which will trigger a system table truncation and RPC fanout under the hood.
 	if req.ResetPersistedStats {
-		if err := controller.ResetClusterSQLStats(ctx); err != nil {
+		if err := persistedSQLStats.ResetClusterSQLStats(ctx); err != nil {
 			return nil, err
 		}
 
@@ -113,8 +114,8 @@ func (s *statusServer) ResetSQLStats(
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 		if local {
-			controller.ResetLocalSQLStats(ctx)
-			return response, nil
+			err := localSQLStats.Reset(ctx)
+			return response, err
 		}
 		status, err := s.dialNode(ctx, requestedNodeID)
 		if err != nil {

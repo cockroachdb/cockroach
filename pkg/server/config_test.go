@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -38,7 +38,7 @@ func TestParseInitNodeAttributes(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	cfg := MakeConfig(context.Background(), cluster.MakeTestingClusterSettings())
 	cfg.Attrs = "attr1=val1::attr2=val2"
-	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, Size: storagepb.SizeSpec{Capacity: base.MinimumStoreSize * 100}}}}
+	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, Size: storageconfig.SizeSpec{Capacity: base.MinimumStoreSize * 100}}}}
 	engines, err := cfg.CreateEngines(context.Background())
 	if err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)
@@ -66,9 +66,9 @@ func TestCreateEnginesWithMultipleStores(t *testing.T) {
 	tmpDir2, cleanup2 := testutils.TempDir(t)
 	defer cleanup2()
 	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{
-		{Size: storagepb.SizeSpec{Capacity: base.MinimumStoreSize}, Path: tmpDir1},
-		{Size: storagepb.SizeSpec{Capacity: base.MinimumStoreSize}, Path: tmpDir2},
-		{InMemory: true, Size: storagepb.SizeSpec{Capacity: base.MinimumStoreSize * 100}},
+		{Size: storageconfig.SizeSpec{Capacity: base.MinimumStoreSize}, Path: tmpDir1},
+		{Size: storageconfig.SizeSpec{Capacity: base.MinimumStoreSize}, Path: tmpDir2},
+		{InMemory: true, Size: storageconfig.SizeSpec{Capacity: base.MinimumStoreSize * 100}},
 	}}
 	engines, err := cfg.CreateEngines(context.Background())
 	if err != nil {
@@ -94,7 +94,7 @@ func TestParseJoinUsingAddrs(t *testing.T) {
 
 	cfg := MakeConfig(context.Background(), cluster.MakeTestingClusterSettings())
 	cfg.JoinList = []string{"localhost:12345", "[::1]:23456", "f00f::1234", ":34567", ":0", ":", "", "localhost"}
-	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, Size: storagepb.SizeSpec{Capacity: base.MinimumStoreSize * 100}}}}
+	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, Size: storageconfig.SizeSpec{Capacity: base.MinimumStoreSize * 100}}}}
 	engines, err := cfg.CreateEngines(context.Background())
 	if err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)

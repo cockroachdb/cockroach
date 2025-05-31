@@ -463,7 +463,7 @@ func (b *Builder) maybeAnnotatePolicyInfo(node exec.Node, e memo.RelExpr) {
 			policiesApplied, found := rlsMeta.PoliciesApplied[tabID]
 			if found {
 				val := exec.RLSPoliciesApplied{
-					PoliciesSkippedForRole: rlsMeta.HasAdminRole || policiesApplied.NoForceExempt,
+					PoliciesSkippedForRole: rlsMeta.HasAdminRole || policiesApplied.NoForceExempt || policiesApplied.BypassRLS,
 				}
 				if applyFilterExpr {
 					val.Policies = policiesApplied.Filter
@@ -475,12 +475,21 @@ func (b *Builder) maybeAnnotatePolicyInfo(node exec.Node, e memo.RelExpr) {
 		}
 		switch e := e.(type) {
 		case *memo.ValuesExpr:
-			// Normally, since policies apply to specific tables, we annotate when we
-			// come across a scan of a single table. We need to annotate a "norows"
-			// value as this can be emitted when scanning a table and RLS forced all
-			// rows to be filtered out because none of the policies applied.
-			if len(e.Rows) == 0 && rlsMeta.NoPoliciesApplied {
-				ef.AnnotateNode(node, exec.PolicyInfoID, &exec.RLSPoliciesApplied{})
+			// In most cases, RLS policies are annotated when scanning individual tables.
+			// However, a "norows" ValuesExpr can also be produced as a result of scanning
+			// a table where RLS is enabled and enforced, and all rows were filtered out.
+			//
+			// This can happen if:
+			//   - No policies applied (e.g., no SELECT policy was defined), or
+			//   - Policies did apply, but their conditions excluded all rows (e.g., the
+			//     policy condition contradicted the query predicate).
+			//
+			// In either case, we annotate this node to reflect that RLS caused all rows
+			// to be filtered.
+			if len(e.Rows) == 0 {
+				ef.AnnotateNode(node, exec.PolicyInfoID, &exec.RLSPoliciesApplied{
+					PoliciesFilteredAllRows: !rlsMeta.NoPoliciesApplied,
+				})
 			}
 		case *memo.ScanExpr:
 			annotateNodeForTable(e.Table, true /* applyFilterExpr */)
@@ -1325,6 +1334,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (_ execPlan, outputCols colO
 		eb := New(ctx, ef, &o, f.Memo(), b.catalog, newRightSide, b.semaCtx, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
 		eb.disableTelemetry = true
 		eb.withExprs = withExprs
+		eb.routineResultBuffers = b.routineResultBuffers
 		plan, err := eb.Build()
 		if err != nil {
 			if errors.IsAssertionFailure(err) {
@@ -2748,14 +2758,19 @@ func (b *Builder) buildLookupJoin(
 		lookupCols.Remove(join.ContinuationCol)
 	}
 
-	lookupOrdinals, lookupColMap := b.getColumns(lookupCols, join.Table)
-
+	numInputCols := inputCols.MaxOrd() + 1
+	var lookupOrdinals exec.TableColumnOrdinalSet
 	// leftAndRightCols are the columns used in expressions evaluated by this
 	// join.
-	leftAndRightCols := b.joinOutputMap(inputCols, lookupColMap)
-
-	// lookupColMap is no longer used, so it can be freed.
-	b.colOrdsAlloc.Free(lookupColMap)
+	leftAndRightCols := b.colOrdsAlloc.Copy(inputCols)
+	for i, rightOrd, n := 0, 0, md.Table(join.Table).ColumnCount(); i < n; i++ {
+		colID := join.Table.ColumnID(i)
+		if lookupCols.Contains(colID) {
+			lookupOrdinals.Add(i)
+			leftAndRightCols.Set(colID, rightOrd+numInputCols)
+			rightOrd++
+		}
+	}
 
 	// Create the output column mapping.
 	switch {
@@ -3550,6 +3565,7 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 		udf.Def.BodyStmts,
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
+		0,     /* resultBufferID */
 	)
 
 	r := tree.NewTypedRoutineExpr(
@@ -3561,12 +3577,14 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 		udf.Def.CalledOnNullInput,
 		udf.Def.MultiColDataSource,
 		udf.Def.SetReturning,
+		false, /* discardLastStmtResult */
 		false, /* tailCall */
 		true,  /* procedure */
 		false, /* triggerFunc */
 		false, /* blockStart */
 		nil,   /* blockState */
 		nil,   /* cursorDeclaration */
+		nil,   /* firstStmtResultWriter */
 	)
 
 	var ep execPlan
@@ -3956,6 +3974,18 @@ func (b *Builder) buildVectorSearch(
 		return execPlan{}, colOrdMap{}, err
 	}
 	targetNeighborCount := uint64(search.TargetNeighborCount)
+
+	// Verify that the query vector and vector column have the same dimensions.
+	resolvedQueryVector, ok := queryVector.(*tree.DPGVector)
+	if !ok {
+		return execPlan{}, colOrdMap{}, errors.AssertionFailedf("expected vector type, got %T", queryVector)
+	}
+	queryVectorLen := int32(len(resolvedQueryVector.T))
+	vectorColumnType := index.VectorColumn().DatumType()
+	if queryVectorLen != vectorColumnType.Width() {
+		return execPlan{}, colOrdMap{}, pgerror.Newf(pgcode.DataException,
+			"different vector dimensions %d and %d", queryVectorLen, vectorColumnType.Width())
+	}
 
 	var res execPlan
 	res.root, err = b.factory.ConstructVectorSearch(

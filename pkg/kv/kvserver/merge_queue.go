@@ -45,7 +45,6 @@ var MergeQueueInterval = settings.RegisterDurationSetting(
 	"kv.range_merge.queue_interval",
 	"how long the merge queue waits between processing replicas",
 	5*time.Second,
-	settings.NonNegativeDuration,
 )
 
 // SkipMergeQueueForExternalBytes is a setting that controls whether

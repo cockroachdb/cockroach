@@ -746,6 +746,13 @@ type UDFDefinition struct {
 	// Body. It is only populated when verbose tracing is enabled.
 	BodyStmts []string
 
+	// FirstStmtOutput allows the result of the first body statement to be
+	// redirected. Only one of the options can be set. If one is set, there will
+	// be at least two body statements - the first with redirected output, and the
+	// last to produce the result of the routine. This invariant is enforced when
+	// the routine is built.
+	FirstStmtOutput RoutineStmtOutput
+
 	// ExceptionBlock contains information needed for exception-handling when the
 	// body of this routine returns an error. It can be unset.
 	ExceptionBlock *ExceptionBlock
@@ -755,12 +762,12 @@ type UDFDefinition struct {
 	// handling.
 	BlockState *tree.BlockState
 
-	// CursorDeclaration contains the information needed to open a SQL cursor with
-	// the result of the *first* body statement. If it is set, there will be at
-	// least two body statements - one to open the cursor, and one to evaluate the
-	// result of the routine. This invariant is enforced when the PLpgSQL routine
-	// is built. CursorDeclaration may be unset.
-	CursorDeclaration *tree.RoutineOpenCursor
+	// ResultBufferID, if set, identifies the buffer that stores the result for
+	// the set-returning PL/pgSQL function that this UDFDefinition represents.
+	// Sub-routines within the body statements may use this ID to add their
+	// results to the same buffer. This is used to implement the PL/pgsql
+	// RETURN NEXT and RETURN QUERY statements.
+	ResultBufferID RoutineResultBufferID
 }
 
 // ExceptionBlock contains the information needed to match and handle errors in
@@ -776,6 +783,27 @@ type ExceptionBlock struct {
 	// each code in the Codes slice.
 	Actions []*UDFDefinition
 }
+
+// RoutineStmtOutput allows the result of a statement in a PL/pgSQL function to
+// be redirected from the default output buffer. This is used to open cursors
+// and implement the RETURN NEXT and RETURN QUERY statements.
+//
+// Only one of the members can be set.
+type RoutineStmtOutput struct {
+	// CursorDeclaration contains the information needed to open a SQL cursor
+	// with the result of the *first* body statement.
+	CursorDeclaration *tree.RoutineOpenCursor
+
+	// TargetBufferID identifies the result buffer of an ancestor set-returning
+	// PL/pgSQL function. The result of the *first* body statement will be added
+	// to this buffer.
+	TargetBufferID RoutineResultBufferID
+}
+
+// RoutineResultBufferID identifies a buffer that is used to store the result of
+// a set-returning PL/pgSQL function. The RoutineBufferID is unique within the
+// scope of a single query.
+type RoutineResultBufferID uint64
 
 // WindowFrame denotes the definition of a window frame for an individual
 // window function, excluding the OFFSET expressions, if present.

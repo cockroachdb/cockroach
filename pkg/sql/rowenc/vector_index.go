@@ -30,3 +30,13 @@ type VectorIndexEncodingHelper struct {
 // EmptyVectorIndexEncodingHelper is a helper with no partition keys or encoded
 // vectors.
 var EmptyVectorIndexEncodingHelper = VectorIndexEncodingHelper{}
+
+func (vh *VectorIndexEncodingHelper) InitForPut() {
+	if vh.PartitionKeys == nil {
+		vh.PartitionKeys = make(map[descpb.IndexID]tree.Datum)
+		vh.QuantizedVecs = make(map[descpb.IndexID]tree.Datum)
+	} else {
+		clear(vh.PartitionKeys)
+		clear(vh.QuantizedVecs)
+	}
+}

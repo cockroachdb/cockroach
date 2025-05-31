@@ -41,7 +41,6 @@ export const Pagination: React.FC<AntPaginationProps> = props => {
       {...props}
       size="small"
       itemRender={itemRenderer}
-      hideOnSinglePage
       className={cx("root")}
     />
   );

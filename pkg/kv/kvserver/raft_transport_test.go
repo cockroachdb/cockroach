@@ -16,8 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -26,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -111,6 +110,8 @@ type raftTransportTestContext struct {
 	nodeRPCContext *rpc.Context
 	gossip         *gossip.Gossip
 	st             *cluster.Settings
+
+	skipOnListenErr bool // if true, calls Skip on error from net.Listen
 }
 
 // clockWithManualSource is a pair of clocks: a manual clock and a clock that
@@ -158,8 +159,6 @@ func (rttc *raftTransportTestContext) Stop() {
 func (rttc *raftTransportTestContext) AddNode(nodeID roachpb.NodeID) *kvserver.RaftTransport {
 	transport, addr := rttc.AddNodeWithoutGossip(
 		nodeID, util.TestAddr, rttc.stopper,
-		kvflowdispatch.NewDummyDispatch(), kvserver.NoopStoresFlowControlIntegration{},
-		kvserver.NoopRaftTransportDisconnectListener{},
 		(*node_rac2.AdmittedPiggybacker)(nil),
 		nil, nil,
 	)
@@ -175,9 +174,6 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 	nodeID roachpb.NodeID,
 	addr net.Addr,
 	stopper *stop.Stopper,
-	kvflowTokenDispatch kvflowcontrol.DispatchReader,
-	kvflowHandles kvflowcontrol.Handles,
-	disconnectListener kvserver.RaftTransportDisconnectListener,
 	piggybacker node_rac2.PiggybackMsgReader,
 	piggybackedResponseScheduler kvserver.PiggybackedAdmittedResponseScheduler,
 	knobs *kvserver.RaftTransportTestingKnobs,
@@ -194,16 +190,17 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 		clock,
 		nodedialer.New(rttc.nodeRPCContext, gossip.AddressResolver(rttc.gossip)),
 		grpcServer,
-		kvflowTokenDispatch,
-		kvflowHandles,
-		disconnectListener,
 		piggybacker,
 		piggybackedResponseScheduler,
 		knobs,
 	)
 	rttc.transports[nodeID] = transport
-	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
+	ln, err := net.Listen(addr.Network(), addr.String())
+	if err != nil && rttc.skipOnListenErr {
+		skip.IgnoreLintf(rttc.t, "skipping test due to listen error: %s", err)
+	}
 	require.NoError(rttc.t, err)
+	require.NoError(rttc.t, netutil.ServeGRPC(stopper, grpcServer, ln))
 	return transport, ln.Addr()
 }
 
@@ -467,9 +464,6 @@ func TestRaftTransportCircuitBreaker(t *testing.T) {
 		serverReplica.NodeID,
 		util.TestAddr,
 		rttc.stopper,
-		kvflowdispatch.NewDummyDispatch(),
-		kvserver.NoopStoresFlowControlIntegration{},
-		kvserver.NoopRaftTransportDisconnectListener{},
 		(*node_rac2.AdmittedPiggybacker)(nil),
 		nil, nil,
 	)
@@ -577,14 +571,16 @@ func TestReopenConnection(t *testing.T) {
 		StoreID:   2,
 		ReplicaID: 2,
 	}
+
+	// We're re-listening on an old address here, but the port may be
+	// in use. In the very rare case of this happening, skip the test.
+	// See: https://github.com/cockroachdb/cockroach/issues/146175.
+	rttc.skipOnListenErr = true
 	serverTransport, serverAddr :=
 		rttc.AddNodeWithoutGossip(
 			serverReplica.NodeID,
 			util.TestAddr,
 			serverStopper,
-			kvflowdispatch.NewDummyDispatch(),
-			kvserver.NoopStoresFlowControlIntegration{},
-			kvserver.NoopRaftTransportDisconnectListener{},
 			(*node_rac2.AdmittedPiggybacker)(nil),
 			nil, nil,
 		)
@@ -622,9 +618,6 @@ func TestReopenConnection(t *testing.T) {
 		replacementReplica.NodeID,
 		serverAddr,
 		rttc.stopper,
-		kvflowdispatch.NewDummyDispatch(),
-		kvserver.NoopStoresFlowControlIntegration{},
-		kvserver.NoopRaftTransportDisconnectListener{},
 		(*node_rac2.AdmittedPiggybacker)(nil),
 		nil, nil,
 	)

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
@@ -375,29 +376,36 @@ func RunNemesis(
 	// Initialize table rows by repeatedly running the `openTxn` transition,
 	// then randomly either committing or rolling back transactions. This will
 	// leave some committed rows.
-	for i := 0; i < ns.rowCount*5; i++ {
-		payload, err := newOpenTxnPayload(ns)
-		if err != nil {
-			return nil, err
-		}
-		if err := openTxn(fsm.Args{Ctx: ctx, Extended: ns, Payload: payload}); err != nil {
-			return nil, err
-		}
-		// Randomly commit or rollback, but commit at least one row to the table.
-		if rand.Intn(3) < 2 || i == 0 {
-			if err := commit(fsm.Args{Ctx: ctx, Extended: ns}); err != nil {
+	// If sql smith is enabled, we'll insert rows below instead.
+	if !nOp.EnableSQLSmith {
+		for i := 0; i < ns.rowCount*5; i++ {
+			payload, err := newOpenTxnPayload(ns)
+			if err != nil {
 				return nil, err
 			}
-		} else {
-			if err := rollback(fsm.Args{Ctx: ctx, Extended: ns}); err != nil {
+			if err := openTxn(fsm.Args{Ctx: ctx, Extended: ns, Payload: payload}); err != nil {
 				return nil, err
+			}
+			// Randomly commit or rollback, but commit at least one row to the table.
+			if rand.Intn(3) < 2 || i == 0 {
+				if err := commit(fsm.Args{Ctx: ctx, Extended: ns}); err != nil {
+					return nil, err
+				}
+			} else {
+				if err := rollback(fsm.Args{Ctx: ctx, Extended: ns}); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
 
 	if nOp.EnableSQLSmith {
+		// Some unsafe queries can hang, so avoid them.
+		if _, err := db.Exec("SET sql_safe_updates=true"); err != nil {
+			return nil, err
+		}
 		queryGen, _ := sqlsmith.NewSmither(db, rng,
-			sqlsmith.MutationsOnly(),
+			sqlsmith.InsUpdDelOnly(),
 			sqlsmith.SetScalarComplexity(0.5),
 			sqlsmith.SetComplexity(0.1),
 			// TODO(#129072): Reenable cross joins when the likelihood of generating
@@ -408,13 +416,19 @@ func RunNemesis(
 			// supported under the serializable isolation.
 			sqlsmith.DisableIsolationChange(),
 		)
+
 		defer queryGen.Close()
 		const numInserts = 100
+		const insertTimeout = 5 * time.Second
 		time := timeutil.Now()
 		for i := 0; i < numInserts; i++ {
 			query := queryGen.Generate()
 			log.Infof(ctx, "Executing query: %s", query)
-			_, err := db.Exec(query)
+			err := timeutil.RunWithTimeout(ctx, "nemeses populate table",
+				insertTimeout, func(ctx context.Context) error {
+					_, err := db.ExecContext(ctx, query)
+					return err
+				})
 			log.Infof(ctx, "Time taken to execute last query: %s", timeutil.Since(time))
 			time = timeutil.Now()
 			if err != nil {
@@ -422,6 +436,28 @@ func RunNemesis(
 				continue
 			}
 		}
+		// Reenable unsafe queries, since the test sometimes alters tables.
+		if _, err := db.Exec("SET sql_safe_updates=false"); err != nil {
+			return nil, err
+		}
+	}
+
+	// Print the contents of the table in a way that can be reproduced.
+	rows, err := db.Query("SELECT * FROM foo")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	// Iterate over the rows and print them
+	for rows.Next() {
+		var id int
+		var ts string
+		if err := rows.Scan(&id, &ts); err != nil {
+			log.Infof(ctx, "# skipping row because error: %s", err)
+			continue
+		}
+		log.Infof(ctx, "INSERT INTO foo (id,ts) VALUES (%d, %s);", id, ts)
 	}
 
 	cfo := newChangefeedOption(testName)

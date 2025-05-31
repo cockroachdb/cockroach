@@ -106,7 +106,7 @@ SELECT array_to_json(ARRAY[1, 2, 3], false)
 ----
 [1, 2, 3]
 
-query error pq: array_to_json\(\): pretty printing is not supported
+query error pq: pretty printing is not supported
 SELECT array_to_json(ARRAY[1, 2, 3], true)
 
 query error pq: unknown signature: array_to_json\(string\)
@@ -591,20 +591,20 @@ SELECT json_build_object(''::void, 1)
 {"": 1}
 
 # even number of arguments
-statement error pgcode 22023 json_build_object\(\): argument list must have even number of elements
+statement error pgcode 22023 argument list must have even number of elements
 SELECT json_build_object(1,2,3)
 
 # keys must be scalar and not null
-statement error pgcode 22004 json_build_object\(\): null value not allowed for object key
+statement error pgcode 22004 null value not allowed for object key
 SELECT json_build_object(null,2)
 
-statement error pgcode 22023 json_build_object\(\): key value must be scalar, not array, composite, or json
+statement error pgcode 22023 key value must be scalar, not array, composite, or json
 SELECT json_build_object((1,2),3)
 
-statement error pgcode 22023 json_build_object\(\): key value must be scalar, not array, composite, or json
+statement error pgcode 22023 key value must be scalar, not array, composite, or json
 SELECT json_build_object('{"a":1,"b":2}'::JSON, 3)
 
-statement error pgcode 22023 json_build_object\(\): key value must be scalar, not array, composite, or json
+statement error pgcode 22023 key value must be scalar, not array, composite, or json
 SELECT json_build_object('{1,2,3}'::int[], 3)
 
 query T
@@ -756,19 +756,19 @@ SELECT jsonb_build_array('+Inf'::FLOAT8, 'NaN'::FLOAT8)::STRING::JSONB
 ----
 ["Infinity", "NaN"]
 
-statement error pgcode 2202E json_object\(\): array must have even number of elements
+statement error pgcode 2202E array must have even number of elements
 SELECT json_object('{a,b,c}'::TEXT[])
 
-statement error pgcode 22004 json_object\(\): null value not allowed for object key
+statement error pgcode 22004 null value not allowed for object key
 SELECT json_object('{NULL, a}'::TEXT[])
 
-statement error pgcode 22004 json_object\(\): null value not allowed for object key
+statement error pgcode 22004 null value not allowed for object key
 SELECT json_object('{a,b,NULL,"d e f"}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
 
-query error pq: json_object\(\): mismatched array dimensions
+query error pq: mismatched array dimensions
 SELECT json_object('{a,b,c,"d e f",g}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
 
-query error pq: json_object\(\): mismatched array dimensions
+query error pq: mismatched array dimensions
 SELECT json_object('{a,b,c,"d e f"}'::TEXT[],'{1,2,3,"a b c",g}'::TEXT[])
 
 query error pq: unknown signature: json_object\(collatedstring\{fr_FR\}\[\]\)
@@ -809,19 +809,19 @@ SELECT json_object('{a,b,c,"d e f"}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
 ----
 {"a": "1", "b": "2", "c": "3", "d e f": "a b c"}
 
-statement error pgcode 2202E jsonb_object\(\): array must have even number of elements
+statement error pgcode 2202E array must have even number of elements
 SELECT jsonb_object('{a,b,c}'::TEXT[])
 
-statement error pgcode 22004 jsonb_object\(\): null value not allowed for object key
+statement error pgcode 22004 null value not allowed for object key
 SELECT jsonb_object('{NULL, a}'::TEXT[])
 
-statement error pgcode 22004 jsonb_object\(\): null value not allowed for object key
+statement error pgcode 22004 null value not allowed for object key
 SELECT jsonb_object('{a,b,NULL,"d e f"}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
 
-query error pq: jsonb_object\(\): mismatched array dimensions
+query error pq: mismatched array dimensions
 SELECT jsonb_object('{a,b,c,"d e f",g}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
 
-query error pq: jsonb_object\(\): mismatched array dimensions
+query error pq: mismatched array dimensions
 SELECT jsonb_object('{a,b,c,"d e f"}'::TEXT[],'{1,2,3,"a b c",g}'::TEXT[])
 
 query error pq: unknown signature: jsonb_object\(collatedstring\{fr_FR\}\[\]\)
@@ -1075,7 +1075,7 @@ SELECT jsonb_insert('{"a": [0, 1, 2]}', '{a, -1}'::STRING[], '"new_value"', true
 ----
 {"a": [0, 1, 2, "new_value"]}
 
-query error pq: jsonb_insert\(\): cannot replace existing key
+query error pq: cannot replace existing key
 SELECT jsonb_insert('{"a": "foo"}', '{a}'::STRING[], '"new_value"', false)
 
 query T
@@ -1182,10 +1182,10 @@ SELECT jsonb_strip_nulls('{"a": {"b": null, "c": null}, "d": {}}')
 ----
 {"a": {}, "d": {}}
 
-query error pq: json_array_length\(\): cannot get array length of a non-array
+query error pq: cannot get array length of a non-array
 SELECT json_array_length('{"f1":1,"f2":[5,6]}')
 
-query error pq: json_array_length\(\): cannot get array length of a scalar
+query error pq: cannot get array length of a scalar
 SELECT json_array_length('4')
 
 query I
@@ -1198,10 +1198,10 @@ SELECT json_array_length('[]')
 ----
 0
 
-query error pq: jsonb_array_length\(\): cannot get array length of a non-array
+query error pq: cannot get array length of a non-array
 SELECT jsonb_array_length('{"f1":1,"f2":[5,6]}')
 
-query error pq: jsonb_array_length\(\): cannot get array length of a scalar
+query error pq: cannot get array length of a scalar
 SELECT jsonb_array_length('4')
 
 query I

@@ -484,7 +484,7 @@ func (r *Replica) leasePostApplyLocked(
 
 	st := r.leaseStatusAtRLocked(ctx, now)
 	if leaseChangingHands && newLease.Type() == roachpb.LeaseExpiration &&
-		r.ownsValidLeaseRLocked(ctx, now) && !r.shouldUseExpirationLeaseRLocked() {
+		r.ownsValidLeaseRLocked(ctx, now) && !r.shouldUseExpirationLease(r.descRLocked()) {
 		// We've received and applied an expiration lease for a range that shouldn't
 		// keep using it, most likely as part of a lease transfer (which is always
 		// expiration-based). The lease is also still valid. Upgrade this lease to
@@ -581,7 +581,7 @@ func (r *Replica) leasePostApplyLocked(
 
 	// Inform the store of this lease.
 	if iAmTheLeaseHolder {
-		r.store.registerLeaseholder(ctx, r, newLease.Sequence)
+		r.store.registerLeaseholderAndRefreshPolicy(ctx, r, newLease.Sequence)
 	} else {
 		r.store.unregisterLeaseholder(ctx, r)
 	}

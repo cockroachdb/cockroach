@@ -135,7 +135,7 @@ regional_by_row_table  CREATE TABLE public.regional_by_row_table (
                          UNIQUE INDEX regional_by_row_table_b_key (b ASC),
                          INVERTED INDEX regional_by_row_table_j_idx (j),
                          FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
-                       ) LOCALITY REGIONAL BY ROW
+                       ) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT partition_name, index_name, zone_config FROM [SHOW PARTITIONS FROM TABLE regional_by_table_in_primary_region]
@@ -305,7 +305,7 @@ regional_by_row_table  CREATE TABLE public.regional_by_row_table (
                          UNIQUE INDEX regional_by_row_table_b_key (b ASC),
                          INVERTED INDEX regional_by_row_table_j_idx (j),
                          FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
-                       ) LOCALITY REGIONAL BY ROW
+                       ) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT partition_name, index_name, zone_config FROM [SHOW PARTITIONS FROM TABLE regional_by_table_in_primary_region]
@@ -523,7 +523,7 @@ regional_by_row_table  CREATE TABLE public.regional_by_row_table (
                          UNIQUE INDEX regional_by_row_table_b_key (b ASC),
                          INVERTED INDEX regional_by_row_table_j_idx (j),
                          FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
-                       ) LOCALITY REGIONAL BY ROW
+                       ) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT partition_name, index_name, zone_config FROM [SHOW PARTITIONS FROM TABLE regional_by_table_in_primary_region]
@@ -678,7 +678,7 @@ regional_by_row_table  CREATE TABLE public.regional_by_row_table (
                          UNIQUE INDEX regional_by_row_table_b_key (b ASC),
                          INVERTED INDEX regional_by_row_table_j_idx (j),
                          FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
-                       ) LOCALITY REGIONAL BY ROW
+                       ) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT partition_name, index_name, zone_config FROM [SHOW PARTITIONS FROM TABLE regional_by_table_in_primary_region]
@@ -860,7 +860,7 @@ regional_by_row_table  CREATE TABLE public.regional_by_row_table (
                          UNIQUE INDEX regional_by_row_table_b_key (b ASC),
                          INVERTED INDEX regional_by_row_table_j_idx (j),
                          FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
-                       ) LOCALITY REGIONAL BY ROW
+                       ) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT partition_name, index_name, zone_config FROM [SHOW PARTITIONS FROM TABLE regional_by_table_in_primary_region]
@@ -989,7 +989,7 @@ regional_by_row_table  CREATE TABLE public.regional_by_row_table (
                          UNIQUE INDEX regional_by_row_table_b_key (b ASC),
                          INVERTED INDEX regional_by_row_table_j_idx (j),
                          FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
-                       ) LOCALITY REGIONAL BY ROW
+                       ) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT partition_name, index_name, zone_config FROM [SHOW PARTITIONS FROM TABLE regional_by_table_in_primary_region]
@@ -1122,7 +1122,7 @@ regional_by_row_table  CREATE TABLE public.regional_by_row_table (
                          UNIQUE INDEX regional_by_row_table_b_key (b ASC),
                          INVERTED INDEX regional_by_row_table_j_idx (j),
                          FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
-                       ) LOCALITY REGIONAL BY ROW
+                       ) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT partition_name, index_name, zone_config FROM [SHOW PARTITIONS FROM TABLE regional_by_table_in_primary_region]
@@ -1248,11 +1248,11 @@ DATABASE "mr-backup-1"  ALTER DATABASE "mr-backup-1" CONFIGURE ZONE USING
 query TT
 SHOW CREATE TABLE non_mr_table
 ----
-non_mr_table                                    CREATE TABLE public.non_mr_table (
-                                                i INT8 NULL,
-                                                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                                CONSTRAINT non_mr_table_pkey PRIMARY KEY (rowid ASC)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+non_mr_table  CREATE TABLE public.non_mr_table (
+                i INT8 NULL,
+                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                CONSTRAINT non_mr_table_pkey PRIMARY KEY (rowid ASC)
+              ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 
 statement ok
@@ -1285,7 +1285,7 @@ regional_by_row_table  CREATE TABLE public.regional_by_row_table (
                          UNIQUE INDEX regional_by_row_table_b_key (b ASC),
                          INVERTED INDEX regional_by_row_table_j_idx (j),
                          FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
-                       ) LOCALITY REGIONAL BY ROW
+                       ) LOCALITY REGIONAL BY ROW;
 
 statement ok
 RESTORE TABLE regional_by_table_in_primary_region FROM LATEST IN 'nodelocal://1/mr-backup-2/'
@@ -1293,12 +1293,12 @@ RESTORE TABLE regional_by_table_in_primary_region FROM LATEST IN 'nodelocal://1/
 query TT
 SHOW CREATE TABLE regional_by_table_in_primary_region
 ----
-regional_by_table_in_primary_region             CREATE TABLE public.regional_by_table_in_primary_region (
-                                                pk INT8 NOT NULL,
-                                                i INT8 NULL,
-                                                CONSTRAINT regional_by_table_in_primary_region_pkey PRIMARY KEY (pk ASC),
-                                                FAMILY fam_0_pk_i (pk, i)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+regional_by_table_in_primary_region  CREATE TABLE public.regional_by_table_in_primary_region (
+                                       pk INT8 NOT NULL,
+                                       i INT8 NULL,
+                                       CONSTRAINT regional_by_table_in_primary_region_pkey PRIMARY KEY (pk ASC),
+                                       FAMILY fam_0_pk_i (pk, i)
+                                     ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 
 statement ok
@@ -1309,12 +1309,12 @@ RESTORE TABLE regional_by_table_in_ca_central_1 FROM LATEST IN 'nodelocal://1/mr
 query TT
 SHOW CREATE TABLE regional_by_table_in_ca_central_1
 ----
-regional_by_table_in_ca_central_1               CREATE TABLE public.regional_by_table_in_ca_central_1 (
-                                                pk INT8 NOT NULL,
-                                                i INT8 NULL,
-                                                CONSTRAINT regional_by_table_in_ca_central_1_pkey PRIMARY KEY (pk ASC),
-                                                FAMILY fam_0_pk_i (pk, i)
-) LOCALITY REGIONAL BY TABLE IN "ca-central-1"
+regional_by_table_in_ca_central_1  CREATE TABLE public.regional_by_table_in_ca_central_1 (
+                                     pk INT8 NOT NULL,
+                                     i INT8 NULL,
+                                     CONSTRAINT regional_by_table_in_ca_central_1_pkey PRIMARY KEY (pk ASC),
+                                     FAMILY fam_0_pk_i (pk, i)
+                                   ) LOCALITY REGIONAL BY TABLE IN "ca-central-1";
 
 statement ok
 RESTORE TABLE global_table FROM LATEST IN 'nodelocal://1/mr-backup-2/'
@@ -1322,12 +1322,12 @@ RESTORE TABLE global_table FROM LATEST IN 'nodelocal://1/mr-backup-2/'
 query TT
 SHOW CREATE TABLE global_table
 ----
-global_table       CREATE TABLE public.global_table (
-                   pk INT8 NOT NULL,
-                   i INT8 NULL,
-                   CONSTRAINT global_table_pkey PRIMARY KEY (pk ASC),
-                   FAMILY fam_0_pk_i (pk, i)
-) LOCALITY GLOBAL
+global_table  CREATE TABLE public.global_table (
+                pk INT8 NOT NULL,
+                i INT8 NULL,
+                CONSTRAINT global_table_pkey PRIMARY KEY (pk ASC),
+                FAMILY fam_0_pk_i (pk, i)
+              ) LOCALITY GLOBAL;
 
 # Restore individual tables into a database with different regions.
 subtest restore_tables_into_database_with_different_regions
@@ -1345,12 +1345,12 @@ USE "mr-restore-1";
 query TT
 SHOW CREATE TABLE global_table
 ----
-global_table       CREATE TABLE public.global_table (
-                   pk INT8 NOT NULL,
-                   i INT8 NULL,
-                   CONSTRAINT global_table_pkey PRIMARY KEY (pk ASC),
-                   FAMILY fam_0_pk_i (pk, i)
-) LOCALITY GLOBAL
+global_table  CREATE TABLE public.global_table (
+                pk INT8 NOT NULL,
+                i INT8 NULL,
+                CONSTRAINT global_table_pkey PRIMARY KEY (pk ASC),
+                FAMILY fam_0_pk_i (pk, i)
+              ) LOCALITY GLOBAL;
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE global_table
@@ -1373,12 +1373,12 @@ RESTORE TABLE "mr-backup-2".regional_by_table_in_primary_region FROM LATEST IN '
 query TT
 SHOW CREATE TABLE regional_by_table_in_primary_region
 ----
-regional_by_table_in_primary_region             CREATE TABLE public.regional_by_table_in_primary_region (
-                                                pk INT8 NOT NULL,
-                                                i INT8 NULL,
-                                                CONSTRAINT regional_by_table_in_primary_region_pkey PRIMARY KEY (pk ASC),
-                                                FAMILY fam_0_pk_i (pk, i)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+regional_by_table_in_primary_region  CREATE TABLE public.regional_by_table_in_primary_region (
+                                       pk INT8 NOT NULL,
+                                       i INT8 NULL,
+                                       CONSTRAINT regional_by_table_in_primary_region_pkey PRIMARY KEY (pk ASC),
+                                       FAMILY fam_0_pk_i (pk, i)
+                                     ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_in_primary_region

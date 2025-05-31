@@ -24,13 +24,10 @@ func (ctx *jsonpathCtx) evalFilter(
 	}
 	b, err := ctx.evalBoolean(op, jsonValue)
 	if err != nil {
-		// Postgres doesn't error when there's a structure error within filter
-		// conditions, and will return nothing instead.
-		return []json.JSON{}, nil //nolint:returnerrcheck
+		return nil, err
 	}
-
 	if b == jsonpathBoolTrue {
 		return []json.JSON{jsonValue}, nil
 	}
-	return []json.JSON{}, nil
+	return nil, nil
 }

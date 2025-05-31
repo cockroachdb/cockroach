@@ -464,7 +464,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  
  drop table tttest;
  drop sequence ttdummy_seq;
-@@ -445,147 +437,135 @@
+@@ -445,147 +437,134 @@
  END;';
  CREATE TRIGGER before_ins_stmt_trig BEFORE INSERT ON main_table
  FOR EACH STATEMENT EXECUTE PROCEDURE trigger_func('before_ins_stmt');
@@ -495,6 +495,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
 -NOTICE:  trigger_func(after_ins_stmt) called: action = INSERT, when = AFTER, level = STATEMENT
  CREATE TRIGGER after_upd_row_trig AFTER UPDATE ON main_table
  FOR EACH ROW EXECUTE PROCEDURE trigger_func('after_upd_row');
++ERROR:  unimplemented: referencing the TG_ARGV trigger function parameter is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/135311/_version_
  INSERT INTO main_table DEFAULT VALUES;
 -NOTICE:  trigger_func(before_ins_stmt) called: action = INSERT, when = BEFORE, level = STATEMENT
 -NOTICE:  trigger_func(after_ins_stmt) called: action = INSERT, when = AFTER, level = STATEMENT
@@ -504,10 +507,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
 -NOTICE:  trigger_func(after_upd_row) called: action = UPDATE, when = AFTER, level = ROW
 -NOTICE:  trigger_func(after_upd_row) called: action = UPDATE, when = AFTER, level = ROW
 -NOTICE:  trigger_func(after_upd_stmt) called: action = UPDATE, when = AFTER, level = STATEMENT
-+NOTICE:  trigger_func(<NULL>) called: action = UPDATE, when = AFTER, level = ROW
-+NOTICE:  trigger_func(<NULL>) called: action = UPDATE, when = AFTER, level = ROW
-+NOTICE:  trigger_func(<NULL>) called: action = UPDATE, when = AFTER, level = ROW
-+NOTICE:  trigger_func(<NULL>) called: action = UPDATE, when = AFTER, level = ROW
  -- UPDATE that effects zero rows should still call per-statement trigger
  UPDATE main_table SET a = a + 2 WHERE b > 100;
 -NOTICE:  trigger_func(after_upd_stmt) called: action = UPDATE, when = AFTER, level = STATEMENT
@@ -669,7 +668,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  SELECT count(*) FROM pg_trigger WHERE tgrelid = 'main_table'::regclass AND tgname = 'modified_a';
   count 
  -------
-@@ -595,15 +575,21 @@
+@@ -595,15 +574,21 @@
  SELECT count(*) FROM pg_trigger WHERE tgrelid = 'main_table'::regclass AND tgname = 'modified_modified_a';
   count 
  -------
@@ -692,7 +691,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  -- Test WHEN condition accessing system columns.
  create table table_with_oids(a int);
  insert into table_with_oids values (1);
-@@ -611,57 +597,45 @@
+@@ -611,57 +596,46 @@
  	for each row
  	when (new.tableoid = old.tableoid AND new.tableoid <> 0)
  	execute procedure trigger_func('after_upd_oid_unchanged');
@@ -705,6 +704,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  drop table table_with_oids;
  -- Test column-level triggers
  DROP TRIGGER after_upd_row_trig ON main_table;
++ERROR:  trigger "after_upd_row_trig" for table "main_table" does not exist
  CREATE TRIGGER before_upd_a_row_trig BEFORE UPDATE OF a ON main_table
  FOR EACH ROW EXECUTE PROCEDURE trigger_func('before_upd_a_row');
 +ERROR:  unimplemented: column lists are not yet supported for triggers
@@ -772,7 +772,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  --
  -- Test case for bug with BEFORE trigger followed by AFTER trigger with WHEN
  --
-@@ -678,73 +652,90 @@
+@@ -675,76 +649,93 @@
+ $$ LANGUAGE plpgsql;
+ CREATE TRIGGER some_trig_before BEFORE UPDATE ON some_t FOR EACH ROW
+   EXECUTE PROCEDURE dummy_update_func('before');
++ERROR:  unimplemented: referencing the TG_ARGV trigger function parameter is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/135311/_version_
  CREATE TRIGGER some_trig_aftera AFTER UPDATE ON some_t FOR EACH ROW
    WHEN (NOT OLD.some_col AND NEW.some_col)
    EXECUTE PROCEDURE dummy_update_func('aftera');
@@ -790,15 +796,12 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  INSERT INTO some_t VALUES (TRUE);
  UPDATE some_t SET some_col = TRUE;
 -NOTICE:  dummy_update_func(before) called: action = UPDATE, old = (t), new = (t)
-+NOTICE:  dummy_update_func(<NULL>) called: action = UPDATE, old = (t), new = (t)
  UPDATE some_t SET some_col = FALSE;
 -NOTICE:  dummy_update_func(before) called: action = UPDATE, old = (t), new = (f)
 -NOTICE:  dummy_update_func(afterb) called: action = UPDATE, old = (t), new = (f)
-+NOTICE:  dummy_update_func(<NULL>) called: action = UPDATE, old = (t), new = (f)
  UPDATE some_t SET some_col = TRUE;
 -NOTICE:  dummy_update_func(before) called: action = UPDATE, old = (f), new = (t)
 -NOTICE:  dummy_update_func(aftera) called: action = UPDATE, old = (f), new = (t)
-+NOTICE:  dummy_update_func(<NULL>) called: action = UPDATE, old = (f), new = (t)
  DROP TABLE some_t;
  -- bogus cases
  CREATE TRIGGER error_upd_and_col BEFORE UPDATE OR UPDATE OF a ON main_table
@@ -1027,34 +1030,56 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  
  drop table trigtest2;
  drop table trigtest;
-@@ -882,7 +938,7 @@
- NOTICE:  TG_TABLE_NAME: trigger_test
- NOTICE:  TG_TABLE_SCHEMA: public
- NOTICE:  TG_NARGS: 2
+@@ -872,44 +928,14 @@
+ CREATE TRIGGER show_trigger_data_trig
+ BEFORE INSERT OR UPDATE OR DELETE ON trigger_test
+ FOR EACH ROW EXECUTE PROCEDURE trigger_data(23,'skidoo');
++ERROR:  unimplemented: referencing the TG_ARGV trigger function parameter is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/135311/_version_
+ insert into trigger_test values(1,'insert');
+-NOTICE:  TG_NAME: show_trigger_data_trig
+-NOTICE:  TG_WHEN: BEFORE
+-NOTICE:  TG_LEVEL: ROW
+-NOTICE:  TG_OP: INSERT
+-NOTICE:  TG_RELID::regclass: trigger_test
+-NOTICE:  TG_RELNAME: trigger_test
+-NOTICE:  TG_TABLE_NAME: trigger_test
+-NOTICE:  TG_TABLE_SCHEMA: public
+-NOTICE:  TG_NARGS: 2
 -NOTICE:  TG_ARGV: [23, skidoo]
-+NOTICE:  TG_ARGV: <NULL>
- NOTICE:  NEW: (1,insert)
+-NOTICE:  NEW: (1,insert)
  update trigger_test set v = 'update' where i = 1;
- NOTICE:  TG_NAME: show_trigger_data_trig
-@@ -894,7 +950,7 @@
- NOTICE:  TG_TABLE_NAME: trigger_test
- NOTICE:  TG_TABLE_SCHEMA: public
- NOTICE:  TG_NARGS: 2
+-NOTICE:  TG_NAME: show_trigger_data_trig
+-NOTICE:  TG_WHEN: BEFORE
+-NOTICE:  TG_LEVEL: ROW
+-NOTICE:  TG_OP: UPDATE
+-NOTICE:  TG_RELID::regclass: trigger_test
+-NOTICE:  TG_RELNAME: trigger_test
+-NOTICE:  TG_TABLE_NAME: trigger_test
+-NOTICE:  TG_TABLE_SCHEMA: public
+-NOTICE:  TG_NARGS: 2
 -NOTICE:  TG_ARGV: [23, skidoo]
-+NOTICE:  TG_ARGV: <NULL>
- NOTICE:  OLD: (1,insert)
- NOTICE:  NEW: (1,update)
+-NOTICE:  OLD: (1,insert)
+-NOTICE:  NEW: (1,update)
  delete from trigger_test;
-@@ -907,7 +963,7 @@
- NOTICE:  TG_TABLE_NAME: trigger_test
- NOTICE:  TG_TABLE_SCHEMA: public
- NOTICE:  TG_NARGS: 2
+-NOTICE:  TG_NAME: show_trigger_data_trig
+-NOTICE:  TG_WHEN: BEFORE
+-NOTICE:  TG_LEVEL: ROW
+-NOTICE:  TG_OP: DELETE
+-NOTICE:  TG_RELID::regclass: trigger_test
+-NOTICE:  TG_RELNAME: trigger_test
+-NOTICE:  TG_TABLE_NAME: trigger_test
+-NOTICE:  TG_TABLE_SCHEMA: public
+-NOTICE:  TG_NARGS: 2
 -NOTICE:  TG_ARGV: [23, skidoo]
-+NOTICE:  TG_ARGV: <NULL>
- NOTICE:  OLD: (1,update)
+-NOTICE:  OLD: (1,update)
  DROP TRIGGER show_trigger_data_trig on trigger_test;
++ERROR:  trigger "show_trigger_data_trig" for table "trigger_test" does not exist
  DROP FUNCTION trigger_data();
-@@ -929,18 +985,16 @@
+ DROP TABLE trigger_test;
+ --
+@@ -929,18 +955,16 @@
  CREATE TRIGGER t
  BEFORE UPDATE ON trigger_test
  FOR EACH ROW EXECUTE PROCEDURE mytrigger();
@@ -1077,7 +1102,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  -- the right way when considering nulls is
  CREATE OR REPLACE FUNCTION mytrigger() RETURNS trigger LANGUAGE plpgsql as $$
  begin
-@@ -952,14 +1006,8 @@
+@@ -952,14 +976,8 @@
  	return new;
  end$$;
  UPDATE trigger_test SET f3 = 'bar';
@@ -1092,7 +1117,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  DROP TABLE trigger_test;
  DROP FUNCTION mytrigger();
  -- Test snapshot management in serializable transactions involving triggers
-@@ -973,6 +1021,9 @@
+@@ -973,6 +991,9 @@
  	return new;
  end;
  $$;
@@ -1102,7 +1127,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  CREATE TABLE serializable_update_tab (
  	id int,
  	filler  text,
-@@ -980,6 +1031,7 @@
+@@ -980,6 +1001,7 @@
  );
  CREATE TRIGGER serializable_update_trig BEFORE UPDATE ON serializable_update_tab
  	FOR EACH ROW EXECUTE PROCEDURE serializable_update_trig();
@@ -1110,7 +1135,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  INSERT INTO serializable_update_tab SELECT a, repeat('xyzxz', 100), 'new'
  	FROM generate_series(1, 50) a;
  BEGIN;
-@@ -987,9 +1039,9 @@
+@@ -987,9 +1009,9 @@
  UPDATE serializable_update_tab SET description = 'no no', id = 1 WHERE id = 1;
  COMMIT;
  SELECT description FROM serializable_update_tab WHERE id = 1;
@@ -1123,7 +1148,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  (1 row)
  
  DROP TABLE serializable_update_tab;
-@@ -1002,9 +1054,10 @@
+@@ -1002,9 +1024,10 @@
  CREATE TRIGGER z_min_update
  BEFORE UPDATE ON min_updates_test
  FOR EACH ROW EXECUTE PROCEDURE suppress_redundant_updates_trigger();
@@ -1135,7 +1160,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  UPDATE min_updates_test SET f2 = f2 + 1;
  UPDATE 2
  UPDATE min_updates_test SET f3 = 2 WHERE f3 is null;
-@@ -1022,6 +1075,7 @@
+@@ -1022,6 +1045,7 @@
  -- Test triggers on views
  --
  CREATE VIEW main_view AS SELECT a, b FROM main_table;
@@ -1143,7 +1168,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  -- VIEW trigger function
  CREATE OR REPLACE FUNCTION view_trigger() RETURNS trigger
  LANGUAGE plpgsql AS $$
-@@ -1065,38 +1119,30 @@
+@@ -1065,38 +1089,30 @@
  -- Before row triggers aren't allowed on views
  CREATE TRIGGER invalid_trig BEFORE INSERT ON main_view
  FOR EACH ROW EXECUTE PROCEDURE trigger_func('before_ins_row');
@@ -1190,7 +1215,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  -- INSTEAD OF triggers aren't allowed on tables
  CREATE TRIGGER invalid_trig INSTEAD OF INSERT ON main_table
  FOR EACH ROW EXECUTE PROCEDURE view_trigger('instead_of_ins');
-@@ -1113,191 +1159,110 @@
+@@ -1113,191 +1129,110 @@
  -- Don't support WHEN clauses with INSTEAD OF triggers
  CREATE TRIGGER invalid_trig INSTEAD OF UPDATE ON main_view
  FOR EACH ROW WHEN (OLD.a <> NEW.a) EXECUTE PROCEDURE view_trigger('instead_of_upd');
@@ -1428,7 +1453,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  INSERT INTO country_table (country_name, continent)
      VALUES ('Japan', 'Asia'),
             ('UK', 'Europe'),
-@@ -1316,6 +1281,7 @@
+@@ -1316,6 +1251,7 @@
      population    bigint,
      country_id    int references country_table
  );
@@ -1436,7 +1461,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  CREATE VIEW city_view AS
      SELECT city_id, city_name, population, country_name, continent
      FROM city_table ci
-@@ -1346,8 +1312,10 @@
+@@ -1346,8 +1282,10 @@
      RETURN NEW;
  end;
  $$;
@@ -1447,7 +1472,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  CREATE FUNCTION city_delete() RETURNS trigger LANGUAGE plpgsql AS $$
  begin
      DELETE FROM city_table WHERE city_id = OLD.city_id;
-@@ -1357,6 +1325,9 @@
+@@ -1357,6 +1295,9 @@
  $$;
  CREATE TRIGGER city_delete_trig INSTEAD OF DELETE ON city_view
  FOR EACH ROW EXECUTE PROCEDURE city_delete();
@@ -1457,7 +1482,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  CREATE FUNCTION city_update() RETURNS trigger LANGUAGE plpgsql AS $$
  declare
      ctry_id int;
-@@ -1383,102 +1354,43 @@
+@@ -1383,102 +1324,43 @@
      RETURN NEW;
  end;
  $$;
@@ -1576,7 +1601,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  \set QUIET true
  -- read-only view with WHERE clause
  CREATE VIEW european_city_view AS
-@@ -1486,26 +1398,44 @@
+@@ -1486,26 +1368,44 @@
  SELECT count(*) FROM european_city_view;
   count 
  -------
@@ -1625,7 +1650,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  CREATE RULE european_city_update_rule AS ON UPDATE TO european_city_view
  DO INSTEAD UPDATE city_view SET
      city_name = NEW.city_name,
-@@ -1513,47 +1443,57 @@
+@@ -1513,47 +1413,57 @@
      country_name = NEW.country_name
  WHERE city_id = OLD.city_id
  RETURNING NEW.*;
@@ -1709,7 +1734,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  -- join UPDATE test
  UPDATE city_view v SET population = 599657
      FROM city_table ci, country_table co
-@@ -1561,26 +1501,14 @@
+@@ -1561,26 +1471,14 @@
      AND v.city_id = ci.city_id AND v.country_name = co.country_name
      RETURNING co.country_id, v.country_name,
                v.city_id, v.city_name, v.population;
@@ -1740,7 +1765,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  DROP TABLE country_table;
  -- Test pg_trigger_depth()
  create table depth_a (id int not null primary key);
-@@ -1597,6 +1525,7 @@
+@@ -1597,6 +1495,7 @@
  $$;
  create trigger depth_a_tr before insert on depth_a
    for each row execute procedure depth_a_tf();
@@ -1748,7 +1773,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  create function depth_b_tf() returns trigger
    language plpgsql as $$
  begin
-@@ -1614,8 +1543,22 @@
+@@ -1614,8 +1513,22 @@
    return new;
  end;
  $$;
@@ -1771,7 +1796,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  create function depth_c_tf() returns trigger
    language plpgsql as $$
  begin
-@@ -1629,47 +1572,19 @@
+@@ -1629,47 +1542,19 @@
  $$;
  create trigger depth_c_tr before insert on depth_c
    for each row execute procedure depth_c_tf();
@@ -1824,7 +1849,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  drop function depth_c_tf();
  --
  -- Test updates to rows during firing of BEFORE ROW triggers.
-@@ -1699,6 +1614,10 @@
+@@ -1699,6 +1584,10 @@
  $$;
  create trigger parent_upd_trig before update on parent
    for each row execute procedure parent_upd_func();
@@ -1835,7 +1860,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  create function parent_del_func()
    returns trigger language plpgsql as
  $$
-@@ -1709,6 +1628,10 @@
+@@ -1709,6 +1598,10 @@
  $$;
  create trigger parent_del_trig before delete on parent
    for each row execute procedure parent_del_func();
@@ -1846,7 +1871,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  create function child_ins_func()
    returns trigger language plpgsql as
  $$
-@@ -1719,6 +1642,10 @@
+@@ -1719,6 +1612,10 @@
  $$;
  create trigger child_ins_trig after insert on child
    for each row execute procedure child_ins_func();
@@ -1857,7 +1882,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  create function child_del_func()
    returns trigger language plpgsql as
  $$
-@@ -1729,12 +1656,16 @@
+@@ -1729,12 +1626,16 @@
  $$;
  create trigger child_del_trig after delete on child
    for each row execute procedure child_del_func();
@@ -1875,7 +1900,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  (1 row)
  
   bid | aid | val1 
-@@ -1743,12 +1674,10 @@
+@@ -1743,12 +1644,10 @@
  (1 row)
  
  update parent set val1 = 'b' where aid = 1; -- should fail
@@ -1889,7 +1914,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  (1 row)
  
   bid | aid | val1 
-@@ -1757,13 +1686,10 @@
+@@ -1757,13 +1656,10 @@
  (1 row)
  
  delete from parent where aid = 1; -- should fail
@@ -1904,7 +1929,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  
   bid | aid | val1 
  -----+-----+------
-@@ -1792,7 +1718,8 @@
+@@ -1792,7 +1688,8 @@
  
   bid | aid | val1 
  -----+-----+------
@@ -1914,7 +1939,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  
  drop table parent, child;
  drop function parent_upd_func();
-@@ -1820,6 +1747,10 @@
+@@ -1820,6 +1717,10 @@
  $$;
  create trigger self_ref_trigger_ins_trig before insert on self_ref_trigger
    for each row execute procedure self_ref_trigger_ins_func();
@@ -1925,7 +1950,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  create function self_ref_trigger_del_func()
    returns trigger language plpgsql as
  $$
-@@ -1833,6 +1764,10 @@
+@@ -1833,6 +1734,10 @@
  $$;
  create trigger self_ref_trigger_del_trig before delete on self_ref_trigger
    for each row execute procedure self_ref_trigger_del_func();
@@ -1936,7 +1961,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  insert into self_ref_trigger values (1, null, 'root');
  insert into self_ref_trigger values (2, 1, 'root child A');
  insert into self_ref_trigger values (3, 1, 'root child B');
-@@ -1842,25 +1777,18 @@
+@@ -1842,25 +1747,18 @@
  select * from self_ref_trigger;
   id | parent |     data     | nchildren 
  ----+--------+--------------+-----------
@@ -1968,7 +1993,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  
  drop table self_ref_trigger;
  drop function self_ref_trigger_ins_func();
-@@ -1870,6 +1798,12 @@
+@@ -1870,6 +1768,12 @@
  --
  create table stmt_trig_on_empty_upd (a int);
  create table stmt_trig_on_empty_upd1 () inherits (stmt_trig_on_empty_upd);
@@ -1981,7 +2006,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  create function update_stmt_notice() returns trigger as $$
  begin
  	raise notice 'updating %', TG_TABLE_NAME;
-@@ -1879,25 +1813,23 @@
+@@ -1879,25 +1783,23 @@
  create trigger before_stmt_trigger
  	before update on stmt_trig_on_empty_upd
  	execute procedure update_stmt_notice();
@@ -2012,7 +2037,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  drop function update_stmt_notice();
  --
  -- Check that index creation (or DDL in general) is prohibited in a trigger
-@@ -1913,19 +1845,16 @@
+@@ -1913,19 +1815,16 @@
  end$$ language plpgsql;
  create trigger trigger_ddl_func before insert on trigger_ddl_table for each row
    execute procedure trigger_ddl_func();
@@ -2035,7 +2060,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  drop table trigger_ddl_table;
  drop function trigger_ddl_func();
  --
-@@ -1953,6 +1882,7 @@
+@@ -1953,6 +1852,7 @@
  $$;
  create trigger upsert_before_trig before insert or update on upsert
    for each row execute procedure upsert_before_func();
@@ -2043,7 +2068,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  create function upsert_after_func()
    returns trigger language plpgsql as
  $$
-@@ -1968,52 +1898,27 @@
+@@ -1968,52 +1868,27 @@
  $$;
  create trigger upsert_after_trig after insert or update on upsert
    for each row execute procedure upsert_after_func();
@@ -2107,7 +2132,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  
  drop table upsert;
  drop function upsert_before_func();
-@@ -2027,8 +1932,9 @@
+@@ -2027,8 +1902,9 @@
  create function my_trigger_function() returns trigger as $$ begin end; $$ language plpgsql;
  create trigger my_trigger after update on my_view referencing old table as old_table
     for each statement execute procedure my_trigger_function();
@@ -2119,7 +2144,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  drop function my_trigger_function();
  drop view my_view;
  drop table my_table;
-@@ -2036,67 +1942,95 @@
+@@ -2036,67 +1912,95 @@
  -- Verify cases that are unsupported with partitioned tables
  --
  create table parted_trig (a int) partition by list (a);
@@ -2244,7 +2269,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  select tgrelid::regclass, tgname, tgfoid::regproc from pg_trigger
    where tgrelid::regclass::text like 'trigpart%' order by tgrelid::regclass::text;
   tgrelid | tgname | tgfoid 
-@@ -2105,74 +2039,140 @@
+@@ -2105,74 +2009,140 @@
  
  -- check detach behavior
  create trigger trg1 after insert on trigpart for each row execute procedure trigger_nothing();
@@ -2420,7 +2445,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  create or replace function trigger_notice() returns trigger as $$
    begin
      raise notice 'trigger % on % % % for %', TG_NAME, TG_TABLE_NAME, TG_WHEN, TG_OP, TG_LEVEL;
-@@ -2185,133 +2185,167 @@
+@@ -2185,133 +2155,167 @@
  -- insert/update/delete statement-level triggers on the parent
  create trigger trig_ins_before before insert on parted_stmt_trig
    for each statement execute procedure trigger_notice();
@@ -2639,7 +2664,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  create or replace function trigger_notice() returns trigger as $$
    declare
      arg1 text = TG_ARGV[0];
-@@ -2324,19 +2358,31 @@
+@@ -2324,19 +2328,31 @@
    $$ language plpgsql;
  create trigger aaa after insert on parted_trig
     for each row execute procedure trigger_notice('quirky', 1);
@@ -2674,7 +2699,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  create or replace function trigger_notice_ab() returns trigger as $$
    begin
      raise notice 'trigger % on % % % for %: (a,b)=(%,%)',
-@@ -2350,42 +2396,76 @@
+@@ -2350,42 +2366,76 @@
    $$ language plpgsql;
  create table parted_irreg_ancestor (fd text, b text, fd2 int, fd3 int, a int)
    partition by range (b);
@@ -2761,7 +2786,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  create function parted_trigfunc() returns trigger language plpgsql as $$
  begin
    new.a = new.a + 1;
-@@ -2393,14 +2473,14 @@
+@@ -2393,14 +2443,14 @@
  end;
  $$;
  insert into parted values (1, 1, 'uno uno v1');    -- works
@@ -2780,7 +2805,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  create or replace function parted_trigfunc() returns trigger language plpgsql as $$
  begin
    new.b = new.b + 1;
-@@ -2408,11 +2488,9 @@
+@@ -2408,11 +2458,9 @@
  end;
  $$;
  insert into parted values (1, 1, 'uno uno v4');    -- fail
@@ -2794,7 +2819,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  create or replace function parted_trigfunc() returns trigger language plpgsql as $$
  begin
    new.c = new.c || ' did '|| TG_OP;
-@@ -2420,25 +2498,26 @@
+@@ -2420,25 +2468,26 @@
  end;
  $$;
  insert into parted values (1, 1, 'uno uno');       -- works
@@ -2832,7 +2857,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  -- both trigger and update change the partition
  create or replace function parted_trigfunc2() returns trigger language plpgsql as $$
  begin
-@@ -2448,27 +2527,35 @@
+@@ -2448,27 +2497,35 @@
  $$;
  create trigger t2 before update on parted
    for each row execute function parted_trigfunc2();
@@ -2878,7 +2903,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  create or replace function parted_trigfunc() returns trigger language plpgsql as $$
  begin
    new.a = new.a + new.b;
-@@ -2476,350 +2563,629 @@
+@@ -2476,350 +2533,629 @@
  end;
  $$;
  create table parted_1 partition of parted for values in (1, 2);
@@ -3630,7 +3655,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  DROP FUNCTION tgf();
  --
  -- Test the interaction between transition tables and both kinds of
-@@ -2862,120 +3228,174 @@
+@@ -2862,120 +3198,174 @@
  --
  -- set up a partition hierarchy with some different TupleDescriptors
  create table parent (a text, b int) partition by list (a);
@@ -3834,7 +3859,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  -- insert into parent with a before trigger on a child tuple before
  -- insertion, and we capture the newly modified row in parent format
  create or replace function intercept_insert() returns trigger language plpgsql as
-@@ -2985,41 +3405,82 @@
+@@ -2985,41 +3375,82 @@
      return new;
    end;
  $$;
@@ -3922,7 +3947,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  --
  -- Verify behavior of statement triggers on (non-partition)
  -- inheritance hierarchy with transition tables; similar to the
-@@ -3028,123 +3489,216 @@
+@@ -3028,123 +3459,216 @@
  --
  -- set up inheritance hierarchy with different TupleDescriptors
  create table parent (a text, b int);
@@ -4156,7 +4181,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  --
  -- Verify behavior of queries with wCTEs, where multiple transition
  -- tuplestores can be active at the same time because there are
-@@ -3156,29 +3710,32 @@
+@@ -3156,29 +3680,32 @@
  create trigger table1_trig
    after insert on table1 referencing new table as new_table
    for each statement execute procedure dump_insert();
@@ -4202,7 +4227,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  
  drop table table1;
  drop table table2;
-@@ -3190,60 +3747,85 @@
+@@ -3190,60 +3717,85 @@
  create trigger my_table_insert_trig
    after insert on my_table referencing new table as new_table
    for each statement execute procedure dump_insert();
@@ -4300,7 +4325,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  --
  -- Verify that you can't create a trigger with transition tables for
  -- more than one event.
-@@ -3271,15 +3853,27 @@
+@@ -3271,15 +3823,27 @@
  create trigger trig_table_before_trig
    before insert or update or delete on trig_table
    for each statement execute procedure trigger_func('trig_table');
@@ -4328,7 +4353,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  insert into refd_table values
    (1, 'one'),
    (2, 'two'),
-@@ -3291,25 +3885,19 @@
+@@ -3291,25 +3855,19 @@
    (2, 'two b'),
    (3, 'three a'),
    (3, 'three b');
@@ -4356,7 +4381,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  select * from trig_table;
   a |    b    
  ---+---------
-@@ -3326,27 +3914,28 @@
+@@ -3326,27 +3884,28 @@
  create trigger self_ref_before_trig
    before delete on self_ref
    for each statement execute procedure trigger_func('self_ref');
@@ -4394,7 +4419,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  drop table self_ref;
  --
  -- test transition tables with MERGE
-@@ -3355,12 +3944,21 @@
+@@ -3355,12 +3914,21 @@
  create trigger merge_target_table_insert_trig
    after insert on merge_target_table referencing new table as new_table
    for each statement execute procedure dump_insert();
@@ -4416,7 +4441,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  create table merge_source_table (a int, b text);
  insert into merge_source_table
    values (1, 'initial1'), (2, 'initial2'),
-@@ -3370,7 +3968,10 @@
+@@ -3370,7 +3938,10 @@
  on t.a = s.a
  when not matched then
    insert values (a, b);
@@ -4428,7 +4453,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  merge into merge_target_table t
  using merge_source_table s
  on t.a = s.a
-@@ -3380,9 +3981,10 @@
+@@ -3380,9 +3951,10 @@
  	delete
  when not matched then
    insert values (a, b);
@@ -4442,7 +4467,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  merge into merge_target_table t
  using merge_source_table s
  on t.a = s.a
-@@ -3392,9 +3994,10 @@
+@@ -3392,9 +3964,10 @@
  	delete
  when not matched then
    insert values (a, b);
@@ -4456,7 +4481,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  drop table merge_source_table, merge_target_table;
  -- cleanup
  drop function dump_insert();
-@@ -3426,83 +4029,156 @@
+@@ -3426,83 +3999,156 @@
  create or replace trigger my_trig
    before insert on my_table
    for each row execute procedure funcB();  -- OK
@@ -4624,7 +4649,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  -- verify transition table conversion slot's lifetime
  -- https://postgr.es/m/39a71864-b120-5a5c-8cc5-c632b6f16761@amazon.com
  create table convslot_test_parent (col1 text primary key);
-@@ -3537,8 +4213,10 @@
+@@ -3537,8 +4183,10 @@
  create trigger but_trigger after update on convslot_test_child
  referencing new table as new_table
  for each statement execute function convslot_trig2();
@@ -4636,7 +4661,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  create function convslot_trig3()
  returns trigger
  language plpgsql
-@@ -3553,14 +4231,17 @@
+@@ -3553,14 +4201,17 @@
  create trigger but_trigger2 after update on convslot_test_child
  referencing old table as old_table new table as new_table
  for each statement execute function convslot_trig3();
@@ -4657,7 +4682,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  drop table convslot_test_child, convslot_test_parent;
  drop function convslot_trig1();
  drop function convslot_trig2();
-@@ -3569,98 +4250,153 @@
+@@ -3569,98 +4220,153 @@
  -- we don't see any ill effects unless trigger tuple requires mapping
  create table convslot_test_parent (id int primary key, val int)
  partition by range (id);

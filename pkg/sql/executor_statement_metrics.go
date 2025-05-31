@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 )
 
 // EngineMetrics groups a set of SQL metrics.
@@ -26,19 +27,31 @@ type EngineMetrics struct {
 	// The subset of SELECTs that were executed by DistSQL with full or partial
 	// distribution.
 	DistSQLSelectDistributedCount *metric.Counter
-	SQLOptPlanCacheHits           *metric.Counter
-	SQLOptPlanCacheMisses         *metric.Counter
-	StatementFingerprintCount     *metric.UniqueCounter
+	DistSQLExecLatency            metric.IHistogram
+	DistSQLServiceLatency         metric.IHistogram
 
-	SQLExecLatencyDetail  *metric.HistogramVec
-	DistSQLExecLatency    metric.IHistogram
-	SQLExecLatency        metric.IHistogram
-	DistSQLServiceLatency metric.IHistogram
-	SQLServiceLatency     metric.IHistogram
-	SQLTxnLatency         metric.IHistogram
-	SQLTxnsOpen           *metric.Gauge
-	SQLActiveStatements   *metric.Gauge
-	SQLContendedTxns      *metric.Counter
+	SQLOptPlanCacheHits   *metric.Counter
+	SQLOptPlanCacheMisses *metric.Counter
+
+	StatementFingerprintCount *metric.UniqueCounter
+	SQLExecLatencyDetail      *metric.HistogramVec
+
+	SQLExecLatency metric.IHistogram
+	// Exec Latency of only non-AOST queries
+	SQLExecLatencyConsistent metric.IHistogram
+	// Exec Latency of only AOST queries
+	SQLExecLatencyHistorical metric.IHistogram
+
+	SQLServiceLatency *aggmetric.SQLHistogram
+	// Service Latency of only non-AOST queries
+	SQLServiceLatencyConsistent metric.IHistogram
+	// Service Latency of only AOST queries
+	SQLServiceLatencyHistorical metric.IHistogram
+
+	SQLTxnLatency       *aggmetric.SQLHistogram
+	SQLTxnsOpen         *aggmetric.SQLGauge
+	SQLActiveStatements *aggmetric.SQLGauge
+	SQLContendedTxns    *metric.Counter
 
 	// TxnAbortCount counts transactions that were aborted, either due
 	// to non-retriable errors, or retriable errors when the client-side
@@ -46,7 +59,7 @@ type EngineMetrics struct {
 	TxnAbortCount *metric.Counter
 
 	// FailureCount counts non-retriable errors in open transactions.
-	FailureCount *metric.Counter
+	FailureCount *aggmetric.SQLCounter
 
 	// StatementTimeoutCount tracks the number of statement failures due
 	// to exceeding the statement timeout.
@@ -57,7 +70,7 @@ type EngineMetrics struct {
 	TransactionTimeoutCount *metric.Counter
 
 	// FullTableOrIndexScanCount counts the number of full table or index scans.
-	FullTableOrIndexScanCount *metric.Counter
+	FullTableOrIndexScanCount *aggmetric.SQLCounter
 
 	// FullTableOrIndexScanRejectedCount counts the number of queries that were
 	// rejected because of the `disallow_full_table_scans` guardrail.
@@ -170,6 +183,7 @@ func (ex *connExecutor) recordStatementSummary(
 	recordedStmtStats := &sqlstats.RecordedStmtStats{
 		FingerprintID:        stmtFingerprintID,
 		QuerySummary:         stmt.StmtSummary,
+		Generic:              flags.IsSet(planFlagGeneric),
 		DistSQL:              flags.ShouldBeDistributed(),
 		Vec:                  flags.IsSet(planFlagVectorized),
 		ImplicitTxn:          implicitTxn,
@@ -202,8 +216,9 @@ func (ex *connExecutor) recordStatementSummary(
 		ExecStats:            queryLevelStats,
 		// TODO(mgartner): Use a slice of struct{uint64, uint64} instead of
 		// converting to strings.
-		Indexes:  planner.instrumentation.indexesUsed.Strings(),
-		Database: planner.SessionData().Database,
+		Indexes:   planner.instrumentation.indexesUsed.Strings(),
+		Database:  planner.SessionData().Database,
+		QueryTags: stmt.QueryTags,
 	}
 
 	err := ex.statsCollector.RecordStatement(ctx, recordedStmtStats)
@@ -236,8 +251,10 @@ func (ex *connExecutor) recordStatementSummary(
 		}
 
 		if queryLevelStats.ContentionTime > 0 {
-			ex.planner.DistSQLPlanner().distSQLSrv.Metrics.ContendedQueriesCount.Inc(1)
-			ex.planner.DistSQLPlanner().distSQLSrv.Metrics.CumulativeContentionNanos.Inc(queryLevelStats.ContentionTime.Nanoseconds())
+			dbName := ex.sessionData().Database
+			appName := ex.sessionData().ApplicationName
+			ex.planner.DistSQLPlanner().distSQLSrv.Metrics.ContendedQueriesCount.Inc(1, dbName, appName)
+			ex.planner.DistSQLPlanner().distSQLSrv.Metrics.CumulativeContentionNanos.Inc(queryLevelStats.ContentionTime.Nanoseconds(), dbName, appName)
 		}
 	}
 
@@ -318,7 +335,14 @@ func (ex *connExecutor) recordStatementLatencyMetrics(
 				m.SQLExecLatencyDetail.Observe(labels, float64(runLatRaw.Nanoseconds()))
 			}
 			m.SQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
-			m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
+			m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds(), ex.sessionData().Database, ex.sessionData().ApplicationName)
+			if ex.state.isHistorical.Load() {
+				m.SQLExecLatencyHistorical.RecordValue(runLatRaw.Nanoseconds())
+				m.SQLServiceLatencyHistorical.RecordValue(svcLatRaw.Nanoseconds())
+			} else {
+				m.SQLExecLatencyConsistent.RecordValue(runLatRaw.Nanoseconds())
+				m.SQLServiceLatencyConsistent.RecordValue(svcLatRaw.Nanoseconds())
+			}
 		}
 	}
 }

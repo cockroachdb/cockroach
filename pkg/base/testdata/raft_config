@@ -9,6 +9,7 @@ echo
  RaftHeartbeatIntervalTicks: (int64) 2,
  StoreLivenessHeartbeatInterval: (time.Duration) 1s,
  StoreLivenessSupportDuration: (time.Duration) 3s,
+ FortificationGracePeriod: (time.Duration) 3s,
  RangeLeaseDuration: (time.Duration) 6s,
  RangeLeaseRenewalFraction: (float64) 0.5,
  RaftEnableCheckQuorum: (bool) true,

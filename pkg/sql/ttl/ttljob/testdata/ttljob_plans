@@ -18,10 +18,10 @@ FROM defaultdb.public.p@"p_pkey"
 AS OF SYSTEM TIME INTERVAL ''0 seconds''
 WHERE ((crdb_internal_expiration) <= ''2024-01-01 00:00:00'')
 AND (
-  (id >= 0)
+  (id >= 0::INT8)
 )
 AND (
-  (id <= 100)
+  (id <= 100::INT8)
 )
 ORDER BY id ASC
 LIMIT 500

@@ -799,7 +799,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/portals.out --lab
  END;
  --
  -- Cursors outside transaction blocks
-@@ -743,78 +218,53 @@
+@@ -743,78 +218,59 @@
  
  BEGIN;
  DECLARE foo25 SCROLL CURSOR WITH HOLD FOR SELECT * FROM tenk2;
@@ -878,15 +878,19 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/portals.out --lab
 +(0 rows)
  
  FETCH ABSOLUTE 4 FROM foo25ns;
-- unique1 | unique2 | two | four | ten | twenty | hundred | thousand | twothousand | fivethous | tenthous | odd | even | stringu1 | stringu2 | string4 
-----------+---------+-----+------+-----+--------+---------+----------+-------------+-----------+----------+-----+------+----------+----------+---------
+  unique1 | unique2 | two | four | ten | twenty | hundred | thousand | twothousand | fivethous | tenthous | odd | even | stringu1 | stringu2 | string4 
+ ---------+---------+-----+------+-----+--------+---------+----------+-------------+-----------+----------+-----+------+----------+----------+---------
 -    9850 |       3 |   0 |    2 |   0 |     10 |      50 |      850 |        1850 |      4850 |     9850 | 100 |  101 | WOAAAA   | DAAAAA   | VVVVxx
 -(1 row)
--
-+ERROR:  cursor can only scan forward
++(0 rows)
+ 
  FETCH ABSOLUTE 4 FROM foo25ns; -- fail
- ERROR:  cursor can only scan forward
+-ERROR:  cursor can only scan forward
 -HINT:  Declare it with SCROLL option to enable backward scan.
++ unique1 | unique2 | two | four | ten | twenty | hundred | thousand | twothousand | fivethous | tenthous | odd | even | stringu1 | stringu2 | string4 
++---------+---------+-----+------+-----+--------+---------+----------+-------------+-----------+----------+-----+------+----------+----------+---------
++(0 rows)
++
  SELECT name, statement, is_holdable, is_binary, is_scrollable FROM pg_cursors;
 -  name   |                              statement                              | is_holdable | is_binary | is_scrollable 
 ----------+---------------------------------------------------------------------+-------------+-----------+---------------
@@ -897,7 +901,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/portals.out --lab
  (1 row)
  
  CLOSE foo25ns;
-@@ -835,33 +285,25 @@
+@@ -835,33 +291,25 @@
     RETURNS void
     AS 'DECLARE c CURSOR FOR SELECT stringu1 FROM tenk1 WHERE stringu1 LIKE $1;'
     LANGUAGE SQL;
@@ -935,9 +939,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/portals.out --lab
 -(15 rows)
 +If you would rather not post publicly, please contact us directly
 +using the support form.
-+
-+We appreciate your feedback.
  
++We appreciate your feedback.
++
 +SELECT declares_cursor('AB%');
 +ERROR:  unknown function: declares_cursor()
 +FETCH ALL FROM c;
@@ -947,7 +951,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/portals.out --lab
  --
  -- Test behavior of both volatile and stable functions inside a cursor;
  -- in particular we want to see what happens during commit of a holdable
-@@ -879,7 +321,7 @@
+@@ -879,7 +327,7 @@
  fetch all from c1;
   count_tt1_v | count_tt1_s 
  -------------+-------------
@@ -956,7 +960,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/portals.out --lab
  (1 row)
  
  rollback;
-@@ -892,36 +334,40 @@
+@@ -892,36 +340,40 @@
  fetch all from c2;
   count_tt1_v | count_tt1_s 
  -------------+-------------
@@ -1010,7 +1014,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/portals.out --lab
  (1 row)
  
  -- test CLOSE ALL;
-@@ -978,39 +424,30 @@
+@@ -978,39 +430,30 @@
  (2 rows)
  
  DELETE FROM uctest WHERE CURRENT OF c1;
@@ -1060,7 +1064,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/portals.out --lab
  
  -- Check UPDATE WHERE CURRENT; this time use FOR UPDATE
  BEGIN;
-@@ -1022,144 +459,133 @@
+@@ -1022,144 +465,133 @@
  (1 row)
  
  UPDATE uctest SET f1 = 8 WHERE CURRENT OF c1;
@@ -1278,7 +1282,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/portals.out --lab
  
  -- Check insensitive cursor with INSERT
  -- (The above tests don't test the SQL notion of an insensitive cursor
-@@ -1170,151 +596,183 @@
+@@ -1170,151 +602,183 @@
  DECLARE c1 INSENSITIVE CURSOR FOR SELECT * FROM uctest;
  INSERT INTO uctest VALUES (10, 'ten');
  FETCH NEXT FROM c1;
@@ -1526,7 +1530,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/portals.out --lab
  ROLLBACK;
  BEGIN;
  DECLARE c1 CURSOR FOR SELECT MIN(f1) FROM uctest FOR UPDATE;
-@@ -1325,239 +783,208 @@
+@@ -1325,239 +789,208 @@
  CREATE TEMP VIEW ucview AS SELECT * FROM uctest;
  CREATE RULE ucrule AS ON DELETE TO ucview DO INSTEAD
    DELETE FROM uctest WHERE f1 = OLD.f1;

@@ -1376,7 +1376,7 @@ func BenchmarkNodeLivenessScanStorage(b *testing.B) {
 			}
 			if l == 0 {
 				// Since did many flushes, compact everything down.
-				require.NoError(b, eng.Compact())
+				require.NoError(b, eng.Compact(ctx))
 			} else {
 				// Flush the next level. This will become a L0 sub-level.
 				require.NoError(b, eng.Flush())
@@ -1435,7 +1435,7 @@ func BenchmarkNodeLivenessScanStorage(b *testing.B) {
 							eng := setupEng(b, numLiveVersions, haveDeadKeys)
 							defer eng.Close()
 							if compacted {
-								require.NoError(b, eng.Compact())
+								require.NoError(b, eng.Compact(ctx))
 							}
 							b.ResetTimer()
 							blockBytes := uint64(0)

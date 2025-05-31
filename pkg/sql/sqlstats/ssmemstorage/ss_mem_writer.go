@@ -77,6 +77,9 @@ func (s *Container) RecordStatement(ctx context.Context, value *sqlstats.Recorde
 		}
 		stats.mu.data.FailureCount++
 	}
+	if value.Generic {
+		stats.mu.data.GenericCount++
+	}
 	if value.AutoRetryCount == 0 {
 		stats.mu.data.FirstAttemptCount++
 	} else if int64(value.AutoRetryCount) > stats.mu.data.MaxRetries {

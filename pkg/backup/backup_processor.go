@@ -53,21 +53,18 @@ var (
 		"bulkio.backup.read_with_priority_after",
 		"amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads",
 		time.Minute,
-		settings.NonNegativeDuration,
 		settings.WithPublic)
 	delayPerAttempt = settings.RegisterDurationSetting(
 		settings.ApplicationLevel,
 		"bulkio.backup.read_retry_delay",
 		"amount of time since the read-as-of time, per-prior attempt, to wait before making another attempt",
 		time.Second*5,
-		settings.NonNegativeDuration,
 	)
 	timeoutPerAttempt = settings.RegisterDurationSetting(
 		settings.ApplicationLevel,
 		"bulkio.backup.read_timeout",
 		"amount of time after which a read attempt is considered timed out, which causes the backup to fail",
 		time.Minute*5,
-		settings.NonNegativeDuration,
 		settings.WithPublic)
 
 	preSplitExports = settings.RegisterBoolSetting(
@@ -264,7 +261,6 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 		}
 		return nil, bp.constructProgressProducerMeta(prog)
 	case <-bp.aggTimer.C:
-		bp.aggTimer.Read = true
 		bp.aggTimer.Reset(15 * time.Second)
 		return nil, bulk.ConstructTracingAggregatorProducerMeta(bp.Ctx(),
 			bp.FlowCtx.NodeID.SQLInstanceID(), bp.FlowCtx.ID, bp.agg)
@@ -444,23 +440,9 @@ func runBackupProcessor(
 
 		readTime := spec.BackupEndTime.GoTime()
 
-		// Passing a nil pacer is effectively a noop if CPU control is disabled.
-		var pacer *admission.Pacer = nil
-		if fileSSTSinkElasticCPUControlEnabled.Get(&clusterSettings.SV) {
-			tenantID, ok := roachpb.ClientTenantFromContext(ctx)
-			if !ok {
-				tenantID = roachpb.SystemTenantID
-			}
-			pacer = flowCtx.Cfg.AdmissionPacerFactory.NewPacer(
-				100*time.Millisecond,
-				admission.WorkInfo{
-					TenantID:        tenantID,
-					Priority:        admissionpb.BulkNormalPri,
-					CreateTime:      timeutil.Now().UnixNano(),
-					BypassAdmission: false,
-				},
-			)
-		}
+		pacer := newBackupPacer(
+			ctx, flowCtx.Cfg.AdmissionPacerFactory, clusterSettings,
+		)
 		// It is safe to close a nil pacer.
 		defer pacer.Close()
 
@@ -511,7 +493,6 @@ func runBackupProcessor(
 								case <-ctxDone:
 									return ctx.Err()
 								case <-timer.C:
-									timer.Read = true
 								}
 							}
 
@@ -772,6 +753,30 @@ func logClose(ctx context.Context, c io.Closer, desc string) {
 	if err := c.Close(); err != nil {
 		log.Warningf(ctx, "failed to close %s: %s", redact.SafeString(desc), err.Error())
 	}
+}
+
+// newBackupPacer creates a new AC pacer for backup. It may return nil if CPU
+// control is disabled, which is effectively a noop.
+func newBackupPacer(
+	ctx context.Context, factory admission.PacerFactory, settings *cluster.Settings,
+) *admission.Pacer {
+	var pacer *admission.Pacer
+	if fileSSTSinkElasticCPUControlEnabled.Get(&settings.SV) {
+		tenantID, ok := roachpb.ClientTenantFromContext(ctx)
+		if !ok {
+			tenantID = roachpb.SystemTenantID
+		}
+		pacer = factory.NewPacer(
+			100*time.Millisecond,
+			admission.WorkInfo{
+				TenantID:        tenantID,
+				Priority:        admissionpb.BulkNormalPri,
+				CreateTime:      timeutil.Now().UnixNano(),
+				BypassAdmission: false,
+			},
+		)
+	}
+	return pacer
 }
 
 func init() {

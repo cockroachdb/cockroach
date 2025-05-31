@@ -409,6 +409,14 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 		}
 	}
 
+	// Disable buffered writes if any system columns are needed that require
+	// MVCC decoding.
+	if rf.mvccDecodeStrategy == storage.MVCCDecodingRequired {
+		if rf.args.Txn != nil && rf.args.Txn.BufferedWritesEnabled() {
+			rf.args.Txn.SetBufferedWritesEnabled(false /* enabled */)
+		}
+	}
+
 	if len(args.Spec.FetchedColumns) > 0 {
 		table.neededValueColsByIdx.AddRange(0, len(args.Spec.FetchedColumns)-1)
 	}
@@ -528,6 +536,14 @@ func (rf *Fetcher) SetTxn(txn *kv.Txn) error {
 // setTxnAndSendFn peeks inside of the KVFetcher to update the underlying
 // txnKVFetcher with the new txn and sendFn.
 func (rf *Fetcher) setTxnAndSendFn(txn *kv.Txn, sendFn sendFunc) error {
+	// Disable buffered writes if any system columns are needed that require
+	// MVCC decoding.
+	if rf.mvccDecodeStrategy == storage.MVCCDecodingRequired {
+		if txn != nil && txn.BufferedWritesEnabled() {
+			txn.SetBufferedWritesEnabled(false /* enabled */)
+		}
+	}
+
 	f, ok := rf.kvFetcher.KVBatchFetcher.(*txnKVFetcher)
 	if !ok {
 		return errors.AssertionFailedf(
@@ -637,14 +653,28 @@ func (rf *Fetcher) StartInconsistentScan(
 		return errors.AssertionFailedf("no spans")
 	}
 
-	txnTimestamp := initialTimestamp
 	txnStartTime := timeutil.Now()
-	if txnStartTime.Sub(txnTimestamp.GoTime()) >= maxTimestampAge {
-		return errors.Errorf(
-			"AS OF SYSTEM TIME: cannot specify timestamp older than %s for this operation",
-			maxTimestampAge,
-		)
+	if txnStartTime.Sub(initialTimestamp.GoTime()) >= maxTimestampAge {
+		// The initial timestamp is too far into the past already (which can
+		// happen when the cluster is overloaded, or there was a delay in the
+		// stats job being picked up for execution, or some other reason). In
+		// such case we'll advance the timestamp so that its age is about 1/10
+		// of the maximum age.
+		targetTimestampAge := maxTimestampAge.Nanoseconds() / 10
+		if targetTimestampAge < int64(100*time.Millisecond) {
+			// Ensure at least 100ms timestamp age. We shouldn't reach this line
+			// unless the max timestamp age setting is set way too low (or
+			// negative, by mistake), so we're just being conservative.
+			targetTimestampAge = int64(100 * time.Millisecond)
+		}
+		advanceBy := txnStartTime.Sub(initialTimestamp.GoTime()).Nanoseconds() - targetTimestampAge
+		if log.V(1) {
+			log.Infof(ctx, "initial timestamp %v too far into the past, advancing it by %v", initialTimestamp, advanceBy)
+		}
+		initialTimestamp = initialTimestamp.Add(advanceBy, 0 /* logical */)
 	}
+
+	txnTimestamp := initialTimestamp
 	txn := kv.NewTxnWithSteppingEnabled(ctx, db, 0 /* gatewayNodeID */, qualityOfService)
 	if err := txn.SetFixedTimestamp(ctx, txnTimestamp); err != nil {
 		return err
@@ -672,6 +702,14 @@ func (rf *Fetcher) StartInconsistentScan(
 			}
 		}
 
+		if rf.args.Spec.MaxKeysPerRow > 1 {
+			// If the table has multiple column families, we need to ensure that
+			// the scan stops at the end of the full SQL row - otherwise, the
+			// row might be deleted between two timestamps leading to incorrect
+			// results (or internal errors).
+			ba.Header.WholeRowsOfSize = int32(rf.args.Spec.MaxKeysPerRow)
+		}
+
 		log.VEventf(ctx, 2, "inconsistent scan: sending a batch with %d requests", len(ba.Requests))
 		res, err := txn.Send(ctx, ba)
 		if err != nil {
@@ -691,7 +729,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	}
 
 	if err := rf.kvFetcher.SetupNextFetch(
-		ctx, spans, nil, batchBytesLimit,
+		ctx, spans, nil /* spanIDs */, batchBytesLimit,
 		rf.rowLimitToKeyLimit(rowLimitHint), false, /* spansCanOverlap */
 	); err != nil {
 		return err
@@ -1246,12 +1284,6 @@ func (rf *Fetcher) NextRowDecodedInto(
 	return true, spanID, nil
 }
 
-// RowLastModified may only be called after NextRow has returned a non-nil row
-// and returns the timestamp of the last modification to that row.
-func (rf *Fetcher) RowLastModified() hlc.Timestamp {
-	return rf.table.rowLastModified
-}
-
 // RowIsDeleted may only be called after NextRow has returned a non-nil row and
 // returns true if that row was most recently deleted. This method is only
 // meaningful when the configured KVBatchFetcher returns deletion tombstones, which
@@ -1268,7 +1300,7 @@ func (rf *Fetcher) finalizeRow() error {
 		// TODO (rohany): Datums are immutable, so we can't store a DDecimal on the
 		//  fetcher and change its contents with each row. If that assumption gets
 		//  lifted, then we can avoid an allocation of a new decimal datum here.
-		dec := rf.args.Alloc.NewDDecimal(tree.DDecimal{Decimal: eval.TimestampToDecimal(rf.RowLastModified())})
+		dec := rf.args.Alloc.NewDDecimal(tree.DDecimal{Decimal: eval.TimestampToDecimal(rf.table.rowLastModified)})
 		table.row[table.timestampOutputIdx] = rowenc.EncDatum{Datum: dec}
 	}
 	if table.oidOutputIdx != noOutputColumn {

@@ -43,7 +43,6 @@ var GCInterval = settings.RegisterDurationSetting(
 	"server.sqlliveness.gc_interval",
 	"duration between attempts to delete extant sessions that have expired",
 	time.Hour,
-	settings.NonNegativeDuration,
 )
 
 // GCJitter specifies the jitter fraction on the interval between attempts to
@@ -404,7 +403,6 @@ func (s *Storage) deleteSessionsLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.Ch():
-			t.MarkRead()
 			s.deleteExpiredSessions(ctx)
 			t.Reset(s.gcInterval())
 		}

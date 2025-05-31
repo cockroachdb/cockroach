@@ -18,12 +18,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -50,6 +53,17 @@ var onlineRestoreLinkWorkers = settings.RegisterByteSizeSetting(
 	32,
 	settings.PositiveInt,
 )
+
+var onlineRestoreLayerLimit = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"backup.restore.online_layer_limit",
+	"maximum number of layers to restore in an online restore operation",
+	10,
+	settings.PositiveInt,
+	settings.WithVisibility(settings.Reserved),
+)
+
+const linkCompleteKey = "link_complete"
 
 // splitAndScatter runs through all entries produced by genSpans splitting and
 // scattering the key-space designated by the passed rewriter such that if all
@@ -88,14 +102,14 @@ func splitAndScatter(
 			// Split at start of the first chunk if it isn't the RHS of last chunk
 			// which was just split in the previous iteration.
 			if !lastSplit.Equal(sp.Key) {
-				if err := sendSplitAt(ctx, execCtx, sp.Key); err != nil {
+				if err := sendSplitAt(ctx, execCtx, sp.Key, false /* forRecovery */); err != nil {
 					log.Warningf(ctx, "failed to split during experimental restore: %v", err)
 				}
 			}
 			// Split at the end of the chunk so that anything which happens to the
 			// right of this chunk's span, including splitting other chunks, does not
 			// interact with this span's scatter, ingests or additional splits.
-			if err := sendSplitAt(ctx, execCtx, sp.EndKey); err != nil {
+			if err := sendSplitAt(ctx, execCtx, sp.EndKey, false /* forRecovery */); err != nil {
 				log.Warningf(ctx, "failed to split during experimental restore: %v", err)
 			}
 			lastSplit = append(lastSplit[:0], sp.EndKey...)
@@ -125,7 +139,7 @@ func splitAndScatter(
 					if !ok || err != nil {
 						return errors.Wrapf(err, "span start key %s was not rewritten", fileStart)
 					}
-					if err := sendSplitAt(ctx, execCtx, start); err != nil {
+					if err := sendSplitAt(ctx, execCtx, start, false /* forRecovery */); err != nil {
 						log.Warningf(ctx, "failed to split during experimental restore: %v", err)
 					}
 					rangeSize = 0
@@ -189,6 +203,15 @@ func sendAddRemoteSSTs(
 		return 0, 0, errors.Wrap(err, "failed to split and scatter spans")
 	}
 
+	downloadSpans := job.Details().(jobspb.RestoreDetails).DownloadSpans
+	for _, span := range downloadSpans {
+		if err := sendSplitAt(ctx, execCtx, span.Key, true /* forRecovery */); err != nil {
+			return 0, 0, errors.Wrap(err, "failed to split download spans")
+		}
+		if err := sendSplitAt(ctx, execCtx, span.EndKey, true /* forRecovery */); err != nil {
+			return 0, 0, errors.Wrap(err, "failed to split download spans")
+		}
+	}
 	if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint("restore.before_link"); err != nil {
 		return 0, 0, err
 	}
@@ -326,13 +349,27 @@ func sendAddRemoteSSTWorker(
 	}
 }
 
-// TODO(ssd): Perhaps the relevant DB functions should start tracing
-// spans.
-func sendSplitAt(ctx context.Context, execCtx sql.JobExecContext, splitKey roachpb.Key) error {
+// sendSplitAt issues an admin split at the specified key with an expiration
+// which depends on the forRecovery bool. When true, the split should never
+// expire as the split seperates ranges with restoring key space, which may
+// contain external data, from other ranges which do not contain any external
+// data. These splits then enable the restore job to cleanly excise the
+// restoring keyspace OnFailOrCancel at the range level. When false, these
+// splits simply allow the link phase to bulk ingest virtual ssts without
+// inducing rebalancing due to range size, a classic bulk ingest strategy.
+//
+// TODO(ssd): Perhaps the relevant DB functions should start tracing spans.
+func sendSplitAt(
+	ctx context.Context, execCtx sql.JobExecContext, splitKey roachpb.Key, forRecovery bool,
+) error {
 	ctx, sp := tracing.ChildSpan(ctx, "backup.sendSplitAt")
 	defer sp.Finish()
 
 	expiration := execCtx.ExecCfg().Clock.Now().AddDuration(time.Hour)
+	if forRecovery {
+		expiration = hlc.MaxTimestamp
+	}
+
 	return execCtx.ExecCfg().DB.AdminSplit(ctx, splitKey, expiration)
 }
 
@@ -411,7 +448,9 @@ func sendRemoteAddSSTable(
 // checkManifestsForOnlineCompat returns an error if the set of
 // manifests appear to be from a backup that we cannot currently
 // support for online restore.
-func checkManifestsForOnlineCompat(ctx context.Context, manifests []backuppb.BackupManifest) error {
+func checkManifestsForOnlineCompat(
+	ctx context.Context, settings *cluster.Settings, manifests []backuppb.BackupManifest,
+) error {
 	if len(manifests) < 1 {
 		return errors.AssertionFailedf("expected at least 1 backup manifest")
 	}
@@ -421,7 +460,7 @@ func checkManifestsForOnlineCompat(ctx context.Context, manifests []backuppb.Bac
 	}
 
 	// TODO(online-restore): Remove once we support layer ordering and have tested some reasonable number of layers.
-	const layerLimit = 3
+	layerLimit := int(onlineRestoreLayerLimit.Get(&settings.SV))
 	if len(manifests) > layerLimit {
 		return pgerror.Newf(pgcode.FeatureNotSupported, "experimental online restore: too many incremental layers %d (from backup) > %d (limit)", len(manifests), layerLimit)
 	}
@@ -487,12 +526,9 @@ func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 		return 0, errors.Wrapf(err, "failed to update running status of job %d", r.job.ID())
 	}
 
-	for _, span := range details.DownloadSpans {
-		remainingForSpan, err := getRemainingExternalFileBytes(ctx, execCtx, span)
-		if err != nil {
-			return 0, err
-		}
-		total += remainingForSpan
+	total, err := getExternalBytesOverSpans(ctx, execCtx.ExecCfg(), details.DownloadSpans)
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to get remaining external file bytes")
 	}
 
 	log.Infof(ctx, "total download size (across all stores) to complete restore: %s", sz(total))
@@ -568,7 +604,7 @@ func sendDownloadSpan(ctx context.Context, execCtx sql.JobExecContext, spans roa
 }
 
 func getDownloadSpans(
-	codec keys.SQLCodec, preRestoreData *restorationDataBase, mainRestoreData *mainRestorationData,
+	codec keys.SQLCodec, preRestoreData restorationData, mainRestoreData restorationData,
 ) (roachpb.Spans, error) {
 	rekey := mainRestoreData.getRekeys()
 	rekey = append(rekey, preRestoreData.getRekeys()...)
@@ -580,7 +616,10 @@ func getDownloadSpans(
 	if err != nil {
 		return nil, errors.Wrap(err, "creating key rewriter from rekeys")
 	}
-	downloadSpans := mainRestoreData.getSpans()
+	downloadSpans := make([]roachpb.Span, 0, len(mainRestoreData.getSpans())+len(preRestoreData.getSpans()))
+	for _, span := range mainRestoreData.getSpans() {
+		downloadSpans = append(downloadSpans, span.Clone())
+	}
 
 	// Intentionally download preRestoreData after the main data. During a cluster
 	// restore, preRestore data are linked to a temp system db that are then
@@ -588,10 +627,13 @@ func getDownloadSpans(
 	// should never be queried. We still want to download this data, however, to
 	// protect against external storage deletions of these linked in ssts, but at
 	// lower priority to the main data.
-	downloadSpans = append(downloadSpans, preRestoreData.getSpans()...)
+	for _, span := range preRestoreData.getSpans() {
+		downloadSpans = append(downloadSpans, span.Clone())
+	}
+
 	for i := range downloadSpans {
 		var err error
-		downloadSpans[i], err = rewriteSpan(kr, downloadSpans[i].Clone(), execinfrapb.ElidePrefix_None)
+		downloadSpans[i], err = rewriteSpan(kr, downloadSpans[i], execinfrapb.ElidePrefix_None)
 		if err != nil {
 			return nil, err
 		}
@@ -600,30 +642,25 @@ func getDownloadSpans(
 }
 
 func (r *restoreResumer) maybeWriteDownloadJob(
-	ctx context.Context,
-	execConfig *sql.ExecutorConfig,
-	preRestoreData *restorationDataBase,
-	mainRestoreData *mainRestorationData,
+	ctx context.Context, execConfig *sql.ExecutorConfig,
 ) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 	if !details.ExperimentalOnline {
 		return nil
 	}
 
-	downloadSpans, err := getDownloadSpans(execConfig.Codec, preRestoreData, mainRestoreData)
-	if err != nil {
-		return errors.Wrap(err, "failed to get download spans")
+	if len(details.DownloadSpans) == 0 && !details.SchemaOnly {
+		return errors.AssertionFailedf("download spans should have been persisted to job details")
 	}
+	downloadJobDetails := details
+	downloadJobDetails.DownloadJob = true
 
-	log.Infof(ctx, "creating job to track downloads in %d spans", len(downloadSpans))
+	log.Infof(ctx, "creating job to track downloads in %d spans", len(details.DownloadSpans))
 	downloadJobRecord := jobs.Record{
 		Description: fmt.Sprintf("Background Data Download for %s", r.job.Payload().Description),
 		Username:    r.job.Payload().UsernameProto.Decode(),
-		Details: jobspb.RestoreDetails{
-			DownloadJob:                        true,
-			DownloadSpans:                      downloadSpans,
-			PostDownloadTableAutoStatsSettings: details.PostDownloadTableAutoStatsSettings},
-		Progress: jobspb.RestoreProgress{},
+		Details:     downloadJobDetails,
+		Progress:    jobspb.RestoreProgress{},
 	}
 
 	return execConfig.InternalDB.DescsTxn(ctx, func(
@@ -666,14 +703,9 @@ func (r *restoreResumer) waitForDownloadToComplete(
 	for rt := retry.StartWithCtx(
 		ctx, retry.Options{InitialBackoff: time.Second, MaxBackoff: time.Second * 10},
 	); ; rt.Next() {
-
-		var remaining uint64
-		for _, span := range details.DownloadSpans {
-			remainingForSpan, err := getRemainingExternalFileBytes(ctx, execCtx, span)
-			if err != nil {
-				return err
-			}
-			remaining += remainingForSpan
+		remaining, err := getExternalBytesOverSpans(ctx, execCtx.ExecCfg(), details.DownloadSpans)
+		if err != nil {
+			return errors.Wrap(err, "failed to get remaining external file bytes")
 		}
 
 		// Sometimes a new virtual/external file sneaks in after we count total; the
@@ -711,13 +743,41 @@ func (r *restoreResumer) waitForDownloadToComplete(
 	}
 }
 
+func unstickRestoreSpans(
+	ctx context.Context, execCfg *sql.ExecutorConfig, spans roachpb.Spans,
+) error {
+	for _, sp := range spans {
+		if err := execCfg.DB.AdminUnsplit(ctx, sp.Key); err != nil {
+			return errors.Wrapf(err, "failed to unsplit %s", sp)
+		}
+		if err := execCfg.DB.AdminUnsplit(ctx, sp.EndKey); err != nil {
+			return errors.Wrapf(err, "failed to unsplit %s", sp.EndKey)
+		}
+	}
+	return nil
+}
+
+func getExternalBytesOverSpans(
+	ctx context.Context, execCfg *sql.ExecutorConfig, spans roachpb.Spans,
+) (uint64, error) {
+	var remaining uint64
+	for _, span := range spans {
+		remainingForSpan, err := getRemainingExternalFileBytes(ctx, execCfg, span)
+		if err != nil {
+			return 0, err
+		}
+		remaining += remainingForSpan
+	}
+	return remaining, nil
+}
+
 func getRemainingExternalFileBytes(
-	ctx context.Context, execCtx sql.JobExecContext, span roachpb.Span,
+	ctx context.Context, execCfg *sql.ExecutorConfig, span roachpb.Span,
 ) (uint64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backup.getRemainingExternalFileBytes")
 	defer sp.Finish()
 
-	resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(ctx, &roachpb.SpanStatsRequest{
+	resp, err := execCfg.TenantStatusServer.SpanStats(ctx, &roachpb.SpanStatsRequest{
 		NodeID:        "0", // Fan out to all nodes.
 		Spans:         []roachpb.Span{span},
 		SkipMvccStats: true,
@@ -733,15 +793,17 @@ func getRemainingExternalFileBytes(
 	return remaining, nil
 }
 
-func (r *restoreResumer) doDownloadFiles(
-	ctx context.Context, execCtx sql.JobExecContext, downloadSpans roachpb.Spans,
-) error {
+func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExecContext) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
+
+	if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint("restore.before_download"); err != nil {
+		return err
+	}
 
 	grp := ctxgroup.WithContext(ctx)
 	completionPoller := make(chan struct{})
 
-	grp.GoCtx(r.sendDownloadWorker(execCtx, downloadSpans, completionPoller))
+	grp.GoCtx(r.sendDownloadWorker(execCtx, details.DownloadSpans, completionPoller))
 	grp.GoCtx(func(ctx context.Context) error {
 		return r.waitForDownloadToComplete(ctx, execCtx, details, completionPoller)
 	})
@@ -787,7 +849,7 @@ func (r *restoreResumer) cleanupAfterDownload(
 			log.Warningf(ctx, "failed to re-enable auto stats on table %d", id)
 		}
 	}
-	return nil
+	return unstickRestoreSpans(ctx, r.execCfg, details.DownloadSpans)
 }
 
 func createImportRollbackJob(
@@ -809,4 +871,126 @@ func createImportRollbackJob(
 	}
 	_, err := jr.CreateJobWithTxn(ctx, jobRecord, jr.MakeJobID(), txn)
 	return err
+}
+
+// setDescriptorsOffline sets the state of all online descriptors in the details to offline.
+func setDescriptorsOffline(
+	ctx context.Context, txn descs.Txn, details jobspb.RestoreDetails,
+) error {
+	descCol := txn.Descriptors()
+	b := txn.KV().NewBatch()
+	var hasOnlineDescriptors bool
+
+	writeDesc := func(desc catalog.MutableDescriptor) error {
+		if !desc.Offline() {
+			hasOnlineDescriptors = true
+			desc.SetOffline("online restore failed")
+			if err := descCol.WriteDescToBatch(ctx, false /* kvTrace */, desc, b); err != nil {
+				return errors.Wrapf(err, "writing dropping %s to batch", desc.DescriptorType())
+			}
+		}
+		return nil
+	}
+
+	for i := range details.TableDescs {
+		mutableTable, err := descCol.MutableByID(txn.KV()).Table(ctx, details.TableDescs[i].ID)
+		if err != nil {
+			return err
+		}
+		if err := writeDesc(mutableTable); err != nil {
+			return err
+		}
+	}
+
+	for i := range details.FunctionDescs {
+		mutableFunc, err := descCol.MutableByID(txn.KV()).Function(ctx, details.FunctionDescs[i].ID)
+		if err != nil {
+			return err
+		}
+		if err := writeDesc(mutableFunc); err != nil {
+			return err
+		}
+	}
+
+	for i := range details.DatabaseDescs {
+		mutableDB, err := descCol.MutableByID(txn.KV()).Database(ctx, details.DatabaseDescs[i].ID)
+		if err != nil {
+			return err
+		}
+		if err := writeDesc(mutableDB); err != nil {
+			return err
+		}
+	}
+
+	for i := range details.TypeDescs {
+		mutableType, err := descCol.MutableByID(txn.KV()).Type(ctx, details.TypeDescs[i].ID)
+		if err != nil {
+			return err
+		}
+		if err := writeDesc(mutableType); err != nil {
+			return err
+		}
+	}
+
+	for i := range details.SchemaDescs {
+		mutableSchema, err := descCol.MutableByID(txn.KV()).Schema(ctx, details.SchemaDescs[i].ID)
+		if err != nil {
+			return err
+		}
+		if err := writeDesc(mutableSchema); err != nil {
+			return err
+		}
+	}
+
+	if !hasOnlineDescriptors {
+		return nil
+	}
+	return txn.KV().Run(ctx, b)
+}
+
+func (r *restoreResumer) maybeCleanupFailedOnlineRestore(
+	ctx context.Context, p sql.JobExecContext, details jobspb.RestoreDetails,
+) error {
+	if len(details.DownloadSpans) == 0 {
+		// If this job is completly unrelated OR, exit early.
+		return nil
+	}
+
+	total, err := getExternalBytesOverSpans(ctx, p.ExecCfg(), details.DownloadSpans)
+	if total == 0 && err == nil {
+		// No external data, so we can exit early.
+		return nil
+	}
+
+	// If the descriptors are online, flip them off before excising to ensure no
+	// foreground workload can run when we clobber the key space.
+	if err := r.execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		return setDescriptorsOffline(ctx, txn, details)
+	}); err != nil {
+		return err
+	}
+
+	// TODO(msbutler): parallelize this blah blah blah.
+	for _, sp := range details.DownloadSpans {
+		batch := &kv.Batch{}
+		batch.AddRawRequest(&kvpb.ExciseRequest{
+			RequestHeader: kvpb.RequestHeader{
+				Key:    sp.Key,
+				EndKey: sp.EndKey,
+			},
+		})
+		if err := p.ExecCfg().DB.Run(ctx, batch); err != nil {
+			return errors.Wrapf(err, "excising external data from %s", sp)
+		}
+	}
+
+	total, err = getExternalBytesOverSpans(ctx, p.ExecCfg(), details.DownloadSpans)
+	if total > 0 {
+		return errors.Newf("online restored keys space still contains external data %d after excise", total)
+	}
+	if err != nil {
+		return errors.Wrapf(err, "failed to get external data after excise")
+	}
+
+	return unstickRestoreSpans(ctx, p.ExecCfg(), details.DownloadSpans)
 }

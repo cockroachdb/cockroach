@@ -740,6 +740,13 @@ statement ok
 INSERT INTO parent VALUES (1);
 INSERT INTO child VALUES (1, 1);
 
+# Write buffering can influence whether a BatchRequest makes it to the KV server
+# where we populate "kv nodes" information (which determines whether this
+# information is shown on EXPLAIN ANALYZE), so we unconditionally disable it
+# just for this statement.
+statement ok
+SET kv_transaction_buffered_writes_enabled = false
+
 query T
 EXPLAIN ANALYZE (VERBOSE) UPDATE parent SET k = 2 WHERE k = 1;
 ----
@@ -1012,6 +1019,8 @@ quality of service: regular
                               estimated row count: 1
                               label: buffer 1000000
 
+statement ok
+RESET kv_transaction_buffered_writes_enabled;
 
 # Ensure that the intent on 'parent' is resolved so that we don't see any
 # contention time reported for 'delete range' below.

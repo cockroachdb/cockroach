@@ -159,7 +159,6 @@ export const getNodeStatus = (): INodeStatus => {
       "distsender.rpc.heartbeattxn.sent": 0,
       "distsender.rpc.import.sent": 0,
       "distsender.rpc.increment.sent": 0,
-      "distsender.rpc.initput.sent": 8,
       "distsender.rpc.leaseinfo.sent": 0,
       "distsender.rpc.merge.sent": 147773,
       "distsender.rpc.migrate.sent": 0,

@@ -210,7 +210,6 @@ func (c *serverController) start(ctx context.Context, ie isql.Executor) error {
 			select {
 			case <-updateCh:
 			case <-timer.C:
-				timer.Read = true
 			case <-c.stopper.ShouldQuiesce():
 				// Expedited server shutdown of outer server.
 				return

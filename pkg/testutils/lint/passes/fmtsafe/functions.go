@@ -44,6 +44,9 @@ var requireConstFmt = map[string]bool{
 	"(*log.Logger).Panicf": true,
 	"(*log.Logger).Printf": true,
 
+	"(*github.com/cockroachdb/cockroach/pkg/util/hlc/logger.logLogger).Fatalf":   true,
+	"(*github.com/cockroachdb/cockroach/pkg/util/hlc/logger.logLogger).Warningf": true,
+
 	"github.com/cockroachdb/cockroach/pkg/util/log.Shoutf":          true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.Eventf":          true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.vEventf":         true,
@@ -79,6 +82,9 @@ var requireConstFmt = map[string]bool{
 	"(github.com/cockroachdb/cockroach/pkg/rpc.breakerLogger).Infof":  true,
 
 	"(*github.com/cockroachdb/cockroach/pkg/internal/rsg/yacc.Tree).errorf": true,
+
+	"github.com/cockroachdb/cockroach/pkg/storage/disk.maybeInfof": true,
+	"github.com/cockroachdb/cockroach/pkg/storage/disk.maybeWarnf": true,
 
 	"(github.com/cockroachdb/cockroach/pkg/storage.pebbleLogger).Infof":  true,
 	"(github.com/cockroachdb/cockroach/pkg/storage.pebbleLogger).Fatalf": true,

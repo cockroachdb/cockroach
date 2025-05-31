@@ -398,7 +398,6 @@ func (b *Balancer) rebalanceLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-timer.Ch():
-			timer.MarkRead()
 			b.rebalance(ctx)
 		}
 	}

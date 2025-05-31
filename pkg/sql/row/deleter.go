@@ -146,6 +146,52 @@ func (rd *Deleter) DeleteRow(
 ) error {
 	b := &KVBatchAdapter{Batch: batch}
 
+	primaryIndexKey, err := rd.Helper.encodePrimaryIndexKey(rd.FetchColIDtoRowIndex, values)
+	if err != nil {
+		return err
+	}
+
+	// Delete the row from the primary index.
+	var called bool
+	err = rd.Helper.TableDesc.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
+		if called {
+			// HACK: MakeFamilyKey appends to its argument, so on every loop iteration
+			// after the first, trim primaryIndexKey so nothing gets overwritten.
+			// TODO(dan): Instead of this, use something like engine.ChunkAllocator.
+			primaryIndexKey = primaryIndexKey[:len(primaryIndexKey):len(primaryIndexKey)]
+		} else {
+			called = true
+		}
+		familyID := family.ID
+		rd.key = keys.MakeFamilyKey(primaryIndexKey, uint32(familyID))
+
+		if oth.IsSet() || mustValidateOldPKValues {
+			var expValue []byte
+			if !oth.IsSet() || !oth.PreviousWasDeleted {
+				prevValue, err := rd.encodeValueForPrimaryIndexFamily(family, values)
+				if err != nil {
+					return err
+				}
+				if prevValue.IsPresent() {
+					expValue = prevValue.TagAndDataBytes()
+				}
+			}
+			if oth.IsSet() {
+				oth.DelWithCPut(ctx, b, &rd.key, expValue, traceKV)
+			} else {
+				delWithCPutFn(ctx, b, &rd.key, expValue, traceKV, rd.Helper.primIndexValDirs)
+			}
+		} else {
+			delFn(ctx, b, &rd.key, !rd.primaryLocked /* needsLock */, traceKV, rd.Helper.primIndexValDirs)
+		}
+
+		rd.key = nil
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
 	// Delete the row from any secondary indices.
 	for i, index := range rd.Helper.Indexes {
 		// If the index ID exists in the set of indexes to ignore, do not
@@ -179,48 +225,7 @@ func (rd *Deleter) DeleteRow(
 		}
 	}
 
-	primaryIndexKey, err := rd.Helper.encodePrimaryIndexKey(rd.FetchColIDtoRowIndex, values)
-	if err != nil {
-		return err
-	}
-
-	// Delete the row.
-	var called bool
-	return rd.Helper.TableDesc.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
-		if called {
-			// HACK: MakeFamilyKey appends to its argument, so on every loop iteration
-			// after the first, trim primaryIndexKey so nothing gets overwritten.
-			// TODO(dan): Instead of this, use something like engine.ChunkAllocator.
-			primaryIndexKey = primaryIndexKey[:len(primaryIndexKey):len(primaryIndexKey)]
-		} else {
-			called = true
-		}
-		familyID := family.ID
-		rd.key = keys.MakeFamilyKey(primaryIndexKey, uint32(familyID))
-
-		if oth.IsSet() || mustValidateOldPKValues {
-			var expValue []byte
-			if !oth.PreviousWasDeleted {
-				prevValue, err := rd.encodeValueForPrimaryIndexFamily(family, values)
-				if err != nil {
-					return err
-				}
-				if prevValue.IsPresent() {
-					expValue = prevValue.TagAndDataBytes()
-				}
-			}
-			if oth.IsSet() {
-				oth.DelWithCPut(ctx, b, &rd.key, expValue, traceKV)
-			} else {
-				delWithCPutFn(ctx, b, &rd.key, expValue, traceKV, rd.Helper.primIndexValDirs)
-			}
-		} else {
-			delFn(ctx, b, &rd.key, !rd.primaryLocked /* needsLock */, traceKV, rd.Helper.primIndexValDirs)
-		}
-
-		rd.key = nil
-		return nil
-	})
+	return nil
 }
 
 // encodeValueForPrimaryIndexFamily encodes the expected roachpb.Value

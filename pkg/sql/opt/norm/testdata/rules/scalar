@@ -676,9 +676,9 @@ semi-join (hash)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
  │    └── filters
- │         ├── i:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
  │         ├── f:3 > 1.0 [outer=(3), constraints=(/3: [/1.0000000000000002 - ]; tight)]
- │         └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+ │         ├── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+ │         └── i:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
  ├── scan xy
  │    ├── columns: x:8!null
  │    └── key: (8)

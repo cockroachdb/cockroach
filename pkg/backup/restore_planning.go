@@ -91,6 +91,14 @@ var featureRestoreEnabled = settings.RegisterBoolSetting(
 	featureflag.FeatureFlagEnabledDefault,
 	settings.WithPublic)
 
+var restoreCompactedBackups = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"restore.compacted_backups.enabled",
+	"allow restoring from compacted backups",
+	true,
+	settings.WithVisibility(settings.Reserved),
+)
+
 // maybeFilterMissingViews filters the set of tables to restore to exclude views
 // whose dependencies are either missing or are themselves unrestorable due to
 // missing dependencies, and returns the resulting set of tables. If the
@@ -1267,20 +1275,9 @@ func restorePlanHook(
 		}
 	}
 
-	var subdir string
-	if restoreStmt.Subdir != nil {
-		var err error
-		subdir, err = exprEval.String(ctx, restoreStmt.Subdir)
-		if err != nil {
-			return nil, nil, false, err
-		}
-	} else {
-		// Deprecation notice for non-collection `RESTORE FROM` syntax. Remove this
-		// once the syntax is deleted in 22.2.
-		p.BufferClientNotice(ctx,
-			pgnotice.Newf("The `RESTORE FROM <backup>` syntax will be removed in a future release, please"+
-				" switch over to using `RESTORE FROM <backup> IN <collection>` to restore a particular backup from a collection: %s",
-				"https://www.cockroachlabs.com/docs/stable/restore.html#view-the-backup-subdirectories"))
+	subdir, err := exprEval.String(ctx, restoreStmt.Subdir)
+	if err != nil {
+		return nil, nil, false, err
 	}
 
 	var incStorage []string
@@ -1784,14 +1781,15 @@ func doRestorePlan(
 	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 
+	includeCompacted := restoreCompactedBackups.Get(&p.ExecCfg().Settings.SV)
 	// Given the stores for the base full backup, and the fully resolved backup
 	// directories, return the URIs and manifests of all backup layers in all
 	// localities. Incrementals will be searched for automatically.
 	defaultURIs, mainBackupManifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
 		ctx, &mem, baseStores, incStores, mkStore, fullyResolvedBaseDirectory,
-		fullyResolvedIncrementalsDirectory, endTime, encryption, &kmsEnv, p.User(), false,
+		fullyResolvedIncrementalsDirectory, endTime, encryption, &kmsEnv,
+		p.User(), false, includeCompacted,
 	)
-
 	if err != nil {
 		return err
 	}
@@ -1814,7 +1812,7 @@ func doRestorePlan(
 	}
 
 	if restoreStmt.Options.OnlineImpl() {
-		if err := checkManifestsForOnlineCompat(ctx, mainBackupManifests); err != nil {
+		if err := checkManifestsForOnlineCompat(ctx, p.ExecCfg().Settings, mainBackupManifests); err != nil {
 			return err
 		}
 	}
@@ -2046,7 +2044,9 @@ func doRestorePlan(
 	if newDBName != "" {
 		overrideDBName = newDBName
 	}
-	if err := rewrite.TableDescs(tables, descriptorRewrites, overrideDBName); err != nil {
+	var typeBackrefsToRemove map[descpb.ID]map[descpb.ID]struct{}
+	typeBackrefsToRemove, err = rewrite.TableDescs(tables, descriptorRewrites, overrideDBName)
+	if err != nil {
 		return errors.Wrapf(err, "table descriptor rewrite failed")
 	}
 	if err := rewrite.DatabaseDescs(databases, descriptorRewrites, map[descpb.ID]struct{}{}); err != nil {
@@ -2055,7 +2055,7 @@ func doRestorePlan(
 	if err := rewrite.SchemaDescs(schemas, descriptorRewrites); err != nil {
 		return errors.Wrapf(err, "schema descriptor rewrite failed")
 	}
-	if err := rewrite.TypeDescs(types, descriptorRewrites); err != nil {
+	if err := rewrite.TypeDescs(types, descriptorRewrites, typeBackrefsToRemove); err != nil {
 		return errors.Wrapf(err, "type descriptor rewrite failed")
 	}
 	if err := rewrite.FunctionDescs(functions, descriptorRewrites, overrideDBName); err != nil {

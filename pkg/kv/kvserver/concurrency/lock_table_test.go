@@ -1152,7 +1152,6 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 				case <-ctx.Done():
 					return ctx.Err()
 				case <-timer.C:
-					timer.Read = true
 					return errors.AssertionFailedf(
 						"request %d has been waiting for more than 5 minutes; lock table state:\n%s\n",
 						g.(*lockTableGuardImpl).seqNum,

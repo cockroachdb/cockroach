@@ -458,7 +458,7 @@ func (c *CustomFuncs) OrderingBySingleColAsc(ordering props.OrderingChoice, col 
 //  1. A vector-search operator which produces candidate PKs.
 //  2. A lookup-join to retrieve the vector column and any other needed columns.
 //  3. A projection of the distance between the vector column and query vector.
-//  3. A top-k operator to perform re-ranking.
+//  4. A top-k operator to perform re-ranking.
 //
 // Note that TryGenerateVectorSearch does not handle additional filters beyond
 // those used to constrain index prefix columns.
@@ -466,23 +466,26 @@ func (c *CustomFuncs) TryGenerateVectorSearch(
 	grp memo.RelExpr,
 	_ *physical.Required,
 	scanExpr *memo.ScanExpr,
-	filters memo.FiltersExpr,
+	originalFilters memo.FiltersExpr,
 	passthrough opt.ColSet,
-	vectorCol, distanceCol opt.ColumnID,
-	distanceExpr, queryVector opt.ScalarExpr,
+	vectorCol opt.ColumnID,
+	queryVector opt.ScalarExpr,
+	projections memo.ProjectionsExpr,
 	limit tree.Datum,
+	limitOrd props.OrderingChoice,
 ) {
 	sp := &scanExpr.ScanPrivate
+	tab := c.e.mem.Metadata().TableMeta(sp.Table)
 
 	// Generate implicit filters from constraints and computed columns as
 	// optional filters to help constrain an index scan.
-	optionalFilters := c.checkConstraintFilters(sp.Table)
-	computedColFilters := c.ComputedColFilters(sp, filters, optionalFilters)
-	optionalFilters = append(optionalFilters, computedColFilters...)
+	originalOptionalFilters := c.checkConstraintFilters(sp.Table)
+	computedColFilters := c.ComputedColFilters(sp, originalFilters, originalOptionalFilters)
+	originalOptionalFilters = append(originalOptionalFilters, computedColFilters...)
 
 	var iter scanIndexIter
-	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, sp, filters, rejectNonVectorIndexes)
-	iter.ForEach(func(index cat.Index, _ memo.FiltersExpr, _ opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
+	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, sp, originalFilters, rejectNonVectorIndexes)
+	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, _ opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 		if sp.Table.ColumnID(index.VectorColumn().Ordinal()) != vectorCol {
 			// This index is for a different vector column.
 			return
@@ -491,6 +494,18 @@ func (c *CustomFuncs) TryGenerateVectorSearch(
 		var prefixConstraint *constraint.Constraint
 		prefixColumns, notNullCols := idxconstraint.IndexPrefixCols(sp.Table, index)
 		if len(prefixColumns) > 0 {
+			optionalFilters := originalOptionalFilters
+			if predScalar, isPartialIdx := tab.PartialIndexPredicate(index.Ordinal()); isPartialIdx {
+				// Include the partial index predicate in the set of optional filters.
+				pred := *predScalar.(*memo.FiltersExpr)
+				if len(optionalFilters) == 0 {
+					optionalFilters = pred
+				} else {
+					optionalFilters = make(memo.FiltersExpr, 0, len(originalOptionalFilters)+len(pred))
+					optionalFilters = append(optionalFilters, originalOptionalFilters...)
+					optionalFilters = append(optionalFilters, pred...)
+				}
+			}
 			prefixConstraint, filters, ok = idxconstraint.ConstrainIndexPrefixCols(
 				c.e.ctx, c.e.evalCtx, c.e.f, prefixColumns, notNullCols, filters,
 				optionalFilters, sp.Table, index, c.checkCancellation,
@@ -552,15 +567,13 @@ func (c *CustomFuncs) TryGenerateVectorSearch(
 		}
 		vectorSearch = c.e.f.ConstructLookupJoin(vectorSearch, nil /* on */, lookupPrivate)
 
-		// Project the distance column.
-		projections := memo.ProjectionsExpr{c.e.f.ConstructProjectionsItem(distanceExpr, distanceCol)}
+		// Add back the projections, including the distance column.
 		vectorSearch = c.e.f.ConstructProject(vectorSearch, projections, passthrough)
 
 		// Build a top-k operator ordering by the distance column and limited by the
-		// NN count to obtain the final result.
-		var ord props.OrderingChoice
-		ord.AppendCol(distanceCol, false /* descending */)
-		topKPrivate := memo.TopKPrivate{K: limitInt, Ordering: ord}
+		// NN count to obtain the final result. We verified when the rule matched
+		// that the limit is ordering by the distance column.
+		topKPrivate := memo.TopKPrivate{K: limitInt, Ordering: limitOrd}
 		c.e.mem.AddTopKToGroup(&memo.TopKExpr{Input: vectorSearch, TopKPrivate: topKPrivate}, grp)
 	})
 }

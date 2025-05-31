@@ -2687,18 +2687,15 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  -- has_table_privilege function
  -- bad-input checks
  select has_table_privilege(NULL,'pg_authid','select');
-@@ -1324,11 +2438,11 @@
- (1 row)
- 
+@@ -1326,9 +2440,9 @@
  select has_table_privilege('pg_shad','select');
--ERROR:  relation "pg_shad" does not exist
-+ERROR:  has_table_privilege(): relation "pg_shad" does not exist
+ ERROR:  relation "pg_shad" does not exist
  select has_table_privilege('nosuchuser','pg_authid','select');
 -ERROR:  role "nosuchuser" does not exist
-+ERROR:  has_table_privilege(): role 'nosuchuser' does not exist
++ERROR:  role 'nosuchuser' does not exist
  select has_table_privilege('pg_authid','sel');
 -ERROR:  unrecognized privilege type: "sel"
-+ERROR:  has_table_privilege(): unrecognized privilege type: "SEL"
++ERROR:  unrecognized privilege type: "SEL"
  select has_table_privilege(-999999,'pg_authid','update');
   has_table_privilege 
  ---------------------
@@ -2862,7 +2859,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  
  select has_column_privilege('pg_authid','nosuchcol','select');
 -ERROR:  column "nosuchcol" of relation "pg_authid" does not exist
-+ERROR:  has_column_privilege(): column "nosuchcol" does not exist
++ERROR:  column "nosuchcol" does not exist
  select has_column_privilege(9999,'nosuchcol','select');
   has_column_privilege 
  ----------------------
@@ -2875,7 +2872,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
 - 
 -(1 row)
 -
-+ERROR:  has_column_privilege(): column 99 of relation pg_authid does not exist
++ERROR:  column 99 of relation pg_authid does not exist
  select has_column_privilege(9999,99::int2,'select');
   has_column_privilege 
  ----------------------
@@ -2884,28 +2881,28 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  alter table mytable drop column f2;
  select has_column_privilege('mytable','f2','select');
 -ERROR:  column "f2" of relation "mytable" does not exist
-+ERROR:  has_column_privilege(): column "f2" does not exist
++ERROR:  column "f2" does not exist
  select has_column_privilege('mytable','........pg.dropped.2........','select');
 - has_column_privilege 
 -----------------------
 - 
 -(1 row)
 -
-+ERROR:  has_column_privilege(): column "........pg.dropped.2........" does not exist
++ERROR:  column "........pg.dropped.2........" does not exist
  select has_column_privilege('mytable',2::int2,'select');
 - has_column_privilege 
 -----------------------
 - 
 -(1 row)
 -
-+ERROR:  has_column_privilege(): column 2 of relation mytable does not exist
++ERROR:  column 2 of relation mytable does not exist
  select has_column_privilege('mytable',99::int2,'select');
 - has_column_privilege 
 -----------------------
 - 
 -(1 row)
 -
-+ERROR:  has_column_privilege(): column 99 of relation mytable does not exist
++ERROR:  column 99 of relation mytable does not exist
  revoke select on table mytable from regress_priv_user3;
  select has_column_privilege('mytable',2::int2,'select');
 - has_column_privilege 
@@ -2913,14 +2910,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
 - 
 -(1 row)
 -
-+ERROR:  has_column_privilege(): column 2 of relation mytable does not exist
++ERROR:  column 2 of relation mytable does not exist
  select has_column_privilege('mytable',99::int2,'select');
 - has_column_privilege 
 -----------------------
 - 
 -(1 row)
 -
-+ERROR:  has_column_privilege(): column 99 of relation mytable does not exist
++ERROR:  column 99 of relation mytable does not exist
  drop table mytable;
  -- Grant options
  SET SESSION AUTHORIZATION regress_priv_user1;
@@ -3075,9 +3072,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
 -(1 row)
 +If you would rather not post publicly, please contact us directly
 +using the support form.
-+
-+We appreciate your feedback.
  
++We appreciate your feedback.
++
 +SELECT brin_desummarize_range('sro_brin', 0);
 +ERROR:  unknown function: brin_desummarize_range()
 +SELECT brin_summarize_range('sro_brin', 0);
@@ -3236,7 +3233,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  CREATE FUNCTION unwanted_grant_nofail(int) RETURNS int
  	IMMUTABLE LANGUAGE plpgsql AS $$
  BEGIN
-@@ -1814,52 +3065,93 @@
+@@ -1814,44 +3065,85 @@
  EXCEPTION WHEN OTHERS THEN
  	RETURN 2;
  END$$;
@@ -3336,16 +3333,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  -- has_sequence_privilege tests
  \c -
  CREATE SEQUENCE x_seq;
- GRANT USAGE on x_seq to regress_priv_user2;
- SELECT has_sequence_privilege('regress_priv_user1', 'atest1', 'SELECT');
--ERROR:  "atest1" is not a sequence
-+ERROR:  has_sequence_privilege(): "atest1" is not a sequence
- SELECT has_sequence_privilege('regress_priv_user1', 'x_seq', 'INSERT');
--ERROR:  unrecognized privilege type: "INSERT"
-+ERROR:  has_sequence_privilege(): unrecognized privilege type: "INSERT"
- SELECT has_sequence_privilege('regress_priv_user1', 'x_seq', 'SELECT');
-  has_sequence_privilege 
- ------------------------
 @@ -1867,6 +3159,12 @@
  (1 row)
  
@@ -3824,7 +3811,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
 - f    | f   | f
 -(1 row)
 -
-+ERROR:  pg_has_role(): role 'pg_database_owner' does not exist
++ERROR:  role 'pg_database_owner' does not exist
  BEGIN;
  DO $$BEGIN EXECUTE format(
  	'ALTER DATABASE %I OWNER TO regress_priv_group2', current_catalog); END$$;
@@ -4018,7 +4005,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  (1 row)
  
  DROP OWNED BY regress_priv_user2, regress_priv_user2;
-@@ -2368,46 +3737,76 @@
+@@ -2368,46 +3737,61 @@
  (1 row)
  
  ROLLBACK;
@@ -4061,7 +4048,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
 - f
 -(1 row)
 -
-+ERROR:  has_function_privilege(): unknown function: testns.agg1()
++ERROR:  unknown function: testns.agg1()
  SELECT has_function_privilege('regress_priv_user2', 'testns.bar()', 'EXECUTE'); -- no
   has_function_privilege 
  ------------------------
@@ -4070,21 +4057,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  (1 row)
  
  ALTER DEFAULT PRIVILEGES IN SCHEMA testns GRANT EXECUTE ON ROUTINES to public;
-+ERROR:  at or near "to": syntax error: unimplemented: this syntax
-+DETAIL:  source SQL:
-+ALTER DEFAULT PRIVILEGES IN SCHEMA testns GRANT EXECUTE ON ROUTINES to public
-+                                                                    ^
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+
-+Please check the public issue tracker to check whether this problem is
-+already tracked. If you cannot find it there, please report the error
-+with details by creating a new issue.
-+
-+If you would rather not post publicly, please contact us directly
-+using the support form.
-+
-+We appreciate your feedback.
-+
  DROP FUNCTION testns.foo();
  CREATE FUNCTION testns.foo() RETURNS int AS 'select 1' LANGUAGE sql;
  DROP AGGREGATE testns.agg1(int);
@@ -4104,7 +4076,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  DROP PROCEDURE testns.bar();
  CREATE PROCEDURE testns.bar() AS 'select 1' LANGUAGE sql;
  SELECT has_function_privilege('regress_priv_user2', 'testns.foo()', 'EXECUTE'); -- yes
-@@ -2417,11 +3816,7 @@
+@@ -2417,11 +3801,7 @@
  (1 row)
  
  SELECT has_function_privilege('regress_priv_user2', 'testns.agg1(int)', 'EXECUTE'); -- yes
@@ -4113,11 +4085,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
 - t
 -(1 row)
 -
-+ERROR:  has_function_privilege(): unknown function: testns.agg1()
++ERROR:  unknown function: testns.agg1()
  SELECT has_function_privilege('regress_priv_user2', 'testns.bar()', 'EXECUTE'); -- yes (counts as function here)
   has_function_privilege 
  ------------------------
-@@ -2430,36 +3825,57 @@
+@@ -2430,25 +3810,47 @@
  
  DROP FUNCTION testns.foo();
  DROP AGGREGATE testns.agg1(int);
@@ -4142,7 +4114,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
 - f
 -(1 row)
 -
-+ERROR:  has_type_privilege(): type 'testns.priv_testdomain1' does not exist
++ERROR:  type 'testns.priv_testdomain1' does not exist
  ALTER DEFAULT PRIVILEGES IN SCHEMA testns GRANT USAGE ON TYPES to public;
  DROP DOMAIN testns.priv_testdomain1;
 +ERROR:  at or near "testns": syntax error: unimplemented: this syntax
@@ -4164,7 +4136,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
 - t
 -(1 row)
 -
-+ERROR:  has_type_privilege(): type 'testns.priv_testdomain1' does not exist
++ERROR:  type 'testns.priv_testdomain1' does not exist
  DROP DOMAIN testns.priv_testdomain1;
 +ERROR:  at or near "testns": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
@@ -4175,11 +4147,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  RESET ROLE;
  SELECT count(*)
    FROM pg_default_acl d LEFT JOIN pg_namespace n ON defaclnamespace = n.oid
-   WHERE nspname = 'testns';
-  count 
- -------
--     3
-+     2
+@@ -2459,7 +3861,6 @@
  (1 row)
  
  DROP SCHEMA testns CASCADE;
@@ -4187,7 +4155,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  DROP SCHEMA testns2 CASCADE;
  DROP SCHEMA testns3 CASCADE;
  DROP SCHEMA testns4 CASCADE;
-@@ -2510,6 +3926,12 @@
+@@ -2510,6 +3911,12 @@
  
  CREATE FUNCTION testns.priv_testfunc(int) RETURNS int AS 'select 3 * $1;' LANGUAGE sql;
  CREATE AGGREGATE testns.priv_testagg(int) (sfunc = int4pl, stype = int4);
@@ -4200,7 +4168,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  CREATE PROCEDURE testns.priv_testproc(int) AS 'select 3' LANGUAGE sql;
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testfunc(int)', 'EXECUTE'); -- true by default
   has_function_privilege 
-@@ -2518,11 +3940,7 @@
+@@ -2518,11 +3925,7 @@
  (1 row)
  
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testagg(int)', 'EXECUTE'); -- true by default
@@ -4209,11 +4177,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
 - t
 -(1 row)
 -
-+ERROR:  has_function_privilege(): unknown function: testns.priv_testagg()
++ERROR:  unknown function: testns.priv_testagg()
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testproc(int)', 'EXECUTE'); -- true by default
   has_function_privilege 
  ------------------------
-@@ -2533,15 +3951,11 @@
+@@ -2533,15 +3936,11 @@
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testfunc(int)', 'EXECUTE'); -- false
   has_function_privilege 
  ------------------------
@@ -4227,11 +4195,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
 - f
 -(1 row)
 -
-+ERROR:  has_function_privilege(): unknown function: testns.priv_testagg()
++ERROR:  unknown function: testns.priv_testagg()
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testproc(int)', 'EXECUTE'); -- still true, not a function
   has_function_privilege 
  ------------------------
-@@ -2552,10 +3966,15 @@
+@@ -2552,7 +3951,7 @@
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testproc(int)', 'EXECUTE'); -- now false
   has_function_privilege 
  ------------------------
@@ -4240,15 +4208,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  (1 row)
  
  GRANT ALL ON ALL ROUTINES IN SCHEMA testns TO PUBLIC;
-+ERROR:  at or near "routines": syntax error
-+DETAIL:  source SQL:
-+GRANT ALL ON ALL ROUTINES IN SCHEMA testns TO PUBLIC
-+                 ^
-+HINT:  try \h GRANT
- SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testfunc(int)', 'EXECUTE'); -- true
-  has_function_privilege 
- ------------------------
-@@ -2563,11 +3982,7 @@
+@@ -2563,11 +3962,7 @@
  (1 row)
  
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testagg(int)', 'EXECUTE'); -- true
@@ -4257,11 +4217,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
 - t
 -(1 row)
 -
-+ERROR:  has_function_privilege(): unknown function: testns.priv_testagg()
++ERROR:  unknown function: testns.priv_testagg()
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testproc(int)', 'EXECUTE'); -- true
   has_function_privilege 
  ------------------------
-@@ -2575,38 +3990,52 @@
+@@ -2575,38 +3970,52 @@
  (1 row)
  
  DROP SCHEMA testns CASCADE;
@@ -4326,7 +4286,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  -- test that dependent privileges are revoked (or not) properly
  \c -
  set session role regress_priv_user1;
-@@ -2620,59 +4049,179 @@
+@@ -2620,59 +4029,179 @@
  set session role regress_priv_user4;
  grant select on dep_priv_test to regress_priv_user5;
  \dp dep_priv_test
@@ -4537,7 +4497,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  DROP TABLE atest1;
  DROP TABLE atest2;
  DROP TABLE atest3;
-@@ -2680,108 +4229,214 @@
+@@ -2680,108 +4209,214 @@
  DROP TABLE atest5;
  DROP TABLE atest6;
  DROP TABLE atestc;
@@ -4765,7 +4725,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  -- clean up
  DROP TABLE lock_table;
  DROP USER regress_locktable_user;
-@@ -2791,24 +4446,17 @@
+@@ -2791,24 +4426,17 @@
  \c -
  CREATE ROLE regress_readallstats;
  SELECT has_table_privilege('regress_readallstats','pg_backend_memory_contexts','SELECT'); -- no
@@ -4774,7 +4734,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
 - f
 -(1 row)
 -
-+ERROR:  has_table_privilege(): relation "pg_backend_memory_contexts" does not exist
++ERROR:  relation "pg_backend_memory_contexts" does not exist
  SELECT has_table_privilege('regress_readallstats','pg_shmem_allocations','SELECT'); -- no
   has_table_privilege 
  ---------------------
@@ -4790,11 +4750,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
 - t
 -(1 row)
 -
-+ERROR:  has_table_privilege(): relation "pg_backend_memory_contexts" does not exist
++ERROR:  relation "pg_backend_memory_contexts" does not exist
  SELECT has_table_privilege('regress_readallstats','pg_shmem_allocations','SELECT'); -- yes
   has_table_privilege 
  ---------------------
-@@ -2818,11 +4466,7 @@
+@@ -2818,11 +4446,7 @@
  -- run query to ensure that functions within views can be executed
  SET ROLE regress_readallstats;
  SELECT COUNT(*) >= 0 AS ok FROM pg_backend_memory_contexts;
@@ -4807,7 +4767,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT COUNT(*) >= 0 AS ok FROM pg_shmem_allocations;
   ok 
  ----
-@@ -2838,28 +4482,48 @@
+@@ -2838,28 +4462,48 @@
  CREATE ROLE regress_group_indirect_manager;
  CREATE ROLE regress_group_member;
  GRANT regress_group TO regress_group_direct_manager WITH INHERIT FALSE, ADMIN TRUE;
@@ -4866,7 +4826,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  DROP ROLE regress_group;
  DROP ROLE regress_group_direct_manager;
  DROP ROLE regress_group_indirect_manager;
-@@ -2871,22 +4535,59 @@
+@@ -2871,22 +4515,59 @@
  CREATE SCHEMA regress_roleoption;
  GRANT CREATE, USAGE ON SCHEMA regress_roleoption TO PUBLIC;
  GRANT regress_roleoption_donor TO regress_roleoption_protagonist WITH INHERIT TRUE, SET FALSE;

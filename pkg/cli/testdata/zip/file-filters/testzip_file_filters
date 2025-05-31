@@ -117,6 +117,7 @@ debug/system.tenant_settings.txt
 debug/system.tenant_tasks.txt
 debug/system.tenant_usage.txt
 debug/system.tenants.txt
+debug/system.zones.txt
 debug/tenant_ranges.err.txt
 
 
@@ -246,6 +247,7 @@ debug/system.tenant_settings.txt
 debug/system.tenant_tasks.txt
 debug/system.tenant_usage.txt
 debug/system.tenants.txt
+debug/system.zones.txt
 debug/tenant_ranges.err.txt
 
 
@@ -406,6 +408,7 @@ debug/system.tenant_settings.txt
 debug/system.tenant_tasks.txt
 debug/system.tenant_usage.txt
 debug/system.tenants.txt
+debug/system.zones.txt
 debug/tenant_ranges.err.txt
 
 
@@ -541,6 +544,7 @@ debug/system.tenant_settings.txt
 debug/system.tenant_tasks.txt
 debug/system.tenant_usage.txt
 debug/system.tenants.txt
+debug/system.zones.txt
 debug/tenant_ranges.err.txt
 
 #include only txt files with system table file exclustion

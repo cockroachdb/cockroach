@@ -86,13 +86,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/btree_index.out -
  -- "lost".
  --
  CREATE INDEX bt_i4_index ON bt_i4_heap USING btree (seqno int4_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  CREATE INDEX bt_name_index ON bt_name_heap USING btree (seqno name_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  CREATE INDEX bt_txt_index ON bt_txt_heap USING btree (seqno text_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  CREATE INDEX bt_f8_index ON bt_f8_heap USING btree (seqno float8_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  --
  -- test retrieval of min/max keys for each index
  --

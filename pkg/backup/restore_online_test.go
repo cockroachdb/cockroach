@@ -8,6 +8,10 @@ package backup
 import (
 	"context"
 	"fmt"
+	"math/rand"
+	"net/url"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -26,10 +30,28 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
+
+var orParams = base.TestClusterArgs{
+	// Online restore is not supported in a secondary tenant yet.
+	ServerArgs: base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	},
+}
+
+var latestDownloadJobIDQuery = `SELECT id FROM system.jobs WHERE description LIKE '%Background Data Download%' ORDER BY created DESC LIMIT 1`
+
+func onlineImpl(rng *rand.Rand) string {
+	opt := "EXPERIMENTAL DEFERRED COPY"
+	if rng.Intn(2) == 0 {
+		opt = "EXPERIMENTAL COPY"
+	}
+	return opt
+}
 
 func TestOnlineRestoreBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -40,16 +62,11 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	ctx := context.Background()
 
 	const numAccounts = 1000
-	params := base.TestClusterArgs{
-		// Online restore is not supported in a secondary tenant yet.
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-		},
-	}
-	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
+
+	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, orParams)
 	defer cleanupFn()
 
-	rtc, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
+	rtc, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, orParams)
 	defer cleanupFnRestored()
 
 	externalStorage := "nodelocal://1/backup"
@@ -92,6 +109,111 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	})
 
 }
+
+func TestOnlineRestoreRecovery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tmpDir := t.TempDir()
+
+	defer nodelocal.ReplaceNodeLocalForTesting(tmpDir)()
+
+	const numAccounts = 1000
+
+	externalStorage := "nodelocal://1/backup"
+
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, orParams)
+	defer cleanupFn()
+
+	restoreToPausedDownloadJob := func(t *testing.T, newDBName string) int {
+		defer func() {
+			sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+		}()
+		sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_download'")
+		sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", externalStorage))
+		var linkJobID int
+		sqlDB.QueryRow(t, fmt.Sprintf("RESTORE DATABASE data FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY, new_db_name=%s, detached", externalStorage, newDBName)).Scan(&linkJobID)
+		jobutils.WaitForJobToSucceed(t, sqlDB, jobspb.JobID(linkJobID))
+		var downloadJobID int
+		sqlDB.QueryRow(t, latestDownloadJobIDQuery).Scan(&downloadJobID)
+		jobutils.WaitForJobToPause(t, sqlDB, jobspb.JobID(downloadJobID))
+
+		var dbExists bool
+		sqlDB.QueryRow(t, fmt.Sprintf("SELECT count(*) > 0 FROM system.namespace WHERE name = '%s'", newDBName)).Scan(&dbExists)
+		require.True(t, dbExists, "database should exist")
+
+		var externalBytes int64
+		sqlDB.QueryRow(t, jobutils.GetExternalBytesForConnectedTenant).Scan(&externalBytes)
+		require.Greater(t, externalBytes, int64(0), "external bytes should be greater than 0")
+		return downloadJobID
+	}
+
+	checkRecovery := func(t *testing.T, dbName string) {
+		sqlDB.CheckQueryResults(t, jobutils.GetExternalBytesForConnectedTenant, [][]string{{"0"}})
+		var dbExists bool
+		sqlDB.QueryRow(t, fmt.Sprintf("SELECT count(*) > 0 FROM system.namespace WHERE name = '%s'", dbName)).Scan(&dbExists)
+		require.False(t, dbExists, "database %s should not exist", dbName)
+	}
+
+	t.Run("cancel download job", func(t *testing.T) {
+		dbName := "data_cancel"
+		downloadJobID := restoreToPausedDownloadJob(t, dbName)
+		sqlDB.Exec(t, fmt.Sprintf("CANCEL JOB %d", downloadJobID))
+		jobutils.WaitForJobToCancel(t, sqlDB, jobspb.JobID(downloadJobID))
+		checkRecovery(t, dbName)
+	})
+	t.Run("delete file", func(t *testing.T) {
+		dbName := "data_delete"
+		downloadJobID := restoreToPausedDownloadJob(t, dbName)
+		corruptBackup(t, sqlDB, tmpDir, externalStorage)
+		sqlDB.ExpectErr(t, "no such file or directory", "SELECT count(*) FROM data_delete.bank")
+		sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", downloadJobID))
+		jobutils.WaitForJobToFail(t, sqlDB, jobspb.JobID(downloadJobID))
+		checkRecovery(t, dbName)
+	})
+	t.Run("cancel link job", func(t *testing.T) {
+		dbName := "data_link"
+		defer func() {
+			sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+		}()
+		sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_publishing_descriptors'")
+		sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", externalStorage))
+		var linkJobID int
+		sqlDB.QueryRow(t, fmt.Sprintf("RESTORE DATABASE data FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY, new_db_name=%s, detached", externalStorage, dbName)).Scan(&linkJobID)
+		jobutils.WaitForJobToPause(t, sqlDB, jobspb.JobID(linkJobID))
+		sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+		sqlDB.Exec(t, fmt.Sprintf("CANCEL JOB %d", linkJobID))
+		jobutils.WaitForJobToCancel(t, sqlDB, jobspb.JobID(linkJobID))
+		checkRecovery(t, dbName)
+	})
+	t.Run("delete file block job", func(t *testing.T) {
+		dbName := "data_block"
+		defer func() {
+			sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+		}()
+		sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_download'")
+		sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", externalStorage))
+		var blockingJobID int
+		sqlDB.QueryRow(t, fmt.Sprintf("RESTORE DATABASE data FROM LATEST IN '%s' WITH EXPERIMENTAL COPY, new_db_name=%s, detached", externalStorage, dbName)).Scan(&blockingJobID)
+		jobutils.WaitForJobToPause(t, sqlDB, jobspb.JobID(blockingJobID))
+		corruptBackup(t, sqlDB, tmpDir, externalStorage)
+		sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+		sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", blockingJobID))
+		jobutils.WaitForJobToFail(t, sqlDB, jobspb.JobID(blockingJobID))
+		checkRecovery(t, dbName)
+	})
+}
+
+func corruptBackup(t *testing.T, sqlDB *sqlutils.SQLRunner, ioDir string, uri string) {
+	var filePath string
+	filePathQuery := fmt.Sprintf("SELECT path FROM [SHOW BACKUP FILES FROM LATEST IN '%s'] LIMIT 1", uri)
+	parsedURI, err := url.Parse(strings.Replace(uri, "'", "", -1))
+	sqlDB.QueryRow(t, filePathQuery).Scan(&filePath)
+	fullPath := filepath.Join(ioDir, parsedURI.Path, filePath)
+	require.NoError(t, err)
+	require.NoError(t, os.Remove(fullPath))
+}
+
 func TestOnlineRestorePartitioned(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -116,6 +238,36 @@ func TestOnlineRestorePartitioned(t *testing.T) {
 	srv.Servers[0].JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 
 	sqlDB.Exec(t, fmt.Sprintf(`SHOW JOB WHEN COMPLETE %s`, j[0][4]))
+}
+
+func TestOnlineRestoreLinkCheckpoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	rng, _ := randutil.NewTestRand()
+
+	const numAccounts = 10
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
+		t,
+		singleNode,
+		numAccounts,
+		InitManualReplication,
+		orParams,
+	)
+	defer cleanupFn()
+	sqlDB.Exec(t, "BACKUP DATABASE data INTO $1", localFoo)
+	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints  = 'restore.before_publishing_descriptors'")
+	var jobID jobspb.JobID
+	stmt := fmt.Sprintf("RESTORE DATABASE data FROM LATEST IN $1 WITH OPTIONS (new_db_name='data2', %s, detached)", onlineImpl(rng))
+	sqlDB.QueryRow(t, stmt, localFoo).Scan(&jobID)
+	jobutils.WaitForJobToPause(t, sqlDB, jobID)
+
+	// Set a pauspoint during the link phase which should not get hit because of
+	// checkpointing.
+	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints  = 'restore.before_link'")
+	sqlDB.Exec(t, "RESUME JOB $1", jobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
 }
 
 func TestOnlineRestoreStatementResult(t *testing.T) {
@@ -215,7 +367,7 @@ func TestOnlineRestoreWaitForDownload(t *testing.T) {
 func waitForLatestDownloadJobToSucceed(t *testing.T, sqlDB *sqlutils.SQLRunner) {
 	var downloadJobID jobspb.JobID
 	sqlDB.QueryRow(t,
-		`SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%' ORDER BY created DESC LIMIT 1`,
+		latestDownloadJobIDQuery,
 	).Scan(&downloadJobID)
 	jobutils.WaitForJobToSucceed(t, sqlDB, downloadJobID)
 }

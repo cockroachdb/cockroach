@@ -6,7 +6,6 @@ go_library(
         "commandbuilder.go",
         "disk_stall.go",
         "disk_usage.go",
-        "health_checker.go",
         "httpclient.go",
         "jaeger.go",
         "load_group.go",
@@ -27,6 +26,7 @@ go_library(
         "//pkg/cmd/roachtest/test",
         "//pkg/kv/kvpb",
         "//pkg/roachprod/config",
+        "//pkg/roachprod/failureinjection/failures",
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/testutils",
@@ -41,10 +41,12 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/workload/histogram/exporter",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_google_pprof//profile",
         "@com_github_prometheus_client_model//go",
         "@com_github_prometheus_common//expfmt",
         "@com_github_stretchr_testify//require",
         "@org_golang_x_exp//maps",
+        "@org_golang_x_sync//errgroup",
     ],
 )
 

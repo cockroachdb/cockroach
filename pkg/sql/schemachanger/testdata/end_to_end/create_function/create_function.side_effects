@@ -129,7 +129,7 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
-       time: {}
+     schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "2"
   +  version: "3"
@@ -272,7 +272,7 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
-       time: {}
+     schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "2"
   +  version: "3"

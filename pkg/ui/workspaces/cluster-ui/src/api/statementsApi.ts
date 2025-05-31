@@ -120,7 +120,7 @@ export const getStatementDetails = (
     end: req.end.toInt(),
   });
   for (const app of req.app_names) {
-    queryStr += `&appNames=${app}`;
+    queryStr += `&appNames=${encodeURIComponent(app)}`;
   }
   return fetchData(
     cockroach.server.serverpb.StatementDetailsResponse,

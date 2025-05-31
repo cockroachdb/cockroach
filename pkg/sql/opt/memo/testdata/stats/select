@@ -3244,7 +3244,7 @@ CREATE TABLE t84478 (
 )
 ----
 
-norm
+norm disable=SimplifyLeftJoinWithZeroRowsRight
 SELECT
   NULL, 1
 FROM

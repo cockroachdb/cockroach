@@ -53,7 +53,7 @@ stats: val_bytes=-50 live_bytes=-50 intent_count=-1 intent_bytes=-19 lock_count=
 resolve_intent: "k/30" -> resolved key = true
 stats: key_count=-1 key_bytes=-17 val_count=-1 val_bytes=-57 live_count=-1 live_bytes=-74 intent_count=-1 intent_bytes=-19 lock_count=-1 lock_age=-89
 >> at end:
-txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 gul=0,0 isn=1
 data: "k"/11.000000000,0 -> /BYTES/b
 data: "k/10"/11.000000000,0 -> /BYTES/10
 data: "k/20"/11.000000000,0 -> /BYTES/20
@@ -125,7 +125,7 @@ stats: key_count=-1 key_bytes=-17 val_count=-1 val_bytes=-57 live_count=-1 live_
 resolve_intent: "k/30" -> resolved key = true
 stats: val_bytes=-50 live_bytes=-50 intent_count=-1 intent_bytes=-19 lock_count=-1 lock_age=-89
 >> at end:
-txn: "A" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 gul=0,0 isn=1
 data: "k"/11.000000000,0 -> /BYTES/c
 data: "k/10"/11.000000000,0 -> /BYTES/10
 data: "k/30"/11.000000000,0 -> /BYTES/30
@@ -157,7 +157,7 @@ put: lock acquisition = {b id=00000003 key="b" iso=Serializable pri=0.00000000 e
 meta: "b" -> txn={id=00000003 key="b" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=20} ts=12.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "b" -> /BYTES/b @12.000000000,0
 >> at end:
-txn: "B" meta={id=00000003 key="b" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=12.000000000,0 wto=false gul=0,0
+txn: "B" meta={id=00000003 key="b" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=12.000000000,0 gul=0,0
 meta: "b"/0,0 -> txn={id=00000003 key="b" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=20} ts=12.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "b"/12.000000000,0 -> /BYTES/b
 data: "k"/11.000000000,0 -> /BYTES/c
@@ -175,7 +175,7 @@ with t=B k=b
 resolve_intent: "b" -> resolved key = true
 get: "b" -> <no data>
 >> at end:
-txn: "B" meta={id=00000003 key="b" iso=Serializable pri=0.00000000 epo=1 ts=12.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=12.000000000,0 wto=false gul=0,0 isn=1
+txn: "B" meta={id=00000003 key="b" iso=Serializable pri=0.00000000 epo=1 ts=12.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=12.000000000,0 gul=0,0 isn=1
 data: "k"/11.000000000,0 -> /BYTES/c
 data: "k/10"/11.000000000,0 -> /BYTES/10
 data: "k/30"/11.000000000,0 -> /BYTES/30

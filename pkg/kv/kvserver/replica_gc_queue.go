@@ -315,7 +315,7 @@ func (rgcq *replicaGCQueue) process(
 		// possible if we currently think we're processing a pre-emptive snapshot
 		// but discover in RemoveReplica that this range has since been added and
 		// knows that.
-		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, RemoveOptions{
+		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, "MVCC GC queue", RemoveOptions{
 			DestroyData: true,
 		}); err != nil {
 			// Should never get an error from RemoveReplica.
@@ -359,7 +359,7 @@ func (rgcq *replicaGCQueue) process(
 		// A tombstone is written with a value of mergedTombstoneReplicaID because
 		// we know the range to have been merged. See the Merge case of
 		// runPreApplyTriggers() for details.
-		if err := repl.store.RemoveReplica(ctx, repl, mergedTombstoneReplicaID, RemoveOptions{
+		if err := repl.store.RemoveReplica(ctx, repl, mergedTombstoneReplicaID, "dangling subsume via MVCC GC queue", RemoveOptions{
 			DestroyData: true,
 		}); err != nil {
 			return false, err

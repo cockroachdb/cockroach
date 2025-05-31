@@ -36,11 +36,76 @@ func (allMatcher) MatchString(string) bool {
 	return true
 }
 
-// callback holds regexp pattern match and GossipCallback method.
+// This is how multiple callback registrations are handled:
+/*
++------------------+     +------------------+     +------------------+
+| Callback Reg 1   |     | Callback Reg 2   | ... | Callback Reg N   |
+| Pattern: "key1.*"|     | Pattern: "key2.*"| ... | Pattern: "keyN.*"|
++------------------+     +------------------+     +------------------+
+        |                        |                        |
+        v                        v                        v
++------------------+     +------------------+     +------------------+
+| callbackWorker 1 |     | callbackWorker 2 | ... | callbackWorker N |
+| - callbackCh     |     | - callbackCh     | ... | - callbackCh     |
+| - stopperCh      |     | - stopperCh      | ... | - stopperCh      |
+| - workQueue      |     | - workQueue      | ... | - workQueue      |
++------------------+     +------------------+     +------------------+
+        |                        |                        |
+        v                        v                        v
++------------------+     +------------------+     +------------------+
+| Worker Goroutine |     | Worker Goroutine | ... | Worker Goroutine |
+| 1                |     | 2                | ... | N                |
++------------------+     +------------------+     +------------------+
+*/
+// When a new info is added, it is checked against all the callback matchers.
+// The work is added inside each workQueue which matches the info key.
+// Each worker goroutine independently processes its own workQueue in FIFO
+// order.
+
+// callback holds regexp pattern match, GossipCallback method, and a queue of
+// remaining work items.
 type callback struct {
 	matcher   stringMatcher
 	method    Callback
 	redundant bool
+	// cw contains all the information needed to orchestrate, schedule, and run
+	// callbacks for this specific matcher.
+	cw *callbackWork
+}
+
+// callbackWorkItem is a struct that contains the information needed to run
+// a callback.
+type callbackWorkItem struct {
+	// schedulingTime is the time when the callback was scheduled.
+	schedulingTime time.Time
+	method         Callback
+	key            string
+	content        roachpb.Value
+}
+
+type callbackWork struct {
+	// callbackCh is used to signal the callback worker to execute the work.
+	callbackCh chan struct{}
+	// stopperCh is used to signal the callback worker to stop.
+	stopperCh chan struct{}
+	mu        struct {
+		syncutil.Mutex
+		// workQueue contains the queue of callbacks that need to be called.
+		workQueue []callbackWorkItem
+	}
+}
+
+func newCallbackWork() *callbackWork {
+	return &callbackWork{
+		callbackCh: make(chan struct{}, 1),
+		stopperCh:  make(chan struct{}, 1),
+		mu: struct {
+			syncutil.Mutex
+			workQueue []callbackWorkItem
+		}{
+			workQueue: make([]callbackWorkItem, 0),
+		},
+	}
 }
 
 // infoStore objects manage maps of Info objects. They maintain a
@@ -64,10 +129,6 @@ type infoStore struct {
 	NodeAddr        util.UnresolvedAddr      `json:"-"`               // Address of node owning this info store: "host:port"
 	highWaterStamps map[roachpb.NodeID]int64 // Per-node information for gossip peers
 	callbacks       []*callback
-
-	callbackWorkMu syncutil.Mutex // Protects callbackWork
-	callbackWork   []func()
-	callbackCh     chan struct{} // Channel to signal the callback goroutine
 }
 
 var monoTime struct {
@@ -167,34 +228,58 @@ func newInfoStore(
 		Infos:           make(infoMap),
 		NodeAddr:        nodeAddr,
 		highWaterStamps: map[roachpb.NodeID]int64{},
-		callbackCh:      make(chan struct{}, 1),
 	}
+	return is
+}
 
+// launchCallbackWorker launches a worker goroutine that is responsible for
+// executing callbacks for one registered callback pattern.
+func (is *infoStore) launchCallbackWorker(ambient log.AmbientContext, cw *callbackWork) {
 	bgCtx := ambient.AnnotateCtx(context.Background())
-	_ = is.stopper.RunAsyncTask(bgCtx, "infostore", func(ctx context.Context) {
+	_ = is.stopper.RunAsyncTask(bgCtx, "callback worker", func(ctx context.Context) {
 		for {
 			for {
-				is.callbackWorkMu.Lock()
-				work := is.callbackWork
-				is.callbackWork = nil
-				is.callbackWorkMu.Unlock()
+				cw.mu.Lock()
+				wq := cw.mu.workQueue
+				cw.mu.workQueue = nil
+				cw.mu.Unlock()
 
-				if len(work) == 0 {
+				if len(wq) == 0 {
 					break
 				}
-				for _, w := range work {
-					w()
+
+				// Execute all the callbacks in the queue, making sure to update the
+				// metrics accordingly.
+				for _, work := range wq {
+					afterQueue := timeutil.Now()
+					queueDur := afterQueue.Sub(work.schedulingTime)
+					is.metrics.CallbacksPending.Dec(1)
+					if queueDur >= minCallbackDurationToRecord {
+						is.metrics.CallbacksPendingDuration.RecordValue(queueDur.Nanoseconds())
+					}
+
+					work.method(work.key, work.content)
+
+					afterProcess := timeutil.Now()
+					processDur := afterProcess.Sub(afterQueue)
+					is.metrics.CallbacksProcessed.Inc(1)
+					if processDur > minCallbackDurationToRecord {
+						is.metrics.CallbacksProcessingDuration.RecordValue(processDur.Nanoseconds())
+					}
+					afterQueue = afterProcess // update for next iteration
 				}
 			}
 
 			select {
-			case <-is.callbackCh:
+			case <-cw.callbackCh:
+				// New work has just arrived.
 			case <-is.stopper.ShouldQuiesce():
+				return
+			case <-cw.stopperCh:
 				return
 			}
 		}
 	})
-	return is
 }
 
 // newInfo allocates and returns a new info object using the specified
@@ -312,10 +397,13 @@ func (is *infoStore) registerCallback(
 		opt.apply(cb)
 	}
 
+	cb.cw = newCallbackWork()
+	is.launchCallbackWorker(is.AmbientContext, cb.cw)
 	is.callbacks = append(is.callbacks, cb)
+
 	if err := is.visitInfos(func(key string, i *Info) error {
 		if matcher.MatchString(key) {
-			is.runCallbacks(key, i.Value, method)
+			is.runCallbacks(key, i.Value, cb)
 		}
 		return nil
 	}, true /* deleteExpired */); err != nil {
@@ -323,6 +411,10 @@ func (is *infoStore) registerCallback(
 	}
 
 	return func() {
+		// Stop the callback worker's goroutine.
+		cb.cw.stopperCh <- struct{}{}
+
+		// Remove the callback from the list.
 		for i, targetCB := range is.callbacks {
 			if targetCB == cb {
 				numCBs := len(is.callbacks)
@@ -339,50 +431,40 @@ func (is *infoStore) registerCallback(
 // matching each callback's regular expression against the key and invoking
 // the corresponding callback method on a match.
 func (is *infoStore) processCallbacks(key string, content roachpb.Value, changed bool) {
-	var matches []Callback
+	var callbacks []*callback
 	for _, cb := range is.callbacks {
 		if (changed || cb.redundant) && cb.matcher.MatchString(key) {
-			matches = append(matches, cb.method)
+			callbacks = append(callbacks, cb)
 		}
 	}
-	is.runCallbacks(key, content, matches...)
+	is.runCallbacks(key, content, callbacks...)
 }
 
-func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks ...Callback) {
+// runCallbacks receives a list of callbacks and contents that match the key.
+// It adds work to the callback work slices, and signals the associated callback
+// workers to execute the work.
+func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks ...*callback) {
 	// Add the callbacks to the callback work list.
 	beforeQueue := timeutil.Now()
 	is.metrics.CallbacksPending.Inc(int64(len(callbacks)))
-	f := func() {
-		afterQueue := timeutil.Now()
-		for _, method := range callbacks {
-			queueDur := afterQueue.Sub(beforeQueue)
-			is.metrics.CallbacksPending.Dec(1)
-			if queueDur >= minCallbackDurationToRecord {
-				is.metrics.CallbacksPendingDuration.RecordValue(queueDur.Nanoseconds())
-			}
+	for _, cb := range callbacks {
+		cb.cw.mu.Lock()
+		cb.cw.mu.workQueue = append(cb.cw.mu.workQueue, callbackWorkItem{
+			schedulingTime: beforeQueue,
+			method:         cb.method,
+			key:            key,
+			content:        content,
+		})
+		cb.cw.mu.Unlock()
 
-			method(key, content)
-
-			afterProcess := timeutil.Now()
-			processDur := afterProcess.Sub(afterQueue)
-			is.metrics.CallbacksProcessed.Inc(1)
-			if processDur > minCallbackDurationToRecord {
-				is.metrics.CallbacksProcessingDuration.RecordValue(processDur.Nanoseconds())
-			}
-			afterQueue = afterProcess // update for next iteration
+		// Signal the associated callback worker goroutine. Callbacks run in a
+		// goroutine to avoid mutex reentry. We also guarantee callbacks are run
+		// in order such that if a key is updated twice in succession, the second
+		// callback will never be run before the first.
+		select {
+		case cb.cw.callbackCh <- struct{}{}:
+		default:
 		}
-	}
-	is.callbackWorkMu.Lock()
-	is.callbackWork = append(is.callbackWork, f)
-	is.callbackWorkMu.Unlock()
-
-	// Signal the callback goroutine. Callbacks run in a goroutine to avoid mutex
-	// reentry. We also guarantee callbacks are run in order such that if a key
-	// is updated twice in succession, the second callback will never be run
-	// before the first.
-	select {
-	case is.callbackCh <- struct{}{}:
-	default:
 	}
 }
 

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -29,11 +30,20 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 	}
 	b.IncrementSchemaChangeCreateCounter("function")
 
-	dbElts, scElts := b.ResolveTargetObject(n.Name.ToUnresolvedObjectName(), privilege.CREATE)
+	var dbElts, scElts ElementResultSet
+	if resolveTemporaryStatus(n.Name.ObjectNamePrefix, tree.PersistencePermanent) {
+		dbElts, scElts = MaybeCreateOrResolveTemporarySchema(b)
+	} else {
+		dbElts, scElts = b.ResolveTargetObject(n.Name.ToUnresolvedObjectName(), privilege.CREATE)
+	}
 	_, _, sc := scpb.FindSchema(scElts)
 	_, _, db := scpb.FindDatabase(dbElts)
 	_, _, scName := scpb.FindNamespace(scElts)
 	_, _, dbname := scpb.FindNamespace(dbElts)
+
+	if sc.IsTemporary {
+		panic(unimplemented.NewWithIssue(104687, "cannot create user-defined functions under a temporary schema"))
+	}
 
 	n.Name.SchemaName = tree.Name(scName.Name)
 	n.Name.CatalogName = tree.Name(dbname.Name)

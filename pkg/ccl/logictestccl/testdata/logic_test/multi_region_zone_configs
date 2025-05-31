@@ -805,7 +805,7 @@ regional_by_row_as  CREATE TABLE public.regional_by_row_as (
                       CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                       INDEX regional_by_row_as_i_idx (i ASC),
                       FAMILY fam_0_cr_pk_i (cr, pk, i, crdb_region)
-                    ) LOCALITY REGIONAL BY ROW
+                    ) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT ZONE_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row_as]
@@ -1950,7 +1950,7 @@ TABLE tbl11  ALTER TABLE tbl11 CONFIGURE ZONE USING
                constraints = '[]',
                lease_preferences = '[]'
 
-query error pq: crdb_internal\.reset_multi_region_zone_configs_for_table\(\): error resolving referenced table ID 1: relation "\[1\]" does not exist
+query error pq: error resolving referenced table ID 1: relation "\[1\]" does not exist
 SELECT crdb_internal.reset_multi_region_zone_configs_for_table(1)
 
 subtest reset_multi_region_zone_configs_database
@@ -2062,7 +2062,7 @@ let $descriptor_table_id
 SELECT table_id FROM crdb_internal.tables WHERE schema_name = 'public' AND name = 'descriptor'
 
 # Validate that builtin errors if called on a table id
-query error pq: crdb_internal\.reset_multi_region_zone_configs_for_database\(\): database "\[3\]" does not exist
+query error pq: database "\[3\]" does not exist
 SELECT crdb_internal.reset_multi_region_zone_configs_for_database($descriptor_table_id)
 
 user testuser
@@ -2149,6 +2149,18 @@ subtest end
 # to/from a regional by row table.
 subtest add_drop_column_regional_by_row_zone_configs
 
+# For this subtest, we don't want the old zone configs to be GC'd. The logictest
+# framework customizes this setting, so we preserve the old value.
+let $old_gc_job_wait_for_gc_interval
+SHOW CLUSTER SETTING sql.gc_job.wait_for_gc.interval
+
+user host-cluster-root
+
+statement ok
+SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1m'
+
+user root
+
 statement ok
 CREATE DATABASE db2 PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE ZONE FAILURE
 
@@ -2169,7 +2181,7 @@ ALTER TABLE regional_by_row_add_drop_col ADD COLUMN k INT DEFAULT 0
 
 # Check that the subzone config has an entry for our new index, along with a
 # subzone span.
-skipif config local-mixed-24.3 local-legacy-schema-changer
+skipif config local-legacy-schema-changer
 statement ok
 WITH subzones AS (
     SELECT
@@ -2206,7 +2218,7 @@ FROM primary_idx_matches_subzone_idx WHERE match_found = false;
 # There should be subzone configs for each index, as well as the temporary
 # index. The subzones for the old index and temporary index are removed
 # later by the GC job, but they should still be present at this point.
-skipif config local-mixed-24.3 local-legacy-schema-changer
+skipif config local-legacy-schema-changer
 query IT
 WITH subzones AS (
     SELECT
@@ -2238,7 +2250,7 @@ SELECT index_id, partition_name FROM subzone_indexes ORDER BY index_id, partitio
 4  "us-east-1"
 
 # Verify that the subzone spans refer to the new primary index.
-skipif config local-mixed-24.3 local-legacy-schema-changer
+skipif config local-legacy-schema-changer
 query T
 WITH subzone_spans AS (
     SELECT json_array_elements(crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzoneSpans') ->> 'key' AS key
@@ -2268,7 +2280,7 @@ statement ok
 CREATE INDEX rbr_idx ON regional_by_row_add_drop_col (k)
 
 # There should be subzone configs for each index, as well as the temporary index.
-skipif config local-mixed-24.3 local-legacy-schema-changer
+skipif config local-legacy-schema-changer
 query IT
 WITH subzones AS (
     SELECT
@@ -2306,7 +2318,7 @@ SELECT index_id, partition_name FROM subzone_indexes ORDER BY index_id, partitio
 6  "us-east-1"
 
 # Verify that the subzone spans refer to the new secondary index.
-skipif config local-mixed-24.3 local-legacy-schema-changer
+skipif config local-legacy-schema-changer
 query T
 WITH subzone_spans AS (
     SELECT json_array_elements(crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzoneSpans') ->> 'key' AS key
@@ -2340,7 +2352,7 @@ ALTER TABLE regional_by_row_add_drop_col DROP COLUMN k
 
 # Check that the subzone config has an entry for our new index, along with a
 # subzone span.
-skipif config local-mixed-24.3 local-legacy-schema-changer
+skipif config local-legacy-schema-changer
 statement ok
 WITH subzones AS (
     SELECT
@@ -2377,7 +2389,7 @@ FROM primary_idx_matches_subzone_idx WHERE match_found = false;
 # There should be subzone configs for each index, as well as the temporary
 # indexes. The subzones for the old indexes and temporary indexes are removed
 # later by the GC job, but they should still be present at this point.
-skipif config local-mixed-24.3 local-legacy-schema-changer
+skipif config local-legacy-schema-changer
 query IT
 WITH subzones AS (
     SELECT
@@ -2421,7 +2433,7 @@ SELECT index_id, partition_name FROM subzone_indexes ORDER BY index_id, partitio
 8  "us-east-1"
 
 # Verify that the subzone spans refer to the new primary index.
-skipif config local-mixed-24.3 local-legacy-schema-changer
+skipif config local-legacy-schema-changer
 query T
 WITH subzone_spans AS (
     SELECT json_array_elements(crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzoneSpans') ->> 'key' AS key
@@ -2449,5 +2461,12 @@ ORDER By subzone_span;
 
 statement ok
 RESET database
+
+user host-cluster-root
+
+statement ok
+SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '$old_gc_job_wait_for_gc_interval'
+
+user root
 
 subtest end

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -35,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -43,6 +44,17 @@ import (
 
 // CreateIndex implements CREATE INDEX.
 func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
+	// Check if sql_safe_updates is enabled and this is a vector index
+	if n.Type == idxtype.VECTOR {
+		if !b.EvalCtx().Settings.Version.ActiveVersion(b).AtLeast(clusterversion.V25_2.Version()) {
+			panic(pgerror.Newf(pgcode.FeatureNotSupported, "cannot create a vector index until finalizing on 25.2"))
+		} else if b.EvalCtx().SessionData().SafeUpdates {
+			panic(pgerror.DangerousStatementf("CREATE VECTOR INDEX will disable writes to the table while the index is being built"))
+		} else {
+			b.EvalCtx().ClientNoticeSender.BufferClientNotice(b, pgnotice.Newf("CREATE VECTOR INDEX will disable writes to the table while the index is being built"))
+		}
+	}
+
 	b.IncrementSchemaChangeCreateCounter("index")
 	// Resolve the table name and start building the new index element.
 	relationElements := b.ResolveRelation(n.Table.ToUnresolvedObjectName(), ResolveParams{
@@ -60,6 +72,14 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			Invisibility:   n.Invisibility.Value,
 		},
 	}
+	if n.Type == idxtype.VECTOR {
+		// Disable vector indexes by default in 25.2.
+		// TODO(andyk): Remove this check after 25.2.
+		if err := vecindex.CheckEnabled(&b.ClusterSettings().SV); err != nil {
+			panic(err)
+		}
+	}
+
 	var relation scpb.Element
 	var sourceIndex *scpb.PrimaryIndex
 	relationElements.ForEach(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
@@ -319,7 +339,7 @@ func processColNodeType(
 	// OpClass are only allowed for the last column of an inverted index.
 	if columnNode.OpClass != "" && (!lastColIdx || !n.Type.SupportsOpClass()) {
 		panic(pgerror.New(pgcode.DatatypeMismatch,
-			"operator classes are only allowed for the last column of an inverted index"))
+			"operator classes are only allowed for the last column of an inverted or vector index"))
 	}
 	// Disallow descending last column in inverted and vector indexes because they
 	// have no linear ordering.
@@ -376,7 +396,18 @@ func processColNodeType(
 			}
 			invertedKind = catpb.InvertedIndexColumnKind_TRIGRAM
 			b.IncrementSchemaChangeIndexCounter("trigram_inverted")
-
+		case types.PGVectorFamily:
+			switch columnNode.OpClass {
+			case "vector_l2_ops", "":
+			// vector_l2_ops is the default operator class. This allows users to omit
+			// the operator class in index definitions.
+			case "vector_l1_ops", "vector_ip_ops", "vector_cosine_ops",
+				"bit_hamming_ops", "bit_jaccard_ops":
+				panic(unimplemented.NewWithIssuef(144016,
+					"operator class %v is not supported", columnNode.OpClass))
+			default:
+				panic(newUndefinedOpclassError(columnNode.OpClass))
+			}
 		}
 		relationElts := b.QueryByID(indexSpec.secondary.TableID)
 		scpb.ForEachIndexColumn(relationElts, func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexColumn) {
@@ -860,6 +891,7 @@ func maybeCreateVirtualColumnForIndex(
 	// TODO(postamar): call addColumn instead of building AST.
 	d := &tree.ColumnTableDef{
 		Name: tree.Name(colName),
+		Type: types.AnyElement,
 	}
 	d.Computed.Computed = true
 	d.Computed.Virtual = true
@@ -867,13 +899,9 @@ func maybeCreateVirtualColumnForIndex(
 	d.Nullable.Nullability = tree.Null
 	// Infer column type from expression.
 	{
-		replacedExpr := b.ComputedColumnExpression(tbl, d)
-		typedExpr, err := tree.TypeCheck(b, replacedExpr, b.SemaCtx(), types.AnyElement)
-		if err != nil {
-			panic(err)
-		}
-		d.Type = typedExpr.ResolvedType()
-		validateColumnIndexableType(typedExpr.ResolvedType())
+		_, columnType := b.ComputedColumnExpression(tbl, d, tree.ExpressionIndexElementExpr)
+		d.Type = columnType
+		validateColumnIndexableType(columnType)
 	}
 	alterTableAddColumn(b, tn, tbl, stmt, &tree.AlterTableAddColumn{ColumnDef: d})
 	// When a virtual column for an index expression gets added for CREATE INDEX
@@ -906,14 +934,34 @@ func maybeAddIndexPredicate(b BuildCtx, n *tree.CreateIndex, idxSpec *indexSpec)
 
 // maybeApplyStorageParameters apply any storage parameters into the index spec.
 func maybeApplyStorageParameters(b BuildCtx, storageParams tree.StorageParams, idxSpec *indexSpec) {
+	// Create config for vector index.
+	if idxSpec.secondary != nil && idxSpec.secondary.Type == idxtype.VECTOR {
+		// Get number of dimensions from the vector column in the index (always
+		// the last key column).
+		for i := len(idxSpec.columns) - 1; i >= 0; i-- {
+			if idxSpec.columns[i].Kind != scpb.IndexColumn_KEY {
+				continue
+			}
+			lastKeyCol := idxSpec.columns[i].ColumnID
+			typeElem := mustRetrieveColumnTypeElem(b, idxSpec.secondary.TableID, lastKeyCol)
+			cfg := vecindex.MakeVecConfig(b.EvalCtx(), typeElem.Type)
+			idxSpec.secondary.VecConfig = &cfg
+			break
+		}
+	}
+
 	if len(storageParams) == 0 {
 		return
 	}
 
-	// Handle config for geospatial inverted indexes.
+	// Handle storage params for geospatial inverted indexes and vector indexes.
 	dummyIndexDesc := &descpb.IndexDescriptor{}
-	if idxSpec.secondary != nil && idxSpec.secondary.GeoConfig != nil {
-		dummyIndexDesc.GeoConfig = *idxSpec.secondary.GeoConfig
+	if idxSpec.secondary != nil {
+		if idxSpec.secondary.GeoConfig != nil {
+			dummyIndexDesc.GeoConfig = *idxSpec.secondary.GeoConfig
+		} else if idxSpec.secondary.VecConfig != nil {
+			dummyIndexDesc.VecConfig = *idxSpec.secondary.VecConfig
+		}
 	}
 	storageParamSetter := &indexstorageparam.Setter{
 		IndexDesc: dummyIndexDesc,
@@ -922,19 +970,16 @@ func maybeApplyStorageParameters(b BuildCtx, storageParams tree.StorageParams, i
 	if err != nil {
 		panic(err)
 	}
-	if idxSpec.secondary != nil && !dummyIndexDesc.GeoConfig.IsEmpty() {
-		idxSpec.secondary.GeoConfig = &dummyIndexDesc.GeoConfig
-	} else if idxSpec.secondary != nil {
-		idxSpec.secondary.GeoConfig = nil
-	}
-
-	// Handle config for vector indexes.
-	if idxSpec.secondary != nil && idxSpec.secondary.Type == idxtype.VECTOR {
-		// Get number of dimensions from the vector column in the index (always
-		// the last column).
-		lastKeyCol := idxSpec.columns[len(idxSpec.columns)-1].ColumnID
-		typeElem := mustRetrieveColumnTypeElem(b, idxSpec.secondary.TableID, lastKeyCol)
-		idxSpec.secondary.VecConfig = &vecpb.Config{Dims: typeElem.Type.Width(), Seed: 0}
+	if idxSpec.secondary != nil {
+		if idxSpec.secondary.GeoConfig != nil {
+			if !dummyIndexDesc.GeoConfig.IsEmpty() {
+				idxSpec.secondary.GeoConfig = &dummyIndexDesc.GeoConfig
+			} else {
+				idxSpec.secondary.GeoConfig = nil
+			}
+		} else if idxSpec.secondary.VecConfig != nil {
+			*idxSpec.secondary.VecConfig = dummyIndexDesc.VecConfig
+		}
 	}
 }
 

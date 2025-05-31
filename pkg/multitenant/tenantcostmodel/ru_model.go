@@ -135,7 +135,7 @@ func (c *RequestUnitModel) MakeBatchInfo(
 		switch req.(type) {
 		case *kvpb.PutRequest, *kvpb.ConditionalPutRequest, *kvpb.IncrementRequest,
 			*kvpb.DeleteRequest, *kvpb.DeleteRangeRequest, *kvpb.ClearRangeRequest,
-			*kvpb.RevertRangeRequest, *kvpb.InitPutRequest, *kvpb.AddSSTableRequest:
+			*kvpb.RevertRangeRequest, *kvpb.AddSSTableRequest:
 			writeCount++
 			if swr, isSizedWrite := req.(kvpb.SizedWriteRequest); isSizedWrite {
 				writeBytes += swr.WriteBytes()
