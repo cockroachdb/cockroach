@@ -9,6 +9,7 @@ go_library(
         "latency.go",
         "network_partition.go",
         "noop.go",
+        "option.go",
         "registry.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures",
