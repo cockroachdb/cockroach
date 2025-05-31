@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -28,6 +29,7 @@ type prepareSnapApplyInput struct {
 	st       *cluster.Settings
 	todoEng  storage.Engine
 	sl       stateloader.StateLoader
+	logSL    logstore.StateLoader
 	writeSST func(context.Context, []byte) error
 
 	truncState    kvserverpb.RaftTruncatedState
@@ -46,7 +48,7 @@ func prepareSnapApply(
 ) {
 	// Step 1: Write unreplicated SST
 	unreplicatedSSTFile, clearedUnreplicatedSpan, err := writeUnreplicatedSST(
-		ctx, input.id, input.st, input.truncState, input.hardState, input.sl,
+		ctx, input.id, input.st, input.truncState, input.hardState, input.sl, input.logSL,
 	)
 	if err != nil {
 		return roachpb.Span{}, nil, err
@@ -77,6 +79,7 @@ func writeUnreplicatedSST(
 	ts kvserverpb.RaftTruncatedState,
 	hs raftpb.HardState,
 	sl stateloader.StateLoader,
+	logSL logstore.StateLoader,
 ) (_ *storage.MemObject, clearedSpan roachpb.Span, _ error) {
 	unreplicatedSSTFile := &storage.MemObject{}
 	unreplicatedSST := storage.MakeIngestionSSTWriter(
@@ -85,7 +88,7 @@ func writeUnreplicatedSST(
 	defer unreplicatedSST.Close()
 	// Clear the raft state/log, and initialize it again with the provided
 	// HardState and RaftTruncatedState.
-	clearedSpan, err := rewriteRaftState(ctx, id, hs, ts, sl, &unreplicatedSST)
+	clearedSpan, err := rewriteRaftState(ctx, id, hs, ts, sl, logSL, &unreplicatedSST)
 	if err != nil {
 		return nil, roachpb.Span{}, err
 	}
@@ -108,6 +111,7 @@ func rewriteRaftState(
 	hs raftpb.HardState,
 	ts kvserverpb.RaftTruncatedState,
 	sl stateloader.StateLoader,
+	logSL logstore.StateLoader,
 	w storage.Writer,
 ) (clearedSpan roachpb.Span, _ error) {
 	// Clearing the unreplicated state.
@@ -125,7 +129,7 @@ func rewriteRaftState(
 	}
 
 	// Update HardState.
-	if err := sl.SetHardState(ctx, w, hs); err != nil {
+	if err := logSL.SetHardState(ctx, w, hs); err != nil {
 		return roachpb.Span{}, errors.Wrapf(err, "unable to write HardState")
 	}
 	// We've cleared all the raft state above, so we are forced to write the
@@ -134,7 +138,7 @@ func rewriteRaftState(
 		return roachpb.Span{}, errors.Wrapf(err, "unable to write RaftReplicaID")
 	}
 	// Update the log truncation state.
-	if err := sl.SetRaftTruncatedState(ctx, w, &ts); err != nil {
+	if err := logSL.SetRaftTruncatedState(ctx, w, &ts); err != nil {
 		return roachpb.Span{}, errors.Wrapf(err, "unable to write RaftTruncatedState")
 	}
 	return clearedSpan, nil

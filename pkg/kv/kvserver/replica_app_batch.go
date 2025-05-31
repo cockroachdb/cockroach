@@ -509,7 +509,7 @@ func (b *replicaAppBatch) stageTruncation(
 	// into the batch, and compute metadata used after applying it.
 	if err := handleTruncatedStateBelowRaftPreApply(
 		ctx, b.truncState, *truncatedState,
-		b.r.raftMu.stateLoader.StateLoader, b.batch,
+		b.r.asLogStorage().raftMu.loader, b.batch,
 	); err != nil {
 		return errors.Wrap(err, "unable to handle truncated state")
 	}
@@ -710,8 +710,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 func (b *replicaAppBatch) addAppliedStateKeyToBatch(ctx context.Context) error {
 	// Set the range applied state, which includes the last applied raft and
 	// lease index along with the mvcc stats, all in one key.
-	loader := &b.r.raftMu.stateLoader
-	return loader.SetRangeAppliedState(
+	return b.r.raftMu.stateLoader.SetRangeAppliedState(
 		ctx, b.batch, b.state.RaftAppliedIndex, b.state.LeaseAppliedIndex, b.state.RaftAppliedIndexTerm,
 		b.state.Stats, b.state.RaftClosedTimestamp, &b.asAlloc,
 	)

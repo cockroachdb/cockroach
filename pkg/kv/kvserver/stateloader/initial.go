@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -100,14 +101,18 @@ func WriteInitialReplicaState(
 	} else if (existingVersion != roachpb.Version{}) {
 		log.Fatalf(ctx, "expected trivial version, but found %+v", existingVersion)
 	}
-
-	// TODO(sep-raft-log): SetRaftTruncatedState will be in a separate batch when
-	// the Raft log engine is separated. Figure out the ordering required here.
-	if err := rsl.SetRaftTruncatedState(ctx, readWriter, truncState); err != nil {
-		return enginepb.MVCCStats{}, err
-	}
 	newMS, err := rsl.Save(ctx, readWriter, s)
 	if err != nil {
+		return enginepb.MVCCStats{}, err
+	}
+
+	// TODO(sep-raft-log): SetRaftTruncatedState will be in a separate batch when
+	// the Raft log engine is separated. First will be the log engine write, with
+	// a WAG node containing all the above state machine writes.
+	// TODO(pav-kv): donate the other state loader's buffer to this one.
+	if err := logstore.NewStateLoader(desc.RangeID).SetRaftTruncatedState(
+		ctx, readWriter, truncState,
+	); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 
@@ -136,9 +141,12 @@ func WriteInitialRangeState(
 	}
 
 	// TODO(sep-raft-log): when the log storage is separated, the below can't be
-	// written in the same batch. Figure out the ordering required here.
+	// written in the same batch. First will go the log engine batch containing
+	// the WAG node and the state engine mutations; then will go the state engine
+	// mutation.
 	sl := Make(desc.RangeID)
-	if err := sl.SynthesizeRaftState(ctx, readWriter); err != nil {
+	logSL := logstore.NewStateLoader(desc.RangeID)
+	if err := SynthesizeRaftState(ctx, logSL, sl, readWriter); err != nil {
 		return err
 	}
 	// Maintain the invariant that any replica (uninitialized or initialized),
