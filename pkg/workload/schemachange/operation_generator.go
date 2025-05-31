@@ -1644,10 +1644,13 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		return nil, err
 	}
 
-	// Check if the table has any policies
-	tableHasPolicies := false
+	// Check if the table has any policies or triggers
+	tableHasPolicies, tableHasTriggers := false, false
 	if tableExists {
 		if tableHasPolicies, err = og.tableHasPolicies(ctx, tx, tableName); err != nil {
+			return nil, err
+		}
+		if tableHasTriggers, err = og.tableHasTriggers(ctx, tx, tableName); err != nil {
 			return nil, err
 		}
 	}
@@ -1703,9 +1706,36 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		// It is possible that we cannot drop column because
 		// it is referenced in a policy expression.
 		{code: pgcode.InvalidTableDefinition, condition: tableHasPolicies},
+		// It is possible that we cannot drop column because
+		// it is depended on by a trigger.
+		{code: pgcode.DependentObjectsStillExist, condition: tableHasTriggers},
 	})
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tableName.String(), columnName.String())
 	return stmt, nil
+}
+
+// tableHasTriggers checks if a table has any triggers defined
+func (og *operationGenerator) tableHasTriggers(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
+) (bool, error) {
+	// Query to check if a table has any triggers
+	query := `
+	SELECT EXISTS (
+		SELECT 1
+		FROM information_schema.triggers
+		WHERE event_object_schema = $1
+		AND event_object_table = $2
+		LIMIT 1
+	)
+	`
+
+	var hasTriggers bool
+	err := tx.QueryRow(ctx, query, tableName.Schema(), tableName.Object()).Scan(&hasTriggers)
+	if err != nil {
+		return false, err
+	}
+
+	return hasTriggers, nil
 }
 
 // tableHasPolicies checks if a table has any row-level security policies defined
@@ -4390,6 +4420,9 @@ FROM
 	})
 	opStmt.potentialExecErrors.addAll(codesWithConditions{
 		{pgcode.InvalidFunctionDefinition, hasFuncRefs},
+		// When create function calls a trigger function we get this error,
+		// because trigger functions can only be called by triggers.
+		{pgcode.FeatureNotSupported, true},
 	})
 
 	return opStmt, nil
@@ -4469,9 +4502,14 @@ func (og *operationGenerator) dropFunction(ctx context.Context, tx pgx.Tx) (*opS
 	if err != nil {
 		return nil, err
 	}
-	return newOpStmt(stmt, codesWithConditions{
+
+	opStmt := newOpStmt(stmt, codesWithConditions{
 		{expectedCode, true},
-	}), nil
+	})
+
+	// Needed for a trigger being created with a dependency on log_change_timestamp().
+	opStmt.potentialExecErrors.add(pgcode.DependentObjectsStillExist)
+	return opStmt, nil
 }
 
 func (og *operationGenerator) alterFunctionRename(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
@@ -5268,4 +5306,218 @@ func (og *operationGenerator) randUser(ctx context.Context, tx pgx.Tx) (string, 
 	}
 	og.LogMessage(fmt.Sprintf("Found real user: '%s'", realUser))
 	return realUser, nil
+}
+
+// createTrigger generates a CREATE TRIGGER statement.
+func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+
+	tableExists, err := og.tableExists(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	// First, ensure the trigger_log table exists
+	_, err = tx.Exec(ctx, `
+	CREATE TABLE IF NOT EXISTS trigger_log (
+	   changed_at TIMESTAMP DEFAULT current_timestamp
+	)`)
+	if err != nil {
+		return nil, err
+	}
+
+	// Query to show the descriptor ID of the trigger_log table
+	var descriptorID int
+	err = tx.QueryRow(ctx, `
+		SELECT table_id FROM crdb_internal.tables 
+		WHERE name = 'trigger_log' AND database_name = current_database()
+	`).Scan(&descriptorID)
+	if err != nil {
+		og.LogMessage(fmt.Sprintf("Could not get descriptor ID for trigger_log table: %v", err))
+	} else {
+		og.LogMessage(fmt.Sprintf("trigger_log table descriptor ID: %d", descriptorID))
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	triggerFunctionName := fmt.Sprintf("trigger_function_%s", og.newUniqueSeqNumSuffix())
+
+	// Generate random SQL statements for the trigger function
+	var triggerBody strings.Builder
+	triggerBody.WriteString("BEGIN ")
+
+	// Add the basic trigger log insert
+	triggerBody.WriteString("INSERT INTO trigger_log VALUES (current_timestamp);")
+
+	// Try to generate a random SELECT statement for more complex dependencies
+	selectStmt, err := og.selectStmt(ctx, tx)
+	if err == nil && selectStmt != nil {
+		// Add the SELECT statement
+		triggerBody.WriteString(fmt.Sprintf("%s;", selectStmt.sql))
+	}
+
+	//// Try to generate a random INSERT statement for more dependencies
+	//insertStmt, err := og.insertRow(ctx, tx)
+	//if err == nil && insertStmt != nil {
+	//	// Add the INSERT statement
+	//	triggerBody.WriteString(fmt.Sprintf("\t\t%s;\n", insertStmt.sql))
+	//}
+
+	triggerBody.WriteString("RETURN NULL;END;")
+
+	triggerFunction := fmt.Sprintf(`CREATE FUNCTION %s() RETURNS TRIGGER AS $$ %s $$ LANGUAGE PLpgSQL`, triggerFunctionName, triggerBody.String())
+
+	// Create the trigger function
+	// _, err = tx.Exec(ctx, triggerFunction)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	og.LogMessage(fmt.Sprintf("Created trigger function %s", triggerFunction))
+
+	// Check if the trigger function exists.
+	// In some cases drop function will drop this function.
+	// triggerFunctionExists := false
+	// err = tx.QueryRow(ctx, `
+	// 	SELECT EXISTS(
+	// 		SELECT 1 FROM information_schema.routines
+	// 		WHERE routine_name = 'log_change_timestamp'
+	// 	)`).Scan(&triggerFunctionExists)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// Create TRIGGER statement components
+	triggerActionTime := "BEFORE"
+	if og.randIntn(2) == 1 {
+		triggerActionTime = "AFTER"
+	}
+
+	eventTypes := []string{"INSERT", "UPDATE", "DELETE"}
+	numEvents := og.randIntn(3) + 1 // 1-3 events
+	events := make([]string, 0, numEvents)
+	eventsSet := make(map[string]bool)
+
+	for i := 0; i < numEvents; i++ {
+		eventIndex := og.randIntn(len(eventTypes))
+		event := eventTypes[eventIndex]
+		if !eventsSet[event] {
+			events = append(events, event)
+			eventsSet[event] = true
+		}
+	}
+
+	// Join events with OR
+	eventClause := strings.Join(events, " OR ")
+
+	triggerName := fmt.Sprintf("trigger_%s", og.newUniqueSeqNumSuffix())
+
+	// Build the SQL statement
+	sqlStatement := fmt.Sprintf("%s;CREATE TRIGGER %s %s %s ON %s FOR EACH ROW EXECUTE FUNCTION %s()",
+		triggerFunction, triggerName, triggerActionTime, eventClause, tableName, triggerFunctionName)
+
+	og.LogMessage(fmt.Sprintf("createTrigger: %s", sqlStatement))
+
+	opStmt := makeOpStmt(OpStmtDDL)
+	opStmt.sql = sqlStatement
+
+	opStmt.expectedExecErrors.addAll(codesWithConditions{
+		{code: pgcode.FeatureNotSupported, condition: !og.useDeclarativeSchemaChanger},
+		{code: pgcode.UndefinedTable, condition: !tableExists},
+		//{code: pgcode.UndefinedFunction, condition: !triggerFunctionExists},
+	})
+
+	// In some cases drop function will drop the trigger function.
+	opStmt.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.UndefinedFunction, condition: true},
+		// Can be hit if the trigger function has a
+		// query on a table that doesn't exist.
+		{code: pgcode.UndefinedTable, condition: true},
+	})
+
+	return opStmt, nil
+}
+
+// dropTrigger generates a DROP TRIGGER statement.
+func (og *operationGenerator) dropTrigger(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	// Find an existing trigger
+	triggerWithInfo, err := og.findExistingTrigger(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	if triggerWithInfo == nil {
+		// Set up expected errors since we know this trigger doesn't exist
+		opStmt := makeOpStmt(OpStmtDDL)
+		opStmt.sql = `DROP TRIGGER dummy_trigger ON dummy_table`
+
+		opStmt.expectedExecErrors.add(pgcode.UndefinedTable)
+
+		og.LogMessage("dropTrigger (non-existent): DROP TRIGGER dummy_trigger ON dummy_table")
+
+		return opStmt, nil
+	}
+
+	// Build the SQL statement
+	sqlStatement := fmt.Sprintf("DROP TRIGGER %s ON %s", triggerWithInfo.triggerName, &triggerWithInfo.table)
+
+	// Construct DROP TRIGGER statement
+	og.LogMessage(fmt.Sprintf("dropTrigger: %s", sqlStatement))
+
+	opStmt := makeOpStmt(OpStmtDDL)
+	opStmt.sql = sqlStatement
+
+	return opStmt, nil
+}
+
+// triggerInfo contains information about a trigger.
+type triggerInfo struct {
+	table       tree.TableName
+	triggerName string
+}
+
+// findExistingTrigger returns a triggerInfo struct with the qualified table name and trigger name.
+// It also returns a boolean indicating whether a trigger was found.
+func (og *operationGenerator) findExistingTrigger(
+	ctx context.Context, tx pgx.Tx,
+) (*triggerInfo, error) {
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return nil, err
+	}
+
+	var triggerWithInfo triggerInfo
+
+	// Query to find all triggers in the database using information_schema
+	triggerQuery := `
+		SELECT
+			event_object_schema,
+			event_object_table,
+			trigger_name
+		FROM
+			information_schema.triggers
+		ORDER BY random()
+		LIMIT 1
+	`
+
+	var schemaName, tableName, triggerName string
+	err := tx.QueryRow(ctx, triggerQuery).Scan(&schemaName, &tableName, &triggerName)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	triggerWithInfo = triggerInfo{
+		table: tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
+			SchemaName:     tree.Name(schemaName),
+			ExplicitSchema: true,
+		}, tree.Name(tableName)),
+		triggerName: triggerName,
+	}
+
+	return &triggerWithInfo, nil
 }

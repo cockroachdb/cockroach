@@ -359,6 +359,30 @@ func (s *schemaChange) setClusterSettings(ctx context.Context, url string) (err 
 			return errors.WithStack(err)
 		}
 	}
+
+// 	// First, ensure the trigger_log table exists
+// 	_, err = conn.Exec(ctx, `
+// CREATE TABLE IF NOT EXISTS trigger_log (
+//     changed_at TIMESTAMP DEFAULT current_timestamp
+// )`)
+// 	if err != nil {
+// 		return errors.WithStack(err)
+// 	}
+
+// 	// Create the function with legacy schema changer
+// 	_, err = conn.Exec(ctx, `
+// CREATE OR REPLACE FUNCTION log_change_timestamp()
+// RETURNS TRIGGER AS $$
+// BEGIN
+//     INSERT INTO trigger_log
+//     VALUES (current_timestamp);
+//     RETURN NULL;
+// END;
+// $$ LANGUAGE PLpgSQL`)
+// 	if err != nil {
+// 		return errors.WithStack(err)
+// 	}
+
 	return nil
 }
 
