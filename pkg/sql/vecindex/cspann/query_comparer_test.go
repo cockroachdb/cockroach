@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -158,7 +159,7 @@ func TestQueryComparer(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup queryComparer.
 			var rot RandomOrthoTransformer
-			rot.Init(RotNone, len(tc.queryVector), 42)
+			rot.Init(vecpb.RotNone, len(tc.queryVector), 42)
 
 			var comparer queryComparer
 			comparer.Init(tc.metric, tc.queryVector, &rot)

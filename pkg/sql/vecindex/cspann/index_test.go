@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -613,7 +614,7 @@ func (s *testState) makeNewIndex(d *datadriven.TestData) {
 	datasetName := ""
 	distanceMetric := vecdist.L2Squared
 	s.Options = cspann.IndexOptions{
-		RotAlgorithm:    cspann.RotGivens,
+		RotAlgorithm:    vecpb.RotGivens,
 		IsDeterministic: true,
 		// Disable stalled op timeout, since it can interfere with stepping tests.
 		StalledOpTimeout: func() time.Duration { return 0 },
@@ -636,11 +637,11 @@ func (s *testState) makeNewIndex(d *datadriven.TestData) {
 			require.Len(s.T, arg.Vals, 1)
 			switch strings.ToLower(arg.Vals[0]) {
 			case "matrix":
-				s.Options.RotAlgorithm = cspann.RotMatrix
+				s.Options.RotAlgorithm = vecpb.RotMatrix
 			case "givens":
-				s.Options.RotAlgorithm = cspann.RotGivens
+				s.Options.RotAlgorithm = vecpb.RotGivens
 			case "none":
-				s.Options.RotAlgorithm = cspann.RotNone
+				s.Options.RotAlgorithm = vecpb.RotNone
 			default:
 				require.Failf(s.T, "unrecognized rot algorithm %s", arg.Vals[0])
 			}
@@ -968,7 +969,7 @@ func TestIndexConcurrency(t *testing.T) {
 		var expectedKeys syncutil.Set[string]
 
 		options := cspann.IndexOptions{
-			RotAlgorithm:     cspann.RotGivens,
+			RotAlgorithm:     vecpb.RotGivens,
 			MinPartitionSize: 2,
 			MaxPartitionSize: 4,
 			BaseBeamSize:     2,
