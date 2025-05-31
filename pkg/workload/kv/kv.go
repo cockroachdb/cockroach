@@ -93,6 +93,7 @@ type kv struct {
 	insertCount                          int
 	txnQoS                               string
 	prepareReadOnly                      bool
+	singleKey                            bool
 }
 
 func init() {
@@ -152,6 +153,8 @@ var kvMeta = workload.Meta{
 			`Use SFU and transactional writes with a sleep after SFU.`)
 		g.flags.BoolVar(&g.zipfian, `zipfian`, false,
 			`Pick keys in a zipfian distribution instead of randomly.`)
+		g.flags.BoolVar(&g.singleKey, `single-key`, false,
+			`Picks a single key to read and write to`)
 		g.flags.BoolVar(&g.sequential, `sequential`, false,
 			`Pick keys sequentially instead of randomly.`)
 		g.flags.StringVar(&g.writeSeq, `write-seq`, "",
@@ -314,6 +317,14 @@ func (w *kv) createKeyGenerator() (func() keyGenerator, *sequence, keyTransforme
 	var gen func() keyGenerator
 	var kr keyRange
 	switch {
+	case w.singleKey:
+		gen = func() keyGenerator {
+			return newSingleKeyGenerator(seq, rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+		}
+		kr = keyRange{
+			min: 0,
+			max: math.MaxInt64,
+		}
 	case w.zipfian:
 		gen = func() keyGenerator {
 			return newZipfianGenerator(seq, rand.New(rand.NewSource(timeutil.Now().UnixNano())))
@@ -985,6 +996,35 @@ func (g *zipfGenerator) rand() *rand.Rand {
 func (g *zipfGenerator) state() string {
 	return fmt.Sprintf("Z%d", g.seq.read())
 }
+
+// singleKeyGenerator is created with a key that is used for all reads and writes
+type singleKeyGenerator struct {
+	key    int64
+	random *rand.Rand
+}
+
+func newSingleKeyGenerator(seq *sequence, rng *rand.Rand) *singleKeyGenerator {
+	key := seq.read()
+	return &singleKeyGenerator{random: rng, key: key}
+}
+
+func (s singleKeyGenerator) writeKey() int64 {
+	return s.key
+}
+
+func (s singleKeyGenerator) readKey() int64 {
+	return s.key
+}
+
+func (s singleKeyGenerator) rand() *rand.Rand {
+	return s.random
+}
+
+func (s singleKeyGenerator) state() string {
+	return fmt.Sprintf("R%d", s.key)
+}
+
+var _ keyGenerator = singleKeyGenerator{}
 
 // randBlock returns a sequence of random bytes according to the kv
 // configuration.
