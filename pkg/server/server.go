@@ -107,6 +107,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logmetrics"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -1835,6 +1836,14 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 
 	advHTTPAddrU := util.NewUnresolvedAddr("tcp", s.cfg.HTTPAdvertiseAddr)
 
+	eventTableSink := eventlog.NewEventTableSink(
+		base.SQLInstanceID(state.nodeID),
+		s.node.execCfg.InternalDB,
+		true,
+		s.stopper,
+		s.cfg.AmbientCtx,
+		s.ClusterSettings())
+	log.RegisterEventLogSink(ctx, s.rpcContext.TenantID.ToUint64(), eventTableSink)
 	if err := s.node.start(
 		ctx, workersCtx,
 		advAddrU,

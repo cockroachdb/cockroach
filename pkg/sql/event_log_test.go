@@ -35,8 +35,9 @@ func TestStructuredEventLogging(t *testing.T) {
 
 	// We really need to have the logs go to files, so that -show-logs
 	// does not break the "authlog" directives.
-	sc := log.ScopeWithoutShowLogs(t)
-	defer sc.Close(t)
+	//sc := log.ScopeWithoutShowLogs(t)
+	defer log.Scope(t).Close(t)
+	//defer sc.Close(t)
 
 	ctx := context.Background()
 
