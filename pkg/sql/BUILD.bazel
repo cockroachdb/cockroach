@@ -696,7 +696,6 @@ go_test(
         "mvcc_statistics_update_job_test.go",
         "normalization_test.go",
         "pg_metadata_test.go",
-        "pg_settings_unit_test.go",
         "pg_oid_test.go",
         "pgwire_internal_test.go",
         "plan_opt_test.go",

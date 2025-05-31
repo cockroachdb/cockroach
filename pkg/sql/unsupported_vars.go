@@ -17,8 +17,8 @@ import (
 var DummyVars = map[string]sessionVar{
 	"enable_seqscan": makeDummyBooleanSessionVar(
 		"enable_seqscan",
-		func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, *string, error) {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableSeqScan), nil, nil
+		func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableSeqScan), nil
 		},
 		func(m sessionDataMutator, v bool) {
 			m.SetEnableSeqScan(v)
@@ -27,8 +27,8 @@ var DummyVars = map[string]sessionVar{
 	),
 	"synchronous_commit": makeDummyBooleanSessionVar(
 		"synchronous_commit",
-		func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, *string, error) {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().SynchronousCommit), nil, nil
+		func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().SynchronousCommit), nil
 		},
 		func(m sessionDataMutator, v bool) {
 			m.SetSynchronousCommit(v)

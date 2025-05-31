@@ -1800,7 +1800,7 @@ var informationSchemaSessionVariables = virtualSchemaTable{
 			if gen.Hidden {
 				continue
 			}
-			value, _, err := gen.Get(&p.extendedEvalCtx, p.Txn())
+			value, err := gen.Get(&p.extendedEvalCtx, p.Txn())
 			if err != nil {
 				return err
 			}

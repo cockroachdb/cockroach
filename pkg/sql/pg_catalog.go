@@ -3049,13 +3049,17 @@ https://www.postgresql.org/docs/9.5/catalog-pg-settings.html`,
 				continue
 			}
 			var valueUnit tree.Datum = tree.DNull
-			value, unit, err := gen.Get(&p.extendedEvalCtx, p.Txn())
+			value, err := gen.Get(&p.extendedEvalCtx, p.Txn())
 			if err != nil {
 				return err
 			}
-			// The setting has specified unit
-			if unit != nil {
-				valueUnit = tree.NewDString(*unit)
+			// Check if the setting has a specified unit
+			if gen.GetUnit != nil {
+				unit, err := gen.GetUnit(&p.extendedEvalCtx)
+				if err != nil {
+					return err
+				}
+				valueUnit = tree.NewDString(unit)
 			}
 			valueDatum := tree.NewDString(value)
 			var bootDatum tree.Datum = tree.DNull
