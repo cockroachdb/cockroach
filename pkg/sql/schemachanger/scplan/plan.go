@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/opgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/current"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_25_1"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_25_2"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
@@ -157,7 +156,6 @@ type rulesForRelease struct {
 var rulesForReleases = []rulesForRelease{
 	{activeVersion: clusterversion.Latest, rulesRegistry: current.GetRegistry()},
 	{activeVersion: clusterversion.V25_2, rulesRegistry: release_25_2.GetRegistry()},
-	{activeVersion: clusterversion.V25_1, rulesRegistry: release_25_1.GetRegistry()},
 }
 
 // minVersionForRules the oldest version supported by the rules.
