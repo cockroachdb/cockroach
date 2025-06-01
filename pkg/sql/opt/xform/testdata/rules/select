@@ -8567,7 +8567,7 @@ CREATE TABLE t136078 (
 )
 ----
 
-opt set=(optimizer_use_trigram_similarity_optimization=false)
+opt expect=GenerateInvertedIndexScans set=(optimizer_use_trigram_similarity_optimization=false)
 SELECT b FROM t136078 WHERE 'abc' % col3_8
 ----
 project
@@ -8597,6 +8597,36 @@ project
            │              └── ["bc ", "bc "]
            └── filters
                 └── 'abc' % lower(b:2) [outer=(2), stable]
+
+exec-ddl
+CREATE TABLE t143070 (
+  a STRING,
+  b STRING,
+  c STRING AS (b) VIRTUAL,
+  PRIMARY KEY (a, b),
+  INVERTED INDEX (c gin_trgm_ops)
+)
+----
+
+# Regression test for #143070. The inverted index scan should not produce
+# unneeded PK cols.
+opt expect=GenerateInvertedIndexScans
+SELECT 1 FROM t143070 WHERE c LIKE 'aaa'
+----
+project
+ ├── columns: "?column?":7!null
+ ├── fd: ()-->(7)
+ ├── select
+ │    ├── columns: b:2!null
+ │    ├── fd: ()-->(2)
+ │    ├── scan t143070@t143070_c_idx,inverted
+ │    │    ├── columns: b:2!null
+ │    │    └── inverted constraint: /6/1/2
+ │    │         └── spans: ["aaa", "aaa"]
+ │    └── filters
+ │         └── b:2 LIKE 'aaa' [outer=(2), constraints=(/2: [/'aaa' - /'aaa']; tight), fd=()-->(2)]
+ └── projections
+      └── 1 [as="?column?":7]
 
 
 # --------------------------------------------------

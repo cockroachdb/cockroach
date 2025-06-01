@@ -968,17 +968,33 @@ func (c *CustomFuncs) generateInvertedIndexScansImpl(
 			pkCols = c.PrimaryKeyCols(scanPrivate.Table)
 		}
 
+		// Start with a new Scan that produces only the PK columns produced by
+		// the original scan.
+		// NOTE: Intersection is used intentionally to avoid mutating pkCols.
+		newScanPrivate.Cols = pkCols.Intersection(scanPrivate.Cols)
+
+		// We will need an index join above the scan if the original scan
+		// produces non-PK columns.
+		needIndexJoin := !scanPrivate.Cols.SubsetOf(newScanPrivate.Cols)
 		// We will need an inverted filter above the scan if the spanExpr might
 		// produce duplicate primary keys or requires at least one UNION or
 		// INTERSECTION. In this case, we must scan both the primary key columns
 		// and the inverted key column.
 		needInvertedFilter := !spanExpr.Unique || spanExpr.Operator != inverted.None
-		newScanPrivate.Cols = pkCols.Copy()
+
+		// An index join or an inverted filter require all PK columns.
+		if needIndexJoin || needInvertedFilter {
+			newScanPrivate.Cols.UnionWith(pkCols)
+		}
+
 		var invertedCol opt.ColumnID
 		if needInvertedFilter {
+			// If we need an inverted filter, then we must also produce the
+			// inverted key column.
 			invertedCol = scanPrivate.Table.ColumnID(index.InvertedColumn().Ordinal())
 			newScanPrivate.Cols.Add(invertedCol)
 		}
+
 		sb.SetScan(&newScanPrivate)
 
 		// Add an inverted filter if needed.
@@ -990,9 +1006,7 @@ func (c *CustomFuncs) generateInvertedIndexScansImpl(
 		// be applied above the scan, and one that requires columns not produced
 		// by the scan.
 		filters = sb.AddSelectAfterSplit(filters, pkCols)
-		if !scanPrivate.Cols.SubsetOf(newScanPrivate.Cols) {
-			// Add an index join if the scan does not produce all the needed
-			// columns.
+		if needIndexJoin {
 			sb.AddIndexJoin(scanPrivate.Cols)
 		}
 		// Add the remaining filters, if any.
