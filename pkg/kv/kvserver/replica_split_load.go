@@ -64,6 +64,20 @@ var SplitByLoadCPUThreshold = settings.RegisterDurationSetting(
 	settings.WithPublic,
 )
 
+// SplitSampleResetDuration wraps "kv.range_split.load_sample_reset_duration".
+// This is the duration after which the load based split sampler will reset its
+// state, regardless of any split suggestions made. This is useful when the
+// load on a range is non-stationary.
+var SplitSampleResetDuration = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.range_split.load_sample_reset_duration",
+	"the duration after which the load based split sampler will reset its state, "+
+		"regardless of any split suggestions made, when zero, the sampler will "+
+		"never reset",
+	0, /* disabled */
+	settings.DurationWithMinimumOrZeroDisable(10*time.Second),
+)
+
 func (obj LBRebalancingObjective) ToSplitObjective() split.SplitObjective {
 	switch obj {
 	case LBRebalancingQueries:
@@ -119,6 +133,12 @@ func (c *replicaSplitConfig) StatThreshold(obj split.SplitObjective) float64 {
 	default:
 		panic(errors.AssertionFailedf("Unkown rebalance objective %d", obj))
 	}
+}
+
+// SampleResetDuration returns the duration that any sampling structure should
+// retain data for before resetting.
+func (c *replicaSplitConfig) SampleResetDuration() time.Duration {
+	return SplitSampleResetDuration.Get(&c.st.SV)
 }
 
 // SplitByLoadEnabled returns whether load based splitting is enabled.
