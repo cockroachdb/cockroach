@@ -568,7 +568,8 @@ func (c *CustomFuncs) TryGenerateVectorSearch(
 		vectorSearch = c.e.f.ConstructLookupJoin(vectorSearch, nil /* on */, lookupPrivate)
 
 		// Add back the projections, including the distance column.
-		vectorSearch = c.e.f.ConstructProject(vectorSearch, projections, passthrough)
+		vectorSearch = c.e.f.ConstructProject(vectorSearch, projections,
+			c.MakePassthrough(passthrough))
 
 		// Build a top-k operator ordering by the distance column and limited by the
 		// NN count to obtain the final result. We verified when the rule matched

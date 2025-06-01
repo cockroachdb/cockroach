@@ -808,11 +808,15 @@ func (b *Builder) addBarrier(s *scope) {
 func (b *Builder) projectColWithMetadataName(
 	s *scope, name string, typ *types.T, scalar opt.ScalarExpr,
 ) opt.ColumnID {
-	passThroughCols := s.colSet()
+	passthrough := s.colSet()
 	colName := scopeColName("").WithMetadataName(name)
 	col := b.synthesizeColumn(s, colName, typ, nil /* expr */, scalar /* scalar */)
 	proj := memo.ProjectionsExpr{b.factory.ConstructProjectionsItem(scalar, col.id)}
-	s.expr = b.factory.ConstructProject(s.expr, proj, passThroughCols)
+	s.expr = b.factory.ConstructProject(s.expr, proj,
+		&memo.ProjectPrivate{
+			Passthrough: passthrough,
+		},
+	)
 	return col.id
 }
 

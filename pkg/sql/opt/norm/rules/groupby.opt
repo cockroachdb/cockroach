@@ -87,7 +87,7 @@
     (Project
         $left
         (ProjectRemappedCols $toRemap $leftCols $fds)
-        $leftCols
+        (MakePassthrough $leftCols)
     )
     $aggs
     (MakeGrouping
@@ -123,7 +123,7 @@
     (Project
         $right
         (ProjectRemappedCols $toRemap $rightCols $fds)
-        $rightCols
+        (MakePassthrough $rightCols)
     )
     $aggs
     (MakeGrouping
@@ -148,7 +148,11 @@
         (ColsAreStrictKey (GroupingCols $groupingPrivate) $input)
 )
 =>
-(Project $input [] (GroupingOutputCols $groupingPrivate $aggs))
+(Project
+    $input
+    []
+    (MakePassthrough (GroupingOutputCols $groupingPrivate $aggs))
+)
 
 # EliminateUpsertDistinct is similar to EliminateDistinct, but it only checks if
 # the grouping columns are a lax key because UpsertDistinctOn considers NULL
@@ -161,7 +165,11 @@
         (ColsAreLaxKey (GroupingCols $groupingPrivate) $input)
 )
 =>
-(Project $input [] (GroupingOutputCols $groupingPrivate $aggs))
+(Project
+    $input
+    []
+    (MakePassthrough (GroupingOutputCols $groupingPrivate $aggs))
+)
 
 # EliminateGroupBy is similar to EliminateDistinct, but it operates on GroupBy
 # expressions where the grouping columns are statically known to form a strict
@@ -183,9 +191,11 @@
 (Project
     $input
     (ConvertAnyNotNullAggsToProjections $aggs)
-    (IntersectionCols
-        (GroupingOutputCols $groupingPrivate $aggs)
-        (OutputCols $input)
+    (MakePassthrough
+        (IntersectionCols
+            (GroupingOutputCols $groupingPrivate $aggs)
+            (OutputCols $input)
+        )
     )
 )
 
@@ -610,7 +620,7 @@
 #      a. The aggregate only references cols from the Window operator's input.
 #      b. The aggregate is a ConstAgg (or ConstNotNull, AnyNotNull, or FirstAgg)
 #         that passes through the result of a window function.
-# 
+#
 # Assuming all of the above are satisfied, each GroupBy aggregate that only
 # references the Window's input can be left alone (5a). Then, each ConstAgg
 # referencing a window function can be replaced by that function (5b).

@@ -1248,7 +1248,22 @@ func (c *CustomFuncs) ProjectExtraCol(
 	in memo.RelExpr, extra opt.ScalarExpr, extraID opt.ColumnID,
 ) memo.RelExpr {
 	projections := memo.ProjectionsExpr{c.f.ConstructProjectionsItem(extra, extraID)}
-	return c.f.ConstructProject(in, projections, in.Relational().OutputCols)
+	return c.f.ConstructProject(in, projections,
+		&memo.ProjectPrivate{
+			Passthrough: in.Relational().OutputCols,
+		},
+	)
+}
+
+// Passthrough returns the passthrough column set of the ProjectPrivate.
+func (c *CustomFuncs) Passthrough(private *memo.ProjectPrivate) opt.ColSet {
+	return private.Passthrough
+}
+
+// MakePassthrough returns a new ProjectPrivate with the given passthrough
+// columns.
+func (c *CustomFuncs) MakePassthrough(passthrough opt.ColSet) *memo.ProjectPrivate {
+	return &memo.ProjectPrivate{Passthrough: passthrough}
 }
 
 // ----------------------------------------------------------------------

@@ -190,7 +190,7 @@ exprnorm expect=EliminateCast
       (ProjectionsItem (Cast (Null "char(2)") "bit")                           (NewColumn "c4" "bit"))
       (ProjectionsItem (Cast (Cast (Var "s") "string") "text")                 (NewColumn "c5" "text"))
     ]
-    ""
+    []
   )
   (Presentation "c1,c2,c3,c4,c5")
   (NoOrdering)

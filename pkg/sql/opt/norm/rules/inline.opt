@@ -44,13 +44,13 @@
         $item:* & (ColsIntersect (OuterCols $item) $constCols)
         ...
     ]
-    $passthrough:*
+    $private:*
 )
 =>
 (Project
     $input
     (InlineProjectionConstants $projections $input $constCols)
-    $passthrough
+    $private
 )
 
 # InlineSelectConstants finds variable references in Filters expressions that
@@ -147,7 +147,7 @@
     (Project
         $input:*
         $projections:* & (CanInlineProjections $projections)
-        $passthrough:*
+        $private:*
     )
     $filters:* & ^(FilterHasCorrelatedSubquery $filters)
 )
@@ -155,7 +155,7 @@
 (Project
     (Select $input (InlineSelectProject $filters $projections))
     $projections
-    $passthrough
+    $private
 )
 
 # InlineSelectVirtualColumns pushes Select filters referencing virtual columns
@@ -241,7 +241,7 @@
     (Project
         $scan:(Scan $scanPrivate:*)
         $projections:*
-        $passthrough:*
+        $private:*
     )
     $filters:* &
         ^(ColsAreEmpty
@@ -262,7 +262,7 @@
             (InlineSelectProject $inlinableFilters $projections)
         )
         $projections
-        $passthrough
+        $private
     )
     (DiffFilters $filters $inlinableFilters)
 )
@@ -285,15 +285,15 @@
 (Project
     $input:(Project * $innerProjections:*)
     $projections:*
-    $passthrough:* &
+    $private:* &
         ^(HasDuplicateRefs
             $projections
-            $passthrough
+            (Passthrough $private)
             (ProjectionCols $innerProjections)
         )
 )
 =>
-(InlineProjectProject $input $projections $passthrough)
+(InlineProjectProject $input $projections (Passthrough $private))
 
 # InlineUDF converts a UDF to a subquery. A UDF can only be inlined if it is
 # non-volatile and has a single statement in the function body. See

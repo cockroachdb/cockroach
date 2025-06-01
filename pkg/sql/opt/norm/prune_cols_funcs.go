@@ -301,7 +301,11 @@ func (c *CustomFuncs) PruneCols(target memo.RelExpr, neededCols opt.ColSet) memo
 				projections = append(projections, *item)
 			}
 		}
-		return c.f.ConstructProject(t.Input, projections, passthrough)
+		return c.f.ConstructProject(t.Input, projections,
+			&memo.ProjectPrivate{
+				Passthrough: passthrough,
+			},
+		)
 
 	default:
 		// In other cases, we wrap the input in a Project operator.
@@ -311,7 +315,11 @@ func (c *CustomFuncs) PruneCols(target memo.RelExpr, neededCols opt.ColSet) memo
 		// higher-level expression, or if it's not part of the PruneCols set.
 		pruneCols := c.DerivePruneCols(target, c.f.disabledRules).Difference(neededCols)
 		colSet := c.OutputCols(target).Difference(pruneCols)
-		return c.f.ConstructProject(target, memo.EmptyProjectionsExpr, colSet)
+		return c.f.ConstructProject(target, memo.EmptyProjectionsExpr,
+			&memo.ProjectPrivate{
+				Passthrough: colSet,
+			},
+		)
 	}
 }
 

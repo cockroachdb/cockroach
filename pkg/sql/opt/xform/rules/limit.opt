@@ -72,11 +72,7 @@
 # with similar behavior is necessary.
 [PushLimitIntoProjectFilteredScan, Explore]
 (Limit
-    (Project
-            (Scan $scanPrivate:*)
-            $projections:*
-            $passthrough:*
-        ) &
+    (Project (Scan $scanPrivate:*) $projections:* $private:*) &
         (PushLimitIntoProjectFilteredScanEnabled)
     (Const $limit:* & (IsPositiveInt $limit))
     $ordering:* & (CanLimitFilteredScan $scanPrivate $ordering)
@@ -85,7 +81,7 @@
 (Project
     (Scan (LimitScanPrivate $scanPrivate $limit $ordering))
     $projections
-    $passthrough
+    $private
 )
 
 # PushLimitIntoIndexJoin pushes a limit through an index join. Since index
@@ -319,7 +315,7 @@
                 )
                 ...
             ]
-            $passthrough:*
+            $private:*
         ) &
         ^(HasOuterCols $project)
     (Const $limit:* & (IsPositiveInt $limit))
@@ -329,7 +325,7 @@
 (TryGenerateVectorSearch
     $scan
     $filters
-    $passthrough
+    (Passthrough $private)
     $vectorCol
     $queryVector
     $projections

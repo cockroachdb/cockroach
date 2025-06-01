@@ -662,7 +662,11 @@ func (c *CustomFuncs) PushColumnRemappingIntoValues(
 		&memo.ValuesPrivate{Cols: newValuesColList, ID: c.f.Metadata().NextUniqueID()})
 
 	// Construct and return a new ProjectExpr with the new ValuesExpr as input.
-	return c.f.ConstructProject(newValues, newProjections, newPassthrough)
+	return c.f.ConstructProject(newValues, newProjections,
+		&memo.ProjectPrivate{
+			Passthrough: newPassthrough,
+		},
+	)
 }
 
 // AssignmentCastCols returns the set of column IDs that undergo an assignment
@@ -800,7 +804,9 @@ func (c *CustomFuncs) PushAssignmentCastsIntoValues(
 			&memo.ValuesPrivate{Cols: newValuesCols, ID: c.f.Metadata().NextUniqueID()},
 		),
 		newProjections,
-		newPassthrough,
+		&memo.ProjectPrivate{
+			Passthrough: newPassthrough,
+		},
 	)
 }
 

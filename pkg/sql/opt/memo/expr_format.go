@@ -1897,6 +1897,9 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	case *ScanPrivate:
 		f.formatIndex(t.Table, t.Index, ScanIsReverseFn(f.Memo.Metadata(), t, &physProps.Ordering))
 
+	case *ProjectPrivate:
+		// Nothing to show.
+
 	case *SequenceSelectPrivate:
 		seq := f.Memo.metadata.Sequence(t.Sequence)
 		fmt.Fprintf(f.Buffer, " %s", seq.Name())

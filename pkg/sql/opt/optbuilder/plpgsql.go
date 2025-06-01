@@ -2097,13 +2097,21 @@ func (b *plpgsqlBuilder) addRuntimeCheck(
 	runtimeCheckColName := b.makeIdentifier("_plpgsql_runtime_check")
 	runtimeCheckCol := b.ob.factory.Metadata().AddColumn(runtimeCheckColName, types.Int)
 	proj := memo.ProjectionsExpr{b.ob.factory.ConstructProjectionsItem(caseExpr, runtimeCheckCol)}
-	s.expr = b.ob.factory.ConstructProject(s.expr, proj, originalCols)
+	s.expr = b.ob.factory.ConstructProject(s.expr, proj,
+		&memo.ProjectPrivate{
+			Passthrough: originalCols,
+		},
+	)
 
 	// Add an optimization barrier to ensure that the runtime checks are not
 	// eliminated by column-pruning. Then, remove the temporary columns from the
 	// output.
 	b.ob.addBarrier(s)
-	s.expr = b.ob.factory.ConstructProject(s.expr, memo.ProjectionsExpr{}, originalCols)
+	s.expr = b.ob.factory.ConstructProject(s.expr, memo.ProjectionsExpr{},
+		&memo.ProjectPrivate{
+			Passthrough: originalCols,
+		},
+	)
 }
 
 // buildFetch projects a call to the crdb_internal.plpgsql_fetch builtin

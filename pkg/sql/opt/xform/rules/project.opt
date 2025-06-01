@@ -53,14 +53,14 @@
 (Project
     (IndexJoin $input:*)
     $projections:*
-    $passthrough:* &
+    $private:* &
         (ColsAreSubset
             (UnionCols
                 (ProjectionOuterCols $projections)
-                $passthrough
+                (Passthrough $private)
             )
             (OutputCols $input)
         )
 )
 =>
-(Project $input $projections $passthrough)
+(Project $input $projections $private)

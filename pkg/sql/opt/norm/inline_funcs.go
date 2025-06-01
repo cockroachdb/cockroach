@@ -256,7 +256,11 @@ func (c *CustomFuncs) InlineProjectProject(
 		}
 	}
 
-	return c.f.ConstructProject(innerProject.Input, newProjections, newPassthrough)
+	return c.f.ConstructProject(innerProject.Input, newProjections,
+		&memo.ProjectPrivate{
+			Passthrough: newPassthrough,
+		},
+	)
 }
 
 // Recursively walk the tree looking for references to projection expressions
@@ -498,7 +502,9 @@ func (c *CustomFuncs) ConvertUDFToSubquery(
 		c.f.ConstructProject(
 			replace(stmt).(memo.RelExpr),
 			nil, /* projections */
-			opt.MakeColSet(returnColID),
+			&memo.ProjectPrivate{
+				Passthrough: opt.MakeColSet(returnColID),
+			},
 		),
 		&memo.SubqueryPrivate{},
 	)

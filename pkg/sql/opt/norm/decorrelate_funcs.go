@@ -314,7 +314,11 @@ func (c *CustomFuncs) HoistSelectSubquery(
 	}
 
 	sel := c.f.ConstructSelect(hoister.input(), newFilters)
-	return c.f.ConstructProject(sel, memo.EmptyProjectionsExpr, c.OutputCols(input))
+	return c.f.ConstructProject(sel, memo.EmptyProjectionsExpr,
+		&memo.ProjectPrivate{
+			Passthrough: c.OutputCols(input),
+		},
+	)
 }
 
 // HoistProjectSubquery searches the Project operator's projections for
@@ -344,7 +348,11 @@ func (c *CustomFuncs) HoistProjectSubquery(
 		}
 	}
 
-	return c.f.ConstructProject(hoister.input(), newProjections, passthrough)
+	return c.f.ConstructProject(hoister.input(), newProjections,
+		&memo.ProjectPrivate{
+			Passthrough: passthrough,
+		},
+	)
 }
 
 // HoistJoinSubquery searches the Join operator's filter for correlated
@@ -393,7 +401,11 @@ func (c *CustomFuncs) HoistJoinSubquery(
 	default:
 		passthrough = c.OutputCols(left).Union(c.OutputCols(right))
 	}
-	return c.f.ConstructProject(join, memo.EmptyProjectionsExpr, passthrough)
+	return c.f.ConstructProject(join, memo.EmptyProjectionsExpr,
+		&memo.ProjectPrivate{
+			Passthrough: passthrough,
+		},
+	)
 }
 
 // HoistValuesSubquery searches the Values operator's projections for correlated
@@ -434,7 +446,11 @@ func (c *CustomFuncs) HoistValuesSubquery(
 	})
 	join := c.f.ConstructInnerJoinApply(hoister.input(), values, memo.TrueFilter, memo.EmptyJoinPrivate)
 	outCols := values.Relational().OutputCols
-	return c.f.ConstructProject(join, memo.EmptyProjectionsExpr, outCols)
+	return c.f.ConstructProject(join, memo.EmptyProjectionsExpr,
+		&memo.ProjectPrivate{
+			Passthrough: outCols,
+		},
+	)
 }
 
 // HoistProjectSetSubquery searches the ProjectSet operator's functions for
@@ -479,7 +495,11 @@ func (c *CustomFuncs) HoistProjectSetSubquery(input memo.RelExpr, zip memo.ZipEx
 	outputCols := c.OutputCols(input).Union(zip.OutputCols())
 
 	projectSet := c.f.ConstructProjectSet(hoister.input(), newZip)
-	return c.f.ConstructProject(projectSet, memo.EmptyProjectionsExpr, outputCols)
+	return c.f.ConstructProject(projectSet, memo.EmptyProjectionsExpr,
+		&memo.ProjectPrivate{
+			Passthrough: outputCols,
+		},
+	)
 }
 
 // ConstructNonApplyJoin constructs the non-apply join operator that corresponds
@@ -550,7 +570,11 @@ func (c *CustomFuncs) tryFindExistingKey(in memo.RelExpr) (_ memo.RelExpr, ok bo
 	case *memo.ProjectExpr:
 		input, foundKey := c.tryFindExistingKey(t.Input)
 		if foundKey {
-			return c.f.ConstructProject(input, t.Projections, input.Relational().OutputCols), true
+			return c.f.ConstructProject(input, t.Projections,
+				&memo.ProjectPrivate{
+					Passthrough: input.Relational().OutputCols,
+				},
+			), true
 		}
 
 	case *memo.ScanExpr:
@@ -785,7 +809,11 @@ func (c *CustomFuncs) TranslateNonIgnoreAggs(
 	if projections == nil {
 		return newIn
 	}
-	return c.f.ConstructProject(newIn, projections, passthrough)
+	return c.f.ConstructProject(newIn, projections,
+		&memo.ProjectPrivate{
+			Passthrough: passthrough,
+		},
+	)
 }
 
 // EnsureAggsCanIgnoreNulls scans the aggregate list to aggregation functions that
@@ -1133,7 +1161,7 @@ func (r *subqueryHoister) constructGroupByExists(subquery memo.RelExpr) memo.Rel
 		subqueryWithCanary = r.f.ConstructProject(
 			subquery,
 			memo.ProjectionsExpr{r.f.ConstructProjectionsItem(memo.TrueSingleton, canaryColID)},
-			opt.ColSet{},
+			&memo.ProjectPrivate{},
 		)
 	} else {
 		canaryColID, _ = subquery.Relational().NotNullCols.Next(0)
@@ -1141,7 +1169,9 @@ func (r *subqueryHoister) constructGroupByExists(subquery memo.RelExpr) memo.Rel
 		subqueryWithCanary = r.f.ConstructProject(
 			subquery,
 			memo.ProjectionsExpr{},
-			opt.MakeColSet(canaryColID),
+			&memo.ProjectPrivate{
+				Passthrough: opt.MakeColSet(canaryColID),
+			},
 		)
 	}
 	aggColID := r.f.Metadata().AddColumn("canary_agg", canaryColTyp)
@@ -1163,7 +1193,7 @@ func (r *subqueryHoister) constructGroupByExists(subquery memo.RelExpr) memo.Rel
 			),
 			existsColID,
 		)},
-		opt.ColSet{},
+		&memo.ProjectPrivate{},
 	)
 }
 
@@ -1298,7 +1328,7 @@ func (c *CustomFuncs) ConstructGroupByAny(
 					inputNotNull,
 					notNullColID,
 				)},
-				opt.ColSet{},
+				&memo.ProjectPrivate{},
 			),
 			memo.AggregationsExpr{c.f.ConstructAggregationsItem(
 				c.f.ConstructBoolOr(
@@ -1328,7 +1358,7 @@ func (c *CustomFuncs) ConstructGroupByAny(
 			),
 			caseColID,
 		)},
-		opt.ColSet{},
+		&memo.ProjectPrivate{},
 	)
 }
 
