@@ -1266,6 +1266,17 @@ func (c *CustomFuncs) MakePassthrough(passthrough opt.ColSet) *memo.ProjectPriva
 	return &memo.ProjectPrivate{Passthrough: passthrough}
 }
 
+// MakePassthroughWithEquivGroups constructs a new ProjectPrivate with the given
+// passthrough columns and equivalence groups.
+func (c *CustomFuncs) MakePassthroughWithEquivGroups(
+	passthrough opt.ColSet, equiv props.EquivGroups,
+) *memo.ProjectPrivate {
+	return &memo.ProjectPrivate{
+		Passthrough: passthrough,
+		Equiv:       equiv,
+	}
+}
+
 // ----------------------------------------------------------------------
 //
 // Values functions

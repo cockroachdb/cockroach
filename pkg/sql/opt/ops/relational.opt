@@ -209,6 +209,10 @@ define ProjectPrivate {
     # Passthrough describes the input columns that are passed through as Project
     # output columns.
     Passthrough ColSet
+
+    # EquivGroups contains equivalencies of projected columns. It is populated
+    # by rules that inline filters below the projection.
+    Equiv EquivGroups
 }
 
 # InvertedFilter filters rows from its input result set, based on the

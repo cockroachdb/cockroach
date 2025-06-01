@@ -155,7 +155,10 @@
 (Project
     (Select $input (InlineSelectProject $filters $projections))
     $projections
-    $private
+    (MakePassthroughWithEquivGroups
+        (Passthrough $private)
+        (EquivGroupsFromFilters $filters)
+    )
 )
 
 # InlineSelectVirtualColumns pushes Select filters referencing virtual columns
@@ -262,7 +265,10 @@
             (InlineSelectProject $inlinableFilters $projections)
         )
         $projections
-        $private
+        (MakePassthroughWithEquivGroups
+            (Passthrough $private)
+            (EquivGroupsFromFilters $inlinableFilters)
+        )
     )
     (DiffFilters $filters $inlinableFilters)
 )

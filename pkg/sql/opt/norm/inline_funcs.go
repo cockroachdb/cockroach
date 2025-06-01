@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
@@ -223,6 +224,17 @@ func (c *CustomFuncs) InlineSelectProject(
 		)
 	}
 	return newFilters
+}
+
+// EquivGroupsFromFilters returns equivalence groups derived from the given
+// filters.
+func (c *CustomFuncs) EquivGroupsFromFilters(filters memo.FiltersExpr) props.EquivGroups {
+	var eq props.EquivGroups
+	for i := range filters {
+		item := &filters[i]
+		eq.AddFromFDs(&item.ScalarProps().FuncDeps)
+	}
+	return eq
 }
 
 // InlineProjectProject searches the projection expressions for any variable
