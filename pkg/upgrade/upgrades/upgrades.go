@@ -91,11 +91,11 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("cluster restore does not restore jobs tables"),
 	),
 
-	newFirstUpgrade(clusterversion.V25_2_Start.Version()),
+	newFirstUpgrade(clusterversion.TODO_Delete_V25_2_Start.Version()),
 
 	upgrade.NewTenantUpgrade(
 		"add new sql activity flush job",
-		clusterversion.V25_2_AddSqlActivityFlushJob.Version(),
+		clusterversion.TODO_Delete_V25_2_AddSqlActivityFlushJob.Version(),
 		upgrade.NoPrecondition,
 		addSqlActivityFlushJob,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this job"),
@@ -103,7 +103,7 @@ var upgrades = []upgradebase.Upgrade{
 
 	upgrade.NewTenantUpgrade(
 		"set new ui.default_timezone setting to ui.display_timezone value",
-		clusterversion.V25_2_SetUiDefaultTimezoneSetting.Version(),
+		clusterversion.TODO_Delete_V25_2_SetUiDefaultTimezoneSetting.Version(),
 		upgrade.NoPrecondition,
 		setUiDefaultTimezone,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this setting"),
@@ -111,7 +111,7 @@ var upgrades = []upgradebase.Upgrade{
 
 	upgrade.NewTenantUpgrade(
 		"add 'username' column to stmt diagnostics requests table",
-		clusterversion.V25_2_AddUsernameToStmtDiagRequest.Version(),
+		clusterversion.TODO_Delete_V25_2_AddUsernameToStmtDiagRequest.Version(),
 		upgrade.NoPrecondition,
 		stmtDiagAddUsernameMigration,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column"),
