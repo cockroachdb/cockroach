@@ -205,6 +205,7 @@ func pushReplicateChange(
 				repl.Desc(),
 				repl.RangeUsageInfo(),
 				op.Chgs,
+				repl.StoreID(), /* leaseholder */
 			)
 		}
 		log.VEventf(ctx, 1, "pushing state change for range=%s, details=%s changeIDs=%v", repl.rng, op.Details, changeIDs)
