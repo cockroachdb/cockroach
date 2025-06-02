@@ -13,9 +13,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -45,7 +47,6 @@ func BenchmarkTPCC(b *testing.B) {
 		{"optimized", "--literal-implementation=false"},
 	} {
 		b.Run(impl.name, func(b *testing.B) {
-
 			for _, mix := range []struct{ name, flag string }{
 				{"new_order", "--mix=newOrder=1"},
 				{"payment", "--mix=payment=1"},
@@ -89,6 +90,11 @@ func run(b *testing.B, pgURL string, workloadFlags []string) {
 func startCluster(b testing.TB) (_ serverutils.TestClusterInterface, pgURL string) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
+
+	// NOTE: disabling background work makes the benchmark more predictable, but
+	// also moderately less realistic.
+	ts.TimeseriesStorageEnabled.Override(context.Background(), &st.SV, false)
+	stats.AutomaticStatisticsClusterMode.Override(context.Background(), &st.SV, false)
 
 	const cacheSize = 2 * 1024 * 1024 * 1024 // 2GB
 	serverArgs := make(map[int]base.TestServerArgs, nodes)
