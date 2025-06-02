@@ -96,7 +96,7 @@ func maybeDropIndex(
 		panic(errors.AssertionFailedf("programming error: cannot find secondary index element."))
 	}
 	panicIfRegionChangeUnderwayOnRBRTable(b, "DROP INDEX", sie.TableID)
-	checkTableSchemaChangePrerequisites(b, b.QueryByID(sie.TableID), n)
+	defer checkTableSchemaChangePrerequisites(b, b.QueryByID(sie.TableID), n)()
 	// Cannot drop the index if not CASCADE and a unique constraint depends on it.
 	if n.DropBehavior != tree.DropCascade && sie.IsUnique && !sie.IsCreatedExplicitly {
 		panic(errors.WithHint(
