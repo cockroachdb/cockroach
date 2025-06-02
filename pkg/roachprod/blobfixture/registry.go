@@ -331,3 +331,13 @@ func (s *ScratchHandle) SetReadyAt(ctx context.Context) error {
 	s.logger.Printf("fixture '%s' ready at '%s'", s.metadata.DataPath, s.metadata.ReadyAt)
 	return nil
 }
+
+// SetFingerprint sets the fingerprint for the fixture.
+func (s *ScratchHandle) SetFingerprint(ctx context.Context, fingerprint map[string]string) error {
+	s.metadata.Fingerprint = fingerprint
+	if err := s.registry.upsertMetadata(s.metadata); err != nil {
+		return err
+	}
+	s.logger.Printf("fixture '%s' fingerprint set to '%s'", s.metadata.DataPath, s.metadata.Fingerprint)
+	return nil
+}
