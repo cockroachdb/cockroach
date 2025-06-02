@@ -704,7 +704,6 @@ func (ir *IntentResolver) lockInFlightTxnCleanup(
 // of async task with the intention that it be used as a hook to update metrics.
 // It will not be called if an error is returned.
 func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
-	_ context.Context, // TODO(tbg): remove
 	admissionHeader kvpb.AdmissionHeader,
 	rangeID roachpb.RangeID,
 	txn *roachpb.Transaction,

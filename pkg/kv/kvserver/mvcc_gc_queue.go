@@ -744,18 +744,16 @@ func (mgcq *mvccGCQueue) process(
 		},
 		func(ctx context.Context, txn *roachpb.Transaction) error {
 			err := repl.store.intentResolver.
-				CleanupTxnIntentsOnGCAsync(
-					ctx, gcAdmissionHeader(repl.store.ClusterSettings()), repl.RangeID, txn, gcTimestamp,
-					func(pushed, succeeded bool) {
-						if pushed {
-							mgcq.store.metrics.GCPushTxn.Inc(1)
-						}
-						if succeeded {
-							mgcq.store.metrics.GCResolveSuccess.Inc(int64(len(txn.LockSpans)))
-						} else {
-							mgcq.store.metrics.GCTxnIntentsResolveFailed.Inc(int64(len(txn.LockSpans)))
-						}
-					})
+				CleanupTxnIntentsOnGCAsync(gcAdmissionHeader(repl.store.ClusterSettings()), repl.RangeID, txn, gcTimestamp, func(pushed, succeeded bool) {
+					if pushed {
+						mgcq.store.metrics.GCPushTxn.Inc(1)
+					}
+					if succeeded {
+						mgcq.store.metrics.GCResolveSuccess.Inc(int64(len(txn.LockSpans)))
+					} else {
+						mgcq.store.metrics.GCTxnIntentsResolveFailed.Inc(int64(len(txn.LockSpans)))
+					}
+				})
 			if errors.Is(err, stop.ErrThrottled) {
 				log.Eventf(ctx, "processing txn %s: %s; skipping for future GC", txn.ID.Short(), err)
 				return nil
