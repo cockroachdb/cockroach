@@ -2069,26 +2069,25 @@ func (ds *DistSender) sendPartialBatchAsync(
 	responseCh chan response,
 	positions []int,
 ) bool {
-	if err := ds.stopper.RunAsyncTaskEx(
-		ctx,
-		stop.TaskOpts{
-			TaskName:   "kv.DistSender: sending partial batch",
-			SpanOpt:    stop.ChildSpan,
-			Sem:        ds.asyncSenderSem,
-			WaitForSem: false,
-		},
-		func(ctx context.Context) {
-			ds.metrics.AsyncSentCount.Inc(1)
-			ds.metrics.AsyncInProgress.Inc(1)
-			defer ds.metrics.AsyncInProgress.Dec(1)
-			resp := ds.sendPartialBatch(ctx, ba, rs, isReverse, withCommit, batchIdx, routing)
-			resp.positions = positions
-			responseCh <- resp
-		},
-	); err != nil {
+	ctx, hdl, err := ds.stopper.GetHandle(ctx, stop.TaskOpts{
+		TaskName:   "kv.DistSender: sending partial batch",
+		SpanOpt:    stop.ChildSpan,
+		Sem:        ds.asyncSenderSem,
+		WaitForSem: false,
+	})
+	if err != nil {
 		ds.metrics.AsyncThrottledCount.Inc(1)
 		return false
 	}
+	go func(ctx context.Context) {
+		defer hdl.Activate(ctx).Release(ctx)
+		ds.metrics.AsyncSentCount.Inc(1)
+		ds.metrics.AsyncInProgress.Inc(1)
+		defer ds.metrics.AsyncInProgress.Dec(1)
+		resp := ds.sendPartialBatch(ctx, ba, rs, isReverse, withCommit, batchIdx, routing)
+		resp.positions = positions
+		responseCh <- resp
+	}(ctx)
 	return true
 }
 
