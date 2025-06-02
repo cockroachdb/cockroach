@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
@@ -227,6 +228,11 @@ func (hi *hypotheticalIndex) GeoConfig() geopb.Config {
 		}
 	}
 	return geopb.Config{}
+}
+
+// VecConfig is part of the cat.Index interface.
+func (hi *hypotheticalIndex) VecConfig() *vecpb.Config {
+	return nil
 }
 
 // Version is part of the cat.Index interface.
