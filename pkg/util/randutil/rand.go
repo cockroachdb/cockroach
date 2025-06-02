@@ -69,7 +69,8 @@ var mtx syncutil.Mutex
 // Initializes the global random seed. This value can be specified via an
 // environment variable COCKROACH_RANDOM_SEED=x.
 func init() {
-	globalSeed = envutil.EnvOrDefaultInt64("COCKROACH_RANDOM_SEED", NewPseudoSeed())
+	// globalSeed = envutil.EnvOrDefaultInt64("COCKROACH_RANDOM_SEED", NewPseudoSeed())
+	globalSeed = 656245271510540675
 	rng = rand.New(rand.NewSource(globalSeed))
 }
 

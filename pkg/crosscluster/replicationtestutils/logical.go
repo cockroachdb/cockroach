@@ -47,7 +47,7 @@ func CheckEmptyDLQs(ctx context.Context, db sqlutils.DBHandle, dbName string) er
 
 func GenerateLDRTable(
 	ctx context.Context, rng *rand.Rand, tableName string, supportKVWriter bool,
-) string {
+) *tree.CreateTable {
 	columnByName := func(name tree.Name, columnDefs []*tree.ColumnTableDef) *tree.ColumnTableDef {
 		for _, col := range columnDefs {
 			if col.Name == name {
@@ -114,5 +114,5 @@ func GenerateLDRTable(
 			return true
 		}),
 	})
-	return tree.AsStringWithFlags(tableDef, tree.FmtParsable)
+	return tableDef
 }

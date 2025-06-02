@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "conflict",
+    srcs = [
+        "conflict.go",
+        "conflict_worker.go",
+        "writer.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/conflict",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/crosscluster/replicationtestutils",
+        "//pkg/sql/randgen",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/log",
+        "//pkg/workload",
+        "//pkg/workload/histogram",
+        "//pkg/workload/rand",
+        "@com_github_pkg_errors//:errors",
+        "@com_github_spf13_pflag//:pflag",
+        "@org_golang_x_sync//errgroup",
+    ],
+)
