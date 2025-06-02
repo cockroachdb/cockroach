@@ -44,11 +44,11 @@ WHERE database_name=$1`, lexbase.EscapeSQLIdent(dbName))
 
 	var ok bool
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-		tid := tree.MustBeDInt(it.Cur()[0])
-		triggerID, tableID := tree.MustBeDInt(it.Cur()[0]), tree.MustBeDInt(it.Cur()[1])
+		triggerID := tree.MustBeDInt(it.Cur()[0])
+		tableID := tree.MustBeDInt(it.Cur()[1])
 		pair := triggerIdPair{int64(triggerID), int64(tableID)}
 		triggerIds = append(triggerIds, pair)
-		if err = acc.Grow(ctx, int64(unsafe.Sizeof(tid))); err != nil {
+		if err = acc.Grow(ctx, int64(unsafe.Sizeof(pair))); err != nil {
 			return nil, err
 		}
 	}
