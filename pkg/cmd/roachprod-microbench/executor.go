@@ -425,7 +425,6 @@ func (e *executor) executeBenchmarks() error {
 	}
 
 	// Execute commands.
-	benchmarkErrorCount := 0
 	logIndex := 0
 	missingBenchmarks := make(map[benchmark]int, 0)
 	failedBenchmarks := make(map[benchmark]int, 0)
@@ -467,7 +466,6 @@ func (e *executor) executeBenchmarks() error {
 					executorError = errors.CombineErrors(executorError, errors.Wrap(err, "failed to post benchmark issue"))
 				}
 			}
-			benchmarkErrorCount++
 			logIndex++
 		}
 		if _, writeErr := report.analyticsOutput[benchmarkResponse.pkg].WriteString(
