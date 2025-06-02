@@ -1,5 +1,3 @@
-# LogicTest: !local-mixed-25.1
-
 query B
 SELECT jsonb_path_exists('{}', '$');
 ----

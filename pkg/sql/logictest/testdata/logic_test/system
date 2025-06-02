@@ -78,7 +78,7 @@ session_id       BYTES  false  NULL  ·  {primary}  false
 crdb_region      BYTES  false  NULL  ·  {primary}  false
 
 
-skipif config local-mixed-25.1 local-mixed-25.2
+skipif config local-mixed-25.2
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.eventlog
 ----
