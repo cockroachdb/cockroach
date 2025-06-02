@@ -1556,19 +1556,24 @@ func (w *workerCoordinator) performRequestAsync(
 
 	w.s.waitGroup.Add(1)
 	w.s.adjustNumRequestsInFlight(1 /* delta */)
-	if err := w.s.stopper.RunAsyncTaskEx(
-		ctx, stop.TaskOpts{
-			TaskName: AsyncRequestOp,
-			SpanOpt:  stop.ChildSpan,
-			// Note that we don't wait for the semaphore since it's the caller's
-			// responsibility to ensure that a new goroutine can be spun up.
-			Sem: w.asyncSem,
-		}, work); err != nil {
+	ctx, hdl, err := w.s.stopper.GetHandle(ctx, stop.TaskOpts{
+		TaskName: AsyncRequestOp,
+		SpanOpt:  stop.ChildSpan,
+		// Note that we don't wait for the semaphore since it's the caller's
+		// responsibility to ensure that a new goroutine can be spun up.
+		Sem: w.asyncSem,
+	})
+	if err != nil {
 		// The new goroutine for the request wasn't spun up, so we have to
 		// perform the cleanup of this request ourselves.
 		w.asyncRequestCleanup(true /* budgetMuAlreadyLocked */)
 		w.s.results.setError(err)
+		return
 	}
+	go func(ctx context.Context) {
+		defer hdl.Activate(ctx).Release(ctx)
+		work(ctx)
+	}(ctx)
 }
 
 // singleRangeBatchResponseFootprint is the footprint of the shape of the
