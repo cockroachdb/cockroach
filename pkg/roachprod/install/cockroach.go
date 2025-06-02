@@ -405,7 +405,7 @@ func (c *SyncedCluster) fetchVersion(
 // Starting the first node is special-cased quite a bit, it's used to distribute
 // certs, set cluster settings, and initialize the cluster. Also, if we're only
 // starting a single node in the cluster and it happens to be the "first" node
-// (node 1, as understood by SyncedCluster.TargetNodes), we use
+// (node 1, as understood by SyncedCluster.Nodes), we use
 // `start-single-node` (this was written to provide a short hand to start a
 // single node cluster with a replication factor of one).
 func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts StartOpts) error {
@@ -1306,7 +1306,7 @@ func (c *SyncedCluster) createAdminUserForSecureCluster(
 	retryOpts := retry.Options{MaxRetries: 20}
 	if err := retryOpts.Do(ctx, func(ctx context.Context) error {
 		// We use the first node in the virtual cluster to create the user.
-		firstNode := c.TargetNodes()[0]
+		firstNode := c.Nodes[0]
 		results, err := c.ExecSQL(
 			ctx, l, Nodes{firstNode}, virtualClusterName, sqlInstance, AuthRootCert, "", /* database */
 			[]string{"-e", stmts})
@@ -1509,7 +1509,7 @@ func (c *SyncedCluster) distributeCerts(ctx context.Context, l *logger.Logger) e
 	if !c.Secure {
 		return nil
 	}
-	for _, node := range c.TargetNodes() {
+	for _, node := range c.Nodes {
 		if node == 1 {
 			return c.DistributeCerts(ctx, l, false)
 		}
