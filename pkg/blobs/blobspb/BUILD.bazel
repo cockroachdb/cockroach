@@ -22,7 +22,12 @@ go_proto_library(
 
 go_library(
     name = "blobspb",
+    srcs = ["rpc_clients.go"],
     embed = [":blobspb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/blobs/blobspb",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/rpc/rpcbase",
+    ],
 )
