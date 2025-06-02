@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -4549,7 +4550,7 @@ func TestConnectionClass(t *testing.T) {
 
 	// class will capture the connection class used for the last transport
 	// created.
-	var class rpc.ConnectionClass
+	var class rpcbase.ConnectionClass
 	var transportFactory TransportFactory = func(opts SendOptions, replicas ReplicaSlice) Transport {
 		class = opts.class
 		return adaptSimpleTransport(
@@ -4577,16 +4578,16 @@ func TestConnectionClass(t *testing.T) {
 
 	for _, pair := range []struct {
 		key       roachpb.Key
-		wantClass rpc.ConnectionClass
+		wantClass rpcbase.ConnectionClass
 	}{
-		{key: keys.Meta1Prefix, wantClass: rpc.SystemClass},
-		{key: keys.NodeLivenessKey(1), wantClass: rpc.SystemClass},
-		{key: keys.StatusNodePrefix, wantClass: rpc.SystemClass},
-		{key: keys.NodeStatusKey(15), wantClass: rpc.SystemClass},
-		{key: keys.NodeIDGenerator, wantClass: rpc.SystemClass},
-		{key: keys.TimeseriesPrefix, wantClass: rpc.DefaultClass},
-		{key: keys.SystemSpanConfigPrefix, wantClass: rpc.DefaultClass},
-		{key: keys.SystemSQLCodec.TablePrefix(1234), wantClass: rpc.DefaultClass},
+		{key: keys.Meta1Prefix, wantClass: rpcbase.SystemClass},
+		{key: keys.NodeLivenessKey(1), wantClass: rpcbase.SystemClass},
+		{key: keys.StatusNodePrefix, wantClass: rpcbase.SystemClass},
+		{key: keys.NodeStatusKey(15), wantClass: rpcbase.SystemClass},
+		{key: keys.NodeIDGenerator, wantClass: rpcbase.SystemClass},
+		{key: keys.TimeseriesPrefix, wantClass: rpcbase.DefaultClass},
+		{key: keys.SystemSpanConfigPrefix, wantClass: rpcbase.DefaultClass},
+		{key: keys.SystemSQLCodec.TablePrefix(1234), wantClass: rpcbase.DefaultClass},
 	} {
 		t.Run(pair.key.String(), func(t *testing.T) {
 			ba := &kvpb.BatchRequest{}

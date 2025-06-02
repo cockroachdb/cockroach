@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -203,7 +204,7 @@ func TestClusterConnectivity(t *testing.T) {
 					serv := tc.Server(bootstrapNode)
 
 					target := serv.AdvRPCAddr()
-					dialOpts, err := tc.Server(bootstrapNode).RPCContext().GRPCDialOptions(ctx, target, rpc.SystemClass)
+					dialOpts, err := tc.Server(bootstrapNode).RPCContext().GRPCDialOptions(ctx, target, rpcbase.SystemClass)
 					if err != nil {
 						return err
 					}
@@ -378,7 +379,7 @@ func TestDecommissionedNodeCannotConnect(t *testing.T) {
 
 			// Within a short period of time, the cluster (n1, n2) will refuse to reach out to n3.
 			_, err := clusterSrv.RPCContext().GRPCDialNode(
-				decomSrv.RPCAddr(), decomSrv.NodeID(), decomSrv.Locality(), rpc.DefaultClass,
+				decomSrv.RPCAddr(), decomSrv.NodeID(), decomSrv.Locality(), rpcbase.DefaultClass,
 			).Connect(ctx)
 			s, ok := grpcstatus.FromError(errors.UnwrapAll(err))
 			if !ok || s.Code() != codes.FailedPrecondition {
@@ -389,7 +390,7 @@ func TestDecommissionedNodeCannotConnect(t *testing.T) {
 
 			// And similarly, n3 will be refused by n1, n2.
 			_, err = decomSrv.RPCContext().GRPCDialNode(
-				clusterSrv.RPCAddr(), clusterSrv.NodeID(), clusterSrv.Locality(), rpc.DefaultClass,
+				clusterSrv.RPCAddr(), clusterSrv.NodeID(), clusterSrv.Locality(), rpcbase.DefaultClass,
 			).Connect(ctx)
 			s, ok = grpcstatus.FromError(errors.UnwrapAll(err))
 			if !ok || s.Code() != codes.PermissionDenied {
