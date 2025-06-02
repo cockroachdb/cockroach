@@ -101,13 +101,18 @@ func (rit *ReplicaIDAndType) subsumesChange(prev, next ReplicaIDAndType) bool {
 
 type ReplicaState struct {
 	ReplicaIDAndType
-	// VoterIsLagging can be set for a VOTER_FULL replica that has fallen behind
-	// (and possibly even needs a snapshot to catch up). It is a hint to the
-	// allocator not to transfer the lease to this replica.
+	// VoterIsLagging can be set for a VOTER_FULL replica that has fallen
+	// behind, i.e., it's matching log is less than the current committed log.
+	// It is a hint to the allocator not to transfer the lease to this replica.
 	VoterIsLagging bool
-	// TODO(kvoli,sumeerbhola): Add in rac2.SendQueue information to prevent
-	// lease transfers to replicas which are not able to take the lease due to a
-	// send queue.
+	// TODO(kvoli,sumeerbhola): Consider adding in rac2.SendQueue information to
+	// prevent lease transfers to replicas which are not able to take the lease
+	// due to a send queue. Do we even need this, given the VoterIsLagging
+	// should be true whenever there is a send queue? I suppose if we are
+	// force-flushing to a replica, it is possible for VoterIsLagging to be
+	// false and the send queue to be non-empty. But we could incorporate the
+	// send-queue state into VoterIsLagging -- having two bools doesn't seem
+	// beneficial.
 }
 
 // ChangeID is a unique ID, in the context of this data-structure and when
@@ -1154,7 +1159,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		for _, change := range enactedChanges {
 			// Mark the change as enacted. Enacting a change does not remove the
 			// corresponding load adjustments. The store load message will do that,
-			// or GC, indiciating that the change is been reflected in the store
+			// or GC, indicating that the change has been reflected in the store
 			// load.
 			cs.markPendingChangeEnacted(change.ChangeID, now)
 		}

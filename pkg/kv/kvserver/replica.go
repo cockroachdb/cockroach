@@ -3010,7 +3010,8 @@ func (m *mmaRangeMessageNeeded) getSendStreamStatsScratch() *rac2.RangeSendStrea
 func (m *mmaRangeMessageNeeded) getNeededAndReset(
 	rangeLoad mma.RangeLoad,
 	raftStatus *raft.Status,
-	// TODO: use RangeSendStreamStats.
+	// TODO: Perhaps use RangeSendStreamStats. See the comment about whether
+	// this is really needed in mma.ReplicaState.
 	sendStreamStats *rac2.RangeSendStreamStats,
 ) bool {
 	needed := m.needed
@@ -3020,9 +3021,6 @@ func (m *mmaRangeMessageNeeded) getNeededAndReset(
 	}
 	if !needed {
 		for replicaID, ls := range m.lastLaggingState {
-			// TODO: Unsure whether using ReplicaIsBehind is what we want here, since
-			// it is stronger than the lack of a send-queue. And we needed the
-			// send-queue state for something in the allocator.
 			if ls.isLagging != raftutil.ReplicaIsBehind(raftStatus, replicaID) {
 				needed = true
 				break
