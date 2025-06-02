@@ -185,6 +185,11 @@ func IsLegalColumnType(typ *types.T) bool {
 		// is low risk.
 		return false
 	}
+	if typ.Family() == types.ArrayFamily && typ.ArrayContents().Family() == types.BitFamily {
+		// It's difficult to parse the bitfield width from an array of bits in a
+		// sql statement.
+		return false
+	}
 	ctx := context.Background()
 	st := clustersettings.MakeTestingClusterSettings()
 	return colinfo.ValidateColumnDefType(ctx, st, typ) == nil

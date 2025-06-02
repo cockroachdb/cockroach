@@ -92,7 +92,7 @@ func TestRandRun(t *testing.T) {
 
 			dataType, err := typeForOid(db, typeT.InternalType.Oid, tblName, colName)
 			require.NoError(t, err)
-			cols := []col{{name: colName, dataType: dataType}}
+			cols := []Col{{Name: colName, DataType: dataType}}
 			op := randOp{
 				config:    &random{batchSize: 1},
 				db:        db,

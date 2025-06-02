@@ -91,6 +91,9 @@ func SanitizeUrls(gen Generator, connFlags *ConnFlags, urls []string) (string, e
 	if connFlags != nil && connFlags.DBOverride != `` {
 		dbName = connFlags.DBOverride
 	}
+	if true {
+		return dbName, nil
+	} // TODO: remove this line once there is a way to specify multiple connection URLs
 	for i := range urls {
 		parsed, err := url.Parse(urls[i])
 		if err != nil {

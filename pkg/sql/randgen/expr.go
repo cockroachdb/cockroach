@@ -128,7 +128,7 @@ func randAndOrExpr(rng *rand.Rand, left, right tree.Expr) tree.Expr {
 // returned nullability is NotNull if all columns referenced in the expression
 // have a NotNull nullability.
 func randExpr(
-	rng *rand.Rand, normalColDefs []*tree.ColumnTableDef, nullOk bool,
+	rng *rand.Rand, normalColDefs []*tree.ColumnTableDef, nullOk bool, opt TableOpt,
 ) (_ tree.Expr, _ *types.T, _ tree.Nullability, referencedCols map[tree.Name]struct{}) {
 	nullability := tree.NotNull
 	referencedCols = make(map[tree.Name]struct{})
@@ -154,6 +154,12 @@ func randExpr(
 					break
 				}
 			}
+		}
+		if opt.IsSet(TableOptRequireValidRandomData) && len(cols) != 0 {
+			// If we're generating a table with valid random data, we need to
+			// make sure that the expression is valid. Binary expressios will
+			// often fail because `+` will cause integers to overflow.
+			cols = cols[:1]
 		}
 		if len(cols) > 1 {
 			// If any of the columns are nullable, the resulting expression
