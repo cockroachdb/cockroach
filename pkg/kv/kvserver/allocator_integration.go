@@ -6,6 +6,7 @@
 package kvserver
 
 import (
+	"context"
 	fmt "fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -13,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // The expected usage for the non-mma components is:
@@ -116,31 +118,18 @@ func (as *AllocatorSync) NonMMAPreTransferLease(
 }
 
 func (as *AllocatorSync) NonMMAPreChangeReplicas(
-	desc *roachpb.RangeDescriptor, usage allocator.RangeUsageInfo, changes kvpb.ReplicationChanges,
+	desc *roachpb.RangeDescriptor,
+	usage allocator.RangeUsageInfo,
+	changes kvpb.ReplicationChanges,
+	leaseholder roachpb.StoreID,
 ) []mma.ChangeID {
 	rLoad := allocator.UsageInfoToMMALoad(usage)
-	replicaChanges := make([]mma.ReplicaChange, len(changes))
+	replicaChanges := make([]mma.ReplicaChange, 0, len(changes))
 	replicaSet := desc.Replicas()
 
-	for i, chg := range changes {
-		// TODO(mma): Handle the leaseholder being added or removed. We currently don't
-		// know from the given arguments which replica is the leaseholder.
-		if chg.ChangeType == roachpb.ADD_VOTER ||
-			chg.ChangeType == roachpb.ADD_NON_VOTER {
-			rType := roachpb.VOTER_FULL
-			if chg.ChangeType == roachpb.ADD_NON_VOTER {
-				rType = roachpb.NON_VOTER
-			}
-			replicaChanges[i] = mma.MakeAddReplicaChange(
-				desc.RangeID, rLoad, mma.ReplicaState{
-					ReplicaIDAndType: mma.ReplicaIDAndType{
-						ReplicaType: mma.ReplicaType{
-							ReplicaType: rType,
-						},
-					},
-				}, chg.Target)
-		} else if chg.ChangeType == roachpb.REMOVE_VOTER ||
-			chg.ChangeType == roachpb.REMOVE_NON_VOTER {
+	var lhBeingRemoved bool
+	for _, chg := range changes {
+		if chg.ChangeType == roachpb.REMOVE_VOTER || chg.ChangeType == roachpb.REMOVE_NON_VOTER {
 			filteredSet := replicaSet.Filter(func(r roachpb.ReplicaDescriptor) bool {
 				return r.StoreID == chg.Target.StoreID
 			})
@@ -151,20 +140,49 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 					chg.Target.StoreID, replDescriptors, desc))
 			}
 			replDesc := replDescriptors[0]
-			replicaChanges[i] = mma.MakeRemoveReplicaChange(
+			lhBeingRemoved = replDesc.StoreID == leaseholder
+			replicaChanges = append(replicaChanges, mma.MakeRemoveReplicaChange(
 				desc.RangeID, rLoad, mma.ReplicaState{
 					ReplicaIDAndType: mma.ReplicaIDAndType{
 						ReplicaID: replDesc.ReplicaID,
 						ReplicaType: mma.ReplicaType{
-							ReplicaType: replDesc.Type,
+							ReplicaType:   replDesc.Type,
+							IsLeaseholder: lhBeingRemoved,
 						},
 					},
 				},
-				chg.Target)
+				chg.Target))
+		}
+	}
+
+	for _, chg := range changes {
+		if chg.ChangeType == roachpb.ADD_VOTER ||
+			chg.ChangeType == roachpb.ADD_NON_VOTER {
+			rType := roachpb.VOTER_FULL
+			if chg.ChangeType == roachpb.ADD_NON_VOTER {
+				rType = roachpb.NON_VOTER
+			}
+			replicaChanges = append(replicaChanges, mma.MakeAddReplicaChange(
+				desc.RangeID, rLoad, mma.ReplicaState{
+					ReplicaIDAndType: mma.ReplicaIDAndType{
+						ReplicaType: mma.ReplicaType{
+							ReplicaType: rType,
+							// TODO(sumeer): can there be multiple ADD_VOTERs?
+							IsLeaseholder: lhBeingRemoved && chg.ChangeType == roachpb.ADD_VOTER,
+						},
+					},
+				}, chg.Target))
+		} else if chg.ChangeType == roachpb.REMOVE_VOTER ||
+			chg.ChangeType == roachpb.REMOVE_NON_VOTER {
+			// Handled above.
+			continue
 		} else {
 			panic("unimplemented change type")
 		}
 	}
+
+	log.Infof(context.Background(), "registering external replica change: chgs=%v usage=%v changes=%v",
+		changes, usage, replicaChanges)
 	changeIDs := as.mmAllocator.RegisterExternalChanges(replicaChanges)
 	trackedChange := trackedAllocatorChange{
 		typ:       AllocatorChangeTypeChangeReplicas,
@@ -172,8 +190,11 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 		changeIDs: changeIDs,
 		chgs:      changes,
 	}
+	log.Infof(context.Background(), "registered external replica change: chgs=%v change_ids=%v",
+		changes, changeIDs)
 	as.trackedChanges[changeIDs[0]] = trackedChange
 	return changeIDs
+
 }
 
 func (as *AllocatorSync) NonMMAPreRelocateRange(
