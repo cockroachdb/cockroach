@@ -1528,12 +1528,15 @@ func (ds *DistSender) divideAndSendParallelCommit(
 		qiResponseCh <- response{reply: reply, positions: positions, pErr: pErr}
 	}
 
-	runTask := ds.stopper.RunAsyncTask
+	const taskName = "kv.DistSender: sending pre-commit query intents"
 	if ds.disableParallelBatches {
-		runTask = ds.stopper.RunTask
-	}
-	if err := runTask(ctx, "kv.DistSender: sending pre-commit query intents", sendPreCommit); err != nil {
-		return nil, kvpb.NewError(err)
+		if err := ds.stopper.RunTask(ctx, taskName, sendPreCommit); err != nil {
+			return nil, kvpb.NewError(err)
+		}
+	} else {
+		if err := ds.stopper.RunAsyncTask(ctx, taskName, sendPreCommit); err != nil {
+			return nil, kvpb.NewError(err)
+		}
 	}
 
 	// Adjust the original batch request to ignore the pre-commit
