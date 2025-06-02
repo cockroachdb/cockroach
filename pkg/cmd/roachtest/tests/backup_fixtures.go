@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -27,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -125,7 +128,7 @@ type backupFixtureSpecs struct {
 
 const scheduleLabel = "tpcc_backup"
 
-func CreateScheduleStatement(uri url.URL) string {
+func CreateScheduleStatement(fixture BackupFixture, uri url.URL) string {
 	// This backup schedule will first run a full backup immediately and then the
 	// incremental backups every minute until the user cancels the backup
 	// schedules. To ensure that only one full backup chain gets created,
@@ -133,12 +136,12 @@ func CreateScheduleStatement(uri url.URL) string {
 	// ;)
 	statement := fmt.Sprintf(
 		`CREATE SCHEDULE IF NOT EXISTS "%s"
-FOR BACKUP DATABASE tpcc
+FOR BACKUP DATABASE %s
 INTO '%s'
 RECURRING '* * * * *'
 FULL BACKUP '@weekly'
 WITH SCHEDULE OPTIONS first_run = 'now';
-`, scheduleLabel, uri.String())
+`, scheduleLabel, fixture.DatabaseName(), uri.String())
 	return statement
 }
 
@@ -242,7 +245,7 @@ func (bd *backupDriver) scheduleBackups(ctx context.Context) {
 		))
 		require.NoError(bd.t, err)
 	}
-	createScheduleStatement := CreateScheduleStatement(bd.registry.URI(bd.fixture.DataPath))
+	createScheduleStatement := CreateScheduleStatement(bd.sp.fixture, bd.registry.URI(bd.fixture.DataPath))
 	_, err := conn.Exec(createScheduleStatement)
 	require.NoError(bd.t, err)
 }
@@ -358,6 +361,92 @@ func (bd *backupDriver) compactionJobStates(
 		}
 	}
 	return successes, running, failures, nil
+}
+
+// fingerprintFixture computes a fingerprint of the fixture. It first takes an
+// incremental backup to ensure that the database state matches the fixture.
+// Note: This assumes that the workload has been stopped so that the state of
+// the database matches the fixture contents.
+func (bd *backupDriver) fingerprintFixture(ctx context.Context) string {
+	conn := bd.c.Conn(ctx, bd.t.L(), 1)
+	defer conn.Close()
+	sql := sqlutils.MakeSQLRunner(conn)
+
+	// Take one more backup to ensure database state matches the fixture for
+	// fingerprinting. Again, this assumes the workload has been stopped.
+	bd.t.L().Printf("taking incremental backup before fingerprinting")
+	bd.takeIncrementalBackup(ctx, sql)
+
+	return fingerprintDatabase(ctx, bd.t, sql, bd.sp.fixture.DatabaseName())
+}
+
+// takeIncrementalBackup synchronously takes an incremental backup.
+func (bd *backupDriver) takeIncrementalBackup(ctx context.Context, sql *sqlutils.SQLRunner) {
+	collectionURI := bd.registry.URI(bd.fixture.DataPath)
+	backupStmt := fmt.Sprintf(
+		`BACKUP DATABASE %s INTO LATEST IN '%s'`, bd.sp.fixture.DatabaseName(), collectionURI.String(),
+	)
+	sql.Exec(bd.t, backupStmt)
+}
+
+// fingerprintDatabase computes a fingerprint of the database by fingerprinting
+// each table in the database and combining the fingerprints with an XOR.
+func fingerprintDatabase(
+	ctx context.Context, t test.Test, sql *sqlutils.SQLRunner, db string,
+) string {
+	tables := getDatabaseTables(ctx, t, sql, db)
+	var wg sync.WaitGroup
+	wg.Add(len(tables))
+
+	var fingerprint int64
+	var mu syncutil.Mutex
+	for _, table := range tables {
+		table := table
+		go func() {
+			defer wg.Done()
+
+			rows := sql.Query(t, fmt.Sprintf(
+				"SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s]", table,
+			))
+			defer rows.Close()
+
+			var tableFingerprint int64
+			for rows.Next() {
+				var indexFingerprint int64
+				err := rows.Scan(&indexFingerprint)
+				require.NoError(t, err, "error scanning fingerprint for table %s", table)
+				tableFingerprint ^= indexFingerprint
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			fingerprint ^= tableFingerprint
+		}()
+	}
+	wg.Wait()
+
+	return strconv.FormatInt(fingerprint, 10)
+}
+
+// getDatabaseTables returns the fully qualified name of every table in the
+// fixture.
+func getDatabaseTables(
+	ctx context.Context, t test.Test, sql *sqlutils.SQLRunner, db string,
+) []string {
+	tablesQuery := fmt.Sprintf(`SELECT schema_name, table_name FROM [SHOW TABLES FROM %s]`, db)
+	rows := sql.Query(t, tablesQuery)
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var schemaName, tableName string
+		if err := rows.Scan(&schemaName, &tableName); err != nil {
+			t.L().Printf("error scanning table name: %v", err)
+			continue
+		}
+		tables = append(tables, fmt.Sprintf("%s.%s.%s", db, schemaName, tableName))
+	}
+	return tables
 }
 
 func fixtureDirectory() string {
@@ -483,6 +572,9 @@ func registerBackupFixtures(r registry.Registry) {
 				require.NoError(t, bd.monitorBackups(ctx))
 
 				stopWorkload()
+
+				fingerprint := bd.fingerprintFixture(ctx)
+				require.NoError(t, handle.SetFingerprint(ctx, fingerprint))
 
 				require.NoError(t, handle.SetReadyAt(ctx))
 			},
