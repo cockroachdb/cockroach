@@ -783,18 +783,18 @@ func (r *rpcConn) close() {
 	atomic.StoreInt32(&r.closed, 1)
 }
 
-func (r *rpcConn) maybeConnect(ctx context.Context, stopper *stop.Stopper) error {
+func (r *rpcConn) maybeConnect(ctx context.Context, _ *stop.Stopper) error {
 	if r.stream != nil {
 		// Already connected.
 		return nil
 	}
 
-	conn, err := r.dialer.Dial(ctx, r.nodeID, rpcbase.SystemClass)
+	client, err := ctpb.DialSideTransportClient(r.dialer, ctx, r.nodeID, rpcbase.SystemClass)
 	if err != nil {
 		return err
 	}
 	streamCtx, cancel := context.WithCancel(ctx)
-	stream, err := ctpb.NewSideTransportClient(conn).PushUpdates(streamCtx)
+	stream, err := client.PushUpdates(streamCtx)
 	if err != nil {
 		cancel()
 		return err

@@ -283,13 +283,11 @@ func (t *Transport) startProcessNewQueue(
 			log.Fatalf(ctx, "queue for n%d does not exist", toNodeID)
 		}
 		defer cleanup()
-		conn, err := t.dialer.Dial(ctx, toNodeID, connClass)
+		client, err := slpb.DialStoreLivenessClient(t.dialer, ctx, toNodeID, connClass)
 		if err != nil {
 			// DialNode already logs sufficiently, so just return.
 			return
 		}
-
-		client := slpb.NewStoreLivenessClient(conn)
 		streamCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
