@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttrace"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -426,8 +426,8 @@ func TestCrashWhileTruncatingSideloadedEntries(t *testing.T) {
 		// leader sent is now above the last index in the log.
 		for _, peer := range []int{0, 2} { // the leader and the other follower
 			dialer := tc.Servers[1].NodeDialer().(*nodedialer.Dialer)
-			for c := 0; c < rpc.NumConnectionClasses; c++ {
-				brk, found := dialer.GetCircuitBreaker(tc.Servers[peer].NodeID(), rpc.ConnectionClass(c))
+			for c := 0; c < rpcbase.NumConnectionClasses; c++ {
+				brk, found := dialer.GetCircuitBreaker(tc.Servers[peer].NodeID(), rpcbase.ConnectionClass(c))
 				if found {
 					brk.Report(errors.New("connection is terminated by the test"))
 				}

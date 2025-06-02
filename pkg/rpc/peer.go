@@ -14,6 +14,7 @@ import (
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -124,8 +125,8 @@ type peer[Conn rpcConn] struct {
 	opts                 *ContextOptions
 	heartbeatInterval    time.Duration
 	heartbeatTimeout     time.Duration
-	dial                 func(ctx context.Context, target string, class ConnectionClass) (Conn, error)
-	dialDRPC             func(ctx context.Context, target string, class ConnectionClass) (drpc.Conn, error)
+	dial                 func(ctx context.Context, target string, class rpcbase.ConnectionClass) (Conn, error)
+	dialDRPC             func(ctx context.Context, target string, class rpcbase.ConnectionClass) (drpc.Conn, error)
 	newHeartbeatClient   heartbeatClientConstructor[Conn]
 	newBatchStreamClient streamConstructor[*kvpb.BatchRequest, *kvpb.BatchResponse, Conn]
 	newCloseNotifier     closeNotifierConstructor[Conn]
@@ -244,7 +245,7 @@ func (rpcCtx *Context) newPeer(k peerKey, locality roachpb.Locality) *peer[*grpc
 		remoteClocks:       rpcCtx.RemoteClocks,
 		opts:               &rpcCtx.ContextOptions,
 		peers:              &rpcCtx.peers,
-		dial: func(ctx context.Context, target string, class ConnectionClass) (*grpc.ClientConn, error) {
+		dial: func(ctx context.Context, target string, class rpcbase.ConnectionClass) (*grpc.ClientConn, error) {
 			additionalDialOpts := []grpc.DialOption{grpc.WithStatsHandler(&statsTracker{lm})}
 			additionalDialOpts = append(additionalDialOpts, rpcCtx.testingDialOpts...)
 			return rpcCtx.grpcDialRaw(ctx, target, class, additionalDialOpts...)

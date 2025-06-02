@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -88,7 +89,7 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 		}
 	}()
 
-	if _, existingQueue := tp.getQueue(1, rpc.SystemClass); existingQueue {
+	if _, existingQueue := tp.getQueue(1, rpcbase.SystemClass); existingQueue {
 		t.Fatal("queue already exists")
 	}
 	timeout := time.Duration(rand.Int63n(int64(5 * time.Millisecond)))
@@ -104,7 +105,7 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 		ln = nil
 		wg.Done()
 	}()
-	tp.startProcessNewQueue(ctxBoom, 1, rpc.SystemClass)
+	tp.startProcessNewQueue(ctxBoom, 1, rpcbase.SystemClass)
 
 	wg.Wait()
 }

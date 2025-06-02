@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "base",
+    srcs = ["connection_class.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/rpc/base",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/rpc/rpcpb",
+        "//pkg/util/envutil",
+    ],
+)
+
+go_library(
+    name = "rpcbase",
+    srcs = ["connection_class.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/rpc/rpcbase",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/rpc/rpcpb",
+        "//pkg/util/envutil",
+    ],
+)
