@@ -107,33 +107,18 @@ func (i ProgressStorage) Set(
 		ts = resolved.AsOfSystemTime()
 	}
 
-	// Optimistically update the job's progress row, but if it does not exist,
-	// insert it. This could have been implemented as a DELETE followed by an
-	// INSERT, but that would have always required two separate SQL operations.
-	rowsUpdated, err := txn.ExecEx(
-		ctx, "write-job-progress-update", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-		`UPDATE system.job_progress SET (written, fraction, resolved) = (now(), $2, $3) WHERE job_id = $1`,
-		i, frac, ts,
-	)
-	if err != nil {
-		// Defend against the update failing on a unique violation due to updating
-		// >1 keys with the same id. This shouldn't happen, unless a user manually
-		// inserted into the job_progress table.
-		if _, err := txn.ExecEx(
-			ctx, "write-job-progress-delete-fallback", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-			`DELETE FROM system.job_progress where job_id = $1`,
-			i); err != nil {
-			return err
-		}
+	if _, err := txn.ExecEx(
+		ctx, "write-job-progress-delete", txn.KV(), sessiondata.NodeUserSessionDataOverride,
+		`DELETE FROM system.job_progress where job_id = $1`,
+		i); err != nil {
+		return err
 	}
-	if rowsUpdated == 0 {
-		if _, err := txn.ExecEx(
-			ctx, "write-job-progress-insert", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-			`INSERT INTO system.job_progress (job_id, written, fraction, resolved) VALUES ($1, now(), $2, $3)`,
-			i, frac, ts,
-		); err != nil {
-			return err
-		}
+	if _, err := txn.ExecEx(
+		ctx, "write-job-progress-insert", txn.KV(), sessiondata.NodeUserSessionDataOverride,
+		`INSERT INTO system.job_progress (job_id, written, fraction, resolved) VALUES ($1, now(), $2, $3)`,
+		i, frac, ts,
+	); err != nil {
+		return err
 	}
 
 	if _, err := txn.ExecEx(
@@ -198,28 +183,11 @@ func (i StatusStorage) Set(ctx context.Context, txn isql.Txn, status string) err
 		return err
 	}
 
-	// Optimistically update the job's status row, but if it does not exist,
-	// insert it. This could have been implemented as a DELETE followed by an
-	// INSERT, but that would have always required two separate SQL operations.
-	rowsUpdated, err := txn.ExecEx(
-		ctx, "write-job-status-update", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-		`UPDATE system.job_status SET (written, status) = (now(), $2) WHERE job_id = $1`,
-		i, status,
-	)
-	if rowsUpdated > 0 && err == nil {
-		return nil
+	if err := i.Clear(ctx, txn); err != nil {
+		return err
 	}
 
-	if err != nil {
-		// Defend against the update failing on a unique violation due to updating
-		// >1 keys with the same id. This should not happen, unless a user manually
-		// inserted into the job_status table.
-		if err := i.Clear(ctx, txn); err != nil {
-			return err
-		}
-	}
-
-	_, err = txn.ExecEx(
+	_, err := txn.ExecEx(
 		ctx, "write-job-status-insert", txn.KV(), sessiondata.NodeUserSessionDataOverride,
 		`INSERT INTO system.job_status (job_id, written, status) VALUES ($1, now(), $2)`,
 		i, status,
@@ -445,63 +413,27 @@ func (i InfoStorage) write(
 	ctx context.Context, infoKey string, value []byte, firstWrite bool,
 ) error {
 	return i.doWrite(ctx, func(ctx context.Context, j *Job, txn isql.Txn) error {
-		if firstWrite {
-			// firstWrite implies that the value is being written for the first time,
-			// so no need to update it.
-			_, err := txn.ExecEx(
-				ctx, "write-job-info-insert", txn.KV(),
-				sessiondata.NodeUserSessionDataOverride,
-				`INSERT INTO system.job_info (job_id, info_key, written, value) VALUES ($1, $2, now(), $3)`,
-				j.ID(), infoKey, value,
-			)
-			return err
-		}
-
-		deleteQuery := "DELETE FROM system.job_info WHERE job_id = $1 AND info_key::string = $2"
-		if value == nil {
-			_, err := txn.ExecEx(
+		if !firstWrite {
+			if _, err := txn.ExecEx(
 				ctx, "write-job-info-delete", txn.KV(),
 				sessiondata.NodeUserSessionDataOverride,
-				deleteQuery,
-				j.ID(), infoKey,
-			)
-			return err
-		}
-
-		// Optimistically update the job info row, but if it does not exist,
-		// insert it. This could have been implemented as a DELETE followed by an
-		// INSERT, but that would have always required two separate SQL operations.
-		rowsUpdated, err := txn.ExecEx(
-			ctx, "write-job-info-update", txn.KV(),
-			sessiondata.NodeUserSessionDataOverride,
-			`UPDATE system.job_info SET (written, value) = (now(), $3) WHERE job_id = $1 AND info_key::string = $2`,
-			j.ID(), infoKey, value,
-		)
-		if rowsUpdated > 0 && err == nil {
-			return nil
-		}
-
-		if err != nil {
-			// Defend against the update failing on a unique violation due to updating
-			// >1 keys with the same id and info_key. This shouldn't happen, unless a
-			// user manually inserted into the job_info table.
-			if _, err := txn.ExecEx(
-				ctx, "write-job-info-delete-fallback", txn.KV(),
-				sessiondata.NodeUserSessionDataOverride,
-				deleteQuery,
+				"DELETE FROM system.job_info WHERE job_id = $1 AND info_key::string = $2",
 				j.ID(), infoKey,
 			); err != nil {
 				return err
 			}
 		}
-
-		_, err = txn.ExecEx(
-			ctx, "write-job-info-insert", txn.KV(),
-			sessiondata.NodeUserSessionDataOverride,
-			`INSERT INTO system.job_info (job_id, info_key, written, value) VALUES ($1, $2, now(), $3)`,
-			j.ID(), infoKey, value,
-		)
-		return err
+		if value != nil {
+			if _, err := txn.ExecEx(
+				ctx, "write-job-info-insert", txn.KV(),
+				sessiondata.NodeUserSessionDataOverride,
+				`INSERT INTO system.job_info (job_id, info_key, written, value) VALUES ($1, $2, now(), $3)`,
+				j.ID(), infoKey, value,
+			); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 
