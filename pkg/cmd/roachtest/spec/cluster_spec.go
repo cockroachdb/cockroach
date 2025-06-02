@@ -268,7 +268,7 @@ func getGCEOpts(
 		opts.PDVolumeCount = volumeCount
 	}
 	opts.SSDCount = localSSDCount
-	if localSSD && localSSDCount > 0 {
+	if (localSSD && localSSDCount > 0) || (!localSSD && volumeCount > 1) {
 		// NB: As the default behavior for _roachprod_ (at least in AWS/GCP) is
 		// to mount multiple disks as a single store using a RAID 0 array, we
 		// must explicitly ask for multiple stores to be enabled, _unless_ the
