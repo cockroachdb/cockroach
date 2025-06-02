@@ -125,8 +125,10 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 			infoCount := int64(len(reply.Delta))
 			s.nodeMetrics.BytesSent.Inc(bytesSent)
 			s.nodeMetrics.InfosSent.Inc(infoCount)
+			s.nodeMetrics.MessagesSent.Inc(1)
 			s.serverMetrics.BytesSent.Inc(bytesSent)
 			s.serverMetrics.InfosSent.Inc(infoCount)
+			s.serverMetrics.MessagesSent.Inc(1)
 
 			return stream.Send(reply)
 		}
@@ -199,6 +201,9 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 		case err := <-errCh:
 			return err
 		case <-ready:
+			// We just sleep here instead of calling batchAndConsume() because the
+			// channel is closed, and sleeping won't block the sender of the channel.
+			time.Sleep(infosBatchDelay)
 		}
 	}
 }
@@ -307,8 +312,10 @@ func (s *server) gossipReceiver(
 		infosReceived := int64(len(args.Delta))
 		s.nodeMetrics.BytesReceived.Inc(bytesReceived)
 		s.nodeMetrics.InfosReceived.Inc(infosReceived)
+		s.nodeMetrics.MessagesReceived.Inc(1)
 		s.serverMetrics.BytesReceived.Inc(bytesReceived)
 		s.serverMetrics.InfosReceived.Inc(infosReceived)
+		s.serverMetrics.MessagesReceived.Inc(1)
 
 		freshCount, err := s.mu.is.combine(args.Delta, args.NodeID)
 		if err != nil {

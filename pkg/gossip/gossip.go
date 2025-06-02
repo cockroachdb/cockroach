@@ -118,6 +118,10 @@ const (
 	// we didn't need to tighten the last time we checked.
 	gossipTightenInterval = time.Second
 
+	// infosBatchDelay controls how much time do we wait to batch infos before
+	// sending them.
+	infosBatchDelay = 10 * time.Millisecond
+
 	unknownNodeID roachpb.NodeID = 0
 )
 
@@ -139,6 +143,18 @@ var (
 		Name:        "gossip.connections.refused",
 		Help:        "Number of refused incoming gossip connections",
 		Measurement: "Connections",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaMessagesSent = metric.Metadata{
+		Name:        "gossip.messages.sent",
+		Help:        "Number of sent gossip messages",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaMessagesReceived = metric.Metadata{
+		Name:        "gossip.messages.received",
+		Help:        "Number of received gossip messages",
+		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
 	MetaInfosSent = metric.Metadata{
@@ -1546,6 +1562,66 @@ func (g *Gossip) findClient(match func(*client) bool) *client {
 			return c
 		}
 	}
+	return nil
+}
+
+// TestingAddInfoProtoAndWaitForAllCallbacks adds an info proto, and waits for all
+// matching callbacks to get called before returning. It's only intended to be
+// used for tests that assert on the result of the gossip propagation.
+func (g *Gossip) TestingAddInfoProtoAndWaitForAllCallbacks(
+	key string, msg protoutil.Message, ttl time.Duration,
+) error {
+	// Take the lock to avoid races where a callback could be added while this
+	// method is waiting for matching callbacks to be called.
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	wg := &sync.WaitGroup{}
+
+	// Increment the wait group once per matching callback. It will be decremented
+	// once the processing is complete.
+	for _, cb := range g.mu.is.callbacks {
+		if cb.matcher.MatchString(key) {
+			wg.Add(1)
+		}
+	}
+
+	// Add the target info to the infoStore. This will trigger the registered
+	// callbacks to be called.
+	bytes, err := protoutil.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	if err := g.addInfoLocked(key, bytes, ttl); err != nil {
+		return err
+	}
+
+	// At this point, we know that the callbacks that will be called have been
+	// added to the work queues. Now, we can append an entry item at the end of
+	// the matching callback's work queue that will decrement the wait group that
+	// was incremented earlier. This ensures that ALL matching callbacks have
+	// been called.
+	for _, cb := range g.mu.is.callbacks {
+		if cb.matcher.MatchString(key) {
+			cb.cw.mu.Lock()
+			cb.cw.mu.workQueue = append(cb.cw.mu.workQueue, callbackWorkItem{
+				method: func(_ string, _ roachpb.Value) {
+					wg.Done()
+				},
+				schedulingTime: timeutil.Now(),
+			})
+			cb.cw.mu.Unlock()
+		}
+
+		// Make sure to notify the callback worker that there is work to do.
+		select {
+		case cb.cw.callbackCh <- struct{}{}:
+		default:
+		}
+	}
+
+	// Wait for all the callbacks to finish processing.
+	wg.Wait()
 	return nil
 }
 

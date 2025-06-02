@@ -89,11 +89,13 @@ func convertNodeStatusToNodeVitality(
 		l.Expiration = liveTs
 		l.Draining = true
 	}
+	ncs := livenesspb.NewNodeConnectionStatus(nid, nil)
+	ncs.SetIsConnected(true)
 	entry := l.CreateNodeVitality(
 		now,               /* now */
 		hlc.Timestamp{},   /* descUpdateTime */
 		hlc.Timestamp{},   /* descUnavailableTime */
-		true,              /* connected */
+		ncs,               /* nodeConnectionStatus */
 		timeUntilNodeDead, /* timeUntilNodeDead */
 		0,                 /* timeAfterNodeSuspect */
 	)

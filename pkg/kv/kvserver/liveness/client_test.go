@@ -417,3 +417,41 @@ func TestLivenessRangeGetsPeriodicallyCompacted(t *testing.T) {
 		return nil
 	})
 }
+
+// TestNodeConnectionStatusIsConnected verifies that NodeConnectionStatus caches
+// the connection status after the first IsConnected() call.
+func TestNodeConnectionStatusIsConnected(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		name             string
+		initialConnected bool
+	}{
+		{
+			name:             "initially connected",
+			initialConnected: true,
+		},
+		{
+			name:             "initially disconnected",
+			initialConnected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create a mock node dialer with the initial connection state.
+			connHealth := livenesspb.NewMockNodeConnectionHealth(tc.initialConnected)
+			ncs := livenesspb.NewNodeConnectionStatus(roachpb.NodeID(1), connHealth)
+
+			// First call should calculate and cache the connection status.
+			require.Equal(t, tc.initialConnected, ncs.IsConnected())
+
+			// Modify the mock to simulate a connection state change.
+			connHealth.SetConnected(!tc.initialConnected)
+
+			// Subsequent calls should use the cached value (still the initial state).
+			require.Equal(t, tc.initialConnected, ncs.IsConnected())
+		})
+	}
+}

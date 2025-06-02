@@ -9,6 +9,5 @@ go_library(
     deps = [
         "//pkg/gossip",
         "//pkg/roachpb",
-        "//pkg/util/syncutil",
     ],
 )
