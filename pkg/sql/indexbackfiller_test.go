@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -575,6 +576,8 @@ INSERT INTO foo VALUES (1), (10), (100);
 func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDeadlock(t, "slow timing sensitive test")
+	skip.UnderRace(t, "slow timing sensitive test")
 
 	ctx := context.Background()
 	backfillProgressCompletedCh := make(chan []roachpb.Span)
