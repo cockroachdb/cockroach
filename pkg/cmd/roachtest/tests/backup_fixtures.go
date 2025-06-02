@@ -257,13 +257,17 @@ func (bd *backupDriver) monitorBackups(ctx context.Context) error {
 	const (
 		WaitingFirstFull = iota
 		RunningIncrementals
-		WaitingCompactions
+		WaitingCompletion
 		Done
 	)
 	state := WaitingFirstFull
 	for state != Done {
 		time.Sleep(1 * time.Minute)
 		compSuccess, compRunning, compFailed, err := bd.compactionJobStates(sql)
+		if err != nil {
+			return err
+		}
+		_, backupRunning, backupFailed, err := bd.backupJobStates(sql)
 		if err != nil {
 			return err
 		}
@@ -274,23 +278,30 @@ func (bd *backupDriver) monitorBackups(ctx context.Context) error {
 				`SELECT count(*) FROM [SHOW SCHEDULES] WHERE label='%s' AND schedule_status='ACTIVE'`, scheduleLabel,
 			)
 			sql.QueryRow(bd.t, scheduleCountQuery).Scan(&activeScheduleCount)
-			if activeScheduleCount < 2 {
+			if len(backupFailed) > 0 {
+				return errors.Newf("backup jobs failed in waiting first full: %v", backupFailed)
+			} else if activeScheduleCount < 2 {
 				bd.t.L().Printf(`First full backup still running`)
 			} else {
 				state = RunningIncrementals
 			}
 		case RunningIncrementals:
 			var backupCount int
+			// We track completed backups via SHOW BACKUP as opposed to SHOW JOBs in
+			// the case that a fixture runs for a long enough time that old backup
+			// jobs stop showing up in SHOW JOBS.
 			backupCountQuery := fmt.Sprintf(
 				`SELECT count(DISTINCT end_time) FROM [SHOW BACKUP FROM LATEST IN '%s']`, fixtureURI.String(),
 			)
 			sql.QueryRow(bd.t, backupCountQuery).Scan(&backupCount)
 			bd.t.L().Printf(`%d scheduled backups taken`, backupCount)
 
-			if bd.sp.fixture.CompactionThreshold > 0 {
+			if len(backupFailed) > 0 {
+				return errors.Newf("backup jobs failed in running incrementals: %v", backupFailed)
+			} else if bd.sp.fixture.CompactionThreshold > 0 {
 				bd.t.L().Printf("%d compaction jobs succeeded, %d running", len(compSuccess), len(compRunning))
 				if len(compFailed) > 0 {
-					return errors.Newf("compaction jobs failed: %v", compFailed)
+					return errors.Newf("compaction jobs failed in running incrementals: %v", compFailed)
 				}
 			}
 
@@ -299,15 +310,19 @@ func (bd *backupDriver) monitorBackups(ctx context.Context) error {
 					`PAUSE SCHEDULES WITH x AS (SHOW SCHEDULES) SELECT id FROM x WHERE label = '%s'`, scheduleLabel,
 				)
 				sql.Exec(bd.t, pauseSchedulesQuery)
-				if len(compRunning) > 0 {
-					state = WaitingCompactions
+				if len(compRunning) > 0 || len(backupRunning) > 0 {
+					state = WaitingCompletion
 				} else {
 					state = Done
 				}
 			}
-		case WaitingCompactions:
-			if len(compFailed) > 0 {
-				return errors.Newf("compaction jobs failed: %v", compFailed)
+		case WaitingCompletion:
+			if len(backupFailed) > 0 {
+				return errors.Newf("backup jobs failed in waiting completion: %v", backupFailed)
+			} else if len(compFailed) > 0 {
+				return errors.Newf("compaction jobs failed in waiting completion: %v", compFailed)
+			} else if len(backupRunning) > 0 {
+				bd.t.L().Printf("waiting for %d backup jobs to finish", len(backupRunning))
 			} else if len(compRunning) > 0 {
 				bd.t.L().Printf("waiting for %d compaction jobs to finish", len(compRunning))
 			} else {
@@ -332,20 +347,45 @@ func (bd *backupDriver) compactionJobStates(
 	if bd.sp.fixture.CompactionThreshold == 0 {
 		return nil, nil, nil, nil
 	}
-	compactionQuery := `SELECT job_id, status, error FROM [SHOW JOBS] WHERE job_type = 'BACKUP' AND
-	description ILIKE 'COMPACT BACKUPS%'`
-	rows := sql.Query(bd.t, compactionQuery)
+	s, r, f, err := bd.queryJobStates(
+		sql, "job_type = 'BACKUP' AND description ILIKE 'COMPACT BACKUPS%'",
+	)
+	return s, r, f, errors.Wrapf(err, "error querying compaction job states")
+}
+
+// backupJobStates returns the state of the backup jobs, returning
+// a partition of jobs that succeeded, are running, and failed.
+func (bd *backupDriver) backupJobStates(
+	sql *sqlutils.SQLRunner,
+) ([]jobMeta, []jobMeta, []jobMeta, error) {
+	s, r, f, err := bd.queryJobStates(
+		sql, "job_type = 'BACKUP' AND description ILIKE 'BACKUP %'",
+	)
+	return s, r, f, errors.Wrapf(err, "error querying backup job states")
+}
+
+// queryJobStates queries the job table and returns a partition of jobs that
+// succeeded, are running, and failed. The filter is applied to the query to
+// limit the jobs searched. If the filter is empty, all jobs are searched.
+func (bd *backupDriver) queryJobStates(
+	sql *sqlutils.SQLRunner, filter string,
+) ([]jobMeta, []jobMeta, []jobMeta, error) {
+	query := "SELECT job_id, status, error FROM [SHOW JOBS]"
+	if filter != "" {
+		query += fmt.Sprintf(" WHERE %s", filter)
+	}
+	rows := sql.Query(bd.t, query)
 	defer rows.Close()
-	var compJobs []jobMeta
+	var jobMetas []jobMeta
 	for rows.Next() {
 		var job jobMeta
 		if err := rows.Scan(&job.jobID, &job.state, &job.error); err != nil {
-			return nil, nil, nil, errors.Wrapf(err, "error scanning compaction job")
+			return nil, nil, nil, errors.Wrapf(err, "error scanning job")
 		}
-		compJobs = append(compJobs, job)
+		jobMetas = append(jobMetas, job)
 	}
 	var successes, running, failures []jobMeta
-	for _, job := range compJobs {
+	for _, job := range jobMetas {
 		switch job.state {
 		case jobs.StateSucceeded:
 			successes = append(successes, job)
@@ -354,7 +394,7 @@ func (bd *backupDriver) compactionJobStates(
 		case jobs.StateFailed:
 			failures = append(failures, job)
 		default:
-			bd.t.L().Printf(`unexpected compaction job %d in state %s`, job.jobID, job.state)
+			bd.t.L().Printf(`unexpected job %d in state %s`, job.jobID, job.state)
 		}
 	}
 	return successes, running, failures, nil
