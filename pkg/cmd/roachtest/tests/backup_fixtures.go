@@ -290,7 +290,7 @@ func (bd *backupDriver) monitorBackups(ctx context.Context) error {
 			if bd.sp.fixture.CompactionThreshold > 0 {
 				bd.t.L().Printf("%d compaction jobs succeeded, %d running", len(compSuccess), len(compRunning))
 				if len(compFailed) > 0 {
-					return errors.Newf("compaction jobs with ids %v failed", compFailed)
+					return errors.Newf("compaction jobs failed: %v", compFailed)
 				}
 			}
 
@@ -307,7 +307,7 @@ func (bd *backupDriver) monitorBackups(ctx context.Context) error {
 			}
 		case WaitingCompactions:
 			if len(compFailed) > 0 {
-				return errors.Newf("compaction jobs with ids %v failed", compFailed)
+				return errors.Newf("compaction jobs failed: %v", compFailed)
 			} else if len(compRunning) > 0 {
 				bd.t.L().Printf("waiting for %d compaction jobs to finish", len(compRunning))
 			} else {
@@ -318,41 +318,43 @@ func (bd *backupDriver) monitorBackups(ctx context.Context) error {
 	return nil
 }
 
+type jobMeta struct {
+	jobID jobspb.JobID
+	state jobs.State
+	error string
+}
+
 // compactionJobStates returns the state of the compaction jobs, returning
-// the IDs of the jobs that succeeded, are running, and failed.
+// a partition of jobs that succeeded, are running, and failed.
 func (bd *backupDriver) compactionJobStates(
 	sql *sqlutils.SQLRunner,
-) ([]jobspb.JobID, []jobspb.JobID, []jobspb.JobID, error) {
+) ([]jobMeta, []jobMeta, []jobMeta, error) {
 	if bd.sp.fixture.CompactionThreshold == 0 {
 		return nil, nil, nil, nil
 	}
-	type Job struct {
-		jobID  jobspb.JobID
-		status jobs.State
-	}
-	compactionQuery := `SELECT job_id, status FROM [SHOW JOBS] WHERE job_type = 'BACKUP' AND
+	compactionQuery := `SELECT job_id, status, error FROM [SHOW JOBS] WHERE job_type = 'BACKUP' AND
 	description ILIKE 'COMPACT BACKUPS%'`
 	rows := sql.Query(bd.t, compactionQuery)
 	defer rows.Close()
-	var compJobs []Job
+	var compJobs []jobMeta
 	for rows.Next() {
-		var job Job
-		if err := rows.Scan(&job.jobID, &job.status); err != nil {
+		var job jobMeta
+		if err := rows.Scan(&job.jobID, &job.state, &job.error); err != nil {
 			return nil, nil, nil, errors.Wrapf(err, "error scanning compaction job")
 		}
 		compJobs = append(compJobs, job)
 	}
-	var successes, running, failures []jobspb.JobID
+	var successes, running, failures []jobMeta
 	for _, job := range compJobs {
-		switch job.status {
+		switch job.state {
 		case jobs.StateSucceeded:
-			successes = append(successes, job.jobID)
+			successes = append(successes, job)
 		case jobs.StateRunning:
-			running = append(running, job.jobID)
+			running = append(running, job)
 		case jobs.StateFailed:
-			failures = append(failures, job.jobID)
+			failures = append(failures, job)
 		default:
-			bd.t.L().Printf(`unexpected compaction job %d in state %s`, job.jobID, job.status)
+			bd.t.L().Printf(`unexpected compaction job %d in state %s`, job.jobID, job.state)
 		}
 	}
 	return successes, running, failures, nil
