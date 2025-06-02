@@ -286,8 +286,9 @@ func (r *Replica) executeWriteBatch(
 					migrateApplicationTimeout.Get(&r.ClusterSettings().SV),
 					func(ctx context.Context) error {
 						desc := r.Desc()
+						nd := AsClientDialer(r.store.cfg.NodeDialer)
 						return waitForApplication(
-							ctx, r.store.cfg.NodeDialer, desc.RangeID, desc.Replicas().Descriptors(),
+							ctx, nd, desc.RangeID, desc.Replicas().Descriptors(),
 							// We wait for an index >= that of the migration command.
 							r.GetLeaseAppliedIndex())
 					})

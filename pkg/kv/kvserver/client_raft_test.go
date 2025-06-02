@@ -4669,12 +4669,13 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 
 			var targets []target
 			for _, s := range tc.Servers {
-				conn, err := s.NodeDialer().(*nodedialer.Dialer).Dial(ctx, s.NodeID(), rpc.DefaultClass)
+				client, err := kvserver.AsClientDialer(s.NodeDialer().(*nodedialer.Dialer)).
+					DialPerReplicaClient(ctx, s.NodeID(), rpc.DefaultClass)
 				if err != nil {
 					t.Fatal(err)
 				}
 				targets = append(targets, target{
-					client: kvserver.NewPerReplicaClient(conn),
+					client: client,
 					header: kvserver.StoreRequestHeader{NodeID: s.NodeID(), StoreID: s.GetFirstStoreID()},
 				})
 			}
@@ -4797,11 +4798,11 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	store := tc.GetFirstStoreFromServer(t, 0)
 
-	conn, err := tc.Servers[0].NodeDialer().(*nodedialer.Dialer).Dial(ctx, store.Ident.NodeID, rpc.DefaultClass)
+	client, err := kvserver.AsClientDialer(tc.Servers[0].NodeDialer().(*nodedialer.Dialer)).
+		DialPerReplicaClient(ctx, store.Ident.NodeID, rpc.DefaultClass)
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := kvserver.NewPerReplicaClient(conn)
 	storeHeader := kvserver.StoreRequestHeader{NodeID: store.Ident.NodeID, StoreID: store.Ident.StoreID}
 
 	// Test that WaitForReplicaInit returns successfully if the replica exists.

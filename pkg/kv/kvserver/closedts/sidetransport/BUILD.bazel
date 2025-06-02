@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "debug.go",
         "receiver.go",
+        "rpc_clients.go",
         "sender.go",
         ":gen-cantclosereason-stringer",  # keep
     ],

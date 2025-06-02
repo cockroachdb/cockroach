@@ -718,7 +718,7 @@ const sleepOnErr = time.Second
 // snapshot before we can resume sending regular messages.
 type rpcConn struct {
 	log.AmbientContext
-	dialer       nodeDialer
+	dialer       *nodeClientDialer
 	producer     *Sender
 	nodeID       roachpb.NodeID
 	testingKnobs connTestingKnobs
@@ -740,7 +740,7 @@ func newRPCConn(
 	dialer nodeDialer, producer *Sender, nodeID roachpb.NodeID, testingKnobs connTestingKnobs,
 ) conn {
 	r := &rpcConn{
-		dialer:       dialer,
+		dialer:       NewClientDialer(dialer),
 		producer:     producer,
 		nodeID:       nodeID,
 		testingKnobs: testingKnobs,
@@ -789,12 +789,12 @@ func (r *rpcConn) maybeConnect(ctx context.Context, stopper *stop.Stopper) error
 		return nil
 	}
 
-	conn, err := r.dialer.Dial(ctx, r.nodeID, rpc.SystemClass)
+	client, err := r.dialer.DialSideTransportClient(ctx, r.nodeID, rpc.SystemClass)
 	if err != nil {
 		return err
 	}
 	streamCtx, cancel := context.WithCancel(ctx)
-	stream, err := ctpb.NewSideTransportClient(conn).PushUpdates(streamCtx)
+	stream, err := client.PushUpdates(streamCtx)
 	if err != nil {
 		cancel()
 		return err

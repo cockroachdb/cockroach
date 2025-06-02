@@ -930,7 +930,8 @@ func (r *Replica) AdminMerge(
 				if disableWaitForReplicasInTesting {
 					return nil
 				}
-				return waitForApplication(ctx, r.store.cfg.NodeDialer, rightDesc.RangeID, mergeReplicas,
+				cd := AsClientDialer(r.store.cfg.NodeDialer)
+				return waitForApplication(ctx, cd, rightDesc.RangeID, mergeReplicas,
 					rhsSnapshotRes.LeaseAppliedIndex)
 			})
 		if err != nil {
@@ -1009,7 +1010,7 @@ func (r *Replica) AdminMerge(
 // replica by maintaining a non-empty send-queue.
 func waitForApplication(
 	ctx context.Context,
-	dialer *nodedialer.Dialer,
+	dialer *nodeClientDialer,
 	rangeID roachpb.RangeID,
 	replicas []roachpb.ReplicaDescriptor,
 	leaseIndex kvpb.LeaseAppliedIndex,
@@ -1018,11 +1019,11 @@ func waitForApplication(
 	for _, repl := range replicas {
 		repl := repl // copy for goroutine
 		g.GoCtx(func(ctx context.Context) error {
-			conn, err := dialer.Dial(ctx, repl.NodeID, rpc.DefaultClass)
+			client, err := dialer.DialPerReplicaClient(ctx, repl.NodeID, rpc.DefaultClass)
 			if err != nil {
 				return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
 			}
-			_, err = NewPerReplicaClient(conn).WaitForApplication(ctx, &WaitForApplicationRequest{
+			_, err = client.WaitForApplication(ctx, &WaitForApplicationRequest{
 				StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
 				RangeID:            rangeID,
 				LeaseIndex:         leaseIndex,
@@ -1048,11 +1049,11 @@ func waitForReplicasInit(
 		for _, repl := range replicas {
 			repl := repl // copy for goroutine
 			g.GoCtx(func(ctx context.Context) error {
-				conn, err := dialer.Dial(ctx, repl.NodeID, rpc.DefaultClass)
+				client, err := AsClientDialer(dialer).DialPerReplicaClient(ctx, repl.NodeID, rpc.DefaultClass)
 				if err != nil {
 					return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
 				}
-				_, err = NewPerReplicaClient(conn).WaitForReplicaInit(ctx, &WaitForReplicaInitRequest{
+				_, err = client.WaitForReplicaInit(ctx, &WaitForReplicaInitRequest{
 					StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
 					RangeID:            rangeID,
 				})
