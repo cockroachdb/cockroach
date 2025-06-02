@@ -294,7 +294,7 @@ func (bd *backupDriver) monitorBackups(ctx context.Context) error {
 				}
 			}
 
-			if backupCount >= bd.sp.fixture.IncrementalChainLength {
+			if backupCount >= bd.sp.fixture.IncrementalChainLength+1 {
 				pauseSchedulesQuery := fmt.Sprintf(
 					`PAUSE SCHEDULES WITH x AS (SHOW SCHEDULES) SELECT id FROM x WHERE label = '%s'`, scheduleLabel,
 				)
