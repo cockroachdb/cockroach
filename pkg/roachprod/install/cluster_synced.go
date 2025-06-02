@@ -70,6 +70,10 @@ type SyncedCluster struct {
 
 	// Nodes is used by most commands (e.g. Start, Stop, Monitor). It describes
 	// the list of nodes the operation pertains to.
+	//	$ roachprod create local -n 4
+	//	$ roachprod start local          # [1, 2, 3, 4]
+	//	$ roachprod start local:2-4      # [2, 3, 4]
+	//	$ roachprod start local:2,1,4    # [1, 2, 4]
 	Nodes Nodes
 
 	ClusterSettings
@@ -237,17 +241,6 @@ func (c *SyncedCluster) IsLocal() bool {
 
 func (c *SyncedCluster) localVMDir(n Node) string {
 	return local.VMDir(c.Name, int(n))
-}
-
-// TargetNodes is the fully expanded, ordered list of nodes that any given
-// roachprod command is intending to target.
-//
-//	$ roachprod create local -n 4
-//	$ roachprod start local          # [1, 2, 3, 4]
-//	$ roachprod start local:2-4      # [2, 3, 4]
-//	$ roachprod start local:2,1,4    # [1, 2, 4]
-func (c *SyncedCluster) TargetNodes() Nodes {
-	return append(Nodes{}, c.Nodes...)
 }
 
 // GetInternalIP returns the internal IP address of the specified node.
