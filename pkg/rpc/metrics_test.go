@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -60,8 +61,8 @@ func TestMetricsRelease(t *testing.T) {
 	}
 
 	const expectedCount = 11
-	k1 := peerKey{NodeID: 5, TargetAddr: "192.168.0.1:1234", Class: DefaultClass}
-	k2 := peerKey{NodeID: 6, TargetAddr: "192.168.0.1:1234", Class: DefaultClass}
+	k1 := peerKey{NodeID: 5, TargetAddr: "192.168.0.1:1234", Class: rpcbase.DefaultClass}
+	k2 := peerKey{NodeID: 6, TargetAddr: "192.168.0.1:1234", Class: rpcbase.DefaultClass}
 	l1 := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east"}}}
 	l2 := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "us-west"}}}
 	m := newMetrics(l1)

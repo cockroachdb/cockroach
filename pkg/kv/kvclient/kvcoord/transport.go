@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -28,7 +29,7 @@ import (
 // more replicas, depending on error conditions and how many successful
 // responses are required.
 type SendOptions struct {
-	class   rpc.ConnectionClass
+	class   rpcbase.ConnectionClass
 	metrics *DistSenderMetrics
 	// dontConsiderConnHealth, if set, makes the transport not take into
 	// consideration the connection health when deciding the ordering for
@@ -146,7 +147,7 @@ func grpcTransportFactoryImpl(
 type grpcTransport struct {
 	opts       SendOptions
 	nodeDialer *nodedialer.Dialer
-	class      rpc.ConnectionClass
+	class      rpcbase.ConnectionClass
 
 	replicas []roachpb.ReplicaDescriptor
 	// replicaHealth maps replica index within the replicas slice to healthHealthy

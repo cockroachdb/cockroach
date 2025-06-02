@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 )
 
 // connectionTrackerForFlowControl tracks the set of server-side nodes the
@@ -19,12 +19,12 @@ import (
 // if a server-side node is no longer connected, we can choose to drop the
 // token return messages.
 type connectionTrackerForFlowControl struct {
-	nodes map[roachpb.NodeID]map[rpc.ConnectionClass]struct{}
+	nodes map[roachpb.NodeID]map[rpcbase.ConnectionClass]struct{}
 }
 
 func newConnectionTrackerForFlowControl() *connectionTrackerForFlowControl {
 	return &connectionTrackerForFlowControl{
-		nodes: make(map[roachpb.NodeID]map[rpc.ConnectionClass]struct{}),
+		nodes: make(map[roachpb.NodeID]map[rpcbase.ConnectionClass]struct{}),
 	}
 }
 
@@ -38,10 +38,10 @@ func (q *connectionTrackerForFlowControl) isNodeConnected(nodeID roachpb.NodeID)
 // markNodeConnected informs the tracker that we're connected to the given
 // node using the given RPC connection class.
 func (q *connectionTrackerForFlowControl) markNodeConnected(
-	nodeID roachpb.NodeID, class rpc.ConnectionClass,
+	nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) {
 	if len(q.nodes[nodeID]) == 0 {
-		q.nodes[nodeID] = map[rpc.ConnectionClass]struct{}{}
+		q.nodes[nodeID] = map[rpcbase.ConnectionClass]struct{}{}
 	}
 	q.nodes[nodeID][class] = struct{}{}
 }
@@ -49,7 +49,7 @@ func (q *connectionTrackerForFlowControl) markNodeConnected(
 // markNodeDisconnected informs the tracker that a previous connection to
 // the given node along the given RPC connection class is now broken.
 func (q *connectionTrackerForFlowControl) markNodeDisconnected(
-	nodeID roachpb.NodeID, class rpc.ConnectionClass,
+	nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) {
 	delete(q.nodes[nodeID], class)
 	if len(q.nodes[nodeID]) == 0 {

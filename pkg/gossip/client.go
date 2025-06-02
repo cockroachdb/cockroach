@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -105,7 +106,7 @@ func (c *client) startLocked(
 			// that ends ups up making `kv` tests take twice as long.
 			var connection *rpc.GRPCConnection
 			if c.peerID != 0 {
-				connection = rpcCtx.GRPCDialNode(c.addr.String(), c.peerID, c.locality, rpc.SystemClass)
+				connection = rpcCtx.GRPCDialNode(c.addr.String(), c.peerID, c.locality, rpcbase.SystemClass)
 			} else {
 				// TODO(baptist): Use this as a temporary connection for getting
 				// onto gossip and then replace with a validated connection.
