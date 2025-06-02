@@ -31,7 +31,12 @@ go_proto_library(
 
 go_library(
     name = "keyvispb",
+    srcs = ["rpc_clients.go"],
     embed = [":keyvispb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/rpc/rpcbase",
+    ],
 )
