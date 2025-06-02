@@ -493,8 +493,8 @@ FROBNICATE ALL
 ```
 
 Back to the terminal, make sure you are at `~/go/src/github.com/cockroachdb/cockroach`,
-and run `./dev test pkg/sql/parser -f TestParseDatadriven --rewrite`.
-The flag `--rewrite` is meant to automatically rewrite the datadriven test with the output it received.
+and run `./dev test pkg/sql/parser -f TestParseDataDriven --rewrite`.
+The flag `--rewrite` is meant to automatically rewrite the DataDriven test with the output it received.
 
 Wait until the test command finishes, and open `pkg/sql/parser/testdata/frobnicate`, and you would expect:
 
