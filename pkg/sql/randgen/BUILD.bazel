@@ -71,6 +71,10 @@ go_test(
         "types_test.go",
     ],
     embed = [":randgen"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"test.Pool": "large"},
+        "//conditions:default": {"test.Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
         "//pkg/ccl",
