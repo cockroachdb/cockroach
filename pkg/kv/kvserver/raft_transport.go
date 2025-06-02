@@ -547,7 +547,7 @@ func (t *RaftTransport) StopOutgoingMessage(storeID roachpb.StoreID) {
 // lost and a new instance of processQueue will be started by the next message
 // to be sent.
 func (t *RaftTransport) processQueue(
-	q *raftSendQueue, stream MultiRaft_RaftMessageBatchClient, class rpcbase.ConnectionClass,
+	q *raftSendQueue, stream MultiRaft_RaftMessageBatchClient, _ rpcbase.ConnectionClass,
 ) error {
 	errCh := make(chan error, 1)
 
@@ -844,13 +844,11 @@ func (t *RaftTransport) startProcessNewQueue(
 			t.connectionMu.connectionTracker.markNodeDisconnected(toNodeID, class)
 			t.connectionMu.Unlock()
 		}()
-		conn, err := t.dialer.Dial(ctx, toNodeID, class)
+		client, err := DialMultiRaftClient(t.dialer, ctx, toNodeID, class)
 		if err != nil {
 			// DialNode already logs sufficiently, so just return.
 			return
 		}
-
-		client := NewMultiRaftClient(conn)
 		batchCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
@@ -977,11 +975,10 @@ func (t *RaftTransport) SendSnapshot(
 ) (*kvserverpb.SnapshotResponse, error) {
 	nodeID := header.RaftMessageRequest.ToReplica.NodeID
 
-	conn, err := t.dialer.Dial(ctx, nodeID, rpcbase.DefaultClass)
+	client, err := DialMultiRaftClient(t.dialer, ctx, nodeID, rpcbase.DefaultClass)
 	if err != nil {
 		return nil, err
 	}
-	client := NewMultiRaftClient(conn)
 	stream, err := client.RaftSnapshot(ctx)
 	if err != nil {
 		return nil, err
@@ -1001,11 +998,10 @@ func (t *RaftTransport) DelegateSnapshot(
 	ctx context.Context, req *kvserverpb.DelegateSendSnapshotRequest,
 ) (*kvserverpb.DelegateSnapshotResponse, error) {
 	nodeID := req.DelegatedSender.NodeID
-	conn, err := t.dialer.Dial(ctx, nodeID, rpcbase.DefaultClass)
+	client, err := DialMultiRaftClient(t.dialer, ctx, nodeID, rpcbase.DefaultClass)
 	if err != nil {
 		return nil, errors.Mark(err, errMarkSnapshotError)
 	}
-	client := NewMultiRaftClient(conn)
 
 	// Creates a rpc stream between the leaseholder and sender.
 	stream, err := client.DelegateRaftSnapshot(ctx)

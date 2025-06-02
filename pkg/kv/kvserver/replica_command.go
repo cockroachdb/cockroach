@@ -1018,11 +1018,11 @@ func waitForApplication(
 	for _, repl := range replicas {
 		repl := repl // copy for goroutine
 		g.GoCtx(func(ctx context.Context) error {
-			conn, err := dialer.Dial(ctx, repl.NodeID, rpcbase.DefaultClass)
+			client, err := DialPerReplicaClient(dialer, ctx, repl.NodeID, rpcbase.DefaultClass)
 			if err != nil {
 				return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
 			}
-			_, err = NewPerReplicaClient(conn).WaitForApplication(ctx, &WaitForApplicationRequest{
+			_, err = client.WaitForApplication(ctx, &WaitForApplicationRequest{
 				StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
 				RangeID:            rangeID,
 				LeaseIndex:         leaseIndex,
@@ -1048,11 +1048,11 @@ func waitForReplicasInit(
 		for _, repl := range replicas {
 			repl := repl // copy for goroutine
 			g.GoCtx(func(ctx context.Context) error {
-				conn, err := dialer.Dial(ctx, repl.NodeID, rpcbase.DefaultClass)
+				client, err := DialPerReplicaClient(dialer, ctx, repl.NodeID, rpcbase.DefaultClass)
 				if err != nil {
 					return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
 				}
-				_, err = NewPerReplicaClient(conn).WaitForReplicaInit(ctx, &WaitForReplicaInitRequest{
+				_, err = client.WaitForReplicaInit(ctx, &WaitForReplicaInitRequest{
 					StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
 					RangeID:            rangeID,
 				})

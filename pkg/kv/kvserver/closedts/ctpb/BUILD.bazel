@@ -4,13 +4,17 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "ctpb",
-    srcs = ["service.go"],
+    srcs = [
+        "rpc_clients.go",
+        "service.go",
+    ],
     embed = [":ctpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
+        "//pkg/rpc/rpcbase",
         "//pkg/util/timeutil",
     ],
 )

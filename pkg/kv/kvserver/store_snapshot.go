@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/pebble/objstorage"
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/time/rate"
-	"google.golang.org/grpc"
 )
 
 const (
@@ -667,7 +666,7 @@ func SendEmptySnapshot(
 	clusterID uuid.UUID,
 	st *cluster.Settings,
 	tracer *tracing.Tracer,
-	cc *grpc.ClientConn,
+	mrc MultiRaftClient,
 	now hlc.Timestamp,
 	desc roachpb.RangeDescriptor,
 	to roachpb.ReplicaDescriptor,
@@ -767,7 +766,7 @@ func SendEmptySnapshot(
 		RangeKeysInOrder:   true,
 	}
 
-	stream, err := NewMultiRaftClient(cc).RaftSnapshot(ctx)
+	stream, err := mrc.RaftSnapshot(ctx)
 	if err != nil {
 		return err
 	}
