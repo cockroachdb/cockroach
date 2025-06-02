@@ -3922,7 +3922,7 @@ CREATE TABLE crdb_internal.create_function_statements (
   schema_name STRING,
   function_id INT,
   function_name STRING,
-  create_statement STRING
+  create_statement STRING,
 )
 `,
 	populate: createRoutinePopulate(false /* procedure */),
@@ -4029,48 +4029,40 @@ func renderCreateTriggerStatement(
 	return f.CloseAndGetString(), nil
 }
 
-func createTriggerPopulate() func(
-	ctx context.Context,
-	p *planner,
-	db catalog.DatabaseDescriptor,
-	addRow func(...tree.Datum) error,
+func createTriggerPopulate(
+	ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
 ) error {
-	return func(
-		ctx context.Context,
-		p *planner,
-		_ catalog.DatabaseDescriptor, // unused, since we get all descriptors
-		addRow func(...tree.Datum) error,
-	) error {
-		return forEachTableDesc(ctx, p, nil, forEachTableDescOptions{}, func(ctx context.Context, tblCtx tableDescContext) error {
-			tbl := tblCtx.table
-			curDB := tblCtx.database
-			sc := tblCtx.schema
+	// Skip virtual tables since they do not have triggers.
+	options := forEachTableDescOptions{virtualOpts: hideVirtual}
+	return forEachTableDesc(ctx, p, db, options, func(ctx context.Context, tblCtx tableDescContext) error {
+		tbl := tblCtx.table
+		curDB := tblCtx.database
+		sc := tblCtx.schema
 
-			for _, trig := range tbl.GetTriggers() {
-				sql, err := renderCreateTriggerStatement(ctx, p, &trig, tbl)
-				if err != nil {
-					return err
-				}
-
-				err = addRow(
-					tree.NewDInt(tree.DInt(curDB.GetID())), // database_id
-					tree.NewDString(curDB.GetName()),       // database_name
-					tree.NewDInt(tree.DInt(sc.GetID())),    // schema_id
-					tree.NewDString(sc.GetName()),          // schema_name
-					tree.NewDInt(tree.DInt(tbl.GetID())),   // table_id
-					tree.NewDString(tbl.GetName()),         // table_name
-					tree.NewDInt(tree.DInt(trig.ID)),       // trigger_id
-					tree.NewDString(trig.Name),             // trigger_name
-					tree.NewDString(sql),                   // create_statement
-				)
-				if err != nil {
-					return err
-				}
+		for _, trig := range tbl.GetTriggers() {
+			sql, err := renderCreateTriggerStatement(ctx, p, &trig, tbl)
+			if err != nil {
+				return err
 			}
-			return nil
-		},
-		)
-	}
+
+			err = addRow(
+				tree.NewDInt(tree.DInt(curDB.GetID())), // database_id
+				tree.NewDString(curDB.GetName()),       // database_name
+				tree.NewDInt(tree.DInt(sc.GetID())),    // schema_id
+				tree.NewDString(sc.GetName()),          // schema_name
+				tree.NewDInt(tree.DInt(tbl.GetID())),   // table_id
+				tree.NewDString(tbl.GetName()),         // table_name
+				tree.NewDInt(tree.DInt(trig.ID)),       // trigger_id
+				tree.NewDString(trig.Name),             // trigger_name
+				tree.NewDString(sql),                   // create_statement
+			)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+	)
 }
 
 var crdbInternalCreateTriggerStmtsTable = virtualSchemaTable{
@@ -4086,7 +4078,8 @@ CREATE TABLE crdb_internal.create_trigger_statements (
   trigger_id INT,
   trigger_name STRING,
   create_statement STRING)`,
-	populate: createTriggerPopulate(),
+	populate: createTriggerPopulate,
+	//TODO: add indexes on table_id and function that populates the rest
 }
 
 // Prepare the row populate function.

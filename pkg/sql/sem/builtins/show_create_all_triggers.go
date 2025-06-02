@@ -14,12 +14,18 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+type triggerIdPair struct {
+	triggerID int64
+	tableID   int64
+}
+
 // TODO: Make the crdb_internal.create_trigger_statements table
 func getTriggerIds(
 	ctx context.Context, evalPlanner eval.Planner, txn *kv.Txn, dbName string, acc *mon.BoundAccount,
-) (triggerIds []int64, retErr error) {
+) (triggerIds []triggerIdPair, retErr error) { //TODO: Check up on ID field names etc
+	//TODO: Want to get (trigger_id, table_id)
 	query := fmt.Sprintf(`
-SELECT descriptor_id 
+SELECT trigger_id, table_id 
 FROM %s.crdb_internal.create_trigger_statements 
 WHERE database_name=$1`, lexbase.EscapeSQLIdent(dbName))
 
@@ -39,7 +45,9 @@ WHERE database_name=$1`, lexbase.EscapeSQLIdent(dbName))
 	var ok bool
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		tid := tree.MustBeDInt(it.Cur()[0])
-		triggerIds = append(triggerIds, int64(tid))
+		triggerID, tableID := tree.MustBeDInt(it.Cur()[0]), tree.MustBeDInt(it.Cur()[1])
+		pair := triggerIdPair{int64(triggerID), int64(tableID)}
+		triggerIds = append(triggerIds, pair)
 		if err = acc.Grow(ctx, int64(unsafe.Sizeof(tid))); err != nil {
 			return nil, err
 		}
@@ -51,18 +59,22 @@ WHERE database_name=$1`, lexbase.EscapeSQLIdent(dbName))
 }
 
 func getTriggerCreateStatement(
-	ctx context.Context, evalPlanner eval.Planner, txn *kv.Txn, triggerId int64, dbName string,
+	ctx context.Context,
+	evalPlanner eval.Planner,
+	txn *kv.Txn,
+	triggerIDPair triggerIdPair,
+	dbName string,
 ) (tree.Datum, error) {
 	query := fmt.Sprintf(`
-SELECT create_statement
+SELECT create_statement, trigger_id
 FROM %s.crdb_internal.create_trigger_statements
-WHERE trigger_id = $1`, lexbase.EscapeSQLIdent(dbName))
+WHERE table_id = $1 AND trigger_id = $2`, lexbase.EscapeSQLIdent(dbName))
 
 	row, err := evalPlanner.QueryRowEx(ctx,
 		"crdb_internal.show_create_all_triggers",
 		sessiondata.NoSessionDataOverride,
 		query,
-		triggerId)
+		triggerIDPair.tableID, triggerIDPair.triggerID)
 
 	if err != nil {
 		return nil, err

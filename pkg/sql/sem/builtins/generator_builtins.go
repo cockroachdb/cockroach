@@ -3084,7 +3084,7 @@ func makeShowCreateAllTablesGenerator(
 type showCreateAllTriggersGenerator struct {
 	evalPlanner eval.Planner
 	txn         *kv.Txn
-	ids         []int64
+	ids         []triggerIdPair
 	dbName      string
 	acc         mon.BoundAccount
 
