@@ -1534,9 +1534,16 @@ func (ds *DistSender) divideAndSendParallelCommit(
 			return nil, kvpb.NewError(err)
 		}
 	} else {
-		if err := ds.stopper.RunAsyncTask(ctx, taskName, sendPreCommit); err != nil {
+		ctx, hdl, err := ds.stopper.GetHandle(ctx, stop.TaskOpts{
+			TaskName: taskName,
+		})
+		if err != nil {
 			return nil, kvpb.NewError(err)
 		}
+		go func(ctx context.Context) {
+			defer hdl.Activate(ctx).Release(ctx)
+			sendPreCommit(ctx)
+		}(ctx)
 	}
 
 	// Adjust the original batch request to ignore the pre-commit
