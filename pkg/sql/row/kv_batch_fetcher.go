@@ -162,6 +162,10 @@ type txnKVFetcher struct {
 	// doesn't result in too much data), and wants to preserve concurrency for
 	// this scans inside of DistSender.
 	batchBytesLimit rowinfra.BytesLimit
+	// perScanRequestKeyLimit is a best-effort limit on the number of keys that
+	// will be returned for each scan request issued by the fetcher. The fetcher
+	// may return extra KV pairs beyond this limit.
+	perScanRequestKeyLimit rowinfra.KeyLimit
 
 	// scanFormat indicates the scan format that should be used for Scans and
 	// ReverseScans. With COL_BATCH_RESPONSE scan format, indexFetchSpec must be
@@ -351,6 +355,7 @@ type newTxnKVFetcherArgs struct {
 	kvPairsRead                *int64
 	batchRequestsIssued        *int64
 	rawMVCCValues              bool
+	perScanRequestKeyLimit     rowinfra.KeyLimit
 
 	admission struct { // groups AC-related fields
 		requestHeader  kvpb.AdmissionHeader
@@ -381,6 +386,7 @@ func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 		forceProductionKVBatchSize: args.forceProductionKVBatchSize,
 		requestAdmissionHeader:     args.admission.requestHeader,
 		responseAdmissionQ:         args.admission.responseQ,
+		perScanRequestKeyLimit:     args.perScanRequestKeyLimit,
 	}
 
 	f.maybeInitAdmissionPacer(
@@ -602,6 +608,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Header.DeadlockTimeout = f.deadlockTimeout
 	ba.Header.TargetBytes = int64(f.batchBytesLimit)
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
+	ba.Header.MaxPerScanRequestKeys = int64(f.perScanRequestKeyLimit)
 	ba.Header.IsReverse = f.reverse
 	if buildutil.CrdbTestBuild {
 		if f.scanFormat == kvpb.COL_BATCH_RESPONSE && f.indexFetchSpec == nil {

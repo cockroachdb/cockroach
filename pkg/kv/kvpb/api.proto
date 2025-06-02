@@ -73,7 +73,7 @@ enum ResumeReason {
   option (gogoproto.goproto_enum_prefix) = false;
   // Zero value; no resume, or an unknown reason from a future or past cockroachdb version.
   RESUME_UNKNOWN = 0;
-  // A key limit was exceeded, i.e. MaxSpanRequestKeys.
+  // A key limit was exceeded, i.e. MaxSpanRequestKeys or MaxPerScanRequestKeys.
   RESUME_KEY_LIMIT = 1;
   // A byte limit was exceeded, i.e. TargetBytes.
   // NB: 21.2 and below will return RESUME_KEY_LIMIT instead.
@@ -2826,6 +2826,17 @@ message Header {
   // complications discussed in "Unordered requests". For now, that's a good
   // enough reason to disallow such batches.
   int64 max_span_request_keys = 8;
+  // If positive, applies a best-effort limit to the number of KVs returned to
+  // serve individual Scan and ReverseScan requests. This is different from
+  // MaxSpanRequestKeys, which applies at the level of the batch. Callers must
+  // be prepared for partial responses for any Scan or ReverseScan requests in
+  // the batch if this limit is set.
+  //
+  // Note that requests that span range boundaries could be split across
+  // single-range batches, each with its own per-scan limit. This means that
+  // the limit can be exceeded in some cases (hence best-effort). A caller that
+  // sets this limit should be able to handle extra KVs in the response.
+  int64 max_per_scan_request_keys = 38;
   // TargetBytes will have different behaviour depending on the request type.
   //
   // Forward and Reverse Scans:
