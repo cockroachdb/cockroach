@@ -121,6 +121,97 @@ CREATE FUNCTION f(val xy) RETURNS xy AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
+subtest assign_elem_case_sensitivity
+
+# Composite type with unquoted (lowercase) fields.
+statement ok
+CREATE TYPE comp1 AS (foo INT, bar INT);
+
+statement ok
+CREATE FUNCTION f1(val comp1) RETURNS comp1 AS $$
+  BEGIN
+    val.foo := 10;
+    val.bar := 20;
+    RETURN val;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f1(ROW(1, 2));
+----
+(10,20)
+
+statement ok
+DROP FUNCTION f1;
+
+# Composite type with quoted (uppercase) fields.
+statement ok
+CREATE TYPE comp2 AS ("FOO" INT, "BAR" INT);
+
+statement ok
+CREATE FUNCTION f2(val comp2) RETURNS comp2 AS $$
+  BEGIN
+    val."FOO" := 100;
+    val."BAR" := 200;
+    RETURN val;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f2(ROW(1, 2)::comp2);
+----
+(100,200)
+
+statement ok
+DROP FUNCTION f2;
+
+# Attempt to assign using wrong case (should fail).
+statement error pgcode 42703 pq: record "val" has no field "FOO"
+CREATE FUNCTION f3(val comp1) RETURNS comp1 AS $$
+  BEGIN
+    val."FOO" := 1;
+    RETURN val;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42703 pq: record "val" has no field "foo"
+CREATE FUNCTION f4(val comp2) RETURNS comp2 AS $$
+  BEGIN
+    val.foo := 1;
+    RETURN val;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# Mixed quoted/unquoted field names in composite type.
+statement ok
+CREATE TYPE comp3 AS (foo INT, "BAR" INT);
+
+statement ok
+CREATE FUNCTION f5(val comp3) RETURNS comp3 AS $$
+  BEGIN
+    val.foo := 5;
+    val."BAR" := 6;
+    RETURN val;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f5(ROW(0, 0)::comp3);
+----
+(5,6)
+
+statement ok
+DROP FUNCTION f5;
+
+statement ok
+DROP TYPE comp1;
+
+statement ok
+DROP TYPE comp2;
+
+statement ok
+DROP TYPE comp3;
+
 subtest end
 
 # Ordinal parameter references should reflect updates made by variable
