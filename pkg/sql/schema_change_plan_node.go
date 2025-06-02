@@ -95,7 +95,9 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 	// If we successfully planned a schema change here, then update telemetry
 	// to indicate that we used the new schema changer.
 	telemetry.Inc(sqltelemetry.DeclarativeSchemaChangerCounter)
-	p.curPlan.instrumentation.schemaChangerMode = schemaChangerModeDeclarative
+	// The curPlan may not be initialized yet, but will pick up the instrumentation
+	// from the planner.
+	p.instrumentation.schemaChangerMode = schemaChangerModeDeclarative
 
 	return &schemaChangePlanNode{
 		stmt:               stmt,
