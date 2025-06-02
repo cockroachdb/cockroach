@@ -139,11 +139,10 @@ func (c *Cluster) ForEveryNodeOrServer(
 		grp.GoCtx(func(ctx context.Context) error {
 			defer alloc.Release()
 
-			conn, err := c.c.Dialer.Dial(ctx, node.ID, rpcbase.DefaultClass)
+			client, err := serverpb.DialMigrationClient(c.c.Dialer, ctx, node.ID, rpcbase.DefaultClass)
 			if err != nil {
 				return err
 			}
-			client := serverpb.NewMigrationClient(conn)
 			return fn(ctx, client)
 		})
 	}

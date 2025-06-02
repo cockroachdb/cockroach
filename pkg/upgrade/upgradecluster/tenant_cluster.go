@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"google.golang.org/grpc"
 )
 
 // TenantCluster represents the set of sql nodes running in a secondary tenant.
@@ -225,7 +224,7 @@ func (t *TenantCluster) ForEveryNodeOrServer(
 		grp.GoCtx(func(ctx context.Context) error {
 			defer alloc.Release()
 
-			var conn *grpc.ClientConn
+			var client serverpb.MigrationClient
 			retryOpts := retry.Options{
 				InitialBackoff: 1 * time.Millisecond,
 				MaxRetries:     20,
@@ -235,12 +234,11 @@ func (t *TenantCluster) ForEveryNodeOrServer(
 			// test flakes due to network issues.
 			if err := retry.WithMaxAttempts(ctx, retryOpts, retryOpts.MaxRetries+1, func() error {
 				var err error
-				conn, err = t.Dialer.Dial(ctx, roachpb.NodeID(instance.InstanceID), rpcbase.DefaultClass)
+				client, err = serverpb.DialMigrationClient(t.Dialer, ctx, roachpb.NodeID(instance.InstanceID), rpcbase.DefaultClass)
 				return err
 			}); err != nil {
 				return annotateDialError(err)
 			}
-			client := serverpb.NewMigrationClient(conn)
 			return fn(ctx, client)
 		})
 	}
