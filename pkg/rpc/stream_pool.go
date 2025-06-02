@@ -297,9 +297,16 @@ func (p *streamPool[Req, Resp, Conn]) newPooledStream() (*pooledStream[Req, Resp
 	}
 
 	s := newPooledStream(p, stream, ctx, cancel)
-	if err := p.stopper.RunAsyncTask(ctx, "pooled gRPC stream", s.run); err != nil {
+	ctx, hdl, err := p.stopper.GetHandle(ctx, stop.TaskOpts{
+		TaskName: "pooled gRPC stream",
+	})
+	if err != nil {
 		return nil, err
 	}
+	go func(ctx context.Context) {
+		defer hdl.Activate(ctx).Release(ctx)
+		s.run(ctx)
+	}(ctx)
 	cancel = nil
 	return s, nil
 }
