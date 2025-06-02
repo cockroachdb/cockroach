@@ -1273,6 +1273,13 @@ func TestRepeatableReadLogic_merge_join(
 	runLogicTest(t, "merge_join")
 }
 
+func TestRepeatableReadLogic_mixed_version_row_level_security(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_row_level_security")
+}
+
 func TestRepeatableReadLogic_multi_statement(
 	t *testing.T,
 ) {

@@ -1287,6 +1287,13 @@ func TestReadCommittedLogic_merge_join(
 	runLogicTest(t, "merge_join")
 }
 
+func TestReadCommittedLogic_mixed_version_row_level_security(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_row_level_security")
+}
+
 func TestReadCommittedLogic_multi_statement(
 	t *testing.T,
 ) {
