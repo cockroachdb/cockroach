@@ -193,6 +193,16 @@ SELECT 'ü' COLLATE de < 'x' COLLATE de
 ----
 true
 
+query B
+SELECT e'\u00E9' COLLATE "en_US" = e'\u0065\u0301' COLLATE "en_US";
+----
+true
+
+query B
+SELECT e'\u00E9' COLLATE "en_US" LIKE e'\u0065\u0301' COLLATE "en_US";
+----
+true
+
 
 statement error syntax error: invalid locale e: language: tag is not well-formed
 CREATE TABLE e1 (
