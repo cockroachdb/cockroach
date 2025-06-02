@@ -15,7 +15,10 @@ go_library(
 
 go_library(
     name = "rpcbase",
-    srcs = ["connection_class.go"],
+    srcs = [
+        "connection_class.go",
+        "nodedialer.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/rpc/rpcbase",
     visibility = ["//visibility:public"],
     deps = [
@@ -23,5 +26,6 @@ go_library(
         "//pkg/roachpb",
         "//pkg/rpc/rpcpb",
         "//pkg/util/envutil",
+        "@org_golang_google_grpc//:grpc",
     ],
 )
