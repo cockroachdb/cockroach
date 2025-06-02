@@ -1503,11 +1503,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	qiBatchIdx := batchIdx + 1
 	qiResponseCh := make(chan response, 1)
 
-	runTask := ds.stopper.RunAsyncTask
-	if ds.disableParallelBatches {
-		runTask = ds.stopper.RunTask
-	}
-	if err := runTask(ctx, "kv.DistSender: sending pre-commit query intents", func(ctx context.Context) {
+	sendPreCommit := func(ctx context.Context) {
 		// Map response index to the original un-swapped batch index.
 		// Remember that we moved the last QueryIntent in this batch
 		// from swapIdx to the end.
@@ -1530,7 +1526,13 @@ func (ds *DistSender) divideAndSendParallelCommit(
 		// concurrently with the EndTxn batch below.
 		reply, pErr := ds.divideAndSendBatchToRanges(ctx, qiBa, qiRS, qiIsReverse, true /* withCommit */, qiBatchIdx)
 		qiResponseCh <- response{reply: reply, positions: positions, pErr: pErr}
-	}); err != nil {
+	}
+
+	runTask := ds.stopper.RunAsyncTask
+	if ds.disableParallelBatches {
+		runTask = ds.stopper.RunTask
+	}
+	if err := runTask(ctx, "kv.DistSender: sending pre-commit query intents", sendPreCommit); err != nil {
 		return nil, kvpb.NewError(err)
 	}
 
