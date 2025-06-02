@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -204,7 +204,7 @@ func (m *MockNodeConnectionHealth) SetConnected(connected bool) {
 }
 
 // ConnHealth implements the NodeDialer interface.
-func (m *MockNodeConnectionHealth) ConnHealth(_ roachpb.NodeID, _ rpc.ConnectionClass) error {
+func (m *MockNodeConnectionHealth) ConnHealth(_ roachpb.NodeID, _ rpcbase.ConnectionClass) error {
 	if m.connected {
 		return nil
 	}

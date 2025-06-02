@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -173,7 +173,7 @@ type RaftTransport struct {
 	//
 	// TODO(pav-kv): only SystemClass and "default" raft class slots are used.
 	// Find an efficient way to have only the necessary number of slots.
-	queues [rpc.NumConnectionClasses]syncutil.Map[roachpb.NodeID, raftSendQueue]
+	queues [rpcbase.NumConnectionClasses]syncutil.Map[roachpb.NodeID, raftSendQueue]
 
 	dialer                  *nodedialer.Dialer
 	incomingMessageHandlers syncutil.Map[roachpb.StoreID, IncomingRaftMessageHandler]
@@ -547,7 +547,7 @@ func (t *RaftTransport) StopOutgoingMessage(storeID roachpb.StoreID) {
 // lost and a new instance of processQueue will be started by the next message
 // to be sent.
 func (t *RaftTransport) processQueue(
-	q *raftSendQueue, stream MultiRaft_RaftMessageBatchClient, class rpc.ConnectionClass,
+	q *raftSendQueue, stream MultiRaft_RaftMessageBatchClient, class rpcbase.ConnectionClass,
 ) error {
 	errCh := make(chan error, 1)
 
@@ -722,7 +722,7 @@ func (t *RaftTransport) processQueue(
 // getQueue returns the queue for the specified node ID and a boolean
 // indicating whether the queue already exists (true) or was created (false).
 func (t *RaftTransport) getQueue(
-	nodeID roachpb.NodeID, class rpc.ConnectionClass,
+	nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (*raftSendQueue, bool) {
 	queuesMap := &t.queues[class]
 	value, ok := queuesMap.Load(nodeID)
@@ -745,7 +745,7 @@ func (t *RaftTransport) getQueue(
 // or may not actually be sent but if it's false the message definitely was not
 // sent. It is not safe to continue using the reference to the provided request.
 func (t *RaftTransport) SendAsync(
-	req *kvserverpb.RaftMessageRequest, class rpc.ConnectionClass,
+	req *kvserverpb.RaftMessageRequest, class rpcbase.ConnectionClass,
 ) (sent bool) {
 	toNodeID := req.ToReplica.NodeID
 	defer func() {
@@ -807,7 +807,7 @@ func (t *RaftTransport) SendAsync(
 //
 // Returns whether the worker was started (the queue is deleted either way).
 func (t *RaftTransport) startProcessNewQueue(
-	ctx context.Context, toNodeID roachpb.NodeID, class rpc.ConnectionClass,
+	ctx context.Context, toNodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (started bool) {
 	cleanup := func(q *raftSendQueue) {
 		// Account for the remainder of `ch` which was never sent.
@@ -977,7 +977,7 @@ func (t *RaftTransport) SendSnapshot(
 ) (*kvserverpb.SnapshotResponse, error) {
 	nodeID := header.RaftMessageRequest.ToReplica.NodeID
 
-	conn, err := t.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
+	conn, err := t.dialer.Dial(ctx, nodeID, rpcbase.DefaultClass)
 	if err != nil {
 		return nil, err
 	}
@@ -1001,7 +1001,7 @@ func (t *RaftTransport) DelegateSnapshot(
 	ctx context.Context, req *kvserverpb.DelegateSendSnapshotRequest,
 ) (*kvserverpb.DelegateSnapshotResponse, error) {
 	nodeID := req.DelegatedSender.NodeID
-	conn, err := t.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
+	conn, err := t.dialer.Dial(ctx, nodeID, rpcbase.DefaultClass)
 	if err != nil {
 		return nil, errors.Mark(err, errMarkSnapshotError)
 	}

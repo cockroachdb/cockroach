@@ -12,7 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
@@ -132,7 +132,7 @@ func TestTenantGRPCServices(t *testing.T) {
 		rpcCtx := tenant2.RPCContext()
 
 		nodeID := roachpb.NodeID(tenant.SQLInstanceID())
-		conn, err := rpcCtx.GRPCDialNode(grpcAddr, nodeID, roachpb.Locality{}, rpc.DefaultClass).Connect(ctx)
+		conn, err := rpcCtx.GRPCDialNode(grpcAddr, nodeID, roachpb.Locality{}, rpcbase.DefaultClass).Connect(ctx)
 		require.NoError(t, err)
 
 		client := serverpb.NewStatusClient(conn)
@@ -146,7 +146,7 @@ func TestTenantGRPCServices(t *testing.T) {
 		grpcAddr := server.RPCAddr()
 		rpcCtx := tenant.RPCContext()
 
-		conn, err := rpcCtx.GRPCDialNode(grpcAddr, server.NodeID(), roachpb.Locality{}, rpc.DefaultClass).Connect(ctx)
+		conn, err := rpcCtx.GRPCDialNode(grpcAddr, server.NodeID(), roachpb.Locality{}, rpcbase.DefaultClass).Connect(ctx)
 		require.NoError(t, err)
 
 		client := serverpb.NewStatusClient(conn)

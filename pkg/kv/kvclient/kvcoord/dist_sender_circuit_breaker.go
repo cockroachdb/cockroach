@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
@@ -819,7 +819,7 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 		// we're only going to contact this replica.
 		replicas := ReplicaSlice{{ReplicaDescriptor: r.desc}}
 		opts := SendOptions{
-			class:                  rpc.SystemClass,
+			class:                  rpcbase.SystemClass,
 			metrics:                &r.d.metrics,
 			dontConsiderConnHealth: true,
 		}
