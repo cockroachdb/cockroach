@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -352,7 +351,7 @@ func (prc PendingRangeChange) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 //
-// TODO: This is adhoc for debugging. A nicer string format would include the
+// This is adhoc for debugging. A nicer string format would include the
 // previous state and next state.
 func (prc PendingRangeChange) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("r%v=[", prc.RangeID)
@@ -533,169 +532,6 @@ func (s storeMembership) SafeFormat(w redact.SafePrinter, _ rune) {
 	}
 }
 
-// storeChangeRateLimiter and helpers.
-//
-// Usage:
-// - construct a single storeChangeRateLimiter for the allocator using
-//   newStoreChangeRateLimiter. If all allocators are operating at 10s
-//   intervals, a gcThreshold of 15s should be enough.
-// - storeEnactedHistory is a member of storeState, so one per store.
-// - storeEnactedHistory.addEnactedChange must be called every time a change
-//   is known to be enacted.
-// - Before every rebalancing pass, call
-//   storeChangeRateLimiter.initForRebalancePass. Then iterate over each store
-//   and call storeChangeRateLimiter.updateForRebalancePass. The latter step
-//   updates the rate limiting state for the store -- this "rate limiting" is
-//   simply a bool, which represents whether changes are allowed to the store
-//   for load reasons (changes for failure reasons, to shed load, are always
-//   allowed), in this rebalancing pass. Note, changes made during the
-//   rebalancing pass, and rate limiting those, is not in scope of this rate
-//   limiter -- that happens via storeState.adjusted.loadPendingChanges.
-// - During the rebalancing pass, use
-//   storeEnactedHistory.allowLoadBasedChanges, to decide whether a store can
-//   be the source or target for load based rebalancing.
-//
-// TODO(sumeer): unit test.
-//
-// TODO(sumeer,kvoli): integrate this into the rest of mma properly, and without
-// peering into its state.
-
-// enactedReplicaChange is information about a change at a store that was
-// enacted. It is an internal implementation detail of storeEnactedHistory and
-// storeChangeRateLimiter.
-type enactedReplicaChange struct {
-	// When the change is known to be enacted, based on the authoritative
-	// information received from the leaseholder.
-	enactedAtTime time.Time
-	// The load this change adds to a store. The values are always positive,
-	// even for load subtraction.
-	loadDelta      LoadVector
-	secondaryDelta SecondaryLoadVector
-}
-
-// storeEnactedHistory is a member of storeState. Users should only call
-// addEnactedChange and allowLoadBasedChanges.
-type storeEnactedHistory struct {
-	changes        []enactedReplicaChange
-	totalDelta     LoadVector
-	totalSecondary SecondaryLoadVector
-	allowChanges   bool
-}
-
-func (h *storeEnactedHistory) addEnactedChange(change *pendingReplicaChange) {
-	c := enactedReplicaChange{
-		enactedAtTime: change.enactedAtTime,
-		loadDelta:     change.loadDelta,
-	}
-	for i, l := range c.loadDelta {
-		if l < 0 {
-			c.loadDelta[i] = -l
-		}
-	}
-	if change.prev.IsLeaseholder != change.next.IsLeaseholder {
-		c.secondaryDelta[LeaseCount] = 1
-	}
-	h.changes = append(h.changes, c)
-	slices.SortFunc(h.changes, func(a, b enactedReplicaChange) int {
-		return a.enactedAtTime.Compare(b.enactedAtTime)
-	})
-	h.totalDelta.add(c.loadDelta)
-	h.totalSecondary.add(c.secondaryDelta)
-}
-
-func (h *storeEnactedHistory) allowLoadBasedChanges() bool {
-	return h.allowChanges
-}
-
-func (h *storeEnactedHistory) gcHistory(now time.Time, gcThreshold time.Duration) {
-	i := 0
-	for ; i < len(h.changes); i++ {
-		c := h.changes[i]
-		if now.Sub(c.enactedAtTime) > gcThreshold {
-			h.totalDelta.subtract(c.loadDelta)
-			h.totalSecondary.subtract(c.secondaryDelta)
-		} else {
-			break
-		}
-	}
-	h.changes = h.changes[i:]
-}
-
-// storeChangeRateLimiter is a rate limiter for rebalancing to/from this
-// store, for this allocator, under the assumption that the cluster uses many
-// (distributed) allocators. The rate limiting heuristic assumes that the
-// other allocators are also running with such a rate limiter, and is intended
-// to prevent a thundering herd problem where all allocators add/remove too
-// much load from a store, resulting in perpetual rebalancing without
-// improving the cluster.
-type storeChangeRateLimiter struct {
-	gcThreshold   time.Duration
-	numAllocators int
-	clusterMean   meanStoreLoad
-}
-
-func newStoreChangeRateLimiter(gcThreshold time.Duration) *storeChangeRateLimiter {
-	return &storeChangeRateLimiter{
-		gcThreshold: gcThreshold,
-	}
-}
-
-func (crl *storeChangeRateLimiter) initForRebalancePass(
-	numAllocators int, clusterMean meanStoreLoad,
-) {
-	crl.numAllocators = numAllocators
-	crl.clusterMean = clusterMean
-}
-
-// TODO(sumeer): also consider utilization in the cluster and capacity of this
-// store, since that is necessary to make this reasonable for heterogeneous
-// clusters.
-
-func (crl *storeChangeRateLimiter) updateForRebalancePass(h *storeEnactedHistory, now time.Time) {
-	h.gcHistory(now, crl.gcThreshold)
-	if len(h.changes) == 0 {
-		// If there is nothing in the history, changes are allowed. This is the
-		// path we will fall into for underloaded clusters where the mean is very
-		// low and the projectedDelta will become too high even with a single
-		// change.
-		//
-		// Additionally, if the actual number of allocators that can add or remove
-		// load from a store is much lower than numAllocators (because of
-		// constraints) we may often need to use this fallback. We do assume that
-		// typical clusters will be configured in a manner that each store will be
-		// able to satisfy some constraint for a substantial fraction of the
-		// ranges in the cluster (say > 50%), so the pessimistic behavior encoded
-		// in the code below will not significantly slow down allocator changes.
-		//
-		// Another situation that can present a problem is cluster configurations
-		// where a significant number of nodes can only have follower replicas. Some options:
-		// - Add a cluster setting effective_fraction_allocators, that defaults to
-		//   1.0 that can be adjusted by the operator to the fraction of nodes
-		//   that can do allocation.
-		// - Estimate the number of allocators based on the gossiped lease count
-		//   by each store.
-		//
-		// We currently prefer the second option.
-		h.allowChanges = true
-		return
-	}
-	h.allowChanges = true
-	for i := range h.totalDelta {
-		projectedDelta := h.totalDelta[i] * LoadValue(crl.numAllocators)
-		if float64(projectedDelta) > 0.5*float64(crl.clusterMean.load[i]) {
-			h.allowChanges = false
-			return
-		}
-	}
-	for i := range h.totalSecondary {
-		projectedDelta := h.totalSecondary[i] * LoadValue(crl.numAllocators)
-		if float64(projectedDelta) > 0.5*float64(crl.clusterMean.secondaryLoad[i]) {
-			h.allowChanges = false
-			return
-		}
-	}
-}
-
 // storeState maintains the complete state about a store as known to the
 // allocator.
 type storeState struct {
@@ -748,9 +584,6 @@ type storeState struct {
 		//
 		// NB: this does not include LEARNER and VOTER_DEMOTING_LEARNER replicas.
 		topKRanges map[roachpb.StoreID]*topKReplicas
-		// TODO(kvoli,sumeerbhola): Update enactedHistory when integrating the
-		// storeChangeRateLimiter.
-		enactedHistory storeEnactedHistory
 	}
 	// This is a locally incremented seqnum which is incremented whenever the
 	// adjusted or reported load information for this store or the containing
@@ -1628,19 +1461,4 @@ func computeLoadSummary(
 }
 
 // Avoid unused lint errors.
-var _ = ReplicaState{}.VoterIsLagging
 var _ = rangeState{}.diversityIncreaseLastFailedAttempt
-var _ = enactedReplicaChange{}
-var _ = storeEnactedHistory{}.changes
-var _ = storeEnactedHistory{}.totalDelta
-var _ = storeEnactedHistory{}.totalSecondary
-var _ = storeEnactedHistory{}.allowChanges
-var _ = (*storeEnactedHistory).addEnactedChange
-var _ = (*storeEnactedHistory).allowLoadBasedChanges
-var _ = (*storeEnactedHistory).gcHistory
-var _ = storeChangeRateLimiter{}.gcThreshold
-var _ = storeChangeRateLimiter{}.numAllocators
-var _ = storeChangeRateLimiter{}.clusterMean
-var _ = newStoreChangeRateLimiter
-var _ = (*storeChangeRateLimiter).initForRebalancePass
-var _ = (*storeChangeRateLimiter).updateForRebalancePass
