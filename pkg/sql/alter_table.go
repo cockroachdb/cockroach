@@ -1218,8 +1218,14 @@ func applyColumnMutation(
 				col.GetName(), tableDesc.GetName())
 		}
 
-		// It is assumed that an identify column owns only one sequence.
-		if col.NumUsesSequences() != 1 {
+		numSeqs := col.NumUsesSequences()
+		if numSeqs == 0 {
+			// This can happen when a SERIAL column is created with IDENTITY and
+			// serial_normalization=rowid, meaning it doesn't use a real sequence.
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"identity column %q of relation %q is not backed by a sequence",
+				col.GetName(), tableDesc.GetName())
+		} else if numSeqs > 1 {
 			return errors.AssertionFailedf(
 				"identity column %q of relation %q has %d sequences instead of 1",
 				col.GetName(), tableDesc.GetName(), col.NumUsesSequences())
@@ -1265,8 +1271,14 @@ func applyColumnMutation(
 				col.GetName(), tableDesc.GetName())
 		}
 
-		// It is assumed that an identify column owns only one sequence.
-		if col.NumUsesSequences() != 1 {
+		numSeqs := col.NumUsesSequences()
+		if numSeqs == 0 {
+			// This can happen when a SERIAL column is created with IDENTITY and
+			// serial_normalization=rowid, meaning it doesn't use a real sequence.
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"identity column %q of relation %q is not backed by a sequence",
+				col.GetName(), tableDesc.GetName())
+		} else if numSeqs > 1 {
 			return errors.AssertionFailedf(
 				"identity column %q of relation %q has %d sequences instead of 1",
 				col.GetName(), tableDesc.GetName(), col.NumUsesSequences())

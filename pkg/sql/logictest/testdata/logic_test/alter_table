@@ -2050,6 +2050,42 @@ INSERT INTO t (c) VALUES (2)
 statement ok
 DROP TABLE t
 
+subtest generated_with_serial_unique_row_id
+
+statement ok
+SET serial_normalization = rowid
+
+statement ok
+CREATE TABLE t(a INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE t ADD COLUMN b SERIAL GENERATED ALWAYS AS IDENTITY
+
+query T
+SELECT crdb_internal.pb_to_json('desc', descriptor)->'table'->'columns'->1->>'defaultExpr'
+FROM system.descriptor
+WHERE id = 't'::regclass::oid
+----
+unique_rowid()
+
+query T
+SELECT crdb_internal.pb_to_json('desc', descriptor)->'table'->'columns'->1->>'generatedAsIdentityType'
+FROM system.descriptor
+WHERE id = 't'::regclass::oid
+----
+GENERATED_ALWAYS
+
+statement error pq: identity column "b" of relation "t" is not backed by a sequence
+ALTER TABLE t ALTER COLUMN b DROP IDENTITY;
+
+statement error pq: identity column "b" of relation "t" is not backed by a sequence
+ALTER TABLE t ALTER COLUMN b SET CYCLE;
+
+statement ok
+DROP TABLE t;
+
+subtest end
+
 subtest generated_as_identity_with_seq_option
 statement ok
 DROP TABLE IF EXISTS t;
@@ -2453,8 +2489,8 @@ FROM (
 LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
 ----
 table_id  name               state   refobjid
-201       test_serial_b_seq  PUBLIC  200
-200       test_serial        PUBLIC  NULL
+202       test_serial_b_seq  PUBLIC  201
+201       test_serial        PUBLIC  NULL
 
 statement ok
 DROP TABLE test_serial;
@@ -2488,8 +2524,8 @@ FROM (
 LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
 ----
 table_id  name               state   refobjid
-203       test_serial_b_seq  PUBLIC  202
-202       test_serial        PUBLIC  NULL
+204       test_serial_b_seq  PUBLIC  203
+203       test_serial        PUBLIC  NULL
 
 statement ok
 ALTER TABLE test_serial DROP COLUMN b;
@@ -2504,7 +2540,7 @@ FROM (
 LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
 ----
 table_id  name         state   refobjid
-202       test_serial  PUBLIC  NULL
+203       test_serial  PUBLIC  NULL
 
 statement ok
 DROP TABLE test_serial;
