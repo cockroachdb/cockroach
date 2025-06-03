@@ -728,7 +728,8 @@ The last argument is a JSONB object containing the following optional fields:
 	),
 	"crdb_internal.scan_storage_internal_keys": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // See #147197.
 		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
