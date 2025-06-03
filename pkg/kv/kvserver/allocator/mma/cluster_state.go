@@ -819,9 +819,11 @@ func (rs *rangeState) removeReplica(storeID roachpb.StoreID) {
 		if rs.replicas[i].StoreID == storeID {
 			rs.replicas[i], rs.replicas[n-1] = rs.replicas[n-1], rs.replicas[i]
 			rs.replicas = rs.replicas[:n-1]
-			break
+			return
 		}
 	}
+	// TODO(sumeer): uncomment once we fix the external change problem.
+	// panic(errors.AssertionFailedf("store %v has no replica", storeID))
 }
 
 func (rs *rangeState) removePendingChangeTracking(changeID ChangeID) {
@@ -848,9 +850,9 @@ type clusterState struct {
 	// Added to when a change is proposed. Will also add to corresponding
 	// rangeState.pendingChanges and to the affected storeStates.
 	//
-	// Removed from based on RangeMsg, explicit rejection by enacting module, or
-	// time-based GC. There is no explicit acceptance by enacting module since
-	// the single source of truth of a rangeState is the leaseholder.
+	// Removed from based on RangeMsg (provided by the leaseholder),
+	// AdjustPendingChangesDisposition (provided by the enacting module at the
+	// leaseholder), or time-based GC.
 	pendingChanges map[ChangeID]*pendingReplicaChange
 	changeSeqGen   ChangeID
 
@@ -907,15 +909,13 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 	ss.adjusted.secondaryLoad = storeMsg.SecondaryLoad
 	ss.maxFractionPendingIncrease, ss.maxFractionPendingDecrease = 0, 0
 
-	// Find any pending changes for ranges which involve this store. These
-	// pending changes can now be removed from the loadPendingChanges. We don't
-	// need to undo the corresponding delta adjustment as the reported load
-	// already contains the effect.
+	// Find any load pending changes for ranges which involve this store, that
+	// can now be removed from the loadPendingChanges. We don't need to undo the
+	// corresponding delta adjustment as the reported load already contains the
+	// effect.
 	for _, change := range ss.computePendingChangesReflectedInLatestLoad(storeMsg.LoadTime) {
 		log.Infof(ctx, "s%d not-pending %v", storeMsg.StoreID, change)
 		delete(ss.adjusted.loadPendingChanges, change.ChangeID)
-		delete(cs.pendingChanges, change.ChangeID)
-		cs.ranges[change.rangeID].removePendingChangeTracking(change.ChangeID)
 	}
 
 	for _, change := range ss.adjusted.loadPendingChanges {
@@ -981,9 +981,17 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		for _, change := range enactedChanges {
 			// Mark the change as enacted. Enacting a change does not remove the
 			// corresponding load adjustments. The store load message will do that,
-			// or GC, indicating that the change has been reflected in the store
-			// load.
-			cs.markPendingChangeEnacted(change.ChangeID, now)
+			// indicating that the change has been reflected in the store load.
+			//
+			// TODO: there was a previous bug where these changes were not being
+			// removed now, and were being removed later when the load adjustment
+			// incorporated them. Fixing this has introduced improved
+			// example_skewed_cpu_even_ranges_mma in that it converges faster, but
+			// introduced more thrashing in
+			// example_skewed_cpu_even_ranges_mma_and_queues. I suspect the latter
+			// is because MMA is acting faster to undo the effects of the changes
+			// made by the replicate and lease queues.
+			cs.pendingChangeEnacted(change.ChangeID, now)
 		}
 		// Re-apply the remaining changes.
 		for _, change := range remainingChanges {
@@ -1113,17 +1121,26 @@ func (cs *clusterState) gcPendingChanges(now time.Time) {
 	}
 }
 
-// Called by enacting module.
-func (cs *clusterState) pendingChangesRejected(changes []ChangeID) {
-	// Wipe rejected changes, including load adjustments, tracking and replica
-	// changes.
-	for _, changeID := range changes {
-		cs.undoPendingChange(changeID)
+func (cs *clusterState) pendingChangeEnacted(cid ChangeID, enactedAt time.Time) {
+	change, ok := cs.pendingChanges[cid]
+	if !ok {
+		panic(fmt.Sprintf("change %v not found", cid))
 	}
+	change.enactedAtTime = enactedAt
+	rs, ok := cs.ranges[change.rangeID]
+	if !ok {
+		panic(fmt.Sprintf("range %v not found in cluster state", change.rangeID))
+	}
+
+	rs.removePendingChangeTracking(change.ChangeID)
+	delete(cs.pendingChanges, change.ChangeID)
 }
 
 func (cs *clusterState) markPendingChangeEnacted(cid ChangeID, enactedAt time.Time) {
-	change := cs.pendingChanges[cid]
+	change, ok := cs.pendingChanges[cid]
+	if !ok {
+		panic(fmt.Sprintf("change %v not found", cid))
+	}
 	change.enactedAtTime = enactedAt
 }
 
@@ -1222,7 +1239,7 @@ func (cs *clusterState) applyReplicaChange(change ReplicaChange) {
 func (cs *clusterState) undoReplicaChange(change ReplicaChange) {
 	rangeState := cs.ranges[change.rangeID]
 	storeState := cs.stores[change.target.StoreID]
-	if change.isRemoval() {
+	if change.isRemoval() || change.isUpdate() {
 		prevRepl := StoreIDAndReplicaState{
 			StoreID:      change.target.StoreID,
 			ReplicaState: change.prev,
@@ -1232,13 +1249,6 @@ func (cs *clusterState) undoReplicaChange(change ReplicaChange) {
 	} else if change.isAddition() {
 		delete(storeState.adjusted.replicas, change.rangeID)
 		rangeState.removeReplica(change.target.StoreID)
-	} else if change.isUpdate() {
-		replState := change.prev
-		rangeState.setReplica(StoreIDAndReplicaState{
-			StoreID:      change.target.StoreID,
-			ReplicaState: replState,
-		})
-		storeState.adjusted.replicas[change.rangeID] = replState
 	} else {
 		panic(fmt.Sprintf("unknown replica change %+v", change))
 	}
