@@ -361,29 +361,68 @@ func TestRetryFields(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	sqlDB.Exec(t, "CREATE SEQUENCE s")
+	sqlDB.Exec(t, "CREATE TABLE a (a INT)")
 
 	retryCountRE := regexp.MustCompile(`number of transaction retries: (\d+)`)
 	retryTimeRE := regexp.MustCompile(`time spent retrying the transaction: ([\d\.]+)[µsm]+`)
+	retryStmtCountRE := regexp.MustCompile(`number of statement retries: (\d+)`)
+	retryStmtTimeRE := regexp.MustCompile(`time spent retrying the statement: ([\d\.]+)[µsm]+`)
 
-	const query = "EXPLAIN ANALYZE SELECT IF(nextval('s')<=3, crdb_internal.force_retry('1h'::INTERVAL), 0)"
-	rows, err := conn.QueryContext(ctx, query)
-	assert.NoError(t, err)
-	var output strings.Builder
-	var foundCount, foundTime bool
-	for rows.Next() {
-		var res string
-		assert.NoError(t, rows.Scan(&res))
-		output.WriteString(res)
-		output.WriteString("\n")
-		if matches := retryCountRE.FindStringSubmatch(res); len(matches) > 0 {
-			foundCount = true
-		}
-		if matches := retryTimeRE.FindStringSubmatch(res); len(matches) > 0 {
-			foundTime = true
-		}
+	testCases := []struct {
+		query     string
+		retryTxn  bool
+		retryStmt bool
+	}{
+		{
+			query:    "EXPLAIN ANALYZE SELECT IF(nextval('s')<=3, crdb_internal.force_retry('1h'::INTERVAL), 0)",
+			retryTxn: true,
+		},
+		{
+			query:     "BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED; EXPLAIN ANALYZE SELECT crdb_internal.force_retry(101); COMMIT",
+			retryTxn:  true,
+			retryStmt: true,
+		},
+		{
+			query:     "BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED; INSERT INTO a VALUES (1); EXPLAIN ANALYZE SELECT crdb_internal.force_retry(5); COMMIT",
+			retryStmt: true,
+		},
 	}
-	assert.Truef(t, foundCount, "expected to find transaction retries, full output:\n\n%s", output.String())
-	assert.Truef(t, foundTime, "expected to find time spent retrying, full output:\n\n%s", output.String())
+
+	for i, tc := range testCases {
+		rows, err := conn.QueryContext(ctx, tc.query)
+		assert.NoError(t, err)
+		var output strings.Builder
+		var foundCount, foundTime bool
+		var foundStmtCount, foundStmtTime bool
+		for rows.Next() {
+			var res string
+			assert.NoError(t, rows.Scan(&res))
+			output.WriteString(res)
+			output.WriteString("\n")
+			if matches := retryCountRE.FindStringSubmatch(res); len(matches) > 0 {
+				foundCount = true
+			}
+			if matches := retryTimeRE.FindStringSubmatch(res); len(matches) > 0 {
+				foundTime = true
+			}
+			if matches := retryStmtCountRE.FindStringSubmatch(res); len(matches) > 0 {
+				foundStmtCount = true
+			}
+			if matches := retryStmtTimeRE.FindStringSubmatch(res); len(matches) > 0 {
+				foundStmtTime = true
+			}
+		}
+		not := func(b bool) string {
+			if b {
+				return ""
+			}
+			return "not "
+		}
+		assert.Equalf(t, tc.retryTxn, foundCount, "expected %sto find transaction retries, full output for tc %d:\n\n%s", not(tc.retryTxn), i, output.String())
+		assert.Equalf(t, tc.retryTxn, foundTime, "expected %sto find time spent retrying, full output for tc %d:\n\n%s", not(tc.retryTxn), i, output.String())
+		assert.Equalf(t, tc.retryStmt, foundStmtCount, "expected %sto find statement retries, full output for tc %d:\n\n%s", not(tc.retryStmt), i, output.String())
+		assert.Equalf(t, tc.retryStmt, foundStmtTime, "expected %sto find time spent retrying, full output for tc %d:\n\n%s", not(tc.retryStmt), i, output.String())
+	}
 }
 
 // TestMaximumMemoryUsage verifies that "maximum memory usage" statistic is

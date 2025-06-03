@@ -2729,7 +2729,12 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 
 	maxRetries := int(ex.sessionData().MaxRetriesForReadCommitted)
 	for attemptNum := 0; ; attemptNum++ {
-		if attemptNum > 0 {
+		// TODO(99410): Fix the phase time for pausable portals.
+		startExecTS := crtime.NowMono()
+		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerMostRecentStartExecStmt, startExecTS)
+		if attemptNum == 0 {
+			ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerFirstStartExecStmt, startExecTS)
+		} else {
 			ex.sessionTracing.TraceRetryInformation(
 				ctx, "statement", p.autoRetryStmtCounter, p.autoRetryStmtReason,
 			)
