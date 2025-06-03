@@ -247,7 +247,7 @@ func makeSQLProcessorFromQuerier(
 		}
 		cdcEventTargets.Add(changefeedbase.Target{
 			Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
-			TableID:           srcDesc.GetID(),
+			DescID:            srcDesc.GetID(),
 			StatementTimeName: changefeedbase.StatementTimeName(srcDesc.GetName()),
 		})
 	}
