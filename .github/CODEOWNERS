@@ -497,6 +497,7 @@
 /pkg/cmd/roachtest/spec/              @cockroachdb/test-eng
 /pkg/cmd/roachtest/test/              @cockroachdb/test-eng
 /pkg/cmd/roachtest/testdata/          @cockroachdb/test-eng
+/pkg/cmd/roachtest/testdata/pg_regress @cockroachdb/sql-queries-prs
 /pkg/cmd/roachtest/testselector/      @cockroachdb/test-eng
 # This isn't quite right, each file should ideally be owned
 # by a team (or at least most of them), namely the team that
