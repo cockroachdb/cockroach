@@ -784,11 +784,6 @@ type storeState struct {
 
 	localityTiers
 
-	// lastLeaseShedAt is the time at which the store last reported that it shed
-	// leases during rebalancing. This is used to determine whether the store,
-	// when remote, can shed replicas to reduce CPU load.
-	lastLeaseShedAt time.Time
-
 	// Time when this store started to be observed as overloaded. Set by
 	// allocatorState.rebalanceStores.
 	overloadStartTime time.Time
@@ -1070,11 +1065,6 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 	// The store's load sequence number is incremented on each load change. The
 	// store's load is updated below.
 	ss.loadSeqNum++
-	if storeMsg.ShedLeasesInLastRebalance {
-		// TODO(kvoli): Cases to think through:
-		// - Upon first hearing about this store.
-		ss.lastLeaseShedAt = storeMsg.LoadTime
-	}
 	ss.storeLoad.reportedLoad = storeMsg.Load
 	ss.storeLoad.capacity = storeMsg.Capacity
 	ss.storeLoad.reportedSecondaryLoad = storeMsg.SecondaryLoad
@@ -1466,10 +1456,6 @@ func (cs *clusterState) setStore(desc roachpb.StoreDescriptor) {
 		// This is the first time seeing this store.
 		ss = newStoreState(desc.StoreID, desc.Node.NodeID)
 		ss.localityTiers = cs.localityTierInterner.intern(desc.Locality())
-		// TODO(kvoli): If we left this uninitialized, the local allocator could
-		// immediately begin shedding replicas from this store if it were CPU
-		// overloaded. Yet, this is hacky.
-		ss.lastLeaseShedAt = cs.ts.Now()
 		ss.overloadStartTime = cs.ts.Now()
 		ss.overloadEndTime = cs.ts.Now()
 		cs.constraintMatcher.setStore(desc)
