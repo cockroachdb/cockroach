@@ -33,8 +33,6 @@ type allocatorState struct {
 
 	diversityScoringMemo *diversityScoringMemo
 
-	changeRateLimiter *storeChangeRateLimiter
-
 	changeIDCounter ChangeID
 
 	rand *rand.Rand
@@ -58,7 +56,6 @@ func NewAllocatorState(ts timeutil.TimeSource, rand *rand.Rand) *allocatorState 
 		cs:                     cs,
 		rangesNeedingAttention: map[roachpb.RangeID]struct{}{},
 		diversityScoringMemo:   newDiversityScoringMemo(),
-		changeRateLimiter:      newStoreChangeRateLimiter(rateChangeLimiterGCInterval),
 		rand:                   rand,
 	}
 }
@@ -100,7 +97,6 @@ func (a *allocatorState) rebalanceStores(
 	// cpu utilization while the cluster mean is 70% utilization (as an
 	// example).
 	clusterMeans := a.cs.meansMemo.getMeans(nil)
-	a.changeRateLimiter.initForRebalancePass(numAllocators, clusterMeans.storeLoad)
 	type sheddingStore struct {
 		roachpb.StoreID
 		storeLoadSummary
@@ -114,7 +110,6 @@ func (a *allocatorState) rebalanceStores(
 	// is storeMembershipRemoving (decommissioning). These are currently handled
 	// via replicate_queue.go.
 	for storeID, ss := range a.cs.stores {
-		a.changeRateLimiter.updateForRebalancePass(&ss.adjusted.enactedHistory, now)
 		sls := a.cs.meansMemo.getStoreLoadSummary(clusterMeans, storeID, ss.loadSeqNum)
 		if sls.sls >= overloadSlow {
 			if ss.overloadEndTime != (time.Time{}) {
@@ -127,9 +122,8 @@ func (a *allocatorState) rebalanceStores(
 				}
 				ss.overloadEndTime = time.Time{}
 			}
-			if ss.adjusted.enactedHistory.allowLoadBasedChanges() &&
-				// The pending decrease must be small enough to continue shedding
-				ss.maxFractionPendingDecrease < maxFractionPendingThreshold &&
+			// The pending decrease must be small enough to continue shedding
+			if ss.maxFractionPendingDecrease < maxFractionPendingThreshold &&
 				// There should be no pending increase, since that can be an overestimate.
 				ss.maxFractionPendingIncrease < epsilon {
 				sheddingStores = append(sheddingStores, sheddingStore{StoreID: storeID, storeLoadSummary: sls})
@@ -1185,7 +1179,6 @@ const epsilon = 1e-10
 
 // Avoid unused lint errors.
 
-var _ = allocatorState{}.changeRateLimiter
 var _ = (&existingReplicaLocalities{}).clear
 var _ = replicasLocalityTiers{}.hash
 var _ = replicasLocalityTiers{}.isEqual
