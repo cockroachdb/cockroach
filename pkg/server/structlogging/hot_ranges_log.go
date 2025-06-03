@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -34,7 +33,7 @@ var CheckInterval = time.Minute
 // TestLoopChannel triggers the hot ranges logging loop to start again.
 // It's useful in the context of a test, where we don't want to wait
 // for whatever the last time the interval was.
-var TestLoopChannel = make(chan struct{}, 1)
+var TestLoopChannel = make(chan struct{})
 
 var TelemetryHotRangesStatsInterval = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
@@ -70,10 +69,14 @@ var TelemetryHotRangesStatsCPUThreshold = settings.RegisterDurationSetting(
 	time.Second/4,
 )
 
+type HotRangeGetter interface {
+	HotRangesV2(ctx context.Context, req *serverpb.HotRangesRequest) (*serverpb.HotRangesResponseV2, error)
+}
+
 // hotRangesLoggingScheduler is responsible for logging index usage stats
 // on a scheduled interval.
 type hotRangesLoggingScheduler struct {
-	sServer     serverpb.TenantStatusServer
+	sServer     HotRangeGetter
 	st          *cluster.Settings
 	stopper     *stop.Stopper
 	job         *jobs.Job
@@ -92,8 +95,7 @@ type hotRangesLoggingScheduler struct {
 func StartHotRangesLoggingScheduler(
 	ctx context.Context,
 	stopper *stop.Stopper,
-	sServer serverpb.TenantStatusServer,
-	ie sql.InternalExecutor,
+	sServer HotRangeGetter,
 	st *cluster.Settings,
 	ti *tenantcapabilities.Entry,
 ) error {
