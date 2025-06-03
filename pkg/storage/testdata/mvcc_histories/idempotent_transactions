@@ -7,7 +7,7 @@ with t=a k=a
   put v=first
 ----
 >> put v=first t=a k=a
-put: lock acquisition = {a id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=a id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+61 live_count=+1 live_bytes=+75 intent_count=+1 intent_bytes=+22 lock_count=+1 lock_age=+89
 >> put v=first t=a k=a
 stats: no change
@@ -41,7 +41,7 @@ with t=a k=a
   check_intent
 ----
 >> put v=second t=a k=a
-put: lock acquisition = {a id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1 Replicated Intent []}
+put: lock acquisition = {span=a id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=+17 live_bytes=+17 intent_bytes=+1
 >> put v=first t=a k=a
 stats: no change
@@ -76,7 +76,7 @@ with t=a k=i
 ----
 >> increment t=a k=i
 inc: current value = 1
-inc: lock acquisition = {i id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=2 Replicated Intent []}
+inc: lock acquisition = {span=i id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=2 durability=Replicated strength=Intent ignored=[]}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+59 live_count=+1 live_bytes=+73 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+89
 >> increment t=a k=i
 inc: current value = 1
@@ -111,7 +111,7 @@ with t=a k=i
 ----
 >> increment t=a k=i
 inc: current value = 2
-inc: lock acquisition = {i id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=3 Replicated Intent []}
+inc: lock acquisition = {span=i id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=3 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=+10 live_bytes=+10
 >> increment t=a k=i
 inc: current value = 2
@@ -163,7 +163,7 @@ with t=a k=i2
 ----
 >> increment t=a k=i2
 inc: current value = 2
-inc: lock acquisition = {i2 id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=4 Replicated Intent []}
+inc: lock acquisition = {span=i2 id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=4 durability=Replicated strength=Intent ignored=[]}
 stats: key_bytes=+12 val_count=+1 val_bytes=+59 live_bytes=+53 gc_bytes_age=+1602 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+89
 >> increment t=a k=i2
 inc: current value = 2
@@ -201,7 +201,7 @@ with t=a k=i2
 ----
 >> increment t=a k=i2
 inc: current value = 3
-inc: lock acquisition = {i2 id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=5 Replicated Intent []}
+inc: lock acquisition = {span=i2 id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=5 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=+10 live_bytes=+10
 >> increment t=a k=i2
 inc: current value = 3

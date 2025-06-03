@@ -7,7 +7,7 @@ with t=A k=k
   get  ts=1
 ----
 >> put v=v t=A k=k
-put: lock acquisition = {k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+49 live_count=+1 live_bytes=+63 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+100
 get: "k" -> /BYTES/v @0,1
 get: "k" -> /BYTES/v @0,1
