@@ -171,7 +171,7 @@ func registerAsyncpg(r registry.Registry) {
 		Name:             "asyncpg",
 		Owner:            registry.OwnerSQLFoundations,
 		Cluster:          r.MakeClusterSpec(1, spec.CPU(16)),
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.Nightly, registry.ORM),
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
