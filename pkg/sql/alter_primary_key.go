@@ -879,7 +879,8 @@ func (p *planner) disallowDroppingPrimaryIndexReferencedInUDFOrView(
 		if tableRef.IndexID == currentPrimaryIndex.GetID() {
 			// canRemoveDependent with `DropDefault` will return the right error.
 			err := p.canRemoveDependent(
-				ctx, "index", currentPrimaryIndex.GetName(), tableDesc.ParentID, tableRef, tree.DropDefault)
+				ctx, "index", currentPrimaryIndex.GetName(), tableDesc.ID, tableDesc.ParentID, tableRef, tree.DropDefault,
+				true /* blockOnTriggerDependency */)
 			if err != nil {
 				return errors.WithDetail(err, sqlerrors.PrimaryIndexSwapDetail)
 			}

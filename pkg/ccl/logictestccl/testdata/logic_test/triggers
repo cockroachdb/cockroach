@@ -925,7 +925,7 @@ statement ok
 CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION trigger_func();
 
 # Relations are referenced by name, so renaming the table is not allowed.
-statement error pgcode 2BP01 cannot rename relation "t" because table "xy" depends on it
+statement error pgcode 2BP01 cannot rename relation "t" because trigger "foo" on table "xy" depends on it
 ALTER TABLE t RENAME TO t2;
 
 # Sequences are remapped to their IDs, so renaming is allowed.
@@ -1024,7 +1024,7 @@ DROP TABLE t;
 # Test cascading drops with a trigger.
 # ==============================================================================
 
-subtest cascade
+subtest cascade_dsc
 
 statement ok
 CREATE DATABASE db;
@@ -1033,13 +1033,13 @@ statement ok
 USE db;
 
 statement ok
-CREATE FUNCTION i() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END; $$;
+CREATE FUNCTION i() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN SELECT 1 FROM t; RETURN NULL; END; $$;
 
 statement ok
 CREATE TABLE t (a INT, b INT);
 
 statement ok
-CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END; $$;
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN SELECT a, b FROM t; RETURN NULL; END; $$;
 
 statement ok
 CREATE TRIGGER foo AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION g();
@@ -1060,13 +1060,79 @@ statement ok
 CREATE TABLE s.t (a INT, b INT);
 
 statement ok
-CREATE FUNCTION s.g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END; $$;
+CREATE FUNCTION s.g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN SELECT * FROM s.t; RETURN NULL; END; $$;
 
 statement ok
 CREATE TRIGGER foo AFTER INSERT ON s.t FOR EACH ROW EXECUTE FUNCTION s.g();
 
 statement ok
 DROP SCHEMA s CASCADE;
+
+# Like cascade_dsc, but the DROP is doing with the legacy schema changer
+subtest cascade_legacy
+
+let $use_decl_sc
+SHOW use_declarative_schema_changer
+
+statement ok
+CREATE DATABASE db;
+
+statement ok
+USE db;
+
+statement ok
+CREATE FUNCTION i() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN SELECT 1 FROM other; RETURN NULL; END; $$;
+
+statement ok
+CREATE TABLE t (a INT, b INT);
+
+statement ok
+CREATE TABLE other (n INT PRIMARY KEY, j INT);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN SELECT a, b FROM t; RETURN NULL; END; $$;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION i();
+
+statement ok
+USE test;
+
+statement ok
+set use_declarative_schema_changer = 'off';
+
+statement ok
+DROP DATABASE db CASCADE;
+
+statement ok
+SET use_declarative_schema_changer = $use_decl_sc;
+
+statement ok
+CREATE SCHEMA s;
+
+statement ok
+CREATE TABLE s.t (a INT, b INT);
+
+statement ok
+CREATE TABLE s.other (n INT PRIMARY KEY);
+
+statement ok
+CREATE FUNCTION s.g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN SELECT * FROM s.t; SELECT 1 FROM s.other; RETURN NULL; END; $$;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON s.t FOR EACH ROW EXECUTE FUNCTION s.g();
+
+statement ok
+set use_declarative_schema_changer = 'off';
+
+statement ok
+DROP SCHEMA s CASCADE;
+
+statement ok
+SET use_declarative_schema_changer = $use_decl_sc;
 
 # ==============================================================================
 # Test references across schemas and databases.
@@ -4498,8 +4564,14 @@ CREATE TRIGGER audit_trigger AFTER INSERT OR UPDATE OR DELETE ON t1 FOR EACH ROW
 statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table t1 drop column j;
 
+statement error pq: unimplemented: ALTER TABLE DROP COLUMN cascade not supported with triggers
+alter table other drop column j cascade;
+
 statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table other drop column j;
+
+statement error pq: unimplemented: ALTER TABLE DROP COLUMN cascade not supported with triggers
+alter table other drop column j cascade;
 
 statement error pq: cannot alter type of column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table t1 alter column j set data type text;
@@ -4507,9 +4579,7 @@ alter table t1 alter column j set data type text;
 statement error pq: cannot alter type of column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table other alter column j set data type text;
 
-# TODO(142370): This should be blocked because the trigger references the table,
-# but we currently don't detect self-dependencies.
-statement ok
+statement error pq: cannot drop index "i1" because trigger "audit_trigger" on table "t1" depends on it
 drop index t1@i1;
 
 statement error pq: cannot drop index "i1" because trigger "audit_trigger" on table "t1" depends on it
@@ -4534,12 +4604,8 @@ statement error pq: cannot drop table other because other objects depend on it
 DROP TABLE other;
 
 # Verify the trigger still works
-# TODO(142370): this fails for now because we were allowed to drop the index earlier.
-statement error pq: while building trigger expression: index "i1" not found
-INSERT INTO t1 VALUES (0,0,0);
-
 statement ok
-create index i1 on t1(k);
+INSERT INTO t1 VALUES (0,0,0);
 
 # This test doesn't run with the legacy schema config because CREATE/DROP
 # trigger isn't implemented there. We enable legacy to run DDL to verify
@@ -4558,28 +4624,41 @@ ALTER TABLE t1 SET (schema_locked = false);
 statement ok
 ALTER TABLE other SET (schema_locked = false);
 
-statement error pq: ALTER COLUMN TYPE is only implemented in the declarative schema changer
+statement error pq: cannot alter type of column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table t1 alter column j set data type text;
 
-statement error pq: cannot alter type of column "j" because table "t1" depends on it
+statement error pq: cannot alter type of column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table other alter column j set data type text;
 
-# TODO(142370): allowed because we don't pick up self-dependencies yet
-statement ok
+statement error pq: cannot rename column "j" because trigger "audit_trigger" on table "t1" depends on it
+alter table t1 rename column j to j2;
+
+statement error pq: cannot rename column "j" because trigger "audit_trigger" on table "t1" depends on it
+alter table other rename column j to j2;
+
+statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table t1 drop column j;
 
-statement error pq: cannot drop column "j" because table "t1" depends on it
+statement error pq: unimplemented: drop column cascade is not supported with triggers
+alter table t1 drop column j cascade;
+
+statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table other drop column j;
 
-# TODO(142370): allowed because we don't pick up self-dependencies yet
-statement ok
+statement error pq: unimplemented: drop column cascade is not supported with triggers
+alter table other drop column j cascade;
+
+statement error pq: cannot drop index "i1" because trigger "audit_trigger" on table "t1" depends on it
 drop index t1@i1;
 
-statement error pq: index "i1" does not exist
+statement error pq: unimplemented: drop index cascade is not supported with triggers
 drop index t1@i1 CASCADE;
 
-statement error pq: cannot drop index "i1" because table "t1" depends on it
+statement error pq: cannot drop index "i1" because trigger "audit_trigger" on table "t1" depends on it
 drop index other@i1;
+
+statement error pq: unimplemented: drop index cascade is not supported with triggers
+drop index other@i1 CASCADE;
 
 statement error pq: cannot drop function "f1" because other objects \(\[test.public.t1\]\) still depend on it
 DROP FUNCTION f1;
@@ -4593,15 +4672,14 @@ DROP TYPE e;
 statement error pq: unimplemented: DROP TYPE CASCADE is not yet supported
 DROP TYPE e CASCADE;
 
-statement error pq: cannot drop relation "other" because table "t1" depends on it
+statement error pq: cannot drop relation "other" because trigger "audit_trigger" on table "t1" depends on it
 DROP TABLE other;
 
 statement ok
 set use_declarative_schema_changer = $use_decl_sc;
 
 # Verify the trigger still works
-# TODO(142370): this fails because we were wrongly allowed to drop index i1 earlier
-statement error pq: while building trigger expression: index "i1" not found
+statement ok
 INSERT INTO t1(n,k) VALUES (1,1);
 
 statement ok

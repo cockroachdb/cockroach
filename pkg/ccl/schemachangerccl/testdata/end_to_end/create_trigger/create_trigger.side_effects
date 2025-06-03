@@ -25,8 +25,15 @@ write *eventpb.CreateTrigger to event log:
     user: root
   tableName: defaultdb.public.t
   triggerName: tr
-## StatementPhase stage 1 of 1 with 9 MutationType ops
+## StatementPhase stage 1 of 1 with 10 MutationType ops
 upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  dependedOnBy:
+  +  - id: 104
+     families:
+     - columnIds:
   ...
      nextIndexId: 2
      nextMutationId: 1
@@ -39,6 +46,8 @@ upsert descriptor #104
   -  schemaLocked: true
   +  triggers:
   +  - actionTime: BEFORE
+  +    dependsOn:
+  +    - 104
   +    dependsOnRoutines:
   +    - 105
   +    enabled: true
@@ -81,7 +90,7 @@ upsert descriptor #105
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 12 MutationType ops
+## PreCommitPhase stage 2 of 2 with 13 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -114,6 +123,8 @@ upsert descriptor #104
   +    revertible: true
   +    targetRanks: <redacted>
   +    targets: <redacted>
+  +  dependedOnBy:
+  +  - id: 104
      families:
      - columnIds:
   ...
@@ -128,6 +139,8 @@ upsert descriptor #104
   -  schemaLocked: true
   +  triggers:
   +  - actionTime: BEFORE
+  +    dependsOn:
+  +    - 104
   +    dependsOnRoutines:
   +    - 105
   +    enabled: true
@@ -216,8 +229,8 @@ upsert descriptor #104
   -    revertible: true
   -    targetRanks: <redacted>
   -    targets: <redacted>
-     families:
-     - columnIds:
+     dependedOnBy:
+     - id: 104
   ...
      replacementOf:
        time: {}
