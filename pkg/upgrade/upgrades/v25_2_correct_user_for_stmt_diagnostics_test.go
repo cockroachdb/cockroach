@@ -88,7 +88,7 @@ func TestStmtDiagAddUsernameMigration(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		sqlDB,
-		clusterversion.V25_2_AddUsernameToStmtDiagRequest,
+		clusterversion.TODO_Delete_V25_2_AddUsernameToStmtDiagRequest,
 		nil,   /* done */
 		false, /* expectError */
 	)

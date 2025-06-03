@@ -14,14 +14,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/policyrefresher"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -35,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -1217,138 +1214,4 @@ func TestRefreshPolicyWithVariousLatencies(t *testing.T) {
 			require.Equal(t, tc.expectedPolicy, actualPolicy, "expected policy %v, got %v", tc.expectedPolicy, actualPolicy)
 		})
 	}
-}
-
-// TestReplicaClosedTSPolicyWithPolicyRefresherInMixedVersionCluster verifies
-// that the closed timestamp policy refresher behaves correctly in a
-// mixed-version cluster.
-//
-// Particularly, a race condition like below might occur:
-// 1. Side transport prepares a policy map before cluster upgrade is complete.
-// 2. Cluster upgrade completes.
-// 3. Policy refresher sees the upgrade and quickly updates replica policies to
-// use latency-based policies.
-// 4. Replica tries to use a latency-based policy but the policy map from step 1
-// doesn't include it yet.
-//
-// The logic in replica.getTargetByPolicyRLocked handles this race condition by
-// falling back to no-latency based policies if no-latency based policies were
-// included from the map provided by the side transport sender.
-//
-// This test simulates a race condition by using a testing knob to allow the
-// policy refresher to use latency based policies on replicas while the rest of
-// the system is still on an older version. It verifies that even if the policy
-// refresher sees an upgrade to V25_2 and replicas starts holding latency based
-// policies, replicas will correctly fall back to non-latency-based policies if
-// the sender hasn’t yet sent the updated latency-based policies.
-func TestReplicaClosedTSPolicyWithPolicyRefresherInMixedVersionCluster(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	prevVer := clusterversion.V25_1.Version()
-	st := cluster.MakeTestingClusterSettingsWithVersions(prevVer, prevVer, true)
-	// Helper function to check if a policy is a newly introduced latency-based policy.
-	isLatencyBasedPolicy := func(policy ctpb.RangeClosedTimestampPolicy) bool {
-		return policy >= ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS &&
-			policy <= ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_EQUAL_OR_GREATER_THAN_300MS
-	}
-
-	// Set small intervals for faster testing.
-	closedts.RangeClosedTimestampPolicyRefreshInterval.Override(ctx, &st.SV, 5*time.Millisecond)
-	closedts.RangeClosedTimestampPolicyLatencyRefreshInterval.Override(ctx, &st.SV, 5*time.Millisecond)
-	closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 5*time.Millisecond)
-
-	type latencyMap struct {
-		mu syncutil.Mutex
-		m  map[roachpb.NodeID]time.Duration
-	}
-
-	latencies := latencyMap{m: make(map[roachpb.NodeID]time.Duration)}
-	upgradeForPolicyRefresher := func() {
-		latencies.mu.Lock()
-		defer latencies.mu.Unlock()
-		latencies.m = map[roachpb.NodeID]time.Duration{
-			1: 10 * time.Millisecond,
-			2: 20 * time.Millisecond,
-			3: 50 * time.Millisecond,
-		}
-	}
-
-	tc := testcluster.StartTestCluster(t, 3,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{
-					PolicyRefresherTestingKnobs: &policyrefresher.TestingKnobs{
-						InjectedLatencies: func() map[roachpb.NodeID]time.Duration {
-							latencies.mu.Lock()
-							defer latencies.mu.Unlock()
-							return latencies.m
-						},
-					},
-				},
-				Settings: st,
-			},
-		})
-	defer tc.Stopper().Stop(ctx)
-
-	key := tc.ScratchRange(t)
-	// Split the range at the table prefix and replicate it across all nodes.
-	tc.SplitRangeOrFatal(t, key)
-	tc.AddVotersOrFatal(t, key, tc.Target(1), tc.Target(2))
-
-	// Get the store and replica for testing.
-	store := tc.GetFirstStoreFromServer(t, 0)
-	replica := store.LookupReplica(roachpb.RKey(key))
-	require.NotNil(t, replica)
-	spanConfig, err := replica.LoadSpanConfig(ctx)
-	spanConfig.GlobalReads = true
-	require.NoError(t, err)
-	require.NotNil(t, spanConfig)
-	replica.SetSpanConfig(*spanConfig, roachpb.Span{Key: key})
-
-	hasLatencyBasedPolicies := func(snapshot *ctpb.Update) bool {
-		// Verify no latency-based policies are being sent.
-		latencyBasedPolicyClosedTimestamps := len(snapshot.ClosedTimestamps) == int(roachpb.MAX_CLOSED_TIMESTAMP_POLICY)
-		// Verify no latency-based policies is chosen by ranges.
-		hasLatencyBasedPolicyForAllRanges := func() bool {
-			for _, policy := range snapshot.AddedOrUpdated {
-				if isLatencyBasedPolicy(policy.Policy) {
-					return true
-				}
-			}
-			return false
-		}
-		return !latencyBasedPolicyClosedTimestamps && !hasLatencyBasedPolicyForAllRanges()
-	}
-
-	// Verify that no latency-based policies should be sent initially.
-	require.Never(t, func() bool {
-		snapshot := store.GetStoreConfig().ClosedTimestampSender.GetSnapshot()
-		expected := !hasLatencyBasedPolicies(snapshot) || len(snapshot.AddedOrUpdated) == 0
-		return !expected
-	}, 5*time.Second, 50*time.Millisecond)
-
-	// Upgrade the cluster version for policy refresher.
-	upgradeForPolicyRefresher()
-
-	// Replicas should now start holding latency based policies.
-	testutils.SucceedsSoon(t, func() error {
-		leaseholders := store.GetStoreConfig().ClosedTimestampSender.GetLeaseholders()
-		for _, lh := range leaseholders {
-			if policy := lh.(*kvserver.Replica).GetCachedClosedTimestampPolicyForTesting(); isLatencyBasedPolicy(policy) {
-				return nil
-			}
-		}
-		return errors.New("expected some leaseholder to have a latency-based policy but none had one")
-	})
-
-	// Sender does not see the cluster version upgrade yet. Replicas should fall
-	// back to no-latency based policies when side transport senders consult with
-	// leaseholders on policies to be sent.
-	require.Never(t, func() bool {
-		snapshot := store.GetStoreConfig().ClosedTimestampSender.GetSnapshot()
-		expected := !hasLatencyBasedPolicies(snapshot) || len(snapshot.AddedOrUpdated) == 0
-		return !expected
-	}, 10*time.Second, 50*time.Millisecond)
 }
