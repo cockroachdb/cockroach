@@ -547,11 +547,11 @@ func (u *sqlSymUnion) grantTargetList() tree.GrantTargetList {
 func (u *sqlSymUnion) grantTargetListPtr() *tree.GrantTargetList {
     return u.val.(*tree.GrantTargetList)
 }
-func (u *sqlSymUnion) changefeedTargets() tree.ChangefeedTargets {
+func (u *sqlSymUnion) changefeedTableTargets() tree.ChangefeedTargets {
     return u.val.(tree.ChangefeedTargets)
 }
-func (u *sqlSymUnion) changefeedTarget() tree.ChangefeedTarget {
-    return u.val.(tree.ChangefeedTarget)
+func (u *sqlSymUnion) changefeedTableTarget() tree.ChangefeedTableTarget {
+    return u.val.(tree.ChangefeedTableTarget)
 }
 func (u *sqlSymUnion) privilegeType() privilege.Kind {
     return u.val.(privilege.Kind)
@@ -1254,6 +1254,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <tree.Statement> create_stmt
 %type <tree.Statement> create_schedule_stmt
 %type <tree.Statement> create_changefeed_stmt create_schedule_for_changefeed_stmt
+%type <tree.Statement> create_database_changefeed_stmt
 %type <tree.Statement> create_ddl_stmt
 %type <tree.Statement> create_database_stmt
 %type <tree.Statement> create_extension_stmt
@@ -1732,8 +1733,8 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 
 %type <[]tree.ColumnID> opt_tableref_col_list tableref_col_list
 
-%type <tree.ChangefeedTargets> changefeed_targets
-%type <tree.ChangefeedTarget> changefeed_target
+%type <tree.ChangefeedTargets> changefeed_table_targets
+%type <tree.ChangefeedTableTarget> changefeed_table_target
 %type <tree.BackupTargetList> backup_targets
 %type <*tree.BackupTargetList> opt_backup_targets
 
@@ -4703,6 +4704,7 @@ create_stmt:
   create_role_stmt       // EXTEND WITH HELP: CREATE ROLE
 | create_ddl_stmt        // help texts in sub-rule
 | create_stats_stmt      // EXTEND WITH HELP: CREATE STATISTICS
+| create_database_changefeed_stmt // EXTEND WITH HELP: CREATE DATABASE CHANGEFEED
 | create_changefeed_stmt // EXTEND WITH HELP: CREATE CHANGEFEED
 | create_extension_stmt  // EXTEND WITH HELP: CREATE EXTENSION
 | create_external_connection_stmt // EXTEND WITH HELP: CREATE EXTERNAL CONNECTION
@@ -6215,6 +6217,28 @@ create_stats_option:
     }
   }
 
+// %Help: CREATE DATABASE CHANGEFEED  - create change data capture
+// %Category: CCL
+// %Text:
+// CREATE [DATABASE] CHANGEFEED
+// FOR <target> [INTO sink] [WITH <options>]
+//
+// sink: data capture stream destination (Enterprise only)
+create_database_changefeed_stmt:
+  CREATE DATABASE CHANGEFEED FOR database_name opt_changefeed_sink opt_with_options
+    {
+      databaseTarget := &tree.ChangefeedDatabaseTarget{
+        DatabaseName: tree.Name($5),
+      }
+      changefeedTargets := tree.ChangefeedTargets{databaseTarget}
+      $$.val = &tree.CreateChangefeed{
+        Targets: changefeedTargets,
+        SinkURI: $6.expr(),
+        Options: $7.kvOptions(),
+        Level: tree.ChangefeedLevelDatabase,
+      }
+    }
+
 // %Help: CREATE CHANGEFEED  - create change data capture
 // %Category: CCL
 // %Text:
@@ -6223,10 +6247,10 @@ create_stats_option:
 //
 // sink: data capture stream destination (Enterprise only)
 create_changefeed_stmt:
-  CREATE CHANGEFEED FOR changefeed_targets opt_changefeed_sink opt_with_options
+CREATE CHANGEFEED FOR changefeed_table_targets opt_changefeed_sink opt_with_options 
   {
     $$.val = &tree.CreateChangefeed{
-      Targets: $4.changefeedTargets(),
+      Targets: $4.changefeedTableTargets(),
       SinkURI: $5.expr(),
       Options: $6.kvOptions(),
     }
@@ -6242,7 +6266,7 @@ create_changefeed_stmt:
     $$.val = &tree.CreateChangefeed{
       SinkURI: $3.expr(),
       Options: $4.kvOptions(),
-      Targets: tree.ChangefeedTargets{target},
+      Targets: tree.ChangefeedTargets{&target},
       Select:  &tree.SelectClause{
          Exprs: $7.selExprs(),
          From:  tree.From{Tables: tree.TableExprs{$9.tblExpr()}},
@@ -6250,11 +6274,11 @@ create_changefeed_stmt:
       },
     }
   }
-| EXPERIMENTAL CHANGEFEED FOR changefeed_targets opt_with_options
+| EXPERIMENTAL CHANGEFEED FOR changefeed_table_targets opt_with_options
   {
     /* SKIP DOC */
     $$.val = &tree.CreateChangefeed{
-      Targets: $4.changefeedTargets(),
+      Targets: $4.changefeedTableTargets(),
       Options: $5.kvOptions(),
     }
   }
@@ -6286,12 +6310,12 @@ create_changefeed_stmt:
 // %SeeAlso: CREATE CHANGEFEED
 create_schedule_for_changefeed_stmt:
   CREATE SCHEDULE /*$3=*/schedule_label_spec FOR CHANGEFEED
-  /* $6=*/changefeed_targets /*$7=*/changefeed_sink
+  /* $6=*/changefeed_table_targets /*$7=*/changefeed_sink
   /*$8=*/opt_with_options /*$9=*/cron_expr /*$10=*/opt_with_schedule_options
   {
      $$.val = &tree.ScheduledChangefeed{
         CreateChangefeed:   &tree.CreateChangefeed{
-          Targets:    $6.changefeedTargets(),
+          Targets:    $6.changefeedTableTargets(),
           SinkURI:    $7.expr(),
           Options:    $8.kvOptions(),
         },
@@ -6312,7 +6336,7 @@ create_schedule_for_changefeed_stmt:
     createChangefeedNode := &tree.CreateChangefeed{
       SinkURI: $6.expr(),
       Options: $7.kvOptions(),
-      Targets: tree.ChangefeedTargets{target},
+      Targets: tree.ChangefeedTargets{&target},
       Select:  &tree.SelectClause{
          Exprs: $10.selExprs(),
          From:  tree.From{Tables: tree.TableExprs{$12.tblExpr()}},
@@ -6329,20 +6353,22 @@ create_schedule_for_changefeed_stmt:
   }
  | CREATE SCHEDULE schedule_label_spec FOR CHANGEFEED error  // SHOW HELP: CREATE SCHEDULE FOR CHANGEFEED
 
-changefeed_targets:
-  changefeed_target
+changefeed_table_targets:
+  changefeed_table_target
   {
-    $$.val = tree.ChangefeedTargets{$1.changefeedTarget()}
+    tableTarget := $1.changefeedTableTarget()
+    $$.val = tree.ChangefeedTargets{&tableTarget}
   }
-| changefeed_targets ',' changefeed_target
+| changefeed_table_targets ',' changefeed_table_target
   {
-    $$.val = append($1.changefeedTargets(), $3.changefeedTarget())
+    tableTarget := $3.changefeedTableTarget()
+    $$.val = append($1.changefeedTableTargets(), &tableTarget)
   }
 
-changefeed_target:
+changefeed_table_target:
   opt_table_prefix table_name opt_changefeed_family
   {
-    $$.val = tree.ChangefeedTarget{
+    $$.val = tree.ChangefeedTableTarget{
       TableName:  $2.unresolvedObjectName().ToUnresolvedName(),
       FamilyName: tree.Name($3),
     }
@@ -6949,18 +6975,18 @@ alter_changefeed_cmds:
 
 alter_changefeed_cmd:
   // ALTER CHANGEFEED <job_id> ADD [TABLE] ...
-  ADD changefeed_targets opt_with_options
+  ADD changefeed_table_targets opt_with_options
   {
     $$.val = &tree.AlterChangefeedAddTarget{
-      Targets: $2.changefeedTargets(),
+      Targets: $2.changefeedTableTargets(),
       Options: $3.kvOptions(),
     }
   }
   // ALTER CHANGEFEED <job_id> DROP [TABLE] ...
-| DROP changefeed_targets
+| DROP changefeed_table_targets
   {
     $$.val = &tree.AlterChangefeedDropTarget{
-      Targets: $2.changefeedTargets(),
+      Targets: $2.changefeedTableTargets(),
     }
   }
 | SET kv_option_list

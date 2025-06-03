@@ -261,7 +261,7 @@ FAMILY extra (extra)
 				return
 			}
 			target := jobspb.ChangefeedTargetSpecification{
-				TableID:           tc.desc.GetID(),
+				DescID:            tc.desc.GetID(),
 				StatementTimeName: tc.desc.GetName(),
 				FamilyName:        tc.targetFamily,
 			}
