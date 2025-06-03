@@ -523,7 +523,7 @@ func (a *allocatorState) ProcessStoreLeaseholderMsg(msg *StoreLeaseholderMsg) {
 func (a *allocatorState) AdjustPendingChangesDisposition(changeIDs []ChangeID, success bool) {
 	for _, changeID := range changeIDs {
 		if success {
-			a.cs.markPendingChangeEnacted(changeID, a.cs.ts.Now())
+			a.cs.pendingChangeEnacted(changeID, a.cs.ts.Now())
 		} else {
 			a.cs.undoPendingChange(changeID)
 		}
