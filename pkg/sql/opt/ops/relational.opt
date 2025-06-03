@@ -1535,6 +1535,14 @@ define VectorMutationSearchPrivate {
 [Relational]
 define Barrier {
     Input RelExpr
+    _ BarrierPrivate
+}
+
+[Private]
+define BarrierPrivate {
+    # SkipIfLeakProof is an optional flag that if set, won't apply the barrier if
+    # subsequent filters are leakproof.
+    SkipIfLeakProof bool
 }
 
 # FakeRel is a mock relational operator used for testing and as a dummy binding

@@ -444,14 +444,13 @@ values
                                     │              └── const: '00000'
                                     └── project
                                          ├── barrier
-                                         │    └── barrier
-                                         │         └── values
-                                         │              └── tuple
-                                         │                   └── udf: nested
-                                         │                        └── body
-                                         │                             └── values
-                                         │                                  └── tuple
-                                         │                                       └── const: 1
+                                         │    └── values
+                                         │         └── tuple
+                                         │              └── udf: nested
+                                         │                   └── body
+                                         │                        └── values
+                                         │                             └── tuple
+                                         │                                  └── const: 1
                                          └── projections
                                               └── udf: _stmt_raise_3
                                                    ├── tail-call
