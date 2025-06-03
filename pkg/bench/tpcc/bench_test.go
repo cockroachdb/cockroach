@@ -8,8 +8,9 @@ package tpcc
 import (
 	"context"
 	"net/url"
-	"os/exec"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -18,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 )
@@ -31,14 +32,11 @@ const (
 	nodes  = 3
 )
 
-// BenchmarkTPCC runs TPC-C transactions against a single warehouse. It runs the
-// client side of the workload in a subprocess so that the client overhead is
-// not included in CPU and heap profiles.
+// BenchmarkTPCC runs TPC-C transactions against a single warehouse.
 func BenchmarkTPCC(b *testing.B) {
-	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
 
-	// Setup the c once for all benchmarks.
+	// Setup the cluster once for all benchmarks.
 	c, pgURL := startCluster(b)
 	defer c.Stopper().Stop(context.Background())
 
@@ -64,30 +62,39 @@ func BenchmarkTPCC(b *testing.B) {
 	}
 }
 
+// run executes the TPC-C workload with the specified workload flags.
 func run(b *testing.B, pgURL string, workloadFlags []string) {
-	c, output := startClient(b, pgURL, workloadFlags)
+	ctx := context.Background()
 
-	var s synchronizer
-	s.init(c.Process.Pid)
+	flags := append([]string{
+		"--wait=0",
+		"--workers=1",
+		"--db=" + dbName,
+	}, workloadFlags...)
+	gen := tpccGenerator(b, flags)
 
-	// Reset the timer when the client starts running queries.
-	if timedOut := s.waitWithTimeout(); timedOut {
-		b.Fatalf("waiting on client timed-out:\n%s", output.String())
+	// Temporarily redirect stdout to /dev/null to suppress the workload's
+	// output during the benchmark.
+	restoreStdout := redirectStdoutToDevNull(b)
+	defer restoreStdout()
+
+	reg := histogram.NewRegistry(time.Minute, "tpcc")
+	ql, err := gen.Ops(ctx, []string{pgURL}, reg)
+	if err != nil {
+		b.Fatal(err)
 	}
+
 	b.ResetTimer()
-	s.notify(b)
-
-	// Stop the timer when the client stops running queries.
-	s.wait()
-	b.StopTimer()
-
-	if err := c.Wait(); err != nil {
-		b.Fatalf("client failed: %s\n%s\n%s", err, output.String(), output.String())
+	for i := 0; i < b.N; i++ {
+		if err := ql.WorkerFns[0](ctx); err != nil {
+			b.Fatal(err)
+		}
 	}
+	b.StopTimer()
 }
 
 // startCluster starts a cluster and initializes the workload data.
-func startCluster(b testing.TB) (_ serverutils.TestClusterInterface, pgURL string) {
+func startCluster(b *testing.B) (_ serverutils.TestClusterInterface, pgURL string) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 
@@ -121,42 +128,52 @@ func startCluster(b testing.TB) (_ serverutils.TestClusterInterface, pgURL strin
 	u.Path = dbName
 	c.Stopper().AddCloser(stop.CloserFn(urlCleanup))
 
+	// Create the database.
 	r := sqlutils.MakeSQLRunner(c.ServerConn(0))
 	r.Exec(b, "CREATE DATABASE "+dbName)
 	r.Exec(b, "USE "+dbName)
-	tpcc, err := workload.Get("tpcc")
-	if err != nil {
-		b.Fatal(err)
-	}
-	gen := tpcc.New().(interface {
-		workload.Flagser
-		workload.Hookser
-		workload.Generator
-	})
-	if err := gen.Flags().Parse([]string{"--db=" + dbName}); err != nil {
-		b.Fatal(err)
-	}
-	if err := gen.Hooks().Validate(); err != nil {
-		b.Fatal(err)
-	}
 
-	var l workloadsql.InsertsDataLoader
-	if _, err := workloadsql.Setup(ctx, c.ServerConn(0), gen, l); err != nil {
+	// Load the TPC-C workload data.
+	gen := tpccGenerator(b, []string{"--db=" + dbName})
+	var loader workloadsql.InsertsDataLoader
+	if _, err := workloadsql.Setup(ctx, c.ServerConn(0), gen, loader); err != nil {
 		b.Fatal(err)
 	}
 
 	return c, u.String()
 }
 
-func startClient(
-	b *testing.B, pgURL string, workloadFlags []string,
-) (c *exec.Cmd, output *synchronizedBuffer) {
-	c, output = runClient.
-		withEnv(nEnvVar, b.N).
-		withEnv(pgURLEnvVar, pgURL).
-		exec(workloadFlags...)
-	if err := c.Start(); err != nil {
-		b.Fatalf("failed to start client: %s\n%s", err, output.String())
+type generator interface {
+	workload.Flagser
+	workload.Hookser
+	workload.Generator
+	workload.Opser
+}
+
+func tpccGenerator(b *testing.B, flags []string) generator {
+	tpcc, err := workload.Get("tpcc")
+	if err != nil {
+		b.Fatal(err)
 	}
-	return c, output
+	gen := tpcc.New().(generator)
+	if err := gen.Flags().Parse(flags); err != nil {
+		b.Fatal(err)
+	}
+	if err := gen.Hooks().Validate(); err != nil {
+		b.Fatal(err)
+	}
+	return gen
+}
+
+// redirectStdoutToDevNull redirects stdout to /dev/null.
+func redirectStdoutToDevNull(b *testing.B) (restoreStdout func()) {
+	old := os.Stdout
+	var err error
+	if os.Stdout, err = os.Open(os.DevNull); err != nil {
+		b.Fatal(err)
+	}
+	return func() {
+		_ = os.Stdout.Close()
+		os.Stdout = old
+	}
 }
