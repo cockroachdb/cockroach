@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -144,6 +145,7 @@ var virtualClustersHandler = http.HandlerFunc(func(w http.ResponseWriter, req *h
 
 func (s *httpServer) setupRoutes(
 	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
 	authnServer authserver.Server,
 	adminAuthzCheck privchecker.CheckerForRPCHandlers,
 	metricSource metricMarshaler,
@@ -158,7 +160,7 @@ func (s *httpServer) setupRoutes(
 	// the system settings initialized for it to pick up from the oidcAuthenticationServer.
 	oidc, err := authserver.ConfigureOIDC(
 		ctx, s.cfg.Settings, s.cfg.Locality,
-		s.mux.Handle, authnServer.UserLoginFromSSO, s.cfg.AmbientCtx, s.cfg.ClusterIDContainer.Get(),
+		s.mux.Handle, authnServer.UserLoginFromSSO, s.cfg.AmbientCtx, s.cfg.ClusterIDContainer.Get(), execCfg,
 	)
 	if err != nil {
 		return err

@@ -87,13 +87,14 @@ func (m mockOidcManager) AuthCodeURL(s string, option ...oauth2.AuthCodeOption) 
 	return m.oauth2Config.AuthCodeURL(s, option...)
 }
 
-func (m mockOidcManager) ExchangeVerifyGetClaims(
-	ctx context.Context, s string, s2 string,
-) (map[string]json.RawMessage, error) {
-	x := map[string]json.RawMessage{}
-	// The email is surrounded by double quotes because it's a serialized JSON string.
-	x["email"] = json.RawMessage([]byte(fmt.Sprintf(`"%s"`, m.claimEmail)))
-	return x, nil
+func (m mockOidcManager) ExchangeVerifyGetTokens(
+	ctx context.Context, code, idTokenKey string,
+) (map[string]json.RawMessage, string, *oauth2.Token, error) {
+	claims := map[string]json.RawMessage{
+		"email": json.RawMessage(`"test@example.com"`),
+	}
+	tok := &oauth2.Token{AccessToken: "dummy"}
+	return claims, "dummy-id-token", tok, nil
 }
 
 var _ IOIDCManager = &mockOidcManager{}

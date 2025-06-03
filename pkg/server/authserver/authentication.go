@@ -101,6 +101,7 @@ var ConfigureOIDC = func(
 	userLoginFromSSO func(ctx context.Context, username string) (*http.Cookie, error),
 	ambientCtx log.AmbientContext,
 	cluster uuid.UUID,
+	execCfg *sql.ExecutorConfig,
 ) (OIDC, error) {
 	return &noOIDCConfigured{}, nil
 }
