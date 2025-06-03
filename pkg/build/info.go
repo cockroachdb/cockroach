@@ -107,13 +107,13 @@ func BinaryVersion() string {
 // It returns "vX.Y" for all release versions, and all prerelease versions >= "alpha.1".
 // X and Y are the major and minor, respectively, of the version specified in version.txt.
 // For all other prerelease versions, it returns "dev".
-// N.B. new public-facing doc URLs are expected to be up beginning with the "alpha.1" prerelease. Otherwise, "dev" will
+// N.B. new public-facing doc URLs are expected to be up once the "alpha.1" prerelease is shipped. Otherwise, "dev" will
 // cause the url mapper to redirect to the latest stable release.
 func VersionForURLs() string {
 	if parsedVersionTxt.IsPrerelease() {
 		phaseAndOrdinal := parsedVersionTxt.Format("%P.%o")
-		// builds prior to "alpha.1" use 'dev' in their URLs
-		if phaseAndOrdinal < "alpha.1" {
+		// builds use 'dev' in their URLs until "alpha.1" is shipped
+		if phaseAndOrdinal <= "alpha.1" {
 			return "dev"
 		}
 	} else if parsedVersionTxt.IsCustomOrNightlyBuild() {
