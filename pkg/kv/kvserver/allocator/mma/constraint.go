@@ -1808,10 +1808,11 @@ func (acb *analyzeConstraintsBuf) tryAddingStore(
 	// We ae ignoring LEARNER and VOTER_DEMOTING_LEARNER, since these are
 	// in the process of going away.
 	//
-	// TODO(sumeer): if we are in a joint config with VOTER_DEMOTING_LEARNER,
-	// and ignore it here, we may propose another change. Will that happen after
-	// exiting from the joint config, or can that race ahead and confuse the
-	// joint config situation?
+	// If we are in a joint config with VOTER_DEMOTING_LEARNER, and ignore it
+	// here, we may propose another change. This is harmless since
+	// Replica.AdminRelocateRange calls
+	// Replica.maybeLeaveAtomicChangeReplicasAndRemoveLearners which will remove
+	// the VOTER_DEMOTING_LEARNER and exit the joint config first.
 	if isVoter(replicaType) {
 		acb.replicas[voterIndex] = append(
 			acb.replicas[voterIndex], storeAndLocality{storeID, locality})
