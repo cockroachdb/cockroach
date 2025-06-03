@@ -44,6 +44,15 @@ const (
 	// PlannerEndLogicalPlan is the SessionPhase when planning ends.
 	PlannerEndLogicalPlan
 
+	// PlannerFirstStartExecStmt is the SessionPhase when execution starts for the
+	// first time. Will only be set if using read committed isolation.
+	PlannerFirstStartExecStmt
+
+	// PlannerMostRecentStartExecStmt is the SessionPhase when execution starts
+	// for the most recent time. Will only be set if using read committed
+	// isolation.
+	PlannerMostRecentStartExecStmt
+
 	// PlannerStartExecStmt is the SessionPhase when execution starts.
 	PlannerStartExecStmt
 
@@ -167,6 +176,13 @@ func (t *Times) GetServiceLatencyNoOverhead() time.Duration {
 // NOTE: SessionQueryServiced phase must have been set.
 func (t *Times) GetServiceLatencyTotal() time.Duration {
 	return t.times[SessionQueryServiced].Sub(t.times[SessionQueryReceived])
+}
+
+// GetStatementRetryLatency returns the time that was spent retrying the
+// statement. (This is only applicable to Read Committed isolation, and will
+// always be zero under stronger isolation levels.)
+func (t *Times) GetStatementRetryLatency() time.Duration {
+	return t.times[PlannerMostRecentStartExecStmt].Sub(t.times[PlannerFirstStartExecStmt])
 }
 
 // GetRunLatency returns the time between a query execution starting and
