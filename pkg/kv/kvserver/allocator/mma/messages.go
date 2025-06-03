@@ -27,21 +27,6 @@ type StoreLoadMsg struct {
 	SecondaryLoad SecondaryLoadVector
 
 	LoadTime time.Time
-
-	// TODO(kvoli): rm the longer comment.
-	//
-	// We need to know whether the remote store recently shed leases, so that we
-	// can determine if the this local store which owns a lease for a range with
-	// a replica on the remote store, should be considered for rebalancing.
-	//
-	// The local store making a decision to rebalance a replica can determine
-	// whether the remote store is overloaded or not, so we don't need that
-	// information. We only need to know if the remote store shed leases during
-	// its last rebalance loop.
-	//
-	// TODO(kvoli): Add the equivalent into the StoreCapacity, so it can be used
-	// to generate this message.
-	ShedLeasesInLastRebalance bool
 }
 
 // StoreLeaseholderMsg is sent by a local store and includes information about

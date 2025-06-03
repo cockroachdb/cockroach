@@ -489,7 +489,7 @@ func (sr *StoreRebalancer) ShouldRebalanceStore(ctx context.Context, rctx *Rebal
 
 	if !(rctx.mode == LBRebalancingLeasesOnly || rctx.mode == LBRebalancingLeasesAndReplicas) {
 		// There's nothing to do, the store rebalancer is disabled. Note that this
-		// is is redundant when called via the store rebalancer's Start method, but
+		// is redundant when called via the store rebalancer's Start method, but
 		// it's necessary when called from tests, which don't start the store
 		// rebalancer loop, such as the asim pkg.
 		return false
