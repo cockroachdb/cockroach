@@ -6,9 +6,16 @@
 package tpcc
 
 import (
+	"bytes"
 	"context"
+	"flag"
 	"net/url"
 	"os"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	runtimepprof "runtime/pprof"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sniffarg"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -25,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
+	"github.com/google/pprof/profile"
 )
 
 const (
@@ -32,7 +41,25 @@ const (
 	nodes  = 3
 )
 
-// BenchmarkTPCC runs TPC-C transactions against a single warehouse.
+var profileFlag = flag.String("profile", "",
+	"if set, CPU and heap profiles are collected with the given file name prefix")
+
+// BenchmarkTPCC runs TPC-C transactions against a single warehouse. Both the
+// optimized and literal implementations of our TPC-C workloard are benchmarked.
+// There are benchmarks for running each transaction individually, as well as a
+// "default" mix that runs the standard mix of TPC-C transactions.
+//
+// CPU and heap profiles can be collected by passing the "-profile" flag with a
+// prefix for the profile file names. The profile names will include the
+// benchmark names, e.g., "foo_tpcc_literal_new_order.cpu" and
+// "foo_tpcc_literal_new_order.mem" will be created when running the benchmark:
+//
+//	./dev bench pkg/bench/tpcc -f BenchmarkTPCC/literal/new_order \
+//	  --test-args '-test.benchtime=30s -profile=foo'
+//
+// These profiles will omit CPU samples and allocations made during the setup
+// phase of the benchmark, unlike profiles collected with the "-test.cpuprofile"
+// and "-test.memprofile" flags.
 func BenchmarkTPCC(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
@@ -65,6 +92,8 @@ func BenchmarkTPCC(b *testing.B) {
 // run executes the TPC-C workload with the specified workload flags.
 func run(b *testing.B, pgURL string, workloadFlags []string) {
 	ctx := context.Background()
+	defer startCPUProfile(b).Stop(b)
+	defer startAllocsProfile(b).Stop(b)
 
 	flags := append([]string{
 		"--wait=0",
@@ -176,4 +205,113 @@ func redirectStdoutToDevNull(b *testing.B) (restoreStdout func()) {
 		_ = os.Stdout.Close()
 		os.Stdout = old
 	}
+}
+
+type doneFn func(testing.TB)
+
+func (f doneFn) Stop(b testing.TB) {
+	f(b)
+}
+
+func startCPUProfile(b testing.TB) doneFn {
+	prefix := *profileFlag
+	if prefix == "" {
+		return func(b testing.TB) {}
+	}
+
+	fileName := profileFileName(b, prefix, "cpu")
+	f, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	if err := runtimepprof.StartCPUProfile(f); err != nil {
+		b.Fatal(err)
+	}
+
+	return func(b testing.TB) {
+		runtimepprof.StopCPUProfile()
+		if err := f.Close(); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func startAllocsProfile(b testing.TB) doneFn {
+	prefix := *profileFlag
+	if prefix == "" {
+		return func(b testing.TB) {}
+	}
+
+	fileName := profileFileName(b, prefix, "mem")
+	diffAllocs := diffProfile(b, func() []byte {
+		p := runtimepprof.Lookup("allocs")
+		var buf bytes.Buffer
+
+		runtime.GC()
+		if err := p.WriteTo(&buf, 0); err != nil {
+			b.Fatal(err)
+		}
+
+		return buf.Bytes()
+	})
+
+	return func(b testing.TB) {
+		if sl := diffAllocs(b); len(sl) > 0 {
+			if err := os.WriteFile(fileName, sl, 0644); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+}
+
+func diffProfile(b testing.TB, take func() []byte) func(testing.TB) []byte {
+	// The below is essentially cribbed from pprof.go in net/http/pprof.
+
+	baseBytes := take()
+	if baseBytes == nil {
+		return func(tb testing.TB) []byte { return nil }
+	}
+	pBase, err := profile.ParseData(baseBytes)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	return func(b testing.TB) []byte {
+		pNew, err := profile.ParseData(take())
+		if err != nil {
+			b.Fatal(err)
+		}
+		pBase.Scale(-1)
+		pMerged, err := profile.Merge([]*profile.Profile{pBase, pNew})
+		if err != nil {
+			b.Fatal(err)
+		}
+		pMerged.TimeNanos = pNew.TimeNanos
+		pMerged.DurationNanos = pNew.TimeNanos - pBase.TimeNanos
+
+		buf := bytes.Buffer{}
+		if err := pMerged.Write(&buf); err != nil {
+			b.Fatal(err)
+		}
+		return buf.Bytes()
+	}
+}
+
+func profileFileName(b testing.TB, prefix, suffix string) string {
+	var outputDir string
+	if err := sniffarg.DoEnv("test.outputdir", &outputDir); err != nil {
+		b.Fatal(err)
+	}
+
+	saniRE := regexp.MustCompile(`\W+`)
+	testName := strings.TrimPrefix(b.Name(), "Benchmark")
+	testName = strings.ToLower(testName)
+	testName = saniRE.ReplaceAllString(testName, "_")
+
+	fileName := prefix + "_" + testName + "." + suffix
+	if outputDir != "" {
+		fileName = filepath.Join(outputDir, fileName)
+	}
+	return fileName
 }
