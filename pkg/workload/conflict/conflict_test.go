@@ -8,6 +8,7 @@ package conflict
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
@@ -39,14 +40,28 @@ func TestLDRCompatibility(t *testing.T) {
 
 	// Create a random table in database A
 	rndSrc, _ := randutil.NewTestRand()
+	rndSrc.Seed(time.Now().UnixNano())
+
+	// TODO(jeffswenson): rand create table refactor
+	// Extend options to use the go options pattern.
+	//
+	// Add an Index and ColumnType filter function that is used retry generation
+	// of types that are incompatible with LDR.
+	//
+	// For other options, add a probility struct that is tuned by LDR.
+
+	// TODO(jeffswenson): FLOAT8 in the primary key causes issues with LDR because it has a composite encoding.
 	stmt := tree.AsStringWithFlags(
 		randgen.RandCreateTable(ctx, rndSrc, "test_writer", 1, RandTableOpt),
 		tree.FmtParsable)
+	t.Logf("creating table: %s", stmt)
 	dbA.Exec(t, stmt)
 
 	dbAURL := replicationtestutils.GetExternalConnectionURI(t, server, server, serverutils.DBName("a"))
+	dbBURL := replicationtestutils.GetExternalConnectionURI(t, server, server, serverutils.DBName("b"))
 	dbB.Exec(t,
-		"CREATE LOGICALLY REPLICATED TABLE test_writer1 FROM TABLE test_writer1 ON $1 WITH UNIDIRECTIONAL",
+		"CREATE LOGICALLY REPLICATED TABLE b.test_writer1 FROM TABLE a.test_writer1 ON $1 WITH BIDIRECTIONAL ON $2",
 		dbAURL.String(),
+		dbBURL.String(),
 	)
 }

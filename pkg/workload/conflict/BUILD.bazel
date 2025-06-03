@@ -35,7 +35,6 @@ go_test(
         "//pkg/base",
         "//pkg/ccl",
         "//pkg/crosscluster/replicationtestutils",
-        "//pkg/jobs/jobspb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
