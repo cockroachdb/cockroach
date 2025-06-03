@@ -55,6 +55,8 @@ store-id=1 node-id=1 reported=[80,80,80] adjusted=[0,0,0] node-reported-cpu=80 n
   top-k-ranges (local-store-id=1) dim=CPURate: r1
 store-id=2 node-id=2 reported=[0,0,0] adjusted=[88,88,88] node-reported-cpu=0 node-adjusted-cpu=88 seq=1
 
+# TODO: this test is confusing since it is sending StoreLeaseholderMsgs from
+# s1 and s2 to the same clusterState, but s1 and s2 are not on the same node.
 store-leaseholder-msg
 store-id=2
   range-id=1 load=[80,80,80] raft-cpu=20 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})

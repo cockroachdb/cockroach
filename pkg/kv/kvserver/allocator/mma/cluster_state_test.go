@@ -223,14 +223,14 @@ func testingGetStoreList(t *testing.T, cs *clusterState) (member, removed storeI
 
 func testingGetPendingChanges(t *testing.T, cs *clusterState) []*pendingReplicaChange {
 	var clusterPendingChangeList []*pendingReplicaChange
-	var storePendingChangeList []*pendingReplicaChange
+	var storeLoadPendingChangeList []*pendingReplicaChange
 	var rangePendingChangeList []*pendingReplicaChange
 	for _, change := range cs.pendingChanges {
 		clusterPendingChangeList = append(clusterPendingChangeList, change)
 	}
 	for _, store := range cs.stores {
 		for _, change := range store.adjusted.loadPendingChanges {
-			storePendingChangeList = append(storePendingChangeList, change)
+			storeLoadPendingChangeList = append(storeLoadPendingChangeList, change)
 		}
 	}
 	for _, rng := range cs.ranges {
@@ -243,15 +243,36 @@ func testingGetPendingChanges(t *testing.T, cs *clusterState) []*pendingReplicaC
 	sort.Slice(clusterPendingChangeList, func(i, j int) bool {
 		return clusterPendingChangeList[i].ChangeID < clusterPendingChangeList[j].ChangeID
 	})
-	sort.Slice(storePendingChangeList, func(i, j int) bool {
-		return storePendingChangeList[i].ChangeID < storePendingChangeList[j].ChangeID
+	sort.Slice(storeLoadPendingChangeList, func(i, j int) bool {
+		return storeLoadPendingChangeList[i].ChangeID < storeLoadPendingChangeList[j].ChangeID
 	})
 	sort.Slice(rangePendingChangeList, func(i, j int) bool {
 		return rangePendingChangeList[i].ChangeID < rangePendingChangeList[j].ChangeID
 	})
-	require.EqualValues(t, clusterPendingChangeList, storePendingChangeList)
-	require.EqualValues(t, rangePendingChangeList, storePendingChangeList)
-	return clusterPendingChangeList
+	require.EqualValues(t, clusterPendingChangeList, rangePendingChangeList)
+	require.LessOrEqual(t, len(clusterPendingChangeList), len(storeLoadPendingChangeList))
+	i, j := 0, 0
+	for i < len(clusterPendingChangeList) && j < len(storeLoadPendingChangeList) {
+		require.GreaterOrEqual(
+			t, clusterPendingChangeList[i].ChangeID, storeLoadPendingChangeList[j].ChangeID)
+		if clusterPendingChangeList[i].ChangeID > storeLoadPendingChangeList[j].ChangeID {
+			// Enacted.
+			require.NotEqual(t, time.Time{}, storeLoadPendingChangeList[j].enactedAtTime)
+			j++
+			continue
+		}
+		require.Equal(t, time.Time{}, storeLoadPendingChangeList[j].enactedAtTime, "%v = %v",
+			storeLoadPendingChangeList[j], clusterPendingChangeList[i])
+		i++
+		j++
+	}
+	require.Equal(t, i, len(clusterPendingChangeList))
+	for j < len(storeLoadPendingChangeList) {
+		// Remaining changes are enacted.
+		require.NotEqual(t, time.Time{}, storeLoadPendingChangeList[j].enactedAtTime)
+		j++
+	}
+	return storeLoadPendingChangeList
 }
 
 func TestClusterState(t *testing.T) {
@@ -439,11 +460,9 @@ func TestClusterState(t *testing.T) {
 				case "reject-pending-changes":
 					var changeIDsInt []int
 					d.ScanArgs(t, "change-ids", &changeIDsInt)
-					changeIDs := make([]ChangeID, 0, len(changeIDsInt))
 					for _, id := range changeIDsInt {
-						changeIDs = append(changeIDs, ChangeID(id))
+						cs.undoPendingChange(ChangeID(id))
 					}
-					cs.pendingChangesRejected(changeIDs)
 					return printPendingChanges(testingGetPendingChanges(t, cs))
 
 				case "get-pending-changes":
