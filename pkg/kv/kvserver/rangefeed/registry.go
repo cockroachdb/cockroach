@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/logtags"
 )
 
 // Disconnector defines an interface for disconnecting a registration. It is
@@ -105,11 +106,17 @@ type baseRegistration struct {
 }
 
 func (r *baseRegistration) getRangefeedInfo() rangefeedpb.Rangefeed {
+	tags := ""
+	if b := logtags.FromContext(r.streamCtx); b != nil {
+		tags = b.String()
+	}
+
 	return rangefeedpb.Rangefeed{
 		ConsumerID: r.consumerID,
 		Span:       r.span,
 		ResolvedTS: r.resolvedTimestamp,
 		CatchUpTS:  r.catchUpTimestamp,
+		Tags:       tags,
 	}
 }
 
