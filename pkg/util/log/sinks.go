@@ -5,7 +5,15 @@
 
 package log
 
-import "github.com/cockroachdb/cockroach/pkg/cli/exit"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
+	"go.opentelemetry.io/otel/sdk/resource"
+
+	otlplog "go.opentelemetry.io/otel/sdk/log"
+)
 
 //go:generate mockgen -package=log -destination=mocks_generated_test.go --mock_names=TestingLogSink=MockLogSink . TestingLogSink
 
@@ -78,3 +86,12 @@ var _ logSink = (*fileSink)(nil)
 var _ logSink = (*fluentSink)(nil)
 var _ logSink = (*httpSink)(nil)
 var _ logSink = (*bufferedSink)(nil)
+
+// junk function for importing opentelemetry log sdk so they appear as direct deps
+func createOtelLogProvider() {
+	ctx := context.Background()
+	res := resource.Default()
+	exporter, _ := otlploghttp.New(ctx)
+	processor := otlplog.NewSimpleProcessor(exporter)
+	_ = otlplog.NewLoggerProvider(otlplog.WithProcessor(processor), otlplog.WithResource(res))
+}

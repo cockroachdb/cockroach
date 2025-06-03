@@ -85,6 +85,9 @@ go_library(
         "@com_github_cockroachdb_redact//interfaces",
         "@com_github_cockroachdb_ttycolor//:ttycolor",
         "@com_github_petermattis_goid//:goid",
+        "@io_opentelemetry_go_otel_exporters_otlp_otlplog_otlploghttp//:otlploghttp",
+        "@io_opentelemetry_go_otel_sdk//resource",
+        "@io_opentelemetry_go_otel_sdk_log//:log",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
             "@org_golang_x_sys//unix",
