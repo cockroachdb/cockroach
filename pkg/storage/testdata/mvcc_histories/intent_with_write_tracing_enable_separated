@@ -6,7 +6,7 @@ with t=A
 >> txn_begin ts=2 t=A
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=2.000000000,0 gul=0,0
 >> put k=k1 v=v1 t=A
-put: lock acquisition = {k1 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=k1 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 meta: "k1"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0} ts=2.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k1"/2.000000000,0 -> /BYTES/v1
 stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+70 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+98
@@ -24,12 +24,12 @@ txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=3.0
 >> txn_step t=A
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=2.000000000,0 gul=0,0
 >> put k=k1 v=v1 t=A
-put: lock acquisition = {k1 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1 Replicated Intent []}
+put: lock acquisition = {span=k1 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1 durability=Replicated strength=Intent ignored=[]}
 meta: "k1"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=7 ih={{0 /BYTES/v1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k1"/3.000000000,0 -> /BYTES/v1
 stats: val_bytes=+13 live_bytes=+13 lock_age=-1
 >> put k=k2 v=v2 t=A
-put: lock acquisition = {k2 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1 Replicated Intent []}
+put: lock acquisition = {span=k2 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1 durability=Replicated strength=Intent ignored=[]}
 meta: "k1"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=7 ih={{0 /BYTES/v1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k1"/3.000000000,0 -> /BYTES/v1
 meta: "k2"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -54,7 +54,7 @@ with t=A
   put k=k3 v=v33
 ----
 >> put k=k3 v=v33 t=A
-put: lock acquisition = {k3 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1 Replicated Intent []}
+put: lock acquisition = {span=k3 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1 durability=Replicated strength=Intent ignored=[]}
 meta: "k1"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=7 ih={{0 /BYTES/v1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k1"/3.000000000,0 -> /BYTES/v1
 meta: "k2"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true

@@ -7,7 +7,7 @@ with t=A
   txn_remove
 ----
 >> put k=a v=default resolve t=A
-put: lock acquisition = {a id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=a id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 resolve_intent: "a" -> resolved key = true
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+12 live_count=+1 live_bytes=+26
 >> at end:
@@ -32,7 +32,7 @@ with t=A
 >> txn_begin ts=2 t=A
 txn: "A" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=2.000000000,0 gul=0,0
 >> put v=first k=a t=A
-put: lock acquisition = {a id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=a id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 meta: "a"/0,0 -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0} ts=2.000000000,0 del=false klen=12 vlen=10 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/2.000000000,0 -> /BYTES/first
 data: "a"/1.000000000,0 -> /BYTES/default
@@ -40,7 +40,7 @@ stats: key_bytes=+12 val_count=+1 val_bytes=+58 live_bytes=+46 gc_bytes_age=+235
 >> txn_step k=a t=A
 txn: "A" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=2.000000000,0 gul=0,0
 >> put v=second k=a t=A
-put: lock acquisition = {a id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=1 Replicated Intent []}
+put: lock acquisition = {span=a id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=1 durability=Replicated strength=Intent ignored=[]}
 meta: "a"/0,0 -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=1} ts=2.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "a"/2.000000000,0 -> /BYTES/second
 data: "a"/1.000000000,0 -> /BYTES/default
@@ -49,7 +49,7 @@ stats: val_bytes=+17 live_bytes=+17 intent_bytes=+1
 txn: "A" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=3} lock=true stat=PENDING rts=2.000000000,0 gul=0,0
 >> del k=a t=A
 del: "a": found key true
-del: lock acquisition = {a id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=3 Replicated Intent []}
+del: lock acquisition = {span=a id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=3 durability=Replicated strength=Intent ignored=[]}
 meta: "a"/0,0 -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=3} ts=2.000000000,0 del=true klen=12 vlen=0 ih={{0 /BYTES/first}{1 /BYTES/second}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "a"/2.000000000,0 -> /<empty>
 data: "a"/1.000000000,0 -> /BYTES/default
@@ -57,7 +57,7 @@ stats: val_bytes=+6 live_count=-1 live_bytes=-89 gc_bytes_age=+9310 intent_bytes
 >> txn_step n=6 k=a t=A
 txn: "A" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=9} lock=true stat=PENDING rts=2.000000000,0 gul=0,0
 >> put v=first k=a t=A
-put: lock acquisition = {a id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=9 Replicated Intent []}
+put: lock acquisition = {span=a id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=9 durability=Replicated strength=Intent ignored=[]}
 meta: "a"/0,0 -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=9} ts=2.000000000,0 del=false klen=12 vlen=10 ih={{0 /BYTES/first}{1 /BYTES/second}{3 /<empty>}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "a"/2.000000000,0 -> /BYTES/first
 data: "a"/1.000000000,0 -> /BYTES/default

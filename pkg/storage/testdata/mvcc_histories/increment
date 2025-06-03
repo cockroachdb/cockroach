@@ -38,11 +38,11 @@ with k=k t=a ts=0,1
 ----
 >> increment k=k t=a ts=0,1
 inc: current value = 1
-inc: lock acquisition = {k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=1 Replicated Intent []}
+inc: lock acquisition = {span=k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=1 durability=Replicated strength=Intent ignored=[]}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+51 live_count=+1 live_bytes=+65 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+100
 >> increment k=k t=a ts=0,1
 inc: current value = 2
-inc: lock acquisition = {k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2 Replicated Intent []}
+inc: lock acquisition = {span=k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=+10 live_bytes=+10
 >> at end:
 txn: "a" meta={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} lock=true stat=PENDING rts=0,1 gul=0,0

@@ -696,7 +696,7 @@ sequence req=req36
 ----
 [36] sequence req36: sequencing request
 [36] sequence req36: acquiring latches
-[36] sequence req36: waiting to acquire write latch ‹/Local/RangeID/1/r/ReplicatedSharedLocksTransactionLatch/"00000002-0000-0000-0000-000000000000"›@0,0 for request Scan(Shared,Replicated) [‹"a"›,‹"f"›), [txn: 00000002], held by write latch ‹/Local/RangeID/1/r/ReplicatedSharedLocksTransactionLatch/"00000002-0000-0000-0000-000000000000"›@0,0 for request Get(Shared,Replicated) [‹"c"›], [txn: 00000002]
+[36] sequence req36: waiting to acquire write latch /Local/RangeID‹/1›/‹r›/‹ReplicatedSharedLocksTransactionLatch›/"00000002-0000-0000-0000-000000000000"@0,0 for request Scan(Shared,Replicated) [‹"a"›,‹"f"›), [txn: 00000002], held by write latch /Local/RangeID‹/1›/‹r›/‹ReplicatedSharedLocksTransactionLatch›/"00000002-0000-0000-0000-000000000000"@0,0 for request Get(Shared,Replicated) [‹"c"›], [txn: 00000002]
 [36] sequence req36: blocked on select in spanlatch.(*Manager).waitForSignal
 
 new-request name=req37 txn=txn1 ts=11,1
