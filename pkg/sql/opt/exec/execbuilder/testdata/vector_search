@@ -4,7 +4,17 @@ statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v VECTOR (3), FAMILY (k, v), VECTOR INDEX (v));
 
 statement ok
-CREATE TABLE t_multi (
+CREATE TABLE t_multi_idx (
+  k INT PRIMARY KEY,
+  v VECTOR (3),
+  FAMILY (k, v),
+  VECTOR INDEX l2 (v vector_l2_ops),
+  VECTOR INDEX cosine (v vector_cosine_ops),
+  VECTOR INDEX ip (v vector_ip_ops)
+);
+
+statement ok
+CREATE TABLE t_multi_col (
   x INT,
   y INT,
   a INT,
@@ -112,7 +122,7 @@ vectorized: true
                   query vector: '[1,2,3]'
 
 query T
-EXPLAIN (VERBOSE) SELECT * FROM t_multi WHERE a = 1 AND b = 2 ORDER BY v <-> '[1, 2, 3]' LIMIT 1;
+EXPLAIN (VERBOSE) SELECT * FROM t_multi_col WHERE a = 1 AND b = 2 ORDER BY v <-> '[1, 2, 3]' LIMIT 1;
 ----
 distribution: local
 vectorized: true
@@ -139,20 +149,20 @@ vectorized: true
         └── • lookup join (inner)
             │ columns: (x, y, a, b, c, v)
             │ estimated row count: 2 (missing stats)
-            │ table: t_multi@t_multi_pkey
+            │ table: t_multi_col@t_multi_col_pkey
             │ equality: (x, y) = (x, y)
             │ equality cols are key
             │
             └── • vector search
                   columns: (x, y)
                   estimated row count: 2 (missing stats)
-                  table: t_multi@t_multi_a_b_v_idx
+                  table: t_multi_col@t_multi_col_a_b_v_idx
                   target count: 1
                   prefix spans: /1/2-/1/3
                   query vector: '[1,2,3]'
 
 query T
-EXPLAIN (VERBOSE) SELECT * FROM t_multi WHERE (a, b) IN ((1, 2), (3, 4), (5, 6)) ORDER BY v <-> '[1, 2, 3]' LIMIT 1;
+EXPLAIN (VERBOSE) SELECT * FROM t_multi_col WHERE (a, b) IN ((1, 2), (3, 4), (5, 6)) ORDER BY v <-> '[1, 2, 3]' LIMIT 1;
 ----
 distribution: local
 vectorized: true
@@ -179,17 +189,61 @@ vectorized: true
         └── • lookup join (inner)
             │ columns: (x, y, a, b, c, v)
             │ estimated row count: 2 (missing stats)
-            │ table: t_multi@t_multi_pkey
+            │ table: t_multi_col@t_multi_col_pkey
             │ equality: (x, y) = (x, y)
             │ equality cols are key
             │
             └── • vector search
                   columns: (x, y)
                   estimated row count: 2 (missing stats)
-                  table: t_multi@t_multi_a_b_v_idx
+                  table: t_multi_col@t_multi_col_a_b_v_idx
                   target count: 1
                   prefix spans: /1/2-/1/3 /3/4-/3/5 /5/6-/5/7
                   query vector: '[1,2,3]'
+
+# Cosine distance op.
+query T
+EXPLAIN SELECT * FROM t_multi_idx ORDER BY v <=> '[1, 2, 3]' LIMIT 1;
+----
+distribution: local
+vectorized: true
+·
+• top-k
+│ order: +column7
+│ k: 1
+│
+└── • render
+    │
+    └── • lookup join
+        │ table: t_multi_idx@t_multi_idx_pkey
+        │ equality: (k) = (k)
+        │ equality cols are key
+        │
+        └── • vector search
+              table: t_multi_idx@cosine
+              target count: 1
+
+# InnerProduct distance op.
+query T
+EXPLAIN SELECT * FROM t_multi_idx ORDER BY v <#> '[1, 2, 3]' LIMIT 1;
+----
+distribution: local
+vectorized: true
+·
+• top-k
+│ order: +column7
+│ k: 1
+│
+└── • render
+    │
+    └── • lookup join
+        │ table: t_multi_idx@t_multi_idx_pkey
+        │ equality: (k) = (k)
+        │ equality cols are key
+        │
+        └── • vector search
+              table: t_multi_idx@ip
+              target count: 1
 
 # ==============================================================================
 # Vector Mutation Search Tests
@@ -315,7 +369,7 @@ vectorized: true
               spans: /1/0
 
 query T
-EXPLAIN (VERBOSE) INSERT INTO t_multi VALUES (1, 2, 1, 2, 3, '[1, 2, 3]');
+EXPLAIN (VERBOSE) INSERT INTO t_multi_col VALUES (1, 2, 1, 2, 3, '[1, 2, 3]');
 ----
 distribution: local
 vectorized: true
@@ -323,14 +377,14 @@ vectorized: true
 • insert
 │ columns: ()
 │ estimated row count: 0 (missing stats)
-│ into: t_multi(x, y, a, b, c, v)
+│ into: t_multi_col(x, y, a, b, c, v)
 │ auto commit
 │
 └── • vector mutation search
     │ columns: (column1, column2, column3, column4, column5, v_cast, "partition-key", "quantized-vector")
     │ estimated row count: 1
     │ mutation type: put
-    │ table: t_multi@t_multi_a_b_v_idx
+    │ table: t_multi_col@t_multi_col_a_b_v_idx
     │ prefix key cols: column3, column4
     │ query vector col: v_cast
     │
@@ -345,7 +399,7 @@ vectorized: true
           row 0, expr 5: '[1,2,3]'
 
 query T
-EXPLAIN (VERBOSE) UPDATE t_multi SET v = '[1, 2, 3]' WHERE a = 1 AND b = 2;
+EXPLAIN (VERBOSE) UPDATE t_multi_col SET v = '[1, 2, 3]' WHERE a = 1 AND b = 2;
 ----
 distribution: local
 vectorized: true
@@ -353,7 +407,7 @@ vectorized: true
 • update
 │ columns: ()
 │ estimated row count: 0 (missing stats)
-│ table: t_multi
+│ table: t_multi_col
 │ set: v
 │ auto commit
 │
@@ -364,7 +418,7 @@ vectorized: true
         │ columns: (v_cast, x, y, a, b, c, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, "partition-key", "partition-key", "quantized-vector")
         │ estimated row count: 1 (missing stats)
         │ mutation type: put
-        │ table: t_multi@t_multi_a_b_v_idx
+        │ table: t_multi_col@t_multi_col_a_b_v_idx
         │ prefix key cols: a, b
         │ query vector col: v_cast
         │
@@ -372,7 +426,7 @@ vectorized: true
             │ columns: (v_cast, x, y, a, b, c, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, "partition-key")
             │ estimated row count: 1 (missing stats)
             │ mutation type: del
-            │ table: t_multi@t_multi_a_b_v_idx
+            │ table: t_multi_col@t_multi_col_a_b_v_idx
             │ prefix key cols: a, b
             │ query vector col: v
             │ suffix key cols: x, y
@@ -399,11 +453,11 @@ vectorized: true
                     └── • scan
                           columns: (x, y, a, b, c, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
                           estimated row count: 1,000 (missing stats)
-                          table: t_multi@t_multi_pkey
+                          table: t_multi_col@t_multi_col_pkey
                           spans: FULL SCAN
 
 query T
-EXPLAIN (VERBOSE) UPDATE t_multi SET a = 2 WHERE a = 1;
+EXPLAIN (VERBOSE) UPDATE t_multi_col SET a = 2 WHERE a = 1;
 ----
 distribution: local
 vectorized: true
@@ -411,7 +465,7 @@ vectorized: true
 • update
 │ columns: ()
 │ estimated row count: 0 (missing stats)
-│ table: t_multi
+│ table: t_multi_col
 │ set: a
 │ auto commit
 │
@@ -422,7 +476,7 @@ vectorized: true
         │ columns: (a_new, x, y, a, b, c, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, "partition-key", "partition-key", "quantized-vector")
         │ estimated row count: 10 (missing stats)
         │ mutation type: put
-        │ table: t_multi@t_multi_a_b_v_idx
+        │ table: t_multi_col@t_multi_col_a_b_v_idx
         │ prefix key cols: a_new, b
         │ query vector col: v
         │
@@ -430,7 +484,7 @@ vectorized: true
             │ columns: (a_new, x, y, a, b, c, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, "partition-key")
             │ estimated row count: 10 (missing stats)
             │ mutation type: del
-            │ table: t_multi@t_multi_a_b_v_idx
+            │ table: t_multi_col@t_multi_col_a_b_v_idx
             │ prefix key cols: a, b
             │ query vector col: v
             │ suffix key cols: x, y
@@ -457,11 +511,11 @@ vectorized: true
                     └── • scan
                           columns: (x, y, a, b, c, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
                           estimated row count: 1,000 (missing stats)
-                          table: t_multi@t_multi_pkey
+                          table: t_multi_col@t_multi_col_pkey
                           spans: FULL SCAN
 
 query T
-EXPLAIN (VERBOSE) DELETE FROM t_multi WHERE a = 1 AND b = 2;
+EXPLAIN (VERBOSE) DELETE FROM t_multi_col WHERE a = 1 AND b = 2;
 ----
 distribution: local
 vectorized: true
@@ -469,7 +523,7 @@ vectorized: true
 • delete
 │ columns: ()
 │ estimated row count: 0 (missing stats)
-│ from: t_multi
+│ from: t_multi_col
 │ auto commit
 │
 └── • project
@@ -479,7 +533,7 @@ vectorized: true
         │ columns: (x, y, a, b, c, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, "partition-key")
         │ estimated row count: 1 (missing stats)
         │ mutation type: del
-        │ table: t_multi@t_multi_a_b_v_idx
+        │ table: t_multi_col@t_multi_col_a_b_v_idx
         │ prefix key cols: a, b
         │ query vector col: v
         │ suffix key cols: x, y
@@ -492,5 +546,5 @@ vectorized: true
             └── • scan
                   columns: (x, y, a, b, c, v, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
                   estimated row count: 1,000 (missing stats)
-                  table: t_multi@t_multi_pkey
+                  table: t_multi_col@t_multi_col_pkey
                   spans: FULL SCAN
