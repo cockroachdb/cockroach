@@ -16,11 +16,14 @@ import (
 // FindBucketBasedOnNetworkRTT maps a network RTT to a closed timestamp policy
 // with zero dampening.
 func FindBucketBasedOnNetworkRTT(networkRTT time.Duration) ctpb.RangeClosedTimestampPolicy {
-	return FindBucketBasedOnNetworkRTTWithDampening(ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO, networkRTT, 0)
+	return FindBucketBasedOnNetworkRTTWithDampening(ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO, networkRTT,
+		0, func() {} /*onDampeningTakingEffect*/)
 }
 
-// FindBucketBasedOnNetworkRTTWithDampening calculates a new closed timestamp policy
-// based on the old policy, the network RTT, and a boundary percentage.
+// FindBucketBasedOnNetworkRTTWithDampening calculates a new closed timestamp
+// policy based on the old policy, the network RTT, and a boundary percentage.
+// onDampeningTakingEffect is a metric callback to report when the dampening is
+// taking effect and latency bucket might be inaccurate.
 //
 // 1. If old policy or new policy is LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO,
 // the new policy is returned.
@@ -53,7 +56,10 @@ func FindBucketBasedOnNetworkRTT(networkRTT time.Duration) ctpb.RangeClosedTimes
 //	  (20ms - 20ms*20%) = 16ms |
 //	   to move to <20ms bucket |
 func FindBucketBasedOnNetworkRTTWithDampening(
-	oldPolicy ctpb.RangeClosedTimestampPolicy, networkRTT time.Duration, boundaryPercent float64,
+	oldPolicy ctpb.RangeClosedTimestampPolicy,
+	networkRTT time.Duration,
+	boundaryPercent float64,
+	onDampeningTakingEffect func(),
 ) ctpb.RangeClosedTimestampPolicy {
 	// Calculate the new policy based on network RTT.
 	newPolicy := findBucketBasedOnNetworkRTT(networkRTT)
@@ -81,6 +87,7 @@ func FindBucketBasedOnNetworkRTTWithDampening(
 		if networkRTT >= higherLatencyBucketThreshold {
 			return newPolicy
 		}
+		onDampeningTakingEffect()
 		return oldPolicy
 	case oldPolicy > newPolicy:
 		// The new policy has a lower latency threshold. Only switch to the lower
@@ -89,6 +96,7 @@ func FindBucketBasedOnNetworkRTTWithDampening(
 		if networkRTT < lowerLatencyBucketThreshold {
 			return newPolicy
 		}
+		onDampeningTakingEffect()
 		return oldPolicy
 	default:
 		panic("unexpected condition")
