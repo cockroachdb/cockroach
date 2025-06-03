@@ -9675,10 +9675,11 @@ show_transfer_stmt:
   }
 | SHOW TRANSFER error // SHOW HELP: SHOW TRANSFER
 
-// %Help: SHOW CREATE - display the CREATE statement for a table, sequence, view, or database
+// %Help: SHOW CREATE - display the CREATE statement for one or more database objects
 // %Category: DDL
 // %Text:
-// SHOW CREATE [ TABLE | SEQUENCE | VIEW | DATABASE ] <object_name>
+// SHOW CREATE [ TABLE | SEQUENCE | VIEW | DATABASE | FUNCTION | PROCEDURE ] <object_name>
+// SHOW CREATE TRIGGER <trigger_name> ON <table_name>
 // SHOW CREATE [ SECONDARY ] INDEXES FROM <table_name>
 // SHOW CREATE ALL SCHEMAS
 // SHOW CREATE ALL TABLES
