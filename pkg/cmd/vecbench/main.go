@@ -479,7 +479,7 @@ func newVectorProvider(
 	}
 
 	// Use SQL-based provider with connection string from flags.
-	provider, err := NewSQLProvider(context.Background(), datasetName, dims, options)
+	provider, err := NewSQLProvider(context.Background(), datasetName, dims, distanceMetric, options)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating SQL provider")
 	}

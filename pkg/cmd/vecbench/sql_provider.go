@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
@@ -43,6 +44,7 @@ func (s *SQLSearchState) Close() {
 type SQLProvider struct {
 	datasetName string
 	dims        int
+	distMetric  vecpb.DistanceMetric
 	options     cspann.IndexOptions
 	pool        *pgxpool.Pool
 	tableName   string
@@ -52,7 +54,11 @@ type SQLProvider struct {
 // NewSQLProvider creates a new SQLProvider that connects to a CockroachDB
 // instance.
 func NewSQLProvider(
-	ctx context.Context, datasetName string, dims int, options cspann.IndexOptions,
+	ctx context.Context,
+	datasetName string,
+	dims int,
+	distMetric vecpb.DistanceMetric,
+	options cspann.IndexOptions,
 ) (*SQLProvider, error) {
 	// Create connection pool.
 	config, err := pgxpool.ParseConfig(*flagDBConnStr)
@@ -82,6 +88,7 @@ func NewSQLProvider(
 
 	return &SQLProvider{
 		datasetName: datasetName,
+		distMetric:  distMetric,
 		dims:        dims,
 		options:     options,
 		pool:        pool,
@@ -129,12 +136,20 @@ func (s *SQLProvider) New(ctx context.Context) error {
 		return errors.Wrap(err, "dropping table")
 	}
 
+	var opClass string
+	switch s.distMetric {
+	case vecpb.CosineDistance:
+		opClass = " vector_cosine_ops"
+	case vecpb.InnerProductDistance:
+		opClass = " vector_ip_ops"
+	}
+
 	_, err = s.pool.Exec(ctx, fmt.Sprintf(`
 		CREATE TABLE %s (
 			id BYTES PRIMARY KEY,
 			embedding VECTOR(%d),
-			VECTOR INDEX (embedding)
-		)`, s.tableName, s.dims))
+			VECTOR INDEX (embedding%s)
+		)`, s.tableName, s.dims, opClass))
 	return errors.Wrap(err, "creating table")
 }
 
@@ -199,13 +214,23 @@ func (s *SQLProvider) SetupSearch(
 		return nil, errors.Wrap(err, "setting vector_search_beam_size")
 	}
 
+	var op string
+	switch s.distMetric {
+	case vecpb.L2SquaredDistance:
+		op = "<->"
+	case vecpb.CosineDistance:
+		op = "<=>"
+	case vecpb.InnerProductDistance:
+		op = "<#>"
+	}
+
 	// Construct the query for vector search.
 	query := fmt.Sprintf(`
 		SELECT id
 		FROM %s
-		ORDER BY embedding <-> $1
+		ORDER BY embedding %s $1
 		LIMIT %d
-	`, s.tableName, maxResults)
+	`, s.tableName, op, maxResults)
 
 	state := &SQLSearchState{
 		conn:  conn,
