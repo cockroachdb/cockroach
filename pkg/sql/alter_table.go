@@ -839,7 +839,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 			depViewRenameError := func(objType string, refTableID descpb.ID) error {
 				return params.p.dependentError(params.ctx,
-					objType, tree.ErrString(&t.NewName), n.tableDesc.ParentID, refTableID, "rename",
+					objType, tree.ErrString(&t.NewName), n.tableDesc.ParentID, refTableID, n.tableDesc.ID, "rename",
 				)
 			}
 
@@ -1940,7 +1940,8 @@ func dropColumnImpl(
 			continue
 		}
 		err := params.p.canRemoveDependent(
-			params.ctx, "column", string(t.Column), tableDesc.ParentID, ref, t.DropBehavior,
+			params.ctx, "column", string(t.Column), tableDesc.ID, tableDesc.ParentID, ref, t.DropBehavior,
+			true, /* blockOnTriggerDependency */
 		)
 		if err != nil {
 			return nil, err

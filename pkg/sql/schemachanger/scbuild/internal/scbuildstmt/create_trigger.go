@@ -146,12 +146,6 @@ func buildRelationDeps(
 ) []scpb.TriggerDeps_RelationReference {
 	usesRelations := make([]scpb.TriggerDeps_RelationReference, 0)
 	if err := refProvider.ForEachTableReference(func(tblID descpb.ID, idxID descpb.IndexID, colIDs descpb.ColumnIDs) error {
-		// It is possible for the trigger function to reference the table on which the
-		// trigger is defined. In that case, we need to remove the table from the list
-		// of referenced relations to avoid a circular dependency.
-		if tblID == tableID {
-			return nil
-		}
 		usesRelations = append(usesRelations, scpb.TriggerDeps_RelationReference{
 			ID:        tblID,
 			IndexID:   idxID,

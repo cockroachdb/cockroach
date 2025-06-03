@@ -28,6 +28,28 @@ Events in this category pertain to changefeed usage and metrics.
 Events in this category are logged to the `TELEMETRY` channel.
 
 
+### `alter_changefeed`
+
+An event of type `alter_changefeed` is an event for any ALTER CHANGEFEED statements that are run.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `PreviousDescription` | The description of the changefeed job before the ALTER CHANGEFEED. | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Description` | The description of that would show up in the job's description field, redacted | yes |
+| `SinkType` | The type of sink being emitted to (ex: kafka, nodelocal, webhook-https). | no |
+| `NumTables` | The number of tables listed in the query that the changefeed is to run on. | no |
+| `Resolved` | The behavior of emitted resolved spans (ex: yes, no, 10s) | no |
+| `InitialScan` | The desired behavior of initial scans (ex: yes, no, only) | no |
+| `Format` | The data format being emitted (ex: JSON, Avro). | no |
+| `JobId` | The job id for enterprise changefeeds. | no |
+
 ### `changefeed_canceled`
 
 An event of type `changefeed_canceled` is an event for any changefeed cancellations.

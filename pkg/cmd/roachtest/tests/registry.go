@@ -94,6 +94,7 @@ func RegisterTests(r registry.Registry) {
 	registerKVStopAndCopy(r)
 	registerKnex(r)
 	registerLOQRecovery(r)
+	registerLargeKV(r)
 	registerLargeRange(r)
 	registerLDAPConnectionLatencyTest(r)
 	registerLDAPConnectionScaleTest(r)
