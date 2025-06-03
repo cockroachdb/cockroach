@@ -2111,13 +2111,14 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// the cluster version from storage as the http auth server relies on
 	// the cluster version being initialized.
 	if err := s.http.setupRoutes(ctx,
-		s.authentication,  /* authnServer */
-		s.adminAuthzCheck, /* adminAuthzCheck */
-		s.recorder,        /* metricSource */
-		s.runtime,         /* runtimeStatsSampler */
-		gwMux,             /* handleRequestsUnauthenticated */
-		s.debug,           /* handleDebugUnauthenticated */
-		s.inspectzServer,  /* handleInspectzUnauthenticated */
+		s.sqlServer.ExecutorConfig(), /* execCfg */
+		s.authentication,             /* authnServer */
+		s.adminAuthzCheck,            /* adminAuthzCheck */
+		s.recorder,                   /* metricSource */
+		s.runtime,                    /* runtimeStatsSampler */
+		gwMux,                        /* handleRequestsUnauthenticated */
+		s.debug,                      /* handleDebugUnauthenticated */
+		s.inspectzServer,             /* handleInspectzUnauthenticated */
 		newAPIV2Server(ctx, &apiV2ServerOpts{
 			admin:            s.admin,
 			status:           s.status,
