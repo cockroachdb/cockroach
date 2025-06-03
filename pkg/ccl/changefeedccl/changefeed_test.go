@@ -11671,3 +11671,52 @@ func TestCloudstorageParallelCompression(t *testing.T) {
 		}
 	})
 }
+
+func TestDuplicateChangefeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, stop := makeServer(t)
+	defer stop()
+	sqlDB := sqlutils.MakeSQLRunner(s.DB)
+	sqlDB.Exec(t, `SET CLUSTER SETTING feature.changefeed.duplicate_check.enabled = true`)
+
+	duplicateNoticeStr := "You have created a duplicate changefeed"
+	sqlDB.Exec(t, `CREATE TABLE t1 (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.Exec(t, `INSERT INTO t1 VALUES (0, 'initial')`)
+	expectNotice(t, s.Server, `CREATE CHANGEFEED FOR d.t1 INTO 'null://'`, "(no notice)")
+	expectNotice(t, s.Server, "CREATE CHANGEFEED FOR d.t1 INTO 'null://'", duplicateNoticeStr)
+
+	sqlDB.Exec(t, `CREATE TABLE t2 (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.Exec(t, `INSERT INTO t2 VALUES (0, 'initial')`)
+	expectNotice(t, s.Server, `CREATE CHANGEFEED FOR d.t2 INTO 'null://'`, "(no notice)")
+	expectNotice(t, s.Server, "CREATE CHANGEFEED FOR d.t2 INTO 'null://'", duplicateNoticeStr)
+	expectNotice(t, s.Server, `CREATE CHANGEFEED FOR d.t1, d.t2 INTO 'null://'`, "(no notice)")
+	expectNotice(t, s.Server, "CREATE CHANGEFEED FOR d.t1, d.t2 INTO 'null://'", duplicateNoticeStr)
+	expectNotice(t, s.Server, "CREATE CHANGEFEED FOR d.t2, d.t1 INTO 'null://'", duplicateNoticeStr)
+
+	sqlDB.Exec(t, `ALTER TABLE t2 RENAME TO t100`)
+	expectNotice(t, s.Server, "CREATE CHANGEFEED FOR d.t100 INTO 'null://'", duplicateNoticeStr)
+	sqlDB.Exec(t, `ALTER TABLE t100 RENAME TO t2`)
+
+	// Test for alter changefeed
+	sqlDB.Exec(t, `CREATE TABLE t3 (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.Exec(t, `CREATE TABLE t4 (a INT PRIMARY KEY, b STRING)`)
+	res := sqlDB.QueryStr(t, `CREATE CHANGEFEED FOR d.t3, d.t4 INTO 'null://'`)
+
+	jobID, err := strconv.Atoi(res[0][0])
+	require.NoError(t, err)
+	sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+	sqlDB.CheckQueryResultsRetry(
+		t,
+		fmt.Sprintf("SELECT count(*) FROM [SHOW JOBS] WHERE job_id = %d and job_type='CHANGEFEED' and status='paused'", jobID),
+		[][]string{{"1"}},
+	)
+	expectNotice(t, s.Server, fmt.Sprintf("ALTER CHANGEFEED %d DROP d.t4", jobID), "(no notice)")
+	expectNotice(t, s.Server, fmt.Sprintf("RESUME JOB %d", jobID), "(no notice)")
+	expectNotice(t, s.Server, "CREATE CHANGEFEED FOR d.t3 INTO 'null://'", duplicateNoticeStr)
+
+	// verify altering changefeed sinkURI
+	// sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+	// expectNotice(t, s.Server, fmt.Sprintf("ALTER CHANGEFEED %d SET sink=''", jobID), "(no notice)")
+}
