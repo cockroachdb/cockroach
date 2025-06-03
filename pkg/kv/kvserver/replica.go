@@ -1390,6 +1390,7 @@ func (r *Replica) RefreshPolicy(latencies map[roachpb.NodeID]time.Duration) {
 			oldPolicy,
 			maxLatency,
 			closedts.PolicySwitchWhenLatencyExceedsBucketFraction.Get(&r.store.GetStoreConfig().Settings.SV),
+			r.store.metrics.ClosedTimestampDampeningInaccuracy,
 		)
 	}
 	oldPolicy := *r.cachedClosedTimestampPolicy.Load()

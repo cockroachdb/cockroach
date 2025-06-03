@@ -2536,6 +2536,13 @@ throttled they do count towards 'delay.total' and 'delay.enginebackpressure'.
 		Unit:        metric.Unit_COUNT,
 	}
 
+	metaClosedTimestampDampeningInaccuracy = metric.Metadata{
+		Name:        "kv.closed_timestamp.dampening_inaccurate",
+		Help:        "Number of times dampening closed timestamp policy of closed timestamp policy takes effect",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	// Replica circuit breaker.
 	metaReplicaCircuitBreakerCurTripped = metric.Metadata{
 		Name: "kv.replica_circuit_breaker.num_tripped_replicas",
@@ -3145,8 +3152,9 @@ type StoreMetrics struct {
 	ClosedTimestampMaxBehindNanos *metric.Gauge
 
 	// Closed timestamp policy change on ranges metrics.
-	ClosedTimestampPolicyChange       *metric.Counter
-	ClosedTimestampLatencyInfoMissing *metric.Counter
+	ClosedTimestampPolicyChange        *metric.Counter
+	ClosedTimestampLatencyInfoMissing  *metric.Counter
+	ClosedTimestampDampeningInaccuracy *metric.Counter
 
 	// Replica circuit breaker.
 	ReplicaCircuitBreakerCurTripped *metric.Gauge
@@ -3969,8 +3977,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		SplitsWithEstimatedStats:     metric.NewCounter(metaSplitEstimatedStats),
 		SplitEstimatedTotalBytesDiff: metric.NewCounter(metaSplitEstimatedTotalBytesDiff),
 
-		ClosedTimestampPolicyChange:       metric.NewCounter(metaClosedTimestampPolicyChange),
-		ClosedTimestampLatencyInfoMissing: metric.NewCounter(metaClosedTimestampLatencyInfoMissing),
+		ClosedTimestampPolicyChange:        metric.NewCounter(metaClosedTimestampPolicyChange),
+		ClosedTimestampLatencyInfoMissing:  metric.NewCounter(metaClosedTimestampLatencyInfoMissing),
+		ClosedTimestampDampeningInaccuracy: metric.NewCounter(metaClosedTimestampDampeningInaccuracy),
 	}
 	sm.categoryIterMetrics.init(storeRegistry)
 

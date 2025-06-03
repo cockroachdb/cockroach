@@ -11,12 +11,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
 // FindBucketBasedOnNetworkRTT maps a network RTT to a closed timestamp policy
 // with zero dampening.
 func FindBucketBasedOnNetworkRTT(networkRTT time.Duration) ctpb.RangeClosedTimestampPolicy {
-	return FindBucketBasedOnNetworkRTTWithDampening(ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO, networkRTT, 0)
+	return FindBucketBasedOnNetworkRTTWithDampening(ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO, networkRTT, 0, nil)
 }
 
 // FindBucketBasedOnNetworkRTTWithDampening calculates a new closed timestamp policy
@@ -53,7 +54,7 @@ func FindBucketBasedOnNetworkRTT(networkRTT time.Duration) ctpb.RangeClosedTimes
 //	  (20ms - 20ms*20%) = 16ms |
 //	   to move to <20ms bucket |
 func FindBucketBasedOnNetworkRTTWithDampening(
-	oldPolicy ctpb.RangeClosedTimestampPolicy, networkRTT time.Duration, boundaryPercent float64,
+	oldPolicy ctpb.RangeClosedTimestampPolicy, networkRTT time.Duration, boundaryPercent float64, closedTimestampDampeningInaccuracy *metric.Counter,
 ) ctpb.RangeClosedTimestampPolicy {
 	// Calculate the new policy based on network RTT.
 	newPolicy := findBucketBasedOnNetworkRTT(networkRTT)
@@ -81,6 +82,9 @@ func FindBucketBasedOnNetworkRTTWithDampening(
 		if networkRTT >= higherLatencyBucketThreshold {
 			return newPolicy
 		}
+		if closedTimestampDampeningInaccuracy != nil {
+			closedTimestampDampeningInaccuracy.Inc(1)
+		}
 		return oldPolicy
 	case oldPolicy > newPolicy:
 		// The new policy has a lower latency threshold. Only switch to the lower
@@ -89,6 +93,7 @@ func FindBucketBasedOnNetworkRTTWithDampening(
 		if networkRTT < lowerLatencyBucketThreshold {
 			return newPolicy
 		}
+		closedTimestampDampeningInaccuracy.Inc(1)
 		return oldPolicy
 	default:
 		panic("unexpected condition")
