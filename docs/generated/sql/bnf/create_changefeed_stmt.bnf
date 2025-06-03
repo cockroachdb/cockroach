@@ -1,9 +1,9 @@
 create_changefeed_stmt ::=
-	'CREATE' 'CHANGEFEED' 'FOR' changefeed_target ( ( ',' changefeed_target ) )* 'INTO' sink 'WITH' option '=' value ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
-	| 'CREATE' 'CHANGEFEED' 'FOR' changefeed_target ( ( ',' changefeed_target ) )* 'INTO' sink 'WITH' option ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
-	| 'CREATE' 'CHANGEFEED' 'FOR' changefeed_target ( ( ',' changefeed_target ) )* 'INTO' sink 'WITH' option '=' value ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
-	| 'CREATE' 'CHANGEFEED' 'FOR' changefeed_target ( ( ',' changefeed_target ) )* 'INTO' sink 'WITH' option ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
-	| 'CREATE' 'CHANGEFEED' 'FOR' changefeed_target ( ( ',' changefeed_target ) )* 'INTO' sink 
+	'CREATE' 'CHANGEFEED' 'FOR' changefeed_table_target ( ( ',' changefeed_table_target ) )* 'INTO' sink 'WITH' option '=' value ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'CREATE' 'CHANGEFEED' 'FOR' changefeed_table_target ( ( ',' changefeed_table_target ) )* 'INTO' sink 'WITH' option ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'CREATE' 'CHANGEFEED' 'FOR' changefeed_table_target ( ( ',' changefeed_table_target ) )* 'INTO' sink 'WITH' option '=' value ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'CREATE' 'CHANGEFEED' 'FOR' changefeed_table_target ( ( ',' changefeed_table_target ) )* 'INTO' sink 'WITH' option ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'CREATE' 'CHANGEFEED' 'FOR' changefeed_table_target ( ( ',' changefeed_table_target ) )* 'INTO' sink 
 	| 'CREATE' 'CHANGEFEED' 'INTO' sink 'WITH' option '=' value ( ( ',' ( option '=' value | option | option '=' value | option ) ) )* 'AS' 'SELECT' target_list 'FROM' changefeed_target_expr opt_where_clause
 	| 'CREATE' 'CHANGEFEED' 'INTO' sink 'WITH' option ( ( ',' ( option '=' value | option | option '=' value | option ) ) )* 'AS' 'SELECT' target_list 'FROM' changefeed_target_expr opt_where_clause
 	| 'CREATE' 'CHANGEFEED' 'INTO' sink 'WITH' option '=' value ( ( ',' ( option '=' value | option | option '=' value | option ) ) )* 'AS' 'SELECT' target_list 'FROM' changefeed_target_expr opt_where_clause

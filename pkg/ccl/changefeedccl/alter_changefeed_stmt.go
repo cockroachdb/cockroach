@@ -485,7 +485,7 @@ func generateAndValidateNewTargets(
 			return err
 		}
 
-		newTarget := tree.ChangefeedTarget{
+		newTarget := &tree.ChangefeedTableTarget{
 			TableName:  tablePattern,
 			FamilyName: tree.Name(targetSpec.FamilyName),
 		}
@@ -561,7 +561,15 @@ func generateAndValidateNewTargets(
 			existingTargetSpans := fetchSpansForDescs(p, existingTargetIDs)
 			var newTargetIDs []descpb.ID
 			for _, target := range v.Targets {
-				desc, found, err := getTargetDesc(ctx, p, descResolver, target.TableName)
+				tableTarget, ok := target.(*tree.ChangefeedTableTarget)
+				if !ok {
+					return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						`target %q is not a table target`,
+						tree.ErrString(target),
+					)
+				}
+				desc, found, err := getTargetDesc(ctx, p, descResolver, tableTarget.TableName)
 				if err != nil {
 					return nil, nil, hlc.Timestamp{}, nil, err
 				}
@@ -569,11 +577,11 @@ func generateAndValidateNewTargets(
 					return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
 						pgcode.InvalidParameterValue,
 						`target %q does not exist`,
-						tree.ErrString(&target),
+						tree.ErrString(target),
 					)
 				}
 
-				k := targetKey{TableID: desc.GetID(), FamilyName: target.FamilyName}
+				k := targetKey{TableID: desc.GetID(), FamilyName: tableTarget.FamilyName}
 				newTargets[k] = target
 				newTableDescs[desc.GetID()] = desc
 				newTargetIDs = append(newTargetIDs, k.TableID)
@@ -601,6 +609,14 @@ func generateAndValidateNewTargets(
 			}
 
 			for _, target := range v.Targets {
+				target, ok := target.(*tree.ChangefeedTableTarget)
+				if !ok {
+					return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						`target %q is not a table target`,
+						tree.ErrString(target),
+					)
+				}
 				desc, found, err := getTargetDesc(ctx, p, descResolver, target.TableName)
 				if err != nil {
 					return nil, nil, hlc.Timestamp{}, nil, err
@@ -615,7 +631,7 @@ func generateAndValidateNewTargets(
 						return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
 							pgcode.InvalidParameterValue,
 							`target %q does not exist`,
-							tree.ErrString(&target),
+							tree.ErrString(target),
 						)
 					}
 				}
@@ -626,7 +642,7 @@ func generateAndValidateNewTargets(
 					return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
 						pgcode.InvalidParameterValue,
 						`target %q already not watched by changefeed`,
-						tree.ErrString(&target),
+						tree.ErrString(target),
 					)
 				}
 				newTableDescs[desc.GetID()] = desc
@@ -717,6 +733,10 @@ func validateNewTargets(
 	}
 
 	for _, target := range newTargets {
+		target, ok := target.(*tree.ChangefeedTableTarget)
+		if !ok {
+			return errors.Errorf(`Target %q is not a table target.`, tree.ErrString(target))
+		}
 		targetName := target.TableName
 		_, found, err := getTargetDesc(ctx, p, descResolver, targetName)
 		if err != nil {
