@@ -92,13 +92,20 @@ const (
 // here. Lease rebalancing will see if there is scope to move some leases
 // between stores that do not have any pending changes and are not overloaded
 // (and will not get overloaded by the movement). This will happen in a
-// separate pass (i.e., not in allocatorState.rebalanceStores).
+// separate pass (i.e., not in allocatorState.rebalanceStores) -- the current plan
+// is to continue using the leaseQueue and call from it into MMA.
 //
 // Note that lease rebalancing will only move leases and not replicas. Also,
 // the rebalancing will take into account the lease preferences, as discussed
 // in https://github.com/cockroachdb/cockroach/issues/93258, and the lease
 // counts among the current candidates (see
 // https://github.com/cockroachdb/cockroach/pull/98893).
+//
+// To use MMA for replica count rebalancing, done by the replicateQueue, we
+// will also add a ReplicaCount load dimension.
+//
+// These are currently unused, since the initial integration of MMA is to
+// replace load-based rebalancing performed by the StoreRebalancer.
 type SecondaryLoadDimension uint8
 
 const (
@@ -353,9 +360,12 @@ func (mm *meansMemo) getStoreLoadSummary(
 	return summary
 }
 
-// computeMeansForStoreSet compuates the mean for the stores in means.stores.
+// computeMeansForStoreSet computes the mean for the stores in means.stores.
 // It does not do any filtering e.g. the stores can include fdDead stores. It
 // is up to the caller to adjust means.stores if it wants to do filtering.
+//
+// TODO: fix callers to exclude stores based on node failure detection, from
+// the mean.
 func computeMeansForStoreSet(
 	loadProvider loadInfoProvider, means *meansForStoreSet, scratchNodes map[roachpb.NodeID]*NodeLoad,
 ) {
@@ -413,6 +423,9 @@ func computeMeansForStoreSet(
 // what scores are roughly equal when deciding on rebalancing priority, and to
 // decide how to order the stores we will try to rebalance to. So we simply use
 // an enum.
+//
+// We use a coarse enum since it allows for more randomization when making a
+// choice, by making bigger equivalence classes.
 type loadSummary uint8
 
 const (
@@ -427,7 +440,7 @@ const (
 	// overloadSlow is a state where the store is overloaded, but not so much
 	// that it is urgent to shed load.
 	overloadSlow
-	// overloadUrgent is a state where the store is overloaded and it is urgent
+	// overloadUrgent is a state where the store is overloaded, and it is urgent
 	// to shed load.
 	overloadUrgent
 )
@@ -458,23 +471,26 @@ func loadSummaryForDimension(
 	dim LoadDimension, load LoadValue, capacity LoadValue, meanLoad LoadValue, meanUtil float64,
 ) loadSummary {
 	loadSummary := loadLow
-	// Heuristics: this is all very rough and subject to revision. There are two
-	// uses for this loadSummary: to find source stores to shed load and to
-	// decide whether the added load on a target store is acceptable (without
-	// driving it to overload). This latter use case may be better served by a
-	// distance measure since we don't want to get too close to overload since
-	// we could overshoot (an alternative to distance would be to slightly
-	// over-estimate the load addition due to a range move, and then ask for the
-	// load summary).
+
+	// Heuristics (and very much subject to revision): There are two uses for
+	// this loadSummary: to find source stores to shed load and to decide
+	// whether the added load on a target store is acceptable (without driving
+	// it to overload). This latter use case may be better served by a distance
+	// measure since we don't want to get too close to overload since we could
+	// overshoot (an alternative to distance would be to slightly over-estimate
+	// the load addition due to a range move, and then ask for the load summary
+	// -- this is what the caller implements).
 	//
-	// The load summarization should be specialized for each load dimension and
-	// secondary load dimension e.g. we want to do a different summarization for
-	// cpu and ByteSize since the consequence of running out-of-disk is much
-	// more severe.
+	// The load summarization should be even more specialized for each load
+	// dimension and secondary load dimension e.g. we would want to do a
+	// different summarization for cpu and ByteSize since the consequence of
+	// running out-of-disk is much more severe.
 	//
 	// The capacity may be UnknownCapacity. Even if we have a known capacity, we
-	// consider how far we are from the mean. The mean isn't very useful when
-	// there are heterogeneous nodes/stores.
+	// currently consider how far we are from the mean. But the mean isn't very
+	// useful when there are heterogeneous nodes/stores, so this computation
+	// will need to be revisited.
+
 	fractionAbove := float64(load)/float64(meanLoad) - 1.0
 	var fractionUsed float64
 	if capacity != UnknownCapacity {
@@ -503,36 +519,28 @@ func loadSummaryForDimension(
 	} else {
 		loadSummary = loadNormal
 	}
-	if capacity != UnknownCapacity {
+	if capacity != UnknownCapacity && meanUtil*1.1 < fractionUsed {
 		// Further tune the summary based on utilization.
 		//
-		// Currently we only tune towards overload based on utilization, and not
+		// Currently, we only tune towards overload based on utilization, and not
 		// towards underload. The idea is that the former allows us to identify
 		// overload due to heterogeneity, while we primarily still want to focus
 		// on balancing towards the mean usage.
 		if fractionUsed > 0.9 {
-			if meanUtil < fractionUsed {
-				return min(summaryUpperBound, overloadUrgent)
-			}
-			return min(summaryUpperBound, overloadSlow)
+			return min(summaryUpperBound, overloadUrgent)
 		}
 		// INVARIANT: fractionUsed <= 0.9
 		if fractionUsed > 0.75 {
 			if meanUtil*1.5 < fractionUsed {
 				return min(summaryUpperBound, overloadUrgent)
 			}
-			if meanUtil < fractionUsed {
-				return min(summaryUpperBound, overloadSlow)
-			}
-			return min(summaryUpperBound, loadSummary)
+			return min(summaryUpperBound, overloadSlow)
 		}
 		// INVARIANT: fractionUsed <= 0.75
 		if meanUtil*1.75 < fractionUsed {
 			return min(summaryUpperBound, overloadSlow)
 		}
-		if meanUtil*1.05 < fractionUsed {
-			return min(summaryUpperBound, max(loadSummary, loadNoChange))
-		}
+		return min(summaryUpperBound, max(loadSummary, loadNoChange))
 	}
 	return min(summaryUpperBound, loadSummary)
 }
