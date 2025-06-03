@@ -1,7 +1,7 @@
 diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/collate.linux.utf8_1.out --label=/mnt/data1/postgres/src/test/regress/results/collate.linux.utf8.out /mnt/data1/postgres/src/test/regress/expected/collate.linux.utf8_1.out /mnt/data1/postgres/src/test/regress/results/collate.linux.utf8.out
 --- /mnt/data1/postgres/src/test/regress/expected/collate.linux.utf8_1.out
 +++ /mnt/data1/postgres/src/test/regress/results/collate.linux.utf8.out
-@@ -7,5 +7,1027 @@
+@@ -7,5 +7,1041 @@
         (SELECT count(*) FROM pg_collation WHERE collname IN ('de_DE', 'en_US', 'sv_SE', 'tr_TR') AND collencoding = pg_char_to_encoding('UTF8')) <> 4 OR
         version() !~ 'linux-gnu'
         AS skip_test \gset
@@ -242,11 +242,25 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/collate.linux.utf
 +HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
 +-- LIKE/ILIKE
 +SELECT * FROM collate_test1 WHERE b LIKE 'abc';
-+ERROR:  unsupported comparison operator: <collatedstring{en_US}> LIKE <string>
++ a |  b  
++---+-----
++ 1 | abc
++(1 row)
++
 +SELECT * FROM collate_test1 WHERE b LIKE 'abc%';
-+ERROR:  unsupported comparison operator: <collatedstring{en_US}> LIKE <string>
++ a |  b  
++---+-----
++ 1 | abc
++(1 row)
++
 +SELECT * FROM collate_test1 WHERE b LIKE '%bc%';
-+ERROR:  unsupported comparison operator: <collatedstring{en_US}> LIKE <string>
++ a |  b  
++---+-----
++ 1 | abc
++ 2 | äbc
++ 3 | bbc
++(3 rows)
++
 +SELECT * FROM collate_test1 WHERE b ILIKE 'abc';
 +ERROR:  unsupported comparison operator: <collatedstring{en_US}> ILIKE <string>
 +SELECT * FROM collate_test1 WHERE b ILIKE 'abc%';

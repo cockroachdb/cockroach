@@ -1,7 +1,7 @@
 diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/collate.windows.win1252_1.out --label=/mnt/data1/postgres/src/test/regress/results/collate.windows.win1252.out /mnt/data1/postgres/src/test/regress/expected/collate.windows.win1252_1.out /mnt/data1/postgres/src/test/regress/results/collate.windows.win1252.out
 --- /mnt/data1/postgres/src/test/regress/expected/collate.windows.win1252_1.out
 +++ /mnt/data1/postgres/src/test/regress/results/collate.windows.win1252.out
-@@ -9,5 +9,870 @@
+@@ -9,5 +9,879 @@
         (SELECT count(*) FROM pg_collation WHERE collname IN ('de_DE', 'en_US', 'sv_SE') AND collencoding = pg_char_to_encoding('WIN1252')) <> 3 OR
         (version() !~ 'Visual C\+\+' AND version() !~ 'mingw32' AND version() !~ 'windows')
         AS skip_test \gset
@@ -207,11 +207,20 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/collate.windows.w
 +                               ^
 +-- LIKE/ILIKE
 +SELECT * FROM collate_test1 WHERE b LIKE 'abc';
-+ERROR:  unsupported comparison operator: <collatedstring{en_US}> LIKE <string>
++ a | b 
++---+---
++(0 rows)
++
 +SELECT * FROM collate_test1 WHERE b LIKE 'abc%';
-+ERROR:  unsupported comparison operator: <collatedstring{en_US}> LIKE <string>
++ a | b 
++---+---
++(0 rows)
++
 +SELECT * FROM collate_test1 WHERE b LIKE '%bc%';
-+ERROR:  unsupported comparison operator: <collatedstring{en_US}> LIKE <string>
++ a | b 
++---+---
++(0 rows)
++
 +SELECT * FROM collate_test1 WHERE b ILIKE 'abc';
 +ERROR:  unsupported comparison operator: <collatedstring{en_US}> ILIKE <string>
 +SELECT * FROM collate_test1 WHERE b ILIKE 'abc%';
