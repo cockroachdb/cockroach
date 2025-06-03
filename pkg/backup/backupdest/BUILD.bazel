@@ -56,7 +56,6 @@ go_test(
         "//pkg/ccl",
         "//pkg/cloud",
         "//pkg/cloud/impl:cloudimpl",
-        "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
