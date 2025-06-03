@@ -307,7 +307,7 @@ run stats ok
 put t=A k=k4 v=v4
 ----
 >> put t=A k=k4 v=v4
-put: lock acquisition = {k4 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1 Replicated Intent [{0 0}]}
+put: lock acquisition = {span=k4 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1 durability=Replicated strength=Intent ignored=[{0 0}]}
 stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+59 live_count=+1 live_bytes=+74 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+90
 >> at end:
 data: "k1"/5.000000000,0 -> /BYTES/v1
@@ -361,7 +361,7 @@ with t=A
   put k=k4 v=v4_prime
 ----
 >> put k=k4 v=v4_prime t=A
-put: lock acquisition = {k4 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2 Replicated Intent [{0 0}]}
+put: lock acquisition = {span=k4 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2 durability=Replicated strength=Intent ignored=[{0 0}]}
 stats: val_bytes=+17 live_bytes=+17 intent_bytes=+6
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} lock=true stat=PENDING rts=10.000000000,0 gul=0,0 isn=1
@@ -568,10 +568,10 @@ with t=A
   put k=k3 v=v3
 ----
 >> put k=k2 v=v2 t=A
-put: lock acquisition = {k2 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3 Replicated Intent [{1 2}]}
+put: lock acquisition = {span=k2 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3 durability=Replicated strength=Intent ignored=[{1 2}]}
 stats: key_bytes=+12 val_count=+1 val_bytes=+59 live_bytes=+52 gc_bytes_age=+1710 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+90
 >> put k=k3 v=v3 t=A
-put: lock acquisition = {k3 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3 Replicated Intent [{1 2}]}
+put: lock acquisition = {span=k3 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3 durability=Replicated strength=Intent ignored=[{1 2}]}
 stats: key_bytes=+12 val_count=+1 val_bytes=+59 live_bytes=+52 gc_bytes_age=+1710 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+90
 >> at end:
 data: "k1"/5.000000000,0 -> /BYTES/v1
@@ -593,11 +593,11 @@ with t=A
 ----
 >> del k=k2 t=A
 del: "k2": found key true
-del: lock acquisition = {k2 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=4 Replicated Intent [{1 2}]}
+del: lock acquisition = {span=k2 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=4 durability=Replicated strength=Intent ignored=[{1 2}]}
 stats: val_bytes=+4 live_count=-1 live_bytes=-74 gc_bytes_age=+7020 intent_bytes=-7
 >> del k=k3 t=A
 del: "k3": found key true
-del: lock acquisition = {k3 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=4 Replicated Intent [{1 2}]}
+del: lock acquisition = {span=k3 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=4 durability=Replicated strength=Intent ignored=[{1 2}]}
 stats: val_bytes=+4 live_count=-1 live_bytes=-74 gc_bytes_age=+7020 intent_bytes=-7
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=4} lock=true stat=PENDING rts=10.000000000,0 gul=0,0 isn=1
@@ -983,7 +983,7 @@ with t=C
 >> acquire_lock k=k2 str=shared t=C
 stats: lock_count=+1 lock_bytes=+69 lock_age=+88
 >> put k=k2 v=v2_2 t=C
-put: lock acquisition = {k2 id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=2 Replicated Intent []}
+put: lock acquisition = {span=k2 id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=2 durability=Replicated strength=Intent ignored=[]}
 stats: key_bytes=+12 val_count=+1 val_bytes=+59 live_bytes=+52 gc_bytes_age=+1672 intent_count=+1 intent_bytes=+21 lock_count=+1 lock_age=+88
 >> acquire_lock k=k2 str=shared t=C
 stats: no change

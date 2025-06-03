@@ -20,11 +20,11 @@ with t=A
   resolve_intent k=k
 ----
 >> put k=k v=a t=A
-put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 Replicated Intent []}
+put: lock acquisition = {span=k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 durability=Replicated strength=Intent ignored=[]}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+56 live_count=+1 live_bytes=+70 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+89
 >> del k=k t=A
 del: "k": found key true
-del: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 Replicated Intent []}
+del: lock acquisition = {span=k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=+4 live_count=-1 live_bytes=-70 gc_bytes_age=+6586 intent_bytes=-6
 >> resolve_intent k=k t=A
 resolve_intent: "k" -> resolved key = true
@@ -62,10 +62,10 @@ with t=A
 ----
 >> del k=k t=A
 del: "k": found key false
-del: lock acquisition = {k id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 Replicated Intent []}
+del: lock acquisition = {span=k id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 durability=Replicated strength=Intent ignored=[]}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+50 gc_bytes_age=+5696 intent_count=+1 intent_bytes=+12 lock_count=+1 lock_age=+89
 >> put k=k v=a t=A
-put: lock acquisition = {k id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 Replicated Intent []}
+put: lock acquisition = {span=k id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=+10 live_count=+1 live_bytes=+74 gc_bytes_age=-5696 intent_bytes=+6
 >> resolve_intent k=k t=A
 resolve_intent: "k" -> resolved key = true
@@ -103,11 +103,11 @@ with t=A
 ----
 >> del k=k t=A
 del: "k": found key false
-del: lock acquisition = {k id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 Replicated Intent []}
+del: lock acquisition = {span=k id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 durability=Replicated strength=Intent ignored=[]}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+50 gc_bytes_age=+5696 intent_count=+1 intent_bytes=+12 lock_count=+1 lock_age=+89
 >> del k=k t=A
 del: "k": found key false
-del: lock acquisition = {k id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 Replicated Intent []}
+del: lock acquisition = {span=k id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=+4 gc_bytes_age=+356
 >> resolve_intent k=k t=A
 resolve_intent: "k" -> resolved key = true
@@ -148,17 +148,17 @@ with t=A
   resolve_intent k=k
 ----
 >> put k=k v=a t=A
-put: lock acquisition = {k id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 Replicated Intent []}
+put: lock acquisition = {span=k id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 durability=Replicated strength=Intent ignored=[]}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+56 live_count=+1 live_bytes=+70 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+89
 >> del k=k t=A
 del: "k": found key true
-del: lock acquisition = {k id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 Replicated Intent []}
+del: lock acquisition = {span=k id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=+4 live_count=-1 live_bytes=-70 gc_bytes_age=+6586 intent_bytes=-6
 >> put k=k v=b t=A
-put: lock acquisition = {k id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30 Replicated Intent []}
+put: lock acquisition = {span=k id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=+12 live_count=+1 live_bytes=+86 gc_bytes_age=-6586 intent_bytes=+6
 >> put k=k v=c t=A
-put: lock acquisition = {k id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40 Replicated Intent []}
+put: lock acquisition = {span=k id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=+12 live_bytes=+12
 >> resolve_intent k=k t=A
 resolve_intent: "k" -> resolved key = true

@@ -45,7 +45,7 @@ stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 live_count=-5 l
 >> del_range_ts k=c end=k ts=5
 stats: range_key_count=+1 range_key_bytes=+22 range_val_count=+2 gc_bytes_age=+2108
 >> put k=g v=7 t=A ts=7
-put: lock acquisition = {g id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=g id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: key_bytes=+12 val_count=+1 val_bytes=+54 live_count=+1 live_bytes=+68 gc_bytes_age=-194 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+93
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 gul=0,0
