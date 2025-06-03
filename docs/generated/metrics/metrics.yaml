@@ -16913,6 +16913,38 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+    - name: storage.value_separation.blob_files.count
+      exported_name: storage_value_separation_blob_files_count
+      description: The number of blob files that are used to store separated values within the storage engine.
+      y_axis_label: Files
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: storage.value_separation.blob_files.size
+      exported_name: storage_value_separation_blob_files_size
+      description: The size of the physical blob files that are used to store separated values within the storage engine. This sum is the physical post-compression sum of value_bytes.referenced and value_bytes.unreferenced.
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: storage.value_separation.value_bytes.referenced
+      exported_name: storage_value_separation_value_bytes_referenced
+      description: The size of storage engine value bytes (pre-compression) that are stored separately in blob files and referenced by a live sstable.
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: storage.value_separation.value_bytes.unreferenced
+      exported_name: storage_value_separation_value_bytes_unreferenced
+      description: The size of storage engine value bytes (pre-compression) that are stored separately in blob files and not referenced by any live sstable. These bytes are garbage that could be reclaimed by a compaction.
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
     - name: storage.wal.bytes_in
       exported_name: storage_wal_bytes_in
       description: The number of logical bytes the storage engine has written to the WAL
