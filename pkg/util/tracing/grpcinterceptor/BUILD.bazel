@@ -12,6 +12,8 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@io_opentelemetry_go_otel//attribute",
         "@io_opentelemetry_go_otel//codes",
+        "@io_storj_drpc//:drpc",
+        "@io_storj_drpc//drpcclient",
         "@org_golang_google_grpc//:grpc",
         "@org_golang_google_grpc//metadata",
         "@org_golang_google_grpc//status",

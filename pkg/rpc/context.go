@@ -50,6 +50,7 @@ import (
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/stats"
+	"storj.io/drpc/drpcclient"
 )
 
 // NewServer sets up an RPC server. Depending on the ServerOptions, the Server
@@ -137,7 +138,12 @@ func NewServerEx(
 		}
 		return resp, nil
 	})
-	streamInterceptor = append(streamInterceptor, func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	streamInterceptor = append(streamInterceptor, func(
+		srv interface{},
+		ss grpc.ServerStream,
+		info *grpc.StreamServerInfo,
+		handler grpc.StreamHandler,
+	) error {
 		return rpcCtx.Stopper.RunTaskWithErr(ss.Context(), info.FullMethod, func(ctx context.Context) error {
 			return handler(srv, ss)
 		})
@@ -245,6 +251,9 @@ type Context struct {
 
 	clientUnaryInterceptors  []grpc.UnaryClientInterceptor
 	clientStreamInterceptors []grpc.StreamClientInterceptor
+
+	clientUnaryInterceptorsDrpc  []drpcclient.UnaryClientInterceptor
+	clientStreamInterceptorsDrpc []drpcclient.StreamClientInterceptor
 
 	// loopbackDialFn, when non-nil, is used when the target of the dial
 	// is ourselves (== AdvertiseAddr).
@@ -620,6 +629,11 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 			grpcinterceptor.ClientInterceptor(tracer, tagger))
 		rpcCtx.clientStreamInterceptors = append(rpcCtx.clientStreamInterceptors,
 			grpcinterceptor.StreamClientInterceptor(tracer, tagger))
+
+		rpcCtx.clientUnaryInterceptorsDrpc = append(rpcCtx.clientUnaryInterceptorsDrpc,
+			grpcinterceptor.ClientInterceptorDrpc(tracer, tagger))
+		rpcCtx.clientStreamInterceptorsDrpc = append(rpcCtx.clientStreamInterceptorsDrpc,
+			grpcinterceptor.StreamClientInterceptorDrpc(tracer, tagger))
 	}
 	// Note that we do not consult rpcCtx.Knobs.StreamClientInterceptor. That knob
 	// can add another interceptor, but it can only do it dynamically, based on
@@ -732,7 +746,13 @@ func makeInternalClientAdapter(
 	// interceptors, then all the server interceptors, and bottoms out with
 	// calling server.Batch().
 	batchClientHandler := getChainUnaryInvoker(clientUnaryInterceptors, 0, /* curr */
-		func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+		func(
+			ctx context.Context,
+			method string,
+			req, reply interface{},
+			cc *grpc.ClientConn,
+			opts ...grpc.CallOption,
+		) error {
 			resp, err := batchServerHandler(ctx, req)
 			if resp != nil {
 				br := resp.(*kvpb.BatchResponse)
@@ -749,7 +769,11 @@ func makeInternalClientAdapter(
 		separateTracers:          separateTracers,
 		clientStreamInterceptors: clientStreamInterceptors,
 		serverStreamInterceptors: serverStreamInterceptors,
-		batchHandler: func(ctx context.Context, ba *kvpb.BatchRequest, opts ...grpc.CallOption) (*kvpb.BatchResponse, error) {
+		batchHandler: func(
+			ctx context.Context,
+			ba *kvpb.BatchRequest,
+			opts ...grpc.CallOption,
+		) (*kvpb.BatchResponse, error) {
 			ba = ba.ShallowCopy()
 			// Mark this as originating locally, which is useful for the decision about
 			// memory allocation tracking.
@@ -896,7 +920,13 @@ func (c clientStreamInterceptorsChain) run(
 		i    int
 		next grpc.Streamer
 	}
-	state.next = func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+	state.next = func(
+		ctx context.Context,
+		desc *grpc.StreamDesc,
+		cc *grpc.ClientConn,
+		method string,
+		opts ...grpc.CallOption,
+	) (grpc.ClientStream, error) {
 		if state.i == len(c)-1 {
 			return c[state.i](ctx, desc, cc, method, streamer, opts...)
 		}
@@ -917,7 +947,13 @@ func getChainUnaryInvoker(
 	if curr == len(interceptors) {
 		return finalInvoker
 	}
-	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+	return func(
+		ctx context.Context,
+		method string,
+		req, reply interface{},
+		cc *grpc.ClientConn,
+		opts ...grpc.CallOption,
+	) error {
 		return interceptors[curr](ctx, method, req, reply, cc, getChainUnaryInvoker(interceptors, curr+1, finalInvoker), opts...)
 	}
 }
