@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package tracingdrpcinterceptorpb;
+
+service TestService {
+  // Unary RPC
+  rpc UnaryCall (RequestMessage) returns (ResponseMessage);
+
+  // Server streaming RPC
+  rpc ServerStreamingCall (RequestMessage) returns (stream ResponseMessage);
+
+  // Client streaming RPC
+  rpc ClientStreamingCall (stream RequestMessage) returns (ResponseMessage);
+
+  // Bidirectional streaming RPC
+  rpc BidiStreamingCall (stream RequestMessage) returns (stream ResponseMessage);
+}
+
+message RequestMessage {
+  string message = 1;
+}
+
+message ResponseMessage {
+  string message = 1;
+}
