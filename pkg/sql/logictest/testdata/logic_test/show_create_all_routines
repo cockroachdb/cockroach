@@ -37,7 +37,7 @@ END;
 $$ LANGUAGE PLpgSQL;
 
 
-query T colnames,rowsort
+query T colnames,nosort
 SHOW CREATE ALL ROUTINES;
 ----
 create_statement
@@ -64,7 +64,7 @@ $$;
 statement ok
 CREATE FUNCTION add_one(x FLOAT) RETURNS FLOAT AS 'SELECT x + 1' LANGUAGE SQL;
 
-query T colnames,rowsort
+query T colnames,nosort
 SHOW CREATE ALL ROUTINES;
 ----
 create_statement
@@ -138,7 +138,7 @@ CREATE FUNCTION add_one(x INT) RETURNS INT AS 'SELECT x + 1' LANGUAGE SQL;
 statement ok
 CREATE FUNCTION s.add_one(x INT) RETURNS INT AS 'SELECT x + 1' LANGUAGE SQL;
 
-query T colnames,rowsort
+query T colnames,nosort
 SHOW CREATE ALL ROUTINES;
 ----
 create_statement
