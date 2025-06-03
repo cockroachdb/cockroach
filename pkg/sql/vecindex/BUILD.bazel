@@ -31,6 +31,7 @@ go_library(
         "//pkg/sql/vecindex/vecpb",
         "//pkg/sql/vecindex/vecstore",
         "//pkg/util/buildutil",
+        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/stop",
