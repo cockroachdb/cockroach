@@ -142,6 +142,7 @@ server.log_gc.max_deletions_per_cycle	integer	1000	the maximum number of entries
 server.log_gc.period	duration	1h0m0s	the period at which log-like system tables are checked for old entries	application
 server.max_connections_per_gateway	integer	-1	the maximum number of SQL connections per gateway allowed at a given time (note: this will only limit future connection attempts and will not affect already established connections). Negative values result in unlimited number of connections. Superusers are not affected by this limit.	application
 server.max_open_transactions_per_gateway	integer	-1	the maximum number of open SQL transactions per gateway allowed at a given time. Negative values result in unlimited number of connections. Superusers are not affected by this limit.	application
+server.oidc_authentication.authorization.enabled	boolean	false	enables role synchronization based on group claims in OIDC tokens	application
 server.oidc_authentication.autologin.enabled (alias: server.oidc_authentication.autologin)	boolean	false	if true, logged-out visitors to the DB Console will be automatically redirected to the OIDC login endpoint	application
 server.oidc_authentication.button_text	string	Log in with your OIDC provider	text to show on button on DB Console login page to login with your OIDC provider (only shown if OIDC is enabled)	application
 server.oidc_authentication.claim_json_key	string		sets JSON key of principal to extract from payload after OIDC authentication completes (usually email or sid)	application
@@ -149,11 +150,13 @@ server.oidc_authentication.client.timeout	duration	15s	sets the client timeout f
 server.oidc_authentication.client_id	string		sets OIDC client id	application
 server.oidc_authentication.client_secret	string		sets OIDC client secret	application
 server.oidc_authentication.enabled	boolean	false	enables or disabled OIDC login for the DB Console	application
+server.oidc_authentication.group_claim	string	groups	sets the name of the OIDC claim that contains groups used for role mapping	application
 server.oidc_authentication.principal_regex	string	(.+)	regular expression to apply to extracted principal (see claim_json_key setting) to translate to SQL user (golang regex format, must include 1 grouping to extract)	application
 server.oidc_authentication.provider.custom_ca	string		sets the PEM encoded custom root CA for verifying certificates while authenticating through the OIDC provider	application
 server.oidc_authentication.provider_url	string		sets OIDC provider URL ({provider_url}/.well-known/openid-configuration must resolve)	application
 server.oidc_authentication.redirect_url	string	https://localhost:8080/oidc/v1/callback	sets OIDC redirect URL via a URL string or a JSON string containing a required `redirect_urls` key with an object that maps from region keys to URL strings (URLs should point to your load balancer and must route to the path /oidc/v1/callback)	application
 server.oidc_authentication.scopes	string	openid	sets OIDC scopes to include with authentication request (space delimited list of strings, required to start with `openid`)	application
+server.oidc_authentication.userinfo_group_key	string	groups	sets the field name to look for in userinfo JSON that lists groups when groups claim is absent from OIDC token	application
 server.redact_sensitive_settings.enabled	boolean	false	enables or disables the redaction of sensitive settings in the output of SHOW CLUSTER SETTINGS and SHOW ALL CLUSTER SETTINGS for users without the MODIFYCLUSTERSETTING privilege	application
 server.shutdown.connections.timeout (alias: server.shutdown.connection_wait)	duration	0s	the maximum amount of time a server waits for all SQL connections to be closed before proceeding with a drain. (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)	application
 server.shutdown.initial_wait (alias: server.shutdown.drain_wait)	duration	0s	the amount of time a server waits in an unready state before proceeding with a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting. --drain-wait is to specify the duration of the whole draining process, while server.shutdown.initial_wait is to set the wait time for health probes to notice that the node is not ready.)	application
