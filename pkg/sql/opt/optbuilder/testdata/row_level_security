@@ -115,7 +115,7 @@ update t1
       │    │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    │    └── flags: avoid-full-scan
       │    │    │    └── filters
-      │    │    │         └── false
+      │    │    │         └── ((c1:7 % 2) = 0) AND false
       │    │    └── filters
       │    │         └── c1:7 > 0
       │    └── projections
@@ -516,7 +516,7 @@ delete t1
       │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    └── flags: avoid-full-scan
       │    └── filters
-      │         └── false
+      │         └── ((c1:7 % 2) = 0) AND false
       └── filters
            └── (c1:7 >= 0) AND (c1:7 <= 20)
 
@@ -781,7 +781,7 @@ update t1
       │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    └── flags: avoid-full-scan
       │    │    └── filters
-      │    │         └── false
+      │    │         └── true AND false
       │    └── projections
       │         └── 'new val' [as=c2_new:13]
       └── projections

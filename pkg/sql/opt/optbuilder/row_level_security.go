@@ -28,11 +28,28 @@ func (b *Builder) addRowLevelSecurityFilter(
 	if b.isExemptFromRLSPolicies(tabMeta, cmdScope) {
 		return
 	}
-	scalar := b.buildRowLevelSecurityUsingExpression(tabMeta, tableScope, cmdScope)
-	if scalar != nil {
-		tableScope.expr = b.factory.ConstructSelect(tableScope.expr,
-			memo.FiltersExpr{b.factory.ConstructFiltersItem(scalar)})
+
+	var scalar opt.ScalarExpr
+	switch cmdScope {
+	case cat.PolicyScopeSelect:
+		scalar = b.genPolicyUsingExpr(tabMeta, tableScope, cat.PolicyScopeSelect)
+	case cat.PolicyScopeUpdate:
+		scalar = b.factory.ConstructAnd(
+			b.genPolicyUsingExpr(tabMeta, tableScope, cat.PolicyScopeSelect),
+			b.genPolicyUsingExpr(tabMeta, tableScope, cat.PolicyScopeUpdate),
+		)
+	case cat.PolicyScopeDelete:
+		scalar = b.factory.ConstructAnd(
+			b.genPolicyUsingExpr(tabMeta, tableScope, cat.PolicyScopeSelect),
+			b.genPolicyUsingExpr(tabMeta, tableScope, cat.PolicyScopeDelete),
+		)
+	default:
+		panic(errors.AssertionFailedf("unsupported policy command scope for filter: %v", cmdScope))
 	}
+
+	tableScope.expr = b.factory.ConstructSelect(tableScope.expr,
+		memo.FiltersExpr{b.factory.ConstructFiltersItem(scalar)})
+	b.factory.Metadata().GetRLSMeta().RefreshNoPoliciesAppliedForTable(tabMeta.MetaID)
 }
 
 // isExemptFromRLSPolicies will check if the given user is exempt from RLS policies.
@@ -65,52 +82,11 @@ func (b *Builder) isExemptFromRLSPolicies(
 	return false
 }
 
-// buildRowLevelSecurityUsingExpression generates a scalar expression for read
-// operations by combining all applicable RLS policies. An expression is always
-// returned; if no policies apply, a 'false' expression is returned.
-func (b *Builder) buildRowLevelSecurityUsingExpression(
+// genPolicyUsingExpr will generate a opt.ScalarExpr
+// for all policies that apply to the given policy command scope.
+func (b *Builder) genPolicyUsingExpr(
 	tabMeta *opt.TableMeta, tableScope *scope, cmdScope cat.PolicyCommandScope,
 ) opt.ScalarExpr {
-	combinedExpr := b.combinePolicyUsingExpressionForCommand(tabMeta, tableScope, cmdScope)
-	if combinedExpr == nil {
-		// No policies, filter out all rows by adding a "false" expression.
-		b.factory.Metadata().GetRLSMeta().NoPoliciesApplied = true
-		return memo.FalseSingleton
-	}
-	return b.buildScalar(combinedExpr, tableScope, nil, nil, nil)
-}
-
-// combinePolicyUsingExpressionForCommand generates a `tree.TypedExpr` command
-// for use in the scan. Depending on the policy command scope, it may simply
-// pass through to `buildRowLevelSecurityUsingExpressionForCommand`.
-// For other commands, the process is more complex and may involve multiple
-// calls to that function to generate the expression.
-func (b *Builder) combinePolicyUsingExpressionForCommand(
-	tabMeta *opt.TableMeta, tableScope *scope, cmdScope cat.PolicyCommandScope,
-) tree.TypedExpr {
-	// For DELETE and UPDATE, we always apply SELECT/ALL policies because
-	// reading the existing row is necessary before performing the write.
-	switch cmdScope {
-	case cat.PolicyScopeUpdate, cat.PolicyScopeDelete:
-		selectExpr := b.buildRowLevelSecurityUsingExpressionForCommand(tabMeta, tableScope, cat.PolicyScopeSelect)
-		if selectExpr == nil {
-			return selectExpr
-		}
-		updateExpr := b.buildRowLevelSecurityUsingExpressionForCommand(tabMeta, tableScope, cmdScope)
-		if updateExpr == nil {
-			return nil
-		}
-		return tree.NewTypedAndExpr(selectExpr, updateExpr)
-	default:
-		return b.buildRowLevelSecurityUsingExpressionForCommand(tabMeta, tableScope, cmdScope)
-	}
-}
-
-// buildRowLevelSecurityUsingExpressionForCommand will generate a tree.TypedExpr
-// for all policies that apply to the given policy command scope.
-func (b *Builder) buildRowLevelSecurityUsingExpressionForCommand(
-	tabMeta *opt.TableMeta, tableScope *scope, cmdScope cat.PolicyCommandScope,
-) tree.TypedExpr {
 	var policiesUsed opt.PolicyIDSet
 	var combinedExpr tree.TypedExpr
 	policies := tabMeta.Table.Policies()
@@ -147,8 +123,8 @@ func (b *Builder) buildRowLevelSecurityUsingExpressionForCommand(
 		buildForPolicy(policy, false /* restrictive */)
 	}
 	if combinedExpr == nil {
-		// No permissive policies. Return an empty expr to force the caller to generate a deny-all expression.
-		return nil
+		// No permissive policies. Return the false expr as a deny-all expression.
+		return memo.FalseSingleton
 	}
 	for _, policy := range policies.Restrictive {
 		buildForPolicy(policy, true /* restrictive */)
@@ -159,7 +135,7 @@ func (b *Builder) buildRowLevelSecurityUsingExpressionForCommand(
 		panic(errors.AssertionFailedf("at least one applicable policy should have been found"))
 	}
 	b.factory.Metadata().GetRLSMeta().AddPoliciesUsed(tabMeta.MetaID, policiesUsed, true /* applyFilterExpr */)
-	return combinedExpr
+	return b.buildScalar(combinedExpr, tableScope, nil, nil, nil)
 }
 
 // policyAppliesToCommandScope checks whether a given PolicyCommandScope applies
