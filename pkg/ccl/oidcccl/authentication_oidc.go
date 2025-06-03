@@ -19,12 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
+	secuser "github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/ui"
@@ -131,6 +132,7 @@ type oidcAuthenticationServer struct {
 	// to help us gracefully recover from auth provider downtime without operator intervention.
 	enabled     bool
 	initialized bool
+	execCfg     *sql.ExecutorConfig
 }
 
 type oidcAuthenticationConf struct {
@@ -152,6 +154,9 @@ type oidcAuthenticationConf struct {
 	generateJWTAuthTokenSQLPort  int64
 	providerCustomCA             string
 	httpClient                   *httputil.Client
+	authZEnabled                 bool
+	groupClaim                   string
+	userinfoGroupKey             string
 }
 
 // GetOIDCConf is used to extract certain parts of the OIDC
@@ -189,35 +194,41 @@ type oidcManager struct {
 	httpClient   *httputil.Client
 }
 
-func (o *oidcManager) ExchangeVerifyGetClaims(
-	ctx context.Context, code string, idTokenKey string,
-) (map[string]json.RawMessage, error) {
+// ExchangeVerifyGetTokens exchanges the auth-code, verifies the ID-token that
+// comes back and returns:
+//   - the decoded claims (for username / group extraction)
+//   - the raw id token string
+//   - the *oauth2.Token this carries the access token that must be used
+//     against the /userinfo endpoint
+func (o *oidcManager) ExchangeVerifyGetTokens(
+	ctx context.Context, code, idTokenKey string,
+) (map[string]json.RawMessage, string, *oauth2.Token, error) {
 	credentials, err := o.Exchange(ctx, code)
 	if err != nil {
 		log.Errorf(ctx, "OIDC: failed to exchange code for token: %v", err)
-		return nil, err
+		return nil, "", nil, err
 	}
 
 	rawIDToken, ok := credentials.Extra(idTokenKey).(string)
 	if !ok {
 		err := errors.New("OIDC: failed to extract ID token from the token credentials")
 		log.Error(ctx, "OIDC: failed to extract ID token from the token credentials")
-		return nil, err
+		return nil, "", nil, err
 	}
 
 	idToken, err := o.Verify(ctx, rawIDToken)
 	if err != nil {
 		log.Errorf(ctx, "OIDC: unable to verify ID token: %v", err)
-		return nil, err
+		return nil, "", nil, err
 	}
 
 	var claims map[string]json.RawMessage
 	if err := idToken.Claims(&claims); err != nil {
 		log.Errorf(ctx, "OIDC: unable to deserialize token claims: %v", err)
-		return nil, err
+		return nil, "", nil, err
 	}
 
-	return claims, nil
+	return claims, rawIDToken, credentials, nil
 }
 
 func (o *oidcManager) Verify(ctx context.Context, s string) (*oidc.IDToken, error) {
@@ -251,7 +262,7 @@ type IOIDCManager interface {
 	Verify(context.Context, string) (*oidc.IDToken, error)
 	Exchange(context.Context, string, ...oauth2.AuthCodeOption) (*oauth2.Token, error)
 	AuthCodeURL(string, ...oauth2.AuthCodeOption) string
-	ExchangeVerifyGetClaims(context.Context, string, string) (map[string]json.RawMessage, error)
+	ExchangeVerifyGetTokens(context.Context, string, string) (map[string]json.RawMessage, string, *oauth2.Token, error)
 }
 
 var _ IOIDCManager = &oidcManager{}
@@ -337,6 +348,9 @@ func reloadConfigLocked(
 			httputil.WithDialerTimeout(clientTimeout),
 			httputil.WithCustomCAPEM(OIDCProviderCustomCA.Get(&st.SV)),
 		),
+		authZEnabled:     OIDCAuthZEnabled.Get(&st.SV),
+		groupClaim:       OIDCAuthGroupClaim.Get(&st.SV),
+		userinfoGroupKey: OIDCAuthUserinfoGroupKey.Get(&st.SV),
 	}
 
 	if !oidcAuthServer.conf.enabled && conf.enabled {
@@ -421,8 +435,11 @@ var ConfigureOIDC = func(
 	userLoginFromSSO func(ctx context.Context, username string) (*http.Cookie, error),
 	ambientCtx log.AmbientContext,
 	cluster uuid.UUID,
+	execCfg *sql.ExecutorConfig,
 ) (authserver.OIDC, error) {
-	oidcAuthentication := &oidcAuthenticationServer{}
+	oidcAuthentication := &oidcAuthenticationServer{
+		execCfg: execCfg,
+	}
 
 	// Don't want to use GRPC here since these endpoints require HTTP-Redirect behaviors and the
 	// callback endpoint will be receiving specialized parameters that grpc-gateway will only get
@@ -493,7 +510,9 @@ var ConfigureOIDC = func(
 			return
 		}
 
-		claims, err := oidcAuthentication.manager.ExchangeVerifyGetClaims(ctx, r.URL.Query().Get(codeKey), idTokenKey)
+		claims, rawIDToken, oauthTok, err := oidcAuthentication.manager.
+			ExchangeVerifyGetTokens(ctx, r.URL.Query().Get(codeKey), idTokenKey)
+
 		if err != nil {
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
@@ -513,6 +532,13 @@ var ConfigureOIDC = func(
 		)
 		if err != nil {
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+			return
+		}
+
+		// OIDC authorization
+		if err := oidcAuthentication.reconcileRoles(ctx, rawIDToken, oauthTok, username); err != nil {
+			log.Errorf(ctx, "OIDC: %v", err)
+			http.Error(w, genericCallbackHTTPError, http.StatusForbidden)
 			return
 		}
 
@@ -705,7 +731,7 @@ var ConfigureOIDC = func(
 					}
 				} else {
 					log.Infof(ctx, "OIDC: no identity map found for issuer %s; using %s without mapping", token.Issuer, tokenPrincipal)
-					if username, err := username.MakeSQLUsernameFromUserInput(tokenPrincipal, username.PurposeValidation); err != nil {
+					if username, err := secuser.MakeSQLUsernameFromUserInput(tokenPrincipal, secuser.PurposeValidation); err != nil {
 						acceptedUsernames = append(acceptedUsernames, username.Normalized())
 					}
 				}
@@ -827,6 +853,15 @@ var ConfigureOIDC = func(
 		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
 	OIDCAuthClientTimeout.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
+	})
+	OIDCAuthZEnabled.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
+	})
+	OIDCAuthGroupClaim.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
+	})
+	OIDCAuthUserinfoGroupKey.SetOnChange(&st.SV, func(ctx context.Context) {
 		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
 
