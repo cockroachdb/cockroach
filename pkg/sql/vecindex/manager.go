@@ -181,7 +181,7 @@ func (m *Manager) GetWithDesc(
 
 			return cspann.NewIndex(
 				m.ctx, store, quantizer, config.Seed,
-				m.getIndexOptions(config, store.ReadOnly()), m.stopper,
+				m.getIndexOptions(&config, store.ReadOnly()), m.stopper,
 			)
 		},
 	)
@@ -214,13 +214,13 @@ func (m *Manager) Get(
 			// the Get call.
 			return cspann.NewIndex(
 				m.ctx, store, quantizer, config.Seed,
-				m.getIndexOptions(config, store.ReadOnly()), m.stopper,
+				m.getIndexOptions(&config, store.ReadOnly()), m.stopper,
 			)
 		},
 	)
 }
 
-func (m *Manager) getIndexOptions(config vecpb.Config, readOnly bool) *cspann.IndexOptions {
+func (m *Manager) getIndexOptions(config *vecpb.Config, readOnly bool) *cspann.IndexOptions {
 	return &cspann.IndexOptions{
 		RotAlgorithm:     config.RotAlgorithm,
 		MinPartitionSize: int(config.MinPartitionSize),
