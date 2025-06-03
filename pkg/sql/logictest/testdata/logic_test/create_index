@@ -1,6 +1,3 @@
-# LogicTest: !local-mixed-25.1
-# TODO(mw5h): Remove this once 25.2 is our minimum supported version.
-
 statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY,

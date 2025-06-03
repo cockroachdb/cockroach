@@ -306,7 +306,7 @@ func (r *Registry) insertRequestInternal(
 	redacted bool,
 	username string,
 ) (RequestID, error) {
-	if username != "" && !r.st.Version.IsActive(ctx, clusterversion.V25_2_AddUsernameToStmtDiagRequest) {
+	if username != "" && !r.st.Version.IsActive(ctx, clusterversion.TODO_Delete_V25_2_AddUsernameToStmtDiagRequest) {
 		// Setting username is only supported after 25.2 version migrations have
 		// completed.
 		//
@@ -690,7 +690,7 @@ func (r *Registry) InsertStatementDiagnostics(
 // updates r.mu.requests accordingly.
 func (r *Registry) pollRequests(ctx context.Context) error {
 	var rows []tree.Datums
-	isUsernameSet := r.st.Version.IsActive(ctx, clusterversion.V25_2_AddUsernameToStmtDiagRequest)
+	isUsernameSet := r.st.Version.IsActive(ctx, clusterversion.TODO_Delete_V25_2_AddUsernameToStmtDiagRequest)
 
 	// Loop until we run the query without straddling an epoch increment.
 	for {

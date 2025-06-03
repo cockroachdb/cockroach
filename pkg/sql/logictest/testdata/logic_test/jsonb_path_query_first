@@ -1,5 +1,3 @@
-# LogicTest: !local-mixed-25.1
-
 query T
 SELECT jsonb_path_query_first('[1, 2, 3]', '$[*]');
 ----
