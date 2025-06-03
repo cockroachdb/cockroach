@@ -70,7 +70,7 @@ func TestRangeDescriptorStringRedact(t *testing.T) {
 	}
 
 	require.EqualValues(t,
-		`r1:‹{c-g}› [(n1,s1):?, (n2,s2):?, (n3,s3):?, next=0, gen=0]`,
+		`r1:{‹c›-‹g›} [(n1,s1):?, (n2,s2):?, (n3,s3):?, next=0, gen=0]`,
 		redact.Sprint(desc),
 	)
 }

@@ -172,7 +172,7 @@ sequence req=req6 eval-kind=pess-after-opt
 ----
 [8] sequence req6: re-sequencing request after optimistic sequencing failed
 [8] sequence req6: optimistic failed, so waiting for latches
-[8] sequence req6: waiting to acquire read latch ‹{a-e}›@12.000000000,1 for request Scan [‹"a"›,‹"e"›), [txn: 00000002], held by write latch ‹d›@10.000000000,1 for request Put [‹"d"›], [txn: 00000003]
+[8] sequence req6: waiting to acquire read latch {‹a›-‹e›}@12.000000000,1 for request Scan [‹"a"›,‹"e"›), [txn: 00000002], held by write latch ‹d›@10.000000000,1 for request Put [‹"d"›], [txn: 00000003]
 [8] sequence req6: blocked on select in spanlatch.(*Manager).waitForSignal
 
 debug-advance-clock ts=123
