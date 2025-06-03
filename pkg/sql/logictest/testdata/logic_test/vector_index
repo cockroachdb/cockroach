@@ -735,7 +735,7 @@ SELECT a, v, round(v <=> '[2, 2]', 2) dist FROM distance_metrics ORDER BY v <=> 
 
 # Results using InnerProduct distance.
 query ITF rowsort
-SELECT a, v, round(v <#> '[2, 2]', 2) dist FROM distance_metrics ORDER BY v <#> '[2, 2]' LIMIT 5;
+SELECT a, v, round(v <#> '[2, 2]', 2) dist FROM distance_metrics@idx3 ORDER BY v <#> '[2, 2]' LIMIT 5;
 ----
 4  [4,4]    -16
 3  [2,2]    -8

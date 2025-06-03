@@ -279,7 +279,7 @@ func Random(rng *rand.Rand, maxDim int) T {
 	v := make(T, n)
 	for i := range v {
 		for {
-			v[i] = math.Float32frombits(rng.Uint32())
+			v[i] = float32(rng.NormFloat64())
 			if math.IsNaN(float64(v[i])) || math.IsInf(float64(v[i]), 0) {
 				continue
 			}
