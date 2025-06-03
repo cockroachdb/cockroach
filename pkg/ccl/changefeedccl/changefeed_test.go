@@ -11671,3 +11671,69 @@ func TestCloudstorageParallelCompression(t *testing.T) {
 		}
 	})
 }
+
+func TestDuplicateChangefeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, stop := makeServer(t)
+	defer stop()
+	sqlDB := sqlutils.MakeSQLRunner(s.DB)
+	var jobID jobspb.JobID
+
+	// Test for resuming existing changefeed
+	sqlDB.Exec(t, `CREATE TABLE t0 (a INT PRIMARY KEY, b STRING)`)
+	jobID = expectNoticeGetJobID(t, s.Server, `CREATE CHANGEFEED FOR d.t0 INTO 'null://'`, false, jobspb.InvalidJobID)
+	sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+	sqlDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT count(*) FROM [SHOW JOBS] WHERE job_id = %d and job_type='CHANGEFEED' and status='paused'", jobID), [][]string{{"1"}})
+	sqlDB.Exec(t, `SET CLUSTER SETTING feature.changefeed.duplicate_check.enabled = true`)
+	jobID1 := jobID
+	jobID = min(jobID, expectNoticeGetJobID(t, s.Server, `CREATE CHANGEFEED FOR d.t0 INTO 'null://'`, false, jobspb.InvalidJobID))
+	sqlDB.Exec(t, `RESUME JOB $1`, jobID1)
+	sqlDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT count(*) FROM [SHOW JOBS] WHERE job_id = %d and job_type='CHANGEFEED' and status='running'", jobID1), [][]string{{"1"}})
+	time.Sleep(3 * time.Second) // Resuming job - status is set to running before the code for resuming the job runs. So, takes a few seconds before it can be tracked for dups.
+	expectNoticeGetJobID(t, s.Server, `CREATE CHANGEFEED FOR d.t0 INTO 'null://'`, true, jobID)
+
+	// Test for creating new changefeed
+	sqlDB.Exec(t, `CREATE TABLE t1 (a INT PRIMARY KEY, b STRING)`)
+	jobID = expectNoticeGetJobID(t, s.Server, `CREATE CHANGEFEED FOR d.t1 INTO 'null://'`, false, jobspb.InvalidJobID)
+	sqlDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT count(*) FROM [SHOW JOBS] WHERE job_id = %d and job_type='CHANGEFEED' and status='running'", jobID), [][]string{{"1"}})
+	expectNoticeGetJobID(t, s.Server, `CREATE CHANGEFEED FOR d.t1 INTO 'null://'`, true, jobID)
+
+	// Test for notifying LOWEST matching jobID from duplicate jobs
+	sqlDB.Exec(t, `PAUSE ALL CHANGEFEED JOBS`)
+	sqlDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT count(*) FROM [SHOW JOBS] WHERE job_id = %d and job_type='CHANGEFEED' and status='running'", jobID), [][]string{{"0"}})
+	jobID = expectNoticeGetJobID(t, s.Server, `CREATE CHANGEFEED FOR d.t1 INTO 'null://'`, false, jobspb.InvalidJobID)
+	for i := 0; i < 10; i++ {
+		tempJobID := expectNoticeGetJobID(t, s.Server, `CREATE CHANGEFEED FOR d.t1 INTO 'null://'`, true, jobID)
+		if jobID == jobspb.InvalidJobID {
+			jobID = tempJobID
+		}
+		jobID = min(jobID, tempJobID)
+	}
+
+	// Test for multiple tables and ordering
+	sqlDB.Exec(t, `CREATE TABLE t2 (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.Exec(t, `INSERT INTO t2 VALUES (0, 'initial')`)
+	jobID = expectNoticeGetJobID(t, s.Server, "CREATE CHANGEFEED FOR d.t1, d.t2 INTO 'null://'", false, jobspb.InvalidJobID)
+	jobID = min(jobID, expectNoticeGetJobID(t, s.Server, "CREATE CHANGEFEED FOR d.t1, d.t2 INTO 'null://'", true, jobID))
+	expectNoticeGetJobID(t, s.Server, "CREATE CHANGEFEED FOR d.t2, d.t1 INTO 'null://'", true, jobID)
+
+	// Test for changing table name
+	sqlDB.Exec(t, `ALTER TABLE t2 RENAME TO t100`)
+	expectNoticeGetJobID(t, s.Server, "CREATE CHANGEFEED FOR d.t100 INTO 'null://'", false, jobspb.InvalidJobID)
+	sqlDB.Exec(t, `ALTER TABLE t100 RENAME TO t2`)
+
+	// Test for alter changefeed
+	sqlDB.Exec(t, `CREATE TABLE t3 (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.Exec(t, `CREATE TABLE t4 (a INT PRIMARY KEY, b STRING)`)
+	jobID = expectNoticeGetJobID(t, s.Server, "CREATE CHANGEFEED FOR d.t3, d.t4 INTO 'null://'", false, jobspb.InvalidJobID)
+	sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+	sqlDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT count(*) FROM [SHOW JOBS] WHERE job_id = %d and job_type='CHANGEFEED' and status='paused'", jobID), [][]string{{"1"}})
+	expectNotice(t, s.Server, fmt.Sprintf("ALTER CHANGEFEED %d DROP d.t4", jobID), "(no notice)")
+	expectNotice(t, s.Server, fmt.Sprintf("RESUME JOB %d", jobID), "(no notice)")
+	time.Sleep(3 * time.Second) // Resuming job - status is set to running before the code for resuming the job runs. So, takes a few seconds before it can be tracked for dups.
+	sqlDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT count(*) FROM [SHOW JOBS] WHERE job_id = %d and job_type='CHANGEFEED' and status='running'", jobID), [][]string{{"1"}})
+	expectNoticeGetJobID(t, s.Server, "CREATE CHANGEFEED FOR d.t3 INTO 'null://'", true, jobID)
+
+}
