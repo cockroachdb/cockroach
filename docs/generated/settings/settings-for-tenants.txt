@@ -139,6 +139,7 @@ server.log_gc.max_deletions_per_cycle	integer	1000	the maximum number of entries
 server.log_gc.period	duration	1h0m0s	the period at which log-like system tables are checked for old entries	application
 server.max_connections_per_gateway	integer	-1	the maximum number of SQL connections per gateway allowed at a given time (note: this will only limit future connection attempts and will not affect already established connections). Negative values result in unlimited number of connections. Superusers are not affected by this limit.	application
 server.max_open_transactions_per_gateway	integer	-1	the maximum number of open SQL transactions per gateway allowed at a given time. Negative values result in unlimited number of connections. Superusers are not affected by this limit.	application
+server.oidc_authentication.authorization.enabled	boolean	false	enables role synchronisation based on group claims in OIDC tokens	application
 server.oidc_authentication.autologin.enabled (alias: server.oidc_authentication.autologin)	boolean	false	if true, logged-out visitors to the DB Console will be automatically redirected to the OIDC login endpoint	application
 server.oidc_authentication.button_text	string	Log in with your OIDC provider	text to show on button on DB Console login page to login with your OIDC provider (only shown if OIDC is enabled)	application
 server.oidc_authentication.claim_json_key	string		sets JSON key of principal to extract from payload after OIDC authentication completes (usually email or sid)	application
@@ -146,6 +147,7 @@ server.oidc_authentication.client.timeout	duration	15s	sets the client timeout f
 server.oidc_authentication.client_id	string		sets OIDC client id	application
 server.oidc_authentication.client_secret	string		sets OIDC client secret	application
 server.oidc_authentication.enabled	boolean	false	enables or disabled OIDC login for the DB Console	application
+server.oidc_authentication.group_claim	string	groups	sets the name of the OIDC claim that contains groups used for role mapping	application
 server.oidc_authentication.principal_regex	string	(.+)	regular expression to apply to extracted principal (see claim_json_key setting) to translate to SQL user (golang regex format, must include 1 grouping to extract)	application
 server.oidc_authentication.provider.custom_ca	string		sets the PEM encoded custom root CA for verifying certificates while authenticating through the OIDC provider	application
 server.oidc_authentication.provider_url	string		sets OIDC provider URL ({provider_url}/.well-known/openid-configuration must resolve)	application
