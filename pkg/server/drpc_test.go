@@ -67,7 +67,7 @@ func TestDRPCBatchServer(t *testing.T) {
 
 		desc := c.LookupRangeOrFatal(t, c.ScratchRange(t))
 
-		client := kvpb.NewDRPCBatchClient(conn)
+		client := kvpb.NewDRPCKVBatchClient(conn)
 		ba := &kvpb.BatchRequest{}
 		ba.RangeID = desc.RangeID
 		var ok bool
@@ -121,7 +121,7 @@ func TestStreamContextCancel(t *testing.T) {
 	}()
 
 	desc := c.LookupRangeOrFatal(t, c.ScratchRange(t))
-	client := kvpb.NewDRPCBatchClient(conn)
+	client := kvpb.NewDRPCKVBatchClient(conn)
 
 	singleRequest := func() {
 		streamCtx, streamCtxCancel := context.WithCancel(ctx)

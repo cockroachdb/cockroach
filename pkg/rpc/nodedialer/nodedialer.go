@@ -167,7 +167,7 @@ func (n *Dialer) DialInternalClient(
 		client = &unaryDRPCBatchServiceToInternalAdapter{
 			useStreamPoolClient:      useStreamPoolClient,
 			RestrictedInternalClient: client, // for RangeFeed only
-			drpcClient:               kvpb.NewDRPCBatchClient(dconn),
+			drpcClient:               kvpb.NewDRPCKVBatchClient(dconn),
 			drpcStreamPool:           drpcBatchStreamPool,
 		}
 		return client, nil

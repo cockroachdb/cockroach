@@ -8,21 +8,17 @@ load(":gen.bzl", "batch_gen")
 go_library(
     name = "kvpb",
     srcs = [
-        ":gen-batch-generated",  # keep
-        ":gen-errordetailtype-stringer",  # keep
-        ":gen-method-stringer",  # keep
         "ambiguous_result_error.go",
         "api.go",
-        # DRPC protobuf file (api_drpc.pb.go) is currently generated manually.
-        # TODO (chandrat): Remove this once DRPC protobuf generation is
-        # integrated into the build process.
-        "api_drpc_hacky.go",
         "batch.go",
         "data.go",
         "errors.go",
         "method.go",
         "node_decommissioned_error.go",
         "replica_unavailable_error.go",
+        ":gen-batch-generated",  # keep
+        ":gen-errordetailtype-stringer",  # keep
+        ":gen-method-stringer",  # keep
     ],
     embed = [":kvpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvpb",
@@ -52,8 +48,6 @@ go_library(
         "@com_github_gogo_protobuf//types",
         "@com_github_gogo_status//:status",
         "@com_github_golang_mock//gomock",  # keep
-        "@io_storj_drpc//:drpc",
-        "@io_storj_drpc//drpcerr",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//metadata",  # keep
     ],
