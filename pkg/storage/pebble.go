@@ -12,6 +12,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -224,6 +225,19 @@ func RegisterCompressionAlgorithmClusterSetting(
 	)
 }
 
+var defaultCompressionAlgorithm = func() CompressionAlgorithm {
+	if runtime.GOARCH == "amd64" {
+		// We prefer MinLZ on amd64 because it is slightly superior to Snappy in
+		// almost all cases (both in terms of speed and compression ratio).
+		//
+		// Only amd64 has an optimized assembly MinLZ implementation; the Go
+		// implementation is significantly slower, especially when decompressing;
+		// see https://github.com/minio/minlz#protobuf-sample
+		return CompressionAlgorithmMinLZ
+	}
+	return CompressionAlgorithmSnappy
+}()
+
 // CompressionAlgorithmStorage determines the compression algorithm used to
 // compress data blocks when writing sstables for use in a Pebble store (written
 // directly, or constructed for ingestion on a remote store via AddSSTable).
@@ -232,7 +246,7 @@ func RegisterCompressionAlgorithmClusterSetting(
 var CompressionAlgorithmStorage = RegisterCompressionAlgorithmClusterSetting(
 	"storage.sstable.compression_algorithm",
 	`determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store;`,
-	CompressionAlgorithmMinLZ, // Default.
+	defaultCompressionAlgorithm,
 )
 
 // CompressionAlgorithmBackupStorage determines the compression algorithm used
@@ -242,7 +256,7 @@ var CompressionAlgorithmStorage = RegisterCompressionAlgorithmClusterSetting(
 var CompressionAlgorithmBackupStorage = RegisterCompressionAlgorithmClusterSetting(
 	"storage.sstable.compression_algorithm_backup_storage",
 	`determines the compression algorithm to use when compressing sstable data blocks for backup row data storage;`,
-	CompressionAlgorithmMinLZ, // Default.
+	defaultCompressionAlgorithm,
 )
 
 // CompressionAlgorithmBackupTransport determines the compression algorithm used
@@ -255,7 +269,7 @@ var CompressionAlgorithmBackupStorage = RegisterCompressionAlgorithmClusterSetti
 var CompressionAlgorithmBackupTransport = RegisterCompressionAlgorithmClusterSetting(
 	"storage.sstable.compression_algorithm_backup_transport",
 	`determines the compression algorithm to use when compressing sstable data blocks for backup transport;`,
-	CompressionAlgorithmMinLZ, // Default.
+	defaultCompressionAlgorithm,
 )
 
 func getCompressionAlgorithm(
