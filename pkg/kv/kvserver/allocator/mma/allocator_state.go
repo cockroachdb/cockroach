@@ -42,11 +42,8 @@ var _ Allocator = &allocatorState{}
 
 // TODO(sumeer): temporary constants.
 const (
-	RebalanceInterval                  time.Duration = 10 * time.Second
-	rateChangeLimiterGCInterval                      = 15 * time.Second
-	numAllocators                                    = 20
-	maxFractionPendingThreshold                      = 0.1
-	waitBeforeSheddingRemoteReplicaCPU               = 120 * time.Second
+	RebalanceInterval           time.Duration = 10 * time.Second
+	maxFractionPendingThreshold               = 0.1
 )
 
 func NewAllocatorState(ts timeutil.TimeSource, rand *rand.Rand) *allocatorState {
@@ -624,20 +621,12 @@ const (
 // this set it will exclude candidates that are overloaded or have too many
 // pending changes, and then pick randomly among the least loaded ones.
 //
-// Our enum for loadSummary is quite coarse. This has pros and cons: the pro
-// is that the coarseness increases the probability that we do eventually find
-// something that can handle the multi-dimensional load of this range. The con
-// is that we may not select the candidate that is the very best. For instance
-// if a new store is added it will also be loadLow like many others, but we
-// want more ranges to go to it. One refinement we can try is to make the
-// summary more fine-grained, and increment a count of times this store has
-// tried to shed this range and failed, and widen the scope of what we pick
-// from after some failures. Another refinement is to initially prefer
-// candidates that are the lowest along the dimension that the overloaded
-// store is trying to shed.
-//
-// TODO(sumeer): implement that refinement after some initial
-// experimentation and learnings.
+// Our enum for loadSummary is quite coarse. This has pros and cons: the pros
+// are (a) the coarseness increases the probability that we do eventually find
+// something that can handle the multidimensional load of this range, (b)
+// random picking in a large set results in different stores with allocators
+// making different decisions, which reduces thrashing. The con is that we may
+// not select the candidate that is the very best.
 //
 // The caller must not exclude any candidates based on load or
 // maxFractionPendingIncrease. That filtering must happen here. Depending on
