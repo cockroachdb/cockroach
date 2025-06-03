@@ -2313,6 +2313,14 @@ WHERE id = 't'::regclass::oid
 ----
 GENERATED_ALWAYS
 
+skipif config local-schema-locked
+statement error pq: identity column "b" of relation "t" is not backed by a sequence
+ALTER TABLE t ALTER COLUMN b DROP IDENTITY;
+
+skipif config local-schema-locked
+statement error pq: identity column "b" of relation "t" is not backed by a sequence
+ALTER TABLE t ALTER COLUMN b SET CYCLE;
+
 statement ok
 DROP TABLE t;
 
