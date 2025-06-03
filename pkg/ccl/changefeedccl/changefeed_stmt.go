@@ -73,6 +73,12 @@ var featureChangefeedEnabled = settings.RegisterBoolSetting(
 	featureflag.FeatureFlagEnabledDefault,
 	settings.WithPublic)
 
+var featureChangefeedDuplicateCheckEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"feature.changefeed.duplicate_check.enabled",
+	"set to true to enable duplicate check for changefeeds, false to disable; default is false",
+	false)
+
 func init() {
 	sql.AddPlanHook("changefeed", changefeedPlanHook, changefeedTypeCheck)
 	jobs.RegisterConstructor(
@@ -136,6 +142,28 @@ func changefeedTypeCheck(
 		return true, sinklessHeader, nil
 	}
 	return true, withSinkHeader, nil
+}
+
+func maybeShowDuplicateChangefeedNotice(
+	ctx context.Context, jr *jobs.Record, txn isql.Txn, p sql.PlanHookState,
+) error {
+	// For purposes of duplicates, an identity is a combination of sinkURI and target table IDs.
+	// The changefeed identity is hashed and added to the job_info table on (1) new changefeed creation,
+	//  (2) when a changefeed job is altered, and (3) when a changefeed job is resumed.
+	// On changefeed creation, active jobs are searched for matching changefeed identity hashes.
+	// This is to raise a notice if a duplicate changefeed is created.
+
+	found, err := p.ExecCfg().JobRegistry.IsPresentDuplicateChangefeedJob(ctx, *jr, txn)
+	if err != nil {
+		return err
+	}
+	if found {
+		err = p.SendClientNotice(ctx, pgnotice.Newf("You have created a duplicate changefeed"), true)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func maybeShowCursorAgeWarning(
@@ -345,6 +373,14 @@ func changefeedPlanHook(
 			if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jr.JobID, txn, *jr); err != nil {
 					return err
+				}
+				if featureChangefeedDuplicateCheckEnabled.Get(&p.ExecCfg().Settings.SV) {
+					if err := maybeShowDuplicateChangefeedNotice(ctx, jr, txn, p); err != nil {
+						return err
+					}
+					if err := p.ExecCfg().JobRegistry.AddChangefeedIdentityHashToJobInfo(ctx, sj.Details().(jobspb.ChangefeedDetails), sj.InfoStorage(txn), txn); err != nil {
+						return err
+					}
 				}
 				if ptr != nil {
 					return p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
@@ -1452,6 +1488,15 @@ func (b *changefeedResumer) resumeWithRetries(
 			startedCh := make(chan tree.Datums, 1)
 			if knobs != nil && knobs.BeforeDistChangefeed != nil {
 				knobs.BeforeDistChangefeed()
+			}
+
+			if featureChangefeedDuplicateCheckEnabled.Get(&execCfg.Settings.SV) {
+				err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+					return execCfg.JobRegistry.AddChangefeedIdentityHashToJobInfo(ctx, b.job.Details().(jobspb.ChangefeedDetails), b.job.InfoStorage(txn), txn)
+				})
+				if err != nil {
+					return err
+				}
 			}
 
 			confPoller := make(chan struct{})

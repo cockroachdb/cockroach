@@ -11671,3 +11671,58 @@ func TestCloudstorageParallelCompression(t *testing.T) {
 		}
 	})
 }
+
+func TestDuplicateChangefeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, stop := makeServer(t)
+	defer stop()
+	sqlDB := sqlutils.MakeSQLRunner(s.DB)
+	duplicateNoticeStr := "You have created a duplicate changefeed"
+	var jobID int
+
+	// Test for resuming existing changefeed
+	sqlDB.Exec(t, `CREATE TABLE t0 (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.QueryRow(t, `CREATE CHANGEFEED FOR d.t0 INTO 'null://'`).Scan(&jobID)
+	sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+	sqlDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT count(*) FROM [SHOW JOBS] WHERE job_id = %d and job_type='CHANGEFEED' and status='paused'", jobID), [][]string{{"1"}})
+	sqlDB.Exec(t, `SET CLUSTER SETTING feature.changefeed.duplicate_check.enabled = true`)
+	expectNotice(t, s.Server, `CREATE CHANGEFEED FOR d.t0 INTO 'null://'`, "(no notice)")
+	sqlDB.Exec(t, `RESUME JOB $1`, jobID)
+	sqlDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT count(*) FROM [SHOW JOBS] WHERE job_id = %d and job_type='CHANGEFEED' and status='running'", jobID), [][]string{{"1"}})
+	expectNotice(t, s.Server, `CREATE CHANGEFEED FOR d.t0 INTO 'null://'`, duplicateNoticeStr)
+
+	// Test for creating new changefeed
+	sqlDB.Exec(t, `CREATE TABLE t1 (a INT PRIMARY KEY, b STRING)`)
+	expectNotice(t, s.Server, `CREATE CHANGEFEED FOR d.t1 INTO 'null://'`, "(no notice)")
+	sqlDB.QueryRow(t, `CREATE CHANGEFEED FOR d.t1 INTO 'null://'`).Scan(&jobID)
+	sqlDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT count(*) FROM [SHOW JOBS] WHERE job_id = %d and job_type='CHANGEFEED' and status='running'", jobID), [][]string{{"1"}})
+	expectNotice(t, s.Server, "CREATE CHANGEFEED FOR d.t1 INTO 'null://'", duplicateNoticeStr)
+
+	// Test for multiple tables and ordering
+	sqlDB.Exec(t, `CREATE TABLE t2 (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.Exec(t, `INSERT INTO t2 VALUES (0, 'initial')`)
+	expectNotice(t, s.Server, `CREATE CHANGEFEED FOR d.t2 INTO 'null://'`, "(no notice)")
+	expectNotice(t, s.Server, "CREATE CHANGEFEED FOR d.t2 INTO 'null://'", duplicateNoticeStr)
+	expectNotice(t, s.Server, `CREATE CHANGEFEED FOR d.t1, d.t2 INTO 'null://'`, "(no notice)")
+	expectNotice(t, s.Server, "CREATE CHANGEFEED FOR d.t1, d.t2 INTO 'null://'", duplicateNoticeStr)
+	expectNotice(t, s.Server, "CREATE CHANGEFEED FOR d.t2, d.t1 INTO 'null://'", duplicateNoticeStr)
+
+	// Test for changing table name
+	sqlDB.Exec(t, `ALTER TABLE t2 RENAME TO t100`)
+	expectNotice(t, s.Server, "CREATE CHANGEFEED FOR d.t100 INTO 'null://'", duplicateNoticeStr)
+	sqlDB.Exec(t, `ALTER TABLE t100 RENAME TO t2`)
+
+	// Test for alter changefeed
+	sqlDB.Exec(t, `CREATE TABLE t3 (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.Exec(t, `CREATE TABLE t4 (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.QueryRow(t, `CREATE CHANGEFEED FOR d.t3, d.t4 INTO 'null://'`).Scan(&jobID)
+	sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+	sqlDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT count(*) FROM [SHOW JOBS] WHERE job_id = %d and job_type='CHANGEFEED' and status='paused'", jobID), [][]string{{"1"}})
+	expectNotice(t, s.Server, fmt.Sprintf("ALTER CHANGEFEED %d DROP d.t4", jobID), "(no notice)")
+	expectNotice(t, s.Server, fmt.Sprintf("RESUME JOB %d", jobID), "(no notice)")
+	sqlDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT count(*) FROM [SHOW JOBS] WHERE job_id = %d and job_type='CHANGEFEED' and status='running'", jobID), [][]string{{"1"}})
+	expectNotice(t, s.Server, "CREATE CHANGEFEED FOR d.t3 INTO 'null://'", duplicateNoticeStr)
+
+}
