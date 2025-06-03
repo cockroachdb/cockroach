@@ -13,14 +13,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/interceptorutil"
 	"github.com/cockroachdb/errors"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
-	"storj.io/drpc"
-	"storj.io/drpc/drpcclient"
 )
 
 // ExtractSpanMetaFromGRPCCtx retrieves a SpanMeta carried as gRPC metadata by
@@ -33,44 +29,6 @@ func ExtractSpanMetaFromGRPCCtx(
 		return tracing.SpanMeta{}, nil
 	}
 	return tracer.ExtractMetaFrom(tracing.MetadataCarrier{MD: md})
-}
-
-// setGRPCErrorTag sets an error tag on the span.
-// TODO update this function to work with drpc
-func setGRPCErrorTag(sp *tracing.Span, err error) {
-	if err == nil {
-		return
-	}
-	s, _ := status.FromError(err)
-	sp.SetTag("response_code", attribute.IntValue(int(codes.Error)))
-	sp.SetOtelStatus(codes.Error, s.Message())
-}
-
-// BatchMethodName is the method name of Internal.Batch RPC.
-const BatchMethodName = "/cockroach.roachpb.Internal/Batch"
-
-// BatchStreamMethodName is the method name of the Internal.BatchStream RPC.
-const BatchStreamMethodName = "/cockroach.roachpb.Internal/BatchStream"
-
-// sendKVBatchMethodName is the method name for adminServer.SendKVBatch.
-const sendKVBatchMethodName = "/cockroach.server.serverpb.Admin/SendKVBatch"
-
-// SetupFlowMethodName is the method name of DistSQL.SetupFlow RPC.
-const SetupFlowMethodName = "/cockroach.sql.distsqlrun.DistSQL/SetupFlow"
-const flowStreamMethodName = "/cockroach.sql.distsqlrun.DistSQL/FlowStream"
-
-// methodExcludedFromTracing returns true if a call to the given RPC method does
-// not need to propagate tracing info. Some RPCs (Internal.Batch,
-// DistSQL.SetupFlow) have dedicated fields for passing along the tracing
-// context in the request, which is more efficient than letting the RPC
-// interceptors deal with it. Others (DistSQL.FlowStream) are simply exempt from
-// tracing because it's not worth it.
-func methodExcludedFromTracing(method string) bool {
-	return method == BatchMethodName ||
-		method == BatchStreamMethodName ||
-		method == sendKVBatchMethodName ||
-		method == SetupFlowMethodName ||
-		method == flowStreamMethodName
 }
 
 // ServerInterceptor returns a grpc.UnaryServerInterceptor suitable
@@ -95,7 +53,7 @@ func ServerInterceptor(tracer *tracing.Tracer) grpc.UnaryServerInterceptor {
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (interface{}, error) {
-		if methodExcludedFromTracing(info.FullMethod) {
+		if interceptorutil.MethodExcludedFromTracing(info.FullMethod) {
 			return handler(ctx, req)
 		}
 
@@ -117,7 +75,7 @@ func ServerInterceptor(tracer *tracing.Tracer) grpc.UnaryServerInterceptor {
 
 		resp, err := handler(ctx, req)
 		if err != nil {
-			setGRPCErrorTag(serverSpan, err)
+			interceptorutil.SetGRPCErrorTag(serverSpan, err)
 			serverSpan.Recordf("error: %s", err)
 		}
 		return resp, err
@@ -142,7 +100,7 @@ func ServerInterceptor(tracer *tracing.Tracer) grpc.UnaryServerInterceptor {
 // application-specific gRPC handler(s) to access.
 func StreamServerInterceptor(tracer *tracing.Tracer) grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		if methodExcludedFromTracing(info.FullMethod) {
+		if interceptorutil.MethodExcludedFromTracing(info.FullMethod) {
 			return handler(srv, ss)
 		}
 		spanMeta, err := ExtractSpanMetaFromGRPCCtx(ss.Context(), tracer)
@@ -175,7 +133,7 @@ func StreamServerInterceptor(tracer *tracing.Tracer) grpc.StreamServerIntercepto
 		}
 		err = handler(srv, ss)
 		if err != nil {
-			setGRPCErrorTag(serverSpan, err)
+			interceptorutil.SetGRPCErrorTag(serverSpan, err)
 			serverSpan.Recordf("error: %s", err)
 		}
 		return err
@@ -189,89 +147,6 @@ type tracingServerStream struct {
 
 func (ss *tracingServerStream) Context() context.Context {
 	return ss.ctx
-}
-
-func injectSpanMeta(
-	ctx context.Context, tracer *tracing.Tracer, clientSpan *tracing.Span,
-) context.Context {
-	md, ok := metadata.FromOutgoingContext(ctx)
-	if !ok {
-		md = metadata.New(nil)
-	} else {
-		md = md.Copy()
-	}
-	tracer.InjectMetaInto(clientSpan.Meta(), tracing.MetadataCarrier{MD: md})
-	return metadata.NewOutgoingContext(ctx, md)
-}
-
-// createClientSpan contains the common tracing logic shared between gRPC and DRPC client interceptors.
-// It creates a span, optionally injects it into the metadata (if needed), and returns the updated context
-// and span for use by the specific interceptor implementations.
-func createClientSpan(
-	ctx context.Context, method string, tracer *tracing.Tracer, init func(*tracing.Span),
-) (context.Context, *tracing.Span, bool) {
-	// Local RPCs don't need any special tracing, since the caller's context
-	// will be used on the "server".
-	_, localRequest := grpcutil.IsLocalRequestContext(ctx)
-	if localRequest {
-		return ctx, nil, true
-	}
-	parent := tracing.SpanFromContext(ctx)
-	if !tracing.SpanInclusionFuncForClient(parent) {
-		return ctx, nil, true
-	}
-
-	clientSpan := tracer.StartSpan(
-		method,
-		tracing.WithParent(parent),
-		tracing.WithClientSpanKind,
-	)
-	if init != nil {
-		init(clientSpan)
-	}
-
-	// For most RPCs we pass along tracing info as metadata. Some select
-	// RPCs carry the tracing in the request protos, which is more efficient.
-	if !methodExcludedFromTracing(method) {
-		ctx = injectSpanMeta(ctx, tracer, clientSpan)
-	}
-
-	return ctx, clientSpan, false
-}
-
-// createStreamClientSpan contains the common tracing logic shared between gRPC and DRPC
-// streaming client interceptors. It creates a span for the stream, and optionally injects it into the
-// metadata (if needed), then returns the updated context and span for use by the specific interceptor
-// implementations.
-func createStreamClientSpan(
-	ctx context.Context, method string, tracer *tracing.Tracer, init func(*tracing.Span),
-) (context.Context, *tracing.Span, bool) {
-	// Local RPCs don't need any special tracing, since the caller's context
-	// will be used on the "server".
-	_, localRequest := grpcutil.IsLocalRequestContext(ctx)
-	if localRequest {
-		return ctx, nil, true
-	}
-	parent := tracing.SpanFromContext(ctx)
-	if !tracing.SpanInclusionFuncForClient(parent) {
-		return ctx, nil, true
-	}
-
-	// Create a span that will live for the life of the stream.
-	clientSpan := tracer.StartSpan(
-		method,
-		tracing.WithParent(parent),
-		tracing.WithClientSpanKind,
-	)
-	if init != nil {
-		init(clientSpan)
-	}
-
-	if !methodExcludedFromTracing(method) {
-		ctx = injectSpanMeta(ctx, tracer, clientSpan)
-	}
-
-	return ctx, clientSpan, false
 }
 
 // ClientInterceptor returns a grpc.UnaryClientInterceptor suitable
@@ -302,7 +177,7 @@ func ClientInterceptor(
 		invoker grpc.UnaryInvoker,
 		opts ...grpc.CallOption,
 	) error {
-		ctx, clientSpan, skipTracing := createClientSpan(ctx, method, tracer, init)
+		ctx, clientSpan, skipTracing := interceptorutil.CreateClientSpan(ctx, method, tracer, init)
 		if skipTracing {
 			return invoker(ctx, method, req, resp, cc, opts...)
 		}
@@ -312,47 +187,7 @@ func ClientInterceptor(
 		if invoker != nil {
 			err := invoker(ctx, method, req, resp, cc, opts...)
 			if err != nil {
-				setGRPCErrorTag(clientSpan, err)
-				clientSpan.Recordf("error: %s", err)
-				return err
-			}
-		}
-		return nil
-	}
-}
-
-// ClientInterceptorDrpc returns a drpcclient.UnaryClientInterceptor suitable
-// for use with DRPC client connections.
-//
-// It provides the same tracing functionality as ClientInterceptor but adapted
-// for the DRPC protocol. The interceptor will inject the tracing SpanMeta into
-// the context metadata and establish a ChildOf relationship with any active
-// parent Span in the context.
-func ClientInterceptorDrpc(
-	tracer *tracing.Tracer, init func(*tracing.Span),
-) drpcclient.UnaryClientInterceptor {
-	if init == nil {
-		init = func(*tracing.Span) {}
-	}
-	return func(
-		ctx context.Context,
-		rpc string,
-		enc drpc.Encoding,
-		in, out drpc.Message,
-		cc *drpcclient.ClientConn,
-		invoker drpcclient.UnaryInvoker,
-	) error {
-		ctx, clientSpan, skipTracing := createClientSpan(ctx, rpc, tracer, init)
-		if skipTracing {
-			return invoker(ctx, rpc, enc, in, out, cc)
-		}
-
-		defer clientSpan.Finish()
-
-		if invoker != nil {
-			err := invoker(ctx, rpc, enc, in, out, cc)
-			if err != nil {
-				setGRPCErrorTag(clientSpan, err)
+				interceptorutil.SetGRPCErrorTag(clientSpan, err)
 				clientSpan.Recordf("error: %s", err)
 				return err
 			}
@@ -390,7 +225,7 @@ func StreamClientInterceptor(
 		streamer grpc.Streamer,
 		opts ...grpc.CallOption,
 	) (grpc.ClientStream, error) {
-		ctx, clientSpan, skipTracing := createStreamClientSpan(ctx, method, tracer, init)
+		ctx, clientSpan, skipTracing := interceptorutil.CreateStreamClientSpan(ctx, method, tracer, init)
 		if skipTracing {
 			return streamer(ctx, desc, cc, method, opts...)
 		}
@@ -398,7 +233,7 @@ func StreamClientInterceptor(
 		cs, err := streamer(ctx, desc, cc, method, opts...)
 		if err != nil {
 			clientSpan.Recordf("error: %s", err)
-			setGRPCErrorTag(clientSpan, err)
+			interceptorutil.SetGRPCErrorTag(clientSpan, err)
 			clientSpan.Finish()
 			return cs, err
 		}
@@ -426,7 +261,7 @@ func newTracingClientStream(
 		defer clientSpan.Finish()
 		if err != nil {
 			clientSpan.Recordf("error: %s", err)
-			setGRPCErrorTag(clientSpan, err)
+			interceptorutil.SetGRPCErrorTag(clientSpan, err)
 		}
 	}
 
@@ -498,136 +333,4 @@ func (cs *tracingClientStream) CloseSend() error {
 		cs.finishFunc(err)
 	}
 	return errors.Wrap(err, "close send error")
-}
-
-// StreamClientInterceptorDrpc returns a drpcclient.StreamClientInterceptor suitable
-// for use with DRPC client connections.
-//
-// It provides the same tracing functionality as StreamClientInterceptor but adapted
-// for the DRPC protocol. The interceptor instruments streaming RPCs by creating
-// a single span to correspond to the lifetime of the RPC's stream.
-//
-// All DRPC client spans will inject the tracing SpanMeta into the context metadata;
-// they will also look in the context.Context for an active in-process parent Span
-// and establish a ChildOf relationship if such a parent Span could be found.
-func StreamClientInterceptorDrpc(
-	tracer *tracing.Tracer, init func(*tracing.Span),
-) drpcclient.StreamClientInterceptor {
-	if init == nil {
-		init = func(*tracing.Span) {}
-	}
-	return func(
-		ctx context.Context,
-		rpc string,
-		enc drpc.Encoding,
-		cc *drpcclient.ClientConn,
-		streamer drpcclient.Streamer,
-	) (drpc.Stream, error) {
-		ctx, clientSpan, skipTracing := createStreamClientSpan(ctx, rpc, tracer, init)
-		if skipTracing {
-			return streamer(ctx, rpc, enc, cc)
-		}
-
-		ds, err := streamer(ctx, rpc, enc, cc)
-		if err != nil {
-			clientSpan.Recordf("error: %s", err)
-			setGRPCErrorTag(clientSpan, err)
-			clientSpan.Finish()
-			return ds, err
-		}
-
-		return newTracingClientStreamDrpc(
-			ctx, ds,
-			// Pass ownership of clientSpan to the stream.
-			clientSpan), nil
-	}
-}
-
-// tracingClientStreamDrpc is an implementation of drpc.Stream that
-// finishes the clientSpan when the stream terminates.
-type tracingClientStreamDrpc struct {
-	drpc.Stream
-	finishFunc func(error)
-}
-
-// MsgSend sends a message and tracks any errors for tracing.
-func (cs *tracingClientStreamDrpc) MsgSend(msg drpc.Message, enc drpc.Encoding) error {
-	err := cs.Stream.MsgSend(msg, enc)
-	if err == io.EOF {
-		cs.finishFunc(nil)
-		// Do not wrap EOF.
-		return err
-	} else if err != nil {
-		cs.finishFunc(err)
-	}
-	return errors.Wrap(err, "send msg error")
-}
-
-// MsgRecv receives a message and tracks any errors for tracing.
-func (cs *tracingClientStreamDrpc) MsgRecv(msg drpc.Message, enc drpc.Encoding) error {
-	err := cs.Stream.MsgRecv(msg, enc)
-	if err == io.EOF {
-		cs.finishFunc(nil)
-		// Do not wrap EOF.
-		return err
-	} else if err != nil {
-		cs.finishFunc(err)
-	}
-	return errors.Wrap(err, "recv msg error")
-}
-
-// CloseSend closes the send direction of the stream and tracks any errors for tracing.
-func (cs *tracingClientStreamDrpc) CloseSend() error {
-	err := cs.Stream.CloseSend()
-	if err != nil {
-		cs.finishFunc(err)
-	}
-	return errors.Wrap(err, "close send error")
-}
-
-// Close closes the stream and tracks any errors for tracing.
-func (cs *tracingClientStreamDrpc) Close() error {
-	err := cs.Stream.Close()
-	if err != nil {
-		cs.finishFunc(err)
-	}
-	cs.finishFunc(nil) // Ensure the span is finished when the stream is closed
-	return errors.Wrap(err, "close error")
-}
-
-// newTracingClientStreamDrpc creates an implementation of drpc.Stream that
-// finishes `clientSpan` when the stream terminates.
-func newTracingClientStreamDrpc(
-	ctx context.Context, ds drpc.Stream, clientSpan *tracing.Span,
-) drpc.Stream {
-	isFinished := new(int32)
-	*isFinished = 0
-	finishFunc := func(err error) {
-		// Since we have multiple code paths that could concurrently call
-		// `finishFunc`, we need to add some sort of synchronization to guard
-		// against multiple finishing.
-		if !atomic.CompareAndSwapInt32(isFinished, 0, 1) {
-			return
-		}
-		defer clientSpan.Finish()
-		if err != nil {
-			clientSpan.Recordf("error: %s", err)
-			setGRPCErrorTag(clientSpan, err)
-		}
-	}
-
-	// If the context is non-cancellable (ctx.Done() == nil), WhenDone returns
-	// false and never invokes the function. Even though it is strange to see
-	// non-cancellable context here, it's not exactly broken if we never invoke
-	// this function because of context cancellation. The finishFunc
-	// can still be invoked directly.
-	_ = ctxutil.WhenDone(ctx, func() {
-		// A streaming RPC can be finished by the caller cancelling the ctx.
-		finishFunc(nil /* err */)
-	})
-
-	return &tracingClientStreamDrpc{
-		Stream:     ds,
-		finishFunc: finishFunc,
-	}
 }

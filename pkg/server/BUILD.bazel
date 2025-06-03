@@ -345,7 +345,7 @@ go_library(
         "//pkg/util/timeutil/ptp",
         "//pkg/util/tracing",
         "//pkg/util/tracing/collector",
-        "//pkg/util/tracing/grpcinterceptor",
+        "//pkg/util/tracing/interceptorutil",
         "//pkg/util/tracing/service",
         "//pkg/util/tracing/tracingpb",
         "//pkg/util/tracing/tracingservicepb",

@@ -37,7 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/drpcinterceptor"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/interceptorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -631,9 +633,9 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 			grpcinterceptor.StreamClientInterceptor(tracer, tagger))
 
 		rpcCtx.clientUnaryInterceptorsDrpc = append(rpcCtx.clientUnaryInterceptorsDrpc,
-			grpcinterceptor.ClientInterceptorDrpc(tracer, tagger))
+			drpcinterceptor.ClientInterceptorDrpc(tracer, tagger))
 		rpcCtx.clientStreamInterceptorsDrpc = append(rpcCtx.clientStreamInterceptorsDrpc,
-			grpcinterceptor.StreamClientInterceptorDrpc(tracer, tagger))
+			drpcinterceptor.StreamClientInterceptorDrpc(tracer, tagger))
 	}
 	// Note that we do not consult rpcCtx.Knobs.StreamClientInterceptor. That knob
 	// can add another interceptor, but it can only do it dynamically, based on
@@ -733,7 +735,7 @@ func makeInternalClientAdapter(
 	batchServerHandler := chainUnaryServerInterceptors(
 		&grpc.UnaryServerInfo{
 			Server:     server,
-			FullMethod: grpcinterceptor.BatchMethodName,
+			FullMethod: interceptorutil.BatchMethodName,
 		},
 		serverUnaryInterceptors,
 		func(ctx context.Context, req interface{}) (interface{}, error) {
@@ -827,7 +829,7 @@ func makeInternalClientAdapter(
 				ctx = tracing.ContextWithSpan(ctx, nil)
 			}
 
-			err := batchClientHandler(ctx, grpcinterceptor.BatchMethodName, ba, reply, nil /* ClientConn */, opts...)
+			err := batchClientHandler(ctx, interceptorutil.BatchMethodName, ba, reply, nil /* ClientConn */, opts...)
 			return reply, err
 		},
 	}
