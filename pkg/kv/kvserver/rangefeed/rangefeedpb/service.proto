@@ -10,10 +10,13 @@ message Rangefeed {
   int64 consumer_id = 1 [(gogoproto.customname) = "ConsumerID"];
   roachpb.Span span = 2  [(gogoproto.nullable) = false];
   int64 stream_id = 3 [(gogoproto.customname) = "StreamID"];
-  util.hlc.Timestamp resolved_ts = 4 [
+  int32 range_id = 4 [(gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  util.hlc.Timestamp resolved_ts = 5 [
     (gogoproto.nullable) = false, (gogoproto.customname) = "ResolvedTS"];
-  util.hlc.Timestamp catchup_ts = 5 [
+  util.hlc.Timestamp catchup_ts = 6 [
     (gogoproto.nullable) = false, (gogoproto.customname) = "CatchUpTS"];
+  string tags = 7 [(gogoproto.customname) = "Tags"];
 }
 
 message InspectStoreRangefeedsRequest {}
@@ -25,6 +28,7 @@ message InspectStoreRangefeedsResponse {
 message RangefeedInfoPerStore {
   int32 node_id = 1 [(gogoproto.customname) = "NodeID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
-  int32 store_id = 2 [(gogoproto.customname) = "StoreID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
-  repeated Rangefeed rangefeed = 3 [(gogoproto.nullable) = false];
+  int32 store_id = 2 [(gogoproto.customname) = "StoreID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+  repeated Rangefeed rangefeed = 4 [(gogoproto.nullable) = false];
 }
