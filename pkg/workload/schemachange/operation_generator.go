@@ -2658,6 +2658,9 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 				AND table_indexes.descriptor_id = columns.table_id
 				AND index_columns.column_id = (columns.col->'id')::int8
 			)) AS is_in_inverted_index,
+		  (EXISTS (
+		  	SELECT * FROM  crdb_internal.table_indexes WHERE table_indexes.descriptor_id = columns.table_id AND index_type <> 'primary'
+		  )) AS has_indexes,
 			(EXISTS(
 				SELECT 
     tc.constraint_name, 
@@ -2707,6 +2710,7 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 			"table_name":                     table_name,
 			"table_undergoing_schema_change": grouped[0]["table_undergoing_schema_change"].(bool),
 			"columns":                        grouped,
+			"has_indexes":                    grouped[0]["has_indexes"].(bool),
 		})
 	}
 
@@ -2783,18 +2787,47 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 		Template: `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable false | Generated false | Indexable false | InInvertedIndex false | Columns }) { end }`,
 	})
 
+	// Adds any potential errors based on the selected table.
+	maybeAddPotentialCommitErrors := func(tbl map[string]any) error {
+		// Skip if we are on a version without any potential errors.
+		if less, err := isClusterVersionLessThan(ctx, tx, clusterversion.V25_2.Version()); err != nil || !less {
+			return err
+		}
+		// Secondary index recreation bugs were fixed in 25.2 (#141850),
+		// so we can hit duplicate column errors when running in a mixed
+		// version state.
+		if tbl["has_indexes"].(bool) {
+			og.potentialCommitErrors.add(pgcode.DuplicateColumn)
+		}
+		return nil
+	}
+
 	stmt, code, err := Generate[*tree.AlterTable](og.params.rng, og.produceError(), generationCases, template.FuncMap{
 		"TableNotUnderGoingSchemaChange": func() (map[string]any, error) {
 			tbls := util.Filter(tables, func(table map[string]any) bool {
 				return !table["table_undergoing_schema_change"].(bool)
 			})
-			return PickOne(og.params.rng, tbls)
+			targetTbl, err := PickOne(og.params.rng, tbls)
+			if err != nil {
+				return nil, err
+			}
+			if err := maybeAddPotentialCommitErrors(targetTbl); err != nil {
+				return nil, err
+			}
+			return targetTbl, nil
 		},
 		"TableUnderGoingSchemaChange": func() (map[string]any, error) {
 			tbls := util.Filter(tables, func(table map[string]any) bool {
 				return table["table_undergoing_schema_change"].(bool)
 			})
-			return PickOne(og.params.rng, tbls)
+			targetTbl, err := PickOne(og.params.rng, tbls)
+			if err != nil {
+				return nil, err
+			}
+			if err := maybeAddPotentialCommitErrors(targetTbl); err != nil {
+				return nil, err
+			}
+			return targetTbl, nil
 		},
 		"Columns": func(table map[string]any) (string, error) {
 			selected, err := PickAtLeast(og.params.rng, 1, table["columns"].([]map[string]any))
