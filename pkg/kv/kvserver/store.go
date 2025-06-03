@@ -4267,11 +4267,17 @@ func (s *Store) VisitRangefeeds() (res rangefeedpb.RangefeedInfoPerStore) {
 	res.StoreID = s.StoreID()
 
 	for _, id := range updateRangeIDs() {
-		if r := s.GetReplicaIfExists(id); r != nil {
+		if repl := s.GetReplicaIfExists(id); repl != nil {
 			//cts := r.GetCurrentClosedTimestamp(ctx)
 			// populate the closed ts here
-			res.Rangefeed = append(res.Rangefeed, r.getRangefeedProcessor().CollectAllRangefeedStats()...)
+			stats := repl.getRangefeedProcessor().CollectAllRangefeedStats()
+			// TODO(mxu): this is super hacky, but okay for now :)
+			for i := range stats {
+				stats[i].RangeID = id
+			}
+			res.Rangefeed = append(res.Rangefeed, stats...)
 		}
 	}
+
 	return res
 }
