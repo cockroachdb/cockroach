@@ -226,6 +226,10 @@ func changefeedPlanHook(
 	}
 	opts := changefeedbase.MakeStatementOptions(rawOpts)
 
+	if changefeedStmt.Level == tree.ChangefeedLevelDatabase {
+		return nil, nil, false, errors.New("database-level changefeed is not implemented")
+	}
+
 	description, err := makeChangefeedDescription(ctx, changefeedStmt.CreateChangefeed, sinkURI, opts)
 	if err != nil {
 		return nil, nil, false, err
@@ -528,7 +532,11 @@ func createChangefeedJobRecord(
 
 	tableOnlyTargetList := tree.BackupTargetList{}
 	for _, t := range changefeedStmt.Targets {
-		tableOnlyTargetList.Tables.TablePatterns = append(tableOnlyTargetList.Tables.TablePatterns, t.TableName)
+		target, ok := t.(*tree.ChangefeedTableTarget)
+		if !ok {
+			return nil, errors.Errorf(`target %q is not a table target`, tree.AsString(t))
+		}
+		tableOnlyTargetList.Tables.TablePatterns = append(tableOnlyTargetList.Tables.TablePatterns, target.TableName)
 	}
 
 	// This grabs table descriptors once to get their ids.
@@ -938,13 +946,17 @@ func getTargetsAndTables(
 	seen := make(map[jobspb.ChangefeedTargetSpecification]tree.ChangefeedTarget)
 
 	for i, ct := range rawTargets {
-		desc, ok := targetDescs[ct.TableName]
+		target, ok := ct.(*tree.ChangefeedTableTarget)
 		if !ok {
-			return nil, nil, errors.Newf("could not match %v to a fetched descriptor. Fetched were %v", ct.TableName, targetDescs)
+			return nil, nil, errors.Newf(`target %q is not a table target`, tree.ErrString(ct))
+		}
+		desc, ok := targetDescs[target.TableName]
+		if !ok {
+			return nil, nil, errors.Newf("could not match %v to a fetched descriptor. Fetched were %v", target.TableName, targetDescs)
 		}
 		td, ok := desc.(catalog.TableDescriptor)
 		if !ok {
-			return nil, nil, errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(&ct))
+			return nil, nil, errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(target))
 		}
 
 		if spec, ok := originalSpecs[ct]; ok {
@@ -972,7 +984,7 @@ func getTargetsAndTables(
 				StatementTimeName: name,
 			}
 			typ := jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY
-			if ct.FamilyName != "" {
+			if target.FamilyName != "" {
 				typ = jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY
 			} else {
 				if td.NumFamilies() > 1 {
@@ -982,14 +994,14 @@ func getTargetsAndTables(
 			targets[i] = jobspb.ChangefeedTargetSpecification{
 				Type:              typ,
 				TableID:           td.GetID(),
-				FamilyName:        string(ct.FamilyName),
+				FamilyName:        string(target.FamilyName),
 				StatementTimeName: tables[td.GetID()].StatementTimeName,
 			}
 		}
 		if dup, isDup := seen[targets[i]]; isDup {
 			return nil, nil, errors.Errorf(
 				"CHANGEFEED targets %s and %s are duplicates",
-				tree.AsString(&dup), tree.AsString(&ct),
+				tree.AsString(dup), tree.AsString(target),
 			)
 		}
 		seen[targets[i]] = ct

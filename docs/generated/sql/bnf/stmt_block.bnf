@@ -211,6 +211,7 @@ create_stmt ::=
 	create_role_stmt
 	| create_ddl_stmt
 	| create_stats_stmt
+	| create_database_changefeed_stmt
 	| create_changefeed_stmt
 	| create_extension_stmt
 	| create_external_connection_stmt
@@ -633,8 +634,11 @@ create_ddl_stmt ::=
 create_stats_stmt ::=
 	'CREATE' 'STATISTICS' statistics_name opt_stats_columns 'FROM' create_stats_target opt_create_stats_options
 
+create_database_changefeed_stmt ::=
+	'CREATE' 'DATABASE' 'CHANGEFEED' 'FOR' database_name opt_changefeed_sink opt_with_options
+
 create_changefeed_stmt ::=
-	'CREATE' 'CHANGEFEED' 'FOR' changefeed_targets opt_changefeed_sink opt_with_options
+	'CREATE' 'CHANGEFEED' 'FOR' changefeed_table_targets opt_changefeed_sink opt_with_options
 	| 'CREATE' 'CHANGEFEED' opt_changefeed_sink opt_with_options 'AS' 'SELECT' target_list 'FROM' changefeed_target_expr opt_where_clause
 
 create_extension_stmt ::=
@@ -1921,11 +1925,11 @@ opt_create_stats_options ::=
 	| 'WITH' 'OPTIONS' create_stats_option_list
 	| 
 
-changefeed_targets ::=
-	( changefeed_target ) ( ( ',' changefeed_target ) )*
-
 opt_changefeed_sink ::=
 	'INTO' string_or_placeholder
+
+changefeed_table_targets ::=
+	( changefeed_table_target ) ( ( ',' changefeed_table_target ) )*
 
 target_list ::=
 	( target_elem ) ( ( ',' target_elem ) )*
@@ -1948,7 +1952,7 @@ opt_logical_replication_create_table_options ::=
 	| 
 
 create_schedule_for_changefeed_stmt ::=
-	'CREATE' 'SCHEDULE' schedule_label_spec 'FOR' 'CHANGEFEED' changefeed_targets changefeed_sink opt_with_options cron_expr opt_with_schedule_options
+	'CREATE' 'SCHEDULE' schedule_label_spec 'FOR' 'CHANGEFEED' changefeed_table_targets changefeed_sink opt_with_options cron_expr opt_with_schedule_options
 	| 'CREATE' 'SCHEDULE' schedule_label_spec 'FOR' 'CHANGEFEED' changefeed_sink opt_with_options 'AS' 'SELECT' target_list 'FROM' changefeed_target_expr opt_where_clause cron_expr opt_with_schedule_options
 
 create_schedule_for_backup_stmt ::=
@@ -2821,7 +2825,7 @@ opt_policy_command ::=
 create_stats_option_list ::=
 	( create_stats_option ) ( ( create_stats_option ) )*
 
-changefeed_target ::=
+changefeed_table_target ::=
 	opt_table_prefix table_name opt_changefeed_family
 
 target_elem ::=
@@ -3226,8 +3230,8 @@ target_object_type ::=
 	| 'ROUTINES'
 
 alter_changefeed_cmd ::=
-	'ADD' changefeed_targets opt_with_options
-	| 'DROP' changefeed_targets
+	'ADD' changefeed_table_targets opt_with_options
+	| 'DROP' changefeed_table_targets
 	| 'SET' kv_option_list
 	| 'UNSET' name_list
 

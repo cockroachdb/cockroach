@@ -276,7 +276,11 @@ func makeScheduledChangefeedSpec(
 
 	tablePatterns := make([]tree.TablePattern, 0)
 	for _, target := range schedule.Targets {
-		tablePatterns = append(tablePatterns, target.TableName)
+		tableTarget, ok := target.(*tree.ChangefeedTableTarget)
+		if !ok {
+			return nil, errors.Newf(`target %q is not a table target`, tree.ErrString(target))
+		}
+		tablePatterns = append(tablePatterns, tableTarget.TableName)
 	}
 
 	qualifiedTablePatterns, err := schedulebase.FullyQualifyTables(ctx, p, tablePatterns)
@@ -286,7 +290,11 @@ func makeScheduledChangefeedSpec(
 
 	newTargets := make([]tree.ChangefeedTarget, 0)
 	for i, table := range qualifiedTablePatterns {
-		newTargets = append(newTargets, tree.ChangefeedTarget{TableName: table, FamilyName: schedule.Targets[i].FamilyName})
+		target, ok := schedule.Targets[i].(*tree.ChangefeedTableTarget)
+		if !ok {
+			return nil, errors.Newf(`target %q is not a table target`, tree.ErrString(target))
+		}
+		newTargets = append(newTargets, &tree.ChangefeedTableTarget{TableName: table, FamilyName: target.FamilyName})
 	}
 
 	schedule.Targets = newTargets

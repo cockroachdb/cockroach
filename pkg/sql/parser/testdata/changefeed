@@ -24,6 +24,15 @@ EXPLAIN CREATE CHANGEFEED FOR TABLE _ INTO '*****' -- identifiers removed
 EXPLAIN CREATE CHANGEFEED FOR TABLE foo INTO 'sink' -- passwords exposed
 
 parse
+EXPLAIN CREATE DATABASE CHANGEFEED FOR foo INTO 'sink'
+----
+EXPLAIN CREATE DATABASE CHANGEFEED FOR foo INTO '*****' -- normalized!
+EXPLAIN CREATE DATABASE CHANGEFEED FOR foo INTO ('*****') -- fully parenthesized
+EXPLAIN CREATE DATABASE CHANGEFEED FOR foo INTO '_' -- literals removed
+EXPLAIN CREATE DATABASE CHANGEFEED FOR _ INTO '*****' -- identifiers removed
+EXPLAIN CREATE DATABASE CHANGEFEED FOR foo INTO 'sink' -- passwords exposed
+
+parse
 CREATE CHANGEFEED FOR foo INTO 'sink'
 ----
 CREATE CHANGEFEED FOR TABLE foo INTO '*****' -- normalized!
@@ -33,6 +42,16 @@ CREATE CHANGEFEED FOR TABLE _ INTO '*****' -- identifiers removed
 CREATE CHANGEFEED FOR TABLE foo INTO 'sink' -- passwords exposed
 
 parse
+CREATE DATABASE CHANGEFEED FOR foo INTO 'sink'
+----
+CREATE DATABASE CHANGEFEED FOR foo INTO '*****' -- normalized!
+CREATE DATABASE CHANGEFEED FOR foo INTO ('*****') -- fully parenthesized
+CREATE DATABASE CHANGEFEED FOR foo INTO '_' -- literals removed
+CREATE DATABASE CHANGEFEED FOR _ INTO '*****' -- identifiers removed
+CREATE DATABASE CHANGEFEED FOR foo INTO 'sink' -- passwords exposed
+
+
+parse
 CREATE CHANGEFEED FOR TABLE foo INTO sink
 ----
 CREATE CHANGEFEED FOR TABLE foo INTO '*****' -- normalized!
@@ -40,6 +59,15 @@ CREATE CHANGEFEED FOR TABLE (foo) INTO ('*****') -- fully parenthesized
 CREATE CHANGEFEED FOR TABLE foo INTO '_' -- literals removed
 CREATE CHANGEFEED FOR TABLE _ INTO '*****' -- identifiers removed
 CREATE CHANGEFEED FOR TABLE foo INTO 'sink' -- passwords exposed
+
+parse
+CREATE DATABASE CHANGEFEED FOR foo INTO sink
+----
+CREATE DATABASE CHANGEFEED FOR foo INTO '*****' -- normalized!
+CREATE DATABASE CHANGEFEED FOR foo INTO ('*****') -- fully parenthesized
+CREATE DATABASE CHANGEFEED FOR foo INTO '_' -- literals removed
+CREATE DATABASE CHANGEFEED FOR _ INTO '*****' -- identifiers removed
+CREATE DATABASE CHANGEFEED FOR foo INTO 'sink' -- passwords exposed
 
 parse
 CREATE CHANGEFEED FOR TABLE foo, db.bar, foo FAMILY bar, schema.db.foo INTO 'sink'
@@ -59,6 +87,15 @@ CREATE CHANGEFEED FOR TABLE foo INTO '_' -- literals removed
 CREATE CHANGEFEED FOR TABLE _ INTO '*****' -- identifiers removed
 CREATE CHANGEFEED FOR TABLE foo INTO 'sink' -- passwords exposed
 
+parse
+CREATE DATABASE CHANGEFEED FOR foo INTO 'sink'
+----
+CREATE DATABASE CHANGEFEED FOR foo INTO '*****' -- normalized!
+CREATE DATABASE CHANGEFEED FOR foo INTO ('*****') -- fully parenthesized
+CREATE DATABASE CHANGEFEED FOR foo INTO '_' -- literals removed
+CREATE DATABASE CHANGEFEED FOR _ INTO '*****' -- identifiers removed
+CREATE DATABASE CHANGEFEED FOR foo INTO 'sink' -- passwords exposed
+
 ## TODO(dan): Implement:
 ## CREATE CHANGEFEED FOR TABLE foo VALUES FROM (1) TO (2) INTO 'sink'
 ## CREATE CHANGEFEED FOR TABLE foo PARTITION bar, baz INTO 'sink'
@@ -72,6 +109,16 @@ CREATE CHANGEFEED FOR TABLE (foo) INTO ('*****') WITH OPTIONS (bar = ('baz')) --
 CREATE CHANGEFEED FOR TABLE foo INTO '_' WITH OPTIONS (bar = '_') -- literals removed
 CREATE CHANGEFEED FOR TABLE _ INTO '*****' WITH OPTIONS (_ = 'baz') -- identifiers removed
 CREATE CHANGEFEED FOR TABLE foo INTO 'sink' WITH OPTIONS (bar = 'baz') -- passwords exposed
+
+parse
+CREATE DATABASE CHANGEFEED FOR foo INTO 'sink' WITH bar = 'baz'
+----
+CREATE DATABASE CHANGEFEED FOR foo INTO '*****' WITH OPTIONS (bar = 'baz') -- normalized!
+CREATE DATABASE CHANGEFEED FOR foo INTO ('*****') WITH OPTIONS (bar = ('baz')) -- fully parenthesized
+CREATE DATABASE CHANGEFEED FOR foo INTO '_' WITH OPTIONS (bar = '_') -- literals removed
+CREATE DATABASE CHANGEFEED FOR _ INTO '*****' WITH OPTIONS (_ = 'baz') -- identifiers removed
+CREATE DATABASE CHANGEFEED FOR foo INTO 'sink' WITH OPTIONS (bar = 'baz') -- passwords exposed
+
 
 parse
 CREATE CHANGEFEED AS SELECT * FROM foo
