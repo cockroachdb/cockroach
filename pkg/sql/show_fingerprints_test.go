@@ -95,6 +95,37 @@ func TestShowFingerprintsColumnNames(t *testing.T) {
 	}
 }
 
+func TestShowFingerprintInvertedIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE d.t (
+		a INT PRIMARY KEY,
+		b INT,
+		c INT,
+		d JSONB,
+		INDEX b_idx (b),
+		INDEX c_partial_idx (c) WHERE c > 0,
+		INVERTED INDEX d_inverted_idx (d)
+	)`)
+
+	sqlDB.Exec(t, `INSERT INTO d.t VALUES (1, 2, 3, '{"a": 4}'), (2, 3, 0, '{"a": 5}')`)
+
+	// Get fingerprints for the table.
+	rows := sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t`)
+	require.Len(t, rows, 3, "expected only primary, b_idx, c_partial_idx to be fingerprinted")
+	require.Equal(t, rows[0][0], "t_pkey")
+	require.Equal(t, rows[1][0], "b_idx")
+	require.Equal(t, rows[2][0], "c_partial_idx")
+	// NOTE: no d_inverted_idx
+}
+
 // TestShowFingerprintsDuringSchemaChange is a regression test that asserts that
 // fingerprinting does not fail when done in the middle of a schema change using
 // an AOST query. In the middle of a schema change such as `ADD COLUMN ...
