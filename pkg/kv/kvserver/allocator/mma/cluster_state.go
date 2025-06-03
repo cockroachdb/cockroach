@@ -569,14 +569,13 @@ type storeState struct {
 		//
 		// NB: this can include LEARNER and VOTER_DEMOTING_LEARNER replicas.
 		replicas map[roachpb.RangeID]ReplicaState
-		// topKRanges along some load dimension. If the store is closer to hitting
-		// the resource limit on some resource ranges that are higher in that
-		// resource dimension should be over-represented in this slice. It
-		// includes ranges whose replicas are being removed via pending changes,
-		// since those pending changes may be reversed, and we don't want to
-		// bother recomputing the top-k.
+		// topKRanges along some load dimension. If the store is overloaded along
+		// one resource dimension, that is the dimension chosen when picking the
+		// top-k. It includes ranges whose replicas are being removed via pending
+		// changes, since those pending changes may be reversed, and we don't want
+		// to bother recomputing the top-k.
 		//
-		// We may decide to to keep this top-k up-to-date incrementally. Since
+		// We may decide to keep this top-k up-to-date incrementally. Since
 		// StoreLeaseholderMsg is incremental about the ranges it reports, that
 		// may provide a building block for the incremental computation.
 		//
@@ -611,9 +610,9 @@ type storeState struct {
 	maxFractionPendingIncrease float64
 	maxFractionPendingDecrease float64
 
-	// TODO: also need a maxFractionPending at the node level since with many
-	// stores on a node, some stores may have used up all the budget for changes
-	// at the node.
+	// TODO: consider adding a maxFractionPending at the node level since with
+	// many stores on a node, some stores may have used up all the budget for
+	// changes at the node.
 
 	localityTiers
 
@@ -632,15 +631,15 @@ type storeState struct {
 // signficant load change (% delta), the store will gossip more frequently (see
 // kvserver/store_gossip.go).
 //
-// TODO(sumeer): set this based on an understanding of ReplicaStats, Gossip
-// etc.
+// This value has nothing to do with the gossip interval, since this is lag
+// added to the origin timestamp of the gossip message. It probably has to do
+// with the fact that we use NodeCapacity when constructing StoreLoadMsg, and
+// that includes NodeCPURateUsage which is the actual observed node cpu rate,
+// and we want to give some time for that to react to the change. We use
+// RuntimeLoadMonitor for that node cpu rate -- need to look at that code to
+// see whether this 10s makes sense.
 const lagForChangeReflectedInLoad = 10 * time.Second
 
-// NB: this is a heuristic.
-//
-// TODO(sumeer): this interface is just a placeholder. We should integrate
-// this into the storeState update function, in which case we can directly
-// remove from the loadPendingChanges map.
 func (ss *storeState) computePendingChangesReflectedInLatestLoad(
 	latestLoadTime time.Time,
 ) []*pendingReplicaChange {
@@ -1184,6 +1183,8 @@ func (cs *clusterState) applyReplicaChange(change ReplicaChange) {
 	if !ok {
 		// This is the first time encountering this range, we add it to the cluster
 		// state.
+		//
+		// TODO(wenyihu6): Don't do anything if the range is not known.
 		//
 		// TODO(kvoli): Pass in the range descriptor to construct the range state
 		// here. Currently, when the replica change is a removal this won't work
