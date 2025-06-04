@@ -1036,10 +1036,13 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 				}
 			}
 		}
-		// TODO: setting a threshold such that only ranges > some threshold of the
-		// store's load in the top-k dimension are included in the top-k. We
-		// should actually be using the min of this threshold and the n-th ranked
-		// load (across all ranges) per dimension reported by the store in
+		// Setting a threshold such that only ranges > some threshold of the
+		// store's load in the top-k dimension are included in the top-k. These
+		// values are copied from store_rebalancer.go:
+		// kvserver.{minLeaseLoadFraction, minReplicaLoadFraction}.
+		//
+		// We should actually be using the min of this threshold and the n-th
+		// ranked load (across all ranges) per dimension reported by the store in
 		// StoreDescriptor, where say n is 50 (since it is possible that the store
 		// has a massive range that consumes 50% of the load, and another 100
 		// ranges that consume 0.5% each, and the only way to restore health is to
