@@ -48,7 +48,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var ErrNilTxnInClusterContext = errors.New("nil txn in cluster context")
+var ErrNilTxnForBuiltin = errors.New("cannot use builtin in this context")
 
 // Context defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
@@ -596,11 +596,12 @@ func (ec *Context) GetStmtTimestamp() time.Time {
 	return ec.StmtTimestamp
 }
 
-// GetClusterTimestamp retrieves the current cluster timestamp as per
-// the evaluation context. The timestamp is guaranteed to be nonzero.
-func (ec *Context) GetClusterTimestamp() (*tree.DDecimal, error) {
-	if ec.Txn == nil {
-		return nil, ErrNilTxnInClusterContext
+// GetClusterTimestamp retrieves the current cluster timestamp as per the
+// evaluation context and the provided txn. The timestamp is guaranteed to be
+// nonzero.
+func (ec *Context) GetClusterTimestamp(txn *kv.Txn) (*tree.DDecimal, error) {
+	if txn == nil {
+		return nil, ErrNilTxnForBuiltin
 	}
 
 	// CommitTimestamp panics for isolation levels that can operate across
@@ -611,7 +612,7 @@ func (ec *Context) GetClusterTimestamp() (*tree.DDecimal, error) {
 			"unsupported in %s isolation", tree.FromKVIsoLevel(ec.TxnIsoLevel).String())
 	}
 
-	ts, err := ec.Txn.CommitTimestamp()
+	ts, err := txn.CommitTimestamp()
 	if err != nil {
 		return nil, err
 	}

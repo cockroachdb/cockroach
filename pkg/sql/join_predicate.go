@@ -8,6 +8,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execexpr"
@@ -118,13 +119,13 @@ func (p *joinPredicate) IndexedVarResolvedType(idx int) *types.T {
 // Returns true if there is no on condition or the on condition accepts the
 // row.
 func (p *joinPredicate) eval(
-	ctx context.Context, evalCtx *eval.Context, leftRow, rightRow tree.Datums,
+	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, leftRow, rightRow tree.Datums,
 ) (bool, error) {
 	if p.onCond != nil {
 		copy(p.curRow[:len(leftRow)], leftRow)
 		copy(p.curRow[len(leftRow):], rightRow)
 		evalCtx.PushIVarContainer(p)
-		pred, err := execexpr.RunFilter(ctx, p.onCond, evalCtx)
+		pred, err := execexpr.RunFilter(ctx, p.onCond, evalCtx, txn)
 		evalCtx.PopIVarContainer()
 		return pred, err
 	}

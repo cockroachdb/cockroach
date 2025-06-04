@@ -377,9 +377,9 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		// Evaluate the new values. This must be done separately for
 		// each row so as to handle impure functions correctly.
 		for j, e := range cb.updateExprs {
-			val, err := eval.Expr(ctx, cb.evalCtx, e)
+			val, err := eval.Expr(ctx, cb.evalCtx, e, nil /* optionalTxn */)
 			if err != nil {
-				if errors.Is(err, eval.ErrNilTxnInClusterContext) {
+				if errors.Is(err, eval.ErrNilTxnForBuiltin) {
 					// Cannot use expressions that depend on the transaction of the
 					// evaluation context as the default value for backfill.
 					return roachpb.Key{}, pgerror.WithCandidateCode(err, pgcode.FeatureNotSupported)
@@ -1044,9 +1044,9 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			if !ok {
 				continue
 			}
-			val, err := eval.Expr(ctx, ib.evalCtx, texpr)
+			val, err := eval.Expr(ctx, ib.evalCtx, texpr, nil /* optionalTxn */)
 			if err != nil {
-				if errors.Is(err, eval.ErrNilTxnInClusterContext) {
+				if errors.Is(err, eval.ErrNilTxnForBuiltin) {
 					// Cannot use expressions that depend on the transaction of the
 					// evaluation context as the default value for backfill.
 					err = pgerror.WithCandidateCode(err, pgcode.FeatureNotSupported)
@@ -1116,7 +1116,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 				// predicate expression evaluates to true.
 				texpr := ib.predicates[idx.GetID()]
 
-				val, err := eval.Expr(ctx, ib.evalCtx, texpr)
+				val, err := eval.Expr(ctx, ib.evalCtx, texpr, nil /* optionalTxn */)
 				if err != nil {
 					return nil, nil, memUsedPerChunk, err
 				}

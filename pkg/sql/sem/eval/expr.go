@@ -8,21 +8,47 @@ package eval
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
-// Expr evaluates a TypedExpr into a Datum.
-func Expr(ctx context.Context, evalCtx *Context, n tree.TypedExpr) (tree.Datum, error) {
-	return n.Eval(ctx, (*evaluator)(evalCtx))
+// Expr evaluates a tree.TypedExpr into a tree.Datum.
+//
+// An optional kv.Txn can be provided which will only be used for builtin
+// overloads that have FnWithTxn set. If such builtin is called and no txn was
+// given, an assertion error might be raised; if the caller wants to get a
+// regular error, nil optionalTxn must be provided.
+func Expr(
+	ctx context.Context, evalCtx *Context, n tree.TypedExpr, optionalTxn ...*kv.Txn,
+) (tree.Datum, error) {
+	if len(optionalTxn) == 0 {
+		return n.Eval(ctx, (*evaluator)(evalCtx))
+	}
+	var txn *kv.Txn
+	var explicitNilTxn bool
+	if len(optionalTxn) > 1 {
+		return nil, errors.AssertionFailedf("multiple arguments provided for optionalTxn: %v", optionalTxn)
+	} else if len(optionalTxn) == 1 {
+		txn = optionalTxn[0]
+		explicitNilTxn = txn == nil
+	}
+	return n.Eval(ctx, &evaluatorWithTxn{evaluator: (*evaluator)(evalCtx), txn: txn, explicitNilTxn: explicitNilTxn})
 }
 
 type evaluator Context
+
+type evaluatorWithTxn struct {
+	*evaluator
+	txn            *kv.Txn
+	explicitNilTxn bool
+}
 
 func (e *evaluator) ctx() *Context { return (*Context)(e) }
 
@@ -491,6 +517,12 @@ func (e *evaluator) EvalFuncExpr(ctx context.Context, expr *tree.FuncExpr) (tree
 		return tree.DNull, err
 	}
 
+	if fn.FnWithTxn != nil {
+		if buildutil.CrdbTestBuild {
+			return nil, errors.AssertionFailedf("attempting to evaluate a builtin that uses txn in context without passing txn argument to eval.Expr")
+		}
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "cannot evaluate function that uses txn in this context")
+	}
 	if fn.Body != "" {
 		// This expression evaluator cannot run functions defined with a SQL body.
 		return nil, unimplemented.NewWithIssuef(147472, "cannot evaluate function in this context")
@@ -511,6 +543,31 @@ func (e *evaluator) EvalFuncExpr(ctx context.Context, expr *tree.FuncExpr) (tree
 		}
 	}
 	return res, nil
+}
+
+func (e *evaluatorWithTxn) EvalFuncExpr(
+	ctx context.Context, expr *tree.FuncExpr,
+) (tree.Datum, error) {
+	fn := expr.ResolvedOverload()
+	if fn.FnWithTxn == nil {
+		return e.evaluator.EvalFuncExpr(ctx, expr)
+	}
+
+	nullResult, args, err := e.evalFuncArgs(ctx, expr)
+	if err != nil {
+		return nil, err
+	}
+	if nullResult {
+		return tree.DNull, err
+	}
+
+	if e.txn == nil {
+		if e.explicitNilTxn {
+			return nil, ErrNilTxnForBuiltin
+		}
+		return nil, errors.AssertionFailedf("txn wasn't provided in this context")
+	}
+	return fn.FnWithTxn.(FnWithTxnOverload)(ctx, e.ctx(), e.txn, args)
 }
 
 func (e *evaluator) evalFuncArgs(

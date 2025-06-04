@@ -97,7 +97,9 @@ func GetAggregateConstructor(
 	for j, argument := range aggInfo.Arguments {
 		h := execexpr.Helper{}
 		// Pass nil types and row - there are no variables in these expressions.
-		if err = h.Init(ctx, argument, nil /* types */, semaCtx, evalCtx); err != nil {
+		// Also pass nil txn since we shouldn't see any builtins that need the
+		// txn either.
+		if err = h.Init(ctx, argument, nil /* types */, semaCtx, evalCtx, nil /* txn */); err != nil {
 			err = errors.Wrapf(err, "%s", argument)
 			return
 		}
