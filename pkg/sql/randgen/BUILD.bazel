@@ -9,6 +9,7 @@ go_library(
         "expr.go",
         "mutator.go",
         "schema.go",
+        "table.go",
         "table_opt.go",
         "type.go",
     ],
