@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 // An AddressResolver translates NodeIDs into addresses.
@@ -102,6 +103,26 @@ func (n *Dialer) Dial(
 		return nil, err
 	}
 	conn, _, err := n.dial(ctx, nodeID, addr, locality, true, class)
+	return conn, err
+}
+
+// TODO(server): add comments
+func (n *Dialer) DialDRPC(
+	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+) (_ drpc.Conn, err error) {
+	if n == nil || n.resolver == nil {
+		return nil, errors.New("no node dialer configured")
+	}
+	// Don't trip the breaker if we're already canceled.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, errors.Wrap(ctxErr, "dial")
+	}
+	addr, locality, err := n.resolver(nodeID)
+	if err != nil {
+		err = errors.Wrapf(err, "failed to resolve n%d", nodeID)
+		return nil, err
+	}
+	conn, _, err := n.dialDRPC(ctx, nodeID, addr, locality, true, class)
 	return conn, err
 }
 
@@ -192,6 +213,38 @@ func (n *Dialer) dial(
 		return nil, nil, errors.Wrap(ctxErr, ctxWrapMsg)
 	}
 	rpcConn := n.rpcContext.GRPCDialNode(addr.String(), nodeID, locality, class)
+	connect := rpcConn.ConnectEx
+	if !checkBreaker {
+		connect = rpcConn.ConnectNoBreaker
+	}
+	conn, err := connect(ctx)
+	if err != nil {
+		// If we were canceled during the dial, don't trip the breaker.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, nil, errors.Wrap(ctxErr, ctxWrapMsg)
+		}
+		err = errors.Wrapf(err, "failed to connect to n%d at %v", nodeID, addr)
+		return nil, nil, err
+	}
+	pool := rpcConn.BatchStreamPool()
+	return conn, pool, nil
+}
+
+// TODO(server): add comments
+func (n *Dialer) dialDRPC(
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	addr net.Addr,
+	locality roachpb.Locality,
+	checkBreaker bool,
+	class rpcbase.ConnectionClass,
+) (drpc.Conn, *rpc.DRPCBatchStreamPool, error) {
+	const ctxWrapMsg = "dial"
+	// Don't trip the breaker if we're already canceled.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, nil, errors.Wrap(ctxErr, ctxWrapMsg)
+	}
+	rpcConn := n.rpcContext.DRPCDialNode(addr.String(), nodeID, locality, class)
 	connect := rpcConn.ConnectEx
 	if !checkBreaker {
 		connect = rpcConn.ConnectNoBreaker

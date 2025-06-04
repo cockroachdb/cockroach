@@ -30,6 +30,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@io_storj_drpc//:drpc",
         "@org_golang_google_grpc//:grpc",
     ],
 )
@@ -59,6 +60,7 @@ go_test(
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
+        "@io_storj_drpc//:drpc",
         "@org_golang_google_grpc//:grpc",
     ],
 )

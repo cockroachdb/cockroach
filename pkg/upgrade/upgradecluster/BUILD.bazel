@@ -27,6 +27,7 @@ go_library(
         "//pkg/util/retry",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@io_storj_drpc//:drpc",
         "@org_golang_google_grpc//:grpc",
     ],
 )
@@ -54,6 +55,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/retry",
         "//pkg/util/syncutil",
+        "@io_storj_drpc//:drpc",
         "@org_golang_google_grpc//:grpc",
     ],
 )

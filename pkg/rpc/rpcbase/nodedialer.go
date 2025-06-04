@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 const TODODRPC = true
@@ -18,4 +19,5 @@ const TODODRPC = true
 // node IDs.
 type NodeDialer interface {
 	Dial(context.Context, roachpb.NodeID, ConnectionClass) (_ *grpc.ClientConn, err error)
+	DialDRPC(context.Context, roachpb.NodeID, ConnectionClass) (_ drpc.Conn, err error)
 }
