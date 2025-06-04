@@ -17,21 +17,13 @@ import (
 // consulting the cluster version.
 type V uint32
 
-// V24_3 is the exec version of all binaries of 24.3 and prior cockroach
-// versions.
-const V24_3 = V(71)
-
-// V25_1 is the exec version of all binaries of 25.1 cockroach versions. It can
-// only be used by the flows once the cluster has upgraded to 25.1.
-const V25_1 = V(72)
-
 // V25_2 is the exec version of all binaries of 25.2 cockroach versions. It can
 // only be used by the flows once the cluster has upgraded to 25.2.
 const V25_2 = V(73)
 
 // MinAccepted is the oldest version that the server is compatible with. A
 // server will not accept flows with older versions.
-const MinAccepted = V24_3
+const MinAccepted = V25_2
 
 // Latest is the latest exec version supported by this binary.
 const Latest = V25_2
