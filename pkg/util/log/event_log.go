@@ -139,7 +139,7 @@ func NewSEventLogger(ac AmbientContext, o ...StructuredEventOptFunc) SEventLogge
 	return SEventLogger{sink: sink, defaultOptions: defaultOptions}
 }
 
-func (S SEventLogger) StructuredEvent(
+func (S *SEventLogger) StructuredEvent(
 	ctx context.Context, event logpb.EventPayload, o ...StructuredEventOptFunc,
 ) {
 	options := S.defaultOptions

@@ -220,11 +220,15 @@ VALUES($1, $2, $3, $4, 0)`
 		// (compatibility with previous versions of CockroachDB.)
 		infoBytes = infoBytes.StripMarkers()
 		eventType := event.CommonDetails().EventType
+		reportingId := "0"
+		if e.ambientContext.ServerIDs != nil {
+			reportingId = e.ambientContext.ServerIDs.ServerIdentityString(serverident.IdentifyInstanceID)
+		}
 		args = append(
 			args,
 			timeutil.Unix(0, event.CommonDetails().Timestamp),
 			eventType,
-			e.ambientContext.ServerIDs.ServerIdentityString(serverident.IdentifyInstanceID),
+			reportingId,
 			string(infoBytes),
 		)
 	}
