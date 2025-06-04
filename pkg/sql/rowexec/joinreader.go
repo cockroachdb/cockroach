@@ -611,7 +611,7 @@ func newJoinReader(
 	}
 
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
-		if flowTxn := flowCtx.EvalCtx.Txn; flowTxn != nil {
+		if flowTxn := flowCtx.Txn; flowTxn != nil {
 			jr.contentionEventsListener.Init(flowTxn.ID())
 		}
 		jr.input = newInputStatCollector(jr.input)

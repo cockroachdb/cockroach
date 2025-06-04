@@ -171,8 +171,10 @@ func alterReplicationJobHook(
 				return nil, nil, false, errors.AssertionFailedf("unexpected nil cutover expression")
 			}
 
-			ct, err := asof.EvalSystemTimeExpr(ctx, evalCtx, p.SemaCtx(), alterTenantStmt.Cutover.Timestamp,
-				alterReplicationJobOp, asof.ReplicationCutover)
+			ct, err := asof.EvalSystemTimeExpr(
+				ctx, evalCtx, p.Txn(), p.SemaCtx(), alterTenantStmt.Cutover.Timestamp,
+				alterReplicationJobOp, asof.ReplicationCutover,
+			)
 			if err != nil {
 				return nil, nil, false, err
 			}
