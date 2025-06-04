@@ -39,6 +39,54 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestDetailsRemoteNode verifies that requesting details for a remote node
+// returns the correct node information.
+func TestDetailsRemoteNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Start a 3 node cluster
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// Use in-memory stores
+			StoreSpecs: []base.StoreSpec{{InMemory: true}},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Create a map of nodeID to status server for each node.
+	statusServers := make(map[roachpb.NodeID]*systemStatusServer)
+	for i := 0; i < 3; i++ {
+		nodeID := tc.Server(i).NodeID()
+		statusServers[nodeID] = tc.Server(i).StatusServer().(*systemStatusServer)
+	}
+
+	// For each status server, request details about every node and verify the response.
+	for serverNodeID, statusServer := range statusServers {
+		// Verify local returns the same node id.
+		res, err := statusServer.Details(ctx, &serverpb.DetailsRequest{
+			NodeId: "local",
+		})
+		require.NoError(t, err)
+		require.Equal(t, serverNodeID, res.NodeID,
+			"status server on node %d returned wrong nodeID for node %d",
+			serverNodeID, serverNodeID)
+
+		// Verify specifying a node id returns the same id in the response.
+		for expectedNodeID := range statusServers {
+			res, err := statusServer.Details(ctx, &serverpb.DetailsRequest{
+				NodeId: expectedNodeID.String(),
+			})
+			require.NoError(t, err)
+			require.Equal(t, expectedNodeID, res.NodeID,
+				"status server on node %d returned wrong nodeID for node %d",
+				serverNodeID, expectedNodeID)
+		}
+	}
+}
+
 // TestDetailsRedacted checks if the `DetailsResponse` contains redacted fields
 // when the `Redact` flag is set in the `DetailsRequest`
 func TestDetailsRedacted(t *testing.T) {

@@ -46,6 +46,7 @@ type RoachtestHTTPClient struct {
 	cluster            cluster.Cluster
 	l                  *logger.Logger
 	virtualClusterName string
+	headers            map[string]string
 	// Used for safely adding to the cookie jar.
 	mu syncutil.Mutex
 }
@@ -53,6 +54,7 @@ type RoachtestHTTPClient struct {
 type RoachtestHTTPOptions struct {
 	Timeout            time.Duration
 	VirtualClusterName string
+	Headers            map[string]string
 }
 
 func HTTPTimeout(timeout time.Duration) func(options *RoachtestHTTPOptions) {
@@ -64,6 +66,12 @@ func HTTPTimeout(timeout time.Duration) func(options *RoachtestHTTPOptions) {
 func VirtualCluster(name string) func(*RoachtestHTTPOptions) {
 	return func(options *RoachtestHTTPOptions) {
 		options.VirtualClusterName = name
+	}
+}
+
+func WithHeaders(headers map[string]string) func(*RoachtestHTTPOptions) {
+	return func(options *RoachtestHTTPOptions) {
+		options.Headers = headers
 	}
 }
 
@@ -93,6 +101,7 @@ func DefaultHTTPClient(
 		roachtestHTTP.client.Timeout = httpOptions.Timeout
 	}
 	roachtestHTTP.virtualClusterName = httpOptions.VirtualClusterName
+	roachtestHTTP.headers = httpOptions.Headers
 
 	return &roachtestHTTP
 }
@@ -101,7 +110,12 @@ func (r *RoachtestHTTPClient) Get(ctx context.Context, url string) (*http.Respon
 	if err := r.addCookies(ctx, url); err != nil {
 		return nil, err
 	}
-	return r.client.Get(ctx, url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	r.addHeaders(req)
+	return r.client.Do(req)
 }
 
 func (r *RoachtestHTTPClient) GetJSON(
@@ -111,6 +125,21 @@ func (r *RoachtestHTTPClient) GetJSON(
 		return err
 	}
 	return httputil.GetJSONWithOptions(*r.client.Client, path, response, opts...)
+}
+
+func (r *RoachtestHTTPClient) Post(
+	ctx context.Context, url string, contentType string, body io.Reader,
+) (*http.Response, error) {
+	if err := r.addCookies(ctx, url); err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", contentType)
+	r.addHeaders(req)
+	return r.client.Do(req)
 }
 
 func (r *RoachtestHTTPClient) PostProtobuf(
@@ -250,4 +279,10 @@ func (r *RoachtestHTTPClient) Download(ctx context.Context, url string, filename
 		return err
 	}
 	return nil
+}
+
+func (r *RoachtestHTTPClient) addHeaders(req *http.Request) {
+	for key, value := range r.headers {
+		req.Header.Set(key, value)
+	}
 }

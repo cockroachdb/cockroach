@@ -1,0 +1,129 @@
+{
+  "endpoints": [
+    {
+      "url": "/_admin/v1/users",
+      "method": "GET"
+    },
+    {
+      "url": "/_admin/v1/databases",
+      "method": "GET"
+    },
+    {
+      "url": "/_admin/v1/databases/{database}",
+      "method": "GET"
+    },
+    {
+      "url": "/_admin/v1/databases/{database}/tables/{table}",
+      "method": "GET"
+    },
+    {
+      "url": "/_admin/v1/databases/{database}/tables/{table}/stats",
+      "method": "GET"
+    },
+    {
+      "url": "/_admin/v1/nontablestats",
+      "method": "GET"
+    },
+    {
+      "url": "/_admin/v1/events",
+      "method": "GET"
+    },
+    {
+      "url": "/_admin/v1/uidata",
+      "method": "POST",
+      "skip": "needs non trivial validation"
+    },
+    {
+      "url": "/_admin/v1/uidata",
+      "method": "GET",
+      "skip": "needs non trivial validation"
+    },
+    {
+      "url": "/_admin/v1/cluster",
+      "method": "GET"
+    },
+    {
+      "url": "/_admin/v1/settings",
+      "method": "GET"
+    },
+    {
+      "url": "/_admin/v1/health",
+      "method": "GET"
+    },
+    {
+      "url": "/health",
+      "method": "GET"
+    },
+    {
+      "url": "/_admin/v1/liveness",
+      "method": "GET"
+    },
+    {
+      "url": "/_admin/v1/jobs",
+      "method": "GET"
+    },
+    {
+      "url": "/_admin/v1/jobs/{job_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_admin/v1/locations",
+      "method": "GET"
+    },
+    {
+      "url": "/_admin/v1/queryplan",
+      "method": "GET",
+      "skip": "needs non trivial validation"
+    },
+    {
+      "url": "/_admin/v1/rangelog",
+      "method": "GET"
+    },
+    {
+      "url": "/_admin/v1/rangelog/{range_id}",
+      "method": "GET"
+    },
+    {
+      "url": "/_admin/v1/data_distribution",
+      "method": "GET"
+    },
+    {
+      "url": "/_admin/v1/metricmetadata",
+      "method": "GET"
+    },
+    {
+      "url": "/_admin/v1/chartcatalog",
+      "method": "GET"
+    },
+    {
+      "url": "/_admin/v1/enqueue_range",
+      "method": "POST"
+    },
+    {
+      "url": "/_admin/v1/trace_snapshots",
+      "method": "GET"
+    },
+    {
+      "url": "/_admin/v1/trace_snapshots",
+      "method": "POST",
+      "skip": "needs non trivial validation"
+    },
+    {
+      "url": "/_admin/v1/trace_snapshots/{snapshot_id}",
+      "method": "GET",
+      "skip": "needs non trivial validation"
+    },
+    {
+      "url": "/_admin/v1/traces",
+      "method": "POST"
+    },
+    {
+      "url": "/_admin/v1/settracerecordingtype",
+      "method": "POST"
+    },
+    {
+      "url": "/_admin/v1/tenants",
+      "method": "GET"
+    }
+  ]
+} 
