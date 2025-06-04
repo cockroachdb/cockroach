@@ -130,7 +130,7 @@ func (c *PromClient) setUrl(url string) {
 
 // instanceConfigRequest is the HTTP request received for generating instance config
 type instanceConfigRequest struct {
-	//Config is the content of the yaml file
+	// Config is the content of the yaml file
 	Config   string `json:"config"`
 	Insecure bool   `json:"insecure"`
 }
@@ -140,7 +140,7 @@ func (c *PromClient) UpdatePrometheusTargets(
 	ctx context.Context,
 	clusterName string,
 	forceFetchCreds bool,
-	nodes map[int][]*NodeInfo,
+	nodes NodeTargets,
 	insecure bool,
 	l *logger.Logger,
 ) error {
@@ -253,8 +253,22 @@ type NodeInfo struct {
 	CustomLabels map[string]string // Custom labels to be added to the cluster config
 }
 
+type NodeTargets map[int][]*NodeInfo
+
+func (nt NodeTargets) String() string {
+	var parts []string
+	for port, infos := range nt {
+		var targets []string
+		for _, info := range infos {
+			targets = append(targets, info.Target)
+		}
+		parts = append(parts, fmt.Sprintf("%d:[%s]", port, strings.Join(targets, ",")))
+	}
+	return strings.Join(parts, " ")
+}
+
 // createClusterConfigFile creates the cluster config file per node
-func buildCreateRequest(nodes map[int][]*NodeInfo, insecure bool) (io.Reader, error) {
+func buildCreateRequest(nodes NodeTargets, insecure bool) (io.Reader, error) {
 	configs := make([]*CCParams, 0)
 	for _, n := range nodes {
 		for _, node := range n {
