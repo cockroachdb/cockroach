@@ -79,6 +79,7 @@ go_library(
         "replica_tscache.go",
         "replica_write.go",
         "replicate_queue.go",
+        "rpc_clients.go",
         "scanner.go",
         "scheduler.go",
         "snapshot_apply_prepare.go",

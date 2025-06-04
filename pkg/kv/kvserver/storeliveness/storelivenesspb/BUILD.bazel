@@ -31,8 +31,15 @@ go_proto_library(
 
 go_library(
     name = "storelivenesspb",
-    srcs = ["service.go"],
+    srcs = [
+        "rpc_clients.go",
+        "service.go",
+    ],
     embed = [":storelivenesspb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/rpc/rpcbase",
+    ],
 )

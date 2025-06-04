@@ -2364,7 +2364,7 @@ func (n *Node) ResetQuorum(
 	log.Infof(ctx, "updated meta2 entry for r%d", desc.RangeID)
 
 	// Set up connection to self. Use rpc.SystemClass to avoid throttling.
-	conn, err := n.storeCfg.NodeDialer.Dial(ctx, n.Descriptor.NodeID, rpcbase.SystemClass)
+	client, err := kvserver.DialMultiRaftClient(n.storeCfg.NodeDialer, ctx, n.Descriptor.NodeID, rpcbase.SystemClass)
 	if err != nil {
 		return nil, err
 	}
@@ -2377,7 +2377,7 @@ func (n *Node) ResetQuorum(
 		n.clusterID.Get(),
 		n.storeCfg.Settings,
 		n.storeCfg.Tracer(),
-		conn,
+		client,
 		n.storeCfg.Clock.Now(),
 		desc,
 		toReplicaDescriptor,
