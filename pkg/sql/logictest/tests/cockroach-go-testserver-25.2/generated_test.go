@@ -121,3 +121,10 @@ func TestLogic_upgrade(
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "upgrade")
 }
+
+func TestLogic_vector_index_mixed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "vector_index_mixed")
+}

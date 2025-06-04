@@ -6,6 +6,9 @@
 package vecindex
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -66,7 +69,9 @@ func CheckEnabled(sv *settings.Values) error {
 
 // MakeVecConfig constructs a new VecConfig that's compatible with the given
 // type.
-func MakeVecConfig(evalCtx *eval.Context, typ *types.T, opClass tree.Name) (vecpb.Config, error) {
+func MakeVecConfig(
+	ctx context.Context, evalCtx *eval.Context, typ *types.T, opClass tree.Name,
+) (vecpb.Config, error) {
 	// Dimensions are derived from the vector type. By default, use Givens
 	// rotations to mix input vectors.
 	config := vecpb.Config{Dims: typ.Width(), RotAlgorithm: vecpb.RotGivens}
@@ -94,6 +99,13 @@ func MakeVecConfig(evalCtx *eval.Context, typ *types.T, opClass tree.Name) (vecp
 	default:
 		return vecpb.Config{}, pgerror.Newf(
 			pgcode.UndefinedObject, "operator class %q does not exist", opClass)
+	}
+
+	if config.DistanceMetric != vecpb.L2SquaredDistance {
+		if !evalCtx.Settings.Version.ActiveVersion(ctx).AtLeast(clusterversion.V25_3.Version()) {
+			return vecpb.Config{}, pgerror.Newf(pgcode.FeatureNotSupported,
+				"cannot use %s until finalizing on 25.3", opClass)
+		}
 	}
 
 	return config, nil

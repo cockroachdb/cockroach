@@ -1977,7 +1977,7 @@ func NewTableDesc(
 					return nil, err
 				}
 				opClass := columns[len(columns)-1].OpClass
-				idx.VecConfig, err = vecindex.MakeVecConfig(evalCtx, column.GetType(), opClass)
+				idx.VecConfig, err = vecindex.MakeVecConfig(ctx, evalCtx, column.GetType(), opClass)
 				if err != nil {
 					return nil, err
 				}
