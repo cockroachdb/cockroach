@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -184,7 +184,7 @@ type vectorBench struct {
 	ctx            context.Context
 	stopper        *stop.Stopper
 	datasetName    string
-	distanceMetric vecdist.Metric
+	distanceMetric vecpb.DistanceMetric
 	provider       VectorProvider
 	buildData      vecann.Dataset
 	searchData     vecann.SearchDataset
@@ -194,13 +194,13 @@ type vectorBench struct {
 func newVectorBench(ctx context.Context, stopper *stop.Stopper, datasetName string) *vectorBench {
 	// Derive the distance metric from the dataset name, assuming certain naming
 	// conventions.
-	var distanceMetric vecdist.Metric
+	var distanceMetric vecpb.DistanceMetric
 	if strings.HasSuffix(datasetName, "-euclidean") {
-		distanceMetric = vecdist.L2Squared
+		distanceMetric = vecpb.L2SquaredDistance
 	} else if strings.HasSuffix(datasetName, "-ip") || strings.HasSuffix(datasetName, "-dot") {
-		distanceMetric = vecdist.InnerProduct
+		distanceMetric = vecpb.InnerProductDistance
 	} else if strings.HasSuffix(datasetName, "-angular") {
-		distanceMetric = vecdist.Cosine
+		distanceMetric = vecpb.CosineDistance
 	} else {
 		panic(errors.Newf("can't derive distance metric for dataset %s", datasetName))
 	}
@@ -464,13 +464,13 @@ func (vb *vectorBench) ensureDataset(ctx context.Context, forSearch bool) {
 // newVectorProvider creates a new in-memory or SQL based vector provider that
 // indexes the given dataset.
 func newVectorProvider(
-	stopper *stop.Stopper, datasetName string, dims int, distanceMetric vecdist.Metric,
+	stopper *stop.Stopper, datasetName string, dims int, distanceMetric vecpb.DistanceMetric,
 ) (VectorProvider, error) {
 	options := cspann.IndexOptions{
 		MinPartitionSize:      minPartitionSize,
 		MaxPartitionSize:      maxPartitionSize,
 		BaseBeamSize:          *flagBeamSize,
-		RotAlgorithm:          cspann.RotGivens,
+		RotAlgorithm:          vecpb.RotGivens,
 		DisableAdaptiveSearch: *flagDisableAdaptiveSearch,
 	}
 
@@ -479,7 +479,7 @@ func newVectorProvider(
 	}
 
 	// Use SQL-based provider with connection string from flags.
-	provider, err := NewSQLProvider(context.Background(), datasetName, dims, options)
+	provider, err := NewSQLProvider(context.Background(), datasetName, dims, distanceMetric, options)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating SQL provider")
 	}

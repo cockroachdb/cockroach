@@ -1,3 +1,5 @@
+# LogicTest: !local-mixed-25.2 !local-schema-locked
+# TODO(andyk): Remove this once 25.3 is our minimum supported version.
 
 # ------------------------------------------------------------------------------
 # CREATE TABLE/INDEX tests.
@@ -281,21 +283,43 @@ storage_params  CREATE TABLE public.storage_params (
 statement ok
 DROP TABLE storage_params
 
-# It is possible to specify the default vector_l2_ops operator class.
+# It is possible to specify different operator classes.
 statement ok
 CREATE TABLE operator_class (
   a INT PRIMARY KEY,
   b INT,
   vec1 VECTOR(3),
   VECTOR INDEX (vec1 vector_l2_ops),
-  VECTOR INDEX (b, vec1 vector_l2_ops)
+  VECTOR INDEX (b, vec1 vector_cosine_ops),
+  VECTOR INDEX (vec1 vector_ip_ops),
+  FAMILY (a, b, vec1)
 )
 
 statement ok
-CREATE INDEX ON operator_class USING cspann (vec1 vector_l2_ops)
+CREATE INDEX ON operator_class USING cspann (b, vec1 vector_l2_ops)
 
 statement ok
-CREATE INDEX ON operator_class USING cspann (b, vec1 vector_l2_ops)
+CREATE INDEX ON operator_class USING cspann (vec1 vector_cosine_ops)
+
+statement ok
+CREATE INDEX ON operator_class USING cspann (b, vec1 vector_ip_ops)
+
+query TT
+SHOW CREATE TABLE operator_class
+----
+operator_class  CREATE TABLE public.operator_class (
+                  a INT8 NOT NULL,
+                  b INT8 NULL,
+                  vec1 VECTOR(3) NULL,
+                  CONSTRAINT operator_class_pkey PRIMARY KEY (a ASC),
+                  VECTOR INDEX operator_class_vec1_idx (vec1 vector_l2_ops),
+                  VECTOR INDEX operator_class_b_vec1_idx (b ASC, vec1 vector_cosine_ops),
+                  VECTOR INDEX operator_class_vec1_idx1 (vec1 vector_ip_ops),
+                  VECTOR INDEX operator_class_b_vec1_idx1 (b ASC, vec1 vector_l2_ops),
+                  VECTOR INDEX operator_class_vec1_idx2 (vec1 vector_cosine_ops),
+                  VECTOR INDEX operator_class_b_vec1_idx2 (b ASC, vec1 vector_ip_ops),
+                  FAMILY fam_0_a_b_vec1 (a, b, vec1)
+                );
 
 statement ok
 DROP TABLE operator_class
@@ -399,12 +423,9 @@ CREATE VECTOR INDEX on vec_errors (vec1) STORING (b);
 statement error at or near "ivfflat": syntax error: unrecognized access method: ivfflat
 CREATE INDEX ON vec_errors USING ivfflat (vec1)
 
-# Operator classes other than vector_l2_ops are not (yet) supported.
+# Try to use unsupported operator class.
 statement error pgcode 0A000 pq: unimplemented: operator class vector_l1_ops is not supported
 CREATE INDEX ON vec_errors USING cspann (vec1 vector_l1_ops)
-
-statement error pgcode 0A000 pq: unimplemented: operator class vector_cosine_ops is not supported
-CREATE INDEX ON vec_errors USING cspann (vec1 vector_cosine_ops)
 
 statement error pgcode 42704 pq: operator class "nonexistent_op_type" does not exist
 CREATE INDEX ON vec_errors USING cspann (vec1 nonexistent_op_type)
@@ -703,6 +724,61 @@ SELECT * FROM backfill_test@backfill_test_username_prefix_enc_idx WHERE username
 
 statement ok
 DROP TABLE backfill_test
+
+# Test other distance metrics.
+statement ok
+CREATE TABLE distance_metrics (
+  a INT PRIMARY KEY,
+  v VECTOR(2),
+  VECTOR INDEX idx1 (v vector_l2_ops) WITH (min_partition_size=1, max_partition_size=4),
+  VECTOR INDEX idx2 (v vector_cosine_ops) WITH (min_partition_size=1, max_partition_size=4),
+  FAMILY (a, v)
+)
+
+statement ok
+CREATE VECTOR INDEX idx3 ON distance_metrics (v vector_ip_ops) WITH (min_partition_size=1, max_partition_size=4)
+
+statement ok
+INSERT INTO distance_metrics (a, v) VALUES
+  (1, '[0, 0]'),
+  (2, '[-2, -2]'),
+  (3, '[2, 2]'),
+  (4, '[4, 4]'),
+  (5, '[-2, 2]');
+
+# Results using L2 distance.
+query ITF rowsort
+SELECT a, v, round(v <-> '[2, 2]', 2) dist FROM distance_metrics ORDER BY v <-> '[2, 2]' LIMIT 5;
+----
+3  [2,2]    0
+1  [0,0]    2.83
+4  [4,4]    2.83
+5  [-2,2]   4
+2  [-2,-2]  5.66
+
+# Results using Cosine distance.
+query ITF rowsort
+SELECT a, v, round(v <=> '[2, 2]', 2) dist FROM distance_metrics ORDER BY v <=> '[2, 2]' LIMIT 5;
+----
+1  [0,0]    NaN
+3  [2,2]    0
+4  [4,4]    0
+5  [-2,2]   1
+2  [-2,-2]  2
+
+# Results using InnerProduct distance.
+query ITF rowsort
+SELECT a, v, round(v <#> '[2, 2]', 2) dist FROM distance_metrics@idx3 ORDER BY v <#> '[2, 2]' LIMIT 5;
+----
+4  [4,4]    -16
+3  [2,2]    -8
+1  [0,0]    -0
+5  [-2,2]   -0
+2  [-2,-2]  8
+
+# Attempt to use index that doesn.t match the distance operator.
+statement error index "idx1" cannot be used for this query
+SELECT a, v, round(v <=> '[2, 2]', 2) dist FROM distance_metrics@idx1 ORDER BY v <=> '[2, 2]' LIMIT 5;
 
 subtest end
 

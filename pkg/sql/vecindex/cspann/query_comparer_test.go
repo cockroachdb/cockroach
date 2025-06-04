@@ -8,7 +8,7 @@ package cspann
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -21,7 +21,7 @@ func TestQueryComparer(t *testing.T) {
 
 	testCases := []struct {
 		name        string
-		metric      vecdist.Metric
+		metric      vecpb.DistanceMetric
 		level       Level
 		queryVector vector.T
 		candidates  []SearchResult
@@ -30,7 +30,7 @@ func TestQueryComparer(t *testing.T) {
 		// L2Squared tests.
 		{
 			name:        "L2Squared leaf level - query vector at origin",
-			metric:      vecdist.L2Squared,
+			metric:      vecpb.L2SquaredDistance,
 			level:       LeafLevel,
 			queryVector: vector.T{0, 0},
 			candidates: []SearchResult{
@@ -42,7 +42,7 @@ func TestQueryComparer(t *testing.T) {
 		},
 		{
 			name:        "L2Squared leaf level - query vector not at origin",
-			metric:      vecdist.L2Squared,
+			metric:      vecpb.L2SquaredDistance,
 			level:       LeafLevel,
 			queryVector: vector.T{3, 4},
 			candidates: []SearchResult{
@@ -54,7 +54,7 @@ func TestQueryComparer(t *testing.T) {
 		},
 		{
 			name:        "L2Squared interior level - same as leaf",
-			metric:      vecdist.L2Squared,
+			metric:      vecpb.L2SquaredDistance,
 			level:       SecondLevel,
 			queryVector: vector.T{3, 4},
 			candidates: []SearchResult{
@@ -68,7 +68,7 @@ func TestQueryComparer(t *testing.T) {
 		// InnerProduct tests.
 		{
 			name:        "InnerProduct leaf level",
-			metric:      vecdist.InnerProduct,
+			metric:      vecpb.InnerProductDistance,
 			level:       LeafLevel,
 			queryVector: vector.T{3, 4},
 			candidates: []SearchResult{
@@ -79,7 +79,7 @@ func TestQueryComparer(t *testing.T) {
 		},
 		{
 			name:        "InnerProduct interior level - normalized centroids",
-			metric:      vecdist.InnerProduct,
+			metric:      vecpb.InnerProductDistance,
 			level:       SecondLevel,
 			queryVector: vector.T{3, 4},
 			candidates: []SearchResult{
@@ -92,7 +92,7 @@ func TestQueryComparer(t *testing.T) {
 		},
 		{
 			name:        "InnerProduct interior level - zero query vector",
-			metric:      vecdist.InnerProduct,
+			metric:      vecpb.InnerProductDistance,
 			level:       SecondLevel,
 			queryVector: vector.T{0, 0},
 			candidates: []SearchResult{
@@ -105,7 +105,7 @@ func TestQueryComparer(t *testing.T) {
 		// Cosine tests.
 		{
 			name:        "Cosine leaf level",
-			metric:      vecdist.Cosine,
+			metric:      vecpb.CosineDistance,
 			level:       LeafLevel,
 			queryVector: vector.T{4, 3}, // normalized = {0.8, 0.6}
 			candidates: []SearchResult{
@@ -118,7 +118,7 @@ func TestQueryComparer(t *testing.T) {
 		},
 		{
 			name:        "Cosine leaf level - zero query vector",
-			metric:      vecdist.Cosine,
+			metric:      vecpb.CosineDistance,
 			level:       LeafLevel,
 			queryVector: vector.T{0, 0}, // normalized = {0, 0}
 			candidates: []SearchResult{
@@ -130,7 +130,7 @@ func TestQueryComparer(t *testing.T) {
 		},
 		{
 			name:        "Cosine interior level",
-			metric:      vecdist.Cosine,
+			metric:      vecpb.CosineDistance,
 			level:       SecondLevel,
 			queryVector: vector.T{4, 3}, // normalized = {0.8, 0.6}
 			candidates: []SearchResult{
@@ -142,7 +142,7 @@ func TestQueryComparer(t *testing.T) {
 		},
 		{
 			name:        "Cosine interior level - zero query vector",
-			metric:      vecdist.Cosine,
+			metric:      vecpb.CosineDistance,
 			level:       SecondLevel,
 			queryVector: vector.T{0, 0},
 			candidates: []SearchResult{
@@ -158,7 +158,7 @@ func TestQueryComparer(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup queryComparer.
 			var rot RandomOrthoTransformer
-			rot.Init(RotNone, len(tc.queryVector), 42)
+			rot.Init(vecpb.RotNone, len(tc.queryVector), 42)
 
 			var comparer queryComparer
 			comparer.Init(tc.metric, tc.queryVector, &rot)

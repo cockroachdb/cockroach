@@ -9,8 +9,8 @@ import (
 	"context"
 	"slices"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -623,7 +623,7 @@ func (fw *fixupWorker) addToParentPartition(
 	// Cosine and InnerProduct need to normalize centroids before adding them to a
 	// partition.
 	switch fw.index.quantizer.GetDistanceMetric() {
-	case vecdist.Cosine, vecdist.InnerProduct:
+	case vecpb.CosineDistance, vecpb.InnerProductDistance:
 		tempCentroid := fw.workspace.AllocVector(len(centroid))
 		defer fw.workspace.FreeVector(tempCentroid)
 		copy(tempCentroid, centroid)
