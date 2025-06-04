@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	circuit2 "github.com/cockroachdb/cockroach/pkg/util/circuit"
@@ -87,7 +88,7 @@ var _ = (*Dialer).Stopper
 // Dial returns a grpc connection to the given node. It logs whenever the
 // node first becomes unreachable or reachable.
 func (n *Dialer) Dial(
-	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
+	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (_ *grpc.ClientConn, err error) {
 	if n == nil || n.resolver == nil {
 		return nil, errors.New("no node dialer configured")
@@ -101,7 +102,27 @@ func (n *Dialer) Dial(
 		err = errors.Wrapf(err, "failed to resolve n%d", nodeID)
 		return nil, err
 	}
-	conn, _, _, _, err := n.dial(ctx, nodeID, addr, locality, true, class)
+	conn, _, err := n.dial(ctx, nodeID, addr, locality, true, class)
+	return conn, err
+}
+
+// TODO(server): add comments
+func (n *Dialer) DialDRPC(
+	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+) (_ drpc.Conn, err error) {
+	if n == nil || n.resolver == nil {
+		return nil, errors.New("no node dialer configured")
+	}
+	// Don't trip the breaker if we're already canceled.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, errors.Wrap(ctxErr, "dial")
+	}
+	addr, locality, err := n.resolver(nodeID)
+	if err != nil {
+		err = errors.Wrapf(err, "failed to resolve n%d", nodeID)
+		return nil, err
+	}
+	conn, _, err := n.dialDRPC(ctx, nodeID, addr, locality, true, class)
 	return conn, err
 }
 
@@ -109,7 +130,7 @@ func (n *Dialer) Dial(
 // trying to connect. This function should only be used when there is good
 // reason to believe that the node is reachable.
 func (n *Dialer) DialNoBreaker(
-	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
+	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (_ *grpc.ClientConn, err error) {
 	if n == nil || n.resolver == nil {
 		return nil, errors.New("no node dialer configured")
@@ -118,7 +139,7 @@ func (n *Dialer) DialNoBreaker(
 	if err != nil {
 		return nil, err
 	}
-	conn, _, _, _, err := n.dial(ctx, nodeID, addr, locality, false, class)
+	conn, _, err := n.dial(ctx, nodeID, addr, locality, false, class)
 	return conn, err
 }
 
@@ -129,7 +150,7 @@ func (n *Dialer) DialNoBreaker(
 // For a more contextualized explanation, see the comment that decorates
 // (*rpc.Context).loopbackDialFn.
 func (n *Dialer) DialInternalClient(
-	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
+	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (rpc.RestrictedInternalClient, error) {
 	if n == nil || n.resolver == nil {
 		return nil, errors.New("no node dialer configured")
@@ -148,7 +169,7 @@ func (n *Dialer) DialInternalClient(
 		return nil, errors.Wrap(err, "resolver error")
 	}
 	log.VEventf(ctx, 2, "sending request to %s", addr)
-	conn, pool, dconn, drpcBatchStreamPool, err := n.dial(ctx, nodeID, addr, locality, true, class)
+	conn, pool, err := n.dial(ctx, nodeID, addr, locality, true, class)
 	if err != nil {
 		return nil, err
 	}
@@ -167,8 +188,6 @@ func (n *Dialer) DialInternalClient(
 		client = &unaryDRPCBatchServiceToInternalAdapter{
 			useStreamPoolClient:      useStreamPoolClient,
 			RestrictedInternalClient: client, // for RangeFeed only
-			drpcClient:               kvpb.NewDRPCKVBatchClient(dconn),
-			drpcStreamPool:           drpcBatchStreamPool,
 		}
 		return client, nil
 	}
@@ -186,37 +205,68 @@ func (n *Dialer) dial(
 	addr net.Addr,
 	locality roachpb.Locality,
 	checkBreaker bool,
-	class rpc.ConnectionClass,
-) (*grpc.ClientConn, *rpc.BatchStreamPool, drpc.Conn, *rpc.DRPCBatchStreamPool, error) {
+	class rpcbase.ConnectionClass,
+) (*grpc.ClientConn, *rpc.BatchStreamPool, error) {
 	const ctxWrapMsg = "dial"
 	// Don't trip the breaker if we're already canceled.
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		return nil, nil, nil, nil, errors.Wrap(ctxErr, ctxWrapMsg)
+		return nil, nil, errors.Wrap(ctxErr, ctxWrapMsg)
 	}
 	rpcConn := n.rpcContext.GRPCDialNode(addr.String(), nodeID, locality, class)
 	connect := rpcConn.ConnectEx
 	if !checkBreaker {
 		connect = rpcConn.ConnectNoBreaker
 	}
-	conn, dconn, err := connect(ctx)
+	conn, err := connect(ctx)
 	if err != nil {
 		// If we were canceled during the dial, don't trip the breaker.
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return nil, nil, nil, nil, errors.Wrap(ctxErr, ctxWrapMsg)
+			return nil, nil, errors.Wrap(ctxErr, ctxWrapMsg)
 		}
 		err = errors.Wrapf(err, "failed to connect to n%d at %v", nodeID, addr)
-		return nil, nil, nil, nil, err
+		return nil, nil, err
 	}
 	pool := rpcConn.BatchStreamPool()
-	drpcStreamPool := rpcConn.DRPCBatchStreamPool()
-	return conn, pool, dconn, drpcStreamPool, nil
+	return conn, pool, nil
+}
+
+// TODO(server): add comments
+func (n *Dialer) dialDRPC(
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	addr net.Addr,
+	locality roachpb.Locality,
+	checkBreaker bool,
+	class rpcbase.ConnectionClass,
+) (drpc.Conn, *rpc.DRPCBatchStreamPool, error) {
+	const ctxWrapMsg = "dial"
+	// Don't trip the breaker if we're already canceled.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, nil, errors.Wrap(ctxErr, ctxWrapMsg)
+	}
+	rpcConn := n.rpcContext.DRPCDialNode(addr.String(), nodeID, locality, class)
+	connect := rpcConn.ConnectEx
+	if !checkBreaker {
+		connect = rpcConn.ConnectNoBreaker
+	}
+	conn, err := connect(ctx)
+	if err != nil {
+		// If we were canceled during the dial, don't trip the breaker.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, nil, errors.Wrap(ctxErr, ctxWrapMsg)
+		}
+		err = errors.Wrapf(err, "failed to connect to n%d at %v", nodeID, addr)
+		return nil, nil, err
+	}
+	pool := rpcConn.BatchStreamPool()
+	return conn, pool, nil
 }
 
 // ConnHealth returns nil if we have an open connection of the request
 // class to the given node that succeeded on its most recent heartbeat.
 // Returns circuit.ErrBreakerOpen if the breaker is tripped, otherwise
 // ErrNoConnection if no connection to the node currently exists.
-func (n *Dialer) ConnHealth(nodeID roachpb.NodeID, class rpc.ConnectionClass) error {
+func (n *Dialer) ConnHealth(nodeID roachpb.NodeID, class rpcbase.ConnectionClass) error {
 	if n == nil || n.resolver == nil {
 		return errors.New("no node dialer configured")
 	}
@@ -244,7 +294,7 @@ func (n *Dialer) ConnHealth(nodeID roachpb.NodeID, class rpc.ConnectionClass) er
 // removed and moved into that code. Also, as of #99191, we have stateful
 // circuit breakers that probe in the background and so whatever exactly it
 // is the caller really wants can likely be achieved by more direct means.
-func (n *Dialer) ConnHealthTryDial(nodeID roachpb.NodeID, class rpc.ConnectionClass) error {
+func (n *Dialer) ConnHealthTryDial(nodeID roachpb.NodeID, class rpcbase.ConnectionClass) error {
 	err := n.ConnHealth(nodeID, class)
 	if err == nil {
 		return err
@@ -267,17 +317,17 @@ func (n *Dialer) ConnHealthTryDialInstance(id base.SQLInstanceID, addr string) e
 		return errors.New("no node dialer configured")
 	}
 	if err := n.rpcContext.ConnHealth(
-		addr, roachpb.NodeID(id), rpc.DefaultClass); err == nil {
+		addr, roachpb.NodeID(id), rpcbase.DefaultClass); err == nil {
 		return nil
 	}
-	return n.rpcContext.GRPCDialPod(addr, id, roachpb.Locality{}, rpc.DefaultClass).Health()
+	return n.rpcContext.GRPCDialPod(addr, id, roachpb.Locality{}, rpcbase.DefaultClass).Health()
 }
 
 // GetCircuitBreaker retrieves the circuit breaker for connections to the
 // given node. The breaker should not be mutated as this affects all connections
 // dialing to that node through this NodeDialer.
 func (n *Dialer) GetCircuitBreaker(
-	nodeID roachpb.NodeID, class rpc.ConnectionClass,
+	nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (*circuit2.Breaker, bool) {
 	addr, _, err := n.resolver(nodeID)
 	if err != nil {

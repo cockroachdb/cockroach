@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -50,11 +50,11 @@ const (
 // corresponding env variable is true.
 //
 // NB: for a subset of system ranges, SystemClass is used instead of this.
-var defRaftConnClass = func() rpc.ConnectionClass {
+var defRaftConnClass = func() rpcbase.ConnectionClass {
 	if envutil.EnvOrDefaultBool("COCKROACH_RAFT_USE_DEFAULT_CONNECTION_CLASS", false) {
-		return rpc.DefaultClass
+		return rpcbase.DefaultClass
 	}
-	return rpc.RaftClass
+	return rpcbase.RaftClass
 }()
 
 // loadInitializedReplicaForTesting loads and constructs an initialized Replica,
@@ -496,7 +496,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 
 	r.rangeStr.store(r.replicaID, desc)
 	r.isInitialized.Store(desc.IsInitialized())
-	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey, defRaftConnClass))
+	r.connectionClass.set(rpcbase.ConnectionClassForKey(desc.StartKey, defRaftConnClass))
 	r.concMgr.OnRangeDescUpdated(desc)
 	r.shMu.state.Desc = desc
 	r.flowControlV2.OnDescChangedLocked(ctx, desc, r.mu.tenantID)

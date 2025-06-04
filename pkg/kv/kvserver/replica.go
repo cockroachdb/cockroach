@@ -41,7 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -169,12 +169,12 @@ func (d *atomicDescString) get() *atomicDescInfo {
 type atomicConnectionClass uint32
 
 // get reads the current value of the ConnectionClass.
-func (c *atomicConnectionClass) get() rpc.ConnectionClass {
-	return rpc.ConnectionClass(atomic.LoadUint32((*uint32)(c)))
+func (c *atomicConnectionClass) get() rpcbase.ConnectionClass {
+	return rpcbase.ConnectionClass(atomic.LoadUint32((*uint32)(c)))
 }
 
 // set updates the current value of the ConnectionClass.
-func (c *atomicConnectionClass) set(cc rpc.ConnectionClass) {
+func (c *atomicConnectionClass) set(cc rpcbase.ConnectionClass) {
 	atomic.StoreUint32((*uint32)(c), uint32(cc))
 }
 

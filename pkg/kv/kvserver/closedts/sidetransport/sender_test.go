@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/policyrefresher"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 // mockReplica is a mock implementation of the Replica interface.
@@ -643,7 +645,7 @@ func (m *mockDialer) addOrUpdateNode(nid roachpb.NodeID, addr string) {
 }
 
 func (m *mockDialer) Dial(
-	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
+	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (_ *grpc.ClientConn, _ error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -658,6 +660,12 @@ func (m *mockDialer) Dial(
 		m.mu.conns = append(m.mu.conns, c)
 	}
 	return c, err
+}
+
+func (m *mockDialer) DialDRPC(
+	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+) (_ drpc.Conn, _ error) {
+	return nil, errors.New("mockDialer.DialDRPC not implemented")
 }
 
 func (m *mockDialer) Close() {
@@ -820,8 +828,15 @@ type failingDialer struct {
 var _ nodeDialer = &failingDialer{}
 
 func (f *failingDialer) Dial(
-	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
+	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (_ *grpc.ClientConn, err error) {
+	atomic.AddInt32(&f.dialCount, 1)
+	return nil, errors.New("failingDialer")
+}
+
+func (f *failingDialer) DialDRPC(
+	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+) (_ drpc.Conn, err error) {
 	atomic.AddInt32(&f.dialCount, 1)
 	return nil, errors.New("failingDialer")
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
@@ -140,7 +141,7 @@ func (t *tenantFanoutClient) dialNode(
 	if err != nil {
 		return nil, err
 	}
-	return t.rpcCtx.GRPCDialPod(instance.InstanceRPCAddr, id, instance.Locality, rpc.DefaultClass).Connect(ctx)
+	return t.rpcCtx.GRPCDialPod(instance.InstanceRPCAddr, id, instance.Locality, rpcbase.DefaultClass).Connect(ctx)
 }
 
 func (t *tenantFanoutClient) getAllNodes(
@@ -221,7 +222,7 @@ func (k kvFanoutClient) dialNode(ctx context.Context, serverID serverID) (*grpc.
 	if err != nil {
 		return nil, err
 	}
-	return k.rpcCtx.GRPCDialNode(addr.String(), id, locality, rpc.DefaultClass).Connect(ctx)
+	return k.rpcCtx.GRPCDialNode(addr.String(), id, locality, rpcbase.DefaultClass).Connect(ctx)
 }
 
 func (k kvFanoutClient) listNodes(ctx context.Context) (*serverpb.NodesResponse, error) {

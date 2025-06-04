@@ -14,6 +14,7 @@ go_library(
         "flow_diagram.go",
         "processors.go",
         "processors_changefeed.go",
+        "rpc_clients.go",
     ],
     embed = [":execinfrapb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb",
@@ -21,6 +22,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/roachpb",
+        "//pkg/rpc/rpcbase",
         "//pkg/security/username",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",

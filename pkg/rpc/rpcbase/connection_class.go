@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package rpc
+package rpcbase
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"

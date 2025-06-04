@@ -12,20 +12,27 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 type NoopDialer struct{}
 
 func (n NoopDialer) Dial(
-	ctx context.Context, id roachpb.NodeID, class rpc.ConnectionClass,
+	ctx context.Context, id roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (*grpc.ClientConn, error) {
+	return nil, nil
+}
+
+func (n NoopDialer) DialDRPC(
+	ctx context.Context, id roachpb.NodeID, class rpcbase.ConnectionClass,
+) (drpc.Conn, error) {
 	return nil, nil
 }
 
@@ -55,7 +62,7 @@ func TestHelperEveryNode(t *testing.T) {
 			MaxRetries:     10,
 		}, func() error {
 			return h.ForEveryNodeOrServer(ctx, "dummy-op", func(
-				context.Context, serverpb.MigrationClient,
+				context.Context, serverpb.RPCMigrationClient,
 			) error {
 				mu.Lock()
 				defer mu.Unlock()
@@ -94,7 +101,7 @@ func TestHelperEveryNode(t *testing.T) {
 			MaxRetries:     10,
 		}, func() error {
 			return h.ForEveryNodeOrServer(ctx, "dummy-op", func(
-				context.Context, serverpb.MigrationClient,
+				context.Context, serverpb.RPCMigrationClient,
 			) error {
 				mu.Lock()
 				defer mu.Unlock()
@@ -136,7 +143,7 @@ func TestHelperEveryNode(t *testing.T) {
 			MaxRetries:     10,
 		}, func() error {
 			return h.ForEveryNodeOrServer(ctx, "dummy-op", func(
-				context.Context, serverpb.MigrationClient,
+				context.Context, serverpb.RPCMigrationClient,
 			) error {
 				mu.Lock()
 				defer mu.Unlock()
@@ -160,7 +167,7 @@ func TestHelperEveryNode(t *testing.T) {
 			MaxRetries:     10,
 		}, func() error {
 			return h.ForEveryNodeOrServer(ctx, "dummy-op", func(
-				context.Context, serverpb.MigrationClient,
+				context.Context, serverpb.RPCMigrationClient,
 			) error {
 				return nil
 			})
