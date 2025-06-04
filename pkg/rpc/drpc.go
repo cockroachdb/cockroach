@@ -11,7 +11,10 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"storj.io/drpc"
 	"storj.io/drpc/drpcconn"
 	"storj.io/drpc/drpcmanager"
@@ -90,6 +93,53 @@ type closeEntirePoolConn struct {
 func (c *closeEntirePoolConn) Close() error {
 	_ = c.Conn.Close()
 	return c.pool.Close()
+}
+
+type drpcCloseNotifier struct {
+	conn drpc.Conn
+}
+
+func (d *drpcCloseNotifier) CloseNotify(ctx context.Context) <-chan struct{} {
+	return d.conn.Closed()
+}
+
+func newDRPCConnectionOptions(rpcCtx *Context, lm localityMetrics) *ConnectionOptions[drpc.Conn] {
+	return &ConnectionOptions[drpc.Conn]{
+		dial: dialDRPC(rpcCtx),
+		connEquals: func(a, b drpc.Conn) bool {
+			return a == b
+		},
+		newBatchStreamClient: func(ctx context.Context, cc drpc.Conn) (BatchStreamClient, error) {
+			return kvpb.NewDRPCInternalClient(cc).BatchStream(ctx)
+		},
+		newCloseNotifier: func(_ *stop.Stopper, cc drpc.Conn) closeNotifier {
+			return &drpcCloseNotifier{conn: cc}
+		},
+	}
+}
+
+func newDRPCPeerOptions(rpcCtx *Context, k peerKey, locality roachpb.Locality) *peerOptions[drpc.Conn] {
+	pm, _ := rpcCtx.metrics.acquire(k, locality)
+	return &peerOptions[drpc.Conn]{
+		locality: locality,
+		peers:    &rpcCtx.drpcPeers,
+		connOptions: &ConnectionOptions[drpc.Conn]{
+			dial: dialDRPC(rpcCtx),
+			connEquals: func(a, b drpc.Conn) bool {
+				return a == b
+			},
+			newBatchStreamClient: func(ctx context.Context, cc drpc.Conn) (BatchStreamClient, error) {
+				return kvpb.NewDRPCInternalClient(cc).BatchStream(ctx)
+			},
+			newCloseNotifier: func(_ *stop.Stopper, cc drpc.Conn) closeNotifier {
+				return &drpcCloseNotifier{conn: cc}
+			},
+		},
+		newHeartbeatClient: func(cc drpc.Conn) rpcHeartbeatClient {
+			return NewDRPCHeartbeatClient(cc)
+		},
+		pm: pm,
+	}
 }
 
 type DRPCConnection = Connection[drpc.Conn]

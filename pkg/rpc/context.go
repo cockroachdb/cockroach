@@ -51,6 +51,7 @@ import (
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/stats"
+	"storj.io/drpc"
 )
 
 // NewServer sets up an RPC server. Depending on the ServerOptions, the Server
@@ -226,7 +227,8 @@ type Context struct {
 
 	localInternalClient RestrictedInternalClient
 
-	peers peerMap[*grpc.ClientConn]
+	peers     peerMap[*grpc.ClientConn]
+	drpcPeers peerMap[drpc.Conn]
 
 	// dialbackMap is a map of currently executing dialback connections. This map
 	// is typically empty or close to empty. It only holds entries that are being
@@ -1995,7 +1997,26 @@ func (rpcCtx *Context) grpcDialRaw(
 func (rpcCtx *Context) GRPCUnvalidatedDial(
 	target string, locality roachpb.Locality,
 ) *GRPCConnection {
-	return rpcCtx.grpcDialNodeInternal(target, 0, locality, rpcbase.SystemClass)
+	class, nodeID := rpcbase.SystemClass, roachpb.NodeID(0)
+	k := peerKey{TargetAddr: target, NodeID: nodeID, Class: class}
+	if p, ok := rpcCtx.peers.get(k); ok {
+		// There's a cached peer, so we have a cached connection, use it.
+		return p.c
+	}
+	return rpcDialNodeInternal(rpcCtx, target, nodeID, class, newGRPCPeerOptions(rpcCtx, k, locality))
+}
+
+// TODO(server): add comments
+func (rpcCtx *Context) DRPCUnvalidatedDial(
+	target string, locality roachpb.Locality,
+) *DRPCConnection {
+	class, nodeID := rpcbase.SystemClass, roachpb.NodeID(0)
+	k := peerKey{TargetAddr: target, NodeID: nodeID, Class: class}
+	if p, ok := rpcCtx.drpcPeers.get(k); ok {
+		// There's a cached peer, so we have a cached connection, use it.
+		return p.c
+	}
+	return rpcDialNodeInternal(rpcCtx, target, nodeID, class, newDRPCPeerOptions(rpcCtx, k, locality))
 }
 
 // GRPCDialNode calls grpc.Dial with options appropriate for the
@@ -2016,7 +2037,34 @@ func (rpcCtx *Context) GRPCDialNode(
 			rpcCtx.makeDialCtx(target, remoteNodeID, class),
 			"%v", errors.AssertionFailedf("invalid node ID 0 in GRPCDialNode()"))
 	}
-	return rpcCtx.grpcDialNodeInternal(target, remoteNodeID, remoteLocality, class)
+
+	k := peerKey{TargetAddr: target, NodeID: remoteNodeID, Class: class}
+	if p, ok := rpcCtx.peers.get(k); ok {
+		// There's a cached peer, so we have a cached connection, use it.
+		return p.c
+	}
+	return rpcDialNodeInternal(rpcCtx, target, remoteNodeID, class, newGRPCPeerOptions(rpcCtx, k, remoteLocality))
+}
+
+// TODO(server): add comments
+func (rpcCtx *Context) DRPCDialNode(
+	target string,
+	remoteNodeID roachpb.NodeID,
+	remoteLocality roachpb.Locality,
+	class rpcbase.ConnectionClass,
+) *DRPCConnection {
+	if remoteNodeID == 0 && !rpcCtx.TestingAllowNamedRPCToAnonymousServer {
+		log.Fatalf(
+			rpcCtx.makeDialCtx(target, remoteNodeID, class),
+			"%v", errors.AssertionFailedf("invalid node ID 0 in GRPCDialNode()"))
+	}
+
+	k := peerKey{TargetAddr: target, NodeID: remoteNodeID, Class: class}
+	if p, ok := rpcCtx.drpcPeers.get(k); ok {
+		// There's a cached peer, so we have a cached connection, use it.
+		return p.c
+	}
+	return rpcDialNodeInternal(rpcCtx, target, remoteNodeID, class, newDRPCPeerOptions(rpcCtx, k, remoteLocality))
 }
 
 // GRPCDialPod wraps GRPCDialNode and treats the `remoteInstanceID`
@@ -2035,22 +2083,21 @@ func (rpcCtx *Context) GRPCDialPod(
 	return rpcCtx.GRPCDialNode(target, roachpb.NodeID(remoteInstanceID), remoteLocality, class)
 }
 
-// grpcDialNodeInternal connects to the remote node and sets up the async heartbeater.
-// This intentionally takes no `context.Context`; it uses one derived from rpcCtx.masterCtx.
-func (rpcCtx *Context) grpcDialNodeInternal(
+// TODO(server): add comments
+func rpcDialNodeInternal[Conn rpcConn](rpcCtx *Context,
 	target string,
 	remoteNodeID roachpb.NodeID,
-	remoteLocality roachpb.Locality,
 	class rpcbase.ConnectionClass,
-) *GRPCConnection {
+	peerOptions *peerOptions[Conn],
+) *Connection[Conn] {
 	k := peerKey{TargetAddr: target, NodeID: remoteNodeID, Class: class}
-	if p, ok := rpcCtx.peers.get(k); ok {
+	if p, ok := peerOptions.peers.get(k); ok {
 		// There's a cached peer, so we have a cached connection, use it.
 		return p.c
 	}
 
 	// Slow path. Race to create a peer.
-	conns := &rpcCtx.peers
+	conns := peerOptions.peers
 
 	conns.mu.Lock()
 	defer conns.mu.Unlock()
@@ -2062,10 +2109,10 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 	// Won race. Actually create a peer.
 
 	if conns.mu.m == nil {
-		conns.mu.m = map[peerKey]*peer[*grpc.ClientConn]{}
+		conns.mu.m = map[peerKey]*peer[Conn]{}
 	}
 
-	p := rpcCtx.newPeer(k, remoteLocality)
+	p := newPeer(rpcCtx, k, peerOptions)
 	// (Asynchronously) Start the probe (= heartbeat loop). The breaker is healthy
 	// right now (it was just created) but the call to `.Probe` will launch the
 	// probe[1] regardless.
