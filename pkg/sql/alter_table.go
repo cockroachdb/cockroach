@@ -839,7 +839,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 			depViewRenameError := func(objType string, refTableID descpb.ID) error {
 				return params.p.dependentError(params.ctx,
-					objType, tree.ErrString(&t.NewName), n.tableDesc.ParentID, refTableID, "rename",
+					objType, tree.ErrString(&t.NewName), n.tableDesc.ParentID, refTableID, n.tableDesc.ID, "rename",
 				)
 			}
 
@@ -1226,8 +1226,14 @@ func applyColumnMutation(
 				col.GetName(), tableDesc.GetName())
 		}
 
-		// It is assumed that an identify column owns only one sequence.
-		if col.NumUsesSequences() != 1 {
+		numSeqs := col.NumUsesSequences()
+		if numSeqs == 0 {
+			// This can happen when a SERIAL column is created with IDENTITY and
+			// serial_normalization=rowid, meaning it doesn't use a real sequence.
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"identity column %q of relation %q is not backed by a sequence",
+				col.GetName(), tableDesc.GetName())
+		} else if numSeqs > 1 {
 			return errors.AssertionFailedf(
 				"identity column %q of relation %q has %d sequences instead of 1",
 				col.GetName(), tableDesc.GetName(), col.NumUsesSequences())
@@ -1273,8 +1279,14 @@ func applyColumnMutation(
 				col.GetName(), tableDesc.GetName())
 		}
 
-		// It is assumed that an identify column owns only one sequence.
-		if col.NumUsesSequences() != 1 {
+		numSeqs := col.NumUsesSequences()
+		if numSeqs == 0 {
+			// This can happen when a SERIAL column is created with IDENTITY and
+			// serial_normalization=rowid, meaning it doesn't use a real sequence.
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"identity column %q of relation %q is not backed by a sequence",
+				col.GetName(), tableDesc.GetName())
+		} else if numSeqs > 1 {
 			return errors.AssertionFailedf(
 				"identity column %q of relation %q has %d sequences instead of 1",
 				col.GetName(), tableDesc.GetName(), col.NumUsesSequences())
@@ -1928,7 +1940,8 @@ func dropColumnImpl(
 			continue
 		}
 		err := params.p.canRemoveDependent(
-			params.ctx, "column", string(t.Column), tableDesc.ParentID, ref, t.DropBehavior,
+			params.ctx, "column", string(t.Column), tableDesc.ID, tableDesc.ParentID, ref, t.DropBehavior,
+			true, /* blockOnTriggerDependency */
 		)
 		if err != nil {
 			return nil, err

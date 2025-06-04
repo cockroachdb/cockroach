@@ -101,6 +101,7 @@ go_library(
         "knex.go",
         "kv.go",
         "kvbench.go",
+        "large_kv.go",
         "large_schema_backup_restore.go",
         "large_schema_benchmark.go",
         "latency_verifier.go",

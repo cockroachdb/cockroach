@@ -25,6 +25,17 @@ message CreateChangefeed {
   bool transformation = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
+// AlterChangefeed is an event for any ALTER CHANGEFEED statements that are run.
+message AlterChangefeed {
+  CommonChangefeedEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // The description of the changefeed job before the ALTER CHANGEFEED.
+  string previous_description = 2 [(gogoproto.jsontag) = ",omitempty"];
+
+  // TODO(yang): Consider expanding this log to include removed/added/changed options
+  // and added/dropped targets.
+}
+
 // ChangefeedFailed is an event for any changefeed failure since the plan hook
 // was triggered.
 message ChangefeedFailed {

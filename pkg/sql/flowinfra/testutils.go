@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -113,7 +114,7 @@ type MockDialer struct {
 
 // DialNoBreaker establishes a grpc connection once.
 func (d *MockDialer) DialNoBreaker(
-	context.Context, roachpb.NodeID, rpc.ConnectionClass,
+	context.Context, roachpb.NodeID, rpcbase.ConnectionClass,
 ) (*grpc.ClientConn, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()

@@ -1,4 +1,3 @@
-# LogicTest: !local-mixed-25.1 !local-schema-locked
 
 # ------------------------------------------------------------------------------
 # CREATE TABLE/INDEX tests.
@@ -67,13 +66,16 @@ SHOW CREATE TABLE simple
 ----
 simple  CREATE TABLE public.simple (
           a INT8 NOT NULL,
+          b INT8 NOT NULL,
           vec1 VECTOR(3) NULL,
-          CONSTRAINT simple_pkey PRIMARY KEY (a ASC),
-          VECTOR INDEX simple_vec1_idx (vec1),
-          VECTOR INDEX simple_vec1_idx1 (vec1),
-          VECTOR INDEX simple_vec1_idx2 (vec1),
-          FAMILY fam_0_a_vec1 (a, vec1)
-        ) WITH (schema_locked = true)
+          CONSTRAINT simple_pkey PRIMARY KEY (b ASC),
+          VECTOR INDEX simple_vec1_idx (vec1 vector_l2_ops),
+          VECTOR INDEX simple_vec1_idx1 (vec1 vector_l2_ops),
+          UNIQUE INDEX simple_a_key (a ASC),
+          VECTOR INDEX simple_vec1_idx2 (vec1 vector_l2_ops),
+          VECTOR INDEX simple_vec1_idx3 (vec1 vector_l2_ops),
+          FAMILY fam_0_a_vec1_b (a, vec1, b)
+        ) WITH (schema_locked = true);
 
 statement ok
 SHOW INDEX FROM simple
@@ -99,6 +101,7 @@ CREATE TABLE alt_syntax (
 statement notice CREATE VECTOR INDEX will disable writes to the table while the index is being built
 CREATE VECTOR INDEX another_index ON alt_syntax (vec1)
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE alt_syntax
 ----
@@ -110,6 +113,20 @@ alt_syntax  CREATE TABLE public.alt_syntax (
               VECTOR INDEX another_index (vec1 vector_l2_ops),
               FAMILY fam_0_a_vec1 (a, vec1)
             );
+
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE alt_syntax
+----
+alt_syntax  CREATE TABLE public.alt_syntax (
+              a INT8 NOT NULL,
+              vec1 VECTOR(3) NULL,
+              CONSTRAINT alt_syntax_pkey PRIMARY KEY (a ASC),
+              VECTOR INDEX vec_idx (vec1 vector_l2_ops),
+              VECTOR INDEX another_index (vec1 vector_l2_ops),
+              FAMILY fam_0_a_vec1 (a, vec1)
+            ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE alt_syntax
@@ -151,7 +168,7 @@ multiple_indexes  CREATE TABLE public.multiple_indexes (
                     VECTOR INDEX multiple_indexes_vec1_idx (vec1 vector_l2_ops),
                     VECTOR INDEX multiple_indexes_vec2_idx (vec2 vector_l2_ops),
                     FAMILY fam_0_a_vec1_vec2 (a, vec1, vec2)
-                  ) WITH (schema_locked = true)
+                  ) WITH (schema_locked = true);
 
 statement ok
 DROP INDEX multiple_indexes_vec1_idx;
@@ -204,7 +221,7 @@ prefix_cols  CREATE TABLE public.prefix_cols (
                VECTOR INDEX prefix_cols_c_b_vec1_idx (c DESC, b ASC, vec1 vector_l2_ops),
                VECTOR INDEX another_index (b ASC, c DESC, vec1 vector_l2_ops),
                FAMILY fam_0_a_b_c_vec1 (a, b, c, vec1)
-             ) WITH (schema_locked = true)
+             ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE prefix_cols
@@ -235,6 +252,7 @@ CREATE TABLE storage_params (
 statement ok
 CREATE VECTOR INDEX ON storage_params (v) WITH (min_partition_size = 8, max_partition_size = 64)
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE storage_params
 ----
@@ -246,6 +264,19 @@ storage_params  CREATE TABLE public.storage_params (
                   VECTOR INDEX storage_params_v_idx1 (v vector_l2_ops) WITH (min_partition_size=8, max_partition_size=64),
                   FAMILY fam_0_a_v (a, v)
                 );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE storage_params
+----
+storage_params  CREATE TABLE public.storage_params (
+                  a INT8 NOT NULL,
+                  v VECTOR(3) NULL,
+                  CONSTRAINT storage_params_pkey PRIMARY KEY (a ASC),
+                  VECTOR INDEX storage_params_v_idx (v vector_l2_ops) WITH (build_beam_size=16),
+                  VECTOR INDEX storage_params_v_idx1 (v vector_l2_ops) WITH (min_partition_size=8, max_partition_size=64),
+                  FAMILY fam_0_a_v (a, v)
+                ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE storage_params
@@ -429,10 +460,10 @@ alter_test  CREATE TABLE public.alter_test (
               b INT8 NOT NULL,
               vec1 VECTOR(3) NULL,
               CONSTRAINT alter_test_pkey PRIMARY KEY (b ASC),
-              VECTOR INDEX alter_test_vec1_idx (vec1),
+              VECTOR INDEX alter_test_vec1_idx (vec1 vector_l2_ops),
               UNIQUE INDEX alter_test_a_key (a ASC),
               FAMILY fam_0_a_b_vec1 (a, b, vec1)
-            ) WITH (schema_locked = true)
+            ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE alter_test

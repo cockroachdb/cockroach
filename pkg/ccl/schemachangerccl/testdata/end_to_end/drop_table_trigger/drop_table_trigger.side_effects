@@ -17,12 +17,15 @@ write *eventpb.DropTable to event log:
     tag: DROP TABLE
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 52 MutationType ops
+## StatementPhase stage 1 of 1 with 53 MutationType ops
 delete object namespace entry {100 101 t} -> 104
 upsert descriptor #104
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
+  -  dependedOnBy:
+  -  - id: 104
+  +  dependedOnBy: []
   +  dropTime: <redacted>"
      families:
      - columnIds:
@@ -32,6 +35,8 @@ upsert descriptor #104
   -  schemaLocked: true
   -  triggers:
   -  - actionTime: BEFORE
+  -    dependsOn:
+  -    - 104
   -    dependsOnRoutines:
   -    - 105
   -    enabled: true
@@ -72,12 +77,14 @@ upsert descriptor #105
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 55 MutationType ops
+## PreCommitPhase stage 2 of 2 with 56 MutationType ops
 delete object namespace entry {100 101 t} -> 104
 upsert descriptor #104
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
+  -  dependedOnBy:
+  -  - id: 104
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
@@ -93,6 +100,7 @@ upsert descriptor #104
   +        statementTag: DROP TABLE
   +    targetRanks: <redacted>
   +    targets: <redacted>
+  +  dependedOnBy: []
   +  dropTime: <redacted>"
      families:
      - columnIds:
@@ -102,6 +110,8 @@ upsert descriptor #104
   -  schemaLocked: true
   -  triggers:
   -  - actionTime: BEFORE
+  -    dependsOn:
+  -    - 104
   -    dependsOnRoutines:
   -    - 105
   -    enabled: true
@@ -174,8 +184,8 @@ upsert descriptor #104
   -        statementTag: DROP TABLE
   -    targetRanks: <redacted>
   -    targets: <redacted>
+     dependedOnBy: []
      dropTime: <redacted>"
-     families:
   ...
      triggers: []
      unexposedParentSchemaId: 101

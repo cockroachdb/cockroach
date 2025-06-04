@@ -41,7 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -169,12 +169,12 @@ func (d *atomicDescString) get() *atomicDescInfo {
 type atomicConnectionClass uint32
 
 // get reads the current value of the ConnectionClass.
-func (c *atomicConnectionClass) get() rpc.ConnectionClass {
-	return rpc.ConnectionClass(atomic.LoadUint32((*uint32)(c)))
+func (c *atomicConnectionClass) get() rpcbase.ConnectionClass {
+	return rpcbase.ConnectionClass(atomic.LoadUint32((*uint32)(c)))
 }
 
 // set updates the current value of the ConnectionClass.
-func (c *atomicConnectionClass) set(cc rpc.ConnectionClass) {
+func (c *atomicConnectionClass) set(cc rpcbase.ConnectionClass) {
 	atomic.StoreUint32((*uint32)(c), uint32(cc))
 }
 
@@ -1931,13 +1931,14 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 		slices.Sort(sl)
 		ri.PausedReplicas = sl
 	}
+	nodeID := r.shMu.state.Lease.Replica.NodeID
 	r.mu.RUnlock()
 	r.sideTransportClosedTimestamp.mu.Lock()
 	ri.ClosedTimestampSideTransportInfo.ReplicaClosed = r.sideTransportClosedTimestamp.mu.cur.ts
 	ri.ClosedTimestampSideTransportInfo.ReplicaLAI = r.sideTransportClosedTimestamp.mu.cur.lai
 	r.sideTransportClosedTimestamp.mu.Unlock()
 	centralClosed, centralLAI := r.store.cfg.ClosedTimestampReceiver.GetClosedTimestamp(
-		ctx, r.RangeID, r.shMu.state.Lease.Replica.NodeID)
+		ctx, r.RangeID, nodeID)
 	ri.ClosedTimestampSideTransportInfo.CentralClosed = centralClosed
 	ri.ClosedTimestampSideTransportInfo.CentralLAI = centralLAI
 	if err := r.breaker.Signal().Err(); err != nil {

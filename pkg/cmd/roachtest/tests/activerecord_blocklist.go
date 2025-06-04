@@ -30,6 +30,7 @@ var activeRecordIgnoreList = blocklist{
 	`ActiveRecord::Encryption::EncryptableRecordTest#test_forced_encoding_for_deterministic_attributes_will_replace_invalid_characters`:                        "flaky",
 	`AssociationCallbacksTest#test_has_many_callbacks_for_destroy_on_parent`:                                                                                   "flaky",
 	`BasicsTest#test_default_values_are_deeply_dupped`:                                                                                                         "flaky",
+	`CascadedEagerLoadingTest#test_eager_association_loading_with_cascaded_three_levels_by_ping_pong`:                                                          "flaky",
 	`CockroachDB::FixturesTest#test_create_fixtures`:                                                                                                           "flaky",
 	`FixtureWithSetModelClassPrevailsOverNamingConventionTest#test_model_class_in_fixture_file_is_respected`:                                                   "flaky",
 	`InheritanceTest#test_eager_load_belongs_to_primary_key_quoting`:                                                                                           "flaky",

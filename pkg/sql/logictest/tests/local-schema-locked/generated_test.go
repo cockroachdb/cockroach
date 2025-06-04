@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 22
+const configIdx = 21
 
 var logicTestDir string
 
@@ -85,6 +85,13 @@ func TestLogic_alias_types(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alias_types")
+}
+
+func TestLogic_alter_column_type(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "alter_column_type")
 }
 
 func TestLogic_alter_database_convert_to_schema(
@@ -416,6 +423,13 @@ func TestLogic_composite_types(
 	runLogicTest(t, "composite_types")
 }
 
+func TestLogic_computed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "computed")
+}
+
 func TestLogic_conditional(
 	t *testing.T,
 ) {
@@ -519,6 +533,13 @@ func TestLogic_default(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "default")
+}
+
+func TestLogic_delete(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "delete")
 }
 
 func TestLogic_delete_batch(
@@ -633,6 +654,13 @@ func TestLogic_drop_function(
 	runLogicTest(t, "drop_function")
 }
 
+func TestLogic_drop_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "drop_index")
+}
+
 func TestLogic_drop_owned_by(
 	t *testing.T,
 ) {
@@ -689,6 +717,13 @@ func TestLogic_drop_temp(
 	runLogicTest(t, "drop_temp")
 }
 
+func TestLogic_drop_type(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "drop_type")
+}
+
 func TestLogic_drop_user(
 	t *testing.T,
 ) {
@@ -708,6 +743,13 @@ func TestLogic_edge(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "edge")
+}
+
+func TestLogic_enums(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "enums")
 }
 
 func TestLogic_errors(
@@ -892,6 +934,13 @@ func TestLogic_hash_join(
 	runLogicTest(t, "hash_join")
 }
 
+func TestLogic_hash_sharded_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "hash_sharded_index")
+}
+
 func TestLogic_hidden_columns(
 	t *testing.T,
 ) {
@@ -927,11 +976,25 @@ func TestLogic_inflight_trace_spans(
 	runLogicTest(t, "inflight_trace_spans")
 }
 
+func TestLogic_information_schema(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "information_schema")
+}
+
 func TestLogic_inner_join(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "inner-join")
+}
+
+func TestLogic_insert(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "insert")
 }
 
 func TestLogic_int_size(
@@ -974,6 +1037,13 @@ func TestLogic_inverted_index(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "inverted_index")
+}
+
+func TestLogic_inverted_index_multi_column(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "inverted_index_multi_column")
 }
 
 func TestLogic_inverted_join_geospatial(
@@ -1242,6 +1312,13 @@ func TestLogic_parallel_stmts_compat(
 	runLogicTest(t, "parallel_stmts_compat")
 }
 
+func TestLogic_partial_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "partial_index")
+}
+
 func TestLogic_partitioning(
 	t *testing.T,
 ) {
@@ -1438,6 +1515,13 @@ func TestLogic_rename_atomic(
 	runLogicTest(t, "rename_atomic")
 }
 
+func TestLogic_rename_column(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "rename_column")
+}
+
 func TestLogic_rename_constraint(
 	t *testing.T,
 ) {
@@ -1578,6 +1662,13 @@ func TestLogic_schema_change_logical_replication(
 	runLogicTest(t, "schema_change_logical_replication")
 }
 
+func TestLogic_schema_change_retry(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "schema_change_retry")
+}
+
 func TestLogic_schema_locked(
 	t *testing.T,
 ) {
@@ -1704,6 +1795,13 @@ func TestLogic_set_role(
 	runLogicTest(t, "set_role")
 }
 
+func TestLogic_set_schema(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "set_schema")
+}
+
 func TestLogic_set_time_zone(
 	t *testing.T,
 ) {
@@ -1716,6 +1814,13 @@ func TestLogic_shift(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "shift")
+}
+
+func TestLogic_show_commit_timestamp(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_commit_timestamp")
 }
 
 func TestLogic_show_completions(
@@ -1905,6 +2010,13 @@ func TestLogic_storing(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "storing")
+}
+
+func TestLogic_strict_ddl_atomicity(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "strict_ddl_atomicity")
 }
 
 func TestLogic_suboperators(
@@ -2327,6 +2439,13 @@ func TestLogic_update_from(
 	runLogicTest(t, "update_from")
 }
 
+func TestLogic_upsert(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "upsert")
+}
+
 func TestLogic_upsert_non_metamorphic(
 	t *testing.T,
 ) {
@@ -2346,6 +2465,13 @@ func TestLogic_values(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "values")
+}
+
+func TestLogic_vector_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "vector_index")
 }
 
 func TestLogic_vectorize_agg(
@@ -2444,6 +2570,13 @@ func TestLogic_zigzag_join(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "zigzag_join")
+}
+
+func TestLogic_zone_config(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "zone_config")
 }
 
 func TestLogic_zone_config_system_tenant(

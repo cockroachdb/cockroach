@@ -11,22 +11,26 @@ import {
   TimezoneContext,
 } from "@cockroachlabs/cluster-ui";
 import classNames from "classnames/bind";
-import React, { useRef, useEffect, useState, useContext } from "react";
+import React, { useRef, useMemo, useEffect, useContext } from "react";
 import { Helmet } from "react-helmet";
 import { useDispatch, useSelector } from "react-redux";
 
 import { cockroach } from "src/js/protos";
-import { refreshHotRanges } from "src/redux/apiReducers";
+import {
+  refreshHotRanges,
+  clearHotRanges,
+  refreshDatabases,
+} from "src/redux/apiReducers";
 import {
   hotRangesSelector,
   isLoadingSelector,
-  isValidSelector,
   lastErrorSelector,
   lastSetAtSelector,
 } from "src/redux/hotRanges";
 import { selectNodeLocalities } from "src/redux/localities";
 import { performanceBestPracticesHotSpots } from "src/util/docs";
 import { HotRangesFilter } from "src/views/hotRanges/hotRangesFilter";
+import useFilters, { filterRanges } from "src/views/hotRanges/useFilters";
 
 import ErrorBoundary from "../app/components/errorMessage/errorBoundary";
 
@@ -35,28 +39,61 @@ import HotRangesTable from "./hotRangesTable";
 
 const cx = classNames.bind(styles);
 const HotRangesRequest = cockroach.server.serverpb.HotRangesRequest;
-type HotRange = cockroach.server.serverpb.HotRangesResponseV2.IHotRange;
+
+const emptyMessages = {
+  SELECT_NODES: {
+    title: "Select nodes to view top ranges",
+    message:
+      "Select one or more nodes with high activity, such as high CPU usage, to investigate potential hotspots. Filtering fewer nodes helps you identify the hottest ranges more quickly and improves page load time.",
+  },
+  MODIFY_FILTERS: {
+    title: "No results found",
+    message:
+      "No hot ranges found for the selected filters. Modify the filters to identify hot ranges",
+  },
+};
 
 const HotRangesPage = () => {
   const dispatch = useDispatch();
   const hotRanges = useSelector(hotRangesSelector);
-  const isValid = useSelector(isValidSelector);
   const lastError = useSelector(lastErrorSelector);
   const lastSetAt = useSelector(lastSetAtSelector);
   const isLoading = useSelector(isLoadingSelector);
   const nodeIdToLocalityMap = useSelector(selectNodeLocalities);
   const timezone = useContext(TimezoneContext);
 
-  useEffect(() => {
-    if (!isValid) {
-      dispatch(refreshHotRanges(new HotRangesRequest()));
-    }
-  }, [dispatch, isValid]);
+  const { filters, applyFilters } = useFilters();
 
-  const [filteredHotRanges, setFilteredHotRanges] =
-    useState<HotRange[]>(hotRanges);
+  // dispatch hot ranges call whenever the filters change and are not empty
+  useEffect(() => {
+    if (filters.nodeIds.length > 0) {
+      dispatch(
+        refreshHotRanges(
+          new HotRangesRequest({ nodes: filters.nodeIds.map(String) }),
+        ),
+      );
+    } else {
+      dispatch(clearHotRanges());
+    }
+  }, [filters.nodeIds, dispatch]);
+
+  // load the databases if possible.
+  useEffect(() => {
+    dispatch(refreshDatabases());
+  }, [dispatch]);
 
   const clearButtonRef = useRef<HTMLSpanElement>();
+  const filteredRanges = useMemo(() => {
+    return filterRanges(hotRanges, filters);
+  }, [filters, hotRanges]);
+
+  const emptyMessage = useMemo(
+    () =>
+      filters.nodeIds.length
+        ? emptyMessages.MODIFY_FILTERS
+        : emptyMessages.SELECT_NODES,
+    [filters.nodeIds],
+  );
 
   return (
     <React.Fragment>
@@ -72,19 +109,15 @@ const HotRangesPage = () => {
           find and reduce hot spots.
         </Anchor>
       </Text>
-      <HotRangesFilter
-        hotRanges={hotRanges}
-        onChange={setFilteredHotRanges}
-        nodeIdToLocalityMap={nodeIdToLocalityMap}
-        clearButtonContainer={clearButtonRef.current}
-      />
+      <HotRangesFilter filters={filters} applyFilters={applyFilters} />
       <ErrorBoundary>
         <Loading
           loading={isLoading}
+          loadingText={`Loading ranges for ${filters.nodeIds?.length} nodes...`}
           error={lastError}
           render={() => (
             <HotRangesTable
-              hotRangesList={filteredHotRanges}
+              hotRangesList={filteredRanges}
               lastUpdate={
                 lastSetAt &&
                 util.FormatWithTimezone(
@@ -95,6 +128,7 @@ const HotRangesPage = () => {
               }
               nodeIdToLocalityMap={nodeIdToLocalityMap}
               clearFilterContainer={<span ref={clearButtonRef} />}
+              emptyMessage={emptyMessage}
             />
           )}
           page={undefined}

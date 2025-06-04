@@ -64,3 +64,19 @@ export const groupGrantsByGrantee = (grants: FlatGrant[]) => {
     privileges,
   }));
 };
+
+export const getNodesFromStores = (
+  stores: string[],
+  nodes: Record<NodeID, NodeStatus>,
+): NodeID[] => {
+  const storeSet = new Set(
+    stores.map((store: string) => parseInt(store, 10) as StoreID),
+  );
+  const result = [];
+  for (const [id, node] of Object.entries(nodes)) {
+    if (node?.stores?.some((sid: StoreID) => storeSet.has(sid))) {
+      result.push(parseInt(id, 10) as NodeID);
+    }
+  }
+  return result;
+};

@@ -15,6 +15,7 @@ go_library(
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/rpc",
+        "//pkg/rpc/rpcbase",
         "//pkg/server/serverpb",
         "//pkg/sql/sqlinstance",
         "//pkg/sql/sqlinstance/instancestorage",
@@ -42,7 +43,7 @@ go_test(
     deps = [
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
-        "//pkg/rpc",
+        "//pkg/rpc/rpcbase",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

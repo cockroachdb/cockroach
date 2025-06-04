@@ -4,13 +4,19 @@
 // included in the /LICENSE file.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from "@testing-library/react";
 import React from "react";
 
 import * as api from "src/api/nodesApi";
 import { NodeID, StoreID } from "src/types/clusterTypes";
 
-import { NodeRegionsSelector } from "./nodeRegionsSelector";
+import { NodeSelector } from "./nodeSelector";
 
 import NodesResponse = cockroach.server.serverpb.NodesResponse;
 
@@ -43,7 +49,7 @@ const mockNodeData = new NodesResponse({
   ],
 });
 
-describe("NodeRegionsSelector", () => {
+describe("NodeSelector", () => {
   beforeEach(() => {
     // Mock the api.getNodes function at the module level
     jest.spyOn(api, "getNodes").mockResolvedValue(mockNodeData);
@@ -54,15 +60,19 @@ describe("NodeRegionsSelector", () => {
   });
 
   it("should render", () => {
-    render(<NodeRegionsSelector value={[]} onChange={() => {}} />);
-    expect(screen.getByText("Nodes")).toBeTruthy();
+    render(<NodeSelector initialValue={[]} onChange={() => {}} />);
+    expect(screen.getByText("Select Nodes")).toBeTruthy();
   });
 
   it("displays correct options based on node data", async () => {
-    render(<NodeRegionsSelector value={[]} onChange={() => {}} />);
+    render(<NodeSelector initialValue={[]} onChange={() => {}} />);
 
-    const select = screen.getByText("Nodes");
-    fireEvent.keyDown(select, { key: "ArrowDown" });
+    // Find the select element by its name attribute and click it
+    const select = screen.getByRole("combobox");
+
+    await act(async () => {
+      fireEvent.mouseDown(select);
+    });
 
     await waitFor(() => {
       expect(screen.getByText("us-east")).toBeTruthy();
@@ -73,27 +83,39 @@ describe("NodeRegionsSelector", () => {
     });
   });
 
-  it("calls onChange with correct values when selecting options", async () => {
-    const value: StoreID[] = [];
-    const mockOnChange = jest.fn((selected: StoreID[]) => {
-      value.push(...selected);
-    });
-    render(<NodeRegionsSelector value={value} onChange={mockOnChange} />);
+  it("calls onSelect with correct values when selecting options", async () => {
+    const mockOnChange = jest.fn();
+    render(<NodeSelector initialValue={[]} onChange={mockOnChange} />);
 
-    const select = screen.getByText("Nodes");
-    fireEvent.keyDown(select, { key: "ArrowDown" });
+    const select = screen.getByRole("combobox");
 
-    await waitFor(() => {
-      fireEvent.click(screen.getByText("n1"));
+    await act(async () => {
+      fireEvent.mouseDown(select);
     });
 
-    expect(mockOnChange).toHaveBeenCalledWith([101, 102]);
+    await waitFor(async () => {
+      const n1Option = screen.getByText("n1");
+      await act(async () => {
+        fireEvent.click(n1Option);
+      });
+    });
+
+    // Click the Apply button to trigger onApply
+    const applyButton = screen.getByText("Apply");
+    await act(async () => {
+      fireEvent.click(applyButton);
+    });
+
+    expect(mockOnChange).toHaveBeenCalledWith(
+      [1],
+      [{ id: 1, region: "us-east", stores: [101, 102] }],
+    );
   });
 
   it("displays selected values correctly", () => {
     render(
-      <NodeRegionsSelector
-        value={[101 as StoreID, 201 as StoreID]}
+      <NodeSelector
+        initialValue={[1 as NodeID, 2 as NodeID]}
         onChange={() => {}}
       />,
     );
@@ -102,7 +124,7 @@ describe("NodeRegionsSelector", () => {
     expect(screen.getByText("n2")).toBeTruthy();
   });
 
-  it("handles loading state", () => {
+  it("handles loading state", async () => {
     jest.spyOn(api, "useNodeStatuses").mockReturnValue({
       error: null,
       isLoading: true,
@@ -119,17 +141,22 @@ describe("NodeRegionsSelector", () => {
       } as Record<StoreID, NodeID>,
     });
 
-    render(<NodeRegionsSelector value={[]} onChange={() => {}} />);
+    render(<NodeSelector initialValue={[]} onChange={() => {}} />);
 
-    const select = screen.getByText("Nodes");
-    fireEvent.keyDown(select, { key: "ArrowDown" });
+    const select = screen.getByRole("combobox");
+
+    await act(async () => {
+      fireEvent.mouseDown(select);
+    });
 
     // In the loading state, the component should still render options
     // based on the existing data
-    expect(screen.getByText("us-east")).toBeTruthy();
-    expect(screen.getByText("us-west")).toBeTruthy();
-    expect(screen.getByText("n1")).toBeTruthy();
-    expect(screen.getByText("n2")).toBeTruthy();
-    expect(screen.getByText("n3")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByText("us-east")).toBeTruthy();
+      expect(screen.getByText("us-west")).toBeTruthy();
+      expect(screen.getByText("n1")).toBeTruthy();
+      expect(screen.getByText("n2")).toBeTruthy();
+      expect(screen.getByText("n3")).toBeTruthy();
+    });
   });
 });

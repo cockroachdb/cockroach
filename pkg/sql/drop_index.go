@@ -430,9 +430,10 @@ func (p *planner) dropIndexByName(
 	var depsToDrop catalog.DescriptorIDSet
 	for _, tableRef := range tableDesc.DependedOnBy {
 		if tableRef.IndexID == idx.GetID() {
-			// Ensure that we have DROP privilege on all dependent views
+			// Ensure that we have DROP privilege on all dependent relations
 			err := p.canRemoveDependent(
-				ctx, "index", idx.GetName(), tableDesc.ParentID, tableRef, behavior)
+				ctx, "index", idx.GetName(), tableDesc.ID, tableDesc.ParentID,
+				tableRef, behavior, true /* blockOnTriggerDependency */)
 			if err != nil {
 				return err
 			}
@@ -529,7 +530,7 @@ func (p *planner) removeDependents(
 ) (droppedViews []string, err error) {
 	for _, descId := range depsToDrop.Ordered() {
 		depDesc, err := p.getDescForCascade(
-			ctx, typeName, objName, tableDesc.ParentID, descId, dropBehavior,
+			ctx, typeName, objName, tableDesc.ParentID, descId, tableDesc.ID, dropBehavior,
 		)
 		if err != nil {
 			return nil, err

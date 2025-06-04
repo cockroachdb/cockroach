@@ -171,6 +171,21 @@ export const StatementInsightDetailsOverviewTab: React.FC<
               label="Statement Fingerprint ID"
               value={StatementDetailsLink(insightDetails)}
             />
+            {insightDetails?.queryTags &&
+              insightDetails.queryTags.length > 0 && (
+                <SummaryCardItem
+                  label="Query Tags"
+                  value={
+                    <div>
+                      {insightDetails.queryTags.map((tag, index) => (
+                        <div key={index}>
+                          <strong>{tag.name}:</strong> {tag.value}
+                        </div>
+                      ))}
+                    </div>
+                  }
+                />
+              )}
           </SummaryCard>
         </Col>
       </Row>

@@ -28,8 +28,8 @@ MANIFEST-000001:
 OPTIONS-000003:
   env type: Data, AES128_CTR
   keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
-  nonce: fa ba 07 9e 17 3f 2c 86 11 54 5b d8
-  counter: 145968458
+  nonce: 0c 07 ac 42 50 0d 38 20 3c 91 cf c0
+  counter: 1731579598
 marker.datakeys.000001.COCKROACHDB_DATA_KEYS_000001_monolith:
   env type: Store, AES128_CTR
   keyID: f594229216d81add7811c4360212eb7629b578ef4eab6e5d05679b3c5de48867
@@ -38,8 +38,8 @@ marker.datakeys.000001.COCKROACHDB_DATA_KEYS_000001_monolith:
 marker.format-version.000008.021:
   env type: Data, AES128_CTR
   keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
-  nonce: 0c 07 ac 42 50 0d 38 20 3c 91 cf c0
-  counter: 1731579598
+  nonce: df 3a 47 28 5e fb 88 e3 9e b3 9b a3
+  counter: 1505393531
 marker.manifest.000001.MANIFEST-000001:
   env type: Data, AES128_CTR
   keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef

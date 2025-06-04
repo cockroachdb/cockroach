@@ -276,7 +276,7 @@ func changefeedPlanHook(
 			p.ExtendedEvalContext().Descs.ReleaseAll(ctx)
 
 			telemetry.Count(`changefeed.create.core`)
-			logChangefeedCreateTelemetry(ctx, jr, changefeedStmt.Select != nil)
+			logCreateChangefeedTelemetry(ctx, jr, changefeedStmt.Select != nil)
 			if err := maybeShowCursorAgeWarning(ctx, p, opts); err != nil {
 				return err
 			}
@@ -369,7 +369,7 @@ func changefeedPlanHook(
 			return err
 		}
 
-		logChangefeedCreateTelemetry(ctx, jr, changefeedStmt.Select != nil)
+		logCreateChangefeedTelemetry(ctx, jr, changefeedStmt.Select != nil)
 
 		select {
 		case <-ctx.Done():
@@ -1768,7 +1768,7 @@ func getChangefeedTargetName(
 	return desc.GetName(), nil
 }
 
-func logChangefeedCreateTelemetry(ctx context.Context, jr *jobs.Record, isTransformation bool) {
+func logCreateChangefeedTelemetry(ctx context.Context, jr *jobs.Record, isTransformation bool) {
 	var changefeedEventDetails eventpb.CommonChangefeedEventDetails
 	if jr != nil {
 		changefeedDetails := jr.Details.(jobspb.ChangefeedDetails)
@@ -1781,6 +1781,22 @@ func logChangefeedCreateTelemetry(ctx context.Context, jr *jobs.Record, isTransf
 	}
 
 	log.StructuredEvent(ctx, severity.INFO, createChangefeedEvent)
+}
+
+func logAlterChangefeedTelemetry(ctx context.Context, job *jobs.Job, prevDescription string) {
+	var changefeedEventDetails eventpb.CommonChangefeedEventDetails
+	if job != nil {
+		changefeedDetails := job.Details().(jobspb.ChangefeedDetails)
+		changefeedEventDetails = makeCommonChangefeedEventDetails(
+			ctx, changefeedDetails, job.Payload().Description, job.ID())
+	}
+
+	alterChangefeedEvent := &eventpb.AlterChangefeed{
+		CommonChangefeedEventDetails: changefeedEventDetails,
+		PreviousDescription:          prevDescription,
+	}
+
+	log.StructuredEvent(ctx, severity.INFO, alterChangefeedEvent)
 }
 
 func logChangefeedFailedTelemetry(

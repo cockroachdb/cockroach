@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -615,7 +615,7 @@ func (r *Replica) TripBreaker() {
 // GetCircuitBreaker returns the circuit breaker controlling
 // connection attempts to the specified node.
 func (t *RaftTransport) GetCircuitBreaker(
-	nodeID roachpb.NodeID, class rpc.ConnectionClass,
+	nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (*circuit.Breaker, bool) {
 	return t.dialer.GetCircuitBreaker(nodeID, class)
 }
