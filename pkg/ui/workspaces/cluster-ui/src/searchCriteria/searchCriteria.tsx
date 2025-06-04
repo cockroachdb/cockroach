@@ -4,8 +4,10 @@
 // included in the /LICENSE file.
 
 import { CaretDown } from "@cockroachlabs/icons";
+import { InlineAlert } from "@cockroachlabs/ui-components";
 import { Menu, Dropdown } from "antd";
 import classNames from "classnames/bind";
+import moment from "moment-timezone";
 import { MenuClickEventHandler } from "rc-menu/es/interface";
 import React from "react";
 
@@ -17,6 +19,7 @@ import {
   TimeScale,
   timeScale1hMinOptions,
   TimeScaleDropdown,
+  toDateRange,
 } from "src/timeScaleDropdown";
 
 import { applyBtn } from "../queryFilter/filterClasses";
@@ -60,6 +63,11 @@ export function SearchCriteria(props: SearchCriteriaProps): React.ReactElement {
     onChangeBy,
     onChangeTimeScale,
   } = props;
+
+  // Check if selected time range is less than 1 hour
+  const [start, end] = toDateRange(currentScale);
+  const duration = moment.duration(end.diff(start));
+  const isSubHourRange = duration.asHours() < 1;
   const sortOptions: SortOption[] =
     searchType === "Statement" ? stmtRequestSortOptions : txnRequestSortOptions;
   const sortMoreOptions: SortOption[] =
@@ -119,6 +127,14 @@ export function SearchCriteria(props: SearchCriteriaProps): React.ReactElement {
   return (
     <div className={cx("search-area")}>
       <h5 className={commonStyles("base-heading")}>Search Criteria</h5>
+      {isSubHourRange && (
+        <div style={{ marginBottom: "16px" }}>
+          <InlineAlert
+            intent="warning"
+            title="Sub-hour time range selected: Statement statistics are aggregated hourly by default. You may not see data for time ranges less than 1 hour if the aggregation interval has not elapsed yet. Adjust the sql.stats.aggregation.interval cluster setting if you need finer granularity."
+          />
+        </div>
+      )}
       <PageConfig className={cx("top-area")}>
         <PageConfigItem>
           <label>
