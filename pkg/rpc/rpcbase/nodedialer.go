@@ -13,7 +13,7 @@ import (
 	"storj.io/drpc"
 )
 
-const TODODRPC = true
+const TODODRPC = false
 
 // NodeDialer interface defines methods for dialing peer nodes using their
 // node IDs.
