@@ -1,0 +1,131 @@
+gen_cluster nodes=25 node_cpu_rate_capacity=800000
+----
+
+# Set the rebalance mode to use the mma store rebalancer and disable the lease
+# and replicate queues so that only the mma store rebalancer is moving replicas
+# or leases.
+setting rebalance_mode=3 replicate_queue_enabled=false lease_queue_enabled=false split_queue_enabled=false
+----
+
+# This workload will be initially evenly distributed over the cluster.
+gen_ranges ranges=50 min_key=0 max_key=10000
+----
+
+gen_load rate=15000 rw_ratio=0.95 min_block=100 max_block=100 request_cpu_per_access=100 raft_cpu_per_write=20 min_key=0 max_key=10000
+----
+
+# Another workload is added over the second half of the keyspace, which is initially
+# only on s1-s3.
+gen_ranges ranges=50 min_key=10001 max_key=20000 placement_type=skewed add_to_existing=true
+----
+
+gen_load rate=15000 rw_ratio=0.95 min_block=1 max_block=1 request_cpu_per_access=100 raft_cpu_per_write=20 min_key=10001 max_key=20000 add_to_existing=true
+----
+
+eval duration=25m samples=1 seed=42
+----
+OK
+
+plot stat=cpu sample=1  show_last_value=true
+----
+----
+
+ 1546500 ┤╭──╮
+ 1443400 ┤│  │
+ 1340300 ┤│  ╰──╮
+ 1237200 ┤│     ╰──╮
+ 1134100 ┤│        │
+ 1031000 ┤│        ╰───╮
+  927900 ┤│            ╰──╮
+  824800 ┤│               ╰──╮
+  721700 ┤│                  ╰──╮
+  618600 ┤│                     ╰───╮
+  515500 ┤│                         ╰─────╮
+  412400 ┤│                               ╰─────╮
+  309300 ┤│                                     ╰───╮
+  206200 ┤│                         ╭─╮╭─╮╭─╮╭─╮╮╭─╮╭─╮╭─╮╭───╭────────────────╮
+  103100 ┤╭──╭───────────────────────────────────────────────────────────────────────────
+       0 ┼───╯
+                                                cpu
+
+last store values: [s1=131160 s2=133503 s3=133591 s4=122480 s5=122328 s6=122498 s7=122240 s8=122711 s9=121990 s10=122256 s11=122262 s12=122644 s13=122497 s14=122018 s15=122276 s16=122254 s17=122369 s18=121988 s19=122492 s20=122063 s21=122385 s22=122253 s23=122296 s24=122138 s25=122528]
+----
+----
+
+plot stat=write_bytes_per_second show_last_value=true
+----
+----
+
+ 9862 ┤╭────────────────────────╮╭──────────────────╮╭─────╭╮╭────╮───────╭─╮─────────
+ 9205 ┤╭───────────╮╭─────────────────────────────────────────────────────────────────
+ 8547 ┤│─╯╯╰╯╰─╯╰╯ ╰╯─││     ╰╯ ╰───╯       ││
+ 7890 ┤│              ││                    ││
+ 7232 ┤│              ╰╯                    ╰╯
+ 6575 ┤│
+ 5917 ┤│
+ 5260 ┤│
+ 4602 ┤│
+ 3945 ┤│
+ 3287 ┤│
+ 2630 ┤│
+ 1972 ┤│
+ 1315 ┤│
+  657 ┤│
+    0 ┼╯
+                                    write_bytes_per_second
+
+last store values: [s1=9466 s2=9558 s3=9521 s4=9031 s5=9020 s6=9014 s7=8974 s8=9037 s9=9026 s10=9027 s11=9009 s12=8972 s13=9049 s14=9022 s15=9071 s16=9036 s17=9021 s18=9008 s19=9012 s20=9000 s21=9031 s22=9019 s23=9030 s24=9024 s25=9043]
+----
+----
+
+plot stat=replicas sample=1 show_last_value=true
+----
+----
+
+ 56.00 ┼───────────────────╮
+ 52.67 ┤   ╰──╮            ╰───────────╮
+ 49.33 ┤      ╰──╮                     ╰─────────╮
+ 46.00 ┤         ╰───╮                           ╰─────────────────────────────────────
+ 42.67 ┤             ╰─────╮
+ 39.33 ┤                   ╰──────────────────────────────────────╮
+ 36.00 ┤                                                          ╰────────────────────
+ 32.67 ┤
+ 29.33 ┤
+ 26.00 ┤
+ 22.67 ┤
+ 19.33 ┤
+ 16.00 ┤
+ 12.67 ┤
+  9.33 ┤               ╭──────────────────╭────────────────────────────────────────────
+  6.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                            replicas
+
+last store values: [s1=38 s2=45 s3=46 s4=8 s5=8 s6=8 s7=7 s8=9 s9=7 s10=8 s11=8 s12=9 s13=8 s14=7 s15=8 s16=7 s17=8 s18=7 s19=8 s20=7 s21=8 s22=8 s23=8 s24=7 s25=8]
+----
+----
+
+plot stat=leases sample=1 show_last_value=true
+----
+----
+
+ 51.00 ┼───╮
+ 47.67 ┤   ╰──╮
+ 44.33 ┤      │
+ 41.00 ┤      ╰──╮
+ 37.67 ┤         ╰───╮
+ 34.33 ┤             │
+ 31.00 ┤             ╰──╮
+ 27.67 ┤                ╰──╮
+ 24.33 ┤                   ╰──╮
+ 21.00 ┤                      ╰───╮
+ 17.67 ┤                          ╰─────╮
+ 14.33 ┤                                ╰─────╮
+ 11.00 ┤                                      ╰───╮
+  7.67 ┤             ╭─╮   ╭──╭──╮╭─╭──╮──╭─────────╭──╮╭──╭─────────────────╮
+  4.33 ┼───╭───────────────────────────────────────────────────────────────────────────
+  1.00 ┼───╯
+                                             leases
+
+last store values: [s1=4 s2=4 s3=4 s4=4 s5=4 s6=4 s7=4 s8=4 s9=4 s10=4 s11=4 s12=4 s13=4 s14=4 s15=4 s16=4 s17=4 s18=4 s19=4 s20=4 s21=4 s22=4 s23=4 s24=4 s25=4]
+----
+----
