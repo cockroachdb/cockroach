@@ -1,14 +1,12 @@
-# LogicTest: !local-schema-locked
-
 # Default behavior, where atomicity violations are allowed
 
 statement ok
 SET autocommit_before_ddl=off;
 
 statement ok
-CREATE TABLE testing (k int, v string);
+CREATE TABLE testing (k int, v string) WITH (schema_locked=false);
   INSERT INTO testing (k,v) VALUES (1, 'a'), (2, 'b'), (3, 'a'), (4, 'b');
-  CREATE TABLE unrelated(x INT)
+  CREATE TABLE unrelated(x INT) WITH (schema_locked=false);
 
 
 statement ok
