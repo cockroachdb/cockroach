@@ -120,6 +120,7 @@ go_test(
     exec_properties = {"test.Pool": "large"},
     deps = [
         "//pkg/base",
+        "//pkg/ccl",
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/security/securityassets",
