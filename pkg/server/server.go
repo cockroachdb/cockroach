@@ -71,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/privchecker"
 	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverrpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverrules"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/structlogging"
@@ -143,7 +144,7 @@ type topLevelServer struct {
 	// The gRPC and DRPC servers on which the different RPC handlers will be
 	// registered.
 	grpc *grpcServer
-	drpc *drpcServer
+	drpc *serverrpc.DRPCServer
 
 	gossip       *gossip.Gossip
 	kvNodeDialer *nodedialer.Dialer
@@ -402,7 +403,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		return nil, err
 	}
 
-	drpcServer, err := newDRPCServer(ctx, rpcContext)
+	drpcServer, err := serverrpc.NewDRPCServer(ctx, rpcContext)
 	if err != nil {
 		return nil, err
 	}
@@ -975,7 +976,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		cfg.LicenseEnforcer,
 	)
 	kvpb.RegisterInternalServer(grpcServer.Server, node)
-	if err := kvpb.DRPCRegisterKVBatch(drpcServer.mux, node.AsDRPCKVBatchServer()); err != nil {
+	if err := kvpb.DRPCRegisterKVBatch(drpcServer.Mux, node.AsDRPCKVBatchServer()); err != nil {
 		return nil, err
 	}
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
@@ -1930,8 +1931,8 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 
 	// After setting modeOperational, we can block until all stores are fully
 	// initialized.
-	s.grpc.setMode(modeOperational)
-	s.drpc.setMode(modeOperational)
+	s.grpc.Set(serverrpc.ModeOperational)
+	s.drpc.Set(serverrpc.ModeOperational)
 
 	s.nodeLiveness.Start(workersCtx)
 

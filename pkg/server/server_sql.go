@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverrpc"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
@@ -396,7 +397,7 @@ type sqlServerArgs struct {
 	// grpc is the RPC service.
 	grpc *grpcServer
 
-	drpc *drpcServer
+	drpc *serverrpc.DRPCServer
 
 	// externalStorageBuilder is the constructor for accesses to external
 	// storage.

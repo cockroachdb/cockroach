@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverrpc"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -119,7 +120,7 @@ type drainServer struct {
 	// stopTrigger is used to request that the server is shut down.
 	stopTrigger  *stopTrigger
 	grpc         *grpcServer
-	drpc         *drpcServer
+	drpc         *serverrpc.DRPCServer
 	sqlServer    *SQLServer
 	drainSleepFn func(time.Duration)
 	serverCtl    *serverController
@@ -136,7 +137,7 @@ func newDrainServer(
 	stopper *stop.Stopper,
 	stopTrigger *stopTrigger,
 	grpc *grpcServer,
-	drpc *drpcServer,
+	drpc *serverrpc.DRPCServer,
 	sqlServer *SQLServer,
 ) *drainServer {
 	var drainSleepFn = time.Sleep
@@ -386,8 +387,8 @@ func (s *drainServer) drainClients(
 
 	// Set the gRPC mode of the node to "draining" and mark the node as "not ready".
 	// Probes to /health?ready=1 will now notice the change in the node's readiness.
-	s.grpc.setMode(modeDraining)
-	s.drpc.setMode(modeDraining)
+	s.grpc.Set(serverrpc.ModeDraining)
+	s.drpc.Set(serverrpc.ModeDraining)
 	s.sqlServer.isReady.Store(false)
 
 	// Log the number of connections periodically.

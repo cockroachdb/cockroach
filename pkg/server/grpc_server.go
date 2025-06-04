@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/serverrpc"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -24,7 +25,7 @@ import (
 // and a mode of operation that can instruct the interceptor to refuse certain
 // RPCs.
 type grpcServer struct {
-	serveModeHandler
+	serverrpc.ServeMode
 	*grpc.Server
 	serverInterceptorsInfo rpc.ServerInterceptorInfo
 }
@@ -33,7 +34,7 @@ func newGRPCServer(
 	ctx context.Context, rpcCtx *rpc.Context, metricsRegistry *metric.Registry,
 ) (*grpcServer, error) {
 	s := &grpcServer{}
-	s.mode.set(modeInitializing)
+	s.Set(serverrpc.ModeInitializing)
 	requestMetrics := rpc.NewRequestMetrics()
 	metricsRegistry.AddMetricStruct(requestMetrics)
 	srv, interceptorInfo, err := rpc.NewServerEx(
@@ -53,15 +54,15 @@ func newGRPCServer(
 }
 
 func (s *grpcServer) health(ctx context.Context) error {
-	sm := s.mode.get()
+	sm := s.Get()
 	switch sm {
-	case modeInitializing:
+	case serverrpc.ModeInitializing:
 		return grpcstatus.Error(codes.Unavailable, "node is waiting for cluster initialization")
-	case modeDraining:
+	case serverrpc.ModeDraining:
 		// grpc.mode is set to modeDraining when the Drain(DrainMode_CLIENT) has
 		// been called (client connections are to be drained).
 		return grpcstatus.Errorf(codes.Unavailable, "node is shutting down")
-	case modeOperational:
+	case serverrpc.ModeOperational:
 		return nil
 	default:
 		return srverrors.ServerError(ctx, errors.Newf("unknown mode: %v", sm))
@@ -77,7 +78,7 @@ var rpcsAllowedWhileBootstrapping = map[string]struct{}{
 
 // intercept implements filtering rules for each server state.
 func (s *grpcServer) intercept(fullName string) error {
-	if s.operational() {
+	if s.Operational() {
 		return nil
 	}
 	if _, allowed := rpcsAllowedWhileBootstrapping[fullName]; !allowed {

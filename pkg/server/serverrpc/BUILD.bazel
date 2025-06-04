@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "serverrpc",
+    srcs = [
+        "drpc_server.go",
+        "serve_mode.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/serverrpc",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/rpc",
+        "//pkg/server/srverrors",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@io_storj_drpc//:drpc",
+        "@io_storj_drpc//drpcerr",
+        "@io_storj_drpc//drpcmanager",
+        "@io_storj_drpc//drpcmux",
+        "@io_storj_drpc//drpcserver",
+        "@io_storj_drpc//drpcwire",
+        "@org_golang_google_grpc//codes",
+    ],
+)

@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/serverrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -42,7 +43,7 @@ func startListenRPCAndSQL(
 	cfg BaseConfig,
 	stopper *stop.Stopper,
 	grpc *grpcServer,
-	drpc *drpcServer,
+	drpc *serverrpc.DRPCServer,
 	rpcListenerFactory RPCListenerFactory,
 	enableSQLListener bool,
 	acceptProxyProtocolHeaders bool,
@@ -205,11 +206,11 @@ func startListenRPCAndSQL(
 			netutil.FatalIfUnexpected(grpc.Serve(grpcL))
 		})
 		_ = stopper.RunAsyncTask(drpcCtx, "serve-drpc", func(ctx context.Context) {
-			if cfg := drpc.tlsCfg; cfg != nil {
+			if cfg := drpc.TLSCfg; cfg != nil {
 				drpcTLSL := tls.NewListener(drpcL, cfg)
-				netutil.FatalIfUnexpected(drpc.srv.Serve(ctx, drpcTLSL))
+				netutil.FatalIfUnexpected(drpc.Srv.Serve(ctx, drpcTLSL))
 			} else {
-				netutil.FatalIfUnexpected(drpc.srv.Serve(ctx, drpcL))
+				netutil.FatalIfUnexpected(drpc.Srv.Serve(ctx, drpcL))
 			}
 		})
 		_ = stopper.RunAsyncTask(workersCtx, "serve-loopback-grpc", func(context.Context) {

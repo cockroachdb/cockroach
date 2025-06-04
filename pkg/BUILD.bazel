@@ -1761,6 +1761,7 @@ GO_TARGETS = [
     "//pkg/server/serverctl:serverctl",
     "//pkg/server/serverpb:serverpb",
     "//pkg/server/serverpb:serverpb_test",
+    "//pkg/server/serverrpc:serverrpc",
     "//pkg/server/serverrules:serverrules",
     "//pkg/server/serverrules:serverrules_test",
     "//pkg/server/settingswatcher:settingswatcher",

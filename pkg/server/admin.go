@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/privchecker"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverrpc"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -117,7 +118,7 @@ type adminServer struct {
 	rpcContext       *rpc.Context
 	clock            *hlc.Clock
 	grpc             *grpcServer
-	drpc             *drpcServer
+	drpc             *serverrpc.DRPCServer
 	db               *kv.DB
 	drainServer      *drainServer
 }
@@ -157,7 +158,7 @@ func newSystemAdminServer(
 	clock *hlc.Clock,
 	distSender *kvcoord.DistSender,
 	grpc *grpcServer,
-	drpc *drpcServer,
+	drpc *serverrpc.DRPCServer,
 	drainServer *drainServer,
 	s *topLevelServer,
 ) *systemAdminServer {
@@ -202,7 +203,7 @@ func newAdminServer(
 	clock *hlc.Clock,
 	distSender *kvcoord.DistSender,
 	grpc *grpcServer,
-	drpc *drpcServer,
+	drpc *serverrpc.DRPCServer,
 	drainServer *drainServer,
 ) *adminServer {
 	server := &adminServer{
@@ -2111,8 +2112,8 @@ func (s *adminServer) checkReadinessForHealthCheck(ctx context.Context) error {
 		return err
 	}
 
-	if s.drpc.enabled {
-		if err := s.drpc.health(ctx); err != nil {
+	if s.drpc.Enabled {
+		if err := s.drpc.Health(ctx); err != nil {
 			return err
 		}
 	}
@@ -2157,8 +2158,8 @@ func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) er
 		return err
 	}
 
-	if s.drpc.enabled {
-		if err := s.drpc.health(ctx); err != nil {
+	if s.drpc.Enabled {
+		if err := s.drpc.Health(ctx); err != nil {
 			return err
 		}
 	}

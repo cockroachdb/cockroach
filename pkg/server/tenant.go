@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/privchecker"
 	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverrpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/structlogging"
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
@@ -98,7 +99,7 @@ type SQLServerWrapper struct {
 	// The gRPC and DRPC servers on which the different RPC handlers will be
 	// registered
 	grpc *grpcServer
-	drpc *drpcServer
+	drpc *serverrpc.DRPCServer
 
 	kvNodeDialer *nodedialer.Dialer
 	db           *kv.DB
@@ -779,8 +780,8 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 
 	// After setting modeOperational, we can block until all stores are fully
 	// initialized.
-	s.grpc.setMode(modeOperational)
-	s.drpc.setMode(modeOperational)
+	s.grpc.Set(serverrpc.ModeOperational)
+	s.drpc.Set(serverrpc.ModeOperational)
 
 	// Report server listen addresses to logs.
 	log.Ops.Infof(ctx, "starting %s server at %s (use: %s)",
@@ -1313,7 +1314,7 @@ func makeTenantSQLServerArgs(
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
-	drpcServer, err := newDRPCServer(startupCtx, rpcContext)
+	drpcServer, err := serverrpc.NewDRPCServer(startupCtx, rpcContext)
 	if err != nil {
 		return sqlServerArgs{}, err
 	}

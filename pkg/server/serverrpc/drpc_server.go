@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package server
+package serverrpc
 
 import (
 	"context"
@@ -36,19 +36,19 @@ type drpcMuxI interface {
 	Register(srv interface{}, desc drpc.Description) error
 }
 
-type drpcServer struct {
-	serveModeHandler
-	srv     drpcServerI
-	mux     drpcMuxI
-	tlsCfg  *tls.Config
-	enabled bool
+type DRPCServer struct {
+	ServeMode
+	Srv     drpcServerI
+	Mux     drpcMuxI
+	TLSCfg  *tls.Config
+	Enabled bool
 }
 
 var _ drpcServerI = (*drpcserver.Server)(nil)
 var _ drpcServerI = (*drpcOffServer)(nil)
 
 // TODO: Register DRPC Heartbeat service
-func newDRPCServer(_ context.Context, rpcCtx *rpc.Context) (*drpcServer, error) {
+func NewDRPCServer(_ context.Context, rpcCtx *rpc.Context) (*DRPCServer, error) {
 	var dmux drpcMuxI = &drpcOffServer{}
 	var dsrv drpcServerI = &drpcOffServer{}
 	var tlsCfg *tls.Config
@@ -88,14 +88,14 @@ func newDRPCServer(_ context.Context, rpcCtx *rpc.Context) (*drpcServer, error) 
 		// https://github.com/bryk-io/pkg/blob/4da5fbfef47770be376e4022eab5c6c324984bf7/net/drpc/server.go#L91-L101
 	}
 
-	d := &drpcServer{
-		srv:     dsrv,
-		mux:     dmux,
-		tlsCfg:  tlsCfg,
-		enabled: enabled,
+	d := &DRPCServer{
+		Srv:     dsrv,
+		Mux:     dmux,
+		TLSCfg:  tlsCfg,
+		Enabled: enabled,
 	}
 
-	d.setMode(modeInitializing)
+	d.Set(ModeInitializing)
 
 	return d, nil
 }
@@ -118,14 +118,14 @@ func (srv *drpcOffServer) Register(interface{}, drpc.Description) error {
 	return nil
 }
 
-func (s *drpcServer) health(ctx context.Context) error {
-	sm := s.mode.get()
+func (s *DRPCServer) Health(ctx context.Context) error {
+	sm := s.Get()
 	switch sm {
-	case modeInitializing:
+	case ModeInitializing:
 		return drpcerr.WithCode(errors.New("node is waiting for cluster initialization"), uint64(codes.Unavailable))
-	case modeDraining:
+	case ModeDraining:
 		return drpcerr.WithCode(errors.New("node is shutting down"), uint64(codes.Unavailable))
-	case modeOperational:
+	case ModeOperational:
 		return nil
 	default:
 		return srverrors.ServerError(ctx, errors.Newf("unknown mode: %v", sm))
