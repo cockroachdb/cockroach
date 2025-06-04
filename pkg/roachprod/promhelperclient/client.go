@@ -130,7 +130,7 @@ func (c *PromClient) setUrl(url string) {
 
 // instanceConfigRequest is the HTTP request received for generating instance config
 type instanceConfigRequest struct {
-	//Config is the content of the yaml file
+	// Config is the content of the yaml file
 	Config   string `json:"config"`
 	Insecure bool   `json:"insecure"`
 }
@@ -251,6 +251,20 @@ type CCParams struct {
 type NodeInfo struct {
 	Target       string            // Name of the node
 	CustomLabels map[string]string // Custom labels to be added to the cluster config
+}
+
+type NodeTarget map[int][]*NodeInfo
+
+func (nt *NodeTarget) String() string {
+	var parts []string
+	for port, infos := range *nt {
+		var targets []string
+		for _, info := range infos {
+			targets = append(targets, info.Target)
+		}
+		parts = append(parts, fmt.Sprintf("%d:[%s]", port, strings.Join(targets, ",")))
+	}
+	return strings.Join(parts, " ")
 }
 
 // createClusterConfigFile creates the cluster config file per node
