@@ -267,7 +267,7 @@ func TestEncoderEqualityRand(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	for i := 0; i < 100; i++ {
 		tableName := fmt.Sprintf("t%d", i)
-		ct := randgen.RandCreateTableWithName(ctx, rng, tableName, i, randgen.TableOptNone)
+		ct := randgen.RandCreateTableWithName(ctx, rng, tableName, i, nil)
 		tableDef := tree.Serialize(ct)
 		r := sqlutils.MakeSQLRunner(db)
 		r.Exec(t, tableDef)
