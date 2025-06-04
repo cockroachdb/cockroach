@@ -10,6 +10,7 @@ go_library(
         "hdrhistogram.go",
         "histogram_buckets.go",
         "histogram_snapshot.go",
+        "label_value_cache.go",
         "metric.go",
         "prometheus_exporter.go",
         "prometheus_rule_exporter.go",
@@ -24,6 +25,7 @@ go_library(
     deps = [
         "//pkg/settings",
         "//pkg/util/buildutil",
+        "//pkg/util/cache",
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/metamorphic",

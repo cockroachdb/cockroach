@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/gogo/protobuf/proto"
@@ -50,7 +51,8 @@ type Registry struct {
 	// computedLabels get filled in by GetLabels().
 	// We hold onto the slice to avoid a re-allocation every
 	// time the metrics get scraped.
-	computedLabels []*prometheusgo.LabelPair
+	computedLabels  []*prometheusgo.LabelPair
+	labelValueCache *LabelSliceCache
 }
 
 type labelPair struct {
@@ -67,9 +69,10 @@ type Struct interface {
 // NewRegistry creates a new Registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		labels:         []labelPair{},
-		computedLabels: []*prometheusgo.LabelPair{},
-		tracked:        map[string]Iterable{},
+		labels:          []labelPair{},
+		computedLabels:  []*prometheusgo.LabelPair{},
+		tracked:         map[string]Iterable{},
+		labelValueCache: NewLabelSliceCache(),
 	}
 }
 
@@ -96,6 +99,9 @@ func (r *Registry) AddMetric(metric Iterable) {
 	r.Lock()
 	defer r.Unlock()
 	r.tracked[metric.GetName(false /* useStaticLabels */)] = metric
+	if m, ok := metric.(PrometheusEvictable); ok {
+		m.InitializeMetrics(r.OnEvictedEntry, r.labelValueCache)
+	}
 	if log.V(2) {
 		log.Infof(context.TODO(), "added metric: %s (%T)", metric.GetName(false /* useStaticLabels */), metric)
 	}
@@ -378,5 +384,22 @@ func containsMetricType(ft reflect.Type) bool {
 		return false
 	default:
 		return false
+	}
+}
+
+func (r *Registry) OnEvictedEntry(entry *cache.Entry) {
+	key, ok := entry.Key.(LabelSliceCacheKey)
+	if !ok {
+		return
+	}
+	r.Lock()
+	defer r.Unlock()
+	val, ok := r.labelValueCache.Get(key)
+	if !ok {
+		return
+	}
+	v := val.Counter.Add(-1)
+	if v == 0 {
+		r.labelValueCache.Delete(key)
 	}
 }

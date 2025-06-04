@@ -17,6 +17,7 @@ import (
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
@@ -131,6 +132,12 @@ type PrometheusReinitialisable interface {
 	PrometheusIterable
 
 	ReinitialiseChildMetrics(labelConfig LabelConfig)
+}
+
+type PrometheusEvictable interface {
+	PrometheusIterable
+
+	InitializeMetrics(func(entry *cache.Entry), *LabelSliceCache)
 }
 
 // WindowedHistogram represents a histogram with data over recent window of

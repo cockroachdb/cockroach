@@ -1077,7 +1077,7 @@ func Test_makeFakeNodeStatuses(t *testing.T) {
 		{
 			name:       "store-missing-in-mapping",
 			mapping:    map[roachpb.StoreID]roachpb.NodeID{1: 1},
-			storesSeen: map[string]struct{}{"1": {}, "2": {}},
+			storesSeen: map[string]struct{}{"1": {}, "2": {}, "3": {}, "4": {}, "5": {}},
 			expErr:     `need to map the remaining stores`,
 		},
 		{
