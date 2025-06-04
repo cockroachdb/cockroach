@@ -103,7 +103,7 @@ func TimeSinceUpdate(updateTime time.Time) (time.Duration, error) {
 // If the wrapped error tree of an error does not contain an instance of
 // rperrors.Error, the error will automatically be wrapped with
 // rperrors.Unclassified.
-func wrap(f func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Command, args []string) {
+func Wrap(f func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Command, args []string) {
 	return func(cmd *cobra.Command, args []string) {
 		var err error
 		isSecure, err = isSecureCluster(cmd)
@@ -137,12 +137,6 @@ func isSecureCluster(cmd *cobra.Command) (bool, error) {
 		return false, fmt.Errorf("cannot pass both --secure and --insecure flags")
 
 	case hasSecureFlag:
-		desc := "Clusters are secure by default"
-		if !secure {
-			desc = "Use the --insecure flag to create insecure clusters"
-		}
-
-		fmt.Printf("WARNING: --secure flag is deprecated. %s.\n", desc)
 		return secure, nil
 
 	default:
