@@ -35,7 +35,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -863,7 +862,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster, cfg cdcBank
 			`SET CLUSTER SETTING changefeed.span_checkpoint.lag_threshold = '1us'`,
 		} {
 			if _, err := db.Exec(stmt); err != nil {
-				t.Fatal(err)
+				t.Fatal(fmt.Sprintf("failed to execute stmt %q: %v", stmt, err))
 			}
 		}
 	}
@@ -897,33 +896,35 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster, cfg cdcBank
 	defer l.Close()
 
 	t.Status("running workload")
-	workloadCtx, workloadCancel := context.WithCancel(ctx)
-	defer workloadCancel()
 
-	m := c.NewMonitor(workloadCtx, crdbNodes)
-	var doneAtomic int64
 	messageBuf := make(chan *sarama.ConsumerMessage, 4096)
 	const requestedResolved = 100
-	if cfg.kafkaChaos {
-		m.Go(func(ctx context.Context) error {
+
+	m := c.NewMonitor(ctx, crdbNodes)
+	chaosCancel := func() func() {
+		if !cfg.kafkaChaos {
+			return func() {}
+		}
+		return m.GoWithCancel(func(ctx context.Context) error {
 			period, downTime := time.Minute, 10*time.Second
 			err := kafka.chaosLoop(ctx, period, downTime, nil)
-			if atomic.LoadInt64(&doneAtomic) > 0 {
+			if errors.Is(err, context.Canceled) {
 				return nil
 			}
 			return errors.Wrap(err, "kafka chaos loop failed")
 		})
-	}
-	m.Go(func(ctx context.Context) error {
+	}()
+	workloadCancel := m.GoWithCancel(func(ctx context.Context) error {
 		err := c.RunE(ctx, option.WithNodes(workloadNode), `./cockroach workload run bank {pgurl:1} --max-rate=10`)
-		if atomic.LoadInt64(&doneAtomic) > 0 {
+		if errors.Is(err, context.Canceled) {
 			return nil
 		}
 		return errors.Wrap(err, "workload failed")
 	})
 	m.Go(func(ctx context.Context) error {
+		defer chaosCancel()
 		defer workloadCancel()
-		defer func() { close(messageBuf) }()
+		defer close(messageBuf)
 		v := cdctest.NewCountValidator(cdctest.NoOpValidator)
 		for {
 			m, err := tc.next(ctx)
@@ -948,7 +949,6 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster, cfg cdcBank
 				l.Printf("%d of %d resolved timestamps received from kafka, latest is %s behind realtime, %s beind realtime when sent to kafka",
 					v.NumResolvedWithRows, requestedResolved, timeutil.Since(resolved.GoTime()), m.Timestamp.Sub(resolved.GoTime()))
 				if v.NumResolvedWithRows >= requestedResolved {
-					atomic.StoreInt64(&doneAtomic, 1)
 					break
 				}
 			}
@@ -3207,9 +3207,17 @@ var kafkaServices = map[string][]string{
 }
 
 func (k kafkaManager) restart(ctx context.Context, targetService string, envVars ...string) {
+	if err := k.restartE(ctx, targetService, envVars...); err != nil {
+		k.t.Fatal(err)
+	}
+}
+
+func (k kafkaManager) restartE(ctx context.Context, targetService string, envVars ...string) error {
 	services := kafkaServices[targetService]
 
-	k.c.Run(ctx, option.WithNodes(k.kafkaSinkNodes), "touch", k.serverJAASConfig())
+	if err := k.c.RunE(ctx, option.WithNodes(k.kafkaSinkNodes), "touch", k.serverJAASConfig()); err != nil {
+		return err
+	}
 	for _, svcName := range services {
 		// The confluent tool applies the KAFKA_OPTS to all
 		// services. Also, the kafka.logs.dir is used by each
@@ -3228,12 +3236,21 @@ func (k kafkaManager) restart(ctx context.Context, targetService string, envVars
 		startCmd += fmt.Sprintf(" %s local services %s start", k.confluentBin(), svcName)
 
 		// Sometimes kafka wants to be difficult and not start back up first try. Give it some time.
-		k.c.Run(ctx, option.WithNodes(k.kafkaSinkNodes).WithRetryOpts(retry.Options{
-			InitialBackoff: 5 * time.Second,
-			MaxBackoff:     30 * time.Second,
-			MaxRetries:     30,
-		}).WithShouldRetryFn(func(*install.RunResultDetails) bool { return true }), startCmd)
+		if err := k.c.RunE(ctx, option.
+			WithNodes(k.kafkaSinkNodes).
+			WithRetryOpts(retry.Options{
+				InitialBackoff: 5 * time.Second,
+				MaxBackoff:     30 * time.Second,
+				MaxRetries:     30,
+			}).
+			WithShouldRetryFn(func(*install.RunResultDetails) bool { return true }),
+			startCmd,
+		); err != nil {
+			return err
+		}
 	}
+
+	return nil
 }
 
 func (k kafkaManager) makeCommand(exe string, args ...string) string {
@@ -3245,8 +3262,19 @@ func (k kafkaManager) makeCommand(exe string, args ...string) string {
 }
 
 func (k kafkaManager) stop(ctx context.Context) {
-	k.c.Run(ctx, option.WithNodes(k.kafkaSinkNodes), fmt.Sprintf("rm -f %s", k.serverJAASConfig()))
-	k.c.Run(ctx, option.WithNodes(k.kafkaSinkNodes), k.makeCommand("confluent", "local services stop"))
+	if err := k.stopE(ctx); err != nil {
+		k.t.Fatal(err)
+	}
+}
+
+func (k kafkaManager) stopE(ctx context.Context) error {
+	if err := k.c.RunE(ctx, option.WithNodes(k.kafkaSinkNodes), fmt.Sprintf("rm -f %s", k.serverJAASConfig())); err != nil {
+		return err
+	}
+	if err := k.c.RunE(ctx, option.WithNodes(k.kafkaSinkNodes), k.makeCommand("confluent", "local services stop")); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (k kafkaManager) chaosLoop(
@@ -3264,7 +3292,9 @@ func (k kafkaManager) chaosLoop(
 		}
 
 		k.t.L().Printf("kafka chaos loop iteration %d: stopping", i)
-		k.stop(ctx)
+		if err := k.stopE(ctx); err != nil {
+			return err
+		}
 
 		select {
 		case <-stopper:
@@ -3275,7 +3305,9 @@ func (k kafkaManager) chaosLoop(
 		}
 
 		k.t.L().Printf("kafka chaos loop iteration %d: restarting", i)
-		k.restart(ctx, "kafka")
+		if err := k.restartE(ctx, "kafka"); err != nil {
+			return err
+		}
 	}
 }
 
