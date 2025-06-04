@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
@@ -202,11 +203,20 @@ func EncodeMetadataValue(metadata cspann.PartitionMetadata) []byte {
 
 // EncodeRaBitQVector encodes a RaBitQ vector into the given byte slice.
 func EncodeRaBitQVector(
-	appendTo []byte, codeCount uint32, centroidDistance, dotProduct float32, code quantize.RaBitQCode,
+	appendTo []byte,
+	codeCount uint32,
+	centroidDistance float32,
+	quantizedDotProduct float32,
+	centroidDotProduct float32,
+	code quantize.RaBitQCode,
+	metric vecpb.DistanceMetric,
 ) []byte {
 	appendTo = encoding.EncodeUint32Ascending(appendTo, codeCount)
 	appendTo = encoding.EncodeUntaggedFloat32Value(appendTo, centroidDistance)
-	appendTo = encoding.EncodeUntaggedFloat32Value(appendTo, dotProduct)
+	appendTo = encoding.EncodeUntaggedFloat32Value(appendTo, quantizedDotProduct)
+	if metric != vecpb.L2SquaredDistance {
+		appendTo = encoding.EncodeUntaggedFloat32Value(appendTo, centroidDotProduct)
+	}
 	for _, c := range code {
 		appendTo = encoding.EncodeUint64Ascending(appendTo, c)
 	}
@@ -308,7 +318,7 @@ func DecodeMetadataValue(encMetadata []byte) (metadata cspann.PartitionMetadata,
 // RaBitQuantizedVectorSet. The vector set must have been initialized with the
 // correct number of dimensions. It returns the remainder of the input buffer.
 func DecodeRaBitQVectorToSet(
-	encVector []byte, vectorSet *quantize.RaBitQuantizedVectorSet,
+	encVector []byte, vectorSet *quantize.RaBitQuantizedVectorSet, metric vecpb.DistanceMetric,
 ) ([]byte, error) {
 	encVector, codeCount, err := encoding.DecodeUint32Ascending(encVector)
 	if err != nil {
@@ -318,15 +328,21 @@ func DecodeRaBitQVectorToSet(
 	if err != nil {
 		return nil, err
 	}
-	encVector, dotProduct, err := encoding.DecodeUntaggedFloat32Value(encVector)
+	encVector, quantizedDotProduct, err := encoding.DecodeUntaggedFloat32Value(encVector)
 	if err != nil {
 		return nil, err
 	}
-	// TODO(andyk): Also decode CentroidDotProducts once we support other distance
-	// metrics.
+	if metric != vecpb.L2SquaredDistance {
+		var centroidDotProduct float32
+		encVector, centroidDotProduct, err = encoding.DecodeUntaggedFloat32Value(encVector)
+		if err != nil {
+			return nil, err
+		}
+		vectorSet.CentroidDotProducts = append(vectorSet.CentroidDotProducts, centroidDotProduct)
+	}
 	vectorSet.CodeCounts = append(vectorSet.CodeCounts, codeCount)
 	vectorSet.CentroidDistances = append(vectorSet.CentroidDistances, centroidDistance)
-	vectorSet.QuantizedDotProducts = append(vectorSet.QuantizedDotProducts, dotProduct)
+	vectorSet.QuantizedDotProducts = append(vectorSet.QuantizedDotProducts, quantizedDotProduct)
 	vectorSet.Codes.Data = slices.Grow(vectorSet.Codes.Data, vectorSet.Codes.Width)
 	for range vectorSet.Codes.Width {
 		var codeWord uint64

@@ -7,7 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build/bazel",
-        "//pkg/sql/vecindex/cspann/vecdist",
+        "//pkg/sql/vecindex/vecpb",
         "//pkg/util/num32",
         "//pkg/util/vector",
         "@com_github_stretchr_testify//require",

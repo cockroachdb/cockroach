@@ -22,6 +22,7 @@ go_library(
         "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/sql/vecindex/vecpb",
         "//pkg/util/intsets",
         "@com_github_cockroachdb_errors//:errors",
     ],

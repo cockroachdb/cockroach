@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -262,10 +263,15 @@ func FormatIndexElements(
 				}
 			}
 		case idxtype.VECTOR:
-			// TODO(#144016): once more distance functions are supported, store the
-			// operator on the index and use it here.
 			if col.GetID() == index.VectorColumnID() {
-				f.WriteString(" vector_l2_ops")
+				switch index.VecConfig.DistanceMetric {
+				case vecpb.L2SquaredDistance:
+					f.WriteString(" vector_l2_ops")
+				case vecpb.CosineDistance:
+					f.WriteString(" vector_cosine_ops")
+				case vecpb.InnerProductDistance:
+					f.WriteString(" vector_ip_ops")
+				}
 			}
 		}
 		// The last column of an inverted or vector index cannot have a DESC

@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 )
 
 // IndexOrdinal identifies an index (in the context of a Table).
@@ -193,6 +194,10 @@ type Index interface {
 	// GeoConfig returns a geospatial index configuration. If not empty, it
 	// describes the configuration for this geospatial inverted index.
 	GeoConfig() geopb.Config
+
+	// VecConfig returns a vector index configuration. If not empty, it describes
+	// the configuration for this vector index.
+	VecConfig() *vecpb.Config
 
 	// Version returns the IndexDescriptorVersion of the index.
 	Version() descpb.IndexDescriptorVersion

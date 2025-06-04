@@ -6,8 +6,8 @@
 package quantize
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
 
@@ -27,7 +27,7 @@ type Quantizer interface {
 
 	// GetDistanceMetric specifies the method by which vector similarity is
 	// determined, e.g. Euclidean (L2Squared), InnerProduct, or Cosine.
-	GetDistanceMetric() vecdist.Metric
+	GetDistanceMetric() vecpb.DistanceMetric
 
 	// Quantize quantizes a set of input vectors and returns their compressed
 	// form as a quantized vector set. The set's centroid is calculated from the

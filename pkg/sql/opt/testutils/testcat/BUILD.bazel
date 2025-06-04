@@ -59,6 +59,7 @@ go_library(
         "//pkg/sql/stats",
         "//pkg/sql/syntheticprivilege",
         "//pkg/sql/types",
+        "//pkg/sql/vecindex/vecpb",
         "//pkg/sql/vtable",
         "//pkg/util/intsets",
         "//pkg/util/treeprinter",

@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
@@ -1319,6 +1320,9 @@ type Index struct {
 	// inverted index.
 	geoConfig geopb.Config
 
+	// vecConfig is defined if this is a vector index.
+	vecConfig vecpb.Config
+
 	// version is the index descriptor version of the index.
 	version descpb.IndexDescriptorVersion
 
@@ -1445,6 +1449,11 @@ func (ti *Index) ImplicitPartitioningColumnCount() int {
 // GeoConfig is part of the cat.Index interface.
 func (ti *Index) GeoConfig() geopb.Config {
 	return ti.geoConfig
+}
+
+// VecConfig is part of the cat.Index interface.
+func (ti *Index) VecConfig() *vecpb.Config {
+	return &ti.vecConfig
 }
 
 // Version is part of the cat.Index interface.
