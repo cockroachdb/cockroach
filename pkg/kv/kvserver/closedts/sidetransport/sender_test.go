@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/policyrefresher"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -643,7 +644,7 @@ func (m *mockDialer) addOrUpdateNode(nid roachpb.NodeID, addr string) {
 }
 
 func (m *mockDialer) Dial(
-	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
+	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (_ *grpc.ClientConn, _ error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -820,7 +821,7 @@ type failingDialer struct {
 var _ nodeDialer = &failingDialer{}
 
 func (f *failingDialer) Dial(
-	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
+	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (_ *grpc.ClientConn, err error) {
 	atomic.AddInt32(&f.dialCount, 1)
 	return nil, errors.New("failingDialer")

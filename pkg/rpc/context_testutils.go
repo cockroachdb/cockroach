@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -31,11 +32,11 @@ type ContextTestingKnobs struct {
 	//
 	// Note that this is not called for streaming RPCs using the
 	// internalClientAdapter - i.e. KV RPCs done against the local server.
-	StreamClientInterceptor func(target string, class ConnectionClass) grpc.StreamClientInterceptor
+	StreamClientInterceptor func(target string, class rpcbase.ConnectionClass) grpc.StreamClientInterceptor
 
 	// UnaryClientInterceptor, if non-nil, will be called when invoking any
 	// unary RPC.
-	UnaryClientInterceptor func(target string, class ConnectionClass) grpc.UnaryClientInterceptor
+	UnaryClientInterceptor func(target string, class rpcbase.ConnectionClass) grpc.UnaryClientInterceptor
 
 	// InjectedLatencyOracle if non-nil contains a map from target address
 	// (server.RPCServingAddr() of a remote node) to artificial latency in
@@ -193,7 +194,7 @@ func (p *Partitioner) RegisterTestingKnobs(
 		return nil
 	}
 	knobs.UnaryClientInterceptor =
-		func(target string, class ConnectionClass) grpc.UnaryClientInterceptor {
+		func(target string, class rpcbase.ConnectionClass) grpc.UnaryClientInterceptor {
 			return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 				if err := isPartitioned(target); err != nil {
 					return err
@@ -202,7 +203,7 @@ func (p *Partitioner) RegisterTestingKnobs(
 			}
 		}
 	knobs.StreamClientInterceptor =
-		func(target string, class ConnectionClass) grpc.StreamClientInterceptor {
+		func(target string, class rpcbase.ConnectionClass) grpc.StreamClientInterceptor {
 			return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 				cs, err := streamer(ctx, desc, cc, method, opts...)
 				if err != nil {

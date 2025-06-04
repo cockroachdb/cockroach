@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -166,7 +166,7 @@ type IsLiveMap map[roachpb.NodeID]IsLiveMapEntry
 type NodeConnectionHealth interface {
 	// ConnHealth returns nil if we have an open connection of the request
 	// class that works successfully. Otherwise, it returns an error.
-	ConnHealth(nodeID roachpb.NodeID, class rpc.ConnectionClass) error
+	ConnHealth(nodeID roachpb.NodeID, class rpcbase.ConnectionClass) error
 }
 
 // NodeConnectionStatus is a lightweight wrapper around the
@@ -208,7 +208,7 @@ func (ncs *NodeConnectionStatus) IsConnected() bool {
 		// Calculate the connection status if we haven't done that before.
 		// Some tests will set the nodeDialer to nil, so we need to check for that.
 		connected := ncs.nodeConnectionHealth == nil ||
-			ncs.nodeConnectionHealth.ConnHealth(ncs.nodeID, rpc.SystemClass) == nil
+			ncs.nodeConnectionHealth.ConnHealth(ncs.nodeID, rpcbase.SystemClass) == nil
 		ncs.SetIsConnected(connected)
 		ncs.calculatedConnected.Store(true)
 	}

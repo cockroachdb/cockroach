@@ -13,7 +13,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
-        "//pkg/rpc",
+        "//pkg/rpc/rpcbase",
         "//pkg/util/hlc",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",

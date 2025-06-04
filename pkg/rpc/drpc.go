@@ -11,6 +11,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"storj.io/drpc"
 	"storj.io/drpc/drpcconn"
 	"storj.io/drpc/drpcmanager"
@@ -25,8 +26,8 @@ var defaultDRPCConnIdleTimeout = 5 * time.Minute
 
 func dialDRPC(
 	rpcCtx *Context,
-) func(ctx context.Context, target string, _ ConnectionClass) (drpc.Conn, error) {
-	return func(ctx context.Context, target string, _ ConnectionClass) (drpc.Conn, error) {
+) func(ctx context.Context, target string, _ rpcbase.ConnectionClass) (drpc.Conn, error) {
+	return func(ctx context.Context, target string, _ rpcbase.ConnectionClass) (drpc.Conn, error) {
 		// TODO(server): could use connection class instead of empty key here.
 		pool := drpcpool.New[struct{}, drpcpool.Conn](drpcpool.Options{
 			Expiration: defaultDRPCConnIdleTimeout,

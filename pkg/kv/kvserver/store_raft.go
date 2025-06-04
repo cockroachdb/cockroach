@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1033,7 +1033,7 @@ func (s *Store) updateLivenessMap() {
 		// will continually probe the connection. The check can also have false
 		// positives if the node goes down after populating the map, but that
 		// matters even less.
-		entry.IsLive = s.cfg.NodeDialer.ConnHealth(nodeID, rpc.SystemClass) == nil
+		entry.IsLive = s.cfg.NodeDialer.ConnHealth(nodeID, rpcbase.SystemClass) == nil
 		nextMap[nodeID] = entry
 	}
 	s.livenessMap.Store(nextMap)
@@ -1096,7 +1096,7 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 		log.Infof(ctx, "sending raft request (coalesced) %+v", chReq)
 	}
 
-	if !s.cfg.Transport.SendAsync(chReq, rpc.SystemClass) {
+	if !s.cfg.Transport.SendAsync(chReq, rpcbase.SystemClass) {
 		for _, beat := range beats {
 			if repl, ok := s.mu.replicasByRangeID.Load(beat.RangeID); ok {
 				repl.addUnreachableRemoteReplica(beat.ToReplicaID)

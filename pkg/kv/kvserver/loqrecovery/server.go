@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -750,7 +751,7 @@ func visitNodeWithRetry(
 		// Note that we use ConnectNoBreaker here to avoid any race with probe
 		// running on current node and target node restarting. Errors from circuit
 		// breaker probes could confuse us and present node as unavailable.
-		conn, _, err = rpcCtx.GRPCDialNode(addr.String(), node.NodeID, node.Locality, rpc.DefaultClass).ConnectNoBreaker(ctx)
+		conn, _, err = rpcCtx.GRPCDialNode(addr.String(), node.NodeID, node.Locality, rpcbase.DefaultClass).ConnectNoBreaker(ctx)
 		// Nodes would contain dead nodes that we don't need to visit. We can skip
 		// them and let caller handle incomplete info.
 		if err != nil {
@@ -803,7 +804,7 @@ func makeVisitNode(g *gossip.Gossip, loc roachpb.Locality, rpcCtx *rpc.Context) 
 			// Note that we use ConnectNoBreaker here to avoid any race with probe
 			// running on current node and target node restarting. Errors from circuit
 			// breaker probes could confuse us and present node as unavailable.
-			conn, _, err = rpcCtx.GRPCDialNode(addr.String(), node.NodeID, node.Locality, rpc.DefaultClass).ConnectNoBreaker(ctx)
+			conn, _, err = rpcCtx.GRPCDialNode(addr.String(), node.NodeID, node.Locality, rpcbase.DefaultClass).ConnectNoBreaker(ctx)
 			if err != nil {
 				if grpcutil.IsClosedConnection(err) {
 					log.Infof(ctx, "can't dial node n%d because connection is permanently closed: %s",
