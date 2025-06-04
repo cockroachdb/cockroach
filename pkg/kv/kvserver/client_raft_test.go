@@ -3436,6 +3436,7 @@ func TestReplicaGCRace(t *testing.T) {
 		tc.Servers[0].Clock(),
 		nodedialer.New(tc.Servers[0].RPCContext(), gossip.AddressResolver(fromStore.Gossip())),
 		nil, /* grpcServer */
+		nil, /* drpcServer */
 		(*node_rac2.AdmittedPiggybacker)(nil),
 		nil, /* PiggybackedAdmittedResponseScheduler */
 		nil, /* knobs */
@@ -3828,6 +3829,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 		nodedialer.New(tc.Servers[0].RPCContext(),
 			gossip.AddressResolver(tc.GetFirstStoreFromServer(t, 0).Gossip())),
 		nil, /* grpcServer */
+		nil, /* drpcServer */
 		(*node_rac2.AdmittedPiggybacker)(nil),
 		nil, /* PiggybackedAdmittedResponseScheduler */
 		nil, /* knobs */
