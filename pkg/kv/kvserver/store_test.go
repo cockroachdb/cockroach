@@ -248,9 +248,10 @@ func createTestStoreWithoutStart(
 		livenessInterval, heartbeatInterval := cfg.StoreLivenessDurations()
 		supportGracePeriod := rpcContext.StoreLivenessWithdrawalGracePeriod()
 		options := storeliveness.NewOptions(livenessInterval, heartbeatInterval, supportGracePeriod)
-		transport := storeliveness.NewTransport(
-			cfg.AmbientCtx, stopper, cfg.Clock, cfg.NodeDialer, grpcServer, nil, /* knobs */
+		transport, err := storeliveness.NewTransport(
+			cfg.AmbientCtx, stopper, cfg.Clock, cfg.NodeDialer, grpcServer, drpcServer, nil, /* knobs */
 		)
+		require.NoError(t, err)
 		knobs := cfg.TestingKnobs.StoreLivenessKnobs
 		cfg.StoreLiveness = storeliveness.NewNodeContainer(stopper, options, transport, knobs)
 	}
