@@ -303,11 +303,25 @@ var (
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRangeFeedMuxStreamSendContentions = metric.Metadata{
+		Name:        "kv.rangefeed.mux_stream_send.contentions",
+		Help:        "Current number of goroutines waiting to acquire the mux stream send lock",
+		Measurement: "Goroutines",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeFeedMuxStreamMutexAcquisitionLatencyNanos = metric.Metadata{
+		Name:        "kv.rangefeed.mux_stream_send.mutex_acquisition.latency",
+		Help:        "KV RangeFeed mux stream send mutex acquisition latency",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 type LockedMuxStreamMetrics struct {
-	SendLatencyNanos metric.IHistogram
-	SlowSends        *metric.Counter
+	SendLatencyNanos             metric.IHistogram
+	SlowSends                    *metric.Counter
+	SendContentions              *metric.Gauge
+	MutexAcquisitionLatencyNanos metric.IHistogram
 }
 
 // MetricStruct implements metrics.Struct interface.
@@ -321,6 +335,13 @@ func NewLockedMuxStreamMetrics(histogramWindow time.Duration) *LockedMuxStreamMe
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
-		SlowSends: metric.NewCounter(metaRangeFeedMuxStreamSlowSends),
+		SlowSends:       metric.NewCounter(metaRangeFeedMuxStreamSlowSends),
+		SendContentions: metric.NewGauge(metaRangeFeedMuxStreamSendContentions),
+		MutexAcquisitionLatencyNanos: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePrometheus,
+			Metadata:     metaRangeFeedMuxStreamMutexAcquisitionLatencyNanos,
+			Duration:     histogramWindow,
+			BucketConfig: metric.IOLatencyBuckets,
+		}),
 	}
 }

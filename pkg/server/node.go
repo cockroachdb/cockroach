@@ -2105,8 +2105,16 @@ func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	// threshold for an RPC to a single replica (as is the case here).
 	const slowMuxStreamSendThreshold = 10 * time.Second
 
+	s.metrics.SendContentions.Inc(1)
+	mutexAcquisitionStart := crtime.NowMono()
+
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
+
+	// TODO(mxu): Assuming we want these metrics to be disjoint from the other one,
+	// we do this immediately after acquisition rather than in defer
+	s.metrics.MutexAcquisitionLatencyNanos.RecordValue(mutexAcquisitionStart.Elapsed().Nanoseconds())
+	s.metrics.SendContentions.Dec(1)
 
 	// Our intent is to provide observability into a slow client from the server node.
 	// So, we don't include the lock acquisition time, as it is confounded by other
