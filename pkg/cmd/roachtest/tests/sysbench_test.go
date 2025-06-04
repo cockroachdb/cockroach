@@ -47,7 +47,7 @@ Threads fairness:
     events (avg/stddev):           11954.3281/1290.50
     execution time (avg/stddev):   599.9974/0.01`,
 			benchmarkName:  "sysbench-settings/oltp_read_write/nodes=3/cpu=8/conc=64",
-			expectedOutput: "BenchmarkSysbenchSettings/a=oltp_read_write/nodes=3/cpu=8/conc=64\t1\t25501.03 queries/sec\t1275.05 txns/sec\t11.86 ms/min\t50.19 ms/avg\t81.48 ms/p95\t276.58 ms/max",
+			expectedOutput: "BenchmarkSysbenchSettings/a=oltp_read_write/nodes=3/cpu=8/conc=64\t1\t25501.03 queries/sec\t1275.05 txns/sec\t11.86 ms/min\t50.19 ms/avg\t81.48 ms/p95\t276.58 ms/max\n",
 			expectError:    false,
 		},
 		{

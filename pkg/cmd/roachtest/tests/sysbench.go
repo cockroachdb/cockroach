@@ -820,6 +820,6 @@ func sysbenchToGoBench(name string, result string) (string, error) {
 	}
 
 	// Return formatted benchmark string with all metrics.
-	return fmt.Sprintf("%s\t1\t%s queries/sec\t%s txns/sec\t%s ms/min\t%s ms/avg\t%s ms/p95\t%s ms/max",
+	return fmt.Sprintf("%s\t1\t%s queries/sec\t%s txns/sec\t%s ms/min\t%s ms/avg\t%s ms/p95\t%s ms/max\n",
 		benchName, qps, tps, minLat, avgLat, p95Lat, maxLat), nil
 }
