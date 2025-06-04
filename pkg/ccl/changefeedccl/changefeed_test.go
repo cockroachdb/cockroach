@@ -4161,6 +4161,11 @@ func TestChangefeedEnriched(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 				_, isWebhook := f.(*webhookFeedFactory)
+				sourceMap := maps.Clone(sourceMap)
+				if isWebhook {
+					// webhook sinks imply topic_in_value
+					sourceMap["topic"] = "foo"
+				}
 
 				// The webhook sink forces key_in_value, and its implementation
 				// in the cdctest framework strips out the key in the value.
@@ -4186,10 +4191,6 @@ func TestChangefeedEnriched(t *testing.T) {
 				// this is not supported by the enriched envelope type. We should adapt
 				// the test framework to account for this.
 				topic := "foo"
-				if isWebhook {
-					topic = ""
-				}
-
 				assertion := fmt.Sprintf("%s: %s->%s", topic, toJSON(t, tc.expectedKey), toJSON(t, tc.messageWithoutSource))
 				sourceAssertion := func(actualSource map[string]any) {
 					if tc.withSource {
@@ -4494,8 +4495,11 @@ func TestChangefeedEnrichedSourceWithDataAvro(t *testing.T) {
 								"database_name":   map[string]any{"string": "d"},
 								"db_version":      map[string]any{"string": dbVersion},
 								"job_id":          map[string]any{"string": jobIDStr},
-								// Note that the field is still present in the avro schema, so it appears here as nil.
+								// Note that optional fields that are not present in the source are set to nil in the json translation.
 								"mvcc_timestamp":       nil,
+								"topic":                nil,
+								"ts_ns":                nil,
+								"ts_hlc":               nil,
 								"node_id":              map[string]any{"string": nodeID},
 								"origin":               map[string]any{"string": "cockroachdb"},
 								"node_name":            map[string]any{"string": nodeName},
@@ -4503,8 +4507,6 @@ func TestChangefeedEnrichedSourceWithDataAvro(t *testing.T) {
 								"schema_name":          map[string]any{"string": "public"},
 								"source_node_locality": map[string]any{"string": sourceNodeLocality},
 								"table_name":           map[string]any{"string": "foo"},
-								"ts_ns":                nil,
-								"ts_hlc":               nil,
 							},
 						}
 						if withMVCCTS {
@@ -4544,10 +4546,10 @@ func TestChangefeedEnrichedSourceWithDataAvro(t *testing.T) {
 				Tiers: []roachpb.Tier{{
 					Key:   "region",
 					Value: testServerRegion,
-				}}}
+				}},
+			}
 			cdcTest(t, mkTestFn("kafka"), feedTestForceSink("kafka"), feedTestUseClusterName(clusterName),
 				feedTestUseLocality(testLocality))
-
 		})
 	})
 }
@@ -4558,104 +4560,113 @@ func TestChangefeedEnrichedSourceWithDataJSON(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "ts_{ns,hlc}", func(t *testing.T, withUpdated bool) {
 		testutils.RunTrueAndFalse(t, "mvcc_ts", func(t *testing.T, withMVCCTS bool) {
-			clusterName := "clusterName123"
-			dbVersion := "v999.0.0"
-			defer build.TestingOverrideVersion(dbVersion)()
-			mkTestFn := func(sink string) func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-				return func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-					clusterID := s.Server.ExecutorConfig().(sql.ExecutorConfig).NodeInfo.LogicalClusterID().String()
+			testutils.RunTrueAndFalse(t, "topic_in_value", func(t *testing.T, withTopicInValue bool) {
+				clusterName := "clusterName123"
+				dbVersion := "v999.0.0"
+				defer build.TestingOverrideVersion(dbVersion)()
+				mkTestFn := func(sink string) func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+					return func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+						clusterID := s.Server.ExecutorConfig().(sql.ExecutorConfig).NodeInfo.LogicalClusterID().String()
 
-					sqlDB := sqlutils.MakeSQLRunner(s.DB)
+						sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
-					sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY)`)
-					sqlDB.Exec(t, `INSERT INTO foo values (0)`)
-					stmt := `CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', format=json`
-					if withMVCCTS {
-						stmt += ", mvcc_timestamp"
-					}
-					if withUpdated {
-						stmt += ", updated"
-					}
-					testFeed := feed(t, f, stmt)
-					defer closeFeed(t, testFeed)
-
-					var jobID int64
-					var nodeName string
-					var sourceAssertion func(actualSource map[string]any)
-					if ef, ok := testFeed.(cdctest.EnterpriseTestFeed); ok {
-						jobID = int64(ef.JobID())
-					}
-					sqlDB.QueryRow(t, `SELECT value FROM crdb_internal.node_runtime_info where component = 'DB' and field = 'Host'`).Scan(&nodeName)
-
-					sourceAssertion = func(actualSource map[string]any) {
-						nodeID := actualSource["node_id"]
-						require.NotNil(t, nodeID)
-
-						sourceNodeLocality := fmt.Sprintf(`region=%s`, testServerRegion)
-
-						// There are some differences between how we specify sinks here and their actual names.
-						if sink == "sinkless" {
-							sink = sinkTypeSinklessBuffer.String()
-						}
-
-						const dummyMvccTimestamp = "1234567890.0001"
-						jobIDStr := strconv.FormatInt(jobID, 10)
-
-						dummyUpdatedTSNS := 12345678900001000
-						dummyUpdatedTSHLC :=
-							hlc.Timestamp{WallTime: int64(dummyUpdatedTSNS), Logical: 0}.AsOfSystemTime()
-
-						var assertion string
-						assertionMap := map[string]any{
-							"cluster_id":           clusterID,
-							"cluster_name":         clusterName,
-							"db_version":           dbVersion,
-							"job_id":               jobIDStr,
-							"node_id":              nodeID,
-							"node_name":            nodeName,
-							"origin":               "cockroachdb",
-							"changefeed_sink":      sink,
-							"source_node_locality": sourceNodeLocality,
-							"database_name":        "d",
-							"schema_name":          "public",
-							"table_name":           "foo",
-							"primary_keys":         []any{"i"},
-						}
+						sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY)`)
+						sqlDB.Exec(t, `INSERT INTO foo values (0)`)
+						stmt := `CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', format=json`
 						if withMVCCTS {
-							assertReasonableMVCCTimestamp(t, actualSource["mvcc_timestamp"].(string))
-							actualSource["mvcc_timestamp"] = dummyMvccTimestamp
-							assertionMap["mvcc_timestamp"] = dummyMvccTimestamp
+							stmt += ", mvcc_timestamp"
 						}
 						if withUpdated {
-							tsns := actualSource["ts_ns"].(gojson.Number)
-							tsnsInt, err := tsns.Int64()
-							require.NoError(t, err)
-							assertReasonableMVCCTimestamp(t, tsns.String())
-							actualSource["ts_ns"] = dummyUpdatedTSNS
-							assertionMap["ts_ns"] = dummyUpdatedTSNS
-							assertEqualTSNSHLCWalltime(t, tsnsInt, actualSource["ts_hlc"].(string))
-							actualSource["ts_hlc"] = dummyUpdatedTSHLC
-							assertionMap["ts_hlc"] = dummyUpdatedTSHLC
+							stmt += ", updated"
 						}
-						assertion = toJSON(t, assertionMap)
+						if withTopicInValue {
+							stmt += ", topic_in_value"
+						}
+						testFeed := feed(t, f, stmt)
+						defer closeFeed(t, testFeed)
 
-						value, err := reformatJSON(actualSource)
-						require.NoError(t, err)
-						require.JSONEq(t, assertion, string(value))
+						var jobID int64
+						var nodeName string
+						var sourceAssertion func(actualSource map[string]any)
+						if ef, ok := testFeed.(cdctest.EnterpriseTestFeed); ok {
+							jobID = int64(ef.JobID())
+						}
+						sqlDB.QueryRow(t, `SELECT value FROM crdb_internal.node_runtime_info where component = 'DB' and field = 'Host'`).Scan(&nodeName)
+
+						sourceAssertion = func(actualSource map[string]any) {
+							nodeID := actualSource["node_id"]
+							require.NotNil(t, nodeID)
+
+							sourceNodeLocality := fmt.Sprintf(`region=%s`, testServerRegion)
+
+							// There are some differences between how we specify sinks here and their actual names.
+							if sink == "sinkless" {
+								sink = sinkTypeSinklessBuffer.String()
+							}
+
+							const dummyMvccTimestamp = "1234567890.0001"
+							jobIDStr := strconv.FormatInt(jobID, 10)
+
+							dummyUpdatedTSNS := 12345678900001000
+							dummyUpdatedTSHLC :=
+								hlc.Timestamp{WallTime: int64(dummyUpdatedTSNS), Logical: 0}.AsOfSystemTime()
+
+							var assertion string
+							assertionMap := map[string]any{
+								"cluster_id":           clusterID,
+								"cluster_name":         clusterName,
+								"db_version":           dbVersion,
+								"job_id":               jobIDStr,
+								"node_id":              nodeID,
+								"node_name":            nodeName,
+								"origin":               "cockroachdb",
+								"changefeed_sink":      sink,
+								"source_node_locality": sourceNodeLocality,
+								"database_name":        "d",
+								"schema_name":          "public",
+								"table_name":           "foo",
+								"primary_keys":         []any{"i"},
+							}
+							if withMVCCTS {
+								assertReasonableMVCCTimestamp(t, actualSource["mvcc_timestamp"].(string))
+								actualSource["mvcc_timestamp"] = dummyMvccTimestamp
+								assertionMap["mvcc_timestamp"] = dummyMvccTimestamp
+							}
+							if withUpdated {
+								tsns := actualSource["ts_ns"].(gojson.Number)
+								tsnsInt, err := tsns.Int64()
+								require.NoError(t, err)
+								assertReasonableMVCCTimestamp(t, tsns.String())
+								actualSource["ts_ns"] = dummyUpdatedTSNS
+								assertionMap["ts_ns"] = dummyUpdatedTSNS
+								assertEqualTSNSHLCWalltime(t, tsnsInt, actualSource["ts_hlc"].(string))
+								actualSource["ts_hlc"] = dummyUpdatedTSHLC
+								assertionMap["ts_hlc"] = dummyUpdatedTSHLC
+							}
+							if withTopicInValue {
+								assertionMap["topic"] = "foo"
+							}
+							assertion = toJSON(t, assertionMap)
+
+							value, err := reformatJSON(actualSource)
+							require.NoError(t, err)
+							require.JSONEq(t, assertion, string(value))
+						}
+
+						assertPayloadsEnriched(t, testFeed, []string{`foo: {"i": 0}->{"after": {"i": 0}, "op": "c"}`}, sourceAssertion)
 					}
-
-					assertPayloadsEnriched(t, testFeed, []string{`foo: {"i": 0}->{"after": {"i": 0}, "op": "c"}`}, sourceAssertion)
 				}
-			}
-			for _, sink := range []string{"kafka", "pubsub", "sinkless", "cloudstorage"} {
-				testLocality := roachpb.Locality{
-					Tiers: []roachpb.Tier{{
-						Key:   "region",
-						Value: testServerRegion,
-					}}}
-				cdcTest(t, mkTestFn(sink), feedTestForceSink(sink), feedTestUseClusterName(clusterName),
-					feedTestUseLocality(testLocality))
-			}
+				for _, sink := range []string{"kafka", "pubsub", "sinkless", "cloudstorage"} {
+					testLocality := roachpb.Locality{
+						Tiers: []roachpb.Tier{{
+							Key:   "region",
+							Value: testServerRegion,
+						}},
+					}
+					cdcTest(t, mkTestFn(sink), feedTestForceSink(sink), feedTestUseClusterName(clusterName),
+						feedTestUseLocality(testLocality))
+				}
+			})
 		})
 	})
 }
@@ -4726,6 +4737,7 @@ func TestChangefeedEnrichedSourceWithDataJSONWebhook(t *testing.T) {
 							"schema_name":          "public",
 							"table_name":           "foo",
 							"primary_keys":         []any{"i"},
+							"topic":                "foo",
 						}
 						if withMVCCTS {
 							assertReasonableMVCCTimestamp(t, actualSource["mvcc_timestamp"].(string))
@@ -4750,7 +4762,7 @@ func TestChangefeedEnrichedSourceWithDataJSONWebhook(t *testing.T) {
 						require.JSONEq(t, assertion, string(value))
 					}
 
-					assertPayloadsEnriched(t, testFeed, []string{`: {"i": 0}->{"after": {"i": 0}, "op": "c"}`}, sourceAssertion)
+					assertPayloadsEnriched(t, testFeed, []string{`foo: {"i": 0}->{"after": {"i": 0}, "op": "c"}`}, sourceAssertion)
 				}
 			}
 			testLocality := roachpb.Locality{

@@ -2316,6 +2316,19 @@ func isResolvedTimestamp(message []byte) (bool, error) {
 func extractTopicFromJSONValue(
 	envelopeType changefeedbase.EnvelopeType, wrapped []byte,
 ) (topic string, value []byte, err error) {
+	if envelopeType == changefeedbase.OptEnvelopeEnriched {
+		var msg map[string]any
+		if err := gojson.Unmarshal(wrapped, &msg); err != nil {
+			return "", nil, err
+		}
+		source, ok := msg["source"]
+		if !ok {
+			return "", nil, errors.New("source not found in enriched envelope")
+		}
+		topic = source.(map[string]any)["topic"].(string)
+		value = wrapped
+		return topic, value, nil
+	}
 	var topicRaw gojson.RawMessage
 	topicRaw, value, err = extractFieldFromJSONValue("topic", envelopeType, wrapped)
 	if err != nil {
