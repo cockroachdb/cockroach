@@ -399,7 +399,7 @@ func processColNodeType(
 		case types.PGVectorFamily:
 			// Create config for vector index, using the number of dimensions from
 			// the vector column.
-			cfg, err := vecindex.MakeVecConfig(b.EvalCtx(), columnType.Type, columnNode.OpClass)
+			cfg, err := vecindex.MakeVecConfig(b, b.EvalCtx(), columnType.Type, columnNode.OpClass)
 			if err != nil {
 				panic(err)
 			}

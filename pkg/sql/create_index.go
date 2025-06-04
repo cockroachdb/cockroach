@@ -263,7 +263,7 @@ func makeIndexDescriptor(
 			return nil, err
 		}
 		indexDesc.VecConfig, err = vecindex.MakeVecConfig(
-			params.EvalContext(), column.GetType(), vecCol.OpClass)
+			params.ctx, params.EvalContext(), column.GetType(), vecCol.OpClass)
 		if err != nil {
 			return nil, err
 		}
