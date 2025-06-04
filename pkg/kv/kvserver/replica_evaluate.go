@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"runtime/trace"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
@@ -335,9 +336,17 @@ func evaluateBatch(
 		// Note that `reply` is populated even when an error is returned: it
 		// may carry a response transaction and in the case of WriteTooOldError
 		// (which is sometimes deferred) it is fully populated.
+		var reg *trace.Region
+		if trace.IsEnabled() {
+			regName := args.Method().String() // NB: this is cheap, no allocs
+			reg = trace.StartRegion(ctx, regName)
+		}
 		curResult, err := evaluateCommand(
 			ctx, readWriter, rec, ms, ss, baHeader, args, reply, g, st, ui, evalPath, omitInRangefeeds,
 		)
+		if reg != nil {
+			reg.End()
+		}
 
 		if filter := rec.EvalKnobs().TestingPostEvalFilter; filter != nil {
 			filterArgs := kvserverbase.FilterArgs{
