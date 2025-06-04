@@ -47,9 +47,9 @@ var (
 	listJSON              bool
 	listMine              bool
 	listPattern           string
-	isSecure              bool   // Set based on the values passed to --secure and --insecure
-	secure                = true // DEPRECATED
-	insecure              = envutil.EnvOrDefaultBool("COCKROACH_ROACHPROD_INSECURE", false)
+	isSecure              bool    // Set based on the values passed to --secure and --insecure
+	secure                = false // DEPRECATED
+	insecure              = envutil.EnvOrDefaultBool("COCKROACH_ROACHPROD_INSECURE", true)
 	virtualClusterName    string
 	sqlInstance           int
 	extraSSHOptions       = ""
