@@ -9,6 +9,7 @@ import (
 	"context"
 	"reflect"
 	"runtime/pprof"
+	"runtime/trace"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -127,6 +128,9 @@ func (r *Replica) SendWithWriteBytes(
 		// Note: the defer statement captured the previous context.
 		ctx = pprof.WithLabels(ctx, pprof.Labels("range_str", r.rangeStr.ID()))
 		pprof.SetGoroutineLabels(ctx)
+	}
+	if trace.IsEnabled() {
+		defer trace.StartRegion(ctx, r.rangeStr.String() /* cheap */).End()
 	}
 	// Add the range log tag.
 	ctx = r.AnnotateCtx(ctx)
