@@ -8,116 +8,58 @@ package server
 import (
 	"context"
 	"crypto/tls"
-	"math"
-	"net"
 
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
-	"storj.io/drpc"
 	"storj.io/drpc/drpcerr"
-	"storj.io/drpc/drpcmanager"
-	"storj.io/drpc/drpcmux"
-	"storj.io/drpc/drpcserver"
-	"storj.io/drpc/drpcwire"
 )
 
-// ErrDRPCDisabled is returned from hosts that in principle could but do not
-// have the DRPC server enabled.
-var ErrDRPCDisabled = errors.New("DRPC is not enabled")
-
-type drpcServerI interface {
-	Serve(ctx context.Context, lis net.Listener) error
-}
-
-type drpcMuxI interface {
-	Register(srv interface{}, desc drpc.Description) error
-}
-
+// drpcServer wraps a DRPCServer and manages its enabled state and TLS
+// configuration. It also tracks the current serving mode for health checks.
 type drpcServer struct {
+	// Embeds logic for managing server mode (initializing, draining, operational).
 	serveModeHandler
-	srv     drpcServerI
-	mux     drpcMuxI
-	tlsCfg  *tls.Config
+	// Underlying DRPC server implementation.
+	rpc.DRPCServer
+	// Indicates if DRPC is enabled for this server.
 	enabled bool
+	// TLS configuration for secure connections.
+	tlsCfg *tls.Config
 }
 
-var _ drpcServerI = (*drpcserver.Server)(nil)
-var _ drpcServerI = (*drpcOffServer)(nil)
-
+// newDRPCServer creates and configures a new drpcServer instance. It enables
+// DRPC if the experimental setting is on, otherwise returns a dummy server.
+//
 // TODO: Register DRPC Heartbeat service
-func newDRPCServer(_ context.Context, rpcCtx *rpc.Context) (*drpcServer, error) {
-	var dmux drpcMuxI = &drpcOffServer{}
-	var dsrv drpcServerI = &drpcOffServer{}
-	var tlsCfg *tls.Config
-	enabled := false
-
+func newDRPCServer(ctx context.Context, rpcCtx *rpc.Context) (*drpcServer, error) {
+	drpcServer := &drpcServer{}
 	if rpc.ExperimentalDRPCEnabled.Get(&rpcCtx.Settings.SV) {
-		enabled = true
-		mux := drpcmux.New()
-		dsrv = drpcserver.NewWithOptions(mux, drpcserver.Options{
-			Log: func(err error) {
-				log.Warningf(context.Background(), "drpc server error %v", err)
-			},
-			// The reader's max buffer size defaults to 4mb, and if it is exceeded (such
-			// as happens with AddSSTable) the RPCs fail.
-			Manager: drpcmanager.Options{Reader: drpcwire.ReaderOptions{MaximumBufferSize: math.MaxInt}},
-		})
-		dmux = mux
-
-		var err error
-		tlsCfg, err = rpcCtx.GetServerTLSConfig()
+		d, err := rpc.NewDRPCServer(ctx, rpcCtx)
 		if err != nil {
 			return nil, err
 		}
-
-		// NB: any server middleware (server interceptors in gRPC parlance) would go
-		// here:
-		//     dmux = whateverMiddleware1(dmux)
-		//     dmux = whateverMiddleware2(dmux)
-		//     ...
-		//
-		// Each middleware must implement the Handler interface:
-		//
-		//   HandleRPC(stream Stream, rpc string) error
-		//
-		// where Stream
-		// See here for an example:
-		// https://github.com/bryk-io/pkg/blob/4da5fbfef47770be376e4022eab5c6c324984bf7/net/drpc/server.go#L91-L101
+		drpcServer.DRPCServer = d
+		drpcServer.enabled = true
+	} else {
+		drpcServer.DRPCServer = rpc.NewDummyDRPCServer()
+		drpcServer.enabled = false
 	}
 
-	d := &drpcServer{
-		srv:     dsrv,
-		mux:     dmux,
-		tlsCfg:  tlsCfg,
-		enabled: enabled,
-	}
-
-	d.setMode(modeInitializing)
-
-	return d, nil
-}
-
-// drpcOffServer is used for drpcServerI and drpcMuxI if the DRPC server is
-// disabled. It immediately closes accepted connections and returns
-// ErrDRPCDisabled.
-type drpcOffServer struct{}
-
-func (srv *drpcOffServer) Serve(_ context.Context, lis net.Listener) error {
-	conn, err := lis.Accept()
+	tlsCfg, err := rpcCtx.GetServerTLSConfig()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_ = conn.Close()
-	return ErrDRPCDisabled
+
+	drpcServer.tlsCfg = tlsCfg
+	drpcServer.setMode(modeInitializing)
+
+	return drpcServer, nil
 }
 
-func (srv *drpcOffServer) Register(interface{}, drpc.Description) error {
-	return nil
-}
-
+// health returns an error if the server is not operational, encoding the error
+// with a DRPC code. Returns nil if the server is healthy and operational.
 func (s *drpcServer) health(ctx context.Context) error {
 	sm := s.mode.get()
 	switch sm {
