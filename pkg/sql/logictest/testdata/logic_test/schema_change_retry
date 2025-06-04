@@ -1,5 +1,3 @@
-# LogicTest: !local-schema-locked
-
 # This test reproduces https://github.com/cockroachdb/cockroach/issues/23979
 
 # Schema changes that experienced retriable errors in RELEASE
@@ -21,7 +19,7 @@ statement ok
 SAVEPOINT cockroach_restart
 
 statement ok
-CREATE TABLE t (x INT PRIMARY KEY, y INT);
+CREATE TABLE t (x INT PRIMARY KEY, y INT) WITH (schema_locked=false);
 
 # It doesn't matter that we're creating the table and index in the
 # same transaction, but it does matter that the index creation is not
@@ -52,7 +50,7 @@ statement ok
 SAVEPOINT cockroach_restart
 
 statement ok
-CREATE TABLE t (x INT PRIMARY KEY, y INT);
+CREATE TABLE t (x INT PRIMARY KEY, y INT)  WITH (schema_locked=false);;
 
 statement ok
 CREATE INDEX y_idx ON t (y);
