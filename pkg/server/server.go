@@ -645,6 +645,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		clock,
 		kvNodeDialer,
 		grpcServer.Server,
+		drpcServer.DRPCServer,
 		admittedPiggybacker,
 		storesForRACv2,
 		raftTransportKnobs,

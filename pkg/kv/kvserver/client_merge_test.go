@@ -2482,6 +2482,7 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 		nodedialer.New(tc.Servers[0].RPCContext(),
 			gossip.AddressResolver(tc.Servers[0].GossipI().(*gossip.Gossip))),
 		nil, /* grpcServer */
+		nil, /* drpcServer */
 		(*node_rac2.AdmittedPiggybacker)(nil),
 		nil, /* PiggybackedAdmittedResponseScheduler */
 		nil, /* knobs */
