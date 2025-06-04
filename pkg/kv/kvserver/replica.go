@@ -1931,13 +1931,14 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 		slices.Sort(sl)
 		ri.PausedReplicas = sl
 	}
+	nodeID := r.shMu.state.Lease.Replica.NodeID
 	r.mu.RUnlock()
 	r.sideTransportClosedTimestamp.mu.Lock()
 	ri.ClosedTimestampSideTransportInfo.ReplicaClosed = r.sideTransportClosedTimestamp.mu.cur.ts
 	ri.ClosedTimestampSideTransportInfo.ReplicaLAI = r.sideTransportClosedTimestamp.mu.cur.lai
 	r.sideTransportClosedTimestamp.mu.Unlock()
 	centralClosed, centralLAI := r.store.cfg.ClosedTimestampReceiver.GetClosedTimestamp(
-		ctx, r.RangeID, r.shMu.state.Lease.Replica.NodeID)
+		ctx, r.RangeID, nodeID)
 	ri.ClosedTimestampSideTransportInfo.CentralClosed = centralClosed
 	ri.ClosedTimestampSideTransportInfo.CentralLAI = centralLAI
 	if err := r.breaker.Signal().Err(); err != nil {
