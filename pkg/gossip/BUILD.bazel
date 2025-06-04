@@ -26,6 +26,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
+        "//pkg/rpc/rpcbase",
         "//pkg/util",
         "//pkg/util/errorutil",
         "//pkg/util/grpcutil",

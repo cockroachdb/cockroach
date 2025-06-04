@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -216,7 +216,7 @@ func TestFlowControlRaftTransportV2(t *testing.T) {
 
 						testutils.SucceedsSoon(t, func() error {
 							if !rttc.Send(from, to, rangeID, raftpb.Message{Commit: uint64(c)}) {
-								breaker, ok := rttc.transports[from.NodeID].GetCircuitBreaker(to.NodeID, rpc.DefaultClass)
+								breaker, ok := rttc.transports[from.NodeID].GetCircuitBreaker(to.NodeID, rpcbase.DefaultClass)
 								require.True(t, ok)
 								breaker.Reset()
 							}

@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -2856,7 +2857,7 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 	// election timeouts to trigger an election if reportUnreachable broke
 	// heartbeat transmission to the other store.
 	b, ok := tc.Servers[followerIdx].RaftTransport().(*kvserver.RaftTransport).GetCircuitBreaker(
-		tc.Target(followerIdx).NodeID, rpc.DefaultClass)
+		tc.Target(followerIdx).NodeID, rpcbase.DefaultClass)
 	require.True(t, ok)
 	undo := circuit.TestingSetTripped(b, errors.New("boom"))
 	defer undo()
@@ -2945,7 +2946,8 @@ func TestReportUnreachableRemoveRace(t *testing.T) {
 		var undos []func()
 		for i := range tc.Servers {
 			if i != partitionedMaybeLeaseholderIdx {
-				b, ok := tc.Servers[i].RaftTransport().(*kvserver.RaftTransport).GetCircuitBreaker(tc.Target(partitionedMaybeLeaseholderIdx).NodeID, rpc.DefaultClass)
+				b, ok := tc.Servers[i].RaftTransport().(*kvserver.RaftTransport).GetCircuitBreaker(
+					tc.Target(partitionedMaybeLeaseholderIdx).NodeID, rpcbase.DefaultClass)
 				require.True(t, ok)
 				undos = append(undos, circuit.TestingSetTripped(b, errors.New("boom")))
 			}
@@ -3180,7 +3182,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 				ToReplicaID:   replica1.ReplicaID,
 			},
 		},
-	}, rpc.DefaultClass)
+	}, rpcbase.DefaultClass)
 	// Execute another replica change to ensure that raft has processed
 	// the heartbeat just sent.
 	tc.AddVotersOrFatal(t, key, tc.Target(1))
@@ -3446,7 +3448,7 @@ func TestReplicaGCRace(t *testing.T) {
 	// dropped messages (see #18355).
 	sendHeartbeat := func() (sent bool) {
 		r := hbReq
-		return fromTransport.SendAsync(&r, rpc.DefaultClass)
+		return fromTransport.SendAsync(&r, rpcbase.DefaultClass)
 	}
 	if sent := sendHeartbeat(); !sent {
 		t.Fatal("failed to send heartbeat")
@@ -3845,7 +3847,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 			Type: raftpb.MsgVote,
 			Term: term + 1,
 		},
-	}, rpc.DefaultClass) {
+	}, rpcbase.DefaultClass) {
 	}
 
 	// The receiver of this message (i.e. replica1) should return an error telling
@@ -4669,7 +4671,7 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 
 			var targets []target
 			for _, s := range tc.Servers {
-				conn, err := s.NodeDialer().(*nodedialer.Dialer).Dial(ctx, s.NodeID(), rpc.DefaultClass)
+				conn, err := s.NodeDialer().(*nodedialer.Dialer).Dial(ctx, s.NodeID(), rpcbase.DefaultClass)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -4797,7 +4799,7 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	store := tc.GetFirstStoreFromServer(t, 0)
 
-	conn, err := tc.Servers[0].NodeDialer().(*nodedialer.Dialer).Dial(ctx, store.Ident.NodeID, rpc.DefaultClass)
+	conn, err := tc.Servers[0].NodeDialer().(*nodedialer.Dialer).Dial(ctx, store.Ident.NodeID, rpcbase.DefaultClass)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4842,7 +4844,7 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 					StoreID: store.Ident.StoreID,
 				},
 				Heartbeats: []kvserverpb.RaftHeartbeat{{RangeID: unusedRangeID, ToReplicaID: 1}},
-			}, rpc.DefaultClass)
+			}, rpcbase.DefaultClass)
 			repl, err = store.GetReplica(unusedRangeID)
 			return err
 		})
@@ -4979,9 +4981,9 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 	disabled.Store(false)
 	disabledSystem.Store(false)
 	knobs := rpc.ContextTestingKnobs{
-		StreamClientInterceptor: func(target string, class rpc.ConnectionClass) grpc.StreamClientInterceptor {
+		StreamClientInterceptor: func(target string, class rpcbase.ConnectionClass) grpc.StreamClientInterceptor {
 			disabledFunc := func() bool {
-				if class == rpc.SystemClass {
+				if class == rpcbase.SystemClass {
 					return disabledSystem.Load().(bool)
 				}
 				return disabled.Load().(bool)
