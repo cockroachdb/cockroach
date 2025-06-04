@@ -621,7 +621,7 @@ func TestEvalCtxTxnOnRemoteNodes(t *testing.T) {
 		db := tc.ServerConn(0)
 		var opt string
 		if vectorize {
-			opt = "experimental_always"
+			opt = "on"
 		} else {
 			opt = "off"
 		}

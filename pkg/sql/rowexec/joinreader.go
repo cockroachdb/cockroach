@@ -438,12 +438,12 @@ func newJoinReader(
 		lookupExprTypes = append(lookupExprTypes, rightTypes...)
 
 		semaCtx := flowCtx.NewSemaContext(jr.txn)
-		if err := jr.lookupExpr.Init(ctx, spec.LookupExpr, lookupExprTypes, semaCtx, evalCtx); err != nil {
+		if err := jr.lookupExpr.Init(ctx, spec.LookupExpr, lookupExprTypes, semaCtx, evalCtx, flowCtx.Txn); err != nil {
 			return nil, err
 		}
 		if !spec.RemoteLookupExpr.Empty() {
 			if err := jr.remoteLookupExpr.Init(
-				ctx, spec.RemoteLookupExpr, lookupExprTypes, semaCtx, evalCtx,
+				ctx, spec.RemoteLookupExpr, lookupExprTypes, semaCtx, evalCtx, flowCtx.Txn,
 			); err != nil {
 				return nil, err
 			}
