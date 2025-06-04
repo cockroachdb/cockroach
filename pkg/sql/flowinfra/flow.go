@@ -280,7 +280,6 @@ func (f *FlowBase) Setup(
 // SetTxn is part of the Flow interface.
 func (f *FlowBase) SetTxn(txn *kv.Txn) {
 	f.FlowCtx.Txn = txn
-	f.EvalCtx.Txn = txn
 }
 
 // ConcurrentTxnUse is part of the Flow interface.

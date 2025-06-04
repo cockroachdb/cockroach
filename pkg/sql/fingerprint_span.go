@@ -101,7 +101,7 @@ func (p *planner) fingerprintSpanFanout(
 	defer sp.Finish()
 
 	var (
-		txn        = p.EvalContext().Txn
+		txn        = p.Txn()
 		execCfg    = p.ExecutorConfig().(*ExecutorConfig)
 		dsp        = p.DistSQLPlanner()
 		extEvalCtx = p.ExtendedEvalContext()

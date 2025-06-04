@@ -185,7 +185,7 @@ func TestMemoIsStale(t *testing.T) {
 	ctx := context.Background()
 	stale := func() {
 		t.Helper()
-		if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		if isStale, err := o.Memo().IsStale(ctx, &evalCtx, txn, catalog); err != nil {
 			t.Fatal(err)
 		} else if !isStale {
 			t.Errorf("memo should be stale")
@@ -197,7 +197,7 @@ func TestMemoIsStale(t *testing.T) {
 		var o2 xform.Optimizer
 		opttestutils.BuildQuery(t, &o2, catalog, &evalCtx, txn, query)
 
-		if isStale, err := o2.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		if isStale, err := o2.Memo().IsStale(ctx, &evalCtx, txn, catalog); err != nil {
 			t.Fatal(err)
 		} else if isStale {
 			t.Errorf("memo should not be stale")
@@ -206,7 +206,7 @@ func TestMemoIsStale(t *testing.T) {
 
 	notStale := func() {
 		t.Helper()
-		if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		if isStale, err := o.Memo().IsStale(ctx, &evalCtx, txn, catalog); err != nil {
 			t.Fatal(err)
 		} else if isStale {
 			t.Errorf("memo should not be stale")
@@ -585,7 +585,7 @@ func TestMemoIsStale(t *testing.T) {
 
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
-	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)
+	_, err = o.Memo().IsStale(ctx, &evalCtx, txn, catalog)
 	if exp := "user does not have privilege"; !testutils.IsError(err, exp) {
 		t.Fatalf("expected %q error, but got %+v", exp, err)
 	}
@@ -594,7 +594,7 @@ func TestMemoIsStale(t *testing.T) {
 
 	// User no longer has execution privilege on a UDF.
 	catalog.RevokeExecution(catalog.Function("one").Oid)
-	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)
+	_, err = o.Memo().IsStale(ctx, &evalCtx, txn, catalog)
 	if exp := "user does not have privilege to execute function"; !testutils.IsError(err, exp) {
 		t.Fatalf("expected %q error, but got %+v", exp, err)
 	}

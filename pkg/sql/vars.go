@@ -1731,8 +1731,8 @@ var varGen = map[string]sessionVar{
 	// been executed yet.
 	// See https://github.com/postgres/postgres/blob/REL_10_STABLE/src/backend/utils/misc/guc.c#L3401-L3409
 	`transaction_isolation`: {
-		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			level := tree.FromKVIsoLevel(evalCtx.Txn.IsoLevel())
+		Get: func(_ *extendedEvalContext, txn *kv.Txn) (string, error) {
+			level := tree.FromKVIsoLevel(txn.IsoLevel())
 			return strings.ToLower(level.String()), nil
 		},
 		RuntimeSet: func(ctx context.Context, evalCtx *extendedEvalContext, local bool, s string) error {

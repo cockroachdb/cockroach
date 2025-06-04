@@ -160,7 +160,7 @@ func newTableReader(
 	}
 
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
-		if flowTxn := flowCtx.EvalCtx.Txn; flowTxn != nil {
+		if flowTxn := flowCtx.Txn; flowTxn != nil {
 			tr.contentionEventsListener.Init(flowTxn.ID())
 		}
 		tr.fetcher = newRowFetcherStatCollector(&fetcher)

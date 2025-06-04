@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -106,7 +107,7 @@ func getRowKey(
 // parseExpriationTime parses an expression into a hlc.Timestamp representing
 // the expiration time of the split.
 func parseExpirationTime(
-	ctx context.Context, evalCtx *eval.Context, expireExpr tree.TypedExpr,
+	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, expireExpr tree.TypedExpr,
 ) (hlc.Timestamp, error) {
 	if !eval.IsConst(evalCtx, expireExpr) {
 		return hlc.Timestamp{}, errors.Errorf("SPLIT AT: only constant expressions are allowed for expiration")
@@ -119,7 +120,7 @@ func parseExpirationTime(
 		return hlc.MaxTimestamp, nil
 	}
 	stmtTimestamp := evalCtx.GetStmtTimestamp()
-	ts, err := asof.DatumToHLC(evalCtx, stmtTimestamp, d, asof.Split)
+	ts, err := asof.DatumToHLC(evalCtx, txn, stmtTimestamp, d, asof.Split)
 	if err != nil {
 		return ts, errors.Wrap(err, "SPLIT AT")
 	}

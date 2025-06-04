@@ -169,9 +169,6 @@ type Context struct {
 
 	PreparedStatementState PreparedStatementState
 
-	// The transaction in which the statement is executing.
-	Txn *kv.Txn
-
 	ReCache           *tree.RegexpCache
 	ToCharFormatCache *tochar.FormatCache
 
@@ -443,7 +440,6 @@ func MakeTestingEvalContext(st *cluster.Settings) Context {
 func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonitor) Context {
 	ctx := Context{
 		Codec:            keys.SystemSQLCodec,
-		Txn:              &kv.Txn{},
 		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
 		Settings:         st,
 		NodeID:           base.TestingIDContainer,

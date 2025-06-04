@@ -645,7 +645,7 @@ func NewColIndexJoin(
 		op.mem.inputBatchSizeLimit = cFetcherMemoryLimit
 	}
 	if shouldCollectStats {
-		if flowTxn := flowCtx.EvalCtx.Txn; flowTxn != nil {
+		if flowTxn := flowCtx.Txn; flowTxn != nil {
 			op.ContentionEventsListener.Init(flowTxn.ID())
 		}
 	}

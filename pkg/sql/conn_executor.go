@@ -3821,14 +3821,17 @@ func (ex *connExecutor) GetPCRReaderTimestamp() hlc.Timestamp {
 // resetEvalCtx initializes the fields of evalCtx that can change
 // during a session (i.e. the fields not set by initEvalCtx).
 //
+// newTxn indicates whether the evalCtx is being updated to correspond to a new
+// txn (meaning either it's being initialized for the first time, or that a new
+// txn will be used).
+//
 // stmtTS is the timestamp that the statement_timestamp() SQL builtin will
 // return for statements executed with this evalCtx. Since generally each
 // statement is supposed to have a different timestamp, the evalCtx generally
 // shouldn't be reused across statements.
 //
 // Safe for concurrent use.
-func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, stmtTS time.Time) {
-	newTxn := txn == nil || evalCtx.Txn != txn
+func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, newTxn bool, stmtTS time.Time) {
 	evalCtx.TxnState = ex.getTransactionState()
 	evalCtx.TxnReadOnly = ex.state.readOnly.Load()
 	evalCtx.TxnImplicit = ex.implicitTxn()
@@ -3848,7 +3851,6 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.Placeholders = nil
 	evalCtx.Annotations = nil
 	evalCtx.IVarContainer = nil
-	evalCtx.Txn = txn
 	evalCtx.PrepareOnly = false
 	evalCtx.SkipNormalize = false
 	evalCtx.SchemaChangerState = ex.extraTxnState.schemaChangerState
@@ -3904,8 +3906,10 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.datumAlloc = &tree.DatumAlloc{}
 }
 
-// maybeAdjustMaxTimestampBound checks
-func (ex *connExecutor) maybeAdjustMaxTimestampBound(p *planner, txn *kv.Txn) {
+// maybeAdjustMaxTimestampBound checks whether max timestamp bound needs to be
+// adjusted as part of resetting the planner. It takes in a boolean indicating
+// whether a new txn will be given to the planner.
+func (ex *connExecutor) maybeAdjustMaxTimestampBound(newTxn bool) {
 	if autoRetryReason := ex.state.mu.autoRetryReason; autoRetryReason != nil {
 		// If we are retrying due to an unsatisfiable timestamp bound which is
 		// retriable, it means we were unable to serve the previous minimum
@@ -3924,7 +3928,7 @@ func (ex *connExecutor) maybeAdjustMaxTimestampBound(p *planner, txn *kv.Txn) {
 	// Otherwise, only change the historical timestamps if this is a new txn.
 	// This is because resetPlanner can be called multiple times for the same
 	// txn during the extended protocol.
-	if newTxn := txn == nil || p.extendedEvalCtx.Txn != txn; newTxn {
+	if newTxn {
 		ex.extraTxnState.descCollection.ResetMaxTimestampBound()
 	}
 }
@@ -3932,8 +3936,9 @@ func (ex *connExecutor) maybeAdjustMaxTimestampBound(p *planner, txn *kv.Txn) {
 func (ex *connExecutor) resetPlanner(
 	ctx context.Context, p *planner, txn *kv.Txn, stmtTS time.Time,
 ) {
+	newTxn := txn == nil || p.txn != txn
 	p.resetPlanner(ctx, txn, ex.sessionData(), ex.state.mon, ex.sessionMon)
-	ex.maybeAdjustMaxTimestampBound(p, txn)
+	ex.maybeAdjustMaxTimestampBound(newTxn)
 	// Make sure the default locality specifies the actual gateway region at the
 	// start of query compilation. It could have been overridden to a remote
 	// region when the enforce_home_region session setting is true.
@@ -3950,7 +3955,7 @@ func (ex *connExecutor) resetPlanner(
 			)
 		}
 	}
-	ex.resetEvalCtx(&p.extendedEvalCtx, txn, stmtTS)
+	ex.resetEvalCtx(&p.extendedEvalCtx, newTxn, stmtTS)
 }
 
 // txnStateTransitionsApplyWrapper is a wrapper on top of Machine built with the

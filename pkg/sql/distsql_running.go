@@ -2154,7 +2154,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		// is no point in providing the locality filter since it will be ignored
 		// anyway, so we don't use NewPlanningCtxWithOracle constructor.
 		localPlanCtx := dsp.NewPlanningCtx(
-			ctx, extEvalCtx, planCtx.planner, extEvalCtx.Txn, LocalDistribution,
+			ctx, extEvalCtx, planCtx.planner, txn, LocalDistribution,
 		)
 		localPlanCtx.setUpForMainQuery(ctx, planCtx.planner, recv)
 		localPhysPlan, localPhysPlanCleanup, err := dsp.createPhysPlan(ctx, localPlanCtx, plan)

@@ -2134,7 +2134,7 @@ func (ef *execFactory) ConstructAlterTableSplit(
 		return nil, err
 	}
 
-	expirationTime, err := parseExpirationTime(ef.ctx, ef.planner.EvalContext(), expiration)
+	expirationTime, err := parseExpirationTime(ef.ctx, ef.planner.EvalContext(), ef.planner.Txn(), expiration)
 	if err != nil {
 		return nil, err
 	}

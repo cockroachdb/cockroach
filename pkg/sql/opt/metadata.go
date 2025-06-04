@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
@@ -440,7 +441,7 @@ func (md *Metadata) leaseObjectsInMetaData(
 // may perform KV operations on behalf of the transaction associated with the
 // provided catalog.
 func (md *Metadata) CheckDependencies(
-	ctx context.Context, evalCtx *eval.Context, optCatalog cat.Catalog,
+	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, optCatalog cat.Catalog,
 ) (upToDate bool, err error) {
 	// If the query is AOST we must check all the dependencies, since the descriptors
 	// may have been different in the past. Otherwise, the dependency digest
@@ -449,7 +450,7 @@ func (md *Metadata) CheckDependencies(
 	if evalCtx.SessionData().CatalogDigestStalenessCheckEnabled &&
 		evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_1) &&
 		evalCtx.AsOfSystemTime == nil &&
-		!evalCtx.Txn.ReadTimestampFixed() &&
+		!txn.ReadTimestampFixed() &&
 		md.dependencyDigestEquals(&currentDigest) {
 		// Lease the underlying descriptors for this metadata. If we fail to lease
 		// any descriptors attempt to resolve them by name through the more expensive

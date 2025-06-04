@@ -100,7 +100,7 @@ func TestMetadata(t *testing.T) {
 	}
 
 	md.AddDependency(opt.DepByName(&tab.TabName), tab, privilege.CREATE)
-	depsUpToDate, err := md.CheckDependencies(context.Background(), &evalCtx, testCat)
+	depsUpToDate, err := md.CheckDependencies(context.Background(), &evalCtx, txn, testCat)
 	if err == nil || depsUpToDate {
 		t.Fatalf("expected table privilege to be revoked")
 	}
@@ -198,7 +198,7 @@ func TestMetadata(t *testing.T) {
 		}
 	}
 
-	depsUpToDate, err = md.CheckDependencies(context.Background(), &evalCtx, testCat)
+	depsUpToDate, err = md.CheckDependencies(context.Background(), &evalCtx, txn, testCat)
 	if err == nil || depsUpToDate {
 		t.Fatalf("expected table privilege to be revoked in metadata copy")
 	}

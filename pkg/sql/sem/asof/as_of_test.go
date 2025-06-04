@@ -8,6 +8,7 @@ package asof_test
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -18,6 +19,7 @@ import (
 
 func BenchmarkDatumToHLC(b *testing.B) {
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	txn := &kv.Txn{}
 	stmtTimestamp := timeutil.Now()
 	usage := asof.AsOf
 
@@ -32,7 +34,7 @@ func BenchmarkDatumToHLC(b *testing.B) {
 		b.Run(tc.name, func(b *testing.B) {
 			var err error
 			for i := 0; i < b.N; i++ {
-				_, err = asof.DatumToHLC(&evalCtx, stmtTimestamp, tc.d, usage)
+				_, err = asof.DatumToHLC(&evalCtx, txn, stmtTimestamp, tc.d, usage)
 			}
 			require.NoError(b, err)
 		})

@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -420,7 +421,7 @@ func (m *Memo) HasPlaceholders() bool {
 // perform KV operations on behalf of the transaction associated with the
 // provided catalog, and those errors are required to be propagated.
 func (m *Memo) IsStale(
-	ctx context.Context, evalCtx *eval.Context, catalog cat.Catalog,
+	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, catalog cat.Catalog,
 ) (bool, error) {
 	// Memo is stale if fields from SessionData that can affect planning have
 	// changed.
@@ -495,7 +496,7 @@ func (m *Memo) IsStale(
 	// Memo is stale if the fingerprint of any object in the memo's metadata has
 	// changed, or if the current user no longer has sufficient privilege to
 	// access the object.
-	if depsUpToDate, err := m.Metadata().CheckDependencies(ctx, evalCtx, catalog); err != nil || !depsUpToDate {
+	if depsUpToDate, err := m.Metadata().CheckDependencies(ctx, evalCtx, txn, catalog); err != nil || !depsUpToDate {
 		return true, err
 	}
 	return false, nil

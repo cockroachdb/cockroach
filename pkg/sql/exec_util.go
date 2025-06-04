@@ -2251,7 +2251,7 @@ func checkResultType(typ *types.T, fmtCode pgwirebase.FormatCode) error {
 func (p *planner) EvalAsOfTimestamp(
 	ctx context.Context, asOfClause tree.AsOfClause, opts ...asof.EvalOption,
 ) (eval.AsOfSystemTime, error) {
-	asOf, err := asof.Eval(ctx, asOfClause, &p.semaCtx, p.EvalContext(), opts...)
+	asOf, err := asof.Eval(ctx, asOfClause, &p.semaCtx, p.EvalContext(), p.Txn(), opts...)
 	if err != nil {
 		return eval.AsOfSystemTime{}, err
 	}
