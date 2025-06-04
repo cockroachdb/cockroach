@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 const (
@@ -89,8 +90,9 @@ func NewTransport(
 	clock *hlc.Clock,
 	dialer *nodedialer.Dialer,
 	grpcServer *grpc.Server,
+	drpcMux drpc.Mux,
 	knobs *TransportKnobs,
-) *Transport {
+) (*Transport, error) {
 	if knobs == nil {
 		knobs = &TransportKnobs{}
 	}
@@ -105,7 +107,19 @@ func NewTransport(
 	if grpcServer != nil {
 		slpb.RegisterStoreLivenessServer(grpcServer, t)
 	}
-	return t
+	if drpcMux != nil {
+		if err := slpb.DRPCRegisterStoreLiveness(drpcMux, t.AsDRPCServer()); err != nil {
+			return nil, err
+		}
+	}
+	return t, nil
+}
+
+type drpcTransport Transport
+
+// AsDRPCServer returns the DRPC server implementation for the StoreLiveness service.
+func (t *Transport) AsDRPCServer() slpb.DRPCStoreLivenessServer {
+	return (*drpcTransport)(t)
 }
 
 // Metrics returns metrics tracking this transport.
@@ -123,6 +137,18 @@ func (t *Transport) ListenMessages(storeID roachpb.StoreID, handler MessageHandl
 // only within the same RPC call; in other words, this guarantee does not hold
 // across stream re-connects.
 func (t *Transport) Stream(stream slpb.StoreLiveness_StreamServer) error {
+	return t.stream(stream)
+}
+
+// Stream proxies the incoming requests to the corresponding store's
+// MessageHandler. Messages between a pair of nodes are delivered in order
+// only within the same RPC call; in other words, this guarantee does not hold
+// across stream re-connects.
+func (t *drpcTransport) Stream(stream slpb.DRPCStoreLiveness_StreamStream) error {
+	return (*Transport)(t).stream(stream)
+}
+
+func (t *Transport) stream(stream slpb.RPCStoreLiveness_StreamStream) error {
 	errCh := make(chan error, 1)
 
 	// Node stopping error is caught below in the select.
