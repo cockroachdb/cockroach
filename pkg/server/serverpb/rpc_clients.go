@@ -14,16 +14,16 @@ import (
 
 // DialMigrationClient establishes a DRPC connection if enabled; otherwise,
 // it falls back to gRPC. The established connection is used to create a
-// MigrationClient.
+// RPCMigrationClient.
 func DialMigrationClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
-) (MigrationClient, error) {
+) (RPCMigrationClient, error) {
 	if rpcbase.TODODRPC {
 		conn, err := nd.Dial(ctx, nodeID, class)
 		if err != nil {
 			return nil, err
 		}
-		return NewMigrationClient(conn), nil
+		return NewGRPCMigrationClientAdapter(conn), nil
 	}
 	return nil, nil
 }

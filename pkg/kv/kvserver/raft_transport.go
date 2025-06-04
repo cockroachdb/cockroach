@@ -547,7 +547,7 @@ func (t *RaftTransport) StopOutgoingMessage(storeID roachpb.StoreID) {
 // lost and a new instance of processQueue will be started by the next message
 // to be sent.
 func (t *RaftTransport) processQueue(
-	q *raftSendQueue, stream MultiRaft_RaftMessageBatchClient, _ rpcbase.ConnectionClass,
+	q *raftSendQueue, stream RPCMultiRaft_RaftMessageBatchClient, _ rpcbase.ConnectionClass,
 ) error {
 	errCh := make(chan error, 1)
 

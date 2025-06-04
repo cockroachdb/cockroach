@@ -1,4 +1,4 @@
-# gazelle:go_grpc_compilers //pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler,  @com_github_grpc_ecosystem_grpc_gateway//protoc-gen-grpc-gateway:go_gen_grpc_gateway
+# gazelle:go_grpc_compilers //pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler, //pkg/cmd/protoc-gen-go-drpc:protoc-gen-go-drpc_compiler, @com_github_grpc_ecosystem_grpc_gateway//protoc-gen-grpc-gateway:go_gen_grpc_gateway
 
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
@@ -54,6 +54,7 @@ go_proto_library(
     compilers = [
         "//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
         "@com_github_grpc_ecosystem_grpc_gateway//protoc-gen-grpc-gateway:go_gen_grpc_gateway",
+        "//pkg/cmd/protoc-gen-go-drpc:protoc-gen-go-drpc_compiler",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/serverpb",
     proto = ":serverpb_proto",
