@@ -2925,16 +2925,6 @@ func (r roleOptions) createDB() (tree.DBool, error) {
 	return tree.DBool(createDB), err
 }
 
-func (r roleOptions) createRole() (tree.DBool, error) {
-	createRole, err := r.Exists("CREATEROLE")
-	return tree.DBool(createRole), err
-}
-
-func (r roleOptions) bypassRLS() (tree.DBool, error) {
-	bypassRLS, err := r.Exists("BYPASSRLS")
-	return tree.DBool(bypassRLS), err
-}
-
 // forEachRoleAtCacheReadTS reads from system.users and related tables using a
 // timestamp based on when the role membership cache was refreshed.
 func forEachRoleAtCacheReadTS(

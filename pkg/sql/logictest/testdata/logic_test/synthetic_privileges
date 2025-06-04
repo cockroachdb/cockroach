@@ -320,11 +320,19 @@ SELECT has_table_privilege('testuser4', 'crdb_internal.feature_usage', 'SELECT')
 ----
 false
 
+# Cleanup the privilege that was added.
+statement ok
+REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
+
 # This subtest makes sure that an unknown privilege in the system.privileges
 # table does not break code that is trying to look up other privileges.
 # This situation can happen if a new synthetic privilege is backported to an
 # older branch.
 subtest unknown_privilege
+
+# Add an arbitrary privilege so that we can test manually overriding it.
+statement ok
+GRANT SYSTEM CREATEDB TO testuser
 
 statement ok
 INSERT INTO system.users VALUES ('node', NULL, true, 0);
