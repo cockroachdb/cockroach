@@ -9,14 +9,19 @@ import (
 	"context"
 	"crypto/tls"
 	"math"
+	"net"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"storj.io/drpc"
 	"storj.io/drpc/drpcconn"
 	"storj.io/drpc/drpcmanager"
 	"storj.io/drpc/drpcmigrate"
+	"storj.io/drpc/drpcmux"
 	"storj.io/drpc/drpcpool"
+	"storj.io/drpc/drpcserver"
 	"storj.io/drpc/drpcstream"
 	"storj.io/drpc/drpcwire"
 )
@@ -93,3 +98,79 @@ func (c *closeEntirePoolConn) Close() error {
 }
 
 type DRPCConnection = Connection[drpc.Conn]
+
+// ErrDRPCDisabled is returned from hosts that in principle could but do not
+// have the DRPC server enabled.
+var ErrDRPCDisabled = errors.New("DRPC is not enabled")
+
+// DRPCServer defines the interface for a DRPC server, which can serve
+// connections and provides a drpc.Mux for registering handlers.
+type DRPCServer interface {
+	// Serve starts serving DRPC requests on the provided listener.
+	Serve(ctx context.Context, lis net.Listener) error
+	drpc.Mux
+}
+
+// drpcServer implements the DRPCServer interface.
+type drpcServer struct {
+	*drpcserver.Server
+	drpc.Mux
+}
+
+// NewDRPCServer creates a new DRPCServer with the provided rpc context.
+func NewDRPCServer(_ context.Context, rpcCtx *Context) (DRPCServer, error) {
+	d := &drpcServer{}
+	mux := drpcmux.New()
+	d.Server = drpcserver.NewWithOptions(mux, drpcserver.Options{
+		Log: func(err error) {
+			log.Warningf(context.Background(), "drpc server error %v", err)
+		},
+		// The reader's max buffer size defaults to 4mb, and if it is exceeded (such
+		// as happens with AddSSTable) the RPCs fail.
+		Manager: drpcmanager.Options{Reader: drpcwire.ReaderOptions{MaximumBufferSize: math.MaxInt}},
+	})
+	d.Mux = mux
+
+	// NB: any server middleware (server interceptors in gRPC parlance) would go
+	// here:
+	//     dmux = whateverMiddleware1(dmux)
+	//     dmux = whateverMiddleware2(dmux)
+	//     ...
+	//
+	// Each middleware must implement the Handler interface:
+	//
+	//   HandleRPC(stream Stream, rpc string) error
+	//
+	// where Stream
+	// See here for an example:
+	// https://github.com/bryk-io/pkg/blob/4da5fbfef47770be376e4022eab5c6c324984bf7/net/drpc/server.go#L91-L101
+	return d, nil
+}
+
+// NewDummyDRPCServer returns a DRPCServer that is disabled and always returns
+// ErrDRPCDisabled.
+func NewDummyDRPCServer() DRPCServer {
+	return &drpcOffServer{}
+}
+
+// drpcOffServer is a disabled DRPC server implementation. It immediately closes
+// accepted connections and returns ErrDRPCDisabled for all Serve calls.
+// Register is a no-op.
+type drpcOffServer struct{}
+
+// Serve implements the DRPCServer interface for drpcOffServer. It closes any
+// accepted connection and returns ErrDRPCDisabled.
+func (srv *drpcOffServer) Serve(_ context.Context, lis net.Listener) error {
+	conn, err := lis.Accept()
+	if err != nil {
+		return err
+	}
+	_ = conn.Close()
+	return ErrDRPCDisabled
+}
+
+// Register implements the drpc.Mux interface for drpcOffServer. It is a no-op
+// when DRPC is disabled.
+func (srv *drpcOffServer) Register(interface{}, drpc.Description) error {
+	return nil
+}
