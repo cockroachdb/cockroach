@@ -1,0 +1,50 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "eventlog",
+    srcs = ["writer.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/log/eventlog",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/base/serverident",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/isql",
+        "//pkg/sql/sessiondata",
+        "//pkg/util/log",
+        "//pkg/util/log/logpb",
+        "//pkg/util/retry",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "eventlog_test",
+    srcs = [
+        "eventlog_test.go",
+        "main_test.go",
+    ],
+    deps = [
+        ":eventlog",
+        "//pkg/base",
+        "//pkg/base/serverident",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/isql",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/log/logtestutils",
+        "//pkg/util/timeutil",
+    ],
+)

@@ -107,6 +107,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logmetrics"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -1834,6 +1835,21 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	advSQLAddrU := util.NewUnresolvedAddr("tcp", s.cfg.SQLAdvertiseAddr)
 
 	advHTTPAddrU := util.NewUnresolvedAddr("tcp", s.cfg.HTTPAdvertiseAddr)
+
+	var writeAsync = true
+	if eventLogKnobs := s.cfg.TestingKnobs.EventLog; eventLogKnobs != nil {
+		if eventLogKnob, ok := eventLogKnobs.(*eventlog.EventLogTestingKnobs); ok {
+			writeAsync = !eventLogKnob.SyncWrites
+		}
+	}
+	// Creates and registers an event log sync for the system tenant. This will
+	// enable the ability to persist structured events to the system tenant's
+	// system.eventlog table.
+	eventTableSink := eventlog.NewWriter(s.node.execCfg.InternalDB, writeAsync, s.stopper, s.cfg.AmbientCtx, s.ClusterSettings())
+	log.RegisterEventLogWriter(ctx, &s.cfg.AmbientCtx, eventTableSink)
+	s.stopper.AddCloser(stop.CloserFn(func() {
+		log.RemoveEventLogWriter(&s.cfg.AmbientCtx)
+	}))
 
 	if err := s.node.start(
 		ctx, workersCtx,
