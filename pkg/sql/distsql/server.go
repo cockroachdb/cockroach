@@ -285,9 +285,7 @@ func (ds *ServerImpl) setupFlow(
 			return ctx, nil, nil, err
 		}
 
-		// It's important to populate evalCtx.Txn early. We'll write it again in the
-		// f.SetTxn() call below, but by then it will already have been captured by
-		// processors.
+		// It's important to create the txn as early as possible.
 		leafTxn, err = makeLeaf(ctx)
 		if err != nil {
 			return nil, nil, nil, err
@@ -390,31 +388,29 @@ func (ds *ServerImpl) setupFlow(
 		telemetry.Inc(sqltelemetry.VecExecCounter)
 	}
 
-	// Figure out what txn the flow needs to run in, if any. For gateway flows
-	// that have no remote flows and also no concurrency, the (root) txn comes
-	// from localState.Txn if we haven't already created a leaf txn. Otherwise,
-	// we create, if necessary, a txn based on the request's LeafTxnInputState.
-	var txn *kv.Txn
-	if localState.IsLocal && !f.ConcurrentTxnUse() && leafTxn == nil {
-		txn = localState.Txn
-	} else {
-		// If I haven't created the leaf already, do it now.
-		if leafTxn == nil {
+	// Make the final determination for which txn the flow needs to run in, if
+	// any. For gateway flows that have no remote flows and also no concurrency,
+	// the (root) txn comes from localState.Txn if we haven't already created a
+	// leaf txn. Otherwise, we create, if necessary, a txn based on the
+	// request's LeafTxnInputState.
+	// TODO(yuzefovich): we're about to overwrite FlowCtx.Txn, but the existing
+	// field might have already been captured by various processors and
+	// operators. In case this is not the gateway, we had already set the
+	// LeafTxn on the FlowCtx above, so it's OK. In case this is the gateway, if
+	// we're running with the RootTxn, then again it was set above so it's fine.
+	// If we're using a LeafTxn on the gateway, though, then the processors
+	// might have erroneously captured the Root. See #41992.
+	if leafTxn == nil {
+		if !localState.IsLocal || f.ConcurrentTxnUse() {
+			// We're on the gateway and need to use the LeafTxn which hasn't
+			// been created yet - do it now.
 			leafTxn, err = makeLeaf(ctx)
 			if err != nil {
 				return nil, nil, nil, err
 			}
+			flowCtx.Txn = leafTxn
 		}
-		txn = leafTxn
 	}
-	// TODO(andrei): We're about to overwrite f.EvalCtx.Txn, but the existing
-	// field has already been captured by various processors and operators that
-	// have already made a copy of the EvalCtx. In case this is not the gateway,
-	// we had already set the LeafTxn on the EvalCtx above, so it's OK. In case
-	// this is the gateway, if we're running with the RootTxn, then again it was
-	// set above so it's fine. If we're using a LeafTxn on the gateway, though,
-	// then the processors have erroneously captured the Root. See #41992.
-	f.SetTxn(txn)
 
 	return ctx, f, opChains, nil
 }
@@ -432,9 +428,9 @@ func (ds *ServerImpl) newFlowContext(
 	collectStats bool,
 	localState LocalState,
 	isGatewayNode bool,
-) execinfra.FlowCtx {
+) *execinfra.FlowCtx {
 	// TODO(radu): we should sanity check some of these fields.
-	flowCtx := execinfra.FlowCtx{
+	flowCtx := &execinfra.FlowCtx{
 		AmbientContext: ds.AmbientContext,
 		Cfg:            &ds.ServerConfig,
 		ID:             id,
@@ -471,7 +467,7 @@ func (ds *ServerImpl) newFlowContext(
 }
 
 func newFlow(
-	flowCtx execinfra.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	sp *tracing.Span,
 	flowReg *flowinfra.FlowRegistry,
 	rowSyncFlowConsumer execinfra.RowReceiver,
