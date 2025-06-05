@@ -1,5 +1,3 @@
-# LogicTest: !local-schema-locked
-
 statement ok
 CREATE TABLE t (
   k INT PRIMARY KEY,
@@ -16,6 +14,7 @@ CREATE TABLE t (
   FAMILY (k, a, b, c, j, v)
 )
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
@@ -35,6 +34,27 @@ CREATE TABLE public.t (
   FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
 );
 
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  k INT8 NOT NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  c STRING NULL,
+  j JSONB NULL,
+  v VECTOR NULL,
+  comp INT8 NULL AS (a + 10:::INT8) VIRTUAL,
+  CONSTRAINT t_pkey PRIMARY KEY (k ASC),
+  INDEX t_a_plus_b_idx ((a + b) ASC),
+  INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
+  INVERTED INDEX t_b_j_a_asc (b DESC, (j->'a':::STRING)),
+  VECTOR INDEX t_vec (a DESC, (v::VECTOR(3)) vector_l2_ops),
+  FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
+) WITH (schema_locked = true);
+
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t WITH REDACT]
 ----
@@ -53,6 +73,26 @@ CREATE TABLE public.t (
   VECTOR INDEX t_vec (a DESC, (v::VECTOR(3)) vector_l2_ops),
   FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t WITH REDACT]
+----
+CREATE TABLE public.t (
+  k INT8 NOT NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  c STRING NULL,
+  j JSONB NULL,
+  v VECTOR NULL,
+  comp INT8 NULL AS (a + ‹×›:::INT8) VIRTUAL,
+  CONSTRAINT t_pkey PRIMARY KEY (k ASC),
+  INDEX t_a_plus_b_idx ((a + b) ASC),
+  INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
+  INVERTED INDEX t_b_j_a_asc (b DESC, (j->‹×›:::STRING)),
+  VECTOR INDEX t_vec (a DESC, (v::VECTOR(3)) vector_l2_ops),
+  FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
+) WITH (schema_locked = true);
 
 query TTBTTTB colnames
 SELECT * FROM [SHOW COLUMNS FROM t] ORDER BY column_name
@@ -198,6 +238,7 @@ CREATE INDEX t_a_plus_ten_idx ON t ((a + 10))
 statement error index \"err\" contains duplicate expression
 CREATE INDEX err ON t ((a + 10), (a + 10))
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
@@ -216,6 +257,30 @@ CREATE TABLE public.t (
   INDEX t_a_plus_ten_idx ((a + 10:::INT8) ASC),
   FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  k INT8 NOT NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  c STRING NULL,
+  j JSONB NULL,
+  v VECTOR NULL,
+  comp INT8 NULL AS (a + 10:::INT8) VIRTUAL,
+  CONSTRAINT t_pkey PRIMARY KEY (k ASC),
+  INDEX t_a_plus_b_idx ((a + b) ASC),
+  INDEX t_lower_c_idx (lower(c) ASC),
+  INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
+  INDEX t_a_plus_ten_idx ((a + 10:::INT8) ASC),
+  FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
+) WITH (schema_locked = true);
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE t SET (schema_locked=false);
 
 # Referencing an inaccessible column in a CHECK constraint is not allowed.
 statement error column \"crdb_internal_idx_expr_2\" is inaccessible and cannot be referenced
@@ -242,6 +307,10 @@ CREATE INDEX err ON t (crdb_internal_idx_expr_2)
 # not allowed.
 statement error column \"crdb_internal_idx_expr_2\" is inaccessible and cannot be referenced
 CREATE INDEX err ON t (a) WHERE crdb_internal_idx_expr_2 > 0
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE t SET (schema_locked=true);
 
 # Referencing an inaccessible column in a FK is not allowed.
 statement error column \"crdb_internal_idx_expr_2\" is inaccessible and cannot be referenced by a foreign key
@@ -345,6 +414,10 @@ ALTER TABLE t ADD COLUMN crdb_internal_idx_expr INT
 statement ok
 ALTER TABLE t DROP COLUMN crdb_internal_idx_expr
 
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE t SET (schema_locked=false);
+
 statement error random\(\): volatile functions are not allowed in EXPRESSION INDEX ELEMENT
 CREATE INDEX err ON t ((a + random()::INT))
 
@@ -359,6 +432,10 @@ CREATE INDEX err ON t (a, (NULL), b)
 
 statement ok
 CREATE INDEX t_cast_idx ON t (a, (NULL::TEXT), b)
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE t SET (schema_locked=true);
 
 statement ok
 CREATE INDEX err ON t (a, (j->'a'));
@@ -465,6 +542,7 @@ CREATE TABLE copy_generated (LIKE src INCLUDING GENERATED);
 CREATE TABLE copy_indexes (LIKE src INCLUDING INDEXES);
 CREATE TABLE copy_all (LIKE src INCLUDING ALL)
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE copy]
 ----
@@ -479,6 +557,21 @@ CREATE TABLE public.copy (
   CONSTRAINT copy_pkey PRIMARY KEY (rowid ASC)
 );
 
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE copy]
+----
+CREATE TABLE public.copy (
+  k INT8 NOT NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  j JSONB NULL,
+  v VECTOR NULL,
+  comp INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT copy_pkey PRIMARY KEY (rowid ASC)
+) WITH (schema_locked = true);
+
 # Inaccessible expression index columns should not be copied if the indexes are
 # not copied. copy should not have any crdb_internal_idx_expr columns.
 query I
@@ -490,6 +583,7 @@ SELECT count(*) FROM (
 ----
 0
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE copy_generated]
 ----
@@ -504,6 +598,21 @@ CREATE TABLE public.copy_generated (
   CONSTRAINT copy_generated_pkey PRIMARY KEY (rowid ASC)
 );
 
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE copy_generated]
+----
+CREATE TABLE public.copy_generated (
+  k INT8 NOT NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  j JSONB NULL,
+  v VECTOR NULL,
+  comp INT8 NULL AS (1:::INT8 + 10:::INT8) VIRTUAL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT copy_generated_pkey PRIMARY KEY (rowid ASC)
+) WITH (schema_locked = true);
+
 # Inaccessible expression index columns should not be copied if the indexes are
 # not copied. copy_generated should not have any crdb_internal_idx_expr columns.
 query I
@@ -515,6 +624,7 @@ SELECT count(*) FROM (
 ----
 0
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE copy_indexes]
 ----
@@ -533,6 +643,25 @@ CREATE TABLE public.copy_indexes (
   VECTOR INDEX src_b_expr_idx (b ASC, (v::VECTOR(3)) vector_l2_ops)
 );
 
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE copy_indexes]
+----
+CREATE TABLE public.copy_indexes (
+  k INT8 NOT NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  j JSONB NULL,
+  v VECTOR NULL,
+  comp INT8 NULL,
+  CONSTRAINT src_pkey PRIMARY KEY (k ASC),
+  INDEX src_expr_idx ((a + b) ASC),
+  INDEX named_idx ((a + 1:::INT8) ASC),
+  UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
+  INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING)),
+  VECTOR INDEX src_b_expr_idx (b ASC, (v::VECTOR(3)) vector_l2_ops)
+) WITH (schema_locked = true);
+
 # Inaccessible expression index columns should be copied if the indexes are
 # copied. copy_indexes should have crdb_internal_idx_expr columns.
 query I
@@ -544,6 +673,7 @@ SELECT count(*) FROM (
 ----
 5
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE copy_all]
 ----
@@ -561,6 +691,25 @@ CREATE TABLE public.copy_all (
   INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING)),
   VECTOR INDEX src_b_expr_idx (b ASC, (v::VECTOR(3)) vector_l2_ops)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE copy_all]
+----
+CREATE TABLE public.copy_all (
+  k INT8 NOT NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  j JSONB NULL,
+  v VECTOR NULL,
+  comp INT8 NULL AS (1:::INT8 + 10:::INT8) VIRTUAL,
+  CONSTRAINT src_pkey PRIMARY KEY (k ASC),
+  INDEX src_expr_idx ((a + b) ASC),
+  INDEX named_idx ((a + 1:::INT8) ASC),
+  UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
+  INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING)),
+  VECTOR INDEX src_b_expr_idx (b ASC, (v::VECTOR(3)) vector_l2_ops)
+) WITH (schema_locked = true);
 
 # Inaccessible expression index columns should be copied if the indexes are
 # copied. copy_all should have crdb_internal_idx_expr columns.
@@ -589,6 +738,7 @@ CREATE UNIQUE INDEX ON anon (lower(c), b);
 CREATE INDEX ON anon ((a + 10), b, lower(c));
 CREATE INDEX ON anon ((a + 10), (b + 100), lower(c));
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE anon]
 ----
@@ -605,6 +755,24 @@ CREATE TABLE public.anon (
   INDEX anon_expr_expr1_expr2_idx ((a + 10:::INT8) ASC, (b + 100:::INT8) ASC, lower(c) ASC),
   FAMILY fam_0_k_a_b_c (k, a, b, c)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE anon]
+----
+CREATE TABLE public.anon (
+  k INT8 NOT NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  c STRING NULL,
+  CONSTRAINT anon_pkey PRIMARY KEY (k ASC),
+  INDEX anon_expr_idx ((a + b) ASC),
+  INDEX anon_expr_b_idx ((a + 10:::INT8) ASC, b ASC),
+  UNIQUE INDEX anon_expr_b_key (lower(c) ASC, b ASC),
+  INDEX anon_expr_b_expr1_idx ((a + 10:::INT8) ASC, b ASC, lower(c) ASC),
+  INDEX anon_expr_expr1_expr2_idx ((a + 10:::INT8) ASC, (b + 100:::INT8) ASC, lower(c) ASC),
+  FAMILY fam_0_k_a_b_c (k, a, b, c)
+) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE anon;
@@ -623,6 +791,7 @@ CREATE TABLE anon (
   FAMILY (k, a, b, c)
 )
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE anon]
 ----
@@ -639,6 +808,25 @@ CREATE TABLE public.anon (
   INDEX anon_expr_expr1_expr2_idx ((a + 10:::INT8) ASC, (b + 100:::INT8) ASC, lower(c) ASC),
   FAMILY fam_0_k_a_b_c (k, a, b, c)
 );
+
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE anon]
+----
+CREATE TABLE public.anon (
+  k INT8 NOT NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  c STRING NULL,
+  CONSTRAINT anon_pkey PRIMARY KEY (k ASC),
+  INDEX anon_expr_idx ((a + b) ASC),
+  INDEX anon_expr_b_idx ((a + 10:::INT8) ASC, b ASC),
+  UNIQUE INDEX anon_expr_b_key (lower(c) ASC, b ASC),
+  INDEX anon_expr_b_expr1_idx ((a + 10:::INT8) ASC, b ASC, lower(c) ASC),
+  INDEX anon_expr_expr1_expr2_idx ((a + 10:::INT8) ASC, (b + 100:::INT8) ASC, lower(c) ASC),
+  FAMILY fam_0_k_a_b_c (k, a, b, c)
+) WITH (schema_locked = true);
 
 # Querying expression indexes.
 
@@ -808,7 +996,7 @@ DROP TABLE bf
 # transaction. This is a limitation of virtual computed columns.
 
 statement ok
-CREATE TABLE bf (a INT)
+CREATE TABLE bf (a INT) WITH (schema_locked = false)
 
 statement ok
 SET autocommit_before_ddl = false
@@ -1191,6 +1379,7 @@ CREATE INDEX t72012_idx ON t72012 ((abs(col)));
 statement ok
 ALTER TABLE t72012 ALTER COLUMN col SET NOT NULL
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t72012
 ----
@@ -1200,6 +1389,18 @@ t72012  CREATE TABLE public.t72012 (
           CONSTRAINT t72012_pkey PRIMARY KEY (rowid ASC),
           INDEX t72012_idx (abs(col) ASC)
         );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t72012
+----
+t72012  CREATE TABLE public.t72012 (
+          col INT8 NOT NULL,
+          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+          CONSTRAINT t72012_pkey PRIMARY KEY (rowid ASC),
+          INDEX t72012_idx (abs(col) ASC)
+        ) WITH (schema_locked = true);
+
 
 statement ok
 ALTER TABLE t72012 ALTER COLUMN col DROP NOT NULL;
@@ -1220,6 +1421,10 @@ CREATE TABLE t74216 (
     UNIQUE ((a::STRING))
 )
 
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE t SET (schema_locked = false)
+
 # create index using an expression works even when retried
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -1227,6 +1432,10 @@ SET LOCAL autocommit_before_ddl=off;
 CREATE INDEX t_a_times_three_idx ON t ((a * 3));
 SELECT crdb_internal.force_retry('10ms');
 COMMIT
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE t SET (schema_locked = true)
 
 # JSON Expression Unique Indexes
 
@@ -1256,6 +1465,7 @@ CREATE TABLE expr_tab (
   FAMILY fam (a, b, c)
 )
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE expr_tab]
 ----
@@ -1267,6 +1477,19 @@ CREATE TABLE public.expr_tab (
   INDEX expr_tab_expr_b_idx ((a * 2:::INT8) ASC, b ASC),
   FAMILY fam (a, b, c)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE expr_tab]
+----
+CREATE TABLE public.expr_tab (
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  c STRING NULL,
+  CONSTRAINT expr_tab_pkey PRIMARY KEY (a ASC, (b + 100:::INT8) ASC, lower(c) ASC),
+  INDEX expr_tab_expr_b_idx ((a * 2:::INT8) ASC, b ASC),
+  FAMILY fam (a, b, c)
+) WITH (schema_locked = true);
 
 query TT
 SELECT c.conname, c.condef
@@ -1288,6 +1511,7 @@ CREATE TABLE expr_tab2 (
   FAMILY fam (a, b, c)
 )
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE expr_tab2]
 ----
@@ -1299,6 +1523,19 @@ CREATE TABLE public.expr_tab2 (
   INDEX expr_tab2_expr_expr1_idx ((c || 'suffix':::STRING) ASC, (a - b) ASC),
   FAMILY fam (a, b, c)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE expr_tab2]
+----
+CREATE TABLE public.expr_tab2 (
+  a INT8 NULL,
+  b INT8 NULL,
+  c STRING NOT NULL,
+  CONSTRAINT expr_tab2_pkey PRIMARY KEY ((a + b) ASC, c ASC),
+  INDEX expr_tab2_expr_expr1_idx ((c || 'suffix':::STRING) ASC, (a - b) ASC),
+  FAMILY fam (a, b, c)
+) WITH (schema_locked = true);
 
 query TT
 SELECT c.conname, c.condef
@@ -1320,6 +1557,7 @@ CREATE TABLE expr_tab3 (
   FAMILY fam (a, b, c)
 )
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE expr_tab3]
 ----
@@ -1331,6 +1569,19 @@ CREATE TABLE public.expr_tab3 (
   UNIQUE INDEX expr_tab3_expr_expr1_key ((b / 2:::INT8) ASC, upper(c) ASC),
   FAMILY fam (a, b, c)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE expr_tab3]
+----
+CREATE TABLE public.expr_tab3 (
+  a INT8 NULL,
+  b INT8 NULL,
+  c STRING NULL,
+  CONSTRAINT expr_tab3_pkey PRIMARY KEY ((a + b) ASC, (b * 2:::INT8) ASC, lower(c) ASC),
+  UNIQUE INDEX expr_tab3_expr_expr1_key ((b / 2:::INT8) ASC, upper(c) ASC),
+  FAMILY fam (a, b, c)
+) WITH (schema_locked = true);
 
 query TT
 SELECT c.conname, c.condef
@@ -1352,6 +1603,7 @@ CREATE TABLE expr_tab4 (
   FAMILY fam (a, b)
 )
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE expr_tab4]
 ----
@@ -1362,6 +1614,18 @@ CREATE TABLE public.expr_tab4 (
   INDEX expr_tab4_expr_idx ((a + 1:::INT8) ASC),
   FAMILY fam (a, b)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE expr_tab4]
+----
+CREATE TABLE public.expr_tab4 (
+  a INT8 NULL,
+  b INT8 NULL,
+  CONSTRAINT expr_tab4_pkey PRIMARY KEY ((a + b) ASC),
+  INDEX expr_tab4_expr_idx ((a + 1:::INT8) ASC),
+  FAMILY fam (a, b)
+) WITH (schema_locked = true);
 
 query TT
 SELECT c.conname, c.condef
@@ -1387,6 +1651,7 @@ CREATE TABLE expr_tab5 (
   FAMILY fam (a, b, c, j, v)
 )
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE expr_tab5]
 ----
@@ -1402,6 +1667,23 @@ CREATE TABLE public.expr_tab5 (
   VECTOR INDEX expr_tab5_expr_idx1 ((v::VECTOR(3)) vector_l2_ops),
   FAMILY fam (a, b, c, j, v)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE expr_tab5]
+----
+CREATE TABLE public.expr_tab5 (
+  a INT8 NULL,
+  b INT8 NULL,
+  c STRING NULL,
+  j JSONB NULL,
+  v VECTOR NULL,
+  CONSTRAINT expr_tab5_pkey PRIMARY KEY ((a + b) ASC),
+  INDEX expr_tab5_expr_expr1_idx ((a * b) ASC, (b - a) ASC),
+  INVERTED INDEX expr_tab5_expr_idx ((j->'data':::STRING)),
+  VECTOR INDEX expr_tab5_expr_idx1 ((v::VECTOR(3)) vector_l2_ops),
+  FAMILY fam (a, b, c, j, v)
+) WITH (schema_locked = true);
 
 query TT
 SELECT c.conname, c.condef

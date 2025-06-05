@@ -1,5 +1,3 @@
-# LogicTest: !local-schema-locked
-
 statement ok
 SET autocommit_before_ddl = false
 
@@ -555,6 +553,10 @@ bar  SELECT 1, 2, 3  false  false  false
 statement ok
 COMMIT
 
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE a SET (schema_locked=false);
+
 query TTBBB
 SELECT name, statement, is_scrollable, is_holdable, is_binary FROM pg_catalog.pg_cursors
 ----
@@ -642,6 +644,10 @@ FETCH 1 a b;
 
 statement ok
 COMMIT;
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE a SET (schema_locked=true);
 
 # Test holdable cursors.
 subtest holdable
