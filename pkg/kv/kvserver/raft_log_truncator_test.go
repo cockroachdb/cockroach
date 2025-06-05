@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -110,6 +111,7 @@ type replicaTruncatorTest struct {
 	rangeID         roachpb.RangeID
 	buf             *strings.Builder
 	stateLoader     stateloader.StateLoader
+	logLoader       logstore.StateLoader
 	truncState      kvserverpb.RaftTruncatedState
 	pendingTruncs   pendingLogTruncations
 	sideloadedFreed int64
@@ -123,6 +125,7 @@ func makeReplicaTT(rangeID roachpb.RangeID, buf *strings.Builder) *replicaTrunca
 		rangeID:     rangeID,
 		buf:         buf,
 		stateLoader: stateloader.Make(rangeID),
+		logLoader:   logstore.NewStateLoader(rangeID),
 	}
 }
 
@@ -155,6 +158,11 @@ func (r *replicaTruncatorTest) getStateLoader() stateloader.StateLoader {
 	return r.stateLoader
 }
 
+func (r *replicaTruncatorTest) getLogStateLoader() logstore.StateLoader {
+	fmt.Fprintf(r.buf, "r%d.getLogStateLoader\n", r.rangeID)
+	return r.logLoader
+}
+
 func (r *replicaTruncatorTest) stagePendingTruncation(_ context.Context, pt pendingTruncation) {
 	trusted := pt.isDeltaTrusted && r.truncState.Index+1 == pt.expectedFirstIndex
 	fmt.Fprintf(r.buf,
@@ -170,10 +178,10 @@ func (r *replicaTruncatorTest) finalizeTruncation(_ context.Context) {
 func (r *replicaTruncatorTest) writeRaftStateToEngine(
 	t *testing.T, eng storage.Engine, truncIndex kvpb.RaftIndex, lastLogEntry kvpb.RaftIndex,
 ) {
-	require.NoError(t, r.stateLoader.SetRaftTruncatedState(context.Background(), eng,
+	require.NoError(t, r.logLoader.SetRaftTruncatedState(context.Background(), eng,
 		&kvserverpb.RaftTruncatedState{Index: truncIndex}))
 	for i := truncIndex + 1; i <= lastLogEntry; i++ {
-		require.NoError(t, eng.PutUnversioned(r.stateLoader.RaftLogKey(i), []byte("something")))
+		require.NoError(t, eng.PutUnversioned(r.logLoader.RaftLogKey(i), []byte("something")))
 	}
 }
 
@@ -190,18 +198,18 @@ func (r *replicaTruncatorTest) writeRaftAppliedIndex(
 }
 
 func (r *replicaTruncatorTest) printEngine(t *testing.T, eng storage.Engine) {
-	truncState, err := r.stateLoader.LoadRaftTruncatedState(context.Background(), eng)
+	truncState, err := r.logLoader.LoadRaftTruncatedState(context.Background(), eng)
 	require.NoError(t, err)
 	fmt.Fprintf(r.buf, "truncated index: %d\n", truncState.Index)
-	prefix := r.stateLoader.RaftLogPrefix()
+	prefix := r.logLoader.RaftLogPrefix()
 	iter, err := eng.NewMVCCIterator(context.Background(), storage.MVCCKeyIterKind, storage.IterOptions{
-		UpperBound: r.stateLoader.RaftLogKey(math.MaxUint64),
+		UpperBound: r.logLoader.RaftLogKey(math.MaxUint64),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer iter.Close()
-	iter.SeekGE(storage.MVCCKey{Key: r.stateLoader.RaftLogKey(0)})
+	iter.SeekGE(storage.MVCCKey{Key: r.logLoader.RaftLogKey(0)})
 	valid, err := iter.Valid()
 	require.NoError(t, err)
 	fmt.Fprintf(r.buf, "log entries:")

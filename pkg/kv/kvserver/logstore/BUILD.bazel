@@ -4,6 +4,7 @@ go_library(
     name = "logstore",
     srcs = [
         "bytes_tracker.go",
+        "keys.go",
         "logstore.go",
         "sideload.go",
         "sideload_disk.go",

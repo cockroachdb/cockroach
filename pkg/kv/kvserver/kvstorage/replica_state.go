@@ -51,14 +51,18 @@ func LoadReplicaState(
 			"r%d: loaded RaftReplicaID %d does not match %d", desc.RangeID, loaded, replicaID)
 	}
 
+	// TODO(pav-kv): donate the buffer from one stateloader to the other when
+	// done, to avoid the second allocation.
+	logSL := logstore.NewStateLoader(desc.RangeID)
+
 	ls := LoadedReplicaState{ReplicaID: replicaID}
-	if ls.hardState, err = sl.LoadHardState(ctx, eng); err != nil {
+	if ls.hardState, err = logSL.LoadHardState(ctx, eng); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	if ls.TruncState, err = sl.LoadRaftTruncatedState(ctx, eng); err != nil {
+	if ls.TruncState, err = logSL.LoadRaftTruncatedState(ctx, eng); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	if ls.LastEntryID, err = sl.LoadLastEntryID(ctx, eng, ls.TruncState); err != nil {
+	if ls.LastEntryID, err = logSL.LoadLastEntryID(ctx, eng, ls.TruncState); err != nil {
 		return LoadedReplicaState{}, err
 	}
 	if ls.ReplState, err = sl.Load(ctx, eng, desc); err != nil {

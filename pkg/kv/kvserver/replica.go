@@ -1955,7 +1955,9 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 ) {
 	if ts := r.shMu.state.TruncatedState; ts != nil {
 		log.Fatalf(ctx, "non-empty RaftTruncatedState in ReplicaState: %+v", ts)
-	} else if loaded, err := r.raftMu.stateLoader.LoadRaftTruncatedState(ctx, reader); err != nil {
+	} else if loaded, err := r.asLogStorage().raftMu.loader.LoadRaftTruncatedState(
+		ctx, reader,
+	); err != nil {
 		log.Fatalf(ctx, "%s", err)
 	} else if ts := r.asLogStorage().shMu.trunc; loaded != ts {
 		log.Fatalf(ctx, "on-disk and in-memory RaftTruncatedState diverged: %s",
