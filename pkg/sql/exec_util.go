@@ -1348,6 +1348,18 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaTxnRetry = metric.Metadata{
+		Name:        "sql.txn.auto_retry.count",
+		Help:        "Number of SQL transaction automatic retries",
+		Measurement: "SQL Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaStatementRetry = metric.Metadata{
+		Name:        "sql.statements.auto_retry.count",
+		Help:        "Number of SQL statement automatic retries",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {
@@ -2861,8 +2873,12 @@ func (st *SessionTracing) TracePlanCheckEnd(ctx context.Context, err error, dist
 }
 
 // TraceRetryInformation conditionally emits a trace message for retry information.
-func (st *SessionTracing) TraceRetryInformation(ctx context.Context, retries int, err error) {
-	log.VEventfDepth(ctx, 2, 1, "executing after %d retries, last retry reason: %v", retries, err)
+func (st *SessionTracing) TraceRetryInformation(
+	ctx context.Context, retryScope string, retries int, err error,
+) {
+	log.VEventfDepth(
+		ctx, 2, 1, "executing after %d %s retries, last retry reason: %v", retries, retryScope, err,
+	)
 }
 
 // TraceExecStart conditionally emits a trace message at the moment
