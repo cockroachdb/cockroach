@@ -148,6 +148,7 @@ go_test(
         "pebble_mvcc_scanner_test.go",
         "pebble_test.go",
         "read_as_of_iterator_test.go",
+        "sst_stats_diff_test.go",
         "sst_test.go",
         "sst_writer_test.go",
         "store_properties_test.go",
