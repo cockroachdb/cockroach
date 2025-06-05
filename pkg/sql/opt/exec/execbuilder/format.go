@@ -44,6 +44,7 @@ func fmtInterceptor(f *memo.ExprFmtCtx, scalar opt.ScalarExpr) string {
 		scalar,
 		nil,   /* semaCtx */
 		nil,   /* evalCtx */
+		nil,   /* txn */
 		false, /* allowAutoCommit */
 		false, /* isANSIDML */
 	)

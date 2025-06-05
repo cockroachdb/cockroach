@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -71,8 +72,9 @@ func TestOrdinalityProvided(t *testing.T) {
 		t.Run(fmt.Sprintf("case%d", tcIdx+1), func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			evalCtx := eval.NewTestingEvalContext(st)
+			txn := &kv.Txn{}
 			var f norm.Factory
-			f.Init(context.Background(), evalCtx, nil /* catalog */)
+			f.Init(context.Background(), evalCtx, txn, nil /* catalog */)
 			input := &testexpr.Instance{
 				Rel: &props.Relational{OutputCols: opt.MakeColSet(1, 2, 3, 4, 5)},
 				Provided: &physical.Provided{

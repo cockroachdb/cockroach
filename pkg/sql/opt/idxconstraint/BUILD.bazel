@@ -27,6 +27,7 @@ go_test(
     data = glob(["testdata/**"]),
     deps = [
         ":idxconstraint",
+        "//pkg/kv",
         "//pkg/settings/cluster",
         "//pkg/sql/opt",
         "//pkg/sql/opt/constraint",

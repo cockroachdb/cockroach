@@ -10,6 +10,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/testutils",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/memo",

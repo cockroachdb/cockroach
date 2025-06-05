@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -64,6 +65,7 @@ type Builder struct {
 	disableTelemetry bool
 	semaCtx          *tree.SemaContext
 	evalCtx          *eval.Context
+	txn              *kv.Txn
 	colOrdsAlloc     colOrdMapAllocator
 
 	// subqueries accumulates information about subqueries that are part of scalar
@@ -247,6 +249,7 @@ func New(
 	e opt.Expr,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
+	txn *kv.Txn,
 	allowAutoCommit bool,
 	isANSIDML bool,
 ) *Builder {
@@ -259,6 +262,7 @@ func New(
 		ctx:                    ctx,
 		semaCtx:                semaCtx,
 		evalCtx:                evalCtx,
+		txn:                    txn,
 		allowAutoCommit:        allowAutoCommit,
 		initialAllowAutoCommit: allowAutoCommit,
 		IsANSIDML:              isANSIDML,

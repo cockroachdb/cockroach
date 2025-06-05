@@ -2392,7 +2392,7 @@ func (dsp *DistSQLPlanner) planAndRunCascadeOrTrigger(
 ) (ok, checksContainLocking bool) {
 	execFactory := newExecFactory(ctx, planner)
 	cascadePlan, err := pq.PlanFn(
-		ctx, &planner.semaCtx, &evalCtx.Context, execFactory,
+		ctx, &planner.semaCtx, &evalCtx.Context, planner.Txn(), execFactory,
 		pq.Buffer, numBufferedRows, allowAutoCommit,
 	)
 	if err != nil {

@@ -178,11 +178,11 @@ func (b *Builder) buildExplain(
 			// factory must be the inner factory.
 			var gf explain.PlanGistFactory
 			gf.Init(f)
-			ef := explain.NewFactory(&gf, b.semaCtx, b.evalCtx)
+			ef := explain.NewFactory(&gf, b.semaCtx, b.evalCtx, b.txn)
 
 			explainBld := New(
 				b.ctx, ef, b.optimizer, b.mem, b.catalog, explainExpr.Input,
-				b.semaCtx, b.evalCtx, b.initialAllowAutoCommit, b.IsANSIDML,
+				b.semaCtx, b.evalCtx, b.txn, b.initialAllowAutoCommit, b.IsANSIDML,
 			)
 			explainBld.disableTelemetry = true
 			plan, err := explainBld.Build()

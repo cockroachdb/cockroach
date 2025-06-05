@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -38,8 +39,9 @@ func TestLookupJoinProvided(t *testing.T) {
 	}
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.NewTestingEvalContext(st)
+	txn := &kv.Txn{}
 	var f norm.Factory
-	f.Init(context.Background(), evalCtx, tc)
+	f.Init(context.Background(), evalCtx, txn, tc)
 	md := f.Metadata()
 	tn := tree.NewUnqualifiedTableName("t")
 	tab := md.AddTable(tc.Table(tn), tn)
@@ -236,8 +238,9 @@ func TestLookupJoinCanProvide(t *testing.T) {
 	ctx := context.Background()
 	evalCtx := eval.NewTestingEvalContext(st)
 	evalCtx.SessionData().OptimizerPlanLookupJoinsWithReverseScans = true
+	txn := &kv.Txn{}
 	var f norm.Factory
-	f.Init(context.Background(), evalCtx, tc)
+	f.Init(context.Background(), evalCtx, txn, tc)
 	md := f.Metadata()
 	tn := tree.NewUnqualifiedTableName("t")
 	tab := md.AddTable(tc.Table(tn), tn)

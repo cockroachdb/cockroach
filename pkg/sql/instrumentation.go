@@ -1163,9 +1163,9 @@ func (ih *instrumentationHelper) SetIndexRecommendations(
 				// memo is empty.
 				opc.reset(ctx)
 				evalCtx := opc.p.EvalContext()
-				f.Init(ctx, evalCtx, opc.catalog)
+				f.Init(ctx, evalCtx, opc.p.Txn(), opc.catalog)
 				f.FoldingControl().AllowStableFolds()
-				bld := optbuilder.New(ctx, &opc.p.semaCtx, evalCtx, opc.catalog, f, opc.p.stmt.AST)
+				bld := optbuilder.New(ctx, &opc.p.semaCtx, evalCtx, opc.p.Txn(), opc.catalog, f, opc.p.stmt.AST)
 				err := bld.Build()
 				if err != nil {
 					log.Warningf(ctx, "unable to build memo: %s", err)

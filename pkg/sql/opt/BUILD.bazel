@@ -75,6 +75,7 @@ go_test(
     embed = [":opt"],
     deps = [
         "//pkg/base",
+        "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

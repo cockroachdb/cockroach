@@ -31,6 +31,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":lookupjoin"],
     deps = [
+        "//pkg/kv",
         "//pkg/settings/cluster",
         "//pkg/sql/opt",
         "//pkg/sql/opt/exec/execbuilder",

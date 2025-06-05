@@ -9,6 +9,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -28,6 +29,7 @@ import (
 // operator is created.
 func TestSimplifyFilters(t *testing.T) {
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	txn := &kv.Txn{}
 
 	cat := testcat.New()
 	if _, err := cat.ExecuteDDL("CREATE TABLE a (x INT PRIMARY KEY, y INT)"); err != nil {
@@ -35,7 +37,7 @@ func TestSimplifyFilters(t *testing.T) {
 	}
 
 	var f norm.Factory
-	f.Init(context.Background(), &evalCtx, cat)
+	f.Init(context.Background(), &evalCtx, txn, cat)
 
 	tn := tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "a")
 	a := f.Metadata().AddTable(cat.Table(tn), tn)
@@ -81,9 +83,10 @@ func TestCopyAndReplace(t *testing.T) {
 
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	evalCtx.SessionData().PlanCacheMode = sessiondatapb.PlanCacheModeAuto
+	txn := &kv.Txn{}
 
 	var o xform.Optimizer
-	testutils.BuildQuery(t, &o, cat, &evalCtx, "SELECT * FROM ab WHERE a = $1")
+	testutils.BuildQuery(t, &o, cat, &evalCtx, txn, "SELECT * FROM ab WHERE a = $1")
 
 	if e, err := o.Optimize(); err != nil {
 		t.Fatal(err)
@@ -94,7 +97,7 @@ func TestCopyAndReplace(t *testing.T) {
 
 	m := o.Factory().DetachMemo()
 
-	o.Init(context.Background(), &evalCtx, cat)
+	o.Init(context.Background(), &evalCtx, txn, cat)
 	var replaceFn norm.ReplaceFunc
 	replaceFn = func(e opt.Expr) opt.Expr {
 		if e.Op() == opt.PlaceholderOp {
@@ -127,6 +130,7 @@ func TestCopyAndReplaceWithScan(t *testing.T) {
 	}
 
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	txn := &kv.Txn{}
 	for _, query := range []string{
 		"WITH cte AS (SELECT * FROM ab) SELECT * FROM cte, cte AS cte2 WHERE cte.a = cte2.b",
 		"INSERT INTO child VALUES (1,1), (2,2)",
@@ -138,11 +142,11 @@ func TestCopyAndReplaceWithScan(t *testing.T) {
 	} {
 		t.Run(query, func(t *testing.T) {
 			var o xform.Optimizer
-			testutils.BuildQuery(t, &o, cat, &evalCtx, query)
+			testutils.BuildQuery(t, &o, cat, &evalCtx, txn, query)
 
 			m := o.Factory().DetachMemo()
 
-			o.Init(context.Background(), &evalCtx, cat)
+			o.Init(context.Background(), &evalCtx, txn, cat)
 			var replaceFn norm.ReplaceFunc
 			replaceFn = func(e opt.Expr) opt.Expr {
 				return o.Factory().CopyAndReplaceDefault(e, replaceFn)

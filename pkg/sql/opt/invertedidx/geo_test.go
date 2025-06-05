@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -32,6 +33,7 @@ func TestTryJoinGeoIndex(t *testing.T) {
 	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.NewTestingEvalContext(st)
+	txn := &kv.Txn{}
 
 	tc := testcat.New()
 
@@ -52,7 +54,7 @@ func TestTryJoinGeoIndex(t *testing.T) {
 	}
 
 	var f norm.Factory
-	f.Init(context.Background(), evalCtx, tc)
+	f.Init(context.Background(), evalCtx, txn, tc)
 	md := f.Metadata()
 	tn1 := tree.NewUnqualifiedTableName("t1")
 	tn2 := tree.NewUnqualifiedTableName("t2")
@@ -280,7 +282,7 @@ func TestTryJoinGeoIndex(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Logf("test case: %v", tc)
-		filters := testutils.BuildFilters(t, &f, &semaCtx, evalCtx, tc.filters)
+		filters := testutils.BuildFilters(t, &f, &semaCtx, evalCtx, txn, tc.filters)
 
 		var inputCols opt.ColSet
 		for i, n := 0, md.Table(tab1).ColumnCount(); i < n; i++ {
@@ -302,7 +304,7 @@ func TestTryJoinGeoIndex(t *testing.T) {
 			t.Fatalf("expected <nil>, got %v", actInvertedExpr)
 		}
 
-		expInvertedExpr := testutils.BuildScalar(t, &f, &semaCtx, evalCtx, tc.invertedExpr)
+		expInvertedExpr := testutils.BuildScalar(t, &f, &semaCtx, evalCtx, txn, tc.invertedExpr)
 		if actInvertedExpr.String() != expInvertedExpr.String() {
 			t.Errorf("expected %v, got %v", expInvertedExpr, actInvertedExpr)
 		}
@@ -313,6 +315,7 @@ func TestTryFilterGeoIndex(t *testing.T) {
 	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.NewTestingEvalContext(st)
+	txn := &kv.Txn{}
 
 	tc := testcat.New()
 	if _, err := tc.ExecuteDDL(
@@ -321,7 +324,7 @@ func TestTryFilterGeoIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	var f norm.Factory
-	f.Init(context.Background(), evalCtx, tc)
+	f.Init(context.Background(), evalCtx, txn, tc)
 	md := f.Metadata()
 	tn := tree.NewUnqualifiedTableName("t")
 	tab := md.AddTable(tc.Table(tn), tn)
@@ -485,7 +488,7 @@ func TestTryFilterGeoIndex(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Logf("test case: %v", tc)
-		filters := testutils.BuildFilters(t, &f, &semaCtx, evalCtx, tc.filters)
+		filters := testutils.BuildFilters(t, &f, &semaCtx, evalCtx, txn, tc.filters)
 
 		// We're not testing that the correct SpanExpression is returned here;
 		// that is tested elsewhere. This is just testing that we are constraining
@@ -520,7 +523,7 @@ func TestTryFilterGeoIndex(t *testing.T) {
 				require.Nil(t, pfState)
 			} else {
 				require.NotNil(t, pfState)
-				pfExpr := testutils.BuildScalar(t, &f, &semaCtx, evalCtx, tc.preFilterExpr)
+				pfExpr := testutils.BuildScalar(t, &f, &semaCtx, evalCtx, txn, tc.preFilterExpr)
 				require.Equal(t, pfExpr.String(), pfState.Expr.String())
 				require.Equal(t, tc.preFilterCol, pfState.Col)
 				require.Equal(t, tc.preFilterTypeFamily, pfState.Typ.Family())

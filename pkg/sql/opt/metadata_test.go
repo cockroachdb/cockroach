@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -30,8 +31,9 @@ import (
 
 func TestMetadata(t *testing.T) {
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	txn := &kv.Txn{}
 	var f norm.Factory
-	f.Init(context.Background(), &evalCtx, nil /* catalog */)
+	f.Init(context.Background(), &evalCtx, txn, nil /* catalog */)
 	md := f.Metadata()
 
 	schID := md.AddSchema(&testcat.Schema{})
@@ -383,8 +385,9 @@ func TestIndexColumns(t *testing.T) {
 // TestDuplicateTable tests that we can extract a set of columns from an index ordinal.
 func TestDuplicateTable(t *testing.T) {
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	txn := &kv.Txn{}
 	var f norm.Factory
-	f.Init(context.Background(), &evalCtx, nil /* catalog */)
+	f.Init(context.Background(), &evalCtx, txn, nil /* catalog */)
 	md := f.Metadata()
 	cat := testcat.New()
 	_, err := cat.ExecuteDDL("CREATE TABLE a (b BOOL, b2 BOOL, INDEX (b2) WHERE b)")

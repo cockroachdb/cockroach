@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
@@ -40,6 +41,7 @@ func TestEval(t *testing.T) {
 	ctx := context.Background()
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
+	txn := &kv.Txn{}
 
 	walk := func(t *testing.T, getExpr func(*testing.T, *datadriven.TestData) string) {
 		datadriven.Walk(t, datapathutils.TestDataPath(t, "eval"), func(t *testing.T, path string) {
@@ -72,7 +74,7 @@ func TestEval(t *testing.T) {
 
 	t.Run("opt", func(t *testing.T) {
 		walkExpr(t, func(e tree.Expr) (tree.TypedExpr, error) {
-			return optBuildScalar(evalCtx, e)
+			return optBuildScalar(evalCtx, txn, e)
 		})
 	})
 
@@ -89,12 +91,12 @@ func TestEval(t *testing.T) {
 	})
 }
 
-func optBuildScalar(evalCtx *eval.Context, e tree.Expr) (tree.TypedExpr, error) {
+func optBuildScalar(evalCtx *eval.Context, txn *kv.Txn, e tree.Expr) (tree.TypedExpr, error) {
 	var o xform.Optimizer
 	ctx := context.Background()
-	o.Init(ctx, evalCtx, nil /* catalog */)
+	o.Init(ctx, evalCtx, txn, nil /* catalog */)
 	semaCtx := tree.MakeSemaContext(nil /* resolver */)
-	b := optbuilder.NewScalar(ctx, &semaCtx, evalCtx, o.Factory())
+	b := optbuilder.NewScalar(ctx, &semaCtx, evalCtx, txn, o.Factory())
 	scalar, err := b.Build(e)
 	if err != nil {
 		return nil, err
@@ -102,7 +104,7 @@ func optBuildScalar(evalCtx *eval.Context, e tree.Expr) (tree.TypedExpr, error) 
 
 	bld := execbuilder.New(
 		ctx, nil /* factory */, &o, o.Memo(), nil /* catalog */, scalar,
-		&semaCtx, evalCtx, false /* allowAutoCommit */, false, /* isANSIDML */
+		&semaCtx, evalCtx, txn, false /* allowAutoCommit */, false, /* isANSIDML */
 	)
 	expr, err := bld.BuildScalar()
 	if err != nil {

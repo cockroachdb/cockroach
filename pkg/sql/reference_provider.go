@@ -115,8 +115,8 @@ func (f *referenceProviderFactory) NewReferenceProvider(
 	ctlg := &optCatalog{}
 	ctlg.init(f.p)
 	var optFactory norm.Factory
-	optFactory.Init(ctx, f.p.EvalContext(), ctlg)
-	optBld := optbuilder.New(ctx, f.p.SemaCtx(), f.p.EvalContext(), ctlg, &optFactory, stmt)
+	optFactory.Init(ctx, f.p.EvalContext(), f.p.Txn(), ctlg)
+	optBld := optbuilder.New(ctx, f.p.SemaCtx(), f.p.EvalContext(), f.p.Txn(), ctlg, &optFactory, stmt)
 	if err := optBld.Build(); err != nil {
 		return nil, err
 	}

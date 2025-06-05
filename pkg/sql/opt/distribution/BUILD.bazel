@@ -21,6 +21,7 @@ go_test(
     srcs = ["distribution_test.go"],
     embed = [":distribution"],
     deps = [
+        "//pkg/kv",
         "//pkg/settings/cluster",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/norm",
