@@ -102,6 +102,7 @@ go_library(
     name = "serverpb",
     srcs = [
         "admin.go",
+        "rpc_clients.go",
         "status.go",
     ],
     embed = [":serverpb_go_proto"],
@@ -110,6 +111,7 @@ go_library(
     deps = [
         "//pkg/gossip",
         "//pkg/roachpb",
+        "//pkg/rpc/rpcbase",
         "//pkg/util/errorutil",
         "//pkg/util/metric",
         "@com_github_prometheus_client_model//go",
