@@ -167,17 +167,13 @@ func (sl StateLoader) SetHardState(
 // SynthesizeHardState synthesizes an on-disk HardState from the given input,
 // taking care that a HardState compatible with the existing data is written.
 func (sl StateLoader) SynthesizeHardState(
-	ctx context.Context,
-	writer storage.Writer,
-	oldHS raftpb.HardState,
-	truncState kvserverpb.RaftTruncatedState,
-	raftAppliedIndex kvpb.RaftIndex,
+	ctx context.Context, writer storage.Writer, oldHS raftpb.HardState, applied EntryID,
 ) error {
 	newHS := raftpb.HardState{
-		Term: uint64(truncState.Term),
-		// Note that when applying a Raft snapshot, the applied index is
-		// equal to the Commit index represented by the snapshot.
-		Commit: uint64(raftAppliedIndex),
+		Term: uint64(applied.Term),
+		// NB: when applying a Raft snapshot, the applied index is equal to the
+		// Commit index represented by the snapshot.
+		Commit: uint64(applied.Index),
 	}
 
 	if oldHS.Commit > newHS.Commit {
