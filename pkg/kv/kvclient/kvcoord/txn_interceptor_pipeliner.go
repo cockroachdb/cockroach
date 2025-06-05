@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -947,8 +948,26 @@ func (tp *txnPipeliner) setWrapped(wrapped lockedSender) {
 }
 
 // populateLeafInputState is part of the txnInterceptor interface.
-func (tp *txnPipeliner) populateLeafInputState(tis *roachpb.LeafTxnInputState) {
-	tis.InFlightWrites = tp.ifWrites.asSlice()
+func (tp *txnPipeliner) populateLeafInputState(
+	tis *roachpb.LeafTxnInputState, readsTree interval.Tree,
+) {
+	if tp.ifWrites.len() == 0 {
+		return
+	}
+	if readsTree == nil {
+		tis.InFlightWrites = tp.ifWrites.asSlice()
+		return
+	}
+	var sp roachpb.Span
+	tp.ifWrites.ascend(func(w *inFlightWrite) {
+		sp.Key = w.Key
+		sp.EndKey = w.Key.Next()
+		if overlaps := readsTree.DoMatching(
+			func(interval.Interface) (done bool) { return true }, sp.AsRange(),
+		); overlaps {
+			tis.InFlightWrites = append(tis.InFlightWrites, w.SequencedWrite)
+		}
+	})
 }
 
 // initializeLeaf is part of the txnInterceptor interface.

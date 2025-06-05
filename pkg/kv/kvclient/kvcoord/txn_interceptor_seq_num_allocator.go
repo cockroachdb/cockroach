@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/errors"
 )
 
@@ -116,7 +117,9 @@ func (s *txnSeqNumAllocator) SendLocked(
 func (s *txnSeqNumAllocator) setWrapped(wrapped lockedSender) { s.wrapped = wrapped }
 
 // populateLeafInputState is part of the txnInterceptor interface.
-func (s *txnSeqNumAllocator) populateLeafInputState(tis *roachpb.LeafTxnInputState) {
+func (s *txnSeqNumAllocator) populateLeafInputState(
+	tis *roachpb.LeafTxnInputState, tree interval.Tree,
+) {
 	tis.Txn.Sequence = s.writeSeq
 	tis.SteppingModeEnabled = bool(s.steppingMode)
 	tis.ReadSeqNum = s.readSeq

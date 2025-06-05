@@ -4194,6 +4194,10 @@ func (m *sessionDataMutator) SetUseImprovedRoutineDependencyTracking(val bool) {
 	m.data.UseImprovedRoutineDependencyTracking = val
 }
 
+func (m *sessionDataMutator) SetDistSQLUseReducedLeafWriteSets(val bool) {
+	m.data.DistSQLUseReducedLeafWriteSets = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
