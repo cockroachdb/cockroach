@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -323,7 +324,7 @@ func TestMuxRangeFeedDoesNotStallOnError(t *testing.T) {
 		errCount    int
 	)
 
-	streamInterceptor := func(target string, class rpc.ConnectionClass) grpc.StreamClientInterceptor {
+	streamInterceptor := func(target string, class rpcbase.ConnectionClass) grpc.StreamClientInterceptor {
 		return func(
 			ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn,
 			method string, streamer grpc.Streamer, opts ...grpc.CallOption,

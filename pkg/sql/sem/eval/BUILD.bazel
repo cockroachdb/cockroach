@@ -104,6 +104,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_lib_pq//oid",
+        "@org_golang_x_text//unicode/norm",
     ],
 )
 

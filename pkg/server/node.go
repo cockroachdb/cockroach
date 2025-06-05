@@ -39,7 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/tenantsettingswatcher"
@@ -1867,18 +1867,10 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 
 // BatchStream implements the kvpb.InternalServer interface.
 func (n *Node) BatchStream(stream kvpb.Internal_BatchStreamServer) error {
-	return n.batchStreamImpl(stream, func(ba *kvpb.BatchRequest) error {
-		return stream.RecvMsg(ba)
-	})
+	return n.batchStreamImpl(stream)
 }
 
-func (n *Node) batchStreamImpl(
-	stream interface {
-		Context() context.Context
-		Send(response *kvpb.BatchResponse) error
-	},
-	recvMsg func(*kvpb.BatchRequest) error,
-) error {
+func (n *Node) batchStreamImpl(stream kvpb.RPCKVBatch_BatchStreamStream) error {
 	ctx := stream.Context()
 	for {
 		argsAlloc := new(struct {
@@ -1888,7 +1880,7 @@ func (n *Node) batchStreamImpl(
 		args := &argsAlloc.args
 		args.Requests = argsAlloc.reqs[:0]
 
-		err := recvMsg(args)
+		err := stream.RecvMsg(args)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return nil
@@ -1907,7 +1899,7 @@ func (n *Node) batchStreamImpl(
 	}
 }
 
-func (n *Node) AsDRPCBatchServer() kvpb.DRPCBatchServer {
+func (n *Node) AsDRPCKVBatchServer() kvpb.DRPCKVBatchServer {
 	return (*drpcNode)(n)
 }
 
@@ -1919,12 +1911,8 @@ func (n *drpcNode) Batch(
 	return (*Node)(n).Batch(ctx, request)
 }
 
-func (n *drpcNode) BatchStream(stream kvpb.DRPCBatch_BatchStreamStream) error {
-	return (*Node)(n).batchStreamImpl(stream, func(ba *kvpb.BatchRequest) error {
-		return stream.(interface {
-			RecvMsg(request *kvpb.BatchRequest) error
-		}).RecvMsg(ba)
-	})
+func (n *drpcNode) BatchStream(stream kvpb.DRPCKVBatch_BatchStreamStream) error {
+	return (*Node)(n).batchStreamImpl(stream)
 }
 
 // spanForRequest is the retval of setupSpanForIncomingRPC. It groups together a
@@ -2376,7 +2364,7 @@ func (n *Node) ResetQuorum(
 	log.Infof(ctx, "updated meta2 entry for r%d", desc.RangeID)
 
 	// Set up connection to self. Use rpc.SystemClass to avoid throttling.
-	conn, err := n.storeCfg.NodeDialer.Dial(ctx, n.Descriptor.NodeID, rpc.SystemClass)
+	client, err := kvserver.DialMultiRaftClient(n.storeCfg.NodeDialer, ctx, n.Descriptor.NodeID, rpcbase.SystemClass)
 	if err != nil {
 		return nil, err
 	}
@@ -2389,7 +2377,7 @@ func (n *Node) ResetQuorum(
 		n.clusterID.Get(),
 		n.storeCfg.Settings,
 		n.storeCfg.Tracer(),
-		conn,
+		client,
 		n.storeCfg.Clock.Now(),
 		desc,
 		toReplicaDescriptor,

@@ -11,6 +11,73 @@ import "gogoproto/gogo.proto";
 
 option (gogoproto.goproto_getters_all) = false;
 
+// RotAlgorithm specifies the algorithm used to randomly rotate the original
+// vectors inserted into the index.
+enum RotAlgorithm {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // RotMatrix specifies that vectors will be randomly rotated by multiplying
+  // them by a full random orthogonal matrix (e.g., generated via QR
+  // decomposition of a random Gaussian matrix). This provides a true
+  // Haar-random rotation, which fully preserves all pairwise distances and
+  // angles.
+  // NOTE: This algorithm is retained for backwards-compatibility and will not
+  // be used for new indexes due to its high computational cost, especially in
+  // high dimensions.
+  RotMatrix = 0;
+  // RotNone specifies that vectors will not be randomly rotated. This is
+  // appropriate when the input vectors are already sufficiently mixed. For
+  // example, OpenAI embeddings are often already well-mixed, so additional
+  // random rotation provides little benefit and can be skipped to save
+  // computation.
+  RotNone = 1;
+  // RotGivens specifies that vectors will be randomly rotated by applying a
+  // sequence of Givens rotations. Each Givens rotation mixes a pair of vector
+  // coordinates using a random angle, and applying O(N log N) such rotations
+  // (where N is the number of dimensions) is sufficient to approximate a
+  // Haar-random orthogonal transformation. This approach is much more
+  // computationally efficient than applying a full random orthogonal matrix,
+  // while still providing strong mixing and preserving all pairwise distances
+  // and angles between vectors.
+  RotGivens = 2;
+}
+
+// DistanceMetric defines the function that's used to compute similarity between
+// vectors.
+enum DistanceMetric {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // L2SquaredDistance specifies squared Euclidean distance between two vectors,
+  // defined as the square of the L2 norm of their difference:
+  //  ||vec1 - vec2||²
+  //
+  // This is equivalent to the dot product of the difference with itself:
+  //  (vec1 - vec2) · (vec1 - vec2)
+  L2SquaredDistance = 0;
+
+  // InnerProductDistance specifies inner product distance between two vectors,
+  // defined as the negative value of the dot product between them:
+  //  -(vec1 · vec2)
+  //
+  // Negating the distance ensures that the smaller the distance, the more
+  // similar are the vectors, aligning this metric with L2Squared and Cosine.
+  InnerProductDistance = 1;
+
+  // CosineDistance specifies the cosine distance between two vectors, defined
+  // as one minus their cosine similarity:
+  //  1 - cos(vec1, vec2)
+  //
+  // Cosine similarity is computed as the dot product of the vectors divided
+  // by the product of their norms (magnitudes):
+  //  cos(vec1, vec2) = (vec1 · vec2) / (||vec1|| * ||vec2||)
+  //
+  // However, when using Cosine distance, we always pre-normalize vectors, so
+  // that they are always unit vectors. This means the product of their norms
+  // is one. Therefore, cosine distance becomes simply:
+  //  1 - (vec1 · vec2)
+  CosineDistance = 2;
+}
+
 // Config encapsulates the information needed to search and maintain a vector
 // index. This includes the dimensions of the vectors and the random seed,
 // neither of which should change after the index is created.
@@ -42,5 +109,8 @@ message Config {
   // RotAlgorithm specifies the type of random orthogonal transformation to
   // apply to vectors before indexing and search. It must be one of the
   // cspann.RotAlgorithm enum values.
-  int32 rot_algorithm = 7;
+  RotAlgorithm rot_algorithm = 7;
+  // DistanceMetric specifies how similarity is computed for vectors in the
+  // index, e.g. Euclidean (L2Squared), InnerProduct, or Cosine.
+  DistanceMetric distance_metric = 8;
 }

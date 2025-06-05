@@ -7,8 +7,8 @@ package quantize
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -22,14 +22,14 @@ type UnQuantizer struct {
 	// dims is the dimensionality of vectors expected by the UnQuantizer.
 	dims int
 	// distanceMetric determines which distance function to use.
-	distanceMetric vecdist.Metric
+	distanceMetric vecpb.DistanceMetric
 }
 
 var _ Quantizer = (*UnQuantizer)(nil)
 
 // NewUnQuantizer returns a new instance of the UnQuantizer that stores vectors
 // with the given number of dimensions and distance metric.
-func NewUnQuantizer(dims int, distanceMetric vecdist.Metric) Quantizer {
+func NewUnQuantizer(dims int, distanceMetric vecpb.DistanceMetric) Quantizer {
 	return &UnQuantizer{dims: dims, distanceMetric: distanceMetric}
 }
 
@@ -39,13 +39,13 @@ func (q *UnQuantizer) GetDims() int {
 }
 
 // GetDistanceMetric implements the Quantizer interface.
-func (q *UnQuantizer) GetDistanceMetric() vecdist.Metric {
+func (q *UnQuantizer) GetDistanceMetric() vecpb.DistanceMetric {
 	return q.distanceMetric
 }
 
 // Quantize implements the Quantizer interface.
 func (q *UnQuantizer) Quantize(w *workspace.T, vectors vector.Set) QuantizedVectorSet {
-	if buildutil.CrdbTestBuild && q.distanceMetric == vecdist.Cosine {
+	if buildutil.CrdbTestBuild && q.distanceMetric == vecpb.CosineDistance {
 		utils.ValidateUnitVectors(vectors)
 	}
 
@@ -60,7 +60,7 @@ func (q *UnQuantizer) Quantize(w *workspace.T, vectors vector.Set) QuantizedVect
 func (q *UnQuantizer) QuantizeInSet(
 	w *workspace.T, quantizedSet QuantizedVectorSet, vectors vector.Set,
 ) {
-	if buildutil.CrdbTestBuild && q.distanceMetric == vecdist.Cosine {
+	if buildutil.CrdbTestBuild && q.distanceMetric == vecpb.CosineDistance {
 		utils.ValidateUnitVectors(vectors)
 	}
 
@@ -85,7 +85,7 @@ func (q *UnQuantizer) EstimateDistances(
 	distances []float32,
 	errorBounds []float32,
 ) {
-	if buildutil.CrdbTestBuild && q.distanceMetric == vecdist.Cosine {
+	if buildutil.CrdbTestBuild && q.distanceMetric == vecpb.CosineDistance {
 		utils.ValidateUnitVector(queryVector)
 	}
 
@@ -93,7 +93,7 @@ func (q *UnQuantizer) EstimateDistances(
 
 	for i := range unquantizedSet.Vectors.Count {
 		dataVector := unquantizedSet.Vectors.At(i)
-		distances[i] = vecdist.Measure(q.distanceMetric, queryVector, dataVector)
+		distances[i] = vecpb.MeasureDistance(q.distanceMetric, queryVector, dataVector)
 	}
 
 	// Distances are exact, so error bounds are always zero.

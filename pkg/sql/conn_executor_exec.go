@@ -729,7 +729,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		p.maybeLogStatement(
 			ctx,
 			ex.executorType,
-			int(ex.state.mu.autoRetryCounter),
+			int(ex.state.mu.autoRetryCounter)+p.autoRetryStmtCounter,
 			int(ex.extraTxnState.txnCounter.Load()),
 			rowsAffected,
 			ex.state.mu.stmtCount,
@@ -1077,6 +1077,16 @@ func (ex *connExecutor) execStmtInOpenState(
 			// region" error occurs.
 			ex.execRelease(ctx, releaseHomeRegionSavepoint, res)
 		}()
+	}
+
+	if ex.state.mu.autoRetryReason != nil {
+		p.autoRetryCounter = int(ex.state.mu.autoRetryCounter)
+		ex.sessionTracing.TraceRetryInformation(
+			ctx, "transaction", int(ex.state.mu.autoRetryCounter), ex.state.mu.autoRetryReason,
+		)
+		if ex.server.cfg.TestingKnobs.OnTxnRetry != nil {
+			ex.server.cfg.TestingKnobs.OnTxnRetry(ex.state.mu.autoRetryReason, p.EvalContext())
+		}
 	}
 
 	if ex.executorType != executorTypeInternal &&
@@ -1742,7 +1752,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		p.maybeLogStatement(
 			ctx,
 			ex.executorType,
-			int(ex.state.mu.autoRetryCounter),
+			int(ex.state.mu.autoRetryCounter)+p.autoRetryStmtCounter,
 			int(ex.extraTxnState.txnCounter.Load()),
 			rowsAffected,
 			ex.state.mu.stmtCount,
@@ -2125,6 +2135,16 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 			// region" error occurs.
 			ex.execRelease(ctx, releaseHomeRegionSavepoint, res)
 		}()
+	}
+
+	if ex.state.mu.autoRetryReason != nil {
+		p.autoRetryCounter = int(ex.state.mu.autoRetryCounter)
+		ex.sessionTracing.TraceRetryInformation(
+			ctx, "transaction", int(ex.state.mu.autoRetryCounter), ex.state.mu.autoRetryReason,
+		)
+		if ex.server.cfg.TestingKnobs.OnTxnRetry != nil {
+			ex.server.cfg.TestingKnobs.OnTxnRetry(ex.state.mu.autoRetryReason, p.EvalContext())
+		}
 	}
 
 	if ex.executorType != executorTypeInternal &&
@@ -2702,6 +2722,17 @@ func (ex *connExecutor) rollbackSQLTransaction(
 func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 	ctx context.Context, p *planner, res RestrictedCommandResult,
 ) error {
+	getPausablePortalInfo := func() *portalPauseInfo {
+		if p != nil && p.pausablePortal != nil {
+			return p.pausablePortal.pauseInfo
+		}
+		return nil
+	}
+	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
+		p.autoRetryStmtReason = ppInfo.dispatchReadCommittedStmtToExecutionEngine.autoRetryStmtReason
+		p.autoRetryStmtCounter = ppInfo.dispatchReadCommittedStmtToExecutionEngine.autoRetryStmtCounter
+	}
+
 	readCommittedSavePointToken, err := ex.state.mu.txn.CreateSavepoint(ctx)
 	if err != nil {
 		return err
@@ -2709,6 +2740,16 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 
 	maxRetries := int(ex.sessionData().MaxRetriesForReadCommitted)
 	for attemptNum := 0; ; attemptNum++ {
+		// TODO(99410): Fix the phase time for pausable portals.
+		startExecTS := crtime.NowMono()
+		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerMostRecentStartExecStmt, startExecTS)
+		if attemptNum == 0 {
+			ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerFirstStartExecStmt, startExecTS)
+		} else {
+			ex.sessionTracing.TraceRetryInformation(
+				ctx, "statement", p.autoRetryStmtCounter, p.autoRetryStmtReason,
+			)
+		}
 		bufferPos := res.BufferedResultsLen()
 		if err = ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
 			return err
@@ -2764,8 +2805,13 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		if err := ex.state.mu.txn.Step(ctx, false /* allowReadTimestampStep */); err != nil {
 			return err
 		}
-		ex.state.mu.autoRetryCounter++
-		ex.state.mu.autoRetryReason = txnRetryErr
+		p.autoRetryStmtCounter++
+		p.autoRetryStmtReason = maybeRetriableErr
+		if ppInfo := getPausablePortalInfo(); ppInfo != nil {
+			ppInfo.dispatchReadCommittedStmtToExecutionEngine.autoRetryStmtReason = p.autoRetryStmtReason
+			ppInfo.dispatchReadCommittedStmtToExecutionEngine.autoRetryStmtCounter = p.autoRetryStmtCounter
+		}
+		ex.metrics.EngineMetrics.StatementRetryCount.Inc(1)
 	}
 	return nil
 }
@@ -2773,8 +2819,8 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 // dispatchToExecutionEngine executes the statement, writes the result to res
 // and returns an event for the connection's state machine.
 //
-// If an error is returned, the connection needs to stop processing queries.`
-// Query execution errors are written to res; they are not returned; it is`
+// If an error is returned, the connection needs to stop processing queries.
+// Query execution errors are written to res; they are not returned; it is
 // expected that the caller will inspect res and react to query errors by
 // producing an appropriate state machine event.
 func (ex *connExecutor) dispatchToExecutionEngine(
@@ -2993,10 +3039,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		planner.curPlan.flags.Set(planFlagPartiallyDistributed)
 	}
 
-	ex.sessionTracing.TraceRetryInformation(ctx, int(ex.state.mu.autoRetryCounter), ex.state.mu.autoRetryReason)
-	if ex.server.cfg.TestingKnobs.OnTxnRetry != nil && ex.state.mu.autoRetryReason != nil {
-		ex.server.cfg.TestingKnobs.OnTxnRetry(ex.state.mu.autoRetryReason, planner.EvalContext())
-	}
 	distribute := DistributionType(LocalDistribution)
 	if distributePlan.WillDistribute() {
 		distribute = FullDistribution
@@ -3039,15 +3081,16 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(func(ctx context.Context) {
 			populateQueryLevelStats(ctx, &curPlanner, ex.server.cfg, ppInfo.dispatchToExecutionEngine.queryStats, &ex.cpuStatsCollector)
 			ppInfo.dispatchToExecutionEngine.stmtFingerprintID = ex.recordStatementSummary(
-				ctx, &curPlanner,
-				int(ex.state.mu.autoRetryCounter), ppInfo.dispatchToExecutionEngine.rowsAffected, ppInfo.curRes.ErrAllowReleased(), *ppInfo.dispatchToExecutionEngine.queryStats,
+				ctx, &curPlanner, int(ex.state.mu.autoRetryCounter), planner.autoRetryStmtCounter,
+				ppInfo.dispatchToExecutionEngine.rowsAffected, ppInfo.curRes.ErrAllowReleased(),
+				*ppInfo.dispatchToExecutionEngine.queryStats,
 			)
 		})
 	} else {
 		populateQueryLevelStats(ctx, planner, ex.server.cfg, &stats, &ex.cpuStatsCollector)
 		ex.recordStatementSummary(
-			ctx, planner,
-			int(ex.state.mu.autoRetryCounter), res.RowsAffected(), res.Err(), stats,
+			ctx, planner, int(ex.state.mu.autoRetryCounter), planner.autoRetryStmtCounter,
+			res.RowsAffected(), res.Err(), stats,
 		)
 	}
 
@@ -4356,6 +4399,7 @@ func (ex *connExecutor) recordTransactionFinish(
 		ex.sessionData().Database, ex.sessionData().ApplicationName)
 	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(elapsedTime.Nanoseconds(),
 		ex.sessionData().Database, ex.sessionData().ApplicationName)
+	ex.metrics.EngineMetrics.TxnRetryCount.Inc(int64(ex.state.mu.autoRetryCounter))
 
 	ex.txnIDCacheWriter.Record(contentionpb.ResolvedTxnID{
 		TxnID:            ev.txnID,

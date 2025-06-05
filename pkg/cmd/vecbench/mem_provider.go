@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/memstore"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -40,7 +40,7 @@ type MemProvider struct {
 	stopper          *stop.Stopper
 	datasetName      string
 	dims             int
-	distanceMetric   vecdist.Metric
+	distMetric       vecpb.DistanceMetric
 	options          cspann.IndexOptions
 	store            *memstore.Store
 	index            *cspann.Index
@@ -53,15 +53,15 @@ func NewMemProvider(
 	stopper *stop.Stopper,
 	datasetName string,
 	dims int,
-	distanceMetric vecdist.Metric,
+	distMetric vecpb.DistanceMetric,
 	options cspann.IndexOptions,
 ) *MemProvider {
 	return &MemProvider{
-		stopper:        stopper,
-		datasetName:    datasetName,
-		dims:           dims,
-		distanceMetric: distanceMetric,
-		options:        options,
+		stopper:     stopper,
+		datasetName: datasetName,
+		dims:        dims,
+		distMetric:  distMetric,
+		options:     options,
 	}
 }
 
@@ -262,7 +262,7 @@ func (m *MemProvider) ensureIndex(ctx context.Context) error {
 		return nil
 	}
 
-	quantizer := quantize.NewRaBitQuantizer(m.dims, seed, m.distanceMetric)
+	quantizer := quantize.NewRaBitQuantizer(m.dims, seed, m.distMetric)
 	if m.store == nil {
 		// Construct empty store if one doesn't yet exist.
 		m.store = memstore.New(quantizer, seed)

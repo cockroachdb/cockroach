@@ -21,6 +21,7 @@ export const getNodes =
   };
 
 export type NodeStatus = {
+  id: NodeID;
   region: string;
   stores: StoreID[];
 };
@@ -48,7 +49,9 @@ export const useNodeStatuses = () => {
           .node_id as NodeID;
       });
 
-      nodeStatusByID[ns.desc.node_id as NodeID] = {
+      const id = ns.desc.node_id as NodeID;
+      nodeStatusByID[id] = {
+        id,
         region: getRegionFromLocality(ns.desc.locality),
         stores: ns.store_statuses?.map(s => s.desc.store_id as StoreID),
       };

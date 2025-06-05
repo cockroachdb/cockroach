@@ -45,3 +45,42 @@ SELECT cluster_logical_timestamp(); INSERT INTO test_retry VALUES (1);
 
 statement ok
 COMMIT
+
+statement ok
+RESET kv_transaction_buffered_writes_enabled
+
+# Test the overload of crdb_internal.force_retry that counts retries.
+subtest force_retry
+
+statement ok
+SET tracing = on
+
+query I
+SELECT crdb_internal.force_retry(0)
+----
+0
+
+statement ok
+SET tracing = off
+
+query T nosort
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%executing after % retries%'
+----
+
+statement ok
+SET tracing = on
+
+query I
+SELECT crdb_internal.force_retry(3)
+----
+0
+
+statement ok
+SET tracing = off
+
+query T nosort
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%executing after % retries%'
+----
+executing after 1 transaction retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+executing after 2 transaction retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+executing after 3 transaction retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()

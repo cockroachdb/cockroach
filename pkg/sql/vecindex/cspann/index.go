@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
@@ -62,7 +62,7 @@ func IncreaseRerankResults(desiredMaxResults int) (maxResults, maxExtraResults i
 type IndexOptions struct {
 	// RotAlgorithm specifies the type of random orthogonal transformation to
 	// apply to vectors before indexing and search. See RotAlgorithm for details.
-	RotAlgorithm RotAlgorithm
+	RotAlgorithm vecpb.RotAlgorithm
 	// MinPartitionSize specifies the size below which a partition will be merged
 	// into other partitions at the same level.
 	MinPartitionSize int
@@ -308,6 +308,11 @@ func NewIndex(
 	return vi, nil
 }
 
+// Quantizer returns the quantizer used for non-root partitions in the index.
+func (vi *Index) Quantizer() quantize.Quantizer {
+	return vi.quantizer
+}
+
 // Store returns the underlying vector store for the index.
 func (vi *Index) Store() Store {
 	return vi.store
@@ -343,7 +348,7 @@ func (vi *Index) FormatStats() string {
 // distances.
 func (vi *Index) TransformVector(original vector.T, randomized vector.T) vector.T {
 	vi.rot.RandomizeVector(original, randomized)
-	if vi.quantizer.GetDistanceMetric() == vecdist.Cosine {
+	if vi.quantizer.GetDistanceMetric() == vecpb.CosineDistance {
 		num32.Normalize(randomized)
 	}
 	return randomized
@@ -949,12 +954,12 @@ func (vi *Index) findExactDistances(
 func (vi *Index) validateVectorToAdd(level Level, vec vector.T) {
 	if buildutil.CrdbTestBuild {
 		switch vi.quantizer.GetDistanceMetric() {
-		case vecdist.InnerProduct:
+		case vecpb.InnerProductDistance:
 			if level != LeafLevel {
 				utils.ValidateUnitVector(vec)
 			}
 
-		case vecdist.Cosine:
+		case vecpb.CosineDistance:
 			utils.ValidateUnitVector(vec)
 		}
 	}
@@ -965,12 +970,12 @@ func (vi *Index) validateVectorToAdd(level Level, vec vector.T) {
 func (vi *Index) validateVectorsToAdd(level Level, vectors vector.Set) {
 	if buildutil.CrdbTestBuild {
 		switch vi.quantizer.GetDistanceMetric() {
-		case vecdist.InnerProduct:
+		case vecpb.InnerProductDistance:
 			if level != LeafLevel {
 				utils.ValidateUnitVectors(vectors)
 			}
 
-		case vecdist.Cosine:
+		case vecpb.CosineDistance:
 			utils.ValidateUnitVectors(vectors)
 		}
 	}

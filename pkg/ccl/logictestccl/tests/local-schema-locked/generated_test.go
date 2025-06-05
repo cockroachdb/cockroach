@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 22
+const configIdx = 21
 
 var cclLogicTestDir string
 
@@ -248,6 +248,13 @@ func TestCCLLogic_triggers(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "triggers")
+}
+
+func TestCCLLogic_txn_retry(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "txn_retry")
 }
 
 func TestCCLLogic_udf_params(

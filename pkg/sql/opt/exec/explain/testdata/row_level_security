@@ -293,7 +293,7 @@ UPDATE writer SET key = key * 10;
 └── • render
     │
     └── • norows
-          policies: row-level security enabled, no policies applied.
+          policies: applied (filtered all rows)
 
 exec-ddl
 CREATE POLICY p_update1 ON writer FOR UPDATE USING (key = 5)  WITH CHECK (value like 'updater: %')
@@ -396,6 +396,11 @@ UPDATE writer SET key = 10 WHERE true;
 # Show policy information for delete
 # ----------------------------------------------------------------------
 
+# First ensure no policies apply.
+exec-ddl
+DROP POLICY p_select ON writer;
+----
+
 plan
 DELETE FROM writer WHERE key = 1;
 ----
@@ -405,6 +410,22 @@ DELETE FROM writer WHERE key = 1;
 │
 └── • norows
       policies: row-level security enabled, no policies applied.
+
+# Create a SELECT policy again. But still no delete policy, so everything is
+# filtered.
+exec-ddl
+CREATE POLICY p_select ON writer FOR SELECT USING (true);
+----
+
+plan
+DELETE FROM writer WHERE key = 1;
+----
+• delete
+│ from: writer
+│ auto commit
+│
+└── • norows
+      policies: applied (filtered all rows)
 
 exec-ddl
 CREATE POLICY p_delete ON writer FOR DELETE USING (key = 1);

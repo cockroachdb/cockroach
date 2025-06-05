@@ -397,7 +397,7 @@ const mvccWallTimeIntervalCollector = "MVCCTimeInterval"
 // Cockroach code relies on unconditionally (like range keys). New stores are by
 // default created with this version. It should correspond to the minimum
 // supported binary version.
-const MinimumSupportedFormatVersion = pebble.FormatColumnarBlocks
+const MinimumSupportedFormatVersion = pebble.FormatTableFormatV6
 
 // DefaultPebbleOptions returns the default pebble options.
 func DefaultPebbleOptions() *pebble.Options {
@@ -2157,7 +2157,6 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 // named version, it can be assumed all *nodes* have ratcheted to the pebble
 // version associated with it, since they did so during the fence version.
 var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
-	clusterversion.V25_1: pebble.FormatColumnarBlocks,
 	clusterversion.V25_2: pebble.FormatTableFormatV6,
 }
 

@@ -12,8 +12,8 @@ import (
 
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -36,7 +36,7 @@ const (
 	batchDuration = 10 * time.Millisecond
 
 	// connClass is the rpc ConnectionClass used by Store Liveness traffic.
-	connClass = rpc.SystemClass
+	connClass = rpcbase.SystemClass
 )
 
 var logQueueFullEvery = log.Every(1 * time.Second)
@@ -283,13 +283,11 @@ func (t *Transport) startProcessNewQueue(
 			log.Fatalf(ctx, "queue for n%d does not exist", toNodeID)
 		}
 		defer cleanup()
-		conn, err := t.dialer.Dial(ctx, toNodeID, connClass)
+		client, err := slpb.DialStoreLivenessClient(t.dialer, ctx, toNodeID, connClass)
 		if err != nil {
 			// DialNode already logs sufficiently, so just return.
 			return
 		}
-
-		client := slpb.NewStoreLivenessClient(conn)
 		streamCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
 

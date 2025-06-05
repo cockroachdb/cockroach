@@ -1653,7 +1653,11 @@ func TestLeaseManagerSessionIDChanges(t *testing.T) {
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 	runner.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
 	runner.Exec(t, `SET CLUSTER SETTING sql.catalog.descriptor_wait_for_initial_version.enabled = false`)
-
+	// Disable the range feed for this test. This prevents a race condition
+	// where the range feed could insert a lease with the real session ID
+	// (if the session ID hook was disabled) before the initial descriptor
+	// acquisition completes.
+	leaseManager.TestingSetDisableRangeFeedCheckpointFn(true)
 	runner.Exec(t, `
 CREATE DATABASE t;
 CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
@@ -1695,6 +1699,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		// Restore the original provider so valid session IDs
 		// are assigned.
 		leaseManager.storage.livenessProvider = fs.Provider
+		leaseManager.TestingSetDisableRangeFeedCheckpointFn(false)
 	}()
 
 	// Repeatedly lease the same descriptor, with the session ID continuously changing
@@ -1713,7 +1718,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		// to be expired.
 		newSessionID := getLatestLeasedDesc().getSessionID()
 		newExpiry := getLatestLeasedDesc().getExpiration(ctx)
-		require.NotEqualf(t, previousSessionID, newSessionID, "session ID should not match")
+		require.NotEqualf(t, previousSessionID, newSessionID, "session ID should not match %v %v", previousSessionID, newSessionID)
 		require.Truef(t, previousExpiry.Less(newExpiry), "session expiry should be later.")
 		// Disable the hook before the lease query.
 		enableHook.Swap(false)

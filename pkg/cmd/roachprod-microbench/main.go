@@ -116,6 +116,7 @@ func makeRunCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&config.affinity, "affinity", config.affinity, "run benchmarks with each iteration's binaries having affinity to the same node, while different iterations can run on different nodes")
 	cmd.Flags().BoolVar(&config.quiet, "quiet", config.quiet, "suppress roachprod progress output")
 	cmd.Flags().BoolVar(&config.recoverable, "recoverable", config.recoverable, "VMs are able to recover from transient failures (e.g., running spot instances on a MIG in GCE)")
+	cmd.Flags().BoolVar(&config.postIssues, "post-issues", config.postIssues, "post issues to github (requires env vars for github issues to be set)")
 	return cmd
 }
 

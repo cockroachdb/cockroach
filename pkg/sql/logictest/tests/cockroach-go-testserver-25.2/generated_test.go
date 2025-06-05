@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 21
+const configIdx = 20
 
 var logicTestDir string
 
@@ -120,4 +120,11 @@ func TestLogic_upgrade(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "upgrade")
+}
+
+func TestLogic_vector_index_mixed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "vector_index_mixed")
 }

@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
@@ -115,7 +115,7 @@ func (s *testState) estimateDistances(t *testing.T, d *datadriven.TestData) stri
 	}
 
 	var buf bytes.Buffer
-	doTest := func(metric vecdist.Metric, prec int) {
+	doTest := func(metric vecpb.DistanceMetric, prec int) {
 		centroid := vectors.Centroid(make(vector.T, vectors.Dims))
 
 		// Test UnQuantizer.
@@ -155,10 +155,10 @@ func (s *testState) estimateDistances(t *testing.T, d *datadriven.TestData) stri
 	}
 
 	buf.WriteString("L2Squared\n")
-	doTest(vecdist.L2Squared, 1)
+	doTest(vecpb.L2SquaredDistance, 1)
 
 	buf.WriteString("InnerProduct\n")
-	doTest(vecdist.InnerProduct, 1)
+	doTest(vecpb.InnerProductDistance, 1)
 
 	// For cosine distance, normalize the query and input vectors.
 	num32.Normalize(queryVector)
@@ -167,7 +167,7 @@ func (s *testState) estimateDistances(t *testing.T, d *datadriven.TestData) stri
 	}
 
 	buf.WriteString("Cosine\n")
-	doTest(vecdist.Cosine, 4)
+	doTest(vecpb.CosineDistance, 4)
 
 	return buf.String()
 }
@@ -213,7 +213,7 @@ func (s *testState) calculateRecall(t *testing.T, d *datadriven.TestData) string
 
 	if randomize {
 		var transform cspann.RandomOrthoTransformer
-		transform.Init(cspann.RotGivens, dataset.Dims, 42)
+		transform.Init(vecpb.RotGivens, dataset.Dims, 42)
 		for i := range queryVectors.Count {
 			transform.RandomizeVector(queryVectors.At(i), queryVectors.At(i))
 		}
@@ -222,7 +222,7 @@ func (s *testState) calculateRecall(t *testing.T, d *datadriven.TestData) string
 		}
 	}
 
-	calculateAvgRecall := func(metric vecdist.Metric) float64 {
+	calculateAvgRecall := func(metric vecpb.DistanceMetric) float64 {
 		var recallSum float64
 		var workspace workspace.T
 		rabitQ := quantize.NewRaBitQuantizer(dataset.Dims, 42, metric)
@@ -250,10 +250,10 @@ func (s *testState) calculateRecall(t *testing.T, d *datadriven.TestData) string
 
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "Euclidean: %.2f%% recall@%d\n",
-		calculateAvgRecall(vecdist.L2Squared)*100, topK)
+		calculateAvgRecall(vecpb.L2SquaredDistance)*100, topK)
 
 	fmt.Fprintf(&buf, "InnerProduct: %.2f%% recall@%d\n",
-		calculateAvgRecall(vecdist.InnerProduct)*100, topK)
+		calculateAvgRecall(vecpb.InnerProductDistance)*100, topK)
 
 	// For cosine distance, normalize the query and input vectors.
 	for i := range queryVectors.Count {
@@ -264,7 +264,7 @@ func (s *testState) calculateRecall(t *testing.T, d *datadriven.TestData) string
 	}
 
 	fmt.Fprintf(&buf, "Cosine: %.2f%% recall@%d\n",
-		calculateAvgRecall(vecdist.Cosine)*100, topK)
+		calculateAvgRecall(vecpb.CosineDistance)*100, topK)
 
 	return buf.String()
 }

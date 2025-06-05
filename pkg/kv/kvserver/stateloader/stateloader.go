@@ -442,10 +442,14 @@ func UninitializedReplicaState(rangeID roachpb.RangeID) kvserverpb.ReplicaState 
 
 // The rest is not technically part of ReplicaState.
 
-// SynthesizeRaftState creates a Raft state which synthesizes both a HardState
-// and a lastIndex from pre-seeded data in the engine (typically created via
-// WriteInitialReplicaState and, on a split, perhaps the activity of an
-// uninitialized Raft group)
+// SynthesizeRaftState creates a Raft state which synthesizes HardState from
+// pre-seeded data in the engine: the state machine state created by
+// WriteInitialReplicaState on a split, and the existing HardState of an
+// uninitialized replica.
+//
+// TODO(sep-raft-log): this is now only used in splits, when initializing a
+// replica. Make the implementation straightforward, most of the stuff here is
+// constant except the existing HardState.
 func (rsl StateLoader) SynthesizeRaftState(
 	ctx context.Context, readWriter storage.ReadWriter,
 ) error {
@@ -453,13 +457,13 @@ func (rsl StateLoader) SynthesizeRaftState(
 	if err != nil {
 		return err
 	}
-	truncState, err := rsl.LoadRaftTruncatedState(ctx, readWriter)
-	if err != nil {
-		return err
-	}
 	as, err := rsl.LoadRangeAppliedState(ctx, readWriter)
 	if err != nil {
 		return err
 	}
-	return rsl.SynthesizeHardState(ctx, readWriter, hs, truncState, as.RaftAppliedIndex)
+	applied := logstore.EntryID{
+		Index: as.RaftAppliedIndex,
+		Term:  as.RaftAppliedIndexTerm,
+	}
+	return rsl.SynthesizeHardState(ctx, readWriter, hs, applied)
 }

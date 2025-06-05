@@ -75,6 +75,14 @@ type EngineMetrics struct {
 	// FullTableOrIndexScanRejectedCount counts the number of queries that were
 	// rejected because of the `disallow_full_table_scans` guardrail.
 	FullTableOrIndexScanRejectedCount *metric.Counter
+
+	// TxnRetryCount counts the number of automatic transaction retries that
+	// have occurred.
+	TxnRetryCount *metric.Counter
+
+	// StatementRetryCount counts the number of automatic statement retries that
+	// have occurred under READ COMMITTED isolation.
+	StatementRetryCount *metric.Counter
 }
 
 // EngineMetrics implements the metric.Struct interface.
@@ -127,14 +135,17 @@ func (GuardrailMetrics) MetricStruct() {}
 // last executed statement/query and performs the associated
 // accounting in the passed-in EngineMetrics.
 //   - distSQLUsed reports whether the query was distributed.
-//   - automaticRetryCount is the count of implicit txn retries
+//   - automaticRetryTxnCount is the count of implicit txn retries
+//     so far.
+//   - automaticRetryStmtCount is the count of implicit stmt retries
 //     so far.
 //   - result is the result set computed by the query/statement.
 //   - err is the error encountered, if any.
 func (ex *connExecutor) recordStatementSummary(
 	ctx context.Context,
 	planner *planner,
-	automaticRetryCount int,
+	automaticRetryTxnCount int,
+	automaticRetryStmtCount int,
 	rowsAffected int,
 	stmtErr error,
 	stats topLevelQueryStats,
@@ -160,7 +171,9 @@ func (ex *connExecutor) recordStatementSummary(
 
 	stmt := &planner.stmt
 	flags := planner.curPlan.flags
-	ex.recordStatementLatencyMetrics(stmt, flags, automaticRetryCount, runLatRaw, svcLatRaw)
+	ex.recordStatementLatencyMetrics(
+		stmt, flags, automaticRetryTxnCount+automaticRetryStmtCount, runLatRaw, svcLatRaw,
+	)
 
 	fullScan := flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan)
 
@@ -180,6 +193,10 @@ func (ex *connExecutor) recordStatementSummary(
 	implicitTxn := flags.IsSet(planFlagImplicitTxn)
 	stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
 		stmt.StmtNoConstants, implicitTxn, planner.SessionData().Database)
+	autoRetryReason := ex.state.mu.autoRetryReason
+	if automaticRetryStmtCount > 0 {
+		autoRetryReason = planner.autoRetryStmtReason
+	}
 	recordedStmtStats := &sqlstats.RecordedStmtStats{
 		FingerprintID:        stmtFingerprintID,
 		QuerySummary:         stmt.StmtSummary,
@@ -190,9 +207,9 @@ func (ex *connExecutor) recordStatementSummary(
 		PlanHash:             planner.instrumentation.planGist.Hash(),
 		SessionID:            ex.planner.extendedEvalCtx.SessionID,
 		StatementID:          stmt.QueryID,
-		AutoRetryCount:       automaticRetryCount,
+		AutoRetryCount:       automaticRetryTxnCount + automaticRetryStmtCount,
 		Failed:               stmtErr != nil,
-		AutoRetryReason:      ex.state.mu.autoRetryReason,
+		AutoRetryReason:      autoRetryReason,
 		RowsAffected:         rowsAffected,
 		IdleLatencySec:       idleLatSec,
 		ParseLatencySec:      parseLatSec,
@@ -289,7 +306,7 @@ func (ex *connExecutor) recordStatementSummary(
 				"run %.2fµs (%.1f%%), "+
 				"overhead %.2fµs (%.1f%%), "+
 				"session age %.4fs",
-			rowsAffected, automaticRetryCount,
+			rowsAffected, automaticRetryTxnCount+automaticRetryStmtCount,
 			parseLatSec*1e6, 100*parseLatSec/svcLatSec,
 			planLatSec*1e6, 100*planLatSec/svcLatSec,
 			runLatSec*1e6, 100*runLatSec/svcLatSec,

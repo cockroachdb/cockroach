@@ -139,6 +139,13 @@ for sha in "${build_sha_arr[@]}"; do
   ./bin/roachprod-microbench stage --quiet "$ROACHPROD_CLUSTER" "gs://$BENCH_BUCKET/builds/$archive_name" "$remote_dir/$sha"
 done
 
+# Post issues to github for triggered builds (triggered builds are always on master)
+if [ -n "${TRIGGERED_BUILD:-}" ]; then
+  GITHUB_BRANCH="master"
+  GITHUB_SHA="${build_sha_arr[0]}"
+  GITHUB_BINARY="experiment"
+fi
+
 # Execute microbenchmarks
 ./bin/roachprod-microbench run "$ROACHPROD_CLUSTER" \
   --binaries experiment="$remote_dir/${build_sha_arr[0]}" \
@@ -149,7 +156,8 @@ done
   ${BENCH_TIMEOUT:+--timeout="$BENCH_TIMEOUT"} \
   ${BENCH_EXCLUDE:+--exclude="$BENCH_EXCLUDE"} \
   ${BENCH_IGNORE_PACKAGES:+--ignore-package="$BENCH_IGNORE_PACKAGES"} \
-  --quiet \
+  ${TRIGGERED_BUILD:+--post-issues} \
+  --quiet \  
   -- "$TEST_ARGS" \
   || exit_status=$?
 

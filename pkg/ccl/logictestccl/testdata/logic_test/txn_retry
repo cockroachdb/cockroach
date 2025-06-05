@@ -1,0 +1,92 @@
+# Test that automatic transaction retries and automatic statement retries are
+# counted separately.
+
+statement ok
+SET max_retries_for_read_committed = 5
+
+statement ok
+SET tracing = on
+
+statement ok
+BEGIN ISOLATION LEVEL READ COMMITTED
+
+# There's currently some quirky behavior for the first statement of a read-
+# committed transaction: it is subject to both transaction retries and statement
+# retries. We can see this if we force more than max_retries_for_read_committed
+# number of retries for the first statement.
+
+query I
+SELECT crdb_internal.force_retry(7)
+----
+0
+
+statement ok
+SET tracing = off
+
+# We use transaction retry count + statement retry count to decide if we have
+# retried enough. We don't currently remember statement retry counts across
+# transaction retries, so we end up retrying 17 times here instead of 7.
+
+query T nosort
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%executing after % retries%'
+----
+executing after 1 statement retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+executing after 2 statement retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+executing after 3 statement retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+executing after 4 statement retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+executing after 5 statement retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+executing after 1 transaction retries, last retry reason: read committed retry limit exceeded; set by max_retries_for_read_committed=5: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+executing after 1 statement retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+executing after 2 statement retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+executing after 3 statement retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+executing after 4 statement retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+executing after 5 statement retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+executing after 2 transaction retries, last retry reason: read committed retry limit exceeded; set by max_retries_for_read_committed=5: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+executing after 1 statement retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+executing after 2 statement retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+executing after 3 statement retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+executing after 4 statement retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+executing after 5 statement retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+
+statement ok
+SET tracing = on
+
+query I
+SELECT crdb_internal.force_retry(3)
+----
+0
+
+statement ok
+SET tracing = off
+
+# We use transaction retry count + statement retry count to decide if we have
+# retried enough. We don't currently remember which statements participated in
+# previous transaction retries, so we end up retrying 1 time here instead of 3.
+
+query T nosort
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%executing after % retries%'
+----
+executing after 2 transaction retries, last retry reason: read committed retry limit exceeded; set by max_retries_for_read_committed=5: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+executing after 1 statement retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+
+statement ok
+SET tracing = on
+
+query I
+SELECT 0
+----
+0
+
+statement ok
+SET tracing = off
+
+# By the time we get to the last statement, the transaction retry count hasn't
+# been affected by any of the statement retries, showing that it is separate.
+
+query T nosort
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%executing after % retries%'
+----
+executing after 2 transaction retries, last retry reason: read committed retry limit exceeded; set by max_retries_for_read_committed=5: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+
+statement ok
+COMMIT

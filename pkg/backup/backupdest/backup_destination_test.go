@@ -21,10 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -397,120 +395,6 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 			})
 		})
 	}
-}
-
-func TestMixedVersionIncrementalSuffixChains(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	args := base.TestServerArgs{
-		DefaultTestTenant: base.TestControlsTenantsExplicitly,
-	}
-	args.Knobs.Server = &server.TestingKnobs{
-		ClusterVersionOverride:         clusterversion.V25_1.Version(),
-		DisableAutomaticVersionUpgrade: make(chan struct{}),
-	}
-	_, db, tmpdir, cleanup := backuptestutils.StartBackupRestoreTestCluster(
-		t, backuptestutils.SingleNode, backuptestutils.WithParams(base.TestClusterArgs{
-			ServerArgs: args,
-		}),
-	)
-	defer cleanup()
-	fmt.Println(tmpdir)
-
-	db.Exec(t, "CREATE TABLE foo (a int)")
-	db.Exec(t, "BACKUP INTO 'nodelocal://1/backup'")
-
-	db.Exec(t, "INSERT INTO foo VALUES (1)")
-	// Round to nearest millisecond timestamp to avoid precision shenanigans
-	// between MacOS and Unix.
-	timeBeforeUpgrade := hlc.Timestamp{WallTime: time.Now().UnixNano() / 1e3 * 1e3}
-	db.Exec(
-		t,
-		fmt.Sprintf(
-			"BACKUP INTO LATEST IN 'nodelocal://1/backup' AS OF SYSTEM TIME '%s'",
-			timeBeforeUpgrade.AsOfSystemTime(),
-		),
-	)
-
-	backups := db.QueryStr(
-		t,
-		"SELECT DISTINCT (start_time, end_time) FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/backup']",
-	)
-	require.Len(t, backups, 2)
-
-	pathBeforeIncSuffixFormat := backuputils.JoinURLPath(
-		"/"+backupbase.DefaultIncrementalsSubdir,
-		backupbase.DateBasedIntoFolderName,
-		backupbase.DateBasedIncFolderName,
-	)
-	var path string
-	db.QueryRow(
-		t,
-		`SELECT path FROM [SHOW BACKUP FILES FROM LATEST IN 'nodelocal://1/backup']
-		WHERE backup_type = 'incremental' LIMIT 1`,
-	).Scan(&path)
-	// Before 25.2, incremental folder names do not contain the suffix, so the
-	// next character after the DateBasedIncFolderName should be the end of the
-	// folder.
-	require.Equal(t, byte('/'), path[len(pathBeforeIncSuffixFormat)])
-
-	db.Exec(t, fmt.Sprintf("SET CLUSTER SETTING version = '%s'", clusterversion.V25_2.Version()))
-
-	db.Exec(t, "INSERT INTO foo VALUES (2)")
-	timeAfterUpgrade := hlc.Timestamp{WallTime: time.Now().UnixNano() / 1e3 * 1e3}
-	db.Exec(
-		t,
-		fmt.Sprintf(
-			"BACKUP INTO LATEST IN 'nodelocal://1/backup' AS OF SYSTEM TIME '%s'",
-			timeAfterUpgrade.AsOfSystemTime(),
-		),
-	)
-
-	db.QueryRow(
-		t,
-		`SELECT path FROM [SHOW BACKUP FILES FROM LATEST IN 'nodelocal://1/backup']
-		WHERE backup_type = 'incremental' ORDER BY PATH DESC LIMIT 1`,
-	).Scan(&path)
-	// Before 25.2, incremental folder names do not contain the suffix, so the
-	// next character after the DateBasedIncFolderName should not be the end of
-	// the directory.
-	require.NotEqual(t, byte('/'), path[len(pathBeforeIncSuffixFormat)])
-
-	db.Exec(t, "INSERT INTO foo VALUES (3)")
-	db.Exec(t, "BACKUP INTO LATEST IN 'nodelocal://1/backup'")
-	backups = db.QueryStr(
-		t,
-		"SELECT DISTINCT (start_time, end_time) FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/backup']",
-	)
-	require.Len(t, backups, 4)
-
-	db.Exec(t, "DROP TABLE foo")
-	db.Exec(
-		t,
-		fmt.Sprintf(
-			"RESTORE TABLE foo FROM LATEST IN 'nodelocal://1/backup' AS OF SYSTEM TIME '%s'",
-			timeBeforeUpgrade.AsOfSystemTime(),
-		),
-	)
-	rows := db.QueryStr(t, "SELECT a FROM foo")
-	require.Len(t, rows, 1)
-
-	db.Exec(t, "DROP TABLE foo")
-	db.Exec(
-		t,
-		fmt.Sprintf(
-			"RESTORE TABLE foo FROM LATEST IN 'nodelocal://1/backup' AS OF SYSTEM TIME '%s'",
-			timeAfterUpgrade.AsOfSystemTime(),
-		),
-	)
-	rows = db.QueryStr(t, "SELECT a FROM foo")
-	require.Len(t, rows, 2)
-
-	db.Exec(t, "DROP TABLE foo")
-	db.Exec(t, "RESTORE TABLE foo FROM LATEST IN 'nodelocal://1/backup'")
-	rows = db.QueryStr(t, "SELECT a FROM foo")
-	require.Len(t, rows, 3)
 }
 
 // TODO(pbardea): Add tests for resolveBackupCollection.

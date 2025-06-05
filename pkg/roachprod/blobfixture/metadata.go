@@ -32,6 +32,14 @@ type FixtureMetadata struct {
 
 	// ReadyAt is the time the fixture was made ready for use.
 	ReadyAt *time.Time `json:"ready_at,omitempty"`
+
+	// Fingerprint is a fingerprint of the fixture data and is used to validate
+	// the contents of the fixture. It specifically stores the fingerprint of the
+	// fixture at the time it was marked ready and maps the fully qualified names
+	// of tables in the fixture to their fingerprints.
+	// Note: this may not be present if the fixture was too large to be
+	// fingerprinted.
+	Fingerprint map[string]string `json:"fingerprint,omitempty"`
 }
 
 func (f *FixtureMetadata) MarshalJson() ([]byte, error) {

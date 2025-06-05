@@ -1,6 +1,3 @@
-# LogicTest: !local-mixed-25.1 !local-schema-locked
-# TODO(mw5h): Remove this once 25.2 is our minimum supported version.
-
 #### Partial Indexes
 
 statement ok
@@ -113,6 +110,7 @@ CREATE INDEX t6i1 ON t6 (a) WHERE a > 6;
 CREATE INDEX t6i2 ON t6 (a) WHERE t6.a > 7;
 CREATE INDEX t6i3 ON t6 (a DESC) WHERE test.t6.a > 8;
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t6
 ----
@@ -131,6 +129,26 @@ t6  CREATE TABLE public.t6 (
       INDEX t6i3 (a DESC) WHERE a > 8:::INT8
     );
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t6
+----
+t6  CREATE TABLE public.t6 (
+      a INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC),
+      INDEX t6_a_idx (a ASC) WHERE a > 0:::INT8,
+      INDEX t6_a_idx1 (a ASC) WHERE a > 1:::INT8,
+      INDEX t6_a_idx2 (a DESC) WHERE a > 2:::INT8,
+      UNIQUE INDEX t6_a_key (a ASC) WHERE a > 3:::INT8,
+      UNIQUE INDEX t6_a_key1 (a ASC) WHERE a > 4:::INT8,
+      UNIQUE INDEX t6_a_key2 (a DESC) WHERE a > 5:::INT8,
+      INDEX t6i1 (a ASC) WHERE a > 6:::INT8,
+      INDEX t6i2 (a ASC) WHERE a > 7:::INT8,
+      INDEX t6i3 (a DESC) WHERE a > 8:::INT8
+    ) WITH (schema_locked = true);
+
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t6 WITH REDACT
 ----
@@ -149,11 +167,31 @@ t6  CREATE TABLE public.t6 (
       INDEX t6i3 (a DESC) WHERE a > ‹×›:::INT8
     );
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t6 WITH REDACT
+----
+t6  CREATE TABLE public.t6 (
+      a INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC),
+      INDEX t6_a_idx (a ASC) WHERE a > ‹×›:::INT8,
+      INDEX t6_a_idx1 (a ASC) WHERE a > ‹×›:::INT8,
+      INDEX t6_a_idx2 (a DESC) WHERE a > ‹×›:::INT8,
+      UNIQUE INDEX t6_a_key (a ASC) WHERE a > ‹×›:::INT8,
+      UNIQUE INDEX t6_a_key1 (a ASC) WHERE a > ‹×›:::INT8,
+      UNIQUE INDEX t6_a_key2 (a DESC) WHERE a > ‹×›:::INT8,
+      INDEX t6i1 (a ASC) WHERE a > ‹×›:::INT8,
+      INDEX t6i2 (a ASC) WHERE a > ‹×›:::INT8,
+      INDEX t6i3 (a DESC) WHERE a > ‹×›:::INT8
+    ) WITH (schema_locked = true);
+
 # Renaming a column updates the index predicates.
 
 statement ok
 ALTER TABLE t6 RENAME COLUMN a TO b
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t6
 ----
@@ -172,11 +210,31 @@ t6  CREATE TABLE public.t6 (
       INDEX t6i3 (b DESC) WHERE b > 8:::INT8
     );
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t6
+----
+t6  CREATE TABLE public.t6 (
+      b INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC),
+      INDEX t6_a_idx (b ASC) WHERE b > 0:::INT8,
+      INDEX t6_a_idx1 (b ASC) WHERE b > 1:::INT8,
+      INDEX t6_a_idx2 (b DESC) WHERE b > 2:::INT8,
+      UNIQUE INDEX t6_a_key (b ASC) WHERE b > 3:::INT8,
+      UNIQUE INDEX t6_a_key1 (b ASC) WHERE b > 4:::INT8,
+      UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5:::INT8,
+      INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
+      INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
+      INDEX t6i3 (b DESC) WHERE b > 8:::INT8
+    ) WITH (schema_locked = true);
+
 # Renaming a table keeps the index predicates intact.
 
 statement ok
 ALTER TABLE t6 RENAME TO t7
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t7
 ----
@@ -195,6 +253,25 @@ t7  CREATE TABLE public.t7 (
       INDEX t6i3 (b DESC) WHERE b > 8:::INT8
     );
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t7
+----
+t7  CREATE TABLE public.t7 (
+      b INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC),
+      INDEX t6_a_idx (b ASC) WHERE b > 0:::INT8,
+      INDEX t6_a_idx1 (b ASC) WHERE b > 1:::INT8,
+      INDEX t6_a_idx2 (b DESC) WHERE b > 2:::INT8,
+      UNIQUE INDEX t6_a_key (b ASC) WHERE b > 3:::INT8,
+      UNIQUE INDEX t6_a_key1 (b ASC) WHERE b > 4:::INT8,
+      UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5:::INT8,
+      INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
+      INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
+      INDEX t6i3 (b DESC) WHERE b > 8:::INT8
+    ) WITH (schema_locked = true);
+
 # Dropping a column referenced in the predicate drops the index.
 
 statement ok
@@ -211,6 +288,7 @@ CREATE TABLE t8 (
 statement error cannot drop column "c" because it is referenced by partial index "t8_a_idx1"\nHINT: drop the partial index first, then drop the column
 ALTER TABLE t8 DROP COLUMN c
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t8
 ----
@@ -225,6 +303,21 @@ t8  CREATE TABLE public.t8 (
       FAMILY fam_0_a_b_c_rowid (a, b, c, rowid)
     );
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t8
+----
+t8  CREATE TABLE public.t8 (
+      a INT8 NULL,
+      b INT8 NULL,
+      c STRING NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC),
+      INDEX t8_a_idx (a ASC) WHERE b > 0:::INT8,
+      INDEX t8_a_idx1 (a ASC) WHERE c = 'foo':::STRING,
+      FAMILY fam_0_a_b_c_rowid (a, b, c, rowid)
+    ) WITH (schema_locked = true);
+
 # CREATE TABLE LIKE ... INCLUDING INDEXES copies partial index predicate
 # expressions to the new table.
 
@@ -234,6 +327,7 @@ CREATE TABLE t9 (a INT, b INT, INDEX (a) WHERE b > 1)
 statement ok
 CREATE TABLE t10 (LIKE t9 INCLUDING INDEXES)
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t10
 ----
@@ -244,6 +338,19 @@ t10  CREATE TABLE public.t10 (
        CONSTRAINT t10_pkey PRIMARY KEY (rowid ASC),
        INDEX t9_a_idx (a ASC) WHERE b > 1:::INT8
      );
+
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t10
+----
+t10  CREATE TABLE public.t10 (
+       a INT8 NULL,
+       b INT8 NULL,
+       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+       CONSTRAINT t10_pkey PRIMARY KEY (rowid ASC),
+       INDEX t9_a_idx (a ASC) WHERE b > 1:::INT8
+     ) WITH (schema_locked = true);
 
 # SHOW CONSTRAINTS includes partial index predicate of UNIQUE partial indexes.
 
@@ -1167,6 +1274,7 @@ CREATE TABLE enum_table_show (
     FAMILY (a, b)
 )
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE enum_table_show
 ----
@@ -1178,6 +1286,19 @@ enum_table_show  CREATE TABLE public.enum_table_show (
                    INDEX i (a ASC) WHERE b IN ('foo':::public.enum_type, 'bar':::public.enum_type),
                    FAMILY fam_0_a_b_rowid (a, b, rowid)
                  );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE enum_table_show
+----
+enum_table_show  CREATE TABLE public.enum_table_show (
+                   a INT8 NULL,
+                   b public.enum_type NULL,
+                   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                   CONSTRAINT enum_table_show_pkey PRIMARY KEY (rowid ASC),
+                   INDEX i (a ASC) WHERE b IN ('foo':::public.enum_type, 'bar':::public.enum_type),
+                   FAMILY fam_0_a_b_rowid (a, b, rowid)
+                 ) WITH (schema_locked = true);
 
 # Inverted partial indexes.
 subtest inverted
@@ -1399,6 +1520,7 @@ CREATE TABLE vec (
   FAMILY (id, v)
 );
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE vec
 ----
@@ -1409,6 +1531,18 @@ vec  CREATE TABLE public.vec (
        VECTOR INDEX vec_v_idx (v vector_l2_ops) WHERE (v <-> '[3,1,2]':::VECTOR) >= 3.0:::FLOAT8,
        FAMILY fam_0_id_v (id, v)
      );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE vec
+----
+vec  CREATE TABLE public.vec (
+       id INT8 NOT NULL,
+       v VECTOR(3) NULL,
+       CONSTRAINT vec_pkey PRIMARY KEY (id ASC),
+       VECTOR INDEX vec_v_idx (v vector_l2_ops) WHERE (v <-> '[3,1,2]':::VECTOR) >= 3.0:::FLOAT8,
+       FAMILY fam_0_id_v (id, v)
+     ) WITH (schema_locked = true);
 
 statement ok
 INSERT INTO vec VALUES
@@ -2112,7 +2246,7 @@ statement ok
 SET autocommit_before_ddl = false
 
 statement ok
-CREATE TABLE t79613 (i INT PRIMARY KEY);
+CREATE TABLE t79613 (i INT PRIMARY KEY) WITH (schema_locked=false);
 
 statement error pgcode 0A000 cannot create partial index on column "k" \(2\) which is not public
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;

@@ -7,6 +7,7 @@ package rpc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/redact"
@@ -27,7 +28,7 @@ type peerKey struct {
 	// NodeID of remote node, 0 when unknown, non-zero to check with remote node.
 	// Never mutated.
 	NodeID roachpb.NodeID
-	Class  ConnectionClass
+	Class  rpcbase.ConnectionClass
 }
 
 var _ redact.SafeFormatter = peerKey{}

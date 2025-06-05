@@ -218,14 +218,12 @@ pq: cannot drop table tbl1 because other objects depend on it
 exec-sql
 ALTER TABLE sc1.tbl1 RENAME TO tbl1_new
 ----
-pq: cannot rename relation "sc1.tbl1" because table "tbl2" depends on it
-HINT: consider dropping "tbl2" first.
+pq: cannot rename relation "sc1.tbl1" because trigger "tr1" on table "tbl1" depends on it
 
 exec-sql
 ALTER TABLE sc1.tbl1 SET SCHEMA sc2;
 ----
-pq: cannot set schema on relation "tbl1" because table "tbl2" depends on it
-HINT: consider dropping "tbl2" first.
+pq: cannot set schema on relation "tbl1" because trigger "tr1" on table "tbl1" depends on it
 
 exec-sql
 DROP TYPE sc1.enum1

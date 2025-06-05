@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -448,7 +448,7 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (
 func (s *initServer) attemptJoinTo(
 	ctx context.Context, addr string,
 ) (*kvpb.JoinNodeResponse, error) {
-	dialOpts, err := s.config.getDialOpts(ctx, addr, rpc.SystemClass)
+	dialOpts, err := s.config.getDialOpts(ctx, addr, rpcbase.SystemClass)
 	if err != nil {
 		return nil, err
 	}
@@ -584,7 +584,7 @@ type initServerCfg struct {
 	defaultZoneConfig       zonepb.ZoneConfig
 
 	// getDialOpts retrieves the gRPC dial options to use to issue Join RPCs.
-	getDialOpts func(ctx context.Context, target string, class rpc.ConnectionClass) ([]grpc.DialOption, error)
+	getDialOpts func(ctx context.Context, target string, class rpcbase.ConnectionClass) ([]grpc.DialOption, error)
 
 	// bootstrapAddresses is a list of node addresses (populated using --join
 	// addresses) that is used to form a connected graph/network of CRDB servers.
@@ -605,7 +605,7 @@ type initServerCfg struct {
 func newInitServerConfig(
 	ctx context.Context,
 	cfg Config,
-	getDialOpts func(context.Context, string, rpc.ConnectionClass) ([]grpc.DialOption, error),
+	getDialOpts func(context.Context, string, rpcbase.ConnectionClass) ([]grpc.DialOption, error),
 ) initServerCfg {
 	latestVersion := cfg.Settings.Version.LatestVersion()
 	minSupportedVersion := cfg.Settings.Version.MinSupportedVersion()

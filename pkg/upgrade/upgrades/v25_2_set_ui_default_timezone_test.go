@@ -55,7 +55,7 @@ func TestSetUiDefaultTimezone(t *testing.T) {
 		// cast to lower case because enum setting type sets all setting values to lower case
 		require.Equal(t, strings.ToLower(val), displayTimezoneVal)
 
-		upgrades.Upgrade(t, sqlDB, clusterversion.V25_2_SetUiDefaultTimezoneSetting, nil, false)
+		upgrades.Upgrade(t, sqlDB, clusterversion.TODO_Delete_V25_2_SetUiDefaultTimezoneSetting, nil, false)
 
 		runner.QueryRow(t, "SHOW cluster setting ui.default_timezone").Scan(&defaultTimezoneVal)
 		require.Equal(t, strings.ToLower(val), defaultTimezoneVal)
@@ -73,7 +73,7 @@ func TestSetUiDefaultTimezone(t *testing.T) {
 		runner.QueryRow(t, "SHOW cluster setting ui.display_timezone").Scan(&displayTimezoneVal)
 		require.Equal(t, strings.ToLower(uisettings.DisplayTimezone.DefaultString()), displayTimezoneVal)
 
-		upgrades.Upgrade(t, sqlDB, clusterversion.V25_2_SetUiDefaultTimezoneSetting, nil, false)
+		upgrades.Upgrade(t, sqlDB, clusterversion.TODO_Delete_V25_2_SetUiDefaultTimezoneSetting, nil, false)
 		runner.QueryRow(t, "SHOW cluster setting ui.default_timezone").Scan(&defaultTimezoneVal)
 		// Since ui.display_timezone has not been set, `ui.default_timezone` should
 		// still be the default value.

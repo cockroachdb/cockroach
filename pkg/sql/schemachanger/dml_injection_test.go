@@ -411,6 +411,20 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			query:        "select * from pg_catalog.pg_constraint",
 		},
 		{
+			desc: "drop a column with a check constraint while querying crdb_internal.create_statements",
+			setup: []string{
+				"ALTER TABLE tbl ADD COLUMN i INT CHECK (i is NOT NULL) DEFAULT 10",
+			},
+			schemaChange: "ALTER TABLE tbl DROP COLUMN i",
+			// Run a query against crdb_internal.create_statements. We don't
+			// care about the result — only that it doesn't fail. This is
+			// valuable when dropping constraints because create_statements performs
+			// descriptor introspection, including rendering expressions for
+			// check constraints. If a column in the check constraint is in the
+			// process of being dropped it will have a placeholder name.
+			query: `SELECT * FROM "".crdb_internal.create_statements`,
+		},
+		{
 			desc:         "create index",
 			schemaChange: "CREATE INDEX idx ON tbl (val)",
 		},

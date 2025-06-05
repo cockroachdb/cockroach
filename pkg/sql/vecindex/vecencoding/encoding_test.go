@@ -19,12 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
@@ -51,89 +52,120 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 
 func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set) {
 	var workspace workspace.T
-	for _, quantizer := range []quantize.Quantizer{
-		quantize.NewUnQuantizer(set.Dims, vecdist.L2Squared),
-		quantize.NewRaBitQuantizer(set.Dims, rnd.Int63(), vecdist.L2Squared),
+
+	doTest := func(quantizer quantize.Quantizer, level cspann.Level, distMetric vecpb.DistanceMetric) {
+		if distMetric == vecpb.CosineDistance {
+			// Normalize the vector set, since the quantizer expects unit vectors.
+			set = set.Clone()
+			for i := range set.Count {
+				num32.Normalize(set.At(i))
+			}
+		}
+
+		// Build the partition.
+		quantizedSet := quantizer.Quantize(&workspace, set)
+		childKeys := make([]cspann.ChildKey, set.Count)
+		valueBytes := make([]cspann.ValueBytes, set.Count)
+		for i := range childKeys {
+			if level == cspann.LeafLevel {
+				pkSize := rnd.Intn(32) + 1
+				childKeys[i] = cspann.ChildKey{KeyBytes: randutil.RandBytes(rnd, pkSize)}
+			} else {
+				childKeys[i] = cspann.ChildKey{PartitionKey: cspann.PartitionKey(rnd.Uint64())}
+			}
+			valueBytes[i] = randutil.RandBytes(rnd, 10)
+		}
+		metadata := cspann.PartitionMetadata{
+			Level:    level,
+			Centroid: set.Centroid(make(vector.T, set.Dims)),
+		}
+		metadata.StateDetails.MakeSplitting(10, 20)
+		originalPartition := cspann.NewPartition(metadata, quantizer, quantizedSet, childKeys, valueBytes)
+
+		// Encode the partition.
+		encMetadata := vecencoding.EncodeMetadataValue(metadata)
+
+		// Create a single buffer containing all vectors.
+		var buf []byte
+		for i := range set.Count {
+			switch quantizedSet := quantizedSet.(type) {
+			case *quantize.UnQuantizedVectorSet:
+				var err error
+				buf, err = vecencoding.EncodeUnquantizerVector(buf, set.At(i))
+				require.NoError(t, err)
+			case *quantize.RaBitQuantizedVectorSet:
+				var centroidDotProduct float32
+				if distMetric != vecpb.L2SquaredDistance {
+					centroidDotProduct = quantizedSet.CentroidDotProducts[i]
+				}
+				buf = vecencoding.EncodeRaBitQVector(buf,
+					quantizedSet.CodeCounts[i], quantizedSet.CentroidDistances[i],
+					quantizedSet.QuantizedDotProducts[i], centroidDotProduct,
+					quantizedSet.Codes.At(i), distMetric,
+				)
+			}
+		}
+
+		// Add some trailing data that should not be processed.
+		trailingData := testutils.NormalizeSlice(randutil.RandBytes(rnd, rnd.Intn(32)))
+		buf = append(buf, trailingData...)
+
+		// Decode the encoded partition.
+		decodedMetadata, err := vecencoding.DecodeMetadataValue(encMetadata)
+		require.NoError(t, err)
+		var decodedSet quantize.QuantizedVectorSet
+		remainder := buf
+
+		switch quantizedSet.(type) {
+		case *quantize.UnQuantizedVectorSet:
+			decodedSet = quantizer.NewQuantizedVectorSet(set.Count, decodedMetadata.Centroid)
+			for range set.Count {
+				remainder, err = vecencoding.DecodeUnquantizerVectorToSet(
+					remainder, decodedSet.(*quantize.UnQuantizedVectorSet),
+				)
+				require.NoError(t, err)
+			}
+			// Verify remaining bytes match trailing data
+			require.Equal(t, trailingData, testutils.NormalizeSlice(remainder))
+		case *quantize.RaBitQuantizedVectorSet:
+			decodedSet = quantizer.NewQuantizedVectorSet(set.Count, decodedMetadata.Centroid)
+			for range set.Count {
+				remainder, err = vecencoding.DecodeRaBitQVectorToSet(
+					remainder,
+					decodedSet.(*quantize.RaBitQuantizedVectorSet),
+					distMetric,
+				)
+				require.NoError(t, err)
+			}
+			// Verify remaining bytes match trailing data
+			require.Equal(t, trailingData, testutils.NormalizeSlice(remainder))
+		}
+
+		decodedPartition := cspann.NewPartition(
+			decodedMetadata, quantizer, decodedSet, childKeys, valueBytes)
+		testingAssertPartitionsEqual(t, originalPartition, decodedPartition)
+	}
+
+	for _, distMetric := range []vecpb.DistanceMetric{
+		vecpb.L2SquaredDistance,
+		vecpb.CosineDistance,
+		vecpb.InnerProductDistance,
 	} {
-		name := strings.TrimPrefix(fmt.Sprintf("%T", quantizer), "*quantize.")
-		t.Run(name, func(t *testing.T) {
-			for _, level := range []cspann.Level{cspann.LeafLevel, cspann.Level(rnd.Intn(10)) + cspann.SecondLevel} {
-				t.Run(fmt.Sprintf("level=%d", level), func(t *testing.T) {
-					// Build the partition.
-					quantizedSet := quantizer.Quantize(&workspace, set)
-					childKeys := make([]cspann.ChildKey, set.Count)
-					valueBytes := make([]cspann.ValueBytes, set.Count)
-					for i := range childKeys {
-						if level == cspann.LeafLevel {
-							pkSize := rnd.Intn(32) + 1
-							childKeys[i] = cspann.ChildKey{KeyBytes: randutil.RandBytes(rnd, pkSize)}
-						} else {
-							childKeys[i] = cspann.ChildKey{PartitionKey: cspann.PartitionKey(rnd.Uint64())}
-						}
-						valueBytes[i] = randutil.RandBytes(rnd, 10)
+		t.Run(fmt.Sprintf("distance=%s", distMetric), func(t *testing.T) {
+			for _, quantizer := range []quantize.Quantizer{
+				quantize.NewUnQuantizer(set.Dims, distMetric),
+				quantize.NewRaBitQuantizer(set.Dims, rnd.Int63(), distMetric),
+			} {
+				name := strings.TrimPrefix(fmt.Sprintf("%T", quantizer), "*quantize.")
+				t.Run(name, func(t *testing.T) {
+					for _, level := range []cspann.Level{
+						cspann.LeafLevel,
+						cspann.Level(rnd.Intn(10)) + cspann.SecondLevel,
+					} {
+						t.Run(fmt.Sprintf("level=%d", level), func(t *testing.T) {
+							doTest(quantizer, level, distMetric)
+						})
 					}
-					metadata := cspann.PartitionMetadata{
-						Level:    level,
-						Centroid: set.Centroid(make(vector.T, set.Dims)),
-					}
-					metadata.StateDetails.MakeSplitting(10, 20)
-					originalPartition := cspann.NewPartition(metadata, quantizer, quantizedSet, childKeys, valueBytes)
-
-					// Encode the partition.
-					encMetadata := vecencoding.EncodeMetadataValue(metadata)
-
-					// Create a single buffer containing all vectors.
-					var buf []byte
-					for i := range set.Count {
-						switch quantizedSet := quantizedSet.(type) {
-						case *quantize.UnQuantizedVectorSet:
-							var err error
-							buf, err = vecencoding.EncodeUnquantizerVector(buf, set.At(i))
-							require.NoError(t, err)
-						case *quantize.RaBitQuantizedVectorSet:
-							buf = vecencoding.EncodeRaBitQVector(buf,
-								quantizedSet.CodeCounts[i], quantizedSet.CentroidDistances[i],
-								quantizedSet.QuantizedDotProducts[i], quantizedSet.Codes.At(i),
-							)
-						}
-					}
-
-					// Add some trailing data that should not be processed.
-					trailingData := testutils.NormalizeSlice(randutil.RandBytes(rnd, rnd.Intn(32)))
-					buf = append(buf, trailingData...)
-
-					// Decode the encoded partition.
-					decodedMetadata, err := vecencoding.DecodeMetadataValue(encMetadata)
-					require.NoError(t, err)
-					var decodedSet quantize.QuantizedVectorSet
-					remainder := buf
-
-					switch quantizedSet.(type) {
-					case *quantize.UnQuantizedVectorSet:
-						decodedSet = quantizer.NewQuantizedVectorSet(set.Count, decodedMetadata.Centroid)
-						for range set.Count {
-							remainder, err = vecencoding.DecodeUnquantizerVectorToSet(
-								remainder, decodedSet.(*quantize.UnQuantizedVectorSet),
-							)
-							require.NoError(t, err)
-						}
-						// Verify remaining bytes match trailing data
-						require.Equal(t, trailingData, testutils.NormalizeSlice(remainder))
-					case *quantize.RaBitQuantizedVectorSet:
-						decodedSet = quantizer.NewQuantizedVectorSet(set.Count, decodedMetadata.Centroid)
-						for range set.Count {
-							remainder, err = vecencoding.DecodeRaBitQVectorToSet(
-								remainder, decodedSet.(*quantize.RaBitQuantizedVectorSet),
-							)
-							require.NoError(t, err)
-						}
-						// Verify remaining bytes match trailing data
-						require.Equal(t, trailingData, testutils.NormalizeSlice(remainder))
-					}
-
-					decodedPartition := cspann.NewPartition(
-						decodedMetadata, quantizer, decodedSet, childKeys, valueBytes)
-					testingAssertPartitionsEqual(t, originalPartition, decodedPartition)
 				})
 			}
 		})
@@ -158,7 +190,10 @@ func testingAssertPartitionsEqual(t *testing.T, l, r *cspann.Partition) {
 		require.True(t, ok, "quantized set types do not match")
 		require.Equal(t, leftSet.CodeCounts, rightSet.CodeCounts, "code counts do not match")
 		require.Equal(t, leftSet.Codes, rightSet.Codes, "codes do not match")
-		require.Equal(t, leftSet.QuantizedDotProducts, rightSet.QuantizedDotProducts, "dot products do not match")
+		require.Equal(t, leftSet.QuantizedDotProducts, rightSet.QuantizedDotProducts,
+			"quantized dot products do not match")
+		require.Equal(t, leftSet.CentroidDotProducts, rightSet.CentroidDotProducts,
+			"centroid dot products do not match")
 		require.Equal(t, leftSet.CentroidDistances, rightSet.CentroidDistances,
 			"centroid distances do not match")
 	default:

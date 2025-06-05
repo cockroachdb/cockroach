@@ -9,39 +9,9 @@ import (
 	"math"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
-)
-
-// RotAlgorithm specifies the algorithm used to randomly rotate the original
-// vectors inserted into the index.
-type RotAlgorithm int
-
-const (
-	// RotMatrix specifies that vectors will be randomly rotated by multiplying
-	// them by a full random orthogonal matrix (e.g., generated via QR
-	// decomposition of a random Gaussian matrix). This provides a true
-	// Haar-random rotation, which fully preserves all pairwise distances and
-	// angles.
-	// NOTE: This algorithm is retained for backwards-compatibility and will not
-	// be used for new indexes due to its high computational cost, especially in
-	// high dimensions.
-	RotMatrix RotAlgorithm = iota
-	// RotNone specifies that vectors will not be randomly rotated. This is
-	// appropriate when the input vectors are already sufficiently mixed. For
-	// example, OpenAI embeddings are often already well-mixed, so additional
-	// random rotation provides little benefit and can be skipped to save
-	// computation.
-	RotNone
-	// RotGivens specifies that vectors will be randomly rotated by applying a
-	// sequence of Givens rotations. Each Givens rotation mixes a pair of vector
-	// coordinates using a random angle, and applying O(N log N) such rotations
-	// (where N is the number of dimensions) is sufficient to approximate a
-	// Haar-random orthogonal transformation. This approach is much more
-	// computationally efficient than applying a full random orthogonal matrix,
-	// while still providing strong mixing and preserving all pairwise distances
-	// and angles between vectors.
-	RotGivens
 )
 
 // givensRotation represents a 2D Givens rotation to be applied to a pair of
@@ -111,7 +81,7 @@ type givensRotation struct {
 // ╰───────────────╯    ╰───────────────╯
 type RandomOrthoTransformer struct {
 	// algo is the algorithm used for the orthogonal transformation.
-	algo RotAlgorithm
+	algo vecpb.RotAlgorithm
 	// dims is the dimensionality of vectors that will be transformed.
 	dims int
 	// seed is used for pseudo-random number generation, ensuring reproducibility.
@@ -127,14 +97,14 @@ type RandomOrthoTransformer struct {
 // Init intializes the transformer for the specified algorithm, operating on
 // vectors with the given number of dimensions. The same seed must always be
 // used for a given vector index, in order to generate the same transforms.
-func (t *RandomOrthoTransformer) Init(algo RotAlgorithm, dims int, seed int64) {
+func (t *RandomOrthoTransformer) Init(algo vecpb.RotAlgorithm, dims int, seed int64) {
 	*t = RandomOrthoTransformer{
 		algo: algo,
 		dims: dims,
 		seed: seed,
 	}
 
-	if algo == RotNone {
+	if algo == vecpb.RotNone {
 		// Nothing to prepare if no rotations will be aplied.
 		return
 	}
@@ -142,12 +112,12 @@ func (t *RandomOrthoTransformer) Init(algo RotAlgorithm, dims int, seed int64) {
 	rng := rand.New(rand.NewSource(seed))
 
 	switch algo {
-	case RotMatrix:
+	case vecpb.RotMatrix:
 		// Generate a square dims x dims random orthogonal matrix. This will be
 		// used to randomize vectors via matrix multiplication.
 		t.mat = num32.MakeRandomOrthoMatrix(rng, t.dims)
 
-	case RotGivens:
+	case vecpb.RotGivens:
 		// Prepare NlogN Givens rotations, where each rotation multiplies a random
 		// pair of vector coordinates (x and y) by a 2x2 matrix containing sines
 		// and cosines of a random angle θ:
@@ -179,15 +149,15 @@ func (t *RandomOrthoTransformer) Init(algo RotAlgorithm, dims int, seed int64) {
 // original vector.
 func (t *RandomOrthoTransformer) RandomizeVector(original vector.T, randomized vector.T) vector.T {
 	switch t.algo {
-	case RotNone:
+	case vecpb.RotNone:
 		// Just copy the original, unchanged vector.
 		copy(randomized, original)
 
-	case RotMatrix:
+	case vecpb.RotMatrix:
 		// Multiply the vector by a random orthogonal matrix.
 		num32.MulMatrixByVector(&t.mat, original, randomized, num32.NoTranspose)
 
-	case RotGivens:
+	case vecpb.RotGivens:
 		// Apply NlogN precomputed Givens rotations to the vector.
 		copy(randomized, original)
 		for i := range t.rotations {
@@ -210,15 +180,15 @@ func (t *RandomOrthoTransformer) UnRandomizeVector(
 	randomized vector.T, original vector.T,
 ) vector.T {
 	switch t.algo {
-	case RotNone:
+	case vecpb.RotNone:
 		// The randomized vector is the original vector, so simply copy it.
 		copy(original, randomized)
 
-	case RotMatrix:
+	case vecpb.RotMatrix:
 		// Multiply the vector by a random orthogonal matrix.
 		num32.MulMatrixByVector(&t.mat, randomized, original, num32.Transpose)
 
-	case RotGivens:
+	case vecpb.RotGivens:
 		// Reverse previously applied Givens rotations by flipping the sign of
 		// the sinθ and applying the rotations in reverse order.
 		//

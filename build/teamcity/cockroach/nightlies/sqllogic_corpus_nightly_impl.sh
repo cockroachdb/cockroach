@@ -81,7 +81,7 @@ if [ $exit_status = 0 ]; then
 fi
 
 # Generate a corpus for all mixed version variants
-for config in local-mixed-25.1 local-mixed-25.2; do
+for config in local-mixed-25.2; do
   $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
       //pkg/sql/logictest/tests/$config/... \
       --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus-mixed \

@@ -11,7 +11,7 @@ import { RouteComponentProps } from "react-router-dom";
 
 import { AppState } from "../store";
 import { selectTimeScale } from "../store/utils/selectors";
-import { TimeScale, toRoundedDateRange } from "../timeScaleDropdown";
+import { TimeScale, toDateRange } from "../timeScaleDropdown";
 import {
   appNamesAttr,
   statementAttr,
@@ -41,12 +41,10 @@ export const selectStatementDetails = createSelector(
     lastError: Error;
     lastUpdated: moment.Moment | null;
   } => {
-    // Since the aggregation interval is 1h, we want to round the selected timeScale to include
-    // the full hour. If a timeScale is between 14:32 - 15:17 we want to search for values
-    // between 14:00 - 16:00. We don't encourage the aggregation interval to be modified, but
-    // in case that changes in the future we might consider changing this function to use the
-    // cluster settings value for the rounding function.
-    const [start, end] = toRoundedDateRange(timeScale);
+    // Use the exact time range selected by the user, not rounded to hour boundaries.
+    // This allows for more granular time ranges when sql.stats.aggregation.interval
+    // is set to a value smaller than 1 hour.
+    const [start, end] = toDateRange(timeScale);
     const key = generateStmtDetailsToID(
       fingerprintID,
       appNames,
