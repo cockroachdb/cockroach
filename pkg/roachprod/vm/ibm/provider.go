@@ -639,7 +639,7 @@ func (p *Provider) Reset(l *logger.Logger, vms vm.List) error {
 		g.Go(func() error {
 			_, _, err = vpcService.CreateInstanceAction(&vpcv1.CreateInstanceActionOptions{
 				InstanceID: instance.instance.ID,
-				Type:       core.StringPtr("reboot"),
+				Type:       core.StringPtr(vpcv1.CreateInstanceActionOptionsTypeRebootConst),
 				Force:      core.BoolPtr(true),
 			})
 			if err != nil {
