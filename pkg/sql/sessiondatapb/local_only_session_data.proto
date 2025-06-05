@@ -670,6 +670,9 @@ message LocalOnlySessionData {
   // OptimizerUseExistsFilterHoistRule, when true, causes the optimizer to apply
   // the HoistUnboundFilterFromExistsSubquery rule to EXISTS conditions.
   bool optimizer_use_exists_filter_hoist_rule = 170;
+  // DistSQLUseReducedLeafWriteSets, when true, indicates that the DistSQL
+  // runner should use the reduced write sets when constructing LeafTxns.
+  bool distsql_use_reduced_leaf_write_sets = 171 [(gogoproto.customname) = "DistSQLUseReducedLeafWriteSets"];
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //

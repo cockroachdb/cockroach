@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -49,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -849,7 +852,27 @@ func (dsp *DistSQLPlanner) Run(
 		}
 		if localState.MustUseLeafTxn() {
 			// Set up leaf txns using the txnCoordMeta if we need to.
-			tis, err := txn.GetLeafTxnInputState(ctx)
+			var readsTree interval.Tree
+			if txn.HasPerformedWrites() && evalCtx.SessionData().DistSQLUseReducedLeafWriteSets {
+				// Avoid constructing the reads tree if the txn hasn't performed
+				// any writes (the tree would be unused) or the session variable
+				// disables this optimization (we will include all writes into
+				// the proto).
+				var err error
+				readsTree, err = constructReadsTreeForLeaf(evalCtx, plan.Processors)
+				if err != nil {
+					// We don't expect to see any errors here, but we'll lean on
+					// the safe side and effectively disable the optimization in
+					// production builds.
+					readsTree = nil
+					if buildutil.CrdbTestBuild {
+						err = errors.WithAssertionFailure(err)
+						recv.SetError(err)
+						return
+					}
+				}
+			}
+			tis, err := txn.GetLeafTxnInputState(ctx, readsTree)
 			if err != nil {
 				log.Infof(ctx, "%s: %s", clientRejectedMsg, err)
 				recv.SetError(err)
@@ -2695,4 +2718,76 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 		}
 	}
 	return nil
+}
+
+type intervalSpan roachpb.Span
+
+var _ interval.Interface = intervalSpan{}
+
+// ID is part of the interval.Interface. We don't need to distinguish the same
+// spans, so we always return 0.
+func (ie intervalSpan) ID() uintptr { return 0 }
+
+// Range is part of the interval.Interface.
+func (ie intervalSpan) Range() interval.Range {
+	return interval.Range{Start: []byte(ie.Key), End: []byte(ie.EndKey)}
+}
+
+// constructReadsTreeForLeaf iterates over the given processors, finds all
+// disk-reading ones that interact with LeafTxnInputState, and constructs an
+// interval tree that contains all key spans that will be read by those
+// processors.
+func constructReadsTreeForLeaf(
+	evalCtx *eval.Context, processors []physicalplan.Processor,
+) (interval.Tree, error) {
+	readsTree := interval.NewTree(interval.ExclusiveOverlapper)
+	// For several processors we'll dynamically construct spans to read based on
+	// the input rows that we'll receive. However, we know at least the index
+	// they will be reading, so we'll add the corresponding index span into the
+	// tree.
+	addIndex := func(fetchSpec fetchpb.IndexFetchSpec) error {
+		codec := evalCtx.Codec
+		tableID := fetchSpec.TableID
+		if ext := fetchSpec.External; ext != nil {
+			codec = keys.MakeSQLCodec(ext.TenantID)
+			tableID = ext.TableID
+		}
+		indexPrefix := rowenc.MakeIndexKeyPrefix(codec, tableID, fetchSpec.IndexID)
+		var sp roachpb.Span
+		sp.Key = indexPrefix
+		sp.EndKey = sp.Key.PrefixEnd()
+		return readsTree.Insert(intervalSpan(sp), true /* fast */)
+	}
+	for _, proc := range processors {
+		var err error
+		switch {
+		case proc.Spec.Core.TableReader != nil:
+			// For TableReaders we know the precise set of spans that we'll read
+			// upfront.
+			spans := proc.Spec.Core.TableReader.Spans
+			for i := 0; i < len(spans) && err == nil; i++ {
+				var sp roachpb.Span
+				sp.Key = spans[i].Key
+				sp.EndKey = spans[i].EndKey
+				if sp.EndKey == nil { // represents a Get request
+					sp.EndKey = sp.Key.PrefixEnd()
+				}
+				err = readsTree.Insert(intervalSpan(sp), true /* fast */)
+			}
+		case proc.Spec.Core.JoinReader != nil:
+			err = addIndex(proc.Spec.Core.JoinReader.FetchSpec)
+		case proc.Spec.Core.InvertedJoiner != nil:
+			err = addIndex(proc.Spec.Core.InvertedJoiner.FetchSpec)
+		case proc.Spec.Core.ZigzagJoiner != nil:
+			zzSpec := proc.Spec.Core.ZigzagJoiner
+			for i := 0; i < len(zzSpec.Sides) && err == nil; i++ {
+				err = addIndex(zzSpec.Sides[i].FetchSpec)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	readsTree.AdjustRanges()
+	return readsTree, nil
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -712,7 +713,9 @@ func (sr *txnSpanRefresher) maxRefreshAttempts() int {
 func (sr *txnSpanRefresher) setWrapped(wrapped lockedSender) { sr.wrapped = wrapped }
 
 // populateLeafInputState is part of the txnInterceptor interface.
-func (sr *txnSpanRefresher) populateLeafInputState(tis *roachpb.LeafTxnInputState) {
+func (sr *txnSpanRefresher) populateLeafInputState(
+	tis *roachpb.LeafTxnInputState, tree interval.Tree,
+) {
 	tis.RefreshInvalid = sr.refreshInvalid
 }
 

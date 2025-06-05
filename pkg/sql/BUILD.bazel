@@ -941,6 +941,7 @@ go_test(
         "//pkg/util/goschedstats",
         "//pkg/util/hlc",
         "//pkg/util/httputil",
+        "//pkg/util/interval",
         "//pkg/util/intsets",
         "//pkg/util/json",
         "//pkg/util/leaktest",
