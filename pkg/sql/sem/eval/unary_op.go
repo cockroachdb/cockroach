@@ -17,7 +17,8 @@ import (
 func UnaryOp(
 	ctx context.Context, evalCtx *Context, op tree.UnaryEvalOp, in tree.Datum,
 ) (tree.Datum, error) {
-	return op.Eval(ctx, (*evaluator)(evalCtx), in)
+	e := &evaluator{Context: evalCtx}
+	return op.Eval(ctx, e, in)
 }
 
 func (e *evaluator) EvalCbrtDecimalOp(
