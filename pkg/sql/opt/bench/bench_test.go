@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -810,6 +811,7 @@ type harness struct {
 	ctx       context.Context
 	semaCtx   tree.SemaContext
 	evalCtx   eval.Context
+	txn       *kv.Txn
 	prepMemo  *memo.Memo
 	testCat   *testcat.Catalog
 	optimizer xform.Optimizer
@@ -821,6 +823,7 @@ func newHarness(tb testing.TB, query benchQuery, schemas []string) *harness {
 		ctx:     context.Background(),
 		semaCtx: tree.MakeSemaContext(nil /* resolver */),
 		evalCtx: eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
+		txn:     &kv.Txn{},
 	}
 
 	// Set session settings to their global defaults.
@@ -851,8 +854,8 @@ func newHarness(tb testing.TB, query benchQuery, schemas []string) *harness {
 	if err != nil {
 		tb.Fatalf("%v", err)
 	}
-	h.optimizer.Init(context.Background(), &h.evalCtx, h.testCat)
-	bld := optbuilder.New(h.ctx, &h.semaCtx, &h.evalCtx, h.testCat, h.optimizer.Factory(), stmt.AST)
+	h.optimizer.Init(context.Background(), &h.evalCtx, h.txn, h.testCat)
+	bld := optbuilder.New(h.ctx, &h.semaCtx, &h.evalCtx, h.txn, h.testCat, h.optimizer.Factory(), stmt.AST)
 	bld.KeepPlaceholders = true
 	if err := bld.Build(); err != nil {
 		tb.Fatalf("%v", err)
@@ -915,12 +918,12 @@ func (h *harness) runSimple(tb testing.TB, query benchQuery, phase Phase) {
 		return
 	}
 
-	h.optimizer.Init(context.Background(), &h.evalCtx, h.testCat)
+	h.optimizer.Init(context.Background(), &h.evalCtx, h.txn, h.testCat)
 	if phase == OptBuildNoNorm {
 		h.optimizer.DisableOptimizations()
 	}
 
-	bld := optbuilder.New(h.ctx, &h.semaCtx, &h.evalCtx, h.testCat, h.optimizer.Factory(), stmt.AST)
+	bld := optbuilder.New(h.ctx, &h.semaCtx, &h.evalCtx, h.txn, h.testCat, h.optimizer.Factory(), stmt.AST)
 	// Note that KeepPlaceholders is false and we have placeholder values in the
 	// evalCtx, so the optbuilder will replace all placeholders with their values.
 	if err = bld.Build(); err != nil {
@@ -955,6 +958,7 @@ func (h *harness) runSimple(tb testing.TB, query benchQuery, phase Phase) {
 		root,
 		&h.semaCtx,
 		&h.evalCtx,
+		h.txn,
 		true, /* allowAutoCommit */
 		statements.IsANSIDML(stmt.AST),
 	)
@@ -965,7 +969,7 @@ func (h *harness) runSimple(tb testing.TB, query benchQuery, phase Phase) {
 
 // runPrepared simulates running the query after it was prepared.
 func (h *harness) runPrepared(tb testing.TB, phase Phase) {
-	h.optimizer.Init(context.Background(), &h.evalCtx, h.testCat)
+	h.optimizer.Init(context.Background(), &h.evalCtx, h.txn, h.testCat)
 
 	if !h.prepMemo.IsOptimized() {
 		if phase == AssignPlaceholdersNoNorm {
@@ -1012,6 +1016,7 @@ func (h *harness) runPrepared(tb testing.TB, phase Phase) {
 		root,
 		&h.semaCtx,
 		&h.evalCtx,
+		h.txn,
 		true,  /* allowAutoCommit */
 		false, /* isANSIDML */
 	)
@@ -1767,8 +1772,8 @@ func BenchmarkExecBuild(b *testing.B) {
 			b.Fatalf("%v", err)
 		}
 
-		h.optimizer.Init(context.Background(), &h.evalCtx, h.testCat)
-		bld := optbuilder.New(h.ctx, &h.semaCtx, &h.evalCtx, h.testCat, h.optimizer.Factory(), stmt.AST)
+		h.optimizer.Init(context.Background(), &h.evalCtx, h.txn, h.testCat)
+		bld := optbuilder.New(h.ctx, &h.semaCtx, &h.evalCtx, h.txn, h.testCat, h.optimizer.Factory(), stmt.AST)
 		if err = bld.Build(); err != nil {
 			b.Fatalf("%v", err)
 		}
@@ -1793,6 +1798,7 @@ func BenchmarkExecBuild(b *testing.B) {
 					root,
 					&h.semaCtx,
 					&h.evalCtx,
+					h.txn,
 					true,  /* allowAutoCommit */
 					false, /* isANSIDML */
 				)

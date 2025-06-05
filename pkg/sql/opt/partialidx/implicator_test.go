@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
@@ -51,12 +52,13 @@ func TestImplicator(t *testing.T) {
 		ctx := context.Background()
 		semaCtx := tree.MakeSemaContext(nil /* resolver */)
 		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+		txn := &kv.Txn{}
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var err error
 
 			var f norm.Factory
-			f.Init(context.Background(), &evalCtx, nil /* catalog */)
+			f.Init(context.Background(), &evalCtx, txn, nil /* catalog */)
 			md := f.Metadata()
 
 			if d.Cmd != "predtest" {
@@ -85,19 +87,19 @@ func TestImplicator(t *testing.T) {
 			}
 
 			// Build the filters from the first split, everything before "=>".
-			filters, err := makeFilters(splitInput[0], sv.Cols(), &semaCtx, &evalCtx, &f)
+			filters, err := makeFilters(splitInput[0], sv.Cols(), &semaCtx, &evalCtx, txn, &f)
 			if err != nil {
 				d.Fatalf(t, "unexpected error while building filters: %v\n", err)
 			}
 
 			// Build the predicate from the second split, everything after "=>".
-			pred, err := makeFilters(splitInput[1], sv.Cols(), &semaCtx, &evalCtx, &f)
+			pred, err := makeFilters(splitInput[1], sv.Cols(), &semaCtx, &evalCtx, txn, &f)
 			if err != nil {
 				d.Fatalf(t, "unexpected error while building predicate: %v\n", err)
 			}
 
 			// Build the computed columns map.
-			computedCols, err := makeComputedCols(sv, &semaCtx, &evalCtx, &f)
+			computedCols, err := makeComputedCols(sv, &semaCtx, &evalCtx, txn, &f)
 			if err != nil {
 				d.Fatalf(t, "error building computed column expression: %v", err)
 			}
@@ -116,7 +118,7 @@ func TestImplicator(t *testing.T) {
 			} else {
 				execBld := execbuilder.New(
 					ctx, nil /* factory */, nil, /* optimizer */
-					f.Memo(), nil /* catalog */, &remainingFilters, &semaCtx, &evalCtx,
+					f.Memo(), nil /* catalog */, &remainingFilters, &semaCtx, &evalCtx, txn,
 					false /* allowAutoCommit */, false, /* isANSIDML */
 				)
 				expr, err := execBld.BuildScalar()
@@ -298,10 +300,11 @@ func BenchmarkImplicator(b *testing.B) {
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	txn := &kv.Txn{}
 
 	for _, tc := range testCases {
 		var f norm.Factory
-		f.Init(ctx, &evalCtx, nil /* catalog */)
+		f.Init(ctx, &evalCtx, txn, nil /* catalog */)
 		md := f.Metadata()
 
 		// Parse the variable types.
@@ -312,19 +315,19 @@ func BenchmarkImplicator(b *testing.B) {
 		}
 
 		// Build the filters.
-		filters, err := makeFilters(tc.filters, sv.Cols(), &semaCtx, &evalCtx, &f)
+		filters, err := makeFilters(tc.filters, sv.Cols(), &semaCtx, &evalCtx, txn, &f)
 		if err != nil {
 			b.Fatalf("unexpected error while building filters: %v\n", err)
 		}
 
 		// Build the predicate.
-		pred, err := makeFilters(tc.pred, sv.Cols(), &semaCtx, &evalCtx, &f)
+		pred, err := makeFilters(tc.pred, sv.Cols(), &semaCtx, &evalCtx, txn, &f)
 		if err != nil {
 			b.Fatalf("unexpected error while building predicate: %v\n", err)
 		}
 
 		// Build the computed columns map.
-		computedCols, err := makeComputedCols(sv, &semaCtx, &evalCtx, &f)
+		computedCols, err := makeComputedCols(sv, &semaCtx, &evalCtx, txn, &f)
 		if err != nil {
 			b.Fatalf("error building computed column expression: %v\n", err)
 		}
@@ -351,9 +354,14 @@ func BenchmarkImplicator(b *testing.B) {
 // This ensures that these test filters mimic the filters that will be created
 // during a real query.
 func makeFilters(
-	input string, cols opt.ColSet, semaCtx *tree.SemaContext, evalCtx *eval.Context, f *norm.Factory,
+	input string,
+	cols opt.ColSet,
+	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
+	txn *kv.Txn,
+	f *norm.Factory,
 ) (memo.FiltersExpr, error) {
-	filters, err := makeFiltersExpr(input, semaCtx, evalCtx, f)
+	filters, err := makeFiltersExpr(input, semaCtx, evalCtx, txn, f)
 	if err != nil {
 		return nil, err
 	}
@@ -401,14 +409,14 @@ func makeFilters(
 
 // makeFiltersExpr returns a FiltersExpr generated from the input string.
 func makeFiltersExpr(
-	input string, semaCtx *tree.SemaContext, evalCtx *eval.Context, f *norm.Factory,
+	input string, semaCtx *tree.SemaContext, evalCtx *eval.Context, txn *kv.Txn, f *norm.Factory,
 ) (memo.FiltersExpr, error) {
 	expr, err := parser.ParseExpr(input)
 	if err != nil {
 		return nil, err
 	}
 
-	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, f)
+	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, txn, f)
 	root, err := b.Build(expr)
 	if err != nil {
 		return nil, err
@@ -418,14 +426,18 @@ func makeFiltersExpr(
 }
 
 func makeComputedCols(
-	sv testutils.ScalarVars, semaCtx *tree.SemaContext, evalCtx *eval.Context, f *norm.Factory,
+	sv testutils.ScalarVars,
+	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
+	txn *kv.Txn,
+	f *norm.Factory,
 ) (map[opt.ColumnID]opt.ScalarExpr, error) {
 	if sv.ComputedCols() == nil {
 		return nil, nil
 	}
 	computedCols := make(map[opt.ColumnID]opt.ScalarExpr)
 	for col, expr := range sv.ComputedCols() {
-		b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, f)
+		b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, txn, f)
 		computedColExpr, err := b.Build(expr)
 		if err != nil {
 			return nil, err

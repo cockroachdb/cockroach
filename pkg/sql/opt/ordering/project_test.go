@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -23,8 +24,9 @@ import (
 func TestProject(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.NewTestingEvalContext(st)
+	txn := &kv.Txn{}
 	var f norm.Factory
-	f.Init(context.Background(), evalCtx, testcat.New())
+	f.Init(context.Background(), evalCtx, txn, testcat.New())
 	md := f.Metadata()
 	for i := 1; i <= 4; i++ {
 		md.AddColumn(fmt.Sprintf("col%d", i), types.Int)

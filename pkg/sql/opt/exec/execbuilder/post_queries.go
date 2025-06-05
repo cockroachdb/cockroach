@@ -8,6 +8,7 @@ package execbuilder
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -157,6 +158,7 @@ func (cb *postQueryBuilder) setupCascade(cascade *memo.FKCascade) exec.PostQuery
 			ctx context.Context,
 			semaCtx *tree.SemaContext,
 			evalCtx *eval.Context,
+			txn *kv.Txn,
 			execFactory exec.Factory,
 			bufferRef exec.Node,
 			numBufferedRows int,
@@ -164,8 +166,8 @@ func (cb *postQueryBuilder) setupCascade(cascade *memo.FKCascade) exec.PostQuery
 		) (exec.Plan, error) {
 			const actionName = "cascade"
 			return cb.planPostQuery(
-				ctx, semaCtx, evalCtx, execFactory, bufferRef, numBufferedRows, allowAutoCommit,
-				cascade.Builder, actionName,
+				ctx, semaCtx, evalCtx, txn, execFactory, bufferRef, numBufferedRows,
+				allowAutoCommit, cascade.Builder, actionName,
 			)
 		},
 	}
@@ -180,6 +182,7 @@ func (cb *postQueryBuilder) setupTriggers(triggers *memo.AfterTriggers) exec.Pos
 			ctx context.Context,
 			semaCtx *tree.SemaContext,
 			evalCtx *eval.Context,
+			txn *kv.Txn,
 			execFactory exec.Factory,
 			bufferRef exec.Node,
 			numBufferedRows int,
@@ -187,8 +190,8 @@ func (cb *postQueryBuilder) setupTriggers(triggers *memo.AfterTriggers) exec.Pos
 		) (exec.Plan, error) {
 			const actionName = "trigger"
 			return cb.planPostQuery(
-				ctx, semaCtx, evalCtx, execFactory, bufferRef, numBufferedRows, allowAutoCommit,
-				triggers.Builder, actionName,
+				ctx, semaCtx, evalCtx, txn, execFactory, bufferRef, numBufferedRows,
+				allowAutoCommit, triggers.Builder, actionName,
 			)
 		},
 	}
@@ -204,6 +207,7 @@ func (cb *postQueryBuilder) planPostQuery(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
+	txn *kv.Txn,
 	execFactory exec.Factory,
 	bufferRef exec.Node,
 	numBufferedRows int,
@@ -214,7 +218,7 @@ func (cb *postQueryBuilder) planPostQuery(
 	// 1. Set up a brand new memo in which to plan the cascading query.
 	var err error
 	var o xform.Optimizer
-	o.Init(ctx, evalCtx, cb.b.catalog)
+	o.Init(ctx, evalCtx, txn, cb.b.catalog)
 	factory := o.Factory()
 	md := factory.Metadata()
 
@@ -229,6 +233,7 @@ func (cb *postQueryBuilder) planPostQuery(
 			ctx,
 			semaCtx,
 			evalCtx,
+			txn,
 			cb.b.catalog,
 			factory,
 			0,            /* binding */
@@ -276,6 +281,7 @@ func (cb *postQueryBuilder) planPostQuery(
 			ctx,
 			semaCtx,
 			evalCtx,
+			txn,
 			cb.b.catalog,
 			factory,
 			postQueryInputWithID,
@@ -310,7 +316,7 @@ func (cb *postQueryBuilder) planPostQuery(
 	// 5. Execbuild the optimized expression.
 	eb := New(
 		ctx, execFactory, &o, factory.Memo(), cb.b.catalog, optimizedExpr,
-		semaCtx, evalCtx, allowAutoCommit, evalCtx.Planner.IsANSIDML(),
+		semaCtx, evalCtx, txn, allowAutoCommit, evalCtx.Planner.IsANSIDML(),
 	)
 	if bufferRef != nil {
 		// Set up the With binding.

@@ -27,6 +27,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/xform",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/inverted",
@@ -87,6 +88,7 @@ go_test(
     }),
     deps = [
         "//pkg/config/zonepb",
+        "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

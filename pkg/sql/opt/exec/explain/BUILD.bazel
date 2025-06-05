@@ -17,6 +17,7 @@ go_library(
     # Pin the dependencies used in auto-generated code.
     deps = [
         "//pkg/geo/geopb",
+        "//pkg/kv",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/roachpb",
         "//pkg/sql/appstatspb",
@@ -67,6 +68,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl",
+        "//pkg/kv",
         "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
