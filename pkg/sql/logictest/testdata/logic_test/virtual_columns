@@ -1,5 +1,3 @@
-# LogicTest: !local-schema-locked
-
 # Test that we don't allow FAMILY constraints with virtual columns.
 statement error virtual computed column "v" cannot be part of a family
 CREATE TABLE t (
@@ -823,6 +821,10 @@ a  b   v
 2  20  22
 3  30  33
 
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE sc SET (schema_locked = false);
+
 # Add virtual columns inside an explicit transactions.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -836,6 +838,10 @@ ALTER TABLE sc ADD COLUMN w2 INT AS (b*2) VIRTUAL
 
 statement ok
 COMMIT
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE sc SET (schema_locked = true);
 
 query IIIII rowsort,colnames
 SELECT * FROM sc
@@ -879,6 +885,10 @@ DROP INDEX v_idx
 statement ok
 ALTER TABLE sc DROP COLUMN v
 
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE sc SET (schema_locked = false);
+
 # Add a column and an index on that column in the same transaction.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -893,6 +903,10 @@ CREATE INDEX v_idx ON sc(v)
 statement ok
 END
 
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE sc SET (schema_locked = true);
+
 query I rowsort
 SELECT a FROM sc@v_idx
 ----
@@ -905,6 +919,10 @@ DROP INDEX v_idx
 
 statement ok
 ALTER TABLE sc DROP COLUMN v
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE sc SET (schema_locked = false);
 
 # Adding a column and a partial index using that column in the predicate in the
 # same transaction is not allowed.
@@ -920,6 +938,10 @@ CREATE INDEX partial_idx ON sc(b) WHERE v > 20
 
 statement ok
 END
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE sc SET (schema_locked = true);
 
 statement ok
 ALTER TABLE sc ADD COLUMN v INT AS (a+b) VIRTUAL
@@ -1081,7 +1103,7 @@ SELECT k, iv, jv FROM inv@iv_jv_idx WHERE iv = 20 AND jv @> '{"b": "c"}' ORDER B
 subtest referencing_mutations
 
 statement ok
-CREATE TABLE t_ref (i INT PRIMARY KEY);
+CREATE TABLE t_ref (i INT PRIMARY KEY) WITH (schema_locked = false);
 
 statement error pgcode 0A000 virtual computed column "k" referencing columns \("j"\) added in the current transaction
 ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42,
@@ -1187,6 +1209,7 @@ statement ok
 CREATE TABLE t63167_a (a INT, v INT AS (a + 1) VIRTUAL);
 CREATE TABLE t63167_b (LIKE t63167_a INCLUDING ALL);
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t63167_b]
 ----
@@ -1196,6 +1219,17 @@ CREATE TABLE public.t63167_b (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t63167_b_pkey PRIMARY KEY (rowid ASC)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t63167_b]
+----
+CREATE TABLE public.t63167_b (
+  a INT8 NULL,
+  v INT8 NULL AS (a + 1:::INT8) VIRTUAL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t63167_b_pkey PRIMARY KEY (rowid ASC)
+) WITH (schema_locked = true);
 
 # Test that columns backfills to tables with virtual columns work.
 subtest column_backfill
@@ -1300,6 +1334,10 @@ ALTER TABLE virtual_pk ADD COLUMN d INT NOT NULL DEFAULT 42;
 statement ok
 ALTER TABLE virtual_pk DROP COLUMN d;
 
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE virtual_pk SET (schema_locked = false)
+
 # Run the operations in an explicit transaction, explicitly using
 # the legacy schema changer.
 statement ok
@@ -1315,6 +1353,10 @@ SET LOCAL autocommit_before_ddl = false;
 SET LOCAL use_declarative_schema_changer = off;
 ALTER TABLE virtual_pk DROP COLUMN d;
 COMMIT;
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE virtual_pk SET (schema_locked = true)
 
 # This tests that the type of a computed expression properly reflects the
 # user's intention. Before this test was added, the declarative schema changer
@@ -1353,6 +1395,7 @@ ALTER TABLE t_added ADD COLUMN i2 INT2 GENERATED ALWAYS AS (2) VIRTUAL;
 #    CONSTRAINT t_added_pkey PRIMARY KEY (i ASC)
 # )
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_added]
 ----
@@ -1365,6 +1408,20 @@ CREATE TABLE public.t_added (
   i2 INT2 NULL AS (2:::INT8) VIRTUAL,
   CONSTRAINT t_added_pkey PRIMARY KEY (i ASC)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_added]
+----
+CREATE TABLE public.t_added (
+  i INT8 NOT NULL,
+  i4n INT4 NULL AS (NULL) VIRTUAL,
+  dn DECIMAL(5,2) NULL AS (NULL) VIRTUAL,
+  d DECIMAL(5,2) NULL AS (123.1:::DECIMAL) VIRTUAL,
+  i4 INT4 NULL AS (4:::INT8) VIRTUAL,
+  i2 INT2 NULL AS (2:::INT8) VIRTUAL,
+  CONSTRAINT t_added_pkey PRIMARY KEY (i ASC)
+) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE t_added

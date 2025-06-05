@@ -157,6 +157,13 @@ func TestLogic_alter_default_privileges_with_grant_option(
 	runLogicTest(t, "alter_default_privileges_with_grant_option")
 }
 
+func TestLogic_alter_primary_key(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "alter_primary_key")
+}
+
 func TestLogic_alter_role(
 	t *testing.T,
 ) {
@@ -486,11 +493,25 @@ func TestLogic_create_statements(
 	runLogicTest(t, "create_statements")
 }
 
+func TestLogic_create_table(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "create_table")
+}
+
 func TestLogic_cross_join(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "cross_join")
+}
+
+func TestLogic_cursor(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "cursor")
 }
 
 func TestLogic_custom_escape_character(
@@ -759,6 +780,13 @@ func TestLogic_errors(
 	runLogicTest(t, "errors")
 }
 
+func TestLogic_event_log(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "event_log")
+}
+
 func TestLogic_exclude_data_from_backup(
 	t *testing.T,
 ) {
@@ -785,6 +813,13 @@ func TestLogic_export(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "export")
+}
+
+func TestLogic_expression_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "expression_index")
 }
 
 func TestLogic_external_connection_privileges(
@@ -1067,6 +1102,13 @@ func TestLogic_inverted_join_multi_column(
 	runLogicTest(t, "inverted_join_multi_column")
 }
 
+func TestLogic_jobs(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jobs")
+}
+
 func TestLogic_join(
 	t *testing.T,
 ) {
@@ -1221,6 +1263,13 @@ func TestLogic_namespace(
 	runLogicTest(t, "namespace")
 }
 
+func TestLogic_new_schema_changer(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "new_schema_changer")
+}
+
 func TestLogic_no_primary_key(
 	t *testing.T,
 ) {
@@ -1317,6 +1366,13 @@ func TestLogic_partial_index(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "partial_index")
+}
+
+func TestLogic_partial_txn_commit(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "partial_txn_commit")
 }
 
 func TestLogic_partitioning(
@@ -1599,6 +1655,13 @@ func TestLogic_row_level_security(
 	runLogicTest(t, "row_level_security")
 }
 
+func TestLogic_row_level_ttl(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "row_level_ttl")
+}
+
 func TestLogic_rows_from(
 	t *testing.T,
 ) {
@@ -1653,6 +1716,13 @@ func TestLogic_schema_change_feature_flags(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "schema_change_feature_flags")
+}
+
+func TestLogic_schema_change_in_txn(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "schema_change_in_txn")
 }
 
 func TestLogic_schema_change_logical_replication(
@@ -2054,11 +2124,25 @@ func TestLogic_system(
 	runLogicTest(t, "system")
 }
 
+func TestLogic_system_columns(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "system_columns")
+}
+
 func TestLogic_system_namespace(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "system_namespace")
+}
+
+func TestLogic_table(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "table")
 }
 
 func TestLogic_target_names(
@@ -2432,6 +2516,13 @@ func TestLogic_unique(
 	runLogicTest(t, "unique")
 }
 
+func TestLogic_update(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "update")
+}
+
 func TestLogic_update_from(
 	t *testing.T,
 ) {
@@ -2507,6 +2598,13 @@ func TestLogic_views(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "views")
+}
+
+func TestLogic_virtual_columns(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "virtual_columns")
 }
 
 func TestLogic_virtual_table_privileges(

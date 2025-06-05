@@ -1,4 +1,3 @@
-# LogicTest: !local-schema-locked
 # knob-opt: disable-corpus-generation sync-event-log
 
 skip_on_retry
@@ -829,6 +828,7 @@ SET experimental_computed_column_rewrites = "(ts :: STRING) -> (to_char(ts AT TI
 statement ok
 ALTER TABLE trewrite ADD COLUMN c STRING AS (ts::STRING) STORED
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
 ----
@@ -839,6 +839,18 @@ CREATE TABLE public.trewrite (
   CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC),
   FAMILY fam_0_k_ts (k, ts, c)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
+----
+CREATE TABLE public.trewrite (
+  k INT8 NOT NULL,
+  ts TIMESTAMPTZ NULL,
+  c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
+  CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC),
+  FAMILY fam_0_k_ts (k, ts, c)
+) WITH (schema_locked = true);
 
 subtest create-index
 
@@ -1457,6 +1469,7 @@ ALTER TABLE t ADD COLUMN j INT DEFAULT 42;
 statement ok
 COMMIT
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
@@ -1467,6 +1480,18 @@ CREATE TABLE public.t (
   CONSTRAINT t_pkey PRIMARY KEY (i ASC),
   UNIQUE INDEX t_k_key (k ASC)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  i INT8 NOT NULL,
+  k INT8 NOT NULL AS (i + 3:::INT8) STORED,
+  j INT8 NULL DEFAULT 42:::INT8,
+  CONSTRAINT t_pkey PRIMARY KEY (i ASC),
+  UNIQUE INDEX t_k_key (k ASC)
+) WITH (schema_locked = true);
 
 query III rowsort
 SELECT * FROM t
@@ -1519,7 +1544,7 @@ statement ok
 SET CLUSTER SETTING sql.schema.force_declarative_statements='!ALTER TABLE'
 
 statement ok
-CREATE TABLE stmt_ctrl(n int primary key)
+CREATE TABLE stmt_ctrl(n int primary key) WITH (schema_locked = false)
 
 statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
 EXPLAIN (DDL) ALTER TABLE stmt_ctrl ADD COLUMN j BOOL

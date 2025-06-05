@@ -1,7 +1,11 @@
-# LogicTest: !local-schema-locked
-
 # This test exercises the presence of an explanatory hint when a transaction
 # ends up partially committed and partially aborted.
+
+# Tables can't be created with schema_locked if we need
+# to manipulate them with the legacy schema changer, since
+# only non-backfilling changes in that mode will work correctly.
+statement ok
+SET create_table_with_schema_locked=false
 
 statement ok
 SET autocommit_before_ddl = false

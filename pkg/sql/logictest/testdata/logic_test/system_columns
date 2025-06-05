@@ -1,5 +1,3 @@
-# LogicTest: !local-schema-locked
-
 statement ok
 CREATE TABLE t (x INT PRIMARY KEY, y INT, z INT, INDEX i (z));
 INSERT INTO t VALUES (1, 2, 3)
@@ -233,6 +231,10 @@ CREATE INDEX idx ON tab3(x) STORING (tableoid)
 statement error pgcode 0A000 index cannot store system column crdb_internal_mvcc_timestamp
 CREATE INDEX idx ON tab3(x) STORING (crdb_internal_mvcc_timestamp)
 
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE tab3 SET (schema_locked=false)
+
 statement error pgcode 42703 column "crdb_internal_mvcc_timestamp" does not exist
 CREATE INDEX idx ON tab3(x, (crdb_internal_mvcc_timestamp + 10))
 
@@ -244,6 +246,10 @@ CREATE INDEX idx ON tab3(x) STORING (crdb_internal_origin_id)
 
 statement error pgcode 42703 column "crdb_internal_origin_id" does not exist
 CREATE INDEX idx ON tab3(x, (crdb_internal_origin_id + 10))
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE tab3 SET (schema_locked=true)
 
 subtest alter_commands
 

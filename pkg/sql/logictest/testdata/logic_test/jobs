@@ -1,11 +1,14 @@
-# LogicTest: !local-schema-locked
-
-# Disable declarative schema changer for this test.
+# Disable declarative schema changer for this test and schema locked by
+# default for this test.
 statement ok
 SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
 
 statement ok
+SET CLUSTER SETTING sql.defaults.create_table_with_schema_locked = 'off'
+
+statement ok
 SET use_declarative_schema_changer = 'off';
+SET create_table_with_schema_locked = 'off';
 
 # These test verify that a user's job are visible via
 # crdb_internal.jobs and SHOW JOBS.
