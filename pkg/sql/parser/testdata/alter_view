@@ -61,3 +61,35 @@ ALTER MATERIALIZED VIEW IF EXISTS v RENAME TO v
 ALTER MATERIALIZED VIEW IF EXISTS v RENAME TO v -- fully parenthesized
 ALTER MATERIALIZED VIEW IF EXISTS v RENAME TO v -- literals removed
 ALTER MATERIALIZED VIEW IF EXISTS _ RENAME TO _ -- identifiers removed
+
+parse
+ALTER VIEW v SET (security_invoker = true)
+----
+ALTER VIEW v SET (security_invoker = true)
+ALTER VIEW v SET (security_invoker = true) -- fully parenthesized
+ALTER VIEW v SET (security_invoker = true) -- literals removed
+ALTER VIEW _ SET (security_invoker = _) -- identifiers removed
+
+parse
+ALTER VIEW v SET (security_invoker = false)
+----
+ALTER VIEW v SET (security_invoker = false)
+ALTER VIEW v SET (security_invoker = false) -- fully parenthesized
+ALTER VIEW v SET (security_invoker = false) -- literals removed
+ALTER VIEW _ SET (security_invoker = _) -- identifiers removed
+
+parse
+ALTER VIEW IF EXISTS v SET (security_invoker = true)
+----
+ALTER VIEW IF EXISTS v SET (security_invoker = true)
+ALTER VIEW IF EXISTS v SET (security_invoker = true) -- fully parenthesized
+ALTER VIEW IF EXISTS v SET (security_invoker = true) -- literals removed
+ALTER VIEW IF EXISTS _ SET (security_invoker = _) -- identifiers removed
+
+parse
+ALTER VIEW IF EXISTS v SET (security_invoker = false)
+----
+ALTER VIEW IF EXISTS v SET (security_invoker = false)
+ALTER VIEW IF EXISTS v SET (security_invoker = false) -- fully parenthesized
+ALTER VIEW IF EXISTS v SET (security_invoker = false) -- literals removed
+ALTER VIEW IF EXISTS _ SET (security_invoker = _) -- identifiers removed
