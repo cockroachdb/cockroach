@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
@@ -611,7 +612,7 @@ func (tc *txnCommitter) maybeDisable1PC(ba *kvpb.BatchRequest) {
 func (tc *txnCommitter) setWrapped(wrapped lockedSender) { tc.wrapped = wrapped }
 
 // populateLeafInputState is part of the txnInterceptor interface.
-func (*txnCommitter) populateLeafInputState(*roachpb.LeafTxnInputState) {}
+func (*txnCommitter) populateLeafInputState(*roachpb.LeafTxnInputState, interval.Tree) {}
 
 // initializeLeaf is part of the txnInterceptor interface.
 func (*txnCommitter) initializeLeaf(tis *roachpb.LeafTxnInputState) {}

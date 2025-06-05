@@ -4198,6 +4198,10 @@ func (m *sessionDataMutator) SetOptimizerDisableCrossRegionCascadeFastPathForRBR
 	m.data.OptimizerDisableCrossRegionCascadeFastPathForRBRTables = val
 }
 
+func (m *sessionDataMutator) SetDistSQLUseReducedLeafWriteSets(val bool) {
+	m.data.DistSQLUseReducedLeafWriteSets = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

@@ -1098,7 +1098,7 @@ func TestUpdateRootWithLeafFinalStateReadsBelowRefreshTimestamp(t *testing.T) {
 		_, err := txn.Get(ctx, keyA)
 		require.NoError(t, err)
 		// Fork off a leaf transaction before the root is refreshed.
-		leafInputState, err := txn.GetLeafTxnInputState(ctx)
+		leafInputState, err := txn.GetLeafTxnInputState(ctx, nil /* readsTree */)
 		require.NoError(t, err)
 		leafTxn := kv.NewLeafTxn(ctx, db, 0, leafInputState, nil /* header */)
 
