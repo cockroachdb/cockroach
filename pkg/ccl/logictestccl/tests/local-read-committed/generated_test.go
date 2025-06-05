@@ -2365,6 +2365,13 @@ func TestReadCommittedLogic_udf_in_constraints(
 	runLogicTest(t, "udf_in_constraints")
 }
 
+func TestReadCommittedLogic_udf_in_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_in_index")
+}
+
 func TestReadCommittedLogic_udf_in_table(
 	t *testing.T,
 ) {
