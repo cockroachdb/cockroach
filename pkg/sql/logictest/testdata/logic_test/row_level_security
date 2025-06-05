@@ -5634,4 +5634,27 @@ DROP FUNCTION fail, divbyzero;
 statement ok
 DROP ROLE alice;
 
+subtest unimplemented_alter_view_with_security_invoker
+
+statement ok
+CREATE TABLE roach_pg_table ( count INT )
+
+statement ok
+SET allow_view_with_security_invoker_clause = on
+
+statement ok
+CREATE VIEW security_invoker_view WITH ( security_invoker = true ) AS SELECT * FROM roach_pg_table
+
+statement error pq: at or near "\)": syntax error: unimplemented: this syntax\nHINT: You have attempted to use a feature that is not yet implemented\.\n\nPlease check the public issue tracker to check whether this problem is\nalready tracked\. If you cannot find it there, please report the error\nwith details by creating a new issue\.\n\nIf you would rather not post publicly, please contact us directly\nusing the support form\.\n\nWe appreciate your feedback\.\n\nDETAIL: source SQL:\nALTER VIEW security_invoker_view SET \( security_invoker = false \)
+ALTER VIEW security_invoker_view SET ( security_invoker = false )
+
+statement ok
+DROP VIEW security_invoker_view
+
+statement ok
+DROP TABLE roach_pg_table
+
+statement ok
+SET allow_view_with_security_invoker_clause = off
+
 subtest end
