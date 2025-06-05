@@ -546,3 +546,19 @@ EXPLAIN (VEC) SELECT * FROM t EXCEPT ALL SELECT * FROM u
   └ *colexecjoin.crossJoiner
     ├ *colfetcher.ColBatchScan
     └ *colfetcher.ColBatchScan
+
+# Regression test for attempting to use optimized vectorized operator which
+# doesn't handle collated strings (#147559).
+statement ok
+CREATE TABLE t147559 (
+    a INT,
+    b TEXT COLLATE en_u_ks_level1
+);
+
+query T
+EXPLAIN (VEC) SELECT * FROM t147559 WHERE b LIKE 'abc%';
+----
+│
+└ Node 1
+  └ *colexecsel.defaultCmpConstSelOp
+    └ *colfetcher.ColBatchScan
