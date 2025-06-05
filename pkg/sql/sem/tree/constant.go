@@ -506,6 +506,7 @@ var (
 		types.String,
 		types.BPChar,
 		types.AnyCollatedString,
+		types.Citext,
 		types.Bytes,
 		types.Bool,
 		types.Int,

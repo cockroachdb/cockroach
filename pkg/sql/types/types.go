@@ -338,6 +338,11 @@ var (
 	VarChar = &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_varchar, Locale: &emptyLocale}}
 
+	// Citext is equivalent to AnyCollatedString, but has a differing Locale
+	// (case-insensitive) and a differing OID (T_citext).
+	Citext = &T{InternalType: InternalType{
+		Family: CollatedStringFamily, Oid: oidext.T_citext, Locale: &caseInsensitiveLocale}}
+
 	// QChar is the special "char" type that is a single-character column type.
 	// It's used by system tables. It is reported as "char" (with double quotes
 	// included) in SHOW CREATE and "char" in introspection for compatibility
@@ -815,7 +820,8 @@ const (
 )
 
 var (
-	emptyLocale = ""
+	emptyLocale           = ""
+	caseInsensitiveLocale = "und-u-ks-level2"
 )
 
 // MakeScalar constructs a new instance of a scalar type (i.e. not array or
@@ -2719,6 +2725,8 @@ func (t *T) downgradeType() error {
 			t.InternalType.VisibleType = visibleQCHAR
 		case oid.T_name:
 			t.InternalType.Family = name
+		case oidext.T_citext:
+			// Nothing to do
 		default:
 			return errors.AssertionFailedf("unexpected Oid: %d", t.Oid())
 		}
@@ -3039,6 +3047,8 @@ func (t *T) stringTypeSQL() string {
 		typName = `"char"`
 	case oid.T_name:
 		typName = "NAME"
+	case oidext.T_citext:
+		typName = "CITEXT"
 	}
 
 	// In general, if there is a specified width we want to print it next to the
