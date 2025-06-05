@@ -309,6 +309,8 @@ type distSQLExprCheckVisitor struct {
 
 var _ tree.Visitor = &distSQLExprCheckVisitor{}
 
+// NB: when modifying this, consider whether reducedLeafExprVisitor needs to be
+// adjusted accordingly.
 func (v *distSQLExprCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	if v.err != nil {
 		return false, expr
@@ -802,6 +804,8 @@ func checkSupportForPlanNode(
 
 	case *vectorSearchNode, *vectorMutationSearchNode:
 		// Don't allow distribution for vector search operators, for now.
+		// TODO(yuzefovich): if we start distributing plans with these nodes,
+		// we'll need to ensure to collect LeafTxnFinalInfo metadata.
 		return cannotDistribute, cannotDistributeVectorSearchErr
 
 	case *windowNode:

@@ -62,7 +62,7 @@ func runTestFlow(
 ) (rowenc.EncDatumRows, error) {
 	distSQLSrv := ts.DistSQLServer().(*distsql.ServerImpl)
 
-	leafInputState, err := txn.GetLeafTxnInputState(context.Background())
+	leafInputState, err := txn.GetLeafTxnInputState(context.Background(), nil /* readsTree */)
 	if err != nil {
 		t.Fatal(err)
 	}
