@@ -13,4 +13,4 @@ package buildutil
 // flag can be used to enable expensive checks, test randomizations, or other
 // metamorphic-style perturbations that will not affect test results but will
 // exercise different parts of the code.
-const CrdbTestBuild = false
+const CrdbTestBuild = true

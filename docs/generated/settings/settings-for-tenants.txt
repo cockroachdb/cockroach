@@ -13,10 +13,10 @@ changefeed.aggregator.flush_jitter	float	0.1	jitter aggregator flushes as a frac
 changefeed.backfill.concurrent_scan_requests	integer	0	number of concurrent scan requests per node issued during a backfill	application
 changefeed.backfill.scan_request_size	integer	524288	the maximum number of bytes returned by each scan request	application
 changefeed.batch_reduction_retry.enabled (alias: changefeed.batch_reduction_retry_enabled)	boolean	false	if true, kafka changefeeds upon erroring on an oversized batch will attempt to resend the messages with progressively lower batch sizes	application
-changefeed.default_range_distribution_strategy	enumeration	default	configures how work is distributed among nodes for a given changefeed. for the most balanced distribution, use `balanced_simple`. changing this setting will not override locality restrictions [default = 0, balanced_simple = 1]	application
-changefeed.event_consumer_worker_queue_size	integer	16	if changefeed.event_consumer_workers is enabled, this setting sets the maxmimum number of events which a worker can buffer	application
+changefeed.default_range_distribution_strategy	enumeration	balanced_simple	configures how work is distributed among nodes for a given changefeed. for the most balanced distribution, use `balanced_simple`. changing this setting will not override locality restrictions [default = 0, balanced_simple = 1]	application
+changefeed.event_consumer_worker_queue_size	integer	4	if changefeed.event_consumer_workers is enabled, this setting sets the maxmimum number of events which a worker can buffer	application
 changefeed.event_consumer_workers	integer	0	the number of workers to use when processing events: <0 disables, 0 assigns a reasonable default, >0 assigns the setting value. for experimental/core changefeeds and changefeeds using parquet format, this is disabled	application
-changefeed.fast_gzip.enabled	boolean	true	use fast gzip implementation	application
+changefeed.fast_gzip.enabled	boolean	false	use fast gzip implementation	application
 changefeed.span_checkpoint.lag_threshold (alias: changefeed.frontier_highwater_lag_checkpoint_threshold)	duration	10m0s	the amount of time a changefeed's lagging (slowest) spans must lag behind its leading (fastest) spans before a span-level checkpoint to save leading span progress is written; if 0, span-level checkpoints due to lagging spans is disabled	application
 changefeed.memory.per_changefeed_limit	byte size	512 MiB	controls amount of data that can be buffered per changefeed	application
 changefeed.resolved_timestamp.min_update_interval (alias: changefeed.min_highwater_advance)	duration	0s	minimum amount of time that must have elapsed since the last time a changefeed's resolved timestamp was updated before it is eligible to be updated again; default of 0 means no minimum interval is enforced but updating will still be limited by the average time it takes to checkpoint progress	application
@@ -396,9 +396,9 @@ sql.txn.read_committed_isolation.enabled	boolean	true	set to true to allow trans
 sql.txn.repeatable_read_isolation.enabled (alias: sql.txn.snapshot_isolation.enabled)	boolean	false	set to true to allow transactions to use the REPEATABLE READ isolation level if specified by BEGIN/SET commands	application
 sql.txn_fingerprint_id_cache.capacity	integer	100	the maximum number of txn fingerprint IDs stored	application
 sql.vecindex.stalled_op.timeout	duration	100ms	amount of time before other vector index workers will assist with a stalled background fixup	application
-storage.columnar_blocks.enabled	boolean	true	set to true to enable columnar-blocks to store KVs in a columnar format	system-visible
-storage.delete_compaction_excise.enabled	boolean	true	set to false to direct Pebble to not partially excise sstables in delete-only compactions	system-visible
-storage.ingestion.value_blocks.enabled	boolean	true	set to true to enable writing of value blocks in ingestion sstables	application
+storage.columnar_blocks.enabled	boolean	false	set to true to enable columnar-blocks to store KVs in a columnar format	system-visible
+storage.delete_compaction_excise.enabled	boolean	false	set to false to direct Pebble to not partially excise sstables in delete-only compactions	system-visible
+storage.ingestion.value_blocks.enabled	boolean	false	set to true to enable writing of value blocks in ingestion sstables	application
 storage.max_sync_duration	duration	20s	maximum duration for disk operations; any operations that take longer than this setting trigger a warning log entry or process crash	system-visible
 storage.max_sync_duration.fatal.enabled	boolean	true	if true, fatal the process when a disk operation exceeds storage.max_sync_duration	application
 storage.sstable.compression_algorithm	enumeration	minlz	determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store; [snappy = 1, zstd = 2, none = 3, minlz = 4]	system-visible

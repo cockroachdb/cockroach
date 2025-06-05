@@ -3424,7 +3424,11 @@ func (ex *connExecutor) makeExecPlan(
 			// session var is set to 'true' ('false' is the default).
 			catalog = planner.optPlanningCtx.catalog
 		}
-		_, err := explain.DecodePlanGistToRows(ctx, &planner.extendedEvalCtx.Context, ih.planGist.String(), catalog)
+		planStr := ih.planGist.String()
+		fmt.Printf("plan gist before decode: %s\n", planStr)
+		_, err := explain.DecodePlanGistToRows(ctx, &planner.extendedEvalCtx.Context, planStr, catalog)
+		fmt.Printf("plan gist after decode: %s\n", ih.planGist.String())
+		fmt.Printf("plan gist decode error: %v\n", err)
 		if err != nil {
 			return ctx, errors.NewAssertionErrorWithWrappedErrf(err, "failed to decode plan gist: %q", ih.planGist.String())
 		}

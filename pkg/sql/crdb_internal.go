@@ -3561,7 +3561,6 @@ CREATE TABLE crdb_internal.builtin_functions (
   category  STRING NOT NULL,
   details   STRING NOT NULL,
   schema    STRING NOT NULL,
-  schema    STRING NOT NULL,
   oid       OID NOT NULL
 )`,
 	populate: func(ctx context.Context, _ *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -3923,7 +3922,7 @@ CREATE TABLE crdb_internal.create_function_statements (
   schema_name STRING,
   function_id INT,
   function_name STRING,
-  create_statement STRING,
+  create_statement STRING
 )
 `,
 	populate: createRoutinePopulate(false /* procedure */),
@@ -4033,7 +4032,7 @@ func renderCreateTriggerStatement(
 func createTriggerPopulate(
 	ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
 ) error {
-	// Skip virtual tables since they do not have triggers.
+	// Skip virtual tables by setting virtualOpts to hideVirtual since they do not have triggers.
 	options := forEachTableDescOptions{virtualOpts: hideVirtual}
 	return forEachTableDesc(ctx, p, db, options, func(ctx context.Context, tblCtx tableDescContext) error {
 		tbl := tblCtx.table
@@ -4084,12 +4083,10 @@ CREATE TABLE crdb_internal.create_trigger_statements (
   trigger_id INT,
   trigger_name STRING,
   create_statement STRING,
-  INDEX (table_id),
-  INDEX (table_id, trigger_id)
+  INDEX (table_id)
 )`,
 	populate: createTriggerPopulate,
 	indexes: []virtualIndex{
-		// Index on table_id
 		{
 			populate: func(
 				ctx context.Context,
@@ -4099,14 +4096,13 @@ CREATE TABLE crdb_internal.create_trigger_statements (
 				addRow func(...tree.Datum) error,
 			) (matched bool, err error) {
 				tableID := descpb.ID(tree.MustBeDInt(unwrappedConstraint))
-				var tableLookup simpleSchemaResolver
-				tableDesc, err := tableLookup.getTableByID(tableID)
-				if err != nil {
+				tableDesc, err := p.LookupTableByID(ctx, tableID)
+				if err != nil || tableDesc == nil {
 					return false, err
 				}
 				triggers := tableDesc.GetTriggers()
 				schemaID := tableDesc.GetParentSchemaID()
-				sc, err := p.Descriptors().ByIDWithLeased(p.txn).Get().Schema(ctx, schemaID)
+				sc, err := p.LookupSchemaByID(ctx, schemaID)
 				if err != nil {
 					return false, err
 				}
@@ -4133,60 +4129,6 @@ CREATE TABLE crdb_internal.create_trigger_statements (
 				return true, nil
 			},
 		},
-		// Index on (table_id, trigger_id)
-		//TODO: Can you indes by two columns with virtual tables?
-		/*
-			{
-				populate: func(
-					ctx context.Context,
-					unwrappedConstraint tree.Datum,
-					p *planner,
-					db catalog.DatabaseDescriptor,
-					addRow func(...tree.Datum) error,
-				) (matched bool, err error) {
-					tuple, ok := unwrappedConstraint.(*tree.DTuple)
-					if !ok || len(tuple.D) != 2 {
-						return false, errors.Newf("expected a tuple with two elements, got %v", unwrappedConstraint)
-					}
-					pair := triggerIdPair{
-						triggerID: int64(tree.MustBeDInt(tuple.D[1])),
-						tableID:   int64(tree.MustBeDInt(tuple.D[0])),
-					}
-					var tableLookup simpleSchemaResolver
-					tableDesc, err := tableLookup.getTableByID(descpb.ID(pair.tableID))
-					if err != nil {
-						return false, err
-					}
-					trigger := catalog.FindTriggerByID(tableDesc, descpb.TriggerID(pair.triggerID))
-					if trigger == nil {
-						return false, nil
-					}
-					sc, err := p.Descriptors().ByIDWithLeased(p.txn).Get().Schema(ctx, tableDesc.GetParentSchemaID())
-					if err != nil {
-						return false, err
-					}
-					sql, err := renderCreateTriggerStatement(ctx, p, trigger, tableDesc)
-					if err != nil {
-						return false, err
-					}
-					err = addRow(
-						tree.NewDInt(tree.DInt(db.GetID())),
-						tree.NewDString(db.GetName()),
-						tree.NewDInt(tree.DInt(sc.GetID())),
-						tree.NewDString(sc.GetName()),
-						tree.NewDInt(tree.DInt(tableDesc.GetID())),
-						tree.NewDString(tableDesc.GetName()),
-						tree.NewDInt(tree.DInt(trigger.ID)),
-						tree.NewDString(trigger.Name),
-						tree.NewDString(sql),
-					)
-					if err != nil {
-						return false, err
-					}
-					return true, nil
-				},
-			}
-		*/
 	},
 }
 

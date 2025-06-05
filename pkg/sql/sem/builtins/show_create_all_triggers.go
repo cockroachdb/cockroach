@@ -1,3 +1,8 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
 package builtins
 
 import (
@@ -64,20 +69,45 @@ func getTriggerCreateStatement(
 	txn *kv.Txn,
 	triggerIDPair triggerIdPair,
 	dbName string,
-) (tree.Datum, error) {
+) (_ tree.Datum, err error) {
 	query := fmt.Sprintf(`
 SELECT create_statement, trigger_id
 FROM %s.crdb_internal.create_trigger_statements
-WHERE table_id = $1 AND trigger_id = $2`, lexbase.EscapeSQLIdent(dbName))
+WHERE table_id = $1`, lexbase.EscapeSQLIdent(dbName))
 
-	row, err := evalPlanner.QueryRowEx(ctx,
+	iter, err := evalPlanner.QueryIteratorEx(ctx,
 		"crdb_internal.show_create_all_triggers",
 		sessiondata.NoSessionDataOverride,
 		query,
-		triggerIDPair.tableID, triggerIDPair.triggerID)
+		triggerIDPair.tableID)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		closeErr := iter.Close()
+		err = errors.CombineErrors(err, closeErr)
+	}()
+	for {
+		next, err := iter.Next(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if !next {
+			break
+		}
+		row := iter.Cur()
+		if len(row) != 2 {
+			return nil, errors.Newf("expected 2 columns in result, got %d", len(row))
+		}
+		if tree.MustBeDInt(row[1]) != tree.DInt(triggerIDPair.triggerID) {
+			continue
+		}
+		return row[0], nil
+	}
 
 	if err != nil {
 		return nil, err
 	}
-	return row[0], nil
+	return nil, nil
 }

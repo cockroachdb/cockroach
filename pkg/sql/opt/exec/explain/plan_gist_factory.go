@@ -10,6 +10,7 @@ import (
 	"context"
 	b64 "encoding/base64"
 	"encoding/binary"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -184,6 +185,7 @@ func DecodePlanGistToRows(
 			// to add error checks everywhere throughout the code. This is only
 			// possible because the code does not update shared state and does
 			// not manipulate locks.
+			fmt.Printf("recovered from panic in DecodePlanGistToRows: %v\n", r)
 			if ok, e := errorutil.ShouldCatch(r); ok {
 				retErr = e
 			} else {

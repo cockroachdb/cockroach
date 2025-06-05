@@ -1954,6 +1954,13 @@ func TestTenantLogic_show_create_all_tables_builtin(
 	runLogicTest(t, "show_create_all_tables_builtin")
 }
 
+func TestTenantLogic_show_create_all_triggers(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_create_all_triggers")
+}
+
 func TestTenantLogic_show_create_all_types(
 	t *testing.T,
 ) {
