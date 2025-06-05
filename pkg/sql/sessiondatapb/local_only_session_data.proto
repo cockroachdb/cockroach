@@ -692,6 +692,8 @@ message LocalOnlySessionData {
   // EnableScrubJob controls if a job is initiated when the EXPERIMENTAL SCRUB
   // command is used.
   bool enable_scrub_job = 176;
+  // AllowViewWithSecurityInvokerClause indicates whether security invoker for views is enabled
+  bool allow_view_with_security_invoker_clause = 177;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
