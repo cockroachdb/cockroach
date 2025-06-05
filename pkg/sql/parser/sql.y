@@ -1206,6 +1206,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <tree.Statement> alter_rename_view_stmt
 %type <tree.Statement> alter_view_set_schema_stmt
 %type <tree.Statement> alter_view_owner_stmt
+%type <tree.Statement> alter_view_set_options_stmt
 
 // ALTER SEQUENCE
 %type <tree.Statement> alter_rename_sequence_stmt
@@ -2055,6 +2056,7 @@ alter_view_stmt:
   alter_rename_view_stmt
 | alter_view_set_schema_stmt
 | alter_view_owner_stmt
+| alter_view_set_options_stmt
 // ALTER VIEW has its error help token here because the ALTER VIEW
 // prefix is spread over multiple non-terminals.
 | ALTER VIEW error // SHOW HELP: ALTER VIEW
@@ -11914,65 +11916,70 @@ role_or_group_or_user:
 // CREATE [TEMPORARY | TEMP] MATERIALIZED VIEW [IF NOT EXISTS] <viewname> [( <colnames...> )] AS <source> [WITH [NO] DATA]
 // %SeeAlso: CREATE TABLE, SHOW CREATE, WEBDOCS/create-view.html
 create_view_stmt:
-  CREATE opt_temp opt_view_recursive VIEW view_name opt_column_list AS select_stmt
+  CREATE opt_temp opt_view_recursive VIEW view_name opt_column_list opt_with_storage_parameter_list AS select_stmt
   {
     name := $5.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateView{
       Name: name,
       ColumnNames: $6.nameList(),
-      AsSource: $8.slct(),
+      AsSource: $9.slct(),
       Persistence: $2.persistence(),
+      StorageParams: $7.storageParams(),
       IfNotExists: false,
       Replace: false,
     }
   }
 // We cannot use a rule like opt_or_replace here as that would cause a conflict
 // with the opt_temp rule.
-| CREATE OR REPLACE opt_temp opt_view_recursive VIEW view_name opt_column_list AS select_stmt
+| CREATE OR REPLACE opt_temp opt_view_recursive VIEW view_name opt_column_list opt_with_storage_parameter_list AS select_stmt
   {
     name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateView{
       Name: name,
       ColumnNames: $8.nameList(),
-      AsSource: $10.slct(),
+      AsSource: $11.slct(),
       Persistence: $4.persistence(),
+      StorageParams: $9.storageParams(),
       IfNotExists: false,
       Replace: true,
     }
   }
-| CREATE opt_temp opt_view_recursive VIEW IF NOT EXISTS view_name opt_column_list AS select_stmt
+| CREATE opt_temp opt_view_recursive VIEW IF NOT EXISTS view_name opt_column_list opt_with_storage_parameter_list AS select_stmt
   {
     name := $8.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateView{
       Name: name,
       ColumnNames: $9.nameList(),
-      AsSource: $11.slct(),
+      AsSource: $12.slct(),
       Persistence: $2.persistence(),
+      StorageParams: $10.storageParams(),
       IfNotExists: true,
       Replace: false,
     }
   }
-| CREATE MATERIALIZED VIEW view_name opt_column_list AS select_stmt opt_with_data
+| CREATE MATERIALIZED VIEW view_name opt_column_list opt_with_storage_parameter_list AS select_stmt opt_with_data
   {
     name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateView{
       Name: name,
       ColumnNames: $5.nameList(),
-      AsSource: $7.slct(),
+      AsSource: $8.slct(),
+      StorageParams: $6.storageParams(),
       Materialized: true,
-      WithData: $8.bool(),
+      WithData: $9.bool(),
     }
   }
-| CREATE MATERIALIZED VIEW IF NOT EXISTS view_name opt_column_list AS select_stmt opt_with_data
+| CREATE MATERIALIZED VIEW IF NOT EXISTS view_name opt_column_list opt_with_storage_parameter_list AS select_stmt opt_with_data
   {
     name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateView{
       Name: name,
       ColumnNames: $8.nameList(),
-      AsSource: $10.slct(),
+      AsSource: $11.slct(),
+      StorageParams: $9.storageParams(),
       Materialized: true,
       IfNotExists: true,
-      WithData: $11.bool(),
+      WithData: $12.bool(),
     }
   }
 | CREATE opt_temp opt_view_recursive VIEW error // SHOW HELP: CREATE VIEW
@@ -12764,6 +12771,24 @@ alter_view_owner_stmt:
       IsView: true,
       IsMaterialized: true,
     }
+  }
+
+alter_view_set_options_stmt:
+  ALTER VIEW relation_expr SET '(' storage_parameter_list ')'
+  {
+    return unimplemented(sqllex, "ALTER VIEW ... SET (...) is not yet implemented.")
+  }
+| ALTER MATERIALIZED VIEW relation_expr SET '(' storage_parameter_list ')'
+  {
+    return unimplemented(sqllex, "ALTER MATERIALIZED VIEW ... SET (...) is not yet implemented.")
+  }
+| ALTER VIEW IF EXISTS relation_expr SET '(' storage_parameter_list ')'
+  {
+    return unimplemented(sqllex, "ALTER VIEW ... IF EXISTS SET (...) is not yet implemented.")
+  }
+| ALTER MATERIALIZED VIEW IF EXISTS relation_expr SET '(' storage_parameter_list ')'
+  {
+    return unimplemented(sqllex, "ALTER MATERIALIZED VIEW ... IF EXISTS SET (...) is not yet implemented.")
   }
 
 alter_sequence_set_schema_stmt:

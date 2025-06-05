@@ -1955,14 +1955,15 @@ func (node *CreateRole) Format(ctx *FmtCtx) {
 
 // CreateView represents a CREATE VIEW statement.
 type CreateView struct {
-	Name         TableName
-	ColumnNames  NameList
-	AsSource     *Select
-	IfNotExists  bool
-	Persistence  Persistence
-	Replace      bool
-	Materialized bool
-	WithData     bool
+	Name          TableName
+	ColumnNames   NameList
+	AsSource      *Select
+	IfNotExists   bool
+	Persistence   Persistence
+	StorageParams StorageParams
+	Replace       bool
+	Materialized  bool
+	WithData      bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -2001,6 +2002,11 @@ func (node *CreateView) Format(ctx *FmtCtx) {
 		ctx.WriteString(" WITH DATA")
 	} else if node.Materialized && !node.WithData {
 		ctx.WriteString(" WITH NO DATA")
+	}
+	if node.StorageParams != nil {
+		ctx.WriteString(` WITH (`)
+		ctx.FormatNode(&node.StorageParams)
+		ctx.WriteByte(')')
 	}
 }
 
