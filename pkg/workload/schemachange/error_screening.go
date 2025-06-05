@@ -117,7 +117,7 @@ func (og *operationGenerator) tableHasDependencies(
                             ns.oid = c.relnamespace
                      WHERE c.relname = $1 AND ns.nspname = $2
                 )
-           AND fd.descriptor_id != fd.dependedonby_id
+           AND NOT (fd.descriptor_id = fd.dependedonby_id AND fd.dependedonby_type = 'fk')
            AND fd.dependedonby_type != 'sequence'
            %s
        )
