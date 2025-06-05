@@ -270,6 +270,12 @@ func (u *sqlSymUnion) auditMode() tree.AuditMode {
 func (u *sqlSymUnion) bool() bool {
     return u.val.(bool)
 }
+func (u *sqlSymUnion) boolPtr() *bool {
+    return u.val.(*bool)
+}
+func (u *sqlSymUnion) viewOptions() *tree.ViewOptions {
+    return u.val.(*tree.ViewOptions)
+}
 func (u *sqlSymUnion) strPtr() *string {
     return u.val.(*string)
 }
@@ -1056,7 +1062,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUNNING
 
 %token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCROLL SCHEMA SCHEMA_ONLY SCHEMAS SCRUB
-%token <str> SEARCH SECOND SECONDARY SECURITY SELECT SEQUENCE SEQUENCES
+%token <str> SEARCH SECOND SECONDARY SECURITY SECURITY_INVOKER SELECT SEQUENCE SEQUENCES
 %token <str> SERIALIZABLE SERVER SERVICE SESSION SESSIONS SESSION_USER SET SETOF SETS SETTING SETTINGS
 %token <str> SHARE SHARED SHOW SIMILAR SIMPLE SIZE SKIP SKIP_LOCALITIES_CHECK SKIP_MISSING_FOREIGN_KEYS
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SKIP_MISSING_UDFS SMALLINT SMALLSERIAL
@@ -1206,6 +1212,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <tree.Statement> alter_rename_view_stmt
 %type <tree.Statement> alter_view_set_schema_stmt
 %type <tree.Statement> alter_view_owner_stmt
+%type <tree.Statement> alter_view_set_options_stmt
 
 // ALTER SEQUENCE
 %type <tree.Statement> alter_rename_sequence_stmt
@@ -1801,6 +1808,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <*tree.TriggerTransition> trigger_transition
 %type <[]*tree.TriggerTransition> trigger_transition_list opt_trigger_transition_list
 %type <bool> transition_is_new transition_is_row
+%type <*bool> opt_view_with
 %type <tree.TriggerForEach> trigger_for_each trigger_for_type
 %type <tree.Expr> trigger_when
 %type <str> trigger_func_arg opt_as function_or_procedure
@@ -2055,6 +2063,7 @@ alter_view_stmt:
   alter_rename_view_stmt
 | alter_view_set_schema_stmt
 | alter_view_owner_stmt
+| alter_view_set_options_stmt
 // ALTER VIEW has its error help token here because the ALTER VIEW
 // prefix is spread over multiple non-terminals.
 | ALTER VIEW error // SHOW HELP: ALTER VIEW
@@ -11901,44 +11910,47 @@ role_or_group_or_user:
 // %Help: CREATE VIEW - create a new view
 // %Category: DDL
 // %Text:
-// CREATE [TEMPORARY | TEMP] VIEW [IF NOT EXISTS] <viewname> [( <colnames...> )] AS <source>
+// CREATE [TEMPORARY | TEMP] VIEW [IF NOT EXISTS] <viewname> [( <colnames...> )] [WITH ( security_invoker = <value> )] AS <source>
 // CREATE [TEMPORARY | TEMP] MATERIALIZED VIEW [IF NOT EXISTS] <viewname> [( <colnames...> )] AS <source> [WITH [NO] DATA]
 // %SeeAlso: CREATE TABLE, SHOW CREATE, WEBDOCS/create-view.html
 create_view_stmt:
-  CREATE opt_temp opt_view_recursive VIEW view_name opt_column_list AS select_stmt
+  CREATE opt_temp opt_view_recursive VIEW view_name opt_column_list opt_view_with AS select_stmt
   {
     name := $5.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateView{
       Name: name,
       ColumnNames: $6.nameList(),
-      AsSource: $8.slct(),
+      AsSource: $9.slct(),
       Persistence: $2.persistence(),
+      Options: $7.viewOptions(),
       IfNotExists: false,
       Replace: false,
     }
   }
 // We cannot use a rule like opt_or_replace here as that would cause a conflict
 // with the opt_temp rule.
-| CREATE OR REPLACE opt_temp opt_view_recursive VIEW view_name opt_column_list AS select_stmt
+| CREATE OR REPLACE opt_temp opt_view_recursive VIEW view_name opt_column_list opt_view_with AS select_stmt
   {
     name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateView{
       Name: name,
       ColumnNames: $8.nameList(),
-      AsSource: $10.slct(),
+      AsSource: $11.slct(),
       Persistence: $4.persistence(),
+      Options: $9.viewOptions(),
       IfNotExists: false,
       Replace: true,
     }
   }
-| CREATE opt_temp opt_view_recursive VIEW IF NOT EXISTS view_name opt_column_list AS select_stmt
+| CREATE opt_temp opt_view_recursive VIEW IF NOT EXISTS view_name opt_column_list opt_view_with AS select_stmt
   {
     name := $8.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateView{
       Name: name,
       ColumnNames: $9.nameList(),
-      AsSource: $11.slct(),
+      AsSource: $12.slct(),
       Persistence: $2.persistence(),
+      Options: $10.viewOptions(),
       IfNotExists: true,
       Replace: false,
     }
@@ -12154,6 +12166,29 @@ opt_view_recursive:
   /* EMPTY */ { /* no error */ }
 | RECURSIVE { return unimplemented(sqllex, "create recursive view") }
 
+// View-specific WITH clause that only accepts security_invoker
+opt_view_with:
+  /* EMPTY */
+  {
+    $$.val = (*tree.ViewOptions)(nil)
+  }
+| WITH '(' SECURITY_INVOKER '=' var_value ')'
+  {
+    /* SKIP DOC */
+    // Convert the expression to a boolean value
+    val := $5.expr()
+    if val != nil {
+      // Try to evaluate it as a boolean
+      if dBool, ok := val.(*tree.DBool); ok {
+        boolVal := bool(*dBool)
+        $$.val = &tree.ViewOptions{SecurityInvoker: boolVal}
+      } else {
+        return unimplemented(sqllex, "non-boolean security_invoker values")
+      }
+    } else {
+      $$.val = (*tree.ViewOptions)(nil)
+    }
+  }
 
 // %Help: CREATE TYPE - create a type
 // %Category: DDL
@@ -12766,6 +12801,16 @@ alter_view_owner_stmt:
       IsView: true,
       IsMaterialized: true,
     }
+  }
+
+alter_view_set_options_stmt:
+  ALTER VIEW relation_expr SET '(' SECURITY_INVOKER '=' var_value ')'
+  {
+    return unimplemented(sqllex, "ALTER VIEW ... SET (security_invoker = ...) is not yet implemented.")
+  }
+| ALTER VIEW IF EXISTS relation_expr SET '(' SECURITY_INVOKER '=' var_value ')'
+  {
+    return unimplemented(sqllex, "ALTER VIEW ... IF EXISTS SET (security_invoker = ...) is not yet implemented.")
   }
 
 alter_sequence_set_schema_stmt:
@@ -18493,6 +18538,7 @@ unreserved_keyword:
 | SEARCH
 | SECOND
 | SECURITY
+| SECURITY_INVOKER
 | SECONDARY
 | SERIALIZABLE
 | SEQUENCE
@@ -19074,6 +19120,7 @@ bare_label_keywords:
 | SEARCH
 | SECONDARY
 | SECURITY
+| SECURITY_INVOKER
 | SELECT
 | SEQUENCE
 | SEQUENCES
