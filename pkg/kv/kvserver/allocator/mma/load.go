@@ -471,7 +471,15 @@ func loadSummaryForDimension(
 	dim LoadDimension, load LoadValue, capacity LoadValue, meanLoad LoadValue, meanUtil float64,
 ) loadSummary {
 	loadSummary := loadLow
-
+	if dim == WriteBandwidth && capacity == UnknownCapacity {
+		// Ignore smaller than 1MiB differences in write bandwidth. This 1MiB
+		// value is somewhat arbitrary, but is based on EBS gp3 having a default
+		// provisioned bandwidth of 125 MiB/s, and assuming that a write amp of
+		// ~20, will inflate 1MiB to ~20 MiB/s.
+		const minWriteBandwidthGranularity = 1 << 20 // 1 MiB
+		load /= minWriteBandwidthGranularity
+		meanLoad /= minWriteBandwidthGranularity
+	}
 	// Heuristics (and very much subject to revision): There are two uses for
 	// this loadSummary: to find source stores to shed load and to decide
 	// whether the added load on a target store is acceptable (without driving
@@ -501,6 +509,11 @@ func loadSummaryForDimension(
 	// low. Rebalancing along too many dimensions results in more thrashing due
 	// to concurrent rebalancing actions by many leaseholders.
 	if dim == ByteSize && capacity != UnknownCapacity && fractionUsed < 0.5 {
+		summaryUpperBound = loadNormal
+	}
+	// Don't bother equalizing CPURate by shedding, if the utilization is < 5%.
+	// The choice of 5% here is arbitrary.
+	if dim == CPURate && capacity != UnknownCapacity && fractionUsed < 0.05 {
 		summaryUpperBound = loadNormal
 	}
 	// TODO(sumeer): consider adding a summaryUpperBound for small
