@@ -75,6 +75,202 @@ func NewMultiMemSSTIterator(ssts [][]byte, verify bool, opts IterOptions) (MVCCI
 	return iter, nil
 }
 
+// ComputeSSTStatsDiff computes a diff of the key span's mvcc stats if the sst
+// were applied. Note, the incoming sst must not contain any range keys, system
+// keys, and must be non empty over the key span and not contain ssts. The
+// function assumes the sst is contained in the key span, and that the local key
+// space has no intents, locks, or inline values.
+//
+// TODO(msbutler): enable prefix seeks, after adding better testing with local
+// range keys.
+func ComputeSSTStatsDiff(
+	ctx context.Context,
+	sst []byte,
+	reader Reader,
+	start, end MVCCKey,
+	leftPeekBound, rightPeekBound roachpb.Key,
+) (enginepb.MVCCStats, error) {
+
+	var ms enginepb.MVCCStats
+	if leftPeekBound == nil {
+		leftPeekBound = keys.MinKey
+	}
+	if rightPeekBound == nil {
+		rightPeekBound = keys.MaxKey
+	}
+
+	// Ensure we're not iterating over system keys.
+	if start.Key.Compare(keys.LocalMax) < 0 {
+		return ms, errors.New("start key must be greater than or equal to LocalMax")
+	}
+
+	// Ensure there are no range keys in the SST
+	rkIter, err := NewMemSSTIterator(sst, false /* verify */, IterOptions{
+		KeyTypes:   IterKeyTypeRangesOnly,
+		LowerBound: keys.MinKey,
+		UpperBound: keys.MaxKey,
+	})
+	if err != nil {
+		return ms, err
+	}
+
+	defer rkIter.Close()
+	if ok, err := rkIter.Valid(); err != nil {
+		return ms, err
+	} else if ok {
+		return ms, errors.New("SST contains range keys")
+	}
+
+	localIter, err := reader.NewMVCCIterator(ctx, MVCCKeyIterKind, IterOptions{
+		KeyTypes:     IterKeyTypePointsAndRanges,
+		LowerBound:   leftPeekBound,
+		UpperBound:   rightPeekBound,
+		useL6Filters: true,
+		ReadCategory: fs.BatchEvalReadCategory,
+	})
+	if err != nil {
+		return ms, err
+	}
+	defer localIter.Close()
+
+	// Seek the local iterator to the start key.
+	var localIterKey MVCCKey
+	localIter.SeekGE(start)
+	if ok, err := localIter.Valid(); err != nil {
+		return ms, err
+	} else if !ok {
+		// When the local iterator is exausted, the remaining sst keys are ingesting
+		// in empty key space. To ensure the key comparison below never treats the
+		// sst keys as shadowing local keys, set the local key to max.
+		localIterKey = MVCCKeyMax
+	} else {
+		localIterKey = localIter.UnsafeKey()
+	}
+
+	sstIter, err := NewMemSSTIterator(sst, false, IterOptions{
+		KeyTypes:   IterKeyTypePointsOnly,
+		UpperBound: end.Key,
+	})
+	if err != nil {
+		return ms, err
+	}
+	defer sstIter.Close()
+
+	sstIter.SeekGE(start)
+	if ok, err := sstIter.Valid(); err != nil {
+		return ms, err
+	} else if !ok {
+		return ms, errors.New("SST is empty")
+	}
+
+	prevSSTKey := NilKey
+
+	for ; ; sstIter.Next() {
+		if ok, err := sstIter.Valid(); err != nil {
+			return ms, err
+		} else if !ok {
+			break
+		}
+		sstIterKey := sstIter.UnsafeKey()
+
+		// To understand if this sst key shadows a local key, advance the local
+		// iterator to the live key at or after the sst key.
+		if sstIterKey.Key.Compare(localIterKey.Key) > 0 {
+			ok, err := localIter.Valid()
+			if err != nil {
+				return ms, err
+			}
+			if !ok {
+				return ms, errors.AssertionFailedf(
+					"local iterator is not valid but sst iterator key %s is greater than local iterator key %s",
+					redact.Safe(sstIterKey), redact.Safe(localIterKey),
+				)
+			}
+
+			localIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
+			if ok, err := localIter.Valid(); err != nil {
+				return ms, err
+			} else if !ok {
+				// When the local iterator is exausted, the remaining sst keys are ingesting
+				// in empty key space. To ensure the key comparison below never treats the
+				// sst keys as shadowing local keys, set the local key to max.
+				localIterKey = MVCCKeyMax
+			} else {
+				localIterKey = localIter.UnsafeKey()
+			}
+		}
+
+		sstVal, err := sstIter.UnsafeValue()
+		if err != nil {
+			return ms, err
+		}
+
+		// First, update the stats for the incoming sst key.
+		sstKeySameAsLocal := localIterKey.Key.Compare(sstIterKey.Key) == 0
+		sstKeyShadowsLocal := sstKeySameAsLocal && localIterKey.Timestamp.Less(sstIterKey.Timestamp)
+		prevKeyShadowsSSTKey := prevSSTKey.Key.Compare(sstIterKey.Key) == 0 && sstIterKey.Timestamp.Less(prevSSTKey.Timestamp)
+		prevSSTKey.Key = append(prevSSTKey.Key, sstIterKey.Key...)
+		prevSSTKey.Timestamp.WallTime = sstIterKey.Timestamp.WallTime
+		prevSSTKey.Timestamp.Logical = sstIterKey.Timestamp.Logical
+
+		sstValueIsTombstone, err := EncodedMVCCValueIsTombstone(sstVal)
+		if err != nil {
+			return ms, err
+		}
+		if sstKeySameAsLocal && sstIterKey.Timestamp.Equal(localIterKey.Timestamp) {
+			// In an interesting twist, dupes don't get counted in stats.
+			continue
+		}
+
+		isMetaKey := (sstKeyShadowsLocal || !sstKeySameAsLocal) && !prevKeyShadowsSSTKey
+		sstKeyIsLive := !sstValueIsTombstone && isMetaKey
+
+		metaKeySize := int64(len(sstIterKey.Key)) + 1
+		metaValSize := int64(0)
+		valSize := int64(len(sstVal)) + metaValSize
+
+		if sstKeyIsLive {
+			ms.LiveCount++
+			ms.LiveBytes += metaKeySize + MVCCVersionTimestampSize + valSize
+		}
+		if isMetaKey {
+			ms.KeyBytes += metaKeySize
+			ms.KeyCount++
+		}
+
+		ms.KeyBytes += MVCCVersionTimestampSize
+		ms.ValBytes += valSize
+		ms.ValCount++
+
+		// Next, subtract off stats if the sst key shadows the local meta key. If
+		// the prev sstKey shadowed the local key, skip this step as we've already
+		// deducted from live bytes.
+		if sstKeyShadowsLocal && !prevKeyShadowsSSTKey {
+
+			localValue, err := localIter.UnsafeValue()
+			if err != nil {
+				return ms, err
+			}
+
+			localMetaKeySize := int64(len(localIterKey.Key) + 1)
+			localValSize := int64(len(localValue)) + metaValSize
+
+			localValueIsTombstone, err := EncodedMVCCValueIsTombstone(localValue)
+			if err != nil {
+				return ms, err
+			}
+			if !localValueIsTombstone {
+				ms.LiveCount--
+				ms.LiveBytes -= localMetaKeySize + MVCCVersionTimestampSize + localValSize
+			}
+			ms.KeyBytes -= localMetaKeySize
+			ms.KeyCount--
+			// TODO (msbutler): figure out how to call AgeTo
+		}
+	}
+	return ms, nil
+}
+
 // CheckSSTConflicts iterates over an SST and a Reader in lockstep and errors
 // out if it finds any conflicts. This includes intents and existing keys with a
 // timestamp at or above the SST key timestamp.
