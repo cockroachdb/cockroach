@@ -15,10 +15,13 @@ import {
   DatabaseSortOptions,
   useDatabaseMetadata,
 } from "src/api/databases/getDatabaseMetadataApi";
+import { NodeStatus } from "src/api/nodesApi";
+import { NodeSelector } from "src/components/nodeSelector/nodeSelector";
 import { Tooltip } from "src/components/tooltip";
 import { ClusterDetailsContext, CockroachCloudContext } from "src/contexts";
 import { PageLayout, PageSection } from "src/layouts";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
+import { getNodesFromStores } from "src/pages/databases/utils";
 import { BooleanSetting } from "src/settings";
 import PageCount from "src/sharedFromCloud/pageCount";
 import { PageHeader } from "src/sharedFromCloud/pageHeader";
@@ -30,12 +33,11 @@ import {
   TableColumnProps,
 } from "src/sharedFromCloud/table";
 import useTable, { TableParams } from "src/sharedFromCloud/useTable";
-import { StoreID } from "src/types/clusterTypes";
+import { NodeID, StoreID } from "src/types/clusterTypes";
 import { Bytes } from "src/util";
 
 import {
   AUTO_STATS_COLLECTION_HELP,
-  NodeRegionsSelector,
   RegionNodesLabel,
   TableMetadataJobControl,
 } from "./components";
@@ -155,12 +157,6 @@ export const DatabasesPageV2 = () => {
     names: [AUTO_STATS_ENABLED_CS],
   });
 
-  const onNodeRegionsChange = (storeIDs: StoreID[]) => {
-    setFilters({
-      storeIDs: storeIDs.map(sid => sid.toString()),
-    });
-  };
-
   const tableData = useMemo(
     () =>
       rawDatabaseMetadataToDatabaseRows(data?.results ?? [], {
@@ -201,8 +197,20 @@ export const DatabasesPageV2 = () => {
     [sort, isTenant],
   );
 
-  const nodeRegionsValue = params.filters.storeIDs.map(
-    sid => parseInt(sid, 10) as StoreID,
+  const onNodeRegionsChange = (_: NodeID[], nodes: NodeStatus[]) => {
+    const storeIDs = nodes
+      .map((node: NodeStatus) => node.stores)
+      .reduce((acc, v) => acc.concat(v), [] as StoreID[])
+      .map(String);
+
+    setFilters({
+      storeIDs,
+    });
+  };
+
+  const selectedNodes = useMemo(
+    () => getNodesFromStores(params.filters.storeIDs, nodesResp.nodeStatusByID),
+    [params.filters.storeIDs, nodesResp.nodeStatusByID],
   );
 
   // 409 conflict - this error code arises when the CRDB version
@@ -233,10 +241,12 @@ export const DatabasesPageV2 = () => {
         </PageConfigItem>
         {!isTenant && (
           <PageConfigItem minWidth={"200px"}>
-            <NodeRegionsSelector
-              value={nodeRegionsValue}
-              onChange={onNodeRegionsChange}
-            />
+            {!nodesResp.isLoading && (
+              <NodeSelector
+                initialValue={selectedNodes}
+                onChange={onNodeRegionsChange}
+              />
+            )}
           </PageConfigItem>
         )}
       </PageConfig>

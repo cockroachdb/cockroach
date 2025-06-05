@@ -131,6 +131,8 @@ export const hotRangesReducerObj = new PaginatedCachedDataReducer(
 
 export const refreshHotRanges = hotRangesReducerObj.refresh;
 
+export const clearHotRanges = hotRangesReducerObj.clearData;
+
 export const tableRequestToID = (req: api.IndexStatsRequestMessage): string =>
   generateTableID(req.database, req.table);
 
