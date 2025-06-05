@@ -3,13 +3,13 @@ statement ok
 CREATE VIEW v_col_fn_ids AS
 SELECT
 id,
-json_array_elements(
+(json_array_elements(
   crdb_internal.pb_to_json(
     'cockroach.sql.sqlbase.Descriptor',
     descriptor,
     false
   )->'table'->'columns'
-)->'id' as col_id,
+)->'id')::INT as col_id,
 json_array_elements(
   crdb_internal.pb_to_json(
     'cockroach.sql.sqlbase.Descriptor',
@@ -70,12 +70,13 @@ SELECT id FROM system.namespace WHERE name = 'test_tbl_t';
 let $fn_id
 SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'test_tbl_f';
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_id);
+query IITT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
-(111,1,,)
-(111,2,,)
-(111,3,"""[FUNCTION 100110]()""",[110])
+id   col_id  compute_expr           uses_fn_ids
+111  1       NULL                   NULL
+111  2       NULL                   NULL
+111  3       "[FUNCTION 100110]()"  [110]
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -101,14 +102,15 @@ CREATE INDEX t_idx2 ON test_tbl_t(b) WHERE test_tbl_f() > 0;
 statement ok
 CREATE INDEX t_idx3 ON test_tbl_t((b + test_tbl_f()));
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_id);
+query IITT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
-(111,1,,)
-(111,2,,)
-(111,3,"""[FUNCTION 100110]()""",[110])
-(111,4,"""[FUNCTION 100110]()""",[110])
-(111,5,"""b + [FUNCTION 100110]()""",[110])
+id   col_id  compute_expr               uses_fn_ids
+111  1       NULL                       NULL
+111  2       NULL                       NULL
+111  3       "[FUNCTION 100110]()"      [110]
+111  4       "[FUNCTION 100110]()"      [110]
+111  5       "b + [FUNCTION 100110]()"  [110]
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -128,16 +130,17 @@ SELECT get_fn_depended_on_by($fn_id)
 statement ok
 CREATE INDEX t_idx4 ON test_tbl_t(test_tbl_f(), b, (test_tbl_f() + 1));
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_id);
+query IITT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
-(111,1,,)
-(111,2,,)
-(111,3,"""[FUNCTION 100110]()""",[110])
-(111,4,"""[FUNCTION 100110]()""",[110])
-(111,5,"""b + [FUNCTION 100110]()""",[110])
-(111,6,"""[FUNCTION 100110]()""",[110])
-(111,7,"""[FUNCTION 100110]() + 1:::INT8""",[110])
+id   col_id  compute_expr                      uses_fn_ids
+111  1       NULL                              NULL
+111  2       NULL                              NULL
+111  3       "[FUNCTION 100110]()"             [110]
+111  4       "[FUNCTION 100110]()"             [110]
+111  5       "b + [FUNCTION 100110]()"         [110]
+111  6       "[FUNCTION 100110]()"             [110]
+111  7       "[FUNCTION 100110]() + 1:::INT8"  [110]
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -155,19 +158,20 @@ SELECT get_fn_depended_on_by($fn_id)
     }
 ]
 
-# Test dropping index removes function dependencies
+# Test dropping index removes function dependencies.
 statement ok
 DROP INDEX t_idx;
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_id);
+query IITT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
-(111,1,,)
-(111,2,,)
-(111,3,"""[FUNCTION 100110]()""",[110])
-(111,5,"""b + [FUNCTION 100110]()""",[110])
-(111,6,"""[FUNCTION 100110]()""",[110])
-(111,7,"""[FUNCTION 100110]() + 1:::INT8""",[110])
+id   col_id  compute_expr                      uses_fn_ids
+111  1       NULL                              NULL
+111  2       NULL                              NULL
+111  3       "[FUNCTION 100110]()"             [110]
+111  5       "b + [FUNCTION 100110]()"         [110]
+111  6       "[FUNCTION 100110]()"             [110]
+111  7       "[FUNCTION 100110]() + 1:::INT8"  [110]
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -184,7 +188,7 @@ SELECT get_fn_depended_on_by($fn_id)
     }
 ]
 
-# Test that function cannot be dropped if used in indexes
+# Test that function cannot be dropped if used in indexes.
 statement error pgcode 2BP01 cannot drop function "test_tbl_f" because other objects \(\[test.public.test_tbl_t\]\) still depend on it
 DROP FUNCTION test_tbl_f;
 
@@ -192,15 +196,16 @@ DROP FUNCTION test_tbl_f;
 statement ok
 DROP INDEX t_idx2;
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_id);
+query IITT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
-(111,1,,)
-(111,2,,)
-(111,3,"""[FUNCTION 100110]()""",[110])
-(111,5,"""b + [FUNCTION 100110]()""",[110])
-(111,6,"""[FUNCTION 100110]()""",[110])
-(111,7,"""[FUNCTION 100110]() + 1:::INT8""",[110])
+id   col_id  compute_expr                      uses_fn_ids
+111  1       NULL                              NULL
+111  2       NULL                              NULL
+111  3       "[FUNCTION 100110]()"             [110]
+111  5       "b + [FUNCTION 100110]()"         [110]
+111  6       "[FUNCTION 100110]()"             [110]
+111  7       "[FUNCTION 100110]() + 1:::INT8"  [110]
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -220,14 +225,15 @@ SELECT get_fn_depended_on_by($fn_id)
 statement ok
 DROP INDEX t_idx3;
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_id);
+query IITT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
-(111,1,,)
-(111,2,,)
-(111,3,"""[FUNCTION 100110]()""",[110])
-(111,6,"""[FUNCTION 100110]()""",[110])
-(111,7,"""[FUNCTION 100110]() + 1:::INT8""",[110])
+id   col_id  compute_expr                      uses_fn_ids
+111  1       NULL                              NULL
+111  2       NULL                              NULL
+111  3       "[FUNCTION 100110]()"             [110]
+111  6       "[FUNCTION 100110]()"             [110]
+111  7       "[FUNCTION 100110]() + 1:::INT8"  [110]
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -246,12 +252,13 @@ SELECT get_fn_depended_on_by($fn_id)
 statement ok
 DROP INDEX t_idx4;
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_id);
+query IITT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
-(111,1,,)
-(111,2,,)
-(111,3,"""[FUNCTION 100110]()""",[110])
+id   col_id  compute_expr           uses_fn_ids
+111  1       NULL                   NULL
+111  2       NULL                   NULL
+111  3       "[FUNCTION 100110]()"  [110]
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -268,11 +275,12 @@ SELECT get_fn_depended_on_by($fn_id)
 statement ok
 DROP INDEX idx_b;
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_id);
+query IITT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
-(111,1,,)
-(111,2,,)
+id   col_id  compute_expr  uses_fn_ids
+111  1       NULL          NULL
+111  2       NULL          NULL
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
