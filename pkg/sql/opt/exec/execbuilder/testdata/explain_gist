@@ -279,3 +279,12 @@ SELECT crdb_internal.decode_plan_gist('AgH8/f//nxkAAN6DgICAgDQAAAADAZz9//+fGQAAz
                     │
                     └── • virtual table
                           table: @primary
+
+# Regression test for trying to decode a plan gist that contains a virtual table
+# with a virtual index that didn't exist on older versions (#142989, #147838).
+query T nosort
+SELECT crdb_internal.decode_plan_gist('AgHk+v//3xoEAKAFAgAABQQGBA==');
+----
+• virtual table
+  table: @?
+  spans: 1+ spans
