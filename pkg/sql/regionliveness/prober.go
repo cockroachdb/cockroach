@@ -274,6 +274,11 @@ func (l *livenessProber) QueryLiveness(ctx context.Context, txn *kv.Txn) (LiveRe
 func (l *livenessProber) QueryUnavailablePhysicalRegions(
 	ctx context.Context, txn *kv.Txn, filterAvailable bool,
 ) (UnavailableAtPhysicalRegions, error) {
+	regionLivenessEnabled, _ := l.GetProbeTimeout()
+	if !regionLivenessEnabled {
+		return UnavailableAtPhysicalRegions{}, nil
+	}
+
 	// Scan the entire region liveness table.
 	regionLivenessIndex := l.codec.IndexPrefix(uint32(systemschema.RegionLivenessTable.GetID()), uint32(systemschema.RegionLivenessTable.GetPrimaryIndexID()))
 	keyValues, err := txn.Scan(ctx, regionLivenessIndex, regionLivenessIndex.PrefixEnd(), 0)
