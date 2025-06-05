@@ -1,0 +1,7 @@
+parse
+SHOW CREATE ALL TRIGGERS
+----
+SHOW CREATE ALL TRIGGERS
+SHOW CREATE ALL TRIGGERS -- fully parenthesized
+SHOW CREATE ALL TRIGGERS -- literals removed
+SHOW CREATE ALL TRIGGERS -- identifiers removed

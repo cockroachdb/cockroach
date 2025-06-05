@@ -139,6 +139,7 @@ const (
 	CrdbInternalCreateProcedureStmtsTableID
 	CrdbInternalCreateSchemaStmtsTableID
 	CrdbInternalCreateStmtsTableID
+	CrdbInternalCreateTriggerStmtsTableID
 	CrdbInternalCreateTypeStmtsTableID
 	CrdbInternalDatabasesTableID
 	CrdbInternalFeatureUsageID
@@ -448,7 +449,6 @@ const (
 	PgExtensionGeometryColumnsTableID
 	PgExtensionSpatialRefSysTableID
 	MinVirtualID = PgExtensionSpatialRefSysTableID
-	CrdbInternalCreateTriggerStmtsTableID
 )
 
 // ConstraintType is used to identify the type of a constraint.
