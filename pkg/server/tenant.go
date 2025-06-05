@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logmetrics"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -104,7 +105,7 @@ type SQLServerWrapper struct {
 	db           *kv.DB
 
 	// Metric registries.
-	// See the explanatory comments in server.go and status/recorder.g o
+	// See the explanatory comments in server.go and status/recorder.go
 	// for details.
 	registry    *metric.Registry
 	sysRegistry *metric.Registry
@@ -729,6 +730,10 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			"encrypted_store": strconv.FormatBool(encryptedStore),
 		})
 	})
+
+	// Registers an event log writer for the tenant. This will enable the ability
+	// to persist structured events to the tenants system.eventlog table.
+	eventlog.Register(ctx, s.cfg.TestingKnobs.EventLog, s.sqlServer.execCfg.InternalDB, s.stopper, s.cfg.AmbientCtx, s.ClusterSettings())
 
 	// Init a log metrics registry.
 	logRegistry := logmetrics.NewRegistry()

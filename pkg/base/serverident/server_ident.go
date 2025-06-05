@@ -50,6 +50,10 @@ type ServerIdentificationPayload interface {
 	ServerIdentityString(key ServerIdentificationKey) string
 }
 
+type ServerIdentifier interface {
+	GetServerIdentificationPayload() ServerIdentificationPayload
+}
+
 // ServerIdentificationKey represents a possible parameter to the
 // ServerIdentityString() method in ServerIdentificationPayload.
 type ServerIdentificationKey int

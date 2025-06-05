@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errorspb"
@@ -114,7 +115,7 @@ func TestSchemaChangerJobErrorDetails(t *testing.T) {
 				return nil
 			},
 		},
-		EventLog:         &sql.EventLogTestingKnobs{SyncWrites: true},
+		EventLog:         &eventlog.EventLogTestingKnobs{SyncWrites: true},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
 
