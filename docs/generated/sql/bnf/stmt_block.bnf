@@ -1882,11 +1882,11 @@ create_type_stmt ::=
 	| 'CREATE' 'TYPE' 'IF' 'NOT' 'EXISTS' type_name 'AS' '(' opt_composite_type_list ')'
 
 create_view_stmt ::=
-	'CREATE' opt_temp 'VIEW' view_name opt_column_list 'AS' select_stmt
-	| 'CREATE' 'OR' 'REPLACE' opt_temp 'VIEW' view_name opt_column_list 'AS' select_stmt
-	| 'CREATE' opt_temp 'VIEW' 'IF' 'NOT' 'EXISTS' view_name opt_column_list 'AS' select_stmt
-	| 'CREATE' 'MATERIALIZED' 'VIEW' view_name opt_column_list 'AS' select_stmt opt_with_data
-	| 'CREATE' 'MATERIALIZED' 'VIEW' 'IF' 'NOT' 'EXISTS' view_name opt_column_list 'AS' select_stmt opt_with_data
+	'CREATE' opt_temp 'VIEW' view_name opt_column_list opt_with_storage_parameter_list 'AS' select_stmt
+	| 'CREATE' 'OR' 'REPLACE' opt_temp 'VIEW' view_name opt_column_list opt_with_storage_parameter_list 'AS' select_stmt
+	| 'CREATE' opt_temp 'VIEW' 'IF' 'NOT' 'EXISTS' view_name opt_column_list opt_with_storage_parameter_list 'AS' select_stmt
+	| 'CREATE' 'MATERIALIZED' 'VIEW' view_name opt_column_list opt_with_storage_parameter_list 'AS' select_stmt opt_with_data
+	| 'CREATE' 'MATERIALIZED' 'VIEW' 'IF' 'NOT' 'EXISTS' view_name opt_column_list opt_with_storage_parameter_list 'AS' select_stmt opt_with_data
 
 create_sequence_stmt ::=
 	'CREATE' opt_temp 'SEQUENCE' sequence_name opt_sequence_option_list

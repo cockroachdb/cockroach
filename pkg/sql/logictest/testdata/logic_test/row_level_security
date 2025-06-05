@@ -5521,4 +5521,14 @@ REVOKE SYSTEM CREATEDB FROM can_createdb_global;
 statement ok
 DROP ROLE can_createdb_global;
 
+subtest enable_view_security_invoker_feature_flag
+
+statement ok
+SET enable_view_security_invoker = on;
+
+query T
+show session enable_view_security_invoker;
+----
+on
+
 subtest end

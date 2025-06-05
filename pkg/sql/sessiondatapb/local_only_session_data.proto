@@ -670,6 +670,8 @@ message LocalOnlySessionData {
   // OptimizerUseExistsFilterHoistRule, when true, causes the optimizer to apply
   // the HoistUnboundFilterFromExistsSubquery rule to EXISTS conditions.
   bool optimizer_use_exists_filter_hoist_rule = 170;
+  // ViewSecurityInvokerEnabled indicates whether security invoker for views is enabled
+  bool view_security_invoker_enabled = 171;
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
