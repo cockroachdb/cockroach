@@ -328,7 +328,7 @@ func maybeAdjustVirtualIndexScanForExplain(
 ) (_ cat.Index, _ exec.ScanParams, extraAttribute string) {
 	idx, ok := index.(*optVirtualIndex)
 	if !ok {
-		return idx, params, extraAttribute
+		return index, params, extraAttribute
 	}
 	if idx.idx != nil && idx.idx.GetID() != 1 && params.IndexConstraint != nil {
 		// If we picked the virtual index, check that we can actually use it.
