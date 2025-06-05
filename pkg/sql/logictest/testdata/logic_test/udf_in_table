@@ -5,13 +5,13 @@ statement ok
 CREATE VIEW v_col_fn_ids AS
 SELECT
 id,
-json_array_elements(
+(json_array_elements(
   crdb_internal.pb_to_json(
     'cockroach.sql.sqlbase.Descriptor',
     descriptor,
     false
   )->'table'->'columns'
-)->'id' as col_id,
+)->'id')::INT as col_id,
 json_array_elements(
   crdb_internal.pb_to_json(
     'cockroach.sql.sqlbase.Descriptor',
@@ -88,14 +88,15 @@ CREATE TABLE t1(
 let $tbl_id
 SELECT id FROM system.namespace WHERE name = 't1';
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_id);
+query IITTTT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
-(111,1,,,,)
-(111,2,"""[FUNCTION 100106]()""",,,[106])
-(111,3,,,,)
-(111,4,,"""[FUNCTION 100106]()""",,[106])
-(111,5,,,,)
+id   col_id  default_expr           on_update_expr         compute_expr  uses_fn_ids
+111  1       NULL                   NULL                   NULL          NULL
+111  2       "[FUNCTION 100106]()"  NULL                   NULL          [106]
+111  3       NULL                   NULL                   NULL          NULL
+111  4       NULL                   "[FUNCTION 100106]()"  NULL          [106]
+111  5       NULL                   NULL                   NULL          NULL
 
 skipif config local-schema-locked
 query T
@@ -144,14 +145,15 @@ SELECT get_fn_depended_on_by($fn_id)
 statement ok
 ALTER TABLE t1 ALTER COLUMN c SET DEFAULT f1();
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_id);
+query IITTTT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
-(111,1,,,,)
-(111,2,"""[FUNCTION 100106]()""",,,[106])
-(111,3,"""[FUNCTION 100106]()""",,,[106])
-(111,4,,"""[FUNCTION 100106]()""",,[106])
-(111,5,,,,)
+id   col_id  default_expr           on_update_expr         compute_expr  uses_fn_ids
+111  1       NULL                   NULL                   NULL          NULL
+111  2       "[FUNCTION 100106]()"  NULL                   NULL          [106]
+111  3       "[FUNCTION 100106]()"  NULL                   NULL          [106]
+111  4       NULL                   "[FUNCTION 100106]()"  NULL          [106]
+111  5       NULL                   NULL                   NULL          NULL
 
 skipif config local-schema-locked
 query T
@@ -199,14 +201,15 @@ SELECT get_fn_depended_on_by($fn_id)
 statement ok
 ALTER TABLE t1 ALTER COLUMN e SET ON UPDATE f1();
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_id);
+query IITTTT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
-(111,1,,,,)
-(111,2,"""[FUNCTION 100106]()""",,,[106])
-(111,3,"""[FUNCTION 100106]()""",,,[106])
-(111,4,,"""[FUNCTION 100106]()""",,[106])
-(111,5,,"""[FUNCTION 100106]()""",,[106])
+id   col_id  default_expr           on_update_expr         compute_expr  uses_fn_ids
+111  1       NULL                   NULL                   NULL          NULL
+111  2       "[FUNCTION 100106]()"  NULL                   NULL          [106]
+111  3       "[FUNCTION 100106]()"  NULL                   NULL          [106]
+111  4       NULL                   "[FUNCTION 100106]()"  NULL          [106]
+111  5       NULL                   "[FUNCTION 100106]()"  NULL          [106]
 
 skipif config local-schema-locked
 query T
@@ -226,14 +229,15 @@ CREATE TABLE public.t1 (
 statement ok
 ALTER TABLE t1 ALTER COLUMN c SET DEFAULT NULL;
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_id);
+query IITTTT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
-(111,1,,,,)
-(111,2,"""[FUNCTION 100106]()""",,,[106])
-(111,3,,,,)
-(111,4,,"""[FUNCTION 100106]()""",,[106])
-(111,5,,"""[FUNCTION 100106]()""",,[106])
+id   col_id  default_expr           on_update_expr         compute_expr  uses_fn_ids
+111  1       NULL                   NULL                   NULL          NULL
+111  2       "[FUNCTION 100106]()"  NULL                   NULL          [106]
+111  3       NULL                   NULL                   NULL          NULL
+111  4       NULL                   "[FUNCTION 100106]()"  NULL          [106]
+111  5       NULL                   "[FUNCTION 100106]()"  NULL          [106]
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -253,14 +257,15 @@ SELECT get_fn_depended_on_by($fn_id)
 statement ok
 ALTER TABLE t1 ALTER COLUMN e SET ON UPDATE NULL;
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_id);
+query IITTTT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
-(111,1,,,,)
-(111,2,"""[FUNCTION 100106]()""",,,[106])
-(111,3,,,,)
-(111,4,,"""[FUNCTION 100106]()""",,[106])
-(111,5,,"""NULL""",,)
+id   col_id  default_expr           on_update_expr         compute_expr  uses_fn_ids
+111  1       NULL                   NULL                   NULL          NULL
+111  2       "[FUNCTION 100106]()"  NULL                   NULL          [106]
+111  3       NULL                   NULL                   NULL          NULL
+111  4       NULL                   "[FUNCTION 100106]()"  NULL          [106]
+111  5       NULL                   "NULL"                 NULL          NULL
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -279,14 +284,15 @@ SELECT get_fn_depended_on_by($fn_id)
 statement ok
 ALTER TABLE t1 ALTER COLUMN b DROP DEFAULT;
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_id);
+query IITTTT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
-(111,1,,,,)
-(111,2,,,,)
-(111,3,,,,)
-(111,4,,"""[FUNCTION 100106]()""",,[106])
-(111,5,,"""NULL""",,)
+id   col_id  default_expr  on_update_expr         compute_expr  uses_fn_ids
+111  1       NULL          NULL                   NULL          NULL
+111  2       NULL          NULL                   NULL          NULL
+111  3       NULL          NULL                   NULL          NULL
+111  4       NULL          "[FUNCTION 100106]()"  NULL          [106]
+111  5       NULL          "NULL"                 NULL          NULL
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -304,14 +310,15 @@ SELECT get_fn_depended_on_by($fn_id)
 statement ok
 ALTER TABLE t1 ALTER COLUMN d DROP ON UPDATE;
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_id);
+query IITTTT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
-(111,1,,,,)
-(111,2,,,,)
-(111,3,,,,)
-(111,4,,,,)
-(111,5,,"""NULL""",,)
+id   col_id  default_expr  on_update_expr  compute_expr  uses_fn_ids
+111  1       NULL          NULL            NULL          NULL
+111  2       NULL          NULL            NULL          NULL
+111  3       NULL          NULL            NULL          NULL
+111  4       NULL          NULL            NULL          NULL
+111  5       NULL          "NULL"          NULL          NULL
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -342,14 +349,15 @@ SELECT get_fn_depended_on_by($fn_id)
 statement ok
 ALTER TABLE t1 ALTER COLUMN c SET DEFAULT f1();
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_id);
+query IITTTT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
-(111,1,,,,)
-(111,2,"""[FUNCTION 100106]()""",,,[106])
-(111,3,"""[FUNCTION 100106]()""",,,[106])
-(111,4,,"""[FUNCTION 100106]()""",,[106])
-(111,5,,"""NULL""",,)
+id   col_id  default_expr           on_update_expr         compute_expr  uses_fn_ids
+111  1       NULL                   NULL                   NULL          NULL
+111  2       "[FUNCTION 100106]()"  NULL                   NULL          [106]
+111  3       "[FUNCTION 100106]()"  NULL                   NULL          [106]
+111  4       NULL                   "[FUNCTION 100106]()"  NULL          [106]
+111  5       NULL                   "NULL"                 NULL          NULL
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -368,13 +376,14 @@ SELECT get_fn_depended_on_by($fn_id)
 statement ok
 ALTER TABLE t1 DROP COLUMN c;
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_id);
+query IITTTT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
-(111,1,,,,)
-(111,2,"""[FUNCTION 100106]()""",,,[106])
-(111,4,,"""[FUNCTION 100106]()""",,[106])
-(111,5,,"""NULL""",,)
+id   col_id  default_expr           on_update_expr         compute_expr  uses_fn_ids
+111  1       NULL                   NULL                   NULL          NULL
+111  2       "[FUNCTION 100106]()"  NULL                   NULL          [106]
+111  4       NULL                   "[FUNCTION 100106]()"  NULL          [106]
+111  5       NULL                   "NULL"                 NULL          NULL
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -400,16 +409,17 @@ ALTER TABLE t1 ADD COLUMN g int DEFAULT (f1());
 statement ok
 ALTER TABLE t1 ADD COLUMN h int ON UPDATE (f1());
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_id);
+query IITTTT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
-(111,1,,,,)
-(111,2,"""[FUNCTION 100106]()""",,,[106])
-(111,4,,"""[FUNCTION 100106]()""",,[106])
-(111,5,,"""NULL""",,)
-(111,6,,,"""[FUNCTION 100106]()""",[106])
-(111,7,"""[FUNCTION 100106]()""",,,[106])
-(111,8,,"""[FUNCTION 100106]()""",,[106])
+id   col_id  default_expr           on_update_expr         compute_expr           uses_fn_ids
+111  1       NULL                   NULL                   NULL                   NULL
+111  2       "[FUNCTION 100106]()"  NULL                   NULL                   [106]
+111  4       NULL                   "[FUNCTION 100106]()"  NULL                   [106]
+111  5       NULL                   "NULL"                 NULL                   NULL
+111  6       NULL                   NULL                   "[FUNCTION 100106]()"  [106]
+111  7       "[FUNCTION 100106]()"  NULL                   NULL                   [106]
+111  8       NULL                   "[FUNCTION 100106]()"  NULL                   [106]
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -432,16 +442,17 @@ SELECT get_fn_depended_on_by($fn_id)
 statement ok
 ALTER TABLE t1 ALTER COLUMN b SET DEFAULT f1();
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_id);
+query IITTTT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
-(111,1,,,,)
-(111,2,"""[FUNCTION 100106]()""",,,[106])
-(111,4,,"""[FUNCTION 100106]()""",,[106])
-(111,5,,"""NULL""",,)
-(111,6,,,"""[FUNCTION 100106]()""",[106])
-(111,7,"""[FUNCTION 100106]()""",,,[106])
-(111,8,,"""[FUNCTION 100106]()""",,[106])
+id   col_id  default_expr           on_update_expr         compute_expr           uses_fn_ids
+111  1       NULL                   NULL                   NULL                   NULL
+111  2       "[FUNCTION 100106]()"  NULL                   NULL                   [106]
+111  4       NULL                   "[FUNCTION 100106]()"  NULL                   [106]
+111  5       NULL                   "NULL"                 NULL                   NULL
+111  6       NULL                   NULL                   "[FUNCTION 100106]()"  [106]
+111  7       "[FUNCTION 100106]()"  NULL                   NULL                   [106]
+111  8       NULL                   "[FUNCTION 100106]()"  NULL                   [106]
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -603,11 +614,12 @@ SELECT id FROM system.namespace WHERE name = 't1';
 let $fn_id
 SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f1';
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_id);
+query IITTTT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
-(119,1,,,,)
-(119,2,"""[FUNCTION 100118]()""",,,[118])
+id   col_id  default_expr           on_update_expr  compute_expr  uses_fn_ids
+119  1       NULL                   NULL            NULL          NULL
+119  2       "[FUNCTION 100118]()"  NULL            NULL          [118]
 
 query T
 SELECT get_fn_depended_on_by($fn_id);
@@ -645,11 +657,12 @@ SELECT id FROM system.namespace WHERE name = 't1';
 let $fn_id
 SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f1';
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_id);
+query IITTTT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
-(120,1,,,,)
-(120,2,"""[FUNCTION 100121]()""",,,[121])
+id   col_id  default_expr           on_update_expr  compute_expr  uses_fn_ids
+120  1       NULL                   NULL            NULL          NULL
+120  2       "[FUNCTION 100121]()"  NULL            NULL          [121]
 
 query T
 SELECT get_fn_depended_on_by($fn_id);
@@ -750,13 +763,14 @@ let $tbl_computed_id
 SELECT id FROM system.namespace WHERE name = 't_computed';
 
 # Check that computed column expressions track function usage.
-query T rowsort
-SELECT get_col_fn_ids($tbl_computed_id);
+query IITTTT colnames
+SELECT * FROM get_col_fn_ids($tbl_computed_id) ORDER BY 1, 2;
 ----
-(125,1,,,,)
-(125,2,,,,)
-(125,3,,,"""[FUNCTION 100124](a)""",[124])
-(125,4,,,"""[FUNCTION 100124](b)""",[124])
+id   col_id  default_expr  on_update_expr  compute_expr            uses_fn_ids
+125  1       NULL          NULL            NULL                    NULL
+125  2       NULL          NULL            NULL                    NULL
+125  3       NULL          NULL            "[FUNCTION 100124](a)"  [124]
+125  4       NULL          NULL            "[FUNCTION 100124](b)"  [124]
 
 # Check function back references include computed columns.
 let $fn_compute_id
@@ -779,12 +793,13 @@ SELECT get_fn_depended_on_by($fn_compute_id)
 statement ok
 ALTER TABLE t_computed DROP COLUMN c;
 
-query T rowsort
-SELECT get_col_fn_ids($tbl_computed_id);
+query IITTTT colnames
+SELECT * FROM get_col_fn_ids($tbl_computed_id) ORDER BY 1, 2;
 ----
-(125,1,,,,)
-(125,2,,,,)
-(125,4,,,"""[FUNCTION 100124](b)""",[124])
+id   col_id  default_expr  on_update_expr  compute_expr            uses_fn_ids
+125  1       NULL          NULL            NULL                    NULL
+125  2       NULL          NULL            NULL                    NULL
+125  4       NULL          NULL            "[FUNCTION 100124](b)"  [124]
 
 query T
 SELECT get_fn_depended_on_by($fn_compute_id)
@@ -836,12 +851,13 @@ let $fn_add_id
 SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f_add';
 
 # Check that computed column tracks multiple function references.
-query T rowsort
-SELECT get_col_fn_ids($tbl_multi_fn_id);
+query IITTTT colnames
+SELECT * FROM get_col_fn_ids($tbl_multi_fn_id) ORDER BY 1, 2;
 ----
-(127,1,,,,)
-(127,2,,,,)
-(127,3,,,"""[FUNCTION 100124](a) + [FUNCTION 100126](a, b)""","[124, 126]")
+id   col_id  default_expr  on_update_expr  compute_expr                                      uses_fn_ids
+127  1       NULL          NULL            NULL                                              NULL
+127  2       NULL          NULL            NULL                                              NULL
+127  3       NULL          NULL            "[FUNCTION 100124](a) + [FUNCTION 100126](a, b)"  [124, 126]
 
 query T
 SELECT get_fn_depended_on_by($fn_compute_id)
