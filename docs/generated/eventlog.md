@@ -463,9 +463,9 @@ An event of type `hot_ranges_stats`
 | `WriteBytesPerSecond` | Write bytes per second is the recent number of bytes written per second on this range. | no |
 | `ReadBytesPerSecond` | Read bytes per second is the recent number of bytes read per second on this range. | no |
 | `CPUTimePerSecond` | CPU time per second is the recent cpu usage in nanoseconds of this range. | no |
-| `Databases` | Databases for the range. | yes |
-| `Tables` | Tables for the range | yes |
-| `Indexes` | Indexes for the range | yes |
+| `Databases` | Databases for the range. | no |
+| `Tables` | Tables for the range | no |
+| `Indexes` | Indexes for the range | no |
 
 
 #### Common fields
