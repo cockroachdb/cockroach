@@ -1,5 +1,3 @@
-# LogicTest: !local-schema-locked
-
 # We've seen this test hit a timeout in fakedist configs under race.
 skip under race
 
@@ -223,6 +221,7 @@ CREATE TABLE t (rowid INT PRIMARY KEY, y INT NOT NULL, FAMILY (rowid, y));
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE t
 ----
@@ -233,6 +232,18 @@ t  CREATE TABLE public.t (
      UNIQUE INDEX t_rowid_key (rowid ASC),
      FAMILY fam_0_rowid_y (rowid, y)
    );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE public.t (
+     rowid INT8 NOT NULL,
+     y INT8 NOT NULL,
+     CONSTRAINT t_pkey PRIMARY KEY (y ASC),
+     UNIQUE INDEX t_rowid_key (rowid ASC),
+     FAMILY fam_0_rowid_y (rowid, y)
+   ) WITH (schema_locked = true);
 
 subtest index_rewrites
 # Test that indexes that need to get rewritten indeed get rewritten.
@@ -255,6 +266,12 @@ CREATE TABLE t (
   INDEX i7 (z) USING HASH WITH (bucket_count=4), -- will be rewritten.
   FAMILY (x, y, z, w, v)
 );
+
+# Because of #146725 we can't have schema_locked set, since this
+# fallback to the legacy schema changer.
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE t SET (schema_locked = false);
 
 statement ok
 INSERT INTO t VALUES (1, 2, 3, 4, '{}');
@@ -435,6 +452,12 @@ CREATE TABLE t (
 statement ok
 INSERT INTO t VALUES (1, 2, 3);
 
+# Because of #146725 we can't have schema_locked set, since this
+# fallback to the legacy schema changer.
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE t SET (schema_locked = false);
+
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y) USING HASH WITH (bucket_count=10)
 
@@ -501,6 +524,12 @@ CREATE TABLE t (
 statement ok
 INSERT INTO t VALUES (1, 2, 3);
 
+# Because of #146725 we can't have schema_locked set, since this
+# fallback to the legacy schema changer.
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE t SET (schema_locked = false);
+
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 
@@ -535,6 +564,7 @@ DROP TABLE IF EXISTS t;
 statement ok
 CREATE TABLE t (rowid INT NOT NULL);
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE t
 ----
@@ -544,10 +574,21 @@ t  CREATE TABLE public.t (
      CONSTRAINT t_pkey PRIMARY KEY (rowid_1 ASC)
    );
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE public.t (
+     rowid INT8 NOT NULL,
+     rowid_1 INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT t_pkey PRIMARY KEY (rowid_1 ASC)
+   ) WITH (schema_locked = true);
+
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (rowid)
 
 # Legacy schema changer will keep the rowid column.
+skipif config local-schema-locked
 skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE t
@@ -556,6 +597,15 @@ t  CREATE TABLE public.t (
      rowid INT8 NOT NULL,
      CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
    );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE public.t (
+     rowid INT8 NOT NULL,
+     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+   ) WITH (schema_locked = true);
 
 # Regression for old primary key not using PrimaryIndexEncoding as its encoding type.
 subtest encoding_bug
@@ -583,7 +633,7 @@ statement ok
 DROP TABLE IF EXISTS t;
 
 statement ok
-CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL)
+CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL) WITH (schema_locked = false);
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -602,7 +652,7 @@ statement ok
 DROP TABLE IF EXISTS t;
 
 statement ok
-CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL)
+CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL) WITH (schema_locked = false)
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -638,6 +688,7 @@ statement ok
 ALTER TABLE t ADD PRIMARY KEY (x)
 
 # Row ID isn't removed by legacy schema changer.
+skipif config local-schema-locked
 skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE t
@@ -646,6 +697,15 @@ t  CREATE TABLE public.t (
      x INT8 NOT NULL,
      CONSTRAINT t_pkey PRIMARY KEY (x ASC)
    );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE public.t (
+     x INT8 NOT NULL,
+     CONSTRAINT t_pkey PRIMARY KEY (x ASC)
+   ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE IF EXISTS t;
@@ -656,6 +716,7 @@ CREATE TABLE t (x INT NOT NULL);
 statement ok
 ALTER TABLE t ADD PRIMARY KEY (x) USING HASH WITH (bucket_count=4)
 
+skipif config local-schema-locked
 skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE t
@@ -665,6 +726,16 @@ t  CREATE TABLE public.t (
      crdb_internal_x_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(x))), 4:::INT8)) VIRTUAL,
      CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=4)
    );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE public.t (
+     x INT8 NOT NULL,
+     crdb_internal_x_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(x))), 4:::INT8)) VIRTUAL,
+     CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=4)
+   ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE IF EXISTS t;
@@ -676,6 +747,7 @@ statement ok
 ALTER TABLE t ADD CONSTRAINT "my_pk" PRIMARY KEY (x)
 
 # Row ID isn't removed by legacy schema changer.
+skipif config local-schema-locked
 skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE t
@@ -685,18 +757,35 @@ t  CREATE TABLE public.t (
      CONSTRAINT my_pk PRIMARY KEY (x ASC)
    );
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE public.t (
+     x INT8 NOT NULL,
+     CONSTRAINT my_pk PRIMARY KEY (x ASC)
+   ) WITH (schema_locked = true);
+
 statement ok
-CREATE INDEX i ON t (x);
+CREATE INDEX i ON t (x)
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE t SET (schema_locked = false);
 
 statement error pgcode 42P07 constraint with name \"i\" already exists
 ALTER TABLE t DROP CONSTRAINT "my_pk", ADD CONSTRAINT "i" PRIMARY KEY (x);
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE t SET (schema_locked = true);
 
 # Regression for #45362.
 statement ok
 DROP TABLE IF EXISTS t;
 
 statement ok
-CREATE TABLE t (x INT NOT NULL)
+CREATE TABLE t (x INT NOT NULL) WITH (schema_locked = false)
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -734,8 +823,9 @@ subtest add_drop_pk
 statement ok
 DROP TABLE IF EXISTS t;
 
+# Legacy schema changer statements
 statement ok
-CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, FAMILY (x), FAMILY (y))
+CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, FAMILY (x), FAMILY (y)) WITH (schema_locked = false)
 
 statement error pq: relation "t" \([0-9]+\): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
 ALTER TABLE t DROP CONSTRAINT "t_pkey"
@@ -772,7 +862,7 @@ statement ok
 DROP TABLE t;
 
 statement ok
-CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, FAMILY (x), FAMILY (y))
+CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, FAMILY (x), FAMILY (y)) WITH (schema_locked = false)
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -791,7 +881,7 @@ statement ok
 DROP TABLE t;
 
 statement ok
-CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, FAMILY (x), FAMILY (y))
+CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, FAMILY (x), FAMILY (y))  WITH (schema_locked = false)
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -823,7 +913,7 @@ statement ok
 DROP TABLE t;
 
 statement ok
-CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL)
+CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL) WITH (schema_locked = false)
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -925,10 +1015,10 @@ statement ok
 DROP TABLE IF EXISTS t1, t2 CASCADE;
 
 statement ok
-CREATE TABLE t1 (x INT PRIMARY KEY, y INT NOT NULL);
+CREATE TABLE t1 (x INT PRIMARY KEY, y INT NOT NULL) WITH (schema_locked = false);
 
 statement ok
-CREATE TABLE t2 (x INT)
+CREATE TABLE t2 (x INT) WITH (schema_locked = false)
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -951,7 +1041,7 @@ statement ok
 DROP TABLE IF EXISTS t;
 
 statement ok
-CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL)
+CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL) WITH (schema_locked = false)
 
 statement error pq: table "t" does not have a primary key, cannot perform ADD COLUMN z INT8 AS \(x \+ 1\) STORED
 ALTER TABLE t DROP CONSTRAINT t_pkey, ADD COLUMN z INT AS (x + 1) STORED, ADD PRIMARY KEY (y)
@@ -975,6 +1065,7 @@ ALTER TABLE t ADD PRIMARY KEY (x)
 statement ok
 COMMIT
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE t
 ----
@@ -986,6 +1077,19 @@ t  CREATE TABLE public.t (
      INDEX t_y_idx (y ASC),
      FAMILY fam_0_x_y_rowid (x, y, rowid)
    );
+
+onlyif config local-schmema-locked
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE public.t (
+     x INT8 NOT NULL,
+     y INT8 NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT t_pkey PRIMARY KEY (x ASC),
+     INDEX t_y_idx (y ASC),
+     FAMILY fam_0_x_y_rowid (x, y, rowid)
+   ) WITH (schema_locked = true);
 
 # Ensure that index y got rewritten. If it was not rewritten,
 # it would have an id less than 3.
@@ -1013,6 +1117,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x)
 statement ok
 COMMIT
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE t
 ----
@@ -1024,6 +1129,20 @@ t  CREATE TABLE public.t (
      INDEX t_y_idx (y ASC),
      FAMILY fam_0_x_y_rowid (x, y, rowid)
    );
+
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE public.t (
+     x INT8 NOT NULL,
+     y INT8 NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT t_pkey PRIMARY KEY (x ASC),
+     INDEX t_y_idx (y ASC),
+     FAMILY fam_0_x_y_rowid (x, y, rowid)
+   ) WITH (schema_locked = true);
 
 # Ensure that index y got rewritten. If it was not rewritten,
 # it would have an id less than 3.
@@ -1057,6 +1176,7 @@ ALTER TABLE t ADD PRIMARY KEY (x)
 statement ok
 COMMIT
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE t
 ----
@@ -1072,6 +1192,23 @@ t  CREATE TABLE public.t (
      INDEX i3 (w ASC) STORING (y, z),
      FAMILY fam_0_x_y_z_w_rowid (x, y, z, w, rowid)
    );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE public.t (
+     x INT8 NOT NULL,
+     y INT8 NULL,
+     z INT8 NULL,
+     w INT8 NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT t_pkey PRIMARY KEY (x ASC),
+     INDEX i1 (y ASC),
+     UNIQUE INDEX i2 (z ASC),
+     INDEX i3 (w ASC) STORING (y, z),
+     FAMILY fam_0_x_y_z_w_rowid (x, y, z, w, rowid)
+   ) WITH (schema_locked = true);
 
 # All index id's should be larger than 4.
 query IT
@@ -1095,6 +1232,7 @@ statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x) USING HASH WITH (bucket_count=3)
 
 # old shard column isn't removed by legacy schema changer.
+skipif config local-schema-locked
 skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE t
@@ -1104,6 +1242,16 @@ t  CREATE TABLE public.t (
      crdb_internal_x_shard_3 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(x))), 3:::INT8)) VIRTUAL,
      CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=3)
    );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE public.t (
+     x INT8 NOT NULL,
+     crdb_internal_x_shard_3 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(x))), 3:::INT8)) VIRTUAL,
+     CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=3)
+   ) WITH (schema_locked = true);
 
 # Changes on a hash sharded index that change the columns will cause the old
 # primary key to be copied.
@@ -1116,6 +1264,7 @@ CREATE TABLE t (x INT PRIMARY KEY USING HASH WITH (bucket_count=2), y INT NOT NU
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y) USING HASH WITH (bucket_count=2)
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE t
 ----
@@ -1128,6 +1277,20 @@ t  CREATE TABLE public.t (
      UNIQUE INDEX t_x_key (x ASC) USING HASH WITH (bucket_count=2),
      FAMILY fam_0_x_y (x, y)
    );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE public.t (
+     crdb_internal_x_shard_2 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(x))), 2:::INT8)) VIRTUAL,
+     x INT8 NOT NULL,
+     y INT8 NOT NULL,
+     crdb_internal_y_shard_2 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(y))), 2:::INT8)) VIRTUAL,
+     CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH (bucket_count=2),
+     UNIQUE INDEX t_x_key (x ASC) USING HASH WITH (bucket_count=2),
+     FAMILY fam_0_x_y (x, y)
+   ) WITH (schema_locked = true);
 
 # Regression for #49079.
 statement ok
@@ -1214,9 +1377,17 @@ t1_pkey  id    ASC
 t1_pkey  id2   ASC
 t1_pkey  name  N/A
 
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE t1 SET (schema_locked = false)
+
 # Validate drop and recreate
 statement ok
 alter table t1 drop constraint t1_pkey, alter primary key using columns(id, id2);
+
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE t1 SET (schema_locked = true)
 
 # Row ID isn't removed by legacy schema changer.
 skipif config local-legacy-schema-changer
@@ -1316,6 +1487,7 @@ CREATE TABLE table_with_virtual_cols (
 );
 ALTER TABLE table_with_virtual_cols ALTER PRIMARY KEY USING COLUMNS (new_pk)
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE table_with_virtual_cols
 ----
@@ -1327,6 +1499,19 @@ table_with_virtual_cols  CREATE TABLE public.table_with_virtual_cols (
                            UNIQUE INDEX table_with_virtual_cols_id_key (id ASC),
                            FAMILY fam_0_id_new_pk (id, new_pk)
                          );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE table_with_virtual_cols
+----
+table_with_virtual_cols  CREATE TABLE public.table_with_virtual_cols (
+                           id INT8 NOT NULL,
+                           new_pk INT8 NOT NULL,
+                           virtual_col INT8 NULL AS (1:::INT8) VIRTUAL,
+                           CONSTRAINT table_with_virtual_cols_pkey PRIMARY KEY (new_pk ASC),
+                           UNIQUE INDEX table_with_virtual_cols_id_key (id ASC),
+                           FAMILY fam_0_id_new_pk (id, new_pk)
+                         ) WITH (schema_locked = true);
 
 # Test that we do not create new indexes for the old primary key when going
 # from sharded to non-sharded and back.
@@ -1431,6 +1616,7 @@ a  b  k
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -1442,6 +1628,19 @@ CREATE TABLE public.t (
   INDEX t_idx_b_k (b ASC, k ASC),
   UNIQUE INDEX t_a_key (a ASC)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  k INT8 NOT NULL AS (a + b) VIRTUAL,
+  CONSTRAINT t_pkey PRIMARY KEY (k ASC),
+  INDEX t_idx_b_k (b ASC, k ASC),
+  UNIQUE INDEX t_a_key (a ASC)
+) WITH (schema_locked = true);
 
 query III colnames,rowsort
 SELECT * FROM t@t_pkey
@@ -1467,6 +1666,7 @@ a  b  k
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (b, k);
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -1479,6 +1679,21 @@ CREATE TABLE public.t (
   UNIQUE INDEX t_a_key (a ASC),
   UNIQUE INDEX t_k_key (k ASC)
 );
+
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  k INT8 NOT NULL AS (a + b) VIRTUAL,
+  CONSTRAINT t_pkey PRIMARY KEY (b ASC, k ASC),
+  INDEX t_idx_b_k (b ASC, k ASC),
+  UNIQUE INDEX t_a_key (a ASC),
+  UNIQUE INDEX t_k_key (k ASC)
+) WITH (schema_locked = true);
 
 query III colnames,rowsort
 SELECT * FROM t@t_pkey
@@ -1511,6 +1726,7 @@ a  b  k
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -1524,6 +1740,22 @@ CREATE TABLE public.t (
   UNIQUE INDEX t_k_key (k ASC),
   UNIQUE INDEX t_b_k_key (b ASC, k ASC)
 );
+
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  k INT8 NOT NULL AS (a + b) VIRTUAL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX t_idx_b_k (b ASC, k ASC),
+  UNIQUE INDEX t_a_key (a ASC),
+  UNIQUE INDEX t_k_key (k ASC),
+  UNIQUE INDEX t_b_k_key (b ASC, k ASC)
+) WITH (schema_locked = true);
 
 query III colnames,rowsort
 SELECT * FROM t@t_pkey
@@ -1585,6 +1817,7 @@ ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) USING HASH WITH BUC
 statement ok
 ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) USING HASH WITH BUCKET_COUNT = 5;
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_test_param]
 ----
@@ -1596,6 +1829,19 @@ CREATE TABLE public.t_test_param (
   UNIQUE INDEX t_test_param_a_key (a ASC),
   FAMILY fam_0_a_b (a, b)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_test_param]
+----
+CREATE TABLE public.t_test_param (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  crdb_internal_b_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 5:::INT8)) VIRTUAL,
+  CONSTRAINT t_test_param_pkey PRIMARY KEY (b ASC) USING HASH WITH (bucket_count=5),
+  UNIQUE INDEX t_test_param_a_key (a ASC),
+  FAMILY fam_0_a_b (a, b)
+) WITH (schema_locked = true);
 
 subtest pkey-comment-carry-over
 
@@ -1735,6 +1981,12 @@ CREATE TABLE t (
 	i INT PRIMARY KEY USING HASH WITH (bucket_count=7) DEFAULT unique_rowid(),
 	j INT NOT NULL UNIQUE
 )
+
+# Because of #146725 we can't have schema_locked set, since this
+# fallback to the legacy schema changer.
+onlyif config local-schema-locked
+statement ok
+ALTER TABLE t SET (schema_locked = false);
 
 # Assert that the primary key is hash-sharded and the unique index is created.
 query TTT
@@ -1884,7 +2136,7 @@ ALTER TABLE t_90306 ALTER PRIMARY KEY USING COLUMNS (k);
 subtest regression_90836
 
 statement ok
-CREATE TABLE t_90836(a INT NOT NULL, b INT NOT NULL, CONSTRAINT "constraint" PRIMARY KEY (a));
+CREATE TABLE t_90836(a INT NOT NULL, b INT NOT NULL, CONSTRAINT "constraint" PRIMARY KEY (a)) WITH (schema_locked = false);
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -1917,6 +2169,7 @@ CREATE TABLE t_96730 (i INT PRIMARY KEY, j INT NOT NULL, k STRING NOT NULL, FAMI
 statement ok
 ALTER TABLE t_96730 ALTER PRIMARY KEY USING COLUMNS (j, k) USING HASH
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t_96730
 ----
@@ -1928,6 +2181,19 @@ t_96730  CREATE TABLE public.t_96730 (
            CONSTRAINT t_96730_pkey PRIMARY KEY (j ASC, k ASC) USING HASH WITH (bucket_count=16),
            UNIQUE INDEX t_96730_i_key (i ASC)
          );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t_96730
+----
+t_96730  CREATE TABLE public.t_96730 (
+           i INT8 NOT NULL,
+           j INT8 NOT NULL,
+           k STRING NOT NULL,
+           crdb_internal_j_k_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(j, k))), 16:::INT8)) VIRTUAL,
+           CONSTRAINT t_96730_pkey PRIMARY KEY (j ASC, k ASC) USING HASH WITH (bucket_count=16),
+           UNIQUE INDEX t_96730_i_key (i ASC)
+         ) WITH (schema_locked = true);
 
 # If we had a partial unique index on the old primary key columns, and after a
 # ALTER PRIMARY KEY, we will create a unique secondary index on the old primary
@@ -1941,6 +2207,7 @@ CREATE TABLE t_99303 (i INT NOT NULL PRIMARY KEY, j INT NOT NULL, UNIQUE INDEX (
 statement ok
 ALTER TABLE t_99303 ALTER PRIMARY KEY USING COLUMNS (j);
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE t_99303
 ----
@@ -1951,6 +2218,18 @@ t_99303  CREATE TABLE public.t_99303 (
            UNIQUE INDEX t_99303_i_key (i ASC) WHERE i > 0:::INT8,
            UNIQUE INDEX t_99303_i_key1 (i ASC)
          );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE t_99303
+----
+t_99303  CREATE TABLE public.t_99303 (
+           i INT8 NOT NULL,
+           j INT8 NOT NULL,
+           CONSTRAINT t_99303_pkey PRIMARY KEY (j ASC),
+           UNIQUE INDEX t_99303_i_key (i ASC) WHERE i > 0:::INT8,
+           UNIQUE INDEX t_99303_i_key1 (i ASC)
+         ) WITH (schema_locked = true);
 
 subtest end
 
@@ -2055,6 +2334,7 @@ CREATE TABLE table_w0_66 ( "Abc" INT4 PRIMARY KEY, "ab\f" INT2 NOT NULL, FAMILY 
 statement ok
 ALTER TABLE public.table_w0_66 ALTER PRIMARY KEY USING COLUMNS ("Abc", "ab\f") USING HASH;
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE public.table_w0_66]
 ----
@@ -2066,5 +2346,18 @@ CREATE TABLE public.table_w0_66 (
   UNIQUE INDEX "table_w0_66_Abc_key" ("Abc" ASC),
   FAMILY "fam_0_Abc_ab\f" ("Abc", "ab\f")
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE public.table_w0_66]
+----
+CREATE TABLE public.table_w0_66 (
+  "Abc" INT4 NOT NULL,
+  "ab\f" INT2 NOT NULL,
+  "crdb_internal_Abc_ab\f_shard_16" INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes("Abc", "ab\f"))), 16:::INT8)) VIRTUAL,
+  CONSTRAINT table_w0_66_pkey PRIMARY KEY ("Abc" ASC, "ab\f" ASC) USING HASH WITH (bucket_count=16),
+  UNIQUE INDEX "table_w0_66_Abc_key" ("Abc" ASC),
+  FAMILY "fam_0_Abc_ab\f" ("Abc", "ab\f")
+) WITH (schema_locked = true);
 
 subtest end
