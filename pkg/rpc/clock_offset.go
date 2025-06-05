@@ -8,6 +8,7 @@ package rpc
 import (
 	"context"
 	"math"
+	"sort"
 	"time"
 
 	"github.com/VividCortex/ewma"
@@ -340,7 +341,7 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 
 	now := r.clock.Now()
 	healthyOffsetCount := 0
-
+	sum := float64(0)
 	offsets, numClocks := func() (stats.Float64Data, int) {
 		r.mu.Lock()
 		defer r.mu.Unlock()
@@ -351,8 +352,10 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 				delete(r.mu.offsets, id)
 				continue
 			}
-			offs = append(offs, float64(offset.Offset+offset.Uncertainty))
-			offs = append(offs, float64(offset.Offset-offset.Uncertainty))
+			off1 := float64(offset.Offset + offset.Uncertainty)
+			off2 := float64(offset.Offset - offset.Uncertainty)
+			sum += off1 + off2
+			offs = append(offs, off1, off2)
 			if offset.isHealthy(ctx, r.toleratedOffset) {
 				healthyOffsetCount++
 			}
@@ -360,22 +363,13 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 		return offs, len(r.mu.offsets)
 	}()
 
-	mean, err := offsets.Mean()
-	if err != nil && !errors.Is(err, stats.EmptyInput) {
-		return err
-	}
-	stdDev, err := offsets.StandardDeviation()
-	if err != nil && !errors.Is(err, stats.EmptyInput) {
-		return err
-	}
-	median, err := offsets.Median()
-	if err != nil && !errors.Is(err, stats.EmptyInput) {
-		return err
-	}
-	medianAbsoluteDeviation, err := offsets.MedianAbsoluteDeviation()
-	if err != nil && !errors.Is(err, stats.EmptyInput) {
-		return err
-	}
+	sort.Float64s(offsets)
+
+	mean := sum / float64(len(offsets))
+	stdDev := StandardDeviationPopulationKnownMean(offsets, mean)
+	median := MedianSortedInput(offsets)
+	medianAbsoluteDeviation := MedianAbsoluteDeviationPopulationSortedInputMutatesInput(offsets)
+
 	r.metrics.ClockOffsetMeanNanos.Update(int64(mean))
 	r.metrics.ClockOffsetStdDevNanos.Update(int64(stdDev))
 	r.metrics.ClockOffsetMedianNanos.Update(int64(median))
@@ -457,4 +451,79 @@ func updateClockOffsetTracking(
 	}
 	remoteClocks.UpdateOffset(ctx, nodeID, offset, pingDuration)
 	return pingDuration, offset, remoteClocks.VerifyClockOffset(ctx)
+}
+
+// The following statistics functions are re-implementations of similar
+// functions provided by github.com/montanaflynn/stats. Those original functions
+// were originally offered under:
+//
+//	The MIT License (MIT)
+//
+//	Copyright (c) 2014-2023 Montana Flynn (https://montanaflynn.com)
+//
+//	Permission is hereby granted, free of charge, to any person obtaining a copy
+//	of this software and associated documentation files (the "Software"), to deal
+//	in the Software without restriction, including without limitation the rights
+//	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//	copies of the Software, and to permit persons to whom the Software is
+//	furnished to do so, subject to the following conditions:
+//
+//	The above copyright notice and this permission notice shall be included in all
+//	copies or substantial portions of the Software.
+//
+
+// StandardDeviationPopulationKnownMean calculates the standard deviation
+// assuming the input is the population and that the given mean is the mean of
+// the input.
+func StandardDeviationPopulationKnownMean(input stats.Float64Data, mean float64) float64 {
+	if input.Len() == 0 {
+		return math.NaN()
+	}
+	return math.Sqrt(PopulationVarianceKnownMean(input, mean))
+}
+
+// PopulationVarianceKnownMean calculates the variance assuming the input is the
+// population and that the given mean is the mean of the input.
+func PopulationVarianceKnownMean(input stats.Float64Data, mean float64) float64 {
+	if input.Len() == 0 {
+		return math.NaN()
+	}
+	variance := float64(0)
+	for _, n := range input {
+		diff := n - mean
+		variance += diff * diff
+	}
+	return variance / float64(input.Len())
+}
+
+// MedianSortedInput calculates the mean of the input, assuming it is already
+// sorted.
+func MedianSortedInput(sortedInput stats.Float64Data) float64 {
+	l := len(sortedInput)
+	if l == 0 {
+		return math.NaN()
+	} else if l == 1 {
+		return sortedInput[0]
+	} else if l%2 == 0 {
+		return (sortedInput[(l/2)-1] + sortedInput[(l/2)]) / 2.0
+	} else {
+		return sortedInput[l/2]
+	}
+}
+
+// MedianAbsoluteDeviationPopulationSortedInputMutatesInput calculates the
+// median absolute deviation from a pre-sorted population.
+//
+// WARNING: This function mutates its input to avoid further allocations.
+func MedianAbsoluteDeviationPopulationSortedInputMutatesInput(sortedInput stats.Float64Data) float64 {
+	if sortedInput.Len() == 0 {
+		return math.NaN()
+	}
+
+	m := MedianSortedInput(sortedInput)
+	for key, value := range sortedInput {
+		sortedInput[key] = math.Abs(value - m)
+	}
+	sort.Float64s(sortedInput)
+	return MedianSortedInput(sortedInput)
 }
