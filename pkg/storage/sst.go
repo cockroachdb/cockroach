@@ -75,6 +75,290 @@ func NewMultiMemSSTIterator(ssts [][]byte, verify bool, opts IterOptions) (MVCCI
 	return iter, nil
 }
 
+// ComputeSSTStatsDiffReaderHasRangeKeys is returned if the reader passed to
+// ComputeSSTSTatsDiff contains range keys in the span [start, end).
+var ComputeSSTStatsDiffReaderHasRangeKeys = errors.New("engine contains rangekeys")
+
+func errorIfReaderContainsRangeKeys(
+	ctx context.Context, reader Reader, start, UpperBound roachpb.Key,
+) error {
+	engRKIter, err := reader.NewMVCCIterator(ctx, MVCCKeyIterKind, IterOptions{
+		KeyTypes:   IterKeyTypeRangesOnly,
+		UpperBound: UpperBound,
+	})
+	if err != nil {
+		return err
+	}
+	defer engRKIter.Close()
+	engRKIter.SeekGE(MVCCKey{Key: start})
+	if ok, err := engRKIter.Valid(); err != nil {
+		return err
+	} else if ok {
+		return ComputeSSTStatsDiffReaderHasRangeKeys
+	}
+	return nil
+}
+
+// ComputeSSTStatsDiff computes a diff of the key span's mvcc stats if the sst
+// were applied. Note, the incoming sst must not contain any range keys. The key
+// span must be contained in the global keyspace.
+//
+// This function assumes that if an engine key overlaps with an sst key
+// (i.e. engKey.Key == iterKey.Key), the sst key shadows the latest eng key or
+// is a duplicate. Here are two valid examples:
+//
+// 1. sst: a2, a1, eng: a4, a3, a2, a1
+// 2. sst: a4, a3, a2 eng: a2, a1
+//
+// The function cannot handle the following case: sst: a1, eng: a2
+//
+// Overall control flow:
+//
+// In an iteration:
+//
+// Ensure engKey.Key is geq iterKey.Key, to detect if there exists a key in the
+// engine that overlaps with the sst key.
+//
+// Detect duplicates in the sst: If engKey.Key == iterKey.Key and
+// engKey.Timestamp >= iterKey.Timestamp, advance both iterators to the next
+// roachpb key, assume the remaining versions of the key in the sst are
+// duplicates, and thus will not contribute to stats. Jump to top.
+//
+// At this point, the current sstKey will contribute to stats: it either shadows
+// an eng key or no eng key overlaps with it.
+//
+// Call sstIter.Next()
+//
+// TODO(msbutler): Currently, this helper throws an error if the engine contains
+// range keys. support range keys in the engine.
+func ComputeSSTStatsDiff(
+	ctx context.Context, sst []byte, reader Reader, nowNanos int64, start, end MVCCKey,
+) (enginepb.MVCCStats, error) {
+
+	var ms enginepb.MVCCStats
+
+	// Ensure we're not iterating over local keys.
+	if start.Key.Compare(keys.LocalMax) < 0 {
+		return ms, errors.New("start key must be greater than LocalMax")
+	}
+
+	// Ensure there are no range keys in the SST
+	rkIter, err := NewMemSSTIterator(sst, false /* verify */, IterOptions{
+		KeyTypes:   IterKeyTypeRangesOnly,
+		UpperBound: keys.MaxKey,
+	})
+	if err != nil {
+		return ms, err
+	}
+	defer rkIter.Close()
+	rkIter.SeekGE(NilKey)
+	if ok, err := rkIter.Valid(); err != nil {
+		return ms, err
+	} else if ok {
+		return ms, errors.New("SST contains range keys")
+	}
+
+	// Ensure the engine has no range keys.
+	//
+	// TODO(msbutler): remove this check once we support range keys in the engine.
+	if err := errorIfReaderContainsRangeKeys(ctx, reader, start.Key, end.Key); err != nil {
+		return ms, err
+	}
+
+	engIter, err := reader.NewMVCCIterator(ctx, MVCCKeyIterKind, IterOptions{
+		KeyTypes:     IterKeyTypePointsOnly,
+		useL6Filters: true,
+		ReadCategory: fs.BatchEvalReadCategory,
+		UpperBound:   end.Key,
+	})
+	if err != nil {
+		return ms, err
+	}
+	defer engIter.Close()
+
+	var engIterKey MVCCKey
+
+	// setEngIterKey sets the engIterKey to the next key in the engine that is
+	// greater than or equal to the passed in unversioned nextSSTKey. When
+	// computing the stats impact of an incoming sst key, we need to understand if
+	// it overlaps existing keys. If such a key in the engine exists, this helper
+	// updates the engineIterKey to the latest live version of that key.
+	setEngIterKey := func(nexSSTKey roachpb.Key) error {
+		engIter.SeekGE(MVCCKey{Key: nexSSTKey})
+		if ok, err := engIter.Valid(); err != nil {
+			return err
+		} else if !ok {
+			// When the eng iterator is exausted, the remaining sst keys are ingesting
+			// in empty key space. To ensure the key comparison below never treats the
+			// sst keys as shadowing eng keys, set the eng key to max.
+			engIterKey = MVCCKeyMax
+		} else {
+			engIterKey = engIter.UnsafeKey()
+		}
+		return nil
+	}
+
+	if err := setEngIterKey(start.Key); err != nil {
+		return ms, err
+	}
+
+	sstIter, err := NewMemSSTIterator(sst, false, IterOptions{
+		KeyTypes:   IterKeyTypePointsOnly,
+		UpperBound: end.Key,
+	})
+	if err != nil {
+		return ms, err
+	}
+	defer sstIter.Close()
+
+	sstIter.SeekGE(start)
+	if ok, err := sstIter.Valid(); err != nil {
+		return ms, err
+	} else if !ok {
+		return ms, errors.New("SST is empty")
+	}
+
+	// processDuplicates advances the sst iterator to the next roachpb key, as all
+	// remaining versions of this sst key should not contribute to stats.
+	processDuplicates := func() error {
+		// TODO (msbutler): detect if the sst contains a version of the key not in
+		// the engine, and if so, increment ContainsEstimates.
+		sstIter.NextKey()
+		return nil
+	}
+
+	prevSSTKey := NilKey
+	for {
+		if ok, err := sstIter.Valid(); err != nil {
+			return ms, err
+		} else if !ok {
+			break
+		}
+		sstIterKey := sstIter.UnsafeKey()
+
+		// To understand if this sst key overlaps with an eng key, advance the eng
+		// iterator to the live key at or after the sst key.
+		if sstIterKey.Key.Compare(engIterKey.Key) > 0 {
+			if err := setEngIterKey(sstIterKey.Key); err != nil {
+				return ms, err
+			}
+		}
+		sstKeySameAsEng := engIterKey.Key.Compare(sstIterKey.Key) == 0
+
+		// If engKey shadows sstKey, all remaining versions of the sst key will not
+		// contribute to stats. Advance the sstIter to the next key. As an example:
+		//
+		// sst:         a2, a1
+		// eng: a4, a3, a2, a1
+		if sstKeySameAsEng && sstIterKey.Timestamp.LessEq(engIterKey.Timestamp) {
+			prevSSTKey.Key = append(prevSSTKey.Key[:0], sstIterKey.Key...)
+			prevSSTKey.Timestamp = sstIterKey.Timestamp
+			if err := processDuplicates(); err != nil {
+				return ms, err
+			}
+			continue
+		}
+
+		// At this point, the sst key shadows the eng key or is landing in empty key
+		// space, so it must contribute to stats.
+		sstKeyShadowsEng := sstKeySameAsEng && engIterKey.Timestamp.Less(sstIterKey.Timestamp)
+
+		// isMetaKey indicates the current sstKey is the latest version of the key
+		// in the sst.
+		isMetaKey := prevSSTKey.Key.Compare(sstIterKey.Key) != 0
+
+		sstVal, err := sstIter.UnsafeValue()
+		if err != nil {
+			return ms, err
+		}
+		sstValueIsTombstone, err := EncodedMVCCValueIsTombstone(sstVal)
+		if err != nil {
+			return ms, err
+		}
+
+		sstKeyIsLive := !sstValueIsTombstone && isMetaKey
+
+		var metaKeySize int64
+		if isMetaKey {
+			metaKeySize = int64(mvccencoding.EncodedMVCCKeyPrefixLength(sstIterKey.Key))
+			ms.KeyCount++
+		}
+		valSize := int64(len(sstVal))
+		totalSize := metaKeySize + MVCCVersionTimestampSize + valSize
+
+		if sstKeyIsLive {
+			ms.LiveCount++
+			ms.LiveBytes += totalSize
+		} else {
+			// If the sst key is not live, it must contribute to GCBytesAge. If the
+			// key is a tombstone it accrues GCBytesAge at its own timestamp, else at
+			// the timestamp which it is shadowed.
+			nonLiveTime := prevSSTKey.Timestamp.WallTime
+			if sstValueIsTombstone {
+				nonLiveTime = sstIterKey.Timestamp.WallTime
+			}
+			ms.GCBytesAge += totalSize * (nowNanos/1e9 - nonLiveTime/1e9)
+		}
+
+		ms.KeyBytes += metaKeySize + MVCCVersionTimestampSize
+		ms.ValBytes += valSize
+		ms.ValCount++
+
+		// Next, subtract off stats if the sst key shadows the eng meta key.
+		if sstKeyShadowsEng {
+			engValue, err := engIter.UnsafeValue()
+			if err != nil {
+				return ms, err
+			}
+			engMetaKeySize := int64(mvccencoding.EncodedMVCCKeyPrefixLength(engIterKey.Key))
+			engValSize := int64(len(engValue))
+
+			engValueIsTombstone, err := EncodedMVCCValueIsTombstone(engValue)
+			if err != nil {
+				return ms, err
+			}
+			// Except for GCBytesAge on a non tombstone engine key, only decrement
+			// stats once for each metakey which shadows the eng key.
+			if isMetaKey {
+				ms.KeyCount--
+				ms.KeyBytes -= engMetaKeySize
+
+				if engValueIsTombstone {
+					// If the sst key shadows a tombstone in the engine, we need to remove
+					// the tombstone's metakey contribution to GCBytesAge, as it is no
+					// longer a metakey.
+					ms.GCBytesAge -= engMetaKeySize * (nowNanos/1e9 - engIterKey.Timestamp.WallTime/1e9)
+				}
+			}
+
+			if !engValueIsTombstone {
+				// For GCBytesAge when the sst shadows a non tombstone: ideally the
+				// timestamp diff would be (now - earliestShaddowingSSTKey.Timestamp).
+				// In other words, if we had sst: a5,a4,a3 and eng a2, the time diff
+				// would be (n- 3); however it's hard to know what the earliest version
+				// of key a in the sst that is greater than a2. Instead, we can do a
+				// little math:
+				//
+				// (n-3) == (n-5) + ((5-4) + (4 - 3))
+				// n-3 == n - 5 + (1 + 1) = n-3
+				gcBytes := MVCCVersionTimestampSize + engValSize
+				if isMetaKey {
+					ms.LiveCount--
+					ms.LiveBytes -= engMetaKeySize + MVCCVersionTimestampSize + engValSize
+					ms.GCBytesAge += gcBytes * (nowNanos/1e9 - sstIterKey.Timestamp.WallTime/1e9)
+				} else {
+					ms.GCBytesAge += gcBytes * (prevSSTKey.Timestamp.WallTime/1e9 - sstIterKey.Timestamp.WallTime/1e9)
+				}
+			}
+		}
+
+		prevSSTKey.Key = append(prevSSTKey.Key[:0], sstIterKey.Key...)
+		prevSSTKey.Timestamp = sstIterKey.Timestamp
+		sstIter.Next()
+	}
+	return ms, nil
+}
+
 // CheckSSTConflicts iterates over an SST and a Reader in lockstep and errors
 // out if it finds any conflicts. This includes intents and existing keys with a
 // timestamp at or above the SST key timestamp.
