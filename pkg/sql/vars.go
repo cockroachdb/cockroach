@@ -4124,6 +4124,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	// CockroachDB extension.
+	`distsql_use_reduced_leaf_write_sets`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`distsql_use_reduced_leaf_write_sets`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("distsql_use_reduced_leaf_write_sets", s)
+			if err != nil {
+				return err
+			}
+			m.SetDistSQLUseReducedLeafWriteSets(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().DistSQLUseReducedLeafWriteSets), nil
+		},
+		GlobalDefault: globalTrue,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {

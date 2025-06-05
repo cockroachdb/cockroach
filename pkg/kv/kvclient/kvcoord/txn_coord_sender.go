@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -191,7 +192,12 @@ type txnInterceptor interface {
 
 	// populateLeafInputState populates the given input payload
 	// for a LeafTxn.
-	populateLeafInputState(*roachpb.LeafTxnInputState)
+	//
+	// readsTree, when non-nil, specifies an interval tree of key spans that
+	// will be read by the caller. As such, any non-overlapping writes could be
+	// ignored when populating the LeafTxnInputState. If readsTree is nil, then
+	// all writes should be included.
+	populateLeafInputState(*roachpb.LeafTxnInputState, interval.Tree)
 
 	// initializeLeaf updates any internal state held inside the interceptor
 	// from the given LeafTxn input state.
@@ -1407,7 +1413,7 @@ func (tc *TxnCoordSender) Active() bool {
 
 // GetLeafTxnInputState is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) GetLeafTxnInputState(
-	ctx context.Context,
+	ctx context.Context, readsTree interval.Tree,
 ) (*roachpb.LeafTxnInputState, error) {
 	tis := new(roachpb.LeafTxnInputState)
 	tc.mu.Lock()
@@ -1421,7 +1427,7 @@ func (tc *TxnCoordSender) GetLeafTxnInputState(
 	// Copy mutable state so access is safe for the caller.
 	tis.Txn = tc.mu.txn
 	for _, reqInt := range tc.interceptorStack {
-		reqInt.populateLeafInputState(tis)
+		reqInt.populateLeafInputState(tis, readsTree)
 	}
 
 	// Also mark the TxnCoordSender as "active".  This prevents changing
@@ -1693,6 +1699,7 @@ func (tc *TxnCoordSender) TestingShouldRetry() bool {
 	return false
 }
 
+// TODO(148760): this doesn't work under Read Committed isolation.
 func (tc *TxnCoordSender) hasPerformedReadsLocked() bool {
 	return !tc.interceptorAlloc.txnSpanRefresher.refreshFootprint.empty()
 }
