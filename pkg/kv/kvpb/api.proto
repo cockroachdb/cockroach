@@ -3293,7 +3293,10 @@ message RangeFeedRequest {
   // field is empty, all events are emitted.
   repeated uint32 with_matching_origin_ids = 8 [(gogoproto.customname) = "WithMatchingOriginIDs"];
 
-  // NextID = 9;
+  // ConsumerID is set by the caller to identify itself.
+  int64 consumer_id = 9 [(gogoproto.customname) = "ConsumerID"];
+
+  // NextID = 10;
 }
 
 // RangeFeedValue is a variant of RangeFeedEvent that represents an update to
