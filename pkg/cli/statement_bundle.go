@@ -189,6 +189,16 @@ func runBundleRecreate(cmd *cobra.Command, args []string) (resErr error) {
 			}
 		}
 		initStmts = append(initStmts, setStmts...)
+		// 'default_transaction_use_follower_reads' session variable can break
+		// recreation of the bundle, so if we see it being set, we'll also add
+		// the corresponding RESET statement.
+		for _, stmt := range setStmts {
+			stmt = strings.TrimSpace(stmt)
+			if strings.HasPrefix(stmt, "SET default_transaction_use_follower_reads = ") {
+				initStmts = append(initStmts, "RESET default_transaction_use_follower_reads; -- added by 'recreate'")
+				break
+			}
+		}
 		// Disable auto stats collection (which would override the injected
 		// stats).
 		initStmts = append(initStmts, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;")
