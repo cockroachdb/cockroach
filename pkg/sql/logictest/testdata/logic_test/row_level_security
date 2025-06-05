@@ -705,6 +705,64 @@ ALTER TABLE colref DROP COLUMN c2;
 statement ok
 DROP TABLE colref;
 
+# Added for bug found in issue #147471
+subtest func_ref
+
+statement ok
+CREATE FUNCTION f() RETURNS BOOL LANGUAGE SQL AS $$ SELECT true; $$;
+
+statement ok
+CREATE TABLE t (x INT, y INT, b BOOL DEFAULT f());
+
+statement ok
+CREATE POLICY p ON t USING (f());
+
+query T
+SELECT jsonb_pretty(crdb_internal.pb_to_json('descriptor', descriptor)->'function'->'dependedOnBy') as dependedOnBy
+FROM system.descriptor
+WHERE id = (select 'f'::REGPROC::INT - 100000);
+----
+[
+    {
+        "columnIds": [
+            3
+        ],
+        "id": 127,
+        "policyIds": [
+            1
+        ]
+    }
+]
+
+# Function reference should be updated but still include dependency on policy.
+statement ok
+ALTER TABLE t DROP COLUMN b;
+
+query T
+SELECT jsonb_pretty(crdb_internal.pb_to_json('descriptor', descriptor)->'function'->'dependedOnBy') as dependedOnBy
+FROM system.descriptor
+WHERE id = (select 'f'::REGPROC::INT - 100000);
+----
+[
+    {
+        "id": 127,
+        "policyIds": [
+            1
+        ]
+    }
+]
+
+query B
+SELECT f();
+----
+true
+
+statement ok
+DROP TABLE t;
+
+statement ok
+DROP FUNCTION f;
+
 subtest no_subvar_expr
 
 statement ok
