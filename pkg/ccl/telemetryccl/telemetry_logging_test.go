@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
@@ -218,7 +219,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 	testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				EventLog: &sql.EventLogTestingKnobs{
+				EventLog: &eventlog.EventLogTestingKnobs{
 					// The sampling checks below need to have a deterministic
 					// number of statements run by internal executor.
 					SyncWrites: true,
