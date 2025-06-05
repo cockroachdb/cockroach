@@ -287,7 +287,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/roleattributes.ou
          rolname         | rolsuper | rolinherit | rolcreaterole | rolcreatedb | rolcanlogin | rolreplication | rolbypassrls | rolconnlimit | rolpassword | rolvaliduntil 
  ------------------------+----------+------------+---------------+-------------+-------------+----------------+--------------+--------------+-------------+---------------
 - regress_test_bypassrls | f        | t          | f             | f           | f           | f              | t            |           -1 |             | 
-+ regress_test_bypassrls | f        | t          | f             | f           | f           | f              | f            |           -1 | ********    | 
++ regress_test_bypassrls | f        | t          | f             | f           | f           | f              | t            |           -1 | ********    | 
  (1 row)
  
  ALTER ROLE regress_test_bypassrls WITH NOBYPASSRLS;
@@ -295,7 +295,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/roleattributes.ou
          rolname         | rolsuper | rolinherit | rolcreaterole | rolcreatedb | rolcanlogin | rolreplication | rolbypassrls | rolconnlimit | rolpassword | rolvaliduntil 
  ------------------------+----------+------------+---------------+-------------+-------------+----------------+--------------+--------------+-------------+---------------
 - regress_test_bypassrls | f        | t          | f             | f           | f           | f              | f            |           -1 |             | 
-+ regress_test_bypassrls | f        | t          | f             | f           | f           | f              | f            |           -1 | ********    | 
++ regress_test_bypassrls | f        | t          | f             | f           | f           | f              | t            |           -1 | ********    | 
  (1 row)
  
  ALTER ROLE regress_test_bypassrls WITH BYPASSRLS;
@@ -303,7 +303,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/roleattributes.ou
          rolname         | rolsuper | rolinherit | rolcreaterole | rolcreatedb | rolcanlogin | rolreplication | rolbypassrls | rolconnlimit | rolpassword | rolvaliduntil 
  ------------------------+----------+------------+---------------+-------------+-------------+----------------+--------------+--------------+-------------+---------------
 - regress_test_bypassrls | f        | t          | f             | f           | f           | f              | t            |           -1 |             | 
-+ regress_test_bypassrls | f        | t          | f             | f           | f           | f              | f            |           -1 | ********    | 
++ regress_test_bypassrls | f        | t          | f             | f           | f           | f              | t            |           -1 | ********    | 
  (1 row)
  
  -- clean up roles
