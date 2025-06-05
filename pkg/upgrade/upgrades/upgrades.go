@@ -109,14 +109,6 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this setting"),
 	),
 
-	upgrade.NewTenantUpgrade(
-		"add 'username' column to stmt diagnostics requests table",
-		clusterversion.TODO_Delete_V25_2_AddUsernameToStmtDiagRequest.Version(),
-		upgrade.NoPrecondition,
-		stmtDiagAddUsernameMigration,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column"),
-	),
-
 	newFirstUpgrade(clusterversion.V25_3_Start.Version()),
 
 	upgrade.NewTenantUpgrade(
