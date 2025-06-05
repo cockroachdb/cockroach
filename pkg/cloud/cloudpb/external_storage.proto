@@ -63,7 +63,8 @@ message ExternalStorage {
     string temp_token = 5;
     string endpoint = 6;
     bool use_path_style=16;
-    bool skip_checksum=17;
+    bool skip_checksum=17; 
+    bool skip_tls_verify=18 [(gogoproto.customname) = "SkipTLSVerify"];
     string region = 7;
     string auth = 8;
     string server_enc_mode  = 9;
@@ -93,7 +94,7 @@ message ExternalStorage {
     // list so that the role specified in AssumeRoleProvider can be assumed.
     repeated AssumeRoleProvider delegate_role_providers = 15 [(gogoproto.nullable) = false];
 
-    // Next ID: 18;
+    // Next ID: 19;
   }
   
   message GCS {
