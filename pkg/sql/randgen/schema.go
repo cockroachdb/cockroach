@@ -21,8 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/randident"
-	"github.com/cockroachdb/cockroach/pkg/util/randident/randidentcfg"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -131,12 +129,6 @@ func RandCreateTable(
 		ctx, rng, prefix, tableIdx, opts, nil, /* generateColumnIndexNumber */
 	)
 }
-
-var nameGenCfg = func() randidentcfg.Config {
-	cfg := randident.DefaultNameGeneratorConfig()
-	cfg.Finalize()
-	return cfg
-}()
 
 func parseCreateStatement(createStmtSQL string) (*tree.CreateTable, error) {
 	var p parser.Parser
