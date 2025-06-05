@@ -98,7 +98,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 
 	// WaitGroup for the outbox and inbound stream. If the WaitGroup is done, no
 	// goroutines were leaked. Grab the flow's waitGroup to avoid a copy warning.
-	f := &flowinfra.FlowBase{}
+	f := &flowinfra.FlowBase{FlowCtx: &flowCtx}
 	wg := f.GetWaitGroup()
 
 	// Use RegisterFlow to register our consumer, which we will control.

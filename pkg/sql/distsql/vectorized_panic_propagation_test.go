@@ -33,7 +33,7 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	flowCtx := execinfra.FlowCtx{
+	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Mon:     evalCtx.TestingMon,
 		Cfg:     &execinfra.ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
@@ -53,7 +53,7 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 
 	mat := colexec.NewMaterializer(
 		nil, /* streamingMemAcc */
-		&flowCtx,
+		flowCtx,
 		0, /* processorID */
 		colexecargs.OpWithMetaInfo{Root: &colexecop.CallbackOperator{
 			NextCb: func() coldata.Batch {
