@@ -160,6 +160,10 @@ type Cluster interface {
 	) error
 	PopulateEtcHosts(ctx context.Context, l *logger.Logger) error
 
+	// VM management
+
+	Reset(ctx context.Context, l *logger.Logger, nodes option.NodeListOption) error
+
 	// Methods whose inclusion on this interface is purely historical.
 	// These should be removed over time.
 

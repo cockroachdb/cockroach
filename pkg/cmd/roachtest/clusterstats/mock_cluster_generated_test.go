@@ -739,6 +739,20 @@ func (mr *MockClusterMockRecorder) RegisterClusterHook(arg0, arg1, arg2, arg3 in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterClusterHook", reflect.TypeOf((*MockCluster)(nil).RegisterClusterHook), arg0, arg1, arg2, arg3)
 }
 
+// Reset mocks base method.
+func (m *MockCluster) Reset(arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Reset", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Reset indicates an expected call of Reset.
+func (mr *MockClusterMockRecorder) Reset(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reset", reflect.TypeOf((*MockCluster)(nil).Reset), arg0, arg1, arg2)
+}
+
 // Run mocks base method.
 func (m *MockCluster) Run(arg0 context.Context, arg1 install.RunOptions, arg2 ...string) {
 	m.ctrl.T.Helper()
