@@ -1953,6 +1953,11 @@ func (node *CreateRole) Format(ctx *FmtCtx) {
 	}
 }
 
+// ViewOptions represents options for CREATE VIEW statements.
+type ViewOptions struct {
+	SecurityInvoker bool
+}
+
 // CreateView represents a CREATE VIEW statement.
 type CreateView struct {
 	Name         TableName
@@ -1960,6 +1965,7 @@ type CreateView struct {
 	AsSource     *Select
 	IfNotExists  bool
 	Persistence  Persistence
+	Options      *ViewOptions
 	Replace      bool
 	Materialized bool
 	WithData     bool
@@ -2001,6 +2007,16 @@ func (node *CreateView) Format(ctx *FmtCtx) {
 		ctx.WriteString(" WITH DATA")
 	} else if node.Materialized && !node.WithData {
 		ctx.WriteString(" WITH NO DATA")
+	}
+	if node.Options != nil {
+		ctx.WriteString(` WITH (`)
+		if node.Options.SecurityInvoker {
+			ctx.WriteString(" security_invoker = true ")
+		} else {
+			ctx.WriteString(" security_invoker = false ")
+		}
+
+		ctx.WriteByte(')')
 	}
 }
 

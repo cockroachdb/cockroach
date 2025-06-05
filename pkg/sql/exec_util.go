@@ -3720,6 +3720,10 @@ func (m *sessionDataMutator) SetAlterColumnTypeGeneral(val bool) {
 	m.data.AlterColumnTypeGeneralEnabled = val
 }
 
+func (m *sessionDataMutator) SetAllowViewWithSecurityInvokerClause(val bool) {
+	m.data.AllowViewWithSecurityInvokerClause = val
+}
+
 func (m *sessionDataMutator) SetEnableSuperRegions(val bool) {
 	m.data.EnableSuperRegions = val
 }
