@@ -59,6 +59,8 @@ const (
 	AWSUsePathStyle = "AWS_USE_PATH_STYLE"
 	// AWSSkipChecksumParam is the query parameter for SkipChecksum in S3 options.
 	AWSSkipChecksumParam = "AWS_SKIP_CHECKSUM"
+	// AWSSkipTLSVerify is the query parameter for skipping certificate verification.
+	AWSSkipTLSVerify = "AWS_SKIP_TLS_VERIFY"
 
 	// AWSServerSideEncryptionMode is the query parameter in an AWS URI, for the
 	// mode to be used for server side encryption. It can either be AES256 or
@@ -202,7 +204,8 @@ type s3ClientConfig struct {
 	assumeRoleProvider                                           roleProvider
 	delegateRoleProviders                                        []roleProvider
 
-	skipChecksum bool
+	skipChecksum  bool
+	skipTLSVerify bool
 	// log.V(2) decides session init params so include it in key.
 	verbose bool
 }
@@ -236,6 +239,7 @@ func clientConfig(conf *cloudpb.ExternalStorage_S3) s3ClientConfig {
 		endpoint:              conf.Endpoint,
 		usePathStyle:          conf.UsePathStyle,
 		skipChecksum:          conf.SkipChecksum,
+		skipTLSVerify:         conf.SkipTLSVerify,
 		region:                conf.Region,
 		bucket:                conf.Bucket,
 		accessKey:             conf.AccessKey,
@@ -341,7 +345,15 @@ func parseS3URL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 			return cloudpb.ExternalStorage{}, errors.Wrapf(err, "cannot parse %s as bool", AWSSkipChecksumParam)
 		}
 	}
-
+	skipTLSVerifyStr := s3URL.ConsumeParam(AWSSkipTLSVerify)
+	skipTLSVerifyBool := false
+	if skipTLSVerifyStr != "" {
+		var err error
+		skipTLSVerifyBool, err = strconv.ParseBool(skipTLSVerifyStr)
+		if err != nil {
+			return cloudpb.ExternalStorage{}, errors.Wrapf(err, "cannot parse %s as bool", AWSSkipTLSVerify)
+		}
+	}
 	conf.S3Config = &cloudpb.ExternalStorage_S3{
 		Bucket:                s3URL.Host,
 		Prefix:                s3URL.Path,
@@ -351,6 +363,7 @@ func parseS3URL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 		Endpoint:              s3URL.ConsumeParam(AWSEndpointParam),
 		UsePathStyle:          pathStyleBool,
 		SkipChecksum:          skipChecksumBool,
+		SkipTLSVerify:         skipTLSVerifyBool,
 		Region:                s3URL.ConsumeParam(S3RegionParam),
 		Auth:                  s3URL.ConsumeParam(cloud.AuthParam),
 		ServerEncMode:         s3URL.ConsumeParam(AWSServerSideEncryptionMode),
@@ -573,7 +586,13 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 		loadOptions = append(loadOptions, option)
 	}
 
-	client, err := cloud.MakeHTTPClient(s.settings, s.metrics, "aws", s.opts.bucket, s.storageOptions.ClientName)
+	client, err := cloud.MakeHTTPClient(s.settings, s.metrics,
+		cloud.Config{
+			Bucket:             s.opts.bucket,
+			Client:             s.storageOptions.ClientName,
+			Cloud:              "aws",
+			InsecureSkipVerify: s.opts.skipTLSVerify,
+		})
 	if err != nil {
 		return s3Client{}, "", err
 	}
