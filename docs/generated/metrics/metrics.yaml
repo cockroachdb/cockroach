@@ -11690,6 +11690,14 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: follower_reads.misses_count
+      exported_name: follower_reads_misses_count
+      description: Number of follower reads missed by follower replicas due to too low closed timestamp
+      y_axis_label: Read Ops
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: follower_reads.success_count
       exported_name: follower_reads_success_count
       description: Number of reads successfully processed by any replica
