@@ -41,7 +41,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER PRIMARY
       │    │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 13, ConstraintID: 7, SourceIndexID: 1 (t_pkey+)}
       │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (k), IndexID: 13}
       │    │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 13}
-      │    └── 30 Mutation operations
+      │    └── 32 Mutation operations
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":16,"Kind":2,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":16,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":16,"Kind":2,"Ordinal":1,"TableID":104}
@@ -60,9 +60,11 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER PRIMARY
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":13,"Kind":1,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":16,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":17,"TableID":104}
+      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":8,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":8,"TableID":104}
       │         ├── CreateGCJobForIndex {"IndexID":8,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":9,"TableID":104}
+      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":10,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":10,"TableID":104}
       │         ├── CreateGCJobForIndex {"IndexID":10,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":11,"TableID":104}

@@ -93,16 +93,14 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER PRIMARY
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 3 (k), IndexID: 12 (t_k_idx-)}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 12 (t_k_idx-)}
       │    │    └── DELETE_ONLY → ABSENT      TemporaryIndex:{DescID: 104 (t), IndexID: 15, ConstraintID: 9, SourceIndexID: 16 (t_pkey-)}
-      │    └── 17 Mutation operations
+      │    └── 15 Mutation operations
       │         ├── MakeIndexAbsent {"IndexID":16,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":15,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":8,"TableID":104}
-      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":8,"TableID":104}
       │         ├── SetIndexName {"IndexID":8,"Name":"crdb_internal_in...","TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":8,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":8,"Kind":1,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":10,"TableID":104}
-      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":10,"TableID":104}
       │         ├── SetIndexName {"IndexID":10,"Name":"crdb_internal_in...","TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":10,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":12,"TableID":104}
@@ -126,10 +124,12 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER PRIMARY
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 13}
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 14 (t_i_key-)}
       │    │    └── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 15}
-      │    └── 15 Mutation operations
+      │    └── 17 Mutation operations
+      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":8,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":8,"TableID":104}
       │         ├── CreateGCJobForIndex {"IndexID":8,"TableID":104}
       │         ├── CreateGCJobForIndex {"IndexID":9,"TableID":104}
+      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":10,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":10,"TableID":104}
       │         ├── CreateGCJobForIndex {"IndexID":10,"TableID":104}
       │         ├── CreateGCJobForIndex {"IndexID":11,"TableID":104}

@@ -560,14 +560,6 @@ StatementPhase stage 1 of 1 with 142 MutationType ops
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 2
       TableID: 109
-    *scop.RemoveDroppedIndexPartialPredicate
-      IndexID: 2
-      TableID: 109
-    *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 109
-      TypeIDs:
-      - 107
-      - 108
     *scop.SetIndexName
       IndexID: 2
       Name: crdb_internal_index_2_name_placeholder
@@ -625,6 +617,14 @@ StatementPhase stage 1 of 1 with 142 MutationType ops
       IndexID: 2
       Kind: 1
       TableID: 109
+    *scop.RemoveDroppedIndexPartialPredicate
+      IndexID: 2
+      TableID: 109
+    *scop.UpdateTableBackReferencesInTypes
+      BackReferencedTableID: 109
+      TypeIDs:
+      - 107
+      - 108
     *scop.MakeIndexAbsent
       IndexID: 2
       TableID: 109
@@ -1275,14 +1275,6 @@ PreCommitPhase stage 2 of 2 with 153 MutationType ops
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 2
       TableID: 109
-    *scop.RemoveDroppedIndexPartialPredicate
-      IndexID: 2
-      TableID: 109
-    *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 109
-      TypeIDs:
-      - 107
-      - 108
     *scop.SetIndexName
       IndexID: 2
       Name: crdb_internal_index_2_name_placeholder
@@ -1340,6 +1332,14 @@ PreCommitPhase stage 2 of 2 with 153 MutationType ops
       IndexID: 2
       Kind: 1
       TableID: 109
+    *scop.RemoveDroppedIndexPartialPredicate
+      IndexID: 2
+      TableID: 109
+    *scop.UpdateTableBackReferencesInTypes
+      BackReferencedTableID: 109
+      TypeIDs:
+      - 107
+      - 108
     *scop.MakeIndexAbsent
       IndexID: 2
       TableID: 109
@@ -4005,14 +4005,6 @@ StatementPhase stage 1 of 1 with 63 MutationType ops
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 2
       TableID: 116
-    *scop.RemoveDroppedIndexPartialPredicate
-      IndexID: 2
-      TableID: 116
-    *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 116
-      TypeIDs:
-      - 114
-      - 115
     *scop.SetIndexName
       IndexID: 2
       Name: crdb_internal_index_2_name_placeholder
@@ -4050,6 +4042,14 @@ StatementPhase stage 1 of 1 with 63 MutationType ops
       IndexID: 2
       Kind: 1
       TableID: 116
+    *scop.RemoveDroppedIndexPartialPredicate
+      IndexID: 2
+      TableID: 116
+    *scop.UpdateTableBackReferencesInTypes
+      BackReferencedTableID: 116
+      TypeIDs:
+      - 114
+      - 115
     *scop.MakeIndexAbsent
       IndexID: 2
       TableID: 116
@@ -4316,14 +4316,6 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 2
       TableID: 116
-    *scop.RemoveDroppedIndexPartialPredicate
-      IndexID: 2
-      TableID: 116
-    *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 116
-      TypeIDs:
-      - 114
-      - 115
     *scop.SetIndexName
       IndexID: 2
       Name: crdb_internal_index_2_name_placeholder
@@ -4361,6 +4353,14 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
       IndexID: 2
       Kind: 1
       TableID: 116
+    *scop.RemoveDroppedIndexPartialPredicate
+      IndexID: 2
+      TableID: 116
+    *scop.UpdateTableBackReferencesInTypes
+      BackReferencedTableID: 116
+      TypeIDs:
+      - 114
+      - 115
     *scop.MakeIndexAbsent
       IndexID: 2
       TableID: 116

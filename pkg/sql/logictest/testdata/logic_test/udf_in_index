@@ -36,6 +36,35 @@ AS $$
 $$;
 
 statement ok
+CREATE VIEW v_idx_fn_ids AS
+SELECT
+id,
+(json_array_elements(
+  crdb_internal.pb_to_json(
+    'cockroach.sql.sqlbase.Descriptor',
+    descriptor,
+    false
+  )->'table'->'indexes'
+)->'id')::INT as idx_id,
+json_array_elements(
+  crdb_internal.pb_to_json(
+    'cockroach.sql.sqlbase.Descriptor',
+    descriptor,
+    false
+  )->'table'->'indexes'
+)->'predicate' as predicate_expr
+FROM system.descriptor
+
+statement ok
+CREATE FUNCTION get_idx_fn_ids(table_id INT) RETURNS SETOF v_idx_fn_ids
+LANGUAGE SQL
+AS $$
+  SELECT *
+  FROM v_idx_fn_ids
+  WHERE id = table_id
+$$;
+
+statement ok
 CREATE VIEW v_fn_depended_on_by AS
 SELECT
      id,
@@ -74,9 +103,9 @@ query IITT colnames
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  compute_expr           uses_fn_ids
-111  1       NULL                   NULL
-111  2       NULL                   NULL
-111  3       "[FUNCTION 100110]()"  [110]
+113  1       NULL                   NULL
+113  2       NULL                   NULL
+113  3       "[FUNCTION 100112]()"  [112]
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -86,7 +115,7 @@ SELECT get_fn_depended_on_by($fn_id)
         "columnIds": [
             3
         ],
-        "id": 111
+        "id": 113
     }
 ]
 
@@ -94,9 +123,85 @@ SELECT get_fn_depended_on_by($fn_id)
 statement ok
 CREATE INDEX t_idx ON test_tbl_t(test_tbl_f());
 
+query IITT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
+----
+id   col_id  compute_expr           uses_fn_ids
+113  1       NULL                   NULL
+113  2       NULL                   NULL
+113  3       "[FUNCTION 100112]()"  [112]
+113  4       "[FUNCTION 100112]()"  [112]
+
+query T
+SELECT get_fn_depended_on_by($fn_id)
+----
+[
+    {
+        "columnIds": [
+            3,
+            4
+        ],
+        "id": 113
+    }
+]
+
 # Test partial index with UDF in WHERE clause.
 statement ok
-CREATE INDEX t_idx2 ON test_tbl_t(b) WHERE test_tbl_f() > 0;
+CREATE FUNCTION test_tbl_partial_f(b INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT b $$;
+
+let $partial_fn_id
+SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'test_tbl_partial_f';
+
+statement ok
+CREATE INDEX t_idx2 ON test_tbl_t(b) WHERE test_tbl_partial_f(b) > 0;
+
+query IITT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
+----
+id   col_id  compute_expr           uses_fn_ids
+113  1       NULL                   NULL
+113  2       NULL                   NULL
+113  3       "[FUNCTION 100112]()"  [112]
+113  4       "[FUNCTION 100112]()"  [112]
+
+query IIT colnames
+SELECT * FROM get_idx_fn_ids($tbl_id) ORDER BY 1, 2;
+----
+id   idx_id  predicate_expr
+113  2       NULL
+113  3       NULL
+113  5       "[FUNCTION 100114](b) > 0:::INT8"
+
+query T
+SELECT get_fn_depended_on_by($partial_fn_id)
+----
+[
+    {
+        "id": 113,
+        "indexIds": [
+            5
+        ]
+    }
+]
+
+statement ok
+INSERT INTO test_tbl_t VALUES (1, 1), (2, -2), (3, 3);
+
+# Verify that we can select from the partial index.
+query II
+SELECT * FROM test_tbl_t@t_idx2 WHERE test_tbl_partial_f(b) > 0;
+----
+1  1
+3  3
+
+statement error index "t_idx2" is a partial index that does not contain all the rows needed to execute this query
+SELECT * FROM test_tbl_t@t_idx2;
+
+statement error cannot drop function "test_tbl_partial_f" because other objects \(\[test.public.test_tbl_t\]\) still depend on it
+DROP FUNCTION test_tbl_partial_f;
+
+statement ok
+DELETE FROM test_tbl_t WHERE true;
 
 # Test expression index with UDF in expression.
 statement ok
@@ -106,11 +211,11 @@ query IITT colnames
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  compute_expr               uses_fn_ids
-111  1       NULL                       NULL
-111  2       NULL                       NULL
-111  3       "[FUNCTION 100110]()"      [110]
-111  4       "[FUNCTION 100110]()"      [110]
-111  5       "b + [FUNCTION 100110]()"  [110]
+113  1       NULL                       NULL
+113  2       NULL                       NULL
+113  3       "[FUNCTION 100112]()"      [112]
+113  4       "[FUNCTION 100112]()"      [112]
+113  5       "b + [FUNCTION 100112]()"  [112]
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -122,7 +227,7 @@ SELECT get_fn_depended_on_by($fn_id)
             4,
             5
         ],
-        "id": 111
+        "id": 113
     }
 ]
 
@@ -134,13 +239,13 @@ query IITT colnames
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  compute_expr                      uses_fn_ids
-111  1       NULL                              NULL
-111  2       NULL                              NULL
-111  3       "[FUNCTION 100110]()"             [110]
-111  4       "[FUNCTION 100110]()"             [110]
-111  5       "b + [FUNCTION 100110]()"         [110]
-111  6       "[FUNCTION 100110]()"             [110]
-111  7       "[FUNCTION 100110]() + 1:::INT8"  [110]
+113  1       NULL                              NULL
+113  2       NULL                              NULL
+113  3       "[FUNCTION 100112]()"             [112]
+113  4       "[FUNCTION 100112]()"             [112]
+113  5       "b + [FUNCTION 100112]()"         [112]
+113  6       "[FUNCTION 100112]()"             [112]
+113  7       "[FUNCTION 100112]() + 1:::INT8"  [112]
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -154,7 +259,7 @@ SELECT get_fn_depended_on_by($fn_id)
             6,
             7
         ],
-        "id": 111
+        "id": 113
     }
 ]
 
@@ -166,12 +271,12 @@ query IITT colnames
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  compute_expr                      uses_fn_ids
-111  1       NULL                              NULL
-111  2       NULL                              NULL
-111  3       "[FUNCTION 100110]()"             [110]
-111  5       "b + [FUNCTION 100110]()"         [110]
-111  6       "[FUNCTION 100110]()"             [110]
-111  7       "[FUNCTION 100110]() + 1:::INT8"  [110]
+113  1       NULL                              NULL
+113  2       NULL                              NULL
+113  3       "[FUNCTION 100112]()"             [112]
+113  5       "b + [FUNCTION 100112]()"         [112]
+113  6       "[FUNCTION 100112]()"             [112]
+113  7       "[FUNCTION 100112]() + 1:::INT8"  [112]
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -184,7 +289,7 @@ SELECT get_fn_depended_on_by($fn_id)
             6,
             7
         ],
-        "id": 111
+        "id": 113
     }
 ]
 
@@ -200,12 +305,12 @@ query IITT colnames
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  compute_expr                      uses_fn_ids
-111  1       NULL                              NULL
-111  2       NULL                              NULL
-111  3       "[FUNCTION 100110]()"             [110]
-111  5       "b + [FUNCTION 100110]()"         [110]
-111  6       "[FUNCTION 100110]()"             [110]
-111  7       "[FUNCTION 100110]() + 1:::INT8"  [110]
+113  1       NULL                              NULL
+113  2       NULL                              NULL
+113  3       "[FUNCTION 100112]()"             [112]
+113  5       "b + [FUNCTION 100112]()"         [112]
+113  6       "[FUNCTION 100112]()"             [112]
+113  7       "[FUNCTION 100112]() + 1:::INT8"  [112]
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -218,7 +323,7 @@ SELECT get_fn_depended_on_by($fn_id)
             6,
             7
         ],
-        "id": 111
+        "id": 113
     }
 ]
 
@@ -229,11 +334,11 @@ query IITT colnames
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  compute_expr                      uses_fn_ids
-111  1       NULL                              NULL
-111  2       NULL                              NULL
-111  3       "[FUNCTION 100110]()"             [110]
-111  6       "[FUNCTION 100110]()"             [110]
-111  7       "[FUNCTION 100110]() + 1:::INT8"  [110]
+113  1       NULL                              NULL
+113  2       NULL                              NULL
+113  3       "[FUNCTION 100112]()"             [112]
+113  6       "[FUNCTION 100112]()"             [112]
+113  7       "[FUNCTION 100112]() + 1:::INT8"  [112]
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -245,7 +350,7 @@ SELECT get_fn_depended_on_by($fn_id)
             6,
             7
         ],
-        "id": 111
+        "id": 113
     }
 ]
 
@@ -256,9 +361,9 @@ query IITT colnames
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  compute_expr           uses_fn_ids
-111  1       NULL                   NULL
-111  2       NULL                   NULL
-111  3       "[FUNCTION 100110]()"  [110]
+113  1       NULL                   NULL
+113  2       NULL                   NULL
+113  3       "[FUNCTION 100112]()"  [112]
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -268,7 +373,7 @@ SELECT get_fn_depended_on_by($fn_id)
         "columnIds": [
             3
         ],
-        "id": 111
+        "id": 113
     }
 ]
 
@@ -279,8 +384,8 @@ query IITT colnames
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  compute_expr  uses_fn_ids
-111  1       NULL          NULL
-111  2       NULL          NULL
+113  1       NULL          NULL
+113  2       NULL          NULL
 
 query T
 SELECT get_fn_depended_on_by($fn_id)

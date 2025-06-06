@@ -243,7 +243,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 3 with 8 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 3 with 7 MutationType ops
 upsert descriptor #104
   ...
          keySuffixColumnIds:
@@ -251,9 +251,8 @@ upsert descriptor #104
   -      name: idx
   +      name: crdb_internal_index_2_name_placeholder
          partitioning: {}
-  -      predicate: i > 0:::INT8
-         sharded: {}
-         vecConfig: {}
+         predicate: i > 0:::INT8
+  ...
          version: 4
        mutationId: 1
   -    state: WRITE_ONLY
@@ -273,10 +272,10 @@ upsert descriptor #104
   -  version: "9"
   +  version: "10"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops pending"
 commit transaction #3
 begin transaction #4
-## PostCommitNonRevertiblePhase stage 2 of 3 with 6 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 3 with 7 MutationType ops
 upsert descriptor #104
   ...
      indexes: []
@@ -300,6 +299,7 @@ upsert descriptor #104
   -      - 1
   -      name: crdb_internal_index_2_name_placeholder
   -      partitioning: {}
+  -      predicate: i > 0:::INT8
   -      sharded: {}
   -      vecConfig: {}
   -      version: 4
