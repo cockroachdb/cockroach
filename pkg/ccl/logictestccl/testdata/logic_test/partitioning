@@ -394,7 +394,7 @@ ok1  CREATE TABLE public.ok1 (
      ) PARTITION BY LIST (a) (
        PARTITION p1 VALUES IN ((1)),
        PARTITION p2 VALUES IN ((2))
-     )
+     ) WITH (schema_locked = true)
      -- Warning: Partitioned table with no zone configurations.
      ;
 
@@ -409,7 +409,7 @@ ok1  CREATE TABLE public.ok1 (
      ) PARTITION BY LIST (a) (
        PARTITION p1 VALUES IN ((‹×›)),
        PARTITION p2 VALUES IN ((‹×›))
-     )
+     ) WITH (schema_locked = true)
      -- Warning: Partitioned table with no zone configurations.
      ;
 
@@ -432,7 +432,7 @@ ok1  CREATE TABLE public.ok1 (
      ) PARTITION BY LIST (a) (
        PARTITION p1 VALUES IN ((1)),
        PARTITION p2 VALUES IN ((2))
-     )
+     ) WITH (schema_locked = true)
      -- Warning: Partitioned table with no zone configurations.
      ;
      ALTER TABLE public.ok1 ENABLE ROW LEVEL SECURITY;
@@ -498,7 +498,7 @@ ok2  CREATE TABLE public.ok2 (
      ) PARTITION BY LIST (a) (
        PARTITION p1 VALUES IN ((1)),
        PARTITION p2 VALUES IN ((2))
-     )
+     ) WITH (schema_locked = true)
      -- Warning: Partitioned table with no zone configurations.
      ;
 
@@ -548,7 +548,7 @@ ok3  CREATE TABLE public.ok3 (
      ) PARTITION BY LIST (a) (
        PARTITION p1 VALUES IN ((1)),
        PARTITION p2 VALUES IN ((DEFAULT))
-     )
+     ) WITH (schema_locked = true)
      -- Warning: Partitioned table with no zone configurations.
      ;
 
@@ -563,7 +563,7 @@ ok3  CREATE TABLE public.ok3 (
      ) PARTITION BY LIST (a) (
        PARTITION p1 VALUES IN ((‹×›)),
        PARTITION p2 VALUES IN ((DEFAULT))
-     )
+     ) WITH (schema_locked = true)
      -- Warning: Partitioned table with no zone configurations.
      ;
 
@@ -617,7 +617,7 @@ ok4  CREATE TABLE public.ok4 (
        PARTITION p2 VALUES IN ((1, DEFAULT)),
        PARTITION p3 VALUES IN ((2, 3)),
        PARTITION p4 VALUES IN ((DEFAULT, DEFAULT))
-     )
+     ) WITH (schema_locked = true)
      -- Warning: Partitioned table with no zone configurations.
      ;
 
@@ -715,7 +715,7 @@ ok5  CREATE TABLE public.ok5 (
          PARTITION p2_1 VALUES IN ((3))
        ),
        PARTITION p3 VALUES IN ((DEFAULT))
-     )
+     ) WITH (schema_locked = true)
      -- Warning: Partitioned table with no zone configurations.
      ;
 
@@ -742,7 +742,7 @@ ok6  CREATE TABLE public.ok6 (
      ) PARTITION BY RANGE (a) (
        PARTITION p1 VALUES FROM (0) TO (1),
        PARTITION p2 VALUES FROM (1) TO (2)
-     )
+     ) WITH (schema_locked = true)
      -- Warning: Partitioned table with no zone configurations.
      ;
 
@@ -781,7 +781,7 @@ ok7  CREATE TABLE public.ok7 (
        CONSTRAINT ok7_pkey PRIMARY KEY (a ASC, b ASC)
      ) PARTITION BY RANGE (a) (
        PARTITION p1 VALUES FROM (0) TO (1)
-     )
+     ) WITH (schema_locked = true)
      -- Warning: Partitioned table with no zone configurations.
      ;
 
@@ -826,7 +826,7 @@ ok8  CREATE TABLE public.ok8 (
        PARTITION p1 VALUES FROM (MINVALUE) TO (1),
        PARTITION p2 VALUES FROM (1) TO (2),
        PARTITION p3 VALUES FROM (2) TO (MAXVALUE)
-     )
+     ) WITH (schema_locked = true)
      -- Warning: Partitioned table with no zone configurations.
      ;
 
@@ -842,7 +842,7 @@ ok8  CREATE TABLE public.ok8 (
        PARTITION p1 VALUES FROM (MINVALUE) TO (‹×›),
        PARTITION p2 VALUES FROM (‹×›) TO (‹×›),
        PARTITION p3 VALUES FROM (‹×›) TO (MAXVALUE)
-     )
+     ) WITH (schema_locked = true)
      -- Warning: Partitioned table with no zone configurations.
      ;
 
@@ -889,7 +889,7 @@ ok9  CREATE TABLE public.ok9 (
        PARTITION p2 VALUES FROM (1, MAXVALUE) TO (3, MINVALUE),
        PARTITION p3 VALUES FROM (3, MINVALUE) TO (3, MAXVALUE),
        PARTITION p4 VALUES FROM (3, MAXVALUE) TO (MAXVALUE, MAXVALUE)
-     )
+     ) WITH (schema_locked = true)
      -- Warning: Partitioned table with no zone configurations.
      ;
 
@@ -938,7 +938,7 @@ ok10  CREATE TABLE public.ok10 (
         PARTITION p3 VALUES FROM (1, MAXVALUE) TO (2, MAXVALUE),
         PARTITION p4 VALUES FROM (2, MAXVALUE) TO (3, 4),
         PARTITION p5 VALUES FROM (3, 4) TO (MAXVALUE, MAXVALUE)
-      )
+      ) WITH (schema_locked = true)
       -- Warning: Partitioned table with no zone configurations.
       ;
 
@@ -996,7 +996,7 @@ ok11  CREATE TABLE public.ok11 (
         PARTITION p2 VALUES IN ((6)) PARTITION BY RANGE (b) (
           PARTITION p2_1 VALUES FROM (7) TO (8)
         )
-      )
+      ) WITH (schema_locked = true)
       -- Warning: Partitioned table with no zone configurations.
       ;
 
@@ -1018,7 +1018,7 @@ ok11  CREATE TABLE public.ok11 (
         PARTITION p2 VALUES IN ((‹×›)) PARTITION BY RANGE (b) (
           PARTITION p2_1 VALUES FROM (‹×›) TO (‹×›)
         )
-      )
+      ) WITH (schema_locked = true)
       -- Warning: Partitioned table with no zone configurations.
       ;
 
@@ -1071,7 +1071,7 @@ ok12  CREATE TABLE public.ok12 (
         PARTITION pu VALUES IN ((NULL)),
         PARTITION p1 VALUES IN ((1)),
         PARTITION p2 VALUES IN ((2))
-      )
+      ) WITH (schema_locked = true)
       -- Warning: Partitioned table with no zone configurations.
       ;
 
@@ -1320,7 +1320,7 @@ CREATE TABLE public.partition_by_nothing (
   UNIQUE INDEX partition_by_nothing_b_key (b ASC),
   INDEX partition_by_nothing_b_idx (b ASC),
   FAMILY fam_0_pk_a_b (pk, a, b)
-);
+) WITH (schema_locked = true);
 
 # Verify that it's not possible to partition tables by array columns (#91766).
 
@@ -1383,7 +1383,7 @@ SHOW CREATE TABLE "a.b"
          CONSTRAINT "a.b_pkey" PRIMARY KEY ("c.d" ASC)
        ) PARTITION BY LIST ("c.d") (
          PARTITION "e.f" VALUES IN ((0))
-       )
+       ) WITH (schema_locked = true)
        -- Warning: Partitioned table with no zone configurations.
        ;
 
@@ -1395,7 +1395,7 @@ SHOW CREATE TABLE "g.h"
          CONSTRAINT "g.h_pkey" PRIMARY KEY ("i.j" ASC)
        ) PARTITION BY RANGE ("i.j") (
          PARTITION "k.l" VALUES FROM (0) TO (1)
-       )
+       ) WITH (schema_locked = true)
        -- Warning: Partitioned table with no zone configurations.
        ;
 
@@ -1510,7 +1510,7 @@ bar  CREATE TABLE public.bar (
      ) PARTITION BY LIST (a) (
        PARTITION x VALUES IN ((1)),
        PARTITION y VALUES IN ((2))
-     );
+     ) WITH (schema_locked = true);
      ALTER PARTITION x OF INDEX test.public.bar@bar_pkey CONFIGURE ZONE USING
        gc.ttlseconds = 100;
      ALTER PARTITION y OF INDEX test.public.bar@bar_pkey CONFIGURE ZONE USING
@@ -1529,7 +1529,7 @@ bar  CREATE TABLE public.bar (
      ) PARTITION BY LIST (a) (
        PARTITION x VALUES IN ((1)),
        PARTITION y VALUES IN ((2))
-     );
+     ) WITH (schema_locked = true);
      ALTER PARTITION x OF INDEX test.public.bar@bar_pkey CONFIGURE ZONE USING
        gc.ttlseconds = 100;
      ALTER PARTITION y OF INDEX test.public.bar@bar_pkey CONFIGURE ZONE USING

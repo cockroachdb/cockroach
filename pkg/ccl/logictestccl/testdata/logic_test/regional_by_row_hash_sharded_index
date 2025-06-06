@@ -51,7 +51,7 @@ CREATE TABLE public.t_to_be_hashed (
   crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
   CONSTRAINT t_to_be_hashed_pkey PRIMARY KEY (pk ASC),
   FAMILY fam_0_b_pk_crdb_region (b, pk, crdb_region)
-) LOCALITY REGIONAL BY ROW;
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 statement ok
 CREATE INDEX ON t_to_be_hashed (b) USING HASH;
@@ -67,7 +67,7 @@ CREATE TABLE public.t_to_be_hashed (
   CONSTRAINT t_to_be_hashed_pkey PRIMARY KEY (pk ASC),
   INDEX t_to_be_hashed_b_idx (b ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_b_pk_crdb_region (b, pk, crdb_region)
-) LOCALITY REGIONAL BY ROW;
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 statement ok
 CREATE UNIQUE INDEX ON t_to_be_hashed (b) USING HASH;
@@ -84,7 +84,7 @@ CREATE TABLE public.t_to_be_hashed (
   INDEX t_to_be_hashed_b_idx (b ASC) USING HASH WITH (bucket_count=16),
   UNIQUE INDEX t_to_be_hashed_b_key (b ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_b_pk_crdb_region (b, pk, crdb_region)
-) LOCALITY REGIONAL BY ROW;
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 statement ok
 ALTER TABLE t_to_be_hashed ALTER PRIMARY KEY USING COLUMNS (pk) USING HASH;
@@ -102,7 +102,7 @@ CREATE TABLE public.t_to_be_hashed (
   INDEX t_to_be_hashed_b_idx (b ASC) USING HASH WITH (bucket_count=16),
   UNIQUE INDEX t_to_be_hashed_b_key (b ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_b_pk_crdb_region (b, pk, crdb_region)
-) LOCALITY REGIONAL BY ROW;
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 statement ok
 CREATE TABLE t_regional_pk_hashed_1 (
@@ -124,7 +124,7 @@ CREATE TABLE public.t_regional_pk_hashed_1 (
   CONSTRAINT t_regional_pk_hashed_1_pkey PRIMARY KEY (pk ASC) USING HASH WITH (bucket_count=16),
   INDEX t_regional_pk_hashed_1_b_idx (b ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_b_pk_crdb_region (b, pk, crdb_region)
-) LOCALITY REGIONAL BY ROW;
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 statement ok
 CREATE TABLE t_regional_pk_hashed_2 (
@@ -147,7 +147,7 @@ CREATE TABLE public.t_regional_pk_hashed_2 (
   CONSTRAINT t_regional_pk_hashed_2_pkey PRIMARY KEY (pk ASC) USING HASH WITH (bucket_count=16),
   INDEX t_regional_pk_hashed_2_b_idx (b ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_b_pk_crdb_region (b, pk, crdb_region)
-) LOCALITY REGIONAL BY ROW;
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 # Permit foreign key constraint on full primary index of RBR table excluding
 # hash column (See #74244).

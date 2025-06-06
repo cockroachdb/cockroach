@@ -24,11 +24,13 @@ db.public.rbr  CREATE TABLE public.rbr (
                  s STRING NULL,
                  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region ON UPDATE rehome_row()::public.crdb_internal_region,
                  CONSTRAINT rbr_pkey PRIMARY KEY (p ASC)
-               ) LOCALITY REGIONAL BY ROW;
+               ) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 
+# Locality cannot be modified with schema_locked set, until declarative
+# schema changer support is added.
 statement ok
-CREATE TABLE db.rbr_altered (p INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+CREATE TABLE db.rbr_altered (p INT PRIMARY KEY) WITH (schema_locked=false) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 statement ok
 ALTER TABLE db.rbr_altered SET LOCALITY REGIONAL BY ROW
