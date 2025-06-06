@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -57,15 +58,42 @@ func TestPrettyDataShort(t *testing.T) {
 	cfg := testPrettyCfg
 	cfg.Align = tree.PrettyNoAlign
 	t.Run("ref", func(t *testing.T) {
-		runTestPrettyData(t, "ref", cfg, matches, true /*short*/)
+		runTestPrettyData(t, "ref", cfg, matches, true /* short */)
 	})
 	cfg.Align = tree.PrettyAlignAndDeindent
 	t.Run("align-deindent", func(t *testing.T) {
-		runTestPrettyData(t, "align-deindent", cfg, matches, true /*short*/)
+		runTestPrettyData(t, "align-deindent", cfg, matches, true /* short */)
 	})
 	cfg.Align = tree.PrettyAlignOnly
 	t.Run("align-only", func(t *testing.T) {
-		runTestPrettyData(t, "align-only", cfg, matches, true /*short*/)
+		runTestPrettyData(t, "align-only", cfg, matches, true /* short */)
+	})
+}
+
+// TestPrettyData reads in a single SQL statement from a file, formats it at all
+// line lengths, and compares that output to a known-good output file. It is
+// most useful when changing or implementing the doc interface for a node, and
+// should be used to compare and verify the changed output.
+func TestPrettyData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "no point in running this test under duress")
+	matches, err := filepath.Glob(datapathutils.TestDataPath(t, "pretty", "*.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := testPrettyCfg
+	cfg.Align = tree.PrettyNoAlign
+	t.Run("ref", func(t *testing.T) {
+		runTestPrettyData(t, "ref", cfg, matches, false /* short */)
+	})
+	cfg.Align = tree.PrettyAlignAndDeindent
+	t.Run("align-deindent", func(t *testing.T) {
+		runTestPrettyData(t, "align-deindent", cfg, matches, false /* short */)
+	})
+	cfg.Align = tree.PrettyAlignOnly
+	t.Run("align-only", func(t *testing.T) {
+		runTestPrettyData(t, "align-only", cfg, matches, false /* short */)
 	})
 }
 
