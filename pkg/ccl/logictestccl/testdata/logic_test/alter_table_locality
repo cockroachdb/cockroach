@@ -1,5 +1,10 @@
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-no-los
 
+# Disable schema_locked for this test since alter table
+# locality is only in the legacy schema changer.
+statement ok
+SET create_table_with_schema_locked=false
+
 statement ok
 CREATE DATABASE alter_locality_test primary region "ca-central-1" regions "ap-southeast-2", "us-east-1"
 

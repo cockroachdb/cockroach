@@ -149,7 +149,13 @@ statement ok
 ALTER TABLE xy ALTER COLUMN region SET NOT NULL;
 
 statement ok
+ALTER TABLE xy SET (schema_locked=false);
+
+statement ok
 ALTER TABLE xy SET LOCALITY REGIONAL BY ROW AS region;
+
+statement ok
+ALTER TABLE xy SET (schema_locked=true);
 
 statement ok
 INSERT INTO xy (x, y, z) VALUES (0, 0, 0), (1, 1, 1), (2, 2, 2);
@@ -847,9 +853,15 @@ inner-join (lookup messages_global_2 [as=g3])
  │    └── filters (true)
  └── filters (true)
 
+statement ok
+ALTER TABLE messages_rbt SET (schema_locked = false)
+
 retry
 statement ok
 ALTER TABLE messages_rbt SET LOCALITY REGIONAL BY TABLE IN "us-east-1";
+
+statement ok
+ALTER TABLE messages_rbt SET (schema_locked = true)
 
 # Regression test for issue #88788
 # A full scan on an RBT table should error out lookup join.
@@ -1126,10 +1138,16 @@ RESET enforce_home_region
 
 # See https://github.com/cockroachdb/cockroach/issues/83819#issuecomment-1178301614
 
+statement ok
+ALTER TABLE messages_rbt SET (schema_locked = false)
+
 # Reset messages_rbt locality back to the local region.
 retry
 statement ok
 ALTER TABLE messages_rbt SET LOCALITY REGIONAL BY TABLE IN "ap-southeast-2";
+
+statement ok
+ALTER TABLE messages_rbt SET (schema_locked = true)
 
 statement ok
 INSERT INTO messages_rbt (account_id, message) VALUES (1, 'Hello, Zone!');

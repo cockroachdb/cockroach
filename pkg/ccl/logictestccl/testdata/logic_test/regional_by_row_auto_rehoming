@@ -80,10 +80,7 @@ statement ok
 DROP TABLE rbr;
 
 statement ok
-CREATE TABLE rbr (p INT PRIMARY KEY, s STRING);
-
-statement ok
-ALTER TABLE rbr SET LOCALITY REGIONAL BY ROW;
+CREATE TABLE rbr (p INT PRIMARY KEY, s STRING) LOCALITY REGIONAL BY ROW;;
 
 statement ok
 INSERT INTO rbr (p, s) VALUES (1, 'hi')
