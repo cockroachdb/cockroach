@@ -312,10 +312,16 @@ CREATE TABLE t146414 (
 )
 
 statement ok
+SET use_improved_routine_dependency_tracking = true;
+
+statement ok
 CREATE FUNCTION f146414() RETURNS INT LANGUAGE SQL AS $$
   DELETE FROM t146414 WHERE a = 1 RETURNING b;
   SELECT 1;
 $$;
+
+statement ok
+RESET use_improved_routine_dependency_tracking;
 
 statement error pgcode 2BP01 pq: cannot drop column "b" because function "f146414" depends on it
 ALTER TABLE t146414 DROP COLUMN b;

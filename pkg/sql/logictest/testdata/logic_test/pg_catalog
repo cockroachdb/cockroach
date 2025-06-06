@@ -3128,6 +3128,7 @@ unconstrained_non_covering_index_scan_enabled              off                 N
 unsafe_allow_triggers_modifying_cascades                   off                 NULL      NULL        NULL        string
 use_cputs_on_non_unique_indexes                            off                 NULL      NULL        NULL        string
 use_declarative_schema_changer                             on                  NULL      NULL        NULL        string
+use_improved_routine_dependency_tracking                   off                 NULL      NULL        NULL        string
 use_pre_25_2_variadic_builtins                             off                 NULL      NULL        NULL        string
 variable_inequality_lookup_join_enabled                    on                  NULL      NULL        NULL        string
 vector_search_beam_size                                    32                  NULL      NULL        NULL        string
@@ -3359,6 +3360,7 @@ unconstrained_non_covering_index_scan_enabled              off                 N
 unsafe_allow_triggers_modifying_cascades                   off                 NULL  user     NULL      off                 off
 use_cputs_on_non_unique_indexes                            off                 NULL  user     NULL      off                 off
 use_declarative_schema_changer                             on                  NULL  user     NULL      on                  on
+use_improved_routine_dependency_tracking                   off                 NULL  user     NULL      off                 off
 use_pre_25_2_variadic_builtins                             off                 NULL  user     NULL      off                 off
 variable_inequality_lookup_join_enabled                    on                  NULL  user     NULL      on                  on
 vector_search_beam_size                                    32                  NULL  user     NULL      32                  32
@@ -3582,6 +3584,7 @@ unconstrained_non_covering_index_scan_enabled              NULL    NULL     NULL
 unsafe_allow_triggers_modifying_cascades                   NULL    NULL     NULL     NULL        NULL
 use_cputs_on_non_unique_indexes                            NULL    NULL     NULL     NULL        NULL
 use_declarative_schema_changer                             NULL    NULL     NULL     NULL        NULL
+use_improved_routine_dependency_tracking                   NULL    NULL     NULL     NULL        NULL
 use_pre_25_2_variadic_builtins                             NULL    NULL     NULL     NULL        NULL
 variable_inequality_lookup_join_enabled                    NULL    NULL     NULL     NULL        NULL
 vector_search_beam_size                                    NULL    NULL     NULL     NULL        NULL
