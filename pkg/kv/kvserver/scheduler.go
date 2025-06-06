@@ -453,6 +453,12 @@ func (ss *raftSchedulerShard) worker(
 			//   and the worker does not go back to sleep between the current
 			//   iteration and the next iteration, so no change to num_signals
 			//   is needed.
+			//
+			// NB: we overwrite state.begin unconditionally since the next processing
+			// can not possibly happen before the current processing is done (i.e.
+			// now). We do not want the scheduler latency to pick up the time spent
+			// handling this replica.
+			state.begin = crtime.NowMono()
 			ss.queue.Push(id)
 		}
 	}
