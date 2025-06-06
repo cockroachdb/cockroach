@@ -24,9 +24,8 @@ Schema change plan for rolling back CREATE SCHEMA defaultdb.sc; following CREATE
       │    │    ├── PUBLIC                → ABSENT      Owner:{DescID: 105 (sc-)}
       │    │    ├── PUBLIC                → ABSENT      UserPrivileges:{DescID: 105 (sc-), Name: "admin"}
       │    │    └── PUBLIC                → ABSENT      UserPrivileges:{DescID: 105 (sc-), Name: "root"}
-      │    └── 18 Mutation operations
+      │    └── 17 Mutation operations
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
-      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":2,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
@@ -49,7 +48,8 @@ Schema change plan for rolling back CREATE SCHEMA defaultdb.sc; following CREATE
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
       │    │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
       │    │    └── DROPPED     → ABSENT Schema:{DescID: 105 (sc-)}
-      │    └── 7 Mutation operations
+      │    └── 8 Mutation operations
+      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":2,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
       │         ├── DeleteDescriptor {"DescriptorID":105}
       │         ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}

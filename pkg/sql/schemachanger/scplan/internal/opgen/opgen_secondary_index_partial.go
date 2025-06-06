@@ -31,6 +31,16 @@ func init() {
 						BackReferencedTableID: this.TableID,
 					}
 				}),
+				emit(func(this *scpb.SecondaryIndexPartial) *scop.AddTableIndexBackReferencesInFunctions {
+					if len(this.UsesFunctionIDs) == 0 {
+						return nil
+					}
+					return &scop.AddTableIndexBackReferencesInFunctions{
+						FunctionIDs:           this.UsesFunctionIDs,
+						BackReferencedTableID: this.TableID,
+						BackReferencedIndexID: this.IndexID,
+					}
+				}),
 			),
 		),
 		toTransientAbsentLikePublic(),
@@ -51,6 +61,16 @@ func init() {
 					return &scop.UpdateTableBackReferencesInTypes{
 						TypeIDs:               this.UsesTypeIDs,
 						BackReferencedTableID: this.TableID,
+					}
+				}),
+				emit(func(this *scpb.SecondaryIndexPartial) *scop.RemoveTableIndexBackReferencesInFunctions {
+					if len(this.UsesFunctionIDs) == 0 {
+						return nil
+					}
+					return &scop.RemoveTableIndexBackReferencesInFunctions{
+						FunctionIDs:           this.UsesFunctionIDs,
+						BackReferencedTableID: this.TableID,
+						BackReferencedIndexID: this.IndexID,
 					}
 				}),
 			),

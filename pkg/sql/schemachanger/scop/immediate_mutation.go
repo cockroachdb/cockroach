@@ -732,6 +732,24 @@ type RemoveTableColumnBackReferencesInFunctions struct {
 	FunctionIDs            []descpb.ID
 }
 
+// AddTableIndexBackReferencesInFunctions adds back-references to indexes
+// from referenced functions.
+type AddTableIndexBackReferencesInFunctions struct {
+	immediateMutationOp
+	BackReferencedTableID descpb.ID
+	BackReferencedIndexID descpb.IndexID
+	FunctionIDs           []descpb.ID
+}
+
+// RemoveTableIndexBackReferencesInFunctions removes back-references to indexes
+// from referenced functions.
+type RemoveTableIndexBackReferencesInFunctions struct {
+	immediateMutationOp
+	BackReferencedTableID descpb.ID
+	BackReferencedIndexID descpb.IndexID
+	FunctionIDs           []descpb.ID
+}
+
 // AddTriggerBackReferencesInRoutines adds back references to a trigger from
 // referenced functions.
 type AddTriggerBackReferencesInRoutines struct {

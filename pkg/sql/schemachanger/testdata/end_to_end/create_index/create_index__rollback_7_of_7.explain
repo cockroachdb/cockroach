@@ -17,10 +17,8 @@ Schema change plan for rolling back CREATE INDEX idx1 ON defaultdb.public.t (v) 
       │    │    ├── TRANSIENT_DELETE_ONLY → ABSENT      TemporaryIndex:{DescID: 106 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 106 (t), ColumnID: 2 (v), IndexID: 3}
       │    │    └── PUBLIC                → ABSENT      IndexColumn:{DescID: 106 (t), ColumnID: 1 (k), IndexID: 3}
-      │    └── 13 Mutation operations
+      │    └── 11 Mutation operations
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":106}
-      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":2,"TableID":106}
-      │         ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":106}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":106}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":106}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":106}
@@ -36,7 +34,9 @@ Schema change plan for rolling back CREATE INDEX idx1 ON defaultdb.public.t (v) 
       │    │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 106 (t), IndexID: 2 (idx1-), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 106 (t), IndexID: 2 (idx1-)}
       │    │    └── PUBLIC      → ABSENT IndexData:{DescID: 106 (t), IndexID: 3}
-      │    └── 7 Mutation operations
+      │    └── 9 Mutation operations
+      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":2,"TableID":106}
+      │         ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":106}
       │         ├── MakeIndexAbsent {"IndexID":2,"TableID":106}
       │         ├── CreateGCJobForIndex {"IndexID":2,"TableID":106}
       │         ├── CreateGCJobForIndex {"IndexID":3,"TableID":106}

@@ -400,6 +400,65 @@ func (i *immediateVisitor) RemoveTableColumnBackReferencesInFunctions(
 	return nil
 }
 
+func (i *immediateVisitor) AddTableIndexBackReferencesInFunctions(
+	ctx context.Context, op scop.AddTableIndexBackReferencesInFunctions,
+) error {
+	tblDesc, err := i.checkOutTable(ctx, op.BackReferencedTableID)
+	if err != nil {
+		return err
+	}
+	var fnIDsInUse catalog.DescriptorIDSet
+	if !tblDesc.Dropped() {
+		// If table is dropped then there is no functions in use.
+		fnIDsInUse, err = tblDesc.GetAllReferencedFunctionIDsInIndex(op.BackReferencedIndexID)
+		if err != nil {
+			return err
+		}
+	}
+	for _, id := range op.FunctionIDs {
+		// If the fnIDsInUse are functions that we are not "adding" back in, do nothing.
+		if !fnIDsInUse.Contains(id) {
+			continue
+		}
+		fnDesc, err := i.checkOutFunction(ctx, id)
+		if err != nil {
+			return err
+		}
+		if err = fnDesc.AddIndexReference(op.BackReferencedTableID, op.BackReferencedIndexID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (i *immediateVisitor) RemoveTableIndexBackReferencesInFunctions(
+	ctx context.Context, op scop.RemoveTableIndexBackReferencesInFunctions,
+) error {
+	tblDesc, err := i.checkOutTable(ctx, op.BackReferencedTableID)
+	if err != nil {
+		return err
+	}
+	var fnIDsInUse catalog.DescriptorIDSet
+	if !tblDesc.Dropped() {
+		// If table is dropped then there is no functions in use.
+		fnIDsInUse, err = tblDesc.GetAllReferencedFunctionIDsInIndex(op.BackReferencedIndexID)
+		if err != nil {
+			return err
+		}
+	}
+	for _, id := range op.FunctionIDs {
+		if fnIDsInUse.Contains(id) {
+			continue
+		}
+		fnDesc, err := i.checkOutFunction(ctx, id)
+		if err != nil {
+			return err
+		}
+		fnDesc.RemoveIndexReference(op.BackReferencedTableID, op.BackReferencedIndexID)
+	}
+	return nil
+}
+
 func (i *immediateVisitor) AddTriggerBackReferencesInRoutines(
 	ctx context.Context, op scop.AddTriggerBackReferencesInRoutines,
 ) error {

@@ -24,12 +24,11 @@ Schema change plan for rolling back CREATE SCHEMA defaultdb.sc; following CREATE
       │    │    ├── PUBLIC           → ABSENT      Owner:{DescID: 105 (sc-)}
       │    │    ├── PUBLIC           → ABSENT      UserPrivileges:{DescID: 105 (sc-), Name: "admin"}
       │    │    └── PUBLIC           → ABSENT      UserPrivileges:{DescID: 105 (sc-), Name: "root"}
-      │    └── 18 Mutation operations
+      │    └── 17 Mutation operations
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
-      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":2,"TableID":104}
       │         ├── MarkDescriptorAsDropped {"DescriptorID":105}
       │         ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":105,"Name":"sc"}}
       │         ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":100,"SchemaID":105}}
@@ -50,7 +49,8 @@ Schema change plan for rolling back CREATE SCHEMA defaultdb.sc; following CREATE
       │    │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
       │    │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 3 (crdb_internal_index_3_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey)}
       │    │    └── DROPPED     → ABSENT Schema:{DescID: 105 (sc-)}
-      │    └── 8 Mutation operations
+      │    └── 9 Mutation operations
+      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":2,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
       │         ├── DeleteDescriptor {"DescriptorID":105}

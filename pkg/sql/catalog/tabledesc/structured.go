@@ -458,12 +458,20 @@ func (desc *wrapper) GetAllReferencedFunctionIDs() (catalog.DescriptorIDSet, err
 	for i := range desc.Triggers {
 		ret = ret.Union(catalog.MakeDescriptorIDSet(desc.Triggers[i].DependsOnRoutines...))
 	}
-	// Add deps from policies
+	// Add deps from policies.
 	for i := range desc.Policies {
 		ret = ret.Union(catalog.MakeDescriptorIDSet(desc.Policies[i].DependsOnFunctions...))
 	}
-	// TODO(chengxiong): add logic to extract references from indexes when UDFs
-	// are allowed in them.
+	// Add deps from partial indexes.
+	for _, idx := range desc.AllIndexes() {
+		if idx.IsPartial() {
+			ids, err := schemaexpr.GetUDFIDsFromExprStr(idx.GetPredicate())
+			if err != nil {
+				return catalog.DescriptorIDSet{}, err
+			}
+			ret = ret.Union(ids)
+		}
+	}
 	return ret.Union(catalog.MakeDescriptorIDSet(desc.DependsOnFunctions...)), nil
 }
 
@@ -494,6 +502,26 @@ func (desc *wrapper) GetAllReferencedFunctionIDsInTrigger(
 		fnIDs.Add(id)
 	}
 	return fnIDs
+}
+
+// GetAllReferencedFunctionIDsInIndex implements the TableDescriptor interface.
+func (desc *wrapper) GetAllReferencedFunctionIDsInIndex(
+	indexID descpb.IndexID,
+) (fnIDs catalog.DescriptorIDSet, err error) {
+	idx := catalog.FindIndexByID(desc, indexID)
+	if idx == nil {
+		return catalog.DescriptorIDSet{}, nil
+	}
+
+	var ret catalog.DescriptorIDSet
+	if idx.IsPartial() {
+		ids, err := schemaexpr.GetUDFIDsFromExprStr(idx.GetPredicate())
+		if err != nil {
+			return catalog.DescriptorIDSet{}, err
+		}
+		ret = ret.Union(ids)
+	}
+	return ret, nil
 }
 
 // GetAllReferencedFunctionIDsInPolicy implements the TableDescriptor interface.
