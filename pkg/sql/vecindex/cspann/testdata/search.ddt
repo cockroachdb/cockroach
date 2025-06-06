@@ -238,13 +238,13 @@ vec6: (500, 500)
 │
 ├───• 3 (50, 50)
 │   │
-│   ├───• vec1 (0, 0)
-│   └───• vec2 (100, 100)
+│   ├───• vec2 (100, 100)
+│   └───• vec1 (0, 0)
 │
 └───• 4 (250, 250)
     │
-    ├───• vec3 (200, 200)
-    └───• vec4 (300, 300)
+    ├───• vec4 (300, 300)
+    └───• vec3 (200, 200)
 
 # Delete all but one vector.
 delete not-found
@@ -263,13 +263,13 @@ vec5
 │
 ├───• 3 (50, 50)
 │   │
-│   ├───• vec1 (MISSING)
-│   └───• vec2 (MISSING)
+│   ├───• vec2 (MISSING)
+│   └───• vec1 (MISSING)
 │
 └───• 4 (250, 250)
     │
-    ├───• vec3 (MISSING)
-    └───• vec4 (MISSING)
+    ├───• vec4 (MISSING)
+    └───• vec3 (MISSING)
 
 # Search for the vector that's farthest from vec6, so it's last in the result
 # set. This ensures that DeletedMinCount is working as intended.
@@ -303,13 +303,13 @@ vec13: (6, 2)
 │   │
 │   ├───• 6 (0.3449, 0.9323)
 │   │   │
-│   │   ├───• vec1 (1, 2)
-│   │   └───• vec9 (2, 8)
+│   │   ├───• vec9 (2, 8)
+│   │   └───• vec1 (1, 2)
 │   │
 │   ├───• 7 (0.0302, 0.9986)
 │   │   │
-│   │   ├───• vec5 (1, 11)
 │   │   ├───• vec7 (0, 4)
+│   │   ├───• vec5 (1, 11)
 │   │   └───• vec10 (0, 3)
 │   │
 │   └───• 4 (-0.4336, 0.8755)
@@ -389,15 +389,15 @@ vec13: (6, 2)
     │
     ├───• 9 (5.3333, 3.6667) [Splitting:12,13]
     │   │
-    │   ├───• vec3 (4, 3)
     │   ├───• vec2 (7, 4)
+    │   ├───• vec3 (4, 3)
     │   ├───• vec12 (5, 4)
     │   └───• vec13 (6, 2)
     │
     └───• 8 (1, -2.5)
         │
-        ├───• vec6 (1, -6)
-        └───• vec11 (1, 1)
+        ├───• vec11 (1, 1)
+        └───• vec6 (1, -6)
 
 # Search for closest vectors with beam-size=1.
 search max-results=2 beam-size=1
