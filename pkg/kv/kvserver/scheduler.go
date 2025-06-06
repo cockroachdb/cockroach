@@ -395,6 +395,9 @@ func (ss *raftSchedulerShard) worker(
 		ss.Unlock()
 
 		// Record the scheduling latency for the range.
+		if buildutil.CrdbTestBuild && state.begin == 0 {
+			log.Fatalf(ctx, "raftSchedulerShard.worker called with zero begin: %+v", state)
+		}
 		lat := state.begin.Elapsed()
 		metrics.RaftSchedulerLatency.RecordValue(int64(lat))
 
@@ -437,8 +440,7 @@ func (ss *raftSchedulerShard) worker(
 		}
 
 		ss.Lock()
-		state = ss.state[id]
-		if state.flags == stateQueued {
+		if ss.state[id].flags == stateQueued {
 			// No further processing required by the range ID, clear it from the
 			// state map.
 			delete(ss.state, id)
@@ -464,6 +466,14 @@ func (ss *raftSchedulerShard) worker(
 			//   and the worker does not go back to sleep between the current
 			//   iteration and the next iteration, so no change to num_signals
 			//   is needed.
+			//
+			// NB: we overwrite state.begin unconditionally since the next processing
+			// can not possibly happen before the current processing is done (i.e.
+			// now). We do not want the scheduler latency to pick up the time spent
+			// handling this replica.
+			state = ss.state[id]
+			state.begin = crtime.NowMono()
+			ss.state[id] = state
 			ss.queue.Push(id)
 		}
 	}
@@ -495,10 +505,11 @@ func (ss *raftSchedulerShard) enqueue1Locked(
 	if newState.flags&stateQueued == 0 {
 		newState.flags |= stateQueued
 		queued++
-		ss.queue.Push(id)
-	}
-	if newState.begin == 0 {
+		if buildutil.CrdbTestBuild && newState.begin != 0 {
+			log.Fatalf(context.Background(), "raftSchedulerShard.enqueue1Locked called with non-zero begin: %+v", newState)
+		}
 		newState.begin = now
+		ss.queue.Push(id)
 	}
 	ss.state[id] = newState
 	return queued
