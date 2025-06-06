@@ -2112,6 +2112,19 @@ message AddSSTableRequest {
   //
   // TODO(dt,msbutler,bilal): This is unsupported.
   util.hlc.Timestamp ignore_keys_above_timestamp = 12 [(gogoproto.nullable) = false];
+  
+  // ComputeStatsDiff causes the server to compute the effect this
+  // sst will have on the range's mvcc stats, even in the presence of
+  // overlapping keys. This flag cannot be passed with the MVCCStats,
+  // DisallowShadowingBelow, or DisallowShadowing fields. 
+  //
+  // This flag assumes that any key in the sst that is shadowed by a key in the
+  // engine is also a duplicate. As an example, accurate stats will be computed
+  // here: 
+  // - sst: a3,a2 and eng: a2,a1
+  // but not for, as a1 is not a duplicate: 
+  // - sst: a1 and eng: a2
+  bool compute_stats_diff = 13 [(gogoproto.customname) = "ComputeStatsDiff"];
 
   reserved 10, 11;
 }
