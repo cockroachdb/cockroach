@@ -34,7 +34,7 @@ func newGRPCServer(
 	ctx context.Context, rpcCtx *rpc.Context, metricsRegistry *metric.Registry,
 ) (*grpcServer, error) {
 	s := &grpcServer{}
-	s.Set(serverrpc.ModeInitializing)
+	s.SetMode(serverrpc.ModeInitializing)
 	requestMetrics := rpc.NewRequestMetrics()
 	metricsRegistry.AddMetricStruct(requestMetrics)
 	srv, interceptorInfo, err := rpc.NewServerEx(
@@ -54,7 +54,7 @@ func newGRPCServer(
 }
 
 func (s *grpcServer) health(ctx context.Context) error {
-	sm := s.Get()
+	sm := s.GetMode()
 	switch sm {
 	case serverrpc.ModeInitializing:
 		return grpcstatus.Error(codes.Unavailable, "node is waiting for cluster initialization")

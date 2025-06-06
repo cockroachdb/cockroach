@@ -144,7 +144,7 @@ type topLevelServer struct {
 	// The gRPC and DRPC servers on which the different RPC handlers will be
 	// registered.
 	grpc *grpcServer
-	drpc *serverrpc.DRPCServer
+	drpc serverrpc.DRPCServer
 
 	gossip       *gossip.Gossip
 	kvNodeDialer *nodedialer.Dialer
@@ -976,7 +976,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		cfg.LicenseEnforcer,
 	)
 	kvpb.RegisterInternalServer(grpcServer.Server, node)
-	if err := kvpb.DRPCRegisterKVBatch(drpcServer.Mux, node.AsDRPCKVBatchServer()); err != nil {
+	if err := kvpb.DRPCRegisterKVBatch(drpcServer, node.AsDRPCKVBatchServer()); err != nil {
 		return nil, err
 	}
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
@@ -1931,8 +1931,8 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 
 	// After setting modeOperational, we can block until all stores are fully
 	// initialized.
-	s.grpc.Set(serverrpc.ModeOperational)
-	s.drpc.Set(serverrpc.ModeOperational)
+	s.grpc.SetMode(serverrpc.ModeOperational)
+	s.drpc.SetMode(serverrpc.ModeOperational)
 
 	s.nodeLiveness.Start(workersCtx)
 

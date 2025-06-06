@@ -99,7 +99,7 @@ type SQLServerWrapper struct {
 	// The gRPC and DRPC servers on which the different RPC handlers will be
 	// registered
 	grpc *grpcServer
-	drpc *serverrpc.DRPCServer
+	drpc serverrpc.DRPCServer
 
 	kvNodeDialer *nodedialer.Dialer
 	db           *kv.DB
@@ -780,8 +780,8 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 
 	// After setting modeOperational, we can block until all stores are fully
 	// initialized.
-	s.grpc.Set(serverrpc.ModeOperational)
-	s.drpc.Set(serverrpc.ModeOperational)
+	s.grpc.SetMode(serverrpc.ModeOperational)
+	s.drpc.SetMode(serverrpc.ModeOperational)
 
 	// Report server listen addresses to logs.
 	log.Ops.Infof(ctx, "starting %s server at %s (use: %s)",

@@ -28,98 +28,97 @@ import (
 // have the DRPC server enabled.
 var ErrDRPCDisabled = errors.New("DRPC is not enabled")
 
-type drpcServerI interface {
+// DRPCServer defines the interface for a DRPC server implementation.
+type DRPCServer interface {
+	// Serve starts serving DRPC requests on the given listener.
 	Serve(ctx context.Context, lis net.Listener) error
-}
 
-type drpcMuxI interface {
-	Register(srv interface{}, desc drpc.Description) error
-}
+	drpc.Mux // Embeds the DRPC multiplexer for service registration.
 
-type DRPCServer struct {
-	ServeMode
-	Srv     drpcServerI
-	Mux     drpcMuxI
-	TLSCfg  *tls.Config
-	Enabled bool
-}
+	// TLSCfg returns the TLS configuration used by the server.
+	TLSCfg() *tls.Config
 
-var _ drpcServerI = (*drpcserver.Server)(nil)
-var _ drpcServerI = (*drpcOffServer)(nil)
+	// SetMode sets the current serving mode (e.g., initializing, operational, draining).
+	SetMode(mode ServeMode)
+
+	// GetMode returns the current serving mode.
+	GetMode() ServeMode
+
+	// Operational returns true if the server is in operational mode.
+	Operational() bool
+
+	// Health returns an error if the server is not healthy, nil otherwise.
+	Health(ctx context.Context) error
+
+	// Enabled returns true if the DRPC server is enabled.
+	Enabled() bool
+}
 
 // TODO: Register DRPC Heartbeat service
-func NewDRPCServer(_ context.Context, rpcCtx *rpc.Context) (*DRPCServer, error) {
-	var dmux drpcMuxI = &drpcOffServer{}
-	var dsrv drpcServerI = &drpcOffServer{}
-	var tlsCfg *tls.Config
-	enabled := false
-
-	if rpc.ExperimentalDRPCEnabled.Get(&rpcCtx.Settings.SV) {
-		enabled = true
-		mux := drpcmux.New()
-		dsrv = drpcserver.NewWithOptions(mux, drpcserver.Options{
-			Log: func(err error) {
-				log.Warningf(context.Background(), "drpc server error %v", err)
-			},
-			// The reader's max buffer size defaults to 4mb, and if it is exceeded (such
-			// as happens with AddSSTable) the RPCs fail.
-			Manager: drpcmanager.Options{Reader: drpcwire.ReaderOptions{MaximumBufferSize: math.MaxInt}},
-		})
-		dmux = mux
-
-		var err error
-		tlsCfg, err = rpcCtx.GetServerTLSConfig()
-		if err != nil {
-			return nil, err
-		}
-
-		// NB: any server middleware (server interceptors in gRPC parlance) would go
-		// here:
-		//     dmux = whateverMiddleware1(dmux)
-		//     dmux = whateverMiddleware2(dmux)
-		//     ...
-		//
-		// Each middleware must implement the Handler interface:
-		//
-		//   HandleRPC(stream Stream, rpc string) error
-		//
-		// where Stream
-		// See here for an example:
-		// https://github.com/bryk-io/pkg/blob/4da5fbfef47770be376e4022eab5c6c324984bf7/net/drpc/server.go#L91-L101
+func NewDRPCServer(_ context.Context, rpcCtx *rpc.Context) (DRPCServer, error) {
+	if !rpc.ExperimentalDRPCEnabled.Get(&rpcCtx.Settings.SV) {
+		return &drpcOffServer{}, nil
 	}
 
-	d := &DRPCServer{
-		Srv:     dsrv,
-		Mux:     dmux,
-		TLSCfg:  tlsCfg,
-		Enabled: enabled,
-	}
+	d := &drpcServer{}
 
-	d.Set(ModeInitializing)
+	mux := drpcmux.New()
+	d.Server = drpcserver.NewWithOptions(mux, drpcserver.Options{
+		Log: func(err error) {
+			log.Warningf(context.Background(), "drpc server error %v", err)
+		},
+		// The reader's max buffer size defaults to 4mb, and if it is exceeded (such
+		// as happens with AddSSTable) the RPCs fail.
+		Manager: drpcmanager.Options{Reader: drpcwire.ReaderOptions{MaximumBufferSize: math.MaxInt}},
+	})
+	d.Mux = mux
+
+	tlsCfg, err := rpcCtx.GetServerTLSConfig()
+	if err != nil {
+		return nil, err
+	}
+	d.tlsCfg = tlsCfg
+
+	// NB: any server middleware (server interceptors in gRPC parlance) would go
+	// here:
+	//     dmux = whateverMiddleware1(dmux)
+	//     dmux = whateverMiddleware2(dmux)
+	//     ...
+	//
+	// Each middleware must implement the Handler interface:
+	//
+	//   HandleRPC(stream Stream, rpc string) error
+	//
+	// where Stream
+	// See here for an example:
+	// https://github.com/bryk-io/pkg/blob/4da5fbfef47770be376e4022eab5c6c324984bf7/net/drpc/server.go#L91-L101
+
+	d.SetMode(ModeInitializing)
 
 	return d, nil
 }
 
-// drpcOffServer is used for drpcServerI and drpcMuxI if the DRPC server is
-// disabled. It immediately closes accepted connections and returns
-// ErrDRPCDisabled.
-type drpcOffServer struct{}
-
-func (srv *drpcOffServer) Serve(_ context.Context, lis net.Listener) error {
-	conn, err := lis.Accept()
-	if err != nil {
-		return err
-	}
-	_ = conn.Close()
-	return ErrDRPCDisabled
+// drpcServer implements the DRPCServer interface and provides a fully functional
+// DRPC server. It embeds the drpcserver.Server and drpcmux.Mux to handle DRPC
+// requests and service registration.
+type drpcServer struct {
+	// ServeMode controls the current operational state of the server (e.g., initializing, operational, draining).
+	ServeMode
+	// Server is the underlying DRPC server implementation handling connections and requests.
+	*drpcserver.Server
+	// Mux is the DRPC multiplexer used for service registration and routing.
+	*drpcmux.Mux
+	// tlsCfg holds the TLS configuration for secure communication.
+	tlsCfg *tls.Config
 }
 
-func (srv *drpcOffServer) Register(interface{}, drpc.Description) error {
-	return nil
-}
+func (s *drpcServer) Enabled() bool       { return true }
+func (s *drpcServer) TLSCfg() *tls.Config { return s.tlsCfg }
 
-func (s *DRPCServer) Health(ctx context.Context) error {
-	sm := s.Get()
+// Health checks the health of the DRPC server based on its current mode.
+// Returns an error with an appropriate code if the server is not operational.
+func (s *drpcServer) Health(ctx context.Context) error {
+	sm := s.GetMode()
 	switch sm {
 	case ModeInitializing:
 		return drpcerr.WithCode(errors.New("node is waiting for cluster initialization"), uint64(codes.Unavailable))
@@ -131,3 +130,40 @@ func (s *DRPCServer) Health(ctx context.Context) error {
 		return srverrors.ServerError(ctx, errors.Newf("unknown mode: %v", sm))
 	}
 }
+
+// drpcOffServer implements the DRPCServer interface for the case when the DRPC
+// server is disabled. All methods either return default values or errors
+// indicating that DRPC is not enabled. This type is used as a stub to satisfy
+// the interface when DRPC functionality is turned off.
+type drpcOffServer struct{}
+
+// Serve immediately closes any accepted connection and returns ErrDRPCDisabled.
+func (srv *drpcOffServer) Serve(_ context.Context, lis net.Listener) error {
+	conn, err := lis.Accept()
+	if err != nil {
+		return err
+	}
+	_ = conn.Close()
+	return ErrDRPCDisabled
+}
+
+// Register is a no-op for drpcOffServer and always returns nil.
+func (srv *drpcOffServer) Register(interface{}, drpc.Description) error { return nil }
+
+// TLSCfg returns nil as there is no TLS configuration for a disabled server.
+func (srv *drpcOffServer) TLSCfg() *tls.Config { return nil }
+
+// Enabled returns false, indicating the DRPC server is not enabled.
+func (srv *drpcOffServer) Enabled() bool { return false }
+
+// TODO(server): add a mode for N.A.
+func (srv *drpcOffServer) GetMode() ServeMode { return ModeInitializing }
+
+// SetMode is a no-op for drpcOffServer.
+func (srv *drpcOffServer) SetMode(_ ServeMode) {}
+
+// Operational always returns false for a disabled server.
+func (srv *drpcOffServer) Operational() bool { return false }
+
+// Health always returns ErrDRPCDisabled for a disabled server.
+func (srv *drpcOffServer) Health(ctx context.Context) error { return ErrDRPCDisabled }

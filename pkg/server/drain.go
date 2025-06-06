@@ -120,7 +120,7 @@ type drainServer struct {
 	// stopTrigger is used to request that the server is shut down.
 	stopTrigger  *stopTrigger
 	grpc         *grpcServer
-	drpc         *serverrpc.DRPCServer
+	drpc         serverrpc.DRPCServer
 	sqlServer    *SQLServer
 	drainSleepFn func(time.Duration)
 	serverCtl    *serverController
@@ -137,7 +137,7 @@ func newDrainServer(
 	stopper *stop.Stopper,
 	stopTrigger *stopTrigger,
 	grpc *grpcServer,
-	drpc *serverrpc.DRPCServer,
+	drpc serverrpc.DRPCServer,
 	sqlServer *SQLServer,
 ) *drainServer {
 	var drainSleepFn = time.Sleep
@@ -387,8 +387,8 @@ func (s *drainServer) drainClients(
 
 	// Set the gRPC mode of the node to "draining" and mark the node as "not ready".
 	// Probes to /health?ready=1 will now notice the change in the node's readiness.
-	s.grpc.Set(serverrpc.ModeDraining)
-	s.drpc.Set(serverrpc.ModeDraining)
+	s.grpc.SetMode(serverrpc.ModeDraining)
+	s.drpc.SetMode(serverrpc.ModeDraining)
 	s.sqlServer.isReady.Store(false)
 
 	// Log the number of connections periodically.

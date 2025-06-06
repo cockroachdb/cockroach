@@ -23,15 +23,15 @@ const (
 	ModeDraining
 )
 
-func (s *ServeMode) Set(mode ServeMode) {
+func (s *ServeMode) SetMode(mode ServeMode) {
 	atomic.StoreInt32((*int32)(s), int32(mode))
 }
 
-func (s *ServeMode) Get() ServeMode {
+func (s *ServeMode) GetMode() ServeMode {
 	return ServeMode(atomic.LoadInt32((*int32)(s)))
 }
 
 func (s *ServeMode) Operational() bool {
-	sMode := s.Get()
+	sMode := s.GetMode()
 	return sMode == ModeOperational || sMode == ModeDraining
 }

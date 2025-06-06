@@ -118,7 +118,7 @@ type adminServer struct {
 	rpcContext       *rpc.Context
 	clock            *hlc.Clock
 	grpc             *grpcServer
-	drpc             *serverrpc.DRPCServer
+	drpc             serverrpc.DRPCServer
 	db               *kv.DB
 	drainServer      *drainServer
 }
@@ -158,7 +158,7 @@ func newSystemAdminServer(
 	clock *hlc.Clock,
 	distSender *kvcoord.DistSender,
 	grpc *grpcServer,
-	drpc *serverrpc.DRPCServer,
+	drpc serverrpc.DRPCServer,
 	drainServer *drainServer,
 	s *topLevelServer,
 ) *systemAdminServer {
@@ -203,7 +203,7 @@ func newAdminServer(
 	clock *hlc.Clock,
 	distSender *kvcoord.DistSender,
 	grpc *grpcServer,
-	drpc *serverrpc.DRPCServer,
+	drpc serverrpc.DRPCServer,
 	drainServer *drainServer,
 ) *adminServer {
 	server := &adminServer{
@@ -2112,7 +2112,7 @@ func (s *adminServer) checkReadinessForHealthCheck(ctx context.Context) error {
 		return err
 	}
 
-	if s.drpc.Enabled {
+	if s.drpc.Enabled() {
 		if err := s.drpc.Health(ctx); err != nil {
 			return err
 		}
@@ -2158,7 +2158,7 @@ func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) er
 		return err
 	}
 
-	if s.drpc.Enabled {
+	if s.drpc.Enabled() {
 		if err := s.drpc.Health(ctx); err != nil {
 			return err
 		}
