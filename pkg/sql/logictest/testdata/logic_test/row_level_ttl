@@ -117,7 +117,7 @@ CREATE TABLE crdb_internal_functions_tbl (
   id INT PRIMARY KEY
 ) WITH (ttl_expire_after = '10 minutes')
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE crdb_internal_functions_tbl]
 ----
@@ -127,7 +127,7 @@ CREATE TABLE public.crdb_internal_functions_tbl (
   CONSTRAINT crdb_internal_functions_tbl_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE crdb_internal_functions_tbl]
 ----
@@ -388,7 +388,7 @@ ALTER TABLE tbl_reset_ttl SET (ttl = 'off')
 statement ok
 ALTER TABLE tbl_reset_ttl RESET (ttl)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_reset_ttl]
 ----
@@ -397,7 +397,7 @@ CREATE TABLE public.tbl_reset_ttl (
   CONSTRAINT tbl_reset_ttl_pkey PRIMARY KEY (id ASC)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_reset_ttl]
 ----
@@ -615,7 +615,7 @@ CREATE TABLE tbl_ttl_on_noop (
   id INT PRIMARY KEY
 ) WITH (ttl_expire_after = '10 minutes')
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_ttl_on_noop]
 ----
@@ -625,7 +625,7 @@ CREATE TABLE public.tbl_ttl_on_noop (
   CONSTRAINT tbl_ttl_on_noop_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_ttl_on_noop]
 ----
@@ -639,7 +639,7 @@ CREATE TABLE public.tbl_ttl_on_noop (
 statement ok
 ALTER TABLE tbl_ttl_on_noop SET (ttl = 'on')
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_ttl_on_noop]
 ----
@@ -649,7 +649,7 @@ CREATE TABLE public.tbl_ttl_on_noop (
   CONSTRAINT tbl_ttl_on_noop_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_ttl_on_noop]
 ----
@@ -693,7 +693,7 @@ CREATE TABLE tbl_create_ttl_job_cron (
   id INT PRIMARY KEY
 ) WITH (ttl_expire_after = '10 minutes', ttl_job_cron = '@daily')
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_create_ttl_job_cron]
 ----
@@ -703,7 +703,7 @@ CREATE TABLE public.tbl_create_ttl_job_cron (
   CONSTRAINT tbl_create_ttl_job_cron_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@daily');
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_create_ttl_job_cron]
 ----
@@ -736,7 +736,7 @@ CREATE TABLE tbl_set_ttl_job_cron (
 statement ok
 ALTER TABLE tbl_set_ttl_job_cron SET (ttl_job_cron = '@weekly')
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_ttl_job_cron]
 ----
@@ -746,7 +746,7 @@ CREATE TABLE public.tbl_set_ttl_job_cron (
   CONSTRAINT tbl_set_ttl_job_cron_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@weekly');
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_ttl_job_cron]
 ----
@@ -779,7 +779,7 @@ CREATE TABLE tbl_reset_ttl_job_cron (
 statement ok
 ALTER TABLE tbl_reset_ttl_job_cron RESET (ttl_job_cron)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_reset_ttl_job_cron]
 ----
@@ -789,7 +789,7 @@ CREATE TABLE public.tbl_reset_ttl_job_cron (
   CONSTRAINT tbl_reset_ttl_job_cron_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_reset_ttl_job_cron]
 ----
@@ -893,7 +893,7 @@ CREATE TABLE tbl_set_ttl_params (
 NOTICE: The TTL rate limit is per leaseholder per table.
 DETAIL: See the documentation for additional details: https://www.cockroachlabs.com/docs/v25.3/row-level-ttl#ttl-storage-parameters
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_ttl_params]
 ----
@@ -903,7 +903,7 @@ CREATE TABLE public.tbl_set_ttl_params (
   CONSTRAINT tbl_set_ttl_params_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_select_batch_size = 10, ttl_delete_batch_size = 20, ttl_select_rate_limit = 30, ttl_delete_rate_limit = 40, ttl_pause = true, ttl_row_stats_poll_interval = '1m0s', ttl_label_metrics = true, ttl_disable_changefeed_replication = true);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_ttl_params]
 ----
@@ -924,7 +924,7 @@ onlyif config local-read-committed local-repeatable-read
 statement ok
 ALTER TABLE tbl_set_ttl_params SET (ttl_select_batch_size = 110, ttl_delete_batch_size = 120, ttl_select_rate_limit = 130, ttl_delete_rate_limit = 140, ttl_row_stats_poll_interval = '2m0s')
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_ttl_params]
 ----
@@ -934,7 +934,7 @@ CREATE TABLE public.tbl_set_ttl_params (
   CONSTRAINT tbl_set_ttl_params_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_select_batch_size = 110, ttl_delete_batch_size = 120, ttl_select_rate_limit = 130, ttl_delete_rate_limit = 140, ttl_pause = true, ttl_row_stats_poll_interval = '2m0s', ttl_label_metrics = true, ttl_disable_changefeed_replication = true);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_ttl_params]
 ----
@@ -957,7 +957,7 @@ ALTER TABLE tbl_set_ttl_params RESET (
   ttl_disable_changefeed_replication
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_ttl_params]
 ----
@@ -967,7 +967,7 @@ CREATE TABLE public.tbl_set_ttl_params (
   CONSTRAINT tbl_set_ttl_params_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_ttl_params]
 ----
@@ -990,7 +990,7 @@ CREATE TABLE tbl_create_table_ttl_expiration_expression (
   FAMILY (id, expire_at)
 ) WITH (ttl_expiration_expression = 'expire_at')
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_create_table_ttl_expiration_expression]
 ----
@@ -1001,7 +1001,7 @@ CREATE TABLE public.tbl_create_table_ttl_expiration_expression (
   FAMILY fam_0_id_expire_at (id, expire_at)
 ) WITH (ttl = 'on', ttl_expiration_expression = 'expire_at');
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_create_table_ttl_expiration_expression]
 ----
@@ -1015,7 +1015,7 @@ CREATE TABLE public.tbl_create_table_ttl_expiration_expression (
 statement ok
 ALTER TABLE tbl_create_table_ttl_expiration_expression RESET (ttl)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_create_table_ttl_expiration_expression]
 ----
@@ -1026,7 +1026,7 @@ CREATE TABLE public.tbl_create_table_ttl_expiration_expression (
   FAMILY fam_0_id_expire_at (id, expire_at)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_create_table_ttl_expiration_expression]
 ----
@@ -1048,7 +1048,7 @@ CREATE TABLE tbl_create_table_ttl_expiration_expression_escape_sql (
   FAMILY (id, expire_at)
 ) WITH (ttl_expiration_expression = 'IF(expire_at > parse_timestamp(''2020-01-01 00:00:00'') AT TIME ZONE ''UTC'', expire_at, NULL)')
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_create_table_ttl_expiration_expression_escape_sql]
 ----
@@ -1059,7 +1059,7 @@ CREATE TABLE public.tbl_create_table_ttl_expiration_expression_escape_sql (
   FAMILY fam_0_id_expire_at (id, expire_at)
 ) WITH (ttl = 'on', ttl_expiration_expression = e'IF(expire_at > parse_timestamp(\'2020-01-01 00:00:00\') AT TIME ZONE \'UTC\', expire_at, NULL)');
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_create_table_ttl_expiration_expression_escape_sql]
 ----
@@ -1095,14 +1095,14 @@ ALTER TABLE tbl_alter_table_ttl_expiration_expression DROP COLUMN expire_at
 statement ok
 SET use_declarative_schema_changer = 'off'
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE tbl_alter_table_ttl_expiration_expression SET (schema_locked = false)
 
 statement error cannot drop column "expire_at" referenced by row-level TTL expiration expression "expire_at"\nHINT: use ALTER TABLE .*
 ALTER TABLE tbl_alter_table_ttl_expiration_expression DROP COLUMN expire_at
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE tbl_alter_table_ttl_expiration_expression SET (schema_locked = true)
 
@@ -1112,7 +1112,7 @@ SET use_declarative_schema_changer = 'on'
 statement error cannot alter type of column "expire_at" referenced by row-level TTL expiration expression "expire_at"\nHINT: use ALTER TABLE .*
 ALTER TABLE tbl_alter_table_ttl_expiration_expression ALTER expire_at TYPE TIMESTAMP USING (expire_at AT TIME ZONE 'UTC')
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_alter_table_ttl_expiration_expression]
 ----
@@ -1123,7 +1123,7 @@ CREATE TABLE public.tbl_alter_table_ttl_expiration_expression (
   FAMILY fam_0_id_expire_at (id, expire_at)
 ) WITH (ttl = 'on', ttl_expiration_expression = 'expire_at');
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_alter_table_ttl_expiration_expression]
 ----
@@ -1138,7 +1138,7 @@ CREATE TABLE public.tbl_alter_table_ttl_expiration_expression (
 statement ok
 ALTER TABLE tbl_alter_table_ttl_expiration_expression SET (ttl_expiration_expression = '((expire_at AT TIME ZONE ''UTC'') + ''5 minutes'':::INTERVAL) AT TIME ZONE ''UTC''')
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_alter_table_ttl_expiration_expression]
 ----
@@ -1149,7 +1149,7 @@ CREATE TABLE public.tbl_alter_table_ttl_expiration_expression (
   FAMILY fam_0_id_expire_at (id, expire_at)
 ) WITH (ttl = 'on', ttl_expiration_expression = e'((expire_at AT TIME ZONE \'UTC\') + \'5 minutes\':::INTERVAL) AT TIME ZONE \'UTC\'');
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_alter_table_ttl_expiration_expression]
 ----
@@ -1163,7 +1163,7 @@ CREATE TABLE public.tbl_alter_table_ttl_expiration_expression (
 statement ok
 ALTER TABLE tbl_alter_table_ttl_expiration_expression RESET (ttl)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_alter_table_ttl_expiration_expression]
 ----
@@ -1174,7 +1174,7 @@ CREATE TABLE public.tbl_alter_table_ttl_expiration_expression (
   FAMILY fam_0_id_expire_at (id, expire_at)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_alter_table_ttl_expiration_expression]
 ----
@@ -1199,7 +1199,7 @@ CREATE TABLE tbl_add_ttl_expiration_expression_to_ttl_expire_after (
 statement ok
 ALTER TABLE tbl_add_ttl_expiration_expression_to_ttl_expire_after SET (ttl_expiration_expression = 'crdb_internal_expiration')
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_add_ttl_expiration_expression_to_ttl_expire_after]
 ----
@@ -1211,7 +1211,7 @@ CREATE TABLE public.tbl_add_ttl_expiration_expression_to_ttl_expire_after (
   FAMILY fam_0_id_expire_at_crdb_internal_expiration (id, expire_at, crdb_internal_expiration)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_expiration_expression = 'crdb_internal_expiration');
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_add_ttl_expiration_expression_to_ttl_expire_after]
 ----
@@ -1275,7 +1275,7 @@ CREATE TABLE create_table_ttl_expire_after_and_ttl_expiration_expression (
   id INT PRIMARY KEY
 ) WITH (ttl_expire_after = '10 minutes', ttl_expiration_expression = 'crdb_internal_expiration')
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE create_table_ttl_expire_after_and_ttl_expiration_expression]
 ----
@@ -1285,7 +1285,7 @@ CREATE TABLE public.create_table_ttl_expire_after_and_ttl_expiration_expression 
   CONSTRAINT create_table_ttl_expire_after_and_ttl_expiration_expression_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_expiration_expression = 'crdb_internal_expiration');
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE create_table_ttl_expire_after_and_ttl_expiration_expression]
 ----
@@ -1298,7 +1298,7 @@ CREATE TABLE public.create_table_ttl_expire_after_and_ttl_expiration_expression 
 statement ok
 ALTER TABLE create_table_ttl_expire_after_and_ttl_expiration_expression RESET (ttl)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE create_table_ttl_expire_after_and_ttl_expiration_expression]
 ----
@@ -1307,7 +1307,7 @@ CREATE TABLE public.create_table_ttl_expire_after_and_ttl_expiration_expression 
   CONSTRAINT create_table_ttl_expire_after_and_ttl_expiration_expression_pkey PRIMARY KEY (id ASC)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE create_table_ttl_expire_after_and_ttl_expiration_expression]
 ----
@@ -1362,7 +1362,7 @@ CREATE TABLE tbl_ttl_expiration_expression_renamed (
 statement ok
 ALTER TABLE tbl_ttl_expiration_expression_renamed RENAME expires_at TO expires_at_renamed
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_ttl_expiration_expression_renamed]
 ----
@@ -1373,7 +1373,7 @@ CREATE TABLE public.tbl_ttl_expiration_expression_renamed (
   FAMILY fam (id, expires_at_renamed)
 ) WITH (ttl = 'on', ttl_expiration_expression = 'expires_at_renamed');
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_ttl_expiration_expression_renamed]
 ----
@@ -1476,7 +1476,7 @@ CREATE TABLE create_table_no_ttl_set_ttl_expiration_expression (
 statement ok
 ALTER TABLE create_table_no_ttl_set_ttl_expiration_expression SET (ttl_expiration_expression = 'expire_at')
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE create_table_no_ttl_set_ttl_expiration_expression]
 ----
@@ -1487,7 +1487,7 @@ CREATE TABLE public.create_table_no_ttl_set_ttl_expiration_expression (
   FAMILY fam_0_id_expire_at (id, expire_at)
 ) WITH (ttl = 'on', ttl_expiration_expression = 'expire_at');
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE create_table_no_ttl_set_ttl_expiration_expression]
 ----
@@ -1555,7 +1555,7 @@ CREATE TABLE tbl_set_both_reset_ttl_expire_after (
 statement ok
 ALTER TABLE tbl_set_both_reset_ttl_expire_after RESET (ttl_expire_after)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_both_reset_ttl_expire_after]
 ----
@@ -1566,7 +1566,7 @@ CREATE TABLE public.tbl_set_both_reset_ttl_expire_after (
   FAMILY fam_0_id_expire_at_crdb_internal_expiration (id, expire_at)
 ) WITH (ttl = 'on', ttl_expiration_expression = 'expire_at');
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_both_reset_ttl_expire_after]
 ----
@@ -1604,7 +1604,7 @@ CREATE TABLE tbl_set_both_reset_ttl_expiration_expression (
 statement ok
 ALTER TABLE tbl_set_both_reset_ttl_expiration_expression RESET (ttl_expiration_expression)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_both_reset_ttl_expiration_expression]
 ----
@@ -1616,7 +1616,7 @@ CREATE TABLE public.tbl_set_both_reset_ttl_expiration_expression (
   FAMILY fam_0_id_expire_at_crdb_internal_expiration (id, expire_at, crdb_internal_expiration)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_both_reset_ttl_expiration_expression]
 ----

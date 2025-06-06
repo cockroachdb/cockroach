@@ -541,6 +541,9 @@ num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preference
 num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'                      regional_by_row@regional_by_row_i_idx  us-east-1
 num_replicas = 10,\nnum_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey   us-east-1
 
+statement ok
+ALTER TABLE regional_by_row SET (schema_locked = false)
+
 statement error attempting to update zone configuration for table regional_by_row which contains modified field "num_replicas"
 ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY TABLE
 
@@ -549,6 +552,9 @@ SET override_multi_region_zone_config = true;
 
 statement ok
 ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY TABLE;
+
+statement ok
+ALTER TABLE regional_by_row SET (schema_locked = true)
 
 statement ok
 SET override_multi_region_zone_config = false
@@ -630,8 +636,14 @@ SET override_multi_region_zone_config = false
 statement error zone configuration for partition "ap-southeast-2" of regional_by_row@idx contains incorrectly configured field "num_replicas"
 SELECT crdb_internal.validate_multi_region_zone_configs()
 
+statement ok
+ALTER TABLE regional_by_row SET (schema_locked = false);
+
 statement error attempting to update zone configuration for partition "ap-southeast-2" of regional_by_row@idx which contains modified field "num_replicas"
 ALTER TABLE regional_by_row SET LOCALITY GLOBAL
+
+statement ok
+ALTER TABLE regional_by_row SET (schema_locked = true);
 
 statement ok
 SET override_multi_region_zone_config = true;
@@ -645,14 +657,26 @@ SET override_multi_region_zone_config = false
 statement error missing zone configuration for partition "ap-southeast-2" of regional_by_row@idx
 SELECT crdb_internal.validate_multi_region_zone_configs()
 
+statement ok
+ALTER TABLE regional_by_row SET (schema_locked = false);
+
 statement error attempting to update zone config which is missing an expected zone configuration for partition "ap-southeast-2" of regional_by_row@idx
 ALTER TABLE regional_by_row SET LOCALITY GLOBAL
+
+statement ok
+ALTER TABLE regional_by_row SET (schema_locked = true);
 
 statement ok
 SET override_multi_region_zone_config = true;
 
 statement ok
+ALTER TABLE regional_by_row SET (schema_locked = false);
+
+statement ok
 ALTER TABLE regional_by_row SET LOCALITY GLOBAL;
+
+statement ok
+ALTER TABLE regional_by_row SET (schema_locked = true);
 
 statement ok
 SET override_multi_region_zone_config = false
@@ -689,7 +713,13 @@ statement ok
 SET override_multi_region_zone_config = true;
 
 statement ok
+ALTER TABLE regional_by_row SET (schema_locked = false);
+
+statement ok
 ALTER TABLE regional_by_row SET LOCALITY GLOBAL;
+
+statement ok
+ALTER TABLE regional_by_row SET (schema_locked = false);
 
 statement ok
 SET override_multi_region_zone_config = false
@@ -733,7 +763,13 @@ statement ok
 SET override_multi_region_zone_config = true;
 
 statement ok
+ALTER TABLE regional_by_row SET (schema_locked = false);
+
+statement ok
 ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY ROW;
+
+statement ok
+ALTER TABLE regional_by_row SET (schema_locked = true);
 
 statement ok
 SET override_multi_region_zone_config = false
@@ -769,6 +805,9 @@ INDEX regional_by_row_as@regional_by_row_as_pkey  ALTER INDEX regional_by_row_as
                                   voter_constraints = '[+region=us-east-1]',
                                   lease_preferences = '[[+region=us-east-1]]'
 
+statement ok
+ALTER TABLE regional_by_row_as SET (schema_locked = false);
+
 statement error attempting to update zone config which contains an extra zone configuration for index regional_by_row_as@regional_by_row_as_pkey with field num_replicas populated
 ALTER TABLE regional_by_row_as SET LOCALITY REGIONAL BY ROW
 
@@ -777,6 +816,10 @@ SET override_multi_region_zone_config = true;
 
 statement ok
 ALTER TABLE regional_by_row_as SET LOCALITY REGIONAL BY ROW;
+
+statement ok
+ALTER TABLE regional_by_row_as
+ SET (schema_locked = true);
 
 statement ok
 SET override_multi_region_zone_config = false
@@ -805,7 +848,7 @@ regional_by_row_as  CREATE TABLE public.regional_by_row_as (
                       CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                       INDEX regional_by_row_as_i_idx (i ASC),
                       FAMILY fam_0_cr_pk_i (cr, pk, i, crdb_region)
-                    ) LOCALITY REGIONAL BY ROW;
+                    ) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT ZONE_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row_as]
@@ -987,6 +1030,9 @@ ALTER INDEX tbl1@tbl1_i_idx CONFIGURE ZONE USING num_replicas=10;
 statement ok
 SET override_multi_region_zone_config = false
 
+statement ok
+ALTER TABLE tbl1 SET (schema_locked = false);
+
 statement error attempting to update zone config which contains an extra zone configuration for index tbl1@tbl1_i_idx with field num_replicas populated
 ALTER TABLE tbl1 SET LOCALITY GLOBAL
 
@@ -997,6 +1043,9 @@ SET override_multi_region_zone_config = true;
 
 statement ok
 ALTER TABLE tbl1 SET LOCALITY GLOBAL;
+
+statement ok
+ALTER TABLE tbl1 SET (schema_locked = true);
 
 statement ok
 SET override_multi_region_zone_config = false
@@ -1016,6 +1065,9 @@ TABLE tbl1  ALTER TABLE tbl1 CONFIGURE ZONE USING
               voter_constraints = '[+region=us-east-1]',
               lease_preferences = '[[+region=us-east-1]]'
 
+statement ok
+ALTER TABLE tbl1 SET (schema_locked = false);
+
 # Confirm that the zone configuration was wiped above by changing the locality
 # again, this time without an override.
 statement ok
@@ -1026,6 +1078,9 @@ statement ok
 ALTER TABLE tbl1 SET LOCALITY GLOBAL
 
 statement ok
+ALTER TABLE tbl1 SET (schema_locked = true);
+
+statement ok
 SET override_multi_region_zone_config = true;
 
 statement ok
@@ -1033,6 +1088,9 @@ ALTER INDEX tbl1@tbl1_i_idx CONFIGURE ZONE USING num_replicas=10;
 
 statement ok
 SET override_multi_region_zone_config = false
+
+statement ok
+ALTER TABLE tbl1 SET (schema_locked = false);
 
 statement error attempting to update zone config which contains an extra zone configuration for index tbl1@tbl1_i_idx with field num_replicas populated
 ALTER TABLE tbl1 SET LOCALITY REGIONAL BY TABLE IN "us-east-1"
@@ -1050,6 +1108,9 @@ statement ok
 ALTER TABLE tbl1 SET LOCALITY GLOBAL
 
 statement ok
+ALTER TABLE tbl1 SET (schema_locked = true);
+
+statement ok
 SET override_multi_region_zone_config = true;
 
 statement ok
@@ -1057,6 +1118,9 @@ ALTER INDEX tbl1@tbl1_i_idx CONFIGURE ZONE USING num_replicas=10;
 
 statement ok
 SET override_multi_region_zone_config = false
+
+statement ok
+ALTER TABLE tbl1 SET (schema_locked = false);
 
 statement error attempting to update zone config which contains an extra zone configuration for index tbl1@tbl1_i_idx with field num_replicas populated
 ALTER TABLE tbl1 SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
@@ -1092,6 +1156,9 @@ statement ok
 ALTER TABLE tbl1 SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 statement ok
+ALTER TABLE tbl1 SET (schema_locked = true);
+
+statement ok
 SET override_multi_region_zone_config = false
 
 # Now test to ensure that the same test holds true if we're transitioning from
@@ -1112,8 +1179,15 @@ ALTER INDEX tbl2@tbl2_i_idx CONFIGURE ZONE USING num_replicas=10;
 statement ok
 SET override_multi_region_zone_config = false;
 
+statement ok
+ALTER TABLE tbl2 SET (schema_locked = false);
+
 statement error attempting to update zone config which contains an extra zone configuration for index tbl2@tbl2_i_idx with field num_replicas populated
 ALTER TABLE tbl2 SET LOCALITY GLOBAL
+
+statement ok
+ALTER TABLE tbl2 SET (schema_locked = true);
+
 
 statement ok
 ALTER INDEX tbl2@tbl2_i_idx CONFIGURE ZONE USING gc.ttlseconds=10
@@ -1135,7 +1209,13 @@ statement ok
 SET override_multi_region_zone_config = true;
 
 statement ok
+ALTER TABLE tbl2 SET (schema_locked = false);
+
+statement ok
 ALTER TABLE tbl2 SET LOCALITY GLOBAL;
+
+statement ok
+ALTER TABLE tbl2 SET (schema_locked = true);
 
 statement ok
 SET override_multi_region_zone_config = false
@@ -1156,7 +1236,13 @@ INDEX tbl2@tbl2_i_idx  ALTER INDEX tbl2@tbl2_i_idx CONFIGURE ZONE USING
                        lease_preferences = '[[+region=us-east-1]]'
 
 statement ok
+ALTER TABLE tbl2 SET (schema_locked = false);
+
+statement ok
 ALTER TABLE tbl2 SET LOCALITY REGIONAL BY ROW
+
+statement ok
+ALTER TABLE tbl2 SET (schema_locked = true);
 
 statement ok
 SET override_multi_region_zone_config = true;
@@ -1166,6 +1252,9 @@ ALTER TABLE tbl2 CONFIGURE ZONE USING num_replicas=10;
 
 statement ok
 SET override_multi_region_zone_config = false
+
+statement ok
+ALTER TABLE tbl2 SET (schema_locked = false);
 
 statement error attempting to update zone configuration for table tbl2 which contains modified field "num_replicas"
 ALTER TABLE tbl2 SET LOCALITY GLOBAL
@@ -1181,6 +1270,9 @@ SET override_multi_region_zone_config = false
 
 statement ok
 ALTER TABLE tbl2 SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+statement ok
+ALTER TABLE tbl2 SET (schema_locked = true);
 
 statement ok
 DROP TABLE tbl2

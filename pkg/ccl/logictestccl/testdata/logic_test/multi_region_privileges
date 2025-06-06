@@ -92,7 +92,13 @@ GRANT CREATE ON TABLE alter_db.t TO testuser
 user testuser
 
 statement ok
+ALTER TABLE alter_db.t SET (schema_locked = false)
+
+statement ok
 ALTER TABLE alter_db.t SET LOCALITY GLOBAL
+
+statement ok
+ALTER TABLE alter_db.t SET (schema_locked = true)
 
 # Same thing, this time make testuser the owner.
 
@@ -110,7 +116,13 @@ ALTER TABLE alter_db.t OWNER TO testuser
 user testuser
 
 statement ok
+ALTER TABLE alter_db.t SET (schema_locked = false)
+
+statement ok
 ALTER TABLE alter_db.t SET LOCALITY REGIONAL
+
+statement ok
+ALTER TABLE alter_db.t SET (schema_locked = true)
 
 subtest alter_database_privileges
 

@@ -221,7 +221,7 @@ CREATE TABLE t (rowid INT PRIMARY KEY, y INT NOT NULL, FAMILY (rowid, y));
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE t
 ----
@@ -233,7 +233,7 @@ t  CREATE TABLE public.t (
      FAMILY fam_0_rowid_y (rowid, y)
    );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE t
 ----
@@ -269,7 +269,7 @@ CREATE TABLE t (
 
 # Because of #146725 we can't have schema_locked set, since this
 # fallback to the legacy schema changer.
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE t SET (schema_locked = false);
 
@@ -471,7 +471,7 @@ INSERT INTO t VALUES (1, 2, 3);
 
 # Because of #146725 we can't have schema_locked set, since this
 # fallback to the legacy schema changer.
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE t SET (schema_locked = false);
 
@@ -552,7 +552,7 @@ INSERT INTO t VALUES (1, 2, 3);
 
 # Because of #146725 we can't have schema_locked set, since this
 # fallback to the legacy schema changer.
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE t SET (schema_locked = false);
 
@@ -590,7 +590,7 @@ DROP TABLE IF EXISTS t;
 statement ok
 CREATE TABLE t (rowid INT NOT NULL);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE t
 ----
@@ -600,7 +600,7 @@ t  CREATE TABLE public.t (
      CONSTRAINT t_pkey PRIMARY KEY (rowid_1 ASC)
    );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE t
 ----
@@ -614,7 +614,7 @@ statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (rowid)
 
 # Legacy schema changer will keep the rowid column.
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE t
@@ -624,7 +624,7 @@ t  CREATE TABLE public.t (
      CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
    );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE t
 ----
@@ -714,7 +714,7 @@ statement ok
 ALTER TABLE t ADD PRIMARY KEY (x)
 
 # Row ID isn't removed by legacy schema changer.
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE t
@@ -724,7 +724,7 @@ t  CREATE TABLE public.t (
      CONSTRAINT t_pkey PRIMARY KEY (x ASC)
    );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE t
 ----
@@ -742,7 +742,7 @@ CREATE TABLE t (x INT NOT NULL);
 statement ok
 ALTER TABLE t ADD PRIMARY KEY (x) USING HASH WITH (bucket_count=4)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE t
@@ -753,7 +753,7 @@ t  CREATE TABLE public.t (
      CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=4)
    );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE t
 ----
@@ -773,7 +773,7 @@ statement ok
 ALTER TABLE t ADD CONSTRAINT "my_pk" PRIMARY KEY (x)
 
 # Row ID isn't removed by legacy schema changer.
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE t
@@ -783,7 +783,7 @@ t  CREATE TABLE public.t (
      CONSTRAINT my_pk PRIMARY KEY (x ASC)
    );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE t
 ----
@@ -795,14 +795,14 @@ t  CREATE TABLE public.t (
 statement ok
 CREATE INDEX i ON t (x)
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE t SET (schema_locked = false);
 
 statement error pgcode 42P07 constraint with name \"i\" already exists
 ALTER TABLE t DROP CONSTRAINT "my_pk", ADD CONSTRAINT "i" PRIMARY KEY (x);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE t SET (schema_locked = true);
 
@@ -1091,7 +1091,7 @@ ALTER TABLE t ADD PRIMARY KEY (x)
 statement ok
 COMMIT
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE t
 ----
@@ -1143,7 +1143,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x)
 statement ok
 COMMIT
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE t
 ----
@@ -1157,7 +1157,7 @@ t  CREATE TABLE public.t (
    );
 
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE t
 ----
@@ -1202,7 +1202,7 @@ ALTER TABLE t ADD PRIMARY KEY (x)
 statement ok
 COMMIT
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE t
 ----
@@ -1219,7 +1219,7 @@ t  CREATE TABLE public.t (
      FAMILY fam_0_x_y_z_w_rowid (x, y, z, w, rowid)
    );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE t
 ----
@@ -1258,7 +1258,7 @@ statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x) USING HASH WITH (bucket_count=3)
 
 # old shard column isn't removed by legacy schema changer.
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE t
@@ -1269,7 +1269,7 @@ t  CREATE TABLE public.t (
      CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=3)
    );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE t
 ----
@@ -1290,7 +1290,7 @@ CREATE TABLE t (x INT PRIMARY KEY USING HASH WITH (bucket_count=2), y INT NOT NU
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y) USING HASH WITH (bucket_count=2)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE t
 ----
@@ -1304,7 +1304,7 @@ t  CREATE TABLE public.t (
      FAMILY fam_0_x_y (x, y)
    );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE t
 ----
@@ -1403,7 +1403,7 @@ t1_pkey  id    ASC
 t1_pkey  id2   ASC
 t1_pkey  name  N/A
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE t1 SET (schema_locked = false)
 
@@ -1411,7 +1411,7 @@ ALTER TABLE t1 SET (schema_locked = false)
 statement ok
 alter table t1 drop constraint t1_pkey, alter primary key using columns(id, id2);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE t1 SET (schema_locked = true)
 
@@ -1513,7 +1513,7 @@ CREATE TABLE table_with_virtual_cols (
 );
 ALTER TABLE table_with_virtual_cols ALTER PRIMARY KEY USING COLUMNS (new_pk)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE table_with_virtual_cols
 ----
@@ -1526,7 +1526,7 @@ table_with_virtual_cols  CREATE TABLE public.table_with_virtual_cols (
                            FAMILY fam_0_id_new_pk (id, new_pk)
                          );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE table_with_virtual_cols
 ----
@@ -1642,7 +1642,7 @@ a  b  k
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -1655,7 +1655,7 @@ CREATE TABLE public.t (
   UNIQUE INDEX t_a_key (a ASC)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -1692,7 +1692,7 @@ a  b  k
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (b, k);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -1707,7 +1707,7 @@ CREATE TABLE public.t (
 );
 
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -1752,7 +1752,7 @@ a  b  k
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -1768,7 +1768,7 @@ CREATE TABLE public.t (
 );
 
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -1843,7 +1843,7 @@ ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) USING HASH WITH BUC
 statement ok
 ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) USING HASH WITH BUCKET_COUNT = 5;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_test_param]
 ----
@@ -1856,7 +1856,7 @@ CREATE TABLE public.t_test_param (
   FAMILY fam_0_a_b (a, b)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_test_param]
 ----
@@ -2010,7 +2010,7 @@ CREATE TABLE t (
 
 # Because of #146725 we can't have schema_locked set, since this
 # fallback to the legacy schema changer.
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE t SET (schema_locked = false);
 
@@ -2195,7 +2195,7 @@ CREATE TABLE t_96730 (i INT PRIMARY KEY, j INT NOT NULL, k STRING NOT NULL, FAMI
 statement ok
 ALTER TABLE t_96730 ALTER PRIMARY KEY USING COLUMNS (j, k) USING HASH
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t_96730
 ----
@@ -2208,7 +2208,7 @@ t_96730  CREATE TABLE public.t_96730 (
            UNIQUE INDEX t_96730_i_key (i ASC)
          );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t_96730
 ----
@@ -2233,7 +2233,7 @@ CREATE TABLE t_99303 (i INT NOT NULL PRIMARY KEY, j INT NOT NULL, UNIQUE INDEX (
 statement ok
 ALTER TABLE t_99303 ALTER PRIMARY KEY USING COLUMNS (j);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE t_99303
 ----
@@ -2245,7 +2245,7 @@ t_99303  CREATE TABLE public.t_99303 (
            UNIQUE INDEX t_99303_i_key1 (i ASC)
          );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE t_99303
 ----
@@ -2360,7 +2360,7 @@ CREATE TABLE table_w0_66 ( "Abc" INT4 PRIMARY KEY, "ab\f" INT2 NOT NULL, FAMILY 
 statement ok
 ALTER TABLE public.table_w0_66 ALTER PRIMARY KEY USING COLUMNS ("Abc", "ab\f") USING HASH;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE public.table_w0_66]
 ----
@@ -2373,7 +2373,7 @@ CREATE TABLE public.table_w0_66 (
   FAMILY "fam_0_Abc_ab\f" ("Abc", "ab\f")
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE public.table_w0_66]
 ----

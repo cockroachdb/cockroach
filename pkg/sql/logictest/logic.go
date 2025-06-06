@@ -1799,7 +1799,13 @@ func (t *logicTest) newCluster(
 			}
 		}
 
-		if cfg.UseSchemaLockedByDefault {
+		if cfg.DisableSchemaLockedByDefault {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.defaults.create_table_with_schema_locked = false",
+			); err != nil {
+				t.Fatal(err)
+			}
+		} else {
 			if _, err := conn.Exec(
 				"SET CLUSTER SETTING sql.defaults.create_table_with_schema_locked = true",
 			); err != nil {

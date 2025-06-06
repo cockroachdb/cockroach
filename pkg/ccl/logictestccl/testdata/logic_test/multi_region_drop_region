@@ -15,7 +15,13 @@ statement ok
 CREATE TABLE kv(k INT PRIMARY KEY, v INT) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 statement ok
+ALTER TABLE kv SET (schema_locked = false);
+
+statement ok
 ALTER TABLE kv SET LOCALITY REGIONAL BY ROW
+
+statement ok
+ALTER TABLE kv SET (schema_locked = true);
 
 statement ok
 INSERT INTO kv (crdb_region, k, v) VALUES ('us-east-1', 1, 1);

@@ -9,7 +9,7 @@ CREATE TABLE with_no_column_refs (
   FAMILY "primary" (a, b, c, rowid)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE with_no_column_refs
 ----
@@ -21,7 +21,7 @@ with_no_column_refs  CREATE TABLE public.with_no_column_refs (
                        CONSTRAINT with_no_column_refs_pkey PRIMARY KEY (rowid ASC)
                      );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE with_no_column_refs
 ----
@@ -33,7 +33,7 @@ with_no_column_refs  CREATE TABLE public.with_no_column_refs (
                        CONSTRAINT with_no_column_refs_pkey PRIMARY KEY (rowid ASC)
                      ) WITH (schema_locked = true);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE with_no_column_refs WITH REDACT
 ----
@@ -45,7 +45,7 @@ with_no_column_refs  CREATE TABLE public.with_no_column_refs (
                        CONSTRAINT with_no_column_refs_pkey PRIMARY KEY (rowid ASC)
                      );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE with_no_column_refs WITH REDACT
 ----
@@ -65,7 +65,7 @@ CREATE TABLE extra_parens (
   FAMILY "primary" (a, b, c, rowid)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE extra_parens
 ----
@@ -77,7 +77,7 @@ extra_parens  CREATE TABLE public.extra_parens (
                 CONSTRAINT extra_parens_pkey PRIMARY KEY (rowid ASC)
               );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE extra_parens
 ----
@@ -131,7 +131,7 @@ CREATE TABLE x (
   FAMILY "primary" (a, b, c, d, rowid)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE x
 ----
@@ -144,7 +144,7 @@ x  CREATE TABLE public.x (
      CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
    );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE x
 ----
@@ -841,7 +841,7 @@ CREATE TABLE x (
   FAMILY "primary" (a, b, rowid)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE x
 ----
@@ -852,7 +852,7 @@ x  CREATE TABLE public.x (
      CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
    );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE x
 ----
@@ -877,7 +877,7 @@ CREATE TABLE x (
 statement ok
 ALTER TABLE x RENAME COLUMN a TO c
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE x
 ----
@@ -888,7 +888,7 @@ x  CREATE TABLE public.x (
      CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
    );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE x
 ----
@@ -929,7 +929,7 @@ INSERT INTO x VALUES (3)
 statement ok
 ALTER TABLE x ADD COLUMN c INT NOT NULL AS (a + 4) STORED
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE x
 ----
@@ -941,7 +941,7 @@ x  CREATE TABLE public.x (
      CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
    );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE x
 ----
@@ -953,7 +953,7 @@ x  CREATE TABLE public.x (
      CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
    ) WITH (schema_locked = true);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE x WITH REDACT
 ----
@@ -965,7 +965,7 @@ x  CREATE TABLE public.x (
      CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
    );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE x WITH REDACT
 ----
@@ -986,7 +986,7 @@ SELECT * FROM x ORDER BY a
 3 6 7
 6 12 10
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE x SET (schema_locked=false);
 
@@ -1001,7 +1001,7 @@ ALTER TABLE x
     ADD COLUMN s STRING,
     ADD COLUMN t STRING AS (lower(s)) STORED
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE x SET (schema_locked=true);
 
@@ -1108,7 +1108,7 @@ statement ok
 CREATE TABLE t42418 (x INT GENERATED ALWAYS AS (1) STORED);
 ALTER TABLE t42418 ADD COLUMN y INT GENERATED ALWAYS AS (1) STORED
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE t42418
 ----
@@ -1119,7 +1119,7 @@ t42418  CREATE TABLE public.t42418 (
           CONSTRAINT t42418_pkey PRIMARY KEY (rowid ASC)
         );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE t42418
 ----
@@ -1146,7 +1146,7 @@ SET experimental_computed_column_rewrites = "(ts :: STRING) -> (to_char(ts AT TI
 statement ok
 CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, c STRING AS (ts::STRING) STORED, FAMILY (k,ts,c))
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
 ----
@@ -1158,7 +1158,7 @@ CREATE TABLE public.trewrite (
   FAMILY fam_0_k_ts_c (k, ts, c)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
 ----
@@ -1179,7 +1179,7 @@ CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, FAMILY (k,ts))
 statement ok
 ALTER TABLE trewrite ADD COLUMN c STRING AS (ts::STRING) STORED
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
 ----
@@ -1191,7 +1191,7 @@ CREATE TABLE public.trewrite (
   FAMILY fam_0_k_ts (k, ts, c)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
 ----
@@ -1209,7 +1209,7 @@ SET experimental_computed_column_rewrites = ""
 statement ok
 CREATE TABLE trewrite_copy (LIKE trewrite INCLUDING ALL)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite_copy]
 ----
@@ -1220,7 +1220,7 @@ CREATE TABLE public.trewrite_copy (
   CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite_copy]
 ----
@@ -1257,7 +1257,7 @@ CREATE TABLE trewrite2(
   FAMILY (k,ts,b,str,c1,c2,c3)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite2]
 ----
@@ -1274,7 +1274,7 @@ CREATE TABLE public.trewrite2 (
 );
 
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite2]
 ----

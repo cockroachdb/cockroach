@@ -553,7 +553,7 @@ bar  SELECT 1, 2, 3  false  false  false
 statement ok
 COMMIT
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE a SET (schema_locked=false);
 
@@ -645,7 +645,7 @@ FETCH 1 a b;
 statement ok
 COMMIT;
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE a SET (schema_locked=true);
 

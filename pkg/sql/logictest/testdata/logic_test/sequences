@@ -2444,7 +2444,7 @@ CREATE TYPE t72820_i_seq AS enum ('a')
 statement ok
 CREATE TABLE t72820 (i SERIAL PRIMARY KEY)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t72820]
 ----
@@ -2453,7 +2453,7 @@ CREATE TABLE public.t72820 (
   CONSTRAINT t72820_pkey PRIMARY KEY (i ASC)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t72820]
 ----

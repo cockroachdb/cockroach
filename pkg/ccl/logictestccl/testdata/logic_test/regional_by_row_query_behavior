@@ -1835,7 +1835,7 @@ CREATE TABLE public.regional_by_row_table (
   INDEX new_idx (a ASC, b ASC),
   UNIQUE INDEX unique_b_a (b ASC, a ASC),
   FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
-) LOCALITY REGIONAL BY ROW;
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 query TTB colnames
 SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
@@ -2307,7 +2307,7 @@ statement ok
 USE single_region_test_db;
 
 statement ok
-CREATE TABLE t63109 (a INT, b STRING);
+CREATE TABLE t63109 (a INT, b STRING) WITH (schema_locked = false);
 
 statement ok
 ALTER TABLE t63109 SET LOCALITY REGIONAL BY ROW;

@@ -32,7 +32,7 @@ CREATE TABLE public.t1 (
   INDEX idx_i_invisible (i ASC) NOT VISIBLE,
   UNIQUE INDEX idx_v_invisible (v ASC) NOT VISIBLE,
   FAMILY fam_0_k_v_i (k, v, i)
-);
+) WITH (schema_locked = true);
 
 # Test SHOW INDEX, SHOW INDEXES, SHOW KEYS FROM TABLE.
 query TTB
@@ -1706,7 +1706,7 @@ t  CREATE TABLE public.t (
      INDEX k_idx (k ASC) VISIBILITY 0.25,
      INDEX v_idx (v ASC) VISIBILITY 0.50,
      FAMILY fam_0_p_k_v (p, k, v)
-   );
+   ) WITH (schema_locked = true);
 
 query TTBITTTBBBF colnames,rowsort
 SELECT * FROM [SHOW INDEX FROM t]

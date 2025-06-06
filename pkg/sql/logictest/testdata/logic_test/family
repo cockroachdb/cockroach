@@ -10,7 +10,7 @@ CREATE TABLE abcd(
   FAMILY (c, d)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE abcd
 ----
@@ -24,7 +24,7 @@ abcd  CREATE TABLE public.abcd (
         FAMILY fam_1_c_d (c, d)
       );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE abcd
 ----
@@ -159,7 +159,7 @@ ALTER TABLE abcd ADD COLUMN i INT CREATE IF NOT EXISTS FAMILY F_H
 statement ok
 ALTER TABLE abcd ADD COLUMN j INT CREATE IF NOT EXISTS FAMILY f_j
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE abcd
 ----
@@ -183,7 +183,7 @@ abcd  CREATE TABLE public.abcd (
         FAMILY f_j (j)
       );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE abcd
 ----
@@ -210,7 +210,7 @@ abcd  CREATE TABLE public.abcd (
 statement ok
 ALTER TABLE abcd DROP c, DROP d, DROP e, DROP h, DROP i, DROP j
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE abcd
 ----
@@ -224,7 +224,7 @@ abcd  CREATE TABLE public.abcd (
         FAMILY fam_2_g (g)
       );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE abcd
 ----
@@ -244,7 +244,7 @@ CREATE TABLE f1 (
   FAMILY "primary" (a, b, c)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE f1
 ----
@@ -255,7 +255,7 @@ f1  CREATE TABLE public.f1 (
       CONSTRAINT f1_pkey PRIMARY KEY (a ASC)
     );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE f1
 ----
@@ -269,7 +269,7 @@ f1  CREATE TABLE public.f1 (
 statement ok
 CREATE TABLE assign_at_create (a INT PRIMARY KEY FAMILY pri, b INT FAMILY foo, c INT CREATE FAMILY)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE assign_at_create
 ----
@@ -283,7 +283,7 @@ assign_at_create  CREATE TABLE public.assign_at_create (
                     FAMILY fam_2_c (c)
                   );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE assign_at_create
 ----
@@ -322,7 +322,7 @@ ALTER TABLE rename_col RENAME b TO d
 statement ok
 ALTER TABLE rename_col RENAME c TO e
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE rename_col
 ----
@@ -335,7 +335,7 @@ rename_col  CREATE TABLE public.rename_col (
               FAMILY fam_1_c (e)
             );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE rename_col
 ----

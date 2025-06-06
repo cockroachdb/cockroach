@@ -37,7 +37,7 @@ CREATE POLICY IF NOT EXISTS p1 on sanity1;
 statement ok
 CREATE POLICY IF NOT EXISTS p2 on sanity1 AS PERMISSIVE WITH CHECK (true);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE sanity1;
 ----
@@ -48,7 +48,7 @@ sanity1  CREATE TABLE public.sanity1 (
          CREATE POLICY p1 ON public.sanity1 AS PERMISSIVE FOR ALL TO public USING (true);
          CREATE POLICY p2 ON public.sanity1 AS PERMISSIVE FOR ALL TO public WITH CHECK (true);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE sanity1;
 ----
@@ -159,7 +159,7 @@ CREATE USER papa_roach
 statement ok
 CREATE POLICY "policy8" ON multi_pol_tab1 FOR ALL TO papa_roach, public
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE multi_pol_tab1
 ----
@@ -176,7 +176,7 @@ multi_pol_tab1  CREATE TABLE public.multi_pol_tab1 (
                 CREATE POLICY policy7 ON public.multi_pol_tab1 AS PERMISSIVE FOR SELECT TO public;
                 CREATE POLICY policy8 ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public, papa_roach;
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE multi_pol_tab1
 ----
@@ -331,7 +331,7 @@ DROP POLICY "policy3" ON multi_pol_tab1
 statement ok
 DROP POLICY "policy5" ON multi_pol_tab1
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE multi_pol_tab1
 ----
@@ -345,7 +345,7 @@ multi_pol_tab1  CREATE TABLE public.multi_pol_tab1 (
                 CREATE POLICY policy7 ON public.multi_pol_tab1 AS PERMISSIVE FOR SELECT TO public;
                 CREATE POLICY policy8 ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public, papa_roach;
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE multi_pol_tab1
 ----
@@ -465,7 +465,7 @@ john testuser
 statement ok
 CREATE POLICY pol on target TO current_user,session_user;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE target
 ----
@@ -475,7 +475,7 @@ target  CREATE TABLE public.target (
         );
         CREATE POLICY pol ON public.target AS PERMISSIVE FOR ALL TO john, testuser;
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE target
 ----
@@ -639,7 +639,7 @@ ALTER TABLE colref DROP COLUMN c1;
 statement ok
 SET use_declarative_schema_changer = 'off';
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE colref SET (schema_locked=false)
 
@@ -647,7 +647,7 @@ statement error pq: cannot drop column "c1" because it is referenced in a policy
 ALTER TABLE colref DROP COLUMN c1;
 
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE colref SET (schema_locked=true)
 
@@ -676,14 +676,14 @@ ALTER TABLE colref DROP COLUMN c2;
 statement ok
 SET use_declarative_schema_changer = 'off';
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE colref SET (schema_locked=false)
 
 statement error pq: cannot drop column "c2" because it is referenced in a policy expression
 ALTER TABLE colref DROP COLUMN c2;
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE colref SET (schema_locked=true)
 
@@ -794,7 +794,7 @@ create table flying_roaches (check ('flying'::roach_type = 'crawling'::roach_typ
 statement ok
 create policy p1 on flying_roaches using ('flying'::roach_type = 'crawling'::roach_type)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE flying_roaches
 ----
@@ -805,7 +805,7 @@ flying_roaches  CREATE TABLE public.flying_roaches (
                 );
                 CREATE POLICY p1 ON public.flying_roaches AS PERMISSIVE FOR ALL TO public USING ('flying':::public.roach_type = 'crawling':::public.roach_type);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE flying_roaches
 ----
@@ -816,7 +816,7 @@ flying_roaches  CREATE TABLE public.flying_roaches (
                 ) WITH (schema_locked = true);
                 CREATE POLICY p1 ON public.flying_roaches AS PERMISSIVE FOR ALL TO public USING ('flying':::public.roach_type = 'crawling':::public.roach_type);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 select create_statement from crdb_internal.create_statements where descriptor_name='flying_roaches'
 ----
@@ -826,7 +826,7 @@ CREATE TABLE public.flying_roaches (
   CONSTRAINT "check" CHECK ('flying':::public.roach_type = 'crawling':::public.roach_type)
 )
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 select create_statement from crdb_internal.create_statements where descriptor_name='flying_roaches'
 ----
@@ -972,7 +972,7 @@ subtest alter_table_rls_enable_disable
 statement ok
 ALTER TABLE roaches ENABLE ROW LEVEL SECURITY;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE roaches
 ----
@@ -982,7 +982,7 @@ roaches  CREATE TABLE public.roaches (
          ) WITH (schema_locked = true);
          ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY;
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE roaches
 ----
@@ -1000,7 +1000,7 @@ select relname, relrowsecurity, relforcerowsecurity from pg_class where relname 
 ----
 roaches  false  false
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE roaches
 ----
@@ -1009,7 +1009,7 @@ roaches  CREATE TABLE public.roaches (
            CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
          ) WITH (schema_locked = true);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE roaches
 ----
@@ -1028,7 +1028,7 @@ select relname, relrowsecurity, relforcerowsecurity from pg_class where relname 
 ----
 roaches  false  true
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE roaches
 ----
@@ -1038,7 +1038,7 @@ roaches  CREATE TABLE public.roaches (
          ) WITH (schema_locked = true);
          ALTER TABLE public.roaches FORCE ROW LEVEL SECURITY;
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE roaches
 ----
@@ -1056,7 +1056,7 @@ select relname, relrowsecurity, relforcerowsecurity from pg_class where relname 
 ----
 roaches  false  false
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE roaches
 ----
@@ -1065,7 +1065,7 @@ roaches  CREATE TABLE public.roaches (
            CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
          ) WITH (schema_locked = true);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE roaches
 ----
@@ -1079,7 +1079,7 @@ subtest alter_table_rls_enable_force
 statement ok
 ALTER TABLE roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE roaches
 ----
@@ -1089,7 +1089,7 @@ roaches  CREATE TABLE public.roaches (
          ) WITH (schema_locked = true);
          ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE roaches
 ----
@@ -1105,7 +1105,7 @@ select relname, relrowsecurity, relforcerowsecurity from pg_class where relname 
 ----
 roaches  true  true
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 select create_statement from crdb_internal.create_statements where descriptor_name='roaches'
 ----
@@ -1114,7 +1114,7 @@ CREATE TABLE public.roaches (
   CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
 ) WITH (schema_locked = true)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 select create_statement from crdb_internal.create_statements where descriptor_name='roaches'
 ----
@@ -1134,7 +1134,7 @@ select rls_statements, fk_statements, create_nofks from crdb_internal.create_sta
 statement ok
 ALTER TABLE roaches DISABLE ROW LEVEL SECURITY, NO FORCE ROW LEVEL SECURITY;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE roaches
 ----
@@ -1143,7 +1143,7 @@ roaches  CREATE TABLE public.roaches (
            CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
          ) WITH (schema_locked = true);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE roaches
 ----
@@ -1405,7 +1405,7 @@ select team, league from bbteams where team != 'pirates' order by league, team;
 Jays     AL
 orioles  AL
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE bbteams
 ----
@@ -1422,7 +1422,7 @@ bbteams  CREATE TABLE public.bbteams (
          CREATE POLICY restrict_update ON public.bbteams AS PERMISSIVE FOR UPDATE TO buck USING (public.is_valid(league) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8));
          CREATE POLICY restrict_delete ON public.bbteams AS PERMISSIVE FOR DELETE TO buck USING ((public.is_valid(league) AND (team = 'tigers':::STRING)) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8));
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE bbteams
 ----
@@ -1737,7 +1737,7 @@ SELECT c1 FROM alter_policy_table ORDER BY c1;
 statement ok
 ALTER POLICY p ON alter_policy_table RENAME TO p_sel;
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE alter_policy_table;
 ----
@@ -1751,7 +1751,7 @@ alter_policy_table  CREATE TABLE public.alter_policy_table (
                     CREATE POLICY p_ins ON public.alter_policy_table AS PERMISSIVE FOR INSERT TO public WITH CHECK (nextval('public.seq1'::REGCLASS) < 10000:::INT8);
                     CREATE POLICY p_sel ON public.alter_policy_table AS PERMISSIVE FOR SELECT TO aux1, alter_policy_role, aux2 USING (c1 != 1:::INT8);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE alter_policy_table;
 ----
@@ -2461,7 +2461,7 @@ SELECT a, b FROM trunc ORDER BY a;
 1  a
 3  c
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE trunc;
 ----
@@ -2477,7 +2477,7 @@ trunc  CREATE TABLE public.trunc (
        CREATE POLICY p2 ON public.trunc AS PERMISSIVE FOR DELETE TO deleter USING (false);
        CREATE POLICY p3 ON public.trunc AS PERMISSIVE FOR INSERT TO deleter WITH CHECK (true);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE trunc;
 ----
@@ -2502,7 +2502,7 @@ SELECT a, b FROM trunc ORDER BY a;
 ----
 
 # TRUNCATE is implemented by recreating the table. Verify the same policies exist.
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE trunc;
 ----
@@ -2518,7 +2518,7 @@ trunc  CREATE TABLE public.trunc (
        CREATE POLICY p2 ON public.trunc AS PERMISSIVE FOR DELETE TO deleter USING (false);
        CREATE POLICY p3 ON public.trunc AS PERMISSIVE FOR INSERT TO deleter WITH CHECK (true);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE trunc;
 ----
@@ -2969,7 +2969,7 @@ INSERT INTO rlsInsert SELECT c1 + 5, c2, c3 FROM rlsInsert WHERE c3 not between 
 statement ok
 SET ROLE root;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE rlsInsert
 ----
@@ -2984,7 +2984,7 @@ rlsinsert  CREATE TABLE public.rlsinsert (
            CREATE POLICY p_insert ON public.rlsinsert AS PERMISSIVE FOR INSERT TO buck WITH CHECK (c3 NOT BETWEEN '2012-01-01':::DATE AND '2012-12-31':::DATE);
            CREATE POLICY p_select ON public.rlsinsert AS PERMISSIVE FOR SELECT TO buck USING (true);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE rlsInsert
 ----
@@ -3188,7 +3188,7 @@ DROP POLICY or3 ON multip;
 statement ok
 SET ROLE multi_user;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE multip;
 ----
@@ -3203,7 +3203,7 @@ multip  CREATE TABLE public.multip (
         CREATE POLICY and1 ON public.multip AS RESTRICTIVE FOR ALL TO public USING (value NOT LIKE '%sensitive%':::STRING);
         CREATE POLICY and2 ON public.multip AS RESTRICTIVE FOR ALL TO public USING (value NOT LIKE '%confidential%':::STRING);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE multip;
 ----
@@ -4956,7 +4956,7 @@ CREATE POLICY p ON alter_policy_table_locked WITH CHECK (TRUE);
 statement ok
 ALTER POLICY p ON alter_policy_table_locked RENAME TO p_sel;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE alter_policy_table_locked;
 ----
@@ -4968,7 +4968,7 @@ alter_policy_table_locked  CREATE TABLE public.alter_policy_table_locked (
                            ) WITH (schema_locked = true);
                            CREATE POLICY p_sel ON public.alter_policy_table_locked AS PERMISSIVE FOR ALL TO public WITH CHECK (true);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE alter_policy_table_locked;
 ----
@@ -4983,7 +4983,7 @@ alter_policy_table_locked  CREATE TABLE public.alter_policy_table_locked (
 statement ok
 ALTER POLICY p_sel ON alter_policy_table_locked WITH CHECK (FALSE);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE alter_policy_table_locked;
 ----
@@ -4995,7 +4995,7 @@ alter_policy_table_locked  CREATE TABLE public.alter_policy_table_locked (
                            ) WITH (schema_locked = true);
                            CREATE POLICY p_sel ON public.alter_policy_table_locked AS PERMISSIVE FOR ALL TO public WITH CHECK (false);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE alter_policy_table_locked;
 ----

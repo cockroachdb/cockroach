@@ -28,7 +28,7 @@ CREATE TABLE public.t_test_hsi_change_locality (
   CONSTRAINT t_test_hsi_change_locality_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
   INDEX idx_b (b ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0 (a, b)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+) WITH (schema_locked = true) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 query ITITTITTB colnames,rowsort
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_test_hsi_change_locality'
@@ -42,7 +42,13 @@ descriptor_id  descriptor_name             index_id  index_name                 
 110            t_test_hsi_change_locality  2         idx_b                            extra        2          NULL                      NULL              false
 
 statement ok
+ALTER TABLE t_test_hsi_change_locality SET (schema_locked = false)
+
+statement ok
 ALTER TABLE t_test_hsi_change_locality SET LOCALITY REGIONAL BY ROW
+
+statement ok
+ALTER TABLE t_test_hsi_change_locality SET (schema_locked = true)
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_test_hsi_change_locality]
@@ -56,7 +62,7 @@ CREATE TABLE public.t_test_hsi_change_locality (
   CONSTRAINT t_test_hsi_change_locality_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
   INDEX idx_b (b ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0 (a, b, crdb_region)
-) LOCALITY REGIONAL BY ROW;
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 query ITITTITTB colnames,rowsort
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_test_hsi_change_locality'
@@ -82,9 +88,15 @@ ca-central-1  11  5  6
 ca-central-1  11  7  8
 ca-central-1  13  3  4
 
+statement ok
+ALTER TABLE t_test_hsi_change_locality SET (schema_locked = false);
+
 # Make sure switching back and forward between different localities is ok.
 statement ok
 ALTER TABLE t_test_hsi_change_locality SET LOCALITY REGIONAL BY TABLE
+
+statement ok
+ALTER TABLE t_test_hsi_change_locality SET (schema_locked = true);
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_test_hsi_change_locality]
@@ -98,7 +110,7 @@ CREATE TABLE public.t_test_hsi_change_locality (
   CONSTRAINT t_test_hsi_change_locality_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
   INDEX idx_b (b ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0 (a, b, crdb_region)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+) WITH (schema_locked = true) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 query ITITTITTB colnames,rowsort
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_test_hsi_change_locality'
@@ -112,7 +124,13 @@ descriptor_id  descriptor_name             index_id  index_name                 
 110            t_test_hsi_change_locality  9         idx_b                            extra        2          NULL                      NULL              false
 
 statement ok
+ALTER TABLE t_test_hsi_change_locality SET (schema_locked = false);
+
+statement ok
 ALTER TABLE t_test_hsi_change_locality SET LOCALITY REGIONAL BY ROW
+
+statement ok
+ALTER TABLE t_test_hsi_change_locality SET (schema_locked = true);
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_test_hsi_change_locality]
@@ -126,7 +144,7 @@ CREATE TABLE public.t_test_hsi_change_locality (
   CONSTRAINT t_test_hsi_change_locality_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
   INDEX idx_b (b ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0 (a, b, crdb_region)
-) LOCALITY REGIONAL BY ROW;
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 query ITITTITTB colnames,rowsort
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_test_hsi_change_locality'
@@ -174,10 +192,16 @@ CREATE TABLE public.t_parent (
   CONSTRAINT t_parent_pkey PRIMARY KEY (id ASC) USING HASH WITH (bucket_count=16),
   UNIQUE INDEX uniq_id2 (id2 ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_id_id2 (id, id2)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+) WITH (schema_locked = true) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+
+statement ok
+ALTER TABLE  t_parent SET (schema_locked = false);
 
 statement ok
 ALTER TABLE t_parent SET LOCALITY REGIONAL BY ROW
+
+statement ok
+ALTER TABLE  t_parent SET (schema_locked = true);
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_parent]
@@ -191,7 +215,7 @@ CREATE TABLE public.t_parent (
   CONSTRAINT t_parent_pkey PRIMARY KEY (id ASC) USING HASH WITH (bucket_count=16),
   UNIQUE INDEX uniq_id2 (id2 ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_id_id2 (id, id2, crdb_region)
-) LOCALITY REGIONAL BY ROW;
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 query TIII
 SELECT crdb_region, crdb_internal_id_shard_16, id, id2
@@ -217,9 +241,15 @@ descriptor_id  descriptor_name  index_id  index_name     column_type  column_id 
 111            t_parent         6         uniq_id2       extra        1          NULL                        NULL              false
 111            t_parent         6         uniq_id2       extra        2          NULL                        NULL              false
 
+statement ok
+ALTER TABLE  t_parent SET (schema_locked = false);
+
 # Make sure switching back and forward between different localities is ok.
 statement ok
 ALTER TABLE t_parent SET LOCALITY REGIONAL BY TABLE
+
+statement ok
+ALTER TABLE  t_parent SET (schema_locked = true);
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_parent]
@@ -233,7 +263,7 @@ CREATE TABLE public.t_parent (
   CONSTRAINT t_parent_pkey PRIMARY KEY (id ASC) USING HASH WITH (bucket_count=16),
   UNIQUE INDEX uniq_id2 (id2 ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_id_id2 (id, id2, crdb_region)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+) WITH (schema_locked = true) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 query ITITTITTB colnames,rowsort
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_parent'
@@ -247,7 +277,13 @@ descriptor_id  descriptor_name  index_id  index_name     column_type  column_id 
 111            t_parent         10        uniq_id2       extra        2          NULL                        NULL              false
 
 statement ok
+ALTER TABLE  t_parent SET (schema_locked = false);
+
+statement ok
 ALTER TABLE t_parent SET LOCALITY REGIONAL BY ROW
+
+statement ok
+ALTER TABLE  t_parent SET (schema_locked = true);
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_parent]
@@ -261,7 +297,7 @@ CREATE TABLE public.t_parent (
   CONSTRAINT t_parent_pkey PRIMARY KEY (id ASC) USING HASH WITH (bucket_count=16),
   UNIQUE INDEX uniq_id2 (id2 ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_id_id2 (id, id2, crdb_region)
-) LOCALITY REGIONAL BY ROW;
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 query ITITTITTB colnames,rowsort
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_parent'

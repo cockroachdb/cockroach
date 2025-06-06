@@ -110,7 +110,7 @@ CREATE INDEX t6i1 ON t6 (a) WHERE a > 6;
 CREATE INDEX t6i2 ON t6 (a) WHERE t6.a > 7;
 CREATE INDEX t6i3 ON t6 (a DESC) WHERE test.t6.a > 8;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t6
 ----
@@ -129,7 +129,7 @@ t6  CREATE TABLE public.t6 (
       INDEX t6i3 (a DESC) WHERE a > 8:::INT8
     );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t6
 ----
@@ -148,7 +148,7 @@ t6  CREATE TABLE public.t6 (
       INDEX t6i3 (a DESC) WHERE a > 8:::INT8
     ) WITH (schema_locked = true);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t6 WITH REDACT
 ----
@@ -167,7 +167,7 @@ t6  CREATE TABLE public.t6 (
       INDEX t6i3 (a DESC) WHERE a > ‹×›:::INT8
     );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t6 WITH REDACT
 ----
@@ -191,7 +191,7 @@ t6  CREATE TABLE public.t6 (
 statement ok
 ALTER TABLE t6 RENAME COLUMN a TO b
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t6
 ----
@@ -210,7 +210,7 @@ t6  CREATE TABLE public.t6 (
       INDEX t6i3 (b DESC) WHERE b > 8:::INT8
     );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t6
 ----
@@ -234,7 +234,7 @@ t6  CREATE TABLE public.t6 (
 statement ok
 ALTER TABLE t6 RENAME TO t7
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t7
 ----
@@ -253,7 +253,7 @@ t7  CREATE TABLE public.t7 (
       INDEX t6i3 (b DESC) WHERE b > 8:::INT8
     );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t7
 ----
@@ -288,7 +288,7 @@ CREATE TABLE t8 (
 statement error cannot drop column "c" because it is referenced by partial index "t8_a_idx1"\nHINT: drop the partial index first, then drop the column
 ALTER TABLE t8 DROP COLUMN c
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t8
 ----
@@ -303,7 +303,7 @@ t8  CREATE TABLE public.t8 (
       FAMILY fam_0_a_b_c_rowid (a, b, c, rowid)
     );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t8
 ----
@@ -327,7 +327,7 @@ CREATE TABLE t9 (a INT, b INT, INDEX (a) WHERE b > 1)
 statement ok
 CREATE TABLE t10 (LIKE t9 INCLUDING INDEXES)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t10
 ----
@@ -340,7 +340,7 @@ t10  CREATE TABLE public.t10 (
      );
 
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t10
 ----
@@ -1274,7 +1274,7 @@ CREATE TABLE enum_table_show (
     FAMILY (a, b)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE enum_table_show
 ----
@@ -1287,7 +1287,7 @@ enum_table_show  CREATE TABLE public.enum_table_show (
                    FAMILY fam_0_a_b_rowid (a, b, rowid)
                  );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE enum_table_show
 ----
@@ -1520,7 +1520,7 @@ CREATE TABLE vec (
   FAMILY (id, v)
 );
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE vec
 ----
@@ -1532,7 +1532,7 @@ vec  CREATE TABLE public.vec (
        FAMILY fam_0_id_v (id, v)
      );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE vec
 ----

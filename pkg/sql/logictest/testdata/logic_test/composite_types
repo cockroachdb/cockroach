@@ -58,7 +58,7 @@ DROP TYPE t
 statement ok
 CREATE TABLE atyp(a t[])
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE atyp
 ----
@@ -68,7 +68,7 @@ atyp  CREATE TABLE public.atyp (
         CONSTRAINT atyp_pkey PRIMARY KEY (rowid ASC)
       );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE atyp
 ----
