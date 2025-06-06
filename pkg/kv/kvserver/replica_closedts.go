@@ -22,9 +22,14 @@ import (
 // getTargetByPolicyRLocked returns a range's closed timestamp policy and target
 // timestamp.
 func (r *Replica) getTargetByPolicyRLocked(
-	targetByPolicy map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp,
+	ctx context.Context, targetByPolicy map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp,
 ) (ctpb.RangeClosedTimestampPolicy, hlc.Timestamp) {
-	policy := closedTimestampPolicy(r.descRLocked(), *r.cachedClosedTimestampPolicy.Load())
+	isGlobalRead := r.mu.conf.GlobalReads
+	cachedPolicy := *r.cachedClosedTimestampPolicy.Load()
+	if isGlobalReadPolicy := cachedPolicy != ctpb.LAG_BY_CLUSTER_SETTING; isGlobalRead != isGlobalReadPolicy {
+		log.Infof(ctx, "unexpected closed timestamp policy %v for global read=%t", cachedPolicy, isGlobalRead)
+	}
+	policy := closedTimestampPolicy(r.descRLocked(), cachedPolicy)
 	target, ok := targetByPolicy[policy]
 	if ok {
 		return policy, target
@@ -87,7 +92,7 @@ func (r *Replica) BumpSideTransportClosed(
 	}
 
 	lai := r.shMu.state.LeaseAppliedIndex
-	policy, target := r.getTargetByPolicyRLocked(targetByPolicy)
+	policy, target := r.getTargetByPolicyRLocked(ctx, targetByPolicy)
 	st := r.leaseStatusForRequest(ctx, now, hlc.Timestamp{} /* reqTS */, r.mu.minLeaseProposedTS,
 		r.mu.minValidObservedTimestamp, r.shMu.state.Lease, r.raftBasicStatusRLocked())
 	// We need to own the lease but note that stasis (LeaseState_UNUSABLE) doesn't
@@ -149,13 +154,19 @@ func (r *Replica) BumpSideTransportClosed(
 // this range. Note that we might not be able to ultimately close this timestamp
 // if there are requests in flight.
 func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
+	isGlobalRead := r.mu.conf.GlobalReads
+	cachedPolicy := *r.cachedClosedTimestampPolicy.Load()
+	if isGlobalPolicy := cachedPolicy != ctpb.LAG_BY_CLUSTER_SETTING; isGlobalRead != isGlobalPolicy {
+		log.Infof(context.Background(), "unexpected closed timestamp policy %v for global read=%t",
+			cachedPolicy, isGlobalRead)
+	}
 	return closedts.TargetForPolicy(
 		r.Clock().NowAsClockTimestamp(),
 		r.Clock().MaxOffset(),
 		closedts.TargetDuration.Get(&r.ClusterSettings().SV),
 		closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV),
 		closedts.SideTransportCloseInterval.Get(&r.ClusterSettings().SV),
-		closedTimestampPolicy(r.descRLocked(), *r.cachedClosedTimestampPolicy.Load()),
+		closedTimestampPolicy(r.descRLocked(), cachedPolicy),
 	)
 }
 
