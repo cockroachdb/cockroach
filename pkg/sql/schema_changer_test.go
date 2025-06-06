@@ -48,6 +48,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
+	"github.com/cockroachdb/cockroach/pkg/sql/scrub/scrubtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -3515,12 +3517,118 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 			if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, tc.numKeysPerRow, maxValue); err != nil {
 				t.Fatal(err)
 			}
-
-			if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+			// Running the option KVSTORE would output keys outside the index span
+			// since the garbage collector only runs after the test
+			if err := sqlutils.RunScrubWithOptions(sqlDB, "t", "test", "WITH OPTIONS INDEX ALL, CONSTRAINT ALL"); err != nil {
 				t.Fatal(err)
 			}
 		})
 	}
+}
+
+// TestBackfillWithUnexpectedKeyScrub verifies that the SCRUB operation correctly
+// detects and reports unexpected keys left behind after dropping a secondary index
+// during a backfill process.
+func TestBackfillWithUnexpectedKeyScrub(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const chunkSize = 100
+
+	ctx, cancel := context.WithCancel(context.Background())
+	params, _ := createTestServerParamsAllowTenants()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			BackfillChunkSize: chunkSize,
+		},
+		GCJob: &sql.GCJobTestingKnobs{
+			RunBeforeResume: func(jobID jobspb.JobID) error {
+				<-ctx.Done()
+				return ctx.Err()
+			},
+		},
+	}
+
+	tc := serverutils.StartCluster(t, 1,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs:      params,
+		})
+	defer tc.Stopper().Stop(context.Background())
+	defer cancel()
+
+	sqlDB := tc.ServerConn(0)
+	kvDB := tc.Server(0).DB()
+	codec := tc.Server(0).ApplicationLayer().Codec()
+
+	if _, err := sqlDB.Exec("SET use_declarative_schema_changer = 'off'"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE db;
+CREATE TABLE db.t (k INT8 PRIMARY KEY, v INT8, pi DECIMAL DEFAULT (DECIMAL '3.14'));
+INSERT INTO db.t VALUES (0, 42);
+CREATE UNIQUE INDEX vidx ON db.t (v);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "db", "t")
+
+	// Find the index ID for vidx
+	var droppedIndexID descpb.IndexID
+	for _, idx := range tableDesc.AllIndexes() {
+		if idx.GetName() == "vidx" {
+			droppedIndexID = idx.GetID()
+			break
+		}
+	}
+	if droppedIndexID == 0 {
+		t.Fatal("could not find index ID for 'vidx'")
+	}
+
+	// Drop the index to leave behind index keys that are no longer mapped
+	if _, err := sqlDB.Exec(`DROP INDEX db.t@vidx`); err != nil {
+		t.Fatal(err)
+	}
+
+	familyID := tableDesc.GetFamilies()[0].ID
+
+	var maxValue int64
+	err := sqlDB.QueryRow(`SELECT v FROM db.t WHERE k = 0`).Scan(&maxValue)
+	if err != nil {
+		t.Fatalf("failed to query value for v: %v", err)
+	}
+
+	// Decode tenant ID from codec
+	_, tenantID, err := keys.DecodeTenantPrefix(codec.TenantPrefix())
+	if err != nil {
+		t.Fatalf("unexpected error decoding tenant prefix: %s", err)
+	}
+
+	var expectedKey string
+	if codec.ForSystemTenant() {
+		expectedKey = fmt.Sprintf("/Table/%d/%d/%d/%d", tableDesc.GetID(), droppedIndexID, maxValue, familyID)
+	} else {
+		expectedKey = fmt.Sprintf("/Tenant/%s/Table/%d/%d/%d/%d", tenantID.String(), tableDesc.GetID(), droppedIndexID, maxValue, familyID)
+	}
+	escapedKey := regexp.QuoteMeta(expectedKey)
+
+	expected := []scrubtestutils.ExpectedScrubResult{
+		{
+			ErrorType:  scrub.UnexpectedKeyOutsideIndexSpanError,
+			Database:   "db",
+			Table:      "t",
+			PrimaryKey: expectedKey,
+			DetailsRegex: fmt.Sprintf(
+				`{"family_id": %d, "row_data": {"key": "%s"}, "unexpected_key": "%s"}`,
+				familyID, escapedKey, escapedKey,
+			),
+		},
+	}
+	scrubtestutils.RunScrub(t, sqlDB, `EXPERIMENTAL SCRUB TABLE db.t WITH OPTIONS KVSTORE`, expected)
+	time.Sleep(1 * time.Millisecond)
+	scrubtestutils.RunScrub(t, sqlDB, `EXPERIMENTAL SCRUB TABLE db.t AS OF SYSTEM TIME '-1ms' WITH OPTIONS KVSTORE`, expected)
 }
 
 func TestSchemaChangeInTxn(t *testing.T) {

@@ -57,44 +57,40 @@ func (o *unexpectedKeyCheckOperation) Start(params runParams) error {
 		expectedFamilies[uint32(fam.ID)] = struct{}{}
 	}
 
-	// Gather index spans
 	indexSpans := o.tableDesc.AllIndexSpans(codec)
-
-	fullSpan := o.tableDesc.TableSpan(codec)
+	fullTableSpan := o.tableDesc.TableSpan(codec)
 
 	txn := db.NewTxn(ctx, "unexpected-key-check")
 
-	kvs, err := txn.Scan(ctx, fullSpan.Key, fullSpan.EndKey, 0)
+	kvs, err := txn.Scan(ctx, fullTableSpan.Key, fullTableSpan.EndKey, 0)
 	if err != nil {
 		return err
 	}
 
 	var errorType tree.Datum
- 	var hasError bool
+	var errorFound bool
 
 	for _, kv := range kvs {
 		familyID, err := keys.DecodeFamilyKey(kv.Key)
 		if err != nil {
-			// Decode Error
-			continue
+			return err
 		}
+		errorFound = false
 
-		hasError = false
-
+		if !isFamilyExpected(familyID, expectedFamilies) {
+			errorType = tree.NewDString(scrub.UnexpectedColumnFamilyError)
+			errorFound = true
+		}
 		if !keyInIndexSpans(kv.Key, indexSpans) {
 			errorType = tree.NewDString(scrub.UnexpectedKeyOutsideIndexSpanError)
-			hasError = true
-		} else if !isFamilyExpected(familyID, expectedFamilies) {
-			errorType = tree.NewDString(scrub.UnexpectedColumnFamilyError)
-			hasError = true
+			errorFound = true
 		}
-
-		if hasError {
+		if errorFound {
 			o.run.errorRows = append(o.run.errorRows, errorType)
 			o.run.keys = append(o.run.keys, kv.Key)
 			o.run.familyIDs = append(o.run.familyIDs, familyID)
 		}
-	}	
+	}
 
 	o.run.started = true
 	return nil
@@ -113,12 +109,12 @@ func isFamilyExpected(familyID uint32, expected map[uint32]struct{}) bool {
 // if the key is contained by at least one span,
 // and false otherwise.
 func keyInIndexSpans(key roachpb.Key, spans []roachpb.Span) bool {
-    for _, span := range spans {
-        if span.ContainsKey(key) {
-            return true
-        }
-    }
-    return false
+	for _, span := range spans {
+		if span.ContainsKey(key) {
+			return true
+		}
+	}
+	return false
 }
 
 func (o *unexpectedKeyCheckOperation) Next(params runParams) (tree.Datums, error) {

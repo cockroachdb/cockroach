@@ -8,6 +8,7 @@ package sql_test
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -718,4 +720,184 @@ INSERT INTO db.t VALUES (1, 2), (2,3);
 	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t WITH OPTIONS CONSTRAINT ALL`, exp)
 	time.Sleep(1 * time.Millisecond)
 	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t AS OF SYSTEM TIME '-1ms' WITH OPTIONS CONSTRAINT ALL`, exp)
+}
+
+// TestScrubUnexpectedKeys tests SCRUB on a table that has extraneous keys
+// outside of valid index spans.
+func TestScrubUnexpectedKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
+	codec := s.Codec()
+
+	if _, err := db.Exec(`
+CREATE DATABASE db;
+CREATE TABLE db.t (
+	id INT PRIMARY KEY,
+	data VARCHAR(50)
+);
+
+INSERT INTO db.t VALUES (1, 'test1');
+`); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "db", "t")
+	tableSpan := tableDesc.TableSpan(codec)
+
+	// Create an invalid index ID — the next one after existing indexes
+	invalidIndexID := tableDesc.GetNextIndexID()
+
+	// Get next row ID that doesn't exist
+	var maxRowID int64
+	err := db.QueryRow("SELECT COALESCE(MAX(id), 0) FROM db.t").Scan(&maxRowID)
+	if err != nil {
+		t.Fatalf("failed to find max id: %v", err)
+	}
+
+	validFamilyID := tableDesc.GetFamilies()[0].ID
+	invalidKey := keys.MakeTableIDIndexID(codec.TenantPrefix(), uint32(tableDesc.GetID()), uint32(invalidIndexID))
+	invalidKey = encoding.EncodeVarintAscending(invalidKey, maxRowID+1)
+	invalidKey = keys.MakeFamilyKey(invalidKey, uint32(validFamilyID))
+
+	invalidValue := []byte("invalid_data")
+	t.Logf("tableSpan start: %x, end: %x, invalidKey: %x", tableSpan.Key, tableSpan.EndKey, invalidKey)
+
+	if err := kvDB.Put(context.Background(), invalidKey, invalidValue); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	_, tenantID, err := keys.DecodeTenantPrefix(codec.TenantPrefix())
+	if err != nil {
+		t.Fatalf("unexpected error decoding tenant prefix: %s", err)
+	}
+
+	var expectedKey string
+	if codec.ForSystemTenant() {
+		expectedKey = fmt.Sprintf("/Table/%d/%d/%d/%d", tableDesc.GetID(), invalidIndexID, maxRowID+1, validFamilyID)
+	} else {
+		expectedKey = fmt.Sprintf("/Tenant/%s/Table/%d/%d/%d/%d", tenantID.String(), tableDesc.GetID(), invalidIndexID, maxRowID+1, validFamilyID)
+	}
+	escapedKey := regexp.QuoteMeta(expectedKey)
+
+	exp := []scrubtestutils.ExpectedScrubResult{
+		{
+			ErrorType:  scrub.UnexpectedKeyOutsideIndexSpanError,
+			Database:   "db",
+			Table:      "t",
+			PrimaryKey: expectedKey,
+			DetailsRegex: fmt.Sprintf(
+				`{"family_id": %d, "row_data": {"key": "%s"}, "unexpected_key": "%s"}`,
+				validFamilyID, escapedKey, escapedKey,
+			),
+		},
+	}
+
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t WITH OPTIONS KVSTORE`, exp)
+	time.Sleep(1 * time.Millisecond)
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t AS OF SYSTEM TIME '-1ms' WITH OPTIONS KVSTORE`, exp)
+}
+
+// TestScrubUnexpectedColumnFamily tests SCRUB on a table that has keys with
+// unexpected column family IDs.
+func TestScrubUnexpectedColumnFamily(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	kvDB := srv.DB() // Use system tenant kv DB to insert rogue keys
+
+	if _, err := db.Exec(`
+CREATE DATABASE db;
+CREATE TABLE db.t (
+	id INT PRIMARY KEY,
+	data1 VARCHAR(50) FAMILY fam1, 
+	data2 VARCHAR(50) FAMILY fam2,
+	extra INT FAMILY fam1
+);
+
+INSERT INTO db.t VALUES (1, 'test1', 'data1', 1);
+`); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, srv.Codec(), "db", "t")
+
+	tableSpan := tableDesc.TableSpan(srv.Codec())
+
+	validIndexID := tableDesc.GetPrimaryIndexID()
+	baseKey := keys.MakeTableIDIndexID(srv.Codec().TenantPrefix(), uint32(tableDesc.GetID()), uint32(validIndexID))
+
+	var maxRowID int64
+	err := db.QueryRow("SELECT COALESCE(MAX(id), 0) FROM db.t").Scan(&maxRowID)
+	if err != nil {
+		t.Fatalf("failed to find max id: %v", err)
+	}
+	baseKey = encoding.EncodeVarintAscending(baseKey, maxRowID+1)
+
+	// The returned list is sorted by family ID.
+	families := tableDesc.GetFamilies()
+	invalidFamilyID := families[len(families)-1].ID + 1
+	invalidFamilyKey := keys.MakeFamilyKey(baseKey, uint32(invalidFamilyID))
+	invalidValue := []byte("invalid_data")
+
+	if err := kvDB.Put(context.Background(), invalidFamilyKey, invalidValue); err != nil {
+		t.Fatalf("unexpected error inserting rogue key: %s", err)
+	}
+	t.Logf("tableSpan start: %x, end: %x, invalidKey: %x", tableSpan.Key, tableSpan.EndKey, invalidFamilyKey)
+
+	var expectedKey string
+	_, tenantID, err := keys.DecodeTenantPrefix(srv.Codec().TenantPrefix())
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	if srv.Codec().ForSystemTenant() {
+		expectedKey = fmt.Sprintf("/Table/%d/%d/%d/%d/1", tableDesc.GetID(), validIndexID, maxRowID+1, invalidFamilyID)
+	} else {
+		expectedKey = fmt.Sprintf("/Tenant/%s/Table/%d/%d/%d/%d/1", tenantID.String(), tableDesc.GetID(), validIndexID, maxRowID+1, invalidFamilyID)
+	}
+
+	escapedKey := regexp.QuoteMeta(expectedKey)
+	exp := []scrubtestutils.ExpectedScrubResult{
+		{
+			ErrorType:  scrub.UnexpectedColumnFamilyError,
+			Database:   "db",
+			Table:      "t",
+			PrimaryKey: expectedKey,
+			DetailsRegex: fmt.Sprintf(
+				`{"family_id": %d, "row_data": {"key": "%s"}, "unexpected_key": "%s"}`,
+				invalidFamilyID, escapedKey, escapedKey,
+			),
+		},
+	}
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t WITH OPTIONS KVSTORE`, exp)
+	time.Sleep(1 * time.Millisecond)
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t AS OF SYSTEM TIME '-1ms' WITH OPTIONS KVSTORE`, exp)
+}
+
+// TestScrubUnexpectedKeysEmptyTable tests SCRUB on an empty table to ensure
+// the unexpected key check handles empty tables correctly.
+func TestScrubUnexpectedKeysEmptyTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+
+	if _, err := db.Exec(`
+CREATE DATABASE db;
+CREATE TABLE db.t (
+	id INT PRIMARY KEY,
+	data VARCHAR(50)
+);
+`); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t WITH OPTIONS KVSTORE`, []scrubtestutils.ExpectedScrubResult{})
+	time.Sleep(1 * time.Millisecond)
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t AS OF SYSTEM TIME '-1ms' WITH OPTIONS KVSTORE`, []scrubtestutils.ExpectedScrubResult{})
 }
