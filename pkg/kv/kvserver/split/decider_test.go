@@ -22,10 +22,11 @@ import (
 // testLoadSplitConfig implements the LoadSplitConfig interface and may be used
 // in testing.
 type testLoadSplitConfig struct {
-	randSource    RandSource
-	useWeighted   bool
-	statRetention time.Duration
-	statThreshold float64
+	randSource          RandSource
+	useWeighted         bool
+	statRetention       time.Duration
+	statThreshold       float64
+	sampleResetDuration time.Duration
 }
 
 // NewLoadBasedSplitter returns a new LoadBasedSplitter that may be used to
@@ -48,6 +49,12 @@ func (t *testLoadSplitConfig) StatRetention() time.Duration {
 // should be considered split.
 func (t *testLoadSplitConfig) StatThreshold(_ SplitObjective) float64 {
 	return t.statThreshold
+}
+
+// SampleResetDuration returns the duration that any sampling structure should
+// retain data for before resetting.
+func (t *testLoadSplitConfig) SampleResetDuration() time.Duration {
+	return t.sampleResetDuration
 }
 
 func ld(n int) func(SplitObjective) int {
@@ -560,4 +567,67 @@ func TestDeciderMetrics(t *testing.T) {
 	assert.Equal(t, dAllInsufficientCounters.loadSplitterMetrics.NoSplitKeyCount.Count(), int64(0))
 	assert.Equal(t, dAllInsufficientCounters.loadSplitterMetrics.ClearDirectionCount.Count(), int64(0))
 
+}
+
+// TestDeciderSampleReset tests the sample reset functionality of the decider,
+// when the sample reset duration is non-zero, the split finder should be reset
+// after the given duration. When the sample reset duration is zero, the split
+// finder should not be reset.
+func TestDeciderSampleReset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	rng := rand.New(rand.NewPCG(12, 12))
+	loadSplitConfig := testLoadSplitConfig{
+		randSource:          rng,
+		useWeighted:         false,
+		statRetention:       2 * time.Second,
+		statThreshold:       1,
+		sampleResetDuration: 10 * time.Second,
+	}
+	ctx := context.Background()
+	tick := 0
+
+	var d Decider
+	Init(&d, &loadSplitConfig, newSplitterMetrics(), SplitQPS)
+
+	require.Nil(t, d.mu.splitFinder)
+	d.Record(ctx, ms(tick), ld(100), func() roachpb.Span {
+		return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
+	})
+	// The split finder should be created as the second sample is recorded and
+	// the stat remains above the threshold (1) each tick.
+	for i := 0; i < 10; i++ {
+		tick += 1000
+		d.Record(ctx, ms(tick), ld(100), func() roachpb.Span {
+			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
+		})
+		require.NotNil(t, d.mu.splitFinder, (*lockedDecider)(&d))
+	}
+
+	// Tick one more time, now the sample reset duration (10s) has passed and the
+	// split finder should be reset.
+	tick += 1000
+	d.Record(ctx, ms(tick), ld(100), func() roachpb.Span {
+		return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
+	})
+	require.Nil(t, d.mu.splitFinder, (*lockedDecider)(&d))
+
+	// Immediately following the last tick where the splitFinder was reset, it
+	// should be recreated as the stat is still above the threshold.
+	for i := 0; i < 10; i++ {
+		tick += 1000
+		d.Record(ctx, ms(tick), ld(100), func() roachpb.Span {
+			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
+		})
+		require.NotNil(t, d.mu.splitFinder, (*lockedDecider)(&d))
+	}
+	// Set the sample reset duration to 0, which should cause the split finder to
+	// not be reset in the next tick, unlike before when the sample reset
+	// duration was 10s.
+	loadSplitConfig.sampleResetDuration = 0
+	tick += 1000
+	d.Record(ctx, ms(tick), ld(100), func() roachpb.Span {
+		return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
+	})
+	require.NotNil(t, d.mu.splitFinder, (*lockedDecider)(&d))
 }
