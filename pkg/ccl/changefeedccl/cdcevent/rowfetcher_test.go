@@ -61,9 +61,9 @@ func TestRowFetcherCache(t *testing.T) {
 	family := "only_c"
 	targets := changefeedbase.Targets{}
 	targets.Add(changefeedbase.Target{
-		Type:       targetType,
-		TableID:    tableDesc.GetID(),
-		FamilyName: family,
+		Type:         targetType,
+		DescriptorID: tableDesc.GetID(),
+		FamilyName:   family,
 	})
 	cFamilyID := descpb.FamilyID(1)
 

@@ -544,9 +544,9 @@ $$`)
 
 			targets := changefeedbase.Targets{}
 			target := changefeedbase.Target{
-				Type:       targetType,
-				TableID:    desc.GetID(),
-				FamilyName: tc.familyName,
+				Type:         targetType,
+				DescriptorID: desc.GetID(),
+				FamilyName:   tc.familyName,
 			}
 			targets.Add(target)
 
@@ -647,8 +647,8 @@ func TestUnsupportedCDCFunctions(t *testing.T) {
 	sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY, b STRING)")
 	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 	target := changefeedbase.Target{
-		TableID:    desc.GetID(),
-		FamilyName: desc.GetFamilies()[0].Name,
+		DescriptorID: desc.GetID(),
+		FamilyName:   desc.GetFamilies()[0].Name,
 	}
 	for fnCall, errFn := range map[string]string{
 		// Some volatile functions.
@@ -775,9 +775,9 @@ func newEvaluatorWithNormCheck(
 	norm, _, _, err := normalizeAndPlan(
 		context.Background(), execCfg, username.RootUserName(), defaultDBSessionData, desc, schemaTS,
 		jobspb.ChangefeedTargetSpecification{
-			Type:       target.Type,
-			TableID:    target.TableID,
-			FamilyName: target.FamilyName,
+			Type:         target.Type,
+			DescriptorID: target.DescriptorID,
+			FamilyName:   target.FamilyName,
 		},
 		sc, splitFamilies,
 	)

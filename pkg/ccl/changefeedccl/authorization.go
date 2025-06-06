@@ -158,7 +158,7 @@ func AuthorizeChangefeedJobAccess(
 	}
 
 	for _, spec := range specs.TargetSpecifications {
-		err := a.CheckPrivilegeForTableID(ctx, spec.TableID, privilege.CHANGEFEED)
+		err := a.CheckPrivilegeForTableID(ctx, spec.DescriptorID, privilege.CHANGEFEED)
 		if err != nil {
 			// When performing SHOW JOBS or SHOW CHANGEFEED JOBS, there may be old changefeed
 			// records that reference tables which have been dropped or are being

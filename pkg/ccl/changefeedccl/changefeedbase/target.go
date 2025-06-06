@@ -14,7 +14,7 @@ import (
 // Target provides a version-agnostic wrapper around jobspb.ChangefeedTargetSpecification.
 type Target struct {
 	Type              jobspb.ChangefeedTargetSpecification_TargetType
-	TableID           descpb.ID
+	DescriptorID      descpb.ID
 	FamilyName        string
 	StatementTimeName StatementTimeName
 }
@@ -23,18 +23,18 @@ type Target struct {
 // the changefeed, possibly modified by WITH options.
 type StatementTimeName string
 
-type targetsByTable struct {
-	// wholeTable is a single target set when the target has no specified column
+type targetsByWatchedObject struct {
+	// target is a single target set when the target has no specified column
 	// families
-	wholeTable *Target
-	// byFamilyName is populated only if there are multiple column family targets
-	// for the table
+	target *Target
+	// byFamilyName is populated only if the target is a table and there are multiple
+	// column family targets for the table
 	byFamilyName map[string]Target
 }
 
-func (tbt targetsByTable) add(t Target) targetsByTable {
+func (tbt targetsByWatchedObject) add(t Target) targetsByWatchedObject {
 	if t.FamilyName == "" {
-		tbt.wholeTable = &t
+		tbt.target = &t
 	} else {
 		if tbt.byFamilyName == nil {
 			tbt.byFamilyName = make(map[string]Target)
@@ -44,9 +44,9 @@ func (tbt targetsByTable) add(t Target) targetsByTable {
 	return tbt
 }
 
-func (tbt targetsByTable) each(f func(t Target) error) error {
-	if tbt.wholeTable != nil {
-		if err := f(*tbt.wholeTable); err != nil {
+func (tbt targetsByWatchedObject) each(f func(t Target) error) error {
+	if tbt.target != nil {
+		if err := f(*tbt.target); err != nil {
 			return err
 		}
 	}
@@ -59,19 +59,23 @@ func (tbt targetsByTable) each(f func(t Target) error) error {
 }
 
 // Targets is the complete list of target specifications for a changefeed.
-// This is stored as a map of TableID -> Family Name -> Target in order
+// This is stored as a map of DescriptorID -> Family Name -> Target in order
 // to support all current ways we need to iterate over it.
 type Targets struct {
 	Size uint
-	m    map[descpb.ID]targetsByTable
+	m    map[descpb.ID]targetsByWatchedObject
 }
 
 // Add adds a target to the list.
 func (ts *Targets) Add(t Target) {
 	if ts.m == nil {
-		ts.m = make(map[descpb.ID]targetsByTable)
+		ts.m = make(map[descpb.ID]targetsByWatchedObject)
 	}
-	ts.m[t.TableID] = ts.m[t.TableID].add(t)
+	if t.DescriptorID > 0 {
+		ts.m[t.DescriptorID] = ts.m[t.DescriptorID].add(t)
+	} else {
+		ts.m[t.DescriptorID] = ts.m[t.DescriptorID].add(t)
+	}
 	ts.Size++
 }
 
@@ -149,8 +153,8 @@ func (ts *Targets) FindByTableIDAndFamilyName(id descpb.ID, family string) (Targ
 			return t, true
 		}
 	}
-	if tbt.wholeTable != nil {
-		return *tbt.wholeTable, true
+	if tbt.target != nil {
+		return *tbt.target, true
 	}
 	return Target{}, false
 }

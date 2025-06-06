@@ -270,9 +270,9 @@ func makeRangefeedReaderAndDecoder(
 	popRow, cleanup := cdctest.MakeRangeFeedValueReader(t, s.ExecutorConfig(), tableDesc)
 	targets := changefeedbase.Targets{}
 	targets.Add(changefeedbase.Target{
-		Type:       jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-		TableID:    tableDesc.GetID(),
-		FamilyName: "primary",
+		Type:         jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+		DescriptorID: tableDesc.GetID(),
+		FamilyName:   "primary",
 	})
 	sqlExecCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	ctx := context.Background()

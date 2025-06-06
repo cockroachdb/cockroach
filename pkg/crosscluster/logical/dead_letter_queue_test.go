@@ -437,9 +437,9 @@ func TestDLQJSONQuery(t *testing.T) {
 	tableDesc := cdctest.GetHydratedTableDescriptor(t, execCfg, "foo")
 	targets := changefeedbase.Targets{}
 	targets.Add(changefeedbase.Target{
-		Type:       jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
-		TableID:    tableDesc.GetID(),
-		FamilyName: "primary",
+		Type:         jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
+		DescriptorID: tableDesc.GetID(),
+		FamilyName:   "primary",
 	})
 
 	decoder, err := cdcevent.NewEventDecoder(ctx, &execCfg, targets, false, false)
