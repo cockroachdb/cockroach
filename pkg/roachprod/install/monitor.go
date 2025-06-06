@@ -346,7 +346,7 @@ func (c *SyncedCluster) Monitor(
 ) chan NodeMonitorInfo {
 	ch := make(chan NodeMonitorInfo)
 
-	nodes := c.TargetNodes()
+	nodes := c.Nodes
 	var wg sync.WaitGroup
 	monitorCtx, cancel := context.WithCancel(ctx)
 
