@@ -13,18 +13,20 @@ import (
 )
 
 type unaryDRPCBatchServiceToInternalAdapter struct {
-	useStreamPoolClient bool
-	rpc.RestrictedInternalClient
-	drpcClient     kvpb.DRPCKVBatchClient
+	client         kvpb.RPCInternalClient
 	drpcStreamPool *rpc.DRPCBatchStreamPool
 }
 
 func (a *unaryDRPCBatchServiceToInternalAdapter) Batch(
 	ctx context.Context, in *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, error) {
-	if a.useStreamPoolClient && a.drpcStreamPool != nil {
+	if a.drpcStreamPool != nil {
 		return a.drpcStreamPool.Send(ctx, in)
 	}
+	return a.client.Batch(ctx, in)
+}
 
-	return a.drpcClient.Batch(ctx, in)
+func (a *unaryDRPCBatchServiceToInternalAdapter) MuxRangeFeed(
+	ctx context.Context) (kvpb.RPCInternal_MuxRangeFeedClient, error) {
+	return a.client.MuxRangeFeed(ctx)
 }
