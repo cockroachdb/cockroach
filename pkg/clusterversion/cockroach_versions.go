@@ -190,10 +190,6 @@ const (
 	// TODO_Delete_V25_1_AddJobsTables added new jobs tables.
 	TODO_Delete_V25_1_AddJobsTables
 
-	// TODO_Delete_V25_1_MoveRaftTruncatedState moves the RaftTruncatedState in eval result
-	// from ReplicaState to its own field.
-	TODO_Delete_V25_1_MoveRaftTruncatedState
-
 	// TODO_Delete_V25_1_AddRangeForceFlushKey adds the RangeForceFlushKey, a replicated
 	// range-ID local key, which is written below raft.
 	TODO_Delete_V25_1_AddRangeForceFlushKey
@@ -276,7 +272,6 @@ var versionTable = [numKeys]roachpb.Version{
 	TODO_Delete_V25_1_Start: {Major: 24, Minor: 3, Internal: 2},
 
 	TODO_Delete_V25_1_AddJobsTables:             {Major: 24, Minor: 3, Internal: 4},
-	TODO_Delete_V25_1_MoveRaftTruncatedState:    {Major: 24, Minor: 3, Internal: 6},
 	TODO_Delete_V25_1_AddRangeForceFlushKey:     {Major: 24, Minor: 3, Internal: 8},
 	TODO_Delete_V25_1_BatchStreamRPC:            {Major: 24, Minor: 3, Internal: 10},
 	TODO_Delete_V25_1_PreparedTransactionsTable: {Major: 24, Minor: 3, Internal: 12},
