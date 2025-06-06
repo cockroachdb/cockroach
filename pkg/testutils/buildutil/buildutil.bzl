@@ -49,6 +49,8 @@ _deps_aspect = aspect(
 )
 
 def _find_deps_with_disallowed_prefixes(current_pkg, dep_pkgs, prefixes):
+    if prefixes == None:
+      return []
     return [dp for dp_list in [
         [(d, p) for p in prefixes if d.startswith(p) and d != current_pkg]
         for d in dep_pkgs
@@ -61,11 +63,11 @@ def _deps_rule_impl(ctx):
         prefixes = ctx.attr.disallowed_prefixes,
     )
     deps = {k: None for k in ctx.attr.src[_DepsInfo].deps.to_list()}
-    if ctx.attr.allowlist:
+    if ctx.attr.allowlist != None:
         failed = [p for p in deps if p not in ctx.attr.allowlist and
                                      p.label != ctx.attr.src.label]
     else:
-        failed = [p for p in ctx.attr.disallowed_list if p in deps]
+        failed = [p for p in (ctx.attr.disallowed_list or []) if p in deps]
     failures = []
     if failed_prefixes:
         failures.extend([
@@ -112,6 +114,8 @@ _deps_rule = rule(
 )
 
 def _validate_disallowed_prefixes(prefixes):
+    if prefixes == None:
+      return []
     validated = []
     repo_prefix = "github.com/cockroachdb/cockroach/"
     short_prefix = "pkg/"
@@ -130,11 +134,15 @@ def _validate_disallowed_prefixes(prefixes):
 
 def disallowed_imports_test(
         src,
-        disallowed_list = [],
-        disallowed_prefixes = [],
+        disallowed_list = None,
+        disallowed_prefixes = None,
         disallow_cdeps = False,
-        allowlist = []):
-    if (disallowed_list and allowlist) or (disallowed_prefixes and allowlist):
+        allowlist = None):
+
+    if allowlist == None and disallowed_list == None and disallowed_prefixes == None:
+      fail("Either allowlist, disallowed_list or disallowed_prefixes should be passed, to block " +
+           "all imports you must explicitly pass allowlist = []")
+    if (allowlist != None and disallowed_list != None) or (allowlist != None and disallowed_prefixes != None):
         fail("allowlist or (disallowed_list or disallowed_prefixes) can be " +
              "provided, but not both")
     disallowed_prefixes = _validate_disallowed_prefixes(disallowed_prefixes)
