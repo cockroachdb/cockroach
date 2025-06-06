@@ -685,6 +685,10 @@ message LocalOnlySessionData {
   // DistSQLUseReducedLeafWriteSets, when true, indicates that the DistSQL
   // runner should use the reduced write sets when constructing LeafTxns.
   bool distsql_use_reduced_leaf_write_sets = 174 [(gogoproto.customname) = "DistSQLUseReducedLeafWriteSets"];
+  // UseProcTxnControlExtendedProtocolFix, when true, enables the fix for
+  // PL/pgSQL transaction control statements (COMMIT, ROLLBACK) when the stored
+  // procedure is executed via a portal in the extended wire protocol.
+  bool use_proc_txn_control_extended_protocol_fix = 175;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

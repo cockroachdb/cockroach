@@ -4143,6 +4143,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	// CockroachDB extension.
+	`use_proc_txn_control_extended_protocol_fix`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`use_proc_txn_control_extended_protocol_fix`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("use_proc_txn_control_extended_protocol_fix", s)
+			if err != nil {
+				return err
+			}
+			m.SetUseProcTxnControlExtendedProtocolFix(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().UseProcTxnControlExtendedProtocolFix), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {

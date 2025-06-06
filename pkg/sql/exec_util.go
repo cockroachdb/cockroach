@@ -4221,6 +4221,10 @@ func (m *sessionDataMutator) SetDistSQLUseReducedLeafWriteSets(val bool) {
 	m.data.DistSQLUseReducedLeafWriteSets = val
 }
 
+func (m *sessionDataMutator) SetUseProcTxnControlExtendedProtocolFix(val bool) {
+	m.data.UseProcTxnControlExtendedProtocolFix = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
