@@ -2615,6 +2615,30 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Flush Utilization",
 		Unit:        metric.Unit_PERCENT,
 	}
+	metaValueSeparationBytesReferenced = metric.Metadata{
+		Name:        "storage.value_separation.value_bytes.referenced",
+		Help:        "The size of storage engine value bytes (pre-compression) that are stored separately in blob files and referenced by a live sstable.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaValueSeparationBytesUnreferenced = metric.Metadata{
+		Name:        "storage.value_separation.value_bytes.unreferenced",
+		Help:        "The size of storage engine value bytes (pre-compression) that are stored separately in blob files and not referenced by any live sstable. These bytes are garbage that could be reclaimed by a compaction.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaValueSeparationBlobFileCount = metric.Metadata{
+		Name:        "storage.value_separation.blob_files.count",
+		Help:        "The number of blob files that are used to store separated values within the storage engine.",
+		Measurement: "Files",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaValueSeparationBlobFileSize = metric.Metadata{
+		Name:        "storage.value_separation.blob_files.size",
+		Help:        "The size of the physical blob files that are used to store separated values within the storage engine. This sum is the physical post-compression sum of value_bytes.referenced and value_bytes.unreferenced.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
 	metaWALBytesWritten = metric.Metadata{
 		Name:        "storage.wal.bytes_written",
 		Help:        "The number of bytes the storage engine has written to the WAL",
@@ -2914,6 +2938,10 @@ type StoreMetrics struct {
 	SSTableCompressionNone            *metric.Gauge
 	categoryIterMetrics               pebbleCategoryIterMetricsContainer
 	categoryDiskWriteMetrics          pebbleCategoryDiskWriteMetricsContainer
+	ValueSeparationBytesReferenced    *metric.Gauge
+	ValueSeparationBytesUnreferenced  *metric.Gauge
+	ValueSeparationBlobFileCount      *metric.Gauge
+	ValueSeparationBlobFileSize       *metric.Gauge
 	WALBytesWritten                   *metric.Counter
 	WALBytesIn                        *metric.Counter
 	WALFailoverSwitchCount            *metric.Counter
@@ -3650,11 +3678,15 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		categoryDiskWriteMetrics: pebbleCategoryDiskWriteMetricsContainer{
 			registry: storeRegistry,
 		},
-		WALBytesWritten:              metric.NewCounter(metaWALBytesWritten),
-		WALBytesIn:                   metric.NewCounter(metaWALBytesIn),
-		WALFailoverSwitchCount:       metric.NewCounter(metaStorageWALFailoverSwitchCount),
-		WALFailoverPrimaryDuration:   metric.NewCounter(metaStorageWALFailoverPrimaryDuration),
-		WALFailoverSecondaryDuration: metric.NewCounter(metaStorageWALFailoverSecondaryDuration),
+		ValueSeparationBytesReferenced:   metric.NewGauge(metaValueSeparationBytesReferenced),
+		ValueSeparationBytesUnreferenced: metric.NewGauge(metaValueSeparationBytesUnreferenced),
+		ValueSeparationBlobFileCount:     metric.NewGauge(metaValueSeparationBlobFileCount),
+		ValueSeparationBlobFileSize:      metric.NewGauge(metaValueSeparationBlobFileSize),
+		WALBytesWritten:                  metric.NewCounter(metaWALBytesWritten),
+		WALBytesIn:                       metric.NewCounter(metaWALBytesIn),
+		WALFailoverSwitchCount:           metric.NewCounter(metaStorageWALFailoverSwitchCount),
+		WALFailoverPrimaryDuration:       metric.NewCounter(metaStorageWALFailoverPrimaryDuration),
+		WALFailoverSecondaryDuration:     metric.NewCounter(metaStorageWALFailoverSecondaryDuration),
 		WALFailoverWriteAndSyncLatency: metric.NewManualWindowHistogram(
 			metaStorageWALFailoverWriteAndSyncLatency,
 			pebble.FsyncLatencyBuckets,
@@ -4088,6 +4120,10 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.FlushableIngestTableCount.Update(int64(m.Flush.AsIngestTableCount))
 	sm.FlushableIngestTableSize.Update(int64(m.Flush.AsIngestBytes))
 	sm.IngestCount.Update(int64(m.Ingest.Count))
+	sm.ValueSeparationBytesReferenced.Update(int64(m.BlobFiles.ReferencedValueSize))
+	sm.ValueSeparationBytesUnreferenced.Update(int64(m.BlobFiles.ValueSize - m.BlobFiles.ReferencedValueSize))
+	sm.ValueSeparationBlobFileCount.Update(int64(m.BlobFiles.LiveCount))
+	sm.ValueSeparationBlobFileSize.Update(int64(m.BlobFiles.LiveSize))
 	// NB: `UpdateIfHigher` is used here since there is a race in pebble where
 	// sometimes the WAL is rotated but metrics are retrieved prior to the update
 	// to BytesIn to account for the previous WAL.
