@@ -344,8 +344,3 @@ type BatchStreamClient = streamClient[*kvpb.BatchRequest, *kvpb.BatchResponse]
 type DRPCBatchStreamPool = streamPool[*kvpb.BatchRequest, *kvpb.BatchResponse, drpc.Conn]
 
 type DRPCBatchStreamClient = streamClient[*kvpb.BatchRequest, *kvpb.BatchResponse]
-
-// newDRPCBatchStream constructs a BatchStreamClient from a drpc.Conn.
-func newDRPCBatchStream(ctx context.Context, dc drpc.Conn) (DRPCBatchStreamClient, error) {
-	return kvpb.NewDRPCKVBatchClient(dc).BatchStream(ctx)
-}
