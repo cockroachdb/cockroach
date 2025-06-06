@@ -848,6 +848,11 @@ func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList
 		// Remember id of newly synthesized column.
 		colIDs[i] = newCol
 
+		// Track columns that were not explicitly set in the insert statement.
+		if mb.b.trackSchemaDeps {
+			mb.implicitInsertCols.Add(newCol)
+		}
+
 		// Add corresponding target column.
 		mb.targetColList = append(mb.targetColList, tabColID)
 		mb.targetColSet.Add(tabColID)

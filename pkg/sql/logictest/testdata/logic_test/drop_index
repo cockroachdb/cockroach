@@ -563,20 +563,6 @@ CREATE TABLE tab_145100 (
 )
 
 statement ok
-CREATE PROCEDURE proc_insert_145100(in_id UUID, in_i INT) LANGUAGE SQL AS $$
-  INSERT INTO tab_145100 (id, i) VALUES (in_id, in_i);
-$$;
-
-# Note: Due to https://github.com/cockroachdb/cockroach/issues/145098, the
-# procedure has a dependency on the shard column. When that issue is resolved,
-# this DROP statement should succeed.
-statement error cannot drop column "crdb_internal_i_shard_16" because function "proc_insert_145100" depends on it
-DROP INDEX tab_145100@tab_145100_i_idx
-
-statement ok
-DROP PROCEDURE proc_insert_145100
-
-statement ok
 CREATE PROCEDURE proc_select_145100() LANGUAGE SQL AS $$
   SELECT *, crdb_internal_i_shard_16 FROM tab_145100;
 $$;
@@ -585,7 +571,18 @@ statement error cannot drop column "crdb_internal_i_shard_16" because function "
 DROP INDEX tab_145100@tab_145100_i_idx
 
 statement ok
-DROP INDEX tab_145100@tab_145100_i_idx CASCADE
+DROP PROCEDURE proc_select_145100
+
+statement ok
+CREATE PROCEDURE proc_insert_145100(in_id UUID, in_i INT) LANGUAGE SQL AS $$
+  INSERT INTO tab_145100 (id, i) VALUES (in_id, in_i);
+$$;
+
+statement ok
+DROP INDEX tab_145100@tab_145100_i_idx
+
+statement ok
+DROP PROCEDURE proc_insert_145100
 
 skipif config local-schema-locked
 query T
