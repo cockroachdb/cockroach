@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"flag"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -102,11 +103,6 @@ func run(b *testing.B, pgURL string, workloadFlags []string) {
 	}, workloadFlags...)
 	gen := tpccGenerator(b, flags)
 
-	// Temporarily redirect stdout to /dev/null to suppress the workload's
-	// output during the benchmark.
-	restoreStdout := redirectStdoutToDevNull(b)
-	defer restoreStdout()
-
 	reg := histogram.NewRegistry(time.Minute, "tpcc")
 	ql, err := gen.Ops(ctx, []string{pgURL}, reg)
 	if err != nil {
@@ -185,6 +181,9 @@ func tpccGenerator(b *testing.B, flags []string) generator {
 		b.Fatal(err)
 	}
 	gen := tpcc.New().(generator)
+	gen.(interface {
+		SetOutput(io.Writer)
+	}).SetOutput(io.Discard)
 	if err := gen.Flags().Parse(flags); err != nil {
 		b.Fatal(err)
 	}
@@ -192,19 +191,6 @@ func tpccGenerator(b *testing.B, flags []string) generator {
 		b.Fatal(err)
 	}
 	return gen
-}
-
-// redirectStdoutToDevNull redirects stdout to /dev/null.
-func redirectStdoutToDevNull(b *testing.B) (restoreStdout func()) {
-	old := os.Stdout
-	var err error
-	if os.Stdout, err = os.Open(os.DevNull); err != nil {
-		b.Fatal(err)
-	}
-	return func() {
-		_ = os.Stdout.Close()
-		os.Stdout = old
-	}
 }
 
 type doneFn func(testing.TB)
