@@ -1799,6 +1799,133 @@ func TestTxnWriteBufferRollbackToSavepoint(t *testing.T) {
 	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
 }
 
+// TestTxnWriteBufferRollbackToSavepointMidTxn tests the savepoint rollback
+// logic in the presence of explicit savepoints.
+func TestTxnWriteBufferRollbackToSavepointMidTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	sendPut := func(t *testing.T, twb *txnWriteBuffer, mockSender *mockLockedSender, txn *roachpb.Transaction) {
+		txn.Sequence++
+		keyA := roachpb.Key("a")
+		valA := fmt.Sprintf("valA@%d", txn.Sequence)
+		putA := putArgs(keyA, valA, txn.Sequence)
+
+		ba := &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: txn}
+		ba.Add(putA)
+
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			br := ba.CreateReply()
+			br.Txn = ba.Txn
+			return br, nil
+		})
+
+		numCalled := mockSender.NumCalled()
+		br, pErr := twb.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+		require.Equal(t, numCalled, mockSender.NumCalled())
+	}
+
+	delRangeBatch := func(txn *roachpb.Transaction) *kvpb.BatchRequest {
+		txn.Sequence++
+		keyB := roachpb.Key("b")
+		keyC := roachpb.Key("c")
+		delRangeReq := delRangeArgs(keyB, keyC, txn.Sequence)
+
+		ba := &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: txn}
+		ba.Add(delRangeReq)
+		return ba
+	}
+
+	savepoint := func(twb *txnWriteBuffer, txn *roachpb.Transaction) *savepoint {
+		txn.Sequence++
+		savepoint := &savepoint{seqNum: txn.Sequence}
+		twb.createSavepointLocked(ctx, savepoint)
+		return savepoint
+	}
+
+	t.Run("flush with no savepoint sends latest", func(t *testing.T) {
+		twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+		txn := makeTxnProto()
+		// Send 4 requests to the buffer
+		sendPut(t, &twb, mockSender, &txn)
+		sendPut(t, &twb, mockSender, &txn)
+		sendPut(t, &twb, mockSender, &txn)
+		sendPut(t, &twb, mockSender, &txn)
+		ba := delRangeBatch(&txn)
+
+		// Expect 1 Put and 1 DelRange.
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			require.Len(t, ba.Requests, 2)
+			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+			require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[1].GetInner())
+
+			br := ba.CreateReply()
+			br.Txn = ba.Txn
+			return br, nil
+		})
+		br, pErr := twb.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+	})
+
+	t.Run("flush with savepoint still elides unnecessary writes under savepoint", func(t *testing.T) {
+		twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+		txn := makeTxnProto()
+		sendPut(t, &twb, mockSender, &txn) // should be elided
+		sendPut(t, &twb, mockSender, &txn)
+		_ = savepoint(&twb, &txn)
+		sendPut(t, &twb, mockSender, &txn)
+		sendPut(t, &twb, mockSender, &txn)
+		ba := delRangeBatch(&txn)
+
+		// Expect 3 Put and 1 DelRange.
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			require.Len(t, ba.Requests, 4)
+			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[1].GetInner())
+			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[2].GetInner())
+			require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[3].GetInner())
+
+			br := ba.CreateReply()
+			br.Txn = ba.Txn
+			return br, nil
+		})
+		br, pErr := twb.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+	})
+
+	t.Run("flush after release of earliest savepoint only sends latest", func(t *testing.T) {
+		twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+		txn := makeTxnProto()
+		sendPut(t, &twb, mockSender, &txn)
+		sendPut(t, &twb, mockSender, &txn)
+		sendPut(t, &twb, mockSender, &txn)
+		sp := savepoint(&twb, &txn)
+		sendPut(t, &twb, mockSender, &txn)
+		twb.releaseSavepointLocked(ctx, sp)
+
+		ba := delRangeBatch(&txn)
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			require.Len(t, ba.Requests, 2)
+			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+			require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[1].GetInner())
+
+			br := ba.CreateReply()
+			br.Txn = ba.Txn
+			return br, nil
+		})
+		br, pErr := twb.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+	})
+}
+
 // TestTxnWriteBufferFlushesAfterDisabling verifies that the txnWriteBuffer
 // flushes on the next batch after it is disabled if it buffered any writes.
 func TestTxnWriteBufferFlushesAfterDisabling(t *testing.T) {

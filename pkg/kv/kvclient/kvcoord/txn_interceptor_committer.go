@@ -626,6 +626,9 @@ func (tc *txnCommitter) epochBumpedLocked() {}
 // createSavepointLocked is part of the txnInterceptor interface.
 func (*txnCommitter) createSavepointLocked(context.Context, *savepoint) {}
 
+// releaseSavepointLocked is part of the txnInterceptor interface.
+func (*txnCommitter) releaseSavepointLocked(context.Context, *savepoint) {}
+
 // rollbackToSavepointLocked is part of the txnInterceptor interface.
 func (*txnCommitter) rollbackToSavepointLocked(context.Context, savepoint) {}
 
