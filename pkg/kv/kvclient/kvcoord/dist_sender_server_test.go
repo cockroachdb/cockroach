@@ -4677,11 +4677,14 @@ func TestUnexpectedCommitOnTxnRecovery(t *testing.T) {
 	keyA := roachpb.Key("a")
 	keyB := roachpb.Key("b")
 
-	var targetTxnIDString atomic.Value
+	var (
+		targetTxnIDString atomic.Value
+		retryNum          atomic.Int32
+		cmdID             atomic.Value
+	)
+	cmdID.Store(kvserverbase.CmdIDKey(""))
 	targetTxnIDString.Store("")
-	var retryNum atomic.Int32
 	retryNum.Store(0)
-	var cmdID kvserverbase.CmdIDKey
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -4706,13 +4709,12 @@ func TestUnexpectedCommitOnTxnRecovery(t *testing.T) {
 						if ok && getReq.KeyLockingDurability == lock.Replicated && retryNum.Load() == 1 {
 							t.Logf("will fail application for txn %s; req: %+v; raft cmdID: %s",
 								fArgs.Req.Header.Txn.ID.String(), getReq, fArgs.CmdID)
-
-							cmdID = fArgs.CmdID
+							cmdID.Store(fArgs.CmdID)
 						}
 						return nil
 					},
 					TestingApplyCalledTwiceFilter: func(fArgs kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
-						if fArgs.CmdID == cmdID {
+						if fArgs.CmdID == cmdID.Load().(kvserverbase.CmdIDKey) {
 							t.Logf("failing application for raft cmdID: %s", cmdID)
 
 							return 0, kvpb.NewErrorf("test injected error")
