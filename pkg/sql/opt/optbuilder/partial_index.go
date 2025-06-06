@@ -57,7 +57,7 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, scan
 	// Construct a scan as the tableScope expr so that logical properties of the
 	// scan can be used to fully normalize the index predicate.
 	tableScope := b.allocScope()
-	tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
+	b.appendOrdinaryColumnsFromTable(tableScope, tabMeta, &tabMeta.Alias)
 
 	// If the optional scan argument was provided and it outputs all of the
 	// ordinary table columns, we use it as tableScope.expr. Otherwise, we must

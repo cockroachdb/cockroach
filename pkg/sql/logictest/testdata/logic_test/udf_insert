@@ -264,3 +264,25 @@ statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(b > 1:::IN
 SELECT f_checkb();
 
 subtest end
+
+subtest regression_146414
+
+statement ok
+CREATE TABLE t146414 (
+  a INT NOT NULL,
+  b INT AS (a + 1) VIRTUAL
+)
+
+statement ok
+CREATE FUNCTION f146414() RETURNS INT LANGUAGE SQL AS $$
+  UPSERT INTO t146414 (a) VALUES (100) RETURNING b;
+  SELECT 1;
+$$;
+
+statement error pgcode 2BP01 pq: cannot drop column "b" because function "f146414" depends on it
+ALTER TABLE t146414 DROP COLUMN b;
+
+statement ok
+SELECT f146414()
+
+subtest end
