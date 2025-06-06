@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -84,4 +85,17 @@ AND %[1]s = %[4]s
 	fullQuery := fmt.Sprintf(query,
 		nameCol, tab, lexbase.EscapeSQLString(udfSchema), lexbase.EscapeSQLString(un.Parts[0]))
 	return d.parse(fullQuery)
+}
+
+func (d *delegator) delegateShowCreateAllRoutines() (tree.Statement, error) {
+	sqltelemetry.IncrementShowCounter(sqltelemetry.Create)
+
+	const showCreateAllRoutinesQuery = `SELECT crdb_internal.show_create_all_routines(%[1]s) AS create_statement;`
+	databaseLiteral := d.evalCtx.SessionData().Database
+
+	query := fmt.Sprintf(showCreateAllRoutinesQuery,
+		lexbase.EscapeSQLString(databaseLiteral),
+	)
+
+	return d.parse(query)
 }

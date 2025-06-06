@@ -1,0 +1,164 @@
+statement ok
+CREATE DATABASE d
+
+statement ok
+USE d
+
+query T colnames
+SHOW CREATE ALL ROUTINES;
+----
+create_statement
+
+statement ok
+CREATE FUNCTION add_one(x INT) RETURNS INT AS 'SELECT x + 1' LANGUAGE SQL;
+
+query T colnames
+SHOW CREATE ALL ROUTINES;
+----
+create_statement
+CREATE FUNCTION public.add_one(x INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF 
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+  SELECT x + 1;
+$$;
+
+statement ok
+CREATE OR REPLACE PROCEDURE double_triple(INOUT double INT, OUT triple INT)
+AS $$
+BEGIN
+  double := double * 2;
+  triple := double * 3;
+END;
+$$ LANGUAGE PLpgSQL;
+
+
+query T colnames,nosort
+SHOW CREATE ALL ROUTINES;
+----
+create_statement
+CREATE FUNCTION public.add_one(x INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+  SELECT x + 1;
+$$;
+CREATE PROCEDURE public.double_triple(INOUT double INT8, OUT triple INT8)
+  LANGUAGE plpgsql
+  SECURITY INVOKER
+  AS $$
+  BEGIN
+  double := double * 2;
+  triple := double * 3;
+  END;
+$$;
+
+statement ok
+CREATE FUNCTION add_one(x FLOAT) RETURNS FLOAT AS 'SELECT x + 1' LANGUAGE SQL;
+
+query T colnames,nosort
+SHOW CREATE ALL ROUTINES;
+----
+create_statement
+CREATE FUNCTION public.add_one(x INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+  SELECT x + 1;
+$$;
+CREATE FUNCTION public.add_one(x FLOAT8)
+  RETURNS FLOAT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+  SELECT x + 1;
+$$;
+CREATE PROCEDURE public.double_triple(INOUT double INT8, OUT triple INT8)
+  LANGUAGE plpgsql
+  SECURITY INVOKER
+  AS $$
+  BEGIN
+  double := double * 2;
+  triple := double * 3;
+  END;
+$$;
+
+
+#test dropping routines
+statement ok
+DROP FUNCTION add_one(x INT8);
+
+statement ok
+DROP FUNCTION add_one(x FLOAT8);
+
+query T colnames
+SHOW CREATE ALL ROUTINES;
+----
+create_statement
+CREATE PROCEDURE public.double_triple(INOUT double INT8, OUT triple INT8)
+  LANGUAGE plpgsql
+  SECURITY INVOKER
+  AS $$
+  BEGIN
+  double := double * 2;
+  triple := double * 3;
+  END;
+$$;
+
+statement ok
+DROP PROCEDURE double_triple;
+
+query T colnames
+SHOW CREATE ALL ROUTINES;
+----
+create_statement
+
+# test user defined schema
+statement ok
+CREATE SCHEMA s;
+
+statement ok
+CREATE FUNCTION add_one(x INT) RETURNS INT AS 'SELECT x + 1' LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION s.add_one(x INT) RETURNS INT AS 'SELECT x + 1' LANGUAGE SQL;
+
+query T colnames,nosort
+SHOW CREATE ALL ROUTINES;
+----
+create_statement
+CREATE FUNCTION public.add_one(x INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+  SELECT x + 1;
+$$;
+CREATE FUNCTION s.add_one(x INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+  SELECT x + 1;
+$$;
