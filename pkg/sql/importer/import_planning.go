@@ -139,14 +139,6 @@ var importOptionExpectValues = map[string]exprutil.KVStringOptValidate{
 
 var pgDumpMaxLoggedStmts = 1024
 
-func testingSetMaxLogIgnoredImportStatements(maxLogSize int) (cleanup func()) {
-	prevLogSize := pgDumpMaxLoggedStmts
-	pgDumpMaxLoggedStmts = maxLogSize
-	return func() {
-		pgDumpMaxLoggedStmts = prevLogSize
-	}
-}
-
 func makeStringSet(opts ...string) map[string]struct{} {
 	res := make(map[string]struct{}, len(opts))
 	for _, opt := range opts {
