@@ -198,7 +198,7 @@ func WaitForState(
 				return nil
 			}
 			if timeutil.Since(startTime) > maxWait {
-				return errors.Newf("job %d did not reach state %s after %s", jobID, state, maxWait)
+				return errors.Newf("job %d still in state %s after %s", jobID, state, maxWait)
 			}
 			ticker.Reset(5 * time.Second)
 		case <-ctx.Done():
