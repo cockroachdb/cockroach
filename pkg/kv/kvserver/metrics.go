@@ -513,6 +513,12 @@ var (
 		Measurement: "Read Ops",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaFollowerReadsMisses = metric.Metadata{
+		Name:        "follower_reads.misses_count",
+		Help:        "Number of follower reads missed by follower replicas due to too low closed timestamp",
+		Measurement: "Read Ops",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Server-side transaction metrics.
 	metaCommitWaitBeforeCommitTriggerCount = metric.Metadata{
@@ -2826,7 +2832,8 @@ type StoreMetrics struct {
 	RecentReplicaQueriesPerSecond  *metric.ManualWindowHistogram
 
 	// Follower read metrics.
-	FollowerReadsCount *metric.Counter
+	FollowerReadsCount  *metric.Counter
+	FollowerReadsMisses *metric.Counter
 
 	// Server-side transaction metrics.
 	CommitWaitsBeforeCommitTrigger                           *metric.Counter
@@ -3555,7 +3562,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		),
 
 		// Follower reads metrics.
-		FollowerReadsCount: metric.NewCounter(metaFollowerReadsCount),
+		FollowerReadsCount:  metric.NewCounter(metaFollowerReadsCount),
+		FollowerReadsMisses: metric.NewCounter(metaFollowerReadsMisses),
 
 		// Server-side transaction metrics.
 		CommitWaitsBeforeCommitTrigger:                           metric.NewCounter(metaCommitWaitBeforeCommitTriggerCount),
