@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/commontest"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -185,7 +185,7 @@ func TestStore(t *testing.T) {
 	// Ensure that races to create partition metadata either do not error, or
 	// they error with WriteTooOldError.
 	t.Run("race to create partition metadata", func(t *testing.T) {
-		store := makeStore(quantize.NewUnQuantizer(2, vecdist.L2Squared)).(*testStore)
+		store := makeStore(quantize.NewUnQuantizer(2, vecpb.L2SquaredDistance)).(*testStore)
 
 		var done atomic.Int64
 		getMetadata := func(treeKey cspann.TreeKey) {
@@ -254,37 +254,43 @@ func TestQuantizeAndEncode(t *testing.T) {
 	vec2 := vector.T{-1.0, -2.0, -3.0, -4.0}
 	centroid := vector.T{0.0, 0.0, 0.0, 0.0}
 
-	// Create quantizers.
-	rootQuantizer := quantize.NewUnQuantizer(dims, vecdist.L2Squared)
-	quantizer := quantize.NewRaBitQuantizer(dims, seed, vecdist.L2Squared)
+	for _, distMetric := range []vecpb.DistanceMetric{
+		vecpb.L2SquaredDistance, vecpb.InnerProductDistance,
+	} {
+		t.Run(fmt.Sprintf("%s distance", distMetric), func(t *testing.T) {
+			// Create quantizers.
+			rootQuantizer := quantize.NewUnQuantizer(dims, distMetric)
+			quantizer := quantize.NewRaBitQuantizer(dims, seed, distMetric)
 
-	// Create a transaction and metadata.
-	tx := &Txn{codec: makePartitionCodec(rootQuantizer, quantizer)}
+			// Create a transaction and metadata.
+			tx := &Txn{codec: makePartitionCodec(rootQuantizer, quantizer)}
 
-	// Test encoding with non-root partition key (uses RaBitQuantizer).
-	partitionKey := cspann.PartitionKey(123)
-	encoded1, err := tx.QuantizeAndEncode(partitionKey, centroid, vec1)
-	require.NoError(t, err)
-	require.NotEmpty(t, encoded1)
+			// Test encoding with non-root partition key (uses RaBitQuantizer).
+			partitionKey := cspann.PartitionKey(123)
+			encoded1, err := tx.QuantizeAndEncode(partitionKey, centroid, vec1)
+			require.NoError(t, err)
+			require.NotEmpty(t, encoded1)
 
-	// Verify we can decode the encoded vector.
-	codec := makeStoreCodec(quantizer)
-	codec.Init(centroid, 1)
-	_, err = codec.DecodeVector(encoded1)
-	require.NoError(t, err)
-	vs := codec.GetVectorSet().(*quantize.RaBitQuantizedVectorSet)
-	require.Equal(t, 1, vs.GetCount())
+			// Verify we can decode the encoded vector.
+			codec := makeStoreCodec(quantizer)
+			codec.Init(centroid, 1)
+			_, err = codec.DecodeVector(encoded1)
+			require.NoError(t, err)
+			vs := codec.GetVectorSet().(*quantize.RaBitQuantizedVectorSet)
+			require.Equal(t, 1, vs.GetCount())
 
-	// Encode a different vector with root partition key (uses UnQuantizer).
-	encoded2, err := tx.QuantizeAndEncode(cspann.RootKey, centroid, vec2)
-	require.NoError(t, err)
-	require.NotEmpty(t, encoded2)
+			// Encode a different vector with root partition key (uses UnQuantizer).
+			encoded2, err := tx.QuantizeAndEncode(cspann.RootKey, centroid, vec2)
+			require.NoError(t, err)
+			require.NotEmpty(t, encoded2)
 
-	// Verify we can decode the encoded vector.
-	codec = makeStoreCodec(rootQuantizer)
-	codec.Init(centroid, 1)
-	_, err = codec.DecodeVector(encoded2)
-	require.NoError(t, err)
-	vs2 := codec.GetVectorSet().(*quantize.UnQuantizedVectorSet)
-	require.Equal(t, 1, vs2.GetCount())
+			// Verify we can decode the encoded vector.
+			codec = makeStoreCodec(rootQuantizer)
+			codec.Init(centroid, 1)
+			_, err = codec.DecodeVector(encoded2)
+			require.NoError(t, err)
+			vs2 := codec.GetVectorSet().(*quantize.UnQuantizedVectorSet)
+			require.Equal(t, 1, vs2.GetCount())
+		})
+	}
 }

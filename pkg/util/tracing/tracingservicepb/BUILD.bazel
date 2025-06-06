@@ -30,7 +30,12 @@ go_proto_library(
 
 go_library(
     name = "tracingservicepb",
+    srcs = ["rpc_clients.go"],
     embed = [":tracingservicepb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingservicepb",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/rpc/rpcbase",
+    ],
 )

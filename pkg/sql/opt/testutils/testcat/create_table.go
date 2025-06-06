@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
@@ -973,6 +974,19 @@ func (tt *Table) addIndexWithVersion(
 						MaxCells: 3,
 					}},
 				}
+			}
+		}
+
+		if isLastIndexCol && def.Type == idxtype.VECTOR {
+			idx.vecConfig = vecpb.Config{
+				Dims: col.DatumType().Width(),
+				Seed: 42,
+			}
+			switch colDef.OpClass {
+			case "vector_cosine_ops":
+				idx.vecConfig.DistanceMetric = vecpb.CosineDistance
+			case "vector_ip_ops":
+				idx.vecConfig.DistanceMetric = vecpb.InnerProductDistance
 			}
 		}
 	}

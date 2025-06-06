@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/text/unicode/norm"
 )
 
 // MatchLikeEscape matches 'unescaped' with 'pattern' using custom escape character 'escape' which
@@ -129,7 +130,9 @@ func matchStringFromDatum(datum tree.Datum) (string, error) {
 		if !d.Deterministic {
 			return "", pgerror.New(pgcode.FeatureNotSupported, "nondeterministic collations are not supported for LIKE")
 		}
-		return d.Contents, nil
+		// Collated string comparisons must be normalized via NFD (Normalization Form D).
+		// See https://www.unicode.org/reports/tr10/#Main_Algorithm for more details.
+		return norm.NFD.String(d.Contents), nil
 	default:
 		return string(tree.MustBeDString(d)), nil
 	}

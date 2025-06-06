@@ -2903,7 +2903,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  create or replace function parted_trigfunc() returns trigger language plpgsql as $$
  begin
    new.a = new.a + new.b;
-@@ -2476,350 +2533,629 @@
+@@ -2476,350 +2533,605 @@
  end;
  $$;
  create table parted_1 partition of parted for values in (1, 2);
@@ -3342,13 +3342,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  select tgrelid::regclass, tgname, tgenabled from pg_trigger
    where tgrelid in ('parent'::regclass, 'child1'::regclass)
    order by tgrelid::regclass::text;
-  tgrelid | tgname | tgenabled 
- ---------+--------+-----------
+- tgrelid | tgname | tgenabled 
+----------+--------+-----------
 - child1  | tg     | O
 - parent  | tg     | D
 -(2 rows)
-+(0 rows)
- 
+-
++ERROR:  relation "child1" does not exist
  alter table only parent enable always trigger tg;
 +ERROR:  at or near "always": syntax error
 +DETAIL:  source SQL:
@@ -3358,13 +3358,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  select tgrelid::regclass, tgname, tgenabled from pg_trigger
    where tgrelid in ('parent'::regclass, 'child1'::regclass)
    order by tgrelid::regclass::text;
-  tgrelid | tgname | tgenabled 
- ---------+--------+-----------
+- tgrelid | tgname | tgenabled 
+----------+--------+-----------
 - child1  | tg     | O
 - parent  | tg     | A
 -(2 rows)
-+(0 rows)
- 
+-
++ERROR:  relation "child1" does not exist
  drop table parent, child1;
 +ERROR:  relation "child1" does not exist
  create table parent (a int) partition by list (a);
@@ -3396,10 +3396,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
 - parent  | tg      | O
 - parent  | tg_stmt | O
 -(3 rows)
-+ tgrelid | tgname | tgenabled 
-+---------+--------+-----------
-+(0 rows)
- 
+-
++ERROR:  relation "child1" does not exist
  alter table only parent enable always trigger tg;	-- no recursion because ONLY
 +ERROR:  at or near "always": syntax error
 +DETAIL:  source SQL:
@@ -3421,10 +3419,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
 - parent  | tg      | A
 - parent  | tg_stmt | A
 -(3 rows)
-+ tgrelid | tgname | tgenabled 
-+---------+--------+-----------
-+(0 rows)
- 
+-
++ERROR:  relation "child1" does not exist
  -- The following is a no-op for the parent trigger but not so
  -- for the child trigger, so recursion should be applied.
  alter table parent enable always trigger tg;
@@ -3442,10 +3438,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
 - parent  | tg      | A
 - parent  | tg_stmt | A
 -(3 rows)
-+ tgrelid | tgname | tgenabled 
-+---------+--------+-----------
-+(0 rows)
- 
+-
++ERROR:  relation "child1" does not exist
  -- This variant malfunctioned in some releases.
  alter table parent disable trigger user;
 +ERROR:  at or near "trigger": syntax error
@@ -3462,10 +3456,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
 - parent  | tg      | D
 - parent  | tg_stmt | D
 -(3 rows)
-+ tgrelid | tgname | tgenabled 
-+---------+--------+-----------
-+(0 rows)
- 
+-
++ERROR:  relation "child1" does not exist
  drop table parent, child1;
 +ERROR:  relation "child1" does not exist
  -- Check processing of foreign key triggers
@@ -3496,10 +3488,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
 - parent  | RI_ConstraintTrigger_a_ | "RI_FKey_noaction_del" | O
 - parent  | RI_ConstraintTrigger_a_ | "RI_FKey_noaction_upd" | O
 -(6 rows)
-+ tgrelid | tgname | tgfoid | tgenabled 
-+---------+--------+--------+-----------
-+(0 rows)
- 
+-
++ERROR:  relation "child1" does not exist
  alter table parent disable trigger all;
 +ERROR:  at or near "trigger": syntax error
 +DETAIL:  source SQL:
@@ -3519,10 +3509,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
 - parent  | RI_ConstraintTrigger_a_ | "RI_FKey_noaction_del" | D
 - parent  | RI_ConstraintTrigger_a_ | "RI_FKey_noaction_upd" | D
 -(6 rows)
-+ tgrelid | tgname | tgfoid | tgenabled 
-+---------+--------+--------+-----------
-+(0 rows)
- 
+-
++ERROR:  relation "child1" does not exist
  drop table parent, child1;
 +ERROR:  relation "child1" does not exist
  -- Verify that firing state propagates correctly on creation, too
@@ -3655,7 +3643,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  DROP FUNCTION tgf();
  --
  -- Test the interaction between transition tables and both kinds of
-@@ -2862,120 +3198,174 @@
+@@ -2862,120 +3174,175 @@
  --
  -- set up a partition hierarchy with some different TupleDescriptors
  create table parent (a text, b int) partition by list (a);
@@ -3777,7 +3765,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
 -(12 rows)
 + trigger_name | event_manipulation | event_object_schema | event_object_table | action_order | action_condition | action_orientation | action_timing | action_reference_old_table | action_reference_new_table 
 +--------------+--------------------+---------------------+--------------------+--------------+------------------+--------------------+---------------+----------------------------+----------------------------
-+(0 rows)
++ tg           | INSERT             | public              | parent             |              |                  | ROW                | AFTER         |                            | 
++(1 row)
  
  -- insert directly into children sees respective child-format tuples
  insert into child1 values ('AAA', 42);
@@ -3859,7 +3848,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  -- insert into parent with a before trigger on a child tuple before
  -- insertion, and we capture the newly modified row in parent format
  create or replace function intercept_insert() returns trigger language plpgsql as
-@@ -2985,41 +3375,82 @@
+@@ -2985,41 +3352,82 @@
      return new;
    end;
  $$;
@@ -3947,7 +3936,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  --
  -- Verify behavior of statement triggers on (non-partition)
  -- inheritance hierarchy with transition tables; similar to the
-@@ -3028,123 +3459,216 @@
+@@ -3028,123 +3436,216 @@
  --
  -- set up inheritance hierarchy with different TupleDescriptors
  create table parent (a text, b int);
@@ -4181,7 +4170,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  --
  -- Verify behavior of queries with wCTEs, where multiple transition
  -- tuplestores can be active at the same time because there are
-@@ -3156,29 +3680,32 @@
+@@ -3156,29 +3657,32 @@
  create trigger table1_trig
    after insert on table1 referencing new table as new_table
    for each statement execute procedure dump_insert();
@@ -4227,7 +4216,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  
  drop table table1;
  drop table table2;
-@@ -3190,60 +3717,85 @@
+@@ -3190,60 +3694,85 @@
  create trigger my_table_insert_trig
    after insert on my_table referencing new table as new_table
    for each statement execute procedure dump_insert();
@@ -4325,7 +4314,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  --
  -- Verify that you can't create a trigger with transition tables for
  -- more than one event.
-@@ -3271,15 +3823,27 @@
+@@ -3271,15 +3800,27 @@
  create trigger trig_table_before_trig
    before insert or update or delete on trig_table
    for each statement execute procedure trigger_func('trig_table');
@@ -4353,7 +4342,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  insert into refd_table values
    (1, 'one'),
    (2, 'two'),
-@@ -3291,25 +3855,19 @@
+@@ -3291,25 +3832,19 @@
    (2, 'two b'),
    (3, 'three a'),
    (3, 'three b');
@@ -4381,7 +4370,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  select * from trig_table;
   a |    b    
  ---+---------
-@@ -3326,27 +3884,28 @@
+@@ -3326,27 +3861,28 @@
  create trigger self_ref_before_trig
    before delete on self_ref
    for each statement execute procedure trigger_func('self_ref');
@@ -4419,7 +4408,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  drop table self_ref;
  --
  -- test transition tables with MERGE
-@@ -3355,12 +3914,21 @@
+@@ -3355,12 +3891,21 @@
  create trigger merge_target_table_insert_trig
    after insert on merge_target_table referencing new table as new_table
    for each statement execute procedure dump_insert();
@@ -4441,7 +4430,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  create table merge_source_table (a int, b text);
  insert into merge_source_table
    values (1, 'initial1'), (2, 'initial2'),
-@@ -3370,7 +3938,10 @@
+@@ -3370,7 +3915,10 @@
  on t.a = s.a
  when not matched then
    insert values (a, b);
@@ -4453,7 +4442,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  merge into merge_target_table t
  using merge_source_table s
  on t.a = s.a
-@@ -3380,9 +3951,10 @@
+@@ -3380,9 +3928,10 @@
  	delete
  when not matched then
    insert values (a, b);
@@ -4467,7 +4456,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  merge into merge_target_table t
  using merge_source_table s
  on t.a = s.a
-@@ -3392,9 +3964,10 @@
+@@ -3392,9 +3941,10 @@
  	delete
  when not matched then
    insert values (a, b);
@@ -4481,7 +4470,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  drop table merge_source_table, merge_target_table;
  -- cleanup
  drop function dump_insert();
-@@ -3426,83 +3999,156 @@
+@@ -3426,83 +3976,156 @@
  create or replace trigger my_trig
    before insert on my_table
    for each row execute procedure funcB();  -- OK
@@ -4649,7 +4638,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  -- verify transition table conversion slot's lifetime
  -- https://postgr.es/m/39a71864-b120-5a5c-8cc5-c632b6f16761@amazon.com
  create table convslot_test_parent (col1 text primary key);
-@@ -3537,8 +4183,10 @@
+@@ -3537,8 +4160,10 @@
  create trigger but_trigger after update on convslot_test_child
  referencing new table as new_table
  for each statement execute function convslot_trig2();
@@ -4661,7 +4650,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  create function convslot_trig3()
  returns trigger
  language plpgsql
-@@ -3553,14 +4201,17 @@
+@@ -3553,14 +4178,17 @@
  create trigger but_trigger2 after update on convslot_test_child
  referencing old table as old_table new table as new_table
  for each statement execute function convslot_trig3();
@@ -4682,7 +4671,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/triggers.out --la
  drop table convslot_test_child, convslot_test_parent;
  drop function convslot_trig1();
  drop function convslot_trig2();
-@@ -3569,98 +4220,153 @@
+@@ -3569,98 +4197,153 @@
  -- we don't see any ill effects unless trigger tuple requires mapping
  create table convslot_test_parent (id int primary key, val int)
  partition by range (id);

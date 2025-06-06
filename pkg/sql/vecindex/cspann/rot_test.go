@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
@@ -56,12 +57,12 @@ func TestRandomOrthoTransformer(t *testing.T) {
 	}
 
 	algos := []struct {
-		algo RotAlgorithm
+		algo vecpb.RotAlgorithm
 		name string
 	}{
-		{RotNone, "rotNone"},
-		{RotMatrix, "rotMatrix"},
-		{RotGivens, "rotGivens"},
+		{vecpb.RotNone, "rotNone"},
+		{vecpb.RotMatrix, "rotMatrix"},
+		{vecpb.RotGivens, "rotGivens"},
 	}
 
 	const seed = 42
@@ -90,7 +91,7 @@ func TestRandomOrthoTransformer(t *testing.T) {
 				require.InDelta(t, origDist, randomizedDist, 1e-4, "distance not preserved")
 
 				// rotNone should be a no-op.
-				if a.algo == RotNone {
+				if a.algo == vecpb.RotNone {
 					require.Equal(t, tc.vec, randomized, "rotNone should not change the vector")
 				}
 
@@ -130,7 +131,7 @@ func TestRandomOrthoTransformer_SkewedVectors(t *testing.T) {
 	// dimension in the data vectors. This is a good measure of how well the
 	// random orthogonal transformation spreads the input skew across all
 	// dimensions.
-	calculateCV := func(algo RotAlgorithm) float64 {
+	calculateCV := func(algo vecpb.RotAlgorithm) float64 {
 		var rot RandomOrthoTransformer
 		rot.Init(algo, dims, seed)
 
@@ -161,14 +162,14 @@ func TestRandomOrthoTransformer_SkewedVectors(t *testing.T) {
 
 	// With no rotation, almost all variance is in the first dimension, so CV is
 	// very high.
-	require.InDelta(t, float32(9.99895), calculateCV(RotNone), 0.0001)
+	require.InDelta(t, float32(9.99895), calculateCV(vecpb.RotNone), 0.0001)
 
 	// With a full random orthogonal matrix, the variance is spread much more
 	// evenly.
-	require.InDelta(t, float32(1.36733), calculateCV(RotMatrix), 0.0001)
+	require.InDelta(t, float32(1.36733), calculateCV(vecpb.RotMatrix), 0.0001)
 
 	// With Givens rotations, the variance is spread fairly well, but not as
 	// uniformly as with a full matrix. This is a "good enough" reduction at a
 	// much lower computational cost (NlogN rather than N^2).
-	require.InDelta(t, float32(2.31794), calculateCV(RotGivens), 0.0001)
+	require.InDelta(t, float32(2.31794), calculateCV(vecpb.RotGivens), 0.0001)
 }

@@ -1,5 +1,3 @@
-# LogicTest: !local-schema-locked
-
 # Skip the rest of the test if a retry occurs. They can happen and are fine
 # but there's no way to encapsulate that in logictests.
 skip_on_retry
@@ -8,6 +6,11 @@ skip_on_retry
 # transactions, so we disable autocommit behavior.
 statement ok
 SET autocommit_before_ddl = false
+
+# Also disable schema locked by default for these tests, since only
+# declarative can auto unset it.
+statement ok
+SET create_table_with_schema_locked = 'off';
 
 subtest create_and_add_fk_in_same_txn
 

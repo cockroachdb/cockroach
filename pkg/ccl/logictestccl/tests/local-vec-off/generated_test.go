@@ -264,6 +264,13 @@ func TestCCLLogic_triggers(
 	runCCLLogicTest(t, "triggers")
 }
 
+func TestCCLLogic_txn_retry(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "txn_retry")
+}
+
 func TestCCLLogic_udf_params(
 	t *testing.T,
 ) {

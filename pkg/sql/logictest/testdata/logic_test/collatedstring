@@ -193,6 +193,16 @@ SELECT 'ü' COLLATE de < 'x' COLLATE de
 ----
 true
 
+query B
+SELECT e'\u00E9' COLLATE "en_US" = e'\u0065\u0301' COLLATE "en_US";
+----
+true
+
+query B
+SELECT e'\u00E9' COLLATE "en_US" LIKE e'\u0065\u0301' COLLATE "en_US";
+----
+true
+
 
 statement error syntax error: invalid locale e: language: tag is not well-formed
 CREATE TABLE e1 (
@@ -768,3 +778,17 @@ SELECT 'TEST' COLLATE "en_US" LIKE 'TEST' COLLATE "de_DE"
 
 query error nondeterministic collations are not supported for LIKE
 SELECT 'TEST' COLLATE "en_US-u-ks-level1" LIKE 'TEST' COLLATE "en_US-u-ks-level1"
+
+# Regression test for attempting to use optimized vectorized operator which
+# doesn't handle collated strings (#147559).
+statement ok
+CREATE TABLE t147559 (
+    a INT,
+    b TEXT COLLATE en_u_ks_level1
+);
+
+statement ok
+INSERT INTO t147559 VALUES (1, 'abc');
+
+query error nondeterministic collations are not supported for LIKE
+SELECT * FROM t147559 WHERE b LIKE 'abc%';

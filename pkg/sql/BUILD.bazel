@@ -542,6 +542,7 @@ go_library(
         "//pkg/sql/ttl/ttlbase",
         "//pkg/sql/types",
         "//pkg/sql/vecindex",
+        "//pkg/sql/vecindex/vecpb",
         "//pkg/sql/vtable",
         "//pkg/storage",
         "//pkg/storage/enginepb",

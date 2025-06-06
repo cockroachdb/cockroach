@@ -1,5 +1,3 @@
-# LogicTest: !local-schema-locked
-
 statement ok
 SET DATABASE = ""
 
@@ -225,6 +223,7 @@ CREATE TABLE test.precision (x DECIMAL(0, 2))
 statement error at or near "\)": syntax error: scale \(4\) must be between 0 and precision \(2\)
 CREATE TABLE test.precision (x DECIMAL(2, 4))
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE test.users
 ----
@@ -245,6 +244,28 @@ test.public.users  CREATE TABLE public.users (
                      CONSTRAINT check_nickname_name CHECK (length(nickname) < length(name)),
                      CONSTRAINT check_nickname CHECK (length(nickname) < 10:::INT8)
                    );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE test.users
+----
+test.public.users  CREATE TABLE public.users (
+                     id INT8 NOT NULL,
+                     name VARCHAR NOT NULL,
+                     title VARCHAR NULL,
+                     nickname STRING NULL,
+                     username STRING(10) NULL,
+                     email VARCHAR(100) NULL,
+                     CONSTRAINT users_pkey PRIMARY KEY (id ASC),
+                     INDEX foo (name ASC),
+                     UNIQUE INDEX bar (id ASC, name ASC),
+                     FAMILY "primary" (id, name),
+                     FAMILY fam_1_title (title),
+                     FAMILY fam_2_nickname (nickname),
+                     FAMILY fam_3_username_email (username, email),
+                     CONSTRAINT check_nickname_name CHECK (length(nickname) < length(name)),
+                     CONSTRAINT check_nickname CHECK (length(nickname) < 10:::INT8)
+                   ) WITH (schema_locked = true);
 
 statement ok
 CREATE TABLE test.dupe_generated (
@@ -282,6 +303,7 @@ CREATE TABLE test.named_constraints (
   FAMILY fam_3_username_email (username, email)
 )
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE test.named_constraints
 ----
@@ -304,6 +326,30 @@ test.public.named_constraints  CREATE TABLE public.named_constraints (
                                  CONSTRAINT ck2 CHECK (length(nickname) < length(name)),
                                  CONSTRAINT ck1 CHECK (length(nickname) < 10:::INT8)
                                );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE test.named_constraints
+----
+test.public.named_constraints  CREATE TABLE public.named_constraints (
+                                 id INT8 NOT NULL,
+                                 name VARCHAR NOT NULL,
+                                 title VARCHAR NULL DEFAULT 'VP of Something':::STRING,
+                                 nickname STRING NULL,
+                                 username STRING(10) NULL,
+                                 email VARCHAR(100) NULL,
+                                 CONSTRAINT pk PRIMARY KEY (id ASC),
+                                 UNIQUE INDEX uq (email ASC),
+                                 INDEX foo (name ASC),
+                                 UNIQUE INDEX uq2 (username ASC),
+                                 UNIQUE INDEX bar (id ASC, name ASC),
+                                 FAMILY "primary" (id, name),
+                                 FAMILY fam_1_title (title),
+                                 FAMILY fam_2_nickname (nickname),
+                                 FAMILY fam_3_username_email (username, email),
+                                 CONSTRAINT ck2 CHECK (length(nickname) < length(name)),
+                                 CONSTRAINT ck1 CHECK (length(nickname) < 10:::INT8)
+                               ) WITH (schema_locked = true);
 
 query TTTTB colnames
 SELECT * FROM [SHOW CONSTRAINTS FROM test.named_constraints] ORDER BY constraint_name
@@ -496,6 +542,7 @@ CREATE TABLE test.null_default (
   ts timestamp NULL DEFAULT NULL
 )
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE test.null_default
 ----
@@ -503,7 +550,17 @@ test.public.null_default  CREATE TABLE public.null_default (
                             ts TIMESTAMP NULL,
                             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                             CONSTRAINT null_default_pkey PRIMARY KEY (rowid ASC)
-                          );
+                         );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE test.null_default
+----
+test.public.null_default  CREATE TABLE public.null_default (
+                            ts TIMESTAMP NULL,
+                            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                            CONSTRAINT null_default_pkey PRIMARY KEY (rowid ASC)
+                          ) WITH (schema_locked = true);
 
 # Issue #13873: don't permit invalid default columns
 statement error could not parse "blah" as type decimal

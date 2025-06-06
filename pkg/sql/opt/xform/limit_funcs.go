@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -469,6 +470,7 @@ func (c *CustomFuncs) TryGenerateVectorSearch(
 	originalFilters memo.FiltersExpr,
 	passthrough opt.ColSet,
 	vectorCol opt.ColumnID,
+	distOp opt.Operator,
 	queryVector opt.ScalarExpr,
 	projections memo.ProjectionsExpr,
 	limit tree.Datum,
@@ -490,6 +492,21 @@ func (c *CustomFuncs) TryGenerateVectorSearch(
 			// This index is for a different vector column.
 			return
 		}
+
+		var neededOp opt.Operator
+		switch index.VecConfig().DistanceMetric {
+		case vecpb.L2SquaredDistance:
+			neededOp = opt.VectorDistanceOp
+		case vecpb.CosineDistance:
+			neededOp = opt.VectorCosDistanceOp
+		case vecpb.InnerProductDistance:
+			neededOp = opt.VectorNegInnerProductOp
+		}
+		if distOp != neededOp {
+			// Index was built for a different distance metric.
+			return
+		}
+
 		var ok bool
 		var prefixConstraint *constraint.Constraint
 		prefixColumns, notNullCols := idxconstraint.IndexPrefixCols(sp.Table, index)

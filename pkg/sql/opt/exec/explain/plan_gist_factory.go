@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/base64"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -786,6 +787,10 @@ func (u *unknownIndex) ImplicitPartitioningColumnCount() int {
 
 func (u *unknownIndex) GeoConfig() geopb.Config {
 	return geopb.Config{}
+}
+
+func (u *unknownIndex) VecConfig() *vecpb.Config {
+	return nil
 }
 
 func (u *unknownIndex) Version() descpb.IndexDescriptorVersion {

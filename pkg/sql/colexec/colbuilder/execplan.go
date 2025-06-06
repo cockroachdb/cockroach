@@ -2217,11 +2217,13 @@ func planSelectionOperators(
 			}
 			switch cmpOp.Symbol {
 			case treecmp.Like, treecmp.NotLike, treecmp.ILike, treecmp.NotILike:
-				negate, caseInsensitive := examineLikeOp(cmpOp)
-				op, err = colexecsel.GetLikeOperator(
-					evalCtx, leftOp, leftIdx, string(tree.MustBeDString(constArg)),
-					negate, caseInsensitive,
-				)
+				if s, ok := tree.AsDString(constArg); ok {
+					// Fallback to an unoptimized operator for collated strings.
+					negate, caseInsensitive := examineLikeOp(cmpOp)
+					op, err = colexecsel.GetLikeOperator(
+						evalCtx, leftOp, leftIdx, string(s), negate, caseInsensitive,
+					)
+				}
 			case treecmp.In, treecmp.NotIn:
 				negate := cmpOp.Symbol == treecmp.NotIn
 				datumTuple, ok := tree.AsDTuple(constArg)
@@ -2866,11 +2868,15 @@ func planProjectionExpr(
 				// Use optimized operators for special cases.
 				switch cmpProjOp.Symbol {
 				case treecmp.Like, treecmp.NotLike, treecmp.ILike, treecmp.NotILike:
-					negate, caseInsensitive := examineLikeOp(cmpProjOp)
-					op, err = colexecprojconst.GetLikeProjectionOperator(
-						allocator, evalCtx, input, leftIdx, resultIdx,
-						string(tree.MustBeDString(rConstArg)), negate, caseInsensitive,
-					)
+					if s, ok := tree.AsDString(rConstArg); ok {
+						// Fallback to an unoptimized operator for collated
+						// strings.
+						negate, caseInsensitive := examineLikeOp(cmpProjOp)
+						op, err = colexecprojconst.GetLikeProjectionOperator(
+							allocator, evalCtx, input, leftIdx, resultIdx,
+							string(s), negate, caseInsensitive,
+						)
+					}
 				case treecmp.In, treecmp.NotIn:
 					negate := cmpProjOp.Symbol == treecmp.NotIn
 					datumTuple, ok := tree.AsDTuple(rConstArg)

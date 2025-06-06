@@ -403,6 +403,8 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// We'll run each test file separately to make reviewing the diff easier.
 	for testIdx, testFile := range tests {
 		// psql was installed in /usr/bin/psql, so use the prefix for bindir.
+		// TODO(yuzefovich): figure out what's wrong with a few tests like
+		// collate.linux.utf8 and unicode where we use "*_1.out" as expected.
 		cmd = fmt.Sprintf("cd %s && "+
 			"./pg_regress --bindir=/usr/bin --host=%s --port=%s --user=test_admin "+
 			"--dbname=root --use-existing %s",

@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -1928,6 +1929,11 @@ func (oi *optIndex) GeoConfig() geopb.Config {
 	return oi.idx.IndexDesc().GeoConfig
 }
 
+// VecConfig is part of the cat.Index interface.
+func (oi *optIndex) VecConfig() *vecpb.Config {
+	return &oi.idx.IndexDesc().VecConfig
+}
+
 // Version is part of the cat.Index interface.
 func (oi *optIndex) Version() descpb.IndexDescriptorVersion {
 	return oi.idx.GetVersion()
@@ -2910,6 +2916,11 @@ func (oi *optVirtualIndex) ImplicitPartitioningColumnCount() int {
 // GeoConfig is part of the cat.Index interface.
 func (oi *optVirtualIndex) GeoConfig() geopb.Config {
 	return geopb.Config{}
+}
+
+// VecConfig is part of the cat.Index interface.
+func (oi *optVirtualIndex) VecConfig() *vecpb.Config {
+	return nil
 }
 
 // Version is part of the cat.Index interface.

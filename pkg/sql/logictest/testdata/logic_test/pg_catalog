@@ -2761,9 +2761,9 @@ FROM pg_catalog.pg_roles
 ORDER BY rolname
 ----
 oid         rolname   rolconnlimit  rolpassword  rolvaliduntil  rolbypassrls  rolconfig
-2310524507  admin     -1            ********     NULL           false         NULL
-3233629770  node      -1            ********     NULL           false         NULL
-1546506610  root      -1            ********     NULL           false         NULL
+2310524507  admin     -1            ********     NULL           true          NULL
+3233629770  node      -1            ********     NULL           true          NULL
+1546506610  root      -1            ********     NULL           true          NULL
 2264919399  testuser  -1            ********     NULL           false         NULL
 
 # Regression test for https://github.com/cockroachdb/cockroach/issues/136230.
@@ -4800,7 +4800,7 @@ ORDER BY rolname
 ----
 rolname    rolcreatedb  rolconfig  rolinherit  rolcanlogin  rolvaliduntil
 testrole1  false        NULL       true        false        NULL
-testuser1  false        NULL       true        true         NULL
+testuser1  true         NULL       true        true         NULL
 testuser2  false        NULL       true        true         NULL
 
 query TBBBBT colnames
@@ -4812,8 +4812,8 @@ ORDER BY rolname
 rolname    rolcreatedb  rolcreaterole  rolinherit  rolcanlogin  rolvaliduntil
 root       true         true           true        true         NULL
 testrole1  false        false          true        false        NULL
-testuser1  false        false          true        true         NULL
-testuser2  false        false          true        true         NULL
+testuser1  true         false          true        true         NULL
+testuser2  false        true           true        true         NULL
 
 # Testing users that have admin role
 

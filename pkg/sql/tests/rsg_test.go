@@ -426,6 +426,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 					"crdb_internal.request_statement_bundle",
 					"crdb_internal.reset_activity_tables",
 					"crdb_internal.revalidate_unique_constraints_in_all_tables",
+					"crdb_internal.scan_storage_internal_keys",
 					"crdb_internal.validate_ttl_scheduled_jobs",
 					"crdb_internal.fingerprint":
 					// Skipped due to long execution time.

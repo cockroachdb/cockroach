@@ -259,6 +259,15 @@ type portalPauseInfo struct {
 		cleanup cleanupFuncStack
 	}
 
+	dispatchReadCommittedStmtToExecutionEngine struct {
+		// autoRetryStmtReason is the planner.autoRetryStmtReason to restore when
+		// resuming a portal.
+		autoRetryStmtReason error
+		// autoRetryStmtCounter is the planner.autoRetryStmtCounter to restore when
+		// resuming a portal.
+		autoRetryStmtCounter int
+	}
+
 	// TODO(sql-session): replace certain fields here with planner.
 	// https://github.com/cockroachdb/cockroach/issues/99625
 	dispatchToExecutionEngine struct {

@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
@@ -23,7 +23,7 @@ func TestRaBitQuantizerSimple(t *testing.T) {
 	defer require.True(t, workspace.IsClear())
 
 	t.Run("add and remove vectors", func(t *testing.T) {
-		quantizer := NewRaBitQuantizer(2, 42, vecdist.L2Squared)
+		quantizer := NewRaBitQuantizer(2, 42, vecpb.L2SquaredDistance)
 		require.Equal(t, 2, quantizer.GetDims())
 
 		// Add 3 vectors and verify centroid.
@@ -70,14 +70,14 @@ func TestRaBitQuantizerSimple(t *testing.T) {
 	})
 
 	t.Run("empty quantized set", func(t *testing.T) {
-		quantizer := NewRaBitQuantizer(2, 42, vecdist.L2Squared)
+		quantizer := NewRaBitQuantizer(2, 42, vecpb.L2SquaredDistance)
 		vectors := vector.MakeSet(2)
 		quantizedSet := quantizer.Quantize(&workspace, vectors).(*RaBitQuantizedVectorSet)
 		require.Equal(t, []float32{0, 0}, quantizedSet.Centroid)
 	})
 
 	t.Run("empty quantized set with capacity", func(t *testing.T) {
-		quantizer := NewRaBitQuantizer(65, 42, vecdist.L2Squared)
+		quantizer := NewRaBitQuantizer(65, 42, vecpb.L2SquaredDistance)
 		centroid := make([]float32, 65)
 		for i := range centroid {
 			centroid[i] = float32(i)
@@ -101,7 +101,7 @@ func TestRaBitQuantizerEdge(t *testing.T) {
 
 	// Search for query vector with two equal dimensions, which makes Δ = 0.
 	t.Run("two dimensions equal", func(t *testing.T) {
-		quantizer := NewRaBitQuantizer(2, 42, vecdist.L2Squared)
+		quantizer := NewRaBitQuantizer(2, 42, vecpb.L2SquaredDistance)
 		vectors := vector.MakeSetFromRawData([]float32{4, 4, -3, -3}, 2)
 		quantizedSet := quantizer.Quantize(&workspace, vectors).(*RaBitQuantizedVectorSet)
 		require.Equal(t, 2, quantizedSet.GetCount())
@@ -118,7 +118,7 @@ func TestRaBitQuantizerEdge(t *testing.T) {
 
 	t.Run("many dimensions, not multiple of 64", func(t *testing.T) {
 		// Number dimensions is > 64 and not a multiple of 64.
-		quantizer := NewRaBitQuantizer(141, 42, vecdist.L2Squared)
+		quantizer := NewRaBitQuantizer(141, 42, vecpb.L2SquaredDistance)
 
 		vectors := vector.MakeSet(141)
 		vectors.AddUndefined(2)
@@ -147,7 +147,7 @@ func TestRaBitQuantizerEdge(t *testing.T) {
 	})
 
 	t.Run("add centroid to set", func(t *testing.T) {
-		quantizer := NewRaBitQuantizer(2, 42, vecdist.L2Squared)
+		quantizer := NewRaBitQuantizer(2, 42, vecpb.L2SquaredDistance)
 		vectors := vector.MakeSetFromRawData([]float32{1, 5, 5, 13}, 2)
 		quantizedSet := quantizer.Quantize(&workspace, vectors).(*RaBitQuantizedVectorSet)
 		require.Equal(t, []float32{3, 9}, quantizedSet.Centroid)
@@ -164,7 +164,7 @@ func TestRaBitQuantizerEdge(t *testing.T) {
 	})
 
 	t.Run("query vector is centroid", func(t *testing.T) {
-		quantizer := NewRaBitQuantizer(2, 42, vecdist.L2Squared)
+		quantizer := NewRaBitQuantizer(2, 42, vecpb.L2SquaredDistance)
 		vectors := vector.MakeSetFromRawData([]float32{1, 5, -3, -9}, 2)
 		quantizedSet := quantizer.Quantize(&workspace, vectors).(*RaBitQuantizedVectorSet)
 		require.Equal(t, []float32{-1, -2}, quantizedSet.Centroid)
@@ -180,7 +180,7 @@ func TestRaBitQuantizerEdge(t *testing.T) {
 // Test InnerProduct distance metric.
 func TestRaBitQuantizerInnerProduct(t *testing.T) {
 	var workspace workspace.T
-	quantizer := NewRaBitQuantizer(2, 42, vecdist.InnerProduct)
+	quantizer := NewRaBitQuantizer(2, 42, vecpb.InnerProductDistance)
 	require.Equal(t, 2, quantizer.GetDims())
 
 	// Add 3 vectors and verify centroid.
@@ -213,7 +213,7 @@ func TestRaBitQuantizerInnerProduct(t *testing.T) {
 // Test Cosine distance metric.
 func TestRaBitQuantizerCosine(t *testing.T) {
 	var workspace workspace.T
-	quantizer := NewRaBitQuantizer(2, 42, vecdist.Cosine)
+	quantizer := NewRaBitQuantizer(2, 42, vecpb.CosineDistance)
 	require.Equal(t, 2, quantizer.GetDims())
 
 	// Add 3 vectors and verify centroid.
@@ -251,7 +251,7 @@ func TestRaBitQuantizeEmbeddings(t *testing.T) {
 
 	dataset := testutils.LoadDataset(t, testutils.ImagesDataset)
 	dataset = dataset.Slice(0, 100)
-	quantizer := NewRaBitQuantizer(dataset.Dims, 42, vecdist.L2Squared)
+	quantizer := NewRaBitQuantizer(dataset.Dims, 42, vecpb.L2SquaredDistance)
 	require.Equal(t, 512, quantizer.GetDims())
 
 	quantizedSet := quantizer.Quantize(&workspace, dataset).(*RaBitQuantizedVectorSet)
@@ -285,7 +285,7 @@ func BenchmarkQuantize(b *testing.B) {
 	var workspace workspace.T
 	dataset := testutils.LoadDataset(b, testutils.ImagesDataset)
 	dataset = dataset.Slice(0, 100)
-	quantizer := NewRaBitQuantizer(dataset.Dims, 42, vecdist.L2Squared)
+	quantizer := NewRaBitQuantizer(dataset.Dims, 42, vecpb.L2SquaredDistance)
 
 	b.ResetTimer()
 
@@ -299,7 +299,7 @@ func BenchmarkEstimateL2SquaredDistances(b *testing.B) {
 	var workspace workspace.T
 	dataset := testutils.LoadDataset(b, testutils.ImagesDataset)
 	dataset = dataset.Slice(0, 100)
-	quantizer := NewRaBitQuantizer(dataset.Dims, 42, vecdist.L2Squared)
+	quantizer := NewRaBitQuantizer(dataset.Dims, 42, vecpb.L2SquaredDistance)
 	quantizedSet := quantizer.Quantize(&workspace, dataset)
 
 	queryVector := dataset.At(0)

@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -121,11 +123,15 @@ type backupFixtureSpecs struct {
 
 	// If non-empty, the test will be skipped with the supplied reason.
 	skip string
+
+	// If set, the fixture will not be fingerprinted after the backup. Used for
+	// larger fixtures where fingerprinting is too expensive.
+	skipFingerprint bool
 }
 
 const scheduleLabel = "tpcc_backup"
 
-func CreateScheduleStatement(uri url.URL) string {
+func CreateScheduleStatement(fixture BackupFixture, uri url.URL) string {
 	// This backup schedule will first run a full backup immediately and then the
 	// incremental backups every minute until the user cancels the backup
 	// schedules. To ensure that only one full backup chain gets created,
@@ -133,12 +139,12 @@ func CreateScheduleStatement(uri url.URL) string {
 	// ;)
 	statement := fmt.Sprintf(
 		`CREATE SCHEDULE IF NOT EXISTS "%s"
-FOR BACKUP DATABASE tpcc
+FOR BACKUP DATABASE %s
 INTO '%s'
 RECURRING '* * * * *'
 FULL BACKUP '@weekly'
 WITH SCHEDULE OPTIONS first_run = 'now';
-`, scheduleLabel, uri.String())
+`, scheduleLabel, fixture.DatabaseName(), uri.String())
 	return statement
 }
 
@@ -242,7 +248,7 @@ func (bd *backupDriver) scheduleBackups(ctx context.Context) {
 		))
 		require.NoError(bd.t, err)
 	}
-	createScheduleStatement := CreateScheduleStatement(bd.registry.URI(bd.fixture.DataPath))
+	createScheduleStatement := CreateScheduleStatement(bd.sp.fixture, bd.registry.URI(bd.fixture.DataPath))
 	_, err := conn.Exec(createScheduleStatement)
 	require.NoError(bd.t, err)
 }
@@ -400,6 +406,82 @@ func (bd *backupDriver) queryJobStates(
 	return successes, running, failures, nil
 }
 
+// fingerprintFixture computes fingerprints for the fixture as of the time of
+// its last incremental backup. It maps the fully qualified name of each table
+// to its fingerprint.
+func (bd *backupDriver) fingerprintFixture(ctx context.Context) map[string]string {
+	conn := bd.c.Conn(ctx, bd.t.L(), 1)
+	defer conn.Close()
+	sql := sqlutils.MakeSQLRunner(conn)
+	aost := bd.getLatestAOST(ctx, sql)
+	tables := getDatabaseTables(ctx, bd.t, sql, bd.sp.fixture.DatabaseName())
+
+	m := bd.c.NewMonitor(ctx)
+
+	bd.t.L().Printf("fingerprinting %d tables in %s", len(tables), bd.sp.fixture.DatabaseName())
+	fingerprints := make(map[string]string)
+	var mu syncutil.Mutex
+	start := timeutil.Now()
+	for _, table := range tables {
+		m.Go(func(ctx context.Context) error {
+			fpContents := newFingerprintContents(conn, table)
+			if err := fpContents.Load(ctx, bd.t.L(), aost, nil /* tableContents */); err != nil {
+				return err
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			fingerprints[table] = fpContents.fingerprints
+			return nil
+		})
+	}
+	m.Wait()
+	bd.t.L().Printf(
+		"fingerprinted %d tables in %s in %s",
+		len(tables), bd.sp.fixture.DatabaseName(), timeutil.Since(start),
+	)
+
+	return fingerprints
+}
+
+// getLatestAOST returns the end time as seen in SHOW BACKUP of the latest
+// backup in the fixture.
+func (bd *backupDriver) getLatestAOST(ctx context.Context, sql *sqlutils.SQLRunner) string {
+	uri := bd.registry.URI(bd.fixture.DataPath)
+	query := fmt.Sprintf(
+		`SELECT end_time FROM
+		[SHOW BACKUP FROM LATEST IN '%s']
+		ORDER BY end_time DESC
+		LIMIT 1`,
+		uri.String(),
+	)
+	var endTime string
+	sql.QueryRow(bd.t, query).Scan(&endTime)
+	return endTime
+}
+
+// getDatabaseTables returns the fully qualified name of every table in the
+// fixture.
+// Note: This assumes there aren't any funky characters in the identifiers, so
+// nothing is SQL-escaped.
+func getDatabaseTables(
+	ctx context.Context, t test.Test, sql *sqlutils.SQLRunner, db string,
+) []string {
+	tablesQuery := fmt.Sprintf(`SELECT schema_name, table_name FROM [SHOW TABLES FROM %s]`, db)
+	rows := sql.Query(t, tablesQuery)
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var schemaName, tableName string
+		if err := rows.Scan(&schemaName, &tableName); err != nil {
+			t.L().Printf("error scanning table name: %v", err)
+			continue
+		}
+		tables = append(tables, fmt.Sprintf(`%s.%s.%s`, db, schemaName, tableName))
+	}
+	return tables
+}
+
 func fixtureDirectory() string {
 	if clusterversion.DevelopmentBranch {
 		return "roachtest/master"
@@ -458,7 +540,8 @@ func registerBackupFixtures(r registry.Registry) {
 			}),
 			timeout: 2 * time.Hour,
 			suites:  registry.Suites(registry.Nightly),
-			clouds:  []spec.Cloud{spec.AWS, spec.GCE}},
+			clouds:  []spec.Cloud{spec.AWS, spec.GCE},
+		},
 		{
 			fixture: MediumFixture,
 			hardware: makeHardwareSpecs(hardwareSpecs{
@@ -469,6 +552,8 @@ func registerBackupFixtures(r registry.Registry) {
 			timeout: 12 * time.Hour,
 			suites:  registry.Suites(registry.Weekly),
 			clouds:  []spec.Cloud{spec.AWS, spec.GCE},
+			// The fixture takes an estimated 3.5 hours to fingerprint, so we skip it.
+			skipFingerprint: true,
 		},
 		{
 			fixture: LargeFixture,
@@ -483,6 +568,9 @@ func registerBackupFixtures(r registry.Registry) {
 			// The large fixture is only generated on GCE to reduce the cost of
 			// storing the fixtures.
 			clouds: []spec.Cloud{spec.GCE},
+			// Well medium fixture takes 3.5 hours to fingerprint, so we dare not
+			// consider fingerprinting the large fixture.
+			skipFingerprint: true,
 		},
 	}
 	for _, bf := range specs {
@@ -523,6 +611,11 @@ func registerBackupFixtures(r registry.Registry) {
 				require.NoError(t, bd.monitorBackups(ctx))
 
 				stopWorkload()
+
+				if !bf.skipFingerprint {
+					fingerprint := bd.fingerprintFixture(ctx)
+					require.NoError(t, handle.SetFingerprint(ctx, fingerprint))
+				}
 
 				require.NoError(t, handle.SetReadyAt(ctx))
 			},

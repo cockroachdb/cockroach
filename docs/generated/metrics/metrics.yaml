@@ -8823,6 +8823,22 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.statements.auto_retry.count
+      exported_name: sql_statements_auto_retry_count
+      description: Number of SQL statement automatic retries
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.statements.auto_retry.count.internal
+      exported_name: sql_statements_auto_retry_count_internal
+      description: Number of SQL statement automatic retries (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.stats.activity.update.latency
       exported_name: sql_stats_activity_update_latency
       description: The latency of updates made by the SQL activity updater job. Includes failed update attempts
@@ -8986,6 +9002,22 @@ layers:
     - name: sql.transaction_timeout.count.internal
       exported_name: sql_transaction_timeout_count_internal
       description: Count of statements that failed because they exceeded the transaction timeout (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.txn.auto_retry.count
+      exported_name: sql_txn_auto_retry_count
+      description: Number of SQL transaction automatic retries
+      y_axis_label: SQL Transactions
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.txn.auto_retry.count.internal
+      exported_name: sql_txn_auto_retry_count_internal
+      description: Number of SQL transaction automatic retries (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
       unit: COUNT

@@ -37,6 +37,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",
+        "//pkg/sql/vecindex/vecpb",
         "//pkg/util/encoding",
         "//pkg/util/intsets",
         "//pkg/util/treeprinter",

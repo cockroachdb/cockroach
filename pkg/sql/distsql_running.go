@@ -18,7 +18,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -120,7 +119,7 @@ func (req runnerRequest) run() error {
 		physicalplan.ReleaseFlowSpec(&req.flowReq.Flow)
 	}()
 
-	conn, err := req.sqlInstanceDialer.Dial(req.ctx, roachpb.NodeID(req.sqlInstanceID), rpcbase.DefaultClass)
+	client, err := execinfrapb.DialDistSQLClient(req.sqlInstanceDialer, req.ctx, roachpb.NodeID(req.sqlInstanceID), rpcbase.DefaultClass)
 	if err != nil {
 		// Mark this error as special runnerDialErr so that we could retry this
 		// distributed query as local.
@@ -128,7 +127,6 @@ func (req runnerRequest) run() error {
 		res.err = err
 		return err
 	}
-	client := execinfrapb.NewDistSQLClient(conn)
 	// TODO(radu): do we want a timeout here?
 	resp, err := client.SetupFlow(req.ctx, req.flowReq)
 	if err != nil {
@@ -259,14 +257,13 @@ func (dsp *DistSQLPlanner) initCancelingWorkers(initCtx context.Context) {
 						continue
 					}
 					log.VEventf(parentCtx, 2, "worker %d is canceling at most %d flows on node %d", workerID, len(req.FlowIDs), sqlInstanceID)
-					conn, err := dsp.sqlInstanceDialer.Dial(parentCtx, roachpb.NodeID(sqlInstanceID), rpcbase.DefaultClass)
+					client, err := execinfrapb.DialDistSQLClient(dsp.sqlInstanceDialer, parentCtx, roachpb.NodeID(sqlInstanceID), rpcbase.DefaultClass)
 					if err != nil {
 						// We failed to dial the node, so we give up given that
 						// our cancellation is best effort. It is possible that
 						// the node is dead anyway.
 						continue
 					}
-					client := execinfrapb.NewDistSQLClient(conn)
 					_ = timeutil.RunWithTimeout(
 						parentCtx,
 						"cancel dead flows",
@@ -444,18 +441,9 @@ func (dsp *DistSQLPlanner) setupFlows(
 	if len(statementSQL) > setupFlowRequestStmtMaxLength {
 		statementSQL = statementSQL[:setupFlowRequestStmtMaxLength]
 	}
-	var v execversion.V
-	switch {
-	case dsp.st.Version.IsActive(ctx, clusterversion.V25_2):
-		v = execversion.V25_2
-	case dsp.st.Version.IsActive(ctx, clusterversion.V25_1):
-		v = execversion.V25_1
-	default:
-		v = execversion.V24_3
-	}
 	setupReq := execinfrapb.SetupFlowRequest{
 		LeafTxnInputState: leafInputState,
-		Version:           v,
+		Version:           execversion.V25_2,
 		TraceKV:           recv.tracing.KVTracingEnabled(),
 		CollectStats:      planCtx.collectExecStats,
 		StatementSQL:      statementSQL,

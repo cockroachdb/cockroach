@@ -2869,6 +2869,13 @@ func TestRepeatableReadLogicCCL_triggers(
 	runCCLLogicTest(t, "triggers")
 }
 
+func TestRepeatableReadLogicCCL_txn_retry(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "txn_retry")
+}
+
 func TestRepeatableReadLogicCCL_udf_params(
 	t *testing.T,
 ) {
