@@ -2099,6 +2099,8 @@ message AddSSTableRequest {
   // TODO(dt,msbutler,bilal): This is unsupported.
   util.hlc.Timestamp ignore_keys_above_timestamp = 12 [(gogoproto.nullable) = false];
 
+  bool compute_stats_diff = 13 [(gogoproto.customname) = "ComputeStatsDiff"];
+
   reserved 10, 11;
 }
 

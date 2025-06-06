@@ -172,6 +172,10 @@ func EvalAddSSTable(
 		}
 	}
 
+	if err := checkSSTRangeBounds(ctx, sst, start, end); err != nil {
+		return result.Result{}, err
+	}
+
 	// If requested and necessary, rewrite the SST's MVCC timestamps to the
 	// request timestamp. This ensures the writes comply with the timestamp cache
 	// and closed timestamp, i.e. by not writing to timestamps that have already
@@ -194,10 +198,22 @@ func EvalAddSSTable(
 		}
 	}
 
-	var statsDelta enginepb.MVCCStats
 	maxLockConflicts := storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 	targetLockConflictBytes := storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 	checkConflicts := args.DisallowConflicts || !args.DisallowShadowingBelow.IsEmpty()
+
+	leftPeekBound, rightPeekBound := roachpb.Key{}, roachpb.Key{}
+
+	// Get a few vars required for CheckSSTConflicts or ComputeSSTStatsDiff.
+	//
+	// TODO (msbutler): enable prefix seeks for ComputeSSTStatsDiff as well.
+	if checkConflicts || args.ComputeStatsDiff {
+		desc := cArgs.EvalCtx.Desc()
+		leftPeekBound, rightPeekBound = rangeTombstonePeekBounds(
+			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
+	}
+
+	var checkConflictsStatsDelta enginepb.MVCCStats
 	if checkConflicts {
 		// If requested, check for MVCC conflicts with existing keys. This enforces
 		// all MVCC invariants by returning WriteTooOldError for any existing
@@ -207,10 +223,10 @@ func EvalAddSSTable(
 		// Additionally, if DisallowShadowingBelow is set, it will not write
 		// above existing/visible values (but will write above tombstones).
 		//
-		// If the overlap between the ingested SST and the engine is large (i.e.
-		// the SST is wide in keyspace), or if the ingested SST is very small,
-		// use prefix seeks in CheckSSTConflicts. This ends up being more performant
-		// as it avoids expensive seeks with index/data block loading in the common
+		// If the overlap between the ingested SST and the engine is large (i.e. the
+		// SST is wide in keyspace), or if the ingested SST is very small, use
+		// prefix seeks in CheckSSTConflicts. This ends up being more performant as
+		// it avoids expensive seeks with index/data block loading in the common
 		// case of no conflicts.
 		usePrefixSeek := false
 		bytes, err := cArgs.EvalCtx.GetApproximateDiskBytes(start.Key, end.Key)
@@ -224,18 +240,13 @@ func EvalAddSSTable(
 			// bounded with a small number on the SST side.
 			usePrefixSeek = usePrefixSeek || args.MVCCStats.KeyCount < 100
 		}
-		desc := cArgs.EvalCtx.Desc()
-		leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
-			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
-
 		log.VEventf(ctx, 2, "checking conflicts for SSTable [%s,%s)", start.Key, end.Key)
-		statsDelta, err = storage.CheckSSTConflicts(ctx, sst, readWriter, start, end, leftPeekBound, rightPeekBound,
+		checkConflictsStatsDelta, err = storage.CheckSSTConflicts(ctx, sst, readWriter, start, end, leftPeekBound, rightPeekBound,
 			args.DisallowShadowingBelow, sstTimestamp, maxLockConflicts, targetLockConflictBytes, usePrefixSeek)
-		statsDelta.Add(sstReqStatsDelta)
+		checkConflictsStatsDelta.Add(sstReqStatsDelta)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "checking for key collisions")
 		}
-
 	} else {
 		// If not checking for MVCC conflicts, at least check for locks. The
 		// caller is expected to make sure there are no writers across the span,
@@ -250,112 +261,80 @@ func EvalAddSSTable(
 		}
 	}
 
-	// Verify that the keys in the sstable are within the range specified by the
-	// request header, and if the request did not include pre-computed stats,
-	// compute the expected MVCC stats delta of ingesting the SST.
-	sstIter, err := storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
-		KeyTypes:   storage.IterKeyTypePointsAndRanges,
-		LowerBound: keys.MinKey,
-		UpperBound: keys.MaxKey,
-	})
-	if err != nil {
-		return result.Result{}, err
-	}
-	defer sstIter.Close()
+	// stats will represent the contribution of MVCC stats from the SST to the
+	// range. We assume these stats are not estimates if we:
+	//
+	// 1. Call ComputeSSTStatsDiff below, which computes the exacts stats diff of
+	// the sst, even in the presence of conflicting keys in the local key space.
+	// This computation is likely slower than the second option here, as the
+	// iterators here deal with potentially conflicting key space. Note that this
+	// computation will throw an error if there is a range key in the incoming
+	// sst.
+	//
+	// 2. Call for CheckForSSTConflicts above, which asserts the sst does not
+	// overlap with any underlying keys. Note that the checkConflictsStatsDelta is
+	// a delta between the SST-only statistics and their effect when applied,
+	// which when added to the SST statistics, will adjust them for existing keys
+	// and values. Thus, we still need to compute the sst-only statistics on this
+	// branch. Also note that CheckForSSTConflicts can still return estimates in
+	// certain corner cases.
+	//
+	// While computing stats in this request requires a potentially expensive scan
+	// of the local range, it ensures a healthy allocator that makes good
+	// decisions on when to split/merge or gc a range (etc). Stats estimates may
+	// not be harmful if we assume that most SSTs don't shadow too many keys, so
+	// the error of simply adding the SST stats directly to the range stats is
+	// minimal. In the worst-case, when we retry a whole SST, then it could be
+	// overcounting the entire file, but we can hope that that is rare.
+	//
+	// TODO (msbutler): flesh out definition of "conflicting" keys here.
 
-	// Check that the first key is in the expected range.
-	sstIter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
-	if ok, err := sstIter.Valid(); err != nil {
-		return result.Result{}, err
-	} else if ok {
-		if unsafeKey := sstIter.UnsafeKey(); unsafeKey.Less(start) {
-			return result.Result{}, errors.Errorf("first key %s not in request range [%s,%s)",
-				unsafeKey.Key, start.Key, end.Key)
-		}
-	}
-
-	// Get the MVCCStats for the SST being ingested.
 	var stats enginepb.MVCCStats
-	if args.MVCCStats != nil {
-		stats = *args.MVCCStats
-	} else {
-		log.VEventf(ctx, 2, "computing MVCCStats for SSTable [%s,%s)", start.Key, end.Key)
-		stats, err = storage.ComputeStatsForIter(sstIter, h.Timestamp.WallTime)
-		if err != nil {
-			return result.Result{}, errors.Wrap(err, "computing SSTable MVCC stats")
-		}
-	}
-
-	sstIter.SeekGE(end)
-	if ok, err := sstIter.Valid(); err != nil {
-		return result.Result{}, err
-	} else if ok {
-		return result.Result{}, errors.Errorf("last key %s not in request range [%s,%s)",
-			sstIter.UnsafeKey(), start.Key, end.Key)
-	}
-
-	// The above MVCCStats represents what is in this new SST.
-	//
-	// *If* the keys in the SST do not conflict with keys currently in this range,
-	// then adding the stats for this SST to the range stats should yield the
-	// correct overall stats.
-	//
-	// *However*, if the keys in this range *do* overlap with keys already in this
-	// range, then adding the SST semantically *replaces*, rather than adds, those
-	// keys, and the net effect on the stats is not so simple.
-	//
-	// To perfectly compute the correct net stats, you could a) determine the
-	// stats for the span of the existing range that this SST covers and subtract
-	// it from the range's stats, then b) use a merging iterator that reads from
-	// the SST and then underlying range and compute the stats of that merged
-	// span, and then add those stats back in. That would result in correct stats
-	// that reflect the merging semantics when the SST "shadows" an existing key.
-	//
-	// If the underlying range is mostly empty, this isn't terribly expensive --
-	// computing the existing stats to subtract is cheap, as there is little or no
-	// existing data to traverse and b) is also pretty cheap -- the merging
-	// iterator can quickly iterate the in-memory SST.
-	//
-	// However, if the underlying range is _not_ empty, then this is not cheap:
-	// recomputing its stats involves traversing lots of data, and iterating the
-	// merged iterator has to constantly go back and forth to the iterator.
-	//
-	// If we assume that most SSTs don't shadow too many keys, then the error of
-	// simply adding the SST stats directly to the range stats is minimal. In the
-	// worst-case, when we retry a whole SST, then it could be overcounting the
-	// entire file, but we can hope that that is rare. In the worst case, it may
-	// cause splitting an under-filled range that would later merge when the
-	// over-count is fixed.
-	//
-	// We can indicate that these stats contain this estimation using the flag in
-	// the MVCC stats so that later re-computations will not be surprised to find
-	// any discrepancies.
-	//
-	// Callers can trigger such a re-computation to fixup any discrepancies (and
-	// remove the ContainsEstimates flag) after they are done ingesting files by
-	// sending an explicit recompute.
-	//
-	// There is a significant performance win to be achieved by ensuring that the
-	// stats computed are not estimates as it prevents recomputation on splits.
-	// Running AddSSTable with disallowShadowing=true gets us close to this as we
-	// do not allow colliding keys to be ingested. However, in the situation that
-	// two SSTs have KV(s) which "perfectly" shadow an existing key (equal ts and
-	// value), we do not consider this a collision. While the KV would just
-	// overwrite the existing data, the stats would be added to the cumulative
-	// stats of the AddSSTable command, causing a double count for such KVs.
-	// Therefore, we compute the stats for these "skipped" KVs on-the-fly while
-	// checking for the collision condition in C++ and subtract them from the
-	// stats of the SST being ingested before adding them to the running
-	// cumulative for this command. These stats can then be marked as accurate.
-	if checkConflicts {
-		stats.Add(statsDelta)
-		if statsDelta.ContainsEstimates == 0 {
-			stats.ContainsEstimates = 0
-		}
-	} else {
+	stats.Add(checkConflictsStatsDelta)
+	if !(checkConflicts || args.ComputeStatsDiff) {
 		stats.ContainsEstimates++
 	}
+	if args.ComputeStatsDiff {
+		if !checkConflictsStatsDelta.Equal(enginepb.MVCCStats{}) {
+			return result.Result{}, errors.New(
+				"AddSSTableRequest.ComputeStatsDiff cannot be used with DisallowConflicts or DisallowShadowingBelow")
+		}
+		if args.MVCCStats != nil {
+			return result.Result{}, errors.New(
+				"AddSSTableRequest.ComputeStatsDiff cannot be used with precomputed MVCCStats")
+		}
+		stats, err = storage.ComputeSSTStatsDiff(
+			ctx, sst, readWriter, start, end, leftPeekBound, rightPeekBound)
+		if err != nil {
+			return result.Result{}, err
+		}
+	} else if args.MVCCStats != nil {
+		stats.Add(*args.MVCCStats)
+	} else {
+		sstIter, err := storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
+			KeyTypes:   storage.IterKeyTypePointsAndRanges,
+			LowerBound: keys.MinKey,
+			UpperBound: keys.MaxKey,
+		})
+		if err != nil {
+			return result.Result{}, err
+		}
+		defer sstIter.Close()
 
+		sstIter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
+		if ok, err := sstIter.Valid(); err != nil {
+			return result.Result{}, err
+		} else if ok {
+			// TODO(msbutler): this implies we tolerate ingesting an empty addstable.
+			// Perhaps we should reject empty addstable requests?
+			log.VEventf(ctx, 2, "computing MVCCStats for SSTable [%s,%s)", start.Key, end.Key)
+			sstStats, err := storage.ComputeStatsForIter(sstIter, h.Timestamp.WallTime)
+			if err != nil {
+				return result.Result{}, errors.Wrap(err, "computing SSTable MVCC stats")
+			}
+			stats.Add(sstStats)
+		}
+	}
 	ms.Add(stats)
 
 	var mvccHistoryMutation *kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation
@@ -503,6 +482,39 @@ func EvalAddSSTable(
 			MVCCHistoryMutation: mvccHistoryMutation,
 		},
 	}, nil
+}
+
+// checkSSTRangeBounds verifies that the keys in the sstable are within the
+// range specified by the request header.
+func checkSSTRangeBounds(ctx context.Context, sst []byte, start, end storage.MVCCKey) error {
+	sstIter, err := storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsAndRanges,
+		LowerBound: keys.MinKey,
+		UpperBound: keys.MaxKey,
+	})
+	if err != nil {
+		return err
+	}
+	defer sstIter.Close()
+
+	// Check that the first key is in the expected range.
+	sstIter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
+	if ok, err := sstIter.Valid(); err != nil {
+		return err
+	} else if ok {
+		if unsafeKey := sstIter.UnsafeKey(); unsafeKey.Less(start) {
+			return errors.Errorf("first key %s not in request range [%s,%s)",
+				unsafeKey.Key, start.Key, end.Key)
+		}
+	}
+	sstIter.SeekGE(end)
+	if ok, err := sstIter.Valid(); err != nil {
+		return err
+	} else if ok {
+		return errors.Errorf("last key %s not in request range [%s,%s)",
+			sstIter.UnsafeKey(), start.Key, end.Key)
+	}
+	return err
 }
 
 // assertSSTContents checks that the SST contains expected inputs:
