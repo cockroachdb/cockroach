@@ -87,4 +87,5 @@ disallowed_imports_test(
     "diagnostics",
     # TODO(#81378): This should be flipped to "true".
     disallow_cdeps = False,
+    disallowed_list = [],
 )
