@@ -1,0 +1,174 @@
+# Check if a regression is detected correctly
+config old=abcdef123 new=qwerty456
+benchmarks:
+  - display_name: Sysbench
+    labels: ["SQL", "3node", "oltp_read_write"]
+    name: "BenchmarkSysbench/SQL/3node/oltp_read_write"
+    package: "pkg/sql/tests"
+    runner_group: 1
+    count: 10
+    iterations: 3000
+    compare_alpha: 0.05
+    retries: 3
+    metrics:
+      - name: "sec/op"
+        threshold: 0.005
+      - name: "allocs/op"
+        threshold: 0.002
+
+----
+
+logs name=BenchmarkSysbench/SQL/3node/oltp_read_write path=/abcdef123/bin/pkg_sql_tests
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852036 ns/op 2368213 B/op 10378 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852036 ns/op 2375306 B/op 10377 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852036 ns/op 2358650 B/op 10287 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9982428 ns/op 2370670 B/op 10411 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9926623 ns/op 2367582 B/op 10386 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9898707 ns/op 2365463 B/op 10398 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9879350 ns/op 2364281 B/op 10361 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9808429 ns/op 2352326 B/op 10246 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9849367 ns/op 2369187 B/op 10379 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9872510 ns/op 2367752 B/op 10392 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852036 ns/op 2368213 B/op 10378 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852036 ns/op 2375306 B/op 10377 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852036 ns/op 2358650 B/op 10287 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9982428 ns/op 2370670 B/op 10411 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9926623 ns/op 2367582 B/op 10386 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9898707 ns/op 2365463 B/op 10398 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9879350 ns/op 2364281 B/op 10361 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9808429 ns/op 2352326 B/op 10246 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9849367 ns/op 2369187 B/op 10379 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9872510 ns/op 2367752 B/op 10392 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852036 ns/op 2368213 B/op 10378 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852036 ns/op 2375306 B/op 10377 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852036 ns/op 2358650 B/op 10287 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9982428 ns/op 2370670 B/op 10411 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9926623 ns/op 2367582 B/op 10386 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9898707 ns/op 2365463 B/op 10398 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9879350 ns/op 2364281 B/op 10361 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9808429 ns/op 2352326 B/op 10246 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9849367 ns/op 2369187 B/op 10379 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9872510 ns/op 2367752 B/op 10392 allocs/op 0 errs/op
+
+----
+
+logs name=BenchmarkSysbench/SQL/3node/oltp_read_write path=/qwerty456/bin/pkg_sql_tests
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8952036 ns/op 2368213 B/op 10378 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8952036 ns/op 2375306 B/op 10377 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8952036 ns/op 2358650 B/op 10287 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8982428 ns/op 2370670 B/op 10411 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8926623 ns/op 2367582 B/op 10386 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8998707 ns/op 2365463 B/op 10398 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8979350 ns/op 2364281 B/op 10361 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8908429 ns/op 2352326 B/op 10246 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8949367 ns/op 2369187 B/op 10379 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8972510 ns/op 2367752 B/op 10392 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8952036 ns/op 2368213 B/op 10378 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8952036 ns/op 2375306 B/op 10377 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8952036 ns/op 2358650 B/op 10287 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8982428 ns/op 2370670 B/op 10411 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8926623 ns/op 2367582 B/op 10386 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8998707 ns/op 2365463 B/op 10398 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8979350 ns/op 2364281 B/op 10361 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8908429 ns/op 2352326 B/op 10246 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8949367 ns/op 2369187 B/op 10379 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8972510 ns/op 2367752 B/op 10392 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8952036 ns/op 2368213 B/op 10378 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8952036 ns/op 2375306 B/op 10377 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8952036 ns/op 2358650 B/op 10287 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8982428 ns/op 2370670 B/op 10411 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8926623 ns/op 2367582 B/op 10386 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8998707 ns/op 2365463 B/op 10398 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8999350 ns/op 2364281 B/op 10361 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8908429 ns/op 2352326 B/op 10246 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8949367 ns/op 2369187 B/op 10379 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 8972510 ns/op 2367752 B/op 10392 allocs/op
+
+----
+
+run group=1
+----
+----
+
+<details><summary><strong>🟢 Sysbench</strong> [SQL, 3node, oltp_read_write]</summary>
+
+| Metric                      | Old Commit     | New Commit     | Delta      | Note         |
+|-----------------------------|----------------|----------------|------------|--------------|
+| 🟢 **sec/op** | 9.862m ±1% | 8.952m ±1% | -9.23% | p=0.000 n=10    |
+| ⚪ **allocs/op** | 10.38k ±1% | 10.38k ±1% | ~ | p=1.000 n=10    |
+
+<details><summary>Reproduce</summary>
+
+**benchdiff binaries**:
+```shell
+mkdir -p benchdiff/qwerty4/bin/1058449141
+gcloud storage cp gs://cockroach-microbench-ci/builds/qwerty456/bin/pkg_sql_tests benchdiff/qwerty4/bin/1058449141/cockroachdb_cockroach_pkg_sql_tests
+chmod +x benchdiff/qwerty4/bin/1058449141/cockroachdb_cockroach_pkg_sql_tests
+mkdir -p benchdiff/abcdef1/bin/1058449141
+gcloud storage cp gs://cockroach-microbench-ci/builds/abcdef123/bin/pkg_sql_tests benchdiff/abcdef1/bin/1058449141/cockroachdb_cockroach_pkg_sql_tests
+chmod +x benchdiff/abcdef1/bin/1058449141/cockroachdb_cockroach_pkg_sql_tests
+```
+**benchdiff command**:
+```shell
+benchdiff --run=^BenchmarkSysbench/SQL/3node/oltp_read_write$ --old=abcdef1 --new=qwerty4 ./pkg/sql/tests
+```
+
+</details>
+
+</details>
+
+<details><summary>Artifacts</summary>
+
+**download**:
+```shell
+mkdir -p new
+gcloud storage cp gs://cockroach-microbench-ci/artifacts/qwerty456//\* new/
+mkdir -p old
+gcloud storage cp gs://cockroach-microbench-ci/artifacts/abcdef123//\* old/
+```
+
+</details>
+
+_built with commit: [qwerty456](https://github.com/cockroachdb/cockroach/commit/qwerty456)_
+----
+----
+
+tree
+----
+----
+
+/abcdef123
+/abcdef123/artifacts
+/abcdef123/artifacts/cleaned_Sysbench_SQL_3node_oltp_read_write.log
+/abcdef123/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged_1.prof
+/abcdef123/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged_2.prof
+/abcdef123/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged_3.prof
+/abcdef123/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged_1.prof
+/abcdef123/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged_2.prof
+/abcdef123/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged_3.prof
+/abcdef123/artifacts/mutex_Sysbench_SQL_3node_oltp_read_write_merged_1.prof
+/abcdef123/artifacts/mutex_Sysbench_SQL_3node_oltp_read_write_merged_2.prof
+/abcdef123/artifacts/mutex_Sysbench_SQL_3node_oltp_read_write_merged_3.prof
+/abcdef123/artifacts/raw_Sysbench_SQL_3node_oltp_read_write.log
+/qwerty456
+/qwerty456/artifacts
+/qwerty456/artifacts/Sysbench_SQL_3node_oltp_read_write.IMPROVED
+/qwerty456/artifacts/cleaned_Sysbench_SQL_3node_oltp_read_write.log
+/qwerty456/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged_1.prof
+/qwerty456/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged_2.prof
+/qwerty456/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged_3.prof
+/qwerty456/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged_1.prof
+/qwerty456/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged_2.prof
+/qwerty456/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged_3.prof
+/qwerty456/artifacts/mutex_Sysbench_SQL_3node_oltp_read_write_merged_1.prof
+/qwerty456/artifacts/mutex_Sysbench_SQL_3node_oltp_read_write_merged_2.prof
+/qwerty456/artifacts/mutex_Sysbench_SQL_3node_oltp_read_write_merged_3.prof
+/qwerty456/artifacts/raw_Sysbench_SQL_3node_oltp_read_write.log
+/suite.yml
+/summary.json
+----
+----
+
+changed
+----
+Regressed = false, Improved = true
