@@ -328,9 +328,9 @@ func (desc *immutable) validateInboundFunctionRef(
 	}
 	// Validate all other references are unset.
 	if ref.ColumnIDs != nil || ref.IndexIDs != nil ||
-		ref.ConstraintIDs != nil || ref.TriggerIDs != nil {
-		return errors.AssertionFailedf("function reference has invalid references (%v, %v %v, %v)",
-			ref.ColumnIDs, ref.IndexIDs, ref.ConstraintIDs, ref.TriggerIDs)
+		ref.ConstraintIDs != nil || ref.TriggerIDs != nil || ref.PolicyIDs != nil {
+		return errors.AssertionFailedf("function reference has invalid references (%v, %v %v, %v, %v)",
+			ref.ColumnIDs, ref.IndexIDs, ref.ConstraintIDs, ref.TriggerIDs, ref.PolicyIDs)
 	}
 	// Validate a reference exists to this function.
 	for _, refID := range backrefFunctionDesc.GetDependsOnFunctions() {
@@ -860,7 +860,7 @@ func (desc *Mutable) maybeRemoveTableReference(id descpb.ID) {
 	var ret []descpb.FunctionDescriptor_Reference
 	for _, ref := range desc.DependedOnBy {
 		if ref.ID == id && len(ref.ColumnIDs) == 0 && len(ref.IndexIDs) == 0 &&
-			len(ref.ConstraintIDs) == 0 && len(ref.TriggerIDs) == 0 {
+			len(ref.ConstraintIDs) == 0 && len(ref.TriggerIDs) == 0 && len(ref.PolicyIDs) == 0 {
 			continue
 		}
 		ret = append(ret, ref)
