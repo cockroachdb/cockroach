@@ -91,6 +91,22 @@ func ClearRangeData(
 	return nil
 }
 
+// DestroyReplicaTODO is the plan for splitting DestroyReplica into cross-engine
+// writes.
+//
+//  1. Log storage write (durable):
+//     1.1. Write WAG node with the state machine mutation (2).
+//  2. State machine mutation:
+//     2.1. Clear RangeID-local un-/replicated state.
+//     2.2. (optional) Clear replicated MVCC span.
+//     2.3. Write RangeTombstone with next ReplicaID/LogID.
+//  3. Log engine GC (after state machine mutation 2 is durably applied):
+//     3.1. Remove previous LogID.
+//
+// TODO(sep-raft-log): support the status quo in which 1+2+3 is written
+// atomically, and 1.1 is not written.
+const DestroyReplicaTODO = 0
+
 // DestroyReplica destroys all or a part of the Replica's state, installing a
 // RangeTombstone in its place. Due to merges, splits, etc, there is a need
 // to control which part of the state this method actually gets to remove,
@@ -114,6 +130,7 @@ func DestroyReplica(
 	if diskReplicaID.ReplicaID >= nextReplicaID {
 		return errors.AssertionFailedf("replica r%d/%d must not survive its own tombstone", rangeID, diskReplicaID)
 	}
+	_ = DestroyReplicaTODO // 2.1 + 3.1 + 2.2
 	if err := ClearRangeData(ctx, rangeID, reader, writer, opts); err != nil {
 		return err
 	}
@@ -129,6 +146,7 @@ func DestroyReplica(
 		return errors.AssertionFailedf(
 			"cannot rewind tombstone from %d to %d", ts.NextReplicaID, nextReplicaID)
 	}
+	_ = DestroyReplicaTODO // 2.3
 	return sl.SetRangeTombstone(ctx, writer, kvserverpb.RangeTombstone{
 		NextReplicaID: nextReplicaID, // NB: nextReplicaID > 0
 	})
