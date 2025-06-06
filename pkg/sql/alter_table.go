@@ -2398,8 +2398,8 @@ func (p *planner) checkSchemaChangeIsAllowed(
 				preventedBySchemaLocked = true
 			}
 		}
-	case *tree.AlterIndex, *tree.DropTable, *tree.RenameColumn, *tree.RenameIndex,
-		*tree.RenameTable, *tree.AlterTableSetSchema:
+	case *tree.AlterIndex, *tree.AlterIndexVisible, *tree.DropTable, *tree.RenameColumn,
+		*tree.RenameIndex, *tree.RenameTable, *tree.AlterTableSetSchema, *tree.SetZoneConfig:
 	default:
 		preventedBySchemaLocked = true
 	}

@@ -179,8 +179,8 @@ subtest zone_config
 statement ok
 ALTER TABLE ref SET (schema_locked = true);
 
-onlyif config local-mixed-25.1 local-legacy-schema-changer
-statement error pgcode 57000 schema changes are disallowed on table "ref" because it is locked
+# This statement is schema_locked bypassed.
+statement ok
 ALTER TABLE ref CONFIGURE ZONE USING num_replicas = 11;
 
 subtest end
