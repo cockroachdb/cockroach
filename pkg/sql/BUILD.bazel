@@ -215,6 +215,7 @@ go_library(
         "scrub_constraint.go",
         "scrub_fk.go",
         "scrub_index.go",
+        "scrub_unexpected_keys.go",
         "scrub_unique_constraint.go",
         "sequence.go",
         "sequence_select.go",

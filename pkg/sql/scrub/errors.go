@@ -40,6 +40,12 @@ const (
 	// UniqueConstraintViolation occurs when a row in a table is violating
 	// a unique constraint.
 	UniqueConstraintViolation = "unique_constraint_violation"
+	// UnexpectedKeyOutsideIndexSpanError occurs when a key is found
+	// that does not belong to any defined index span of the table.
+	UnexpectedKeyOutsideIndexSpanError = "unexpected_key_outside_index_span"
+	// UnexpectedColumnFamilyError occurs when a key is found with a column family ID
+	// that is not expected or defined for the table.
+	UnexpectedColumnFamilyError = "unexpected_column_family"
 )
 
 // Error contains the details on the scrub error that was caught.

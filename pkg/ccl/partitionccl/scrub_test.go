@@ -555,3 +555,149 @@ INSERT INTO db.t VALUES (1, 1);
 	time.Sleep(1 * time.Millisecond)
 	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t AS OF SYSTEM TIME '-1ms' WITH OPTIONS CONSTRAINT ALL`, exp)
 }
+
+// TestScrubUnexpectedKeys tests SCRUB on a table that has extraneous keys
+// outside of valid index spans.
+func TestScrubUnexpectedKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	utilccl.TestingEnableEnterprise()
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
+
+	if _, err := db.Exec(`
+CREATE DATABASE db;
+SET experimental_enable_implicit_column_partitioning = true;
+CREATE TABLE db.t (
+	id INT PRIMARY KEY,
+	data VARCHAR(50),
+	partition_by INT
+) PARTITION ALL BY LIST (partition_by) (
+    PARTITION one VALUES IN (1),
+    PARTITION two VALUES IN (2)
+);
+
+INSERT INTO db.t VALUES (1, 'test1', 1), (2, 'test2', 2);
+`); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	codec := s.Codec()
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "db", "t")
+	
+	tableSpan := tableDesc.TableSpan(codec)
+
+	invalidKey := tableSpan.EndKey
+	invalidValue := []byte("invalid_data")
+	
+	if err := kvDB.Put(context.Background(), invalidKey, invalidValue); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	exp := []scrubtestutils.ExpectedScrubResult{
+		{
+			ErrorType:    scrub.UnexpectedKeyOutsideIndexSpanError,
+			Database:     "db",
+			Table:        "t",
+			PrimaryKey:   "", 
+			DetailsRegex: `key not in any index span`,
+		},
+	}
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t WITH OPTIONS KVSTORE`, exp)
+	time.Sleep(1 * time.Millisecond)
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t AS OF SYSTEM TIME '-1ms' WITH OPTIONS KVSTORE`, exp)
+}
+
+// TestScrubUnexpectedColumnFamily tests SCRUB on a table that has keys with
+// unexpected column family IDs.
+func TestScrubUnexpectedColumnFamily(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	utilccl.TestingEnableEnterprise()
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
+
+	if _, err := db.Exec(`
+CREATE DATABASE db;
+SET experimental_enable_implicit_column_partitioning = true;
+CREATE TABLE db.t (
+	id INT PRIMARY KEY,
+	data1 VARCHAR(50) FAMILY fam1, 
+	data2 VARCHAR(50) FAMILY fam2,
+	partition_by INT FAMILY fam1
+) PARTITION ALL BY LIST (partition_by) (
+    PARTITION one VALUES IN (1),
+    PARTITION two VALUES IN (2)
+);
+
+INSERT INTO db.t VALUES (1, 'test1', 'data1', 1);
+`); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	codec := s.Codec()
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "db", "t")
+	primaryIndex := tableDesc.GetPrimaryIndex()
+	
+	values := []tree.Datum{tree.NewDInt(2), tree.NewDString("test2"), tree.NewDString("data2"), tree.NewDInt(1)}
+	var colIDtoRowIndex catalog.TableColMap
+	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
+	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
+	colIDtoRowIndex.Set(tableDesc.PublicColumns()[2].GetID(), 2)
+	colIDtoRowIndex.Set(tableDesc.PublicColumns()[3].GetID(), 3)
+	
+	primaryIndexKey, err := rowenc.EncodePrimaryIndex(codec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
+	if err != nil {
+		t.Fatalf("unexpected error %s", err)
+	}
+	if len(primaryIndexKey) != 1 {
+		t.Fatalf("expected 1 index entry, got %d", len(primaryIndexKey))
+	}
+
+	validKey := primaryIndexKey[0].Key
+
+	invalidFamilyKey := append(validKey[:len(validKey)-1], byte(99))
+	
+	if err := kvDB.Put(context.Background(), invalidFamilyKey, &primaryIndexKey[0].Value); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	exp := []scrubtestutils.ExpectedScrubResult{
+		{
+			ErrorType:    scrub.UnexpectedColumnFamilyError,
+			Database:     "db",
+			Table:        "t",  
+			PrimaryKey:   "", // No primary key for unexpected keys
+			DetailsRegex: `unexpected column family|key not in any index span`,
+		},
+	}
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t WITH OPTIONS KVSTORE`, exp)
+	time.Sleep(1 * time.Millisecond)
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t AS OF SYSTEM TIME '-1ms' WITH OPTIONS KVSTORE`, exp)
+}
+
+// TestScrubUnexpectedKeysEmptyTable tests SCRUB on an empty table to ensure
+// the unexpected key check handles empty tables correctly.
+func TestScrubUnexpectedKeysEmptyTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	utilccl.TestingEnableEnterprise()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+
+	if _, err := db.Exec(`
+CREATE DATABASE db;
+CREATE TABLE db.t (
+	id INT PRIMARY KEY,
+	data VARCHAR(50)
+);
+`); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t WITH OPTIONS KVSTORE`, []scrubtestutils.ExpectedScrubResult{})
+	time.Sleep(1 * time.Millisecond)
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t AS OF SYSTEM TIME '-1ms' WITH OPTIONS KVSTORE`, []scrubtestutils.ExpectedScrubResult{})
+}

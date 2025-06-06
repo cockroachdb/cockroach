@@ -179,3 +179,18 @@ CREATE TYPE typedb.e as enum('open', 'closed');
 
 statement ok
 EXPERIMENTAL SCRUB DATABASE typedb;
+
+# Logic tests for the EXPERIMENTAL SCRUB feature, which validates on-disk data consistency.
+
+statement ok
+CREATE TABLE test.kvstore_table (
+  id INT PRIMARY KEY,
+  val INT
+);
+
+statement ok
+INSERT INTO test.kvstore_table VALUES (1, 10), (2, 20);
+
+query TTTTTTTT
+EXPERIMENTAL SCRUB TABLE test.kvstore_table WITH OPTIONS KVSTORE
+----
