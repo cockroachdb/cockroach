@@ -61,7 +61,7 @@ def _deps_rule_impl(ctx):
         prefixes = ctx.attr.disallowed_prefixes,
     )
     deps = {k: None for k in ctx.attr.src[_DepsInfo].deps.to_list()}
-    if ctx.attr.allowlist:
+    if "allowlist" in ctx.attr:
         failed = [p for p in deps if p not in ctx.attr.allowlist and
                                      p.label != ctx.attr.src.label]
     else:
