@@ -3128,6 +3128,7 @@ unsafe_allow_triggers_modifying_cascades                   off                 N
 use_cputs_on_non_unique_indexes                            off                 NULL      NULL        NULL        string
 use_declarative_schema_changer                             on                  NULL      NULL        NULL        string
 use_pre_25_2_variadic_builtins                             off                 NULL      NULL        NULL        string
+use_proc_txn_control_extended_protocol_fix                 on                  NULL      NULL        NULL        string
 variable_inequality_lookup_join_enabled                    on                  NULL      NULL        NULL        string
 vector_search_beam_size                                    32                  NULL      NULL        NULL        string
 vectorize                                                  on                  NULL      NULL        NULL        string
@@ -3358,6 +3359,7 @@ unsafe_allow_triggers_modifying_cascades                   off                 N
 use_cputs_on_non_unique_indexes                            off                 NULL  user     NULL      off                 off
 use_declarative_schema_changer                             on                  NULL  user     NULL      on                  on
 use_pre_25_2_variadic_builtins                             off                 NULL  user     NULL      off                 off
+use_proc_txn_control_extended_protocol_fix                 on                  NULL  user     NULL      on                  on
 variable_inequality_lookup_join_enabled                    on                  NULL  user     NULL      on                  on
 vector_search_beam_size                                    32                  NULL  user     NULL      32                  32
 vectorize                                                  on                  NULL  user     NULL      on                  on
@@ -3580,6 +3582,7 @@ unsafe_allow_triggers_modifying_cascades                   NULL    NULL     NULL
 use_cputs_on_non_unique_indexes                            NULL    NULL     NULL     NULL        NULL
 use_declarative_schema_changer                             NULL    NULL     NULL     NULL        NULL
 use_pre_25_2_variadic_builtins                             NULL    NULL     NULL     NULL        NULL
+use_proc_txn_control_extended_protocol_fix                 NULL    NULL     NULL     NULL        NULL
 variable_inequality_lookup_join_enabled                    NULL    NULL     NULL     NULL        NULL
 vector_search_beam_size                                    NULL    NULL     NULL     NULL        NULL
 vectorize                                                  NULL    NULL     NULL     NULL        NULL

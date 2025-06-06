@@ -1648,6 +1648,10 @@ type connExecutor struct {
 			// checks for resumeProc in buildExecMemo, and executes it as the next
 			// statement if it is non-nil.
 			resumeProc *memo.Memo
+
+			// resumeStmt is set if resumeProc is set. It is used to determine the
+			// response format for the extended wire protocol.
+			resumeStmt statements.Statement[tree.Statement]
 		}
 
 		// shouldExecuteOnTxnRestart indicates that ex.onTxnRestart will be
@@ -2297,6 +2301,15 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		return err // err could be io.EOF
 	}
 
+	// Special handling for COMMIT/ROLLBACK in PL/pgSQL stored procedures. See the
+	// makeCmdForStoredProcResume comment for details.
+	if ex.extraTxnState.storedProcTxnState.resumeProc != nil {
+		cmd, err = ex.makeCmdForStoredProcResume(cmd)
+		if err != nil {
+			return err
+		}
+	}
+
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		ex.sessionEventf(ctx, "[%s pos:%d] executing %s",
 			ex.machine.CurState(), pos, cmd)
@@ -2713,6 +2726,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		// and transaction modes. The stored procedure has finished execution,
 		// either successfully or with an error.
 		ex.extraTxnState.storedProcTxnState.resumeProc = nil
+		ex.extraTxnState.storedProcTxnState.resumeStmt = statements.Statement[tree.Statement]{}
 		ex.extraTxnState.storedProcTxnState.txnModes = nil
 	}
 
@@ -2887,6 +2901,33 @@ func stateToTxnStatusIndicator(s fsm.State) TransactionStatusIndicator {
 	default:
 		panic(errors.AssertionFailedf("unknown state: %T", s))
 	}
+}
+
+// makeCmdForStoredProcResume creates a Command that can be used to resume
+// execution of a stored procedure that has ended the previous transaction via
+// COMMIT or ROLLBACK. It is not enough to just process the original command
+// again, because it may have been an ExecPortal statement, and the portal will
+// already have been closed after the first phase of execution.
+func (ex *connExecutor) makeCmdForStoredProcResume(curCmd Command) (Command, error) {
+	if !ex.sessionData().UseProcTxnControlExtendedProtocolFix {
+		// The fix is not enabled, so return the original command.
+		return curCmd, nil
+	}
+	var timeReceived crtime.Mono
+	switch t := curCmd.(type) {
+	case ExecStmt:
+		timeReceived = t.TimeReceived
+	case ExecPortal:
+		timeReceived = t.TimeReceived
+	default:
+		return nil, errors.AssertionFailedf(
+			"unexpected command type %T for stored procedure resume", t,
+		)
+	}
+	return ExecStmt{
+		Statement:    ex.extraTxnState.storedProcTxnState.resumeStmt,
+		TimeReceived: timeReceived,
+	}, nil
 }
 
 // isCopyToExternalStorage returns true if the CopyIn command is writing to an

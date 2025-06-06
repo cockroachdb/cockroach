@@ -670,6 +670,10 @@ message LocalOnlySessionData {
   // OptimizerUseExistsFilterHoistRule, when true, causes the optimizer to apply
   // the HoistUnboundFilterFromExistsSubquery rule to EXISTS conditions.
   bool optimizer_use_exists_filter_hoist_rule = 170;
+  // UseProcTxnControlExtendedProtocolFix, when true, enables the fix for
+  // PL/pgSQL transaction control statements (COMMIT, ROLLBACK) when the stored
+  // procedure is executed via a portal in the extended wire protocol.
+  bool use_proc_txn_control_extended_protocol_fix = 171;
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
