@@ -3092,6 +3092,7 @@ unbounded_parallel_scans                                   off                 N
 unconstrained_non_covering_index_scan_enabled              off                 NULL      NULL        NULL        string
 unsafe_allow_triggers_modifying_cascades                   off                 NULL      NULL        NULL        string
 use_declarative_schema_changer                             on                  NULL      NULL        NULL        string
+use_proc_txn_control_extended_protocol_fix                 off                 NULL      NULL        NULL        string
 variable_inequality_lookup_join_enabled                    on                  NULL      NULL        NULL        string
 vectorize                                                  on                  NULL      NULL        NULL        string
 xmloption                                                  content             NULL      NULL        NULL        string
@@ -3303,6 +3304,7 @@ unbounded_parallel_scans                                   off                 N
 unconstrained_non_covering_index_scan_enabled              off                 NULL  user     NULL      off                 off
 unsafe_allow_triggers_modifying_cascades                   off                 NULL  user     NULL      off                 off
 use_declarative_schema_changer                             on                  NULL  user     NULL      on                  on
+use_proc_txn_control_extended_protocol_fix                 off                 NULL  user     NULL      off                 off
 variable_inequality_lookup_join_enabled                    on                  NULL  user     NULL      on                  on
 vectorize                                                  on                  NULL  user     NULL      on                  on
 xmloption                                                  content             NULL  user     NULL      content             content
@@ -3514,6 +3516,7 @@ unbounded_parallel_scans                                   NULL    NULL     NULL
 unconstrained_non_covering_index_scan_enabled              NULL    NULL     NULL     NULL        NULL
 unsafe_allow_triggers_modifying_cascades                   NULL    NULL     NULL     NULL        NULL
 use_declarative_schema_changer                             NULL    NULL     NULL     NULL        NULL
+use_proc_txn_control_extended_protocol_fix                 NULL    NULL     NULL     NULL        NULL
 variable_inequality_lookup_join_enabled                    NULL    NULL     NULL     NULL        NULL
 vectorize                                                  NULL    NULL     NULL     NULL        NULL
 xmloption                                                  NULL    NULL     NULL     NULL        NULL
