@@ -2203,7 +2203,7 @@ func (c *clusterImpl) StartE(
 		defer conn.Close()
 
 		if err := roachtestutil.WaitForReplication(
-			ctx, l, conn, startOpts.WaitForReplicationFactor, roachtestutil.AtLeastReplicationFactor,
+			ctx, l, conn, startOpts.WaitForReplicationFactor, roachprod.AtLeastReplicationFactor,
 		); err != nil {
 			return errors.Wrap(err, "failed to wait for replication after starting cockroach")
 		}
@@ -2305,6 +2305,12 @@ func (c *clusterImpl) RefetchCertsFromNode(ctx context.Context, node int) error 
 	// that might cause fallout) by using a non-existing dir here.
 	c.localCertsDir = filepath.Join(c.localCertsDir, install.CockroachNodeCertsDir)
 	return roachprod.FetchCertsDir(ctx, c.l, c.MakeNodes(c.Node(node)), fmt.Sprintf("./%s", install.CockroachNodeCertsDir), c.localCertsDir)
+}
+
+// LocalCertsDir returns the directory where the local copy of the cluster
+// certs are stored, i.e. the ones accessible by the test runner.
+func (c *clusterImpl) LocalCertsDir() string {
+	return c.localCertsDir
 }
 
 func (c *clusterImpl) SetDefaultVirtualCluster(name string) {
