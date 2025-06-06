@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "commandbuilder.go",
         "disk_usage.go",
-        "health_checker.go",
         "httpclient.go",
         "jaeger.go",
         "utils.go",
