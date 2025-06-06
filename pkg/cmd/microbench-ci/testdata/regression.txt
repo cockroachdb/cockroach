@@ -171,4 +171,4 @@ tree
 
 changed
 ----
-true
+Regressed = true, Improved = false
