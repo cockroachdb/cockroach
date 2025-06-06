@@ -231,7 +231,7 @@ CREATE INDEX idx ON tab3(x) STORING (tableoid)
 statement error pgcode 0A000 index cannot store system column crdb_internal_mvcc_timestamp
 CREATE INDEX idx ON tab3(x) STORING (crdb_internal_mvcc_timestamp)
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE tab3 SET (schema_locked=false)
 
@@ -247,7 +247,7 @@ CREATE INDEX idx ON tab3(x) STORING (crdb_internal_origin_id)
 statement error pgcode 42703 column "crdb_internal_origin_id" does not exist
 CREATE INDEX idx ON tab3(x, (crdb_internal_origin_id + 10))
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE tab3 SET (schema_locked=true)
 

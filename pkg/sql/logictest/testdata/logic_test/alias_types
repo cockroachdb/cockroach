@@ -6,7 +6,7 @@ CREATE TABLE aliases (
     FAMILY fam_1_b (b)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT colnames
 SHOW CREATE TABLE aliases
 ----
@@ -20,7 +20,7 @@ aliases     CREATE TABLE public.aliases (
               FAMILY fam_1_b (b)
             );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT colnames
 SHOW CREATE TABLE aliases
 ----

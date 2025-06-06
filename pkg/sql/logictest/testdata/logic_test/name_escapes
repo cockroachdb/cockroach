@@ -17,7 +17,7 @@ DROP USER madhatter;
 CREATE TABLE unused4(x INT, CONSTRAINT woo " PRIMARY KEY (x)
 );
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE ";--notbetter"
 ----
@@ -40,7 +40,7 @@ SHOW CREATE TABLE ";--notbetter"
                 CREATE TABLE unused (x ")
                 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE ";--notbetter"
 ----
@@ -79,7 +79,7 @@ SHOW CREATE VIEW ";--alsoconcerning"
 statement ok
 CREATE TABLE ";--dontask" AS SELECT x AS a, y AS b FROM ";--notbetter"
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE ";--dontask"
 ----
@@ -90,7 +90,7 @@ SHOW CREATE TABLE ";--dontask"
                 CONSTRAINT ";--dontask_pkey" PRIMARY KEY (rowid ASC)
               );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE ";--dontask"
 ----

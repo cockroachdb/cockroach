@@ -265,7 +265,7 @@ create table err (a int, j json, inverted index (a gin_trgm_ops, j));
 statement ok
 CREATE TABLE t86614 (a int, s STRING, INVERTED INDEX (a, s gist_trgm_ops), FAMILY (a, s))
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t86614]
 ----
@@ -278,7 +278,7 @@ CREATE TABLE public.t86614 (
   FAMILY fam_0_a_s_rowid (a, s, rowid)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t86614]
 ----
@@ -337,7 +337,7 @@ CREATE TABLE t_112713 (i INT PRIMARY KEY, t STRING, FAMILY (i, t));
 statement ok
 CREATE INVERTED INDEX ON t_112713 (t gin_trgm_ops);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_112713];
 ----
@@ -349,7 +349,7 @@ CREATE TABLE public.t_112713 (
   FAMILY fam_0_i_t (i, t)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_112713];
 ----

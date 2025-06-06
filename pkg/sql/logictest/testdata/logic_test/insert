@@ -474,7 +474,7 @@ CREATE TABLE sw (
  FAMILY "primary" (a, b, c, d, e, f, g, ac, bc, cc, dc, ec, fc, rowid)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE sw]
 ----
@@ -496,7 +496,7 @@ CREATE TABLE public.sw (
   CONSTRAINT sw_pkey PRIMARY KEY (rowid ASC)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE sw]
 ----

@@ -99,7 +99,7 @@ CREATE TABLE t(
 statement ok
 COMMENT ON TABLE t IS 'table t';
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -113,7 +113,7 @@ CREATE TABLE public.t (
 );
 COMMENT ON TABLE public.t IS 'table t';
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -130,7 +130,7 @@ COMMENT ON TABLE public.t IS 'table t';
 statement ok
 COMMENT ON TABLE t IS 'table t AGAIN';
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -144,7 +144,7 @@ CREATE TABLE public.t (
 );
 COMMENT ON TABLE public.t IS 'table t AGAIN';
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -161,7 +161,7 @@ COMMENT ON TABLE public.t IS 'table t AGAIN';
 statement ok
 COMMENT ON TABLE t IS NULL;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -174,7 +174,7 @@ CREATE TABLE public.t (
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -190,7 +190,7 @@ CREATE TABLE public.t (
 statement ok
 COMMENT ON COLUMN t.b IS 'column b';
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -204,7 +204,7 @@ CREATE TABLE public.t (
 );
 COMMENT ON COLUMN public.t.b IS 'column b';
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -224,7 +224,7 @@ COMMENT ON COLUMN t.b IS 'column b AGAIN';
 statement error column name must be qualified
 COMMENT ON COLUMN b IS 'unqualified column b';
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -238,7 +238,7 @@ CREATE TABLE public.t (
 );
 COMMENT ON COLUMN public.t.b IS 'column b AGAIN';
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -255,7 +255,7 @@ COMMENT ON COLUMN public.t.b IS 'column b AGAIN';
 statement ok
 COMMENT ON COLUMN t.b IS NULL;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -268,7 +268,7 @@ CREATE TABLE public.t (
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -284,7 +284,7 @@ CREATE TABLE public.t (
 statement ok
 COMMENT ON INDEX t@idxb IS 'index b';
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -298,7 +298,7 @@ CREATE TABLE public.t (
 );
 COMMENT ON INDEX public.t@idxb IS 'index b';
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -315,7 +315,7 @@ COMMENT ON INDEX public.t@idxb IS 'index b';
 statement ok
 COMMENT ON INDEX t@idxb IS 'index b AGAIN';
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -329,7 +329,7 @@ CREATE TABLE public.t (
 );
 COMMENT ON INDEX public.t@idxb IS 'index b AGAIN';
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -346,7 +346,7 @@ COMMENT ON INDEX public.t@idxb IS 'index b AGAIN';
 statement ok
 COMMENT ON INDEX t@idxb IS NULL;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -359,7 +359,7 @@ CREATE TABLE public.t (
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -375,7 +375,7 @@ CREATE TABLE public.t (
 statement ok
 COMMENT ON CONSTRAINT ckb ON t IS 'cst b';
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -389,7 +389,7 @@ CREATE TABLE public.t (
 );
 COMMENT ON CONSTRAINT ckb ON public.t IS 'cst b';
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -406,7 +406,7 @@ COMMENT ON CONSTRAINT ckb ON public.t IS 'cst b';
 statement ok
 COMMENT ON CONSTRAINT ckb ON t IS 'cst b AGAIN';
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -420,7 +420,7 @@ CREATE TABLE public.t (
 );
 COMMENT ON CONSTRAINT ckb ON public.t IS 'cst b AGAIN';
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -437,7 +437,7 @@ COMMENT ON CONSTRAINT ckb ON public.t IS 'cst b AGAIN';
 statement ok
 COMMENT ON CONSTRAINT ckb ON t IS NULL;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -450,7 +450,7 @@ CREATE TABLE public.t (
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
