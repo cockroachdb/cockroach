@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -217,6 +218,28 @@ func (f *GenericFailure) WaitForSQLUnavailable(
 	return errors.Wrapf(err, "connections to node %d never unavailable after %s", node, timeout)
 }
 
+// WaitForProcessDeath checks systemd until the cockroach process is no longer running
+// or the timeout is reached.
+func (f *GenericFailure) WaitForProcessDeath(
+	ctx context.Context, l *logger.Logger, node install.Nodes, timeout time.Duration,
+) error {
+	start := timeutil.Now()
+	err := retryForDuration(ctx, timeout, func() error {
+		res, err := f.RunWithDetails(ctx, l, node, "systemctl is-active cockroach-system.service")
+		if err != nil {
+			return err
+		}
+		status := strings.TrimSpace(res.Stdout)
+		if status != "active" {
+			l.Printf("n%d cockroach process exited after %s: %s", node, timeutil.Since(start), status)
+			return nil
+		}
+		return errors.Newf("systemd reported n%d cockroach process as %s", node, status)
+	})
+
+	return errors.Wrapf(err, "n%d process never exited after %s", node, timeout)
+}
+
 func (f *GenericFailure) StopCluster(
 	ctx context.Context, l *logger.Logger, stopOpts roachprod.StopOpts,
 ) error {
@@ -260,4 +283,16 @@ func forEachNode(nodes install.Nodes, fn func(install.Nodes) error) error {
 		}
 	}
 	return nil
+}
+
+func runAsync(ctx context.Context, l *logger.Logger, f func(context.Context) error) <-chan error {
+	errCh := make(chan error, 1)
+	go func() {
+		err := roachprodutil.PanicAsError(ctx, l, func(context.Context) error {
+			return f(ctx)
+		})
+		errCh <- err
+		close(errCh)
+	}()
+	return errCh
 }

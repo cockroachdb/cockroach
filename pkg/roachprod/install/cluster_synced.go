@@ -471,30 +471,33 @@ func (c *SyncedCluster) Stop(
 	// killProcesses indicates whether processed need to be stopped.
 	killProcesses := true
 
+	// Non system shared process virtual clusters don't get killed but are stopped via SQL.
+	// Figure out if the virtual cluster is one or not.
 	if virtualClusterLabel != "" {
 		name, sqlInstance, err := VirtualClusterInfoFromLabel(virtualClusterLabel)
 		if err != nil {
 			return err
 		}
 
-		services, err := c.DiscoverServices(ctx, name, ServiceTypeSQL)
-		if err != nil {
-			return err
-		}
+		if name != SystemInterfaceName {
+			services, err := c.DiscoverServices(ctx, name, ServiceTypeSQL)
+			if err != nil {
+				return err
+			}
 
-		if len(services) == 0 {
-			return fmt.Errorf("no service for virtual cluster %q", virtualClusterName)
-		}
+			if len(services) == 0 {
+				return fmt.Errorf("no service for virtual cluster %q", virtualClusterName)
+			}
 
-		virtualClusterName = name
-		if services[0].ServiceMode == ServiceModeShared {
-			// For shared process virtual clusters, we just stop the service
-			// via SQL.
-			killProcesses = false
-		} else {
-			virtualClusterDisplay = fmt.Sprintf(" virtual cluster %q, instance %d", virtualClusterName, sqlInstance)
+			virtualClusterName = name
+			if services[0].ServiceMode == ServiceModeShared {
+				// For shared process virtual clusters, we just stop the service
+				// via SQL.
+				killProcesses = false
+			} else {
+				virtualClusterDisplay = fmt.Sprintf(" virtual cluster %q, instance %d", virtualClusterName, sqlInstance)
+			}
 		}
-
 	}
 
 	if killProcesses {
@@ -602,7 +605,6 @@ fi`,
 				sig,                       // [5]
 				waitCmd,                   // [6]
 			)
-
 			res, err := c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("kill"))
 			if err != nil {
 				return res, err

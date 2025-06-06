@@ -227,8 +227,6 @@ func (c *SyncedCluster) DiscoverService(
 	// The fall back is also useful for
 	// backwards compatibility with clusters that were created before the
 	// introduction of service discovery, or without a DNS provider.
-	// TODO(Herko): Remove this once DNS support is fully
-	// functional.
 	if len(services) == 0 {
 		var port int
 		switch serviceType {
