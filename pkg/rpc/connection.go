@@ -110,15 +110,13 @@ func newConnectionToNodeID[Conn rpcConn](
 	breakerSignal func() circuit.Signal,
 	connOptions *ConnectionOptions[Conn],
 ) *Connection[Conn] {
-	drpcConnEquals := func(a, b drpc.Conn) bool { return a == b }
 	c := &Connection[Conn]{
 		breakerSignalFn: breakerSignal,
 		k:               k,
 		connFuture: connFuture[Conn]{
 			ready: make(chan struct{}),
 		},
-		batchStreamPool:     makeStreamPool(opts.Stopper, connOptions.newBatchStreamClient, connOptions.connEquals),
-		drpcBatchStreamPool: makeStreamPool(opts.Stopper, newDRPCBatchStream, drpcConnEquals),
+		batchStreamPool: makeStreamPool(opts.Stopper, connOptions.newBatchStreamClient, connOptions.connEquals),
 	}
 	return c
 }
@@ -304,12 +302,12 @@ func (s *connFuture[Conn]) Resolved() bool {
 
 // Resolve is idempotent. Only the first call has any effect.
 // Not thread safe.
-func (s *connFuture[Conn]) Resolve(cc Conn, dc drpc.Conn, err error) {
+func (s *connFuture[Conn]) Resolve(cc Conn, err error) {
 	select {
 	case <-s.ready:
 		// Already resolved, noop.
 	default:
-		s.cc, s.dc, s.err = cc, dc, err
+		s.cc, s.err = cc, err
 		close(s.ready)
 	}
 }
