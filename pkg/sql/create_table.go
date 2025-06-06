@@ -614,7 +614,8 @@ func (n *createTableNode) startExec(params runParams) error {
 				// indexes, partial, vector, or otherwise, to update.
 				var pm row.PartialIndexUpdateHelper
 				var vh row.VectorIndexUpdateHelper
-				if err := ti.row(params.ctx, rowBuffer, pm, vh, params.extendedEvalCtx.Tracing.KVTracingEnabled()); err != nil {
+				var oth row.OriginTimestampCPutHelper
+				if err := ti.row(params.ctx, rowBuffer, pm, vh, oth, params.extendedEvalCtx.Tracing.KVTracingEnabled()); err != nil {
 					return err
 				}
 			}
