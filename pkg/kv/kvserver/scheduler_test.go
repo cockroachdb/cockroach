@@ -418,8 +418,7 @@ func TestSchedulerEnqueueWhileProcessing(t *testing.T) {
 		statePost := ss.state[id]
 		ss.Unlock()
 
-		// TODO(tbg): enable in follow-up commit.
-		// assert.Zero(t, statePost.begin)
+		assert.Zero(t, statePost.begin)
 		assert.Equal(t, stateQueued|stateTestIntercept, statePost.flags)
 		close(done)
 	}
