@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -660,7 +661,10 @@ type storedProcTxnStateAccessor struct {
 }
 
 func (a *storedProcTxnStateAccessor) setStoredProcTxnState(
-	txnOp tree.StoredProcTxnOp, txnModes *tree.TransactionModes, resumeProc *memo.Memo,
+	txnOp tree.StoredProcTxnOp,
+	txnModes *tree.TransactionModes,
+	resumeProc *memo.Memo,
+	resumeStmt statements.Statement[tree.Statement],
 ) {
 	if a.ex == nil {
 		panic(errors.AssertionFailedf("setStoredProcTxnState is not supported without connExecutor"))
@@ -668,6 +672,7 @@ func (a *storedProcTxnStateAccessor) setStoredProcTxnState(
 	a.ex.extraTxnState.storedProcTxnState.txnOp = txnOp
 	a.ex.extraTxnState.storedProcTxnState.txnModes = txnModes
 	a.ex.extraTxnState.storedProcTxnState.resumeProc = resumeProc
+	a.ex.extraTxnState.storedProcTxnState.resumeStmt = resumeStmt
 }
 
 func (a *storedProcTxnStateAccessor) getTxnOp() tree.StoredProcTxnOp {
@@ -713,6 +718,8 @@ func (p *planner) EvalTxnControlExpr(
 	if err != nil {
 		return nil, err
 	}
-	p.storedProcTxnState.setStoredProcTxnState(expr.Op, &expr.Modes, resumeProc.(*memo.Memo))
+	p.storedProcTxnState.setStoredProcTxnState(
+		expr.Op, &expr.Modes, resumeProc.(*memo.Memo), p.stmt.Statement,
+	)
 	return tree.DNull, nil
 }
