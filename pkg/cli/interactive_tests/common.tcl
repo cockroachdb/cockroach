@@ -73,7 +73,7 @@ proc eexpect {text} {
 }
 
 # eexpect_re is like eexpect, but takes a regular expression argument
-# instead of a text string
+# instead of a text string.
 proc eexpect_re {text} {
   expect {
     -re $text {}
@@ -86,6 +86,44 @@ proc interrupt {} {
     report "INTERRUPT TO FOREGROUND PROCESS"
     send "\003"
     sleep 0.4
+}
+
+# Convenience function that sends Ctrl+C and waits more reliably for process to exit.
+# This uses a retry approach similar to stop_server but adapted for expect environment.
+proc interrupt_and_wait {} {
+    report "INTERRUPT AND WAIT FOR FOREGROUND PROCESS"
+
+    # Send the interrupt signal
+    send "\003"
+
+    # Use a retry loop similar to stop_server's wait mechanism.
+    # Try up to 30 times with 1 second intervals, like stop_server does.
+    try {
+        # Set shorter timeout for the retry loop
+        set timeout 1
+
+        for {set i 1} {$i <= 30} {incr i} {
+            # Try to expect the shell prompt with a short timeout (1 second per attempt).
+            expect {
+                ":/# " {
+                    report "FOREGROUND PROCESS EXITED SUCCESSFULLY (after $i attempt(s))"
+                    return
+                }
+                timeout {
+                    # Process might still be running, continue waiting.
+                    report "still waiting for process to exit (attempt $i/30)"
+                    # The sleep is implicit in the timeout, so we don't need an additional sleep here.
+                }
+            }
+        }
+
+        # If we get here, the process didn't exit cleanly within 30 seconds.
+        report "TIMEOUT: foreground process still running after 30 attempts"
+        error "Failed to interrupt foreground process - it did not exit within 30 seconds"
+    } finally {
+        # Restore original timeout.
+        set timeout 45
+    }
 }
 
 # Convenience function that sends Ctrl+D to the monitored process.
