@@ -98,8 +98,16 @@ func (og *operationGenerator) fnExists(
 	)`, fnName, argTypes)
 }
 
+// tableHasDependencies reports whether the given table has any schema dependencies,
+// optionally excluding foreign keys and/or self-references.
+//
+// A dependency is ignored if:
+// 1. It is a foreign key and includeFKs is false.
+// 2. It is a self-dependency (i.e., the table depends on itself) and:
+// a) It is a foreign key, or
+// b) skipSelfRef is true (regardless of dependency type).
 func (og *operationGenerator) tableHasDependencies(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, includeFKs bool,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, includeFKs, skipSelfRef bool,
 ) (bool, error) {
 	fkFilter := ""
 	if !includeFKs {
@@ -117,12 +125,18 @@ func (og *operationGenerator) tableHasDependencies(
                             ns.oid = c.relnamespace
                      WHERE c.relname = $1 AND ns.nspname = $2
                 )
-           AND NOT (fd.descriptor_id = fd.dependedonby_id AND fd.dependedonby_type = 'fk')
+           AND NOT (
+             fd.descriptor_id = fd.dependedonby_id
+             AND (
+               fd.dependedonby_type = 'fk'
+               OR $3::BOOL = true
+             )
+           )
            AND fd.dependedonby_type != 'sequence'
            %s
        )
 	`, fkFilter)
-	return og.scanBool(ctx, tx, q, tableName.Object(), tableName.Schema())
+	return og.scanBool(ctx, tx, q, tableName.Object(), tableName.Schema(), skipSelfRef)
 }
 
 // columnRemovalWillDropFKBackingIndexes determines if dropping this column
