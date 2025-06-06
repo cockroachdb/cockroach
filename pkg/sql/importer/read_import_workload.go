@@ -132,6 +132,8 @@ func makeDatumFromColOffset(
 			// MakeDTimestamp here and just directly construct it.
 			return alloc.NewDTimestampTZ(tree.DTimestampTZ{Time: col.Timestamp()[rowIdx]}), nil
 		}
+	case types.DecimalFamily:
+		return alloc.NewDDecimal(tree.DDecimal{Decimal: col.Decimal()[rowIdx]}), nil
 	}
 	return nil, errors.Errorf(
 		`don't know how to interpret %s column as %s`, col.Type(), hint)
