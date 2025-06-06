@@ -619,8 +619,9 @@ func buildRowKVs(
 	p := &capturePutter{}
 	var pm row.PartialIndexUpdateHelper
 	var vh row.VectorIndexUpdateHelper
+	var oth row.OriginTimestampCPutHelper
 	for _, d := range datums {
-		if err := inserter.InsertRow(context.Background(), p, d, pm, vh, nil, row.CPutOp, true /* traceKV */); err != nil {
+		if err := inserter.InsertRow(context.Background(), p, d, pm, vh, oth, row.CPutOp, true /* traceKV */); err != nil {
 			return kvs{}, err
 		}
 	}

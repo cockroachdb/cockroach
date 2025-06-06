@@ -241,7 +241,7 @@ func (ru *Updater) UpdateRow(
 	updateValues []tree.Datum,
 	pm PartialIndexUpdateHelper,
 	vh VectorIndexUpdateHelper,
-	oth *OriginTimestampCPutHelper,
+	oth OriginTimestampCPutHelper,
 	mustValidateOldPKValues bool,
 	traceKV bool,
 ) ([]tree.Datum, error) {

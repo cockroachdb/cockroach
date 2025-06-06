@@ -63,12 +63,19 @@ type deleteRun struct {
 	numPassthrough int
 
 	mustValidateOldPKValues bool
+
+	originTimestampCPutHelper row.OriginTimestampCPutHelper
 }
 
-func (r *deleteRun) initRowContainer(params runParams, columns colinfo.ResultColumns) {
+func (r *deleteRun) init(params runParams, columns colinfo.ResultColumns) {
+	if ots := params.extendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
+		r.originTimestampCPutHelper.OriginTimestamp = ots
+	}
+
 	if !r.rowsNeeded {
 		return
 	}
+
 	r.td.rows = rowcontainer.NewRowContainer(
 		params.p.Mon().MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(columns),
@@ -83,7 +90,7 @@ func (d *deleteNode) startExec(params runParams) error {
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
 	d.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
-	d.run.initRowContainer(params, d.columns)
+	d.run.init(params, d.columns)
 
 	return d.run.td.init(params.ctx, params.p.txn, params.EvalContext())
 }
@@ -189,7 +196,7 @@ func (r *deleteRun) processSourceRow(params runParams, sourceVals tree.Datums) e
 
 	// Queue the deletion in the KV batch.
 	if err := r.td.row(
-		params.ctx, deleteVals, pm, vh, r.mustValidateOldPKValues, r.traceKV,
+		params.ctx, deleteVals, pm, vh, r.originTimestampCPutHelper, r.mustValidateOldPKValues, r.traceKV,
 	); err != nil {
 		return err
 	}
