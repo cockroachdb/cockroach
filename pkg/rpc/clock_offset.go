@@ -496,7 +496,7 @@ func PopulationVarianceKnownMean(input stats.Float64Data, mean float64) float64 
 	return variance / float64(input.Len())
 }
 
-// MedianSortedInput calculates the mean of the input, assuming it is already
+// MedianSortedInput calculates the median of the input, assuming it is already
 // sorted.
 func MedianSortedInput(sortedInput stats.Float64Data) float64 {
 	l := len(sortedInput)
