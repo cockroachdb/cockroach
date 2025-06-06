@@ -414,6 +414,28 @@ func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescri
 	return nil
 }
 
+// applySnapshotTODO is the plan for splitting snapshot application into
+// cross-engine writes.
+//
+//  1. Log engine write (durable):
+//     1.1. HardState, RaftTruncatedState for new LogID. Log is empty.
+//     1.2. WAG node with the state machine mutation (2).
+//
+//  2. State machine mutation:
+//     2.1. For subsumed, clear RangeID-local un-/replicated state.
+//     2.2. For subsumed, write RangeTombstone with max NextReplicaID / LogID.
+//     2.3. Clear MVCC keyspace for (this + subsumed).
+//     2.4. Ingest snapshot SSTs.
+//     2.5. Update RaftReplicaID with the new LogID.
+//
+//  3. Log engine GC (after state machine mutation 2 is durably applied):
+//     3.1. Remove previous LogID.
+//     3.2. For each subsumed, remove the last LogID.
+//
+// TODO(sep-raft-log): support the status quo in which 1+2+3 is written
+// atomically, and 1.2 is not written.
+const applySnapshotTODO = 0
+
 // applySnapshotRaftMuLocked updates the replica and its store based on the given
 // (non-empty) snapshot and associated HardState. All snapshots must pass
 // through Raft for correctness, i.e. the parameters to this method must be
@@ -577,6 +599,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		subsumedDescs: subsumedDescs,
 	}
 
+	_ = applySnapshotTODO
 	clearedUnreplicatedSpan, clearedSubsumedSpans, err := prepareSnapApply(ctx, prepInput)
 	if err != nil {
 		return err
@@ -611,12 +634,14 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	var ingestStats pebble.IngestOperationStats
 	var writeBytes uint64
 	if applyAsIngest {
+		_ = applySnapshotTODO // all atomic
 		exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
 		if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(ctx, inSnap.SSTStorageScratch.SSTs(), inSnap.sharedSSTs, inSnap.externalSSTs, exciseSpan); err != nil {
 			return errors.Wrapf(err, "while ingesting %s and excising %s-%s",
 				inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
 		}
 	} else {
+		_ = applySnapshotTODO // all atomic
 		err := r.store.TODOEngine().ConvertFilesToBatchAndCommit(
 			ctx, inSnap.SSTStorageScratch.SSTs(), clearedSpans)
 		if err != nil {
