@@ -33,7 +33,7 @@ t  CREATE TABLE public.t (
      CONSTRAINT t_pkey PRIMARY KEY (a ASC),
      FAMILY fam_0_a (a),
      FAMILY fam_1_b (b)
-   );
+   ) WITH (schema_locked = true);
 
 query TT
 SHOW CREATE TABLE t_idx
@@ -50,7 +50,7 @@ t_idx  CREATE TABLE public.t_idx (
          FAMILY fam_0_a (a),
          FAMILY fam_1_b (b),
          FAMILY fam_2_c (c)
-       );
+       ) WITH (schema_locked = true);
 
 subtest Select
 

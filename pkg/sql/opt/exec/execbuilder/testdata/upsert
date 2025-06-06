@@ -865,7 +865,7 @@ UPSERT INTO t35364 (x) VALUES (0)
 # ------------------------------------------------------------------------------
 
 statement ok
-CREATE TABLE table38627 (a INT PRIMARY KEY, b INT, FAMILY (a, b)); INSERT INTO table38627 VALUES(1,1)
+CREATE TABLE table38627 (a INT PRIMARY KEY, b INT, FAMILY (a, b)) WITH (schema_locked = false); INSERT INTO table38627 VALUES(1,1)
 
 statement ok
 BEGIN;
