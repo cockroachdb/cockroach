@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
@@ -596,6 +597,48 @@ var dmsetupDiskStallTest = func(c cluster.Cluster) failureSmokeTest {
 	}
 }
 
+var resetVMTests = func(c cluster.Cluster) failureSmokeTest {
+	rng, _ := randutil.NewPseudoRand()
+	rebootedNode := c.CRDBNodes().SeededRandNode(rng)
+	return failureSmokeTest{
+		testName:    failures.ResetVMFailureName,
+		failureName: failures.ResetVMFailureName,
+		args: failures.ResetVMArgs{
+			Nodes: rebootedNode.InstallNodes(),
+		},
+		validateFailure: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f *failures.Failer) error {
+			// Check that we aren't able to establish a SQL connection to the rebooted node.
+			// waitForFailureToPropagate already does a similar check, but we do it here
+			// to satisfy the smoke test framework since this is a fairly simple failure
+			// mode with less to validate.
+			return testutils.SucceedsSoonError(func() error {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+
+				killedDB, err := c.ConnE(ctx, l, rebootedNode[0])
+				if err == nil {
+					defer killedDB.Close()
+					if err := killedDB.Ping(); err == nil {
+						return errors.Errorf("expected node %d to be dead, but it is alive", rebootedNode)
+					} else {
+						l.Printf("failed to connect to node %d: %v", rebootedNode, err)
+					}
+				} else {
+					l.Printf("unable to establish SQL connection to node %d", rebootedNode)
+				}
+				return nil
+			})
+		},
+		validateRecover: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f *failures.Failer) error {
+			return nil
+		},
+		workload: func(ctx context.Context, c cluster.Cluster, args ...string) error {
+			return defaultFailureSmokeTestWorkload(ctx, c, "--tolerate-errors")
+		},
+	}
+}
+
 func defaultFailureSmokeTestWorkload(ctx context.Context, c cluster.Cluster, args ...string) error {
 	workloadArgs := strings.Join(args, " ")
 	cmd := roachtestutil.NewCommand("./cockroach workload run kv %s", workloadArgs).
@@ -642,6 +685,7 @@ func runFailureSmokeTest(ctx context.Context, t test.Test, c cluster.Cluster, no
 		asymmetricOutgoingNetworkPartitionTest(c),
 		latencyTest(c),
 		dmsetupDiskStallTest(c),
+		resetVMTests(c),
 	}
 	failureSmokeTests = append(failureSmokeTests, cgroupsDiskStallTests(c)...)
 

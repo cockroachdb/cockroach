@@ -10,6 +10,7 @@ go_library(
         "network_partition.go",
         "noop.go",
         "registry.go",
+        "reset.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures",
     visibility = ["//visibility:public"],
