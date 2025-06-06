@@ -17,7 +17,7 @@ ba
 c
 foobarbaz
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
@@ -27,7 +27,7 @@ CREATE TABLE public.t (
   FAMILY fam_0_c (c)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----

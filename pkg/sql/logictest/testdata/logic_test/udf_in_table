@@ -112,7 +112,7 @@ id   col_id  default_expr           on_update_expr         compute_expr  uses_fn
 111  4       NULL                   "[FUNCTION 100106]()"  NULL          [106]
 111  5       NULL                   NULL                   NULL          NULL
 
-skipif config local-schema-locked local-mixed-25.2
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t1];
 ----
@@ -124,7 +124,7 @@ CREATE TABLE public.t1 (
   e INT8 NULL,
   CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
   FAMILY fam_0 (a, b, c, d, e)
-);
+) WITH (schema_locked = true);
 
 onlyif config local-schema-locked
 query T
@@ -138,7 +138,7 @@ CREATE TABLE public.t1 (
   e INT8 NULL,
   CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
   FAMILY fam_0 (a, b, c, d, e)
-) WITH (schema_locked = true);
+);
 
 # Make sure that back references are tracked properly.
 let $fn_id
@@ -174,21 +174,7 @@ id   col_id  default_expr           on_update_expr         compute_expr  uses_fn
 111  4       NULL                   "[FUNCTION 100106]()"  NULL          [106]
 111  5       NULL                   NULL                   NULL          NULL
 
-skipif config local-schema-locked local-mixed-25.2
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t1];
-----
-CREATE TABLE public.t1 (
-  a INT8 NOT NULL,
-  b INT8 NULL DEFAULT public.f1(),
-  c INT8 NULL DEFAULT public.f1(),
-  d INT8 NULL ON UPDATE public.f1(),
-  e INT8 NULL,
-  CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
-  FAMILY fam_0 (a, b, c, d, e)
-);
-
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t1];
 ----
@@ -201,6 +187,20 @@ CREATE TABLE public.t1 (
   CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
   FAMILY fam_0 (a, b, c, d, e)
 ) WITH (schema_locked = true);
+
+onlyif config local-legacy-schema-changer
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t1];
+----
+CREATE TABLE public.t1 (
+  a INT8 NOT NULL,
+  b INT8 NULL DEFAULT public.f1(),
+  c INT8 NULL DEFAULT public.f1(),
+  d INT8 NULL ON UPDATE public.f1(),
+  e INT8 NULL,
+  CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
+  FAMILY fam_0 (a, b, c, d, e)
+);
 
 skipif config local-mixed-25.2
 query T
@@ -233,7 +233,7 @@ id   col_id  default_expr           on_update_expr         compute_expr  uses_fn
 111  4       NULL                   "[FUNCTION 100106]()"  NULL          [106]
 111  5       NULL                   "[FUNCTION 100106]()"  NULL          [106]
 
-skipif config local-schema-locked local-mixed-25.2
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t1];
 ----
@@ -245,7 +245,7 @@ CREATE TABLE public.t1 (
   e INT8 NULL ON UPDATE public.f1(),
   CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
   FAMILY fam_0 (a, b, c, d, e)
-);
+) WITH (schema_locked = true);
 
 # Make sure cross references are properly removed with SET DEFAULT.
 skipif config local-mixed-25.2
@@ -776,18 +776,7 @@ SELECT * FROM t1 ORDER BY a;
 statement ok
 ALTER FUNCTION f1() RENAME TO f1_new;
 
-skipif config local-schema-locked
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t1]
-----
-CREATE TABLE public.t1 (
-  a INT8 NOT NULL,
-  b INT8 NULL DEFAULT public.f1_new(),
-  CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
-  FAMILY fam_0 (a, b)
-);
-
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t1]
 ----
@@ -797,6 +786,17 @@ CREATE TABLE public.t1 (
   CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
   FAMILY fam_0 (a, b)
 ) WITH (schema_locked = true);
+
+onlyif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t1]
+----
+CREATE TABLE public.t1 (
+  a INT8 NOT NULL,
+  b INT8 NULL DEFAULT public.f1_new(),
+  CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
+  FAMILY fam_0 (a, b)
+);
 
 statement ok
 INSERT INTO t1 VALUES (3)

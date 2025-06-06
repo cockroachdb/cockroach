@@ -23,7 +23,7 @@ INSERT INTO kv VALUES (111, 222)
 
 # Verify the right columns are hidden.
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t
 ----
@@ -33,7 +33,7 @@ t  CREATE TABLE public.t (
      CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
    );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t
 ----

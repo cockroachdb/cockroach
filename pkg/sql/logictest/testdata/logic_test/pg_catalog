@@ -663,32 +663,32 @@ FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-relname            relhasrules  relhastriggers  relhassubclass  relfrozenxid  relacl  reloptions  relreplident
-t1                 false        false           false           0             NULL    NULL        d
-t1_pkey            false        false           false           0             NULL    NULL        n
-t1_a_key           false        false           false           0             NULL    NULL        n
-index_key          false        false           false           0             NULL    NULL        n
-t1_m_seq           false        false           false           0             NULL    NULL        n
-t1_n_seq           false        false           false           0             NULL    NULL        n
-t2                 false        false           false           0             NULL    NULL        d
-t2_pkey            false        false           false           0             NULL    NULL        n
-t2_t1_id_idx       false        false           false           0             NULL    NULL        n
-t3                 false        false           false           0             NULL    NULL        d
-t3_pkey            false        false           false           0             NULL    NULL        n
-t3_a_b_idx         false        false           false           0             NULL    NULL        n
-v1                 false        false           false           0             NULL    NULL        n
-t4                 false        false           false           0             NULL    NULL        d
-t4_pkey            false        false           false           0             NULL    NULL        n
-t5                 false        false           false           0             NULL    NULL        d
-t5_pkey            false        false           false           0             NULL    NULL        n
-t6                 false        false           false           0             NULL    NULL        d
-t6_pkey            false        false           false           0             NULL    NULL        n
-t6_expr_idx        false        false           false           0             NULL    NULL        n
-t6_expr_expr1_idx  false        false           false           0             NULL    NULL        n
-t6_expr_key        false        false           false           0             NULL    NULL        n
-t6_expr_idx1       false        false           false           0             NULL    NULL        n
-mv1                false        false           false           0             NULL    NULL        d
-mv1_pkey           false        false           false           0             NULL    NULL        n
+relname            relhasrules  relhastriggers  relhassubclass  relfrozenxid  relacl  reloptions            relreplident
+t1                 false        false           false           0             NULL    {schema_locked=true}  d
+t1_pkey            false        false           false           0             NULL    NULL                  n
+t1_a_key           false        false           false           0             NULL    NULL                  n
+index_key          false        false           false           0             NULL    NULL                  n
+t1_m_seq           false        false           false           0             NULL    NULL                  n
+t1_n_seq           false        false           false           0             NULL    NULL                  n
+t2                 false        false           false           0             NULL    {schema_locked=true}  d
+t2_pkey            false        false           false           0             NULL    NULL                  n
+t2_t1_id_idx       false        false           false           0             NULL    NULL                  n
+t3                 false        false           false           0             NULL    {schema_locked=true}  d
+t3_pkey            false        false           false           0             NULL    NULL                  n
+t3_a_b_idx         false        false           false           0             NULL    NULL                  n
+v1                 false        false           false           0             NULL    NULL                  n
+t4                 false        false           false           0             NULL    {schema_locked=true}  d
+t4_pkey            false        false           false           0             NULL    NULL                  n
+t5                 false        false           false           0             NULL    {schema_locked=true}  d
+t5_pkey            false        false           false           0             NULL    NULL                  n
+t6                 false        false           false           0             NULL    {schema_locked=true}  d
+t6_pkey            false        false           false           0             NULL    NULL                  n
+t6_expr_idx        false        false           false           0             NULL    NULL                  n
+t6_expr_expr1_idx  false        false           false           0             NULL    NULL                  n
+t6_expr_key        false        false           false           0             NULL    NULL                  n
+t6_expr_idx1       false        false           false           0             NULL    NULL                  n
+mv1                false        false           false           0             NULL    NULL                  d
+mv1_pkey           false        false           false           0             NULL    NULL                  n
 
 ## pg_catalog.pg_attribute
 
@@ -2947,7 +2947,7 @@ copy_num_retries_per_batch                                 5                   N
 copy_transaction_quality_of_service                        background          NULL      NULL        NULL        string
 copy_write_pipelining_enabled                              off                 NULL      NULL        NULL        string
 cost_scans_with_default_col_size                           off                 NULL      NULL        NULL        string
-create_table_with_schema_locked                            off                 NULL      NULL        NULL        string
+create_table_with_schema_locked                            on                  NULL      NULL        NULL        string
 database                                                   test                NULL      NULL        NULL        string
 datestyle                                                  ISO, MDY            NULL      NULL        NULL        string
 deadlock_timeout                                           0                   NULL      NULL        NULL        string
@@ -3179,7 +3179,7 @@ copy_num_retries_per_batch                                 5                   N
 copy_transaction_quality_of_service                        background          NULL  user     NULL      background          background
 copy_write_pipelining_enabled                              off                 NULL  user     NULL      off                 off
 cost_scans_with_default_col_size                           off                 NULL  user     NULL      off                 off
-create_table_with_schema_locked                            off                 NULL  user     NULL      off                 off
+create_table_with_schema_locked                            on                  NULL  user     NULL      on                  on
 database                                                   test                NULL  user     NULL      ·                   test
 datestyle                                                  ISO, MDY            NULL  user     NULL      ISO, MDY            ISO, MDY
 deadlock_timeout                                           0                   ms    user     NULL      0s                  0s

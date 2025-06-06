@@ -325,7 +325,7 @@ ALTER TABLE fk1 ADD CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES fk2 (x);
 statement ok
 DROP INDEX fk1@i CASCADE
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE fk1
 ----
@@ -337,7 +337,7 @@ fk1  CREATE TABLE public.fk1 (
        INDEX i2 (x ASC)
      );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE fk1
 ----
@@ -374,7 +374,7 @@ INSERT INTO t VALUES (100, 500.5);
 statement ok
 SET autocommit_before_ddl = false;
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE t SET (schema_locked=false)
 
@@ -394,7 +394,7 @@ COMMIT;
 statement ok
 RESET autocommit_before_ddl
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE t SET (schema_locked=true)
 
@@ -584,7 +584,7 @@ DROP INDEX tab_145100@tab_145100_i_idx
 statement ok
 DROP PROCEDURE proc_insert_145100
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tab_145100]
 ----
@@ -596,7 +596,7 @@ CREATE TABLE public.tab_145100 (
   FAMILY fam_0_id_i_j (id, i, j)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tab_145100]
 ----
