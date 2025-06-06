@@ -14,18 +14,15 @@ import (
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
 	"storj.io/drpc"
 )
@@ -121,15 +118,13 @@ func (p *peer[Conn]) releaseMetricsLocked() {
 // See (*peer).launch for details on the probe (heartbeat loop) itself.
 type peer[Conn rpcConn] struct {
 	peerMetrics
-	k                    peerKey
-	opts                 *ContextOptions
-	heartbeatInterval    time.Duration
-	heartbeatTimeout     time.Duration
-	dial                 func(ctx context.Context, target string, class rpcbase.ConnectionClass) (Conn, error)
-	dialDRPC             func(ctx context.Context, target string, class rpcbase.ConnectionClass) (drpc.Conn, error)
-	newHeartbeatClient   heartbeatClientConstructor[Conn]
-	newBatchStreamClient streamConstructor[*kvpb.BatchRequest, *kvpb.BatchResponse, Conn]
-	newCloseNotifier     closeNotifierConstructor[Conn]
+	k                  peerKey
+	opts               *ContextOptions
+	newHeartbeatClient heartbeatClientConstructor[Conn]
+	heartbeatInterval  time.Duration
+	heartbeatTimeout   time.Duration
+	connOptions        *ConnectionOptions[Conn]
+	drpcDial           dialFunc[drpc.Conn]
 	// b maintains connection health. This breaker's async probe is always
 	// active - it is the heartbeat loop and manages `mu.c.` (including
 	// recreating it after the connection fails and has to be redialed).
@@ -210,6 +205,14 @@ func (p *peer[Conn]) snap() PeerSnap[Conn] {
 	return p.mu.PeerSnap
 }
 
+type peerOptions[Conn rpcConn] struct {
+	locality           roachpb.Locality
+	pm                 peerMetrics
+	newHeartbeatClient heartbeatClientConstructor[Conn]
+	connOptions        *ConnectionOptions[Conn]
+	peers              *peerMap[Conn]
+}
+
 // newPeer returns circuit breaker that trips when connection (associated
 // with provided peerKey) is failed. The breaker's probe *is* the heartbeat loop
 // and is thus running at all times. The exception is a decommissioned node, for
@@ -229,7 +232,7 @@ func (p *peer[Conn]) snap() PeerSnap[Conn] {
 // map, the next attempt to dial the node will start from a blank slate. In
 // other words, even with this theoretical race, the situation will sort itself
 // out quickly.
-func (rpcCtx *Context) newPeer(k peerKey, locality roachpb.Locality) *peer[*grpc.ClientConn] {
+func newPeer[Conn rpcConn](rpcCtx *Context, k peerKey, peerOpts *peerOptions[Conn]) *peer[Conn] {
 	// Initialization here is a bit circular. The peer holds the breaker. The
 	// breaker probe references the peer because it needs to replace the one-shot
 	// Connection when it makes a new connection in the probe. And (all but the
@@ -237,31 +240,18 @@ func (rpcCtx *Context) newPeer(k peerKey, locality roachpb.Locality) *peer[*grpc
 	// Connect method needs to do the short-circuiting (if a Connection is created
 	// while the breaker is tripped, we want to block in Connect only once we've
 	// seen the first heartbeat succeed).
-	pm, lm := rpcCtx.metrics.acquire(k, locality)
-	p := &peer[*grpc.ClientConn]{
-		peerMetrics:        pm,
+	p := &peer[Conn]{
+		peerMetrics:        peerOpts.pm,
 		logDisconnectEvery: log.Every(time.Minute),
 		k:                  k,
 		remoteClocks:       rpcCtx.RemoteClocks,
 		opts:               &rpcCtx.ContextOptions,
-		peers:              &rpcCtx.peers,
-		dial: func(ctx context.Context, target string, class rpcbase.ConnectionClass) (*grpc.ClientConn, error) {
-			additionalDialOpts := []grpc.DialOption{grpc.WithStatsHandler(&statsTracker{lm})}
-			additionalDialOpts = append(additionalDialOpts, rpcCtx.testingDialOpts...)
-			return rpcCtx.grpcDialRaw(ctx, target, class, additionalDialOpts...)
-		},
-		dialDRPC: dialDRPC(rpcCtx),
-		newHeartbeatClient: func(cc *grpc.ClientConn) RPCHeartbeatClient {
-			return NewGRPCHeartbeatClientAdapter(cc)
-		},
-		newBatchStreamClient: func(ctx context.Context, cc *grpc.ClientConn) (BatchStreamClient, error) {
-			return kvpb.NewInternalClient(cc).BatchStream(ctx)
-		},
-		newCloseNotifier: func(stopper *stop.Stopper, cc *grpc.ClientConn) closeNotifier {
-			return &grpcCloseNotifier{stopper: stopper, conn: cc}
-		},
-		heartbeatInterval: rpcCtx.RPCHeartbeatInterval,
-		heartbeatTimeout:  rpcCtx.RPCHeartbeatTimeout,
+		peers:              peerOpts.peers,
+		connOptions:        peerOpts.connOptions,
+		drpcDial:           dialDRPC(rpcCtx),
+		newHeartbeatClient: peerOpts.newHeartbeatClient,
+		heartbeatInterval:  rpcCtx.RPCHeartbeatInterval,
+		heartbeatTimeout:   rpcCtx.RPCHeartbeatTimeout,
 	}
 	var b *circuit.Breaker
 
@@ -275,8 +265,8 @@ func (rpcCtx *Context) newPeer(k peerKey, locality roachpb.Locality) *peer[*grpc
 		},
 	})
 	p.b = b
-	c := newConnectionToNodeID(p.opts, k, b.Signal, p.newBatchStreamClient)
-	p.mu.PeerSnap = PeerSnap[*grpc.ClientConn]{c: c}
+	c := newConnectionToNodeID(p.opts, k, b.Signal, p.connOptions)
+	p.mu.PeerSnap = PeerSnap[Conn]{c: c}
 
 	return p
 }
@@ -375,7 +365,7 @@ func (p *peer[Conn]) run(ctx context.Context, report func(error), done func()) {
 		func() {
 			p.mu.Lock()
 			defer p.mu.Unlock()
-			p.mu.c = newConnectionToNodeID(p.opts, p.k, p.mu.c.breakerSignalFn, p.newBatchStreamClient)
+			p.mu.c = newConnectionToNodeID(p.opts, p.k, p.mu.c.breakerSignalFn, p.connOptions)
 		}()
 
 		if p.snap().deleteAfter != 0 {
@@ -388,14 +378,14 @@ func (p *peer[Conn]) run(ctx context.Context, report func(error), done func()) {
 }
 
 func (p *peer[Conn]) runOnce(ctx context.Context, report func(error)) error {
-	cc, err := p.dial(ctx, p.k.TargetAddr, p.k.Class)
+	cc, err := p.connOptions.dial(ctx, p.k.TargetAddr, p.k.Class)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		_ = cc.Close() // nolint:grpcconnclose
 	}()
-	dc, err := p.dialDRPC(ctx, p.k.TargetAddr, p.k.Class)
+	dc, err := p.drpcDial(ctx, p.k.TargetAddr, p.k.Class)
 	if err != nil {
 		return err
 	}
@@ -406,7 +396,7 @@ func (p *peer[Conn]) runOnce(ctx context.Context, report func(error)) error {
 	// Set up notifications on a channel when gRPC tears down, so that we
 	// can trigger another instant heartbeat for expedited circuit breaker
 	// tripping.
-	connClosedCh := p.newCloseNotifier(p.opts.Stopper, cc).CloseNotify(ctx)
+	connClosedCh := p.connOptions.newCloseNotifier(p.opts.Stopper, cc).CloseNotify(ctx)
 
 	if p.remoteClocks != nil {
 		p.remoteClocks.OnConnect(ctx, p.k.NodeID)
