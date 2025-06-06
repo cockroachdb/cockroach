@@ -46,12 +46,12 @@ func TestUpdatePrometheusTargets(t *testing.T) {
 			}, nil
 		}
 		err := c.UpdatePrometheusTargets(ctx, "c1", false,
-			map[int][]*NodeInfo{1: {{Target: "n1"}}}, true, l)
+			NodeTargets{1: {{Target: "n1"}}}, true, l)
 		require.NotNil(t, err)
 		require.Equal(t, fmt.Sprintf(ErrorMessage, 400, getUrl(promUrl, "c1"), "failed"), err.Error())
 	})
 	t.Run("UpdatePrometheusTargets succeeds", func(t *testing.T) {
-		nodeInfos := map[int][]*NodeInfo{
+		nodeInfos := NodeTargets{
 			1: {{
 				Target: "n1",
 			}},
