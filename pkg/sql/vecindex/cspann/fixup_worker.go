@@ -95,6 +95,7 @@ type fixupWorker struct {
 	tempVectorsWithKeys []VectorWithKey
 	tempChildKey        [1]ChildKey
 	tempValueBytes      [1]ValueBytes
+	tempMetadataToGet   []PartitionMetadataToGet
 }
 
 // ewFixupWorker returns a new worker for the given processor.

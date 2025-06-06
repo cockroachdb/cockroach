@@ -209,6 +209,7 @@ func (fw *fixupWorker) splitPartition(
 			return errors.Wrapf(errFixupAborted, "reloading partition, metadata timestamp changed")
 		}
 	} else if metadata.StateDetails.State != MissingState {
+		// Fetch metadata for already created left and right partitions.
 		leftMetadata, err = fw.getPartitionMetadata(ctx, leftPartitionKey)
 		if err != nil {
 			return err
@@ -363,16 +364,15 @@ func (fw *fixupWorker) getPartition(
 // getPartitionMetadata returns the up-to-date metadata of the partition with
 // the given key.
 func (fw *fixupWorker) getPartitionMetadata(
-	ctx context.Context, partitionKey PartitionKey,
+       ctx context.Context, partitionKey PartitionKey,
 ) (PartitionMetadata, error) {
-	metadata, err := fw.index.store.TryGetPartitionMetadata(ctx, fw.treeKey, partitionKey)
+	fw.tempMetadataToGet = ensureSliceLen(fw.tempMetadataToGet, 1)
+	fw.tempMetadataToGet[0].Key = partitionKey
+	err := fw.index.store.TryGetPartitionMetadata(ctx, fw.treeKey, fw.tempMetadataToGet)
 	if err != nil {
-		metadata, err = suppressRaceErrors(err)
-		if err != nil {
-			return PartitionMetadata{}, errors.Wrapf(err, "getting metadata for partition %d", partitionKey)
-		}
+		return PartitionMetadata{}, errors.Wrapf(err, "getting metadata for partition %d", partitionKey)
 	}
-	return metadata, nil
+	return fw.tempMetadataToGet[0].Metadata, nil
 }
 
 // updateMetadata updates the given partition's metadata record, on the
@@ -586,8 +586,7 @@ func (fw *fixupWorker) createSplitSubPartition(
 		// Load parent metadata to verify that it's in a state that allows inserts.
 		parentMetadata, err := fw.getPartitionMetadata(ctx, parentPartitionKey)
 		if err != nil {
-			return PartitionMetadata{}, errors.Wrapf(err,
-				"getting parent partition %d metadata", parentPartitionKey)
+			return PartitionMetadata{}, err
 		}
 
 		parentLevel := sourceMetadata.Level + 1

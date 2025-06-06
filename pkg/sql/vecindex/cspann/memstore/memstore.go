@@ -377,17 +377,26 @@ func (s *Store) TryGetPartition(
 
 // TryGetPartitionMetadata implements the Store interface.
 func (s *Store) TryGetPartitionMetadata(
-	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
-) (cspann.PartitionMetadata, error) {
-	memPart := s.lockPartition(treeKey, partitionKey, uniqueOwner, false /* isExclusive */)
-	if memPart == nil {
-		// Partition does not exist.
-		return cspann.PartitionMetadata{}, cspann.ErrPartitionNotFound
-	}
-	defer memPart.lock.ReleaseShared()
+	ctx context.Context, treeKey cspann.TreeKey, toGet []cspann.PartitionMetadataToGet,
+) error {
+	for i := range toGet {
+		item := &toGet[i]
 
-	// Return a copy of the metadata.
-	return *memPart.lock.partition.Metadata(), nil
+		func() {
+			memPart := s.lockPartition(treeKey, item.Key, uniqueOwner, false /* isExclusive */)
+			if memPart == nil {
+				// Partition does not exist, so map it to Missing.
+				item.Metadata = cspann.PartitionMetadata{}
+				return
+			}
+			defer memPart.lock.ReleaseShared()
+
+			// Return a copy of the metadata.
+			item.Metadata = *memPart.lock.partition.Metadata()
+		}()
+	}
+
+	return nil
 }
 
 // TryUpdatePartitionMetadata implements the Store interface.
