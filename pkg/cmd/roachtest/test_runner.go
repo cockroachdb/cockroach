@@ -28,7 +28,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -1392,7 +1391,7 @@ func (r *testRunner) runTest(
 		t.L().Printf("test completed %s", s)
 		annotationText := fmt.Sprintf("%s completed %s", t.Name(), s)
 		// Attempt to annotate the test completion on Grafana.
-		if err := c.AddGrafanaAnnotation(ctx, t.L(), grafana.AddAnnotationRequest{Text: annotationText}); err != nil {
+		if err := c.AddGrafanaAnnotation(ctx, t.L(), option.WithText(annotationText)); err != nil {
 			t.L().Printf(errors.Wrap(err, "error adding annotation for test end").Error())
 		}
 
@@ -2194,7 +2193,10 @@ func grafanaAnnotateTestStart(ctx context.Context, t test.Test, c cluster.Cluste
 		tags = []string{branch}
 	}
 
-	if err := c.AddGrafanaAnnotation(ctx, t.L(), grafana.AddAnnotationRequest{Text: text, Tags: tags}); err != nil {
+	if err := c.AddGrafanaAnnotation(ctx, t.L(),
+		option.WithText(text),
+		option.WithTag(tags...),
+	); err != nil {
 		t.L().Printf(errors.Wrap(err, "error adding annotation for test start").Error())
 	}
 }

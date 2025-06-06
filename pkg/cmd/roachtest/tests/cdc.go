@@ -2306,7 +2306,7 @@ func registerCDC(r registry.Registry) {
 
 			// Consider an installation failure to be a flake which is out of
 			// our control. This should be rare.
-			err := c.Install(ctx, t.L(), ct.sinkNodes, "go")
+			err := c.InstallGoVersion(ctx, t.L(), ct.sinkNodes)
 			if err != nil {
 				t.Skip(err)
 			}
@@ -2360,7 +2360,7 @@ func registerCDC(r registry.Registry) {
 			defer cancel()
 			brokers := mskMgr.WaitForClusterActiveAndDNSUpdated(waitCtx, c)
 			t.Status("cluster is active")
-			mskMgr.CreateTopic(ctx, "auth_test_table", c)
+			mskMgr.CreateTopic(ctx, t.L(), "auth_test_table", c)
 
 			db := c.Conn(ctx, t.L(), 1)
 			defer stopFeeds(db)
@@ -4111,9 +4111,6 @@ const createMSKTopicBinPath = "/tmp/create-msk-topic"
 var setupMskTopicScript = fmt.Sprintf(`
 #!/bin/bash
 set -e -o pipefail
-wget https://go.dev/dl/go1.23.7.linux-amd64.tar.gz -O /tmp/go.tar.gz
-sudo rm -rf /usr/local/go
-sudo tar -C /usr/local -xzf /tmp/go.tar.gz
 echo export PATH=$PATH:/usr/local/go/bin >> ~/.profile
 source ~/.profile
 
@@ -4125,12 +4122,15 @@ go build .
 `, createMSKTopicBinPath)
 
 // CreateTopic creates a topic on the MSK cluster.
-func (m *mskManager) CreateTopic(ctx context.Context, topic string, c cluster.Cluster) {
+func (m *mskManager) CreateTopic(
+	ctx context.Context, l *logger.Logger, topic string, c cluster.Cluster,
+) {
 	createTopicNode := c.Node(1)
 	withCTN := option.WithNodes(createTopicNode)
 
 	require.NoError(m.t, c.RunE(ctx, withCTN, "mkdir", "-p", createMSKTopicBinPath))
 	require.NoError(m.t, c.PutString(ctx, createMskTopicMain, path.Join(createMSKTopicBinPath, "main.go"), 0700, createTopicNode))
+	require.NoError(m.t, c.InstallGoVersion(ctx, l, createTopicNode))
 	require.NoError(m.t, c.PutString(ctx, setupMskTopicScript,
 		path.Join(createMSKTopicBinPath, "setup.sh"), 0700, createTopicNode))
 	require.NoError(m.t, c.RunE(ctx, withCTN,
