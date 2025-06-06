@@ -670,6 +670,11 @@ message LocalOnlySessionData {
   // OptimizerUseExistsFilterHoistRule, when true, causes the optimizer to apply
   // the HoistUnboundFilterFromExistsSubquery rule to EXISTS conditions.
   bool optimizer_use_exists_filter_hoist_rule = 170;
+  // UseImprovedRoutineDependencyTracking, when true, causes newly-created
+  // routines to only consider user-specified target columns when determining the
+  // dependencies of an INSERT statement in a routine.
+  bool use_improved_routine_dependency_tracking = 171;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
