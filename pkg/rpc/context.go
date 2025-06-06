@@ -2065,7 +2065,7 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 		conns.mu.m = map[peerKey]*peer[*grpc.ClientConn]{}
 	}
 
-	p := rpcCtx.newPeer(k, remoteLocality)
+	p := newPeer(rpcCtx, k, newGRPCPeerOptions(rpcCtx, k, remoteLocality))
 	// (Asynchronously) Start the probe (= heartbeat loop). The breaker is healthy
 	// right now (it was just created) but the call to `.Probe` will launch the
 	// probe[1] regardless.
