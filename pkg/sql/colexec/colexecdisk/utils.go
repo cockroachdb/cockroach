@@ -10,7 +10,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -63,16 +62,12 @@ func (p *partitionerToOperator) Init(ctx context.Context) {
 }
 
 func (p *partitionerToOperator) Next() coldata.Batch {
-	var err error
 	// We need to perform the memory accounting on the dequeued batch. Note that
 	// such setup allows us to release the memory under the old p.batch (which
 	// is no longer valid) and to retain the memory under the just dequeued one.
 	p.allocator.PerformOperation(p.batch.ColVecs(), func() {
-		err = p.partitioner.Dequeue(p.Ctx, p.partitionIdx, p.batch)
+		p.partitioner.Dequeue(p.Ctx, p.partitionIdx, p.batch)
 	})
-	if err != nil {
-		colexecerror.InternalError(err)
-	}
 	return p.batch
 }
 

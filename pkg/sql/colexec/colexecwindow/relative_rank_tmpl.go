@@ -592,21 +592,14 @@ func (r *_RELATIVE_RANK_STRINGOp) Close(ctx context.Context) error {
 	if !r.CloserHelper.Close() {
 		return nil
 	}
-	var lastErr error
-	if err := r.bufferedTuples.Close(ctx); err != nil {
-		lastErr = err
-	}
+	r.bufferedTuples.Close(ctx)
 	// {{if .HasPartition}}
-	if err := r.partitionsState.Close(ctx); err != nil {
-		lastErr = err
-	}
+	r.partitionsState.Close(ctx)
 	// {{end}}
 	// {{if .IsCumeDist}}
-	if err := r.peerGroupsState.Close(ctx); err != nil {
-		lastErr = err
-	}
+	r.peerGroupsState.Close(ctx)
 	// {{end}}
-	return lastErr
+	return nil
 }
 
 // {{end}}

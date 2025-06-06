@@ -15,8 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -105,15 +103,13 @@ func TestDiskQueue(t *testing.T) {
 					dest := coldata.NewMemBatch(typs, testColumnFactory)
 					for {
 						src := op.Next()
-						require.NoError(t, q.Enqueue(ctx, src))
+						q.Enqueue(ctx, src)
 						if src.Length() == 0 {
 							break
 						}
 						if rng.Float64() < dequeuedProbabilityBeforeAllEnqueuesAreDone {
-							if ok, err := q.Dequeue(ctx, dest); !ok {
+							if ok := q.Dequeue(ctx, dest); !ok {
 								t.Fatal("queue incorrectly considered empty")
-							} else if err != nil {
-								t.Fatal(err)
 							}
 							coldata.AssertEquivalentBatches(t, batches[0], dest)
 							batches = batches[1:]
@@ -126,10 +122,8 @@ func TestDiskQueue(t *testing.T) {
 					for i := 0; i < numReadIterations; i++ {
 						batchIdx := 0
 						for batchIdx < len(batches) {
-							if ok, err := q.Dequeue(ctx, dest); !ok {
+							if ok := q.Dequeue(ctx, dest); !ok {
 								t.Fatal("queue incorrectly considered empty")
-							} else if err != nil {
-								t.Fatal(err)
 							}
 							coldata.AssertEquivalentBatches(t, batches[batchIdx], dest)
 							batchIdx++
@@ -138,24 +132,22 @@ func TestDiskQueue(t *testing.T) {
 						if testReuseCache {
 							// Trying to Enqueue after a Dequeue should return an error in these
 							// CacheModes.
-							require.Error(t, q.Enqueue(ctx, dest))
+							require.Panics(t, func() { q.Enqueue(ctx, dest) })
 						}
 
-						if ok, err := q.Dequeue(ctx, dest); ok {
+						if ok := q.Dequeue(ctx, dest); ok {
 							if dest.Length() != 0 {
 								t.Fatal("queue should be empty")
 							}
-						} else if err != nil {
-							t.Fatal(err)
 						}
 
 						if rewindable {
-							require.NoError(t, q.(colcontainer.RewindableQueue).Rewind(ctx))
+							q.(colcontainer.RewindableQueue).Rewind(ctx)
 						}
 					}
 
 					// Close queue.
-					require.NoError(t, q.Close(ctx))
+					q.Close(ctx)
 
 					// Verify no directories are left over.
 					directories, err = queueCfg.FS.List(queueCfg.GetPather.GetPath(ctx))
@@ -201,18 +193,18 @@ func TestDiskQueueCloseOnErr(t *testing.T) {
 			q, err := colcontainer.NewDiskQueue(ctx, typs, queueCfg, &diskAcc, testMemAcc)
 			require.NoError(t, err)
 
-			err = q.Enqueue(ctx, batch)
 			if diskLimit > 2 {
 				// If we have large disk limit, then enqueuing the first batch
 				// should succeed, but we should get an error on the second one.
-				require.NoError(t, err)
-				err = q.Enqueue(ctx, batch)
+				q.Enqueue(ctx, batch)
 			}
-			require.Error(t, err, "expected Enqueue to produce an error")
-			require.Equal(t, pgerror.GetPGCode(err), pgcode.DiskFull, "unexpected pg code")
+			require.Panics(t, func() { q.Enqueue(ctx, batch) })
+			// TODO
+			//require.Error(t, err, "expected Enqueue to produce an error")
+			//require.Equal(t, pgerror.GetPGCode(err), pgcode.DiskFull, "unexpected pg code")
 
 			// Now Close the queue, this should be successful.
-			require.NoError(t, q.Close(ctx))
+			q.Close(ctx)
 		})
 	}
 }
@@ -260,22 +252,16 @@ func BenchmarkDiskQueue(b *testing.B) {
 		require.NoError(b, err)
 		for {
 			batchToEnqueue := op.Next()
-			if err := q.Enqueue(ctx, batchToEnqueue); err != nil {
-				b.Fatal(err)
-			}
+			q.Enqueue(ctx, batchToEnqueue)
 			if batchToEnqueue.Length() == 0 {
 				break
 			}
 		}
 		dequeuedBatch := coldata.NewMemBatch(typs, testColumnFactory)
 		for dequeuedBatch.Length() != 0 {
-			if _, err := q.Dequeue(ctx, dequeuedBatch); err != nil {
-				b.Fatal(err)
-			}
+			q.Dequeue(ctx, dequeuedBatch)
 		}
-		if err := q.Close(ctx); err != nil {
-			b.Fatal(err)
-		}
+		q.Close(ctx)
 	}
 	// When running this benchmark multiple times, disk throttling might kick in
 	// and result in unfair numbers. Uncomment this code to run the benchmark

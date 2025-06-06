@@ -167,9 +167,7 @@ func (q *SpillingQueue) Enqueue(ctx context.Context, batch coldata.Batch) {
 		// zero batch was enqueued so that in case it wasn't, the queue would
 		// add it automatically in Dequeue.
 		if q.diskQueue != nil {
-			if err := q.diskQueue.Enqueue(ctx, batch); err != nil {
-				HandleErrorFromDiskQueue(err)
-			}
+			q.diskQueue.Enqueue(ctx, batch)
 		}
 		return
 	}
@@ -187,7 +185,7 @@ func (q *SpillingQueue) Enqueue(ctx context.Context, batch coldata.Batch) {
 		//    in-memory buffer
 		// so we have to add batch to the disk queue.
 		if err := q.maybeSpillToDisk(ctx); err != nil {
-			HandleErrorFromDiskQueue(err)
+			colcontainer.HandleErrorFromDiskQueue(err)
 		}
 		if sel := batch.Selection(); sel != nil {
 			// We need to perform the deselection since the disk queue
@@ -212,9 +210,7 @@ func (q *SpillingQueue) Enqueue(ctx context.Context, batch coldata.Batch) {
 			})
 			batch = q.diskQueueDeselectionScratch
 		}
-		if err := q.diskQueue.Enqueue(ctx, batch); err != nil {
-			HandleErrorFromDiskQueue(err)
-		}
+		q.diskQueue.Enqueue(ctx, batch)
 		q.numOnDiskItems++
 		return
 	}
@@ -365,10 +361,7 @@ func (q *SpillingQueue) Dequeue(ctx context.Context) (coldata.Batch, error) {
 			q.dequeueScratch = q.unlimitedAllocator.NewMemBatchWithFixedCapacity(q.typs, coldata.BatchSize())
 			q.unlimitedAllocator.ReleaseMemory(colmem.GetBatchMemSize(q.dequeueScratch))
 		}
-		ok, err := q.diskQueue.Dequeue(ctx, q.dequeueScratch)
-		if err != nil {
-			return nil, err
-		}
+		ok := q.diskQueue.Dequeue(ctx, q.dequeueScratch)
 		if !ok {
 			// There was no batch to Dequeue from disk. This should not really
 			// happen, as it should have been caught by the q.empty() check above.
@@ -487,9 +480,7 @@ func (q *SpillingQueue) maybeSpillToDisk(ctx context.Context) error {
 	for i := len(queueTailToMove) - 1; i >= 0; i-- {
 		// Note that these batches definitely do not have selection vectors
 		// since the deselection is performed during the copying in Enqueue().
-		if err := q.diskQueue.Enqueue(ctx, queueTailToMove[i]); err != nil {
-			return err
-		}
+		q.diskQueue.Enqueue(ctx, queueTailToMove[i])
 		q.numOnDiskItems++
 	}
 	return nil
@@ -524,9 +515,9 @@ func (q *SpillingQueue) MemoryUsage() int64 {
 }
 
 // Close closes the spilling queue.
-func (q *SpillingQueue) Close(ctx context.Context) error {
+func (q *SpillingQueue) Close(ctx context.Context) {
 	if q == nil || q.closed {
-		return nil
+		return
 	}
 	q.closed = true
 	q.testingObservability.spilled = q.diskQueue != nil
@@ -541,39 +532,33 @@ func (q *SpillingQueue) Close(ctx context.Context) error {
 	q.diskQueueDeselectionScratch = nil
 	q.dequeueScratch = nil
 	if q.diskQueue != nil {
-		if err := q.diskQueue.Close(ctx); err != nil {
-			return err
-		}
+		q.diskQueue.Close(ctx)
 		q.diskQueue = nil
 		if q.fdSemaphore != nil {
 			q.fdSemaphore.Release(q.numFDsOpenAtAnyGivenTime())
 		}
 		q.maxMemoryLimit += int64(q.diskQueueCfg.BufferSizeBytes)
 	}
-	return nil
 }
 
 // Rewind rewinds the spilling queue.
-func (q *SpillingQueue) Rewind(ctx context.Context) error {
+func (q *SpillingQueue) Rewind(ctx context.Context) {
 	if !q.rewindable {
-		return errors.AssertionFailedf("unexpectedly Rewind() called when spilling queue is not rewindable")
+		colexecerror.InternalError(errors.AssertionFailedf(
+			"unexpectedly Rewind() called when spilling queue is not rewindable",
+		))
 	}
 	if q.diskQueue != nil {
-		if err := q.diskQueue.(colcontainer.RewindableQueue).Rewind(ctx); err != nil {
-			return err
-		}
+		q.diskQueue.(colcontainer.RewindableQueue).Rewind(ctx)
 	}
 	q.curHeadIdx = 0
 	q.lastDequeuedBatchMemUsage = 0
 	q.rewindableState.numItemsDequeued = 0
-	return nil
 }
 
 // Reset resets the spilling queue.
 func (q *SpillingQueue) Reset(ctx context.Context) {
-	if err := q.Close(ctx); err != nil {
-		colexecerror.InternalError(err)
-	}
+	q.Close(ctx)
 	q.closed = false
 	q.numInMemoryItems = 0
 	q.numOnDiskItems = 0
