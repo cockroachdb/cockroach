@@ -370,7 +370,7 @@ statement ok
 CREATE TABLE t (
   x INT PRIMARY KEY, y INT, z INT, w INT,
   FAMILY (y), FAMILY (x), FAMILY (z), FAMILY (w)
-);
+) WITH (schema_locked = false);
 INSERT INTO t VALUES (1, 2, NULL, NULL)
 
 statement ok
