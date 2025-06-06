@@ -88,6 +88,44 @@ proc interrupt {} {
     sleep 0.4
 }
 
+# Convenience function that sends Ctrl+C and waits more reliably for process to exit
+# This uses a retry approach similar to stop_server but adapted for expect environment
+proc interrupt_and_wait {} {
+    report "INTERRUPT AND WAIT FOR FOREGROUND PROCESS"
+    
+    # Send the interrupt signal
+    send "\003"
+    
+    # Use a retry loop similar to stop_server's wait mechanism
+    # Try up to 30 times with 1 second intervals, like stop_server does
+    for {set i 1} {$i <= 30} {incr i} {
+        # Try to expect the shell prompt with a short timeout (1 second per attempt)
+        set timeout 1
+        expect {
+            ":/# " {
+                report "FOREGROUND PROCESS EXITED SUCCESSFULLY"
+                # Restore original timeout
+                set timeout 45
+                return
+            }
+            timeout {
+                # Process might still be running, continue waiting
+                if {$i <= 5} {
+                    report "still waiting for process to exit (attempt $i/30)"
+                }
+                # The sleep is implicit in the timeout, so we don't need an additional sleep here
+            }
+        }
+    }
+    
+    # Restore original timeout
+    set timeout 45
+    # If we get here, the process didn't exit cleanly within 30 seconds
+    report "TIMEOUT: foreground process still running after 30 seconds"
+    # Don't fail the test, but log the issue and continue
+    # The subsequent eexpect in the test will handle any remaining prompt
+}
+
 # Convenience function that sends Ctrl+D to the monitored process.
 # Leaves some upfront delay to let the readline process the time
 # to initialize the key binding.
