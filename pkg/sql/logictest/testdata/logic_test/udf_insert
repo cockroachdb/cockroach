@@ -297,11 +297,19 @@ CREATE TABLE t_computed (
   INDEX i (a ASC) USING HASH
 )
 
+# An insert routine created with use_improved_routine_dependency_tracking = true
+# should not depend on columns other than the target column "a". 
+statement ok
+SET use_improved_routine_dependency_tracking = true;
+
 statement ok
 CREATE FUNCTION f145098() RETURNS INT LANGUAGE SQL AS $$
   INSERT INTO t_computed VALUES (100);
   SELECT 1;
 $$;
+
+statement ok
+RESET use_improved_routine_dependency_tracking;
 
 statement ok
 SELECT f145098();
@@ -361,6 +369,43 @@ DROP FUNCTION f145098;
 statement ok
 DROP TABLE t_computed;
 
+statement ok
+CREATE TABLE t_computed (
+  a INT NOT NULL,
+  b INT AS (a + 1) STORED,
+  c INT AS (a * 2) VIRTUAL,
+  INDEX i (a ASC) USING HASH
+)
+
+# With use_improved_routine_dependency_tracking = false, the insert routine
+# will depend on all columns in the table.
+statement ok
+SET use_improved_routine_dependency_tracking = false;
+
+statement ok
+CREATE FUNCTION f145098() RETURNS INT LANGUAGE SQL AS $$
+  INSERT INTO t_computed VALUES (100);
+  SELECT 1;
+$$;
+
+statement ok
+RESET use_improved_routine_dependency_tracking;
+
+statement error pgcode 2BP01 pq: cannot drop column "crdb_internal_a_shard_16" because function "f145098" depends on it
+DROP INDEX i;
+
+statement error pgcode 2BP01 pq: cannot drop column "c" because function "f145098" depends on it
+ALTER TABLE t_computed DROP COLUMN c;
+
+statement error pgcode 2BP01 pq: cannot drop column "b" because function "f145098" depends on it
+ALTER TABLE t_computed DROP COLUMN b;
+
+statement ok
+DROP FUNCTION f145098;
+
+statement ok
+DROP TABLE t_computed;
+
 # Case where the INSERT statement has a RETURNING clause that references the
 # hash-sharded index column. In this case, a dependency *should* be added.
 statement ok
@@ -370,10 +415,16 @@ CREATE TABLE t_hash_sharded (
 )
 
 statement ok
+SET use_improved_routine_dependency_tracking = true;
+
+statement ok
 CREATE FUNCTION f145098() RETURNS INT LANGUAGE SQL AS $$
   INSERT INTO t_hash_sharded VALUES (100) RETURNING crdb_internal_a_shard_16;
   SELECT 1;
 $$;
+
+statement ok
+RESET use_improved_routine_dependency_tracking;
 
 statement error pgcode 2BP01 pq: cannot drop column "crdb_internal_a_shard_16" because function "f145098" depends on it
 DROP INDEX i;

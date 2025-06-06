@@ -863,7 +863,9 @@ func (b *Builder) appendOrdinaryColumnsFromTable(
 		s.cols = make([]scopeColumn, 0, tab.ColumnCount())
 	}
 	var dep opt.SchemaDep
-	if b.trackSchemaDeps {
+	trackSchemaDepsForReturning := b.trackSchemaDeps &&
+		b.evalCtx.SessionData().UseImprovedRoutineDependencyTracking
+	if trackSchemaDepsForReturning {
 		dep = opt.SchemaDep{DataSource: tab}
 	}
 	for i, n := 0, tab.ColumnCount(); i < n; i++ {
@@ -879,14 +881,14 @@ func (b *Builder) appendOrdinaryColumnsFromTable(
 			id:         colID,
 			visibility: columnVisibility(tabCol.Visibility()),
 		})
-		if b.trackSchemaDeps {
+		if trackSchemaDepsForReturning {
 			if dep.ColumnIDToOrd == nil {
 				dep.ColumnIDToOrd = make(map[opt.ColumnID]int)
 			}
 			dep.ColumnIDToOrd[colID] = i
 		}
 	}
-	if b.trackSchemaDeps {
+	if trackSchemaDepsForReturning {
 		b.schemaDeps = append(b.schemaDeps, dep)
 	}
 }

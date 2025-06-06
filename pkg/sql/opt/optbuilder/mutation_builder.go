@@ -849,7 +849,7 @@ func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList
 		colIDs[i] = newCol
 
 		// Track columns that were not explicitly set in the insert statement.
-		if mb.b.trackSchemaDeps {
+		if mb.b.trackSchemaDeps && mb.b.evalCtx.SessionData().UseImprovedRoutineDependencyTracking {
 			mb.implicitInsertCols.Add(newCol)
 		}
 
