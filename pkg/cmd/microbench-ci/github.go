@@ -25,8 +25,9 @@ type GitHubConfig struct {
 }
 
 const (
-	CommentTag = "<!-- microbench-ci -->"
-	PerfLabel  = "X-perf-check"
+	CommentTag          = "<!-- microbench-ci -->"
+	PerfRegressionLabel = "X-perf-check"
+	PerfGainLabel       = "X-perf-gain"
 )
 
 // NewGithubConfig creates a new GitHubConfig from the environment variables.

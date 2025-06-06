@@ -114,7 +114,9 @@ func TestRunAndCompare(t *testing.T) {
 				require.NoError(t, err)
 				return summary
 			case "changed":
-				return fmt.Sprintf("%t", suite.changeDetected())
+				return fmt.Sprintf("Regressed = %t, Improved = %t",
+					suite.hasPerformanceChange(Regressed),
+					suite.hasPerformanceChange(Improved))
 			case "json":
 				data, err := os.ReadFile(config.SummaryPath)
 				require.NoError(t, err)
