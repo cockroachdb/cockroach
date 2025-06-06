@@ -944,7 +944,7 @@ func (r *Registry) withSession(ctx context.Context, f withSessionFunc) {
 // jobs if it observes a failure. Otherwise it starts all the main daemons of
 // registry that poll the jobs table and start/cancel/gc jobs.
 func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
-	if r.knobs.DisableRegistryLifecycleManagent {
+	if r.knobs.DisableRegistryLifecycleManagement {
 		return nil
 	}
 
