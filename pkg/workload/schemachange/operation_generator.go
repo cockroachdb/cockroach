@@ -2870,6 +2870,9 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 	// errors.
 	opStmt.potentialExecErrors.add(pgcode.InvalidColumnReference)
 	opStmt.potentialExecErrors.add(pgcode.DuplicateColumn)
+	// When altering a primary key, the implicit rowid column may be dropped,
+	// but triggers could reference it, causing a dependency violation.
+	opStmt.potentialExecErrors.add(pgcode.DependentObjectsStillExist)
 
 	return opStmt, nil
 }
