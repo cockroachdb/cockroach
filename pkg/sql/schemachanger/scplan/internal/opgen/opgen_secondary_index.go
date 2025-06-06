@@ -52,6 +52,17 @@ func init() {
 						BackReferencedTableID: this.TableID,
 					}
 				}),
+				emit(func(this *scpb.SecondaryIndex) *scop.AddTableIndexBackReferencesInFunctions {
+					if this.EmbeddedExpr == nil ||
+						len(this.EmbeddedExpr.UsesFunctionIDs) == 0 {
+						return nil
+					}
+					return &scop.AddTableIndexBackReferencesInFunctions{
+						FunctionIDs:           this.EmbeddedExpr.UsesFunctionIDs,
+						BackReferencedTableID: this.TableID,
+						BackReferencedIndexID:  this.IndexID,
+					}
+				}),
 			),
 			to(scpb.Status_BACKFILLED,
 				emit(func(this *scpb.SecondaryIndex, md *opGenContext) *scop.BackfillIndex {
@@ -190,6 +201,17 @@ func init() {
 					return &scop.UpdateTableBackReferencesInTypes{
 						TypeIDs:               this.EmbeddedExpr.UsesTypeIDs,
 						BackReferencedTableID: this.TableID,
+					}
+				}),
+				emit(func(this *scpb.SecondaryIndex) *scop.RemoveTableIndexBackReferencesInFunctions {
+					if this.EmbeddedExpr == nil ||
+						len(this.EmbeddedExpr.UsesFunctionIDs) == 0 {
+						return nil
+					}
+					return &scop.RemoveTableIndexBackReferencesInFunctions{
+						FunctionIDs:           this.EmbeddedExpr.UsesFunctionIDs,
+						BackReferencedTableID: this.TableID,
+						BackReferencedIndexID:  this.IndexID,
 					}
 				}),
 			),
