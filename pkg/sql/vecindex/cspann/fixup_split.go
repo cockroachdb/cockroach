@@ -711,33 +711,33 @@ func (fw *fixupWorker) copyToSplitSubPartitions(
 	vectors vector.Set,
 	leftMetadata, rightMetadata PartitionMetadata,
 ) (err error) {
-	var leftOffsets, rightOffsets []uint64
+	var leftCount int
 	sourceState := sourcePartition.Metadata().StateDetails
 
 	defer func() {
 		err = errors.Wrapf(err,
 			"assigning %d vectors to left partition %d and %d vectors to right partition %d",
-			len(leftOffsets), sourceState.Target1, len(rightOffsets), sourceState.Target2)
+			leftCount, sourceState.Target1, vectors.Count-leftCount, sourceState.Target2)
 	}()
 
-	tempOffsets := fw.workspace.AllocUint64s(vectors.Count)
-	defer fw.workspace.FreeUint64s(tempOffsets)
+	tempAssignments := fw.workspace.AllocUint64s(vectors.Count)
+	defer fw.workspace.FreeUint64s(tempAssignments)
 
 	// Assign vectors to the partition with the nearest centroid.
 	kmeans := BalancedKmeans{Workspace: &fw.workspace, Rand: fw.rng}
-	leftOffsets, rightOffsets = kmeans.AssignPartitions(
-		vectors, leftMetadata.Centroid, rightMetadata.Centroid, tempOffsets)
+	leftCount = kmeans.AssignPartitions(
+		vectors, leftMetadata.Centroid, rightMetadata.Centroid, tempAssignments)
 
 	// Assign vectors and associated keys and values into contiguous left and right groupings.
 	childKeys := slices.Clone(sourcePartition.ChildKeys())
 	valueBytes := slices.Clone(sourcePartition.ValueBytes())
-	splitPartitionData(&fw.workspace, vectors, childKeys, valueBytes, leftOffsets, rightOffsets)
+	splitPartitionData(&fw.workspace, vectors, childKeys, valueBytes, tempAssignments)
 	leftVectors := vectors
-	rightVectors := leftVectors.SplitAt(len(leftOffsets))
-	leftChildKeys := childKeys[:len(leftOffsets)]
-	rightChildKeys := childKeys[len(leftOffsets):]
-	leftValueBytes := valueBytes[:len(leftOffsets)]
-	rightValueBytes := valueBytes[len(leftOffsets):]
+	rightVectors := leftVectors.SplitAt(leftCount)
+	leftChildKeys := childKeys[:leftCount]
+	rightChildKeys := childKeys[leftCount:]
+	leftValueBytes := valueBytes[:leftCount]
+	rightValueBytes := valueBytes[leftCount:]
 
 	// Add vectors to left and right sub-partitions. Note that this may not be
 	// transactional; if an error occurs, any vectors already added may not be
@@ -748,7 +748,7 @@ func (fw *fixupWorker) copyToSplitSubPartitions(
 		leftPartitionKey, leftVectors, leftChildKeys, leftValueBytes, leftMetadata)
 	if added {
 		log.VEventf(ctx, 2, "assigned %d vectors to left partition %d (level=%d, state=%s)",
-			len(leftOffsets), leftPartitionKey, leftMetadata.Level, leftMetadata.StateDetails.String())
+			leftCount, leftPartitionKey, leftMetadata.Level, leftMetadata.StateDetails.String())
 	}
 	if err != nil {
 		return err
@@ -768,7 +768,7 @@ func (fw *fixupWorker) copyToSplitSubPartitions(
 		rightPartitionKey, rightVectors, rightChildKeys, rightValueBytes, rightMetadata)
 	if added {
 		log.VEventf(ctx, 2, "assigned %d vectors to right partition %d (level=%d, state=%s)",
-			len(rightOffsets), rightPartitionKey,
+			vectors.Count-leftCount, rightPartitionKey,
 			rightMetadata.Level, rightMetadata.StateDetails.String())
 	}
 	if err != nil {
@@ -798,62 +798,55 @@ func suppressRaceErrors(err error) (PartitionMetadata, error) {
 }
 
 // splitPartitionData groups the provided partition data according to the left
-// and right offsets. All data referenced by left offsets will be moved to the
-// left of each set or slice. All data referenced by right offsets will be moved
-// to the right. The internal ordering of elements on each side is not defined.
-//
-// TODO(andyk): Passing in left and right offsets makes this overly complex. It
-// would be better to pass an assignments slice of the same length as the
-// partition data, where 0=left and 1=right.
+// and right offsets. The assignments slice specifies which partition the data
+// will be moved into: 0 for left and 1 for right. The internal ordering of
+// elements on each side is not defined.
 func splitPartitionData(
 	w *workspace.T,
 	vectors vector.Set,
 	childKeys []ChildKey,
 	valueBytes []ValueBytes,
-	leftOffsets, rightOffsets []uint64,
+	assignments []uint64,
 ) {
 	tempVector := w.AllocFloats(vectors.Dims)
 	defer w.FreeFloats(tempVector)
 
+	// Use a two-pointer approach to partition the data. left points to the next
+	// position where a left element should go. right points to the next position
+	// where a right element should go (from the end).
 	left := 0
-	right := 0
+	right := len(assignments) - 1
+
 	for {
-		// Find a misplaced "right" element from the left side.
-		var leftOffset int
-		for {
-			if left >= len(leftOffsets) {
-				return
-			}
-			leftOffset = int(leftOffsets[left])
+		// Find a misplaced element on the left side (should be 0 but is 1).
+		for left < right && assignments[left] == 0 {
 			left++
-			if leftOffset >= len(leftOffsets) {
-				break
-			}
 		}
 
-		// There must be a misplaced "left" element from the right side.
-		var rightOffset int
-		for {
-			rightOffset = int(rightOffsets[right])
-			right++
-			if rightOffset < len(leftOffsets) {
-				break
-			}
+		// Find a misplaced element on the right side (should be 1 but is 0).
+		for left < right && assignments[right] == 1 {
+			right--
 		}
 
-		// Swap the two elements.
-		rightToLeft := vectors.At(leftOffset)
-		leftToRight := vectors.At(rightOffset)
-		copy(tempVector, rightToLeft)
-		copy(rightToLeft, leftToRight)
-		copy(leftToRight, tempVector)
+		if left >= right {
+			// No more misplaced elements, so break.
+			break
+		}
 
-		tempChildKey := childKeys[leftOffset]
-		childKeys[leftOffset] = childKeys[rightOffset]
-		childKeys[rightOffset] = tempChildKey
+		// Swap vectors.
+		leftVector := vectors.At(left)
+		rightVector := vectors.At(right)
+		copy(tempVector, leftVector)
+		copy(leftVector, rightVector)
+		copy(rightVector, tempVector)
 
-		tempValueBytes := valueBytes[leftOffset]
-		valueBytes[leftOffset] = valueBytes[rightOffset]
-		valueBytes[rightOffset] = tempValueBytes
+		// Swap child keys.
+		childKeys[left], childKeys[right] = childKeys[right], childKeys[left]
+
+		// Swap value bytes.
+		valueBytes[left], valueBytes[right] = valueBytes[right], valueBytes[left]
+
+		left++
+		right--
 	}
 }
