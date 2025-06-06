@@ -302,6 +302,9 @@ func (h *txnHeartbeater) epochBumpedLocked() {}
 // createSavepointLocked is part of the txnInterceptor interface.
 func (*txnHeartbeater) createSavepointLocked(context.Context, *savepoint) {}
 
+// releaseSavepointLocked is part of the txnInterceptor interface.
+func (*txnHeartbeater) releaseSavepointLocked(context.Context, *savepoint) {}
+
 // rollbackToSavepointLocked is part of the txnInterceptor interface.
 func (*txnHeartbeater) rollbackToSavepointLocked(context.Context, savepoint) {}
 
