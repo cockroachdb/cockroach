@@ -1,4 +1,4 @@
-# LogicTest: !weak-iso-level-configs local-schema-locked
+# LogicTest: !weak-iso-level-configs schema-locked-disabled
 # This test is skipped under READ COMMITTED and REPEATABLE READ, since it
 # asserts on the NOTICE output, and weak isolation level schema changes always
 # send out extra notices.
@@ -33,7 +33,7 @@ COMMENT ON COLUMN c.a IS 'column'
 statement ok
 COMMENT ON INDEX c_a_b_idx IS 'index'
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TTTT colnames
 SELECT
   regexp_replace(create_statement, '\n', ' ', 'g'),
@@ -53,7 +53,7 @@ CREATE TABLE public.t (   a INT8 NULL,   rowid INT8 NOT VISIBLE NOT NULL DEFAULT
 CREATE TABLE public.v (   "'" INT8 NULL,   s STRING NULL,   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),   CONSTRAINT v_pkey PRIMARY KEY (rowid ASC),   CONSTRAINT "v_'_fkey" FOREIGN KEY ("'") REFERENCES public.t(rowid),   CONSTRAINT v_s_fkey FOREIGN KEY (s) REFERENCES public.v(s),   UNIQUE INDEX v_s_key (s ASC) )                                                                                    CREATE TABLE public.v (   "'" INT8 NULL,   s STRING NULL,   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),   CONSTRAINT v_pkey PRIMARY KEY (rowid ASC),   UNIQUE INDEX v_s_key (s ASC) )                                                                                                                                                                                                        {"ALTER TABLE public.v ADD CONSTRAINT \"v_'_fkey\" FOREIGN KEY (\"'\") REFERENCES public.t(rowid)","ALTER TABLE public.v ADD CONSTRAINT v_s_fkey FOREIGN KEY (s) REFERENCES public.v(s)"}  {"ALTER TABLE public.v VALIDATE CONSTRAINT \"v_'_fkey\"","ALTER TABLE public.v VALIDATE CONSTRAINT v_s_fkey"}
 CREATE TABLE public.c (   a INT8 NOT NULL,   b INT8 NULL,   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),   CONSTRAINT c_pkey PRIMARY KEY (rowid ASC),   INDEX c_a_b_idx (a ASC, b ASC),   FAMILY fam_0_a_rowid (a, rowid),   FAMILY fam_1_b (b) ); COMMENT ON TABLE public.c IS 'table'; COMMENT ON COLUMN public.c.a IS 'column'; COMMENT ON INDEX public.c@c_a_b_idx IS 'index'                             CREATE TABLE public.c (   a INT8 NOT NULL,   b INT8 NULL,   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),   CONSTRAINT c_pkey PRIMARY KEY (rowid ASC),   INDEX c_a_b_idx (a ASC, b ASC),   FAMILY fam_0_a_rowid (a, rowid),   FAMILY fam_1_b (b) ); COMMENT ON TABLE public.c IS 'table'; COMMENT ON COLUMN public.c.a IS 'column'; COMMENT ON INDEX public.c@c_a_b_idx IS 'index'                             {}                                                                                                                                                                                         {}
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TTTT colnames
 SELECT
   regexp_replace(create_statement, '\n', ' ', 'g'),
@@ -78,7 +78,7 @@ CREATE UNLOGGED TABLE unlogged_tbl (col int PRIMARY KEY)
 ----
 NOTICE: UNLOGGED TABLE will behave as a regular table in CockroachDB
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE unlogged_tbl
 ----
@@ -87,7 +87,7 @@ unlogged_tbl  CREATE TABLE public.unlogged_tbl (
                 CONSTRAINT unlogged_tbl_pkey PRIMARY KEY (col ASC)
               );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE unlogged_tbl
 ----

@@ -90,9 +90,9 @@ type TestClusterConfig struct {
 	// restart/upgrade nodes. This always bootstraps with the predecessor version
 	// of the current commit, and upgrades to the current commit.
 	UseCockroachGoTestserver bool
-	// UseSchemaLockedByDefault determines if all tables created by logictest
+	// DisableSchemaLockedByDefault determines if all tables created by logictest
 	// are schema_locked by default.
-	UseSchemaLockedByDefault bool
+	DisableSchemaLockedByDefault bool
 }
 
 // TenantMode is the type of the UseSecondaryTenant field in TestClusterConfig.
@@ -293,6 +293,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		NumNodes:                        1,
 		OverrideDistSQLMode:             "off",
 		DisableDeclarativeSchemaChanger: true,
+		DisableSchemaLockedByDefault:    true,
 	},
 	{
 		Name:                "local-vec-off",
@@ -489,12 +490,13 @@ var LogicTestConfigs = []TestClusterConfig{
 	{
 		// This config runs tests using 25.2 cluster version, simulating a node that
 		// is operating in a mixed-version cluster.
-		Name:                        "local-mixed-25.2",
-		NumNodes:                    1,
-		OverrideDistSQLMode:         "off",
-		BootstrapVersion:            clusterversion.V25_2,
-		DisableUpgrade:              true,
-		DeclarativeCorpusCollection: true,
+		Name:                         "local-mixed-25.2",
+		NumNodes:                     1,
+		OverrideDistSQLMode:          "off",
+		BootstrapVersion:             clusterversion.V25_2,
+		DisableUpgrade:               true,
+		DeclarativeCorpusCollection:  true,
+		DisableSchemaLockedByDefault: true,
 	},
 	{
 		// This config runs a cluster with 3 nodes, with a separate process per
@@ -503,12 +505,6 @@ var LogicTestConfigs = []TestClusterConfig{
 		UseCockroachGoTestserver: true,
 		BootstrapVersion:         clusterversion.V25_2,
 		NumNodes:                 3,
-	},
-	{
-		Name:                     "local-schema-locked",
-		NumNodes:                 1,
-		OverrideDistSQLMode:      "off",
-		UseSchemaLockedByDefault: true,
 	},
 }
 
@@ -597,7 +593,6 @@ var DefaultConfigSets = map[string]ConfigSet{
 		"fakedist-vec-off",
 		"fakedist-disk",
 		"local-mixed-25.2",
-		"local-schema-locked",
 	),
 
 	// Special alias for all 5 node configs.
@@ -630,6 +625,12 @@ var DefaultConfigSets = map[string]ConfigSet{
 	// Special alias for all testserver configs (for mixed-version testing).
 	"cockroach-go-testserver-configs": makeConfigSet(
 		"cockroach-go-testserver-25.2",
+	),
+
+	// Special alias for configs where schema locked is disabled.
+	"schema-locked-disabled": makeConfigSet(
+		"local-legacy-schema-changer",
+		"local-mixed-25.2",
 	),
 }
 

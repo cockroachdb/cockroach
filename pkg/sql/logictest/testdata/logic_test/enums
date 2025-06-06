@@ -385,7 +385,7 @@ SELECT b'\xFF'::as_bytes
 
 # Regression for #49300. Ensure that virtual tables have access to hydrated
 # type descriptors.
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE t1
 ----
@@ -396,7 +396,7 @@ t1  CREATE TABLE public.t1 (
       INDEX i (x ASC)
     );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE t1
 ----
@@ -409,7 +409,7 @@ t1  CREATE TABLE public.t1 (
 
 # SHOW CREATE uses a virtual index, so also check the code path where a
 # descriptor scan is used.
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM crdb_internal.create_statements WHERE descriptor_name = 't1'
 ----
@@ -420,7 +420,7 @@ CREATE TABLE public.t1 (
    INDEX i (x ASC)
 )
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM crdb_internal.create_statements WHERE descriptor_name = 't1'
 ----
@@ -523,7 +523,7 @@ WHERE
 'hello'::public.greeting
 
 # Test that enum default values are formatted in human readable ways.
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE enum_default
 ----
@@ -536,7 +536,7 @@ enum_default  CREATE TABLE public.enum_default (
                 FAMILY fam_0_x_y_z_rowid (x, y, z, rowid)
               );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE enum_default
 ----
@@ -594,7 +594,7 @@ SELECT * FROM enum_computed
 1 hello false hello
 2 hello false hello
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE enum_computed
 ----
@@ -608,7 +608,7 @@ enum_computed  CREATE TABLE public.enum_computed (
                  FAMILY fam_0_x_y_z_w_rowid (x, y, z, w, rowid)
                );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE enum_computed
 ----
@@ -646,7 +646,7 @@ CREATE TABLE enum_checks (
 );
 INSERT INTO enum_checks VALUES ('hello')
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE enum_checks
 ----
@@ -658,7 +658,7 @@ enum_checks  CREATE TABLE public.enum_checks (
                CONSTRAINT "check" CHECK ('hello':::public.greeting = 'hello':::public.greeting)
              );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE enum_checks
 ----
@@ -1642,7 +1642,7 @@ ALTER TYPE arr_typ RENAME TO arr_typ2
 statement ok
 INSERT INTO arr_t6 VALUES (default, default, default)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE arr_t6
 ----
@@ -1655,7 +1655,7 @@ arr_t6  CREATE TABLE public.arr_t6 (
           FAMILY fam_0_i_j_k_rowid (i, j, k, rowid)
         );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE arr_t6
 ----
@@ -1852,7 +1852,7 @@ CREATE TABLE tab2 (k greeting)
 statement ok
 INSERT INTO tab2 VALUES ('hello')
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE tab2 SET (schema_locked=false)
 
@@ -1873,7 +1873,7 @@ INSERT INTO tab2 VALUES ('salud')
 statement ok
 ROLLBACK
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE tab2 SET (schema_locked=true)
 
@@ -1927,7 +1927,7 @@ ALTER TABLE t ADD COLUMN "MixedCase Column" "➖➖"."MixedCase" DEFAULT ('mixed
 statement ok
 ALTER TABLE t ADD COLUMN "🙏" "DB➕➕".public."Emoji 😉" DEFAULT ('😊'::"DB➕➕".public."Emoji 😉") ON UPDATE ('😔':::public."Emoji 😉");
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
@@ -1939,7 +1939,7 @@ CREATE TABLE public.t (
 );
 
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
@@ -1960,7 +1960,7 @@ CREATE DATABASE db1;
 CREATE TYPE db1.mytype AS ENUM ('foo');
 CREATE TABLE db1.t (m db1.mytype)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE db1.public.t]
 ----
@@ -1970,7 +1970,7 @@ CREATE TABLE public.t (
   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE db1.public.t]
 ----

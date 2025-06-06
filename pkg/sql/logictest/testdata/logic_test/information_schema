@@ -1176,7 +1176,7 @@ system         information_schema  views                                  SYSTEM
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TTI colnames
 SELECT table_catalog, table_name, version
   FROM "".information_schema.tables
@@ -1185,7 +1185,7 @@ SELECT table_catalog, table_name, version
 table_catalog  table_name  version
 other_db       xyz         6
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TTI colnames
 SELECT table_catalog, table_name, version
   FROM "".information_schema.tables
@@ -1198,7 +1198,7 @@ user testuser
 
 # Check that another user cannot see other_db.adbc any more because they
 # don't have privileges on it.
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TTTTTI colnames
 SELECT * FROM other_db.information_schema.tables
 WHERE table_catalog = 'other_db' AND table_schema = 'public'
@@ -1208,7 +1208,7 @@ table_catalog  table_schema  table_name  table_type  is_insertable_into  version
 other_db       public        abc         VIEW        NO                  1
 other_db       public        xyz         BASE TABLE  YES                 6
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TTTTTI colnames
 SELECT * FROM other_db.information_schema.tables
 WHERE table_catalog = 'other_db' AND table_schema = 'public'
@@ -1226,7 +1226,7 @@ GRANT SELECT ON other_db.abc TO testuser
 user testuser
 
 # Check the user can see the tables now that they have privilege.
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TTTTTI colnames
 SELECT * FROM other_db.information_schema.tables WHERE table_catalog = 'other_db' AND table_schema = 'public' ORDER BY 1, 3
 ----
@@ -1234,7 +1234,7 @@ table_catalog  table_schema  table_name  table_type  is_insertable_into  version
 other_db       public        abc         VIEW        NO                  2
 other_db       public        xyz         BASE TABLE  YES                 6
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TTTTTI colnames
 SELECT * FROM other_db.information_schema.tables WHERE table_catalog = 'other_db' AND table_schema = 'public' ORDER BY 1, 3
 ----

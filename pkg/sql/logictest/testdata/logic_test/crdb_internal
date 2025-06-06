@@ -534,7 +534,7 @@ SELECT crdb_internal.unsafe_upsert_descriptor(id, descriptor, true) FROM encoded
 
 # Regression test for #139848. This query used to fail while querying
 # crdb_internal.zones because of the offline database.
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE empty
 ----
@@ -543,7 +543,7 @@ empty  CREATE TABLE public.empty (
          CONSTRAINT empty_pkey PRIMARY KEY (rowid ASC)
        );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE empty
 ----

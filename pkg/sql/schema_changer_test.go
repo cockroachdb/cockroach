@@ -77,6 +77,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+func DisableSchemaLockedForLegacyTest(r *sqlutils.SQLRunner) {
+
+}
+
 // TestSchemaChangeProcess adds mutations manually to a table descriptor and
 // ensures that RunStateMachineBeforeBackfill processes the mutation.
 // TODO (lucy): This is the only test that creates its own schema changer and

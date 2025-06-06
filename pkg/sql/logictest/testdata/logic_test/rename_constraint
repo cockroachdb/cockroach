@@ -7,7 +7,7 @@ CREATE TABLE t (
   FAMILY "primary" (x, y, rowid)
   )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE t]
 ----
@@ -21,7 +21,7 @@ CREATE TABLE public.t (
   CONSTRAINT cc CHECK (x > 10:::INT8)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE t]
 ----
@@ -50,7 +50,7 @@ ALTER TABLE t RENAME CONSTRAINT cu TO cu2,
               RENAME CONSTRAINT cf TO cf2,
 			  RENAME CONSTRAINT cc TO cc2
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE t]
 ----
@@ -64,7 +64,7 @@ CREATE TABLE public.t (
   CONSTRAINT cc2 CHECK (x > 10:::INT8)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE t]
 ----
@@ -117,7 +117,7 @@ ALTER TABLE t RENAME CONSTRAINT cu2 TO cu3,
 			  RENAME CONSTRAINT cc3 TO cc4,
 			  RENAME CONSTRAINT cf3 TO cf4
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE t]
 ----
@@ -131,7 +131,7 @@ CREATE TABLE public.t (
   CONSTRAINT cc4 CHECK (x > 10:::INT8)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE t]
 ----

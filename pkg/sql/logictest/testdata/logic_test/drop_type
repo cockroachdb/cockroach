@@ -224,7 +224,7 @@ CREATE TYPE t4 AS ENUM ('cheers')
 statement ok
 SET autocommit_before_ddl = false;
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE expr SET (schema_locked=false)
 
@@ -271,7 +271,7 @@ ROLLBACK
 statement ok
 RESET autocommit_before_ddl
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE expr SET (schema_locked=true)
 
