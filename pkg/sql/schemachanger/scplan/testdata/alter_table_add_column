@@ -2719,14 +2719,14 @@ PostCommitPhase stage 7 of 15 with 1 ValidationType op
       TableID: 109
 PostCommitPhase stage 8 of 15 with 11 MutationType ops
   transitions:
+    [[SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4, RecreateSourceIndexID: 0}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4, RecreateSourceIndexID: 0}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexData:{DescID: 109, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexName:{DescID: 109, Name: baz_g_key, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[TemporaryIndex:{DescID: 109, IndexID: 3, ConstraintID: 3, SourceIndexID: 4}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
     [[IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
-    [[TemporaryIndex:{DescID: 109, IndexID: 3, ConstraintID: 3, SourceIndexID: 4}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
   ops:
     *scop.MakeAbsentIndexBackfilling
       Index:
@@ -2739,6 +2739,15 @@ PostCommitPhase stage 8 of 15 with 11 MutationType ops
       IsSecondaryIndex: true
     *scop.MaybeAddSplitForIndex
       IndexID: 2
+      TableID: 109
+    *scop.AddColumnToIndex
+      ColumnID: 2
+      IndexID: 2
+      TableID: 109
+    *scop.AddColumnToIndex
+      ColumnID: 1
+      IndexID: 2
+      Kind: 1
       TableID: 109
     *scop.SetIndexName
       IndexID: 2
@@ -2754,15 +2763,6 @@ PostCommitPhase stage 8 of 15 with 11 MutationType ops
       IsSecondaryIndex: true
     *scop.MaybeAddSplitForIndex
       IndexID: 3
-      TableID: 109
-    *scop.AddColumnToIndex
-      ColumnID: 2
-      IndexID: 2
-      TableID: 109
-    *scop.AddColumnToIndex
-      ColumnID: 1
-      IndexID: 2
-      Kind: 1
       TableID: 109
     *scop.AddColumnToIndex
       ColumnID: 2
@@ -2860,9 +2860,9 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 16 MutationType ops
     [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 5}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 5}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4, RecreateSourceIndexID: 0}, PUBLIC], VALIDATED] -> PUBLIC
+    [[TemporaryIndex:{DescID: 109, IndexID: 3, ConstraintID: 3, SourceIndexID: 4}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
     [[IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
-    [[TemporaryIndex:{DescID: 109, IndexID: 3, ConstraintID: 3, SourceIndexID: 4}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
   ops:
     *scop.MakePublicPrimaryIndexWriteOnly
       IndexID: 1
@@ -2898,14 +2898,14 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 16 MutationType ops
       IndexID: 3
       Kind: 1
       TableID: 109
-    *scop.MakeIndexAbsent
-      IndexID: 3
-      TableID: 109
     *scop.MakeValidatedPrimaryIndexPublic
       IndexID: 4
       TableID: 109
     *scop.MakeIndexAbsent
       IndexID: 5
+      TableID: 109
+    *scop.MakeIndexAbsent
+      IndexID: 3
       TableID: 109
     *scop.MakeWriteOnlyColumnPublic
       ColumnID: 2

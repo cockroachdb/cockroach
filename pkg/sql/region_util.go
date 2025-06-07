@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1936,6 +1937,22 @@ func (p *planner) checkNoRegionalByRowChangeUnderway(
 						),
 						"is currently undergoing an ALTER PRIMARY KEY change",
 					)
+				}
+			}
+			// For declarative schema changer check if we are trying to add
+			// a primary index to detect primary key changes.
+			if table.GetDeclarativeSchemaChangerState() != nil {
+				for idx, target := range table.GetDeclarativeSchemaChangerState().Targets {
+					if target.GetPrimaryIndex() != nil &&
+						table.GetDeclarativeSchemaChangerState().CurrentStatuses[idx] != scpb.Status_PUBLIC {
+						return wrapErr(
+							pgerror.Newf(
+								pgcode.ObjectNotInPrerequisiteState,
+								"cannot perform database region changes while a ALTER PRIMARY KEY is underway",
+							),
+							"is currently undergoing an ALTER PRIMARY KEY change",
+						)
+					}
 				}
 			}
 			// Disallow index changes for REGIONAL BY ROW tables.
