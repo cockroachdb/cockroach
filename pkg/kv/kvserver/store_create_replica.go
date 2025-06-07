@@ -83,6 +83,20 @@ func (s *Store) getOrCreateReplica(
 		if err != nil {
 			return nil, false, err
 		}
+		if created && r.RangeID == 2 && r.store.cfg.CoalescedFlightRecorder != nil {
+			// NB: this is broken since we'll never release this handle ( so we will
+			// continue to capture the execution trace into the flight recorder
+			// indefinitely, even if the r2 replica gets rebalanced away). We need to
+			// call handle.Release when the replica is gc'ed. Unfortunately, the
+			// lifecycle isn't that well contained - basically the only guaranteed
+			// action is a call to r.mu.destroyStatus.Set, but the destroyStatus
+			// doesn't have access to the handle. Since this is just a prototype, I'm
+			// going to ignore this. We could also more tightly scope the handle to be
+			// active on nodes that hold the liveness lease, rather than having it
+			// active on all nodes holding a Replica of the liveness range. Basically
+			// - this just gives an idea of how this would be used.
+			r.mu.execTraceHandle = r.store.cfg.CoalescedFlightRecorder.New()
+		}
 		return r, created, err
 	}
 }

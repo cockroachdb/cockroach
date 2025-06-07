@@ -7,7 +7,9 @@ package server
 
 import (
 	"context"
+	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -21,7 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/goexectrace"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 var jemallocPurgeOverhead = settings.RegisterIntSetting(
@@ -40,16 +44,37 @@ var jemallocPurgePeriod = settings.RegisterDurationSettingWithExplicitUnit(
 )
 
 type sampleEnvironmentCfg struct {
-	st                   *cluster.Settings
-	stopper              *stop.Stopper
-	minSampleInterval    time.Duration
-	goroutineDumpDirName string
-	heapProfileDirName   string
-	cpuProfileDirName    string
-	runtime              *status.RuntimeStatSampler
-	sessionRegistry      *sql.SessionRegistry
-	rootMemMonitor       *mon.BytesMonitor
-	cgoMemTarget         uint64
+	st                    *cluster.Settings
+	stopper               *stop.Stopper
+	minSampleInterval     time.Duration
+	goroutineDumpDirName  string
+	heapProfileDirName    string
+	cpuProfileDirName     string
+	executionTraceDirName string
+	runtime               *status.RuntimeStatSampler
+	sessionRegistry       *sql.SessionRegistry
+	rootMemMonitor        *mon.BytesMonitor
+	cgoMemTarget          uint64
+}
+
+func NewCoalescedFlightRecorder(
+	tags *logtags.Buffer, dir string,
+) *goexectrace.CoalescedFlightRecorder {
+	cfr := goexectrace.NewCoalescedFlightRecorder(goexectrace.CoalescedFlightRecorderOptions{
+		UniqueFileName: func() string {
+			return filepath.Join(dir, profiler.UniqueExecutionTracerFileName())
+		},
+		CreateFile: func(s string) (io.Writer, error) {
+			f, err := os.Create(s)
+			return f, err
+		},
+		IdleDuration: 10 * time.Second,
+		Warningf: func(format string, args ...interface{}) {
+			ctx := logtags.WithTags(context.Background(), tags)
+			log.Warningf(ctx, format, args...)
+		},
+	})
+	return cfr
 }
 
 // startSampleEnvironment starts a periodic loop that samples the environment and,
@@ -64,6 +89,7 @@ func startSampleEnvironment(
 	runtimeSampler *status.RuntimeStatSampler,
 	sessionRegistry *sql.SessionRegistry,
 	rootMemMonitor *mon.BytesMonitor,
+	cfr *goexectrace.CoalescedFlightRecorder,
 ) error {
 	metricsSampleInterval := base.DefaultMetricsSampleInterval
 	if p, ok := srvCfg.TestingKnobs.Server.(*TestingKnobs); ok && p.EnvironmentSampleInterval != time.Duration(0) {
@@ -153,6 +179,52 @@ func startSampleEnvironment(
 				log.Warningf(ctx, "failed to start cpu profiler worker: %v", err)
 			}
 		}
+	}
+
+	if cfr != nil {
+		// The execution tracer gets its own loop, so that it can spin more tightly
+		// and record "continuous" CPU traces.
+		execTracer, err := profiler.NewExecutionTracer(cfg.st, cfr)
+		if err != nil {
+			return err
+		}
+		ctx, h, err := cfg.stopper.GetHandle(ctx, stop.TaskOpts{})
+		if err != nil {
+			return err
+		}
+		go func(ctx context.Context) {
+			defer h.Activate(ctx).Release(ctx)
+			var timer timeutil.Timer
+			defer timer.Stop()
+
+			period := func() time.Duration {
+				p := cfg.minSampleInterval
+				if d := profiler.ExecutionTracerInterval.Get(&cfg.st.SV); d > 0 && d < p {
+					p = d
+				}
+				return p
+			}
+
+			timer.Reset(period())
+			for {
+				select {
+				case <-cfg.stopper.ShouldQuiesce():
+					return
+				case <-timer.C:
+					tBegin := timeutil.Now()
+					execTracer.MaybeRecordTrace(ctx)
+					elapsed := timeutil.Since(tBegin)
+					p := period()
+					if expDur := profiler.ExecutionTracerDuration.Get(&cfg.st.SV); elapsed < expDur {
+						// If we were expecting (say) a 10s profile but the call returned in 10ns, something
+						// must have gone wrong. Avoid busy looping and wait out the remainder of the 10s we
+						// expected to be taking a trace for, plus the time between traces.
+						p += expDur - elapsed
+					}
+					timer.Reset(p)
+				}
+			}
+		}(ctx)
 	}
 
 	return cfg.stopper.RunAsyncTaskEx(ctx,
