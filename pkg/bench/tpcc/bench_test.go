@@ -6,42 +6,67 @@
 package tpcc
 
 import (
+	"bytes"
 	"context"
+	"flag"
+	"io"
 	"net/url"
-	"os/exec"
+	"os"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	runtimepprof "runtime/pprof"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testfixtures"
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sniffarg"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
+	"github.com/google/pprof/profile"
 )
 
-// BenchmarkTPCC runs TPC-C transactions against a single warehouse. It runs the
-// client side of the workload in a subprocess so that the client overhead is
-// not included in CPU and heap profiles.
+const (
+	dbName = "tpcc"
+	nodes  = 3
+)
+
+var profileFlag = flag.String("profile", "",
+	"if set, CPU and heap profiles are collected with the given file name prefix")
+
+// BenchmarkTPCC runs TPC-C transactions against a single warehouse. Both the
+// optimized and literal implementations of our TPC-C workloard are benchmarked.
+// There are benchmarks for running each transaction individually, as well as a
+// "default" mix that runs the standard mix of TPC-C transactions.
 //
-// The benchmark will generate the schema and table data for a single warehouse,
-// using a reusable store directory. In future runs the cockroach server will
-// clone and use the store directory, rather than regenerating the schema and
-// data. This enables faster iteration when re-running the benchmark.
+// CPU and heap profiles can be collected by passing the "-profile" flag with a
+// prefix for the profile file names. The profile names will include the
+// benchmark names, e.g., "foo_tpcc_literal_new_order.cpu" and
+// "foo_tpcc_literal_new_order.mem" will be created when running the benchmark:
+//
+//	./dev bench pkg/bench/tpcc -f BenchmarkTPCC/literal/new_order \
+//	  --test-args '-test.benchtime=30s -profile=foo'
+//
+// These profiles will omit CPU samples and allocations made during the setup
+// phase of the benchmark, unlike profiles collected with the "-test.cpuprofile"
+// and "-test.memprofile" flags.
 func BenchmarkTPCC(b *testing.B) {
-	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
 
-	// Reuse or generate TPCC data.
-	storeName := "bench_tpcc_store_" + storage.MinimumSupportedFormatVersion.String()
-	storeDir := testfixtures.ReuseOrGenerate(b, storeName, func(dir string) {
-		c, output := generateStoreDir.withEnv(storeDirEnvVar, dir).exec()
-		if err := c.Run(); err != nil {
-			b.Fatalf("failed to generate store dir: %s\n%s", err, output.String())
-		}
-	})
+	// Setup the cluster once for all benchmarks.
+	c, pgURL := startCluster(b)
+	defer c.Stopper().Stop(context.Background())
 
 	for _, impl := range []struct{ name, flag string }{
 		{"literal", "--literal-implementation=true"},
@@ -57,7 +82,7 @@ func BenchmarkTPCC(b *testing.B) {
 				{"default", "--mix=newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1"},
 			} {
 				b.Run(mix.name, func(b *testing.B) {
-					run(b, storeDir, []string{impl.flag, mix.flag})
+					run(b, pgURL, []string{impl.flag, mix.flag})
 				})
 			}
 		})
@@ -65,70 +90,214 @@ func BenchmarkTPCC(b *testing.B) {
 	}
 }
 
-func run(b *testing.B, storeDir string, workloadFlags []string) {
-	server, pgURL := startCockroach(b, storeDir)
-	defer server.Stopper().Stop(context.Background())
-	c, output := startClient(b, pgURL, workloadFlags)
+// run executes the TPC-C workload with the specified workload flags.
+func run(b *testing.B, pgURL string, workloadFlags []string) {
+	ctx := context.Background()
+	defer startCPUProfile(b).Stop(b)
+	defer startAllocsProfile(b).Stop(b)
 
-	var s synchronizer
-	s.init(c.Process.Pid)
+	flags := append([]string{
+		"--wait=0",
+		"--workers=1",
+		"--db=" + dbName,
+	}, workloadFlags...)
+	gen := tpccGenerator(b, flags)
 
-	// Reset the timer when the client starts running queries.
-	if timedOut := s.waitWithTimeout(); timedOut {
-		b.Fatalf("waiting on client timed-out:\n%s", output.String())
+	reg := histogram.NewRegistry(time.Minute, "tpcc")
+	ql, err := gen.Ops(ctx, []string{pgURL}, reg)
+	if err != nil {
+		b.Fatal(err)
 	}
+
 	b.ResetTimer()
-	s.notify(b)
-
-	// Stop the timer when the client stops running queries.
-	s.wait()
-	b.StopTimer()
-
-	if err := c.Wait(); err != nil {
-		b.Fatalf("client failed: %s\n%s\n%s", err, output.String(), output.String())
+	for i := 0; i < b.N; i++ {
+		if err := ql.WorkerFns[0](ctx); err != nil {
+			b.Fatal(err)
+		}
 	}
+	b.StopTimer()
 }
 
-func startCockroach(
-	b testing.TB, storeDir string,
-) (server serverutils.TestServerInterface, pgURL string) {
-	// Clone the store dir.
-	td := b.TempDir()
-	c, output := cloneEngine.
-		withEnv(srcEngineEnvVar, storeDir).
-		withEnv(dstEngineEnvVar, td).
-		exec()
-	if err := c.Run(); err != nil {
-		b.Fatalf("failed to clone engine: %s\n%s", err, output.String())
+// startCluster starts a cluster and initializes the workload data.
+func startCluster(b *testing.B) (_ serverutils.TestClusterInterface, pgURL string) {
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	// NOTE: disabling background work makes the benchmark more predictable, but
+	// also moderately less realistic.
+	ts.TimeseriesStorageEnabled.Override(context.Background(), &st.SV, false)
+	stats.AutomaticStatisticsClusterMode.Override(context.Background(), &st.SV, false)
+
+	const cacheSize = 2 * 1024 * 1024 * 1024 // 2GB
+	serverArgs := make(map[int]base.TestServerArgs, nodes)
+	for i := 0; i < nodes; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Settings:  st,
+			CacheSize: cacheSize,
+		}
 	}
 
-	// Start the server.
-	s := serverutils.StartServerOnly(b, base.TestServerArgs{
-		StoreSpecs: []base.StoreSpec{{Path: td}},
+	// Start the cluster.
+	c := serverutils.StartCluster(b, nodes, base.TestClusterArgs{
+		ServerArgsPerNode: serverArgs,
+		ParallelStart:     true,
 	})
 
 	// Generate a PG URL.
 	u, urlCleanup, err := pgurlutils.PGUrlE(
-		s.AdvSQLAddr(), b.TempDir(), url.User("root"),
+		c.Server(0).AdvSQLAddr(), b.TempDir(), url.User("root"),
 	)
 	if err != nil {
 		b.Fatalf("failed to create pgurl: %s", err)
 	}
-	u.Path = databaseName
-	s.Stopper().AddCloser(stop.CloserFn(urlCleanup))
+	u.Path = dbName
+	c.Stopper().AddCloser(stop.CloserFn(urlCleanup))
 
-	return s, u.String()
+	// Create the database.
+	r := sqlutils.MakeSQLRunner(c.ServerConn(0))
+	r.Exec(b, "CREATE DATABASE "+dbName)
+	r.Exec(b, "USE "+dbName)
+
+	// Load the TPC-C workload data.
+	gen := tpccGenerator(b, []string{"--db=" + dbName})
+	var loader workloadsql.InsertsDataLoader
+	if _, err := workloadsql.Setup(ctx, c.ServerConn(0), gen, loader); err != nil {
+		b.Fatal(err)
+	}
+
+	return c, u.String()
 }
 
-func startClient(
-	b *testing.B, pgURL string, workloadFlags []string,
-) (c *exec.Cmd, output *synchronizedBuffer) {
-	c, output = runClient.
-		withEnv(nEnvVar, b.N).
-		withEnv(pgurlEnvVar, pgURL).
-		exec(workloadFlags...)
-	if err := c.Start(); err != nil {
-		b.Fatalf("failed to start client: %s\n%s", err, output.String())
+type generator interface {
+	workload.Flagser
+	workload.Hookser
+	workload.Generator
+	workload.Opser
+}
+
+func tpccGenerator(b *testing.B, flags []string) generator {
+	tpcc, err := workload.Get("tpcc")
+	if err != nil {
+		b.Fatal(err)
 	}
-	return c, output
+	gen := tpcc.New().(generator)
+	gen.(interface {
+		SetOutput(io.Writer)
+	}).SetOutput(io.Discard)
+	if err := gen.Flags().Parse(flags); err != nil {
+		b.Fatal(err)
+	}
+	if err := gen.Hooks().Validate(); err != nil {
+		b.Fatal(err)
+	}
+	return gen
+}
+
+type doneFn func(testing.TB)
+
+func (f doneFn) Stop(b testing.TB) {
+	f(b)
+}
+
+func startCPUProfile(b testing.TB) doneFn {
+	prefix := *profileFlag
+	if prefix == "" {
+		return func(b testing.TB) {}
+	}
+
+	fileName := profileFileName(b, prefix, "cpu")
+	f, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	if err := runtimepprof.StartCPUProfile(f); err != nil {
+		b.Fatal(err)
+	}
+
+	return func(b testing.TB) {
+		runtimepprof.StopCPUProfile()
+		if err := f.Close(); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func startAllocsProfile(b testing.TB) doneFn {
+	prefix := *profileFlag
+	if prefix == "" {
+		return func(b testing.TB) {}
+	}
+
+	fileName := profileFileName(b, prefix, "mem")
+	diffAllocs := diffProfile(b, func() []byte {
+		p := runtimepprof.Lookup("allocs")
+		var buf bytes.Buffer
+
+		runtime.GC()
+		if err := p.WriteTo(&buf, 0); err != nil {
+			b.Fatal(err)
+		}
+
+		return buf.Bytes()
+	})
+
+	return func(b testing.TB) {
+		if sl := diffAllocs(b); len(sl) > 0 {
+			if err := os.WriteFile(fileName, sl, 0644); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+}
+
+func diffProfile(b testing.TB, take func() []byte) func(testing.TB) []byte {
+	// The below is essentially cribbed from pprof.go in net/http/pprof.
+
+	baseBytes := take()
+	if baseBytes == nil {
+		return func(tb testing.TB) []byte { return nil }
+	}
+	pBase, err := profile.ParseData(baseBytes)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	return func(b testing.TB) []byte {
+		pNew, err := profile.ParseData(take())
+		if err != nil {
+			b.Fatal(err)
+		}
+		pBase.Scale(-1)
+		pMerged, err := profile.Merge([]*profile.Profile{pBase, pNew})
+		if err != nil {
+			b.Fatal(err)
+		}
+		pMerged.TimeNanos = pNew.TimeNanos
+		pMerged.DurationNanos = pNew.TimeNanos - pBase.TimeNanos
+
+		buf := bytes.Buffer{}
+		if err := pMerged.Write(&buf); err != nil {
+			b.Fatal(err)
+		}
+		return buf.Bytes()
+	}
+}
+
+func profileFileName(b testing.TB, prefix, suffix string) string {
+	var outputDir string
+	if err := sniffarg.DoEnv("test.outputdir", &outputDir); err != nil {
+		b.Fatal(err)
+	}
+
+	saniRE := regexp.MustCompile(`\W+`)
+	testName := strings.TrimPrefix(b.Name(), "Benchmark")
+	testName = strings.ToLower(testName)
+	testName = saniRE.ReplaceAllString(testName, "_")
+
+	fileName := prefix + "_" + testName + "." + suffix
+	if outputDir != "" {
+		fileName = filepath.Join(outputDir, fileName)
+	}
+	return fileName
 }
