@@ -367,18 +367,9 @@ func (r *fkResolver) CurrentSearchPath() sessiondata.SearchPath {
 func (r *fkResolver) LookupObject(
 	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (found bool, prefix catalog.ResolvedObjectPrefix, objMeta catalog.Descriptor, err error) {
-	// PGDUMP supports non-public schemas so respect the schema name.
 	var lookupName string
-	if r.format.Format == roachpb.IOFileFormat_PgDump {
-		if scName == "" || dbName == "" {
-			return false, prefix, nil, errors.Errorf("expected catalog and schema name to be set when resolving"+
-				" table %q in PGDUMP", obName)
-		}
-		lookupName = fmt.Sprintf("%s.%s", scName, obName)
-	} else {
-		if scName != "" {
-			lookupName = strings.TrimPrefix(obName, scName+".")
-		}
+	if scName != "" {
+		lookupName = strings.TrimPrefix(obName, scName+".")
 	}
 	tbl, ok := r.tableNameToDesc[lookupName]
 	if ok {

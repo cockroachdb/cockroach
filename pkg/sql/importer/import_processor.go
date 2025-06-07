@@ -314,9 +314,6 @@ func makeInputConverter(
 	case roachpb.IOFileFormat_PgCopy:
 		return newPgCopyReader(semaCtx, spec.Format.PgCopy, kvCh, spec.WalltimeNanos,
 			readerParallelism, singleTable, singleTableTargetCols, evalCtx, db)
-	case roachpb.IOFileFormat_PgDump:
-		return newPgDumpReader(ctx, semaCtx, int64(spec.Progress.JobID), kvCh, spec.Format.PgDump,
-			spec.WalltimeNanos, spec.Tables, evalCtx, db)
 	case roachpb.IOFileFormat_Avro:
 		return newAvroInputReader(
 			semaCtx, kvCh, singleTable, spec.Format.Avro, spec.WalltimeNanos,
