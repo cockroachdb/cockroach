@@ -65,18 +65,17 @@ func TestClusterTimestampConversion(t *testing.T) {
 			false, // omitInRangefeeds
 		)
 
-		ctx := eval.Context{
-			Txn: kv.NewTxnFromProto(
-				context.Background(),
-				db,
-				1, /* gatewayNodeID */
-				ts,
-				kv.RootTxn,
-				&txnProto,
-			),
-		}
+		txn := kv.NewTxnFromProto(
+			context.Background(),
+			db,
+			1, /* gatewayNodeID */
+			ts,
+			kv.RootTxn,
+			&txnProto,
+		)
+		var evalCtx eval.Context
 
-		dec, err := ctx.GetClusterTimestamp()
+		dec, err := evalCtx.GetClusterTimestamp(txn)
 		require.NoError(t, err)
 		final := dec.Text('f')
 		if final != d.expected {

@@ -28,7 +28,8 @@ func GetFuncGenerator(
 	if ol.GeneratorWithExprs != nil {
 		return ol.GeneratorWithExprs.(GeneratorWithExprsOverload)(ctx, evalCtx, expr.Exprs)
 	}
-	nullArg, args, err := (*evaluator)(evalCtx).evalFuncArgs(ctx, expr)
+	e := &evaluator{Context: evalCtx}
+	nullArg, args, err := e.evalFuncArgs(ctx, expr)
 	if err != nil || nullArg {
 		return nil, err
 	}
@@ -39,7 +40,8 @@ func GetFuncGenerator(
 func GetRoutineGenerator(
 	ctx context.Context, evalCtx *Context, expr *tree.RoutineExpr,
 ) (ValueGenerator, error) {
-	args, err := (*evaluator)(evalCtx).evalRoutineArgs(ctx, expr.Args)
+	e := &evaluator{Context: evalCtx}
+	args, err := e.evalRoutineArgs(ctx, expr.Args)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +55,7 @@ func GetRoutineGenerator(
 			}
 		}
 	}
-	return (*evaluator)(evalCtx).Planner.RoutineExprGenerator(ctx, expr, args), nil
+	return e.Planner.RoutineExprGenerator(ctx, expr, args), nil
 }
 
 // Table generators, also called "set-generating functions", are

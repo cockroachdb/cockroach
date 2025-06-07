@@ -9,6 +9,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -23,6 +24,7 @@ func TestTryFilterTSVector(t *testing.T) {
 	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.NewTestingEvalContext(st)
+	txn := &kv.Txn{}
 
 	tc := testcat.New()
 	if _, err := tc.ExecuteDDL(
@@ -31,7 +33,7 @@ func TestTryFilterTSVector(t *testing.T) {
 		t.Fatal(err)
 	}
 	var f norm.Factory
-	f.Init(context.Background(), evalCtx, tc)
+	f.Init(context.Background(), evalCtx, txn, tc)
 	md := f.Metadata()
 	tn := tree.NewUnqualifiedTableName("t")
 	tab := md.AddTable(tc.Table(tn), tn)
@@ -87,7 +89,7 @@ func TestTryFilterTSVector(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Logf("test case: %v", tc)
-		filters := testutils.BuildFilters(t, &f, &semaCtx, evalCtx, tc.filters)
+		filters := testutils.BuildFilters(t, &f, &semaCtx, evalCtx, txn, tc.filters)
 
 		// We're not testing that the correct SpanExpression is returned here;
 		// that is tested elsewhere. This is just testing that we are constraining

@@ -9,6 +9,7 @@ package norm
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -68,6 +69,7 @@ type AppliedRuleFunc func(ruleName opt.RuleName, source, target opt.Expr)
 type Factory struct {
 	ctx     context.Context
 	evalCtx *eval.Context
+	txn     *kv.Txn
 
 	// mem is the Memo data structure that the factory builds.
 	mem *memo.Memo
@@ -124,7 +126,9 @@ func init() {
 //
 // By default, a factory only constant-folds immutable operators; this can be
 // changed using FoldingControl().AllowStableFolds().
-func (f *Factory) Init(ctx context.Context, evalCtx *eval.Context, catalog cat.Catalog) {
+func (f *Factory) Init(
+	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, catalog cat.Catalog,
+) {
 	// Initialize (or reinitialize) the memo.
 	mem := f.mem
 	if mem == nil {
@@ -141,6 +145,7 @@ func (f *Factory) Init(ctx context.Context, evalCtx *eval.Context, catalog cat.C
 		ctx:     ctx,
 		mem:     mem,
 		evalCtx: evalCtx,
+		txn:     txn,
 		catalog: catalog,
 	}
 
@@ -167,7 +172,7 @@ func (f *Factory) DetachMemo() *memo.Memo {
 	m := f.mem
 	f.mem = nil
 	m.Detach()
-	f.Init(f.ctx, f.evalCtx, nil /* catalog */)
+	f.Init(f.ctx, f.evalCtx, f.txn, nil /* catalog */)
 	return m
 }
 

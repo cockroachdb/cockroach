@@ -2270,7 +2270,6 @@ func (j *jsonRecordSetGenerator) Next(ctx context.Context) (bool, error) {
 }
 
 type checkConsistencyGenerator struct {
-	txn                *kv.Txn // to load range descriptors
 	consistencyChecker eval.ConsistencyCheckRunner
 	rangeDescIterator  rangedesc.Iterator
 	mode               kvpb.ChecksumMode
@@ -2354,7 +2353,6 @@ func makeCheckConsistencyGenerator(
 		return nil, err
 	}
 	return &checkConsistencyGenerator{
-		txn:                evalCtx.Txn,
 		consistencyChecker: evalCtx.ConsistencyChecker,
 		rangeDescIterator:  rangeDescIterator,
 		mode:               mode,

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
@@ -80,9 +81,10 @@ func TestBuilder(t *testing.T) {
 				evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats = true
 				evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting = true
 				evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = true
+				txn := &kv.Txn{}
 
 				var o xform.Optimizer
-				o.Init(ctx, &evalCtx, catalog)
+				o.Init(ctx, &evalCtx, txn, catalog)
 				var sv testutils.ScalarVars
 
 				for _, arg := range d.CmdArgs {
@@ -109,7 +111,7 @@ func TestBuilder(t *testing.T) {
 				// Disable normalization rules: we want the tests to check the result
 				// of the build process.
 				o.DisableOptimizations()
-				b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, o.Factory())
+				b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, txn, o.Factory())
 				scalar, err := b.Build(expr)
 				if err != nil {
 					return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))

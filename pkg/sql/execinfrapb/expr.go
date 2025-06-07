@@ -8,6 +8,7 @@ package execinfrapb
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -36,11 +37,13 @@ func DeserializeExpr(
 }
 
 // RunFilter runs a filter expression and returns whether the filter passes.
-func RunFilter(ctx context.Context, filter tree.TypedExpr, evalCtx *eval.Context) (bool, error) {
+func RunFilter(
+	ctx context.Context, filter tree.TypedExpr, evalCtx *eval.Context, txn *kv.Txn,
+) (bool, error) {
 	if filter == nil {
 		return true, nil
 	}
-	d, err := eval.Expr(ctx, evalCtx, filter)
+	d, err := eval.Expr(ctx, evalCtx, filter, txn)
 	if err != nil {
 		return false, err
 	}
@@ -64,8 +67,9 @@ func (eh *ExprHelper) Init(
 	types []*types.T,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
+	txn *kv.Txn,
 ) (err error) {
-	if err = eh.init(ctx, types, semaCtx, evalCtx); err != nil {
+	if err = eh.init(ctx, types, semaCtx, evalCtx, txn); err != nil {
 		return err
 	}
 	if eh.expr, err = eh.prepareExpr(ctx, expr); err != nil {
@@ -110,8 +114,9 @@ func (eh *MultiExprHelper) Init(
 	types []*types.T,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
+	txn *kv.Txn,
 ) (err error) {
-	if err = eh.h.init(ctx, types, semaCtx, evalCtx); err != nil {
+	if err = eh.h.init(ctx, types, semaCtx, evalCtx, txn); err != nil {
 		return err
 	}
 	// Reuse the exprs slice if there is enough capacity.
@@ -181,6 +186,7 @@ func (eh *MultiExprHelper) Reset() {
 // ExprHelper and MultiExprHelper.
 type exprHelper struct {
 	evalCtx    *eval.Context
+	txn        *kv.Txn
 	semaCtx    *tree.SemaContext
 	datumAlloc *tree.DatumAlloc
 
@@ -207,10 +213,15 @@ func (eh *exprHelper) IndexedVarEval(idx int) (tree.Datum, error) {
 
 // init initializes the exprHelper.
 func (eh *exprHelper) init(
-	ctx context.Context, types []*types.T, semaCtx *tree.SemaContext, evalCtx *eval.Context,
+	ctx context.Context,
+	types []*types.T,
+	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
+	txn *kv.Txn,
 ) error {
 	*eh = exprHelper{
 		evalCtx:    evalCtx,
+		txn:        txn,
 		semaCtx:    semaCtx,
 		types:      types,
 		datumAlloc: &tree.DatumAlloc{},
@@ -283,7 +294,7 @@ func (eh *exprHelper) evalFilter(
 ) (bool, error) {
 	eh.row = row
 	eh.evalCtx.PushIVarContainer(eh)
-	pass, err := RunFilter(ctx, expr, eh.evalCtx)
+	pass, err := RunFilter(ctx, expr, eh.evalCtx, eh.txn)
 	eh.evalCtx.PopIVarContainer()
 	return pass, err
 }
@@ -300,7 +311,7 @@ func (eh *exprHelper) eval(
 ) (tree.Datum, error) {
 	eh.row = row
 	eh.evalCtx.PushIVarContainer(eh)
-	d, err := eval.Expr(ctx, eh.evalCtx, expr)
+	d, err := eval.Expr(ctx, eh.evalCtx, expr, eh.txn)
 	eh.evalCtx.PopIVarContainer()
 	return d, err
 }

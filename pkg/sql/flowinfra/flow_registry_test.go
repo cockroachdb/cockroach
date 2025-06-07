@@ -66,16 +66,16 @@ func TestFlowRegistry(t *testing.T) {
 	reg := NewFlowRegistry()
 
 	id1 := execinfrapb.FlowID{UUID: uuid.MakeV4()}
-	f1 := &FlowBase{}
+	f1 := &FlowBase{FlowCtx: &execinfra.FlowCtx{}}
 
 	id2 := execinfrapb.FlowID{UUID: uuid.MakeV4()}
-	f2 := &FlowBase{}
+	f2 := &FlowBase{FlowCtx: &execinfra.FlowCtx{}}
 
 	id3 := execinfrapb.FlowID{UUID: uuid.MakeV4()}
-	f3 := &FlowBase{}
+	f3 := &FlowBase{FlowCtx: &execinfra.FlowCtx{}}
 
 	id4 := execinfrapb.FlowID{UUID: uuid.MakeV4()}
-	f4 := &FlowBase{}
+	f4 := &FlowBase{FlowCtx: &execinfra.FlowCtx{}}
 
 	// A basic duration; needs to be significantly larger than possible delays
 	// in scheduling goroutines.
@@ -209,7 +209,7 @@ func TestStreamConnectionTimeout(t *testing.T) {
 	// Register a flow with a very low timeout. After it times out, we'll attempt
 	// to connect a stream, but it'll be too late.
 	id1 := execinfrapb.FlowID{UUID: uuid.MakeV4()}
-	f1 := &FlowBase{}
+	f1 := &FlowBase{FlowCtx: &execinfra.FlowCtx{}}
 	f1.mu.ctxCancel = func() {}
 	streamID1 := execinfrapb.StreamID(1)
 	consumer := &distsqlutils.RowBuffer{}
@@ -304,7 +304,7 @@ func TestHandshake(t *testing.T) {
 				}
 			}
 			connectConsumer := func() {
-				f1 := &FlowBase{}
+				f1 := &FlowBase{FlowCtx: &execinfra.FlowCtx{}}
 				consumer := &distsqlutils.RowBuffer{}
 				wg := &sync.WaitGroup{}
 				wg.Add(1)
@@ -369,7 +369,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 	ctx := context.Background()
 	reg := NewFlowRegistry()
 
-	flow := &FlowBase{}
+	flow := &FlowBase{FlowCtx: &execinfra.FlowCtx{}}
 	flow.mu.ctxCancel = func() {}
 	id := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 	registerFlow := func(t *testing.T, id execinfrapb.FlowID) {
@@ -570,7 +570,7 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 	}
 	wg.Add(1)
 	if err := fr.RegisterFlow(
-		context.Background(), execinfrapb.FlowID{}, &FlowBase{}, inboundStreams, 0, /* timeout */
+		context.Background(), execinfrapb.FlowID{}, &FlowBase{FlowCtx: &execinfra.FlowCtx{}}, inboundStreams, 0, /* timeout */
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -614,7 +614,7 @@ func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 
 	// RegisterFlow with an immediate timeout.
 	if err := fr.RegisterFlow(
-		ctx, execinfrapb.FlowID{}, &FlowBase{}, inboundStreams, 0, /* timeout */
+		ctx, execinfrapb.FlowID{}, &FlowBase{FlowCtx: &execinfra.FlowCtx{}}, inboundStreams, 0, /* timeout */
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -628,7 +628,7 @@ func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 	// Attempt to register a flow. Note that this flow has no inbound streams, so
 	// Pushing to the RowBuffer is unexpected.
 	if err := fr.RegisterFlow(
-		ctx, execinfrapb.FlowID{UUID: uuid.MakeV4()}, &FlowBase{}, nil /* inboundStreams */, time.Hour, /* timeout */
+		ctx, execinfrapb.FlowID{UUID: uuid.MakeV4()}, &FlowBase{FlowCtx: &execinfra.FlowCtx{}}, nil /* inboundStreams */, time.Hour, /* timeout */
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -669,7 +669,7 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 
 	// RegisterFlow with an immediate timeout.
 	flow := &FlowBase{
-		FlowCtx: execinfra.FlowCtx{
+		FlowCtx: &execinfra.FlowCtx{
 			ID: execinfrapb.FlowID{UUID: uuid.MakeV4()},
 		},
 		inboundStreams: inboundStreams,
@@ -751,7 +751,7 @@ func TestErrorOnSlowHandshake(t *testing.T) {
 	flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 	streamID := execinfrapb.StreamID(1)
 	cancelCh := make(chan struct{})
-	f := &FlowBase{}
+	f := &FlowBase{FlowCtx: &execinfra.FlowCtx{}}
 	f.mu.ctxCancel = func() {
 		cancelCh <- struct{}{}
 	}
