@@ -7,8 +7,11 @@ package jobs
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -692,6 +695,98 @@ func (r *Registry) CreateIfNotExistAdoptableJobWithTxn(
 	}
 
 	return nil
+}
+
+func (r *Registry) UpdateChangefeedIdentityHashToJobInfo(
+	ctx context.Context, record Record, txn isql.Txn,
+) error {
+	if txn == nil {
+		return errors.New("txn is required")
+	}
+
+	const changefeedIdentityHashKey = "changefeed_identity_hash"
+	changefeedHash, err := r.GetChangefeedIdentityHash(ctx, record, txn)
+	if err != nil {
+		return err
+	}
+
+	infoStorage := InfoStorageForJob(txn, record.JobID)
+	err = infoStorage.Delete(ctx, changefeedIdentityHashKey)
+	if err != nil {
+		return err
+	}
+	return infoStorage.Write(ctx, changefeedIdentityHashKey, changefeedHash)
+}
+
+func (r *Registry) AddChangefeedIdentityHashToJobInfo(
+	ctx context.Context, record Record, txn isql.Txn,
+) error {
+	if txn == nil {
+		return errors.New("txn is required")
+	}
+
+	const changefeedIdentityHashKey = "changefeed_identity_hash"
+	changefeedHash, err := r.GetChangefeedIdentityHash(ctx, record, txn)
+	if err != nil {
+		return err
+	}
+
+	infoStorage := InfoStorageForJob(txn, record.JobID)
+	return infoStorage.Write(ctx, changefeedIdentityHashKey, changefeedHash)
+}
+
+func (r *Registry) GetChangefeedIdentityHash(
+	ctx context.Context, record Record, txn isql.Txn,
+) ([]byte, error) {
+	if txn == nil {
+		return nil, errors.New("txn is required")
+	}
+
+	hasher := sha256.New()
+
+	jobDetails := record.Details.(jobspb.ChangefeedDetails)
+	tableIDs := make([]uint32, 0, len(jobDetails.Tables))
+	for tableID := range jobDetails.Tables {
+		tableIDs = append(tableIDs, uint32(tableID))
+	}
+	sort.Slice(tableIDs, func(i, j int) bool {
+		return tableIDs[i] < tableIDs[j]
+	})
+	hasher.Write([]byte(jobDetails.SinkURI))
+	for _, tableID := range tableIDs {
+		var b [4]byte
+		binary.BigEndian.PutUint32(b[:], tableID)
+		hasher.Write(b[:])
+	}
+	changefeedHash := hasher.Sum(nil)
+	return changefeedHash, nil
+}
+
+func (r *Registry) FindDuplicateChangefeedJob(
+	ctx context.Context, record Record, txn isql.Txn,
+) (bool, error) {
+	if txn == nil {
+		return false, errors.New("txn is required")
+	}
+
+	const changefeedIdentityHashKey = "changefeed_identity_hash"
+
+	changefeedHash, err := r.GetChangefeedIdentityHash(ctx, record, txn)
+	if err != nil {
+		return false, err
+	}
+
+	row, err := txn.QueryRowEx(ctx, "changefeed-duplicate-check", txn.KV(), sessiondata.NodeUserSessionDataOverride,
+		`select ji.job_id, ji.value from system.jobs j inner join system.job_info ji on j.id = ji.job_id where ji.job_id != $1 and j.job_type = 'CHANGEFEED' and ji.info_key = $2 and ji.value = $3 limit 1;`,
+		record.JobID, changefeedIdentityHashKey, changefeedHash,
+	)
+	if err != nil {
+		return false, err
+	}
+	if row == nil {
+		return false, nil
+	}
+	return true, nil
 }
 
 // CreateAdoptableJobWithTxn creates a job which will be adopted for execution
