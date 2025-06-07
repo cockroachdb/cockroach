@@ -720,11 +720,7 @@ func (s *statusServer) dialNode(
 			return nil, err
 		}
 	}
-	conn, err := s.serverIterator.dialNode(ctx, serverID(nodeID))
-	if err != nil {
-		return nil, err
-	}
-	return serverpb.NewStatusClient(conn), nil
+	return serverpb.DialStatusClient(s.serverIterator, ctx, nodeID, rpcbase.DefaultClass)
 }
 
 // Gossip returns current state of gossip information on the given node
