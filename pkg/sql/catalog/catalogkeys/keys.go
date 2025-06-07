@@ -141,6 +141,13 @@ func IndexColumnEncodingDirection(dir catenumpb.IndexColumn_Direction) (encoding
 	}
 }
 
+// NumIndexKeyValDirs returns the number of encoding.Directions for all the
+// encoded values in the index's fullest possible index key, including
+// directions for table/index IDs and index column values.
+func NumIndexKeyValDirs(index catalog.Index) int {
+	return index.NumKeyColumns() + 2
+}
+
 // IndexKeyValDirs returns the corresponding encoding.Directions for all the
 // encoded values in index's "fullest" possible index key, including directions
 // for table/index IDs and the index column values.
@@ -148,8 +155,16 @@ func IndexKeyValDirs(index catalog.Index) []encoding.Direction {
 	if index == nil {
 		return nil
 	}
+	dirs := make([]encoding.Direction, 0, NumIndexKeyValDirs(index))
+	return AppendIndexKeyValDirs(dirs, index)
+}
 
-	dirs := make([]encoding.Direction, 0, 2+index.NumKeyColumns())
+// AppendIndexKeyValDirs is similar to IndexKeyValDirs, but appends the
+// directions to the given slice and returns the updated slice.
+func AppendIndexKeyValDirs(dirs []encoding.Direction, index catalog.Index) []encoding.Direction {
+	if index == nil {
+		return nil
+	}
 
 	// The index's table/index ID.
 	dirs = append(dirs, encoding.Ascending, encoding.Ascending)

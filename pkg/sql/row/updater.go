@@ -101,8 +101,6 @@ func MakeUpdater(
 		return Updater{}, errors.AssertionFailedf("requestedCols is nil in MakeUpdater")
 	}
 
-	updateColIDtoRowIndex := ColIDtoRowIndexFromCols(updateCols)
-
 	var primaryIndexCols catalog.TableColSet
 	for i := 0; i < tableDesc.GetPrimaryIndex().NumKeyColumns(); i++ {
 		colID := tableDesc.GetPrimaryIndex().GetKeyColumnID(i)
@@ -117,54 +115,30 @@ func MakeUpdater(
 		}
 	}
 
-	// needsUpdate returns true if the given index may need to be updated for
-	// the current UPDATE mutation.
-	needsUpdate := func(index catalog.Index) bool {
-		// If the UPDATE is set to only update columns and not secondary
-		// indexes, return false.
-		if updateType == UpdaterOnlyColumns {
-			return false
-		}
-		// If the primary key changed, we need to update all secondary indexes.
-		if primaryKeyColChange {
-			return true
-		}
-		// If the index is a partial index, an update may be required even if
-		// the indexed columns aren't changing. For example, an index entry must
-		// be added when an update to a non-indexed column causes a row to
-		// satisfy the partial index predicate when it did not before.
-		// TODO(mgartner): needsUpdate does not need to return true for every
-		// partial index. A partial index will never require updating if neither
-		// its indexed columns nor the columns referenced in its predicate
-		// expression are changing.
-		if index.IsPartial() {
-			return true
-		}
-		colIDs := index.CollectKeyColumnIDs()
-		colIDs.UnionWith(index.CollectSecondaryStoredColumnIDs())
-		colIDs.UnionWith(index.CollectKeySuffixColumnIDs())
-		for _, colID := range colIDs.Ordered() {
-			if _, ok := updateColIDtoRowIndex.Get(colID); ok {
-				return true
-			}
-		}
-		return false
-	}
-
-	includeIndexes := make([]catalog.Index, 0, len(tableDesc.WritableNonPrimaryIndexes()))
+	updateColIDToRowIndex := ColIDtoRowIndexFromCols(updateCols)
+	var includeIndexes []catalog.Index
 	var deleteOnlyIndexes []catalog.Index
-	for _, index := range tableDesc.DeletableNonPrimaryIndexes() {
-		if !needsUpdate(index) {
-			continue
-		}
-		if !index.DeleteOnly() {
-			includeIndexes = append(includeIndexes, index)
-		} else {
-			if deleteOnlyIndexes == nil {
-				// Allocate at most once.
-				deleteOnlyIndexes = make([]catalog.Index, 0, len(tableDesc.DeleteOnlyNonPrimaryIndexes()))
+	// If the UPDATE is set to only update columns, do not collect secondary
+	// indexes to update.
+	if updateType != UpdaterOnlyColumns {
+		for i, index := range tableDesc.DeletableNonPrimaryIndexes() {
+			// If the primary key changed, we need to update all secondary
+			// indexes, regardless of what other columns are being updated.
+			if !primaryKeyColChange && !indexNeedsUpdate(index, updateColIDToRowIndex) {
+				continue
 			}
-			deleteOnlyIndexes = append(deleteOnlyIndexes, index)
+			if !index.DeleteOnly() {
+				if includeIndexes == nil {
+					includeIndexes = make([]catalog.Index, 0, len(tableDesc.WritableNonPrimaryIndexes())-i)
+				}
+				includeIndexes = append(includeIndexes, index)
+			} else {
+				if deleteOnlyIndexes == nil {
+					// Allocate at most once.
+					deleteOnlyIndexes = make([]catalog.Index, 0, len(tableDesc.DeleteOnlyNonPrimaryIndexes())-i)
+				}
+				deleteOnlyIndexes = append(deleteOnlyIndexes, index)
+			}
 		}
 	}
 
@@ -190,18 +164,20 @@ func MakeUpdater(
 		// but no correctness issues.
 		panic(errors.AssertionFailedf("locked at least two secondary indexes in the initial scan: %v", lockedIndexes))
 	}
+	numEntries := len(includeIndexes)
+	indexEntries := make([][]rowenc.IndexEntry, numEntries*2)
 	ru := Updater{
 		Helper:                NewRowHelper(codec, tableDesc, includeIndexes, uniqueWithTombstoneIndexes, sd, sv, metrics),
 		DeleteHelper:          deleteOnlyHelper,
 		FetchCols:             requestedCols,
 		FetchColIDtoRowIndex:  ColIDtoRowIndexFromCols(requestedCols),
 		UpdateCols:            updateCols,
-		UpdateColIDtoRowIndex: updateColIDtoRowIndex,
+		UpdateColIDtoRowIndex: updateColIDToRowIndex,
 		primaryKeyColChange:   primaryKeyColChange,
 		primaryLocked:         primaryLocked,
 		secondaryLocked:       secondaryLocked,
-		oldIndexEntries:       make([][]rowenc.IndexEntry, len(includeIndexes)),
-		newIndexEntries:       make([][]rowenc.IndexEntry, len(includeIndexes)),
+		oldIndexEntries:       indexEntries[:numEntries:numEntries],
+		newIndexEntries:       indexEntries[numEntries:],
 	}
 
 	if primaryKeyColChange {
@@ -225,6 +201,31 @@ func MakeUpdater(
 	ru.newValues = make(tree.Datums, len(ru.FetchCols))
 
 	return ru, nil
+}
+
+// indexNeedsUpdate returns true if the given index may need to be updated based
+// on the columns in the map.
+func indexNeedsUpdate(index catalog.Index, updateCols catalog.TableColMap) bool {
+	// If the index is a partial index, an update may be required even if
+	// the indexed columns aren't changing. For example, an index entry must
+	// be added when an update to a non-indexed column causes a row to
+	// satisfy the partial index predicate when it did not before.
+	// TODO(mgartner): This function does not need to return true for every
+	// partial index. A partial index will never require updating if neither
+	// its indexed columns nor the columns referenced in its predicate
+	// expression are changing.
+	if index.IsPartial() {
+		return true
+	}
+	colIDs := index.CollectKeyColumnIDs()
+	colIDs.UnionWith(index.CollectSecondaryStoredColumnIDs())
+	colIDs.UnionWith(index.CollectKeySuffixColumnIDs())
+	for colID, ok := colIDs.Next(0); ok; colID, ok = colIDs.Next(colID + 1) {
+		if _, ok := updateCols.Get(colID); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // UpdateRow adds to the batch the kv operations necessary to update a table row
