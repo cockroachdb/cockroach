@@ -77,6 +77,7 @@ func alterZoneConfigAndClusterSettings(
 		`ALTER ROLE ALL SET statement_timeout = '60s'`,
 		`ALTER ROLE ALL SET default_transaction_isolation = 'read committed'`,
 		`ALTER ROLE ALL SET autocommit_before_ddl = 'true'`,
+		`ALTER ROLE ALL SET create_table_with_schema_locked='true'`,
 	} {
 		if _, err := db.ExecContext(ctx, cmd); err != nil {
 			return err

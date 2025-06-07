@@ -158,6 +158,9 @@ var enabledDjangoTests = []string{
 
 // Maintain that this list is alphabetized.
 var djangoBlocklist = blocklist{
+	// Schema change used by this test:
+	// ALTER TABLE schema_author ALTER COLUMN name SET DATA TYPE STRING, ALTER COLUMN name DROP NOT NULL
+	`schema.tests.SchemaTests.test_alter`:                              "alter column name in declarative schema changer is missing (prevents from working with schema locked)",
 	`schema.tests.SchemaTests.test_alter_text_field_to_date_field`:     "alter type requires USING",
 	`schema.tests.SchemaTests.test_alter_text_field_to_datetime_field`: "alter type requires USING",
 	`schema.tests.SchemaTests.test_alter_text_field_to_time_field`:     "alter type requires USING",
