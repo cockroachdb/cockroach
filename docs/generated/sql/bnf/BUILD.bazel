@@ -100,6 +100,7 @@ FILES = [
     "copy_to_stmt",
     "create_as_col_qual_list",
     "create_as_constraint_def",
+    "create_database_changefeed_stmt",
     "create_changefeed_stmt",
     "create_database_stmt",
     "create_ddl_stmt",

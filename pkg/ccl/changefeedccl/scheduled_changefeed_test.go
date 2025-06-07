@@ -871,7 +871,8 @@ func TestFullyQualifyTables(t *testing.T) {
 
 	tablePatterns := make([]tree.TablePattern, 0)
 	for _, target := range createChangeFeedStmt.Targets {
-		tablePatterns = append(tablePatterns, target.TableName)
+		tableTarget := target.(*tree.ChangefeedTableTarget)
+		tablePatterns = append(tablePatterns, tableTarget.TableName)
 	}
 
 	qualifiedPatterns, err := schedulebase.FullyQualifyTables(ctx, p.(sql.PlanHookState), tablePatterns)

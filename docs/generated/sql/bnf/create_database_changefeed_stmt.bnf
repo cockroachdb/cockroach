@@ -1,0 +1,2 @@
+create_database_changefeed_stmt ::=
+	'CREATE' 'DATABASE' 'CHANGEFEED' 'FOR' database_name opt_changefeed_sink opt_with_options

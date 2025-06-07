@@ -54,13 +54,14 @@ func AllTargets(cd jobspb.ChangefeedDetails) (targets changefeedbase.Targets) {
 	// TODO: Use a version gate for this once we have CDC version gates
 	if len(cd.TargetSpecifications) > 0 {
 		for _, ts := range cd.TargetSpecifications {
-			if ts.TableID > 0 {
+			if ts.TableID > 0 || ts.DescriptorID > 0 {
 				if ts.StatementTimeName == "" {
 					ts.StatementTimeName = cd.Tables[ts.TableID].StatementTimeName
 				}
 				targets.Add(changefeedbase.Target{
 					Type:              ts.Type,
 					TableID:           ts.TableID,
+					DescriptorID:      ts.DescriptorID,
 					FamilyName:        ts.FamilyName,
 					StatementTimeName: changefeedbase.StatementTimeName(ts.StatementTimeName),
 				})
