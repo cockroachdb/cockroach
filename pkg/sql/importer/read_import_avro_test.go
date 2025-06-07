@@ -199,13 +199,12 @@ func newTestHelper(ctx context.Context, t *testing.T, gens ...avroGen) *testHelp
 	evalCtx := eval.MakeTestingEvalContext(st)
 
 	return &testHelper{
-		schemaJSON: string(schemaJSON),
-		schemaTable: descForTable(ctx, t, createStmt, 100, 150, 200, NoFKs).
-			ImmutableCopy().(catalog.TableDescriptor),
-		codec:    codec,
-		gens:     gens,
-		settings: st,
-		evalCtx:  evalCtx,
+		schemaJSON:  string(schemaJSON),
+		schemaTable: descForTable(ctx, t, createStmt, 100, 150, 200).ImmutableCopy().(catalog.TableDescriptor),
+		codec:       codec,
+		gens:        gens,
+		settings:    st,
+		evalCtx:     evalCtx,
 	}
 }
 
@@ -588,7 +587,7 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
 	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	evalCtx := eval.MakeTestingEvalContext(st)
 
-	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaID, descpb.ID(100), NoFKs, 1)
+	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaID, descpb.ID(100), 1)
 	require.NoError(b, err)
 
 	kvCh := make(chan row.KVBatch)
