@@ -448,3 +448,25 @@ $input
     )
     (RemoveFiltersItem $filter $item)
 )
+
+# SimplifyIsCondition replaces x IS (NOT DISTINCT FROM) y with x = y.
+# This is applied under the following conditions:
+#   1. Neither x nor y is a tuple.
+#   2. x and y have identical types.
+#   3. In the context of filtering.
+[SimplifyIsCondition, Normalize]
+(Select
+    $input:*
+    $filters:[
+        ...
+        $item:(FiltersItem
+            (Is
+                $left:* & ^(IsTuple $left)
+                $right:* & ^(IsTuple $right) & (IdenticalTypes (TypeOf $left) (TypeOf $right))
+            )
+        )
+        ...
+    ]
+)
+=>
+(Select $input [ (FiltersItem (Eq $left $right)) ])
