@@ -30,27 +30,27 @@ func TestMakeSimpleTableDescriptorErrors(t *testing.T) {
 	}{
 		{
 			stmt:  "create table if not exists a (i int)",
-			error: "unsupported IF NOT EXISTS",
+			error: "IF NOT EXISTS is not supported",
 		},
 		{
 			stmt:  "create table a as select 1",
-			error: "CREATE AS not supported",
+			error: "CREATE AS is not supported",
 		},
 		{
 			stmt:  "create table a (i int references b (id))",
-			error: `this IMPORT format does not support foreign keys`,
+			error: `foreign keys are not supported`,
 		},
 		{
 			stmt:  "create table a (i int, constraint a foreign key (i) references c (id))",
-			error: `this IMPORT format does not support foreign keys`,
+			error: `foreign keys are not supported`,
 		},
 		{
 			stmt:  "create table a (i int, j int as (i + 10) virtual)",
-			error: `to import into a table with virtual computed columns, use IMPORT INTO`,
+			error: `virtual computed columns are not supported`,
 		},
 		{
 			stmt:  "create table a (i int, index ((i + 1)))",
-			error: `to import into a table with expression indexes, use IMPORT INTO`,
+			error: `expression indexes are not supported`,
 		},
 		{
 			stmt: `create table a (
@@ -81,7 +81,7 @@ func TestMakeSimpleTableDescriptorErrors(t *testing.T) {
 			if !ok {
 				t.Fatal("expected CREATE TABLE statement in table file")
 			}
-			_, err = MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, parentID, keys.PublicSchemaID, tableID, NoFKs, 0)
+			_, err = MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, parentID, keys.PublicSchemaID, tableID, 0)
 			if !testutils.IsError(err, tc.error) {
 				t.Fatalf("expected %v, got %+v", tc.error, err)
 			}
