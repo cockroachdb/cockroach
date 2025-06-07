@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logmetrics"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -104,7 +105,7 @@ type SQLServerWrapper struct {
 	db           *kv.DB
 
 	// Metric registries.
-	// See the explanatory comments in server.go and status/recorder.g o
+	// See the explanatory comments in server.go and status/recorder.go
 	// for details.
 	registry    *metric.Registry
 	sysRegistry *metric.Registry
@@ -723,6 +724,22 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			"encrypted_store": strconv.FormatBool(encryptedStore),
 		})
 	})
+
+	var writeAsync = true
+	if eventLogKnobs := s.cfg.TestingKnobs.EventLog; eventLogKnobs != nil {
+		if eventLogKnob, ok := eventLogKnobs.(*eventlog.EventLogTestingKnobs); ok {
+			writeAsync = !eventLogKnob.SyncWrites
+		}
+	}
+
+	// Creates and registers an event log sync for the tenant. This will enable
+	// the ability to persist structured events to the tenants system.eventlog
+	// table.
+	eventTableSink := eventlog.NewWriter(s.sqlServer.execCfg.InternalDB, writeAsync, s.stopper, s.cfg.AmbientCtx, s.ClusterSettings())
+	log.RegisterEventLogWriter(ctx, &s.cfg.AmbientCtx, eventTableSink)
+	s.stopper.AddCloser(stop.CloserFn(func() {
+		log.RemoveEventLogWriter(&s.cfg.AmbientCtx)
+	}))
 
 	// Init a log metrics registry.
 	logRegistry := logmetrics.NewRegistry()
