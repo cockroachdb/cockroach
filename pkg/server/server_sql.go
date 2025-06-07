@@ -822,7 +822,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			// Attach a child memory monitor to enable control over the BulkAdder's
 			// memory usage.
 			bulkMon := execinfra.NewMonitor(ctx, bulkMemoryMonitor, mon.MakeName("bulk-adder-monitor"))
-			return bulk.MakeBulkAdder(ctx, db, cfg.distSender.RangeDescriptorCache(), cfg.Settings, ts, opts, bulkMon, bulkSenderLimiter)
+			return bulk.MakeBulkAdder(
+				ctx, db, cfg.distSender.RangeDescriptorCache(), cfg.Settings,
+				ts, opts, bulkMon, bulkSenderLimiter, &bulkMetrics,
+			)
 		},
 
 		Metrics:            &distSQLMetrics,
