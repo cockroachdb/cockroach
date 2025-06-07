@@ -764,6 +764,9 @@ func (sr *txnSpanRefresher) createSavepointLocked(ctx context.Context, s *savepo
 	s.refreshInvalid = sr.refreshInvalid
 }
 
+// releaseSavepointLocked is part of the txnInterceptor interface.
+func (sr *txnSpanRefresher) releaseSavepointLocked(context.Context, *savepoint) {}
+
 // rollbackToSavepointLocked is part of the txnInterceptor interface.
 func (sr *txnSpanRefresher) rollbackToSavepointLocked(ctx context.Context, s savepoint) {
 	if !KeepRefreshSpansOnSavepointRollback.Get(&sr.st.SV) {

@@ -174,6 +174,12 @@ type txnWriteBuffer struct {
 	// sees the next BatchRequest.
 	flushOnNextBatch bool
 
+	// firstExplicitSavepointSeq tracks the lowest explicit savepoint that hasn't
+	// been released or rolled back. If this savepoint is non-zero, then a
+	// mid-transaction flush must flush all revisions required to roll back this
+	// (or a later) savepoint.
+	firstExplicitSavepointSeq enginepb.TxnSeq
+
 	buffer        btree
 	bufferIDAlloc uint64
 	bufferSize    int64
@@ -601,8 +607,23 @@ func (twb *txnWriteBuffer) resetBuffer() {
 	twb.bufferSize = 0
 }
 
+func (twb *txnWriteBuffer) hasActiveSavepoint() bool {
+	return twb.firstExplicitSavepointSeq != enginepb.TxnSeq(0)
+}
+
 // createSavepointLocked is part of the txnInterceptor interface.
-func (twb *txnWriteBuffer) createSavepointLocked(context.Context, *savepoint) {}
+func (twb *txnWriteBuffer) createSavepointLocked(ctx context.Context, sp *savepoint) {
+	if twb.firstExplicitSavepointSeq == enginepb.TxnSeq(0) {
+		twb.firstExplicitSavepointSeq = sp.seqNum
+	}
+}
+
+// rollbackToSavepointLocked is part of the txnInterceptor interface.
+func (twb *txnWriteBuffer) releaseSavepointLocked(ctx context.Context, sp *savepoint) {
+	if twb.firstExplicitSavepointSeq == sp.seqNum {
+		twb.firstExplicitSavepointSeq = 0
+	}
+}
 
 // rollbackToSavepointLocked is part of the txnInterceptor interface.
 func (twb *txnWriteBuffer) rollbackToSavepointLocked(ctx context.Context, s savepoint) {
@@ -633,6 +654,9 @@ func (twb *txnWriteBuffer) rollbackToSavepointLocked(ctx context.Context, s save
 	}
 	for _, bw := range toDelete {
 		twb.removeFromBuffer(bw)
+	}
+	if twb.firstExplicitSavepointSeq == s.seqNum {
+		twb.firstExplicitSavepointSeq = 0
 	}
 }
 
@@ -1304,6 +1328,8 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 		twb.txnMetrics.TxnWriteBufferDisabledAfterBuffering.Inc(1)
 	}
 
+	midTxnFlushWithExplicitSavepoint := !hasEndTxn && twb.hasActiveSavepoint()
+
 	// Flush all buffered writes by pre-pending them to the requests being sent
 	// in the batch.
 	//
@@ -1313,8 +1339,8 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 	it := twb.buffer.MakeIter()
 	numRevisionsBuffered := 0
 	for it.First(); it.Valid(); it.Next() {
-		if !hasEndTxn {
-			revs := it.Cur().toAllRevisionRequests()
+		if midTxnFlushWithExplicitSavepoint {
+			revs := it.Cur().toAllRevisionRequests(twb.firstExplicitSavepointSeq)
 			numRevisionsBuffered += len(revs)
 			reqs = append(reqs, revs...)
 		} else {
@@ -1489,13 +1515,26 @@ func (bw *bufferedWrite) toRequest() kvpb.RequestUnion {
 }
 
 // toAllRevisionRequests returns requests for all revisions of the buffered
-// writes for the key. When the buffer is flushed before the end of a
-// transaction, all revisions must be written to storage to ensure that a future
-// savepoint rollback is properly handled.
-func (bw *bufferedWrite) toAllRevisionRequests() []kvpb.RequestUnion {
+// writes that need to be flushed given the minimum sequence number.
+//
+// When the buffer is flushed before the end of a transaction, previous
+// revisions must be written to storage to ensure that a future savepoint
+// rollback is properly handled.
+//
+// The given sequence number is the smallest sequence number associated with an
+// active savepoint.
+//
+// A write below the the minimum sequence number can be elided if there is a
+// subsequent write also below the minimum sequence number.
+func (bw *bufferedWrite) toAllRevisionRequests(minSeq enginepb.TxnSeq) []kvpb.RequestUnion {
 	rus := make([]kvpb.RequestUnion, 0, len(bw.vals))
-	for _, val := range bw.vals {
-		rus = append(rus, val.toRequestUnion(bw.key))
+	maxIdx := len(bw.vals) - 1
+	for i, val := range bw.vals {
+		nextWriteLessThanSeq := (i+1 < maxIdx) && (bw.vals[i+1].seq < minSeq)
+		canElideRevision := val.seq < minSeq && nextWriteLessThanSeq
+		if !canElideRevision {
+			rus = append(rus, val.toRequestUnion(bw.key))
+		}
 	}
 	return rus
 }
