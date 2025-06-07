@@ -87,8 +87,8 @@ func (km *BalancedKmeans) ComputeCentroids(
 ) {
 	km.validateVectors(vectors)
 
-	tempOffsets := km.Workspace.AllocUint64s(vectors.Count)
-	defer km.Workspace.FreeUint64s(tempOffsets)
+	tempAssignments := km.Workspace.AllocUint64s(vectors.Count)
+	defer km.Workspace.FreeUint64s(tempAssignments)
 
 	tolerance := km.calculateTolerance(vectors)
 
@@ -119,14 +119,13 @@ func (km *BalancedKmeans) ComputeCentroids(
 
 	for range maxIterations {
 		// Assign vectors to one of the partitions.
-		leftOffsets, rightOffsets := km.AssignPartitions(
-			vectors, leftCentroid, rightCentroid, tempOffsets)
+		km.AssignPartitions(vectors, leftCentroid, rightCentroid, tempAssignments)
 
 		// Calculate new centroids.
 		if !pinLeftCentroid {
-			calcPartitionCentroid(vectors, leftOffsets, newLeftCentroid)
+			calcPartitionCentroid(vectors, tempAssignments, 0, newLeftCentroid)
 		}
-		calcPartitionCentroid(vectors, rightOffsets, newRightCentroid)
+		calcPartitionCentroid(vectors, tempAssignments, 1, newRightCentroid)
 
 		// Check for convergence using the scikit-learn algorithm.
 		leftCentroidShift := num32.L2SquaredDistance(leftCentroid, newLeftCentroid)
@@ -144,15 +143,22 @@ func (km *BalancedKmeans) ComputeCentroids(
 // AssignPartitions assigns the input vectors into either the left or right
 // partition, based on which partition's centroid they're closer to. It also
 // enforces a constraint that one partition will never be more than 2x as large
-// as the other.
+// as the other. Each assignment will be set to 0 if the vector gets assigned
+// to the left partition, or 1 if assigned to the right partition. It returns
+// the number of vectors assigned to the left partition.
 //
 // NOTE: For InnerProduct and Cosine distance metrics, AssignPartitions groups
 // vectors by their distance from spherical centroids (i.e. unit centroids). See
 // BalancedKmeans comment.
 func (km *BalancedKmeans) AssignPartitions(
-	vectors vector.Set, leftCentroid, rightCentroid vector.T, offsets []uint64,
-) (leftOffsets, rightOffsets []uint64) {
+	vectors vector.Set, leftCentroid, rightCentroid vector.T, assignments []uint64,
+) int {
 	count := vectors.Count
+	if len(assignments) != count {
+		panic(errors.AssertionFailedf(
+			"assignments slice must have length %d, got %d", count, len(assignments)))
+	}
+
 	tempDistances := km.Workspace.AllocFloats(count)
 	defer km.Workspace.FreeFloats(tempDistances)
 
@@ -174,6 +180,7 @@ func (km *BalancedKmeans) AssignPartitions(
 
 	// Calculate difference between distance of each vector to the left and right
 	// centroids.
+	var leftCount int
 	for i := range count {
 		var leftDistance, rightDistance float32
 		if spherical {
@@ -200,29 +207,56 @@ func (km *BalancedKmeans) AssignPartitions(
 			rightDistance = num32.L2SquaredDistance(vectors.At(i), rightCentroid)
 		}
 		tempDistances[i] = leftDistance - rightDistance
-		offsets[i] = uint64(i)
+		if tempDistances[i] < 0 {
+			leftCount++
+		}
 	}
+
+	// Check imbalance limit, so that at least (allowImbalance / 100)% of the
+	// vectors go to each side.
+	minCount := (count*allowImbalance + 99) / 100
+	if leftCount >= minCount && (count-leftCount) >= minCount {
+		// Set assignments slice.
+		for i := range count {
+			if tempDistances[i] < 0 {
+				assignments[i] = 0
+			} else {
+				assignments[i] = 1
+			}
+		}
+		return leftCount
+	}
+
+	// Not enough vectors on left or right side, so rebalance them.
+	tempOffsets := km.Workspace.AllocUint64s(count)
+	defer km.Workspace.FreeUint64s(tempOffsets)
 
 	// Arg sort by the distance differences in order of increasing distance to
 	// the left centroid, relative to the right centroid. Use a stable sort to
 	// ensure that tests are deterministic.
-	slices.SortStableFunc(offsets, func(i, j uint64) int {
+	for i := range count {
+		tempOffsets[i] = uint64(i)
+	}
+	slices.SortStableFunc(tempOffsets, func(i, j uint64) int {
 		return cmp.Compare(tempDistances[i], tempDistances[j])
 	})
 
-	// Find split between distances, with negative distances going to the left
-	// centroid and others going to the right. Enforce imbalance limit, such that
-	// at least (allowImbalance / 100)% of the vectors go to each side.
-	start := (count*allowImbalance + 99) / 100
-	split := start
-	for split < count-start {
-		if tempDistances[offsets[split]] >= 0 {
-			break
-		}
-		split++
+	if leftCount < minCount {
+		leftCount = minCount
+	} else if (count - leftCount) < minCount {
+		leftCount = count - minCount
 	}
 
-	return offsets[:split], offsets[split:]
+	// Set assignments slice.
+	for i := range count {
+		if i < leftCount {
+			assignments[tempOffsets[i]] = 0
+		} else {
+			assignments[tempOffsets[i]] = 1
+		}
+	}
+
+	return leftCount
 }
 
 // calculateTolerance computes a threshold distance value. Once new centroids
@@ -411,15 +445,24 @@ func (km *BalancedKmeans) validateVectors(vectors vector.Set) {
 
 // calcPartitionCentroid calculates the mean centroid of a subset of the given
 // vectors, which represents the "average" of those vectors. The subset consists
-// of vectors at the given set of offsets in the set. The result is written to
+// of vectors with a corresponding assignment value equal to "assignVal". For
+// example, if "assignments" is [0, 1, 0, 0, 1] and "assignVal" is 0, then
+// vectors at positions 0, 2, and 3 are in the subset. The result is written to
 // the provided centroid vector, which the caller is expected to allocate.
-func calcPartitionCentroid(vectors vector.Set, offsets []uint64, centroid vector.T) {
-	copy(centroid, vectors.At(int(offsets[0])))
-	for _, offset := range offsets[1:] {
-		num32.Add(centroid, vectors.At(int(offset)))
+func calcPartitionCentroid(
+	vectors vector.Set, assignments []uint64, assignVal uint64, centroid vector.T,
+) {
+	var n int
+	num32.Zero(centroid)
+	for i, val := range assignments {
+		if val != assignVal {
+			continue
+		}
+		num32.Add(centroid, vectors.At(i))
+		n++
 	}
 
 	// Compute the mean vector by scaling the centroid by the inverse of N,
 	// where N is the number of input vectors.
-	num32.Scale(1/float32(len(offsets)), centroid)
+	num32.Scale(1/float32(n), centroid)
 }

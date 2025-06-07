@@ -790,11 +790,11 @@ format-tree
 │
 ├───• 12 (0.5, -7.5)
 │   │
+│   ├───• 9 (0, -8)
 │   ├───• 8 (0, -8)
 │   │   │
 │   │   └───• vec2 (0, -8)
 │   │
-│   ├───• 9 (0, -8)
 │   ├───• 4 (0, -8) [DeletingForSplitState:8,9]
 │   └───• 6 (2, -6)
 │       │
@@ -808,8 +808,8 @@ format-tree
     │   │
     │   └───• vec4 (2, -3)
     │
-    ├───• 2 (2, -4) [DeletingForSplitState:4,5]
     ├───• 3 (2, -4) [DeletingForSplitState:6,7]
+    ├───• 2 (2, -4) [DeletingForSplitState:4,5]
     ├───• 10 (4, 0)
     │   │
     │   └───• vec1 (4, 0)
@@ -845,19 +845,18 @@ format-tree
 │   └───• 11 (4, 0)
 ├───• 14 (2, -3.6667)
 │   │
-│   ├───• 3 (2, -4) [DeletingForSplitState:6,7]
+│   ├───• 2 (2, -4) [DeletingForSplitState:4,5]
 │   ├───• 7 (2, -3)
 │   │   │
 │   │   └───• vec4 (2, -3)
 │   │
-│   └───• 2 (2, -4) [DeletingForSplitState:4,5]
+│   └───• 3 (2, -4) [DeletingForSplitState:6,7]
 └───• 16 (0, -8)
     │
-    ├───• 8 (0, -8)
-    │   │
-    │   └───• vec2 (0, -8)
-    │
-    └───• 9 (0, -8)
+    ├───• 9 (0, -8)
+    └───• 8 (0, -8)
+        │
+        └───• vec2 (0, -8)
 
 # And finally once more, since all partitions should now be right-sized.
 search beam-size=16
@@ -881,11 +880,11 @@ format-tree
 │   │
 │   └───• 16 (0, -8)
 │       │
-│       ├───• 8 (0, -8)
-│       │   │
-│       │   └───• vec2 (0, -8)
-│       │
-│       └───• 9 (0, -8)
+│       ├───• 9 (0, -8)
+│       └───• 8 (0, -8)
+│           │
+│           └───• vec2 (0, -8)
+│
 └───• 19 (3, -1.8333)
     │
     ├───• 14 (2, -3.6667)
