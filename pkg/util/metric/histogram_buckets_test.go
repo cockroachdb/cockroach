@@ -7,7 +7,6 @@ package metric
 
 import (
 	"fmt"
-	"math"
 	"strings"
 	"testing"
 
@@ -26,9 +25,8 @@ func TestHistogramBuckets(t *testing.T) {
 			if idx == 0 {
 				fmt.Fprintf(&buf, "%s", category)
 			}
-			// Truncate to avoid architecture-specific floating point differences
-			truncated := math.Trunc(f)
-			fmt.Fprintf(&buf, "\n%f", truncated)
+			// Round to avoid architecture-specific floating point differences
+			fmt.Fprintf(&buf, "\n%.2f", f)
 		}
 		return buf.String()
 	}
