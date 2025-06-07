@@ -1011,20 +1011,6 @@ func ColumnIDToOrdinalMap(columns []Column) TableColMap {
 	return m
 }
 
-// ColumnTypesWithInvertedCol returns the types of all given columns,
-// If invertedCol is non-nil, substitutes the type of the inverted
-// column instead of the column with the same ID.
-func ColumnTypesWithInvertedCol(columns []Column, invertedCol Column) []*types.T {
-	t := make([]*types.T, len(columns))
-	for i, col := range columns {
-		t[i] = col.GetType()
-		if invertedCol != nil && col.GetID() == invertedCol.GetID() {
-			t[i] = invertedCol.GetType()
-		}
-	}
-	return t
-}
-
 // ColumnsByIDs returns a map of Columns keyed by their ID for the given table.
 func ColumnsByIDs(tbl TableDescriptor) map[descpb.ColumnID]Column {
 	cols := tbl.AllColumns()

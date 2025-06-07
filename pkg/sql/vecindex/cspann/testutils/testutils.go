@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
-	"gonum.org/v1/gonum/floats/scalar"
 )
 
 // DbpediaDataset consists of 1K 1536 dimension float32 vectors. Each vector is
@@ -74,11 +73,6 @@ func LoadDataset(t testing.TB, datasetName string) vector.Set {
 	err = decoder.Decode(&vectors)
 	require.NoError(t, err)
 	return vectors
-}
-
-// RoundFloat rounds the given float32 value using the given precision.
-func RoundFloat(s float32, prec int) float32 {
-	return float32(scalar.Round(float64(s), prec))
 }
 
 // RoundFloats rounds all float32 values in the slice using the given precision.

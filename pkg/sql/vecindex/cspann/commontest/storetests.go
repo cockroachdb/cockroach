@@ -17,10 +17,6 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type equaler interface {
-	Equal(that any) bool
-}
-
 var vec1 = vector.T{1, 2}
 var vec2 = vector.T{7, 4}
 var vec3 = vector.T{4, 3}

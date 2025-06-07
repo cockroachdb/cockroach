@@ -1359,14 +1359,6 @@ const (
 	// in the hash sharded primary key in the sql stats tables, this value needs to
 	// be updated.
 	SQLStatsHashShardBucketCount = 8
-
-	// StmtStatsHashColumnName is the name of the hash column of
-	// system.statement_statistics.
-	StmtStatsHashColumnName = "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8"
-
-	// TxnStatsHashColumnName is the name of the hash column of
-	// system.transaction_statistics.
-	TxnStatsHashColumnName = "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8"
 )
 
 // SystemDatabaseName is the name of the system database.
