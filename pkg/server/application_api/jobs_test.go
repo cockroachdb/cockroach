@@ -407,16 +407,9 @@ func TestJobStatusResponse(t *testing.T) {
 			Statements:  []string{"SELECT 1"},
 			Username:    username.RootUserName(),
 			Details: jobspb.ImportDetails{
-				Tables: []jobspb.ImportDetails_Table{
-					{
-						Desc: &descpb.TableDescriptor{
-							ID: 1,
-						},
-					},
-					{
-						Desc: &descpb.TableDescriptor{
-							ID: 2,
-						},
+				Table: jobspb.ImportDetails_Table{
+					Desc: &descpb.TableDescriptor{
+						ID: 1,
 					},
 				},
 				URIs: []string{"a", "b"},

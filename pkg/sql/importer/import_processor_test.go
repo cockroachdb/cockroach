@@ -57,14 +57,14 @@ import (
 type testSpec struct {
 	format roachpb.IOFileFormat
 	inputs map[int32]string
-	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable
+	table  *execinfrapb.ReadImportDataSpec_ImportTable
 }
 
 // Given test spec returns ReadImportDataSpec suitable creating input converter.
 func (spec *testSpec) getConverterSpec() *execinfrapb.ReadImportDataSpec {
 	return &execinfrapb.ReadImportDataSpec{
 		Format:            spec.format,
-		Tables:            spec.tables,
+		Table:             spec.table,
 		Uri:               spec.inputs,
 		ReaderParallelism: 1, // Make tests deterministic
 	}
@@ -97,8 +97,6 @@ func TestConverterFlushesBatches(t *testing.T) {
 
 	tests := []testSpec{
 		newTestSpec(ctx, t, csvFormat(), "testdata/csv/data-0"),
-		newTestSpec(ctx, t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql"),
-		newTestSpec(ctx, t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
 		newTestSpec(ctx, t, avroFormat(t, roachpb.AvroOptions_OCF), "testdata/avro/simple.ocf"),
 	}
 
@@ -273,16 +271,6 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 			[]int64{0},
 		},
 		{
-			"mysql-one-invalid",
-			newTestSpec(ctx, t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql", "/_/missing/_"),
-			[]int64{0, eofOffset},
-		},
-		{
-			"pgdump-one-input",
-			newTestSpec(ctx, t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
-			[]int64{0},
-		},
-		{
 			"avro-one-invalid",
 			newTestSpec(ctx, t, avroFormat(t, roachpb.AvroOptions_OCF), "__invalid__", "testdata/avro/simple.ocf"),
 			[]int64{eofOffset, 0},
@@ -387,10 +375,8 @@ func TestImportHonorsResumePosition(t *testing.T) {
 	// contain sufficient number of rows.
 	testSpecs := []testSpec{
 		newTestSpec(ctx, t, csvFormat(), "testdata/csv/data-0"),
-		newTestSpec(ctx, t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql"),
 		newTestSpec(ctx, t, mysqlOutFormat(), "testdata/mysqlout/csv-ish/simple.txt"),
 		newTestSpec(ctx, t, pgCopyFormat(), "testdata/pgcopy/default/test.txt"),
-		newTestSpec(ctx, t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
 		newTestSpec(ctx, t, avroFormat(t, roachpb.AvroOptions_JSON_RECORDS), "testdata/avro/simple-sorted.json"),
 	}
 
@@ -515,10 +501,8 @@ func TestImportHandlesDuplicateKVs(t *testing.T) {
 	// All imports produce a DuplicateKeyError, which we expect to be propagated.
 	testSpecs := []testSpec{
 		newTestSpec(ctx, t, csvFormat(), "testdata/csv/data-0"),
-		newTestSpec(ctx, t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql"),
 		newTestSpec(ctx, t, mysqlOutFormat(), "testdata/mysqlout/csv-ish/simple.txt"),
 		newTestSpec(ctx, t, pgCopyFormat(), "testdata/pgcopy/default/test.txt"),
-		newTestSpec(ctx, t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
 		newTestSpec(ctx, t, avroFormat(t, roachpb.AvroOptions_JSON_RECORDS), "testdata/avro/simple-sorted.json"),
 	}
 
@@ -939,16 +923,12 @@ func newTestSpec(
 	var descr *tabledesc.Mutable
 	switch format.Format {
 	case roachpb.IOFileFormat_CSV:
-		descr = descForTable(ctx, t,
-			"CREATE TABLE simple (i INT PRIMARY KEY, s text )", 100, 150, 200, NoFKs)
+		descr = descForTable(ctx, t, "CREATE TABLE simple (i INT PRIMARY KEY, s text )", 100, 150, 200)
 	case
-		roachpb.IOFileFormat_Mysqldump,
 		roachpb.IOFileFormat_MysqlOutfile,
-		roachpb.IOFileFormat_PgDump,
 		roachpb.IOFileFormat_PgCopy,
 		roachpb.IOFileFormat_Avro:
-		descr = descForTable(ctx, t,
-			"CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea default null)", 100, 150, 200, NoFKs)
+		descr = descForTable(ctx, t, "CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea default null)", 100, 150, 200)
 	default:
 		t.Fatalf("Unsupported input format: %v", format)
 	}
@@ -963,12 +943,9 @@ func newTestSpec(
 	}
 	assert.True(t, numCols > 0)
 
-	fullTableName := "simple"
-	if format.Format == roachpb.IOFileFormat_PgDump {
-		fullTableName = "public.simple"
-	}
-	spec.tables = map[string]*execinfrapb.ReadImportDataSpec_ImportTable{
-		fullTableName: {Desc: descr.TableDesc(), TargetCols: targetCols[0:numCols]},
+	spec.table = &execinfrapb.ReadImportDataSpec_ImportTable{
+		Desc:       descr.TableDesc(),
+		TargetCols: targetCols[0:numCols],
 	}
 
 	for id, path := range inputs {
@@ -976,16 +953,6 @@ func newTestSpec(
 	}
 
 	return spec
-}
-
-func pgDumpFormat() roachpb.IOFileFormat {
-	return roachpb.IOFileFormat{
-		Format: roachpb.IOFileFormat_PgDump,
-		PgDump: roachpb.PgDumpOptions{
-			MaxRowSize:        64 * 1024,
-			IgnoreUnsupported: true,
-		},
-	}
 }
 
 func pgCopyFormat() roachpb.IOFileFormat {
@@ -996,12 +963,6 @@ func pgCopyFormat() roachpb.IOFileFormat {
 			Null:       `\N`,
 			MaxRowSize: 4096,
 		},
-	}
-}
-
-func mysqlDumpFormat() roachpb.IOFileFormat {
-	return roachpb.IOFileFormat{
-		Format: roachpb.IOFileFormat_Mysqldump,
 	}
 }
 
