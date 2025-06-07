@@ -2267,25 +2267,17 @@ func (node *Import) doc(p *PrettyCfg) pretty.Doc {
 	items := make([]pretty.TableRow, 0, 5)
 	items = append(items, p.row("IMPORT", pretty.Nil))
 
-	if node.Bundle {
-		if node.Table != nil {
-			items = append(items, p.row("TABLE", p.Doc(node.Table)))
-			items = append(items, p.row("FROM", pretty.Nil))
-		}
-		items = append(items, p.row(node.FileFormat, p.Doc(&node.Files)))
-	} else if node.Into {
-		into := p.Doc(node.Table)
-		if node.IntoCols != nil {
-			into = p.nestUnder(into, p.bracket("(", p.Doc(&node.IntoCols), ")"))
-		}
-		items = append(items, p.row("INTO", into))
-		data := p.bracketKeyword(
-			"DATA", " (",
-			p.Doc(&node.Files),
-			")", "",
-		)
-		items = append(items, p.row(node.FileFormat, data))
+	into := p.Doc(node.Table)
+	if node.IntoCols != nil {
+		into = p.nestUnder(into, p.bracket("(", p.Doc(&node.IntoCols), ")"))
 	}
+	items = append(items, p.row("INTO", into))
+	data := p.bracketKeyword(
+		"DATA", " (",
+		p.Doc(&node.Files),
+		")", "",
+	)
+	items = append(items, p.row(node.FileFormat, data))
 
 	if node.Options != nil {
 		items = append(items, p.row("WITH", p.Doc(&node.Options)))
