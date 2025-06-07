@@ -54,7 +54,8 @@ func TestStreamPool_Basic(t *testing.T) {
 	stream.EXPECT().Send(gomock.Any()).Return(nil).Times(2)
 	stream.EXPECT().Recv().Return(&kvpb.BatchResponse{}, nil).Times(2)
 	conn := &mockBatchStreamConstructor{stream: stream}
-	p := makeStreamPool(stopper, conn.newStream)
+	connEquals := func(a, b *grpc.ClientConn) bool { return a == b }
+	p := makeStreamPool(stopper, conn.newStream, connEquals)
 	p.Bind(ctx, new(grpc.ClientConn))
 	defer p.Close()
 
@@ -103,7 +104,8 @@ func TestStreamPool_Multi(t *testing.T) {
 		}).
 		Times(num)
 	conn := &mockBatchStreamConstructor{stream: stream}
-	p := makeStreamPool(stopper, conn.newStream)
+	connEquals := func(a, b *grpc.ClientConn) bool { return a == b }
+	p := makeStreamPool(stopper, conn.newStream, connEquals)
 	p.Bind(ctx, new(grpc.ClientConn))
 	defer p.Close()
 
@@ -147,7 +149,8 @@ func TestStreamPool_SendBeforeBind(t *testing.T) {
 	stream.EXPECT().Send(gomock.Any()).Times(0)
 	stream.EXPECT().Recv().Times(0)
 	conn := &mockBatchStreamConstructor{stream: stream}
-	p := makeStreamPool(stopper, conn.newStream)
+	connEquals := func(a, b *grpc.ClientConn) bool { return a == b }
+	p := makeStreamPool(stopper, conn.newStream, connEquals)
 
 	// Exercise the pool before it is bound to a gRPC connection.
 	resp, err := p.Send(ctx, &kvpb.BatchRequest{})
@@ -172,7 +175,8 @@ func TestStreamPool_SendError(t *testing.T) {
 	stream.EXPECT().Send(gomock.Any()).Return(sendErr).Times(1)
 	stream.EXPECT().Recv().Times(0)
 	conn := &mockBatchStreamConstructor{stream: stream}
-	p := makeStreamPool(stopper, conn.newStream)
+	connEquals := func(a, b *grpc.ClientConn) bool { return a == b }
+	p := makeStreamPool(stopper, conn.newStream, connEquals)
 	p.Bind(ctx, new(grpc.ClientConn))
 
 	// Exercise the pool and observe the error.
@@ -199,7 +203,8 @@ func TestStreamPool_RecvError(t *testing.T) {
 	stream.EXPECT().Send(gomock.Any()).Return(nil).Times(1)
 	stream.EXPECT().Recv().Return(nil, recvErr).Times(1)
 	conn := &mockBatchStreamConstructor{stream: stream}
-	p := makeStreamPool(stopper, conn.newStream)
+	connEquals := func(a, b *grpc.ClientConn) bool { return a == b }
+	p := makeStreamPool(stopper, conn.newStream, connEquals)
 	p.Bind(ctx, new(grpc.ClientConn))
 
 	// Exercise the pool and observe the error.
@@ -221,7 +226,8 @@ func TestStreamPool_NewStreamError(t *testing.T) {
 
 	streamErr := errors.New("test error")
 	conn := &mockBatchStreamConstructor{streamErr: streamErr}
-	p := makeStreamPool(stopper, conn.newStream)
+	connEquals := func(a, b *grpc.ClientConn) bool { return a == b }
+	p := makeStreamPool(stopper, conn.newStream, connEquals)
 	p.Bind(ctx, new(grpc.ClientConn))
 
 	// Exercise the pool and observe the error.
@@ -261,7 +267,8 @@ func TestStreamPool_Cancellation(t *testing.T) {
 		}).
 		Times(1)
 	conn := &mockBatchStreamConstructor{stream: stream, lastStreamCtx: &streamCtx}
-	p := makeStreamPool(stopper, conn.newStream)
+	connEquals := func(a, b *grpc.ClientConn) bool { return a == b }
+	p := makeStreamPool(stopper, conn.newStream, connEquals)
 	p.Bind(ctx, new(grpc.ClientConn))
 
 	// Exercise the pool and observe the request get stuck.
@@ -306,7 +313,8 @@ func TestStreamPool_Quiesce(t *testing.T) {
 	stream.EXPECT().Send(gomock.Any()).Return(nil).Times(1)
 	stream.EXPECT().Recv().Return(&kvpb.BatchResponse{}, nil).Times(1)
 	conn := &mockBatchStreamConstructor{stream: stream}
-	p := makeStreamPool(stopper, conn.newStream)
+	connEquals := func(a, b *grpc.ClientConn) bool { return a == b }
+	p := makeStreamPool(stopper, conn.newStream, connEquals)
 	stopperCtx, _ := stopper.WithCancelOnQuiesce(ctx)
 	p.Bind(stopperCtx, new(grpc.ClientConn))
 
@@ -350,7 +358,8 @@ func TestStreamPool_QuiesceDuringSend(t *testing.T) {
 		}).
 		Times(1)
 	conn := &mockBatchStreamConstructor{stream: stream, lastStreamCtx: &streamCtx}
-	p := makeStreamPool(stopper, conn.newStream)
+	connEquals := func(a, b *grpc.ClientConn) bool { return a == b }
+	p := makeStreamPool(stopper, conn.newStream, connEquals)
 	stopperCtx, _ := stopper.WithCancelOnQuiesce(ctx)
 	p.Bind(stopperCtx, new(grpc.ClientConn))
 
@@ -393,7 +402,8 @@ func TestStreamPool_IdleTimeout(t *testing.T) {
 	stream.EXPECT().Send(gomock.Any()).Return(nil).Times(1)
 	stream.EXPECT().Recv().Return(&kvpb.BatchResponse{}, nil).Times(1)
 	conn := &mockBatchStreamConstructor{stream: stream}
-	p := makeStreamPool(stopper, conn.newStream)
+	connEquals := func(a, b *grpc.ClientConn) bool { return a == b }
+	p := makeStreamPool(stopper, conn.newStream, connEquals)
 	p.Bind(ctx, new(grpc.ClientConn))
 	p.idleTimeout = 10 * time.Millisecond
 
