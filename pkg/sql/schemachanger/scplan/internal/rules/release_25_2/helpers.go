@@ -74,12 +74,6 @@ func isDescriptor(e scpb.Element) bool {
 	return false
 }
 
-// IsDescriptor returns true for a descriptor-element, i.e. an element which
-// owns its corresponding descriptor. This is only used for exports
-func IsDescriptor(e scpb.Element) bool {
-	return isDescriptor(e)
-}
-
 func isSubjectTo2VersionInvariant(e scpb.Element) bool {
 	// TODO(ajwerner): This should include constraints and enum values but it
 	// currently does not because we do not support dropping them unless we're

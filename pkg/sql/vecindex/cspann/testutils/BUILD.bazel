@@ -11,6 +11,5 @@ go_library(
         "//pkg/util/num32",
         "//pkg/util/vector",
         "@com_github_stretchr_testify//require",
-        "@org_gonum_v1_gonum//floats/scalar",
     ],
 )

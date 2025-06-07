@@ -13,9 +13,4 @@ const (
 	// NamespaceTablePrimaryIndexID is the id of the primary index of the
 	// namespace table.
 	NamespaceTablePrimaryIndexID = 1
-
-	// PreMigrationNamespaceTableName is the name that was used on the descriptor
-	// of the current namespace table before the DeprecatedNamespaceTable was
-	// migrated away.
-	PreMigrationNamespaceTableName = "namespace2"
 )

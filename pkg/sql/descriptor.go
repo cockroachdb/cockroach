@@ -245,19 +245,6 @@ func TranslateSurvivalGoal(g tree.SurvivalGoal) (descpb.SurvivalGoal, error) {
 	}
 }
 
-// TranslateProtoSurvivalGoal translate a descpb.SurvivalGoal into a
-// tree.SurvivalGoal.
-func TranslateProtoSurvivalGoal(g descpb.SurvivalGoal) (tree.SurvivalGoal, error) {
-	switch g {
-	case descpb.SurvivalGoal_ZONE_FAILURE:
-		return tree.SurvivalGoalZoneFailure, nil
-	case descpb.SurvivalGoal_REGION_FAILURE:
-		return tree.SurvivalGoalRegionFailure, nil
-	default:
-		return 0, errors.Newf("unknown survival goal: %d", g)
-	}
-}
-
 // TranslateDataPlacement translates a tree.DataPlacement into a
 // descpb.DataPlacement.
 func TranslateDataPlacement(g tree.DataPlacement) (descpb.DataPlacement, error) {
