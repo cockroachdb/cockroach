@@ -1876,6 +1876,32 @@ ALTER ROLE testuser SUBJECT 'foo'
 
 subtest end
 
+subtest provisioning_source
+
+skipif config 3node-tenant
+skipif config local-mixed-25.2
+skipif config local-mixed-25.1
+skipif config local-mixed-24.3
+statement error OSS binaries do not include enterprise features
+CREATE ROLE role_with_provisioning PROVISIONING_SOURCE 'ldap:ldap.example.com'
+
+skipif config 3node-tenant
+skipif config local-mixed-25.2
+skipif config local-mixed-25.1
+skipif config local-mixed-24.3
+statement error OSS binaries do not include enterprise features
+ALTER ROLE testuser PROVISIONING_SOURCE 'ldap:ldap.example.com'
+
+onlyif config local-mixed-24.3
+statement error SUBJECT role option is only supported after v25.3 upgrade is finalized
+CREATE ROLE role_with_provisioning PROVISIONING_SOURCE 'ldap:ldap.example.com'
+
+onlyif config local-mixed-24.3
+statement error SUBJECT role option is only supported after v25.3 upgrade is finalized
+ALTER ROLE testuser PROVISIONING_SOURCE 'ldap:ldap.example.com'
+
+subtest end
+
 # Validates that drop role will be prevented if the role is in use by
 # any schema objects. This is validates and prevents the regression found
 # in #124441

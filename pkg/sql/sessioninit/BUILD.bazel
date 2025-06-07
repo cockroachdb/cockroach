@@ -11,6 +11,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/security/password",
+        "//pkg/security/provisioning",
         "//pkg/security/username",
         "//pkg/settings",
         "//pkg/settings/cluster",
