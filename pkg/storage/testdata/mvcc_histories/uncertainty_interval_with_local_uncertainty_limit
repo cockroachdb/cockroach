@@ -79,7 +79,7 @@ with k=k5
   txn_begin t=A ts=20,0
   put t=A v=v10
 ----
-put: lock acquisition = {k5 id=00000001 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=k5 id=00000001 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 >> at end:
 txn: "A" meta={id=00000001 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 gul=0,0
 data: "k1"/20.000000000,0 -> /BYTES/v2
@@ -100,7 +100,7 @@ with k=k6
   txn_begin t=B ts=20,0
   put t=B v=v12
 ----
-put: lock acquisition = {k6 id=00000002 key="k6" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=k6 id=00000002 key="k6" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 >> at end:
 txn: "B" meta={id=00000002 key="k6" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 gul=0,0
 data: "k1"/20.000000000,0 -> /BYTES/v2
@@ -124,7 +124,7 @@ with k=k7
   txn_begin t=C ts=20,0
   put t=C v=v14 localTs=10,0
 ----
-put: lock acquisition = {k7 id=00000003 key="k7" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=k7 id=00000003 key="k7" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 >> at end:
 txn: "C" meta={id=00000003 key="k7" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 gul=0,0
 data: "k1"/20.000000000,0 -> /BYTES/v2
@@ -151,7 +151,7 @@ with k=k8
   txn_begin t=D ts=20,0
   put t=D v=v16 localTs=10,0
 ----
-put: lock acquisition = {k8 id=00000004 key="k8" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=k8 id=00000004 key="k8" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 >> at end:
 txn: "D" meta={id=00000004 key="k8" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 gul=0,0
 data: "k1"/20.000000000,0 -> /BYTES/v2

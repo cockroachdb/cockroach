@@ -56,7 +56,7 @@ stats: lock_count=+1 lock_bytes=+69 lock_age=+90
 >> acquire_lock k=k3 str=exclusive t=A
 stats: lock_count=+1 lock_bytes=+69 lock_age=+90
 >> put k=k4 v=v_new t=A
-put: lock acquisition = {k4 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10 Replicated Intent []}
+put: lock acquisition = {span=k4 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10 durability=Replicated strength=Intent ignored=[]}
 stats: key_bytes=+12 val_count=+1 val_bytes=+60 live_bytes=+53 gc_bytes_age=+1710 intent_count=+1 intent_bytes=+22 lock_count=+1 lock_age=+90
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} lock=true stat=PENDING rts=10.000000000,0 gul=0,0
@@ -267,9 +267,9 @@ with t=A
   txn_step seq=30
   put k=k8 v=v8_third
 ----
-put: lock acquisition = {k8 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=20 Replicated Intent [{5 15}]}
-put: lock acquisition = {k8 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=25 Replicated Intent [{5 15}]}
-put: lock acquisition = {k8 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=30 Replicated Intent [{5 15}]}
+put: lock acquisition = {span=k8 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=20 durability=Replicated strength=Intent ignored=[{5 15}]}
+put: lock acquisition = {span=k8 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=25 durability=Replicated strength=Intent ignored=[{5 15}]}
+put: lock acquisition = {span=k8 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=30 durability=Replicated strength=Intent ignored=[{5 15}]}
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=10.000000000,0 gul=0,0 isn=1
 data: "k1"/5.000000000,0 -> /BYTES/v1

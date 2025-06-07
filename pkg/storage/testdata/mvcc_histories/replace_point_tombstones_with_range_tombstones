@@ -45,9 +45,9 @@ del: "i": found key false
 del: "k": found key false
 del: "l": found key false
 del: "n": found key false
-put: lock acquisition = {f id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=f id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 del: "g": found key false
-del: lock acquisition = {g id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=g id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 gul=0,0
 rangekey: {h-o}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
@@ -145,9 +145,9 @@ del: "i": found key false
 del: "k": found key false
 del: "l": found key false
 del: "n": found key false
-put: lock acquisition = {f id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=f id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 del: "g": found key false
-del: lock acquisition = {g id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=g id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 >> at end:
 txn: "A" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 gul=0,0
 rangekey: {h-o}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]

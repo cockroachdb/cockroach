@@ -1834,9 +1834,9 @@ func TestStoreRebalancerHotRangesLogging(t *testing.T) {
 
 	hottestRanges := rr.TopLoad(objectiveProvider.Objective().ToDimension())
 	require.Equal(t, redact.RedactableString(
-		"\t1: r3:‹/Meta1› replicas=[(n1,s1):1,(n2,s2):2,(n3,s3):3] load=[batches/s=300.0 request_cpu/s=300ms raft_cpu/s=0µs write(keys)/s=0.0 write(bytes)/s=0 B read(keys)/s=0.0 read(bytes)/s=0 B]"+
-			"\n\t2: r2:‹/Meta1› replicas=[(n2,s2):2,(n4,s4):4,(n6,s6):6] load=[batches/s=200.0 request_cpu/s=200ms raft_cpu/s=0µs write(keys)/s=0.0 write(bytes)/s=0 B read(keys)/s=0.0 read(bytes)/s=0 B]"+
-			"\n\t3: r1:‹/Meta1› replicas=[(n1,s1):1,(n3,s3):3,(n5,s5):5] load=[batches/s=100.0 request_cpu/s=100ms raft_cpu/s=0µs write(keys)/s=0.0 write(bytes)/s=0 B read(keys)/s=0.0 read(bytes)/s=0 B]",
+		"\t1: r3:/Meta1 replicas=[(n1,s1):1,(n2,s2):2,(n3,s3):3] load=[batches/s=300.0 request_cpu/s=300ms raft_cpu/s=0µs write(keys)/s=0.0 write(bytes)/s=0 B read(keys)/s=0.0 read(bytes)/s=0 B]"+
+			"\n\t2: r2:/Meta1 replicas=[(n2,s2):2,(n4,s4):4,(n6,s6):6] load=[batches/s=200.0 request_cpu/s=200ms raft_cpu/s=0µs write(keys)/s=0.0 write(bytes)/s=0 B read(keys)/s=0.0 read(bytes)/s=0 B]"+
+			"\n\t3: r1:/Meta1 replicas=[(n1,s1):1,(n3,s3):3,(n5,s5):5] load=[batches/s=100.0 request_cpu/s=100ms raft_cpu/s=0µs write(keys)/s=0.0 write(bytes)/s=0 B read(keys)/s=0.0 read(bytes)/s=0 B]",
 	), formatHotRanges(hottestRanges))
 }
 

@@ -110,7 +110,7 @@ with t=A k=c
   txn_begin ts=4,0
   put v=1
 ----
-put: lock acquisition = {c id=00000001 key="c" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=c id=00000001 key="c" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 >> at end:
 txn: "A" meta={id=00000001 key="c" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=4.000000000,0 gul=0,0
 data: "a"/5.000000000,0 -> /BYTES/12
