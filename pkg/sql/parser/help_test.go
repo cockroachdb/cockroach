@@ -591,7 +591,7 @@ func TestContextualHelp(t *testing.T) {
 		{`RESTORE foo FROM LATEST IN '/bar' ??`, `RESTORE`},
 		{`RESTORE DATABASE ??`, `RESTORE`},
 
-		{`IMPORT TABLE ??`, `IMPORT`},
+		{`IMPORT INTO ??`, `IMPORT`},
 
 		{`EXPORT ??`, `EXPORT`},
 		{`EXPORT INTO CSV 'a' ??`, `EXPORT`},
