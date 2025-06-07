@@ -207,9 +207,9 @@ func startListenRPCAndSQL(
 		_ = stopper.RunAsyncTask(drpcCtx, "serve-drpc", func(ctx context.Context) {
 			if cfg := drpc.tlsCfg; cfg != nil {
 				drpcTLSL := tls.NewListener(drpcL, cfg)
-				netutil.FatalIfUnexpected(drpc.srv.Serve(ctx, drpcTLSL))
+				netutil.FatalIfUnexpected(drpc.Serve(ctx, drpcTLSL))
 			} else {
-				netutil.FatalIfUnexpected(drpc.srv.Serve(ctx, drpcL))
+				netutil.FatalIfUnexpected(drpc.Serve(ctx, drpcL))
 			}
 		})
 		_ = stopper.RunAsyncTask(workersCtx, "serve-loopback-grpc", func(context.Context) {
