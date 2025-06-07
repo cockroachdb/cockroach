@@ -3,56 +3,26 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { render } from "@testing-library/react";
-import * as H from "history";
 import moment from "moment-timezone";
 import React from "react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route } from "react-router-dom";
+import useSWR from "swr";
 
 import { formatDuration } from "../util/duration";
 
-import { JobsPage, JobsPageProps } from "./jobsPage";
+import { JobsPage } from "./jobsPage";
 import { allJobsFixture, earliestRetainedTime } from "./jobsPage.fixture";
 
-import Job = cockroach.server.serverpb.IJobResponse;
-
-const getMockJobsPageProps = (jobs: Array<Job>): JobsPageProps => {
-  const history = H.createHashHistory();
-  return {
-    sort: { columnTitle: null, ascending: true },
-    status: "",
-    show: "50",
-    type: 0,
-    columns: [],
-    setSort: () => {},
-    setStatus: () => {},
-    setShow: () => {},
-    setType: () => {},
-    onColumnsChange: () => {},
-    jobsResponse: {
-      data: {
-        jobs,
-        earliest_retained_time: earliestRetainedTime,
-      },
-      valid: true,
-      lastUpdated: moment(),
-      error: null,
-      inFlight: false,
-    },
-    refreshJobs: () => {},
-    location: history.location,
-    history,
-    match: {
-      url: "",
-      path: history.location.pathname,
-      isExact: false,
-      params: {},
-    },
-  };
-};
+// Mock SWR to control the data returned to the component
+jest.mock("swr");
+const mockedSWR = useSWR as jest.Mock;
 
 describe("Jobs", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it("format duration", () => {
     expect(formatDuration(moment.duration(0))).toEqual("00:00:00");
     expect(formatDuration(moment.duration(5, "minutes"))).toEqual("00:05:00");
@@ -64,9 +34,17 @@ describe("Jobs", () => {
   });
 
   it("renders expected jobs table columns", () => {
+    mockedSWR.mockReturnValue({
+      data: {
+        jobs: allJobsFixture,
+        earliest_retained_time: earliestRetainedTime,
+      },
+      error: null,
+      isValidating: false,
+    });
     const { getAllByText } = render(
-      <MemoryRouter>
-        <JobsPage {...getMockJobsPageProps(allJobsFixture)} />
+      <MemoryRouter initialEntries={["/jobs"]}>
+        <Route path="/jobs" component={JobsPage} />
       </MemoryRouter>,
     );
     const expectedColumnTitles = [
@@ -84,9 +62,17 @@ describe("Jobs", () => {
   });
 
   it("renders a message when the table is empty", () => {
+    mockedSWR.mockReturnValue({
+      data: {
+        jobs: [],
+        earliest_retained_time: earliestRetainedTime,
+      },
+      error: null,
+      isValidating: false,
+    });
     const { getByText } = render(
-      <MemoryRouter>
-        <JobsPage {...getMockJobsPageProps([])} />
+      <MemoryRouter initialEntries={["/jobs"]}>
+        <Route path="/jobs" component={JobsPage} />
       </MemoryRouter>,
     );
     const expectedText = [
