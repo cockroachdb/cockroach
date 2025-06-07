@@ -77,7 +77,6 @@
 #!/pkg/sql/BUILD.bazel       @cockroachdb/sql-queries-noreview
 
 /pkg/sql/importer/           @cockroachdb/sql-queries-prs
-/pkg/sql/importer/export*    @cockroachdb/cdc-prs
 /pkg/ccl/importerccl/        @cockroachdb/sql-queries-prs
 
 /pkg/sql/appstatspb           @cockroachdb/obs-prs
@@ -261,6 +260,7 @@
 
 /pkg/ccl/jobsccl/            @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
 /pkg/ccl/changefeedccl/      @cockroachdb/cdc-prs
+/pkg/sql/export/             @cockroachdb/cdc-prs
 
 /pkg/crosscluster/       @cockroachdb/disaster-recovery
 /pkg/backup/                 @cockroachdb/disaster-recovery
