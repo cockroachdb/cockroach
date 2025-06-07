@@ -357,6 +357,20 @@ func NewTestWithLocality(
 	return gossip
 }
 
+type drpcGossip Gossip
+
+// AsDRPCServer returns the DRPC server implementation for the Gossip service.
+func (n *Gossip) AsDRPCServer() DRPCGossipServer {
+	return (*drpcGossip)(n)
+}
+
+// Gossip implements the DRPC service. It receives gossiped information from a
+// peer node. The received delta is combined with the infostore, and this node's
+// own gossip is returned to requesting client.
+func (g *drpcGossip) Gossip(stream DRPCGossip_GossipStream) error {
+	return (*Gossip)(g).gossip(stream)
+}
+
 // AssertNotStarted fatals if the Gossip instance was already started.
 func (g *Gossip) AssertNotStarted(ctx context.Context) {
 	if g.started {
