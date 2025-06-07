@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -274,19 +273,6 @@ var (
 	// length.
 	ZeroUint32Column = make([]uint32, coldata.MaxBatchSize)
 )
-
-// HandleErrorFromDiskQueue takes in non-nil error emitted by colcontainer.Queue
-// or colcontainer.PartitionedDiskQueue implementations and propagates it
-// throughout the vectorized engine.
-func HandleErrorFromDiskQueue(err error) {
-	if sqlerrors.IsDiskFullError(err) {
-		// We don't want to annotate the disk full error, so we propagate it
-		// as expected one.
-		colexecerror.ExpectedError(err)
-	} else {
-		colexecerror.InternalError(err)
-	}
-}
 
 // EnsureSelectionVectorLength returns an int slice that is guaranteed to have
 // the specified length. old is reused if possible but is *not* zeroed out.
