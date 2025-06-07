@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // ExprContext is an interface containing objects necessary for creating
@@ -100,6 +101,25 @@ func (ef *ExprFactory) IndexedVarsHint(hint int) {
 	ef.indexedVarsHint = hint
 }
 
+// exprFmtCtxBase produces a FmtCtx used for serializing expressions; a proper
+// IndexedVar formatting function needs to be added on. It replaces placeholders
+// with their values.
+func exprFmtCtxBase(ctx context.Context, evalCtx *eval.Context) *tree.FmtCtx {
+	fmtCtx := evalCtx.FmtCtx(
+		tree.FmtCheckEquivalence,
+		tree.FmtPlaceholderFormat(
+			func(fmtCtx *tree.FmtCtx, p *tree.Placeholder) {
+				d, err := eval.Expr(ctx, evalCtx, p)
+				if err != nil {
+					panic(errors.NewAssertionErrorWithWrappedErrf(err, "failed to serialize placeholder"))
+				}
+				d.Format(fmtCtx)
+			},
+		),
+	)
+	return fmtCtx
+}
+
 // Make creates a execinfrapb.Expression. Init must be called on the ExprFactory
 // before Make.
 //
@@ -136,7 +156,7 @@ func (ef *ExprFactory) Make(expr tree.TypedExpr) (execinfrapb.Expression, error)
 	}
 
 	// Since the plan is not fully local, serialize the expression.
-	fmtCtx := execinfrapb.ExprFmtCtxBase(ef.ctx, evalCtx)
+	fmtCtx := exprFmtCtxBase(ef.ctx, evalCtx)
 	fmtCtx.FormatNode(expr)
 	if log.V(1) {
 		log.Infof(ef.ctx, "Expr %s:\n%s", fmtCtx.String(), tree.ExprDebugString(expr))

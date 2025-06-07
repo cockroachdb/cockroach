@@ -12,7 +12,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -66,25 +65,6 @@ func ConvertToMappedSpecOrdering(
 		}
 	}
 	return specOrdering
-}
-
-// ExprFmtCtxBase produces a FmtCtx used for serializing expressions; a proper
-// IndexedVar formatting function needs to be added on. It replaces placeholders
-// with their values.
-func ExprFmtCtxBase(ctx context.Context, evalCtx *eval.Context) *tree.FmtCtx {
-	fmtCtx := evalCtx.FmtCtx(
-		tree.FmtCheckEquivalence,
-		tree.FmtPlaceholderFormat(
-			func(fmtCtx *tree.FmtCtx, p *tree.Placeholder) {
-				d, err := eval.Expr(ctx, evalCtx, p)
-				if err != nil {
-					panic(errors.NewAssertionErrorWithWrappedErrf(err, "failed to serialize placeholder"))
-				}
-				d.Format(fmtCtx)
-			},
-		),
-	)
-	return fmtCtx
 }
 
 // Expression is the representation of a SQL expression.
