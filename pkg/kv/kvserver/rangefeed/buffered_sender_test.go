@@ -7,9 +7,11 @@ package rangefeed
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -18,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -163,4 +166,105 @@ func TestBufferedSenderChaosWithStop(t *testing.T) {
 		require.Equal(t, bs.sendBuffered(muxEv, nil).Error(), errors.New("stream sender is stopped").Error())
 		require.Equal(t, 0, bs.len())
 	})
+}
+
+// We create a new stream manager for each MuxRangeFeed call (to handle the gRPC stream).
+// Since we care about buffered sender, this doesn't matter to us.
+// Just wanted to note that a processor could potentially have different registrations
+// registered on it that correspond to different senders (stream managers).
+// But since we're stress testing, we can assume that every registration is for the same
+// underlying stream to maximize the load on a single sender.
+
+// A: From here on we focus on 1 MuxRangeFeed invocation, in which we
+//  1. Create a stream manager to manage a buffered sender for the locked gRPC stream
+// *2. Start the stream manager, which runs the sender's `run` method in a goroutine
+//      ↳ this is done with `stopper` to get a handle on it
+//  3. Start listening for requests to create a new rangefeed
+
+// -- we've got a stream manager and are running the sender's polling method
+
+// B: When we receive a RangeFeedRequest, we
+//  1. Ask our stream manager for a new input stream called a `streamSink`
+//  2. Register it with the rangefeed processor on the replica of note
+//      ↳ this requires searching for that replica, hence: stores -> store -> replica
+//      ↳ it's of note that if no processor exists yet, we create it here
+//  3. Once it's registered, we save our stream's disconnector in the stream manager
+
+// -- we've got an input pipe into our sender
+
+// C: Continuing from step 2 above, to register the stream with the rangefeed processor, we
+//  1. Create an unbuffered registration that pipes into the stream
+//  2. Add it to the registry
+// *3. Start a goroutine for the registration's `runOutputLoop`
+//      ↳ for unbuffered registration, this is a quick job for catchup scans exclusively
+//      ↳ for buffered registration (deprecated) it's a polling loop
+
+// -- now the processor knows where to forward it's logical operations to
+// -- all the infra is setup
+
+//	We only have K=(32|64|128) concurrent scheduler workers
+//
+// ==> we can only send K events concurrently at any instant
+const workers = 64
+
+func TestMichael(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	// A
+	testServerStream := newTestServerStream()
+	bs := NewBufferedSender(testServerStream, NewBufferedSenderMetrics())
+
+	smMetrics := NewStreamManagerMetrics()
+	sm := NewStreamManager(bs, smMetrics)
+	require.NoError(t, sm.Start(ctx, stopper))
+
+	var wg sync.WaitGroup
+	HandleRangeFeedRequest := func(id int) {
+		wg.Add(1)
+		stream, _ := sm.NewStream(int64(id), 42).(BufferedStream)
+		// if !isBufferedStream {
+		// 	return errors.New("dawg please give stream manager a buffered sender.")
+		// }
+		// TODO(mxu): currently we have no obs into whether tick rate > consumption rate
+		ticker := time.NewTicker(10 * time.Millisecond)
+		timer := time.NewTimer(30 * time.Second)
+
+		require.NoError(t, stopper.RunAsyncTask(ctx, fmt.Sprintf("sending into %v", id),
+			func(context.Context) {
+				var longest time.Duration
+				var numEvents int
+				for {
+					select {
+					case <-ticker.C:
+						val := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
+						event := new(kvpb.RangeFeedEvent)
+						event.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val, PrevValue: val})
+
+						start := crtime.NowMono()
+						require.NoError(t, stream.SendBuffered(event, nil))
+						longest = max(longest, start.Elapsed())
+						numEvents++
+					case <-timer.C:
+						log.Infof(ctx, "%v events (longest: %v)", numEvents, longest)
+						wg.Done()
+						return
+					}
+				}
+			}))
+
+		// we don't need a registration because all unbuffered registration does is call stream.SendBuffered
+	}
+
+	for i := range workers {
+		HandleRangeFeedRequest(i)
+	}
+
+	wg.Wait()
+	log.Infof(ctx, "Total events sent: %v", testServerStream.totalEventsSent())
+	// sm.Stop(ctx)
 }

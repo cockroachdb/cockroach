@@ -289,3 +289,59 @@ func NewBufferedSenderMetrics() *BufferedSenderMetrics {
 		BufferedSenderQueueSize: metric.NewGauge(metaBufferedSenderQueueSize),
 	}
 }
+
+var (
+	metaRangeFeedMuxStreamSendLatencyNanos = metric.Metadata{
+		Name:        "kv.rangefeed.mux_stream_send.latency",
+		Help:        "KV RangeFeed event send on mux stream latency",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaRangeFeedMuxStreamSlowSends = metric.Metadata{
+		Name:        "kv.rangefeed.mux_stream_send.slow_events",
+		Help:        "Number of times RangeFeed was slow sending an event on a mux stream",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeFeedMuxStreamSendContentions = metric.Metadata{
+		Name:        "kv.rangefeed.mux_stream_send.contentions",
+		Help:        "Current number of goroutines waiting to acquire the mux stream send lock",
+		Measurement: "Goroutines",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeFeedMuxStreamMutexAcquisitionLatencyNanos = metric.Metadata{
+		Name:        "kv.rangefeed.mux_stream_send.mutex_acquisition.latency",
+		Help:        "KV RangeFeed mux stream send mutex acquisition latency",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+)
+
+type LockedMuxStreamMetrics struct {
+	SendLatencyNanos             metric.IHistogram
+	SlowSends                    *metric.Counter
+	SendContentions              *metric.Gauge
+	MutexAcquisitionLatencyNanos metric.IHistogram
+}
+
+// MetricStruct implements metrics.Struct interface.
+func (*LockedMuxStreamMetrics) MetricStruct() {}
+
+func NewLockedMuxStreamMetrics(histogramWindow time.Duration) *LockedMuxStreamMetrics {
+	return &LockedMuxStreamMetrics{
+		SendLatencyNanos: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePrometheus,
+			Metadata:     metaRangeFeedMuxStreamSendLatencyNanos,
+			Duration:     histogramWindow,
+			BucketConfig: metric.IOLatencyBuckets,
+		}),
+		SlowSends:       metric.NewCounter(metaRangeFeedMuxStreamSlowSends),
+		SendContentions: metric.NewGauge(metaRangeFeedMuxStreamSendContentions),
+		MutexAcquisitionLatencyNanos: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePrometheus,
+			Metadata:     metaRangeFeedMuxStreamMutexAcquisitionLatencyNanos,
+			Duration:     histogramWindow,
+			BucketConfig: metric.IOLatencyBuckets,
+		}),
+	}
+}
