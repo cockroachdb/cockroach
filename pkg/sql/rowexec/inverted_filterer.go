@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
@@ -94,7 +95,7 @@ func newInvertedFilterer(
 	evalCtx := flowCtx.EvalCtx
 	if spec.PreFiltererSpec != nil {
 		// Only make a copy of the eval context if we're going to pass it to the
-		// ExprHelper later.
+		// execexpr.Helper later.
 		evalCtx = flowCtx.NewEvalCtx()
 	}
 	if err := ifr.ProcessorBase.InitWithEvalCtx(
@@ -132,7 +133,7 @@ func newInvertedFilterer(
 
 	if spec.PreFiltererSpec != nil {
 		semaCtx := flowCtx.NewSemaContext(flowCtx.Txn)
-		var exprHelper execinfrapb.ExprHelper
+		var exprHelper execexpr.Helper
 		colTypes := []*types.T{spec.PreFiltererSpec.Type}
 		if err := exprHelper.Init(ctx, spec.PreFiltererSpec.Expression, colTypes, semaCtx, evalCtx); err != nil {
 			return nil, err

@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -373,6 +374,19 @@ func (c *cancelFlowsCoordinator) addFlowsToCancel(
 	}
 }
 
+// serializeEvalContext serializes some of the fields of a eval.Context into a
+// execinfrapb.EvalContext proto.
+func serializeEvalContext(evalCtx *eval.Context) execinfrapb.EvalContext {
+	sessionDataProto := evalCtx.SessionData().SessionData
+	sessiondata.MarshalNonLocal(evalCtx.SessionData(), &sessionDataProto)
+	return execinfrapb.EvalContext{
+		SessionData:                       sessionDataProto,
+		StmtTimestampNanos:                evalCtx.StmtTimestamp.UnixNano(),
+		TxnTimestampNanos:                 evalCtx.TxnTimestamp.UnixNano(),
+		TestingKnobsForceProductionValues: evalCtx.TestingKnobs.ForceProductionValues,
+	}
+}
+
 // setupFlows sets up all the flows specified in flows using the provided state.
 // It will first attempt to set up the gateway flow (whose output is the
 // DistSQLReceiver provided) and - if successful - will proceed to setting up
@@ -454,7 +468,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		setupReq.EvalContext.SessionData.VectorizeMode = evalCtx.SessionData().VectorizeMode
 	} else {
 		// In distributed plans populate some extra state.
-		setupReq.EvalContext = execinfrapb.MakeEvalContext(evalCtx)
+		setupReq.EvalContext = serializeEvalContext(evalCtx)
 		if jobTag, ok := logtags.FromContext(ctx).GetTag("job"); ok {
 			setupReq.JobTag = redact.SafeString(jobTag.ValueStr())
 		}

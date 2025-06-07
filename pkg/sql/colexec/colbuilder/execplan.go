@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execagg"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -1896,7 +1897,7 @@ func processExpr(
 	if expr.LocalExpr != nil {
 		return expr.LocalExpr, nil
 	}
-	return execinfrapb.DeserializeExpr(ctx, expr, typs, semaCtx, evalCtx)
+	return execexpr.DeserializeExpr(ctx, expr, typs, semaCtx, evalCtx)
 }
 
 // planAndMaybeWrapFilter plans a filter. If the filter is unsupported, it is
