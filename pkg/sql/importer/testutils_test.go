@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -42,7 +43,7 @@ func descForTable(
 	settings := testEvalCtx.Settings
 	stmt := parsed[0].AST.(*tree.CreateTable)
 	semaCtx := tree.MakeSemaContext(nil /* resolver */)
-	table, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, settings, stmt, parent, parentSchemaID, id, nanos)
+	table, err := sqlutils.MakeTestingSimpleTableDescriptor(ctx, &semaCtx, settings, stmt, parent, parentSchemaID, id, nanos)
 	if err != nil {
 		t.Fatalf("could not interpret %q: %v", create, err)
 	}

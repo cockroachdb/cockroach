@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -235,7 +235,7 @@ func parseSchemaDefinition(schemaPath string) (opts []sqlsmith.SmitherOption, _ 
 			return nil, errors.AssertionFailedf("only CreateTable statements supported, found %T", t)
 		case *tree.CreateTable:
 			tableID := descpb.ID(int(parentID) + i + 1)
-			desc, err := importer.MakeTestingSimpleTableDescriptor(
+			desc, err := sqlutils.MakeTestingSimpleTableDescriptor(
 				context.Background(), &semaCtx, st, t, parentID, keys.PublicSchemaID, tableID, wall,
 			)
 			if err != nil {
