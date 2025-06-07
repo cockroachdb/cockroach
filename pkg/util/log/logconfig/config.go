@@ -35,6 +35,10 @@ const DefaultFluentFormat = `json-fluent-compact`
 // when not specified in a configuration.
 const DefaultHTTPFormat = `json-compact`
 
+// DefaultOtlpFormat is the entry format for OpenTelemetry sinks
+// when not specified in a configuration.
+const DefaultOtlpFormat = `json-compact`
+
 // DefaultFilePerms is the default permissions used in file-defaults. It
 // is applied literally via os.Chmod, without considering the umask.
 const DefaultFilePerms = FilePermissions(0o640)
@@ -69,7 +73,16 @@ http-defaults:
     exit-on-error: false
     timeout: 2s
     buffering:
-      max-staleness: 5s	
+      max-staleness: 5s
+      flush-trigger-size: 1mib
+      max-buffer-size: 50mib
+otlp-defaults:
+    filter: INFO
+    format: ` + DefaultOtlpFormat + `
+    redactable: true
+    exit-on-error: false
+    buffering:
+      max-staleness: 5s
       flush-trigger-size: 1mib
       max-buffer-size: 50mib
 sinks:
@@ -124,6 +137,11 @@ type Config struct {
 	// inherited when a specific HTTP sink config does not provide a
 	// configuration value.
 	HTTPDefaults HTTPDefaults `yaml:"http-defaults,omitempty"`
+
+	// OtlpDefaults represents the default configuration for OpenTelemetry sinks,
+	// inherited when a specific OpenTelemetry sink config does not provide a
+	// configuration value.
+	OtlpDefaults OtlpDefaults `yaml:"otlp-defaults,omitempty"`
 
 	// Sinks represents the sink configurations.
 	Sinks SinkConfig `yaml:",omitempty"`
@@ -249,6 +267,8 @@ type SinkConfig struct {
 	FluentServers map[string]*FluentSinkConfig `yaml:"fluent-servers,omitempty"`
 	// HTTPServers represents the list of configured http sinks.
 	HTTPServers map[string]*HTTPSinkConfig `yaml:"http-servers,omitempty"`
+	// OtlpServers represents the list of configured opentelemetry sinks.
+	OtlpServers map[string]*OtlpSinkConfig `yaml:"otlp-servers,omitempty"`
 	// Stderr represents the configuration for the stderr sink.
 	Stderr StderrSinkConfig `yaml:",omitempty"`
 }
@@ -564,6 +584,21 @@ type HTTPSinkConfig struct {
 	Channels ChannelFilters `yaml:",omitempty,flow"`
 
 	HTTPDefaults `yaml:",inline"`
+
+	// sinkName is populated during validation.
+	sinkName string
+}
+
+type OtlpDefaults struct {
+	CommonSinkConfig `yaml:",inline"`
+}
+
+type OtlpSinkConfig struct {
+	Channels ChannelFilters `yaml:",omitempty,flow"`
+
+	Address string `yaml:""`
+
+	OtlpDefaults `yaml:",inline"`
 
 	// sinkName is populated during validation.
 	sinkName string
