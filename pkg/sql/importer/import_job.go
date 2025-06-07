@@ -321,53 +321,21 @@ func (r *importResumer) prepareTablesForIngestion(
 	importDetails := details
 	importDetails.Tables = make([]jobspb.ImportDetails_Table, len(details.Tables))
 
-	var err error
-	var desc *descpb.TableDescriptor
-
-	useImportEpochs := importEpochs.Get(&p.ExecCfg().Settings.SV)
-	for i, table := range details.Tables {
-		desc, err = prepareExistingTablesForIngestion(ctx, txn, descsCol, table.Desc, useImportEpochs)
-		if err != nil {
-			return importDetails, err
-		}
-		importDetails.Tables[i] = jobspb.ImportDetails_Table{
-			Desc:       desc,
-			Name:       table.Name,
-			SeqVal:     table.SeqVal,
-			TargetCols: table.TargetCols,
-		}
-	}
-
-	importDetails.PrepareComplete = true
-
-	// We have to wait for all nodes to see the same descriptor version before
-	// choosing our Walltime.
-	importDetails.Walltime = 0
-	return importDetails, nil
-}
-
-// prepareExistingTablesForIngestion prepares descriptors for existing tables
-// being imported into.
-func prepareExistingTablesForIngestion(
-	ctx context.Context,
-	txn *kv.Txn,
-	descsCol *descs.Collection,
-	desc *descpb.TableDescriptor,
-	useImportEpochs bool,
-) (*descpb.TableDescriptor, error) {
+	table := details.Tables[0]
+	desc := table.Desc
 	if len(desc.Mutations) > 0 {
-		return nil, errors.Errorf("cannot IMPORT INTO a table with schema changes in progress -- try again later (pending mutation %s)", desc.Mutations[0].String())
+		return jobspb.ImportDetails{}, errors.Errorf("cannot IMPORT INTO a table with schema changes in progress -- try again later (pending mutation %s)", desc.Mutations[0].String())
 	}
 
 	// Note that desc is just used to verify that the version matches.
 	importing, err := descsCol.MutableByID(txn).Table(ctx, desc.ID)
 	if err != nil {
-		return nil, err
+		return jobspb.ImportDetails{}, err
 	}
 	// Ensure that the version of the table has not been modified since this
 	// job was created.
 	if got, exp := importing.Version, desc.Version; got != exp {
-		return nil, errors.Errorf("another operation is currently operating on the table")
+		return jobspb.ImportDetails{}, errors.Errorf("another operation is currently operating on the table")
 	}
 
 	// Take the table offline for import.
@@ -376,7 +344,7 @@ func prepareExistingTablesForIngestion(
 
 	// We only use the new OfflineForImport on 24.1, which bumps
 	// the ImportEpoch, if we are completely on 24.1.
-	if useImportEpochs {
+	if importEpochs.Get(&p.ExecCfg().Settings.SV) {
 		importing.OfflineForImport()
 	} else {
 		importing.SetOffline(tabledesc.OfflineReasonImporting)
@@ -386,10 +354,22 @@ func prepareExistingTablesForIngestion(
 	if err := descsCol.WriteDesc(
 		ctx, false /* kvTrace */, importing, txn,
 	); err != nil {
-		return nil, err
+		return jobspb.ImportDetails{}, err
 	}
 
-	return importing.TableDesc(), nil
+	importDetails.Tables[0] = jobspb.ImportDetails_Table{
+		Desc:       importing.TableDesc(),
+		Name:       table.Name,
+		SeqVal:     table.SeqVal,
+		TargetCols: table.TargetCols,
+	}
+
+	importDetails.PrepareComplete = true
+
+	// We have to wait for all nodes to see the same descriptor version before
+	// choosing our Walltime.
+	importDetails.Walltime = 0
+	return importDetails, nil
 }
 
 // bindTableDescImportProperties updates the table descriptor at the start of an
