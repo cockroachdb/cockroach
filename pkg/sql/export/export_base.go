@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package importer
+package export
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -22,11 +22,11 @@ var eventMemoryMultipier = settings.RegisterFloatSetting(
 	settings.FloatWithMinimum(1),
 )
 
-// ExportTestingKnobs contains testing knobs for Export.
-type ExportTestingKnobs struct {
+// TestingKnobs contains testing knobs for Export.
+type TestingKnobs struct {
 	// MemoryMonitor is a test memory monitor to report allocations to.
 	MemoryMonitor *mon.BytesMonitor
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
-func (*ExportTestingKnobs) ModuleTestingKnobs() {}
+func (*TestingKnobs) ModuleTestingKnobs() {}
