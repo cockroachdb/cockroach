@@ -169,6 +169,11 @@ func (s *hotRangesLoggingScheduler) maybeLogHotRanges(ctx context.Context, stopp
 //		   -- It's been greater than the log interval since we last logged.
 //		   -- One of the replicas see exceeds our cpu threshold.
 func (s *hotRangesLoggingScheduler) shouldLog(ctx context.Context) bool {
+	// if there are no settings, bail
+	if s.st == nil {
+		return false
+	}
+
 	enabled := TelemetryHotRangesStatsEnabled.Get(&s.st.SV)
 	if !enabled {
 		return false
