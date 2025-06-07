@@ -183,6 +183,14 @@ func (r *Replica) executeReadOnlyBatch(
 	// conflicting intents so intent resolution could have been racing with this
 	// request even if latches were held.
 	intents := result.Local.DetachEncounteredIntents()
+
+	// If QueryIntent reports a lock as missing, we must report it to the lock
+	// manager.
+	missingLocks := result.Local.DetachMissingLocks()
+	for i := range missingLocks {
+		r.concMgr.OnLockMissing(ctx, &missingLocks[i])
+	}
+
 	if pErr == nil {
 		pErr = r.handleReadOnlyLocalEvalResult(ctx, ba, result.Local)
 	}
@@ -503,8 +511,9 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 		// Failed read-only batches can't have any Result except for what's
 		// allowlisted here.
 		res.Local = result.LocalResult{
-			EncounteredIntents: res.Local.DetachEncounteredIntents(),
-			Metrics:            res.Local.Metrics,
+			ReportedMissingLocks: res.Local.ReportedMissingLocks,
+			EncounteredIntents:   res.Local.DetachEncounteredIntents(),
+			Metrics:              res.Local.Metrics,
 		}
 		return ba, nil, res, pErr
 	}
