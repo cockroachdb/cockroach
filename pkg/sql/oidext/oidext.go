@@ -31,6 +31,7 @@ const (
 	T__box2d     = oid.Oid(90005)
 	T_pgvector   = oid.Oid(90006)
 	T__pgvector  = oid.Oid(90007)
+	T_citext     = oid.Oid(90008)
 )
 
 // OIDs in this block are not extensions of postgres, but are not supported in
@@ -53,6 +54,7 @@ var ExtensionTypeName = map[oid.Oid]string{
 	T__pgvector:  "_VECTOR",
 	T_jsonpath:   "JSONPATH",
 	T__jsonpath:  "_JSONPATH",
+	T_citext:     "CITEXT",
 }
 
 // TypeName checks the name for a given type by first looking up oid.TypeName

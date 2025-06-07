@@ -498,6 +498,11 @@ func DecodeDatum(
 				return nil, err
 			}
 			return &tree.DPGVector{T: ret}, nil
+		case oidext.T_citext:
+			if err := validateStringBytes(b); err != nil {
+				return nil, err
+			}
+			return da.NewDString(tree.DString(bs)), nil
 		}
 		switch typ.Family() {
 		case types.ArrayFamily, types.TupleFamily:
