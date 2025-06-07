@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
@@ -225,6 +226,17 @@ func (c *CustomFuncs) InlineSelectProject(
 	return newFilters
 }
 
+// EquivGroupsFromFilters returns equivalence groups derived from the given
+// filters.
+func (c *CustomFuncs) EquivGroupsFromFilters(filters memo.FiltersExpr) props.EquivGroups {
+	var eq props.EquivGroups
+	for i := range filters {
+		item := &filters[i]
+		eq.AddFromFDs(&item.ScalarProps().FuncDeps)
+	}
+	return eq
+}
+
 // InlineProjectProject searches the projection expressions for any variable
 // references to columns from the given input (which must be a Project
 // operator). Each variable is replaced by the corresponding inlined projection
@@ -256,7 +268,11 @@ func (c *CustomFuncs) InlineProjectProject(
 		}
 	}
 
-	return c.f.ConstructProject(innerProject.Input, newProjections, newPassthrough)
+	return c.f.ConstructProject(innerProject.Input, newProjections,
+		&memo.ProjectPrivate{
+			Passthrough: newPassthrough,
+		},
+	)
 }
 
 // Recursively walk the tree looking for references to projection expressions
@@ -498,7 +514,9 @@ func (c *CustomFuncs) ConvertUDFToSubquery(
 		c.f.ConstructProject(
 			replace(stmt).(memo.RelExpr),
 			nil, /* projections */
-			opt.MakeColSet(returnColID),
+			&memo.ProjectPrivate{
+				Passthrough: opt.MakeColSet(returnColID),
+			},
 		),
 		&memo.SubqueryPrivate{},
 	)

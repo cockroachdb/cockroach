@@ -767,7 +767,11 @@ func (b *Builder) buildScan(
 			}
 			proj = append(proj, item)
 		})
-		outScope.expr = b.factory.ConstructProject(outScope.expr, proj, scanColIDs)
+		outScope.expr = b.factory.ConstructProject(outScope.expr, proj,
+			&memo.ProjectPrivate{
+				Passthrough: scanColIDs,
+			},
+		)
 	}
 
 	// Apply any filters required to enforce RLS policies. This must be done
