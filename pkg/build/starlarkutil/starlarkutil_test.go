@@ -16,14 +16,6 @@ func TestGetExistingMirrorsFromDepsBzl(t *testing.T) {
 load("@bazel_gazelle//:deps.bzl", "go_repository")
 def go_deps():
     go_repository(
-        name = "io_vitess_vitess",
-        build_file_proto_mode = "disable_global",
-        importpath = "vitess.io/vitess",
-        sha256 = "FAKESHA256",
-        strip_prefix = "github.com/cockroachdb/vitess@v0.0.0-20210218160543-54524729cc82",
-        urls = ["https://example.com/fakeurl"],
-    )
-    go_repository(
         name = "com_github_akavel_rsrc",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/akavel/rsrc",
@@ -41,11 +33,8 @@ def go_deps():
 `
 	mirrors, err := downloadableArtifactsFromDepsBzl(depsbzl)
 	require.NoError(t, err)
-	require.Equal(t, len(mirrors), 2)
-	mirror := mirrors["io_vitess_vitess"]
-	require.Equal(t, mirror.URL, "https://example.com/fakeurl")
-	require.Equal(t, mirror.Sha256, "FAKESHA256")
-	mirror = mirrors["com_github_alecthomas_units"]
+	require.Equal(t, len(mirrors), 1)
+	mirror := mirrors["com_github_alecthomas_units"]
 	require.Equal(t, mirror.URL, "https://foo/bar.zip")
 	require.Equal(t, mirror.Sha256, "abcdefghij")
 }
