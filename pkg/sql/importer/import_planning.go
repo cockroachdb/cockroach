@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -36,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -87,10 +85,6 @@ const (
 	// as either an inline JSON schema, or an external schema URI.
 	avroSchema    = "schema"
 	avroSchemaURI = "schema_uri"
-
-	// statusImportBundleParseSchema indicates to the user that a bundle format
-	// schema is being parsed
-	statusImportBundleParseSchema jobs.StatusMessage = "parsing schema on Import Bundle"
 )
 
 var importOptionExpectValues = map[string]exprutil.KVStringOptValidate{
@@ -152,10 +146,7 @@ var mysqlOutAllowedOptions = makeStringSet(
 	mysqlOutfileEscape, csvNullIf, csvSkip, csvRowLimit,
 )
 
-var (
-	mysqlDumpAllowedOptions = makeStringSet(importOptionSkipFKs, csvRowLimit)
-	pgCopyAllowedOptions    = makeStringSet(pgCopyDelimiter, pgCopyNull, optMaxRowSize)
-)
+var pgCopyAllowedOptions = makeStringSet(pgCopyDelimiter, pgCopyNull, optMaxRowSize)
 
 // DROP is required because the target table needs to be take offline during
 // IMPORT INTO.
@@ -327,15 +318,6 @@ func importPlanHook(
 	importStmt, ok := stmt.(*tree.Import)
 	if !ok {
 		return nil, nil, false, nil
-	}
-
-	switch f := strings.ToUpper(importStmt.FileFormat); f {
-	case "MYSQLDUMP":
-		p.BufferClientNotice(ctx, pgnotice.Newf(
-			"IMPORT %s has been deprecated in 23.1, and will be removed in a future version. See %s for alternatives.",
-			redact.SafeString(f),
-			redact.SafeString(docs.URL("migration-overview")),
-		))
 	}
 
 	addToFileFormatTelemetry(importStmt.FileFormat, "attempted")
@@ -588,21 +570,6 @@ func importPlanHook(
 					return pgerror.Newf(pgcode.Syntax, "%s must be > 0", csvRowLimit)
 				}
 				format.MysqlOut.RowLimit = int64(rowLimit)
-			}
-		case "MYSQLDUMP":
-			if err = validateFormatOptions(importStmt.FileFormat, opts, mysqlDumpAllowedOptions); err != nil {
-				return err
-			}
-			format.Format = roachpb.IOFileFormat_Mysqldump
-			if override, ok := opts[csvRowLimit]; ok {
-				rowLimit, err := strconv.Atoi(override)
-				if err != nil {
-					return pgerror.Wrapf(err, pgcode.Syntax, "invalid numeric %s value", csvRowLimit)
-				}
-				if rowLimit <= 0 {
-					return pgerror.Newf(pgcode.Syntax, "%s must be > 0", csvRowLimit)
-				}
-				format.MysqlDump.RowLimit = int64(rowLimit)
 			}
 		case "PGCOPY":
 			if err = validateFormatOptions(importStmt.FileFormat, opts, pgCopyAllowedOptions); err != nil {

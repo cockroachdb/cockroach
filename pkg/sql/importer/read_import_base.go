@@ -376,16 +376,7 @@ type inputConverter interface {
 // mapped specifically to a particular data column.
 func formatHasNamedColumns(format roachpb.IOFileFormat_FileFormat) bool {
 	switch format {
-	case roachpb.IOFileFormat_Avro,
-		roachpb.IOFileFormat_Mysqldump:
-		return true
-	}
-	return false
-}
-
-func isMultiTableFormat(format roachpb.IOFileFormat_FileFormat) bool {
-	switch format {
-	case roachpb.IOFileFormat_Mysqldump:
+	case roachpb.IOFileFormat_Avro:
 		return true
 	}
 	return false
