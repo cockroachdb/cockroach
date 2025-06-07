@@ -12,7 +12,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/ingeststopped"
@@ -28,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/ingesting"
@@ -47,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logutil"
@@ -129,9 +126,6 @@ type preparedSchemaMetadata struct {
 // Resume is part of the jobs.Resumer interface.
 func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(sql.JobExecContext)
-	if err := r.parseBundleSchemaIfNeeded(ctx, p); err != nil {
-		return err
-	}
 
 	details := r.job.Details().(jobspb.ImportDetails)
 	files := details.URIs
@@ -753,186 +747,6 @@ func bindTableDescImportProperties(
 		return err
 	}
 	return nil
-}
-
-// parseBundleSchemaIfNeeded parses dump files (MYSQLDUMP) for DDL
-// statements and creates the relevant database, schema, table and type
-// descriptors. Data from the dump files is ingested into these descriptors in
-// the next phase of the import.
-func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs interface{}) error {
-	p := phs.(sql.JobExecContext)
-	seqVals := make(map[descpb.ID]int64)
-	details := r.job.Details().(jobspb.ImportDetails)
-	skipFKs := details.SkipFKs
-	parentID := details.ParentID
-	files := details.URIs
-	format := details.Format
-
-	owner := r.job.Payload().UsernameProto.Decode()
-
-	p.SessionDataMutatorIterator().SetSessionDefaultIntSize(details.DefaultIntSize)
-
-	if details.ParseBundleSchema {
-		var span *tracing.Span
-		ctx, span = tracing.ChildSpan(ctx, "import-parsing-bundle-schema")
-		defer span.Finish()
-
-		if err := r.job.NoTxn().UpdateStatusMessage(ctx, statusImportBundleParseSchema); err != nil {
-			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
-		}
-
-		var dbDesc catalog.DatabaseDescriptor
-		{
-			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
-				ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
-			) (err error) {
-				dbDesc, err = descriptors.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, parentID)
-				if err != nil {
-					return err
-				}
-				return err
-			}); err != nil {
-				return err
-			}
-		}
-
-		var schemaDescs []*schemadesc.Mutable
-		var tableDescs []*tabledesc.Mutable
-		var err error
-		walltime := p.ExecCfg().Clock.Now().WallTime
-
-		if tableDescs, schemaDescs, err = parseAndCreateBundleTableDescs(
-			ctx, p, details, seqVals, skipFKs, dbDesc, files, format, walltime, owner,
-			r.job.ID()); err != nil {
-			return err
-		}
-
-		schemaDetails := make([]jobspb.ImportDetails_Schema, len(schemaDescs))
-		for i, schemaDesc := range schemaDescs {
-			schemaDetails[i] = jobspb.ImportDetails_Schema{Desc: schemaDesc.SchemaDesc()}
-		}
-		details.Schemas = schemaDetails
-
-		tableDetails := make([]jobspb.ImportDetails_Table, len(tableDescs))
-		for i, tableDesc := range tableDescs {
-			tableDetails[i] = jobspb.ImportDetails_Table{
-				Name:   tableDesc.GetName(),
-				Desc:   tableDesc.TableDesc(),
-				SeqVal: seqVals[tableDescs[i].ID],
-				IsNew:  true,
-			}
-		}
-		details.Tables = tableDetails
-
-		for _, tbl := range tableDescs {
-			// For reasons relating to #37691, we disallow user defined types in
-			// the standard IMPORT case.
-			for _, col := range tbl.Columns {
-				if col.Type.UserDefined() {
-					return errors.Newf("IMPORT cannot be used with user defined types; use IMPORT INTO instead")
-				}
-			}
-		}
-		// Prevent job from redoing schema parsing and table desc creation
-		// on subsequent resumptions.
-		details.ParseBundleSchema = false
-		if err := r.job.NoTxn().SetDetails(ctx, details); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func getPublicSchemaDescForDatabase(
-	ctx context.Context, execCfg *sql.ExecutorConfig, db catalog.DatabaseDescriptor,
-) (scDesc catalog.SchemaDescriptor, err error) {
-	if err := sql.DescsTxn(ctx, execCfg, func(
-		ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
-	) error {
-		publicSchemaID := db.GetSchemaID(catconstants.PublicSchemaName)
-		scDesc, err = descriptors.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Schema(ctx, publicSchemaID)
-		return err
-	}); err != nil {
-		return nil, err
-	}
-
-	return scDesc, nil
-}
-
-// parseAndCreateBundleTableDescs parses and creates the table
-// descriptors for bundle formats.
-func parseAndCreateBundleTableDescs(
-	ctx context.Context,
-	p sql.JobExecContext,
-	details jobspb.ImportDetails,
-	seqVals map[descpb.ID]int64,
-	skipFKs bool,
-	parentDB catalog.DatabaseDescriptor,
-	files []string,
-	format roachpb.IOFileFormat,
-	walltime int64,
-	owner username.SQLUsername,
-	jobID jobspb.JobID,
-) ([]*tabledesc.Mutable, []*schemadesc.Mutable, error) {
-
-	var schemaDescs []*schemadesc.Mutable
-	var tableDescs []*tabledesc.Mutable
-	var tableName string
-
-	// A single table entry in the import job details when importing a bundle format
-	// indicates that we are performing a single table import.
-	// This info is populated during the planning phase.
-	if len(details.Tables) > 0 {
-		tableName = details.Tables[0].Name
-	}
-
-	store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, files[0], p.User())
-	if err != nil {
-		return tableDescs, schemaDescs, err
-	}
-	defer store.Close()
-
-	raw, _, err := store.ReadFile(ctx, "", cloud.ReadOptions{NoFileSize: true})
-	if err != nil {
-		return tableDescs, schemaDescs, err
-	}
-	defer raw.Close(ctx)
-	reader, err := decompressingReader(ioctx.ReaderCtxAdapter(ctx, raw), files[0], format.Compression)
-	if err != nil {
-		return tableDescs, schemaDescs, err
-	}
-	defer reader.Close()
-
-	fks := fkHandler{skip: skipFKs, allowed: true, resolver: fkResolver{
-		tableNameToDesc: make(map[string]*tabledesc.Mutable),
-	}}
-	switch format.Format {
-	case roachpb.IOFileFormat_Mysqldump:
-		idgen := descidgen.NewGenerator(p.ExecCfg().Settings, p.ExecCfg().Codec, p.ExecCfg().DB)
-		id, err := idgen.PeekNextUniqueDescID(ctx)
-		if err != nil {
-			return tableDescs, schemaDescs, err
-		}
-		fks.resolver.format.Format = roachpb.IOFileFormat_Mysqldump
-		evalCtx := &p.ExtendedEvalContext().Context
-		tableDescs, err = readMysqlCreateTable(
-			ctx, reader, evalCtx, p, id, parentDB, tableName, fks,
-			seqVals, owner, walltime,
-		)
-		if err != nil {
-			return tableDescs, schemaDescs, err
-		}
-
-	default:
-		return tableDescs, schemaDescs, errors.Errorf(
-			"non-bundle format %q does not support reading schemas", format.Format.String())
-	}
-
-	if tableDescs == nil && len(details.Tables) > 0 {
-		return tableDescs, schemaDescs, errors.Errorf("table definition not found for %q", tableName)
-	}
-
-	return tableDescs, schemaDescs, err
 }
 
 // publishTables updates the status of imported tables from OFFLINE to PUBLIC.
