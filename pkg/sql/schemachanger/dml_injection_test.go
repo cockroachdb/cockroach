@@ -258,7 +258,7 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			desc:         "add column default udf",
 			setup:        []string{"CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$"},
 			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col INT NOT NULL DEFAULT f()",
-			skipIssue:    87699,
+			skipIssue:    147472,
 		},
 		{
 			desc: "drop column default udf",
@@ -267,7 +267,7 @@ func TestAlterTableDMLInjection(t *testing.T) {
 				"ALTER TABLE tbl ADD COLUMN new_col INT NOT NULL DEFAULT f()",
 			},
 			schemaChange: "ALTER TABLE tbl DROP COLUMN new_col",
-			skipIssue:    87699,
+			skipIssue:    147472,
 		},
 		{
 			desc:         "add column unique not null",

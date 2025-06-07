@@ -84,6 +84,7 @@ go_library(
         "//pkg/util/cidr",
         "//pkg/util/duration",
         "//pkg/util/encoding",
+        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
         "//pkg/util/json",
         "//pkg/util/mon",
