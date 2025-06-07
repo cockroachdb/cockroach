@@ -88,7 +88,7 @@ func registerProbeRanges(r registry.Registry) {
 		Owner:              registry.OwnerKV, // Contact SRE first, as they own the prober.
 		Timeout:            30 * time.Minute,
 		CompatibleClouds:   registry.AllClouds,
-		CanRunConcurrently: registry.OperationCanRunConcurrently,
+		CanRunConcurrently: registry.OperationCannotRunConcurrently,
 		Dependencies:       []registry.OperationDependency{registry.OperationRequiresPopulatedDatabase, registry.OperationRequiresZeroUnavailableRanges},
 		Run: func(ctx context.Context, o operation.Operation, c cluster.Cluster) registry.OperationCleanup {
 			return runProbeRanges(ctx, o, c, false)
@@ -99,7 +99,7 @@ func registerProbeRanges(r registry.Registry) {
 		Owner:              registry.OwnerKV, // Contact SRE first, as they own the prober.
 		Timeout:            30 * time.Minute,
 		CompatibleClouds:   registry.AllClouds,
-		CanRunConcurrently: registry.OperationCanRunConcurrently,
+		CanRunConcurrently: registry.OperationCannotRunConcurrently,
 		Dependencies:       []registry.OperationDependency{registry.OperationRequiresPopulatedDatabase, registry.OperationRequiresZeroUnavailableRanges},
 		Run: func(ctx context.Context, o operation.Operation, c cluster.Cluster) registry.OperationCleanup {
 			return runProbeRanges(ctx, o, c, true)
