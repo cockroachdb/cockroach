@@ -102,7 +102,7 @@ func RandCreateCompositeType(rng *rand.Rand, name, alphabet string) tree.Stateme
 	}
 }
 
-type TableOpt uint8
+type TableOpt uint16
 
 const (
 	TableOptNone                 TableOpt = 0
@@ -111,6 +111,12 @@ const (
 	TableOptMultiRegion
 	TableOptAllowPartiallyVisibleIndex
 	TableOptCrazyNames
+	TableOptDisableComputedColumns
+	// TableOptRequireValidRandomData disables schema features that prevent
+	// randgen from generating rows that can always be inserted into the table.
+	TableOptRequireValidRandomData
+	TableOptDisableExpressionIndex
+	TableOptDisableIndexPartitioning
 )
 
 func (t TableOpt) IsSet(o TableOpt) bool {
@@ -184,17 +190,13 @@ func RandCreateTableWithName(
 	)
 }
 
-func randCreateTableWithColumnIndexNumberGeneratorAndName(
-	ctx context.Context,
-	rng *rand.Rand,
-	tableName string,
-	tableIdx int,
-	opt TableOpt,
-	generateColumnIndexSuffix func() string,
-) *tree.CreateTable {
+func randomColumnDefs(
+	rng *rand.Rand, tableIdx int, opt TableOpt, generateColumnIndexSuffix func() string,
+) ([]*tree.ColumnTableDef, tree.TableDefs) {
 	// columnDefs contains the list of Columns we'll add to our table.
 	nColumns := randutil.RandIntInRange(rng, 1, 20)
 	columnDefs := make([]*tree.ColumnTableDef, 0, nColumns)
+
 	// defs contains the list of Columns and other attributes (indexes, column
 	// families, etc) we'll add to our table.
 	defs := make(tree.TableDefs, 0, len(columnDefs))
@@ -208,7 +210,10 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 	}
 
 	// Make new defs from scratch.
-	nComputedColumns := randutil.RandIntInRange(rng, 0, (nColumns+1)/2)
+	nComputedColumns := 0
+	if !opt.IsSet(TableOptDisableComputedColumns) {
+		nComputedColumns = randutil.RandIntInRange(rng, 0, (nColumns+1)/2)
+	}
 	nNormalColumns := nColumns - nComputedColumns
 	for i := 0; i < nNormalColumns; i++ {
 		columnDef := randColumnTableDef(rng, tableIdx, colSuffix(i), opt)
@@ -224,33 +229,51 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 		defs = append(defs, columnDef)
 	}
 
-	// Make a random primary key with high likelihood.
+	return columnDefs, defs
+}
+
+func randCreateTableWithColumnIndexNumberGeneratorAndName(
+	ctx context.Context,
+	rng *rand.Rand,
+	tableName string,
+	tableIdx int,
+	opt TableOpt,
+	generateColumnIndexSuffix func() string,
+) *tree.CreateTable {
 	var pk *tree.IndexTableDef
-	if opt.IsSet(TableOptPrimaryIndexRequired) || (rng.Intn(8) != 0) {
-		for {
-			indexDef, ok := randIndexTableDefFromCols(ctx, rng, columnDefs, tableName, true /* isPrimaryIndex */, opt)
-			canUseIndex := ok && indexDef.Type.CanBePrimary()
-			if canUseIndex {
-				// Although not necessary for Cockroach to function correctly,
-				// but for ease of use for any code that introspects on the
-				// AST data structure (instead of the descriptor which doesn't
-				// exist yet), explicitly set all PK cols as NOT NULL.
-				for _, col := range columnDefs {
-					for _, elem := range indexDef.Columns {
-						if col.Name == elem.Column {
-							col.Nullable.Nullability = tree.NotNull
-						}
+	var columnDefs []*tree.ColumnTableDef
+	var defs tree.TableDefs
+	for {
+		columnDefs, defs = randomColumnDefs(rng, tableIdx, opt, generateColumnIndexSuffix)
+
+		// If we're not required to have a primary key, we can occasionally stop
+		// here.
+		if rng.Intn(8) == 0 && !opt.IsSet(TableOptPrimaryIndexRequired) {
+			break
+		}
+
+		indexDef, ok := randIndexTableDefFromCols(ctx, rng, columnDefs, tableName, true /* isPrimaryIndex */, opt)
+		canUseIndex := ok && indexDef.Type.CanBePrimary()
+		if canUseIndex {
+			// Although not necessary for Cockroach to function correctly,
+			// but for ease of use for any code that introspects on the
+			// AST data structure (instead of the descriptor which doesn't
+			// exist yet), explicitly set all PK cols as NOT NULL.
+			for _, col := range columnDefs {
+				for _, elem := range indexDef.Columns {
+					if col.Name == elem.Column {
+						col.Nullable.Nullability = tree.NotNull
 					}
 				}
-				pk = &indexDef
-				defs = append(defs, &tree.UniqueConstraintTableDef{
-					PrimaryKey:    true,
-					IndexTableDef: indexDef,
-				})
 			}
-			if canUseIndex || !opt.IsSet(TableOptPrimaryIndexRequired) {
-				break
-			}
+			pk = &indexDef
+			defs = append(defs, &tree.UniqueConstraintTableDef{
+				PrimaryKey:    true,
+				IndexTableDef: indexDef,
+			})
+		}
+		if canUseIndex || !opt.IsSet(TableOptPrimaryIndexRequired) {
+			break
 		}
 	}
 
@@ -277,8 +300,9 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 			}
 		}
 		// Make forward indexes unique 50% of the time. Other index types cannot
-		// be unique.
-		unique := indexDef.Type.CanBeUnique() && rng.Intn(2) == 0
+		// be unique. Don't allow a unique index if random data needs to be
+		// valid, since the unique constraint can be violated by the random data.
+		unique := indexDef.Type.CanBeUnique() && rng.Intn(2) == 0 && !opt.IsSet(TableOptRequireValidRandomData)
 		if unique {
 			defs = append(defs, &tree.UniqueConstraintTableDef{
 				IndexTableDef: indexDef,
@@ -507,7 +531,7 @@ func randComputedColumnTableDef(
 	newDef.Computed.Computed = true
 	newDef.Computed.Virtual = rng.Intn(2) == 0
 
-	expr, typ, nullability, _ := randExpr(rng, normalColDefs, true /* nullOk */)
+	expr, typ, nullability, _ := randExpr(rng, normalColDefs, true /* nullOk */, opt)
 	newDef.Computed.Expr = expr
 	newDef.Type = typ
 	newDef.Nullable.Nullability = nullability
@@ -577,7 +601,7 @@ func randIndexTableDefFromCols(
 	// index, after which we stop adding columns to the prefix.
 	var prefix tree.NameList
 	var stopPrefix bool
-	partitioningNotSupported := false
+	partitioningNotSupported := opt.IsSet(TableOptDisableIndexPartitioning)
 
 	def.Columns = make(tree.IndexElemList, 0, len(cols))
 	for i := range cols {
@@ -591,12 +615,14 @@ func randIndexTableDefFromCols(
 		}
 
 		// Replace the column with an expression 10% of the time.
-		if !isPrimaryIndex && len(eligibleExprIndexRefs) > 0 && rng.Intn(10) == 0 {
+		useExpression := !isPrimaryIndex && len(eligibleExprIndexRefs) > 0 &&
+			rng.Intn(10) == 0 && !opt.IsSet(TableOptDisableExpressionIndex)
+		if useExpression {
 			var expr tree.Expr
 			// Do not allow NULL in expressions to avoid expressions that have
 			// an ambiguous type.
 			var referencedCols map[tree.Name]struct{}
-			expr, semType, _, referencedCols = randExpr(rng, eligibleExprIndexRefs, false /* nullOk */)
+			expr, semType, _, referencedCols = randExpr(rng, eligibleExprIndexRefs, false /* nullOk */, opt)
 			removeColsFromExprIndexRefCols(referencedCols)
 			elem.Expr = expr
 			elem.Column = ""

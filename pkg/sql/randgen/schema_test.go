@@ -74,3 +74,39 @@ func TestPopulateTableWithRandData(t *testing.T) {
 	}
 	require.Equal(t, true, success)
 }
+
+func TestDisableExpressionIndexOption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	rng, _ := randutil.NewTestRand()
+	numTables := 10
+
+	tables := randgen.RandCreateTables(
+		ctx, rng, "expridx", numTables, randgen.TableOptDisableExpressionIndex,
+	)
+
+	for _, stmt := range tables {
+		tbl, ok := stmt.(*tree.CreateTable)
+		require.True(t, ok, "expected *tree.CreateTable, got %T", stmt)
+		for _, def := range tbl.Defs {
+			var idx *tree.IndexTableDef
+			switch d := def.(type) {
+			case *tree.IndexTableDef:
+				idx = d
+			case *tree.UniqueConstraintTableDef:
+				if !d.PrimaryKey && !d.WithoutIndex {
+					idx = &d.IndexTableDef
+				}
+			}
+			if idx == nil {
+				continue
+			}
+			for _, elem := range idx.Columns {
+				require.Nil(t, elem.Expr, "expression index found when TableOptDisableExpressionIndex is set: %v", elem.Expr)
+				require.NotEmpty(t, elem.Column, "index column name should not be empty when expression indexes are disabled")
+			}
+		}
+	}
+}
