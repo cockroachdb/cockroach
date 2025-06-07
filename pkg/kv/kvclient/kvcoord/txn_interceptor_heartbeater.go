@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -283,7 +284,7 @@ func (h *txnHeartbeater) setWrapped(wrapped lockedSender) {
 }
 
 // populateLeafInputState is part of the txnInterceptor interface.
-func (*txnHeartbeater) populateLeafInputState(*roachpb.LeafTxnInputState) {}
+func (*txnHeartbeater) populateLeafInputState(*roachpb.LeafTxnInputState, interval.Tree) {}
 
 // initializeLeaf is part of the txnInterceptor interface.
 func (*txnHeartbeater) initializeLeaf(tis *roachpb.LeafTxnInputState) {}

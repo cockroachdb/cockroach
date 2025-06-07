@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -59,7 +60,7 @@ func (m *txnMetricRecorder) SendLocked(
 func (m *txnMetricRecorder) setWrapped(wrapped lockedSender) { m.wrapped = wrapped }
 
 // populateLeafInputState is part of the txnInterceptor interface.
-func (*txnMetricRecorder) populateLeafInputState(*roachpb.LeafTxnInputState) {}
+func (*txnMetricRecorder) populateLeafInputState(*roachpb.LeafTxnInputState, interval.Tree) {}
 
 // initializeLeaf is part of the txnInterceptor interface.
 func (*txnMetricRecorder) initializeLeaf(tis *roachpb.LeafTxnInputState) {}

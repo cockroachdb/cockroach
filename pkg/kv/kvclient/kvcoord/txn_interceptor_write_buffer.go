@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/mvcceval"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
@@ -521,7 +522,9 @@ func (twb *txnWriteBuffer) setWrapped(wrapped lockedSender) {
 }
 
 // populateLeafInputState is part of the txnInterceptor interface.
-func (twb *txnWriteBuffer) populateLeafInputState(tis *roachpb.LeafTxnInputState) {
+func (twb *txnWriteBuffer) populateLeafInputState(
+	tis *roachpb.LeafTxnInputState, readsTree interval.Tree,
+) {
 	// Note that we don't short-circuit this method if twb.enabled is false in
 	// case write buffering was just disabled, yet we haven't flushed the
 	// buffer.
@@ -532,10 +535,19 @@ func (twb *txnWriteBuffer) populateLeafInputState(tis *roachpb.LeafTxnInputState
 	if twb.buffer.Len() == 0 {
 		return
 	}
-	tis.BufferedWrites = make([]roachpb.BufferedWrite, 0, twb.buffer.Len())
+	var sp roachpb.Span
 	it := twb.buffer.MakeIter()
 	for it.First(); it.Valid(); it.Next() {
 		bw := it.Cur()
+		if readsTree != nil {
+			sp.Key = bw.key
+			sp.EndKey = bw.key.Next()
+			if overlaps := readsTree.DoMatching(
+				func(interval.Interface) (done bool) { return true }, sp.AsRange(),
+			); !overlaps {
+				continue
+			}
+		}
 		// TODO(yuzefovich): optimize allocation of vals slices.
 		vals := make([]roachpb.BufferedWrite_Val, 0, len(bw.vals))
 		for _, v := range bw.vals {
