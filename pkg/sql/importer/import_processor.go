@@ -340,7 +340,7 @@ func ingestKvs(
 	spec *execinfrapb.ReadImportDataSpec,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	kvCh <-chan row.KVBatch,
-) (*kvpb.BulkOpSummary, error) {
+) (_ *kvpb.BulkOpSummary, retErr error) {
 	ctx, span := tracing.ChildSpan(ctx, "import-ingest-kvs")
 	defer span.Finish()
 
@@ -395,7 +395,9 @@ func ingestKvs(
 	if err != nil {
 		return nil, err
 	}
-	defer pkIndexAdder.Close(ctx)
+	defer func() {
+		retErr = errors.CombineErrors(retErr, pkIndexAdder.Close(ctx))
+	}()
 
 	minBufferSize, maxBufferSize = importBufferConfigSizes(flowCtx.Cfg.Settings,
 		false /* isPKAdder */)
@@ -412,7 +414,9 @@ func ingestKvs(
 	if err != nil {
 		return nil, err
 	}
-	defer indexAdder.Close(ctx)
+	defer func() {
+		retErr = errors.CombineErrors(retErr, indexAdder.Close(ctx))
+	}()
 
 	// Setup progress tracking:
 	//  - offsets maps source file IDs to offsets in the slices below.
