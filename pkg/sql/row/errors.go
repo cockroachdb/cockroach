@@ -287,7 +287,7 @@ func DecodeRowInfo(
 	if err := rf.ConsumeKVProvider(ctx, &f); err != nil {
 		return nil, nil, nil, err
 	}
-	datums, err := rf.NextRowDecoded(ctx)
+	datums, _, err := rf.NextRowDecoded(ctx)
 	if err != nil {
 		return nil, nil, nil, err
 	}

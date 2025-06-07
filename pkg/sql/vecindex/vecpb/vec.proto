@@ -114,3 +114,4 @@ message Config {
   // index, e.g. Euclidean (L2Squared), InnerProduct, or Cosine.
   DistanceMetric distance_metric = 8;
 }
+
