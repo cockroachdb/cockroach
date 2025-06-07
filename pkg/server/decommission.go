@@ -19,11 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/decommissioning"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -358,21 +356,9 @@ func (s *topLevelServer) Decommission(
 		if statusChanged {
 			event, nodeDetails := newEvent()
 			nodeDetails.TargetNodeID = int32(nodeID)
-			// Ensure an entry is produced in the external log in all cases.
-			log.StructuredEvent(ctx, severity.INFO, event)
-
-			// If we die right now or if this transaction fails to commit, the
-			// membership event will not be recorded to the event log. While we
-			// could insert the event record in the same transaction as the liveness
-			// update, this would force a 2PC and potentially leave write intents in
-			// the node liveness range. Better to make the event logging best effort
-			// than to slow down future node liveness transactions.
-			sql.InsertEventRecords(
-				ctx,
-				s.sqlServer.execCfg,
-				sql.LogToSystemTable|sql.LogToDevChannelIfVerbose, /* not LogExternally: we already call log.StructuredEvent above */
-				event,
-			)
+			logger := log.NewSEventLogger(s.sqlServer.ambientCtx, log.WithWriteToTable(true))
+			logger.StructuredEvent(ctx, event)
+			log.VInfof(ctx, 2, "SQL event: payload %+v", event)
 		}
 
 		// Similarly to the log event above, we may not be able to clean up the
