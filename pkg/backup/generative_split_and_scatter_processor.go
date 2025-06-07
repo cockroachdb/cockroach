@@ -66,9 +66,8 @@ type generativeSplitAndScatterProcessor struct {
 	// the import span chunks.
 	chunkSplitAndScatterers []splitAndScatterer
 
-	// chunkEntrySplitAndScatterers contain the scatterers responsible for making
-	// splits at each import span entry. These scatterers only create splits for
-	// the start key of each import span and do not perform any scatters.
+	// chunkEntrySplitAndScatterers contain the scatterers responsible for
+	// splitting and scattering each import span entry.
 	chunkEntrySplitAndScatterers []splitAndScatterer
 
 	// cancelScatterAndWaitForWorker cancels the scatter goroutine and waits for
@@ -644,10 +643,10 @@ func runGenerativeSplitAndScatter(
 	})
 
 	// This group of goroutines takes chunks that have already been split and
-	// scattered by the previous worker group. These workers create splits at the
-	// start key of the span of every entry of every chunk. After a chunk has been
-	// processed, it is passed to doneScatterCh to signal that the chunk has gone
-	// through the entire split and scatter process.
+	// scattered by the previous worker group. These workers split and scatter at
+	// the start key of every entry in a chunk. After a chunk has been processed,
+	// it is passed to doneScatterCh to signal that the chunk has gone through the
+	// entire split and scatter process.
 	for worker := 0; worker < len(chunkEntrySplitAndScatterers); worker++ {
 		worker := worker
 		g.GoCtx(func(ctx context.Context) error {
@@ -662,6 +661,10 @@ func runGenerativeSplitAndScatter(
 						// Split at the next entry.
 						splitKey = importSpanChunk.entries[nextChunkIdx].Span.Key
 						if err := chunkEntrySplitAndScatterers[worker].split(ctx, flowCtx.Codec(), splitKey); err != nil {
+							return err
+						}
+
+						if _, err := chunkEntrySplitAndScatterers[worker].scatter(ctx, flowCtx.Codec(), importEntry.Span.Key); err != nil {
 							return err
 						}
 					}
