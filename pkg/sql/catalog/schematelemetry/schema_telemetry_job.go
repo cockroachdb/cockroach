@@ -88,13 +88,10 @@ func (t schemaTelemetryResumer) Resume(ctx context.Context, execCtx interface{})
 	if err != nil || len(events) == 0 {
 		return err
 	}
-
-	sql.InsertEventRecords(
-		ctx,
-		p.ExecCfg(),
-		sql.LogExternally,
-		events...,
-	)
+	logger := log.NewSEventLogger(p.ExecCfg().AmbientCtx)
+	for _, event := range events {
+		logger.StructuredEvent(ctx, event)
+	}
 
 	return nil
 }
