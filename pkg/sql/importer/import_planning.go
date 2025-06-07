@@ -63,7 +63,6 @@ const (
 	mysqlOutfileEscape   = "fields_escaped_by"
 
 	importOptionDecompress       = "decompress"
-	importOptionSkipFKs          = "skip_foreign_keys"
 	importOptionDisableGlobMatch = "disable_glob_matching"
 	importOptionSaveRejected     = "experimental_save_rejected"
 	importOptionDetached         = "detached"
@@ -104,7 +103,6 @@ var importOptionExpectValues = map[string]exprutil.KVStringOptValidate{
 	importOptionDecompress:   exprutil.KVStringOptRequireValue,
 	importOptionSaveRejected: exprutil.KVStringOptRequireNoValue,
 
-	importOptionSkipFKs:          exprutil.KVStringOptRequireNoValue,
 	importOptionDisableGlobMatch: exprutil.KVStringOptRequireNoValue,
 	importOptionDetached:         exprutil.KVStringOptRequireNoValue,
 
@@ -614,11 +612,6 @@ func importPlanHook(
 			return unimplemented.Newf("import.format", "unsupported import format: %q", importStmt.FileFormat)
 		}
 
-		var skipFKs bool
-		if _, ok := opts[importOptionSkipFKs]; ok {
-			skipFKs = true
-		}
-
 		if override, ok := opts[importOptionDecompress]; ok {
 			found := false
 			for name, value := range roachpb.IOFileFormat_Compression_value {
@@ -776,8 +769,6 @@ func importPlanHook(
 			ParentID:              db.GetID(),
 			Tables:                tableDetails,
 			Types:                 typeDetails,
-			SkipFKs:               skipFKs,
-			DefaultIntSize:        p.SessionData().DefaultIntSize,
 			DatabasePrimaryRegion: databasePrimaryRegion,
 		}
 
