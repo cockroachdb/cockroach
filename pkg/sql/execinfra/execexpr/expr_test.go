@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package execinfrapb
+package execexpr
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -20,7 +21,7 @@ import (
 func TestDeserializeExpr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	e := Expression{Expr: "@1 * (@2 + @3) + @1"}
+	e := execinfrapb.Expression{Expr: "@1 * (@2 + @3) + @1"}
 
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
@@ -49,7 +50,7 @@ func TestDeserializeExpr(t *testing.T) {
 	}
 
 	// We can process a new expression with the same tree.IndexedVarHelper.
-	e = Expression{Expr: "@4 - @1"}
+	e = execinfrapb.Expression{Expr: "@4 - @1"}
 	expr, err = DeserializeExpr(
 		context.Background(),
 		e,
@@ -79,7 +80,7 @@ func TestDeserializeExpr(t *testing.T) {
 func TestDeserializeExpressionConstantEval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	e := Expression{Expr: "ARRAY[1:::INT,2:::INT]"}
+	e := execinfrapb.Expression{Expr: "ARRAY[1:::INT,2:::INT]"}
 
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)

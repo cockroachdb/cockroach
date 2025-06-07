@@ -10,7 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -124,7 +124,7 @@ func (p *joinPredicate) eval(
 		copy(p.curRow[:len(leftRow)], leftRow)
 		copy(p.curRow[len(leftRow):], rightRow)
 		evalCtx.PushIVarContainer(p)
-		pred, err := execinfrapb.RunFilter(ctx, p.onCond, evalCtx)
+		pred, err := execexpr.RunFilter(ctx, p.onCond, evalCtx)
 		evalCtx.PopIVarContainer()
 		return pred, err
 	}
