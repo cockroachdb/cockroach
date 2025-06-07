@@ -1560,3 +1560,196 @@ func (c *CustomFuncs) DuplicateJoinPrivate(jp *memo.JoinPrivate) *memo.JoinPriva
 		SkipReorderJoins: jp.SkipReorderJoins,
 	}
 }
+
+func (c *CustomFuncs) ExtractFiltersItem(filter opt.ScalarExpr) []opt.ScalarExpr {
+	var conditions []opt.ScalarExpr
+
+	var extract func(opt.ScalarExpr)
+	extract = func(e opt.ScalarExpr) {
+		if and, ok := e.(*memo.AndExpr); ok {
+			extract(and.Left)
+			extract(and.Right)
+		} else {
+			conditions = append(conditions, e)
+		}
+	}
+
+	extract(filter)
+	return conditions
+}
+
+
+func (c *CustomFuncs) IsFilters(x interface{}) bool {
+	_, ok := x.(memo.FiltersExpr)
+	return ok
+}
+
+
+// SingletonFilter extracts a single scalar expression from a FiltersExpr
+// by ANDing all conditions together.
+func (c *CustomFuncs) SingletonFilter(filters memo.FiltersExpr) opt.ScalarExpr {
+	if len(filters) == 0 {
+		return c.f.ConstructTrue()
+	}
+	if len(filters) == 1 {
+		return filters[0].Condition
+	}
+
+	// Combine multiple conditions with AND
+	result := filters[0].Condition
+	for i := 1; i < len(filters); i++ {
+		result = c.f.ConstructAnd(result, filters[i].Condition)
+	}
+	return result
+}
+
+func (c *CustomFuncs) PushFilterIntoWith(
+	binding memo.RelExpr,
+	input memo.RelExpr,
+	withPrivate *memo.WithPrivate,
+	filter opt.ScalarExpr, // original filter as a scalar expression (typically an AND of conditions)
+) opt.Expr {
+	// Extract individual conditions.
+	conditions := c.ExtractFiltersItem(filter)
+	withBinding, ok := c.mem.Metadata().WithBinding(withPrivate.ID).(memo.RelExpr)
+	if !ok {
+		panic("WithBinding is not a relational expression")
+	}
+
+	var pushable, nonPushable []opt.ScalarExpr
+	for _, cond := range conditions {
+		if c.CanPushFilterIntoWith(cond, withBinding) {
+			pushable = append(pushable, cond)
+		} else {
+			nonPushable = append(nonPushable, cond)
+		}
+	}
+
+	var newBinding memo.RelExpr
+	if len(pushable) > 0 {
+		// Combine pushable conditions into one scalar expression.
+		pushableCondScalar := c.constructAndFromList(pushable)
+		// Wrap the scalar expression in a FiltersExpr slice by constructing a FiltersItem.
+		pushableCond := memo.FiltersExpr{ c.f.ConstructFiltersItem(pushableCondScalar) }
+		if union, ok := withBinding.(*memo.UnionExpr); ok {
+			leftWithFilter := c.f.ConstructSelect(union.Left, pushableCond)
+			rightWithFilter := c.f.ConstructSelect(union.Right, pushableCond)
+			newBinding = c.f.ConstructUnion(leftWithFilter, rightWithFilter, union.Private().(*memo.SetPrivate))
+		} else {
+			newBinding = c.f.ConstructSelect(withBinding, pushableCond)
+		}
+	} else {
+		newBinding = withBinding
+	}
+
+	// Construct a new With expression using the new binding.
+	newWithExpr := c.f.ConstructWith(newBinding, input, withPrivate)
+
+	if len(nonPushable) == 0 {
+		return newWithExpr
+	}
+	// Combine non-pushable conditions into one scalar expression.
+	remainingCondScalar := c.constructAndFromList(nonPushable)
+	remainingCond := memo.FiltersExpr{ c.f.ConstructFiltersItem(remainingCondScalar) }
+	return c.f.ConstructSelect(newWithExpr, remainingCond)
+}
+
+
+
+
+
+// constructAndFromList builds an AND expression from a list of conditions.
+func (c *CustomFuncs) constructAndFromList(conditions []opt.ScalarExpr) opt.ScalarExpr {
+	if len(conditions) == 0 {
+		return nil
+	}
+
+	if len(conditions) == 1 {
+		return conditions[0]
+	}
+
+	result := c.f.ConstructAnd(conditions[0], conditions[1])
+	for i := 2; i < len(conditions); i++ {
+		result = c.f.ConstructAnd(result, conditions[i])
+	}
+
+	return result
+}
+
+// PushFilterIntoUnion pushes filter into both sides of a Union
+func (c *CustomFuncs) PushFilterIntoUnion(union *memo.UnionExpr, filter memo.FiltersExpr) memo.RelExpr {
+	leftWithFilter := c.f.ConstructSelect(union.Left, filter)
+	rightWithFilter := c.f.ConstructSelect(union.Right, filter)
+
+	return c.f.ConstructUnion(leftWithFilter, rightWithFilter, union.Private().(*memo.SetPrivate))
+}
+
+
+// CanPushFilterIntoWith checks if a filter can be pushed
+func (c *CustomFuncs) CanPushFilterIntoWith(cond opt.ScalarExpr, binding memo.RelExpr) bool {
+	colsUsed := c.OuterCols(cond)
+	return colsUsed.SubsetOf(binding.Relational().OutputCols) &&
+		!c.HasCorrelatedSubquery(cond)
+		//!c.IsVolatile(cond)
+}
+
+// HasCorrelatedSubquery returns true if the scalar expression contains a
+// subquery that references columns outside its own scope.
+func (c *CustomFuncs) HasCorrelatedSubquery(scalar opt.ScalarExpr) bool {
+	hasCorrelatedSubquery := false
+
+	var visit func(e opt.Expr) bool
+	visit = func(e opt.Expr) bool {
+		if opt.IsRelationalOp(e) {
+			relExpr := e.(memo.RelExpr)
+			if !relExpr.Relational().OuterCols.Empty() {
+				hasCorrelatedSubquery = true
+				return false
+			}
+		}
+		// Recursively visit child expressions
+		for i, n := 0, e.ChildCount(); i < n; i++ {
+			child := e.Child(i)
+			if !visit(child) {
+				return false
+			}
+		}
+		return true
+	}
+
+	visit(scalar)
+	return hasCorrelatedSubquery
+}
+
+
+//func (c *CustomFuncs) IsVolatile(scalar opt.ScalarExpr) bool {
+//	isVolatile := false
+//
+//	var visit func(e opt.Expr) bool
+//	visit = func(e opt.Expr) bool {
+//		if fn, ok := e.(*memo.FunctionExpr); ok {
+//			// Check the function definition for its volatility.
+//			// (Assuming fn.Fn is of type *tree.FunctionDefinition and its Volatility field is a string.)
+//			if fn != nil && fn.Volatility == "volatile" {
+//				isVolatile = true
+//				return false
+//			}
+//		}
+//		// Visit child expressions recursively.
+//		for i, n := 0, e.ChildCount(); i < n; i++ {
+//			if !visit(e.Child(i)) {
+//				return false
+//			}
+//		}
+//		return true
+//	}
+//
+//	visit(scalar)
+//	return isVolatile
+//}
+
+// IsWithAlwaysMaterialized returns true if the With expression is set to
+// always materialize, which means we should not attempt to push filters into it.
+func (c *CustomFuncs) IsWithAlwaysMaterialized(private *memo.WithPrivate) bool {
+	return private.Mtr == tree.CTEMaterializeAlways
+}
