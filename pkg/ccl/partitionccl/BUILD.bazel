@@ -65,6 +65,7 @@ go_test(
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/gcjob",
+        "//pkg/sql/importer",
         "//pkg/sql/lexbase",
         "//pkg/sql/parser",
         "//pkg/sql/randgen",

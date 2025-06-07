@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -716,65 +715,4 @@ func emittedRowLowWatermark(workerID int, emittedRow int64, minEmitted []int64) 
 	}
 
 	return emittedRow
-}
-
-var errRegionOperator = errors.New("region operations unsupported")
-
-type importRegionOperator struct {
-	primaryRegion catpb.RegionName
-}
-
-var _ eval.RegionOperator = &importRegionOperator{}
-
-func makeImportRegionOperator(primaryRegion catpb.RegionName) *importRegionOperator {
-	return &importRegionOperator{primaryRegion: primaryRegion}
-}
-
-// importDatabaseRegionConfig is a stripped down version of
-// multiregion.RegionConfig that is used by import.
-type importDatabaseRegionConfig struct {
-	primaryRegion catpb.RegionName
-}
-
-var _ eval.DatabaseRegionConfig = &importDatabaseRegionConfig{}
-
-// IsValidRegionNameString implements the tree.DatabaseRegionConfig interface.
-func (i importDatabaseRegionConfig) IsValidRegionNameString(_ string) bool {
-	// Unimplemented.
-	return false
-}
-
-// PrimaryRegionString implements the tree.DatabaseRegionConfig interface.
-func (i importDatabaseRegionConfig) PrimaryRegionString() string {
-	return string(i.primaryRegion)
-}
-
-// CurrentDatabaseRegionConfig is part of the eval.RegionOperator interface.
-func (so *importRegionOperator) CurrentDatabaseRegionConfig(
-	_ context.Context,
-) (eval.DatabaseRegionConfig, error) {
-	return importDatabaseRegionConfig{primaryRegion: so.primaryRegion}, nil
-}
-
-// ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the eval.RegionOperator interface.
-func (so *importRegionOperator) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
-	_ context.Context,
-) error {
-	return errors.WithStack(errRegionOperator)
-}
-
-// ResetMultiRegionZoneConfigsForTable is part of the eval.RegionOperator
-// interface.
-func (so *importRegionOperator) ResetMultiRegionZoneConfigsForTable(
-	_ context.Context, _ int64, _ bool,
-) error {
-	return errors.WithStack(errRegionOperator)
-}
-
-// ResetMultiRegionZoneConfigsForDatabase is part of the eval.RegionOperator
-// interface.
-func (so *importRegionOperator) ResetMultiRegionZoneConfigsForDatabase(
-	_ context.Context, _ int64,
-) error {
-	return errors.WithStack(errRegionOperator)
 }
