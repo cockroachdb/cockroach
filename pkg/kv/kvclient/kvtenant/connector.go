@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -1040,7 +1040,7 @@ func (c *connector) Query(
 // AddressResolver wraps a NodeDescStore interface in an adapter that allows it
 // be used as a nodedialer.AddressResolver. Addresses are resolved to a node's
 // address.
-func AddressResolver(s kvclient.NodeDescStore) nodedialer.AddressResolver {
+func AddressResolver(s kvclient.NodeDescStore) rpcbase.AddressResolver {
 	return func(nodeID roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
 		nd, err := s.GetNodeDescriptor(nodeID)
 		if err != nil {

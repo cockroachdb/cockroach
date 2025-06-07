@@ -644,7 +644,7 @@ func (m *mockDialer) addOrUpdateNode(nid roachpb.NodeID, addr string) {
 }
 
 func (m *mockDialer) Dial(
-	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass, opts ...rpcbase.DialOption,
 ) (_ *grpc.ClientConn, _ error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -821,7 +821,7 @@ type failingDialer struct {
 var _ nodeDialer = &failingDialer{}
 
 func (f *failingDialer) Dial(
-	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass, opts ...rpcbase.DialOption,
 ) (_ *grpc.ClientConn, err error) {
 	atomic.AddInt32(&f.dialCount, 1)
 	return nil, errors.New("failingDialer")

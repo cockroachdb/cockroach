@@ -338,7 +338,7 @@ type interceptingListener struct {
 }
 
 // newSingleNodeResolver returns a Resolver that resolve a single node id
-func newSingleNodeResolver(id roachpb.NodeID, addr net.Addr) AddressResolver {
+func newSingleNodeResolver(id roachpb.NodeID, addr net.Addr) rpcbase.AddressResolver {
 	return func(toResolve roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
 		if id == toResolve {
 			return addr, roachpb.Locality{}, nil

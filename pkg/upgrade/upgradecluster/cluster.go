@@ -53,7 +53,7 @@ type ClusterConfig struct {
 // NodeDialer abstracts connecting to other nodes in the cluster.
 type NodeDialer interface {
 	// Dial returns a grpc connection to the given node.
-	Dial(context.Context, roachpb.NodeID, rpcbase.ConnectionClass) (*grpc.ClientConn, error)
+	Dial(context.Context, roachpb.NodeID, rpcbase.ConnectionClass, ...rpcbase.DialOption) (*grpc.ClientConn, error)
 }
 
 // New constructs a new Cluster with the provided dependencies.

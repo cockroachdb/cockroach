@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -35,7 +36,7 @@ import (
 )
 
 // staticAddressResolver maps execinfra.StaticSQLInstanceID to the given address.
-func staticAddressResolver(addr net.Addr) nodedialer.AddressResolver {
+func staticAddressResolver(addr net.Addr) rpcbase.AddressResolver {
 	return func(nodeID roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
 		if nodeID == roachpb.NodeID(execinfra.StaticSQLInstanceID) {
 			return addr, roachpb.Locality{}, nil

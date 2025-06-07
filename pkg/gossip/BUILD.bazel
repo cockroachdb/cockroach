@@ -25,7 +25,6 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/rpc",
-        "//pkg/rpc/nodedialer",
         "//pkg/rpc/rpcbase",
         "//pkg/util",
         "//pkg/util/errorutil",
