@@ -28,13 +28,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -109,14 +107,6 @@ var performConstraintValidation = settings.RegisterBoolSetting(
 	settings.WithUnsafe,
 )
 
-type preparedSchemaMetadata struct {
-	schemaPreparedDetails jobspb.ImportDetails
-	schemaRewrites        jobspb.DescRewriteMap
-	newSchemaIDToName     map[descpb.ID]string
-	oldSchemaIDToName     map[descpb.ID]string
-	queuedSchemaJobs      []jobspb.JobID
-}
-
 // Resume is part of the jobs.Resumer interface.
 func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(sql.JobExecContext)
@@ -129,35 +119,14 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	if details.Tables != nil {
 		// Skip prepare stage on job resumption, if it has already been completed.
 		if !details.PrepareComplete {
-			var schemaMetadata *preparedSchemaMetadata
 			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
 				ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
 			) error {
 				var preparedDetails jobspb.ImportDetails
-				schemaMetadata = &preparedSchemaMetadata{
-					newSchemaIDToName: make(map[descpb.ID]string),
-					oldSchemaIDToName: make(map[descpb.ID]string),
-				}
 				var err error
 				curDetails := details
-				if len(details.Schemas) != 0 {
-					schemaMetadata, err = r.prepareSchemasForIngestion(ctx, p, curDetails, txn, descsCol)
-					if err != nil {
-						return err
-					}
-					curDetails = schemaMetadata.schemaPreparedDetails
-				}
 
-				// The public schema is expected to always be present in the database for 22.2+.
-				dbDesc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, details.ParentID)
-				if err != nil {
-					return err
-				}
-				schemaMetadata.oldSchemaIDToName[dbDesc.GetSchemaID(catconstants.PublicSchemaName)] = catconstants.PublicSchemaName
-				schemaMetadata.newSchemaIDToName[dbDesc.GetSchemaID(catconstants.PublicSchemaName)] = catconstants.PublicSchemaName
-
-				preparedDetails, err = r.prepareTablesForIngestion(ctx, p, curDetails, txn.KV(), descsCol,
-					schemaMetadata)
+				preparedDetails, err = r.prepareTablesForIngestion(ctx, p, curDetails, txn.KV(), descsCol)
 				if err != nil {
 					return err
 				}
@@ -186,9 +155,6 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 					prev := md.Payload.DescriptorIDs
 					if prev == nil {
 						var descriptorIDs []descpb.ID
-						for _, schema := range preparedDetails.Schemas {
-							descriptorIDs = append(descriptorIDs, schema.Desc.GetID())
-						}
 						for _, table := range preparedDetails.Tables {
 							descriptorIDs = append(descriptorIDs, table.Desc.GetID())
 						}
@@ -201,25 +167,9 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				return err
 			}
 
-			// Run the queued job which updates the database descriptor to contain the
-			// newly created schemas.
-			// NB: Seems like the registry eventually adopts the job anyways but this
-			// is in keeping with the semantics we use when creating a schema during
-			// sql execution. Namely, queue job in the txn which creates the schema
-			// desc and run once the txn has committed.
-			if err := p.ExecCfg().JobRegistry.Run(ctx, schemaMetadata.queuedSchemaJobs); err != nil {
-				return err
-			}
-
 			// Re-initialize details after prepare step.
 			details = r.job.Details().(jobspb.ImportDetails)
 			emitImportJobEvent(ctx, p, jobs.StateRunning, r.job)
-		}
-
-		// Create a mapping from schemaID to schemaName.
-		schemaIDToName := make(map[descpb.ID]string)
-		for _, i := range details.Schemas {
-			schemaIDToName[i.Desc.GetID()] = i.Desc.GetName()
 		}
 
 		for _, i := range details.Tables {
@@ -329,10 +279,6 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
-	if err := r.publishSchemas(ctx, p.ExecCfg()); err != nil {
-		return err
-	}
-
 	if err := r.publishTables(ctx, p.ExecCfg(), res); err != nil {
 		return err
 	}
@@ -371,7 +317,6 @@ func (r *importResumer) prepareTablesForIngestion(
 	details jobspb.ImportDetails,
 	txn *kv.Txn,
 	descsCol *descs.Collection,
-	schemaMetadata *preparedSchemaMetadata,
 ) (jobspb.ImportDetails, error) {
 	importDetails := details
 	importDetails.Tables = make([]jobspb.ImportDetails_Table, len(details.Tables))
@@ -445,94 +390,6 @@ func prepareExistingTablesForIngestion(
 	}
 
 	return importing.TableDesc(), nil
-}
-
-// prepareSchemasForIngestion is responsible for assigning the created schema
-// descriptors actual IDs, updating the parent DB with references to the new
-// schemas and writing the schema descriptors to disk.
-func (r *importResumer) prepareSchemasForIngestion(
-	ctx context.Context,
-	p sql.JobExecContext,
-	details jobspb.ImportDetails,
-	txn isql.Txn,
-	descsCol *descs.Collection,
-) (*preparedSchemaMetadata, error) {
-	schemaMetadata := &preparedSchemaMetadata{
-		schemaPreparedDetails: details,
-		newSchemaIDToName:     make(map[descpb.ID]string),
-		oldSchemaIDToName:     make(map[descpb.ID]string),
-	}
-
-	schemaMetadata.schemaPreparedDetails.Schemas = make([]jobspb.ImportDetails_Schema,
-		len(details.Schemas))
-
-	desc, err := descsCol.MutableByID(txn.KV()).Desc(ctx, details.ParentID)
-	if err != nil {
-		return nil, err
-	}
-
-	dbDesc, ok := desc.(*dbdesc.Mutable)
-	if !ok {
-		return nil, errors.Newf("expected ID %d to refer to the database being imported into",
-			details.ParentID)
-	}
-
-	schemaMetadata.schemaRewrites = make(jobspb.DescRewriteMap)
-	mutableSchemaDescs := make([]*schemadesc.Mutable, 0)
-	for _, desc := range details.Schemas {
-		schemaMetadata.oldSchemaIDToName[desc.Desc.GetID()] = desc.Desc.GetName()
-		newMutableSchemaDescriptor := schemadesc.NewBuilder(desc.Desc).BuildCreatedMutable().(*schemadesc.Mutable)
-
-		// Verification steps have passed, generate a new schema ID. We do this
-		// last because we want to avoid calling GenerateUniqueDescID if there's
-		// any kind of error in the prior stages of import.
-		id, err := p.ExecCfg().DescIDGenerator.GenerateUniqueDescID(ctx)
-		if err != nil {
-			return nil, err
-		}
-		newMutableSchemaDescriptor.Version = 1
-		newMutableSchemaDescriptor.ID = id
-		mutableSchemaDescs = append(mutableSchemaDescs, newMutableSchemaDescriptor)
-
-		schemaMetadata.newSchemaIDToName[id] = newMutableSchemaDescriptor.GetName()
-
-		// Update the parent database with this schema information.
-		dbDesc.AddSchemaToDatabase(newMutableSchemaDescriptor.Name,
-			descpb.DatabaseDescriptor_SchemaInfo{ID: newMutableSchemaDescriptor.ID})
-
-		schemaMetadata.schemaRewrites[desc.Desc.ID] = &jobspb.DescriptorRewrite{
-			ID: id,
-		}
-	}
-
-	// Queue a job to write the updated database descriptor.
-	schemaMetadata.queuedSchemaJobs, err = writeNonDropDatabaseChange(ctx, dbDesc, txn, descsCol, p,
-		fmt.Sprintf("updating parent database %s when importing new schemas", dbDesc.GetName()))
-	if err != nil {
-		return nil, err
-	}
-
-	// Finally create the schemas on disk.
-	for i, mutDesc := range mutableSchemaDescs {
-		b := txn.KV().NewBatch()
-		kvTrace := p.ExtendedEvalContext().Tracing.KVTracingEnabled()
-		if err := descsCol.WriteDescToBatch(ctx, kvTrace, mutDesc, b); err != nil {
-			return nil, err
-		}
-		if !mutDesc.SkipNamespace() {
-			if err := descsCol.InsertNamespaceEntryToBatch(ctx, kvTrace, mutDesc, b); err != nil {
-				return nil, err
-			}
-		}
-		if err := txn.KV().Run(ctx, b); err != nil {
-			return nil, err
-		}
-		schemaMetadata.schemaPreparedDetails.Schemas[i] = jobspb.ImportDetails_Schema{
-			Desc: mutDesc.SchemaDesc(),
-		}
-	}
-
-	return schemaMetadata, err
 }
 
 // bindTableDescImportProperties updates the table descriptor at the start of an
@@ -641,50 +498,6 @@ func (r *importResumer) publishTables(
 	}
 
 	return nil
-}
-
-// publishSchemas updates the status of imported schemas from OFFLINE to PUBLIC.
-func (r *importResumer) publishSchemas(ctx context.Context, execCfg *sql.ExecutorConfig) error {
-	details := r.job.Details().(jobspb.ImportDetails)
-	// Schemas should only be published once.
-	if details.SchemasPublished {
-		return nil
-	}
-	log.Event(ctx, "making schemas live")
-
-	return sql.DescsTxn(ctx, execCfg, func(
-		ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
-	) error {
-		b := txn.KV().NewBatch()
-		for _, schema := range details.Schemas {
-			newDesc, err := descsCol.MutableByID(txn.KV()).Desc(ctx, schema.Desc.GetID())
-			if err != nil {
-				return err
-			}
-			newSchemaDesc, ok := newDesc.(*schemadesc.Mutable)
-			if !ok {
-				return errors.Newf("expected schema descriptor with ID %v, got %v",
-					schema.Desc.GetID(), newDesc)
-			}
-			newSchemaDesc.SetPublic()
-			if err := descsCol.WriteDescToBatch(
-				ctx, false /* kvTrace */, newSchemaDesc, b,
-			); err != nil {
-				return errors.Wrapf(err, "publishing schema %d", newSchemaDesc.ID)
-			}
-		}
-		if err := txn.KV().Run(ctx, b); err != nil {
-			return errors.Wrap(err, "publishing schemas")
-		}
-
-		// Update job record to mark tables published state as complete.
-		details.SchemasPublished = true
-		err := r.job.WithTxn(txn).SetDetails(ctx, details)
-		if err != nil {
-			return errors.Wrap(err, "updating job details after publishing schemas")
-		}
-		return nil
-	})
 }
 
 // checkVirtualConstraints checks constraints that are enforced via runtime
@@ -1161,7 +974,7 @@ func (r *importResumer) dropSchemas(
 	// If the prepare step of the import job was not completed then the
 	// descriptors do not need to be rolled back as the txn updating them never
 	// completed.
-	if !details.PrepareComplete || len(details.Schemas) == 0 {
+	if !details.PrepareComplete {
 		return nil, nil
 	}
 
@@ -1177,69 +990,12 @@ func (r *importResumer) dropSchemas(
 			details.ParentID)
 	}
 
-	droppedSchemaIDs := make([]descpb.ID, 0)
-	for _, schema := range details.Schemas {
-		desc, err := descsCol.MutableByID(txn.KV()).Desc(ctx, schema.Desc.ID)
-		if err != nil {
-			return nil, err
-		}
-		var schemaDesc *schemadesc.Mutable
-		var ok bool
-		if schemaDesc, ok = desc.(*schemadesc.Mutable); !ok {
-			return nil, errors.Newf("unable to resolve schema desc with ID %d", schema.Desc.ID)
-		}
-
-		// Mark the descriptor as dropped and write it to the batch.
-		// Delete namespace entry or update draining names depending on version.
-		schemaDesc.SetDropped()
-		droppedSchemaIDs = append(droppedSchemaIDs, schemaDesc.GetID())
-
-		b := txn.KV().NewBatch()
-		if dbDesc.Schemas != nil {
-			delete(dbDesc.Schemas, schemaDesc.GetName())
-		}
-		if err := descsCol.WriteDescToBatch(
-			ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), schemaDesc, b,
-		); err != nil {
-			return nil, err
-		}
-		if err := descsCol.DeleteNamespaceEntryToBatch(
-			ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), schemaDesc, b,
-		); err != nil {
-			return nil, err
-		}
-		err = txn.KV().Run(ctx, b)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	// Write out the change to the database. This only creates a job record to be
 	// run after the txn commits.
 	queuedJob, err := writeNonDropDatabaseChange(ctx, dbDesc, txn, descsCol, p, "")
 	if err != nil {
 		return nil, err
 	}
-
-	// Create the job to drop the schema.
-	dropSchemaJobRecord := jobs.Record{
-		Description:   "dropping schemas as part of an import job rollback",
-		Username:      p.User(),
-		DescriptorIDs: droppedSchemaIDs,
-		Details: jobspb.SchemaChangeDetails{
-			DroppedSchemas:    droppedSchemaIDs,
-			DroppedDatabaseID: descpb.InvalidID,
-			FormatVersion:     jobspb.DatabaseJobFormatVersion,
-		},
-		Progress:      jobspb.SchemaChangeProgress{},
-		NonCancelable: true,
-	}
-	jobID := p.ExecCfg().JobRegistry.MakeJobID()
-	job, err := execCfg.JobRegistry.CreateJobWithTxn(ctx, dropSchemaJobRecord, jobID, txn)
-	if err != nil {
-		return nil, err
-	}
-	queuedJob = append(queuedJob, job.ID())
 
 	return queuedJob, nil
 }

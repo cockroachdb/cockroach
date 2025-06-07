@@ -687,16 +687,12 @@ message ImportDetails {
     repeated string target_cols = 21;
     reserved 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 20;
   }
-  message Schema {
-    sqlbase.SchemaDescriptor desc = 1;
-  }
   message Type {
     sqlbase.TypeDescriptor desc = 1;
   }
   // TODO(yuzefovich): we now can only support importing into a single table via
   // a single IMPORT job, so we could change this field.
   repeated Table tables = 1 [(gogoproto.nullable) = false];
-  repeated Schema schemas = 23 [(gogoproto.nullable) = false];
   repeated Type types = 26 [(gogoproto.nullable) = false];
 
   repeated string uris = 2 [(gogoproto.customname) = "URIs"];
@@ -710,7 +706,6 @@ message ImportDetails {
   ];
 
   bool prepare_complete = 12;
-  bool schemas_published = 24;
   bool tables_published = 13;
 
   // If the database being imported into is a multi-region database, then this
@@ -719,7 +714,7 @@ message ImportDetails {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"
   ];
 
-  reserved 4, 7, 8, 9, 10, 11, 14, 22, 25;
+  reserved 4, 7, 8, 9, 10, 11, 14, 22, 23, 24, 25;
 
   // next val: 28
 }
