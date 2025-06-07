@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package importer
+package export
 
 import (
 	"bytes"
@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
@@ -125,7 +124,7 @@ func newCSVExporter(sp execinfrapb.ExportSpec) *csvExporter {
 	return exporter
 }
 
-func newCSVWriterProcessor(
+func NewCSVWriterProcessor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
@@ -303,7 +302,3 @@ func (sp *csvWriter) Resume(output execinfra.RowReceiver) {
 
 // Close is part of the execinfra.Processor interface.
 func (*csvWriter) Close(context.Context) {}
-
-func init() {
-	rowexec.NewCSVWriterProcessor = newCSVWriterProcessor
-}

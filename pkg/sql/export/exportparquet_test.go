@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package importer_test
+package export_test
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/importer"
+	"github.com/cockroachdb/cockroach/pkg/sql/export"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -415,7 +415,7 @@ func TestMemoryMonitor(t *testing.T) {
 		ExternalIODir: dir,
 		Knobs: base.TestingKnobs{
 			DistSQL: &execinfra.TestingKnobs{
-				Export: &importer.ExportTestingKnobs{
+				Export: &export.TestingKnobs{
 					MemoryMonitor: mm,
 				},
 			},
