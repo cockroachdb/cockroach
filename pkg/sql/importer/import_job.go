@@ -244,15 +244,6 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				return errors.New("invalid table specification")
 			}
 
-			// If we are importing from PGDUMP, qualify the table name with the schema
-			// name since we support non-public schemas.
-			if details.Format.Format == roachpb.IOFileFormat_PgDump {
-				schemaName := catconstants.PublicSchemaName
-				if schema, ok := schemaIDToName[i.Desc.GetUnexposedParentSchemaID()]; ok {
-					schemaName = schema
-				}
-				tableName = fmt.Sprintf("%s.%s", schemaName, tableName)
-			}
 			tables[tableName] = &execinfrapb.ReadImportDataSpec_ImportTable{
 				Desc:       i.Desc,
 				TargetCols: i.TargetCols,
@@ -429,6 +420,7 @@ func (r *importResumer) prepareTablesForIngestion(
 			}
 			hasExistingTables = true
 		} else {
+			// TODO(yuzefovich): remove this branch.
 			// PGDUMP imports support non-public schemas.
 			// For the purpose of disambiguation we must take the schema into
 			// account when constructing the newTablenameToIdx map.
@@ -763,7 +755,7 @@ func bindTableDescImportProperties(
 	return nil
 }
 
-// parseBundleSchemaIfNeeded parses dump files (PGDUMP, MYSQLDUMP) for DDL
+// parseBundleSchemaIfNeeded parses dump files (MYSQLDUMP) for DDL
 // statements and creates the relevant database, schema, table and type
 // descriptors. Data from the dump files is ingested into these descriptors in
 // the next phase of the import.
@@ -930,30 +922,10 @@ func parseAndCreateBundleTableDescs(
 		if err != nil {
 			return tableDescs, schemaDescs, err
 		}
-	case roachpb.IOFileFormat_PgDump:
-		fks.resolver.format.Format = roachpb.IOFileFormat_PgDump
-		evalCtx := &p.ExtendedEvalContext().Context
-
-		// Setup a logger to handle unsupported DDL statements in the PGDUMP file.
-		unsupportedStmtLogger := makeUnsupportedStmtLogger(ctx, p.User(), int64(jobID),
-			format.PgDump.IgnoreUnsupported, format.PgDump.IgnoreUnsupportedLog, schemaParsing,
-			p.ExecCfg().DistSQLSrv.ExternalStorage)
-
-		tableDescs, schemaDescs, err = readPostgresCreateTable(ctx, reader, evalCtx, p, tableName,
-			parentDB, walltime, fks, int(format.PgDump.MaxRowSize), owner, unsupportedStmtLogger)
-
-		logErr := unsupportedStmtLogger.flush()
-		if logErr != nil {
-			return nil, nil, logErr
-		}
 
 	default:
 		return tableDescs, schemaDescs, errors.Errorf(
 			"non-bundle format %q does not support reading schemas", format.Format.String())
-	}
-
-	if err != nil {
-		return tableDescs, schemaDescs, err
 	}
 
 	if tableDescs == nil && len(details.Tables) > 0 {
@@ -1387,6 +1359,20 @@ func emitImportJobEvent(
 	}); err != nil {
 		log.Warningf(ctx, "failed to log event: %v", err)
 	}
+}
+
+type schemaAndTableName struct {
+	schema string
+	table  string
+}
+
+func (s *schemaAndTableName) String() string {
+	var ret string
+	if s.schema != "" {
+		ret += s.schema + "."
+	}
+	ret += s.table
+	return ret
 }
 
 func constructSchemaAndTableKey(

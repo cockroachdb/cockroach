@@ -6,7 +6,6 @@
 package importer
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -22,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -90,11 +88,6 @@ const (
 	avroSchema    = "schema"
 	avroSchemaURI = "schema_uri"
 
-	pgDumpIgnoreAllUnsupported     = "ignore_unsupported_statements"
-	pgDumpIgnoreShuntFileDest      = "log_ignored_statements"
-	pgDumpUnsupportedSchemaStmtLog = "unsupported_schema_stmts"
-	pgDumpUnsupportedDataStmtLog   = "unsupported_data_stmts"
-
 	// statusImportBundleParseSchema indicates to the user that a bundle format
 	// schema is being parsed
 	statusImportBundleParseSchema jobs.StatusMessage = "parsing schema on Import Bundle"
@@ -129,12 +122,7 @@ var importOptionExpectValues = map[string]exprutil.KVStringOptValidate{
 	avroRecordsSeparatedBy: exprutil.KVStringOptRequireValue,
 	avroBinRecords:         exprutil.KVStringOptRequireNoValue,
 	avroJSONRecords:        exprutil.KVStringOptRequireNoValue,
-
-	pgDumpIgnoreAllUnsupported: exprutil.KVStringOptRequireNoValue,
-	pgDumpIgnoreShuntFileDest:  exprutil.KVStringOptRequireValue,
 }
-
-var pgDumpMaxLoggedStmts = 1024
 
 func makeStringSet(opts ...string) map[string]struct{} {
 	res := make(map[string]struct{}, len(opts))
@@ -167,8 +155,6 @@ var mysqlOutAllowedOptions = makeStringSet(
 var (
 	mysqlDumpAllowedOptions = makeStringSet(importOptionSkipFKs, csvRowLimit)
 	pgCopyAllowedOptions    = makeStringSet(pgCopyDelimiter, pgCopyNull, optMaxRowSize)
-	pgDumpAllowedOptions    = makeStringSet(optMaxRowSize, importOptionSkipFKs, csvRowLimit,
-		pgDumpIgnoreAllUnsupported, pgDumpIgnoreShuntFileDest)
 )
 
 // DROP is required because the target table needs to be take offline during
@@ -344,7 +330,7 @@ func importPlanHook(
 	}
 
 	switch f := strings.ToUpper(importStmt.FileFormat); f {
-	case "PGDUMP", "MYSQLDUMP":
+	case "MYSQLDUMP":
 		p.BufferClientNotice(ctx, pgnotice.Newf(
 			"IMPORT %s has been deprecated in 23.1, and will be removed in a future version. See %s for alternatives.",
 			redact.SafeString(f),
@@ -649,44 +635,6 @@ func importPlanHook(
 				maxRowSize = int32(sz)
 			}
 			format.PgCopy.MaxRowSize = maxRowSize
-		case "PGDUMP":
-			if err = validateFormatOptions(importStmt.FileFormat, opts, pgDumpAllowedOptions); err != nil {
-				return err
-			}
-			format.Format = roachpb.IOFileFormat_PgDump
-			maxRowSize := int32(defaultScanBuffer)
-			if override, ok := opts[optMaxRowSize]; ok {
-				sz, err := humanizeutil.ParseBytes(override)
-				if err != nil {
-					return err
-				}
-				if sz < 1 || sz > math.MaxInt32 {
-					return errors.Errorf("%d out of range: %d", maxRowSize, sz)
-				}
-				maxRowSize = int32(sz)
-			}
-			format.PgDump.MaxRowSize = maxRowSize
-			if _, ok := opts[pgDumpIgnoreAllUnsupported]; ok {
-				format.PgDump.IgnoreUnsupported = true
-			}
-
-			if dest, ok := opts[pgDumpIgnoreShuntFileDest]; ok {
-				if !format.PgDump.IgnoreUnsupported {
-					return errors.New("cannot log unsupported PGDUMP stmts without `ignore_unsupported_statements` option")
-				}
-				format.PgDump.IgnoreUnsupportedLog = dest
-			}
-
-			if override, ok := opts[csvRowLimit]; ok {
-				rowLimit, err := strconv.Atoi(override)
-				if err != nil {
-					return pgerror.Wrapf(err, pgcode.Syntax, "invalid numeric %s value", csvRowLimit)
-				}
-				if rowLimit <= 0 {
-					return pgerror.Newf(pgcode.Syntax, "%s must be > 0", csvRowLimit)
-				}
-				format.PgDump.RowLimit = int64(rowLimit)
-			}
 		case "AVRO":
 			if err = validateFormatOptions(importStmt.FileFormat, opts, avroAllowedOptions); err != nil {
 				return err
@@ -1031,115 +979,6 @@ func parseAvroOptions(
 			format.Avro.MaxRecordSize = int32(sz)
 		}
 	}
-	return nil
-}
-
-type loggerKind int
-
-const (
-	schemaParsing loggerKind = iota
-	dataIngestion
-)
-
-// unsupportedStmtLogger is responsible for handling unsupported PGDUMP SQL
-// statements seen during the import.
-type unsupportedStmtLogger struct {
-	ctx   context.Context
-	user  username.SQLUsername
-	jobID int64
-
-	// Values are initialized based on the options specified in the IMPORT PGDUMP
-	// stmt.
-	ignoreUnsupported        bool
-	ignoreUnsupportedLogDest string
-	externalStorage          cloud.ExternalStorageFactory
-
-	// logBuffer holds the string to be flushed to the ignoreUnsupportedLogDest.
-	logBuffer       *bytes.Buffer
-	numIgnoredStmts int
-
-	// Incremented every time the logger flushes. It is used as the suffix of the
-	// log file written to external storage.
-	flushCount int
-
-	loggerType loggerKind
-}
-
-func makeUnsupportedStmtLogger(
-	ctx context.Context,
-	user username.SQLUsername,
-	jobID int64,
-	ignoreUnsupported bool,
-	unsupportedLogDest string,
-	loggerType loggerKind,
-	externalStorage cloud.ExternalStorageFactory,
-) *unsupportedStmtLogger {
-	return &unsupportedStmtLogger{
-		ctx:                      ctx,
-		user:                     user,
-		jobID:                    jobID,
-		ignoreUnsupported:        ignoreUnsupported,
-		ignoreUnsupportedLogDest: unsupportedLogDest,
-		loggerType:               loggerType,
-		logBuffer:                new(bytes.Buffer),
-		externalStorage:          externalStorage,
-	}
-}
-
-func (u *unsupportedStmtLogger) log(logLine string, isParseError bool) error {
-	// We have already logged parse errors during the schema ingestion phase, so
-	// skip them to avoid duplicate entries.
-	skipLoggingParseErr := isParseError && u.loggerType == dataIngestion
-	if u.ignoreUnsupportedLogDest == "" || skipLoggingParseErr {
-		return nil
-	}
-
-	// Flush to a file if we have hit the max size of our buffer.
-	if u.numIgnoredStmts >= pgDumpMaxLoggedStmts {
-		err := u.flush()
-		if err != nil {
-			return err
-		}
-	}
-
-	if isParseError {
-		logLine = fmt.Sprintf("%s: could not be parsed\n", logLine)
-	} else {
-		logLine = fmt.Sprintf("%s: unsupported by IMPORT\n", logLine)
-	}
-	u.logBuffer.Write([]byte(logLine))
-	u.numIgnoredStmts++
-	return nil
-}
-
-func (u *unsupportedStmtLogger) flush() error {
-	if u.ignoreUnsupportedLogDest == "" {
-		return nil
-	}
-
-	conf, err := cloud.ExternalStorageConfFromURI(u.ignoreUnsupportedLogDest, u.user)
-	if err != nil {
-		return errors.Wrap(err, "failed to log unsupported stmts during IMPORT PGDUMP")
-	}
-	var s cloud.ExternalStorage
-	if s, err = u.externalStorage(u.ctx, conf); err != nil {
-		return errors.New("failed to log unsupported stmts during IMPORT PGDUMP")
-	}
-	defer s.Close()
-
-	logFileName := fmt.Sprintf("import%d", u.jobID)
-	if u.loggerType == dataIngestion {
-		logFileName = path.Join(logFileName, pgDumpUnsupportedDataStmtLog, fmt.Sprintf("%d.log", u.flushCount))
-	} else {
-		logFileName = path.Join(logFileName, pgDumpUnsupportedSchemaStmtLog, fmt.Sprintf("%d.log", u.flushCount))
-	}
-	err = cloud.WriteFile(u.ctx, s, logFileName, bytes.NewReader(u.logBuffer.Bytes()))
-	if err != nil {
-		return errors.Wrap(err, "failed to log unsupported stmts to log during IMPORT PGDUMP")
-	}
-	u.flushCount++
-	u.numIgnoredStmts = 0
-	u.logBuffer.Truncate(0)
 	return nil
 }
 
