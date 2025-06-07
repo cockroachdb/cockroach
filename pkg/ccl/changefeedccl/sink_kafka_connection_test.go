@@ -471,6 +471,11 @@ func TestAzureKafkaDefaults(t *testing.T) {
 			uri:      "azure-event-hub://myeventhubs.servicebus.windows.net:9093?shared_access_key_name=saspolicyhistory&shared_access_key=q%2BSecretRedacted%3D",
 			expected: makeExpectation("myeventhubs.servicebus.windows.net", "saspolicyhistory", "q+SecretRedacted="),
 		},
+		{
+			name:     "test camel case to snake case param names fallback",
+			uri:      "azure-event-hub://myeventhubs.servicebus.windows.net:9093?SharedAccessKeyName=saspolicyhistory&SharedAccessKey=q%2BSecretRedacted%3D",
+			expected: makeExpectation("myeventhubs.servicebus.windows.net", "saspolicyhistory", "q+SecretRedacted="),
+		},
 	}
 	t.Run("sarama", func(t *testing.T) {
 		for _, tc := range cases {
@@ -500,4 +505,57 @@ func TestAzureKafkaDefaults(t *testing.T) {
 		}
 	})
 
+}
+
+// TestSnakeCaseToCamelCase verifies the conversion of snake_case strings to camelCase format.
+// This is particularly important for Azure Event Hub parameter handling where both formats
+// are accepted (e.g., "shared_access_key_name" and "SharedAccessKeyName").
+func TestSnakeCaseToCamelCase(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cases := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "basic conversion",
+			input:    "shared_access_key_name",
+			expected: "SharedAccessKeyName",
+		},
+		{
+			name:     "already camel case",
+			input:    "SharedAccessKeyName",
+			expected: "SharedAccessKeyName",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "starts with underscore",
+			input:    "_shared_access_key",
+			expected: "SharedAccessKey",
+		},
+		{
+			name:     "ends with underscore",
+			input:    "shared_access_key_",
+			expected: "SharedAccessKey",
+		},
+		{
+			name:     "azure specific parameters",
+			input:    "shared_access_key",
+			expected: "SharedAccessKey",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := snakeCaseToCamelCase(tc.input)
+			assert.Equal(t, tc.expected, result,
+				"snakeCaseToCamelCase(%q) = %q; want %q",
+				tc.input, result, tc.expected)
+		})
+	}
 }
