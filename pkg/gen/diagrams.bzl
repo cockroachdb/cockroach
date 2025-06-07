@@ -104,6 +104,7 @@ DIAGRAMS_SRCS = [
     "//docs/generated/sql/bnf:create_as_constraint_def.html",
     "//docs/generated/sql/bnf:create_changefeed.html",
     "//docs/generated/sql/bnf:create_database.html",
+    "//docs/generated/sql/bnf:create_database_changefeed.html",
     "//docs/generated/sql/bnf:create_ddl.html",
     "//docs/generated/sql/bnf:create_extension.html",
     "//docs/generated/sql/bnf:create_external_connection.html",
