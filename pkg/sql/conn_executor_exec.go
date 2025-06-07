@@ -69,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -2722,6 +2723,14 @@ func (ex *connExecutor) rollbackSQLTransaction(
 func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 	ctx context.Context, p *planner, res RestrictedCommandResult,
 ) error {
+	if ex.executorType == executorTypeInternal {
+		// Because we step the external read timestamp below, this is not safe to
+		// call within internal executor.
+		return errors.AssertionFailedf(
+			"call of dispatchReadCommittedStmtToExecutionEngine within internal executor",
+		)
+	}
+
 	getPausablePortalInfo := func() *portalPauseInfo {
 		if p != nil && p.pausablePortal != nil {
 			return p.pausablePortal.pauseInfo
@@ -2738,8 +2747,19 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		return err
 	}
 
+	// Use retry with exponential backoff and full jitter to reduce collisions for
+	// high-contention workloads. See https://en.wikipedia.org/wiki/Exponential_backoff and
+	// https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
 	maxRetries := int(ex.sessionData().MaxRetriesForReadCommitted)
-	for attemptNum := 0; ; attemptNum++ {
+	initialBackoff := ex.sessionData().InitialBackoffOfRetriesForReadCommitted
+	useBackoff := initialBackoff > 0
+	opts := retry.Options{
+		InitialBackoff:      initialBackoff,
+		MaxBackoff:          1024 * initialBackoff,
+		Multiplier:          2.0,
+		RandomizationFactor: 1.0,
+	}
+	for attemptNum, r := 0, retry.StartWithCtx(ctx, opts); !useBackoff || r.Next(); attemptNum++ {
 		// TODO(99410): Fix the phase time for pausable portals.
 		startExecTS := crtime.NowMono()
 		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerMostRecentStartExecStmt, startExecTS)
@@ -2749,6 +2769,15 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 			ex.sessionTracing.TraceRetryInformation(
 				ctx, "statement", p.autoRetryStmtCounter, p.autoRetryStmtReason,
 			)
+			// Step both the sequence number and the external read timestamp so that
+			// we can see the results of the conflicting transactions that caused us
+			// to fail.
+			if err := ex.state.mu.txn.Step(ctx, true /* allowReadTimestampStep */); err != nil {
+				return err
+			}
+			// Also step statement_timestamp so that any SQL using it is up-to-date.
+			stmtTS := ex.server.cfg.Clock.PhysicalTime()
+			p.extendedEvalCtx.StmtTimestamp = stmtTS
 		}
 		bufferPos := res.BufferedResultsLen()
 		if err = ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
@@ -2802,9 +2831,6 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		if err := ex.state.mu.txn.PrepareForPartialRetry(ctx); err != nil {
 			return err
 		}
-		if err := ex.state.mu.txn.Step(ctx, false /* allowReadTimestampStep */); err != nil {
-			return err
-		}
 		p.autoRetryStmtCounter++
 		p.autoRetryStmtReason = maybeRetriableErr
 		if ppInfo := getPausablePortalInfo(); ppInfo != nil {
@@ -2812,6 +2838,12 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 			ppInfo.dispatchReadCommittedStmtToExecutionEngine.autoRetryStmtCounter = p.autoRetryStmtCounter
 		}
 		ex.metrics.EngineMetrics.StatementRetryCount.Inc(1)
+	}
+	// Check if we exited the loop due to cancelation.
+	select {
+	case <-ctx.Done():
+		res.SetError(cancelchecker.QueryCanceledError)
+	default:
 	}
 	return nil
 }
