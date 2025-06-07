@@ -277,14 +277,14 @@ type BindStmt struct {
 	// code, in which case that code will be applied to all arguments.
 	ArgFormatCodes []pgwirebase.FormatCode
 
-	// internalArgs, if not nil, represents the arguments for the prepared
+	// InternalArgs, if not nil, represents the arguments for the prepared
 	// statements as produced by the internal clients. These don't need to go
 	// through encoding/decoding of the args. However, the types of the datums
 	// must correspond exactly to the inferred types (but note that the types of
 	// the datums are passes as type hints to the PrepareStmt command, so the
 	// inferred types should reflect that).
-	// If internalArgs is specified, Args and ArgFormatCodes are ignored.
-	internalArgs []tree.Datum
+	// If InternalArgs is specified, Args and ArgFormatCodes are ignored.
+	InternalArgs []tree.Datum
 }
 
 // command implements the Command interface.
@@ -518,6 +518,12 @@ func (buf *StmtBuf) Push(ctx context.Context, cmd Command) error {
 
 	buf.mu.cond.Signal()
 	return nil
+}
+
+func (buf *StmtBuf) Last() CmdPos {
+	buf.mu.Lock()
+	defer buf.mu.Unlock()
+	return buf.mu.lastPos
 }
 
 // CurCmd returns the Command currently indicated by the cursor. Besides the
