@@ -140,7 +140,11 @@ var generators = map[string]builtinDefinition{
 			volatility.Stable,
 		),
 	),
-	"crdb_internal.scan": makeBuiltin(genProps(),
+	"crdb_internal.scan": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategoryGenerator,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "start_key", Typ: types.Bytes},
@@ -296,7 +300,11 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
-	"workload_index_recs": makeBuiltin(genProps(),
+	"workload_index_recs": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategoryGenerator,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
 		makeGeneratorOverload(
 			tree.ParamTypes{},
 			WorkloadIndexRecsGeneratorType,
@@ -501,7 +509,8 @@ var generators = map[string]builtinDefinition{
 
 	"crdb_internal.list_sql_keys_in_range": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
@@ -516,7 +525,8 @@ var generators = map[string]builtinDefinition{
 
 	"crdb_internal.payloads_for_span": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
@@ -530,7 +540,8 @@ var generators = map[string]builtinDefinition{
 	),
 	"crdb_internal.payloads_for_trace": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
@@ -543,7 +554,10 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 	"crdb_internal.show_create_all_schemas": makeBuiltin(
-		tree.FunctionProperties{},
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "database_name", Typ: types.String},
@@ -557,7 +571,10 @@ The output can be used to recreate a database.'
 		),
 	),
 	"crdb_internal.show_create_all_tables": makeBuiltin(
-		tree.FunctionProperties{},
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "database_name", Typ: types.String},
@@ -576,7 +593,10 @@ The output can be used to recreate a database.'
 		),
 	),
 	"crdb_internal.show_create_all_types": makeBuiltin(
-		tree.FunctionProperties{},
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "database_name", Typ: types.String},
@@ -602,7 +622,10 @@ The output can be used to recreate a database.'
 		),
 	),
 	"crdb_internal.decode_plan_gist": makeBuiltin(
-		tree.FunctionProperties{},
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "gist", Typ: types.String},
@@ -615,7 +638,9 @@ The output can be used to recreate a database.'
 		),
 	),
 	"crdb_internal.decode_external_plan_gist": makeBuiltin(
-		tree.FunctionProperties{},
+		tree.FunctionProperties{
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "gist", Typ: types.String},
@@ -665,7 +690,11 @@ The last argument is a JSONB object containing the following optional fields:
 			volatility.Volatile,
 		),
 	),
-	"crdb_internal.tenant_span_stats": makeBuiltin(genProps(),
+	"crdb_internal.tenant_span_stats": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategoryGenerator,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
 		// This overload defines a built-in that returns the range count,
 		// approximate disk size, live range bytes, total range bytes,
 		// and live range byte percentage for all tables that belong to the
@@ -723,7 +752,8 @@ The last argument is a JSONB object containing the following optional fields:
 	),
 	"crdb_internal.sstable_metrics": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
@@ -740,7 +770,8 @@ The last argument is a JSONB object containing the following optional fields:
 	),
 	"crdb_internal.scan_storage_internal_keys": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
@@ -770,8 +801,9 @@ The last argument is a JSONB object containing the following optional fields:
 	),
 	"crdb_internal.execute_internally": makeBuiltin(
 		tree.FunctionProperties{
-			Undocumented: true,
-			Category:     builtinconstants.CategoryGenerator,
+			Undocumented:     true,
+			Category:         builtinconstants.CategoryGenerator,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		makeInternallyExecutedQueryGeneratorOverload(false /* withSessionBound */, false /* withOverrides */, false /* withTxn */),
 		makeInternallyExecutedQueryGeneratorOverload(true /* withSessionBound */, false /* withOverrides */, false /* withTxn */),
