@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -357,7 +356,7 @@ func (pt partitioningTest) parse() (parsed parsedPartitioningTest, _ error) {
 		}
 		st := cluster.MakeTestingClusterSettings()
 		parentID, tableID := descpb.ID(bootstrap.TestingUserDescID(0)), descpb.ID(bootstrap.TestingUserDescID(1))
-		mutDesc, err := importer.MakeTestingSimpleTableDescriptor(
+		mutDesc, err := sqlutils.MakeTestingSimpleTableDescriptor(
 			ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, timeutil.Now().UnixNano(),
 		)
 		if err != nil {

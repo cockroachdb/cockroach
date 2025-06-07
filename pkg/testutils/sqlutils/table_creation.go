@@ -1,9 +1,9 @@
-// Copyright 2017 The Cockroach Authors.
+// Copyright 2025 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package importer
+package sqlutils
 
 import (
 	"context"
@@ -35,9 +35,6 @@ import (
 // Any occurrence of SERIAL in the column definitions is handled using
 // the CockroachDB legacy behavior, i.e. INT NOT NULL DEFAULT
 // unique_rowid().
-//
-// TODO(yuzefovich): move this out of importer package into some test utils
-// package.
 func MakeTestingSimpleTableDescriptor(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
@@ -100,7 +97,7 @@ func MakeTestingSimpleTableDescriptor(
 
 	evalCtx := eval.Context{
 		Sequence:           &importSequenceOperators{},
-		Regions:            makeImportRegionOperator(""),
+		Regions:            &faketreeeval.DummyRegionOperator{},
 		SessionDataStack:   sessiondata.NewStack(&sessiondata.SessionData{}),
 		ClientNoticeSender: &faketreeeval.DummyClientNoticeSender{},
 		TxnTimestamp:       timeutil.Unix(0, walltime),
@@ -141,68 +138,7 @@ func MakeTestingSimpleTableDescriptor(
 	return tableDesc, nil
 }
 
-var (
-	errSequenceOperators = errors.New("sequence operations unsupported")
-	errRegionOperator    = errors.New("region operations unsupported")
-)
-
-// Implements the tree.RegionOperator interface.
-type importRegionOperator struct {
-	primaryRegion catpb.RegionName
-}
-
-func makeImportRegionOperator(primaryRegion catpb.RegionName) *importRegionOperator {
-	return &importRegionOperator{primaryRegion: primaryRegion}
-}
-
-// importDatabaseRegionConfig is a stripped down version of
-// multiregion.RegionConfig that is used by import.
-type importDatabaseRegionConfig struct {
-	primaryRegion catpb.RegionName
-}
-
-// IsValidRegionNameString implements the tree.DatabaseRegionConfig interface.
-func (i importDatabaseRegionConfig) IsValidRegionNameString(_ string) bool {
-	// Unimplemented.
-	return false
-}
-
-// PrimaryRegionString implements the tree.DatabaseRegionConfig interface.
-func (i importDatabaseRegionConfig) PrimaryRegionString() string {
-	return string(i.primaryRegion)
-}
-
-var _ eval.DatabaseRegionConfig = &importDatabaseRegionConfig{}
-
-// CurrentDatabaseRegionConfig is part of the eval.RegionOperator interface.
-func (so *importRegionOperator) CurrentDatabaseRegionConfig(
-	_ context.Context,
-) (eval.DatabaseRegionConfig, error) {
-	return importDatabaseRegionConfig{primaryRegion: so.primaryRegion}, nil
-}
-
-// ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the eval.RegionOperator interface.
-func (so *importRegionOperator) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
-	_ context.Context,
-) error {
-	return errors.WithStack(errRegionOperator)
-}
-
-// ResetMultiRegionZoneConfigsForTable is part of the eval.RegionOperator
-// interface.
-func (so *importRegionOperator) ResetMultiRegionZoneConfigsForTable(
-	_ context.Context, _ int64, _ bool,
-) error {
-	return errors.WithStack(errRegionOperator)
-}
-
-// ResetMultiRegionZoneConfigsForDatabase is part of the eval.RegionOperator
-// interface.
-func (so *importRegionOperator) ResetMultiRegionZoneConfigsForDatabase(
-	_ context.Context, _ int64,
-) error {
-	return errors.WithStack(errRegionOperator)
-}
+var errSequenceOperators = errors.New("sequence operations unsupported")
 
 // Implements the eval.SequenceOperators interface.
 type importSequenceOperators struct{}
