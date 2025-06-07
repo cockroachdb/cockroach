@@ -159,6 +159,7 @@ go_library(
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/kvstorage",
         "//pkg/kv/kvserver/kvstorage/snaprecv",
+        "//pkg/kv/kvserver/kvstorage/wag",
         "//pkg/kv/kvserver/leases",
         "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/liveness/livenesspb",

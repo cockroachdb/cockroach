@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/snaprecv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
@@ -565,6 +566,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	clearedSpans := inSnap.clearedSpans
 
 	subsumedDescs := make([]*roachpb.RangeDescriptor, 0, len(subsumedRepls))
+	subsumeAddrs := make([]wag.FullAddr, 0, len(subsumedRepls))
 	for _, sr := range subsumedRepls {
 		// We mark the replica as destroyed so that new commands are not
 		// accepted. This destroy status will be detected after the batch
@@ -582,6 +584,20 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		sr.readOnlyCmdMu.Unlock()
 
 		subsumedDescs = append(subsumedDescs, sr.Desc())
+		subsumeAddrs = append(subsumeAddrs, wag.FullAddr{
+			RangeID: sr.RangeID,
+			LogAddr: wag.LogAddr{LogID: 1, Index: sr.shMu.state.RaftAppliedIndex},
+		})
+	}
+
+	if w, unlock := r.store.WAG(); w != nil {
+		w.Init(wag.FullAddr{RangeID: r.RangeID, LogAddr: wag.LogAddr{
+			LogID: 1, Index: inSnap.raftAppliedIndex,
+		}}, wag.Snapshot{
+			ID:   logstore.EntryID{Index: inSnap.raftAppliedIndex, Term: 0},
+			SSTs: inSnap.SSTStorageScratch.SSTs(),
+		}, subsumeAddrs)
+		unlock()
 	}
 
 	st := r.ClusterSettings()
