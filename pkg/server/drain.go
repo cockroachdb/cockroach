@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
@@ -104,7 +105,7 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		// response. We must forward all of them.
 
 		// Connect to the target node.
-		client, err := s.dialNode(ctx, roachpb.NodeID(nodeID))
+		client, err := serverpb.DialAdminClient(s.serverIterator, ctx, roachpb.NodeID(nodeID), rpcbase.DefaultClass)
 		if err != nil {
 			return srverrors.ServerError(ctx, err)
 		}
