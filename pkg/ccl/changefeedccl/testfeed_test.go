@@ -297,7 +297,9 @@ func (c *sinklessFeed) start() (err error) {
 func (c *sinklessFeed) Close() error {
 	c.t.Logf("closing sinkless feed")
 	c.rows = nil
-	return c.conn.Close(context.Background())
+	err := c.conn.Close(context.Background())
+	c.t.Logf("closed sinkless feed conn")
+	return err
 }
 
 type logger interface {

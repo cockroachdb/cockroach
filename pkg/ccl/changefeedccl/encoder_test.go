@@ -726,6 +726,7 @@ func TestAvroSchemaNaming(t *testing.T) {
 
 	}
 
+	// TODO: why does this one encounter an error? is it expected? skip if so
 	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestUseRootUserConnection)
 }
 
@@ -879,7 +880,7 @@ func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
 		}
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	cdcTest(t, testFn, feedTestForceSink("kafka"), withAllowChangefeedErr("checks error manually"))
 }
 
 func TestAvroLedger(t *testing.T) {
