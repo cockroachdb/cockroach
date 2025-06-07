@@ -383,3 +383,57 @@ func (m clusterSettingMutator) changeSteps(
 
 	return steps
 }
+
+const (
+	// PanicNode is a mutator that will randomly cause a node to crash
+	// during the test, before restarting the node within the same step.
+	PanicNode = "panic_node"
+)
+
+type panicNodeMutator struct {
+	maxPanics int
+}
+
+func (m panicNodeMutator) Name() string {
+	return PanicNode
+}
+
+// PanicNodeMutator is newly added, so the default probability
+// will be temporarily raised to 50% to induce deeper testing.
+func (m panicNodeMutator) Probability() float64 {
+	return 0.5
+}
+
+func (m panicNodeMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutation {
+	var mutations []mutation
+	const defaultMaxPanics = 3
+
+	maxPanics := m.maxPanics
+	if maxPanics <= 0 {
+		maxPanics = defaultMaxPanics
+	}
+
+	possiblePointsInTime := plan.
+		newStepSelector().
+		Filter(func(s *singleStep) bool {
+
+			_, isHookStep := s.impl.(runHookStep)
+			_, isRestartSystem := s.impl.(restartWithNewBinaryStep)
+			_, isRestartTenant := s.impl.(restartVirtualClusterStep)
+			isRestart := isRestartSystem || isRestartTenant || isHookStep
+			return s.context.System.Stage >= OnStartupStage && !isRestart
+		})
+
+	numPanics := 1 + rng.Intn(maxPanics)
+	numPanics = min(numPanics, len(possiblePointsInTime))
+
+	for i := 0; i < numPanics; i++ {
+		addRandomly := possiblePointsInTime.
+			RandomStep(rng).
+			InsertBefore(panicNodeStep{plan.rt, plan.ctx.System.Descriptor.Nodes[0]})
+
+		mutations = append(mutations, addRandomly...)
+	}
+
+	return mutations
+}
