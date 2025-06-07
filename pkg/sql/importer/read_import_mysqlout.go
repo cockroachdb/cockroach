@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -364,4 +365,18 @@ func (d *mysqloutfileReader) readFile(
 	}
 
 	return runParallelImport(ctx, d.importCtx, fileCtx, producer, consumer)
+}
+
+func mysqlStrToDatum(evalCtx *eval.Context, s string, desired *types.T) (tree.Datum, error) {
+	switch desired.Family() {
+	case types.BytesFamily:
+		// mysql emits raw byte strings that do not use the same escaping as our
+		// tree.ParseDBytes function expects, and the difference between
+		// tree.ParseAndRequireString and mysqlStrToDatum is whether or not it
+		// attempts to parse bytes.
+		return tree.NewDBytes(tree.DBytes(s)), nil
+	default:
+		res, _, err := tree.ParseAndRequireString(desired, s, evalCtx)
+		return res, err
+	}
 }
