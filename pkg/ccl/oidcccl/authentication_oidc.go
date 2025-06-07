@@ -13,18 +13,20 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
+	secuser "github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/ui"
@@ -131,6 +133,7 @@ type oidcAuthenticationServer struct {
 	// to help us gracefully recover from auth provider downtime without operator intervention.
 	enabled     bool
 	initialized bool
+	execCfg     *sql.ExecutorConfig
 }
 
 type oidcAuthenticationConf struct {
@@ -152,6 +155,9 @@ type oidcAuthenticationConf struct {
 	generateJWTAuthTokenSQLPort  int64
 	providerCustomCA             string
 	httpClient                   *httputil.Client
+	authZEnabled                 bool
+	groupClaim                   string
+	userinfoGroupKey             string
 }
 
 // GetOIDCConf is used to extract certain parts of the OIDC
@@ -189,35 +195,41 @@ type oidcManager struct {
 	httpClient   *httputil.Client
 }
 
-func (o *oidcManager) ExchangeVerifyGetClaims(
-	ctx context.Context, code string, idTokenKey string,
-) (map[string]json.RawMessage, error) {
+// ExchangeVerifyGetTokens exchanges the auth-code, verifies the ID-token that
+// comes back and returns:
+//   - the decoded claims (for username / group extraction)
+//   - the raw id token string
+//   - the *oauth2.Token this carries the access token that must be used
+//     against the /userinfo endpoint
+func (o *oidcManager) ExchangeVerifyGetTokens(
+	ctx context.Context, code, idTokenKey string,
+) (map[string]json.RawMessage, string, *oauth2.Token, error) {
 	credentials, err := o.Exchange(ctx, code)
 	if err != nil {
 		log.Errorf(ctx, "OIDC: failed to exchange code for token: %v", err)
-		return nil, err
+		return nil, "", nil, err
 	}
 
 	rawIDToken, ok := credentials.Extra(idTokenKey).(string)
 	if !ok {
 		err := errors.New("OIDC: failed to extract ID token from the token credentials")
 		log.Error(ctx, "OIDC: failed to extract ID token from the token credentials")
-		return nil, err
+		return nil, "", nil, err
 	}
 
 	idToken, err := o.Verify(ctx, rawIDToken)
 	if err != nil {
 		log.Errorf(ctx, "OIDC: unable to verify ID token: %v", err)
-		return nil, err
+		return nil, "", nil, err
 	}
 
 	var claims map[string]json.RawMessage
 	if err := idToken.Claims(&claims); err != nil {
 		log.Errorf(ctx, "OIDC: unable to deserialize token claims: %v", err)
-		return nil, err
+		return nil, "", nil, err
 	}
 
-	return claims, nil
+	return claims, rawIDToken, credentials, nil
 }
 
 func (o *oidcManager) Verify(ctx context.Context, s string) (*oidc.IDToken, error) {
@@ -251,7 +263,7 @@ type IOIDCManager interface {
 	Verify(context.Context, string) (*oidc.IDToken, error)
 	Exchange(context.Context, string, ...oauth2.AuthCodeOption) (*oauth2.Token, error)
 	AuthCodeURL(string, ...oauth2.AuthCodeOption) string
-	ExchangeVerifyGetClaims(context.Context, string, string) (map[string]json.RawMessage, error)
+	ExchangeVerifyGetTokens(context.Context, string, string) (map[string]json.RawMessage, string, *oauth2.Token, error)
 }
 
 var _ IOIDCManager = &oidcManager{}
@@ -337,6 +349,9 @@ func reloadConfigLocked(
 			httputil.WithDialerTimeout(clientTimeout),
 			httputil.WithCustomCAPEM(OIDCProviderCustomCA.Get(&st.SV)),
 		),
+		authZEnabled:     OIDCAuthZEnabled.Get(&st.SV),
+		groupClaim:       OIDCAuthGroupClaim.Get(&st.SV),
+		userinfoGroupKey: OIDCAuthUserinfoGroupKey.Get(&st.SV),
 	}
 
 	if !oidcAuthServer.conf.enabled && conf.enabled {
@@ -421,8 +436,11 @@ var ConfigureOIDC = func(
 	userLoginFromSSO func(ctx context.Context, username string) (*http.Cookie, error),
 	ambientCtx log.AmbientContext,
 	cluster uuid.UUID,
+	execCfg *sql.ExecutorConfig,
 ) (authserver.OIDC, error) {
-	oidcAuthentication := &oidcAuthenticationServer{}
+	oidcAuthentication := &oidcAuthenticationServer{
+		execCfg: execCfg,
+	}
 
 	// Don't want to use GRPC here since these endpoints require HTTP-Redirect behaviors and the
 	// callback endpoint will be receiving specialized parameters that grpc-gateway will only get
@@ -493,7 +511,9 @@ var ConfigureOIDC = func(
 			return
 		}
 
-		claims, err := oidcAuthentication.manager.ExchangeVerifyGetClaims(ctx, r.URL.Query().Get(codeKey), idTokenKey)
+		claims, _, oauthTok, err := oidcAuthentication.manager.
+			ExchangeVerifyGetTokens(ctx, r.URL.Query().Get(codeKey), idTokenKey)
+
 		if err != nil {
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
@@ -514,6 +534,105 @@ var ConfigureOIDC = func(
 		if err != nil {
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
+		}
+
+		// OIDC authorization
+		if oidcAuthentication.conf.authZEnabled {
+			var groups []string
+			if raw, ok := claims[oidcAuthentication.conf.groupClaim]; ok {
+				// Try JSON array first.
+				if err := json.Unmarshal(raw, &groups); err != nil {
+					// Fall back to single string.
+					var s string
+					if err := json.Unmarshal(raw, &s); err == nil {
+						sep := ","
+						if !strings.Contains(s, ",") {
+							sep = " "
+						}
+						groups = strings.Split(s, sep)
+					}
+				}
+			}
+
+			// Normalise: trim, lower-case, dedupe, sort
+			if len(groups) > 0 {
+				uniq := make(map[string]struct{}, len(groups))
+				for _, g := range groups {
+					g = strings.ToLower(strings.TrimSpace(g))
+					if g != "" {
+						uniq[g] = struct{}{}
+					}
+				}
+				groups = groups[:0]
+				for g := range uniq {
+					groups = append(groups, g)
+				}
+				sort.Strings(groups)
+			}
+
+			if len(groups) == 0 {
+				// fall back to userinfo here.
+				// Build a Provider
+				pctx := oidc.ClientContext(ctx, oidcAuthentication.conf.httpClient.Client)
+				prov, err := oidc.NewProvider(pctx, oidcAuthentication.conf.providerURL)
+				if err != nil {
+					log.Errorf(ctx, "OIDC: provider init for userinfo failed: %v", err)
+					http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+					return
+				}
+
+				//Call /userinfo with ACCESS TOKEN
+				ui, err := prov.UserInfo(pctx, oauth2.StaticTokenSource(oauthTok))
+				if err != nil {
+					log.Errorf(ctx, "OIDC: userinfo call failed: %v", err)
+					http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+					return
+				}
+
+				// Extract groups from the returned JSON
+				var uiJSON map[string]any //userinfo JSON
+				if err := ui.Claims(&uiJSON); err == nil {
+					if raw, ok := uiJSON[oidcAuthentication.conf.userinfoGroupKey]; ok {
+						switch v := raw.(type) {
+						case []any:
+							for _, g := range v {
+								if s, ok := g.(string); ok {
+									groups = append(groups, s)
+								}
+							}
+						case string:
+							sep := ","
+							if !strings.Contains(v, ",") {
+								sep = " "
+							}
+							groups = strings.Split(v, sep)
+						}
+					}
+				}
+
+			}
+			if len(groups) != 0 {
+				// Sync Roles and Groups
+				sqlRoles := make([]secuser.SQLUsername, 0, len(groups))
+				for _, g := range groups {
+					if role, err := secuser.MakeSQLUsernameFromUserInput(
+						g, secuser.PurposeValidation,
+					); err == nil {
+						sqlRoles = append(sqlRoles, role)
+					}
+				}
+
+				userSQL, _ := secuser.MakeSQLUsernameFromUserInput(
+					username, secuser.PurposeValidation,
+				)
+				if err := sql.EnsureUserOnlyBelongsToRoles(
+					ctx, oidcAuthentication.execCfg, userSQL, sqlRoles,
+				); err != nil {
+					log.Errorf(ctx, "OIDC: failed to authorize %s: %v", username, err)
+					http.Error(w, genericCallbackHTTPError, http.StatusForbidden)
+					return
+				}
+			}
 		}
 
 		cookie, err := userLoginFromSSO(ctx, username)
@@ -705,7 +824,7 @@ var ConfigureOIDC = func(
 					}
 				} else {
 					log.Infof(ctx, "OIDC: no identity map found for issuer %s; using %s without mapping", token.Issuer, tokenPrincipal)
-					if username, err := username.MakeSQLUsernameFromUserInput(tokenPrincipal, username.PurposeValidation); err != nil {
+					if username, err := secuser.MakeSQLUsernameFromUserInput(tokenPrincipal, secuser.PurposeValidation); err != nil {
 						acceptedUsernames = append(acceptedUsernames, username.Normalized())
 					}
 				}
