@@ -258,7 +258,9 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(t.ArtifactsDir(), "bench.txt"), []byte(goBenchOutput), 0666); err != nil {
+		// NB: 1.perf was created in exportSysbenchResults above.
+		if err := os.WriteFile(filepath.Join(t.ArtifactsDir(), "1.perf", "bench.txt"), []byte(goBenchOutput),
+			0666); err != nil {
 			return err
 		}
 
