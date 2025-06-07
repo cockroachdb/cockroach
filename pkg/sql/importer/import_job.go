@@ -12,7 +12,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/ingeststopped"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
@@ -29,21 +28,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/ingesting"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/rewrite"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -256,7 +250,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	//
 	// In the case of importing into existing tables we must wait for all nodes
 	// to see the same version of the updated table descriptor, after which we
-	// shall chose a ts to import from.
+	// shall choose a ts to import from.
 	if details.Walltime == 0 {
 		// Now that we know all the tables are offline, pick a walltime at which we
 		// will write.
@@ -267,34 +261,24 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		// cluster has finalized to 22.1, use DeleteRange without predicate
 		// filtering).
 		for i := range details.Tables {
-			if !details.Tables[i].IsNew {
-				tblDesc := tabledesc.NewBuilder(details.Tables[i].Desc).BuildImmutableTable()
-				tblSpan := tblDesc.TableSpan(p.ExecCfg().Codec)
-				res, err := p.ExecCfg().DB.Scan(ctx, tblSpan.Key, tblSpan.EndKey, 1 /* maxRows */)
-				if err != nil {
-					return errors.Wrap(err, "checking if existing table is empty")
-				}
-				details.Tables[i].WasEmpty = len(res) == 0
+			tblDesc := tabledesc.NewBuilder(details.Tables[i].Desc).BuildImmutableTable()
+			tblSpan := tblDesc.TableSpan(p.ExecCfg().Codec)
+			res, err := p.ExecCfg().DB.Scan(ctx, tblSpan.Key, tblSpan.EndKey, 1 /* maxRows */)
+			if err != nil {
+				return errors.Wrap(err, "checking if existing table is empty")
+			}
+			details.Tables[i].WasEmpty = len(res) == 0
 
-				// Update the descriptor in the job record and in the database
-				details.Tables[i].Desc.ImportStartWallTime = details.Walltime
+			// Update the descriptor in the job record and in the database
+			details.Tables[i].Desc.ImportStartWallTime = details.Walltime
 
-				if err := bindTableDescImportProperties(ctx, p, tblDesc.GetID(), details.Walltime); err != nil {
-					return err
-				}
+			if err := bindTableDescImportProperties(ctx, p, tblDesc.GetID(), details.Walltime); err != nil {
+				return err
 			}
 		}
 
 		if err := r.job.NoTxn().SetDetails(ctx, details); err != nil {
 			return err
-		}
-	}
-
-	if len(details.Tables) > 1 {
-		for _, tab := range details.Tables {
-			if !tab.IsNew {
-				return errors.AssertionFailedf("all tables in multi-table import must be new")
-			}
 		}
 	}
 
@@ -392,88 +376,28 @@ func (r *importResumer) prepareTablesForIngestion(
 	importDetails := details
 	importDetails.Tables = make([]jobspb.ImportDetails_Table, len(details.Tables))
 
-	newSchemaAndTableNameToIdx := make(map[string]int, len(importDetails.Tables))
-	var hasExistingTables bool
 	var err error
-	var newTableDescs []jobspb.ImportDetails_Table
 	var desc *descpb.TableDescriptor
 
 	useImportEpochs := importEpochs.Get(&p.ExecCfg().Settings.SV)
 	for i, table := range details.Tables {
-		if !table.IsNew {
-			desc, err = prepareExistingTablesForIngestion(ctx, txn, descsCol, table.Desc, useImportEpochs)
-			if err != nil {
-				return importDetails, err
-			}
-			importDetails.Tables[i] = jobspb.ImportDetails_Table{
-				Desc:       desc,
-				Name:       table.Name,
-				SeqVal:     table.SeqVal,
-				IsNew:      table.IsNew,
-				TargetCols: table.TargetCols,
-			}
-			hasExistingTables = true
-		} else {
-			// TODO(yuzefovich): remove this branch.
-			// PGDUMP imports support non-public schemas.
-			// For the purpose of disambiguation we must take the schema into
-			// account when constructing the newTablenameToIdx map.
-			// At this point the table descriptor's parent schema ID has not being
-			// remapped to the newly generated schema ID.
-			key, err := constructSchemaAndTableKey(ctx, table.Desc, schemaMetadata.oldSchemaIDToName, p.ExecCfg().Settings.Version)
-			if err != nil {
-				return importDetails, err
-			}
-			newSchemaAndTableNameToIdx[key.String()] = i
-			// Make a deep copy of the table descriptor so that rewrites do not
-			// partially clobber the descriptor stored in details.
-			newTableDescs = append(newTableDescs,
-				*protoutil.Clone(&table).(*jobspb.ImportDetails_Table))
-		}
-	}
-
-	// Prepare the table descriptors for newly created tables being imported
-	// into.
-	//
-	// TODO(adityamaru): This is still unnecessarily complicated. If we can get
-	// the new table desc preparation to work on a per desc basis, rather than
-	// requiring all the newly created descriptors, then this can look like the
-	// call to prepareExistingTablesForIngestion. Currently, FK references
-	// misbehave when I tried to write the desc one at a time.
-	if len(newTableDescs) != 0 {
-		res, err := prepareNewTablesForIngestion(
-			ctx, txn, descsCol, p, newTableDescs, importDetails.ParentID, schemaMetadata.schemaRewrites)
+		desc, err = prepareExistingTablesForIngestion(ctx, txn, descsCol, table.Desc, useImportEpochs)
 		if err != nil {
 			return importDetails, err
 		}
-
-		for _, desc := range res {
-			key, err := constructSchemaAndTableKey(ctx, desc, schemaMetadata.newSchemaIDToName, p.ExecCfg().Settings.Version)
-			if err != nil {
-				return importDetails, err
-			}
-			i := newSchemaAndTableNameToIdx[key.String()]
-			table := details.Tables[i]
-			importDetails.Tables[i] = jobspb.ImportDetails_Table{
-				Desc:       desc,
-				Name:       table.Name,
-				SeqVal:     table.SeqVal,
-				IsNew:      table.IsNew,
-				TargetCols: table.TargetCols,
-			}
+		importDetails.Tables[i] = jobspb.ImportDetails_Table{
+			Desc:       desc,
+			Name:       table.Name,
+			SeqVal:     table.SeqVal,
+			TargetCols: table.TargetCols,
 		}
 	}
 
 	importDetails.PrepareComplete = true
 
-	// If we do not have pending schema changes on existing descriptors we can
-	// choose our Walltime (to IMPORT from) immediately. Otherwise, we have to
-	// wait for all nodes to see the same descriptor version before doing so.
-	if !hasExistingTables {
-		importDetails.Walltime = p.ExecCfg().Clock.Now().WallTime
-	} else {
-		importDetails.Walltime = 0
-	}
+	// We have to wait for all nodes to see the same descriptor version before
+	// choosing our Walltime.
+	importDetails.Walltime = 0
 	return importDetails, nil
 }
 
@@ -521,117 +445,6 @@ func prepareExistingTablesForIngestion(
 	}
 
 	return importing.TableDesc(), nil
-}
-
-// prepareNewTablesForIngestion prepares descriptors for newly created
-// tables being imported into.
-func prepareNewTablesForIngestion(
-	ctx context.Context,
-	txn *kv.Txn,
-	descsCol *descs.Collection,
-	p sql.JobExecContext,
-	importTables []jobspb.ImportDetails_Table,
-	parentID descpb.ID,
-	schemaRewrites jobspb.DescRewriteMap,
-) ([]*descpb.TableDescriptor, error) {
-	newMutableTableDescriptors := make([]*tabledesc.Mutable, len(importTables))
-	for i := range importTables {
-		newMutableTableDescriptors[i] = tabledesc.NewBuilder(importTables[i].Desc).BuildCreatedMutableTable()
-	}
-
-	// Verification steps have passed, generate a new table ID if we're
-	// restoring. We do this last because we want to avoid calling
-	// GenerateUniqueDescID if there's any kind of error above.
-	// Reserving a table ID now means we can avoid the rekey work during restore.
-	//
-	// schemaRewrites may contain information which is used in rewrite.TableDescs
-	// to rewrite the parent schema ID in the table desc to point to the correct
-	// schema ID.
-	tableRewrites := schemaRewrites
-	if tableRewrites == nil {
-		tableRewrites = make(jobspb.DescRewriteMap)
-	}
-	seqVals := make(map[descpb.ID]int64, len(importTables))
-	for _, tableDesc := range importTables {
-		id, err := p.ExecCfg().DescIDGenerator.GenerateUniqueDescID(ctx)
-		if err != nil {
-			return nil, err
-		}
-		oldParentSchemaID := tableDesc.Desc.GetUnexposedParentSchemaID()
-		parentSchemaID := oldParentSchemaID
-		if rw, ok := schemaRewrites[oldParentSchemaID]; ok {
-			parentSchemaID = rw.ID
-		}
-		tableRewrites[tableDesc.Desc.ID] = &jobspb.DescriptorRewrite{
-			ID:             id,
-			ParentSchemaID: parentSchemaID,
-			ParentID:       parentID,
-		}
-		seqVals[id] = tableDesc.SeqVal
-	}
-	if _, err := rewrite.TableDescs(
-		newMutableTableDescriptors, tableRewrites, "",
-	); err != nil {
-		return nil, err
-	}
-
-	// After all of the ID's have been remapped, ensure that there aren't any name
-	// collisions with any importing tables.
-	for i := range newMutableTableDescriptors {
-		tbl := newMutableTableDescriptors[i]
-		err := descs.CheckObjectNameCollision(
-			ctx,
-			descsCol,
-			txn,
-			tbl.GetParentID(),
-			tbl.GetParentSchemaID(),
-			tree.NewUnqualifiedTableName(tree.Name(tbl.GetName())),
-		)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// tableDescs contains the same slice as newMutableTableDescriptors but
-	// as tabledesc.TableDescriptor.
-	tableDescs := make([]catalog.TableDescriptor, len(newMutableTableDescriptors))
-	for i := range tableDescs {
-		newMutableTableDescriptors[i].SetOffline(tabledesc.OfflineReasonImporting)
-		tableDescs[i] = newMutableTableDescriptors[i]
-	}
-
-	var seqValKVs []roachpb.KeyValue
-	for _, desc := range newMutableTableDescriptors {
-		if v, ok := seqVals[desc.GetID()]; ok && v != 0 {
-			key, val, err := sql.MakeSequenceKeyVal(p.ExecCfg().Codec, desc, v, false)
-			if err != nil {
-				return nil, err
-			}
-			kv := roachpb.KeyValue{Key: key}
-			kv.Value.SetInt(val)
-			seqValKVs = append(seqValKVs, kv)
-		}
-	}
-
-	// Write the new TableDescriptors and flip the namespace entries over to
-	// them. After this call, any queries on a table will be served by the newly
-	// imported data.
-	includePublicSchemaCreatePriv := sqlclustersettings.PublicSchemaCreatePrivilegeEnabled.Get(&p.ExecCfg().Settings.SV)
-	if err := ingesting.WriteDescriptors(
-		ctx, txn, p.User(), descsCol, nil /* databases */, nil /* schemas */, tableDescs,
-		nil /* types */, nil /* functions */, tree.RequestedDescriptors, seqValKVs,
-		"" /* inheritParentName */, includePublicSchemaCreatePriv,
-		true, /* allowCrossDatabaseRefs */
-	); err != nil {
-		return nil, errors.Wrapf(err, "creating importTables")
-	}
-
-	newPreparedTableDescs := make([]*descpb.TableDescriptor, len(newMutableTableDescriptors))
-	for i := range newMutableTableDescriptors {
-		newPreparedTableDescs[i] = newMutableTableDescriptors[i].TableDesc()
-	}
-
-	return newPreparedTableDescs, nil
 }
 
 // prepareSchemasForIngestion is responsible for assigning the created schema
@@ -759,10 +572,6 @@ func (r *importResumer) publishTables(
 		return nil
 	}
 
-	// Write stub statistics for new tables created during the import. This should
-	// be sufficient until the CREATE STATISTICS run finishes.
-	r.writeStubStatisticsForImportedTables(ctx, execCfg, res)
-
 	log.Event(ctx, "making tables live")
 
 	err := sql.DescsTxn(ctx, execCfg, func(
@@ -776,29 +585,27 @@ func (r *importResumer) publishTables(
 			}
 			newTableDesc.SetPublic()
 
-			if !tbl.IsNew {
-				// NB: This is not using AllNonDropIndexes or directly mutating the
-				// constraints returned by the other usual helpers because we need to
-				// replace the `OutboundFKs` and `Checks` slices of newTableDesc with copies
-				// that we can mutate. We need to do that because newTableDesc is a shallow
-				// copy of tbl.Desc that we'll be asserting is the current version when we
-				// CPut below.
-				//
-				// Set FK constraints to unvalidated before publishing the table imported
-				// into.
-				newTableDesc.OutboundFKs = make([]descpb.ForeignKeyConstraint, len(newTableDesc.OutboundFKs))
-				copy(newTableDesc.OutboundFKs, tbl.Desc.OutboundFKs)
-				for i := range newTableDesc.OutboundFKs {
-					newTableDesc.OutboundFKs[i].Validity = descpb.ConstraintValidity_Unvalidated
-				}
+			// NB: This is not using AllNonDropIndexes or directly mutating the
+			// constraints returned by the other usual helpers because we need to
+			// replace the `OutboundFKs` and `Checks` slices of newTableDesc with copies
+			// that we can mutate. We need to do that because newTableDesc is a shallow
+			// copy of tbl.Desc that we'll be asserting is the current version when we
+			// CPut below.
+			//
+			// Set FK constraints to unvalidated before publishing the table imported
+			// into.
+			newTableDesc.OutboundFKs = make([]descpb.ForeignKeyConstraint, len(newTableDesc.OutboundFKs))
+			copy(newTableDesc.OutboundFKs, tbl.Desc.OutboundFKs)
+			for i := range newTableDesc.OutboundFKs {
+				newTableDesc.OutboundFKs[i].Validity = descpb.ConstraintValidity_Unvalidated
+			}
 
-				// Set CHECK constraints to unvalidated before publishing the table imported into.
-				for _, c := range newTableDesc.CheckConstraints() {
-					// We only "unvalidate" constraints that are not hash-sharded column
-					// check constraints.
-					if !c.IsHashShardingConstraint() {
-						c.CheckDesc().Validity = descpb.ConstraintValidity_Unvalidated
-					}
+			// Set CHECK constraints to unvalidated before publishing the table imported into.
+			for _, c := range newTableDesc.CheckConstraints() {
+				// We only "unvalidate" constraints that are not hash-sharded column
+				// check constraints.
+				if !c.IsHashShardingConstraint() {
+					c.CheckDesc().Validity = descpb.ConstraintValidity_Unvalidated
 				}
 			}
 			newTableDesc.FinalizeImport()
@@ -834,45 +641,6 @@ func (r *importResumer) publishTables(
 	}
 
 	return nil
-}
-
-// writeStubStatisticsForImportedTables writes "stub" statistics for new tables
-// created during an import.
-func (r *importResumer) writeStubStatisticsForImportedTables(
-	ctx context.Context, execCfg *sql.ExecutorConfig, res kvpb.BulkOpSummary,
-) {
-	details := r.job.Details().(jobspb.ImportDetails)
-	for _, tbl := range details.Tables {
-		if tbl.IsNew {
-			desc := tabledesc.NewBuilder(tbl.Desc).BuildImmutableTable()
-			id := kvpb.BulkOpSummaryID(uint64(desc.GetID()), uint64(desc.GetPrimaryIndexID()))
-			rowCount := uint64(res.EntryCounts[id])
-			// TODO(michae2): collect distinct and null counts during import.
-			distinctCount := uint64(float64(rowCount) * memo.UnknownDistinctCountRatio)
-			nullCount := uint64(float64(rowCount) * memo.UnknownNullCountRatio)
-			avgRowSize := uint64(memo.UnknownAvgRowSize)
-			statistics, err := sql.StubTableStats(desc, jobspb.ImportStatsName)
-			if err == nil {
-				for _, statistic := range statistics {
-					statistic.RowCount = rowCount
-					statistic.DistinctCount = distinctCount
-					statistic.NullCount = nullCount
-					statistic.AvgSize = avgRowSize
-				}
-				// TODO(michae2): parallelize insertion of statistics.
-				err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-					return stats.InsertNewStats(ctx, execCfg.Settings, txn, statistics)
-				})
-			}
-			if err != nil {
-				// Failure to create statistics should not fail the entire import.
-				log.Warningf(
-					ctx, "error while creating statistics during import of %q: %v",
-					desc.GetName(), err,
-				)
-			}
-		}
-	}
 }
 
 // publishSchemas updates the status of imported schemas from OFFLINE to PUBLIC.
@@ -1175,35 +943,6 @@ func emitImportJobEvent(
 	}
 }
 
-type schemaAndTableName struct {
-	schema string
-	table  string
-}
-
-func (s *schemaAndTableName) String() string {
-	var ret string
-	if s.schema != "" {
-		ret += s.schema + "."
-	}
-	ret += s.table
-	return ret
-}
-
-func constructSchemaAndTableKey(
-	_ context.Context,
-	tableDesc *descpb.TableDescriptor,
-	schemaIDToName map[descpb.ID]string,
-	_ clusterversion.Handle,
-) (schemaAndTableName, error) {
-	schemaName, ok := schemaIDToName[tableDesc.GetUnexposedParentSchemaID()]
-	if !ok && schemaName != catconstants.PublicSchemaName {
-		return schemaAndTableName{}, errors.Newf("invalid parent schema %s with ID %d for table %s",
-			schemaName, tableDesc.UnexposedParentSchemaID, tableDesc.GetName())
-	}
-
-	return schemaAndTableName{schema: schemaName, table: tableDesc.GetName()}, nil
-}
-
 func writeNonDropDatabaseChange(
 	ctx context.Context,
 	desc *dbdesc.Mutable,
@@ -1350,19 +1089,12 @@ func (r *importResumer) dropTables(
 	var tableWasEmpty bool
 	var intoTable catalog.TableDescriptor
 	for _, tbl := range details.Tables {
-		if !tbl.IsNew {
-			desc, err := descsCol.MutableByID(txn.KV()).Table(ctx, tbl.Desc.ID)
-			if err != nil {
-				return err
-			}
-			intoTable = desc.ImmutableCopy().(catalog.TableDescriptor)
-			tableWasEmpty = tbl.WasEmpty
-			break
+		desc, err := descsCol.MutableByID(txn.KV()).Table(ctx, tbl.Desc.ID)
+		if err != nil {
+			return err
 		}
-	}
-	if intoTable == nil {
-		// Rolling back IMPORT (i.e. not IMPORT INTO), where for all tables tbl.IsNew==true
-		return r.dropNewTables(ctx, txn, descsCol, execCfg)
+		intoTable = desc.ImmutableCopy().(catalog.TableDescriptor)
+		tableWasEmpty = tbl.WasEmpty
 	}
 	// Clear table data from a rolling back IMPORT INTO cmd
 	//
@@ -1415,70 +1147,6 @@ func (r *importResumer) dropTables(
 		return err
 	}
 	return errors.Wrap(txn.KV().Run(ctx, b), "putting IMPORT INTO table back online")
-}
-
-// dropNewTables drops the tables that were created as part of an IMPORT and
-// queues a GC job to clean up the dropped descriptors.
-func (r *importResumer) dropNewTables(
-	ctx context.Context, txn isql.Txn, descsCol *descs.Collection, execCfg *sql.ExecutorConfig,
-) error {
-	details := r.job.Details().(jobspb.ImportDetails)
-	dropTime := int64(1)
-
-	b := txn.KV().NewBatch()
-	tablesToGC := make([]descpb.ID, 0, len(details.Tables))
-	toWrite := make([]*tabledesc.Mutable, 0, len(details.Tables))
-	for _, tbl := range details.Tables {
-		newTableDesc, err := descsCol.MutableByID(txn.KV()).Table(ctx, tbl.Desc.ID)
-		if err != nil {
-			return err
-		}
-		newTableDesc.SetDropped()
-		// If the DropTime if set, a table uses RangeClear for fast data removal. This
-		// operation starts at DropTime + the GC TTL. If we used now() here, it would
-		// not clean up data until the TTL from the time of the error. Instead, use 1
-		// (that is, 1ns past the epoch) to allow this to be cleaned up as soon as
-		// possible. This is safe since the table data was never visible to users,
-		// and so we don't need to preserve MVCC semantics.
-		newTableDesc.DropTime = dropTime
-		tablesToGC = append(tablesToGC, newTableDesc.ID)
-
-		// Accumulate the changes before adding them to the batch to avoid
-		// making any table invalid before having read it.
-		toWrite = append(toWrite, newTableDesc)
-	}
-	for _, d := range toWrite {
-		const kvTrace = false
-		if err := descsCol.WriteDescToBatch(ctx, kvTrace, d, b); err != nil {
-			return err
-		}
-		if err := descsCol.DeleteNamespaceEntryToBatch(ctx, kvTrace, d, b); err != nil {
-			return err
-		}
-		descsCol.NotifyOfDeletedDescriptor(d.GetID())
-	}
-
-	// Queue a GC job.
-	gcDetails := jobspb.SchemaChangeGCDetails{}
-	for _, tableID := range tablesToGC {
-		gcDetails.Tables = append(gcDetails.Tables, jobspb.SchemaChangeGCDetails_DroppedID{
-			ID:       tableID,
-			DropTime: dropTime,
-		})
-	}
-	gcJobRecord := jobs.Record{
-		Description:   fmt.Sprintf("GC for %s", r.job.Payload().Description),
-		Username:      r.job.Payload().UsernameProto.Decode(),
-		DescriptorIDs: tablesToGC,
-		Details:       gcDetails,
-		Progress:      jobspb.SchemaChangeGCProgress{},
-		NonCancelable: true,
-	}
-	if _, err := execCfg.JobRegistry.CreateJobWithTxn(
-		ctx, gcJobRecord, execCfg.JobRegistry.MakeJobID(), txn); err != nil {
-		return err
-	}
-	return errors.Wrap(txn.KV().Run(ctx, b), "rolling back IMPORT tables")
 }
 
 func (r *importResumer) dropSchemas(

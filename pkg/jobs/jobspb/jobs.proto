@@ -683,10 +683,9 @@ message ImportDetails {
     sqlbase.TableDescriptor desc = 1;
     string name = 18;
     int64 seq_val = 19;
-    bool is_new = 20;
     bool was_empty = 22;
     repeated string target_cols = 21;
-    reserved 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17;
+    reserved 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 20;
   }
   message Schema {
     sqlbase.SchemaDescriptor desc = 1;
