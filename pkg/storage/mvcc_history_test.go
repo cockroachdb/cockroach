@@ -94,7 +94,7 @@ var (
 // increment      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] k=<key> [inc=<val>]
 // put            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key> v=<string> [raw]
 // put_rangekey   ts=<int>[,<int>] [localTs=<int>[,<int>]] k=<key> end=<key> [syntheticBit]
-// put_blind_inline	k=<key> v=<string> [prev=<string>]
+// put_blind_inline     k=<key> v=<string> [prev=<string>]
 // get            [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [inconsistent] [skipLocked] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [maxKeys=<int>] [targetBytes=<int>] [allowEmpty]
 // scan           [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [skipLocked] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [wholeRows[=<int>]] [allowEmpty]
 // export         [k=<key>] [end=<key>] [ts=<int>[,<int>]] [kTs=<int>[,<int>]] [startTs=<int>[,<int>]] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] [allRevisions] [targetSize=<int>] [maxSize=<int>] [stopMidKey] [fingerprint]
@@ -1396,8 +1396,24 @@ func cmdGet(e *evalCtx) error {
 		opts.Tombstones = true
 	}
 	if e.hasArg("failOnMoreRecent") {
-		opts.FailOnMoreRecent = true
+		opts.MoreRecentPolicy = storage.WriteTooOldErrorOnMoreRecent
 	}
+
+	if e.hasArg("moreRecentPolicy") {
+		var moreRecentPolicyStr string
+		e.scanArg("moreRecentPolicy", &moreRecentPolicyStr)
+		switch moreRecentPolicyStr {
+		case "ignoreMoreRecent":
+			opts.MoreRecentPolicy = storage.IgnoreMoreRecent
+		case "writeTooOldErrorOnMoreRecent":
+			opts.MoreRecentPolicy = storage.WriteTooOldErrorOnMoreRecent
+		case "exclusionViolationErrorOnMoreRecent":
+			opts.MoreRecentPolicy = storage.ExclusionViolationErrorOnMoreRecent
+		default:
+			e.Fatalf("unknown moreRecentPolicy: %s", moreRecentPolicyStr)
+		}
+	}
+
 	opts.Uncertainty = uncertainty.Interval{
 		GlobalLimit: e.getTsWithName("globalUncertaintyLimit"),
 		LocalLimit:  hlc.ClockTimestamp(e.getTsWithName("localUncertaintyLimit")),

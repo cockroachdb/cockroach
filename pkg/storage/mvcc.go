@@ -1230,13 +1230,28 @@ type LockTableView interface {
 	Close()
 }
 
+// MVCCGetMoreRecentPolicy determines how MVCCGet should handle more recent
+// versions of a key.
+type MVCCGetMoreRecentPolicy int
+
+const (
+	// IgnoreMoreRecent indicates that MVCCGet should ignore more recent versions of a key.
+	IgnoreMoreRecent MVCCGetMoreRecentPolicy = iota
+	// WriteTooOldErrorOnMoreRecent indicates that MVCCGet should return a WriteTooOldErrorOnMoreRecent
+	// if a more recent version of a key is found.
+	WriteTooOldErrorOnMoreRecent
+	// ExclusionViolationErrorOnMoreRecent indicates that MVCCGet should return an ExclusionLostError
+	// if a more recent version of a key is found.
+	ExclusionViolationErrorOnMoreRecent
+)
+
 // MVCCGetOptions bundles options for the MVCCGet family of functions.
 type MVCCGetOptions struct {
 	// See the documentation for MVCCGet for information on these parameters.
 	Inconsistent     bool
 	SkipLocked       bool
 	Tombstones       bool
-	FailOnMoreRecent bool
+	MoreRecentPolicy MVCCGetMoreRecentPolicy
 	Txn              *roachpb.Transaction
 	ScanStats        *kvpb.ScanStats
 	Uncertainty      uncertainty.Interval
@@ -1302,7 +1317,7 @@ func (opts *MVCCGetOptions) validate() error {
 	if opts.Inconsistent && opts.SkipLocked {
 		return errors.Errorf("cannot allow inconsistent reads with skip locked option")
 	}
-	if opts.Inconsistent && opts.FailOnMoreRecent {
+	if opts.Inconsistent && opts.MoreRecentPolicy != IgnoreMoreRecent {
 		return errors.Errorf("cannot allow inconsistent reads with fail on more recent option")
 	}
 	if opts.DontInterleaveIntents && opts.SkipLocked {
@@ -1572,7 +1587,7 @@ func mvccGet(
 		skipLocked:        opts.SkipLocked,
 		tombstones:        opts.Tombstones,
 		rawMVCCValues:     opts.ReturnRawMVCCValues,
-		failOnMoreRecent:  opts.FailOnMoreRecent,
+		moreRecentPolicy:  opts.MoreRecentPolicy,
 		keyBuf:            mvccScanner.keyBuf,
 		decodeMVCCHeaders: true,
 	}
@@ -4451,6 +4466,10 @@ func mvccScanInit(
 	if opts.MemoryAccount != nil {
 		memAccount = opts.MemoryAccount
 	}
+	moreRecentPolicy := IgnoreMoreRecent
+	if opts.FailOnMoreRecent {
+		moreRecentPolicy = WriteTooOldErrorOnMoreRecent
+	}
 	*mvccScanner = pebbleMVCCScanner{
 		parent:           iter,
 		memAccount:       memAccount,
@@ -4469,7 +4488,7 @@ func mvccScanInit(
 		inconsistent:     opts.Inconsistent,
 		skipLocked:       opts.SkipLocked,
 		tombstones:       opts.Tombstones,
-		failOnMoreRecent: opts.FailOnMoreRecent,
+		moreRecentPolicy: moreRecentPolicy,
 		keyBuf:           mvccScanner.keyBuf,
 		// NB: If the `results` argument passed to this function is a pointer to
 		// mvccScanner.alloc.pebbleResults, we don't want to overwrite any
