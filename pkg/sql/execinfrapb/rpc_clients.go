@@ -16,10 +16,10 @@ import (
 // it falls back to gRPC. The established connection is used to create a
 // DistSQLClient.
 func DialDistSQLClient(
-	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID,
 ) (DistSQLClient, error) {
 	if !rpcbase.TODODRPC {
-		conn, err := nd.Dial(ctx, nodeID, class)
+		conn, err := nd.Dial(ctx, nodeID)
 		if err != nil {
 			return nil, err
 		}

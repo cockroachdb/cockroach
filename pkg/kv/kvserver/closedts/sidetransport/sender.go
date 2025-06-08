@@ -704,7 +704,7 @@ func (f *rpcConnFactory) new(s *Sender, nodeID roachpb.NodeID) conn {
 
 // nodeDialer abstracts *nodedialer.Dialer.
 type nodeDialer interface {
-	Dial(ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass) (_ *grpc.ClientConn, err error)
+	Dial(ctx context.Context, nodeID roachpb.NodeID, dialOpts ...rpcbase.DialOption) (_ *grpc.ClientConn, err error)
 }
 
 // On sending errors, we sleep a bit as to not spin on a tripped

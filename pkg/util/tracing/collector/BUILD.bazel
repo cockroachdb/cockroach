@@ -9,7 +9,6 @@ go_library(
         "//pkg/base",
         "//pkg/roachpb",
         "//pkg/rpc/nodedialer",
-        "//pkg/rpc/rpcbase",
         "//pkg/sql/sqlinstance",
         "//pkg/util/log",
         "//pkg/util/tracing",

@@ -43,7 +43,7 @@ func TestNodedialerPositive(t *testing.T) {
 	defer stopper.Stop(context.Background())
 	// Ensure that dialing works.
 	ctx := context.Background()
-	_, err := nd.Dial(ctx, staticNodeID, rpcbase.DefaultClass)
+	_, err := nd.Dial(ctx, staticNodeID)
 	assert.Nil(t, err, "failed to dial")
 }
 
@@ -62,7 +62,7 @@ func TestDialNoBreaker(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	nd := New(rpcCtx, newSingleNodeResolver(staticNodeID, ln.Addr()))
-	_, err := nd.Dial(ctx, staticNodeID, rpcbase.DefaultClass)
+	_, err := nd.Dial(ctx, staticNodeID)
 	require.NoError(t, err)
 	testutils.SucceedsSoon(t, func() error {
 		return nd.ConnHealth(staticNodeID, rpcbase.DefaultClass)
@@ -73,10 +73,10 @@ func TestDialNoBreaker(t *testing.T) {
 	// Test that DialNoBreaker is successful normally.
 	conn := rpcCtx.GRPCDialNode(ln.Addr().String(), staticNodeID, roachpb.Locality{}, rpcbase.DefaultClass)
 	require.NoError(t, conn.Signal().Err())
-	_, err = nd.DialNoBreaker(ctx, staticNodeID, rpcbase.DefaultClass)
+	_, err = nd.DialNoBreaker(ctx, staticNodeID)
 	require.NoError(t, err)
 	// Ditto regular dial.
-	_, err = nd.Dial(ctx, staticNodeID, rpcbase.DefaultClass)
+	_, err = nd.Dial(ctx, staticNodeID)
 	require.NoError(t, err)
 
 	injErr := errors.New("injected error")
@@ -91,10 +91,10 @@ func TestDialNoBreaker(t *testing.T) {
 	// Regular Dial should be refused, but DialNoBreaker will
 	// still work.
 
-	_, err = nd.Dial(ctx, staticNodeID, rpcbase.DefaultClass)
+	_, err = nd.Dial(ctx, staticNodeID)
 	require.True(t, errors.Is(err, injErr), "%+v", err)
 
-	_, err = nd.DialNoBreaker(ctx, staticNodeID, rpcbase.DefaultClass)
+	_, err = nd.DialNoBreaker(ctx, staticNodeID)
 	require.NoError(t, err)
 }
 
@@ -126,7 +126,7 @@ func TestConnHealth(t *testing.T) {
 	require.Equal(t, rpc.ErrNotHeartbeated, nd.ConnHealth(staticNodeID, rpcbase.DefaultClass))
 
 	// After dialing the node, ConnHealth should return nil.
-	_, err := nd.Dial(ctx, staticNodeID, rpcbase.DefaultClass)
+	_, err := nd.Dial(ctx, staticNodeID)
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
 		return nd.ConnHealth(staticNodeID, rpcbase.DefaultClass) == nil
@@ -153,7 +153,7 @@ func TestConnHealth(t *testing.T) {
 		//
 		// See: https://github.com/cockroachdb/cockroach/issues/91798
 		require.Eventually(t, func() bool {
-			_, err := nd.DialNoBreaker(ctx, staticNodeID, rpcbase.DefaultClass)
+			_, err := nd.DialNoBreaker(ctx, staticNodeID)
 			return err == nil
 		}, 10*time.Second, time.Millisecond)
 		require.Eventually(t, func() bool {
@@ -268,7 +268,7 @@ func setUpNodedialerTest(
 	rpcCtx.NodeID.Set(context.Background(), nodeID)
 	_, ln, hb = newTestServer(t, clock, stopper, true /* useHeartbeat */)
 	nd = New(rpcCtx, newSingleNodeResolver(nodeID, ln.Addr()))
-	_, err := nd.Dial(context.Background(), nodeID, rpcbase.DefaultClass)
+	_, err := nd.Dial(context.Background(), nodeID)
 	require.NoError(t, err)
 	testutils.SucceedsSoon(t, func() error {
 		return nd.ConnHealth(nodeID, rpcbase.DefaultClass)

@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/metadata"
@@ -200,7 +199,7 @@ func NewBlobClientFactory(
 		if localNodeID == dialTarget && allowLocalFastpath {
 			return NewLocalClient(externalIODir)
 		}
-		client, err := blobspb.DialBlobClient(dialer, ctx, dialTarget, rpcbase.DefaultClass)
+		client, err := blobspb.DialBlobClient(dialer, ctx, dialTarget)
 		if err != nil {
 			return nil, errors.Wrapf(err, "connecting to node %d", dialTarget)
 		}

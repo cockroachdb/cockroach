@@ -53,7 +53,7 @@ type ClusterConfig struct {
 // NodeDialer abstracts connecting to other nodes in the cluster.
 type NodeDialer interface {
 	// Dial returns a grpc connection to the given node.
-	Dial(context.Context, roachpb.NodeID, rpcbase.ConnectionClass) (*grpc.ClientConn, error)
+	Dial(context.Context, roachpb.NodeID, ...rpcbase.DialOption) (*grpc.ClientConn, error)
 }
 
 // New constructs a new Cluster with the provided dependencies.
@@ -139,7 +139,7 @@ func (c *Cluster) ForEveryNodeOrServer(
 		grp.GoCtx(func(ctx context.Context) error {
 			defer alloc.Release()
 
-			client, err := serverpb.DialMigrationClient(c.c.Dialer, ctx, node.ID, rpcbase.DefaultClass)
+			client, err := serverpb.DialMigrationClient(c.c.Dialer, ctx, node.ID)
 			if err != nil {
 				return err
 			}

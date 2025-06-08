@@ -21,7 +21,7 @@ import (
 // method that outboxes need from nodedialer.Dialer so that we can mock it
 // in tests outside of this package.
 type Dialer interface {
-	DialNoBreaker(context.Context, roachpb.NodeID, rpcbase.ConnectionClass) (*grpc.ClientConn, error)
+	DialNoBreaker(context.Context, roachpb.NodeID, ...rpcbase.DialOption) (*grpc.ClientConn, error)
 }
 
 // GetConnForOutbox is a shared function between the rowexec and colexec
@@ -39,7 +39,7 @@ func GetConnForOutbox(
 ) (conn *grpc.ClientConn, err error) {
 	firstConnectionAttempt := timeutil.Now()
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
-		conn, err = dialer.DialNoBreaker(ctx, roachpb.NodeID(sqlInstanceID), rpcbase.DefaultClass)
+		conn, err = dialer.DialNoBreaker(ctx, roachpb.NodeID(sqlInstanceID))
 		if err == nil || timeutil.Since(firstConnectionAttempt) > timeout {
 			break
 		}

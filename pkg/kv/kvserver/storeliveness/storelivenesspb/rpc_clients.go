@@ -19,7 +19,7 @@ func DialStoreLivenessClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (StoreLivenessClient, error) {
 	if !rpcbase.TODODRPC {
-		conn, err := nd.Dial(ctx, nodeID, class)
+		conn, err := nd.Dial(ctx, nodeID, rpcbase.WithConnectionClass(class))
 		if err != nil {
 			return nil, err
 		}

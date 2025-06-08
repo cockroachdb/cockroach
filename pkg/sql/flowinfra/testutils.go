@@ -114,7 +114,7 @@ type MockDialer struct {
 
 // DialNoBreaker establishes a grpc connection once.
 func (d *MockDialer) DialNoBreaker(
-	context.Context, roachpb.NodeID, rpcbase.ConnectionClass,
+	context.Context, roachpb.NodeID, ...rpcbase.DialOption,
 ) (*grpc.ClientConn, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()

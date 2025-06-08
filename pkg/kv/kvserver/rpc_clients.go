@@ -19,7 +19,7 @@ func DialMultiRaftClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (MultiRaftClient, error) {
 	if !rpcbase.TODODRPC {
-		conn, err := nd.Dial(ctx, nodeID, class)
+		conn, err := nd.Dial(ctx, nodeID, rpcbase.WithConnectionClass(class))
 		if err != nil {
 			return nil, err
 		}
@@ -32,10 +32,10 @@ func DialMultiRaftClient(
 // it falls back to gRPC. The established connection is used to create a
 // PerReplicaClient.
 func DialPerReplicaClient(
-	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID,
 ) (PerReplicaClient, error) {
 	if !rpcbase.TODODRPC {
-		conn, err := nd.Dial(ctx, nodeID, class)
+		conn, err := nd.Dial(ctx, nodeID)
 		if err != nil {
 			return nil, err
 		}
@@ -48,10 +48,10 @@ func DialPerReplicaClient(
 // it falls back to gRPC. The established connection is used to create a
 // PerStoreClient.
 func DialPerStoreClient(
-	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID,
 ) (PerStoreClient, error) {
 	if !rpcbase.TODODRPC {
-		conn, err := nd.Dial(ctx, nodeID, class)
+		conn, err := nd.Dial(ctx, nodeID)
 		if err != nil {
 			return nil, err
 		}

@@ -16,8 +16,39 @@ import (
 // be updated to support DRPC.
 const TODODRPC = false
 
+// dialOptions to be used when dialing a node.
+type dialOptions struct {
+	ConnectionClass ConnectionClass
+	CheckBreaker    bool
+}
+
+// DialOptions customize dialing behavior when connecting to a node.
+type DialOption func(*dialOptions)
+
+// WithNoBreaker skips the circuit breaker check before trying to connect.
+// This function should only be used when there is good reason to believe
+// that the node is reachable.
+func WithNoBreaker() DialOption {
+	return func(opts *dialOptions) {
+		opts.CheckBreaker = false
+	}
+}
+
+func WithConnectionClass(class ConnectionClass) DialOption {
+	return func(opts *dialOptions) {
+		opts.ConnectionClass = class
+	}
+}
+
+func NewDefaultDialOptions() *dialOptions {
+	return &dialOptions{
+		ConnectionClass: DefaultClass,
+		CheckBreaker:    true,
+	}
+}
+
 // NodeDialer interface defines methods for dialing peer nodes using their
 // node IDs.
 type NodeDialer interface {
-	Dial(context.Context, roachpb.NodeID, ConnectionClass) (_ *grpc.ClientConn, err error)
+	Dial(context.Context, roachpb.NodeID, ...DialOption) (_ *grpc.ClientConn, err error)
 }
