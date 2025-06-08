@@ -223,6 +223,13 @@ message GetRequest {
   // LockNonExisting indicates whether the Get request should acquire a lock
   // on keys that don't exist.
   bool lock_non_existing = 5;
+
+  // ExpectExclusionSince, if set, indicates that the request should return an
+  // error if this key has been written to at a timestamp at or after the given
+  // timestamp. This is different from the ReadTimestamp of the transaction in
+  // that it allows a writer to verify an unreplicated lock acquired at an
+  // earlier timestamp has provided the require protection.
+  util.hlc.Timestamp expect_exclusion_since = 6 [(gogoproto.nullable) = false];
 }
 
 // A GetResponse is the return value from the Get() method.

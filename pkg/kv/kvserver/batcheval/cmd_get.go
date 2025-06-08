@@ -29,6 +29,10 @@ func Get(
 	h := cArgs.Header
 	reply := resp.(*kvpb.GetResponse)
 
+	if err := args.Validate(h); err != nil {
+		return result.Result{}, err
+	}
+
 	var lockTableForSkipLocked storage.LockTableView
 	if h.WaitPolicy == lock.WaitPolicy_SkipLocked {
 		lockTableForSkipLocked = newRequestBoundLockTableView(
@@ -37,11 +41,25 @@ func Get(
 		defer lockTableForSkipLocked.Close()
 	}
 
-	getRes, err := storage.MVCCGet(ctx, readWriter, args.Key, h.Timestamp, storage.MVCCGetOptions{
+	readTimestamp := h.Timestamp
+	moreRecentPolicy := storage.IgnoreMoreRecent
+
+	// If ExpectExclusionSince is set, use it as the read timestamp and set the
+	// MoreRecentPolicy to ExclusionViolationErrorOnMoreRecent to ensure that an
+	// exclusion violation error is returned if a write has occurred since the
+	// exclusion timestamp.
+	if !args.ExpectExclusionSince.Empty() {
+		readTimestamp = args.ExpectExclusionSince
+		moreRecentPolicy = storage.ExclusionViolationErrorOnMoreRecent
+	} else if args.KeyLockingStrength != lock.None {
+		moreRecentPolicy = storage.WriteTooOldErrorOnMoreRecent
+	}
+
+	getRes, err := storage.MVCCGet(ctx, readWriter, args.Key, readTimestamp, storage.MVCCGetOptions{
 		Inconsistent:          h.ReadConsistency != kvpb.CONSISTENT,
 		SkipLocked:            h.WaitPolicy == lock.WaitPolicy_SkipLocked,
 		Txn:                   h.Txn,
-		FailOnMoreRecent:      args.KeyLockingStrength != lock.None,
+		MoreRecentPolicy:      moreRecentPolicy,
 		ScanStats:             cArgs.ScanStats,
 		Uncertainty:           cArgs.Uncertainty,
 		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),

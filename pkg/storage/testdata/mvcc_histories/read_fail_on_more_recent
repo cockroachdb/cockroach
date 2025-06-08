@@ -21,7 +21,7 @@ meta: "k2"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=
 data: "k2"/10.000000000,0 -> /BYTES/v
 
 # Test cases:
-# 
+#
 # for k in (k1, k2):
 #   for op in (get, scan):
 #     for ts in (9, 10, 11):
@@ -50,6 +50,12 @@ get k=k1 ts=10,0 failOnMoreRecent
 ----
 get: "k1" -> <no data>
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; must write at or above 10.000000000,1
+
+run error
+get k=k1 ts=10,0 moreRecentPolicy=exclusionViolationErrorOnMoreRecent
+----
+get: "k1" -> <no data>
+error: (*kvpb.ExclusionViolationError:) write exclusion on key "k1" expected since 10.000000000,0 but found more recent write at 10.000000000,0
 
 run ok
 get k=k1 ts=11,0
@@ -164,7 +170,7 @@ scan: "k2"-"k3" -> <no data>
 error: (*kvpb.LockConflictError:) conflicting locks on "k2"
 
 # More test cases:
-# 
+#
 # span = [k1, k3)
 # op   = scan
 # for ts in (9, 10, 11):
@@ -211,6 +217,12 @@ error: (*kvpb.LockConflictError:) conflicting locks on "k2"
 
 run error
 get k=k1 ts=9,0 inconsistent failOnMoreRecent
+----
+get: "k1" -> <no data>
+error: (*withstack.withStack:) cannot allow inconsistent reads with fail on more recent option
+
+run error
+get k=k1 ts=9,0 inconsistent moreRecentPolicy=exclusionViolationErrorOnMoreRecent
 ----
 get: "k1" -> <no data>
 error: (*withstack.withStack:) cannot allow inconsistent reads with fail on more recent option
