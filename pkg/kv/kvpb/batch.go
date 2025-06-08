@@ -108,6 +108,15 @@ func (ba *BatchRequest) EarliestActiveTimestamp() hlc.Timestamp {
 				// NB: StartTime.Next() because StartTime is exclusive.
 				ts.Backward(t.StartTime.Next())
 			}
+		case *GetRequest:
+			// A GetRequest with ExpectExclusionSince set need to be able to observe
+			// MVCC versions from the specified time to correctly detect isolation
+			// violations.
+			//
+			// See the example in RefreshRequest for more details.
+			if !t.ExpectExclusionSince.IsEmpty() {
+				ts.Backward(t.ExpectExclusionSince.Next())
+			}
 		case *PutRequest:
 			// A PutRequest with ExpectExclusionSince set need to be able to observe MVCC
 			// versions from the specified time to correctly detect isolation
