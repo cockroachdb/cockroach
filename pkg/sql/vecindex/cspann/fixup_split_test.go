@@ -45,56 +45,40 @@ func TestSplitPartitionData(t *testing.T) {
 	}
 
 	testCases := []struct {
-		desc          string
-		leftOffsets   []uint64
-		rightOffsets  []uint64
-		expectedLeft  []uint64
-		expectedRight []uint64
+		desc        string
+		assignments []uint64
+		expected    []int
 	}{
 		{
-			desc:         "no reordering",
-			leftOffsets:  []uint64{0, 1, 2, 3},
-			rightOffsets: []uint64{4, 5, 6},
+			desc:        "no reordering",
+			assignments: []uint64{0, 0, 0, 0, 1, 1, 1},
+			expected:    []int{0, 1, 2, 3, 4, 5, 6},
 		},
 		{
-			desc:         "only one on left",
-			leftOffsets:  []uint64{1},
-			rightOffsets: []uint64{0, 2, 3, 4, 5, 6},
+			desc:        "only one on left",
+			assignments: []uint64{1, 0, 1, 1, 1, 1, 1},
+			expected:    []int{1, 0, 2, 3, 4, 5, 6},
 		},
 		{
-			desc:         "only one on right",
-			leftOffsets:  []uint64{0, 1, 2, 4, 5, 6},
-			rightOffsets: []uint64{3},
+			desc:        "only one on right",
+			assignments: []uint64{0, 0, 0, 1, 0, 0, 0},
+			expected:    []int{0, 1, 2, 6, 4, 5, 3},
 		},
 		{
-			desc:         "interleaved",
-			leftOffsets:  []uint64{0, 2, 4, 6},
-			rightOffsets: []uint64{1, 3, 5},
+			desc:        "interleaved",
+			assignments: []uint64{0, 1, 0, 1, 0, 1, 0},
+			expected:    []int{0, 6, 2, 4, 3, 5, 1},
 		},
 		{
-			desc:         "another interleaved",
-			leftOffsets:  []uint64{1, 4, 5},
-			rightOffsets: []uint64{0, 2, 3, 6},
+			desc:        "another interleaved",
+			assignments: []uint64{1, 0, 1, 1, 0, 0, 1},
+			expected:    []int{5, 1, 4, 3, 2, 0, 6},
 		},
 		{
-			desc:         "reversed",
-			leftOffsets:  []uint64{4, 5, 6},
-			rightOffsets: []uint64{0, 1, 2, 3},
+			desc:        "reversed",
+			assignments: []uint64{1, 1, 1, 1, 0, 0, 0},
+			expected:    []int{6, 5, 4, 3, 2, 1, 0},
 		},
-		{
-			desc:         "out of order",
-			leftOffsets:  []uint64{5, 4, 6},
-			rightOffsets: []uint64{3, 0, 1, 2},
-		},
-	}
-
-	findKey := func(allKeys []ChildKey, toFind ChildKey) int {
-		for i, key := range allKeys {
-			if key.Equal(toFind) {
-				return i
-			}
-		}
-		return -1
 	}
 
 	for _, tc := range testCases {
@@ -102,21 +86,13 @@ func TestSplitPartitionData(t *testing.T) {
 			tempVectors := vectors.Clone()
 			tempChildKeys := slices.Clone(childKeys)
 			tempValueBytes := slices.Clone(valueBytes)
-			splitPartitionData(&workspace,
-				tempVectors, tempChildKeys, tempValueBytes, tc.leftOffsets, tc.rightOffsets)
+			splitPartitionData(&workspace, tempVectors, tempChildKeys, tempValueBytes, tc.assignments)
 
 			// Ensure that partition data is on the correct side.
-			for originalOffset := range childKeys {
-				newOffset := findKey(tempChildKeys, childKeys[originalOffset])
-
-				if newOffset < len(tc.leftOffsets) {
-					require.Contains(t, tc.leftOffsets, uint64(originalOffset))
-				} else {
-					require.Contains(t, tc.rightOffsets, uint64(originalOffset))
-				}
-
-				require.Equal(t, tempVectors.At(newOffset), vectors.At(originalOffset))
-				require.Equal(t, tempValueBytes[newOffset], valueBytes[originalOffset])
+			for i := range tc.expected {
+				require.Equal(t, tempVectors.At(tc.expected[i]), vectors.At(i))
+				require.Equal(t, tempChildKeys[tc.expected[i]], childKeys[i])
+				require.Equal(t, tempValueBytes[tc.expected[i]], valueBytes[i])
 			}
 		})
 	}
