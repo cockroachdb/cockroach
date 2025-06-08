@@ -51,21 +51,21 @@ vec9: (-2, 8)
 │
 ├───• 2 (9, 6)
 │   │
-│   ├───• vec2 (5, 6)
 │   ├───• vec6 (14, 1)
-│   └───• vec5 (8, 11)
+│   ├───• vec5 (8, 11)
+│   └───• vec2 (5, 6)
 │
-├───• 5 (0.3333, 2)
+├───• 5 (4, 3)
 │   │
-│   ├───• vec7 (0, 0)
-│   ├───• vec8 (0, 4)
-│   └───• vec1 (1, 2)
+│   ├───• vec4 (4, 3)
+│   └───• vec3 (4, 3)
 │
-└───• 4 (2, 4.6667)
+└───• 4 (-0.25, 3.5)
     │
     ├───• vec9 (-2, 8)
-    ├───• vec3 (4, 3)
-    └───• vec4 (4, 3)
+    ├───• vec8 (0, 4)
+    ├───• vec1 (1, 2)
+    └───• vec7 (0, 0)
 
 # Overwrite vector with a new value that won't be found in the index, causing
 # duplicate child keys that point to the same vector (but with different
@@ -80,22 +80,25 @@ vec2: (-5, -5)
 │
 ├───• 2 (9, 6)
 │   │
-│   ├───• vec2 (-5, -5)
 │   ├───• vec6 (14, 1)
-│   └───• vec5 (8, 11)
-│
-├───• 5 (0.3333, 2)
-│   │
-│   ├───• vec7 (0, 0)
-│   ├───• vec8 (0, 4)
-│   ├───• vec1 (1, 2)
+│   ├───• vec5 (8, 11)
 │   └───• vec2 (-5, -5)
 │
-└───• 4 (2, 4.6667)
+├───• 5 (4, 3)
+│   │
+│   ├───• vec4 (4, 3)
+│   └───• vec3 (4, 3)
+│
+├───• 7 (-1, 6)
+│   │
+│   ├───• vec8 (0, 4)
+│   └───• vec9 (-2, 8)
+│
+└───• 6 (-1.3333, -1)
     │
-    ├───• vec9 (-2, 8)
-    ├───• vec3 (4, 3)
-    └───• vec4 (4, 3)
+    ├───• vec2 (-5, -5)
+    ├───• vec7 (0, 0)
+    └───• vec1 (1, 2)
 
 search max-results=10 beam-size=8
 (-5, -5)
@@ -109,7 +112,7 @@ vec4: 145
 vec9: 178
 vec6: 397
 vec5: 425
-10 leaf vectors, 13 vectors, 9 full vectors, 4 partitions
+10 leaf vectors, 14 vectors, 9 full vectors, 5 partitions
 
 # ----------------------------------------------------------------------
 # Use Cosine distance metric.

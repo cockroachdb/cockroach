@@ -288,16 +288,16 @@ format-tree root=6
 ----
 • 6 (-1.5, 2.5) [Updating:1]
 │
-├───• 4 (-1, 6)
+├───• 5 (-2, -1)
 │   │
-│   ├───• vec9 (-2, 7)
-│   └───• vec8 (0, 4)
+│   ├───• vec7 (0, 0)
+│   ├───• vec1 (1, 2)
+│   └───• vec2 (-7, -5)
 │
-└───• 5 (-2, -1)
+└───• 4 (-1, 6)
     │
-    ├───• vec7 (0, 0)
-    ├───• vec1 (1, 2)
-    └───• vec2 (-7, -5)
+    ├───• vec9 (-2, 7)
+    └───• vec8 (0, 4)
 
 # Search the tree, ensure that duplicates are not returned.
 # NOTE: vec4 and vec9 are extra results (within error bound of zero).
@@ -353,28 +353,28 @@ force-split partition-key=1 steps=4
 │
 ├───• 6 (-1.5, 2.5)
 │   │
-│   ├───• 4 (-1, 6)
+│   ├───• 5 (-2, -1)
 │   │   │
-│   │   ├───• vec9 (-2, 7)
-│   │   └───• vec8 (0, 4)
+│   │   ├───• vec7 (0, 0)
+│   │   ├───• vec1 (1, 2)
+│   │   └───• vec2 (-7, -5)
 │   │
-│   └───• 5 (-2, -1)
+│   └───• 4 (-1, 6)
 │       │
-│       ├───• vec7 (0, 0)
-│       ├───• vec1 (1, 2)
-│       └───• vec2 (-7, -5)
+│       ├───• vec9 (-2, 7)
+│       └───• vec8 (0, 4)
 │
 └───• 7 (7.5, 4.5)
     │
-    ├───• 2 (11, 6)
+    ├───• 3 (4, 3)
     │   │
-    │   ├───• vec6 (14, 1)
-    │   └───• vec5 (8, 11)
+    │   ├───• vec3 (4, 3)
+    │   └───• vec4 (4, 3)
     │
-    └───• 3 (4, 3)
+    └───• 2 (11, 6)
         │
-        ├───• vec3 (4, 3)
-        └───• vec4 (4, 3)
+        ├───• vec6 (14, 1)
+        └───• vec5 (8, 11)
 
 # Search the tree.
 search max-results=4 discard-fixups
@@ -395,28 +395,28 @@ force-split partition-key=1 steps=1
 │
 ├───• 6 (-1.5, 2.5)
 │   │
-│   ├───• 4 (-1, 6)
+│   ├───• 5 (-2, -1)
 │   │   │
-│   │   ├───• vec9 (-2, 7)
-│   │   └───• vec8 (0, 4)
+│   │   ├───• vec7 (0, 0)
+│   │   ├───• vec1 (1, 2)
+│   │   └───• vec2 (-7, -5)
 │   │
-│   └───• 5 (-2, -1)
+│   └───• 4 (-1, 6)
 │       │
-│       ├───• vec7 (0, 0)
-│       ├───• vec1 (1, 2)
-│       └───• vec2 (-7, -5)
+│       ├───• vec9 (-2, 7)
+│       └───• vec8 (0, 4)
 │
 └───• 7 (7.5, 4.5)
     │
-    ├───• 2 (11, 6)
+    ├───• 3 (4, 3)
     │   │
-    │   ├───• vec6 (14, 1)
-    │   └───• vec5 (8, 11)
+    │   ├───• vec3 (4, 3)
+    │   └───• vec4 (4, 3)
     │
-    └───• 3 (4, 3)
+    └───• 2 (11, 6)
         │
-        ├───• vec3 (4, 3)
-        └───• vec4 (4, 3)
+        ├───• vec6 (14, 1)
+        └───• vec5 (8, 11)
 
 # Search the tree.
 search max-results=4 discard-fixups
@@ -739,10 +739,10 @@ format-tree root=2
 • 2 (5.3333, 6.6667) [Updating:1]
 │
 ├───• vec10 (5, 8)
-├───• vec7 (3, 5)
+├───• vec8 (6, 8)
 ├───• vec3 (4, 3)
 ├───• vec4 (8, 11)
-└───• vec8 (6, 8)
+└───• vec7 (3, 5)
 
 delete discard-fixups
 vec3
@@ -764,8 +764,8 @@ format-tree root=2
 • 2 (5.3333, 6.6667) [Updating:1]
 │
 ├───• vec10 (5, 8)
-├───• vec7 (3, 5)
 ├───• vec8 (6, 8)
+├───• vec7 (3, 5)
 └───• vec4 (8, 11)
 
 # Delete vector after vectors have been cleared in the root. This should remove
@@ -780,8 +780,8 @@ vec4
 • 3 (9.6667, 3.6667) [Updating:1]
 │
 ├───• vec6 (8, 6)
-├───• vec9 (6, 5)
-└───• vec5 (14, 1)
+├───• vec5 (14, 1)
+└───• vec9 (6, 5)
 
 # Delete vector in AddingLevel state. This should remove the vector from
 # sub-partition #3.
@@ -805,8 +805,8 @@ force-split partition-key=1
 ├───• 2 (5.3333, 6.6667)
 │   │
 │   ├───• vec10 (5, 8)
-│   ├───• vec7 (3, 5)
-│   └───• vec8 (6, 8)
+│   ├───• vec8 (6, 8)
+│   └───• vec7 (3, 5)
 │
 └───• 3 (9.6667, 3.6667)
     │
