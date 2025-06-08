@@ -340,7 +340,6 @@ func getProfileWithTimeout(
 		resp, err := client.Get(ctx, url)
 		if err != nil {
 			latestError = err
-			resp.Body.Close()
 			continue
 		}
 
