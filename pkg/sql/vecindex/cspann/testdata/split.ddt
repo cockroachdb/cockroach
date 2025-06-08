@@ -172,26 +172,56 @@ vec12: 9
 #----
 
 # ----------------------------------------------------------------------
-# Test moving vectors to other partitions during split.
-# TODO(andyk): Need to implement this in new split fixup.
+# Test reassigning vectors to sibling partitions during split.
 # ----------------------------------------------------------------------
-#new-index min-partition-size=1 max-partition-size=4 beam-size=2
-#vec1: (0, 0)
-#vec2: (-1, 1)
-#vec3: (1, 1)
-#vec4: (0, -2)
-#vec5: (-1, -2)
-#vec6: (1, -2)
-#----
-#
-## Add vectors to partition 2 until it splits, leaving vec1 further away from
-## the new centroids than to the centroid of partition 2. Expect it to move to
-## partition 2.
-## TODO(andyk): This won't work until we implement moving vectors.
-#insert
-#vec7: (-4, 4)
-#vec8: (4, 4)
-#----
+load-index min-partition-size=1 max-partition-size=4 beam-size=2
+• 1 (0, 0)
+│
+├───• 2 (0, 0.6667)
+│   │
+│   ├───• vec3 (1, 1)
+│   ├───• vec2 (-1, 1)
+│   └───• vec1 (0, 0)
+│
+├───• 3 (-0.5, -2)
+│   │
+│   ├───• vec4 (0, -2)
+│   └───• vec5 (-1, -2)
+│
+└───• 4 (1, -2)
+    │
+    └───• vec6 (1, -2)
+----
+Loaded 6 vectors.
+
+# Add vectors to partition 2 until it splits, leaving vec1 further away from
+# the new centroids than to the centroid of partition 2. Expect it to move to
+# partition 4.
+insert
+vec7: (-4, 4)
+vec8: (4, 5)
+----
+• 1 (0, 0)
+│
+├───• 6 (-1.6667, 1.6667)
+│   │
+│   ├───• vec2 (-1, 1)
+│   └───• vec7 (-4, 4)
+│
+├───• 3 (-0.5, -2)
+│   │
+│   ├───• vec4 (0, -2)
+│   └───• vec5 (-1, -2)
+│
+├───• 4 (1, -2)
+│   │
+│   ├───• vec6 (1, -2)
+│   └───• vec1 (0, 0)
+│
+└───• 5 (2.5, 3)
+    │
+    ├───• vec3 (1, 1)
+    └───• vec8 (4, 5)
 
 # ----------------------------------------------------------------------
 # Test splits in the presence of dangling vectors.
