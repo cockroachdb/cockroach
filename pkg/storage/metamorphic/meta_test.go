@@ -167,13 +167,13 @@ func TestPebbleEquivalence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// This test times out with the race detector enabled.
 	skip.UnderRace(t)
 	runPebbleEquivalenceTest(t)
 }
 
 func runPebbleEquivalenceTest(t *testing.T) {
 	ctx := context.Background()
-	// This test times out with the race detector enabled.
 	_, seed := randutil.NewTestRand()
 
 	engineSeqs := make([]engineSequence, 0, numStandardOptions+numRandomOptions)

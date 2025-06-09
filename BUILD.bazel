@@ -26,7 +26,7 @@ exports_files([
 #
 # gazelle:prefix github.com/cockroachdb/cockroach
 # gazelle:build_file_name BUILD.bazel
-# gazelle:build_tags bazel,compose,deadlock,fast_int_set_small,fast_int_set_large,gss,slow
+# gazelle:build_tags bazel,compose,deadlock,fast_int_set_small,fast_int_set_large,gss,nightly,slow
 
 # Enable protobuf generation.
 #

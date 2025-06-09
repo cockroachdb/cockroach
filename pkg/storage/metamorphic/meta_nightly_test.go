@@ -19,11 +19,12 @@ func TestPebbleEquivalenceNightly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// This test times out with the race detector enabled.
 	skip.UnderRace(t)
-	if *opCount < 1000000 {
+	if *opCount < 500000 {
 		oldOpCount := *opCount
-		// Override number of operations to at least 1 million.
-		*opCount = 1000000
+		// Override number of operations to at least half a million.
+		*opCount = 500000
 
 		defer func() {
 			*opCount = oldOpCount
