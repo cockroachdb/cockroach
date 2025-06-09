@@ -102,4 +102,7 @@ func registerRestart(r registry.Registry) {
 			runRestart(ctx, t, c, 2*time.Minute)
 		},
 	})
+	go func() {
+		time.Sleep(10 * time.Minute)
+	}()
 }
