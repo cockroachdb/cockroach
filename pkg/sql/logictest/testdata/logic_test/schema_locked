@@ -184,3 +184,49 @@ statement error pgcode 57000 schema changes are disallowed on table "ref" becaus
 ALTER TABLE ref CONFIGURE ZONE USING num_replicas = 11;
 
 subtest end
+
+
+# Validate schema_locked can be unset properly in add column txns.
+subtest regression_147993
+
+statement ok
+CREATE TABLE t_147993 (
+  k INT8 NOT NULL,
+  geom1 GEOMETRY(POINT,4326) NULL,
+  geom2 GEOMETRY(POLYGON,4326) NULL,
+  geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
+  geom4 GEOMETRY(LINESTRING,4326) NULL,
+  geom5 GEOMETRY(MULTIPOINT,4326) NULL,
+  geom6 GEOMETRY(MULTILINESTRING,4326) NULL,
+  CONSTRAINT t_147993_pkey PRIMARY KEY (k ASC),
+  FAMILY fam (k, geom1, geom2, geom3, geom6)
+) WITH (schema_locked = true);
+
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-25.1
+statement ok
+SELECT  AddGeometryColumn ('t_147993','geom7',4326,'POINT',2),
+        AddGeometryColumn ('t_147993','geom8',4326,'POINT',2);
+
+
+
+skipif config local-legacy-schema-changer
+query TT
+show create table t_147993
+----
+t_147993  CREATE TABLE public.t_147993 (
+            k INT8 NOT NULL,
+            geom1 GEOMETRY(POINT,4326) NULL,
+            geom2 GEOMETRY(POLYGON,4326) NULL,
+            geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
+            geom4 GEOMETRY(LINESTRING,4326) NULL,
+            geom5 GEOMETRY(MULTIPOINT,4326) NULL,
+            geom6 GEOMETRY(MULTILINESTRING,4326) NULL,
+            geom7 GEOMETRY(POINT,4326) NULL,
+            geom8 GEOMETRY(POINT,4326) NULL,
+            CONSTRAINT t_147993_pkey PRIMARY KEY (k ASC),
+            FAMILY fam (k, geom1, geom2, geom3, geom6, geom4, geom5, geom8, geom7)
+          ) WITH (schema_locked = true);
+
+subtest end
