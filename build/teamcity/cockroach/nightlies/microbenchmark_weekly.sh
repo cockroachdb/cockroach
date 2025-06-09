@@ -157,7 +157,7 @@ fi
   ${BENCH_EXCLUDE:+--exclude="$BENCH_EXCLUDE"} \
   ${BENCH_IGNORE_PACKAGES:+--ignore-package="$BENCH_IGNORE_PACKAGES"} \
   ${TRIGGERED_BUILD:+--post-issues} \
-  --quiet \  
+  --quiet \
   -- "$TEST_ARGS" \
   || exit_status=$?
 
