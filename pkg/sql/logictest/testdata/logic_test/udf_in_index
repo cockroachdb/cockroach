@@ -1,3 +1,5 @@
+# LogicTest: !local-mixed-25.2
+
 # Set up functions that inspect function dependencies.
 statement ok
 CREATE VIEW v_col_fn_ids AS
