@@ -17,6 +17,7 @@ fi
 
 dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
 source "$dir/release/teamcity-support.sh"
+source "$dir/shlib.sh"
 
 tc_start_block "Variable Setup"
 
@@ -83,7 +84,7 @@ for product in cockroach cockroach-sql; do
       --code-signature-flags runtime \
       "$product-$build_name.$platform/$product"
     zip -r crl.zip "$product-$build_name.$platform/$product"
-    rcodesign notary-submit --api-key-file "$secrets_dir/api_key.json" --wait crl.zip
+    retry rcodesign notary-submit --api-key-file "$secrets_dir/api_key.json" --wait crl.zip
     tar -czf "$product-$build_name.$platform.tgz" "$product-$build_name.$platform"
     shasum --algorithm 256 "$product-$build_name.$platform.tgz" > "$product-$build_name.$platform.tgz.sha256sum"
     gsutil cp "$product-$build_name.$platform.tgz" "gs://$gcs_bucket/$product-$build_name.$platform.tgz"
