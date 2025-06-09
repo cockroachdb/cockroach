@@ -485,25 +485,11 @@ func (i *instance) getPrimaryNetworkInterface() (*vpcv1NetworkInterface, error) 
 	return i.networkInterface, nil
 }
 
-// isRoachprodAndValidStatus checks if a roahcprod instance in valid status.
-func (i *instance) isRoachprodAndValidStatus() (bool, string) {
+// isValidStatus checks if an instance has a valid status.
+func (i *instance) isValidStatus() (bool, string) {
 	if i == nil || i.instance == nil || i.instance.Status == nil {
 		return false, InstanceNotInitialized
 	}
-
-	tags, err := i.getTagsAsMap()
-	if err != nil {
-		return false, InstanceInvalidTags
-	}
-
-	if tags[vm.TagRoachprod] != "true" {
-		return false, InstanceNotRochprod
-	}
-
-	// if *i.instance.Status != "pending" && *i.instance.Status != "running" {
-	// 	return false, InstanceInvalidStatus
-	// }
-
 	return true, ""
 }
 
@@ -583,6 +569,11 @@ func (i *instance) toVM() vm.VM {
 		vmErrors = append(vmErrors, errors.Wrap(err, "unable to get region"))
 	} else {
 		vpcID = i.provider.config.regions[region].vpcID
+	}
+
+	// Check if the instance is in a valid state.
+	if core.StringNilMapper(i.instance.Status) == "failed" {
+		vmErrors = append(vmErrors, errors.New("instance is in failed state"))
 	}
 
 	// Gather tags
