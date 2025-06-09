@@ -34,6 +34,7 @@ go_library(
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfra/execagg",
+        "//pkg/sql/execinfra/execexpr",
         "//pkg/sql/execinfra/execreleasable",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/row",

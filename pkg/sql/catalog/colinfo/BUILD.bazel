@@ -24,7 +24,6 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/catconstants",
-        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlerrors",
