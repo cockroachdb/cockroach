@@ -5834,6 +5834,7 @@ func (d *DOid) Name() string {
 // Types that currently benefit from DOidWrapper are:
 // - DName => DOidWrapper(*DString, oid.T_name)
 // - DRefCursor => DOidWrapper(*DString, oid.T_refcursor)
+// - DCitext => DOIDWrapper(*DCollatedString, oidext.T_citext)
 type DOidWrapper struct {
 	Wrapped Datum
 	Oid     oid.Oid
@@ -5841,6 +5842,7 @@ type DOidWrapper struct {
 
 // wrapWithOid wraps a Datum with a custom Oid.
 func wrapWithOid(d Datum, oid oid.Oid) Datum {
+	// TODO(niziolekpaul): add support for wrapping DCollatedString
 	switch v := d.(type) {
 	case nil:
 		return nil
@@ -6000,6 +6002,22 @@ func NewDNameFromDString(d *DString) Datum {
 // initialized from a string.
 func NewDName(d string) Datum {
 	return NewDNameFromDString(NewDString(d))
+}
+
+// NewDCitextFromDString is a helper routine to create a *DCitext (implemented as
+// a *DOidWrapper) initialized from an existing *DCollatedString.
+func NewDCitextFromDCollatedString(d *DCollatedString) Datum {
+	return wrapWithOid(d, oid.T_name)
+}
+
+// NewDCitext is a helper routine to create a *DCitext (implemented as a *DOidWrapper)
+// initialized from a string.
+func NewDCitext(contents string, locale string, env *CollationEnvironment) (Datum, error) {
+	d, err := NewDCollatedString(contents, locale, env)
+	if err != nil {
+		return nil, err
+	}
+	return NewDCitextFromDCollatedString(d), nil
 }
 
 // NewDRefCursorFromDString is a helper routine to create a *DRefCursor

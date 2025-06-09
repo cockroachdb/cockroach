@@ -1,0 +1,16 @@
+statement ok
+
+statement ok
+CREATE TABLE t (
+  c CITEXT
+)
+
+skipif config local-schema-locked
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE public.t (
+     c STRING COLLATE und_u_ks_level2 NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+   );

@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -130,7 +131,13 @@ func Decode(
 		if err != nil {
 			return nil, nil, err
 		}
-		d, err := a.NewDCollatedString(r, valType.Locale())
+		var d tree.Datum
+		switch valType.Oid() {
+		case oidext.T_citext:
+			d, err = a.NewDCitext(r, valType.Locale())
+		default:
+			d, err = a.NewDCollatedString(r, valType.Locale())
+		}
 		return d, rkey, err
 	case types.JsonFamily:
 		var json json.JSON
