@@ -10,7 +10,7 @@ sql admin
   "application_name": "$ api-v2-sql",
   "database": "system",
   "execute": false,
-  "max_result_size": 10000,
+  "max_result_size": 100000,
   "separate_txns": false,
   "statements": [
    {
