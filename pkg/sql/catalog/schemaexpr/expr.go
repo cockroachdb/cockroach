@@ -79,6 +79,10 @@ func DequalifyAndValidateExprImpl(
 		return "", nil, colIDs, err
 	}
 
+	if err := funcdesc.MaybeFailOnUDFUsage(typedExpr, context, version); err != nil {
+		return "", nil, colIDs, err
+	}
+
 	// We need to do the rewrite here before the expression is serialized because
 	// the serialization would drop the prefixes to functions.
 	//
