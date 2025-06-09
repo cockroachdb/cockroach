@@ -401,9 +401,9 @@ storage.delete_compaction_excise.enabled	boolean	true	set to false to direct Peb
 storage.ingestion.value_blocks.enabled	boolean	true	set to true to enable writing of value blocks in ingestion sstables	application
 storage.max_sync_duration	duration	20s	maximum duration for disk operations; any operations that take longer than this setting trigger a warning log entry or process crash	system-visible
 storage.max_sync_duration.fatal.enabled	boolean	true	if true, fatal the process when a disk operation exceeds storage.max_sync_duration	application
-storage.sstable.compression_algorithm	enumeration	minlz	determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store; [snappy = 1, zstd = 2, none = 3, minlz = 4]	system-visible
-storage.sstable.compression_algorithm_backup_storage	enumeration	minlz	determines the compression algorithm to use when compressing sstable data blocks for backup row data storage; [snappy = 1, zstd = 2, none = 3, minlz = 4]	system-visible
-storage.sstable.compression_algorithm_backup_transport	enumeration	minlz	determines the compression algorithm to use when compressing sstable data blocks for backup transport; [snappy = 1, zstd = 2, none = 3, minlz = 4]	system-visible
+storage.sstable.compression_algorithm	enumeration	snappy	determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store; [snappy = 1, zstd = 2, none = 3, minlz = 4]	system-visible
+storage.sstable.compression_algorithm_backup_storage	enumeration	snappy	determines the compression algorithm to use when compressing sstable data blocks for backup row data storage; [snappy = 1, zstd = 2, none = 3, minlz = 4]	system-visible
+storage.sstable.compression_algorithm_backup_transport	enumeration	snappy	determines the compression algorithm to use when compressing sstable data blocks for backup transport; [snappy = 1, zstd = 2, none = 3, minlz = 4]	system-visible
 timeseries.storage.resolution_10s.ttl	duration	240h0m0s	the maximum age of time series data stored at the 10 second resolution. Data older than this is subject to rollup and deletion.	system-visible
 timeseries.storage.resolution_30m.ttl	duration	2160h0m0s	the maximum age of time series data stored at the 30 minute resolution. Data older than this is subject to deletion.	system-visible
 trace.debug_http_endpoint.enabled (alias: trace.debug.enable)	boolean	false	if set, traces for recent requests can be seen at https://<ui>/debug/requests	application
@@ -414,4 +414,4 @@ trace.zipkin.collector	string		the address of a Zipkin instance to receive trace
 ui.database_locality_metadata.enabled	boolean	true	if enabled shows extended locality data about databases and tables in DB Console which can be expensive to compute	application
 ui.default_timezone	string		the default timezone used to format timestamps in the ui	application
 ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui. This setting is deprecatedand will be removed in a future version. Use the 'ui.default_timezone' setting instead. 'ui.default_timezone' takes precedence over this setting. [etc/utc = 0, america/new_york = 1]	application
-version	version	1000025.2-upgrading-to-1000025.3-step-004	set the active cluster version in the format '<major>.<minor>'	application
+version	version	1000025.2-upgrading-to-1000025.3-step-006	set the active cluster version in the format '<major>.<minor>'	application
