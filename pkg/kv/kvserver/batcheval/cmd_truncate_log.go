@@ -9,7 +9,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -125,16 +124,11 @@ func TruncateLog(
 	}
 	ms.SysBytes = -ms.SysBytes // simulate the deletion
 
-	tState := &kvserverpb.RaftTruncatedState{
+	var pd result.Result
+	pd.Replicated.SetRaftTruncatedState(&kvserverpb.RaftTruncatedState{
 		Index: args.Index - 1,
 		Term:  term,
-	}
-
-	var pd result.Result
-	pd.Replicated.SetRaftTruncatedState(tState,
-		cArgs.EvalCtx.ClusterSettings().Version.IsActive(
-			ctx, clusterversion.TODO_Delete_V25_1_MoveRaftTruncatedState),
-	)
+	})
 	pd.Replicated.RaftLogDelta = ms.SysBytes
 	pd.Replicated.RaftExpectedFirstIndex = firstIndex
 	return pd, nil

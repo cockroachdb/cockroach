@@ -66,6 +66,7 @@ go_library(
         "//pkg/sql/execinfra/execreleasable",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/execstats",
+        "//pkg/sql/export",
         "//pkg/sql/inverted",
         "//pkg/sql/isql",
         "//pkg/sql/memsize",

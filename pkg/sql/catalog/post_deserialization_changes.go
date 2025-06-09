@@ -79,10 +79,6 @@ const (
 	// field was unset and that the MVCC timestamp value was assigned to it.
 	SetModTimeToMVCCTimestamp
 
-	// SetCreateAsOfTimeUsingModTime indicates that a table's CreateAsOfTime field
-	// was unset and the ModificationTime value was assigned to it.
-	SetCreateAsOfTimeUsingModTime
-
 	// SetSystemDatabaseDescriptorVersion indicates that the system database
 	// descriptor did not have its version set.
 	SetSystemDatabaseDescriptorVersion

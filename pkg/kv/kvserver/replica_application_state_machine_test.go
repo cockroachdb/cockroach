@@ -159,7 +159,7 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	runTest := func(t *testing.T, accurate, v25dot1 bool) {
+	runTest := func(t *testing.T, accurate bool) {
 		tc := testContext{}
 		ctx := context.Background()
 		stopper := stop.NewStopper()
@@ -201,7 +201,7 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 		}
 		evalResult.SetRaftTruncatedState(&kvserverpb.RaftTruncatedState{
 			Index: truncatedIndex + 1,
-		}, v25dot1)
+		})
 
 		ent := &raftlog.Entry{
 			Entry: raftpb.Entry{
@@ -258,9 +258,7 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 	}
 
 	testutils.RunTrueAndFalse(t, "accurate first index", func(t *testing.T, accurate bool) {
-		testutils.RunTrueAndFalse(t, "v25.1", func(t *testing.T, v25dot1 bool) {
-			runTest(t, accurate, v25dot1)
-		})
+		runTest(t, accurate)
 	})
 }
 
@@ -268,7 +266,7 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	runTest := func(t *testing.T, accurate, v25dot1 bool) {
+	runTest := func(t *testing.T, accurate bool) {
 		tc := testContext{}
 		ctx := context.Background()
 		stopper := stop.NewStopper()
@@ -329,7 +327,7 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			}
 			evalResult.SetRaftTruncatedState(&kvserverpb.RaftTruncatedState{
 				Index: truncatedIndex + 1,
-			}, v25dot1)
+			})
 			ent := &raftlog.Entry{
 				Entry: raftpb.Entry{
 					Index: uint64(raftAppliedIndex + 1),
@@ -406,9 +404,7 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 	}
 
 	testutils.RunTrueAndFalse(t, "accurate first index", func(t *testing.T, accurate bool) {
-		testutils.RunTrueAndFalse(t, "v25.1", func(t *testing.T, v25dot1 bool) {
-			runTest(t, accurate, v25dot1)
-		})
+		runTest(t, accurate)
 	})
 }
 
