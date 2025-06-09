@@ -257,6 +257,7 @@ go_test(
         "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
+        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/util/duration",
         "//pkg/util/json",
