@@ -5,6 +5,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/tick"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	io_prometheus_client "github.com/prometheus/client_model/go"
@@ -261,4 +263,277 @@ func (cc *ComponentCounter) Value() int64 {
 // Inc increments the ComponentCounter's value.
 func (cc *ComponentCounter) Inc(i int64) {
 	cc.value.Inc(i)
+}
+
+// SummaryGauge maintains a value as the sum of its children, keyed by LabelSliceCacheKey.
+type SummaryGauge struct {
+	g metric.Gauge
+	*SummaryMetric
+}
+
+var _ metric.Iterable = (*SummaryGauge)(nil)
+var _ metric.PrometheusEvictable = (*SummaryGauge)(nil)
+var _ metric.PrometheusExportable = (*SummaryGauge)(nil)
+
+// NewSummaryGauge constructs a new SummaryGauge.
+func NewSummaryGauge(metadata metric.Metadata, childLabels ...string) *SummaryGauge {
+	g := &SummaryGauge{
+		g: *metric.NewGauge(metadata),
+	}
+	g.SummaryMetric = NewSummaryMetric(childLabels)
+	return g
+}
+
+// GetType is part of the metric.PrometheusExportable interface.
+func (g *SummaryGauge) GetType() *io_prometheus_client.MetricType {
+	return g.g.GetType()
+}
+
+// GetLabels is part of the metric.PrometheusExportable interface.
+func (g *SummaryGauge) GetLabels(useStaticLabels bool) []*io_prometheus_client.LabelPair {
+	return g.g.GetLabels(useStaticLabels)
+}
+
+// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
+func (g *SummaryGauge) ToPrometheusMetric() *io_prometheus_client.Metric {
+	return g.g.ToPrometheusMetric()
+}
+
+// GetName is part of the metric.Iterable interface.
+func (g *SummaryGauge) GetName(useStaticLabels bool) string {
+	return g.g.GetName(useStaticLabels)
+}
+
+// GetHelp is part of the metric.Iterable interface.
+func (g *SummaryGauge) GetHelp() string {
+	return g.g.GetHelp()
+}
+
+// GetMeasurement is part of the metric.Iterable interface.
+func (g *SummaryGauge) GetMeasurement() string {
+	return g.g.GetMeasurement()
+}
+
+// GetUnit is part of the metric.Iterable interface.
+func (g *SummaryGauge) GetUnit() metric.Unit {
+	return g.g.GetUnit()
+}
+
+// GetMetadata is part of the metric.Iterable interface.
+func (g *SummaryGauge) GetMetadata() metric.Metadata {
+	return g.g.GetMetadata()
+}
+
+// Inspect is part of the metric.Iterable interface.
+func (g *SummaryGauge) Inspect(f func(interface{})) {
+	f(g)
+}
+
+// Value returns the aggregate value of all of its current and past children.
+func (g *SummaryGauge) Value() int64 {
+	return g.g.Value()
+}
+
+// Update updates the Gauge value by val for the given label values. If a
+// Gauge with the given label values doesn't exist yet, it creates a new
+// Gauge and updates it. Update increments parent metrics.
+func (g *SummaryGauge) Update(val int64, labels ...string) {
+	childMetric := g.SummaryMetric.getOrAddChild(g.createComponentGauge, labels)
+
+	delta := val - childMetric.(*ComponentGauge).Value()
+	g.g.Inc(delta)
+
+	childMetric.(*ComponentGauge).Update(val)
+}
+
+func (g *SummaryGauge) createComponentGauge(
+	key metric.LabelSliceCacheKey, cache *metric.LabelSliceCache,
+) ChildMetric {
+	return &ComponentGauge{
+		LabelSliceCacheKey: key,
+		LabelSliceCache:    cache,
+	}
+}
+
+// ComponentGauge is a child of a SummaryGauge. When metrics are collected by prometheus,
+// each of the children will appear with a distinct label, however, when cockroach
+// internally collects metrics, only the parent is collected.
+type ComponentGauge struct {
+	metric.LabelSliceCacheKey
+	value metric.Gauge
+	*metric.LabelSliceCache
+}
+
+func (cg *ComponentGauge) labelValues() []string {
+	lv, ok := cg.LabelSliceCache.Get(cg.LabelSliceCacheKey)
+	if !ok {
+		return nil
+	}
+	return lv.LabelValues
+}
+
+// ToPrometheusMetric constructs a prometheus metric for this Gauge.
+func (cg *ComponentGauge) ToPrometheusMetric() *io_prometheus_client.Metric {
+	return &io_prometheus_client.Metric{
+		Gauge: &io_prometheus_client.Gauge{
+			Value: proto.Float64(float64(cg.Value())),
+		},
+	}
+}
+
+// Value returns the ComponentGauge's current value.
+func (cg *ComponentGauge) Value() int64 {
+	return cg.value.Value()
+}
+
+// Update sets the ComponentGauge's value.
+func (cg *ComponentGauge) Update(value int64) {
+	cg.value.Update(value)
+}
+
+// SummaryHistogram maintains a value as the sum of its children, keyed by LabelSliceCacheKey.
+type SummaryHistogram struct {
+	h      metric.IHistogram
+	create func() metric.IHistogram
+	*SummaryMetric
+	ticker struct {
+		// We use a RWMutex, because we don't want child histograms to contend when
+		// recording values, unless we're rotating histograms for the parent & children.
+		// In this instance, the "writer" for the RWMutex is the ticker, and the "readers"
+		// are all the child histograms recording their values.
+		syncutil.RWMutex
+		*tick.Ticker
+	}
+}
+
+var _ metric.Iterable = (*SummaryHistogram)(nil)
+var _ metric.PrometheusEvictable = (*SummaryHistogram)(nil)
+var _ metric.PrometheusExportable = (*SummaryHistogram)(nil)
+var _ metric.WindowedHistogram = (*SQLHistogram)(nil)
+var _ metric.CumulativeHistogram = (*SQLHistogram)(nil)
+
+// NewSummaryHistogram constructs a new SummaryHistogram.
+func NewSummaryHistogram(opts metric.HistogramOptions) *SummaryHistogram {
+	create := func() metric.IHistogram {
+		return metric.NewHistogram(opts)
+	}
+	s := &SummaryHistogram{
+		h:      create(),
+		create: create,
+	}
+	s.SummaryMetric = NewSummaryHistogram(metric.LabelConfigDisabled)
+	s.ticker.Ticker = tick.NewTicker(
+		now(),
+		opts.Duration/metric.WindowedHistogramWrapNum,
+		func() {
+			// Atomically rotate the histogram window for the
+			// parent histogram, and all the child histograms.
+			s.h.Tick()
+			s.apply(func(childMetric ChildMetric) {
+				childHist, ok := childMetric.(*SQLChildHistogram)
+				if !ok {
+					panic(errors.AssertionFailedf(
+						"unable to assert type of child for histogram %q when rotating histogram windows",
+						opts.Metadata.Name))
+				}
+				childHist.h.Tick()
+			})
+		})
+	return s
+}
+
+// GetType is part of the metric.PrometheusExportable interface.
+func (h *SummaryHistogram) GetType() *io_prometheus_client.MetricType {
+	return h.h.GetType()
+}
+
+// GetLabels is part of the metric.PrometheusExportable interface.
+func (h *SummaryHistogram) GetLabels(useStaticLabels bool) []*io_prometheus_client.LabelPair {
+	return h.h.GetLabels(useStaticLabels)
+}
+
+// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
+func (h *SummaryHistogram) ToPrometheusMetric() *io_prometheus_client.Metric {
+	return h.h.ToPrometheusMetric()
+}
+
+// GetName is part of the metric.Iterable interface.
+func (h *SummaryHistogram) GetName(useStaticLabels bool) string {
+	return h.h.GetName(useStaticLabels)
+}
+
+// GetHelp is part of the metric.Iterable interface.
+func (h *SummaryHistogram) GetHelp() string {
+	return h.h.GetHelp()
+}
+
+// GetMeasurement is part of the metric.Iterable interface.
+func (h *SummaryHistogram) GetMeasurement() string {
+	return h.h.GetMeasurement()
+}
+
+// GetUnit is part of the metric.Iterable interface.
+func (h *SummaryHistogram) GetUnit() metric.Unit {
+	return h.h.GetUnit()
+}
+
+// GetMetadata is part of the metric.Iterable interface.
+func (h *SummaryHistogram) GetMetadata() metric.Metadata {
+	return h.h.GetMetadata()
+}
+
+// Inspect is part of the metric.Iterable interface.
+func (h *SummaryHistogram) Inspect(f func(interface{})) {
+	f(h)
+}
+
+// RecordValue records a value for the given LabelSliceCacheKey.
+// If a histogram with the given key doesn't exist yet, it creates a new histogram and records the value.
+func (h *SummaryHistogram) RecordValue(value int64, labels ...string) {
+	h.h.RecordValue(value)
+
+	childMetric := h.SummaryMetric.getOrAddChild(h.createComponentHistogram, labels)
+
+	childMetric.(*ComponentHistogram).RecordValue(value)
+}
+
+func (h *SummaryHistogram) createComponentHistogram(
+	key metric.LabelSliceCacheKey, cache *metric.LabelSliceCache,
+) ChildMetric {
+	return &ComponentHistogram{
+		LabelSliceCacheKey: key,
+		LabelSliceCache:    cache,
+	}
+}
+
+// ComponentHistogram is a child of a SummaryHistogram. When metrics are collected by prometheus,
+// each of the children will appear with a distinct label, however, when cockroach
+// internally collects metrics, only the parent is collected.
+type ComponentHistogram struct {
+	metric.LabelSliceCacheKey
+	histogram metric.Histogram
+	*metric.LabelSliceCache
+}
+
+func (ch *ComponentHistogram) labelValues() []string {
+	lv, ok := ch.LabelSliceCache.Get(ch.LabelSliceCacheKey)
+	if !ok {
+		return nil
+	}
+	return lv.LabelValues
+}
+
+// ToPrometheusMetric constructs a prometheus metric for this Histogram.
+func (ch *ComponentHistogram) ToPrometheusMetric() *io_prometheus_client.Metric {
+	return &io_prometheus_client.Metric{
+		Histogram: &io_prometheus_client.Histogram{
+			SampleCount: proto.Uint64(uint64(ch.histogram.TotalCount())),
+			SampleSum:   proto.Float64(float64(ch.histogram.TotalSum())),
+		},
+	}
+}
+
+// RecordValue records a value in the ComponentHistogram.
+func (ch *ComponentHistogram) RecordValue(value int64) {
+	ch.histogram.RecordValue(value)
 }
