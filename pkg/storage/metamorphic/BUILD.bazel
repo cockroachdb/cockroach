@@ -39,6 +39,7 @@ go_test(
     size = "enormous",
     srcs = [
         "main_test.go",
+        "meta_nightly_test.go",
         "meta_test.go",
         "parser_test.go",
     ],

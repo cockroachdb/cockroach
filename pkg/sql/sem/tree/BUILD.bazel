@@ -213,6 +213,7 @@ go_test(
         "main_test.go",
         "name_part_test.go",
         "name_resolution_test.go",
+        "nightly_pretty_test.go",
         "operators_test.go",
         "overload_test.go",
         "parse_array_test.go",
