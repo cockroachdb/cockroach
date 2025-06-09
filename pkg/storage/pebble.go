@@ -455,10 +455,6 @@ func DefaultPebbleOptions() *pebble.Options {
 			ValueStoragePolicy:             pebble.ValueStorageLowReadLatency,
 		},
 	)
-	// Disable multi-level compaction heuristic for now. See #134423
-	// for why this was disabled, and what needs to be changed to reenable it.
-	// This issue tracks re-enablement: https://github.com/cockroachdb/pebble/issues/4139
-	opts.Experimental.MultiLevelCompactionHeuristic = pebble.NoMultiLevel{}
 
 	opts.Experimental.UserKeyCategories = userKeyCategories
 
