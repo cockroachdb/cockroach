@@ -1,0 +1,248 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL);
+----
+...
++object {100 101 t} -> 104
+
+/* test */
+ALTER TABLE t ALTER COLUMN j DROP NOT NULL;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.drop_not_null
+## StatementPhase stage 1 of 1 with 2 MutationType ops
+upsert descriptor #104
+   table:
+  +  checks:
+  +  - columnIds:
+  +    - 2
+  +    expr: j IS NOT NULL
+  +    isNonNullConstraint: true
+  +    name: j_auto_not_null
+  +    validity: Dropping
+     columns:
+     - id: 1
+  ...
+     - id: 2
+       name: j
+  +    nullable: true
+       type:
+         family: IntFamily
+  ...
+     id: 104
+     modificationTime: {}
+  +  mutations:
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 2
+  +        expr: j IS NOT NULL
+  +        isNonNullConstraint: true
+  +        name: j_auto_not_null
+  +        validity: Dropping
+  +      constraintType: NOT_NULL
+  +      foreignKey: {}
+  +      name: j_auto_not_null
+  +      notNullColumn: 2
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 3
+  ...
+     replacementOf:
+       time: {}
+  -  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 4 MutationType ops
+upsert descriptor #104
+   table:
+  +  checks:
+  +  - columnIds:
+  +    - 2
+  +    expr: j IS NOT NULL
+  +    isNonNullConstraint: true
+  +    name: j_auto_not_null
+  +    validity: Dropping
+     columns:
+     - id: 1
+  ...
+     - id: 2
+       name: j
+  +    nullable: true
+       type:
+         family: IntFamily
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": i
+  +        "2": j
+  +        "4294967292": crdb_internal_origin_timestamp
+  +        "4294967293": crdb_internal_origin_id
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 104
+  +      indexes:
+  +        "1": t_pkey
+  +      name: t
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› DROP NOT NULL
+  +        statement: ALTER TABLE t ALTER COLUMN j DROP NOT NULL
+  +        statementTag: ALTER TABLE
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     id: 104
+     modificationTime: {}
+  +  mutations:
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 2
+  +        expr: j IS NOT NULL
+  +        isNonNullConstraint: true
+  +        name: j_auto_not_null
+  +        validity: Dropping
+  +      constraintType: NOT_NULL
+  +      foreignKey: {}
+  +      name: j_auto_not_null
+  +      notNullColumn: 2
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 3
+  ...
+     replacementOf:
+       time: {}
+  -  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+persist all catalog changes to storage
+create job #1 (non-cancelable: true): "ALTER TABLE defaultdb.public.t ALTER COLUMN j DROP NOT NULL"
+  descriptor IDs: [104]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
+upsert descriptor #104
+   table:
+  -  checks:
+  -  - columnIds:
+  -    - 2
+  -    expr: j IS NOT NULL
+  -    isNonNullConstraint: true
+  -    name: j_auto_not_null
+  -    validity: Dropping
+  +  checks: []
+     columns:
+     - id: 1
+  ...
+     id: 104
+     modificationTime: {}
+  -  mutations:
+  -  - constraint:
+  -      check:
+  -        columnIds:
+  -        - 2
+  -        expr: j IS NOT NULL
+  -        isNonNullConstraint: true
+  -        name: j_auto_not_null
+  -        validity: Dropping
+  -      constraintType: NOT_NULL
+  -      foreignKey: {}
+  -      name: j_auto_not_null
+  -      notNullColumn: 2
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: DROP
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+  +  mutations: []
+     name: t
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 1 MutationType op pending"
+commit transaction #3
+begin transaction #4
+## PostCommitNonRevertiblePhase stage 2 of 2 with 3 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "2": j
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "1": t_pkey
+  -      name: t
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› DROP NOT NULL
+  -        statement: ALTER TABLE t ALTER COLUMN j DROP NOT NULL
+  -        statementTag: ALTER TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+persist all catalog changes to storage
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
+commit transaction #4
+# end PostCommitPhase
