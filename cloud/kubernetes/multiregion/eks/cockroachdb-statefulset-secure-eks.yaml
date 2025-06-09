@@ -185,7 +185,7 @@ spec:
           name: cockroach-env
       containers:
       - name: cockroachdb
-        image: cockroachdb/cockroach:v25.2.0
+        image: cockroachdb/cockroach:v25.2.1
         imagePullPolicy: IfNotPresent
         # TODO: Change these to appropriate values for the hardware that you're running. You can see
         # the resources that can be allocated on each of your Kubernetes nodes by running:

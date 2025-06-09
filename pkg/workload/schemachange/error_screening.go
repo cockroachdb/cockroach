@@ -400,43 +400,6 @@ func (og *operationGenerator) colIsRefByComputed(
 	return colIsRefByGeneratedExpr, nil
 }
 
-func (og *operationGenerator) columnIsDependedOnByView(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name,
-) (bool, error) {
-	return og.scanBool(ctx, tx, `SELECT EXISTS(
-		SELECT source.column_id
-			FROM (
-			   SELECT DISTINCT column_id
-			     FROM (
-			           SELECT unnest(
-			                   string_to_array(
-			                    rtrim(
-			                     ltrim(
-			                      fd.dependedonby_details,
-			                      'Columns: ['
-			                     ),
-			                     ']'
-			                    ),
-			                    ' '
-			                   )::INT8[]
-			                  ) AS column_id
-			             FROM crdb_internal.forward_dependencies
-			                   AS fd
-			            WHERE fd.descriptor_id
-			                  = $1::REGCLASS
-                    AND fd.dependedonby_type != 'sequence'
-			            )
-			 ) AS cons
-			 INNER JOIN (
-			   SELECT ordinal_position AS column_id
-			     FROM information_schema.columns
-			    WHERE table_schema = $2
-			      AND table_name = $3
-			      AND column_name = $4
-			  ) AS source ON source.column_id = cons.column_id
-)`, tableName.String(), tableName.Schema(), tableName.Object(), columnName)
-}
-
 func (og *operationGenerator) colIsPrimaryKey(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name,
 ) (bool, error) {
