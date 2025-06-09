@@ -466,7 +466,7 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 		inputRow := n.run.inputRow(rowIdx)
 		for col, typedExpr := range tupleRow {
 			var err error
-			inputRow[col], err = eval.Expr(params.ctx, params.EvalContext(), typedExpr)
+			inputRow[col], err = eval.Expr(params.ctx, params.EvalContext(), typedExpr, params.p.Txn())
 			if err != nil {
 				err = interceptAlterColumnTypeParseError(n.run.insertCols, col, err)
 				return false, err

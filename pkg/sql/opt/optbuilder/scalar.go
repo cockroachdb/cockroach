@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -880,7 +881,7 @@ func (b *Builder) constructUnary(
 
 // ScalarBuilder is a specialized variant of Builder that can be used to create
 // a scalar from a TypedExpr. This is used to build scalar expressions for
-// testing. It is also used temporarily to interface with the old planning code.
+// testing.
 //
 // TypedExprs can refer to columns in the current scope using IndexedVars (@1,
 // @2, etc). When we build a scalar, we have to provide information about these
@@ -894,7 +895,11 @@ type ScalarBuilder struct {
 // NewScalar creates a new ScalarBuilder. The columns in the metadata are accessible
 // from scalar expressions via IndexedVars.
 func NewScalar(
-	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, factory *norm.Factory,
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
+	txn *kv.Txn,
+	factory *norm.Factory,
 ) *ScalarBuilder {
 	md := factory.Metadata()
 	sb := &ScalarBuilder{
@@ -903,6 +908,7 @@ func NewScalar(
 			ctx:     ctx,
 			semaCtx: semaCtx,
 			evalCtx: evalCtx,
+			txn:     txn,
 		},
 	}
 	sb.scope.builder = &sb.Builder

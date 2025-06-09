@@ -23,7 +23,7 @@ type defaultBuiltinFuncOperator struct {
 	colexecop.OneInputHelper
 	allocator           *colmem.Allocator
 	evalCtx             *eval.Context
-	funcExpr            *tree.FuncExpr
+	overload            *tree.Overload
 	columnTypes         []*types.T
 	argumentCols        []int
 	outputIdx           int
@@ -65,11 +65,10 @@ func (b *defaultBuiltinFuncOperator) Next() coldata.Batch {
 					err error
 				)
 				// Some functions cannot handle null arguments.
-				if hasNulls && !b.funcExpr.ResolvedOverload().CalledOnNullInput {
+				if hasNulls && !b.overload.CalledOnNullInput {
 					res = tree.DNull
 				} else {
-					res, err = b.funcExpr.ResolvedOverload().
-						Fn.(eval.FnOverload)(b.Ctx, b.evalCtx, b.row)
+					res, err = b.overload.Fn.(eval.FnOverload)(b.Ctx, b.evalCtx, b.row)
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -98,10 +97,10 @@ func (b *defaultBuiltinFuncOperator) Release() {
 	b.toDatumConverter.Release()
 }
 
-// errFnWithExprsNotSupported is returned from NewBuiltinFunctionOperator
-// when the function in question uses FnWithExprs, which is not supported.
-var errFnWithExprsNotSupported = errors.New(
-	"builtins with FnWithExprs are not supported in the vectorized engine",
+// errOnlyFnSupported is returned from NewBuiltinFunctionOperator when the
+// function in question uses anything other than Fn.
+var errOnlyFnSupported = errors.New(
+	"only builtins with Fn are supported in the vectorized engine",
 )
 
 // NewBuiltinFunctionOperator returns an operator that applies builtin functions.
@@ -115,8 +114,8 @@ func NewBuiltinFunctionOperator(
 	input colexecop.Operator,
 ) (colexecop.Operator, error) {
 	overload := funcExpr.ResolvedOverload()
-	if overload.FnWithExprs != nil {
-		return nil, errFnWithExprsNotSupported
+	if overload.Fn == nil {
+		return nil, errOnlyFnSupported
 	}
 	outputType := funcExpr.ResolvedType()
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
@@ -150,7 +149,7 @@ func NewBuiltinFunctionOperator(
 			OneInputHelper:      colexecop.MakeOneInputHelper(input),
 			allocator:           allocator,
 			evalCtx:             evalCtx,
-			funcExpr:            funcExpr,
+			overload:            overload,
 			outputIdx:           outputIdx,
 			columnTypes:         columnTypes,
 			outputType:          outputType,

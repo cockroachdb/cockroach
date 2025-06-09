@@ -130,6 +130,7 @@ type OptTester struct {
 	ctx          context.Context
 	semaCtx      tree.SemaContext
 	evalCtx      eval.Context
+	txn          *kv.Txn
 	appliedRules RuleSet
 
 	builder strings.Builder
@@ -282,9 +283,10 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 		ctx:     ctx,
 		semaCtx: tree.MakeSemaContext(catalog),
 		evalCtx: eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
+		txn:     &kv.Txn{},
 	}
 	ot.f = &norm.Factory{}
-	ot.f.Init(ot.ctx, &ot.evalCtx, ot.catalog)
+	ot.f.Init(ot.ctx, &ot.evalCtx, ot.txn, ot.catalog)
 	ot.Flags.ctx = ot.ctx
 	ot.Flags.evalCtx = ot.evalCtx
 	ot.semaCtx.SearchPath = tree.EmptySearchPath
@@ -1339,7 +1341,7 @@ func (ot *OptTester) Memo() (string, error) {
 // Expr parses the input directly into an expression; see exprgen.Build.
 func (ot *OptTester) Expr() (opt.Expr, error) {
 	var f norm.Factory
-	f.Init(ot.ctx, &ot.evalCtx, ot.catalog)
+	f.Init(ot.ctx, &ot.evalCtx, ot.txn, ot.catalog)
 	ot.f = &f
 	f.DisableOptimizations()
 
@@ -1350,7 +1352,7 @@ func (ot *OptTester) Expr() (opt.Expr, error) {
 // normalization; see exprgen.Build.
 func (ot *OptTester) ExprNorm() (opt.Expr, error) {
 	var f norm.Factory
-	f.Init(ot.ctx, &ot.evalCtx, ot.catalog)
+	f.Init(ot.ctx, &ot.evalCtx, ot.txn, ot.catalog)
 	ot.f = &f
 	f.SetDisabledRules(ot.Flags.DisableRules)
 
@@ -2317,7 +2319,7 @@ func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 	ot.semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */)
 	ot.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 	ot.semaCtx.TypeResolver = ot.catalog
-	b := optbuilder.New(ot.ctx, &ot.semaCtx, &ot.evalCtx, ot.catalog, factory, stmt.AST)
+	b := optbuilder.New(ot.ctx, &ot.semaCtx, &ot.evalCtx, ot.txn, ot.catalog, factory, stmt.AST)
 	return b.Build()
 }
 
@@ -2325,7 +2327,7 @@ func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 // notifier that updates ot.appliedRules.
 func (ot *OptTester) makeOptimizer() *xform.Optimizer {
 	var o xform.Optimizer
-	o.Init(ot.ctx, &ot.evalCtx, ot.catalog)
+	o.Init(ot.ctx, &ot.evalCtx, ot.txn, ot.catalog)
 	ot.f = o.Factory()
 	o.Factory().SetDisabledRules(ot.Flags.DisableRules)
 	o.NotifyOnAppliedRule(func(ruleName opt.RuleName, source, target opt.Expr) {
@@ -2397,6 +2399,7 @@ func ruleFromString(str string) (opt.RuleName, error) {
 
 // ExecBuild is used for testing to expose makeOptimizer.
 func (ot *OptTester) ExecBuild(f exec.Factory, mem *memo.Memo, expr opt.Expr) (exec.Plan, error) {
+	txn := ot.txn
 	// For DDL we need a fresh root transaction that isn't system tenant.
 	if opt.IsDDLOp(expr) {
 		ot.evalCtx.Codec = keys.MakeSQLCodec(roachpb.MustMakeTenantID(5))
@@ -2404,11 +2407,11 @@ func (ot *OptTester) ExecBuild(f exec.Factory, mem *memo.Memo, expr opt.Expr) (e
 		clock := hlc.NewClockForTesting(nil)
 		stopper := stop.NewStopper()
 		db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), factory, clock, stopper)
-		ot.evalCtx.Txn = kv.NewTxn(context.Background(), db, 1)
+		txn = kv.NewTxn(context.Background(), db, 1)
 	}
 	bld := execbuilder.New(
 		context.Background(), f, ot.makeOptimizer(), mem, ot.catalog, expr,
-		&ot.semaCtx, &ot.evalCtx, true /* allowAutoCommit */, false, /* isANSIDML */
+		&ot.semaCtx, &ot.evalCtx, txn, true /* allowAutoCommit */, false, /* isANSIDML */
 	)
 	return bld.Build()
 }
@@ -2475,7 +2478,7 @@ func (ot *OptTester) PostQueries(optimize bool) (string, error) {
 		var exprStr string
 		if optimize {
 			var o2 xform.Optimizer
-			o2.Init(ot.ctx, &ot.evalCtx, ot.catalog)
+			o2.Init(ot.ctx, &ot.evalCtx, ot.txn, ot.catalog)
 			o2.Factory().CopyMetadataFrom(o.Memo())
 			o2.Memo().SetRoot(expr.(memo.RelExpr), &physical.Required{})
 			optimizedExpr, err := o2.Optimize()
@@ -2517,6 +2520,7 @@ func (ot *OptTester) PostQueries(optimize bool) (string, error) {
 					context.Background(),
 					&ot.semaCtx,
 					&ot.evalCtx,
+					ot.txn,
 					ot.catalog,
 					o.Factory(),
 					c.WithID,
@@ -2541,6 +2545,7 @@ func (ot *OptTester) PostQueries(optimize bool) (string, error) {
 					context.Background(),
 					&ot.semaCtx,
 					&ot.evalCtx,
+					ot.txn,
 					ot.catalog,
 					o.Factory(),
 					t.WithID,

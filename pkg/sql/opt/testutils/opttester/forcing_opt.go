@@ -60,7 +60,7 @@ func newForcingOptimizer(
 		remaining:   steps,
 		lastMatched: opt.InvalidRuleName,
 	}
-	fo.o.Init(context.Background(), &tester.evalCtx, tester.catalog)
+	fo.o.Init(context.Background(), &tester.evalCtx, tester.txn, tester.catalog)
 	fo.o.Factory().FoldingControl().AllowStableFolds()
 	fo.coster.Init(&fo.o, &fo.groups)
 	fo.o.SetCoster(&fo.coster)

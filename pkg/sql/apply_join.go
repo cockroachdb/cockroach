@@ -133,7 +133,7 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 					break
 				}
 				// Compute join.
-				predMatched, err := a.pred.eval(params.ctx, params.EvalContext(), a.run.leftRow, rrow)
+				predMatched, err := a.pred.eval(params.ctx, params.EvalContext(), params.p.Txn(), a.run.leftRow, rrow)
 				if err != nil {
 					return false, err
 				}

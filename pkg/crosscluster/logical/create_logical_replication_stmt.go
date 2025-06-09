@@ -580,7 +580,7 @@ func evalLogicalReplicationOptions(
 			return nil, err
 		}
 		asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(cursor)}
-		asOf, err := asof.Eval(ctx, asOfClause, p.SemaCtx(), &p.ExtendedEvalContext().Context)
+		asOf, err := asof.Eval(ctx, asOfClause, p.SemaCtx(), &p.ExtendedEvalContext().Context, p.Txn())
 		if err != nil {
 			return nil, err
 		}

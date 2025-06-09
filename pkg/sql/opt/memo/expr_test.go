@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
@@ -59,9 +60,10 @@ func TestExprIsNeverNull(t *testing.T) {
 				ctx := context.Background()
 				semaCtx := tree.MakeSemaContext(nil /* resolver */)
 				evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+				txn := &kv.Txn{}
 
 				var o xform.Optimizer
-				o.Init(ctx, &evalCtx, catalog)
+				o.Init(ctx, &evalCtx, txn, catalog)
 
 				var sv testutils.ScalarVars
 
@@ -86,7 +88,7 @@ func TestExprIsNeverNull(t *testing.T) {
 					d.Fatalf(t, "%v", err)
 				}
 
-				b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, o.Factory())
+				b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, txn, o.Factory())
 				scalar, err := b.Build(expr)
 				if err != nil {
 					return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
