@@ -76,10 +76,10 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │              ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":10,"TableID":108}}
  │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":10,"TableID":108}
  │              ├── AddColumnToIndex {"ColumnID":4,"IndexID":10,"Kind":2,"TableID":108}
- │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":10,"Ordinal":2,"TableID":108}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":10,"Kind":2,"Ordinal":1,"TableID":108}
  │              ├── AddColumnToIndex {"ColumnID":5,"IndexID":10,"Kind":2,"Ordinal":2,"TableID":108}
- │              └── AddColumnToIndex {"ColumnID":6,"IndexID":10,"Ordinal":1,"TableID":108}
+ │              ├── AddColumnToIndex {"ColumnID":6,"IndexID":10,"Ordinal":1,"TableID":108}
+ │              └── AddColumnToIndex {"ColumnID":1,"IndexID":10,"Ordinal":2,"TableID":108}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 17 elements transitioning toward PUBLIC
@@ -188,10 +188,10 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │              ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":10,"TableID":108}}
  │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":10,"TableID":108}
  │              ├── AddColumnToIndex {"ColumnID":4,"IndexID":10,"Kind":2,"TableID":108}
- │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":10,"Ordinal":2,"TableID":108}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":10,"Kind":2,"Ordinal":1,"TableID":108}
  │              ├── AddColumnToIndex {"ColumnID":5,"IndexID":10,"Kind":2,"Ordinal":2,"TableID":108}
  │              ├── AddColumnToIndex {"ColumnID":6,"IndexID":10,"Ordinal":1,"TableID":108}
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":10,"Ordinal":2,"TableID":108}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":108,"Initialize":true}
  │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  ├── PostCommitPhase
@@ -278,7 +278,6 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │    │         ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":11,"TableID":108}}
  │    │         ├── AddColumnToIndex {"ColumnID":3,"IndexID":11,"TableID":108}
  │    │         ├── AddColumnToIndex {"ColumnID":4,"IndexID":11,"Kind":2,"TableID":108}
- │    │         ├── AddColumnToIndex {"ColumnID":1,"IndexID":11,"Ordinal":2,"TableID":108}
  │    │         ├── AddColumnToIndex {"ColumnID":2,"IndexID":11,"Kind":2,"Ordinal":1,"TableID":108}
  │    │         ├── AddColumnToIndex {"ColumnID":5,"IndexID":11,"Kind":2,"Ordinal":2,"TableID":108}
  │    │         ├── AddColumnToIndex {"ColumnID":6,"IndexID":11,"Ordinal":1,"TableID":108}
@@ -296,6 +295,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │    │         ├── AddColumnToIndex {"ColumnID":2,"IndexID":5,"Ordinal":1,"TableID":108}
  │    │         ├── AddColumnToIndex {"ColumnID":1,"IndexID":5,"Kind":1,"TableID":108}
  │    │         ├── AddColumnToIndex {"ColumnID":6,"IndexID":5,"Kind":1,"Ordinal":1,"TableID":108}
+ │    │         ├── AddColumnToIndex {"ColumnID":1,"IndexID":11,"Ordinal":2,"TableID":108}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    ├── Stage 9 of 24 in PostCommitPhase
