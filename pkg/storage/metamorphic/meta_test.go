@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -167,13 +168,36 @@ func TestPebbleEquivalence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// This test times out with the race detector enabled.
 	skip.UnderRace(t)
+	runPebbleEquivalenceTest(t)
+}
+
+func TestPebbleEquivalenceNightly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	if nightly := envutil.EnvOrDefaultBool("COCKROACH_MISC_NIGHTLY", false); !nightly {
+		skip.IgnoreLintf(t, "only runs in Misc Nightly CI")
+	}
+
+	// This test times out with the race detector enabled.
+	skip.UnderRace(t)
+	if *opCount < 500000 {
+		oldOpCount := *opCount
+		// Override number of operations to at least half a million.
+		*opCount = 500000
+
+		defer func() {
+			*opCount = oldOpCount
+		}()
+	}
+
 	runPebbleEquivalenceTest(t)
 }
 
 func runPebbleEquivalenceTest(t *testing.T) {
 	ctx := context.Background()
-	// This test times out with the race detector enabled.
 	_, seed := randutil.NewTestRand()
 
 	engineSeqs := make([]engineSequence, 0, numStandardOptions+numRandomOptions)
