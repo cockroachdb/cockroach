@@ -187,7 +187,7 @@ func TestActivityTablesReset(t *testing.T) {
 	})
 
 	// Give the query runner privilege to insert into the activity tables.
-	sqlDB.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3)")
+	sqlDB.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3, NULL)")
 	sqlDB.Exec(t, "GRANT node TO root")
 
 	// Insert into system.statement_activity table

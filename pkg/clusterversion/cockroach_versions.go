@@ -216,6 +216,7 @@ const (
 
 	V25_3_AddEventLogColumnAndIndex
 
+	V25_3_AddEstimatedLastLoginTime
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -271,6 +272,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V25_3_Start: {Major: 25, Minor: 2, Internal: 2},
 
 	V25_3_AddEventLogColumnAndIndex: {Major: 25, Minor: 2, Internal: 4},
+
+	V25_3_AddEstimatedLastLoginTime: {Major: 25, Minor: 2, Internal: 6},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
