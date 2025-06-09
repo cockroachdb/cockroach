@@ -98,6 +98,7 @@ func (r *logicalReplicationResumer) handleResumeError(
 	ctx context.Context, execCtx sql.JobExecContext, err error,
 ) error {
 	if err == nil {
+		r.updateStatusMessage(ctx, "")
 		return nil
 	}
 	if jobs.IsPermanentJobError(err) {
