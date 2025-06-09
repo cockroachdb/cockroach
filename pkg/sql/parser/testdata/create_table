@@ -152,6 +152,14 @@ CREATE TABLE a (b STRING) -- literals removed
 CREATE TABLE _ (_ STRING) -- identifiers removed
 
 parse
+CREATE TABLE a (c CITEXT)
+----
+CREATE TABLE a (c CITEXT)
+CREATE TABLE a (c CITEXT) -- fully parenthesized
+CREATE TABLE a (c CITEXT) -- literals removed
+CREATE TABLE _ (_ CITEXT) -- identifiers removed
+
+parse
 CREATE TABLE a (b CHAR(1), c CHARACTER(1), d CHARACTER(3))
 ----
 CREATE TABLE a (b CHAR, c CHAR, d CHAR(3)) -- normalized!

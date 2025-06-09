@@ -2664,6 +2664,23 @@ var builtinOidsArray = []string{
 	2701: `jsonb_path_match(target: jsonb, path: jsonpath, vars: jsonb, silent: bool) -> bool`,
 	2702: `crdb_internal.force_retry(val: int) -> int`,
 	2703: `crdb_internal.show_create_all_routines(database_name: string) -> string`,
+	2704: `citextsend(citext: citext) -> bytes`,
+	2705: `citextrecv(input: anyelement) -> citext`,
+	2706: `citextout(citext: citext) -> bytes`,
+	2707: `citextin(input: anyelement) -> citext`,
+	2708: `bpchar(citext: citext) -> bpchar`,
+	2709: `inet(citext: citext) -> inet`,
+	2710: `varchar(citext: citext) -> varchar`,
+	2711: `name(citext: citext) -> name`,
+	2712: `text(citext: citext) -> string`,
+	2713: `char(citext: citext) -> "char"`,
+	2714: `bool(citext: citext) -> bool`,
+	2715: `citext(bool: bool) -> citext`,
+	2716: `citext(inet: inet) -> citext`,
+	2717: `citext(text: text) -> citext`,
+	2718: `citext(varchar: varchar) -> citext`,
+	2719: `citext(string: string) -> citext`,
+	2720: `citext(citext: citext) -> citext`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
