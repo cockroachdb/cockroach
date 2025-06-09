@@ -969,6 +969,16 @@ func (l *internalLookupCtx) getTypeByID(id descpb.ID) (catalog.TypeDescriptor, e
 	return typ, nil
 }
 
+// hasSchemaWithID reports whether a schema with the given ID exists in the
+// lookup context.
+func (l *internalLookupCtx) hasSchemaWithID(id descpb.ID) bool {
+	if id == keys.SystemPublicSchemaID {
+		return true
+	}
+	_, ok := l.schemaDescs[id]
+	return ok
+}
+
 func (l *internalLookupCtx) getSchemaByID(id descpb.ID) (catalog.SchemaDescriptor, error) {
 	sc, ok := l.schemaDescs[id]
 	if !ok {

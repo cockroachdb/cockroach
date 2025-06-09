@@ -1675,7 +1675,10 @@ statement ok
 CREATE TABLE foo (a INT PRIMARY KEY, INDEX idx(a)); INSERT INTO foo VALUES(1);
 
 statement ok
-CREATE TABLE bar (a INT PRIMARY KEY, INDEX idx(a));
+CREATE SCHEMA droptest;
+
+statement ok
+CREATE TABLE droptest.bar (a INT PRIMARY KEY, INDEX idx(a));
 
 query TB rowsort
 SELECT name, dropped  
@@ -1686,7 +1689,7 @@ foo    false
 bar    false
 
 statement ok
-DROP TABLE bar
+DROP SCHEMA droptest CASCADE
 
 query TB rowsort
 SELECT name, dropped  
@@ -1744,13 +1747,13 @@ CREATE TYPE other_db.public.enum1 AS ENUM ('yo');
 query ITTITTT
 SELECT * FROM "".crdb_internal.create_type_statements WHERE descriptor_name = 'enum1' and database_name = 'other_db'
 ----
-124  other_db  public  154  enum1  CREATE TYPE public.enum1 AS ENUM ('yo')  {yo}
+124  other_db  public  155  enum1  CREATE TYPE public.enum1 AS ENUM ('yo')  {yo}
 
 # This uses the virtual index. descriptor_id is an int in the vtable.
 query ITTITTT
 SELECT * FROM "".crdb_internal.create_type_statements WHERE descriptor_id = (('other_db.public.enum1'::regtype::int) - 100000)
 ----
-124  other_db  public  154  enum1  CREATE TYPE public.enum1 AS ENUM ('yo')  {yo}
+124  other_db  public  155  enum1  CREATE TYPE public.enum1 AS ENUM ('yo')  {yo}
 
 # Repeat above two queries but apply only for the current database. We do this by omitting the "".
 # This one uses the full table scan.

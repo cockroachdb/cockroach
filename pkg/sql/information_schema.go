@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
@@ -2671,10 +2672,6 @@ func forEachTypeDesc(
 		if err != nil {
 			continue
 		}
-		sc, err := lCtx.getSchemaByID(typ.GetParentSchemaID())
-		if err != nil {
-			return err
-		}
 		canSeeDescriptor, err := userCanSeeDescriptor(
 			ctx, p, typ, dbDesc, false /* allowAdding */, false /* includeDropped */)
 		if err != nil {
@@ -2682,6 +2679,10 @@ func forEachTypeDesc(
 		}
 		if !canSeeDescriptor {
 			continue
+		}
+		sc, err := lCtx.getSchemaByID(typ.GetParentSchemaID())
+		if err != nil {
+			return err
 		}
 		if err := fn(ctx, dbDesc, sc, typ); err != nil {
 			return err
@@ -2809,9 +2810,16 @@ func forEachTableDescFromDescriptors(
 		}
 		var sc catalog.SchemaDescriptor
 		if parentExists {
-			sc, err = lCtx.getSchemaByID(table.GetParentSchemaID())
-			if err != nil && !table.IsTemporary() {
-				return err
+			// The schema may not exist if the table is temporary or belongs to a
+			// dropped schema. If the schema is dropped and we're configured to
+			// tolerate that (includeDropped is true), then the schema descriptor (sc)
+			// will intentionally remain nil.
+			schemaID := table.GetParentSchemaID()
+			if lCtx.hasSchemaWithID(schemaID) {
+				sc, err = lCtx.getSchemaByID(schemaID)
+				if err != nil {
+					return err
+				}
 			} else if table.IsTemporary() {
 				// Look up the schemas for this database if we discover that there is a
 				// missing temporary schema name. Temporary schemas have namespace
@@ -2836,6 +2844,8 @@ func forEachTableDescFromDescriptors(
 				if sc == nil {
 					sc = schemadesc.NewTemporarySchema(catconstants.PgTempSchemaName, table.GetParentSchemaID(), dbDesc.GetID())
 				}
+			} else if !opts.includeDropped {
+				return sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", schemaID))
 			}
 		}
 		if err := fn(ctx, tableDescContext{dbDesc, sc, table, lCtx}); err != nil {
