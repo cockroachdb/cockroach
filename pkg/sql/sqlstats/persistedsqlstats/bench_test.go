@@ -320,7 +320,7 @@ func BenchmarkSqlStatsPersisted(b *testing.B) {
 					sqlRunner, tc := cluster.create()
 					defer tc.Stopper().Stop(ctx)
 					sqlRunner.Exec(b, `INSERT INTO system.users VALUES ('node', NULL, 
-							true, 3)`)
+							true, 3, NULL)`)
 					sqlRunner.Exec(b, `GRANT node TO root`)
 					sqlRunner.Exec(b, `CREATE DATABASE IF NOT EXISTS bench`)
 					for _, query := range dropQueries {
