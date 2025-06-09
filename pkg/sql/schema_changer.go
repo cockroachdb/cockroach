@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -1546,6 +1547,9 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			return catalog.MakeDescriptorIDSet(ids...), err
 		}
 		referencedTypeIDs, err := collectReferencedTypeIDs()
+		if err != nil {
+			return err
+		}
 
 		collectReferencedSequenceIDs := func() map[descpb.ID]descpb.ColumnIDs {
 			m := make(map[descpb.ID]descpb.ColumnIDs)
@@ -1559,6 +1563,34 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		}
 		referencedSequenceIDs := collectReferencedSequenceIDs()
 
+		collectReferencedFunctionIDs := func() (colRefs map[descpb.ID]descpb.ColumnIDs, idxRefs map[descpb.ID][]descpb.IndexID, err error) {
+			colRefs = make(map[descpb.ID]descpb.ColumnIDs)
+			idxRefs = make(map[descpb.ID][]descpb.IndexID)
+
+			// Collect function references from columns.
+			for _, col := range scTable.AllColumns() {
+				for i := 0; i < col.NumUsesFunctions(); i++ {
+					id := col.GetUsesFunctionID(i)
+					colRefs[id] = append(colRefs[id], col.GetID())
+				}
+			}
+
+			// Collect function references from partial index predicates.
+			for _, idx := range scTable.AllIndexes() {
+				if idx.IsPartial() {
+					fnIDs, err := schemaexpr.GetUDFIDsFromExprStr(idx.GetPredicate())
+					if err != nil {
+						return nil, nil, err
+					}
+					fnIDs.ForEach(func(id descpb.ID) {
+						idxRefs[id] = append(idxRefs[id], idx.GetID())
+					})
+				}
+			}
+
+			return colRefs, idxRefs, nil
+		}
+		referencedFunctionIDsFromCols, referencedFunctionIDsFromIndexes, err := collectReferencedFunctionIDs()
 		if err != nil {
 			return err
 		}
@@ -1925,6 +1957,113 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				}
 				tbl.UpdateColumnsDependedOnBy(scTable.ID, colIDSet)
 				if err := txn.Descriptors().WriteDescToBatch(ctx, kvTrace, tbl, b); err != nil {
+					return err
+				}
+			}
+		}
+
+		// Now do the same as the above but for referenced functions.
+		if !scTable.Dropped() {
+			newReferencedFunctionIDsFromCols, newReferencedFunctionIDsFromIndexes, err := collectReferencedFunctionIDs()
+			if err != nil {
+				return err
+			}
+			update := make(map[descpb.ID]catalog.TableColSet, len(newReferencedFunctionIDsFromCols)+len(referencedFunctionIDsFromCols))
+			for id := range referencedFunctionIDsFromCols {
+				if _, found := newReferencedFunctionIDsFromCols[id]; !found {
+					// Mark id as requiring update, empty col set means deletion.
+					update[id] = catalog.TableColSet{}
+				}
+			}
+			for id, newColIDs := range newReferencedFunctionIDsFromCols {
+				newColIDSet := catalog.MakeTableColSet(newColIDs...)
+				var oldColIDSet catalog.TableColSet
+				if oldColIDs, found := referencedFunctionIDsFromCols[id]; found {
+					oldColIDSet = catalog.MakeTableColSet(oldColIDs...)
+				}
+				union := catalog.MakeTableColSet(newColIDs...)
+				union.UnionWith(oldColIDSet)
+				if union.Len() != oldColIDSet.Len() || union.Len() != newColIDSet.Len() {
+					// Mark id as requiring update with new col set.
+					update[id] = newColIDSet
+				}
+			}
+
+			// Update the set of back references.
+			for id, colIDSet := range update {
+				fnDesc, err := txn.Descriptors().MutableByID(txn.KV()).Function(ctx, id)
+				if err != nil {
+					return err
+				}
+				// Remove all column references from this table first.
+				for _, ref := range fnDesc.GetDependedOnBy() {
+					if ref.ID == scTable.ID {
+						for _, colID := range ref.ColumnIDs {
+							fnDesc.RemoveColumnReference(scTable.ID, colID)
+						}
+					}
+				}
+				// Now add the new column references.
+				colIDSet.ForEach(func(colID descpb.ColumnID) {
+					if err == nil {
+						err = fnDesc.AddColumnReference(scTable.ID, colID)
+					}
+				})
+				if err != nil {
+					return err
+				}
+				if err := txn.Descriptors().WriteDescToBatch(ctx, kvTrace, fnDesc, b); err != nil {
+					return err
+				}
+			}
+
+			// Handle index references separately.
+			// We need to track which functions are referenced by indexes and update
+			// their back-references accordingly.
+			allFunctionIDs := make(map[descpb.ID]struct{})
+			for id := range referencedFunctionIDsFromCols {
+				allFunctionIDs[id] = struct{}{}
+			}
+			for id := range referencedFunctionIDsFromIndexes {
+				allFunctionIDs[id] = struct{}{}
+			}
+			for id := range newReferencedFunctionIDsFromCols {
+				allFunctionIDs[id] = struct{}{}
+			}
+			for id := range newReferencedFunctionIDsFromIndexes {
+				allFunctionIDs[id] = struct{}{}
+			}
+
+			// Update index references for all functions that have any relationship with this table.
+			for id := range allFunctionIDs {
+				fnDesc, err := txn.Descriptors().MutableByID(txn.KV()).Function(ctx, id)
+				if err != nil {
+					return err
+				}
+
+				// Determine which indexes currently reference this function.
+				var newIndexIDs []descpb.IndexID
+				if idxIDs, found := newReferencedFunctionIDsFromIndexes[id]; found {
+					newIndexIDs = idxIDs
+				}
+
+				// Remove all existing index references from this table.
+				for _, ref := range fnDesc.GetDependedOnBy() {
+					if ref.ID == scTable.ID {
+						for _, idxID := range ref.IndexIDs {
+							fnDesc.RemoveIndexReference(scTable.ID, idxID)
+						}
+					}
+				}
+
+				// Add the new index references.
+				for _, idxID := range newIndexIDs {
+					if err := fnDesc.AddIndexReference(scTable.ID, idxID); err != nil {
+						return err
+					}
+				}
+
+				if err := txn.Descriptors().WriteDescToBatch(ctx, kvTrace, fnDesc, b); err != nil {
 					return err
 				}
 			}
