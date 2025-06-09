@@ -315,7 +315,7 @@ var opWeights = []int{
 	dropSchema:                        1,
 	dropSequence:                      1,
 	dropTable:                         1,
-	dropTrigger:                       1,
+	dropTrigger:                       0, // TODO(147981): re-enable once we fix orphaning of backref in DROP TRIGGER
 	dropView:                          1,
 	renameIndex:                       1,
 	renameSequence:                    1,
