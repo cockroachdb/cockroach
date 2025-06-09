@@ -118,3 +118,24 @@ func init() {
 	)
 
 }
+
+// This rule ensures that index columns depend on each other in increasing order.
+func init() {
+	registerDepRule(
+		"ensure index columns are in increasing order",
+		scgraph.Precedence,
+		"later-column", "earlier-column",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.IndexColumn)(nil)),
+				from.JoinTargetNode(),
+				to.Type((*scpb.IndexColumn)(nil)),
+				JoinOnIndexID(from, to, "table-id", "index-id"),
+				ToPublicOrTransient(from, to),
+				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
+				FilterElements("SmallerColumnIDFirst", from, to, func(from, to *scpb.IndexColumn) bool {
+					return from.OrdinalInKind < to.OrdinalInKind && from.Kind == to.Kind
+				}),
+			}
+		})
+}
