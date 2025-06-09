@@ -17,12 +17,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const (
-	// ossFlag is the name of the boolean long (GNU-style) flag that builds only
-	// the open-source parts of the UI.
-	ossFlag = "oss"
-)
-
 // makeUICmd initializes the top-level 'ui' subcommand.
 func makeUICmd(d *dev) *cobra.Command {
 	uiCmd := &cobra.Command{
@@ -288,11 +282,6 @@ Replaces 'make ui-watch'.`,
 				return err
 			}
 
-			isOss, err := cmd.Flags().GetBool(ossFlag)
-			if err != nil {
-				return err
-			}
-
 			// Ensure node dependencies are up-to-date.
 			err = d.exec.CommandContextInheritingStdStreams(
 				ctx,
@@ -309,13 +298,11 @@ Replaces 'make ui-watch'.`,
 			args := []string{
 				"build",
 				"//pkg/ui/workspaces/cluster-ui:cluster-ui-lib",
-			}
-			if !isOss {
-				args = append(args, "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl-lib")
-				args = append(args, "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client_files")
-				args = append(args, "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client")
-				args = append(args, "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl_files")
-				args = append(args, "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl")
+				"//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl-lib",
+				"//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client_files",
+				"//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
+				"//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl_files",
+				"//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl",
 			}
 			logCommand("bazel", args...)
 			err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
@@ -325,7 +312,7 @@ Replaces 'make ui-watch'.`,
 				return err
 			}
 
-			if err := arrangeFilesForWatchers(d, isOss); err != nil {
+			if err := arrangeFilesForWatchers(d); err != nil {
 				log.Fatalf("failed to arrange files for watchers: %v", err)
 				return err
 			}
@@ -382,13 +369,6 @@ Replaces 'make ui-watch'.`,
 				}
 			}
 
-			var webpackDist string
-			if isOss {
-				webpackDist = "oss"
-			} else {
-				webpackDist = "ccl"
-			}
-
 			args = []string{
 				"--dir",
 				dirs.dbConsole,
@@ -399,7 +379,7 @@ Replaces 'make ui-watch'.`,
 				// Polyfill WEBPACK_SERVE for webpack v4; it's set in webpack v5 via
 				// `webpack serve`.
 				"--env.WEBPACK_SERVE",
-				"--env.dist=" + webpackDist,
+				"--env.dist=ccl",
 				"--env.target=" + dbTarget,
 				"--port", port,
 			}
@@ -425,7 +405,6 @@ Replaces 'make ui-watch'.`,
 	watchCmd.Flags().Int16P(portFlag, "p", 3000, "port to serve UI on")
 	watchCmd.Flags().String(dbTargetFlag, "http://localhost:8080", "url to proxy DB requests to")
 	watchCmd.Flags().Bool(secureFlag, false, "serve via HTTPS")
-	watchCmd.Flags().Bool(ossFlag, false, "build only the open-source parts of the UI")
 	watchCmd.Flags().StringArray(
 		clusterUiDestinationsFlag,
 		[]string{},
@@ -482,7 +461,7 @@ func makeUIStorybookCmd(d *dev) *cobra.Command {
 				return err
 			}
 
-			if err := arrangeFilesForWatchers(d /* ossOnly */, false); err != nil {
+			if err := arrangeFilesForWatchers(d); err != nil {
 				log.Fatalf("failed to arrange files for watchers: %v", err)
 				return err
 			}
@@ -745,7 +724,7 @@ func makeUICleanCmd(d *dev) *cobra.Command {
 // mode) to be executed from directly within a pkg/ui/workspaces/... directory.
 //
 // See https://github.com/bazelbuild/rules_nodejs/issues/2028
-func arrangeFilesForWatchers(d *dev, ossOnly bool) error {
+func arrangeFilesForWatchers(d *dev) error {
 	bazelBin, err := d.getBazelBin(d.cli.Context(), []string{})
 	if err != nil {
 		return err
@@ -771,10 +750,6 @@ func arrangeFilesForWatchers(d *dev, ossOnly bool) error {
 		ossDst := filepath.Join(dbConsoleDst, relPath)
 		if err := d.os.CopyFile(filepath.Join(dbConsoleSrc, relPath), ossDst); err != nil {
 			return err
-		}
-
-		if ossOnly {
-			continue
 		}
 
 		cclDst := filepath.Join(dbConsoleCclDst, relPath)
@@ -845,7 +820,7 @@ Replaces 'make ui-test' and 'make ui-test-watch'.`,
 					return err
 				}
 
-				err = arrangeFilesForWatchers(d, false /* ossOnly */)
+				err = arrangeFilesForWatchers(d)
 				if err != nil {
 					// nolint:errwrap
 					return fmt.Errorf("unable to arrange files properly for watch-mode testing: %+v", err)
