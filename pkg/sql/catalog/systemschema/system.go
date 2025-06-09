@@ -63,6 +63,7 @@ CREATE TABLE system.users (
   CONSTRAINT "primary" PRIMARY KEY (username),
   UNIQUE INDEX users_user_id_idx (user_id ASC),
   FAMILY "primary" (username, user_id)
+  "estimated_last_login_time" TIMESTAMPTZ NULL,
 );`
 	RoleOptionsTableSchema = `
 CREATE TABLE system.role_options (
@@ -1378,7 +1379,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V25_3_AddEventLogColumnAndIndex.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V25_3_AddEstimatedLastLoginTime.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -1651,6 +1652,7 @@ var (
 				{Name: "hashedPassword", ID: 2, Type: types.Bytes, Nullable: true},
 				{Name: "isRole", ID: 3, Type: types.Bool, DefaultExpr: &falseBoolString},
 				{Name: "user_id", ID: 4, Type: types.Oid},
+				{Name: "estimated_last_login_time", ID: 6, Type: types.TimestampTZ, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{Name: "primary", ID: 0, ColumnNames: []string{"username", "user_id"}, ColumnIDs: []descpb.ColumnID{1, 4}, DefaultColumnID: 4},
