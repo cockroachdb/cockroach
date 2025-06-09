@@ -10,7 +10,7 @@ import { RequestError } from "../util";
 
 import {
   executeInternalSql,
-  MAX_RESULT_SIZE,
+  LARGE_RESULT_SIZE,
   SqlExecutionRequest,
   sqlResultsAreEmpty,
 } from "./sqlApi";
@@ -74,7 +74,7 @@ export function getSchedules(req: {
         arguments: args,
       },
     ],
-    max_result_size: MAX_RESULT_SIZE,
+    max_result_size: LARGE_RESULT_SIZE,
     execute: true,
   };
   return executeInternalSql<ScheduleColumns>(request).then(result => {
