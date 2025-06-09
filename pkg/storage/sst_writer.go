@@ -95,7 +95,7 @@ func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstab
 	// There are other, more specific, use cases that may call for a different
 	// algorithm, which can be set by overriding the default (see
 	// MakeIngestionSSTWriterWithOverrides).
-	opts.Compression = getCompressionAlgorithm(ctx, cs, CompressionAlgorithmStorage)
+	opts.Compression = getCompressionProfile(ctx, cs, CompressionAlgorithmStorage)
 	opts.MergerName = "nullptr"
 	if !IngestionValueBlocksEnabled.Get(&cs.SV) {
 		opts.DisableValueBlocks = true
@@ -142,7 +142,7 @@ func MakeTransportSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writ
 	// block checksums and more index entries are just overhead and smaller blocks
 	// reduce compression ratio.
 	opts.BlockSize = 128 << 10
-	opts.Compression = getCompressionAlgorithm(ctx, cs, CompressionAlgorithmBackupTransport)
+	opts.Compression = getCompressionProfile(ctx, cs, CompressionAlgorithmBackupTransport)
 	opts.MergerName = "nullptr"
 	return SSTWriter{
 		fw: sstable.NewWriter(&noopFinishAbort{f}, opts),
@@ -174,7 +174,7 @@ func WithCompressionFromClusterSetting(
 	ctx context.Context, cs *cluster.Settings, setting *settings.EnumSetting[CompressionAlgorithm],
 ) SSTWriterOption {
 	return func(opts *sstable.WriterOptions) {
-		opts.Compression = getCompressionAlgorithm(ctx, cs, setting)
+		opts.Compression = getCompressionProfile(ctx, cs, setting)
 	}
 }
 
