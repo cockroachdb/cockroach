@@ -10,7 +10,6 @@ import (
 	"context"
 	"flag"
 	"io"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -21,9 +20,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sniffarg"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -65,8 +64,9 @@ func BenchmarkTPCC(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	// Setup the cluster once for all benchmarks.
-	c, pgURL := startCluster(b)
-	defer c.Stopper().Stop(context.Background())
+	ctx := context.Background()
+	tc, pgURL := startCluster(b, ctx)
+	defer tc.Stopper().Stop(ctx)
 
 	for _, impl := range []struct{ name, flag string }{
 		{"literal", "--literal-implementation=true"},
@@ -82,17 +82,15 @@ func BenchmarkTPCC(b *testing.B) {
 				{"default", "--mix=newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1"},
 			} {
 				b.Run(mix.name, func(b *testing.B) {
-					run(b, pgURL, []string{impl.flag, mix.flag})
+					run(b, ctx, pgURL, []string{impl.flag, mix.flag})
 				})
 			}
 		})
-
 	}
 }
 
 // run executes the TPC-C workload with the specified workload flags.
-func run(b *testing.B, pgURL string, workloadFlags []string) {
-	ctx := context.Background()
+func run(b *testing.B, ctx context.Context, pgURL string, workloadFlags []string) {
 	defer startCPUProfile(b).Stop(b)
 	defer startAllocsProfile(b).Stop(b)
 
@@ -119,14 +117,15 @@ func run(b *testing.B, pgURL string, workloadFlags []string) {
 }
 
 // startCluster starts a cluster and initializes the workload data.
-func startCluster(b *testing.B) (_ serverutils.TestClusterInterface, pgURL string) {
-	ctx := context.Background()
+func startCluster(
+	b *testing.B, ctx context.Context,
+) (_ serverutils.TestClusterInterface, pgURL string) {
 	st := cluster.MakeTestingClusterSettings()
 
 	// NOTE: disabling background work makes the benchmark more predictable, but
 	// also moderately less realistic.
-	ts.TimeseriesStorageEnabled.Override(context.Background(), &st.SV, false)
-	stats.AutomaticStatisticsClusterMode.Override(context.Background(), &st.SV, false)
+	ts.TimeseriesStorageEnabled.Override(ctx, &st.SV, false)
+	stats.AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
 
 	const cacheSize = 2 * 1024 * 1024 * 1024 // 2GB
 	serverArgs := make(map[int]base.TestServerArgs, nodes)
@@ -134,38 +133,38 @@ func startCluster(b *testing.B) (_ serverutils.TestClusterInterface, pgURL strin
 		serverArgs[i] = base.TestServerArgs{
 			Settings:  st,
 			CacheSize: cacheSize,
+			Knobs: base.TestingKnobs{
+				DialerKnobs: nodedialer.DialerTestingKnobs{
+					// Disable local client optimization.
+					TestingNoLocalClientOptimization: true,
+				},
+			},
 		}
 	}
 
 	// Start the cluster.
-	c := serverutils.StartCluster(b, nodes, base.TestClusterArgs{
+	tc := serverutils.StartCluster(b, nodes, base.TestClusterArgs{
 		ServerArgsPerNode: serverArgs,
 		ParallelStart:     true,
 	})
 
 	// Generate a PG URL.
-	u, urlCleanup, err := pgurlutils.PGUrlE(
-		c.Server(0).AdvSQLAddr(), b.TempDir(), url.User("root"),
-	)
-	if err != nil {
-		b.Fatalf("failed to create pgurl: %s", err)
-	}
-	u.Path = dbName
-	c.Stopper().AddCloser(stop.CloserFn(urlCleanup))
+	u, cleanupURL := tc.ApplicationLayer(0).PGUrl(b, serverutils.DBName(dbName))
+	tc.Stopper().AddCloser(stop.CloserFn(cleanupURL))
 
 	// Create the database.
-	r := sqlutils.MakeSQLRunner(c.ServerConn(0))
+	r := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	r.Exec(b, "CREATE DATABASE "+dbName)
 	r.Exec(b, "USE "+dbName)
 
 	// Load the TPC-C workload data.
 	gen := tpccGenerator(b, []string{"--db=" + dbName})
 	var loader workloadsql.InsertsDataLoader
-	if _, err := workloadsql.Setup(ctx, c.ServerConn(0), gen, loader); err != nil {
+	if _, err := workloadsql.Setup(ctx, tc.ServerConn(0), gen, loader); err != nil {
 		b.Fatal(err)
 	}
 
-	return c, u.String()
+	return tc, u.String()
 }
 
 type generator interface {
@@ -173,6 +172,7 @@ type generator interface {
 	workload.Hookser
 	workload.Generator
 	workload.Opser
+	SetOutput(io.Writer)
 }
 
 func tpccGenerator(b *testing.B, flags []string) generator {
@@ -181,9 +181,7 @@ func tpccGenerator(b *testing.B, flags []string) generator {
 		b.Fatal(err)
 	}
 	gen := tpcc.New().(generator)
-	gen.(interface {
-		SetOutput(io.Writer)
-	}).SetOutput(io.Discard)
+	gen.SetOutput(io.Discard)
 	if err := gen.Flags().Parse(flags); err != nil {
 		b.Fatal(err)
 	}
