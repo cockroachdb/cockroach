@@ -114,6 +114,11 @@ func TestMVCCComputeSSTStatsDiff(t *testing.T) {
 			local: p("a1"),
 		},
 		{
+			name:  "sstHistoryThreeVersionsGreaterThanLocal",
+			sst:   p("a4a3a2"),
+			local: p("a1"),
+		},
+		{
 			name:  "sstHistoryLessThanLocal",
 			sst:   p("a2a1"),
 			local: p("a3"),
