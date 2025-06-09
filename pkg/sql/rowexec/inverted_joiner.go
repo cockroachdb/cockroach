@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
@@ -80,7 +81,7 @@ type invertedJoiner struct {
 	// fetched columns (same length with prefixEqualityCols).
 	prefixFetchedColOrdinals []int
 
-	onExprHelper execinfrapb.ExprHelper
+	onExprHelper execexpr.Helper
 	combinedRow  rowenc.EncDatumRow
 
 	joinType descpb.JoinType
@@ -271,7 +272,7 @@ func newInvertedJoiner(
 	ij.combinedRow = make(rowenc.EncDatumRow, 0, combinedRowLen)
 
 	if ij.datumsToInvertedExpr == nil {
-		var invertedExprHelper execinfrapb.ExprHelper
+		var invertedExprHelper execexpr.Helper
 		if err := invertedExprHelper.Init(ctx, spec.InvertedExpr, onExprColTypes, semaCtx, evalCtx); err != nil {
 			return nil, err
 		}

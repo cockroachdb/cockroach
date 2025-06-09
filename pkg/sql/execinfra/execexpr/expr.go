@@ -3,13 +3,14 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package execinfrapb
+package execexpr
 
 import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -23,7 +24,7 @@ import (
 // provided IndexedVarHelper.
 func DeserializeExpr(
 	ctx context.Context,
-	expr Expression,
+	expr execinfrapb.Expression,
 	typs []*types.T,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
@@ -31,7 +32,7 @@ func DeserializeExpr(
 	if expr.Expr == "" {
 		return nil, nil
 	}
-	eh := exprHelper{evalCtx: evalCtx, semaCtx: semaCtx, types: typs}
+	eh := helper{evalCtx: evalCtx, semaCtx: semaCtx, types: typs}
 	return eh.deserializeExpr(ctx, expr)
 }
 
@@ -47,20 +48,20 @@ func RunFilter(ctx context.Context, filter tree.TypedExpr, evalCtx *eval.Context
 	return d == tree.DBoolTrue, nil
 }
 
-// ExprHelper implements the common logic around evaluating an expression that
+// Helper implements the common logic around evaluating an expression that
 // depends on a set of values.
-type ExprHelper struct {
-	exprHelper
+type Helper struct {
+	helper
 	expr tree.TypedExpr
 }
 
-// ExprHelper implements tree.IndexedVarContainer.
-var _ eval.IndexedVarContainer = &ExprHelper{}
+// Helper implements tree.IndexedVarContainer.
+var _ eval.IndexedVarContainer = &Helper{}
 
-// Init initializes the ExprHelper.
-func (eh *ExprHelper) Init(
+// Init initializes the Helper.
+func (eh *Helper) Init(
 	ctx context.Context,
-	expr Expression,
+	expr execinfrapb.Expression,
 	types []*types.T,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
@@ -75,7 +76,7 @@ func (eh *ExprHelper) Init(
 }
 
 // Expr returns the typed expression within the helper.
-func (eh *ExprHelper) Expr() tree.TypedExpr {
+func (eh *Helper) Expr() tree.TypedExpr {
 	return eh.expr
 }
 
@@ -86,25 +87,25 @@ func (eh *ExprHelper) Expr() tree.TypedExpr {
 //	'@2 + @5' would return '7'
 //	'@1' would return '1'
 //	'@2 + 10' would return '12'
-func (eh *ExprHelper) Eval(ctx context.Context, row rowenc.EncDatumRow) (tree.Datum, error) {
+func (eh *Helper) Eval(ctx context.Context, row rowenc.EncDatumRow) (tree.Datum, error) {
 	return eh.eval(ctx, eh.expr, row)
 }
 
 // EvalFilter is used for filter expressions; it evaluates the expression and
 // returns whether the filter passes.
-func (eh *ExprHelper) EvalFilter(ctx context.Context, row rowenc.EncDatumRow) (bool, error) {
+func (eh *Helper) EvalFilter(ctx context.Context, row rowenc.EncDatumRow) (bool, error) {
 	return eh.evalFilter(ctx, eh.expr, row)
 }
 
-// MultiExprHelper is similar to ExprHelper. It is preferred in cases where
+// MultiHelper is similar to Helper. It is preferred in cases where
 // there are multiple expressions to evaluate.
-type MultiExprHelper struct {
-	h     exprHelper
+type MultiHelper struct {
+	h     helper
 	exprs []tree.TypedExpr
 }
 
-// Init initializes the MultiExprHelper.
-func (eh *MultiExprHelper) Init(
+// Init initializes the MultiHelper.
+func (eh *MultiHelper) Init(
 	ctx context.Context,
 	numExprs int,
 	types []*types.T,
@@ -125,14 +126,14 @@ func (eh *MultiExprHelper) Init(
 
 // Expr returns the i-th typed expression within the helper. If AddExpr was not
 // called for the given index, then Expr will return nil.
-func (eh *MultiExprHelper) Expr(i int) tree.TypedExpr {
+func (eh *MultiHelper) Expr(i int) tree.TypedExpr {
 	return eh.exprs[i]
 }
 
 // ExprCount returns the number of expressions that the helper can store. Note
 // that if AddExpr was not called for every index, some expressions will not
 // have been set.
-func (eh *MultiExprHelper) ExprCount() int {
+func (eh *MultiHelper) ExprCount() int {
 	if eh == nil {
 		return 0
 	}
@@ -140,7 +141,9 @@ func (eh *MultiExprHelper) ExprCount() int {
 }
 
 // AddExpr sets the given expression as the i-th expression in the helper.
-func (eh *MultiExprHelper) AddExpr(ctx context.Context, expr Expression, i int) (err error) {
+func (eh *MultiHelper) AddExpr(
+	ctx context.Context, expr execinfrapb.Expression, i int,
+) (err error) {
 	eh.exprs[i], err = eh.h.prepareExpr(ctx, expr)
 	return err
 }
@@ -148,38 +151,38 @@ func (eh *MultiExprHelper) AddExpr(ctx context.Context, expr Expression, i int) 
 // SetRow sets the internal row of the expression helper.
 // TODO(mgartner): This is only used in projectSetProcessor and ideally it could
 // be removed.
-func (eh *MultiExprHelper) SetRow(row rowenc.EncDatumRow) {
+func (eh *MultiHelper) SetRow(row rowenc.EncDatumRow) {
 	eh.h.row = row
 }
 
 // EvalExpr evaluates the i-th expression with the given row and returns the
 // resulting datum.
-func (eh *MultiExprHelper) EvalExpr(
+func (eh *MultiHelper) EvalExpr(
 	ctx context.Context, i int, row rowenc.EncDatumRow,
 ) (tree.Datum, error) {
 	return eh.h.eval(ctx, eh.exprs[i], row)
 }
 
 // IVarContainer returns the tree.IndexedVarContainer of the expression helper.
-func (eh *MultiExprHelper) IVarContainer() tree.IndexedVarContainer {
+func (eh *MultiHelper) IVarContainer() tree.IndexedVarContainer {
 	return &eh.h
 }
 
 // Reset clears all references in the expression helper.
-func (eh *MultiExprHelper) Reset() {
+func (eh *MultiHelper) Reset() {
 	if eh == nil {
 		return
 	}
-	eh.h = exprHelper{}
+	eh.h = helper{}
 	for i := range eh.exprs {
 		eh.exprs[i] = nil
 	}
 	eh.exprs = eh.exprs[:0]
 }
 
-// exprHelper is a base implementation of an expression helper used by both
-// ExprHelper and MultiExprHelper.
-type exprHelper struct {
+// helper is a base implementation of an expression helper used by both
+// Helper and MultiHelper.
+type helper struct {
 	evalCtx    *eval.Context
 	semaCtx    *tree.SemaContext
 	datumAlloc *tree.DatumAlloc
@@ -188,16 +191,16 @@ type exprHelper struct {
 	row   rowenc.EncDatumRow
 }
 
-// exprHelper implements tree.IndexedVarContainer.
-var _ eval.IndexedVarContainer = &exprHelper{}
+// helper implements tree.IndexedVarContainer.
+var _ eval.IndexedVarContainer = &helper{}
 
 // IndexedVarResolvedType is part of the tree.IndexedVarContainer interface.
-func (eh *exprHelper) IndexedVarResolvedType(idx int) *types.T {
+func (eh *helper) IndexedVarResolvedType(idx int) *types.T {
 	return eh.types[idx]
 }
 
 // IndexedVarEval is part of the eval.IndexedVarContainer interface.
-func (eh *exprHelper) IndexedVarEval(idx int) (tree.Datum, error) {
+func (eh *helper) IndexedVarEval(idx int) (tree.Datum, error) {
 	err := eh.row[idx].EnsureDecoded(eh.types[idx], eh.datumAlloc)
 	if err != nil {
 		return nil, err
@@ -205,11 +208,11 @@ func (eh *exprHelper) IndexedVarEval(idx int) (tree.Datum, error) {
 	return eh.row[idx].Datum, nil
 }
 
-// init initializes the exprHelper.
-func (eh *exprHelper) init(
+// init initializes the helper.
+func (eh *helper) init(
 	ctx context.Context, types []*types.T, semaCtx *tree.SemaContext, evalCtx *eval.Context,
 ) error {
-	*eh = exprHelper{
+	*eh = helper{
 		evalCtx:    evalCtx,
 		semaCtx:    semaCtx,
 		types:      types,
@@ -227,7 +230,9 @@ func (eh *exprHelper) init(
 
 // prepareExpr converts the given Expression into a tree.TypedExpr and returns
 // it.
-func (eh *exprHelper) prepareExpr(ctx context.Context, expr Expression) (tree.TypedExpr, error) {
+func (eh *helper) prepareExpr(
+	ctx context.Context, expr execinfrapb.Expression,
+) (tree.TypedExpr, error) {
 	if expr.Empty() {
 		return nil, nil
 	}
@@ -239,7 +244,9 @@ func (eh *exprHelper) prepareExpr(ctx context.Context, expr Expression) (tree.Ty
 
 // deserializeExpr converts the given expression's string representation into a
 // tree.TypedExpr and returns it.
-func (eh *exprHelper) deserializeExpr(ctx context.Context, e Expression) (tree.TypedExpr, error) {
+func (eh *helper) deserializeExpr(
+	ctx context.Context, e execinfrapb.Expression,
+) (tree.TypedExpr, error) {
 	if e.Expr == "" {
 		return nil, nil
 	}
@@ -278,7 +285,7 @@ func (eh *exprHelper) deserializeExpr(ctx context.Context, e Expression) (tree.T
 
 // evalFilter is used for filter expressions; it evaluates the expression and
 // returns whether the filter passes.
-func (eh *exprHelper) evalFilter(
+func (eh *helper) evalFilter(
 	ctx context.Context, expr tree.TypedExpr, row rowenc.EncDatumRow,
 ) (bool, error) {
 	eh.row = row
@@ -295,7 +302,7 @@ func (eh *exprHelper) evalFilter(
 //	'@2 + @5' would return '7'
 //	'@1' would return '1'
 //	'@2 + 10' would return '12'
-func (eh *exprHelper) eval(
+func (eh *helper) eval(
 	ctx context.Context, expr tree.TypedExpr, row rowenc.EncDatumRow,
 ) (tree.Datum, error) {
 	eh.row = row
