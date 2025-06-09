@@ -30,7 +30,7 @@ var SQLStatsFlushBatchSize = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"sql.stats.flush.batch_size",
 	"the number of rows to flush per upsert",
-	50,
+	10,
 	settings.NonNegativeInt)
 
 // MinimumInterval is the cluster setting that controls the minimum interval
