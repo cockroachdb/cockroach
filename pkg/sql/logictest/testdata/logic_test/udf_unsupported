@@ -3,8 +3,36 @@ subtest disallow_udf_in_table
 statement ok
 CREATE FUNCTION test_tbl_f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
 
+onlyif config local-mixed-25.2
+statement error pgcode 0A000 pq: unimplemented: usage of user-defined function from relations not supported
+CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT ON UPDATE (test_tbl_f() + 1));
+
+onlyif config local-mixed-25.2
+statement error pgcode 0A000 pq: unimplemented: usage of user-defined function from relations not supported
+CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT AS (test_tbl_f() + 1) STORED);
+
+onlyif config local-mixed-25.2
+statement error pgcode 0A000 pq: unimplemented: usage of user-defined function from relations not supported
+CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT, INDEX idx_b(test_tbl_f()));
+
 statement ok
 CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT);
+
+onlyif config local-mixed-25.2
+statement error pgcode 0A000 pq: unimplemented: usage of user-defined function from relations not supported
+CREATE INDEX t_idx ON test_tbl_t(test_tbl_f());
+
+onlyif config local-mixed-25.2
+statement error pgcode 0A000 pq: unimplemented: usage of user-defined function from relations not supported
+CREATE INDEX t_idx ON test_tbl_t(b) WHERE test_tbl_f() > 0;
+
+onlyif config local-mixed-25.2
+statement error pgcode 0A000 pq: unimplemented: usage of user-defined function from relations not supported
+ALTER TABLE test_tbl_t ADD COLUMN c int ON UPDATE (test_tbl_f());
+
+onlyif config local-mixed-25.2
+statement error pgcode 0A000 pq: unimplemented: usage of user-defined function from relations not supported
+ALTER TABLE test_tbl_t ALTER COLUMN b SET ON UPDATE (test_tbl_f());
 
 # Insert a row to verify that backfills that use UDFs are blocked without internal errors.
 statement ok
