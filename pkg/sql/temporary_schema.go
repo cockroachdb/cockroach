@@ -627,7 +627,7 @@ func (c *TemporaryObjectCleaner) Start(ctx context.Context, stopper *stop.Stoppe
 			select {
 			case <-nextTickCh:
 				if err := c.doTemporaryObjectCleanup(ctx, stopper.ShouldQuiesce()); err != nil {
-					log.Warningf(ctx, "failed to clean temp objects: %v", err)
+					log.Warningf(ctx, "failed to clean temp objects: %v", redact.Safe(err))
 				}
 			case <-stopper.ShouldQuiesce():
 				return
