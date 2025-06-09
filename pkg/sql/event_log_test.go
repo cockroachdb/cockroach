@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -113,6 +114,46 @@ func TestStructuredEventLogging(t *testing.T) {
 	if !foundEntry {
 		t.Error("structured entry for set_cluster_setting not found in log")
 	}
+}
+
+func TestStructuredEventLogging_txnTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	appLogsSpy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_SQL_SCHEMA},
+		[]string{"create_table"},
+		func(entry logpb.Entry) (eventpb.CreateTable, error) {
+			var cte eventpb.CreateTable
+			if err := json.Unmarshal([]byte(entry.Message[entry.StructuredStart:entry.StructuredEnd]), &cte); err != nil {
+				return cte, err
+			}
+			return cte, nil
+		},
+	)
+
+	cleanup := log.InterceptWith(ctx, appLogsSpy)
+	defer cleanup()
+
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(conn)
+	runner.Exec(t, "CREATE TABLE test (id INT PRIMARY KEY)")
+	runner.Exec(t, "BEGIN")
+	runner.Exec(t, "SET autocommit_before_ddl = false")
+	runner.Exec(t, "CREATE TABLE test1 (id INT PRIMARY KEY)")
+	runner.Exec(t, "CREATE TABLE test2 (id INT PRIMARY KEY)")
+	runner.Exec(t, "COMMIT")
+
+	createTables := appLogsSpy.GetLogs(logpb.Channel_SQL_SCHEMA)
+	require.Len(t, createTables, 3)
+	// Not created in the same transaction, so transaction timestamps are different
+	require.NotEqual(t, createTables[0].TxnTimestamp, createTables[1].TxnTimestamp)
+	// Created in the same transaction, so transaction timestamps are the same
+	require.Equal(t, createTables[1].TxnTimestamp, createTables[2].TxnTimestamp)
 }
 
 var execLogRe = regexp.MustCompile(`event_log.go`)

@@ -25,6 +25,10 @@ message CommonSQLEventDetails {
   // The statement string contains a mix of sensitive and non-sensitive details (it is redactable).
   string statement = 1 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"mixed\""];
 
+  // The current read timestamp of the transaction that triggered the event, if
+  // in a transaction.
+  int64 txn_timestamp = 7 [(gogoproto.jsontag) = ",omitempty"];
+
   // The statement tag. This is separate from the statement string,
   // since the statement string can contain sensitive information. The
   // tag is guaranteed not to.
