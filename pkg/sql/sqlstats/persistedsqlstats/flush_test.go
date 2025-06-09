@@ -708,7 +708,7 @@ func TestSQLStatsReadLimitSizeOnLockedTable(t *testing.T) {
 	s := srv.ApplicationLayer()
 
 	sqlConn := sqlutils.MakeSQLRunner(conn)
-	sqlConn.Exec(t, `INSERT INTO system.users VALUES ('node', NULL, true, 3); GRANT node TO root`)
+	sqlConn.Exec(t, `INSERT INTO system.users VALUES ('node', NULL, true, 3, NULL); GRANT node TO root`)
 	waitForFollowerReadTimestamp(t, sqlConn)
 	pss := s.SQLServer().(*sql.Server).GetSQLStatsProvider()
 
