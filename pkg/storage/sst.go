@@ -209,7 +209,7 @@ func ComputeSSTStatsDiff(
 		sstKeySameAsLocal := localIterKey.Key.Compare(sstIterKey.Key) == 0
 		sstKeyShadowsLocal := sstKeySameAsLocal && localIterKey.Timestamp.Less(sstIterKey.Timestamp)
 		prevKeyShadowsSSTKey := prevSSTKey.Key.Compare(sstIterKey.Key) == 0 && sstIterKey.Timestamp.Less(prevSSTKey.Timestamp)
-		prevSSTKey.Key = append(prevSSTKey.Key, sstIterKey.Key...)
+		prevSSTKey.Key = append(prevSSTKey.Key[:0], sstIterKey.Key...)
 		prevSSTKey.Timestamp.WallTime = sstIterKey.Timestamp.WallTime
 		prevSSTKey.Timestamp.Logical = sstIterKey.Timestamp.Logical
 
@@ -222,6 +222,9 @@ func ComputeSSTStatsDiff(
 			continue
 		}
 
+		// ismetaKey suggests the current sstKey is the latest version of a key,
+		// which happens when the previous sst key does not shadow the current sst
+		// key and one of: the sst key shadows a local key or there is no local key.
 		isMetaKey := (sstKeyShadowsLocal || !sstKeySameAsLocal) && !prevKeyShadowsSSTKey
 		sstKeyIsLive := !sstValueIsTombstone && isMetaKey
 
