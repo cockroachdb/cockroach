@@ -45,13 +45,15 @@ SHOW COLUMNS FROM system.descriptor
 id          INT8   false  NULL  ·  {primary}  false
 descriptor  BYTES  true   NULL  ·  {primary}  false
 
+skipif config local-mixed-25.2
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.users
 ----
-username        STRING  false  NULL   ·  {primary,users_user_id_idx}  false
-hashedPassword  BYTES   true   NULL   ·  {primary}                    false
-isRole          BOOL    false  false  ·  {primary}                    false
-user_id         OID     false  NULL   ·  {primary,users_user_id_idx}  false
+username                   STRING       false  NULL   ·  {primary,users_user_id_idx}  false
+hashedPassword             BYTES        true   NULL   ·  {primary}                    false
+isRole                     BOOL         false  false  ·  {primary}                    false
+user_id                    OID          false  NULL   ·  {primary,users_user_id_idx}  false
+estimated_last_login_time  TIMESTAMPTZ  true   NULL   ·  {primary}                    false
 
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.zones
