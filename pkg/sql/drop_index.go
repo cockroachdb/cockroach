@@ -174,6 +174,11 @@ func (n *dropIndexNode) startExec(params runParams) error {
 				}
 				if col.IsExpressionIndexColumn() && !keyColumnOfOtherIndex(col.GetID()) {
 					n.queueDropColumn(tableDesc, col)
+					if col.NumUsesFunctions() > 0 {
+						if err := params.p.removeColumnBackReferenceInFunctions(params.ctx, tableDesc, col.ColumnDesc()); err != nil {
+							return err
+						}
+					}
 					columnsDropped = true
 				}
 			}
@@ -493,6 +498,10 @@ func (p *planner) dropIndexByName(
 	}
 
 	if err := validateDescriptor(ctx, p, tableDesc); err != nil {
+		return err
+	}
+
+	if err := p.maybeRemoveFunctionReferencesForIndex(ctx, tableDesc, idxDesc); err != nil {
 		return err
 	}
 

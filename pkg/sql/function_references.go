@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 )
 
 func (p *planner) updateFunctionReferencesForCheck(
@@ -64,6 +65,66 @@ func (p *planner) maybeUpdateFunctionReferencesForColumn(
 		if err := fnDesc.AddColumnReference(tblDesc.GetID(), col.ID); err != nil {
 			return err
 		}
+		if err := p.writeFuncSchemaChange(ctx, fnDesc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *planner) maybeAddFunctionReferencesForIndex(
+	ctx context.Context, tblDesc catalog.TableDescriptor, idx *descpb.IndexDescriptor,
+) error {
+	if !idx.IsPartial() {
+		return nil
+	}
+	if idx.UseDeletePreservingEncoding {
+		// These indexes are only used during the backfill and are discarded after.
+		return nil
+	}
+
+	// Extract function IDs from the partial index predicate.
+	fnIDs, err := schemaexpr.GetUDFIDsFromExprStr(idx.Predicate)
+	if err != nil {
+		return err
+	}
+
+	// Add back-references in function descriptors.
+	for _, id := range fnIDs.Ordered() {
+		fnDesc, err := p.descCollection.MutableByID(p.txn).Function(ctx, id)
+		if err != nil {
+			return err
+		}
+		if err := fnDesc.AddIndexReference(tblDesc.GetID(), idx.ID); err != nil {
+			return err
+		}
+		if err := p.writeFuncSchemaChange(ctx, fnDesc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *planner) maybeRemoveFunctionReferencesForIndex(
+	ctx context.Context, tblDesc catalog.TableDescriptor, idx *descpb.IndexDescriptor,
+) error {
+	if !idx.IsPartial() {
+		return nil
+	}
+
+	// Extract function IDs from the partial index predicate.
+	fnIDs, err := schemaexpr.GetUDFIDsFromExprStr(idx.Predicate)
+	if err != nil {
+		return err
+	}
+
+	// Remove back-references in function descriptors.
+	for _, id := range fnIDs.Ordered() {
+		fnDesc, err := p.descCollection.MutableByID(p.txn).Function(ctx, id)
+		if err != nil {
+			return err
+		}
+		fnDesc.RemoveIndexReference(tblDesc.GetID(), idx.ID)
 		if err := p.writeFuncSchemaChange(ctx, fnDesc); err != nil {
 			return err
 		}
