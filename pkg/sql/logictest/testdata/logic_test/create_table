@@ -1232,5 +1232,5 @@ CREATE TABLE create_table_index_elem_duplicate_storage_params_e (
 
 subtest end
 
-statement error pq: unimplemented: column col2 has type refcursor, which is not indexable\nHINT: You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/35730/dev
+statement error pq: unimplemented: column col2 has type refcursor, which is not indexable\nHINT: You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/35730/v25.3
 CREATE TABLE not_indexable (COL1 INT PRIMARY KEY, COL2 REFCURSOR, COL3 REFCURSOR, INDEX (COL2, COL3))

@@ -891,7 +891,7 @@ CREATE TABLE tbl_set_ttl_params (
 )
 ----
 NOTICE: The TTL rate limit is per leaseholder per table.
-DETAIL: See the documentation for additional details: https://www.cockroachlabs.com/docs/dev/row-level-ttl#ttl-storage-parameters
+DETAIL: See the documentation for additional details: https://www.cockroachlabs.com/docs/v25.3/row-level-ttl#ttl-storage-parameters
 
 skipif config local-schema-locked
 query T
@@ -918,7 +918,7 @@ query T noticetrace
 ALTER TABLE tbl_set_ttl_params SET (ttl_select_batch_size = 110, ttl_delete_batch_size = 120, ttl_select_rate_limit = 130, ttl_delete_rate_limit = 140, ttl_row_stats_poll_interval = '2m0s')
 ----
 NOTICE: The TTL rate limit is per leaseholder per table.
-DETAIL: See the documentation for additional details: https://www.cockroachlabs.com/docs/dev/row-level-ttl#ttl-storage-parameters
+DETAIL: See the documentation for additional details: https://www.cockroachlabs.com/docs/v25.3/row-level-ttl#ttl-storage-parameters
 
 onlyif config local-read-committed local-repeatable-read
 statement ok
