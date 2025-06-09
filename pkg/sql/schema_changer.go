@@ -2185,6 +2185,21 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 				scTable.Mutations[m.MutationOrdinal()], columns = sc.reverseMutation(scTable.Mutations[m.MutationOrdinal()], false /*notStarted*/, columns)
 			}
 
+			// Any function back-reference that was added while making the column
+			// needs to be removed.
+			if col := scTable.Mutations[m.MutationOrdinal()].GetColumn(); col != nil {
+				for _, id := range col.UsesFunctionIds {
+					fnDesc, err := txn.Descriptors().MutableByID(txn.KV()).Function(ctx, id)
+					if err != nil {
+						return err
+					}
+					fnDesc.RemoveColumnReference(scTable.GetID(), col.ID)
+					if err := txn.Descriptors().WriteDescToBatch(ctx, kvTrace, fnDesc, b); err != nil {
+						return err
+					}
+				}
+			}
+
 			// If the mutation is for validating a constraint that is being added,
 			// drop the constraint because validation has failed.
 			if constraint := m.AsConstraintWithoutIndex(); constraint != nil && constraint.Adding() {

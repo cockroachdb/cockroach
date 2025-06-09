@@ -607,6 +607,11 @@ func replaceExpressionElemsWithVirtualCols(
 				Virtual:      true,
 				Nullable:     true,
 			}
+			if fnIDs, err := schemaexpr.GetUDFIDsFromExprStr(expr); err != nil {
+				return err
+			} else {
+				col.UsesFunctionIds = fnIDs.Ordered()
+			}
 
 			// Add the column to the table descriptor. If the table already
 			// exists, add it as a mutation column.
@@ -833,6 +838,25 @@ func (n *createIndexNode) startExec(params runParams) error {
 	// Add all newly created type back references.
 	if err := params.p.addBackRefsFromAllTypesInTable(params.ctx, n.tableDesc); err != nil {
 		return err
+	}
+
+	// Update function back-references for any column that was added as an index
+	// expression and for any index with a partial predicate.
+	for _, m := range n.tableDesc.GetMutations() {
+		if col := m.GetColumn(); col != nil && m.Direction == descpb.DescriptorMutation_ADD {
+			if err := params.p.maybeUpdateFunctionReferencesForColumn(
+				params.ctx, n.tableDesc, col,
+			); err != nil {
+				return err
+			}
+		}
+		if idx := m.GetIndex(); idx != nil && m.Direction == descpb.DescriptorMutation_ADD {
+			if err := params.p.maybeAddFunctionReferencesForIndex(
+				params.ctx, n.tableDesc, idx,
+			); err != nil {
+				return err
+			}
+		}
 	}
 
 	// Record index creation in the event log. This is an auditable log
