@@ -2531,7 +2531,7 @@ func (r *ConditionalPutRequest) Validate(_ Header) error {
 }
 
 func (r *GetRequest) Validate(_ Header) error {
-	if !r.ExpectExclusionSince.IsEmpty() && r.KeyLockingStrength != lock.None {
+	if !r.ExpectExclusionSince.IsEmpty() && r.KeyLockingStrength == lock.None {
 		return errors.AssertionFailedf("invalid GetRequest: ExpectExclusionSince is non-empty for non-locking request")
 	}
 	return nil

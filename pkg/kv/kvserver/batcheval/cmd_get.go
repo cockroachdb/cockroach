@@ -48,7 +48,7 @@ func Get(
 	// MoreRecentPolicy to ExclusionViolationErrorOnMoreRecent to ensure that an
 	// exclusion violation error is returned if a write has occurred since the
 	// exclusion timestamp.
-	if !args.ExpectExclusionSince.Empty() {
+	if !args.ExpectExclusionSince.IsEmpty() {
 		readTimestamp = args.ExpectExclusionSince
 		moreRecentPolicy = storage.ExclusionViolationErrorOnMoreRecent
 	} else if args.KeyLockingStrength != lock.None {
