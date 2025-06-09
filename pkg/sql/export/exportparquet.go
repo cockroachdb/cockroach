@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package importer
+package export
 
 import (
 	"bytes"
@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/parquet"
@@ -48,7 +47,7 @@ func fileName(spec execinfrapb.ExportSpec, part string) string {
 	return fileName
 }
 
-func newParquetWriterProcessor(
+func NewParquetWriterProcessor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
@@ -251,13 +250,9 @@ func (sp *parquetWriterProcessor) Resume(output execinfra.RowReceiver) {
 func (*parquetWriterProcessor) Close(context.Context) {}
 
 // Resume is part of the execinfra.Processor interface.
-func (sp *parquetWriterProcessor) testingKnobsOrNil() *ExportTestingKnobs {
+func (sp *parquetWriterProcessor) testingKnobsOrNil() *TestingKnobs {
 	if sp.flowCtx.TestingKnobs().Export == nil {
 		return nil
 	}
-	return sp.flowCtx.TestingKnobs().Export.(*ExportTestingKnobs)
-}
-
-func init() {
-	rowexec.NewParquetWriterProcessor = newParquetWriterProcessor
+	return sp.flowCtx.TestingKnobs().Export.(*TestingKnobs)
 }

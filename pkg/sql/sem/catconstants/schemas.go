@@ -10,16 +10,6 @@ package catconstants
 // databases other than system were given a public schema.
 const PublicSchemaID = 29
 
-// StaticSchemaIDMapVirtualPublicSchema is a map of statically known schema IDs
-// on versions prior to PublicSchemasWithDescriptors.
-var StaticSchemaIDMapVirtualPublicSchema = map[uint32]string{
-	PublicSchemaID:      PublicSchemaName,
-	PgCatalogID:         PgCatalogName,
-	InformationSchemaID: InformationSchemaName,
-	CrdbInternalID:      CRDBInternalSchemaName,
-	PgExtensionSchemaID: PgExtensionSchemaName,
-}
-
 // StaticSchemaIDMap is a map of statically known schema IDs on versions
 // PublicSchemasWithDescriptors and onwards.
 var StaticSchemaIDMap = map[uint32]string{
@@ -27,12 +17,6 @@ var StaticSchemaIDMap = map[uint32]string{
 	InformationSchemaID: InformationSchemaName,
 	CrdbInternalID:      CRDBInternalSchemaName,
 	PgExtensionSchemaID: PgExtensionSchemaName,
-}
-
-// GetStaticSchemaIDMap returns a map of schema ids to schema names for the
-// static schemas.
-func GetStaticSchemaIDMap() map[uint32]string {
-	return StaticSchemaIDMapVirtualPublicSchema
 }
 
 // PgCatalogName is the name of the pg_catalog system schema.

@@ -19,57 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
-
-// FakeStorage implements the instanceprovider.storage interface.
-type FakeStorage struct {
-	mu struct {
-		syncutil.Mutex
-		instances     map[base.SQLInstanceID]sqlinstance.InstanceInfo
-		instanceIDCtr base.SQLInstanceID
-	}
-}
-
-// NewFakeStorage creates a new FakeStorage.
-func NewFakeStorage() *FakeStorage {
-	f := &FakeStorage{}
-	f.mu.instances = make(map[base.SQLInstanceID]sqlinstance.InstanceInfo)
-	f.mu.instanceIDCtr = base.SQLInstanceID(1)
-	return f
-}
-
-// CreateInstance implements the instanceprovider.writer interface.
-func (f *FakeStorage) CreateInstance(
-	ctx context.Context,
-	sessionID sqlliveness.SessionID,
-	sessionExpiration hlc.Timestamp,
-	rpcAddr string,
-	sqlAddr string,
-	locality roachpb.Locality,
-) (base.SQLInstanceID, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	i := sqlinstance.InstanceInfo{
-		InstanceID:      f.mu.instanceIDCtr,
-		InstanceRPCAddr: rpcAddr,
-		InstanceSQLAddr: sqlAddr,
-		SessionID:       sessionID,
-		Locality:        locality,
-	}
-	f.mu.instances[f.mu.instanceIDCtr] = i
-	f.mu.instanceIDCtr++
-	return i.InstanceID, nil
-}
-
-// ReleaseInstanceID implements the instanceprovider.writer interface.
-func (f *FakeStorage) ReleaseInstanceID(_ context.Context, id base.SQLInstanceID) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	delete(f.mu.instances, id)
-	return nil
-}
 
 // CreateInstanceDataForTest creates a new entry in the sql_instances system
 // table for testing purposes.
