@@ -496,7 +496,8 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("username", "STRING", false, gosql.NullBool{}, "", "{primary,users_user_id_idx}", false).
 				Results("hashedPassword", "BYTES", true, gosql.NullBool{}, "", "{primary}", false).
 				Results("isRole", "BOOL", false, false, "", "{primary}", false).
-				Results("user_id", "OID", false, gosql.NullBool{}, "", "{primary,users_user_id_idx}", false),
+				Results("user_id", "OID", false, gosql.NullBool{}, "", "{primary,users_user_id_idx}", false).
+				Results("estimated_last_login_time", "TIMESTAMPTZ", true, gosql.NullBool{}, "", "{primary}", false),
 		}},
 		{"SELECT database_name, owner FROM [SHOW DATABASES]", []preparedQueryTest{
 			baseTest.Results("d", username.RootUser).
@@ -519,6 +520,7 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("users", "primary", false, 2, "hashedPassword", "hashedPassword", "N/A", true, false, true, 1).
 				Results("users", "primary", false, 3, "isRole", "isRole", "N/A", true, false, true, 1).
 				Results("users", "primary", false, 4, "user_id", "user_id", "N/A", true, false, true, 1).
+				Results("users", "primary", false, 5, "estimated_last_login_time", "estimated_last_login_time", "N/A", true, false, true, 1).
 				Results("users", "users_user_id_idx", false, 1, "user_id", "user_id", "ASC", false, false, true, 1).
 				Results("users", "users_user_id_idx", false, 2, "username", "username", "ASC", true, true, true, 1),
 		}},
