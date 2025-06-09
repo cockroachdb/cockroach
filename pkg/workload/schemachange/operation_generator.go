@@ -2200,17 +2200,17 @@ func (og *operationGenerator) renameColumn(ctx context.Context, tx pgx.Tx) (*opS
 	if err != nil {
 		return nil, err
 	}
-	columnIsDependedOnByView, err := og.columnIsDependedOnByView(ctx, tx, tableName, srcColumnName)
-	if err != nil {
-		return nil, err
-	}
 
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{pgcode.UndefinedColumn, !srcColumnExists},
 		{pgcode.DuplicateColumn, destColumnExists && srcColumnName != destColumnName},
-		{pgcode.DependentObjectsStillExist, columnIsDependedOnByView},
 	})
+	// The column may be referenced in a view or trigger, which can lead to a
+	// dependency error. This is particularly hard to detect in cases where renaming
+	// a column that is part of a hash-sharded primary key triggers a cascading rename
+	// of the crdb_internal shard column, which might be used indirectly by other objects.
+	stmt.potentialExecErrors.add(pgcode.DependentObjectsStillExist)
 
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s RENAME COLUMN %s TO %s`,
 		tableName.String(), srcColumnName.String(), destColumnName.String())
