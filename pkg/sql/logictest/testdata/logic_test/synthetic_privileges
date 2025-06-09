@@ -410,6 +410,6 @@ testuser  NULL
 
 # testuser still should not have write privileges.
 statement error user testuser does not have INSERT privilege on relation users
-INSERT INTO system.users VALUES ('cat', null, true, 200)
+INSERT INTO system.users (username, "hashedPassword", "isRole", user_id) VALUES ('cat', null, true, 200)
 
 subtest end

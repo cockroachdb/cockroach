@@ -3,7 +3,7 @@
 # Ensure we can run DELETE statement on system.statement_statistics and
 # system.transaction_statistics table.
 statement ok
-INSERT INTO system.users VALUES ('node', NULL, true, 3);
+INSERT INTO system.users (username, "hashedPassword", "isRole", user_id) VALUES ('node', NULL, true, 3);
 
 statement ok
 GRANT node TO root;
