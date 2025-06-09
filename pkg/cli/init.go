@@ -50,7 +50,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if err := dialAndCheckHealth(ctx); err != nil {
 		return err
 	}
-	conn, finish, err := getClientGRPCConn(ctx, serverCfg)
+	conn, finish, err := newClientConn(ctx, serverCfg)
 	if err != nil {
 		return err
 	}
@@ -64,7 +64,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	// Actually perform cluster initialization.
-	c := serverpb.NewInitClient(conn)
+	c := conn.NewInitClient()
 	if _, err = c.Bootstrap(ctx, &serverpb.BootstrapRequest{
 		InitType: typ,
 	}); err != nil {
