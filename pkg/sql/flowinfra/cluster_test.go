@@ -269,7 +269,7 @@ func TestClusterFlow(t *testing.T) {
 		servers[i] = s
 		conns[i] = s.SQLConn(t)
 		conn := s.RPCClientConn(t, username.RootUserName())
-		clients[i] = execinfrapb.NewDistSQLClient(conn)
+		clients[i] = conn.NewDistSQLClient()
 	}
 
 	runTestClusterFlow(t, servers, conns, clients)
@@ -776,7 +776,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 					for i := 0; i < numNodes; i++ {
 						s := tc.Server(i)
 						conn := s.RPCClientConn(b, username.RootUserName())
-						clients = append(clients, execinfrapb.NewDistSQLClient(conn))
+						clients = append(clients, conn.NewDistSQLClient())
 					}
 
 					b.ResetTimer()
