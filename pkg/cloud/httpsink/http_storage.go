@@ -68,7 +68,7 @@ func MakeHTTPStorage(
 
 	clientName := args.ExternalStorageOptions().ClientName
 	client, err := cloud.MakeHTTPClient(args.Settings, args.MetricsRecorder,
-		cloud.Config{
+		cloud.HTTPClientConfig{
 			Cloud:  "http",
 			Bucket: "base",
 			Client: clientName,
