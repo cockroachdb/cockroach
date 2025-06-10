@@ -65,7 +65,7 @@ func BenchmarkTPCC(b *testing.B) {
 
 	// Setup the cluster once for all benchmarks.
 	ctx := context.Background()
-	tc, pgURL := startCluster(b, ctx)
+	tc, pgURLs := startCluster(b, ctx)
 	defer tc.Stopper().Stop(ctx)
 
 	for _, impl := range []struct{ name, flag string }{
@@ -82,7 +82,7 @@ func BenchmarkTPCC(b *testing.B) {
 				{"default", "--mix=newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1"},
 			} {
 				b.Run(mix.name, func(b *testing.B) {
-					run(b, ctx, pgURL, []string{impl.flag, mix.flag})
+					run(b, ctx, pgURLs, []string{impl.flag, mix.flag})
 				})
 			}
 		})
@@ -90,7 +90,7 @@ func BenchmarkTPCC(b *testing.B) {
 }
 
 // run executes the TPC-C workload with the specified workload flags.
-func run(b *testing.B, ctx context.Context, pgURL string, workloadFlags []string) {
+func run(b *testing.B, ctx context.Context, pgURLs [nodes]string, workloadFlags []string) {
 	defer startCPUProfile(b).Stop(b)
 	defer startAllocsProfile(b).Stop(b)
 
@@ -102,7 +102,7 @@ func run(b *testing.B, ctx context.Context, pgURL string, workloadFlags []string
 	gen := tpccGenerator(b, flags)
 
 	reg := histogram.NewRegistry(time.Minute, "tpcc")
-	ql, err := gen.Ops(ctx, []string{pgURL}, reg)
+	ql, err := gen.Ops(ctx, pgURLs[:], reg)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func run(b *testing.B, ctx context.Context, pgURL string, workloadFlags []string
 // startCluster starts a cluster and initializes the workload data.
 func startCluster(
 	b *testing.B, ctx context.Context,
-) (_ serverutils.TestClusterInterface, pgURL string) {
+) (_ serverutils.TestClusterInterface, pgURLs [nodes]string) {
 	st := cluster.MakeTestingClusterSettings()
 
 	// NOTE: disabling background work makes the benchmark more predictable, but
@@ -149,8 +149,11 @@ func startCluster(
 	})
 
 	// Generate a PG URL.
-	u, cleanupURL := tc.ApplicationLayer(0).PGUrl(b, serverutils.DBName(dbName))
-	tc.Stopper().AddCloser(stop.CloserFn(cleanupURL))
+	for node := 0; node < nodes; node++ {
+		pgURL, cleanupURL := tc.ApplicationLayer(0).PGUrl(b, serverutils.DBName(dbName))
+		pgURLs[node] = pgURL.String()
+		tc.Stopper().AddCloser(stop.CloserFn(cleanupURL))
+	}
 
 	// Create the database.
 	r := sqlutils.MakeSQLRunner(tc.ServerConn(0))
@@ -164,7 +167,7 @@ func startCluster(
 		b.Fatal(err)
 	}
 
-	return tc, u.String()
+	return tc, pgURLs
 }
 
 type generator interface {
