@@ -3034,6 +3034,7 @@ node_id                                                    1                   N
 null_ordered_last                                          off                 NULL      NULL        NULL        string
 on_update_rehome_row_enabled                               on                  NULL      NULL        NULL        string
 opt_split_scan_limit                                       2048                NULL      NULL        NULL        string
+optimizer_always_use_cascade_fast_path_for_rbr_tables      off                 NULL      NULL        NULL        string
 optimizer_always_use_histograms                            on                  NULL      NULL        NULL        string
 optimizer_check_input_min_row_count                        1                   NULL      NULL        NULL        string
 optimizer_enable_lock_elision                              on                  NULL      NULL        NULL        string
@@ -3264,6 +3265,7 @@ node_id                                                    1                   N
 null_ordered_last                                          off                 NULL  user     NULL      off                 off
 on_update_rehome_row_enabled                               on                  NULL  user     NULL      on                  on
 opt_split_scan_limit                                       2048                NULL  user     NULL      2048                2048
+optimizer_always_use_cascade_fast_path_for_rbr_tables      off                 NULL  user     NULL      off                 off
 optimizer_always_use_histograms                            on                  NULL  user     NULL      on                  on
 optimizer_check_input_min_row_count                        1                   NULL  user     NULL      1                   1
 optimizer_enable_lock_elision                              on                  NULL  user     NULL      on                  on
@@ -3485,6 +3487,7 @@ null_ordered_last                                          NULL    NULL     NULL
 on_update_rehome_row_enabled                               NULL    NULL     NULL     NULL        NULL
 opt_split_scan_limit                                       NULL    NULL     NULL     NULL        NULL
 optimizer                                                  NULL    NULL     NULL     NULL        NULL
+optimizer_always_use_cascade_fast_path_for_rbr_tables      NULL    NULL     NULL     NULL        NULL
 optimizer_always_use_histograms                            NULL    NULL     NULL     NULL        NULL
 optimizer_check_input_min_row_count                        NULL    NULL     NULL     NULL        NULL
 optimizer_enable_lock_elision                              NULL    NULL     NULL     NULL        NULL

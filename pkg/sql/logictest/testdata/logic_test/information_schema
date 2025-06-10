@@ -4041,6 +4041,7 @@ null_ordered_last                                          off
 on_update_rehome_row_enabled                               on
 opt_split_scan_limit                                       2048
 optimizer                                                  on
+optimizer_always_use_cascade_fast_path_for_rbr_tables      off
 optimizer_always_use_histograms                            on
 optimizer_check_input_min_row_count                        1
 optimizer_enable_lock_elision                              on
