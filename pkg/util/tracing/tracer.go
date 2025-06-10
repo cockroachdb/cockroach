@@ -1099,7 +1099,7 @@ func (t *Tracer) forceOpNameVerbose(opName string) bool {
 // context in a nil span.
 func (t *Tracer) startSpanFast(
 	ctx context.Context, opName string, opts *spanOptions,
-) (context.Context, *Span) {
+) (_ context.Context, sp *Span) {
 	if opts.RefType != childOfRef && opts.RefType != followsFromRef {
 		panic(errors.AssertionFailedf("unexpected RefType %v", opts.RefType))
 	}
