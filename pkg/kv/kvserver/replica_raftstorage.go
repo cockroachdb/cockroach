@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/snaprecv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -607,15 +606,11 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	clearedSpans = append(clearedSpans, clearedUnreplicatedSpan)
 	clearedSpans = append(clearedSpans, clearedSubsumedSpans...)
 
-	// Drop the entry cache before ingestion, like a real truncation would.
-	//
-	// TODO(sep-raft-log): like a real truncation, we should also bump the
-	// in-memory truncated state to the snapshot index. We should also assert
-	// that this leads to a (logically) empty log (otherwise we wouldn't have
-	// accepted the snapshot).
-	//
-	// See: https://github.com/cockroachdb/cockroach/pull/145328#discussion_r2068209588
-	r.store.raftEntryCache.Drop(r.RangeID)
+	ls := r.asLogStorage()
+
+	// Stage the truncation, so that in-memory state reflects an
+	// empty log.
+	ls.stageApplySnapshotRaftMuLocked(truncState)
 
 	stats.subsumedReplicas = timeutil.Now()
 
@@ -655,6 +650,9 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		// snapshot.
 		writeBytes = uint64(inSnap.SSTSize)
 	}
+	// The snapshot is visible, so finalize the truncation.
+	ls.finalizeApplySnapshotRaftMuLocked(ctx)
+
 	// The "ignored" here is to ignore the writes to create the AC linear models
 	// for LSM writes. Since these writes typically correspond to actual writes
 	// onto the disk, we account for them separately in
@@ -682,6 +680,9 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	if uint64(state.RaftAppliedIndexTerm) != nonemptySnap.Metadata.Term {
 		log.Fatalf(ctx, "snapshot RaftAppliedIndexTerm %d doesn't match its metadata term %d",
 			state.RaftAppliedIndexTerm, nonemptySnap.Metadata.Term)
+	}
+	if ls.shMu.size != 0 {
+		log.Fatalf(ctx, "expected empty raft log after snapshot, got %d", ls.shMu.size)
 	}
 
 	// Read the prior read summary for this range, which was included in the
@@ -737,23 +738,6 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	// without risking a lock-ordering deadlock.
 	r.store.mu.Unlock()
 
-	// The log has been cleared and reset to start at the snapshot's applied
-	// index/term. Update the in-memory metadata accordingly.
-	r.asLogStorage().updateStateRaftMuLockedMuLocked(logstore.RaftState{
-		LastIndex: truncState.Index,
-		LastTerm:  truncState.Term,
-		ByteSize:  0, // the log is empty now
-	})
-	ls := r.asLogStorage()
-	ls.shMu.trunc = truncState
-	// Snapshots typically have fewer log entries than the leaseholder. The next
-	// time we hold the lease, recompute the log size before making decisions.
-	//
-	// TODO(pav-kv): does this assume that snapshots can contain log entries,
-	// which is no longer true? The comment needs an update, and the decision to
-	// set this flag to false revisited.
-	ls.shMu.sizeTrusted = false
-
 	// Update the store stats for the data in the snapshot.
 	r.store.metrics.subtractMVCCStats(ctx, r.tenantMetricsRef, *r.shMu.state.Stats)
 	r.store.metrics.addMVCCStats(ctx, r.tenantMetricsRef, *state.Stats)
@@ -790,14 +774,6 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	}
 
 	r.mu.Unlock()
-
-	// Assert that the in-memory and on-disk states of the Replica are congruent
-	// after the application of the snapshot. Do so under a read lock, as this
-	// operation can be expensive. This is safe, as we hold the Replica.raftMu
-	// across both Replica.mu critical sections.
-	r.mu.RLock()
-	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.TODOEngine())
-	r.mu.RUnlock()
 
 	// The rangefeed processor is listening for the logical ops attached to
 	// each raft command. These will be lost during a snapshot, so disconnect

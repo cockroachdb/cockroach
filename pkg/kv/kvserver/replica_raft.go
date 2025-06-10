@@ -823,7 +823,7 @@ func (s handleRaftReadyStats) SafeFormat(p redact.SafePrinter, _ rune) {
 	}
 	p.SafeString("]")
 
-	if n := s.apply.stateAssertions; n > 0 {
+	if n := s.apply.assertionsRequested; n > 0 {
 		p.Printf(", state_assertions=%d", n)
 	}
 	if s.snap.offered {
@@ -1082,6 +1082,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 	}
 
+	// If this field is set, by the end of the method (after snapshot, append,
+	// apply handling), we will verify invariants including checking that
+	// in-memory state is congruent with disk state.
+	var shouldAssert bool
+
 	// Grab the known leaseholder before applying to the state machine.
 	startingLeaseholderID := r.shMu.state.Lease.Replica.ReplicaID
 	refreshReason := noReason
@@ -1111,6 +1116,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 
 		if app.Snapshot != nil {
+			shouldAssert = true
 			if inSnap.Desc == nil {
 				// If we didn't expect Raft to have a snapshot but it has one
 				// regardless, that is unexpected and indicates a programming
@@ -1236,6 +1242,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// it is now marked as destroyed.
 			return stats, err
 		}
+		shouldAssert = shouldAssert || stats.apply.assertionsRequested > 0
 
 		if r.store.cfg.KVAdmissionController != nil &&
 			stats.apply.followerStoreWriteBytes.NumEntries > 0 {
@@ -1268,6 +1275,15 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	if r.store.TestingKnobs().EnableUnconditionalRefreshesInRaftReady {
 		refreshReason = reasonNewLeaderOrConfigChange
 	}
+
+	if shouldAssert {
+		sm.r.mu.RLock()
+		// TODO(sep-raft-log): either check only statemachine invariants or
+		// pass both engines in.
+		sm.r.assertStateRaftMuLockedReplicaMuRLocked(ctx, sm.r.store.TODOEngine())
+		sm.r.mu.RUnlock()
+	}
+
 	if refreshReason != noReason {
 		r.mu.Lock()
 		r.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, refreshReason)
