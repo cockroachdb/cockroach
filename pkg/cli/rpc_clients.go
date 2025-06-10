@@ -73,20 +73,18 @@ func makeRPCClientConfig(cfg server.Config) rpc.ClientConnConfig {
 func newClientConn(ctx context.Context, cfg server.Config) (rpcConn, func(), error) {
 	ccfg := makeRPCClientConfig(cfg)
 	cc, finish, err := rpc.NewClientConn(ctx, ccfg)
-	return &grpcConn{conn: cc}, finish, errors.Wrap(err, "failed to connect to the node")
-}
-
-func getClientGRPCConn(ctx context.Context, cfg server.Config) (*grpc.ClientConn, func(), error) {
-	ccfg := makeRPCClientConfig(cfg)
-	return rpc.NewClientConn(ctx, ccfg)
-}
-
-// getAdminClient returns an AdminClient and a closure that must be invoked
-// to free associated resources.
-func getAdminClient(ctx context.Context, cfg server.Config) (serverpb.AdminClient, func(), error) {
-	conn, finish, err := getClientGRPCConn(ctx, cfg)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to connect to the node")
 	}
-	return serverpb.NewAdminClient(conn), finish, nil
+	return &grpcConn{conn: cc}, finish, nil
+}
+
+// dialAdminClient dials a client connection and returns an AdminClient and a
+// closure that must be invoked to free associated resources.
+func dialAdminClient(ctx context.Context, cfg server.Config) (serverpb.AdminClient, func(), error) {
+	cc, finish, err := newClientConn(ctx, cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	return cc.NewAdminClient(), finish, nil
 }

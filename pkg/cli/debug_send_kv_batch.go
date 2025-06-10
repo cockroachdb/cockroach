@@ -166,12 +166,11 @@ func runSendKVBatch(cmd *cobra.Command, args []string) error {
 	// Send BatchRequest.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	conn, finish, err := getClientGRPCConn(ctx, serverCfg)
+	admin, finish, err := dialAdminClient(ctx, serverCfg)
 	if err != nil {
 		return errors.Wrap(err, "failed to connect to the node")
 	}
 	defer finish()
-	admin := serverpb.NewAdminClient(conn)
 
 	br, rec, err := sendKVBatchRequestWithTracingOption(ctx, enableTracing, admin, &ba)
 	if err != nil {
