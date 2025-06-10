@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"google.golang.org/grpc"
 )
 
 // Cluster mediates interacting with a cockroach cluster.
@@ -37,7 +36,7 @@ type ClusterConfig struct {
 	NodeLiveness livenesspb.NodeVitalityInterface
 
 	// Dialer constructs connections to other nodes.
-	Dialer NodeDialer
+	Dialer rpcbase.NodeDialer
 
 	// RangeDescScanner paginates through all range descriptors.
 	RangeDescScanner rangedesc.Scanner
@@ -48,12 +47,6 @@ type ClusterConfig struct {
 	// to expose only relevant, vetted bits of kv.DB. It'll make our tests less
 	// "integration-ey".
 	DB *kv.DB
-}
-
-// NodeDialer abstracts connecting to other nodes in the cluster.
-type NodeDialer interface {
-	// Dial returns a grpc connection to the given node.
-	Dial(context.Context, roachpb.NodeID, rpcbase.ConnectionClass) (*grpc.ClientConn, error)
 }
 
 // New constructs a new Cluster with the provided dependencies.
