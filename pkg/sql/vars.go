@@ -4060,7 +4060,7 @@ var varGen = map[string]sessionVar{
 			return strconv.FormatInt(ms, 10), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return "0s"
+			return "2ms"
 		},
 	},
 }
