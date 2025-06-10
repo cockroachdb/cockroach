@@ -151,7 +151,7 @@ func (bs *BufferedSender) run(
 ) error {
 
 	var (
-		e       sharedMuxEvent
+		events  []sharedMuxEvent
 		success bool
 	)
 	for {
@@ -165,21 +165,24 @@ func (bs *BufferedSender) run(
 			// error.
 			return nil
 		case <-bs.notifyDataC:
+
 			for {
 				trace.WithRegion(ctx, "Popping", func() {
-					e, success = bs.popFront()
+					events, success = bs.popFrontBatch()
 				})
 				bs.metrics.BufferedSenderQueueSize.Dec(1)
 				if !success {
 					break
 				}
-				err := bs.sender.Send(e.ev)
-				e.alloc.Release(ctx)
-				if e.ev.Error != nil {
-					onError(e.ev.StreamID)
-				}
-				if err != nil {
-					return err
+				for _, e := range events {
+					err := bs.sender.Send(e.ev)
+					e.alloc.Release(ctx)
+					if e.ev.Error != nil {
+						onError(e.ev.StreamID)
+					}
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -193,6 +196,20 @@ func (bs *BufferedSender) popFront() (e sharedMuxEvent, success bool) {
 	defer bs.queueMu.Unlock()
 	event, ok := bs.queueMu.buffer.popFront()
 	return event, ok
+}
+
+func (bs *BufferedSender) popFrontBatch() (events []sharedMuxEvent, success bool) {
+	const batchSize = 1024
+	bs.queueMu.Lock()
+	defer bs.queueMu.Unlock()
+	for range batchSize {
+		e, ok := bs.queueMu.buffer.popFront()
+		if !ok {
+			break
+		}
+		events = append(events, e)
+	}
+	return events, len(events) > 0
 }
 
 // cleanup is called when the sender is stopped. It is expected to free up
