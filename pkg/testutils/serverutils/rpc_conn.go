@@ -3,12 +3,12 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package srvtestutils
+package serverutils
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"google.golang.org/grpc"
 )
@@ -20,7 +20,7 @@ type grpcConn struct {
 	conn *grpc.ClientConn
 }
 
-func FromGRPCConn(conn *grpc.ClientConn) serverutils.RPCConn {
+func FromGRPCConn(conn *grpc.ClientConn) RPCConn {
 	return &grpcConn{conn: conn}
 }
 
@@ -42,4 +42,8 @@ func (c *grpcConn) NewTimeSeriesClient() tspb.TimeSeriesClient {
 
 func (c *grpcConn) NewInternalClient() kvpb.InternalClient {
 	return kvpb.NewInternalClient(c.conn)
+}
+
+func (c *grpcConn) NewDistSQLClient() execinfrapb.DistSQLClient {
+	return execinfrapb.NewDistSQLClient(c.conn)
 }

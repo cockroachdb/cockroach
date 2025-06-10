@@ -176,7 +176,7 @@ func TestServerQuery(t *testing.T) {
 	}
 
 	conn := s.RPCClientConn(t, username.RootUserName())
-	client := tspb.NewTimeSeriesClient(conn)
+	client := conn.NewTimeSeriesClient()
 	response, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
 		StartNanos: 500 * 1e9,
 		EndNanos:   526 * 1e9,
@@ -272,7 +272,7 @@ func TestServerQueryStarvation(t *testing.T) {
 	}
 
 	conn := s.RPCClientConn(t, username.RootUserName())
-	client := tspb.NewTimeSeriesClient(conn)
+	client := conn.NewTimeSeriesClient()
 
 	queries := make([]tspb.Query, 0, seriesCount)
 	for i := 0; i < seriesCount; i++ {
@@ -442,7 +442,7 @@ func TestServerQueryTenant(t *testing.T) {
 	}
 
 	conn := s.RPCClientConn(t, username.RootUserName())
-	client := tspb.NewTimeSeriesClient(conn)
+	client := conn.NewTimeSeriesClient()
 	aggregatedResponse, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
 		StartNanos: 400 * 1e9,
 		EndNanos:   500 * 1e9,
@@ -578,7 +578,7 @@ func TestServerQueryTenant(t *testing.T) {
 	capability := map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanViewTSDBMetrics: "true"}
 	serverutils.WaitForTenantCapabilities(t, s, tenantID, capability, "")
 	tenantConn := tenant.RPCClientConn(t, username.RootUserName())
-	tenantClient := tspb.NewTimeSeriesClient(tenantConn)
+	tenantClient := tenantConn.NewTimeSeriesClient()
 
 	tenantResponse, err := tenantClient.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
 		StartNanos: 400 * 1e9,
@@ -696,7 +696,7 @@ func TestServerQueryMemoryManagement(t *testing.T) {
 	}
 
 	conn := s.RPCClientConn(t, username.RootUserName())
-	client := tspb.NewTimeSeriesClient(conn)
+	client := conn.NewTimeSeriesClient()
 
 	queries := make([]tspb.Query, 0, seriesCount)
 	for i := 0; i < seriesCount; i++ {
@@ -773,7 +773,7 @@ func TestServerDump(t *testing.T) {
 	}
 
 	conn := s.RPCClientConn(t, username.RootUserName())
-	client := tspb.NewTimeSeriesClient(conn)
+	client := conn.NewTimeSeriesClient()
 
 	dumpClient, err := client.Dump(ctx, &tspb.DumpRequest{
 		Names:      names,
@@ -869,7 +869,7 @@ func TestServerDump(t *testing.T) {
 		require.NoError(t, s.DB().Run(ctx, &b))
 
 		conn := s.RPCClientConn(t, username.RootUserName())
-		client := tspb.NewTimeSeriesClient(conn)
+		client := conn.NewTimeSeriesClient()
 
 		dumpClient, err := client.Dump(ctx, &tspb.DumpRequest{
 			Names:      names,
@@ -899,7 +899,7 @@ func BenchmarkServerQuery(b *testing.B) {
 	}
 
 	conn := s.RPCClientConn(b, username.RootUserName())
-	client := tspb.NewTimeSeriesClient(conn)
+	client := conn.NewTimeSeriesClient()
 
 	queries := make([]tspb.Query, 0, seriesCount)
 	for i := 0; i < seriesCount; i++ {
