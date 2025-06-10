@@ -117,7 +117,7 @@ func DestroyReplica(
 		return errors.AssertionFailedf("replica r%d/%d must not survive its own tombstone", rangeID, diskReplicaID)
 	}
 	if err := ClearRangeData(ctx, rangeID, reader, writer, opts); err != nil {
-		return err
+		return errors.Wrapf(err, "ClearRangeData")
 	}
 
 	// Save a tombstone to ensure that replica IDs never get reused.
@@ -136,7 +136,7 @@ func DestroyReplica(
 		if _, err := storage.MVCCGetProto(
 			ctx, reader, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
 		); err != nil {
-			return err
+			return errors.Wrapf(err, "GetProto")
 		}
 		if tombstone.NextReplicaID >= nextReplicaID {
 			return errors.AssertionFailedf(

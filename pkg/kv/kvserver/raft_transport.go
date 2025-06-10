@@ -7,6 +7,7 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"net"
 	"runtime/pprof"
@@ -700,6 +701,7 @@ func (t *RaftTransport) processQueue(
 						continue
 					}
 					if err := incomingMessageHandler.HandleRaftResponse(ctx, resp); err != nil {
+						log.Errorf(ctx, "HandleRaftResponse: %v", err)
 						return err
 					}
 				}
@@ -796,6 +798,7 @@ func (t *RaftTransport) processQueue(
 
 		select {
 		case <-t.stopper.ShouldQuiesce():
+			fmt.Println("should quiesce", q.nodeID)
 			return nil
 
 		case <-raftIdleTimer.C:
@@ -1074,6 +1077,7 @@ func (t *RaftTransport) startProcessNewQueue(
 		if err := t.processQueue(q, stream, class); err != nil {
 			log.Warningf(ctx, "while processing outgoing Raft queue to node %d: %s:", toNodeID, err)
 		}
+		fmt.Println("cancel")
 	}
 	err := t.stopper.RunAsyncTask(ctx, "storage.RaftTransport: sending/receiving messages",
 		func(ctx context.Context) {

@@ -197,9 +197,11 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 
 	t.Run("ibrahim", func(t *testing.T) {
 		tc, args, _, tablePrefix, unblockSplits, _ := setup(t, 1)
-		defer tc.Stopper().Stop(ctx)
 		defer unblockSplits()
 		moveTableToNewStore(t, tc, args, tablePrefix)
+		time.Sleep(250 * time.Millisecond)
+		tc.Stopper().Stop(ctx)
+		time.Sleep(1 * time.Second)
 	})
 
 	t.Run("no backpressure when much larger on new node", func(t *testing.T) {

@@ -7,6 +7,7 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"sort"
 	"strings"
@@ -1072,10 +1073,26 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		// release the corresponding memory tokens at the end of this func. Next
 		// time we enter this function, the account will be empty again.
 		defer r.detachRaftEntriesMonitorRaftMuLocked()
+		cm := ready.Committed
+		if cm.Last > cm.After && r.replicaID == 1 {
+			cm.Last = cm.After + 1
+		}
 		if toApply, err = logSnapshot.Slice(
-			ready.Committed, r.store.cfg.RaftMaxCommittedSizePerReady,
+			cm, r.store.cfg.RaftMaxCommittedSizePerReady,
 		); err != nil {
 			return stats, errors.Wrap(err, "loading committed entries")
+		}
+		if r.replicaID == 1 && len(toApply) > 0 {
+			e, err := raftlog.NewEntry(toApply[0])
+			if err != nil {
+				panic(err)
+			}
+			if cr := e.Cmd.ReplicatedEvalResult.ChangeReplicas; cr != nil {
+				fmt.Println("CR", cr)
+				if cr.NextReplicaID() == 3 && len(cr.Replicas()) == 1 {
+					toApply = nil
+				}
+			}
 		}
 	}
 	// If the ready struct includes entries that have been committed, these

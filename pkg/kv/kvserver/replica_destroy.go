@@ -109,6 +109,10 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	desc := r.Desc()
 	inited := desc.IsInitialized()
 
+	if r.RangeID == 75 && r.replicaID == 1 {
+		fmt.Println("destroying r75", ctx.Err())
+	}
+
 	opts := kvstorage.ClearRangeDataOptions{
 		ClearReplicatedBySpan: desc.RSpan(), // zero if !inited
 		// TODO(tbg): if it's uninitialized, we might as well clear
@@ -120,13 +124,8 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 		ClearUnreplicatedByRangeID: true,
 	}
 	// TODO(sep-raft-log): need both engines separately here.
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	if r.RangeID == 75 && r.replicaID == 1 {
-		cancel()
-	}
 	if err := kvstorage.DestroyReplica(ctx, r.RangeID, r.store.TODOEngine(), batch, nextReplicaID, opts); err != nil {
-		log.Fatalf(ctx, "DestroyReplica failed: %v", err)
+		log.Fatalf(ctx, "DestroyReplica failed: (ctx.Err %v): %v", ctx.Err(), err)
 		return err
 	}
 	preTime := timeutil.Now()
@@ -137,11 +136,13 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	// then need to handle the case in which there is both the tombstone and
 	// leftover replica data.
 	if err := batch.Commit(true); err != nil {
+		log.Fatalf(ctx, "batch.Commit failed: %v", err)
 		return err
 	}
 	commitTime := timeutil.Now()
 
 	if err := r.postDestroyRaftMuLocked(ctx, ms); err != nil {
+		log.Fatalf(ctx, "postDestroyRaftMuLocked failed: %v", err)
 		return err
 	}
 	if r.IsInitialized() {
