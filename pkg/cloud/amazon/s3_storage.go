@@ -89,6 +89,9 @@ const (
 	scheme = "s3"
 
 	checksumAlgorithm = types.ChecksumAlgorithmSha256
+
+	// TODO(yevgeniy): Revisit retry logic.  Retrying 10 times seems arbitrary.
+	defaultRetryMaxAttempts = 10
 )
 
 // NightlyEnvVarS3Params maps param keys that get added to an S3
@@ -120,6 +123,16 @@ type s3Storage struct {
 
 	opts   s3ClientConfig
 	cached *s3Client
+}
+
+// retryMaxAttempts defines how many times we will retry a
+// S3 request on a retriable error.
+var retryMaxAttempts = defaultRetryMaxAttempts
+
+// InjectTestingRetryMaxAttempts is used to change the
+// default retries for tests that need quick fail.
+func InjectTestingRetryMaxAttempts(maxAttempts int) {
+	retryMaxAttempts = maxAttempts
 }
 
 // customRetryer implements the `request.Retryer` interface and allows for
@@ -587,7 +600,7 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 	}
 
 	client, err := cloud.MakeHTTPClient(s.settings, s.metrics,
-		cloud.Config{
+		cloud.HTTPClientConfig{
 			Bucket:             s.opts.bucket,
 			Client:             s.storageOptions.ClientName,
 			Cloud:              "aws",
@@ -598,15 +611,12 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 	}
 	addLoadOption(config.WithHTTPClient(client))
 
-	// TODO(yevgeniy): Revisit retry logic.  Retrying 10 times seems arbitrary.
-	retryMaxAttempts := 10
 	addLoadOption(config.WithRetryMaxAttempts(retryMaxAttempts))
 
 	addLoadOption(config.WithLogger(newLogAdapter(ctx)))
 	if s.opts.verbose {
 		addLoadOption(config.WithClientLogMode(awsVerboseLogging))
 	}
-
 	config.WithRetryer(func() aws.Retryer {
 		return retry.NewStandard(func(opts *retry.StandardOptions) {
 			opts.MaxAttempts = retryMaxAttempts

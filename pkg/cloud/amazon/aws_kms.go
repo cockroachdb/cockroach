@@ -145,7 +145,7 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 				"custom endpoints disallowed for aws kms due to --aws-kms-disable-http flag")
 		}
 		client, err := cloud.MakeHTTPClient(env.ClusterSettings(), cloud.NilMetrics,
-			cloud.Config{
+			cloud.HTTPClientConfig{
 				Bucket: "KMS",
 				Cloud:  "aws",
 			})
