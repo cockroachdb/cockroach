@@ -1282,7 +1282,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		// pass both engines in.
 		sm.r.assertStateRaftMuLockedReplicaMuRLocked(ctx, sm.r.store.TODOEngine())
 		sm.r.mu.RUnlock()
-
 	}
 
 	if refreshReason != noReason {

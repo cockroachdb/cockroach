@@ -610,7 +610,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 
 	// Stage the truncation, so that in-memory state reflects an
 	// empty log.
-	ls.stageApplySnapshot(truncState)
+	ls.stageApplySnapshotRaftMuLocked(truncState)
 
 	stats.subsumedReplicas = timeutil.Now()
 
@@ -682,7 +682,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 			state.RaftAppliedIndexTerm, nonemptySnap.Metadata.Term)
 	}
 	if ls.shMu.size != 0 {
-		log.Fatalf(ctx, "expected empty raftLogSize after snapshot, got %d", ls.shMu.size)
+		log.Fatalf(ctx, "expected empty raft log after snapshot, got %d", ls.shMu.size)
 	}
 
 	// Read the prior read summary for this range, which was included in the
