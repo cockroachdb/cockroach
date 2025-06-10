@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
@@ -181,7 +182,9 @@ func TestMVCCComputeSSTStatsDiff(t *testing.T) {
 				require.NoError(t, fs.WriteFile(engine.Env(), "local", local, fs.UnspecifiedWriteCategory))
 				require.NoError(t, engine.IngestLocalFiles(ctx, []string{"local"}))
 
-				baseStats, err := storage.ComputeStats(ctx, engine, keys.LocalMax, roachpb.KeyMax, 0)
+				now := int64(timeutil.Now().Nanosecond())
+
+				baseStats, err := storage.ComputeStats(ctx, engine, keys.LocalMax, roachpb.KeyMax, now)
 				require.NoError(t, err)
 
 				sst, startUnversioned, endUnversioned := storageutils.MakeSST(t, st, sstT)
@@ -189,18 +192,17 @@ func TestMVCCComputeSSTStatsDiff(t *testing.T) {
 				end := storage.MVCCKey{Key: endUnversioned}
 
 				statsDelta, err := storage.ComputeSSTStatsDiff(
-					ctx, sst, engine, start, end, nil, nil)
+					ctx, sst, engine, now, start, end)
 				require.NoError(t, err)
 
 				require.NoError(t, fs.WriteFile(engine.Env(), "sst", sst, fs.UnspecifiedWriteCategory))
 				require.NoError(t, engine.IngestLocalFiles(ctx, []string{"sst"}))
 
-				expStats, err := storage.ComputeStats(ctx, engine, keys.LocalMax, roachpb.KeyMax, 0)
+				expStats, err := storage.ComputeStats(ctx, engine, keys.LocalMax, roachpb.KeyMax, now)
 				require.NoError(t, err)
 
 				baseStats.Add(statsDelta)
 
-				baseStats.AgeTo(expStats.LastUpdateNanos)
 				t.Logf("sst %s, local %s", sstT, localT)
 				if !baseStats.Equal(expStats) {
 					t.Log("test, expected")
