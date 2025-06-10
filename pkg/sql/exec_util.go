@@ -4186,6 +4186,10 @@ func (m *sessionDataMutator) SetOptimizerUseExistsFilterHoistRule(val bool) {
 	m.data.OptimizerUseExistsFilterHoistRule = val
 }
 
+func (m *sessionDataMutator) SetInitialRetryBackoffForReadCommitted(val time.Duration) {
+	m.data.InitialRetryBackoffForReadCommitted = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
