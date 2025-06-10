@@ -10,13 +10,10 @@ import (
 	"context"
 	gosql "database/sql"
 	"database/sql/driver"
-	"encoding/hex"
 	"fmt"
 	"math/rand"
-	"reflect"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -26,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
-	"github.com/lib/pq/oid"
 	"github.com/spf13/pflag"
 )
 
@@ -108,41 +104,6 @@ func (w *random) Tables() []workload.Table {
 	return tables
 }
 
-type col struct {
-	name          string
-	dataType      *types.T
-	dataPrecision int
-	dataScale     int
-	cdefault      gosql.NullString
-	isNullable    bool
-	isComputed    bool
-}
-
-// typeForOid returns the *types.T struct associated with the given
-// OID. Note that for columns of type `BIT` and `CHAR`, the width is
-// not recorded on the T struct itself; instead, we query the
-// `information_schema.columns` view to get that information. When the
-// `character_maximum_length` column is NULL, it means the column has
-// variable width and we set the width of the type to 0, which will
-// cause the random data generator to generate data with random width.
-func typeForOid(db *gosql.DB, typeOid oid.Oid, tableName, columnName string) (*types.T, error) {
-	datumType := *types.OidToType[typeOid]
-	if typeOid == oid.T_bit || typeOid == oid.T_char {
-		var width int32
-		if err := db.QueryRow(
-			`SELECT IFNULL(character_maximum_length, 0)
-			FROM information_schema.columns
-			WHERE table_name = $1 AND column_name = $2`,
-			tableName, columnName).Scan(&width); err != nil {
-			return nil, err
-		}
-
-		datumType.InternalType.Width = width
-	}
-
-	return &datumType, nil
-}
-
 // Ops implements the Opser interface.
 func (w *random) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
@@ -160,93 +121,23 @@ func (w *random) Ops(
 		tableName = w.Tables()[0].Name
 	}
 
-	var relid int
-	sqlName := tree.Name(tableName)
-	if err := db.QueryRow("SELECT $1::REGCLASS::OID", sqlName.String()).Scan(&relid); err != nil {
-		return workload.QueryLoad{}, err
-	}
-
-	rows, err := db.Query(
-		`
-SELECT attname, atttypid, adsrc, NOT attnotnull, attgenerated != ''
-FROM pg_catalog.pg_attribute
-LEFT JOIN pg_catalog.pg_attrdef
-ON attrelid=adrelid AND attnum=adnum
-WHERE attrelid=$1`, relid)
+	table, err := LoadTable(db, tableName)
 	if err != nil {
-		return workload.QueryLoad{}, err
-	}
-	defer func() { retErr = errors.CombineErrors(retErr, rows.Close()) }()
-	var cols []col
-	var numCols = 0
-
-	for rows.Next() {
-		var c col
-		c.dataPrecision = 0
-		c.dataScale = 0
-
-		var typOid int
-		if err := rows.Scan(&c.name, &typOid, &c.cdefault, &c.isNullable, &c.isComputed); err != nil {
-			return workload.QueryLoad{}, err
-		}
-		c.dataType, err = typeForOid(db, oid.Oid(typOid), tableName, c.name)
-		if err != nil {
-			return workload.QueryLoad{}, err
-		}
-		if c.cdefault.String == "unique_rowid()" { // skip
-			continue
-		}
-		if strings.HasPrefix(c.cdefault.String, "uuid_v4()") { // skip
-			continue
-		}
-		cols = append(cols, c)
-		numCols++
-	}
-
-	if numCols == 0 {
-		return workload.QueryLoad{}, errors.New("no columns detected")
-	}
-
-	if err = rows.Err(); err != nil {
 		return workload.QueryLoad{}, err
 	}
 
 	// insert on conflict requires the primary key. check information_schema if not specified on the command line
 	if strings.HasPrefix(w.method, "ioc") && w.primaryKey == "" {
-		rows, err := db.Query(
-			`
-SELECT a.attname
-FROM   pg_index i
-JOIN   pg_attribute a ON a.attrelid = i.indrelid
-                      AND a.attnum = ANY(i.indkey)
-WHERE  i.indrelid = $1
-AND    i.indisprimary`, relid)
-		if err != nil {
-			return workload.QueryLoad{}, err
+		if len(table.PrimaryKey) == 0 {
+			return workload.QueryLoad{}, errors.New(
+				"insert on conflict requires primary key to be specified via -primary if the table does " +
+					"not have primary key")
 		}
-		defer func() { retErr = errors.CombineErrors(retErr, rows.Close()) }()
-		for rows.Next() {
-			var colname string
-
-			if err := rows.Scan(&colname); err != nil {
-				return workload.QueryLoad{}, err
-			}
-			if w.primaryKey != "" {
-				w.primaryKey += "," + tree.NameString(colname)
-			} else {
-				w.primaryKey += tree.NameString(colname)
-			}
+		var primaryKey []string
+		for _, i := range table.PrimaryKey {
+			primaryKey = append(primaryKey, table.Cols[i].Name)
 		}
-		if err = rows.Err(); err != nil {
-			return workload.QueryLoad{}, err
-		}
-	}
-
-	if strings.HasPrefix(w.method, "ioc") && w.primaryKey == "" {
-		err := errors.New(
-			"insert on conflict requires primary key to be specified via -primary if the table does " +
-				"not have primary key")
-		return workload.QueryLoad{}, err
+		w.primaryKey = strings.Join(primaryKey, ",")
 	}
 
 	var dmlMethod string
@@ -265,19 +156,19 @@ AND    i.indisprimary`, relid)
 	case "ioc-update":
 		dmlMethod = "insert"
 		dmlSuffix.WriteString(fmt.Sprintf(" on conflict (%s) do update set ", w.primaryKey))
-		for i, c := range cols {
+		for i, c := range table.Cols {
 			if i > 0 {
 				dmlSuffix.WriteString(",")
 			}
-			dmlSuffix.WriteString(fmt.Sprintf("%s=EXCLUDED.%s", tree.NameString(c.name), tree.NameString(c.name)))
+			dmlSuffix.WriteString(fmt.Sprintf("%s=EXCLUDED.%s", tree.NameString(c.Name), tree.NameString(c.Name)))
 		}
 	default:
 		return workload.QueryLoad{}, errors.Errorf("%s DML method not valid", w.primaryKey)
 	}
 
-	var nonComputedCols []col
-	for _, c := range cols {
-		if !c.isComputed {
+	var nonComputedCols []Col
+	for _, c := range table.Cols {
+		if !c.IsComputed {
 			nonComputedCols = append(nonComputedCols, c)
 		}
 	}
@@ -287,7 +178,7 @@ AND    i.indisprimary`, relid)
 		if i > 0 {
 			buf.WriteString(",")
 		}
-		buf.WriteString(tree.NameString(c.name))
+		buf.WriteString(tree.NameString(c.Name))
 	}
 	buf.WriteString(`) VALUES `)
 
@@ -320,7 +211,7 @@ AND    i.indisprimary`, relid)
 			config:    w,
 			hists:     reg.GetHandle(),
 			db:        db,
-			cols:      nonComputedCols,
+			table:     &table,
 			rng:       rand.New(rand.NewSource(RandomSeed.Seed() + int64(i))),
 			writeStmt: writeStmt,
 		}
@@ -333,7 +224,7 @@ type randOp struct {
 	config    *random
 	hists     *histogram.Histograms
 	db        *gosql.DB
-	cols      []col
+	table     *Table
 	rng       *rand.Rand
 	writeStmt *gosql.Stmt
 }
@@ -365,80 +256,6 @@ func (sa sqlArray) Value() (driver.Value, error) {
 	return pq.Array(sa.array).Value()
 }
 
-// DatumToGoSQL converts a datum to a Go type.
-func DatumToGoSQL(d tree.Datum) (interface{}, error) {
-	d = tree.UnwrapDOidWrapper(d)
-	if d == tree.DNull {
-		return nil, nil
-	}
-	switch d := d.(type) {
-	case *tree.DBool:
-		return bool(*d), nil
-	case *tree.DString:
-		return string(*d), nil
-	case *tree.DBytes:
-		return fmt.Sprintf(`x'%s'`, hex.EncodeToString([]byte(*d))), nil
-	case *tree.DDate, *tree.DTime:
-		return tree.AsStringWithFlags(d, tree.FmtBareStrings), nil
-	case *tree.DTimestamp:
-		return d.Time, nil
-	case *tree.DTimestampTZ:
-		return d.Time, nil
-	case *tree.DInterval:
-		return d.Duration.String(), nil
-	case *tree.DBitArray:
-		return tree.AsStringWithFlags(d, tree.FmtBareStrings), nil
-	case *tree.DInt:
-		return int64(*d), nil
-	case *tree.DOid:
-		return uint32(d.Oid), nil
-	case *tree.DFloat:
-		return float64(*d), nil
-	case *tree.DDecimal:
-		// use string representation here since randgen might generate
-		// decimals that don't fit into a float64
-		return d.String(), nil
-	case *tree.DArray:
-		arr := make([]interface{}, len(d.Array))
-		for i := range d.Array {
-			elt, err := DatumToGoSQL(d.Array[i])
-			if err != nil {
-				return nil, err
-			}
-			if elt == nil {
-				elt = nullVal{}
-			}
-			arr[i] = elt
-		}
-		return sqlArray{arr, d.ParamTyp}, nil
-	case *tree.DUuid:
-		return d.UUID, nil
-	case *tree.DIPAddr:
-		return d.IPAddr.String(), nil
-	case *tree.DJSON:
-		return d.JSON.String(), nil
-	case *tree.DJsonpath:
-		return d.String(), nil
-	case *tree.DTimeTZ:
-		return d.TimeTZ.String(), nil
-	case *tree.DBox2D:
-		return d.CartesianBoundingBox.Repr(), nil
-	case *tree.DGeography:
-		return geo.SpatialObjectToEWKT(d.Geography.SpatialObject(), 2)
-	case *tree.DGeometry:
-		return geo.SpatialObjectToEWKT(d.Geometry.SpatialObject(), 2)
-	case *tree.DPGLSN:
-		return d.LSN.String(), nil
-	case *tree.DTSQuery:
-		return d.String(), nil
-	case *tree.DTSVector:
-		return d.String(), nil
-	case *tree.DPGVector:
-		return d.String(), nil
-	}
-	return nil, errors.Errorf("unhandled datum type: %s", reflect.TypeOf(d))
-}
-
 type nullVal struct{}
 
 func (nullVal) Value() (driver.Value, error) {
@@ -446,23 +263,15 @@ func (nullVal) Value() (driver.Value, error) {
 }
 
 func (o *randOp) run(ctx context.Context) (err error) {
-	params := make([]interface{}, len(o.cols)*o.config.batchSize)
-	k := 0 // index into params
+	params := make([]interface{}, 0, len(o.table.Cols)*o.config.batchSize)
 	for j := 0; j < o.config.batchSize; j++ {
-		for _, c := range o.cols {
-			nullPct := 0
-			if c.isNullable && o.config.nullPct > 0 {
-				nullPct = 100 / o.config.nullPct
-			}
-			d := randgen.RandDatumWithNullChance(o.rng, c.dataType, nullPct, /* nullChance */
-				false /* favorCommonData */, false /* targetColumnIsUnique */)
-			params[k], err = DatumToGoSQL(d)
-			if err != nil {
-				return err
-			}
-			k++
+		row, err := o.table.RandomRow(o.rng, o.config.nullPct)
+		if err != nil {
+			return err
 		}
+		params = append(params, row...)
 	}
+
 	start := timeutil.Now()
 	_, err = o.writeStmt.ExecContext(ctx, params...)
 	if o.hists != nil {
