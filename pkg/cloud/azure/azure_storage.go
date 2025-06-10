@@ -222,7 +222,7 @@ func makeAzureStorage(
 
 	options := args.ExternalStorageOptions()
 	t, err := cloud.MakeHTTPClient(args.Settings, args.MetricsRecorder,
-		cloud.Config{
+		cloud.HTTPClientConfig{
 			Bucket: dest.AzureConfig.Container,
 			Client: options.ClientName,
 			Cloud:  "azure",

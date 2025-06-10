@@ -89,7 +89,7 @@ func (m cephManager) getBackupURI(ctx context.Context, dest string) (string, err
 	// Region is required in the URL, but not used in Ceph.
 	q.Add(amazon.S3RegionParam, "dummy")
 	q.Add(amazon.AWSEndpointParam, endpointURL)
-	if m.secure == s3CloneRequireTLS {
+	if m.secure == s3CloneTLSWithSkipVerify {
 		q.Add(amazon.AWSSkipTLSVerify, "true")
 	}
 	uri := fmt.Sprintf("s3://%s/%s?%s", m.bucket, dest, q.Encode())
@@ -147,7 +147,7 @@ func (m cephManager) install(ctx context.Context) {
 
 // maybeInstallCa adds a custom ca in the CockroachDB cluster.
 func (m cephManager) maybeInstallCa(ctx context.Context) error {
-	if m.secure != s3CloneVerifyTLS {
+	if m.secure != s3CloneTLS {
 		return nil
 	}
 	localCertsDir, err := os.MkdirTemp("", "roachtest-certs")

@@ -28,8 +28,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Config defines the settings for building the underlying transport.
-type Config struct {
+// HTTPClientConfig defines the settings for building the underlying transport.
+type HTTPClientConfig struct {
 	// Bucket is name of the bucket. Used to label metrics.
 	Bucket string
 	// Client type (e.g. CDC vs backup). Used to label metrics.
@@ -92,7 +92,7 @@ var httpMetrics = settings.RegisterBoolSetting(
 // MakeHTTPClient makes an http client configured with the common settings used
 // for interacting with cloud storage (timeouts, retries, CA certs, etc).
 func MakeHTTPClient(
-	settings *cluster.Settings, metrics *Metrics, config Config,
+	settings *cluster.Settings, metrics *Metrics, config HTTPClientConfig,
 ) (*http.Client, error) {
 	t, err := MakeTransport(settings, metrics, config)
 	if err != nil {
@@ -114,7 +114,7 @@ func MakeHTTPClientForTransport(t http.RoundTripper) (*http.Client, error) {
 // used for interacting with cloud storage (timeouts, retries, CA certs, etc).
 // Prefer MakeHTTPClient where possible.
 func MakeTransport(
-	settings *cluster.Settings, metrics *Metrics, config Config,
+	settings *cluster.Settings, metrics *Metrics, config HTTPClientConfig,
 ) (*http.Transport, error) {
 	var tlsConf *tls.Config
 	if config.InsecureSkipVerify {

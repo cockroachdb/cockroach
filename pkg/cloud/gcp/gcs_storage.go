@@ -186,7 +186,7 @@ func makeGCSStorage(
 	}
 
 	clientName := args.ExternalStorageOptions().ClientName
-	baseTransport, err := cloud.MakeTransport(args.Settings, args.MetricsRecorder, cloud.Config{
+	baseTransport, err := cloud.MakeTransport(args.Settings, args.MetricsRecorder, cloud.HTTPClientConfig{
 		Bucket: conf.Bucket,
 		Client: clientName,
 		Cloud:  "gcs",
