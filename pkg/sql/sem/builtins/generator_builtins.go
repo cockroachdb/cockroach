@@ -583,8 +583,7 @@ The output can be used to recreate a database.'
 			},
 			showCreateAllTriggersGeneratorType,
 			makeShowCreateAllTriggersGenerator,
-			`Returns rows of CREATE trigger statements.
-				The output can be used to recreate a database.`,
+			`Returns rows of CREATE trigger statements. The output can be used to recreate a database.`,
 			volatility.Volatile,
 		),
 	),
@@ -3097,7 +3096,7 @@ func makeShowCreateAllTablesGenerator(
 type showCreateAllTriggersGenerator struct {
 	evalPlanner eval.Planner
 	txn         *kv.Txn
-	ids         []triggerIdPair
+	ids         []tableTriggerPair
 	dbName      string
 	acc         mon.BoundAccount
 
