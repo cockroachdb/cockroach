@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -25,11 +24,11 @@ import (
 
 type replicateQueue struct {
 	baseQueue
-	planner       plan.ReplicationPlanner
-	clock         *hlc.Clock
-	settings      *config.SimulationSettings
-	lastChangeIDs []mma.ChangeID
-	as            *kvserver.AllocatorSync
+	planner          plan.ReplicationPlanner
+	clock            *hlc.Clock
+	settings         *config.SimulationSettings
+	lastSyncChangeID kvserver.SyncChangeID
+	as               *kvserver.AllocatorSync
 }
 
 // NewReplicateQueue returns a new replicate queue.
@@ -115,9 +114,9 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 		rq.next = rq.lastTick
 	}
 
-	if !tick.Before(rq.next) && rq.lastChangeIDs != nil {
-		rq.as.PostApply(rq.lastChangeIDs, true /* success */)
-		rq.lastChangeIDs = nil
+	if !tick.Before(rq.next) && rq.lastSyncChangeID.IsValid() {
+		rq.as.PostApply(rq.lastSyncChangeID, true /* success */)
+		rq.lastSyncChangeID = kvserver.InvalidSyncChangeID
 	}
 
 	for !tick.Before(rq.next) && rq.priorityQueue.Len() != 0 {
@@ -154,7 +153,7 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 			continue
 		}
 
-		rq.next, rq.lastChangeIDs = pushReplicateChange(
+		rq.next, rq.lastSyncChangeID = pushReplicateChange(
 			ctx, change, repl, tick, rq.settings.ReplicaChangeDelayFn(), rq.baseQueue.stateChanger, rq.as)
 	}
 
@@ -169,20 +168,20 @@ func pushReplicateChange(
 	delayFn func(int64, bool) time.Duration,
 	stateChanger state.Changer,
 	as *kvserver.AllocatorSync,
-) (time.Time, []mma.ChangeID) {
+) (time.Time, kvserver.SyncChangeID) {
 	var stateChange state.Change
-	var changeIDs []mma.ChangeID
+	var changeID kvserver.SyncChangeID
 	next := tick
 	switch op := change.Op.(type) {
 	case plan.AllocationNoop:
 		// Nothing to do.
-		return next, nil
+		return next, kvserver.InvalidSyncChangeID
 	case plan.AllocationFinalizeAtomicReplicationOp:
 		panic("unimplemented finalize atomic replication op")
 	case plan.AllocationTransferLeaseOp:
 		if as != nil {
 			// as may be nil in some tests.
-			changeIDs = as.NonMMAPreTransferLease(
+			changeID = as.NonMMAPreTransferLease(
 				repl.Desc(),
 				repl.RangeUsageInfo(),
 				op.Source,
@@ -201,14 +200,14 @@ func pushReplicateChange(
 	case plan.AllocationChangeReplicasOp:
 		if as != nil {
 			// as may be nil in some tests.
-			changeIDs = as.NonMMAPreChangeReplicas(
+			changeID = as.NonMMAPreChangeReplicas(
 				repl.Desc(),
 				repl.RangeUsageInfo(),
 				op.Chgs,
 				repl.StoreID(), /* leaseholder */
 			)
 		}
-		log.VEventf(ctx, 1, "pushing state change for range=%s, details=%s changeIDs=%v", repl.rng, op.Details, changeIDs)
+		log.VEventf(ctx, 1, "pushing state change for range=%s, details=%s changeIDs=%v", repl.rng, op.Details, changeID)
 		stateChange = &state.ReplicaChange{
 			RangeID: state.RangeID(change.Replica.GetRangeID()),
 			Changes: op.Chgs,
@@ -224,8 +223,8 @@ func pushReplicateChange(
 		next = completeAt
 	} else {
 		log.VEventf(ctx, 1, "pushing state change failed")
-		as.PostApply(changeIDs, false /* success */)
-		changeIDs = nil
+		as.PostApply(changeID, false /* success */)
+		changeID = kvserver.InvalidSyncChangeID
 	}
-	return next, changeIDs
+	return next, changeID
 }

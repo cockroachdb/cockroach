@@ -1243,6 +1243,11 @@ func (cs *clusterState) createPendingChanges(changes ...ReplicaChange) []*pendin
 	return pendingChanges
 }
 
+func (cs *clusterState) hasRange(rangeID roachpb.RangeID) bool {
+	_, ok := cs.ranges[rangeID]
+	return ok
+}
+
 func (cs *clusterState) applyReplicaChange(change ReplicaChange) {
 	storeState, ok := cs.stores[change.target.StoreID]
 	if !ok {
@@ -1253,13 +1258,10 @@ func (cs *clusterState) applyReplicaChange(change ReplicaChange) {
 		// This is the first time encountering this range, we add it to the cluster
 		// state.
 		//
-		// TODO(wenyihu6): Don't do anything if the range is not known.
-		//
 		// TODO(kvoli): Pass in the range descriptor to construct the range state
 		// here. Currently, when the replica change is a removal this won't work
 		// because the range state will not contain the replica being removed.
-		rangeState = newRangeState()
-		cs.ranges[change.rangeID] = rangeState
+		panic(fmt.Sprintf("range %v not found in cluster state", change.rangeID))
 	}
 
 	if change.isRemoval() {

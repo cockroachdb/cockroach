@@ -57,6 +57,7 @@ type MMAStoreRebalancer struct {
 type pendingChangeAndRangeUsageInfo struct {
 	change mma.PendingRangeChange
 	usage  allocator.RangeUsageInfo
+	syncChangeID kvserver.SyncChangeID
 }
 
 // NewMMAStoreRebalancer creates a new MMAStoreRebalancer.
@@ -114,6 +115,9 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 		// loop iterations on this tick, or prior ticks.
 		if msr.pendingTicket != -1 {
 			curChange := msr.pendingChanges[msr.pendingChangeIdx]
+			if !curChange.syncChangeID.IsValid() {
+				panic("invalid sync change ID")
+			}
 			// There is a pending operation we are waiting on. Check the status.
 			op, ok := msr.controller.Check(msr.pendingTicket)
 			if !ok {
@@ -132,7 +136,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 				} else {
 					log.VInfof(ctx, 1, "operation for pendingChange=%v completed successfully", curChange)
 				}
-				msr.as.PostApply(curChange.change.ChangeIDs(), success)
+				msr.as.PostApply(curChange.syncChangeID, success)
 				msr.pendingChangeIdx++
 			} else {
 				log.VInfof(ctx, 1, "operation for pendingChange=%v is still in progress", curChange)
@@ -199,7 +203,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 			panic(fmt.Sprintf("unexpected pending change type: %v", curChange))
 		}
 		log.VInfof(ctx, 1, "dispatching operation for pendingChange=%v", curChange)
-		msr.as.MMAPreApply(curChange.usage, curChange.change)
+		msr.pendingChanges[msr.pendingChangeIdx].syncChangeID = msr.as.MMAPreApply(curChange.usage, curChange.change)
 		msr.pendingTicket = msr.controller.Dispatch(ctx, tick, s, curOp)
 	}
 }
