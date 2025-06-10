@@ -322,7 +322,7 @@ func makeTableIterator(f io.Reader) ([]string, func(func(string) error) error) {
 	// some of the rows can be very large, bigger than the bufio.MaxTokenSize
 	// (65kb). So, we need to increase the buffer size and split by lines while
 	// scanning.
-	scanner.Buffer(nil, 5<<20) // 5 MB
+	scanner.Buffer(nil, 5<<22) // 20 MB
 	scanner.Split(bufio.ScanLines)
 
 	scanner.Scan() // scan the first line to get the headers
