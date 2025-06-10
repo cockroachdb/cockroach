@@ -159,6 +159,11 @@ type TestServerArgs struct {
 	// below for alternative options that suits your test case.
 	DefaultTestTenant DefaultTestTenantOptions
 
+	// DefaultTestDRPCEnableOption specifies the DRPC enablement mode for a test
+	// server. This controls whether inter-node connectivity uses DRPC, just
+	// gRPC, or is chosen randomly.
+	DefaultDRPCOption DefaultTestDRPCEnableOption
+
 	// DefaultTenantName is the name of the tenant created implicitly according
 	// to DefaultTestTenant. It is typically `test-tenant` for unit tests and
 	// always `demoapp` for the cockroach demo.
@@ -223,6 +228,25 @@ func (a *TestServerArgs) SlimServerConfig(opts ...SlimServerOption) {
 type SlimTestServerConfig struct {
 	Options slimOptions
 }
+
+// DefaultTestDRPCEnableOption specifies the DRPC enablement mode for a test
+// server. This controls whether inter-node connectivity uses DRPC, just gRPC,
+// or is chosen randomly.
+type DefaultTestDRPCEnableOption uint8
+
+const (
+	// TestDRPCDisabled disables DRPC; all inter-node connectivity will use gRPC
+	// only.
+	TestDRPCDisabled DefaultTestDRPCEnableOption = iota
+
+	// TestDRPCEnabled enables DRPC. Some services may still use gRPC if they
+	// have not yet migrated to DRPC.
+	TestDRPCEnabled
+
+	// TestDRPCEnabledRandomly randomly chooses between the behavior of
+	// TestDRPCDisabled or TestDRPCEnabled.
+	TestDRPCEnabledRandomly
+)
 
 // TestClusterArgs contains the parameters one can set when creating a test
 // cluster. It contains a TestServerArgs instance which will be copied over to
