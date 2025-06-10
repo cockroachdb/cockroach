@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionprotectedts"
@@ -313,6 +314,14 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 		return false, nil
 	}
 	index := n.indexes[n.run.rowIdx]
+
+	// Skip inverted indexes. Experimental fingerprint uses a query that forces
+	// the use of an index and that is incompatible with inverted indexes.
+	if index.GetType() == idxtype.INVERTED {
+		n.run.rowIdx++
+		return n.Next(params)
+	}
+
 	excludedColumns := []string{}
 	if n.options != nil && len(n.options.excludedUserColumns) > 0 {
 		excludedColumns = append(excludedColumns, n.options.excludedUserColumns...)
