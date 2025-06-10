@@ -50,7 +50,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if err := dialAndCheckHealth(ctx); err != nil {
 		return err
 	}
-	conn, finish, err := getClientGRPCConn(ctx, serverCfg)
+	conn, finish, err := newClientConn(ctx, serverCfg)
 	if err != nil {
 		return err
 	}
@@ -64,7 +64,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	// Actually perform cluster initialization.
-	c := serverpb.NewInitClient(conn)
+	c := conn.NewInitClient()
 	if _, err = c.Bootstrap(ctx, &serverpb.BootstrapRequest{
 		InitType: typ,
 	}); err != nil {
@@ -89,7 +89,7 @@ func dialAndCheckHealth(ctx context.Context) error {
 		// (Attempt to) establish the gRPC connection. If that fails,
 		// it may be that the server hasn't started to listen yet, in
 		// which case we'll retry.
-		conn, finish, err := getClientGRPCConn(ctx, serverCfg)
+		conn, finish, err := newClientConn(ctx, serverCfg)
 		if err != nil {
 			return err
 		}
@@ -98,7 +98,7 @@ func dialAndCheckHealth(ctx context.Context) error {
 		// Access the /health endpoint. Until/unless this succeeds, the
 		// node is not yet fully initialized and ready to accept
 		// Bootstrap requests.
-		ac := serverpb.NewAdminClient(conn)
+		ac := conn.NewAdminClient()
 		_, err = ac.Health(ctx, &serverpb.HealthRequest{})
 		return err
 	}
