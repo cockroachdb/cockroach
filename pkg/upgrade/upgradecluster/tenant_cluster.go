@@ -129,7 +129,7 @@ import (
 //     again in the next release.
 type TenantCluster struct {
 	// Dialer allows for the construction of connections to other SQL pods.
-	Dialer          NodeDialer
+	Dialer          rpcbase.NodeDialer
 	InstanceReader  *instancestorage.Reader
 	instancesAtBump []sqlinstance.InstanceInfo
 	DB              *kv.DB
@@ -138,7 +138,7 @@ type TenantCluster struct {
 // TenantClusterConfig configures a TenantCluster.
 type TenantClusterConfig struct {
 	// Dialer allows for the construction of connections to other SQL pods.
-	Dialer NodeDialer
+	Dialer rpcbase.NodeDialer
 
 	// InstanceReader is used to retrieve all SQL pods for a given tenant.
 	InstanceReader *instancestorage.Reader

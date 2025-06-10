@@ -21,3 +21,10 @@ const TODODRPC = false
 type NodeDialer interface {
 	Dial(context.Context, roachpb.NodeID, ConnectionClass) (_ *grpc.ClientConn, err error)
 }
+
+// NodeDialerNoBreaker interface defines methods for dialing peer nodes using their
+// node IDs. This interface is similar to NodeDialer but does not check the
+// breaker before dialing.
+type NodeDialerNoBreaker interface {
+	DialNoBreaker(context.Context, roachpb.NodeID, ConnectionClass) (_ *grpc.ClientConn, err error)
+}
