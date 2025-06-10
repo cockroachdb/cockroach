@@ -506,7 +506,9 @@ func (r *Replica) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
 	r.asLogStorage().stagePendingTruncationRaftMuLocked(pt)
 }
 
-func (r *replicaLogStorage) stageApplySnapshot(truncState kvserverpb.RaftTruncatedState) {
+func (r *replicaLogStorage) stageApplySnapshotRaftMuLocked(
+	truncState kvserverpb.RaftTruncatedState,
+) {
 	r.raftMu.AssertHeld()
 
 	// A snapshot application implies a log truncation to the snapshot's index,
@@ -522,33 +524,20 @@ func (r *replicaLogStorage) stageApplySnapshot(truncState kvserverpb.RaftTruncat
 	// section but before the clear will see an empty log anyway, since the
 	// in-memory state is already updated to reflect the truncation, even if
 	// entries are still present in the cache.
-	//
-	// NB: a reader that obtained bounds pre-critical section might be able to
-	// load entries, though, and could repopulate the cache after it has been
-	// cleared - the cache is not "snapshotted". Ideally, mu-only readers simply
-	// cannot populate the cache.
 	defer r.cache.Drop(r.ls.RangeID)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// Raft never accepts a snapshot that does not increase the commit index, and
-	// the commit index always refers to a log entry (unless the log is empty
-	// already). In particular, any entries in the log are guaranteed to be at
-	// indexes that this truncation will remove, and the result is an empty log
-	// (and raft entry cache). This is true even if the RawNode has entries lined
-	// up that it wants to append to the log[1] (on top of the snapshot), as these
-	// entries are not yet stable and thus not in the log/cache yet.
+	// On snapshots, the entire log is cleared. This is safe:
+	// - log entries preceding the entry represented by the snapshot are durable
+	//   via the snapshot itself, and
+	// - committed log entries ahead of the snapshot index were not acked by this
+	//   replica, or raft would not have accepted this snapshot.
 	//
-	// [1]: this is not properly supported yet and will currently fatal.
-	// See: https://github.com/cockroachdb/cockroach/pull/125530
-	// We also, in the same mu critical section, update the in-memory metadata
-	// accordingly before the change is visible on the engine. This means that
-	// even if someone used the in-memory state to grab an iterator (all within
-	// the same mu section), they would either see pre-snapshot raft log, or the
-	// post-snapshot (empty) log, but never any in-between state in which the
-	// first and last index are out of sync either with each other or with what's
-	// actually on the log engine.
+	// Here, we update the in-memory state to reflect this before making the
+	// corresponding change to on-disk state. This makes sure that concurrent
+	// readers don't try to access entries no longer present in the log.
 	r.updateStateRaftMuLockedMuLocked(logstore.RaftState{
 		LastIndex: truncState.Index,
 		LastTerm:  truncState.Term,
