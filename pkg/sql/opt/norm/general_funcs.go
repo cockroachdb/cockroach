@@ -1445,6 +1445,17 @@ func (c *CustomFuncs) NoJoinHints(p *memo.JoinPrivate) bool {
 //
 // ----------------------------------------------------------------------
 
+// If returns the given boolean value. This function is useful in matching
+// expressions that have a boolean field.
+func (c *CustomFuncs) If(val bool) bool {
+	return val
+}
+
+// EqualsBool returns true if the given boolean values are equal.
+func (c *CustomFuncs) EqualsBool(left, right bool) bool {
+	return left == right
+}
+
 // IsPositiveInt is true if the given Datum value is greater than zero.
 func (c *CustomFuncs) IsPositiveInt(datum tree.Datum) bool {
 	val := int64(*datum.(*tree.DInt))
@@ -1559,12 +1570,6 @@ func (c *CustomFuncs) DuplicateJoinPrivate(jp *memo.JoinPrivate) *memo.JoinPriva
 		Flags:            jp.Flags,
 		SkipReorderJoins: jp.SkipReorderJoins,
 	}
-}
-
-// IsBarrierLeakproofPermeable returns true if the barrier allows for leakproof
-// filters to permeate through it.
-func (c *CustomFuncs) IsBarrierLeakproofPermeable(priv *memo.BarrierPrivate) bool {
-	return priv.LeakproofPermeable
 }
 
 // SplitLeakproofFilters separates a list of filters into two groups: those that
