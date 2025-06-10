@@ -855,7 +855,6 @@ var noSnap IncomingSnapshot
 func (r *Replica) handleRaftReady(
 	ctx context.Context, inSnap IncomingSnapshot,
 ) (handleRaftReadyStats, error) {
-
 	// Don't process anything if this fn returns false.
 	if fn := r.store.cfg.TestingKnobs.DisableProcessRaft; fn != nil && fn(r.store.StoreID()) {
 		return handleRaftReadyStats{
@@ -889,6 +888,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	stats = handleRaftReadyStats{
 		tBegin: crtime.NowMono(),
 	}
+	time.Sleep(time.Millisecond)
 	defer func() {
 		stats.tEnd = crtime.NowMono()
 	}()
