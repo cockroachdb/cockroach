@@ -898,7 +898,8 @@ func benchmarkSysbenchImpl(b *testing.B, parallel bool) {
 func runSysbenchOuter(b *testing.B, sys sysbenchDriver, opFn sysbenchWorkload, parallel bool) {
 	sys.prep(rand.New(rand.NewSource(0)))
 
-	defer startAllocsProfile(b).Stop(b)
+	defer startDeltaProfiles(b).Stop(b)
+	defer startCPUProfile(b).Stop(b)
 	defer b.StopTimer()
 
 	const warmupIters = 100
@@ -980,10 +981,46 @@ func try[T any](t T, err error) T {
 type doneFn func(testing.TB)
 
 func (f doneFn) Stop(b testing.TB) {
+	if f == nil {
+		return
+	}
 	f(b)
 }
 
-func startAllocsProfile(b testing.TB) doneFn {
+func startCPUProfile(b *testing.B) doneFn {
+
+	// Sniff the file location. Remove the original file (to avoid confusion),
+	// and start a new CPU profile into a new one.
+	var cpuProfFile string
+	require.NoError(b, sniffarg.DoEnv("test.cpuprofile", &cpuProfFile))
+	if cpuProfFile == "" {
+		return nil // no CPU profile requested
+	}
+
+	// Hijack CPU profile to make a clean profile.
+	// The flag is set, so likely a CPU profile started by the Go harness is
+	// running (unless -count is specified, but StopCPUProfile is idempotent).
+	runtimepprof.StopCPUProfile()
+
+	var outputDir string
+	require.NoError(b, sniffarg.DoEnv("test.outputdir", &outputDir))
+
+	if outputDir != "" {
+		cpuProfFile = filepath.Join(outputDir, cpuProfFile)
+	}
+
+	_ = os.Remove(cpuProfFile)       // remove harness' file
+	f, err := os.Create(cpuProfFile) // make our own
+	require.NoError(b, err)
+	require.NoError(b, runtimepprof.StartCPUProfile(f))
+	return func(t testing.TB) {
+		runtimepprof.StopCPUProfile()
+		_ = f.Close()
+		b.Logf("wrote CPU profile to: %s", cpuProfFile)
+	}
+}
+
+func startDeltaProfiles(b testing.TB) doneFn {
 	outAllocs := testProfileFile(b, "memprofile")
 	diffAllocs := diffProfile(b, func() []byte {
 		if outAllocs == "" {
@@ -1012,9 +1049,11 @@ func startAllocsProfile(b testing.TB) doneFn {
 	return func(b testing.TB) {
 		if sl := diffAllocs(b); len(sl) > 0 {
 			require.NoError(b, os.WriteFile(outAllocs, sl, 0644))
+			b.Log("wrote allocs delta profile to", outAllocs)
 		}
 		if sl := diffMutex(b); len(sl) > 0 {
 			require.NoError(b, os.WriteFile(outMutex, sl, 0644))
+			b.Log("wrote mutex delta profile to", outAllocs)
 		}
 	}
 }
