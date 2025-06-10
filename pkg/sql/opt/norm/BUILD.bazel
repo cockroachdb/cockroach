@@ -3,7 +3,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "norm",
     srcs = [
-        "barrier_funcs.go",
         "bool_funcs.go",
         "comp_funcs.go",
         "decorrelate_funcs.go",
