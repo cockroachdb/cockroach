@@ -45,7 +45,7 @@ func runDebugResetQuorum(cmd *cobra.Command, args []string) error {
 	}
 
 	// Set up GRPC Connection for running ResetQuorum.
-	cc, finish, err := getClientGRPCConn(ctx, serverCfg)
+	conn, finish, err := newClientConn(ctx, serverCfg)
 	if err != nil {
 		log.Errorf(ctx, "connection to server failed: %v", err)
 		return err
@@ -53,7 +53,7 @@ func runDebugResetQuorum(cmd *cobra.Command, args []string) error {
 	defer finish()
 
 	// Call ResetQuorum to reset quorum for given range on target node.
-	_, err = kvpb.NewInternalClient(cc).ResetQuorum(ctx, &kvpb.ResetQuorumRequest{
+	_, err = conn.NewInternalClient().ResetQuorum(ctx, &kvpb.ResetQuorumRequest{
 		RangeID: int32(rangeID),
 	})
 	if err != nil {
