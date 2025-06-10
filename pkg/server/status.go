@@ -712,6 +712,8 @@ func (s *statusServer) parseNodeID(nodeIDParam string) (roachpb.NodeID, bool, er
 	return roachpb.NodeID(id), local, err
 }
 
+// dialNode dials a connection to the node with the given nodeID and returns
+// a StatusClient.
 func (s *statusServer) dialNode(
 	ctx context.Context, nodeID roachpb.NodeID,
 ) (serverpb.StatusClient, error) {
@@ -720,11 +722,15 @@ func (s *statusServer) dialNode(
 			return nil, err
 		}
 	}
-	conn, err := s.serverIterator.dialNode(ctx, serverID(nodeID))
-	if err != nil {
-		return nil, err
+
+	if !rpcbase.TODODRPC {
+		conn, err := s.serverIterator.dialNode(ctx, serverID(nodeID))
+		if err != nil {
+			return nil, err
+		}
+		return serverpb.NewStatusClient(conn), nil
 	}
-	return serverpb.NewStatusClient(conn), nil
+	return nil, errors.New("DRPC not supported")
 }
 
 // Gossip returns current state of gossip information on the given node

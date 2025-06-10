@@ -142,6 +142,7 @@ go_library(
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/rpc",
+        "//pkg/rpc/rpcbase",
         "//pkg/security",
         "//pkg/security/certnames",
         "//pkg/security/clientsecopts",

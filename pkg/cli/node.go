@@ -348,15 +348,13 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	conn, finish, err := getClientGRPCConn(ctx, serverCfg)
+	clients, finish, err := getClients(ctx, serverCfg)
 	if err != nil {
 		return errors.Wrap(err, "failed to connect to the node")
 	}
 	defer finish()
 
-	s := serverpb.NewStatusClient(conn)
-
-	localNodeID, err := getLocalNodeID(ctx, s)
+	localNodeID, err := getLocalNodeID(ctx, clients.statusClient)
 	if err != nil {
 		return err
 	}
@@ -366,12 +364,11 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := expectNodesDecommissioned(ctx, s, nodeIDs, false /* expDecommissioned */); err != nil {
+	if err := expectNodesDecommissioned(ctx, clients.statusClient, nodeIDs, false /* expDecommissioned */); err != nil {
 		return err
 	}
 
-	c := serverpb.NewAdminClient(conn)
-	if err := runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait,
+	if err := runDecommissionNodeImpl(ctx, clients.adminClient, nodeCtx.nodeDecommissionWait,
 		nodeCtx.nodeDecommissionChecks, nodeCtx.nodeDecommissionDryRun,
 		nodeIDs, localNodeID,
 	); err != nil {
@@ -831,15 +828,13 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	conn, finish, err := getClientGRPCConn(ctx, serverCfg)
+	clients, finish, err := getClients(ctx, serverCfg)
 	if err != nil {
 		return errors.Wrap(err, "failed to connect to the node")
 	}
 	defer finish()
 
-	s := serverpb.NewStatusClient(conn)
-
-	localNodeID, err := getLocalNodeID(ctx, s)
+	localNodeID, err := getLocalNodeID(ctx, clients.statusClient)
 	if err != nil {
 		return err
 	}
@@ -849,16 +844,15 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := expectNodesDecommissioned(ctx, s, nodeIDs, true /* expDecommissioned */); err != nil {
+	if err := expectNodesDecommissioned(ctx, clients.statusClient, nodeIDs, true /* expDecommissioned */); err != nil {
 		return err
 	}
 
-	c := serverpb.NewAdminClient(conn)
 	req := &serverpb.DecommissionRequest{
 		NodeIDs:          nodeIDs,
 		TargetMembership: livenesspb.MembershipStatus_ACTIVE,
 	}
-	resp, err := c.Decommission(ctx, req)
+	resp, err := clients.adminClient.Decommission(ctx, req)
 	if err != nil {
 		cause := errors.UnwrapAll(err)
 		// If it's a specific illegal membership transition error, we try to

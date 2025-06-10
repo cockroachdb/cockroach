@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -1332,9 +1333,8 @@ func (s *adminServer) statsForSpan(
 				var spanResponse *roachpb.SpanStatsResponse
 				err := timeutil.RunWithTimeout(ctx, "request remote stats", 20*time.Second,
 					func(ctx context.Context) error {
-						conn, err := s.serverIterator.dialNode(ctx, serverID(nodeID))
+						client, err := s.dialStatusClient(ctx, nodeID)
 						if err == nil {
-							client := serverpb.NewStatusClient(conn)
 							req := roachpb.SpanStatsRequest{
 								Spans:  []roachpb.Span{span},
 								NodeID: nodeID.String(),
@@ -1395,6 +1395,21 @@ func (s *adminServer) statsForSpan(
 	}
 
 	return &tableStatResponse, nil
+}
+
+// dialStatusClient dials a connection to the node with the given nodeID
+// and returns a StatusClient.
+func (s *adminServer) dialStatusClient(
+	ctx context.Context, nodeID roachpb.NodeID,
+) (serverpb.StatusClient, error) {
+	if !rpcbase.TODODRPC {
+		conn, err := s.serverIterator.dialNode(ctx, serverID(nodeID))
+		if err != nil {
+			return nil, err
+		}
+		return serverpb.NewStatusClient(conn), nil
+	}
+	return nil, errors.New("DRPC not supported")
 }
 
 // Returns the list of node ids, range count,

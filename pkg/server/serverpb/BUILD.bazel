@@ -115,7 +115,6 @@ go_library(
         "//pkg/util/errorutil",
         "//pkg/util/metric",
         "@com_github_prometheus_client_model//go",
-        "@org_golang_google_grpc//:grpc",
     ],
 )
 
