@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -65,6 +66,94 @@ var showCreateTriggerColumns = colinfo.ResultColumns{
 	{Name: "create_statement", Typ: types.String},
 }
 
+func renderCreateTriggerStatement(
+	ctx context.Context,
+	p *planner,
+	trigger *descpb.TriggerDescriptor,
+	tableDesc catalog.TableDescriptor,
+) (string, error) {
+	tableTyp, err := p.ResolveTypeByOID(ctx, typedesc.TableIDToImplicitTypeOID(tableDesc.GetID()))
+	if err != nil {
+		return "", err
+	}
+
+	// Resolve the fully-qualified names of the trigger function and table.
+	funcName, err := p.GetQualifiedFunctionNameByID(ctx, int64(trigger.FuncID))
+	if err != nil {
+		return "", err
+	}
+
+	tableName, err := p.getQualifiedTableName(ctx, tableDesc)
+	if err != nil {
+		return "", err
+	}
+
+	// Use the trigger descriptor to decompile a CreateTrigger statement that
+	// will be used to produce the SHOW CREATE TRIGGER output.
+	events := make([]*tree.TriggerEvent, len(trigger.Events))
+	for j := range events {
+		descEvent := trigger.Events[j]
+		events[j] = &tree.TriggerEvent{
+			EventType: tree.TriggerEventTypeToTree[descEvent.Type],
+			Columns:   make(tree.NameList, 0, len(descEvent.ColumnNames)),
+		}
+		for _, colName := range descEvent.ColumnNames {
+			events[j].Columns = append(events[j].Columns, tree.Name(colName))
+		}
+	}
+
+	var transitions []*tree.TriggerTransition
+	if trigger.NewTransitionAlias != "" {
+		transitions = append(transitions, &tree.TriggerTransition{
+			IsNew: true,
+			Name:  tree.Name(trigger.NewTransitionAlias),
+		})
+	}
+	if trigger.OldTransitionAlias != "" {
+		transitions = append(transitions, &tree.TriggerTransition{
+			IsNew: false,
+			Name:  tree.Name(trigger.OldTransitionAlias),
+		})
+	}
+
+	forEach := tree.TriggerForEachStatement
+	if trigger.ForEachRow {
+		forEach = tree.TriggerForEachRow
+	}
+
+	var whenExpr tree.Expr
+	if trigger.WhenExpr != "" {
+		whenExpr, err = schemaexpr.ParseTriggerWhenExprForDisplay(
+			ctx, tableTyp, trigger.WhenExpr, p.EvalContext(), p.SemaCtx(), tree.FmtParsable,
+		)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	createTrigger := &tree.CreateTrigger{
+		Replace:     false,
+		Name:        tree.Name(trigger.Name),
+		ActionTime:  tree.TriggerActionTimeToTree[trigger.ActionTime],
+		Events:      events,
+		TableName:   tableName.ToUnresolvedObjectName(),
+		Transitions: transitions,
+		ForEach:     forEach,
+		When:        whenExpr,
+		FuncName:    funcName.ToUnresolvedObjectName().ToUnresolvedName(),
+		FuncArgs:    trigger.FuncArgs,
+	}
+
+	f := tree.NewFmtCtx(
+		tree.FmtParsable,
+		tree.FmtDataConversionConfig(p.SessionData().DataConversionConfig),
+		tree.FmtLocation(p.SessionData().Location),
+	)
+	f.FormatNode(createTrigger)
+
+	return f.CloseAndGetString(), nil
+}
+
 // ShowCreateTrigger returns a SHOW CREATE TRIGGER statement. The user must have
 // any privilege on the table.
 func (p *planner) ShowCreateTrigger(
@@ -81,12 +170,7 @@ func (p *planner) ShowCreateTrigger(
 	if err = p.CheckAnyPrivilege(ctx, tableDesc); err != nil {
 		return nil, err
 	}
-	// Resolve the table's implicit record type to be used in parsing and
-	// displaying the WHEN expression.
-	tableTyp, err := p.ResolveTypeByOID(ctx, typedesc.TableIDToImplicitTypeOID(tableDesc.GetID()))
-	if err != nil {
-		return nil, err
-	}
+
 	return &delayedNode{
 		name:    fmt.Sprintf("SHOW CREATE TRIGGER %v ON %v", n.Name, n.TableName),
 		columns: showCreateTriggerColumns,
@@ -107,78 +191,14 @@ func (p *planner) ShowCreateTrigger(
 				)
 			}
 
-			// Resolve the fully-qualified names of the trigger function and table.
-			funcName, err := p.GetQualifiedFunctionNameByID(ctx, int64(trigger.FuncID))
+			createStatement, err := renderCreateTriggerStatement(ctx, p, trigger, tableDesc)
 			if err != nil {
 				return nil, err
 			}
-			tableName, err := p.getQualifiedTableName(ctx, tableDesc)
-			if err != nil {
-				return nil, err
-			}
-
-			// Use the trigger descriptor to decompile a CreateTrigger statement that
-			// will be used to produce the SHOW CREATE TRIGGER output.
-			events := make([]*tree.TriggerEvent, len(trigger.Events))
-			for j := range events {
-				descEvent := trigger.Events[j]
-				events[j] = &tree.TriggerEvent{
-					EventType: tree.TriggerEventTypeToTree[descEvent.Type],
-					Columns:   make(tree.NameList, 0, len(descEvent.ColumnNames)),
-				}
-				for _, colName := range descEvent.ColumnNames {
-					events[j].Columns = append(events[j].Columns, tree.Name(colName))
-				}
-			}
-			var transitions []*tree.TriggerTransition
-			if trigger.NewTransitionAlias != "" {
-				transitions = append(transitions, &tree.TriggerTransition{
-					IsNew: true,
-					Name:  tree.Name(trigger.NewTransitionAlias),
-				})
-			}
-			if trigger.OldTransitionAlias != "" {
-				transitions = append(transitions, &tree.TriggerTransition{
-					IsNew: false,
-					Name:  tree.Name(trigger.OldTransitionAlias),
-				})
-			}
-			forEach := tree.TriggerForEachStatement
-			if trigger.ForEachRow {
-				forEach = tree.TriggerForEachRow
-			}
-			var whenExpr tree.Expr
-			if trigger.WhenExpr != "" {
-				whenExpr, err = schemaexpr.ParseTriggerWhenExprForDisplay(
-					ctx, tableTyp, trigger.WhenExpr, p.EvalContext(), p.SemaCtx(), tree.FmtParsable,
-				)
-				if err != nil {
-					return nil, err
-				}
-			}
-			createTrigger := &tree.CreateTrigger{
-				Replace:     false,
-				Name:        tree.Name(trigger.Name),
-				ActionTime:  tree.TriggerActionTimeToTree[trigger.ActionTime],
-				Events:      events,
-				TableName:   tableName.ToUnresolvedObjectName(),
-				Transitions: transitions,
-				ForEach:     forEach,
-				When:        whenExpr,
-				FuncName:    funcName.ToUnresolvedObjectName().ToUnresolvedName(),
-				FuncArgs:    trigger.FuncArgs,
-			}
-			f := tree.NewFmtCtx(
-				tree.FmtParsable,
-				tree.FmtDataConversionConfig(p.SessionData().DataConversionConfig),
-				tree.FmtLocation(p.SessionData().Location),
-			)
-			f.FormatNode(createTrigger)
-
 			v := p.newContainerValuesNode(showCreateTriggerColumns, 1 /* capacity */)
 			row := tree.Datums{
-				tree.NewDString(createTrigger.Name.String()),
-				tree.NewDString(f.CloseAndGetString()),
+				tree.NewDString(trigger.Name),
+				tree.NewDString(createStatement),
 			}
 			if _, err = v.rows.AddRow(ctx, row); err != nil {
 				v.Close(ctx)
