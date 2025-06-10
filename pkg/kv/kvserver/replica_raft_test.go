@@ -103,7 +103,7 @@ func Test_handleRaftReadyStats_SafeFormat(t *testing.T) {
 				numAddSST:                3,
 				numAddSSTCopies:          1,
 			},
-			stateAssertions:      4,
+			assertionsRequested:  4,
 			numConfChangeEntries: 6,
 		},
 		append: logstore.AppendStats{
