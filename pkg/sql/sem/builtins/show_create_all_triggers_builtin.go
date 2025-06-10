@@ -19,15 +19,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type triggerIdPair struct {
+type tableTriggerPair struct {
 	triggerID int64
 	tableID   int64
 }
 
 func getTriggerIds(
 	ctx context.Context, evalPlanner eval.Planner, txn *kv.Txn, dbName string, acc *mon.BoundAccount,
-) (triggerIds []triggerIdPair, retErr error) { //TODO: Check up on ID field names etc
-	//TODO: Want to get (trigger_id, table_id)
+) (triggerIds []tableTriggerPair, retErr error) { //TODO: Check up on ID field names etc
 	query := fmt.Sprintf(`
 SELECT trigger_id, table_id 
 FROM %s.crdb_internal.create_trigger_statements 
@@ -50,7 +49,7 @@ WHERE database_name=$1`, lexbase.EscapeSQLIdent(dbName))
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		triggerID := tree.MustBeDInt(it.Cur()[0])
 		tableID := tree.MustBeDInt(it.Cur()[1])
-		pair := triggerIdPair{int64(triggerID), int64(tableID)}
+		pair := tableTriggerPair{int64(triggerID), int64(tableID)}
 		triggerIds = append(triggerIds, pair)
 		if err = acc.Grow(ctx, int64(unsafe.Sizeof(pair))); err != nil {
 			return nil, err
@@ -66,47 +65,27 @@ func getTriggerCreateStatement(
 	ctx context.Context,
 	evalPlanner eval.Planner,
 	txn *kv.Txn,
-	triggerIDPair triggerIdPair,
+	tableTriggerIds tableTriggerPair,
 	dbName string,
 ) (_ tree.Datum, err error) {
+	// Here, we query by `table_id` and 'trigger_id' but the query is only actually indexed by 'table_id'.
+	// This is because the `crdb_internal.create_trigger_statements` table only has a virtual index on `table_id`
+	// due to the fact that internal virtual tables do not support multi-column indexes
+	// and `trigger_id` values are only unique within a table, not between tables.
 	query := fmt.Sprintf(`
 SELECT create_statement, trigger_id
 FROM %s.crdb_internal.create_trigger_statements
-WHERE table_id = $1`, lexbase.EscapeSQLIdent(dbName))
+WHERE table_id = $1 AND trigger_id=$2`, lexbase.EscapeSQLIdent(dbName))
 
-	iter, err := evalPlanner.QueryIteratorEx(ctx,
+	row, err := evalPlanner.QueryRowEx(
+		ctx,
 		"crdb_internal.show_create_all_triggers",
 		sessiondata.NoSessionDataOverride,
 		query,
-		triggerIDPair.tableID)
+		tableTriggerIds.tableID, tableTriggerIds.triggerID)
 	if err != nil {
 		return nil, err
 	}
 
-	defer func() {
-		closeErr := iter.Close()
-		err = errors.CombineErrors(err, closeErr)
-	}()
-	for {
-		next, err := iter.Next(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if !next {
-			break
-		}
-		row := iter.Cur()
-		if len(row) != 2 {
-			return nil, errors.Newf("expected 2 columns in result, got %d", len(row))
-		}
-		if tree.MustBeDInt(row[1]) != tree.DInt(triggerIDPair.triggerID) {
-			continue
-		}
-		return row[0], nil
-	}
-
-	if err != nil {
-		return nil, err
-	}
-	return nil, nil
+	return row[0], nil
 }
