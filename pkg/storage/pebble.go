@@ -12,7 +12,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -184,10 +183,11 @@ type CompressionAlgorithm int64
 // These values end up being the underlying value of the cluster setting, so
 // they must be stable across releases.
 const (
-	CompressionAlgorithmSnappy CompressionAlgorithm = 1
-	CompressionAlgorithmZstd   CompressionAlgorithm = 2
-	CompressionAlgorithmNone   CompressionAlgorithm = 3
-	CompressionAlgorithmMinLZ  CompressionAlgorithm = 4
+	CompressionAlgorithmSnappy  CompressionAlgorithm = 1
+	CompressionAlgorithmZstd    CompressionAlgorithm = 2
+	CompressionAlgorithmNone    CompressionAlgorithm = 3
+	CompressionAlgorithmMinLZ   CompressionAlgorithm = 4
+	CompressionAlgorithmFastest CompressionAlgorithm = 5
 )
 
 var compressionAlgorithmToString = map[CompressionAlgorithm]string{
@@ -195,6 +195,10 @@ var compressionAlgorithmToString = map[CompressionAlgorithm]string{
 	CompressionAlgorithmMinLZ:  "minlz",
 	CompressionAlgorithmNone:   "none",
 	CompressionAlgorithmZstd:   "zstd",
+
+	// CompressionAlgorithmFastest uses either Snappy or MinLZ, depending on the
+	// architecture.
+	CompressionAlgorithmFastest: "fastest",
 }
 
 // String implements fmt.Stringer for CompressionAlgorithm.
@@ -225,19 +229,6 @@ func RegisterCompressionAlgorithmClusterSetting(
 	)
 }
 
-var defaultCompressionAlgorithm = func() CompressionAlgorithm {
-	if runtime.GOARCH == "amd64" {
-		// We prefer MinLZ on amd64 because it is slightly superior to Snappy in
-		// almost all cases (both in terms of speed and compression ratio).
-		//
-		// Only amd64 has an optimized assembly MinLZ implementation; the Go
-		// implementation is significantly slower, especially when decompressing;
-		// see https://github.com/minio/minlz#protobuf-sample
-		return CompressionAlgorithmMinLZ
-	}
-	return CompressionAlgorithmSnappy
-}()
-
 // CompressionAlgorithmStorage determines the compression algorithm used to
 // compress data blocks when writing sstables for use in a Pebble store (written
 // directly, or constructed for ingestion on a remote store via AddSSTable).
@@ -246,7 +237,7 @@ var defaultCompressionAlgorithm = func() CompressionAlgorithm {
 var CompressionAlgorithmStorage = RegisterCompressionAlgorithmClusterSetting(
 	"storage.sstable.compression_algorithm",
 	`determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store;`,
-	defaultCompressionAlgorithm,
+	CompressionAlgorithmFastest,
 )
 
 // CompressionAlgorithmBackupStorage determines the compression algorithm used
@@ -256,7 +247,7 @@ var CompressionAlgorithmStorage = RegisterCompressionAlgorithmClusterSetting(
 var CompressionAlgorithmBackupStorage = RegisterCompressionAlgorithmClusterSetting(
 	"storage.sstable.compression_algorithm_backup_storage",
 	`determines the compression algorithm to use when compressing sstable data blocks for backup row data storage;`,
-	defaultCompressionAlgorithm,
+	CompressionAlgorithmFastest,
 )
 
 // CompressionAlgorithmBackupTransport determines the compression algorithm used
@@ -269,7 +260,7 @@ var CompressionAlgorithmBackupStorage = RegisterCompressionAlgorithmClusterSetti
 var CompressionAlgorithmBackupTransport = RegisterCompressionAlgorithmClusterSetting(
 	"storage.sstable.compression_algorithm_backup_transport",
 	`determines the compression algorithm to use when compressing sstable data blocks for backup transport;`,
-	defaultCompressionAlgorithm,
+	CompressionAlgorithmFastest,
 )
 
 func getCompressionProfile(
@@ -286,6 +277,8 @@ func getCompressionProfile(
 		return pebble.NoCompression
 	case CompressionAlgorithmMinLZ:
 		return pebble.MinLZCompression
+	case CompressionAlgorithmFastest:
+		return pebble.FastestCompression
 	default:
 		return pebble.DefaultCompression
 	}
