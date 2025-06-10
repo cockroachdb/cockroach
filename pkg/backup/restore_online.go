@@ -892,11 +892,11 @@ func setDescriptorsOffline(
 		return nil
 	}
 
-	for i := range details.TableDescs {
-		mutableTable, err := descCol.MutableByID(txn.KV()).Table(ctx, details.TableDescs[i].ID)
-		if err != nil {
-			return err
-		}
+	mutableTables, err := getUndroppedTablesFromRestore(ctx, txn.KV(), details, descCol)
+	if err != nil {
+		return errors.Wrapf(err, "set descriptors offline: getting undropped tables from restore")
+	}
+	for _, mutableTable := range mutableTables {
 		if err := writeDesc(mutableTable); err != nil {
 			return err
 		}
