@@ -237,36 +237,35 @@ func (ie *InternalExecutor) runWithEx(
 		ex.close(ctx, closeMode)
 		wg.Done()
 	}
-	if err = ie.s.cfg.Stopper.RunAsyncTaskEx(
-		ctx,
-		stop.TaskOpts{
-			TaskName: opName.StripMarkers(),
-			SpanOpt:  stop.ChildSpan,
-		},
-		func(ctx context.Context) {
-			defer cleanup(ctx)
-			// TODO(yuzefovich): benchmark whether we should be growing the
-			// stack size unconditionally.
-			if growStackSize {
-				growstack.Grow()
-			}
-			if err := ex.run(
-				ctx,
-				ie.mon,
-				&mon.BoundAccount{}, /*reserved*/
-				nil,                 /* cancel */
-			); err != nil {
-				sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
-				errCallback(err)
-			}
-			w.finish()
-		},
-	); err != nil {
+	ctx, hdl, err := ie.s.cfg.Stopper.GetHandle(ctx, stop.TaskOpts{
+		TaskName: opName.StripMarkers(),
+		SpanOpt:  stop.ChildSpan,
+	})
+	if err != nil {
 		// The goroutine wasn't started, so we need to perform the cleanup
 		// ourselves.
 		cleanup(ctx)
 		return err
 	}
+	go func() {
+		defer hdl.Activate(ctx).Release(ctx)
+		defer cleanup(ctx)
+		// TODO(yuzefovich): benchmark whether we should be growing the
+		// stack size unconditionally.
+		if growStackSize {
+			growstack.Grow()
+		}
+		if err := ex.run(
+			ctx,
+			ie.mon,
+			&mon.BoundAccount{}, /*reserved*/
+			nil,                 /* cancel */
+		); err != nil {
+			sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
+			errCallback(err)
+		}
+		w.finish()
+	}()
 	return nil
 }
 
