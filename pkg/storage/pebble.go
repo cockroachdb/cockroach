@@ -272,11 +272,11 @@ var CompressionAlgorithmBackupTransport = RegisterCompressionAlgorithmClusterSet
 	defaultCompressionAlgorithm,
 )
 
-func getCompressionAlgorithm(
+func getCompressionProfile(
 	ctx context.Context,
 	settings *cluster.Settings,
 	setting *settings.EnumSetting[CompressionAlgorithm],
-) pebble.Compression {
+) *pebble.CompressionProfile {
 	switch setting.Get(&settings.SV) {
 	case CompressionAlgorithmSnappy:
 		return pebble.SnappyCompression
@@ -740,8 +740,8 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	cfg.opts.Lock = cfg.env.DirectoryLock
 	cfg.opts.ErrorIfNotExists = cfg.mustExist
 	for i := range cfg.opts.Levels {
-		cfg.opts.Levels[i].Compression = func() block.Compression {
-			return getCompressionAlgorithm(ctx, cfg.settings, CompressionAlgorithmStorage)
+		cfg.opts.Levels[i].Compression = func() *block.CompressionProfile {
+			return getCompressionProfile(ctx, cfg.settings, CompressionAlgorithmStorage)
 		}
 	}
 	// Note: the CompactionConcurrencyRange function will be wrapped below to
