@@ -843,7 +843,6 @@ func (b *SSTBatcher) addSSTable(
 		}
 	}
 
-
 	work := []*sstSpan{{start: start, end: end, sstBytes: sstBytes, stats: stats}}
 	var files int
 	for len(work) > 0 {
@@ -882,7 +881,7 @@ func (b *SSTBatcher) addSSTable(
 					MVCCStats:                              &item.stats,
 					IngestAsWrites:                         ingestAsWriteBatch,
 					ReturnFollowingLikelyNonEmptySpanStart: true,
-					ComputeStatsDiff: b.ingestAll,
+					ComputeStatsDiff:                       b.ingestAll,
 				}
 				if b.writeAtBatchTS {
 					req.SSTTimestampToRequestTimestamp = batchTS
@@ -962,8 +961,10 @@ func (b *SSTBatcher) addSSTable(
 					if err != nil {
 						return err
 					}
-					if err := addStatsToSplitTables(left, right, item, sendStart); err != nil {
-						return err
+					if (item.stats != enginepb.MVCCStats{}) {
+						if err := addStatsToSplitTables(left, right, item, sendStart); err != nil {
+							return err
+						}
 					}
 					// Add more work.
 					work = append([]*sstSpan{left, right}, work...)

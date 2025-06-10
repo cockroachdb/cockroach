@@ -290,6 +290,7 @@ func EvalAddSSTable(
 	// TODO (msbutler): flesh out definition of "conflicting" keys here.
 
 	var stats enginepb.MVCCStats
+	preComputedStats := *args.MVCCStats
 	stats.Add(checkConflictsStatsDelta)
 	if !(checkConflicts || args.ComputeStatsDiff) {
 		stats.ContainsEstimates++
@@ -299,7 +300,7 @@ func EvalAddSSTable(
 			return result.Result{}, errors.New(
 				"AddSSTableRequest.ComputeStatsDiff cannot be used with DisallowConflicts or DisallowShadowingBelow")
 		}
-		if args.MVCCStats != nil {
+		if preComputedStats != (enginepb.MVCCStats{}) {
 			return result.Result{}, errors.New(
 				"AddSSTableRequest.ComputeStatsDiff cannot be used with precomputed MVCCStats")
 		}
@@ -308,8 +309,8 @@ func EvalAddSSTable(
 		if err != nil {
 			return result.Result{}, err
 		}
-	} else if args.MVCCStats != nil {
-		stats.Add(*args.MVCCStats)
+	} else if preComputedStats != (enginepb.MVCCStats{}) {
+		stats.Add(preComputedStats)
 	} else {
 		sstIter, err := storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
 			KeyTypes:   storage.IterKeyTypePointsAndRanges,
