@@ -176,6 +176,7 @@ func RegisterTests(r registry.Registry) {
 	registerSqlStatsMixedVersion(r)
 	registerDbConsoleCypress(r)
 	registerDBConsoleEndpoints(r)
+	registerDBConsoleEndpointsMixedVersion(r)
 	registerTTLRestart(r)
 	perturbation.RegisterTests(r)
 }
