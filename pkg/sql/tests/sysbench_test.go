@@ -1022,16 +1022,18 @@ func startAllocsProfile(b testing.TB) doneFn {
 func diffProfile(b testing.TB, take func() []byte) func(testing.TB) []byte {
 	// The below is essentially cribbed from pprof.go in net/http/pprof.
 
-	baseBytes := take()
+	baseBytes := take() // NB: parsed only after we've taken the "after" profile
 	if baseBytes == nil {
 		return func(tb testing.TB) []byte { return nil }
 	}
-	pBase, err := profile.ParseData(baseBytes)
-	require.NoError(b, err)
 
 	return func(b testing.TB) []byte {
 		pNew, err := profile.ParseData(take())
 		require.NoError(b, err)
+
+		pBase, err := profile.ParseData(baseBytes)
+		require.NoError(b, err)
+
 		pBase.Scale(-1)
 		pMerged, err := profile.Merge([]*profile.Profile{pBase, pNew})
 		require.NoError(b, err)
