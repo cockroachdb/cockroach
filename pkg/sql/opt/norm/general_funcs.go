@@ -1584,6 +1584,18 @@ func (c *CustomFuncs) DuplicateJoinPrivate(jp *memo.JoinPrivate) *memo.JoinPriva
 func (c *CustomFuncs) SplitLeakproofFilters(
 	filters memo.FiltersExpr,
 ) (leakproofFilters, remainingFilters memo.FiltersExpr, hasLeakproofFilters bool) {
+	numLeakproof := 0
+	for i := range filters {
+		if filters[i].ScalarProps().VolatilitySet.IsLeakproof() {
+			numLeakproof++
+		}
+	}
+	if numLeakproof == 0 {
+		// Return early if there are no leakproof filters.
+		return nil, nil, false
+	}
+	leakproofFilters = make(memo.FiltersExpr, 0, numLeakproof)
+	remainingFilters = make(memo.FiltersExpr, 0, len(filters)-numLeakproof)
 	for i := range filters {
 		if filters[i].ScalarProps().VolatilitySet.IsLeakproof() {
 			leakproofFilters = append(leakproofFilters, filters[i])
@@ -1591,8 +1603,5 @@ func (c *CustomFuncs) SplitLeakproofFilters(
 			remainingFilters = append(remainingFilters, filters[i])
 		}
 	}
-	if len(leakproofFilters) > 0 {
-		return leakproofFilters, remainingFilters, true
-	}
-	return nil, filters, false
+	return leakproofFilters, remainingFilters, true
 }
