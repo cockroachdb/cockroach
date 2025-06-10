@@ -29,15 +29,12 @@ import (
 	"storj.io/drpc"
 )
 
-// An AddressResolver translates NodeIDs into addresses.
-type AddressResolver func(roachpb.NodeID) (net.Addr, roachpb.Locality, error)
-
 // A Dialer wraps an *rpc.Context for dialing based on node IDs. For each node,
 // it maintains a circuit breaker that prevents rapid connection attempts and
 // provides hints to the callers on whether to log the outcome of the operation.
 type Dialer struct {
 	rpcContext   *rpc.Context
-	resolver     AddressResolver
+	resolver     rpcbase.AddressResolver
 	testingKnobs DialerTestingKnobs
 }
 
@@ -62,7 +59,7 @@ type DialerTestingKnobs struct {
 func (DialerTestingKnobs) ModuleTestingKnobs() {}
 
 // New initializes a Dialer.
-func New(rpcContext *rpc.Context, resolver AddressResolver) *Dialer {
+func New(rpcContext *rpc.Context, resolver rpcbase.AddressResolver) *Dialer {
 	return &Dialer{
 		rpcContext: rpcContext,
 		resolver:   resolver,
@@ -70,7 +67,7 @@ func New(rpcContext *rpc.Context, resolver AddressResolver) *Dialer {
 }
 
 // NewWithOpt initializes a Dialer and allows passing in configuration options.
-func NewWithOpt(rpcContext *rpc.Context, resolver AddressResolver, opt DialerOpt) *Dialer {
+func NewWithOpt(rpcContext *rpc.Context, resolver rpcbase.AddressResolver, opt DialerOpt) *Dialer {
 	d := New(rpcContext, resolver)
 	d.testingKnobs = opt.TestingKnobs
 	return d
@@ -88,9 +85,21 @@ var _ = (*Dialer).Stopper
 // Dial returns a grpc connection to the given node. It logs whenever the
 // node first becomes unreachable or reachable.
 func (n *Dialer) Dial(
-	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass, opts ...rpcbase.DialOption,
 ) (_ *grpc.ClientConn, err error) {
-	if n == nil || n.resolver == nil {
+	if n == nil {
+		return nil, errors.New("no node dialer configured")
+	}
+
+	dialOpts := rpcbase.NewDefaultDialOptions()
+	for _, opt := range opts {
+		opt(dialOpts)
+	}
+	resolver := dialOpts.AddressResolver
+	if resolver == nil {
+		resolver = n.resolver
+	}
+	if resolver == nil {
 		return nil, errors.New("no node dialer configured")
 	}
 	// Don't trip the breaker if we're already canceled.
@@ -102,7 +111,7 @@ func (n *Dialer) Dial(
 		err = errors.Wrapf(err, "failed to resolve n%d", nodeID)
 		return nil, err
 	}
-	conn, _, _, _, err := n.dial(ctx, nodeID, addr, locality, true, class)
+	conn, _, _, _, err := n.dial(ctx, nodeID, addr, locality, dialOpts.CheckBreaker, class)
 	return conn, err
 }
 
@@ -112,15 +121,7 @@ func (n *Dialer) Dial(
 func (n *Dialer) DialNoBreaker(
 	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (_ *grpc.ClientConn, err error) {
-	if n == nil || n.resolver == nil {
-		return nil, errors.New("no node dialer configured")
-	}
-	addr, locality, err := n.resolver(nodeID)
-	if err != nil {
-		return nil, err
-	}
-	conn, _, _, _, err := n.dial(ctx, nodeID, addr, locality, false, class)
-	return conn, err
+	return n.Dial(ctx, nodeID, class, rpcbase.WithNoBreaker())
 }
 
 // DialInternalClient is a specialization of DialClass for callers that

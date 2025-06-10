@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -1332,9 +1333,8 @@ func (s *adminServer) statsForSpan(
 				var spanResponse *roachpb.SpanStatsResponse
 				err := timeutil.RunWithTimeout(ctx, "request remote stats", 20*time.Second,
 					func(ctx context.Context) error {
-						conn, err := s.serverIterator.dialNode(ctx, serverID(nodeID))
+						client, err := serverpb.DialStatusClient(s.serverIterator, ctx, nodeID, rpcbase.DefaultClass)
 						if err == nil {
-							client := serverpb.NewStatusClient(conn)
 							req := roachpb.SpanStatsRequest{
 								Spans:  []roachpb.Span{span},
 								NodeID: nodeID.String(),
@@ -3128,7 +3128,7 @@ func (s *systemAdminServer) EnqueueRange(
 	if req.NodeID == roachpb.NodeID(s.serverIterator.getID()) {
 		return s.enqueueRangeLocal(ctx, req)
 	} else if req.NodeID != 0 {
-		admin, err := s.dialNode(ctx, req.NodeID)
+		admin, err := serverpb.DialAdminClient(s.serverIterator, ctx, req.NodeID, rpcbase.DefaultClass)
 		if err != nil {
 			return nil, srverrors.ServerError(ctx, err)
 		}
@@ -3136,9 +3136,8 @@ func (s *systemAdminServer) EnqueueRange(
 	}
 
 	response := &serverpb.EnqueueRangeResponse{}
-
 	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
-		client, err := s.dialNode(ctx, nodeID)
+		client, err := serverpb.DialAdminClient(s.serverIterator, ctx, nodeID, rpcbase.DefaultClass)
 		return client, err
 	}
 	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
@@ -3714,18 +3713,6 @@ func (s *adminServer) queryTableID(
 		return descpb.InvalidID, errors.Newf("failed to resolve %q as a table name", tableName)
 	}
 	return descpb.ID(tree.MustBeDOid(row[0]).Oid), nil
-}
-
-// Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to srverrors.ServerErrors.
-func (s *adminServer) dialNode(
-	ctx context.Context, nodeID roachpb.NodeID,
-) (serverpb.AdminClient, error) {
-	conn, err := s.serverIterator.dialNode(ctx, serverID(nodeID))
-	if err != nil {
-		return nil, err
-	}
-	return serverpb.NewAdminClient(conn), nil
 }
 
 func (s *adminServer) ListTracingSnapshots(

@@ -24,7 +24,7 @@ import (
 type NoopDialer struct{}
 
 func (n NoopDialer) Dial(
-	ctx context.Context, id roachpb.NodeID, class rpcbase.ConnectionClass,
+	ctx context.Context, id roachpb.NodeID, class rpcbase.ConnectionClass, opts ...rpcbase.DialOption,
 ) (*grpc.ClientConn, error) {
 	return nil, nil
 }

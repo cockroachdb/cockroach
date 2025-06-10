@@ -46,11 +46,9 @@ type serverID int32
 // TODO(davidh): unify the `getAllNodes` and `nodesList` responses.
 // They contain similar data and are confusing to use.
 type ServerIterator interface {
-	// dialNode provides a gRPC connection to the node or
-	// SQL instance identified by serverID.
-	dialNode(
-		ctx context.Context, serverID serverID,
-	) (*grpc.ClientConn, error)
+	// dialNode provides a gRPC connection to the node or SQL instance
+	// identified by serverID.
+	rpcbase.NodeDialer
 	// getAllNodes returns a map of all nodes in the cluster
 	// or instances in the tenant with their liveness status.
 	getAllNodes(
@@ -133,15 +131,15 @@ func (t *tenantFanoutClient) getID() serverID {
 	return serverID(t.sqlServer.SQLInstanceID())
 }
 
-func (t *tenantFanoutClient) dialNode(
-	ctx context.Context, serverID serverID,
+func (t *tenantFanoutClient) Dial(
+	ctx context.Context, serverID roachpb.NodeID, class rpcbase.ConnectionClass, dialOpts ...rpcbase.DialOption,
 ) (*grpc.ClientConn, error) {
 	id := base.SQLInstanceID(serverID)
 	instance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	return t.rpcCtx.GRPCDialPod(instance.InstanceRPCAddr, id, instance.Locality, rpcbase.DefaultClass).Connect(ctx)
+	return t.rpcCtx.GRPCDialPod(instance.InstanceRPCAddr, id, instance.Locality, class).Connect(ctx)
 }
 
 func (t *tenantFanoutClient) getAllNodes(
@@ -216,13 +214,14 @@ func (k kvFanoutClient) getID() serverID {
 	return serverID(k.gossip.NodeID.Get())
 }
 
-func (k kvFanoutClient) dialNode(ctx context.Context, serverID serverID) (*grpc.ClientConn, error) {
-	id := roachpb.NodeID(serverID)
-	addr, locality, err := k.gossip.GetNodeIDAddress(id)
+func (k kvFanoutClient) Dial(
+	ctx context.Context, serverID roachpb.NodeID, class rpcbase.ConnectionClass, dialOpts ...rpcbase.DialOption,
+) (*grpc.ClientConn, error) {
+	addr, locality, err := k.gossip.GetNodeIDAddress(serverID)
 	if err != nil {
 		return nil, err
 	}
-	return k.rpcCtx.GRPCDialNode(addr.String(), id, locality, rpcbase.DefaultClass).Connect(ctx)
+	return k.rpcCtx.GRPCDialNode(addr.String(), serverID, locality, rpcbase.DefaultClass).Connect(ctx)
 }
 
 func (k kvFanoutClient) listNodes(ctx context.Context) (*serverpb.NodesResponse, error) {
