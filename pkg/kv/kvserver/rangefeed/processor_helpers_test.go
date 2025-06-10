@@ -36,6 +36,13 @@ func (tb *testBufferedStream) SendBuffered(
 	// and releasing the alloc. We just ignore memory accounting here.
 	return tb.SendUnbuffered(e)
 }
+func (tb *testBufferedStream) SendBufferedWithCtx(
+	e *kvpb.RangeFeedEvent, _ *SharedBudgetAllocation, _ context.Context,
+) error {
+	// In production code, buffered stream would be responsible for properly using
+	// and releasing the alloc. We just ignore memory accounting here.
+	return tb.SendUnbuffered(e)
+}
 
 func (tb *testBufferedStream) Disconnect(err *kvpb.Error) {
 	tb.Stream.SendError(err)

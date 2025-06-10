@@ -71,6 +71,7 @@ type sender interface {
 	// sendBuffered buffers a RangeFeedEvent before sending to the underlying grpc
 	// stream. This call must be non-blocking and thread-safe.
 	sendBuffered(ev *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation) error
+	sendBufferedWithCtx(ev *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation, ctx context.Context) error
 	// run is the main loop for the sender. It is expected to run in the
 	// background until a node level error is encountered which would shut down
 	// all streams in StreamManager.

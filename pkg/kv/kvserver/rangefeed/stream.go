@@ -34,6 +34,7 @@ type BufferedStream interface {
 	// SendBuffered buffers the event before sending it to the underlying Stream.
 	// It should not block if ev.Error != nil.
 	SendBuffered(*kvpb.RangeFeedEvent, *SharedBudgetAllocation) error
+	SendBufferedWithCtx(*kvpb.RangeFeedEvent, *SharedBudgetAllocation, context.Context) error
 }
 
 // PerRangeEventSink is an implementation of Stream which annotates each
@@ -139,4 +140,15 @@ func (s *BufferedPerRangeEventSink) SendBuffered(
 		StreamID:       s.streamID,
 	}
 	return s.wrapped.sendBuffered(response, alloc)
+}
+
+func (s *BufferedPerRangeEventSink) SendBufferedWithCtx(
+	event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation, ctx context.Context,
+) error {
+	response := &kvpb.MuxRangeFeedEvent{
+		RangeFeedEvent: *event,
+		RangeID:        s.rangeID,
+		StreamID:       s.streamID,
+	}
+	return s.wrapped.sendBufferedWithCtx(response, alloc, ctx)
 }

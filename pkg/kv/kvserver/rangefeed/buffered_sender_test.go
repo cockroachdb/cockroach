@@ -8,6 +8,7 @@ package rangefeed
 import (
 	"context"
 	"fmt"
+	"runtime/trace"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -20,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -205,7 +205,19 @@ func TestBufferedSenderChaosWithStop(t *testing.T) {
 //	We only have K=(32|64|128) concurrent scheduler workers
 //
 // ==> we can only send K events concurrently at any instant
-const workers = 64
+const (
+	// the degree of concurrency is limited by the number of processor workers
+	workers = 8
+
+	// this value represents the number of registrations that overlap each logical op event
+	// each event will be sent this number of times to our buffered sender (via imaginary registrations)
+	registrations = 100
+
+	// workload parameters
+	testDuration = 1 * time.Second
+	tickInterval = 1 * time.Millisecond
+	initialDelay = tickInterval / workers / 4
+)
 
 func TestMichael(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -215,56 +227,84 @@ func TestMichael(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	// A
+	// this mock stream gives us observability into the # of events that were actually sent
 	testServerStream := newTestServerStream()
 	bs := NewBufferedSender(testServerStream, NewBufferedSenderMetrics())
 
+	// initialize the stream manager like normal
 	smMetrics := NewStreamManagerMetrics()
 	sm := NewStreamManager(bs, smMetrics)
+
+	// start the sender's `run` loop in a goroutine
 	require.NoError(t, sm.Start(ctx, stopper))
 
-	var wg sync.WaitGroup
-	HandleRangeFeedRequest := func(id int) {
-		wg.Add(1)
-		stream, _ := sm.NewStream(int64(id), 42).(BufferedStream)
-		// if !isBufferedStream {
-		// 	return errors.New("dawg please give stream manager a buffered sender.")
-		// }
-		// TODO(mxu): currently we have no obs into whether tick rate > consumption rate
-		ticker := time.NewTicker(10 * time.Millisecond)
-		timer := time.NewTimer(30 * time.Second)
+	// this test is time-based, so we need to count the # of events enqueued by each worker
+	eventsEnqueuedByWorkers := make(chan int, workers)
 
-		require.NoError(t, stopper.RunAsyncTask(ctx, fmt.Sprintf("sending into %v", id),
-			func(context.Context) {
-				var longest time.Duration
+	var wg sync.WaitGroup
+	SpawnProcessorWorker := func(id int) {
+		wg.Add(1)
+
+		taskCtx, task := trace.NewTask(ctx, fmt.Sprintf("Handler-%d", id))
+		defer task.End()
+
+		// spawn a worker in a goroutine
+		require.NoError(t, stopper.RunAsyncTask(taskCtx, fmt.Sprintf("Worker %v", id),
+			func(ctx context.Context) {
+				// offset it's start
+				time.Sleep(time.Duration(id) * initialDelay)
+
+				stream, _ := sm.NewStream(int64(id), 42).(BufferedStream)
+
+				ticker := time.NewTicker(tickInterval)
+				timer := time.NewTimer(testDuration)
+
 				var numEvents int
 				for {
 					select {
 					case <-ticker.C:
+						// at each tick, we consume a logical op, and create an event from it
 						val := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
-						event := new(kvpb.RangeFeedEvent)
+						event := new(kvpb.RangeFeedEvent) // note: this only allocates one event per tick
 						event.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val, PrevValue: val})
 
-						start := crtime.NowMono()
-						require.NoError(t, stream.SendBuffered(event, nil))
-						longest = max(longest, start.Elapsed())
-						numEvents++
+						// the event gets published to each overlapping registration (which we assume to be all of them)
+						// we don't need a registration because all unbuffered registration does is call stream.SendBuffered
+						trace.WithRegion(ctx, fmt.Sprintf("Sending %v messages", registrations), func() {
+							for range registrations {
+								trace.WithRegion(ctx, "SendBuffered", func() {
+									if err := stream.SendBufferedWithCtx(event, nil, ctx); err != nil {
+										panic("😰") // require.NoError needs synchronization; this doesn't
+									}
+									numEvents++
+								})
+							}
+						})
 					case <-timer.C:
-						log.Infof(ctx, "%v events (longest: %v)", numEvents, longest)
+						eventsEnqueuedByWorkers <- numEvents
 						wg.Done()
 						return
 					}
 				}
 			}))
-
-		// we don't need a registration because all unbuffered registration does is call stream.SendBuffered
 	}
 
+	// let the boys run
 	for i := range workers {
-		HandleRangeFeedRequest(i)
+		SpawnProcessorWorker(i)
+	}
+	wg.Wait()
+
+	// the number of events we actually sent out
+	totalEventsSentBySender := testServerStream.totalEventsSent()
+
+	// the number of events we enqueued
+	close(eventsEnqueuedByWorkers)
+	var totalEventsSentByWorkers int
+	for n := range eventsEnqueuedByWorkers {
+		totalEventsSentByWorkers += n
 	}
 
-	wg.Wait()
-	log.Infof(ctx, "Total events sent: %v", testServerStream.totalEventsSent())
-	// sm.Stop(ctx)
+	// if our buffered sender's been able to keep up, then we shouldn't have a backlog at the end of the test
+	require.Greater(t, float64(totalEventsSentBySender)/float64(totalEventsSentByWorkers)*100, 90., "throughput needs to be >90%")
 }
