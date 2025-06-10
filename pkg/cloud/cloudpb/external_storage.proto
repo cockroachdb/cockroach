@@ -62,6 +62,7 @@ message ExternalStorage {
     string secret = 4;
     string temp_token = 5;
     string endpoint = 6;
+    int32  retry_max_attempts = 19 [(gogoproto.customname) = "RetryMaxAttempts"];
     bool use_path_style=16;
     bool skip_checksum=17; 
     bool skip_tls_verify=18 [(gogoproto.customname) = "SkipTLSVerify"];
@@ -94,7 +95,7 @@ message ExternalStorage {
     // list so that the role specified in AssumeRoleProvider can be assumed.
     repeated AssumeRoleProvider delegate_role_providers = 15 [(gogoproto.nullable) = false];
 
-    // Next ID: 19;
+    // Next ID: 20;
   }
   
   message GCS {

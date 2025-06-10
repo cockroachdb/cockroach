@@ -89,6 +89,8 @@ const (
 	scheme = "s3"
 
 	checksumAlgorithm = types.ChecksumAlgorithmSha256
+
+	defaultRetryMaxAttempts = 10
 )
 
 // NightlyEnvVarS3Params maps param keys that get added to an S3
@@ -118,8 +120,9 @@ type s3Storage struct {
 	metrics        *cloud.Metrics
 	storageOptions cloud.ExternalStorageOptions
 
-	opts   s3ClientConfig
-	cached *s3Client
+	retryMaxAttempts int
+	opts             s3ClientConfig
+	cached           *s3Client
 }
 
 // customRetryer implements the `request.Retryer` interface and allows for
@@ -373,6 +376,9 @@ func parseS3URL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 		DelegateRoleARNs:      delegateRoles,
 		AssumeRoleProvider:    assumeRoleProvider,
 		DelegateRoleProviders: delegateRoleProviders,
+		// TODO(yevgeniy): Revisit retry logic.  Retrying 10 times seems arbitrary.
+		// This parameter is not currently exposed in the URL.
+		RetryMaxAttempts: defaultRetryMaxAttempts,
 		/* NB: additions here should also update s3QueryParams() serializer */
 	}
 	conf.S3Config.Prefix = strings.TrimLeft(conf.S3Config.Prefix, "/")
@@ -496,14 +502,15 @@ func MakeS3Storage(
 	}
 
 	s := &s3Storage{
-		bucket:         aws.String(conf.Bucket),
-		conf:           conf,
-		ioConf:         args.IOConf,
-		prefix:         conf.Prefix,
-		metrics:        args.MetricsRecorder,
-		settings:       args.Settings,
-		opts:           clientConfig(conf),
-		storageOptions: args.ExternalStorageOptions(),
+		bucket:           aws.String(conf.Bucket),
+		conf:             conf,
+		ioConf:           args.IOConf,
+		prefix:           conf.Prefix,
+		metrics:          args.MetricsRecorder,
+		settings:         args.Settings,
+		opts:             clientConfig(conf),
+		storageOptions:   args.ExternalStorageOptions(),
+		retryMaxAttempts: int(conf.RetryMaxAttempts),
 	}
 
 	reuse := reuseSession.Get(&args.Settings.SV)
@@ -587,7 +594,7 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 	}
 
 	client, err := cloud.MakeHTTPClient(s.settings, s.metrics,
-		cloud.Config{
+		cloud.HTTPClientConfig{
 			Bucket:             s.opts.bucket,
 			Client:             s.storageOptions.ClientName,
 			Cloud:              "aws",
@@ -598,18 +605,15 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 	}
 	addLoadOption(config.WithHTTPClient(client))
 
-	// TODO(yevgeniy): Revisit retry logic.  Retrying 10 times seems arbitrary.
-	retryMaxAttempts := 10
-	addLoadOption(config.WithRetryMaxAttempts(retryMaxAttempts))
+	addLoadOption(config.WithRetryMaxAttempts(s.retryMaxAttempts))
 
 	addLoadOption(config.WithLogger(newLogAdapter(ctx)))
 	if s.opts.verbose {
 		addLoadOption(config.WithClientLogMode(awsVerboseLogging))
 	}
-
 	config.WithRetryer(func() aws.Retryer {
 		return retry.NewStandard(func(opts *retry.StandardOptions) {
-			opts.MaxAttempts = retryMaxAttempts
+			opts.MaxAttempts = s.retryMaxAttempts
 			opts.Retryables = append(opts.Retryables, &customRetryer{})
 		})
 	})

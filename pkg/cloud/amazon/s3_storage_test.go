@@ -455,9 +455,8 @@ func TestPutS3Endpoint(t *testing.T) {
 		q.Add(AWSSecretParam, "secret")
 		q.Add(S3RegionParam, "region")
 		q.Add(AWSUsePathStyle, "true")
-		// Set AWSSkipTLSVerify to use with HTTPS Server with self signed certificates.
-		q.Add(AWSSkipTLSVerify, "true")
 
+		// Verify that it fails without the flag.
 		u := url.URL{
 			Scheme:   "s3",
 			Host:     "bucket",
@@ -476,15 +475,33 @@ func TestPutS3Endpoint(t *testing.T) {
 		// Setup a sink for the given args.
 		testSettings := cluster.MakeTestingClusterSettings()
 		clientFactory := blobs.TestBlobServiceClient("")
-
+		// Force to fail quickly.
+		conf.S3Config.RetryMaxAttempts = 1
 		storage, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory,
 			nil, nil, cloud.NilMetrics)
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer storage.Close()
-		require.True(t, storage.Conf().S3Config.SkipTLSVerify)
 		_, _, err = storage.ReadFile(ctx, "test file", cloud.ReadOptions{NoFileSize: true})
+		require.Error(t, err)
+
+		// Set AWSSkipTLSVerify to use with HTTPS Server with self signed certificates.
+		q.Add(AWSSkipTLSVerify, "true")
+		u.RawQuery = q.Encode()
+
+		confWithSkipVerify, err := cloud.ExternalStorageConfFromURI(u.String(), user)
+		if err != nil {
+			t.Fatal(err)
+		}
+		storageWithSkipVerify, err := cloud.MakeExternalStorage(ctx, confWithSkipVerify, ioConf, testSettings, clientFactory,
+			nil, nil, cloud.NilMetrics)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer storageWithSkipVerify.Close()
+		require.True(t, storageWithSkipVerify.Conf().S3Config.SkipTLSVerify)
+		_, _, err = storageWithSkipVerify.ReadFile(ctx, "another test file", cloud.ReadOptions{NoFileSize: true})
 		if err != nil {
 			t.Fatal(err)
 		}
