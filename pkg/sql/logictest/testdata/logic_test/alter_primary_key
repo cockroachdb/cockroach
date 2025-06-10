@@ -304,10 +304,26 @@ t  CREATE TABLE public.t (
 # Test that the indexes we expect got rewritten. All should have been rewritten,
 # so all indexID should be larger than 7.
 
+# The order in which index IDs are assigned differs between the legacy and
+# declarative schema changers.
+skipif config local-legacy-schema-changer
 query IT
-SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
+SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_name
 ----
-9   t_pkey
+9   i1
+11  i2
+13  i3
+15  i4
+17  i5
+19  i6
+21  i7
+25  t_pkey
+23  t_x_key
+
+onlyif config local-legacy-schema-changer
+query IT
+SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_name
+----
 11  i1
 13  i2
 15  i3
@@ -315,6 +331,7 @@ SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_na
 19  i5
 21  i6
 23  i7
+9   t_pkey
 25  t_x_key
 
 # Make sure that each index can index join against the new primary key;
@@ -486,11 +503,20 @@ SELECT * FROM [EXPLAIN INSERT INTO t VALUES (4, 5, 6)] OFFSET 2
   size: 7 columns, 1 row
 
 # Ensure that all of the indexes have been rewritten.
+skipif config local-legacy-schema-changer
 query IT
-SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
+SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_name
 ----
-3  t_pkey
+3  i1
+7  t_pkey
+5  t_x_key
+
+onlyif config local-legacy-schema-changer
+query IT
+SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_name
+----
 5  i1
+3  t_pkey
 7  t_x_key
 
 query III
