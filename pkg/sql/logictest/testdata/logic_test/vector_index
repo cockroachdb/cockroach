@@ -393,6 +393,9 @@ CREATE TABLE exec_test (
   VECTOR INDEX idx2 (b, vec1)
 )
 
+query error pgcode 22000 different vector dimensions 1 and 3
+SELECT a FROM exec_test ORDER BY vec1 <-> '[1]' LIMIT 1;
+
 statement ok
 INSERT INTO exec_test (a, b, vec1) VALUES
   (1, 1, '[1, 2, 3]'),
@@ -402,6 +405,12 @@ INSERT INTO exec_test (a, b, vec1) VALUES
   (5, 2, '[13, 14, 15]'),
   (6, NULL, '[16, 17, 18]'),
   (7, NULL, '[1, 1, 1]');
+
+statement error pgcode 22000 pq: expected 3 dimensions, not 1
+INSERT INTO exec_test (a, b, vec1) VALUES (10, 1, '[1]');
+
+query error pgcode 22000 different vector dimensions 1 and 3
+SELECT a FROM exec_test ORDER BY vec1 <-> '[1]' LIMIT 1;
 
 # TODO(143209): write a full set of tests once we can make them deterministic.
 # For now, we can write tests that return every vector with a given prefix.
