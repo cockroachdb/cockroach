@@ -29,7 +29,7 @@ func (n NoopDialer) Dial(
 	return nil, nil
 }
 
-var _ NodeDialer = NoopDialer{}
+var _ rpcbase.NodeDialer = NoopDialer{}
 
 func TestHelperEveryNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
