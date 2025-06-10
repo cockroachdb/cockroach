@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -17,18 +18,24 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -36,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -1231,4 +1239,194 @@ SELECT id, details FROM jobs AS j INNER JOIN cte1 ON id = job_id WHERE id = 1;
 	r.Scan(&id, &details)
 	require.Equal(t, 1, id)
 	require.Equal(t, 1, details)
+}
+
+// TestConstructReadsTreeForLeaf is a unit test for constructReadsTreeForLeaf.
+// It simulates different sets of reads performed by processors and then asserts
+// that the reads tree correctly distinguishes overlapping and non-overlapping
+// keys.
+func TestConstructReadsTreeForLeaf(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	rng, _ := randutil.NewTestRand()
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(context.Background())
+
+	tableA, tableB, tableC := descpb.ID(100), descpb.ID(200), descpb.ID(300)
+	makeKey := func(tableID descpb.ID, indexID descpb.IndexID, key string) roachpb.Key {
+		keyPrefix := rowenc.MakeIndexKeyPrefix(evalCtx.Codec, tableID, indexID)
+		return append(keyPrefix, []byte(key)...)
+	}
+	externalTenantID := roachpb.MustMakeTenantID(42)
+	externalCodec := keys.MakeSQLCodec(externalTenantID)
+	maybeAdjustKeyForExternal := func(key roachpb.Key, external bool) roachpb.Key {
+		if len(key) == 0 || !external {
+			return key
+		}
+		// Strip the tenant prefix of the original tenant and prepend the prefix
+		// of the external one.
+		var err error
+		key, err = evalCtx.Codec.StripTenantPrefix(key)
+		require.NoError(t, err)
+		prefix := externalCodec.TenantPrefix()
+		return append(prefix[:len(prefix):len(prefix)], key...)
+	}
+
+	type index struct {
+		tableID descpb.ID
+		indexID descpb.IndexID
+	}
+	for _, external := range []bool{false, true} {
+		for _, tc := range []struct {
+			readSpans      []roachpb.Span
+			readIndexes    []index
+			overlapping    []roachpb.Key
+			nonOverlapping []roachpb.Key
+		}{
+			{
+				// Will read:
+				//   [TableA/1/1, TableA/1/5)
+				readSpans: []roachpb.Span{
+					{Key: makeKey(tableA, 1, "1"), EndKey: makeKey(tableA, 1, "5")},
+				},
+				overlapping: []roachpb.Key{
+					makeKey(tableA, 1, "1"),
+					makeKey(tableA, 1, "2"),
+					makeKey(tableA, 1, "4"),
+				},
+				nonOverlapping: []roachpb.Key{
+					makeKey(tableA, 1, "0"),
+					makeKey(tableA, 1, "5"),
+					makeKey(tableA, 2, "1"),
+					makeKey(tableB, 1, "1"),
+				},
+			},
+			{
+				// Will read:
+				//   TableA/1/1, TableA/1/3, TableA/1/5
+				readSpans: []roachpb.Span{
+					{Key: makeKey(tableA, 1, "1"), EndKey: nil},
+					{Key: makeKey(tableA, 1, "3"), EndKey: nil},
+					{Key: makeKey(tableA, 1, "5"), EndKey: nil},
+				},
+				overlapping: []roachpb.Key{
+					makeKey(tableA, 1, "1"),
+					makeKey(tableA, 1, "3"),
+					makeKey(tableA, 1, "5"),
+				},
+				nonOverlapping: []roachpb.Key{
+					makeKey(tableA, 1, "0"),
+					makeKey(tableA, 1, "2"),
+					makeKey(tableA, 1, "4"),
+					makeKey(tableA, 2, "1"),
+					makeKey(tableB, 1, "1"),
+				},
+			},
+			{
+				// Will read:
+				//   indexes TableA/1 and TableB/2
+				// Any key within these two indexes should overlap while any
+				// keys outside shouldn't.
+				readIndexes: []index{
+					{tableID: tableA, indexID: 1},
+					{tableID: tableB, indexID: 2},
+				},
+				overlapping: []roachpb.Key{
+					makeKey(tableA, 1, strconv.Itoa(rng.Int())),
+					makeKey(tableB, 2, strconv.Itoa(rng.Int())),
+				},
+				nonOverlapping: []roachpb.Key{
+					makeKey(tableA, 2, strconv.Itoa(rng.Int())),
+					makeKey(tableB, 1, strconv.Itoa(rng.Int())),
+					makeKey(tableC, 1, strconv.Itoa(rng.Int())),
+				},
+			},
+			{
+				// Same as above but also add some random span- and point-reads
+				// within the same indexes.
+				readSpans: []roachpb.Span{
+					{Key: makeKey(tableA, 1, strconv.Itoa(rng.Int())), EndKey: makeKey(tableA, 1, strconv.Itoa(rng.Int()))},
+					{Key: makeKey(tableA, 1, strconv.Itoa(rng.Int())), EndKey: nil},
+					{Key: makeKey(tableB, 2, strconv.Itoa(rng.Int())), EndKey: makeKey(tableB, 2, strconv.Itoa(rng.Int()))},
+					{Key: makeKey(tableB, 2, strconv.Itoa(rng.Int())), EndKey: nil},
+				},
+				readIndexes: []index{
+					{tableID: tableA, indexID: 1},
+					{tableID: tableB, indexID: 2},
+				},
+				overlapping: []roachpb.Key{
+					makeKey(tableA, 1, strconv.Itoa(rng.Int())),
+					makeKey(tableB, 2, strconv.Itoa(rng.Int())),
+				},
+				nonOverlapping: []roachpb.Key{
+					makeKey(tableA, 2, strconv.Itoa(rng.Int())),
+					makeKey(tableB, 1, strconv.Itoa(rng.Int())),
+					makeKey(tableC, 1, strconv.Itoa(rng.Int())),
+				},
+			},
+		} {
+			var processors []physicalplan.Processor
+			if len(tc.readSpans) > 0 {
+				for _, span := range tc.readSpans {
+					if len(processors) == 0 || rng.Float64() < 0.5 {
+						// With 50% probability include the next span into a
+						// separate processor.
+						processors = append(processors, physicalplan.Processor{
+							Spec: execinfrapb.ProcessorSpec{
+								Core: execinfrapb.ProcessorCoreUnion{
+									TableReader: &execinfrapb.TableReaderSpec{},
+								},
+							},
+						})
+					}
+					if span.EndKey != nil && span.EndKey.Less(span.Key) {
+						// Due to randomly generated keys, we might create an
+						// inverted span which is illegal.
+						span.Key, span.EndKey = span.EndKey, span.Key
+					}
+					span.Key = maybeAdjustKeyForExternal(span.Key, external)
+					span.EndKey = maybeAdjustKeyForExternal(span.EndKey, external)
+					tr := processors[len(processors)-1].Spec.Core.TableReader
+					tr.Spans = append(tr.Spans, span)
+				}
+			}
+			for _, readIndex := range tc.readIndexes {
+				// We could've used InvertedJoinerSpec or ZigzagJoinerSpec, but
+				// it doesn't really matter.
+				var jr execinfrapb.JoinReaderSpec
+				jr.FetchSpec.TableID = readIndex.tableID
+				jr.FetchSpec.IndexID = readIndex.indexID
+				if external {
+					jr.FetchSpec.External = &fetchpb.IndexFetchSpec_ExternalRowData{
+						TenantID: externalTenantID,
+						TableID:  readIndex.tableID,
+					}
+				}
+				processors = append(processors, physicalplan.Processor{
+					Spec: execinfrapb.ProcessorSpec{
+						Core: execinfrapb.ProcessorCoreUnion{
+							JoinReader: &jr,
+						},
+					},
+				})
+			}
+			readsTree, err := constructReadsTreeForLeaf(&evalCtx, processors)
+			require.NoError(t, err)
+			overlaps := func(key roachpb.Key) bool {
+				var sp roachpb.Span
+				sp.Key = key
+				sp.EndKey = key.Next()
+				return readsTree.DoMatching(func(interval.Interface) (done bool) {
+					return true
+				}, sp.AsRange())
+			}
+			for _, k := range tc.overlapping {
+				require.True(t, overlaps(maybeAdjustKeyForExternal(k, external)))
+			}
+			for _, k := range tc.nonOverlapping {
+				require.False(t, overlaps(maybeAdjustKeyForExternal(k, external)))
+			}
+		}
+	}
 }

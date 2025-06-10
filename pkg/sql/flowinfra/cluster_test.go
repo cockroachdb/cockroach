@@ -99,7 +99,7 @@ func runTestClusterFlow(
 		false, // omitInRangefeeds
 	)
 	txn := kv.NewTxnFromProto(ctx, kvDB, roachpb.NodeID(servers[0].SQLInstanceID()), now, kv.RootTxn, &txnProto)
-	leafInputState, err := txn.GetLeafTxnInputState(ctx)
+	leafInputState, err := txn.GetLeafTxnInputState(ctx, nil /* readsTree */)
 	require.NoError(t, err)
 
 	var spec fetchpb.IndexFetchSpec
@@ -415,7 +415,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	txn := kv.NewTxnFromProto(
 		context.Background(), tc.Server(0).DB(), tc.Server(0).NodeID(),
 		now, kv.RootTxn, &txnProto)
-	leafInputState, err := txn.GetLeafTxnInputState(context.Background())
+	leafInputState, err := txn.GetLeafTxnInputState(context.Background(), nil /* readsTree */)
 	require.NoError(t, err)
 
 	req := execinfrapb.SetupFlowRequest{
@@ -719,7 +719,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 					txn := kv.NewTxnFromProto(
 						context.Background(), tc.Server(0).DB(), tc.Server(0).NodeID(),
 						now, kv.RootTxn, &txnProto)
-					leafInputState, err := txn.GetLeafTxnInputState(context.Background())
+					leafInputState, err := txn.GetLeafTxnInputState(context.Background(), nil /* readsTree */)
 					require.NoError(b, err)
 					for i := range reqs {
 						reqs[i] = execinfrapb.SetupFlowRequest{
