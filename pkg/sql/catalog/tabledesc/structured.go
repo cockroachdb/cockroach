@@ -375,17 +375,10 @@ func ForEachExprStringInTableDesc(
 	return nil
 }
 
-// GetAllReferencedTableIDs implements the TableDescriptor interface.
-func (desc *wrapper) GetAllReferencedTableIDs() descpb.IDs {
+// GetAllReferencedRelationIDsExceptFKs implements the TableDescriptor interface.
+func (desc *wrapper) GetAllReferencedRelationIDsExceptFKs() descpb.IDs {
 	var ids catalog.DescriptorIDSet
 
-	// Collect referenced table IDs in foreign keys.
-	for _, fk := range desc.OutboundForeignKeys() {
-		ids.Add(fk.GetReferencedTableID())
-	}
-	for _, fk := range desc.InboundForeignKeys() {
-		ids.Add(fk.GetOriginTableID())
-	}
 	// Add trigger dependencies.
 	for i := range desc.Triggers {
 		ids = ids.Union(catalog.MakeDescriptorIDSet(desc.Triggers[i].DependsOn...))
