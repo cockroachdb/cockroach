@@ -62,7 +62,7 @@ type cephManager struct {
 	cephNodes option.NodeListOption // The nodes within the cluster used by Ceph.
 	key       string
 	secret    string
-	secure    bool
+	secure    s3CloneSecureOption
 	version   string
 }
 
@@ -77,7 +77,7 @@ func (m cephManager) getBackupURI(ctx context.Context, dest string) (string, err
 	}
 	m.t.Status("cephNode: ", addr)
 	endpointURL := `http://` + addr[0]
-	if m.secure {
+	if m.secure != s3ClonePlain {
 		endpointURL = `https://` + addr[0]
 	}
 	q := make(url.Values)
@@ -87,6 +87,9 @@ func (m cephManager) getBackupURI(ctx context.Context, dest string) (string, err
 	// Region is required in the URL, but not used in Ceph.
 	q.Add(amazon.S3RegionParam, "dummy")
 	q.Add(amazon.AWSEndpointParam, endpointURL)
+	if m.secure == s3CloneTLSWithSkipVerify {
+		q.Add(amazon.AWSSkipTLSVerify, "true")
+	}
 	uri := fmt.Sprintf("s3://%s/%s?%s", m.bucket, dest, q.Encode())
 	return uri, nil
 }
@@ -115,9 +118,9 @@ func (m cephManager) install(ctx context.Context) {
 	// Start the Ceph Object Gateway, also known as RADOS Gateway (RGW). RGW is
 	// an object storage interface to provide applications with a RESTful
 	// gateway to Ceph storage clusters, compatible with the S3 APIs.
-	// We are leveraging the node certificates created by cockroach.
 	rgwCmd := "sudo microceph enable rgw "
-	if m.secure {
+	if m.secure != s3ClonePlain {
+		// We are leveraging the node certificates created by cockroach.
 		rgwCmd = rgwCmd + ` --ssl-certificate="$(base64 -w0 certs/node.crt)" --ssl-private-key="$(base64 -w0 certs/node.key)"`
 	}
 	m.run(ctx, `starting object gateway`, rgwCmd)
@@ -130,7 +133,7 @@ func (m cephManager) install(ctx context.Context) {
 
 	m.run(ctx, `install s3cmd`, `sudo apt install -y s3cmd`)
 	s3cmd := s3cmdNoSsl
-	if m.secure {
+	if m.secure != s3ClonePlain {
 		s3cmd = s3cmdSsl
 	}
 	m.run(ctx, `creating bucket`,
@@ -142,7 +145,7 @@ func (m cephManager) install(ctx context.Context) {
 
 // maybeInstallCa adds a custom ca in the CockroachDB cluster.
 func (m cephManager) maybeInstallCa(ctx context.Context) error {
-	if !m.secure {
+	if m.secure != s3CloneTLS {
 		return nil
 	}
 	return installCa(ctx, m.t, m.c)

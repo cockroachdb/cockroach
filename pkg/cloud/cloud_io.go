@@ -28,6 +28,21 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// HTTPClientConfig defines the settings for building the underlying transport.
+type HTTPClientConfig struct {
+	// Bucket is name of the bucket. Used to label metrics.
+	Bucket string
+	// Client type (e.g. CDC vs backup). Used to label metrics.
+	Client string
+	// Cloud is the storage provider. Used to label metrics.
+	Cloud string
+	// InsecureSkipVerify controls whether a client verifies the server's
+	// certificate chain and host name. If InsecureSkipVerify is true, crypto/tls
+	// accepts any certificate presented by the server and any host name in that
+	// certificate. In this mode, TLS is susceptible to machine-in-the-middle attacks.
+	InsecureSkipVerify bool
+}
+
 // Timeout is a cluster setting used for cloud storage interactions.
 var Timeout = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
@@ -77,9 +92,9 @@ var httpMetrics = settings.RegisterBoolSetting(
 // MakeHTTPClient makes an http client configured with the common settings used
 // for interacting with cloud storage (timeouts, retries, CA certs, etc).
 func MakeHTTPClient(
-	settings *cluster.Settings, metrics *Metrics, cloud, bucket, client string,
+	settings *cluster.Settings, metrics *Metrics, config HTTPClientConfig,
 ) (*http.Client, error) {
-	t, err := MakeTransport(settings, metrics, cloud, bucket, client)
+	t, err := MakeTransport(settings, metrics, config)
 	if err != nil {
 		return nil, err
 	}
@@ -99,10 +114,12 @@ func MakeHTTPClientForTransport(t http.RoundTripper) (*http.Client, error) {
 // used for interacting with cloud storage (timeouts, retries, CA certs, etc).
 // Prefer MakeHTTPClient where possible.
 func MakeTransport(
-	settings *cluster.Settings, metrics *Metrics, cloud, bucket, client string,
+	settings *cluster.Settings, metrics *Metrics, config HTTPClientConfig,
 ) (*http.Transport, error) {
 	var tlsConf *tls.Config
-	if pem := httpCustomCA.Get(&settings.SV); pem != "" {
+	if config.InsecureSkipVerify {
+		tlsConf = &tls.Config{InsecureSkipVerify: true}
+	} else if pem := httpCustomCA.Get(&settings.SV); pem != "" {
 		roots, err := x509.SystemCertPool()
 		if err != nil {
 			return nil, errors.Wrap(err, "could not load system root CA pool")
@@ -121,7 +138,7 @@ func MakeTransport(
 	// most bulk jobs.
 	t.MaxIdleConnsPerHost = 64
 	if metrics != nil {
-		t.DialContext = metrics.NetMetrics.Wrap(t.DialContext, cloud, bucket, client)
+		t.DialContext = metrics.NetMetrics.Wrap(t.DialContext, config.Cloud, config.Bucket, config.Client)
 	}
 	return t, nil
 }

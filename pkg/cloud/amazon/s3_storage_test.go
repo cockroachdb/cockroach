@@ -442,6 +442,70 @@ func TestPutS3Endpoint(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+
+	t.Run("skip-tls-verify", func(t *testing.T) {
+		ctx := context.Background()
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+		defer srv.Close()
+		q := make(url.Values)
+		// Convert IP address to `localhost` to exercise the DNS-defining path in the S3 client.
+		localhostURL := strings.Replace(srv.URL, "127.0.0.1", "localhost", -1)
+		q.Add(AWSEndpointParam, localhostURL)
+		q.Add(AWSAccessKeyParam, "key")
+		q.Add(AWSSecretParam, "secret")
+		q.Add(S3RegionParam, "region")
+		q.Add(AWSUsePathStyle, "true")
+
+		// Verify that it fails without the flag.
+		u := url.URL{
+			Scheme:   "s3",
+			Host:     "bucket",
+			Path:     "subdir1/subdir2",
+			RawQuery: q.Encode(),
+		}
+
+		user := username.RootUserName()
+		ioConf := base.ExternalIODirConfig{}
+
+		conf, err := cloud.ExternalStorageConfFromURI(u.String(), user)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Setup a sink for the given args.
+		testSettings := cluster.MakeTestingClusterSettings()
+		clientFactory := blobs.TestBlobServiceClient("")
+		// Force to fail quickly.
+		InjectTestingRetryMaxAttempts(1)
+		storage, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory,
+			nil, nil, cloud.NilMetrics)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer storage.Close()
+		_, _, err = storage.ReadFile(ctx, "test file", cloud.ReadOptions{NoFileSize: true})
+		require.Error(t, err)
+
+		// Set AWSSkipTLSVerify to use with HTTPS Server with self signed certificates.
+		q.Add(AWSSkipTLSVerify, "true")
+		u.RawQuery = q.Encode()
+
+		confWithSkipVerify, err := cloud.ExternalStorageConfFromURI(u.String(), user)
+		if err != nil {
+			t.Fatal(err)
+		}
+		storageWithSkipVerify, err := cloud.MakeExternalStorage(ctx, confWithSkipVerify, ioConf, testSettings, clientFactory,
+			nil, nil, cloud.NilMetrics)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer storageWithSkipVerify.Close()
+		require.True(t, storageWithSkipVerify.Conf().S3Config.SkipTLSVerify)
+		_, _, err = storageWithSkipVerify.ReadFile(ctx, "another test file", cloud.ReadOptions{NoFileSize: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
 }
 
 func TestS3DisallowCustomEndpoints(t *testing.T) {
