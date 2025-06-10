@@ -833,7 +833,7 @@ func (b *SSTBatcher) addSSTable(
 	}
 	defer iter.Close()
 
-	if (stats == enginepb.MVCCStats{}) {
+	if (stats == enginepb.MVCCStats{}) && !b.ingestAll {
 		iter.SeekGE(storage.MVCCKey{Key: start})
 		// NB: even though this ComputeStatsForIter call exhausts the iterator, we
 		// can reuse/re-seek on the iterator, as part of the MVCCIterator contract.
@@ -842,6 +842,7 @@ func (b *SSTBatcher) addSSTable(
 			return errors.Wrapf(err, "computing stats for SST [%s, %s)", start, end)
 		}
 	}
+
 
 	work := []*sstSpan{{start: start, end: end, sstBytes: sstBytes, stats: stats}}
 	var files int
@@ -881,6 +882,7 @@ func (b *SSTBatcher) addSSTable(
 					MVCCStats:                              &item.stats,
 					IngestAsWrites:                         ingestAsWriteBatch,
 					ReturnFollowingLikelyNonEmptySpanStart: true,
+					ComputeStatsDiff: b.ingestAll,
 				}
 				if b.writeAtBatchTS {
 					req.SSTTimestampToRequestTimestamp = batchTS
