@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -125,10 +124,6 @@ func alterTableAddColumn(
 	isRBR := b.QueryByID(tbl.TableID).FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement() != nil
 	if idx != nil {
 		panicIfRegionChangeUnderwayOnRBRTable(b, "add a UNIQUE COLUMN", tbl.TableID)
-		*idx, err = configureIndexDescForNewIndexPartitioning(b, tbl.TableID, *idx, nil /* partitionByIndex */)
-		if err != nil {
-			return
-		}
 	}
 
 	// Only set PgAttributeNum if it differs from ColumnID.
@@ -686,9 +681,40 @@ func getIndexColumns(
 	return keyColumns
 }
 
+func populateColumnsFromIndexDesc(
+	tbl *scpb.Table, indexID catid.IndexID, desc *descpb.IndexDescriptor, spec *indexSpecMutator,
+) {
+	for i, dir := range desc.KeyColumnDirections {
+		spec.appendColumn(&scpb.IndexColumn{
+			TableID:   tbl.TableID,
+			IndexID:   indexID,
+			ColumnID:  desc.KeyColumnIDs[i],
+			Kind:      scpb.IndexColumn_KEY,
+			Direction: dir,
+		})
+	}
+	for _, colID := range desc.KeySuffixColumnIDs {
+		spec.appendColumn(&scpb.IndexColumn{
+			TableID:  tbl.TableID,
+			IndexID:  indexID,
+			ColumnID: colID,
+			Kind:     scpb.IndexColumn_KEY_SUFFIX,
+		})
+	}
+	for _, colID := range desc.StoreColumnIDs {
+		spec.appendColumn(&scpb.IndexColumn{
+			TableID:  tbl.TableID,
+			IndexID:  indexID,
+			ColumnID: colID,
+			Kind:     scpb.IndexColumn_STORED,
+		})
+	}
+}
+
 func addSecondaryIndexTargetsForAddColumn(
 	b BuildCtx, tbl *scpb.Table, desc *descpb.IndexDescriptor, newPrimaryIdx *scpb.PrimaryIndex,
 ) {
+	spec := indexSpecMutator{}
 	var partitioning *catpb.PartitioningDescriptor
 	index := scpb.Index{
 		TableID:       tbl.TableID,
@@ -710,23 +736,53 @@ func addSecondaryIndexTargetsForAddColumn(
 		index.ConstraintID = b.NextTableConstraintID(tbl.TableID)
 	}
 
+	spec.secondary = &scpb.SecondaryIndex{Index: index}
+	spec.data = &scpb.IndexData{TableID: tbl.TableID, IndexID: index.IndexID}
+	// Get the initial partition descriptor from the index.
+	if len(desc.Partitioning.Range) != 0 || len(desc.Partitioning.List) != 0 {
+		partitioning = &desc.Partitioning
+	}
+	if partitioning != nil {
+		spec.partitioning = &scpb.IndexPartitioning{
+			TableID:                tbl.TableID,
+			IndexID:                index.IndexID,
+			PartitioningDescriptor: *protoutil.Clone(partitioning).(*catpb.PartitioningDescriptor),
+		}
+	}
+	populateColumnsFromIndexDesc(tbl, index.IndexID, desc, &spec)
+	// Populate partitioning information next.
+	err := configureIndexDescForNewIndexPartitioning(b, tbl.TableID, 0 /* sourcePartitionIndexID*/, nil /*prevSpec*/, &spec, false /* isPrimary */, nil /* partitionByIndex */)
+	if err != nil {
+		panic(err)
+	}
+	// If no partition descriptor is populated, pick one up from the primary index.
+	if spec.partitioning == nil {
+		indexPart := b.QueryByID(tbl.TableID).FilterIndexPartitioning().Filter(func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexPartitioning) bool {
+			return e.IndexID == newPrimaryIdx.IndexID
+		}).MustGetZeroOrOneElement()
+		if indexPart != nil {
+			spec.partitioning = &scpb.IndexPartitioning{
+				TableID:                tbl.TableID,
+				IndexID:                index.IndexID,
+				PartitioningDescriptor: *protoutil.Clone(&indexPart.PartitioningDescriptor).(*catpb.PartitioningDescriptor),
+			}
+		}
+	}
+	numImplicitColumns := 0
+	if spec.partitioning != nil {
+		numImplicitColumns = int(spec.partitioning.NumImplicitColumns)
+	}
 	// If necessary add suffix columns, this would normally be done inside
 	// allocateIndexIDs, but we are going to do it explicitly for the declarative
 	// schema changer.
 	{
-		// Apply any implicit partitioning columns first, if they are missing.
-		scpb.ForEachIndexPartitioning(
-			b.QueryByID(tbl.TableID),
-			func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexPartitioning) {
-				if e.IndexID == newPrimaryIdx.IndexID {
-					partitioning = &e.PartitioningDescriptor
-				}
-			},
-		)
 		keyColSet := catalog.TableColSet{}
 		extraSuffixColumns := catalog.TableColSet{}
-		for _, colID := range desc.KeyColumnIDs {
-			keyColSet.Add(colID)
+		for _, col := range spec.columns {
+			if col.Kind != scpb.IndexColumn_KEY {
+				continue
+			}
+			keyColSet.Add(col.ColumnID)
 		}
 		newPrimaryIdxKeyColumns := getIndexColumns(
 			b.QueryByID(tbl.TableID), newPrimaryIdx.IndexID, scpb.IndexColumn_KEY,
@@ -734,26 +790,19 @@ func addSecondaryIndexTargetsForAddColumn(
 		if partitioning != nil && len(desc.Partitioning.Range) == 0 &&
 			len(desc.Partitioning.List) == 0 &&
 			partitioning.NumImplicitColumns > 0 {
-
-			keyColumnIDs := make(
-				[]descpb.ColumnID, 0,
-				len(desc.KeyColumnIDs)+int(partitioning.NumImplicitColumns),
-			)
-			keyColumnDirs := make(
-				[]catenumpb.IndexColumn_Direction, 0,
-				len(desc.KeyColumnIDs)+int(partitioning.NumImplicitColumns),
-			)
 			for _, c := range newPrimaryIdxKeyColumns[0:partitioning.NumImplicitColumns] {
 				if !keyColSet.Contains(c.ColumnID) {
-					keyColumnIDs = append(keyColumnIDs, c.ColumnID)
-					keyColumnDirs = append(keyColumnDirs, c.Direction)
+					spec.prependColumn(&scpb.IndexColumn{
+						TableID:   tbl.TableID,
+						IndexID:   index.IndexID,
+						ColumnID:  c.ColumnID,
+						Kind:      scpb.IndexColumn_KEY,
+						Implicit:  true,
+						Direction: c.Direction,
+					})
 					keyColSet.Add(c.ColumnID)
 				}
 			}
-			desc.KeyColumnIDs = append(keyColumnIDs, desc.KeyColumnIDs...)
-			desc.KeyColumnDirections = append(keyColumnDirs, desc.KeyColumnDirections...)
-		} else if len(desc.Partitioning.Range) != 0 || len(desc.Partitioning.List) != 0 {
-			partitioning = &desc.Partitioning
 		}
 		for _, c := range newPrimaryIdxKeyColumns {
 			if !keyColSet.Contains(c.ColumnID) {
@@ -761,47 +810,19 @@ func addSecondaryIndexTargetsForAddColumn(
 			}
 		}
 		if !extraSuffixColumns.Empty() {
-			desc.KeySuffixColumnIDs = append(
-				desc.KeySuffixColumnIDs, extraSuffixColumns.Ordered()...,
-			)
+			for _, suffixColumn := range extraSuffixColumns.Ordered() {
+				spec.appendColumn(&scpb.IndexColumn{
+					TableID:  tbl.TableID,
+					IndexID:  spec.indexID(),
+					ColumnID: suffixColumn,
+					Kind:     scpb.IndexColumn_KEY_SUFFIX,
+				})
+			}
 		}
 	}
-	sec := &scpb.SecondaryIndex{Index: index}
-	for i, dir := range desc.KeyColumnDirections {
-		b.Add(&scpb.IndexColumn{
-			TableID:       tbl.TableID,
-			IndexID:       index.IndexID,
-			ColumnID:      desc.KeyColumnIDs[i],
-			OrdinalInKind: uint32(i),
-			Kind:          scpb.IndexColumn_KEY,
-			Direction:     dir,
-		})
-	}
-	for i, colID := range desc.KeySuffixColumnIDs {
-		b.Add(&scpb.IndexColumn{
-			TableID:       tbl.TableID,
-			IndexID:       index.IndexID,
-			ColumnID:      colID,
-			OrdinalInKind: uint32(i),
-			Kind:          scpb.IndexColumn_KEY_SUFFIX,
-		})
-	}
-	for i, colID := range desc.StoreColumnIDs {
-		b.Add(&scpb.IndexColumn{
-			TableID:       tbl.TableID,
-			IndexID:       index.IndexID,
-			ColumnID:      colID,
-			OrdinalInKind: uint32(i),
-			Kind:          scpb.IndexColumn_STORED,
-		})
-	}
-	b.Add(sec)
-	b.Add(&scpb.IndexData{TableID: tbl.TableID, IndexID: index.IndexID})
+
 	indexName := desc.Name
-	numImplicitColumns := 0
-	if partitioning != nil {
-		numImplicitColumns = int(partitioning.NumImplicitColumns)
-	}
+	spec.apply(b.Add)
 	if indexName == "" {
 		indexName = getImplicitSecondaryIndexName(b, tbl.TableID, index.IndexID, numImplicitColumns)
 	}
@@ -810,47 +831,8 @@ func addSecondaryIndexTargetsForAddColumn(
 		IndexID: index.IndexID,
 		Name:    indexName,
 	})
-	temp := &scpb.TemporaryIndex{
-		Index:                    protoutil.Clone(sec).(*scpb.SecondaryIndex).Index,
-		IsUsingSecondaryEncoding: true,
-	}
-	temp.TemporaryIndexID = 0
-	temp.IndexID = nextRelationIndexID(b, tbl)
-	if temp.IndexID != tempIndexID {
-		panic(errors.AssertionFailedf(
-			"assumed temporary index ID %d != %d", tempIndexID, temp.IndexID,
-		))
-	}
-	temp.ConstraintID = index.ConstraintID + 1
-	var tempIndexColumns []*scpb.IndexColumn
-	scpb.ForEachIndexColumn(b.QueryByID(tbl.TableID), func(
-		_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexColumn,
-	) {
-		if e.IndexID != index.IndexID {
-			return
-		}
-		c := protoutil.Clone(e).(*scpb.IndexColumn)
-		c.IndexID = tempIndexID
-		tempIndexColumns = append(tempIndexColumns, c)
-	})
-	for _, c := range tempIndexColumns {
-		b.AddTransient(c)
-	}
-	b.AddTransient(temp)
-	b.AddTransient(&scpb.IndexData{TableID: temp.TableID, IndexID: temp.IndexID})
-	// Add in the partitioning descriptor for the final and temporary index.
-	if partitioning != nil {
-		b.Add(&scpb.IndexPartitioning{
-			TableID:                tbl.TableID,
-			IndexID:                index.IndexID,
-			PartitioningDescriptor: *protoutil.Clone(partitioning).(*catpb.PartitioningDescriptor),
-		})
-		b.Add(&scpb.IndexPartitioning{
-			TableID:                tbl.TableID,
-			IndexID:                temp.IndexID,
-			PartitioningDescriptor: *protoutil.Clone(partitioning).(*catpb.PartitioningDescriptor),
-		})
-	}
+	tempSpec := makeTempIndexSpec(spec.indexSpec)
+	tempSpec.apply(b.AddTransient)
 }
 
 func retrieveTemporaryIndexElem(

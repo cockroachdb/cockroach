@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -552,9 +553,43 @@ type indexSpec struct {
 	data          *scpb.IndexData
 }
 
+// indexSpecMutator holds an index spec designed for mutatioin
+type indexSpecMutator struct {
+	indexSpec
+}
+
+// applyDeltaForIndexColumns updates index column configurations by applying
+// changes from a previous to the current state. It removes outdated elements
+// and incorporates new or updated elements into the build context for processing.
+func (s *indexSpecMutator) applyDeltaForIndexColumns(
+	b BuildCtx, prev *indexSpec, isIndexFinal bool,
+) {
+	columnIDToElem := make(map[catid.ColumnID]*scpb.IndexColumn)
+	// Remove all old elements.
+	for _, col := range prev.columns {
+		columnIDToElem[col.ColumnID] = col
+		b.Drop(col)
+	}
+	// Next, apply the current state.
+	for idx, col := range s.columns {
+		// If the element already exists, we just need to copy
+		// the update in there.
+		if existingCol, ok := columnIDToElem[col.ColumnID]; ok {
+			*existingCol = *protoutil.Clone(col).(*scpb.IndexColumn)
+			col = existingCol
+			s.columns[idx] = col
+		}
+		if isIndexFinal {
+			b.Add(col)
+		} else {
+			b.AddTransient(col)
+		}
+	}
+}
+
 // apply makes it possible to conveniently define build targets for all
 // the elements in the indexSpec.
-func (s indexSpec) apply(fn func(e scpb.Element)) {
+func (s *indexSpec) apply(fn func(e scpb.Element)) {
 	if s.primary != nil {
 		fn(s.primary)
 	}
@@ -587,8 +622,14 @@ func (s indexSpec) apply(fn func(e scpb.Element)) {
 	}
 }
 
+func (s *indexSpec) makeMutator() *indexSpecMutator {
+	m := &indexSpecMutator{indexSpec: s.clone()}
+	m.orderColumns()
+	return m
+}
+
 // clone conveniently deep-copies all the elements in the indexSpec.
-func (s indexSpec) clone() (c indexSpec) {
+func (s *indexSpec) clone() (c indexSpec) {
 	if s.primary != nil {
 		c.primary = protoutil.Clone(s.primary).(*scpb.PrimaryIndex)
 	}
@@ -622,7 +663,143 @@ func (s indexSpec) clone() (c indexSpec) {
 	return c
 }
 
-func (s indexSpec) indexID() catid.IndexID {
+func (s *indexSpec) tableID() catid.DescID {
+	if s.primary != nil {
+		return s.primary.TableID
+	}
+	if s.temporary != nil {
+		return s.temporary.TableID
+	}
+	if s.secondary != nil {
+		return s.secondary.TableID
+	}
+	return 0
+}
+
+// columnComparison compares two index columns based on their kind and ordinal
+// position within the kind.
+func (s *indexSpecMutator) columnComparison(i, j int) bool {
+	return s.columns[i].Kind < s.columns[j].Kind &&
+		s.columns[i].OrdinalInKind < s.columns[j].OrdinalInKind
+}
+
+// orderColumns the column field by kind and type.
+func (s *indexSpecMutator) orderColumns() {
+	sort.Slice(s.columns, s.columnComparison)
+}
+
+func (s *indexSpecMutator) reassignOrdinals(kind scpb.IndexColumn_Kind) {
+	// Re-number all columns of this kind.
+	numColKind := 0
+	for _, col := range s.columns {
+		if col.Kind == kind {
+			col.OrdinalInKind = uint32(numColKind)
+			numColKind++
+		}
+	}
+}
+
+// resetColumns clears all the columns in specifications.
+func (s *indexSpecMutator) resetColumns() {
+	s.columns = s.columns[:0]
+}
+
+// removeColumn deletes a column by ID and adjusts ordinals
+// after.
+func (s *indexSpecMutator) removeColumn(columnID catid.ColumnID, kind scpb.IndexColumn_Kind) {
+	// The indexSpec must have ordered columns for this to work.
+	if buildutil.CrdbTestBuild &&
+		!sort.SliceIsSorted(s.columns, s.columnComparison) {
+		panic(errors.AssertionFailedf("indexSpec was not sorted first"))
+	}
+	for i, col := range s.columns {
+		if col.ColumnID == columnID && kind == col.Kind {
+			kind = col.Kind
+			s.columns = append(s.columns[:i], s.columns[i+1:]...)
+			s.reassignOrdinals(kind)
+			return
+		}
+	}
+}
+
+// removeImplicitColumns removes all implicit columns.
+func (s *indexSpecMutator) removeImplicitColumns() {
+	// The indexSpec must have ordered columns for this to work.
+	if buildutil.CrdbTestBuild &&
+		!sort.SliceIsSorted(s.columns, s.columnComparison) {
+		panic(errors.AssertionFailedf("indexSpec was not sorted first"))
+	}
+	newColumns := make([]*scpb.IndexColumn, 0, len(s.columns))
+	for _, col := range s.columns {
+		if col.Implicit {
+			continue
+		}
+		newColumns = append(newColumns, col)
+	}
+	s.columns = newColumns
+}
+
+// assertColumnIsNotContained validates the column doesn't already exist.
+func (s *indexSpec) assertColumnIsNotContained(column *scpb.IndexColumn) {
+	if !buildutil.CrdbTestBuild {
+		return
+	}
+	for _, col := range s.columns {
+		if col.ColumnID == column.ColumnID && col.Kind == column.Kind {
+			panic(errors.AssertionFailedf("column %d %d %d already exists",
+				column.ColumnID, column.Kind, column.OrdinalInKind))
+		}
+	}
+}
+
+// prependColumn columns before all others of the same kind. The columns should
+// be sorted first.
+func (s *indexSpecMutator) prependColumn(column *scpb.IndexColumn) {
+	// Sanity: Validate the column is not already contained.
+	s.assertColumnIsNotContained(column)
+	// The indexSpec must have ordered columns for this to work.
+	if buildutil.CrdbTestBuild &&
+		!sort.SliceIsSorted(s.columns, s.columnComparison) {
+		panic(errors.AssertionFailedf("indexSpec was not sorted first"))
+	}
+
+	// Determine the offset where we should add this column.
+	insertionPoint := 0
+	for idx, col := range s.columns {
+		if col.Kind <= column.Kind {
+			insertionPoint = idx
+		}
+		if col.Kind >= column.Kind {
+			break
+		}
+	}
+	s.columns = append(s.columns[:insertionPoint], append([]*scpb.IndexColumn{column}, s.columns[insertionPoint:]...)...)
+	s.reassignOrdinals(column.Kind)
+}
+
+// appendColumn columns after all others of the same kind. The columns should
+// be sorted first.
+func (s *indexSpecMutator) appendColumn(column *scpb.IndexColumn) {
+	// Sanity: Validate the column is not already contained.
+	s.assertColumnIsNotContained(column)
+	// The indexSpec must have ordered columns for this to work.
+	if buildutil.CrdbTestBuild &&
+		!sort.SliceIsSorted(s.columns, s.columnComparison) {
+		panic(errors.AssertionFailedf("indexSpec was not sorted first"))
+	}
+	// Find the insertion point.
+	insertionPoint := len(s.columns)
+	for i, col := range s.columns {
+		if col.Kind > column.Kind {
+			insertionPoint = i
+			break
+		}
+	}
+	s.columns = append(s.columns[:insertionPoint], append([]*scpb.IndexColumn{column}, s.columns[insertionPoint:]...)...)
+	s.reassignOrdinals(column.Kind)
+}
+
+func (s *indexSpec) indexID() catid.IndexID {
 	if s.primary != nil {
 		return s.primary.IndexID
 	}
@@ -635,7 +812,7 @@ func (s indexSpec) indexID() catid.IndexID {
 	return 0
 }
 
-func (s indexSpec) SourceIndexID() catid.IndexID {
+func (s *indexSpec) SourceIndexID() catid.IndexID {
 	if s.primary != nil {
 		return s.primary.SourceIndexID
 	}

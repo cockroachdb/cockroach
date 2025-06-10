@@ -345,56 +345,56 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │    │    └── 1 Validation operation
  │    │         └── ValidateIndex {"IndexID":8,"TableID":108}
  │    ├── Stage 16 of 23 in PostCommitPhase
- │    │    ├── 16 elements transitioning toward PUBLIC
- │    │    │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 4 (crdb_region), IndexID: 2 (table_regional_by_row_j_key+)}
- │    │    │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 5 (j+), IndexID: 2 (table_regional_by_row_j_key+)}
- │    │    │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 2 (table_regional_by_row_j_key+)}
- │    │    │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 2 (table_regional_by_row_j_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 8 (table_regional_by_row_pkey+), RecreateSourceIndexID: 0}
- │    │    │    ├── ABSENT → PUBLIC        IndexData:{DescID: 108 (table_regional_by_row), IndexID: 2 (table_regional_by_row_j_key+)}
- │    │    │    ├── ABSENT → PUBLIC        IndexName:{DescID: 108 (table_regional_by_row), Name: "table_regional_by_row_j_key", IndexID: 2 (table_regional_by_row_j_key+)}
- │    │    │    ├── ABSENT → PUBLIC        IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 2 (table_regional_by_row_j_key+)}
- │    │    │    ├── ABSENT → PUBLIC        IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 3}
- │    │    │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 4 (crdb_region), IndexID: 4 (table_regional_by_row_l_key+)}
- │    │    │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l+), IndexID: 4 (table_regional_by_row_l_key+)}
- │    │    │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 4 (table_regional_by_row_l_key+)}
- │    │    │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 4 (table_regional_by_row_l_key+), ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 8 (table_regional_by_row_pkey+), RecreateSourceIndexID: 0}
- │    │    │    ├── ABSENT → PUBLIC        IndexData:{DescID: 108 (table_regional_by_row), IndexID: 4 (table_regional_by_row_l_key+)}
- │    │    │    ├── ABSENT → PUBLIC        IndexName:{DescID: 108 (table_regional_by_row), Name: "table_regional_by_row_l_key", IndexID: 4 (table_regional_by_row_l_key+)}
- │    │    │    ├── ABSENT → PUBLIC        IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 4 (table_regional_by_row_l_key+)}
- │    │    │    └── ABSENT → PUBLIC        IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 5}
- │    │    ├── 8 elements transitioning toward TRANSIENT_ABSENT
- │    │    │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 4 (crdb_region), IndexID: 3}
- │    │    │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 5 (j+), IndexID: 3}
- │    │    │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 3}
- │    │    │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 3, ConstraintID: 3, SourceIndexID: 8 (table_regional_by_row_pkey+)}
- │    │    │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 4 (crdb_region), IndexID: 5}
- │    │    │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l+), IndexID: 5}
- │    │    │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 5}
- │    │    │    └── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 5, ConstraintID: 5, SourceIndexID: 8 (table_regional_by_row_pkey+)}
+ │    │    ├── 14 elements transitioning toward PUBLIC
+ │    │    │    ├── ABSENT → BACKFILL_ONLY    SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 2 (table_regional_by_row_j_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 8 (table_regional_by_row_pkey+), RecreateSourceIndexID: 0}
+ │    │    │    ├── ABSENT → PUBLIC           IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 2 (table_regional_by_row_j_key+)}
+ │    │    │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 4 (crdb_region), IndexID: 2 (table_regional_by_row_j_key+)}
+ │    │    │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 5 (j+), IndexID: 2 (table_regional_by_row_j_key+)}
+ │    │    │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 2 (table_regional_by_row_j_key+)}
+ │    │    │    ├── ABSENT → PUBLIC           IndexData:{DescID: 108 (table_regional_by_row), IndexID: 2 (table_regional_by_row_j_key+)}
+ │    │    │    ├── ABSENT → PUBLIC           IndexName:{DescID: 108 (table_regional_by_row), Name: "table_regional_by_row_j_key", IndexID: 2 (table_regional_by_row_j_key+)}
+ │    │    │    ├── ABSENT → BACKFILL_ONLY    SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 4 (table_regional_by_row_l_key+), ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 8 (table_regional_by_row_pkey+), RecreateSourceIndexID: 0}
+ │    │    │    ├── ABSENT → PUBLIC           IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 4 (table_regional_by_row_l_key+)}
+ │    │    │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 4 (crdb_region), IndexID: 4 (table_regional_by_row_l_key+)}
+ │    │    │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l+), IndexID: 4 (table_regional_by_row_l_key+)}
+ │    │    │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 4 (table_regional_by_row_l_key+)}
+ │    │    │    ├── ABSENT → PUBLIC           IndexData:{DescID: 108 (table_regional_by_row), IndexID: 4 (table_regional_by_row_l_key+)}
+ │    │    │    └── ABSENT → PUBLIC           IndexName:{DescID: 108 (table_regional_by_row), Name: "table_regional_by_row_l_key", IndexID: 4 (table_regional_by_row_l_key+)}
+ │    │    ├── 10 elements transitioning toward TRANSIENT_ABSENT
+ │    │    │    ├── ABSENT → DELETE_ONLY      TemporaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 3, ConstraintID: 3, SourceIndexID: 8 (table_regional_by_row_pkey+)}
+ │    │    │    ├── ABSENT → TRANSIENT_ABSENT IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 3}
+ │    │    │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 4 (crdb_region), IndexID: 3}
+ │    │    │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 5 (j+), IndexID: 3}
+ │    │    │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 3}
+ │    │    │    ├── ABSENT → DELETE_ONLY      TemporaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 5, ConstraintID: 5, SourceIndexID: 8 (table_regional_by_row_pkey+)}
+ │    │    │    ├── ABSENT → TRANSIENT_ABSENT IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 5}
+ │    │    │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 4 (crdb_region), IndexID: 5}
+ │    │    │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l+), IndexID: 5}
+ │    │    │    └── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 5}
  │    │    └── 28 Mutation operations
  │    │         ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
  │    │         ├── MaybeAddSplitForIndex {"IndexID":2,"TableID":108}
- │    │         ├── SetIndexName {"IndexID":2,"Name":"table_regional_b...","TableID":108}
- │    │         ├── MakeAbsentTempIndexDeleteOnly {"IsSecondaryIndex":true}
- │    │         ├── MaybeAddSplitForIndex {"IndexID":3,"TableID":108}
  │    │         ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":2,"TableID":108}}
- │    │         ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":3,"TableID":108}}
- │    │         ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
- │    │         ├── MaybeAddSplitForIndex {"IndexID":4,"TableID":108}
- │    │         ├── SetIndexName {"IndexID":4,"Name":"table_regional_b...","TableID":108}
- │    │         ├── MakeAbsentTempIndexDeleteOnly {"IsSecondaryIndex":true}
- │    │         ├── MaybeAddSplitForIndex {"IndexID":5,"TableID":108}
- │    │         ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":4,"TableID":108}}
- │    │         ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":5,"TableID":108}}
  │    │         ├── AddColumnToIndex {"ColumnID":4,"IndexID":2,"TableID":108}
  │    │         ├── AddColumnToIndex {"ColumnID":5,"IndexID":2,"Ordinal":1,"TableID":108}
  │    │         ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":108}
+ │    │         ├── SetIndexName {"IndexID":2,"Name":"table_regional_b...","TableID":108}
+ │    │         ├── MakeAbsentTempIndexDeleteOnly {"IsSecondaryIndex":true}
+ │    │         ├── MaybeAddSplitForIndex {"IndexID":3,"TableID":108}
+ │    │         ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":3,"TableID":108}}
  │    │         ├── AddColumnToIndex {"ColumnID":4,"IndexID":3,"TableID":108}
  │    │         ├── AddColumnToIndex {"ColumnID":5,"IndexID":3,"Ordinal":1,"TableID":108}
  │    │         ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":108}
+ │    │         ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
+ │    │         ├── MaybeAddSplitForIndex {"IndexID":4,"TableID":108}
+ │    │         ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":4,"TableID":108}}
  │    │         ├── AddColumnToIndex {"ColumnID":4,"IndexID":4,"TableID":108}
  │    │         ├── AddColumnToIndex {"ColumnID":6,"IndexID":4,"Ordinal":1,"TableID":108}
  │    │         ├── AddColumnToIndex {"ColumnID":1,"IndexID":4,"Kind":1,"TableID":108}
+ │    │         ├── SetIndexName {"IndexID":4,"Name":"table_regional_b...","TableID":108}
+ │    │         ├── MakeAbsentTempIndexDeleteOnly {"IsSecondaryIndex":true}
+ │    │         ├── MaybeAddSplitForIndex {"IndexID":5,"TableID":108}
+ │    │         ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":5,"TableID":108}}
  │    │         ├── AddColumnToIndex {"ColumnID":4,"IndexID":5,"TableID":108}
  │    │         ├── AddColumnToIndex {"ColumnID":6,"IndexID":5,"Ordinal":1,"TableID":108}
  │    │         ├── AddColumnToIndex {"ColumnID":1,"IndexID":5,"Kind":1,"TableID":108}
@@ -480,16 +480,16 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 9}
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 5 (j+), IndexID: 7}
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 5 (j+), IndexID: 9}
+      │    │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 3, ConstraintID: 3, SourceIndexID: 8 (table_regional_by_row_pkey+)}
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 4 (crdb_region), IndexID: 3}
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 5 (j+), IndexID: 3}
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 3}
-      │    │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 3, ConstraintID: 3, SourceIndexID: 8 (table_regional_by_row_pkey+)}
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l+), IndexID: 7}
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l+), IndexID: 9}
+      │    │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 5, ConstraintID: 5, SourceIndexID: 8 (table_regional_by_row_pkey+)}
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 4 (crdb_region), IndexID: 5}
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l+), IndexID: 5}
-      │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 5}
-      │    │    └── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 5, ConstraintID: 5, SourceIndexID: 8 (table_regional_by_row_pkey+)}
+      │    │    └── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 5}
       │    ├── 7 elements transitioning toward ABSENT
       │    │    ├── WRITE_ONLY            → DELETE_ONLY      Column:{DescID: 108 (table_regional_by_row), ColumnID: 2 (v-)}
       │    │    ├── WRITE_ONLY            → DELETE_ONLY      Column:{DescID: 108 (table_regional_by_row), ColumnID: 3 (m-)}
@@ -514,7 +514,6 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
       │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":3,"TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":5,"IndexID":3,"Ordinal":1,"TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":108}
-      │         ├── MakeIndexAbsent {"IndexID":3,"TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":6,"IndexID":7,"Kind":2,"Ordinal":3,"TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":6,"IndexID":9,"Kind":2,"Ordinal":1,"TableID":108}
       │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":4,"TableID":108}
@@ -522,10 +521,11 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
       │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":5,"TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":6,"IndexID":5,"Ordinal":1,"TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":5,"Kind":1,"TableID":108}
-      │         ├── MakeIndexAbsent {"IndexID":5,"TableID":108}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":108}
       │         ├── MakeIndexAbsent {"IndexID":7,"TableID":108}
       │         ├── MakeIndexAbsent {"IndexID":9,"TableID":108}
+      │         ├── MakeIndexAbsent {"IndexID":3,"TableID":108}
+      │         ├── MakeIndexAbsent {"IndexID":5,"TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":1,"TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"Ordinal":1,"TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"Kind":2,"TableID":108}
