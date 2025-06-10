@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tsutil"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -138,13 +139,15 @@ will then convert it to the --format requested in the current invocation.
 		if convertFile == "" {
 			// To enable conversion without a running cluster, we want to skip
 			// connecting to the server when converting an existing tsdump.
-			conn, finish, err := getClientGRPCConn(ctx, serverCfg)
+			conn, finish, err := newClientConn(ctx, serverCfg)
 			if err != nil {
 				return err
 			}
 			defer finish()
 
-			names, err := serverpb.GetInternalTimeseriesNamesFromServer(ctx, conn)
+			target, _ := addr.AddrWithDefaultLocalhost(serverCfg.AdvertiseAddr)
+			adminClient := conn.NewAdminClient()
+			names, err := serverpb.GetInternalTimeseriesNamesFromServer(ctx, adminClient)
 			if err != nil {
 				return err
 			}
@@ -156,12 +159,12 @@ will then convert it to the --format requested in the current invocation.
 					tspb.TimeSeriesResolution_RESOLUTION_30M, tspb.TimeSeriesResolution_RESOLUTION_10S,
 				},
 			}
-			tsClient := tspb.NewTimeSeriesClient(conn)
 
+			tsClient := conn.NewTimeSeriesClient()
 			if debugTimeSeriesDumpOpts.format == tsDumpRaw {
 				stream, err := tsClient.DumpRaw(context.Background(), req)
 				if err != nil {
-					return errors.Wrapf(err, "connecting to %s", conn.Target())
+					return errors.Wrapf(err, "connecting to %s", target)
 				}
 
 				// Buffer the writes to os.Stdout since we're going to
@@ -172,7 +175,8 @@ will then convert it to the --format requested in the current invocation.
 				}
 
 				// get the node details so that we can get the SQL port
-				resp, err := serverpb.NewStatusClient(conn).Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
+				statusClient := conn.NewStatusClient()
+				resp, err := statusClient.Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
 				if err != nil {
 					return err
 				}
@@ -191,7 +195,7 @@ will then convert it to the --format requested in the current invocation.
 			}
 			stream, err := tsClient.Dump(context.Background(), req)
 			if err != nil {
-				return errors.Wrapf(err, "connecting to %s", conn.Target())
+				return errors.Wrapf(err, "connecting to %s", target)
 			}
 			recv = stream.Recv
 		} else {

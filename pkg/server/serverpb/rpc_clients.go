@@ -27,3 +27,38 @@ func DialMigrationClient(
 	}
 	return nil, nil
 }
+
+// DialStatusClientNoBreaker establishes a DRPC connection if enabled;
+// otherwise, it falls back to gRPC. The established connection is used
+// to create a StatusClient.
+func DialStatusClientNoBreaker(
+	nd rpcbase.NodeDialerNoBreaker,
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	class rpcbase.ConnectionClass,
+) (StatusClient, error) {
+	if !rpcbase.TODODRPC {
+		conn, err := nd.DialNoBreaker(ctx, nodeID, class)
+		if err != nil {
+			return nil, err
+		}
+		return NewStatusClient(conn), nil
+	}
+	return nil, nil
+}
+
+// DialStatusClient establishes a DRPC connection if enabled; otherwise, it
+// falls back to gRPC. The established connection is used to create a
+// StatusClient.
+func DialStatusClient(
+	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID,
+) (StatusClient, error) {
+	if !rpcbase.TODODRPC {
+		conn, err := nd.Dial(ctx, nodeID, rpcbase.DefaultClass)
+		if err != nil {
+			return nil, err
+		}
+		return NewStatusClient(conn), nil
+	}
+	return nil, nil
+}

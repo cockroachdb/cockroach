@@ -348,15 +348,14 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	conn, finish, err := getClientGRPCConn(ctx, serverCfg)
+	conn, finish, err := newClientConn(ctx, serverCfg)
 	if err != nil {
-		return errors.Wrap(err, "failed to connect to the node")
+		return err
 	}
 	defer finish()
 
-	s := serverpb.NewStatusClient(conn)
-
-	localNodeID, err := getLocalNodeID(ctx, s)
+	statusClient := conn.NewStatusClient()
+	localNodeID, err := getLocalNodeID(ctx, statusClient)
 	if err != nil {
 		return err
 	}
@@ -366,12 +365,12 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := expectNodesDecommissioned(ctx, s, nodeIDs, false /* expDecommissioned */); err != nil {
+	if err := expectNodesDecommissioned(ctx, statusClient, nodeIDs, false /* expDecommissioned */); err != nil {
 		return err
 	}
 
-	c := serverpb.NewAdminClient(conn)
-	if err := runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait,
+	adminClient := conn.NewAdminClient()
+	if err := runDecommissionNodeImpl(ctx, adminClient, nodeCtx.nodeDecommissionWait,
 		nodeCtx.nodeDecommissionChecks, nodeCtx.nodeDecommissionDryRun,
 		nodeIDs, localNodeID,
 	); err != nil {
@@ -831,15 +830,14 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	conn, finish, err := getClientGRPCConn(ctx, serverCfg)
+	conn, finish, err := newClientConn(ctx, serverCfg)
 	if err != nil {
-		return errors.Wrap(err, "failed to connect to the node")
+		return err
 	}
 	defer finish()
 
-	s := serverpb.NewStatusClient(conn)
-
-	localNodeID, err := getLocalNodeID(ctx, s)
+	statusClient := conn.NewStatusClient()
+	localNodeID, err := getLocalNodeID(ctx, statusClient)
 	if err != nil {
 		return err
 	}
@@ -849,16 +847,16 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := expectNodesDecommissioned(ctx, s, nodeIDs, true /* expDecommissioned */); err != nil {
+	if err := expectNodesDecommissioned(ctx, statusClient, nodeIDs, true /* expDecommissioned */); err != nil {
 		return err
 	}
 
-	c := serverpb.NewAdminClient(conn)
+	adminClient := conn.NewAdminClient()
 	req := &serverpb.DecommissionRequest{
 		NodeIDs:          nodeIDs,
 		TargetMembership: livenesspb.MembershipStatus_ACTIVE,
 	}
-	resp, err := c.Decommission(ctx, req)
+	resp, err := adminClient.Decommission(ctx, req)
 	if err != nil {
 		cause := errors.UnwrapAll(err)
 		// If it's a specific illegal membership transition error, we try to
@@ -922,13 +920,14 @@ func runDrain(cmd *cobra.Command, args []string) (err error) {
 	}
 
 	// Establish a RPC connection.
-	c, finish, err := getAdminClient(ctx, serverCfg)
+	conn, finish, err := newClientConn(ctx, serverCfg)
 	if err != nil {
 		return err
 	}
 	defer finish()
 
-	if _, _, err := doDrain(ctx, c, targetNode); err != nil {
+	adminClient := conn.NewAdminClient()
+	if _, _, err := doDrain(ctx, adminClient, targetNode); err != nil {
 		return err
 	}
 
@@ -936,7 +935,7 @@ func runDrain(cmd *cobra.Command, args []string) (err error) {
 	fmt.Println("drain ok")
 
 	if drainCtx.shutdown {
-		if _, err := doShutdown(ctx, c, targetNode); err != nil {
+		if _, err := doShutdown(ctx, adminClient, targetNode); err != nil {
 			return err
 		}
 		// Report "ok" if there was no error.
