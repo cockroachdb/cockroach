@@ -598,18 +598,22 @@ func (bq *baseQueue) Async(
 		log.InfofDepth(ctx, 2, "%s", redact.Safe(opName))
 	}
 	opName += " (" + bq.name + ")"
-	bgCtx := bq.AnnotateCtx(context.Background())
-	if err := bq.store.stopper.RunAsyncTaskEx(bgCtx,
-		stop.TaskOpts{
+	bgCtx, hdl, err := bq.store.stopper.GetHandle(
+		bq.AnnotateCtx(context.Background()), stop.TaskOpts{
 			TaskName:   opName,
 			Sem:        bq.addOrMaybeAddSem,
 			WaitForSem: wait,
-		},
-		func(ctx context.Context) {
-			fn(ctx, baseQueueHelper{bq})
-		}); err != nil && bq.addLogN.ShouldLog() {
-		log.Infof(ctx, "rate limited in %s: %s", redact.Safe(opName), err)
+		})
+	if err != nil {
+		if bq.addLogN.ShouldLog() {
+			log.Infof(ctx, "rate limited in %s: %s", redact.Safe(opName), err)
+		}
+		return
 	}
+	go func(ctx context.Context) {
+		defer hdl.Activate(ctx).Release(ctx)
+		fn(ctx, baseQueueHelper{bq})
+	}(bgCtx)
 }
 
 // MaybeAddAsync offers the replica to the queue. The queue will only process a

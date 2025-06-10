@@ -489,12 +489,12 @@ func (ir *IntentResolver) MaybePushTransactions(
 // run asynchronously; otherwise, it's run synchronously if
 // allowSyncProcessing is true; if false, an error is returned.
 func (ir *IntentResolver) runAsyncTask(
-	ctx context.Context, allowSyncProcessing bool, taskFn func(context.Context),
+	origCtx context.Context, allowSyncProcessing bool, taskFn func(context.Context),
 ) error {
 	if ir.testingKnobs.DisableAsyncIntentResolution {
 		return errors.New("intents not processed as async resolution is disabled")
 	}
-	err := ir.stopper.RunAsyncTaskEx(
+	ctx, hdl, err := ir.stopper.GetHandle(
 		// If we've successfully launched a background task, dissociate
 		// this work from our caller's context and timeout.
 		ir.ambientCtx.AnnotateCtx(context.Background()),
@@ -502,21 +502,23 @@ func (ir *IntentResolver) runAsyncTask(
 			TaskName:   "storage.IntentResolver: processing intents",
 			Sem:        ir.sem,
 			WaitForSem: false,
-		},
-		taskFn,
-	)
+		})
 	if err != nil {
 		if errors.Is(err, stop.ErrThrottled) {
 			ir.Metrics.IntentResolverAsyncThrottled.Inc(1)
 			if allowSyncProcessing {
 				// A limited task was not available. Rather than waiting for
 				// one, we reuse the current goroutine.
-				taskFn(ctx)
+				taskFn(origCtx)
 				return nil
 			}
 		}
 		return errors.Wrapf(err, "during async intent resolution")
 	}
+	go func(ctx context.Context) {
+		defer hdl.Activate(ctx).Release(ctx)
+		taskFn(ctx)
+	}(ctx)
 	return nil
 }
 
@@ -702,14 +704,13 @@ func (ir *IntentResolver) lockInFlightTxnCleanup(
 // of async task with the intention that it be used as a hook to update metrics.
 // It will not be called if an error is returned.
 func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
-	ctx context.Context,
 	admissionHeader kvpb.AdmissionHeader,
 	rangeID roachpb.RangeID,
 	txn *roachpb.Transaction,
 	now hlc.Timestamp,
 	onComplete func(pushed, succeeded bool),
 ) error {
-	return ir.stopper.RunAsyncTaskEx(
+	ctx, hdl, err := ir.stopper.GetHandle(
 		// If we've successfully launched a background task,
 		// dissociate this work from our caller's context and
 		// timeout.
@@ -724,66 +725,70 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 			// them. Not much harm in having old txn records lying around in
 			// the meantime.
 			WaitForSem: false,
-		},
-		func(ctx context.Context) {
-			var pushed, succeeded bool
-			defer func() {
-				if onComplete != nil {
-					onComplete(pushed, succeeded)
-				}
-			}()
-			locked, release := ir.lockInFlightTxnCleanup(ctx, txn.ID)
-			if !locked {
+		})
+	if err != nil {
+		return err
+	}
+	go func(ctx context.Context) {
+		defer hdl.Activate(ctx).Release(ctx)
+		var pushed, succeeded bool
+		defer func() {
+			if onComplete != nil {
+				onComplete(pushed, succeeded)
+			}
+		}()
+		locked, release := ir.lockInFlightTxnCleanup(ctx, txn.ID)
+		if !locked {
+			return
+		}
+		defer release()
+		// If the transaction is not yet finalized, but expired, push it
+		// before resolving the intents.
+		if !txn.Status.IsFinalized() {
+			if !txnwait.IsExpired(now, txn) {
+				log.VErrEventf(ctx, 3, "cannot push a %s transaction which is not expired: %s", txn.Status, txn)
 				return
 			}
-			defer release()
-			// If the transaction is not yet finalized, but expired, push it
-			// before resolving the intents.
-			if !txn.Status.IsFinalized() {
-				if !txnwait.IsExpired(now, txn) {
-					log.VErrEventf(ctx, 3, "cannot push a %s transaction which is not expired: %s", txn.Status, txn)
-					return
-				}
-				b := &kv.Batch{}
-				b.Header.Timestamp = now
-				b.AddRawRequest(&kvpb.PushTxnRequest{
-					RequestHeader: kvpb.RequestHeader{Key: txn.Key},
-					PusherTxn: roachpb.Transaction{
-						TxnMeta: enginepb.TxnMeta{Priority: enginepb.MaxTxnPriority},
-					},
-					PusheeTxn: txn.TxnMeta,
-					PushType:  kvpb.PUSH_ABORT,
-				})
-				pushed = true
-				if err := ir.db.Run(ctx, b); err != nil {
-					log.VErrEventf(ctx, 2, "failed to push %s, expired txn (%s): %s", txn.Status, txn, err)
-					return
-				}
-				// Update the txn with the result of the push, such that the intents we're about
-				// to resolve get a final status.
-				finalizedTxn := &b.RawResponse().Responses[0].GetInner().(*kvpb.PushTxnResponse).PusheeTxn
-				txn = txn.Clone()
-				txn.Update(finalizedTxn)
+			b := &kv.Batch{}
+			b.Header.Timestamp = now
+			b.AddRawRequest(&kvpb.PushTxnRequest{
+				RequestHeader: kvpb.RequestHeader{Key: txn.Key},
+				PusherTxn: roachpb.Transaction{
+					TxnMeta: enginepb.TxnMeta{Priority: enginepb.MaxTxnPriority},
+				},
+				PusheeTxn: txn.TxnMeta,
+				PushType:  kvpb.PUSH_ABORT,
+			})
+			pushed = true
+			if err := ir.db.Run(ctx, b); err != nil {
+				log.VErrEventf(ctx, 2, "failed to push %s, expired txn (%s): %s", txn.Status, txn, err)
+				return
 			}
-			var onCleanupComplete func(error)
-			if onComplete != nil {
-				onCompleteCopy := onComplete // copy onComplete for use in onCleanupComplete
-				onCleanupComplete = func(err error) {
-					onCompleteCopy(pushed, err == nil)
-				}
+			// Update the txn with the result of the push, such that the intents we're about
+			// to resolve get a final status.
+			finalizedTxn := &b.RawResponse().Responses[0].GetInner().(*kvpb.PushTxnResponse).PusheeTxn
+			txn = txn.Clone()
+			txn.Update(finalizedTxn)
+		}
+		var onCleanupComplete func(error)
+		if onComplete != nil {
+			onCompleteCopy := onComplete // copy onComplete for use in onCleanupComplete
+			onCleanupComplete = func(err error) {
+				onCompleteCopy(pushed, err == nil)
 			}
-			// Set onComplete to nil to disable the deferred call as the call has now
-			// been delegated to the callback passed to cleanupFinishedTxnIntents.
-			onComplete = nil
-			err := ir.cleanupFinishedTxnIntents(
-				ctx, admissionHeader, rangeID, txn, false /* poison */, onCleanupComplete)
-			if err != nil {
-				if ir.every.ShouldLog() {
-					log.Warningf(ctx, "failed to cleanup transaction intents: %+v", err)
-				}
+		}
+		// Set onComplete to nil to disable the deferred call as the call has now
+		// been delegated to the callback passed to cleanupFinishedTxnIntents.
+		onComplete = nil
+		err := ir.cleanupFinishedTxnIntents(
+			ctx, admissionHeader, rangeID, txn, false /* poison */, onCleanupComplete)
+		if err != nil {
+			if ir.every.ShouldLog() {
+				log.Warningf(ctx, "failed to cleanup transaction intents: %+v", err)
 			}
-		},
-	)
+		}
+	}(ctx)
+	return nil
 }
 
 func (ir *IntentResolver) gcTxnRecord(
@@ -865,23 +870,28 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 	// gcTxnRecord completes, which may cancel the context and abort the cleanup
 	// either due to a defer cancel() or client disconnection. We give it a timeout
 	// as well, to avoid goroutine leakage.
-	return ir.stopper.RunAsyncTask(
-		ir.ambientCtx.AnnotateCtx(context.Background()),
-		"storage.IntentResolver: cleanup txn records",
-		func(ctx context.Context) {
-			err := timeutil.RunWithTimeout(ctx, "cleanup txn record",
-				gcTxnRecordTimeout, func(ctx context.Context) error {
-					return ir.gcTxnRecord(ctx, rangeID, txn)
-				})
-			if onComplete != nil {
-				onComplete(err)
+	ctx, hdl, err := ir.stopper.GetHandle(ir.ambientCtx.AnnotateCtx(context.Background()), stop.TaskOpts{
+		TaskName: "storage.IntentResolver: cleanup txn records",
+	})
+	if err != nil {
+		return err
+	}
+	go func(ctx context.Context) {
+		defer hdl.Activate(ctx).Release(ctx)
+		err := timeutil.RunWithTimeout(ctx, "cleanup txn record",
+			gcTxnRecordTimeout, func(ctx context.Context) error {
+				return ir.gcTxnRecord(ctx, rangeID, txn)
+			})
+		if onComplete != nil {
+			onComplete(err)
+		}
+		if err != nil {
+			if ir.every.ShouldLog() {
+				log.Warningf(ctx, "failed to gc transaction record: %v", err)
 			}
-			if err != nil {
-				if ir.every.ShouldLog() {
-					log.Warningf(ctx, "failed to gc transaction record: %v", err)
-				}
-			}
-		})
+		}
+	}(ctx)
+	return nil
 }
 
 // ResolveOptions is used during intent resolution.

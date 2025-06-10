@@ -384,57 +384,58 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 	taskCtx = t.AnnotateCtx(taskCtx)
 	defer cancel()
 
-	if err := t.stopper.RunAsyncTaskEx(
-		taskCtx,
-		stop.TaskOpts{
-			TaskName: "storage.RaftTransport: processing batch",
-			SpanOpt:  stop.ChildSpan,
-		}, func(ctx context.Context) {
-			errCh <- func() error {
-				defer func() {
-					if fn := t.knobs.OnServerStreamDisconnected; fn != nil {
-						fn()
-					}
-				}()
-
-				stream := &lockedRaftMessageResponseStream{wrapped: stream}
-				for {
-					batch, err := stream.Recv()
-					if err != nil {
-						return err
-					}
-					if !batch.Now.IsEmpty() {
-						t.clock.Update(batch.Now)
-					}
-					if len(batch.AdmittedStates) != 0 {
-						// Dispatch the admitted vectors to RACv2.
-						// NB: we do this via this special path instead of using the
-						// handleRaftRequest path since we don't have a full-fledged
-						// RaftMessageRequest for each range (each of these responses could
-						// be for a different range), and because what we need to do w.r.t.
-						// queueing is much simpler (we don't need to worry about queue size
-						// since we only keep the highest admitted marks from each replica).
-						t.kvflowcontrol2.piggybackedResponseScheduler.
-							ScheduleAdmittedResponseForRangeRACv2(ctx, batch.AdmittedStates)
-					}
-					if len(batch.Requests) == 0 {
-						continue
-					}
-					for i := range batch.Requests {
-						req := &batch.Requests[i]
-						t.metrics.MessagesRcvd.Inc(1)
-						if pErr := t.handleRaftRequest(ctx, req, stream); pErr != nil {
-							if err := stream.Send(newRaftMessageResponse(req, pErr)); err != nil {
-								return err
-							}
-							t.metrics.ReverseSent.Inc(1)
-						}
-					}
-				}
-			}()
-		}); err != nil {
+	taskCtx, hdl, err := t.stopper.GetHandle(taskCtx, stop.TaskOpts{
+		TaskName: "storage.RaftTransport: processing batch",
+		SpanOpt:  stop.ChildSpan,
+	})
+	if err != nil {
 		return err
 	}
+	go func(ctx context.Context) {
+		defer hdl.Activate(ctx).Release(ctx)
+		errCh <- func() error {
+			defer func() {
+				if fn := t.knobs.OnServerStreamDisconnected; fn != nil {
+					fn()
+				}
+			}()
+
+			stream := &lockedRaftMessageResponseStream{wrapped: stream}
+			for {
+				batch, err := stream.Recv()
+				if err != nil {
+					return err
+				}
+				if !batch.Now.IsEmpty() {
+					t.clock.Update(batch.Now)
+				}
+				if len(batch.AdmittedStates) != 0 {
+					// Dispatch the admitted vectors to RACv2.
+					// NB: we do this via this special path instead of using the
+					// handleRaftRequest path since we don't have a full-fledged
+					// RaftMessageRequest for each range (each of these responses could
+					// be for a different range), and because what we need to do w.r.t.
+					// queueing is much simpler (we don't need to worry about queue size
+					// since we only keep the highest admitted marks from each replica).
+					t.kvflowcontrol2.piggybackedResponseScheduler.
+						ScheduleAdmittedResponseForRangeRACv2(ctx, batch.AdmittedStates)
+				}
+				if len(batch.Requests) == 0 {
+					continue
+				}
+				for i := range batch.Requests {
+					req := &batch.Requests[i]
+					t.metrics.MessagesRcvd.Inc(1)
+					if pErr := t.handleRaftRequest(ctx, req, stream); pErr != nil {
+						if err := stream.Send(newRaftMessageResponse(req, pErr)); err != nil {
+							return err
+						}
+						t.metrics.ReverseSent.Inc(1)
+					}
+				}
+			}
+		}()
+	}(taskCtx)
 
 	select {
 	case err := <-errCh:
@@ -553,30 +554,33 @@ func (t *RaftTransport) processQueue(
 
 	ctx := stream.Context()
 
-	if err := t.stopper.RunAsyncTask(
-		ctx, "storage.RaftTransport: processing queue",
-		func(ctx context.Context) {
-			errCh <- func() error {
-				for {
-					resp, err := stream.Recv()
-					if err != nil {
-						return err
-					}
-					t.metrics.ReverseRcvd.Inc(1)
-					incomingMessageHandler, ok := t.getIncomingRaftMessageHandler(resp.ToReplica.StoreID)
-					if !ok {
-						log.Warningf(ctx, "no handler found for store %s in response %s",
-							resp.ToReplica.StoreID, resp)
-						continue
-					}
-					if err := incomingMessageHandler.HandleRaftResponse(ctx, resp); err != nil {
-						return err
-					}
-				}
-			}()
-		}); err != nil {
+	goCtx, hdl, err := t.stopper.GetHandle(ctx, stop.TaskOpts{
+		TaskName: "storage.RaftTransport: processing queue",
+	})
+	if err != nil {
 		return err
 	}
+	go func(ctx context.Context) {
+		defer hdl.Activate(ctx).Release(ctx)
+		errCh <- func() error {
+			for {
+				resp, err := stream.Recv()
+				if err != nil {
+					return err
+				}
+				t.metrics.ReverseRcvd.Inc(1)
+				incomingMessageHandler, ok := t.getIncomingRaftMessageHandler(resp.ToReplica.StoreID)
+				if !ok {
+					log.Warningf(ctx, "no handler found for store %s in response %s",
+						resp.ToReplica.StoreID, resp)
+					continue
+				}
+				if err := incomingMessageHandler.HandleRaftResponse(ctx, resp); err != nil {
+					return err
+				}
+			}
+		}()
+	}(goCtx)
 
 	// For replication admission control v2.
 	maybeAnnotateWithAdmittedStates := func(
@@ -862,10 +866,9 @@ func (t *RaftTransport) startProcessNewQueue(
 			log.Warningf(ctx, "while processing outgoing Raft queue to node %d: %s:", toNodeID, err)
 		}
 	}
-	err := t.stopper.RunAsyncTask(ctx, "storage.RaftTransport: sending/receiving messages",
-		func(ctx context.Context) {
-			pprof.Do(ctx, pprof.Labels("remote_node_id", toNodeID.String()), worker)
-		})
+	ctx, hdl, err := t.stopper.GetHandle(ctx, stop.TaskOpts{
+		TaskName: "storage.RaftTransport: sending/receiving messages",
+	})
 	if err != nil {
 		t.connectionMu.Lock()
 		t.queues[class].Delete(toNodeID)
@@ -873,6 +876,10 @@ func (t *RaftTransport) startProcessNewQueue(
 		t.connectionMu.Unlock()
 		return false
 	}
+	go func(ctx context.Context) {
+		defer hdl.Activate(ctx).Release(ctx)
+		pprof.Do(ctx, pprof.Labels("remote_node_id", toNodeID.String()), worker)
+	}(ctx)
 	return true
 }
 
@@ -882,48 +889,52 @@ func (t *RaftTransport) startProcessNewQueue(
 // them, to prevent an unbounded accumulation of memory. This "connected
 // nodes" is a client-side view of the world.
 func (t *RaftTransport) startDroppingFlowTokensForDisconnectedNodes(ctx context.Context) error {
-	return t.stopper.RunAsyncTask(
-		ctx,
-		"kvserver.RaftTransport: drop flow tokens for disconnected nodes",
-		func(ctx context.Context) {
-			settingChangeCh := make(chan struct{}, 1)
-			kvadmission.FlowTokenDropInterval.SetOnChange(
-				&t.st.SV, func(ctx context.Context) {
-					select {
-					case settingChangeCh <- struct{}{}:
-					default:
-					}
-				})
-
-			var timer timeutil.Timer
-			defer timer.Stop()
-
-			for {
-				interval := kvadmission.FlowTokenDropInterval.Get(&t.st.SV)
-				if interval > 0 {
-					timer.Reset(interval)
-				} else {
-					// Disable the mechanism.
-					timer.Stop()
-				}
+	ctx, hdl, err := t.stopper.GetHandle(ctx, stop.TaskOpts{
+		TaskName: "kvserver.RaftTransport: drop flow tokens for disconnected nodes",
+	})
+	if err != nil {
+		return err
+	}
+	go func(ctx context.Context) {
+		defer hdl.Activate(ctx).Release(ctx)
+		settingChangeCh := make(chan struct{}, 1)
+		kvadmission.FlowTokenDropInterval.SetOnChange(
+			&t.st.SV, func(ctx context.Context) {
 				select {
-				case <-timer.C:
-					t.dropFlowTokensForDisconnectedNodes()
-					continue
-
-				case <-settingChangeCh:
-					// Loop around to use the updated timer.
-					continue
-
-				case <-ctx.Done():
-					return
-
-				case <-t.stopper.ShouldQuiesce():
-					return
+				case settingChangeCh <- struct{}{}:
+				default:
 				}
+			})
+
+		var timer timeutil.Timer
+		defer timer.Stop()
+
+		for {
+			interval := kvadmission.FlowTokenDropInterval.Get(&t.st.SV)
+			if interval > 0 {
+				timer.Reset(interval)
+			} else {
+				// Disable the mechanism.
+				timer.Stop()
 			}
-		},
-	)
+			select {
+			case <-timer.C:
+				t.dropFlowTokensForDisconnectedNodes()
+				continue
+
+			case <-settingChangeCh:
+				// Loop around to use the updated timer.
+				continue
+
+			case <-ctx.Done():
+				return
+
+			case <-t.stopper.ShouldQuiesce():
+				return
+			}
+		}
+	}(ctx)
+	return nil
 }
 
 // TestingDropFlowTokensForDisconnectedNodes exports
