@@ -1495,9 +1495,6 @@ func (tl *txnLock) writeTS() hlc.Timestamp {
 	// lock strength == lock.Exclusive. Note that unreplicated locks can't be held
 	// with lock strength lock.Intent.
 	if tl.isHeldUnreplicated() && tl.unreplicatedInfo.held(lock.Exclusive) {
-		// If there's both a write intent and an unreplicated exclusive lock, we want
-		// to prefer the lower of the two timestamps, since the lower timestamp
-		// blocks more non-locking readers.
 		return tl.unreplicatedInfo.ts
 	}
 	return hlc.MaxTimestamp
