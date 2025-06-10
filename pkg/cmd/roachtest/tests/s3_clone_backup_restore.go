@@ -27,21 +27,21 @@ import (
 type s3CloneSecureOption int
 
 const (
-	s3ClonePlain      s3CloneSecureOption = iota // Use HTTP
-	s3CloneRequireTLS                            // Use HTTPS, but skip certification verification.
-	s3CloneVerifyTLS                             // Use HTTPS and verify certificates.
+	s3ClonePlain             s3CloneSecureOption = iota // Use HTTP
+	s3CloneTLSWithSkipVerify                            // Use HTTPS, but skip certification verification.
+	s3CloneTLS                                          // Use HTTPS and verify certificates.
 )
 
-var s3CloneSecureOptions = []s3CloneSecureOption{s3ClonePlain, s3CloneRequireTLS, s3CloneVerifyTLS}
+var s3CloneSecureOptions = []s3CloneSecureOption{s3ClonePlain, s3CloneTLSWithSkipVerify, s3CloneTLS}
 
 func (o s3CloneSecureOption) String() string {
 	switch o {
 	case s3ClonePlain:
 		return "plain"
-	case s3CloneRequireTLS:
-		return "require"
-	case s3CloneVerifyTLS:
-		return "verify"
+	case s3CloneTLSWithSkipVerify:
+		return "tlsSkipVerify"
+	case s3CloneTLS:
+		return "tls"
 	default:
 		panic("invalid option")
 	}
