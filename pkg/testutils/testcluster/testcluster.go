@@ -346,6 +346,8 @@ func NewTestCluster(
 			serverArgs.Settings = cluster.TestingCloneClusterSettings(serverArgs.Settings)
 		}
 
+		serverutils.TryEnableDRPCSetting(context.Background(), t, &serverArgs)
+
 		// If a reusable listener registry is provided, create reusable listeners
 		// for every server that doesn't have a custom listener provided. (Only
 		// servers with a reusable listener can be restarted).
