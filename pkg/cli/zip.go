@@ -229,7 +229,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	var tenants []*serverpb.Tenant
 	if err := func() error {
 		s := zr.start("discovering virtual clusters")
-		conn, finish, err := getClientGRPCConn(ctx, serverCfg)
+		conn, finish, err := newClientConn(ctx, serverCfg)
 		if err != nil {
 			return s.fail(err)
 		}
@@ -237,12 +237,14 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 
 		var resp *serverpb.ListTenantsResponse
 		if err := timeutil.RunWithTimeout(context.Background(), "list virtual clusters", timeout, func(ctx context.Context) error {
-			resp, err = serverpb.NewAdminClient(conn).ListTenants(ctx, &serverpb.ListTenantsRequest{})
+			adminClient := conn.NewAdminClient()
+			resp, err = adminClient.ListTenants(ctx, &serverpb.ListTenantsRequest{})
 			return err
 		}); err != nil {
 			// For pre-v23.1 clusters, this endpoint in not implemented, proceed with
 			// only querying the system tenant.
-			resp, sErr := serverpb.NewStatusClient(conn).Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
+			statusClient := conn.NewStatusClient()
+			resp, sErr := statusClient.Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
 			if sErr != nil {
 				return s.fail(errors.CombineErrors(err, sErr))
 			}
@@ -286,14 +288,11 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			sqlAddr := tenant.SqlAddr
 
 			s := zr.start(redact.Sprintf("establishing RPC connection to %s", cfg.AdvertiseAddr))
-			conn, finish, err := getClientGRPCConn(ctx, cfg)
+			conn, finish, err := newClientConn(ctx, cfg)
 			if err != nil {
 				return s.fail(err)
 			}
 			defer finish()
-
-			status := serverpb.NewStatusClient(conn)
-			admin := serverpb.NewAdminClient(conn)
 			s.done()
 
 			if sqlAddr == "" {
@@ -345,8 +344,8 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 				clusterPrinter:   zr,
 				z:                z,
 				timeout:          timeout,
-				admin:            admin,
-				status:           status,
+				admin:            conn.NewAdminClient(),
+				status:           conn.NewStatusClient(),
 				firstNodeSQLConn: sqlConn,
 				sem:              semaphore.New(zipCtx.concurrency),
 				prefix:           debugBase + prefix,
