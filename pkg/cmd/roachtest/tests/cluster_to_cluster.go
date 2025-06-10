@@ -342,6 +342,7 @@ func (kv replicateKV) sourceRunCmd(tenantName string, nodes option.NodeListOptio
 		MaybeFlag(kv.debugRunDuration > 0, "duration", kv.debugRunDuration).
 		MaybeFlag(kv.maxQPS > 0, "max-rate", kv.maxQPS).
 		MaybeFlag(kv.readOnly, "prepare-read-only", true).
+		Option("zipfian").
 		Arg("{pgurl%s:%s}", nodes, tenantName).
 		WithEqualsSyntax()
 	return cmd.String()
