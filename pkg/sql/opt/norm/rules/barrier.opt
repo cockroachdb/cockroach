@@ -8,9 +8,12 @@
 # the same configuration.
 [EliminateRedundantBarrier, Normalize]
 (Barrier
-    (Barrier $input:* $innerBarrierPrivate:*)
-    $outerBarrierPrivate:* &
-        (BarriersEqual $innerBarrierPrivate $outerBarrierPrivate)
+    (Barrier $input:* $innerLeakproofPermeable:*)
+    $outerLeakproofPermeable:* &
+        (EqualsBool
+            $innerLeakproofPermeable
+            $outerLeakproofPermeable
+        )
 )
 =>
-(Barrier $input $outerBarrierPrivate)
+(Barrier $input $outerLeakproofPermeable)
