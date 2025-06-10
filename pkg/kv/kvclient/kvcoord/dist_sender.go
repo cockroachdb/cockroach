@@ -1503,11 +1503,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	qiBatchIdx := batchIdx + 1
 	qiResponseCh := make(chan response, 1)
 
-	runTask := ds.stopper.RunAsyncTask
-	if ds.disableParallelBatches {
-		runTask = ds.stopper.RunTask
-	}
-	if err := runTask(ctx, "kv.DistSender: sending pre-commit query intents", func(ctx context.Context) {
+	sendPreCommit := func(ctx context.Context) {
 		// Map response index to the original un-swapped batch index.
 		// Remember that we moved the last QueryIntent in this batch
 		// from swapIdx to the end.
@@ -1530,8 +1526,24 @@ func (ds *DistSender) divideAndSendParallelCommit(
 		// concurrently with the EndTxn batch below.
 		reply, pErr := ds.divideAndSendBatchToRanges(ctx, qiBa, qiRS, qiIsReverse, true /* withCommit */, qiBatchIdx)
 		qiResponseCh <- response{reply: reply, positions: positions, pErr: pErr}
-	}); err != nil {
-		return nil, kvpb.NewError(err)
+	}
+
+	const taskName = "kv.DistSender: sending pre-commit query intents"
+	if ds.disableParallelBatches {
+		if err := ds.stopper.RunTask(ctx, taskName, sendPreCommit); err != nil {
+			return nil, kvpb.NewError(err)
+		}
+	} else {
+		ctx, hdl, err := ds.stopper.GetHandle(ctx, stop.TaskOpts{
+			TaskName: taskName,
+		})
+		if err != nil {
+			return nil, kvpb.NewError(err)
+		}
+		go func(ctx context.Context) {
+			defer hdl.Activate(ctx).Release(ctx)
+			sendPreCommit(ctx)
+		}(ctx)
 	}
 
 	// Adjust the original batch request to ignore the pre-commit
@@ -2069,26 +2081,25 @@ func (ds *DistSender) sendPartialBatchAsync(
 	responseCh chan response,
 	positions []int,
 ) bool {
-	if err := ds.stopper.RunAsyncTaskEx(
-		ctx,
-		stop.TaskOpts{
-			TaskName:   "kv.DistSender: sending partial batch",
-			SpanOpt:    stop.ChildSpan,
-			Sem:        ds.asyncSenderSem,
-			WaitForSem: false,
-		},
-		func(ctx context.Context) {
-			ds.metrics.AsyncSentCount.Inc(1)
-			ds.metrics.AsyncInProgress.Inc(1)
-			defer ds.metrics.AsyncInProgress.Dec(1)
-			resp := ds.sendPartialBatch(ctx, ba, rs, isReverse, withCommit, batchIdx, routing)
-			resp.positions = positions
-			responseCh <- resp
-		},
-	); err != nil {
+	ctx, hdl, err := ds.stopper.GetHandle(ctx, stop.TaskOpts{
+		TaskName:   "kv.DistSender: sending partial batch",
+		SpanOpt:    stop.ChildSpan,
+		Sem:        ds.asyncSenderSem,
+		WaitForSem: false,
+	})
+	if err != nil {
 		ds.metrics.AsyncThrottledCount.Inc(1)
 		return false
 	}
+	go func(ctx context.Context) {
+		defer hdl.Activate(ctx).Release(ctx)
+		ds.metrics.AsyncSentCount.Inc(1)
+		ds.metrics.AsyncInProgress.Inc(1)
+		defer ds.metrics.AsyncInProgress.Dec(1)
+		resp := ds.sendPartialBatch(ctx, ba, rs, isReverse, withCommit, batchIdx, routing)
+		resp.positions = positions
+		responseCh <- resp
+	}(ctx)
 	return true
 }
 

@@ -178,9 +178,17 @@ func (sm *SupportManager) Start(ctx context.Context) error {
 		return err
 	}
 
-	return sm.stopper.RunAsyncTask(
-		ctx, "storeliveness.SupportManager: loop", sm.startLoop,
-	)
+	ctx, hdl, err := sm.stopper.GetHandle(ctx, stop.TaskOpts{
+		TaskName: "storeliveness.SupportManager: loop",
+	})
+	if err != nil {
+		return err
+	}
+	go func(ctx context.Context) {
+		defer hdl.Activate(ctx).Release(ctx)
+		sm.startLoop(ctx)
+	}(ctx)
+	return nil
 }
 
 // onRestart initializes the SupportManager with state persisted on disk.

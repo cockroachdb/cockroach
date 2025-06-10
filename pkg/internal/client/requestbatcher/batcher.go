@@ -242,9 +242,16 @@ func New(cfg Config) *RequestBatcher {
 	}
 	b.sendBatchOpName = redact.Sprintf("%s.sendBatch", b.cfg.Name)
 	bgCtx := cfg.AmbientCtx.AnnotateCtx(context.Background())
-	if err := cfg.Stopper.RunAsyncTask(bgCtx, b.cfg.Name.StripMarkers(), b.run); err != nil {
+	bgCtx, hdl, err := cfg.Stopper.GetHandle(bgCtx, stop.TaskOpts{
+		TaskName: b.cfg.Name.StripMarkers(),
+	})
+	if err != nil {
 		panic(err)
 	}
+	go func(ctx context.Context) {
+		defer hdl.Activate(ctx).Release(ctx)
+		b.run(ctx)
+	}(bgCtx)
 	return b
 }
 
@@ -342,7 +349,7 @@ func (b *RequestBatcher) sendDone(ba *batch) {
 }
 
 func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
-	if err := b.cfg.Stopper.RunAsyncTask(ctx, "send-batch", func(ctx context.Context) {
+	work := func(ctx context.Context) {
 		defer b.sendDone(ba)
 		var batchRequest *kvpb.BatchRequest
 		var br *kvpb.BatchResponse
@@ -426,9 +433,19 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 			}
 			ba.reqs, prevResps = nextReqs, nextPrevResps
 		}
-	}); err != nil {
-		b.sendDone(ba)
 	}
+
+	ctx, hdl, err := b.cfg.Stopper.GetHandle(ctx, stop.TaskOpts{
+		TaskName: "send-batch",
+	})
+	if err != nil {
+		b.sendDone(ba)
+		return
+	}
+	go func(ctx context.Context) {
+		defer hdl.Activate(ctx).Release(ctx)
+		work(ctx)
+	}(ctx)
 }
 
 func (b *RequestBatcher) sendResponse(req *request, resp Response) {

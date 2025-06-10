@@ -284,27 +284,16 @@ func newRaftSchedulerShard(numWorkers int, maxTicks int64) *raftSchedulerShard {
 }
 
 func (s *raftScheduler) Start(stopper *stop.Stopper) {
-	ctx := s.ambientContext.AnnotateCtx(context.Background())
-	waitQuiesce := func(context.Context) {
-		<-stopper.ShouldQuiesce()
+	stopper.OnQuiesce(func() {
 		for _, shard := range s.shards {
 			shard.Lock()
 			shard.stopped = true
 			shard.Unlock()
 			shard.cond.Broadcast()
 		}
-	}
-	if err := stopper.RunAsyncTaskEx(ctx,
-		stop.TaskOpts{
-			TaskName: "raftsched-wait-quiesce",
-			// This task doesn't reference a parent because it runs for the server's
-			// lifetime.
-			SpanOpt: stop.SterileRootSpan,
-		},
-		waitQuiesce); err != nil {
-		waitQuiesce(ctx)
-	}
+	})
 
+	ctx := s.ambientContext.AnnotateCtx(context.Background())
 	for _, shard := range s.shards {
 		s.done.Add(shard.numWorkers)
 		f := func(ctx context.Context, hdl *stop.Handle) {

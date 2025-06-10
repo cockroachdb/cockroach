@@ -499,17 +499,26 @@ func (tc *txnCommitter) makeTxnCommitExplicitAsync(
 	if multitenant.HasTenantCostControlExemption(ctx) {
 		asyncCtx = multitenant.WithTenantCostControlExemption(asyncCtx)
 	}
-	if err := tc.stopper.RunAsyncTask(
-		asyncCtx, "txnCommitter: making txn commit explicit", func(ctx context.Context) {
-			tc.mu.Lock()
-			defer tc.mu.Unlock()
-			if err := makeTxnCommitExplicitLocked(ctx, tc.wrapped, txn, lockSpans); err != nil {
-				log.Errorf(ctx, "making txn commit explicit failed for %s: %v", txn, err)
-			}
-		},
-	); err != nil {
-		log.VErrEventf(ctx, 1, "failed to make txn commit explicit: %v", err)
+
+	work := func(ctx context.Context) {
+		tc.mu.Lock()
+		defer tc.mu.Unlock()
+		if err := makeTxnCommitExplicitLocked(ctx, tc.wrapped, txn, lockSpans); err != nil {
+			log.Errorf(ctx, "making txn commit explicit failed for %s: %v", txn, err)
+		}
 	}
+
+	asyncCtx, hdl, err := tc.stopper.GetHandle(asyncCtx, stop.TaskOpts{
+		TaskName: "txnCommitter: making txn commit explicit",
+	})
+	if err != nil {
+		log.VErrEventf(ctx, 1, "failed to make txn commit explicit: %v", err)
+		return
+	}
+	go func(ctx context.Context) {
+		defer hdl.Activate(ctx).Release(ctx)
+		work(ctx)
+	}(asyncCtx)
 }
 
 func makeTxnCommitExplicitLocked(
