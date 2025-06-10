@@ -19,15 +19,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type triggerIdPair struct {
+type tableTriggerPair struct {
 	triggerID int64
 	tableID   int64
 }
 
 func getTriggerIds(
 	ctx context.Context, evalPlanner eval.Planner, txn *kv.Txn, dbName string, acc *mon.BoundAccount,
-) (triggerIds []triggerIdPair, retErr error) { //TODO: Check up on ID field names etc
-	//TODO: Want to get (trigger_id, table_id)
+) (triggerIds []tableTriggerPair, retErr error) { //TODO: Check up on ID field names etc
 	query := fmt.Sprintf(`
 SELECT trigger_id, table_id 
 FROM %s.crdb_internal.create_trigger_statements 
@@ -50,7 +49,7 @@ WHERE database_name=$1`, lexbase.EscapeSQLIdent(dbName))
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		triggerID := tree.MustBeDInt(it.Cur()[0])
 		tableID := tree.MustBeDInt(it.Cur()[1])
-		pair := triggerIdPair{int64(triggerID), int64(tableID)}
+		pair := tableTriggerPair{int64(triggerID), int64(tableID)}
 		triggerIds = append(triggerIds, pair)
 		if err = acc.Grow(ctx, int64(unsafe.Sizeof(pair))); err != nil {
 			return nil, err
@@ -66,9 +65,15 @@ func getTriggerCreateStatement(
 	ctx context.Context,
 	evalPlanner eval.Planner,
 	txn *kv.Txn,
-	triggerIDPair triggerIdPair,
+	tableTriggerIds tableTriggerPair,
 	dbName string,
 ) (_ tree.Datum, err error) {
+	// Here, we query by `table_id` since `crdb_internal.create_trigger_statements`
+	// only has `table_id` as an index, due to it not currently being possible to index by
+	// two columns on a virtual table. It's worth noting that
+	// trigger IDs are only unique within a table, but not between tables.
+	// Therefore, we then iterate over the rows matching the `table_id` to find
+	// the corresponding `trigger_id` for the trigger.
 	query := fmt.Sprintf(`
 SELECT create_statement, trigger_id
 FROM %s.crdb_internal.create_trigger_statements
@@ -78,7 +83,7 @@ WHERE table_id = $1`, lexbase.EscapeSQLIdent(dbName))
 		"crdb_internal.show_create_all_triggers",
 		sessiondata.NoSessionDataOverride,
 		query,
-		triggerIDPair.tableID)
+		tableTriggerIds.tableID)
 	if err != nil {
 		return nil, err
 	}
@@ -97,16 +102,13 @@ WHERE table_id = $1`, lexbase.EscapeSQLIdent(dbName))
 		}
 		row := iter.Cur()
 		if len(row) != 2 {
-			return nil, errors.Newf("expected 2 columns in result, got %d", len(row))
+			return nil, errors.AssertionFailedf("expected 2 columns in result, got %d", len(row))
 		}
-		if tree.MustBeDInt(row[1]) != tree.DInt(triggerIDPair.triggerID) {
+		if tree.MustBeDInt(row[1]) != tree.DInt(tableTriggerIds.triggerID) {
 			continue
 		}
 		return row[0], nil
 	}
 
-	if err != nil {
-		return nil, err
-	}
 	return nil, nil
 }
