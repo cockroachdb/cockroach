@@ -8,6 +8,7 @@ package kvnemesis
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"math/rand"
 	"os"
 	"testing"
@@ -437,6 +438,13 @@ func testKVNemesisImpl(t *testing.T, cfg kvnemesisTestCfg) {
 	ctx := context.Background()
 	tr := &SeqTracker{}
 	tc := testcluster.StartTestCluster(t, cfg.numNodes, cfg.testClusterArgs(ctx, tr))
+	defer func() {
+		if w, unlock := tc.GetFirstStoreFromServer(t, 0).WAG(); w != nil {
+			defer unlock()
+			fmt.Printf("%+v\n", w.Nodes)
+		}
+	}()
+
 	defer tc.Stopper().Stop(ctx)
 	dbs, sqlDBs := make([]*kv.DB, cfg.numNodes), make([]*gosql.DB, cfg.numNodes)
 	for i := 0; i < cfg.numNodes; i++ {

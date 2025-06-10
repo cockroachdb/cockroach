@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/snaprecv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
@@ -927,6 +928,11 @@ type Store struct {
 	// metricsMu protects the collection and update of engine metrics.
 	metricsMu syncutil.Mutex
 
+	wagMu struct {
+		syncutil.Mutex
+		wag *wag.WAG
+	}
+
 	coalescedMu struct {
 		syncutil.Mutex
 		heartbeats         map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat
@@ -1154,6 +1160,11 @@ type Store struct {
 
 	// diskMonitor provides metrics for the disk associated with this store.
 	diskMonitor *disk.Monitor
+}
+
+func (s *Store) WAG() (*wag.WAG, func()) {
+	s.wagMu.Lock()
+	return s.wagMu.wag, s.wagMu.Unlock
 }
 
 var _ kv.Sender = &Store{}
@@ -1595,6 +1606,8 @@ func NewStore(
 	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat{}
 	s.coalescedMu.heartbeatResponses = map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat{}
 	s.coalescedMu.Unlock()
+
+	s.wagMu.wag = &wag.WAG{}
 
 	s.mu.Lock()
 	s.mu.replicaPlaceholders = map[roachpb.RangeID]*ReplicaPlaceholder{}

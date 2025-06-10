@@ -10,6 +10,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -31,6 +32,7 @@ func splitPreApply(
 	ctx context.Context,
 	r *Replica,
 	readWriter storage.ReadWriter,
+	addr wag.LogAddr,
 	split roachpb.SplitTrigger,
 	initClosedTS *hlc.Timestamp,
 ) {
@@ -152,6 +154,10 @@ func splitPreApply(
 	initClosedTS.Forward(r.GetCurrentClosedTimestamp(ctx))
 	if err := rsl.SetClosedTimestamp(ctx, readWriter, *initClosedTS); err != nil {
 		log.Fatalf(ctx, "%s", err)
+	}
+	if w, unlock := r.store.WAG(); w != nil {
+		w.Split(wag.FullAddr{RangeID: r.RangeID, LogAddr: addr})
+		defer unlock()
 	}
 }
 
