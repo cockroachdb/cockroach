@@ -670,6 +670,11 @@ message LocalOnlySessionData {
   // OptimizerUseExistsFilterHoistRule, when true, causes the optimizer to apply
   // the HoistUnboundFilterFromExistsSubquery rule to EXISTS conditions.
   bool optimizer_use_exists_filter_hoist_rule = 170;
+  // OptimizerAlwaysUseCascadeFastPathForRBRTables, when true, causes the optimizer
+  // to unconditionally attempt to apply the fast path for cascading deletes.
+  // See also #146705.
+  bool optimizer_always_use_cascade_fast_path_for_rbr_tables = 171 [(gogoproto.customname) = "OptimizerAlwaysUseCascadeFastPathForRBRTables"];;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
