@@ -10333,6 +10333,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_google_cloud_go_profiler",
+        build_file_proto_mode = "disable_global",
+        importpath = "cloud.google.com/go/profiler",
+        sha256 = "9d9a400c033e16229a326a7ec3397c09d1949bf924c33ed38fecf413958d38ae",
+        strip_prefix = "cloud.google.com/go/profiler@v0.4.2",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/cloud.google.com/go/profiler/com_google_cloud_go_profiler-v0.4.2.zip",
+        ],
+    )
+    go_repository(
         name = "com_google_cloud_go_pubsub",
         build_file_proto_mode = "disable_global",
         importpath = "cloud.google.com/go/pubsub",

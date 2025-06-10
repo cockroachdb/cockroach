@@ -21,3 +21,13 @@ var ActiveQueryDumpsEnabled = settings.RegisterBoolSetting(
 	"experimental: enable dumping of anonymized active queries to disk when node is under memory pressure",
 	true,
 	settings.WithPublic)
+
+// GoogleCloudProfilerEnabled controls whether Google Cloud Profiler is enabled.
+// When enabled, the profiler will send profiling data to Google Cloud Profiler
+// service. This should typically only be enabled on GCP clusters.
+var GoogleCloudProfilerEnabled = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"diagnostics.google_cloud_profiler.enabled",
+	"enable Google Cloud Profiler to send profiling data to GCP (typically only useful on GCP clusters)",
+	false, /* disabled by default, enabled dynamically based on cloud provider */
+	settings.WithPublic)
