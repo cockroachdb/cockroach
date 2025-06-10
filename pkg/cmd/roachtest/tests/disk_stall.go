@@ -444,7 +444,7 @@ func registerDiskStalledWALFailoverWithProgress(r registry.Registry) {
 func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	const (
 		testDuration = 1 * time.Hour
-		// We'll issue short stalls every 10s to keep us in the failover state.
+		// We'll issue short stalls every 5s to keep us in the failover state.
 		stallInterval = 5 * time.Second
 		shortStallDur = 200 * time.Millisecond
 		// For each loop, each operation will start after a random wait between [30s, 150s).
@@ -560,13 +560,13 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 			select {
 			case <-ctx.Done():
 				t.Fatalf("context done before workload started: %s", ctx.Err())
-			case <-time.After(20 * time.Second):
+			case <-time.After(30 * time.Second):
 				t.Status("starting QPS sampling")
 			}
 
-			// Calculate approx how many samples we can take before workload ends.
 			// We want to stop sampling 10s before workload ends to avoid sampling during shutdown.
-			samplingDuration := operationDur - 30*time.Second // 20s initial wait + 10s buffer at workload end
+			// We'll take approx. 14 samples with this configuration.
+			samplingDuration := operationDur - 40*time.Second // 30s initial wait + 10s buffer at workload end
 			sampleCount := int(samplingDuration / sampleInterval)
 
 			sampleTimer := time.NewTicker(sampleInterval)
@@ -620,19 +620,24 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 					t.Status("starting disk stall")
 				}
 				stallStart := timeutil.Now()
-				// Execute short 200ms stalls every 10s.
+				// Execute short 200ms stalls every 5s.
 				for timeutil.Since(stallStart) < operationDur {
 					select {
 					case <-ctx.Done():
 						t.Fatalf("context done while stall induced: %s", ctx.Err())
 					case <-time.After(stallInterval):
 						func() {
-							s.Stall(ctx, c.Node(1))
 							t.Status("short disk stall on n1")
+							s.Stall(ctx, c.Node(1))
 							defer func() {
+								// NB: We use a background context in the defer'ed unstall command,
+								// otherwise on test failure our Unstall calls will be ignored. Leaving
+								// the disk stalled will prevent artifact collection, making debugging
+								// difficult.
 								ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 								defer cancel()
 								s.Unstall(ctx, c.Node(1))
+								t.Status("unstalled disk on n1")
 							}()
 							select {
 							case <-ctx.Done():
