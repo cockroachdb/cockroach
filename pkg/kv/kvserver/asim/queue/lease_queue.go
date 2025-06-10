@@ -12,7 +12,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -25,12 +24,12 @@ import (
 type leaseQueue struct {
 	baseQueue
 	plan.ReplicaPlanner
-	storePool     storepool.AllocatorStorePool
-	planner       plan.ReplicationPlanner
-	clock         *hlc.Clock
-	settings      *config.SimulationSettings
-	as            *kvserver.AllocatorSync
-	lastChangeIDs []mma.ChangeID
+	storePool        storepool.AllocatorStorePool
+	planner          plan.ReplicationPlanner
+	clock            *hlc.Clock
+	settings         *config.SimulationSettings
+	as               *kvserver.AllocatorSync
+	lastSyncChangeID kvserver.SyncChangeID
 }
 
 // NewLeaseQueue returns a new lease queue.
@@ -115,9 +114,9 @@ func (lq *leaseQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 		lq.next = lq.lastTick
 	}
 
-	if !tick.Before(lq.next) && lq.lastChangeIDs != nil {
-		lq.as.PostApply(lq.lastChangeIDs, true /* success */)
-		lq.lastChangeIDs = nil
+	if !tick.Before(lq.next) && lq.lastSyncChangeID.IsValid() {
+		lq.as.PostApply(lq.lastSyncChangeID, true /* success */)
+		lq.lastSyncChangeID = kvserver.InvalidSyncChangeID
 	}
 
 	for !tick.Before(lq.next) && lq.priorityQueue.Len() != 0 {
@@ -159,7 +158,7 @@ func (lq *leaseQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 			continue
 		}
 
-		lq.next, lq.lastChangeIDs = pushReplicateChange(
+		lq.next, lq.lastSyncChangeID = pushReplicateChange(
 			ctx, change, repl, tick, lq.settings.ReplicaChangeDelayFn(), lq.baseQueue.stateChanger, lq.as)
 	}
 

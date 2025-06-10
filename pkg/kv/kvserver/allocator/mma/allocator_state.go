@@ -529,6 +529,12 @@ func (a *allocatorState) AdjustPendingChangesDisposition(changeIDs []ChangeID, s
 
 // RegisterExternalChanges implements the Allocator interface.
 func (a *allocatorState) RegisterExternalChanges(changes []ReplicaChange) []ChangeID {
+	for _, change := range changes {
+		// TODO(wenyihu6): or has no pending ranges
+		if !a.cs.hasRange(change.rangeID) {
+			return nil
+		}
+	}
 	pendingChanges := a.cs.createPendingChanges(changes...)
 	changeIDs := make([]ChangeID, len(pendingChanges))
 	for i, pendingChange := range pendingChanges {

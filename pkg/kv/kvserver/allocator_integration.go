@@ -17,6 +17,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+type SyncChangeID uint64
+
+const InvalidSyncChangeID SyncChangeID = 0
+
+func (id SyncChangeID) IsValid() bool {
+	return id != 0
+}
+
 // The expected usage for the non-mma components is:
 // changeIDs := allocatorSync.NonMMA(PreTransferLease|PreChangeReplicas)()
 // // Actually apply the change, or when simulating, queue up the change to be
@@ -32,14 +40,15 @@ import (
 type AllocatorSync struct {
 	sp             *storepool.StorePool
 	mmAllocator    mma.Allocator
-	trackedChanges map[mma.ChangeID]trackedAllocatorChange
+	changeSeqGen   SyncChangeID
+	trackedChanges map[SyncChangeID]trackedAllocatorChange
 }
 
 func NewAllocatorSync(sp *storepool.StorePool, mmAllocator mma.Allocator) *AllocatorSync {
 	return &AllocatorSync{
 		sp:             sp,
 		mmAllocator:    mmAllocator,
-		trackedChanges: make(map[mma.ChangeID]trackedAllocatorChange),
+		trackedChanges: make(map[SyncChangeID]trackedAllocatorChange),
 	}
 }
 
@@ -71,7 +80,7 @@ func (as *AllocatorSync) NonMMAPreTransferLease(
 	desc *roachpb.RangeDescriptor,
 	usage allocator.RangeUsageInfo,
 	transferFrom, transferTo roachpb.ReplicationTarget,
-) []mma.ChangeID {
+) SyncChangeID {
 	existingReplicas := make([]mma.StoreIDAndReplicaState, len(desc.InternalReplicas))
 	for i, replica := range desc.Replicas().Descriptors() {
 		existingReplicas[i] = allocator.ReplicaDescriptorToReplicaIDAndType(replica, transferFrom.StoreID)
@@ -113,8 +122,9 @@ func (as *AllocatorSync) NonMMAPreTransferLease(
 	}
 	// We only track one of the changeIDs, since they are the same for both
 	// lease transfer.
-	as.trackedChanges[changeIDs[0]] = trackedChange
-	return changeIDs
+	syncChangeID := as.newSyncChangeID()
+	as.trackedChanges[syncChangeID] = trackedChange
+	return syncChangeID
 }
 
 func (as *AllocatorSync) NonMMAPreChangeReplicas(
@@ -122,7 +132,7 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 	usage allocator.RangeUsageInfo,
 	changes kvpb.ReplicationChanges,
 	leaseholder roachpb.StoreID,
-) []mma.ChangeID {
+) SyncChangeID {
 	rLoad := allocator.UsageInfoToMMALoad(usage)
 	replicaChanges := make([]mma.ReplicaChange, 0, len(changes))
 	replicaSet := desc.Replicas()
@@ -184,6 +194,9 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 	log.Infof(context.Background(), "registering external replica change: chgs=%v usage=%v changes=%v",
 		changes, usage, replicaChanges)
 	changeIDs := as.mmAllocator.RegisterExternalChanges(replicaChanges)
+	if changeIDs == nil {
+		log.Info(context.Background(), "cluster does not have a range for the external replica change, skipping")
+	}
 	trackedChange := trackedAllocatorChange{
 		typ:       AllocatorChangeTypeChangeReplicas,
 		usage:     usage,
@@ -192,9 +205,15 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 	}
 	log.Infof(context.Background(), "registered external replica change: chgs=%v change_ids=%v",
 		changes, changeIDs)
-	as.trackedChanges[changeIDs[0]] = trackedChange
-	return changeIDs
 
+	syncChangeID := as.newSyncChangeID()
+	as.trackedChanges[syncChangeID] = trackedChange
+	return syncChangeID
+}
+
+func (as *AllocatorSync) newSyncChangeID() SyncChangeID {
+	as.changeSeqGen += 1
+	return as.changeSeqGen
 }
 
 func (as *AllocatorSync) NonMMAPreRelocateRange(
@@ -209,7 +228,7 @@ func (as *AllocatorSync) NonMMAPreRelocateRange(
 // cluster.
 func (as *AllocatorSync) MMAPreApply(
 	usage allocator.RangeUsageInfo, pendingChange mma.PendingRangeChange,
-) {
+) SyncChangeID {
 	var trackedChange trackedAllocatorChange
 	trackedChange.usage = usage
 	trackedChange.changeIDs = pendingChange.ChangeIDs()
@@ -222,32 +241,25 @@ func (as *AllocatorSync) MMAPreApply(
 	} else {
 		panic("unexpected change type")
 	}
-	changeIDs := pendingChange.ChangeIDs()
-	as.trackedChanges[changeIDs[0]] = trackedChange
+	syncChangeID := as.newSyncChangeID()
+	as.trackedChanges[syncChangeID] = trackedChange
+	return syncChangeID
 }
 
 // PostApply is called after changes have been applied to the cluster, by both
 // the old allocator components (lease queue, replicate queue and store
 // rebalancer), as well as the new mma.Allocator.
-func (as *AllocatorSync) PostApply(changeIDs []mma.ChangeID, success bool) {
-	as.mmAllocator.AdjustPendingChangesDisposition(changeIDs, success)
-
-	if len(changeIDs) == 0 {
-		// No changes to apply, nothing to do.
-		return
-	}
-
-	trackedChangeID := changeIDs[0]
-	tracked, ok := as.trackedChanges[trackedChangeID]
+func (as *AllocatorSync) PostApply(syncChangeID SyncChangeID, success bool) {
+	trackedChange := as.trackedChanges[syncChangeID]
+	tracked, ok := as.trackedChanges[syncChangeID]
 	if !ok {
-		// Deleted in a previous iteration, see below.
-		panic(fmt.Sprintf("changeID %d not found in tracked changes", trackedChangeID))
+		panic("PostApply called with unknown SyncChangeID")
 	}
-	delete(as.trackedChanges, trackedChangeID)
-	if !success {
-		// Don't need to update the storepool stats if the change failed.
-		return
+	if changeIDs := trackedChange.changeIDs; changeIDs != nil {
+		as.mmAllocator.AdjustPendingChangesDisposition(changeIDs, success)
 	}
+	delete(as.trackedChanges, syncChangeID)
+
 	switch tracked.typ {
 	case AllocatorChangeTypeLeaseTransfer:
 		as.sp.UpdateLocalStoresAfterLeaseTransfer(tracked.transferFrom,
