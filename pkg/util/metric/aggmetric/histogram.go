@@ -222,7 +222,7 @@ func NewSQLHistogram(opts metric.HistogramOptions) *SQLHistogram {
 		h:      create(),
 		create: create,
 	}
-	s.SQLMetric = NewSummaryMetric()
+	s.SQLMetric = NewSQLMetric(metric.LabelConfigDisabled)
 	s.ticker.Ticker = tick.NewTicker(
 		now(),
 		opts.Duration/metric.WindowedHistogramWrapNum,

@@ -413,7 +413,7 @@ var _ metric.WindowedHistogram = (*SQLHistogram)(nil)
 var _ metric.CumulativeHistogram = (*SQLHistogram)(nil)
 
 // NewSummaryHistogram constructs a new SummaryHistogram.
-func NewSummaryHistogram(opts metric.HistogramOptions) *SummaryHistogram {
+func NewSummaryHistogram(opts metric.HistogramOptions, childLabels ...string) *SummaryHistogram {
 	create := func() metric.IHistogram {
 		return metric.NewHistogram(opts)
 	}
@@ -421,7 +421,7 @@ func NewSummaryHistogram(opts metric.HistogramOptions) *SummaryHistogram {
 		h:      create(),
 		create: create,
 	}
-	s.SummaryMetric = NewSummaryHistogram(metric.LabelConfigDisabled)
+	s.SummaryMetric = NewSummaryMetric(childLabels)
 	s.ticker.Ticker = tick.NewTicker(
 		now(),
 		opts.Duration/metric.WindowedHistogramWrapNum,
@@ -440,6 +440,15 @@ func NewSummaryHistogram(opts metric.HistogramOptions) *SummaryHistogram {
 			})
 		})
 	return s
+}
+
+// apply applies the given applyFn to every item in children
+func (h *SummaryHistogram) apply(applyFn func(childMetric ChildMetric)) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.mu.children.ForEach(func(metric ChildMetric) {
+		applyFn(metric.(*ComponentHistogram))
+	})
 }
 
 // GetType is part of the metric.PrometheusExportable interface.
@@ -525,12 +534,7 @@ func (ch *ComponentHistogram) labelValues() []string {
 
 // ToPrometheusMetric constructs a prometheus metric for this Histogram.
 func (ch *ComponentHistogram) ToPrometheusMetric() *io_prometheus_client.Metric {
-	return &io_prometheus_client.Metric{
-		Histogram: &io_prometheus_client.Histogram{
-			SampleCount: proto.Uint64(uint64(ch.histogram.TotalCount())),
-			SampleSum:   proto.Float64(float64(ch.histogram.TotalSum())),
-		},
-	}
+	return ch.histogram.ToPrometheusMetric()
 }
 
 // RecordValue records a value in the ComponentHistogram.
