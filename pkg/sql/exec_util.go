@@ -4194,6 +4194,10 @@ func (m *sessionDataMutator) SetUseImprovedRoutineDependencyTracking(val bool) {
 	m.data.UseImprovedRoutineDependencyTracking = val
 }
 
+func (m *sessionDataMutator) SetOptimizerDisableCrossRegionCascadeFastPathForRBRTables(val bool) {
+	m.data.OptimizerDisableCrossRegionCascadeFastPathForRBRTables = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

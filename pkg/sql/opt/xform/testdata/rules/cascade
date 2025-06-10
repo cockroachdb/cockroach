@@ -1013,9 +1013,70 @@ root
                           │    └── fd: ()-->(36,37)
                           └── filters (true)
 
-# TODO(146705) the delete cascade fast-path prevents the cascade from being
-# limited to the parent row's region.
+# Avoid using the delete cascade fast-path because it would be unable to
+# constrain the region column to a single value.
 opt-post-queries locality=(region=east)
+DELETE FROM parent WHERE k = 1
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: k:6 crdb_region:8
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_crdb_region_b_fkey
+ │    ├── cardinality: [0 - 0]
+ │    ├── volatile, mutations
+ │    └── locality-optimized-search
+ │         ├── columns: k:6!null crdb_region:8!null
+ │         ├── left columns: k:11 crdb_region:13
+ │         ├── right columns: k:16 crdb_region:18
+ │         ├── cardinality: [0 - 1]
+ │         ├── key: ()
+ │         ├── fd: ()-->(6,8)
+ │         ├── scan parent
+ │         │    ├── columns: k:11!null crdb_region:13!null
+ │         │    ├── constraint: /13/11: [/'east'/1 - /'east'/1]
+ │         │    ├── flags: avoid-full-scan
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── key: ()
+ │         │    └── fd: ()-->(11,13)
+ │         └── scan parent
+ │              ├── columns: k:16!null crdb_region:18!null
+ │              ├── constraint: /18/16
+ │              │    ├── [/'central'/1 - /'central'/1]
+ │              │    └── [/'west'/1 - /'west'/1]
+ │              ├── flags: avoid-full-scan
+ │              ├── cardinality: [0 - 1]
+ │              ├── key: ()
+ │              └── fd: ()-->(16,18)
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: a:16 b:17 child.crdb_region:18
+           ├── cardinality: [0 - 0]
+           ├── volatile, mutations
+           └── project
+                ├── columns: a:16!null b:17!null child.crdb_region:18!null
+                ├── key: (16)
+                ├── fd: (16)-->(17,18)
+                └── inner-join (lookup child@child_crdb_region_b_idx)
+                     ├── columns: a:16!null b:17!null child.crdb_region:18!null crdb_region:21!null k:22!null
+                     ├── key columns: [21 22] = [18 17]
+                     ├── key: (16)
+                     ├── fd: ()-->(17,18,21,22), (18)==(21), (21)==(18), (17)==(22), (22)==(17)
+                     ├── with-scan &1
+                     │    ├── columns: crdb_region:21!null k:22!null
+                     │    ├── mapping:
+                     │    │    ├──  parent.crdb_region:8 => crdb_region:21
+                     │    │    └──  parent.k:6 => k:22
+                     │    ├── cardinality: [0 - 1]
+                     │    ├── key: ()
+                     │    └── fd: ()-->(21,22)
+                     └── filters (true)
+
+# Disabling the setting causes the delete cascade fast-path to be used.
+opt-post-queries locality=(region=east) set=optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables=false
 DELETE FROM parent WHERE k = 1
 ----
 root
@@ -1065,6 +1126,39 @@ root
                 ├── key: (16)
                 └── fd: ()-->(17), (16)-->(18)
 
+# Use the delete cascade fast-path here because the region column is
+# constrained to a single value.
+opt-post-queries locality=(region=east)
+DELETE FROM parent WHERE k = 1 AND crdb_region = 'east'
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: k:6 crdb_region:8
+ │    ├── cascades
+ │    │    └── child_crdb_region_b_fkey
+ │    ├── cardinality: [0 - 0]
+ │    ├── volatile, mutations
+ │    └── scan parent
+ │         ├── columns: k:6!null crdb_region:8!null
+ │         ├── constraint: /8/6: [/'east'/1 - /'east'/1]
+ │         ├── flags: avoid-full-scan
+ │         ├── cardinality: [0 - 1]
+ │         ├── key: ()
+ │         └── fd: ()-->(6,8)
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: a:16 b:17 child.crdb_region:18
+           ├── cardinality: [0 - 0]
+           ├── volatile, mutations
+           └── scan child@child_crdb_region_b_idx
+                ├── columns: a:16!null b:17!null child.crdb_region:18!null
+                ├── constraint: /18/17/16: [/'east'/1 - /'east'/1]
+                ├── flags: avoid-full-scan
+                ├── key: (16)
+                └── fd: ()-->(17,18)
+
 opt-post-queries locality=(region=east)
 DELETE FROM parent WHERE v = 1
 ----
@@ -1113,6 +1207,142 @@ root
                      │    ├── key: (22)
                      │    └── fd: (22)-->(21)
                      └── filters (true)
+
+exec-ddl
+DROP TABLE child
+----
+
+exec-ddl
+DROP TABLE parent
+----
+
+# --------------------------------------------------
+# Test a computed region column.
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE parent (k INT PRIMARY KEY, v INT) LOCALITY REGIONAL BY ROW
+----
+
+exec-ddl
+CREATE TABLE child (
+  a INT PRIMARY KEY,
+  b INT NOT NULL,
+  crdb_region STRING NOT NULL AS (CASE WHEN b = 1 THEN 'east' ELSE 'west' END) STORED,
+  FOREIGN KEY (crdb_region, b) REFERENCES parent(crdb_region, k) ON UPDATE CASCADE ON DELETE CASCADE,
+  INDEX (b)
+) LOCALITY REGIONAL BY ROW
+----
+
+# TODO(#146705): disallowing the fast path for RBR tables regresses in this
+# case because the computed column expression can be used to infer a filter
+# that constrains the region column to a constant value.
+opt-post-queries locality=(region=east)
+DELETE FROM parent WHERE k = 1
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: k:6 crdb_region:8
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_crdb_region_b_fkey
+ │    ├── cardinality: [0 - 0]
+ │    ├── volatile, mutations
+ │    └── locality-optimized-search
+ │         ├── columns: k:6!null crdb_region:8!null
+ │         ├── left columns: k:11 crdb_region:13
+ │         ├── right columns: k:16 crdb_region:18
+ │         ├── cardinality: [0 - 1]
+ │         ├── key: ()
+ │         ├── fd: ()-->(6,8)
+ │         ├── scan parent
+ │         │    ├── columns: k:11!null crdb_region:13!null
+ │         │    ├── constraint: /13/11: [/'east'/1 - /'east'/1]
+ │         │    ├── flags: avoid-full-scan
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── key: ()
+ │         │    └── fd: ()-->(11,13)
+ │         └── scan parent
+ │              ├── columns: k:16!null crdb_region:18!null
+ │              ├── constraint: /18/16
+ │              │    ├── [/'central'/1 - /'central'/1]
+ │              │    └── [/'west'/1 - /'west'/1]
+ │              ├── flags: avoid-full-scan
+ │              ├── cardinality: [0 - 1]
+ │              ├── key: ()
+ │              └── fd: ()-->(16,18)
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: a:16 b:17 child.crdb_region:18
+           ├── cardinality: [0 - 0]
+           ├── volatile, mutations
+           └── project
+                ├── columns: a:16!null b:17!null child.crdb_region:18!null
+                ├── key: (16)
+                ├── fd: (16)-->(17,18), (17)-->(18)
+                └── inner-join (lookup child@child_crdb_region_b_idx)
+                     ├── columns: a:16!null b:17!null child.crdb_region:18!null crdb_region:21!null k:22!null
+                     ├── key columns: [21 22] = [18 17]
+                     ├── key: (16)
+                     ├── fd: ()-->(17,18,21,22), (18)==(21), (21)==(18), (17)==(22), (22)==(17)
+                     ├── with-scan &1
+                     │    ├── columns: crdb_region:21!null k:22!null
+                     │    ├── mapping:
+                     │    │    ├──  parent.crdb_region:8 => crdb_region:21
+                     │    │    └──  parent.k:6 => k:22
+                     │    ├── cardinality: [0 - 1]
+                     │    ├── key: ()
+                     │    └── fd: ()-->(21,22)
+                     └── filters (true)
+
+opt-post-queries locality=(region=east) set=optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables=false
+DELETE FROM parent WHERE k = 1
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: k:6 crdb_region:8
+ │    ├── cascades
+ │    │    └── child_crdb_region_b_fkey
+ │    ├── cardinality: [0 - 0]
+ │    ├── volatile, mutations
+ │    └── locality-optimized-search
+ │         ├── columns: k:6!null crdb_region:8!null
+ │         ├── left columns: k:11 crdb_region:13
+ │         ├── right columns: k:16 crdb_region:18
+ │         ├── cardinality: [0 - 1]
+ │         ├── key: ()
+ │         ├── fd: ()-->(6,8)
+ │         ├── scan parent
+ │         │    ├── columns: k:11!null crdb_region:13!null
+ │         │    ├── constraint: /13/11: [/'east'/1 - /'east'/1]
+ │         │    ├── flags: avoid-full-scan
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── key: ()
+ │         │    └── fd: ()-->(11,13)
+ │         └── scan parent
+ │              ├── columns: k:16!null crdb_region:18!null
+ │              ├── constraint: /18/16
+ │              │    ├── [/'central'/1 - /'central'/1]
+ │              │    └── [/'west'/1 - /'west'/1]
+ │              ├── flags: avoid-full-scan
+ │              ├── cardinality: [0 - 1]
+ │              ├── key: ()
+ │              └── fd: ()-->(16,18)
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: a:16 b:17 child.crdb_region:18
+           ├── cardinality: [0 - 0]
+           ├── volatile, mutations
+           └── scan child@child_crdb_region_b_idx
+                ├── columns: a:16!null b:17!null child.crdb_region:18!null
+                ├── constraint: /18/17/16: [/'east'/1 - /'east'/1]
+                ├── flags: avoid-full-scan
+                ├── key: (16)
+                └── fd: ()-->(17,18)
 
 exec-ddl
 DROP TABLE child
