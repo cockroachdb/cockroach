@@ -119,7 +119,7 @@ func TestServer(t *testing.T) {
 			t.Run(fmt.Sprintf("%d", tc.version), func(t *testing.T) {
 				req := *req
 				req.Version = tc.version
-				distSQLClient := execinfrapb.NewDistSQLClient(conn)
+				distSQLClient := conn.NewDistSQLClient()
 				resp, err := distSQLClient.SetupFlow(ctx, &req)
 				if err == nil && resp.Error != nil {
 					err = resp.Error.ErrorDetail(ctx)
