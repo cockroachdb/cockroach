@@ -641,10 +641,10 @@ type TableDescriptor interface {
 	// is now deprecated.
 	GetReplacementOf() descpb.TableDescriptor_Replacement
 
-	// GetAllReferencedTableIDs returns all relation IDs that this table
-	// references. Table references can be from foreign keys, triggers, or via
-	// direct references if the descriptor is a view.
-	GetAllReferencedTableIDs() descpb.IDs
+	// GetAllReferencedRelationIDsExceptFKs returns the IDs of all relations
+	// this table depends on, excluding foreign key dependencies. Dependencies can
+	// originate from triggers, policies, or direct references in views.
+	GetAllReferencedRelationIDsExceptFKs() descpb.IDs
 
 	// GetAllReferencedTypeIDs returns all user defined type descriptor IDs that
 	// this table references. It takes in a function that returns the TypeDescriptor
