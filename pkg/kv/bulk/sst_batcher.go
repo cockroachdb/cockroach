@@ -83,6 +83,106 @@ func MakeAndRegisterConcurrencyLimiter(sv *settings.Values) limit.ConcurrentRequ
 	return l
 }
 
+type batch struct {
+	sstWriter    storage.SSTWriter
+	sstFile      *storage.MemObject
+	startKey     []byte
+	endKey       []byte
+	endValue     []byte
+	endTimestamp hlc.Timestamp
+
+	// ts is set for mvcc complient ingestion. It is set to the current hlc time
+	// when the first kv is added to the batch. If ts is set, it must be used as the
+	// timestamp for every key in the sst and as the request timestamp for the add sst
+	// request.
+	//
+	// If ts is not set, the batcher client is supposed to set the a timestamp on each
+	// key. That is used by non-mvcc compliant ingestion such as PCR, which is allowed
+	// to write data in the past and may be ingesting multiple KVs with different timestamps
+	// or even multiple values with the same key, but different timestamps.
+	ts hlc.Timestamp
+
+	flushKeyChecked bool
+	flushKey        roachpb.Key
+
+	// stores on-the-fly stats for the SST if disallowShadowingBelow is set.
+	ms enginepb.MVCCStats
+
+	// Summary of the rows written in the current batch.
+	//
+	// NB: It is not advisable to use this field directly to consume per batch
+	// summaries. This field is reset when the batcher is reset after each flush.
+	// Under certain conditions the batcher can internally trigger a flush and a
+	// reset while adding KVs i.e. without the caller explicilty calling Flush.
+	// Furthermore, the batcher may reset the row counter before the async flush
+	// has actually completed.
+	//
+	// If the caller requires a BulkOpSummary after each flush, they must register
+	// a callback `onFlush`.
+	rowCounter storage.RowCounter
+
+	// stats contain the stats since the last flush. After each flush,
+	// batch.stats is reset back to the empty value after being combined into
+	// totalStats.
+	stats bulkpb.IngestionPerformanceStats
+}
+
+func (b *batch) reset(ctx context.Context, settings *cluster.Settings, resetTS bool) {
+	b.sstWriter.Close()
+
+	b.sstFile = &storage.MemObject{}
+	// Create sstables intended for ingestion using the newest format that all
+	// nodes can support. MakeIngestionSSTWriter will handle cluster version
+	// gating using b.settings.
+	b.sstWriter = storage.MakeIngestionSSTWriter(ctx, settings, b.sstFile)
+
+	b.startKey = b.startKey[:0]
+	b.endKey = b.endKey[:0]
+	b.endValue = b.endValue[:0]
+	b.endTimestamp = hlc.Timestamp{}
+
+	if resetTS {
+		b.ts = hlc.Timestamp{}
+	}
+
+	b.flushKey = nil
+	b.flushKeyChecked = false
+
+	b.ms.Reset()
+	b.rowCounter.BulkOpSummary.Reset()
+	if b.stats.SendWaitByStore == nil {
+		b.stats.SendWaitByStore = make(map[roachpb.StoreID]time.Duration)
+	}
+	b.stats.Reset()
+}
+
+// copyStats constructs a copy of the `stats` field in the batch.
+func (b *batch) copyStats() *bulkpb.IngestionPerformanceStats {
+	stats := b.stats.Identity().(*bulkpb.IngestionPerformanceStats)
+	stats.Combine(&b.stats)
+	return stats
+}
+
+func (b *batch) close() {
+	b.sstWriter.Close()
+}
+
+func (b *batch) updateMVCCStats(key storage.MVCCKey, value []byte) {
+	metaKeySize := int64(len(key.Key)) + 1
+	metaValSize := int64(0)
+	b.ms.LiveBytes += metaKeySize
+	b.ms.LiveCount++
+	b.ms.KeyBytes += metaKeySize
+	b.ms.ValBytes += metaValSize
+	b.ms.KeyCount++
+
+	totalBytes := int64(len(value)) + storage.MVCCVersionTimestampSize
+	b.ms.LiveBytes += totalBytes
+	b.ms.KeyBytes += storage.MVCCVersionTimestampSize
+	b.ms.ValBytes += int64(len(value))
+	b.ms.ValCount++
+}
+
 // SSTBatcher is a helper for bulk-adding many KVs in chunks via AddSSTable. An
 // SSTBatcher can be handed KVs repeatedly and will make them into SSTs that are
 // added when they reach the configured size, tracking the total added rows,
@@ -122,53 +222,20 @@ type SSTBatcher struct {
 	// the same as en existing key but the value differs.
 	ingestAll bool
 
-	// batchTS is the timestamp that will be set on batch requests used to send
-	// produced SSTs.
-	batchTS hlc.Timestamp
-
 	// writeAtBatchTS is passed to the writeAtBatchTs argument to db.AddSStable.
 	writeAtBatchTS bool
 
 	// disableScatters controls scatters of the as-we-fill split ranges.
 	disableScatters bool
 
-	// The rest of the fields accumulated state as opposed to configuration. Some,
-	// like totalBulkOpSummary, are accumulated _across_ batches and are not reset between
-	// batches when Reset() is called.
-	//
-	// currentStats contain the stats since the last flush. After each flush,
-	// currentStats is reset back to the empty value after being combined into
-	// totalStats.
-	currentStats bulkpb.IngestionPerformanceStats
-
-	// Summary of the rows written in the current batch.
-	//
-	// NB: It is not advisable to use this field directly to consume per batch
-	// summaries. This field is reset when the batcher is reset after each flush.
-	// Under certain conditions the batcher can internally trigger a flush and a
-	// reset while adding KVs i.e. without the caller explicilty calling Flush.
-	// Furthermore, the batcher may reset the row counter before the async flush
-	// has actually completed.
-	//
-	// If the caller requires a BulkOpSummary after each flush, they must register
-	// a callback `onFlush`.
-	batchRowCounter storage.RowCounter
-
 	// span tracks the total span into which this batcher has flushed. It is
 	// only maintained if log.V(1), so if vmodule is upped mid-ingest it may be
 	// incomplete.
 	span roachpb.Span
 
-	// The rest of the fields are per-batch and are reset via Reset() before each
-	// batch is started.
-	sstWriter         storage.SSTWriter
-	sstFile           *storage.MemObject
-	batchStartKey     []byte
-	batchEndKey       []byte
-	batchEndValue     []byte
-	batchEndTimestamp hlc.Timestamp
-	flushKeyChecked   bool
-	flushKey          roachpb.Key
+	// batch stores state for the unflushed batch.
+	batch batch
+
 	// lastRange is the span and remaining capacity of the last range added to,
 	// for checking if the next addition would overfill it.
 	lastRange struct {
@@ -176,9 +243,6 @@ type SSTBatcher struct {
 		remaining       sz
 		nextExistingKey roachpb.Key
 	}
-
-	// stores on-the-fly stats for the SST if disallowShadowingBelow is set.
-	ms enginepb.MVCCStats
 
 	asyncAddSSTs ctxgroup.Group
 
@@ -192,8 +256,8 @@ type SSTBatcher struct {
 
 		// totalStats contain the stats over the entire lifetime of the SST Batcher.
 		// As rows accumulate, the corresponding stats initially start out in
-		// currentStats. After each flush, the contents of currentStats are combined
-		// into totalStats, and currentStats is reset back to the empty value.
+		// batch.stats. After each flush, the contents of batch.stats are combined
+		// into totalStats, and batch.stats is reset back to the empty value.
 		totalStats  bulkpb.IngestionPerformanceStats
 		lastFlush   time.Time
 		tracingSpan *tracing.Span
@@ -297,22 +361,6 @@ func MakeTestingSSTBatcher(
 	return b, nil
 }
 
-func (b *SSTBatcher) updateMVCCStats(key storage.MVCCKey, value []byte) {
-	metaKeySize := int64(len(key.Key)) + 1
-	metaValSize := int64(0)
-	b.ms.LiveBytes += metaKeySize
-	b.ms.LiveCount++
-	b.ms.KeyBytes += metaKeySize
-	b.ms.ValBytes += metaValSize
-	b.ms.KeyCount++
-
-	totalBytes := int64(len(value)) + storage.MVCCVersionTimestampSize
-	b.ms.LiveBytes += totalBytes
-	b.ms.KeyBytes += storage.MVCCVersionTimestampSize
-	b.ms.ValBytes += int64(len(value))
-	b.ms.ValCount++
-}
-
 // SetOnFlush sets a callback to run after the SSTBatcher flushes.
 func (b *SSTBatcher) SetOnFlush(onFlush func(summary kvpb.BulkOpSummary)) {
 	b.mu.Lock()
@@ -361,9 +409,9 @@ func (b *SSTBatcher) AddMVCCKeyLDR(ctx context.Context, key storage.MVCCKey, val
 // keys -- like RESTORE where we want the restored data to look like the backup.
 // Keys must be added in order.
 func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error {
-	if len(b.batchEndKey) > 0 && bytes.Equal(b.batchEndKey, key.Key) {
-		if b.ingestAll && key.Timestamp.Equal(b.batchEndTimestamp) {
-			if bytes.Equal(b.batchEndValue, value) {
+	if len(b.batch.endKey) > 0 && bytes.Equal(b.batch.endKey, key.Key) {
+		if b.ingestAll && key.Timestamp.Equal(b.batch.endTimestamp) {
+			if bytes.Equal(b.batch.endValue, value) {
 				// If ingestAll is set, we allow and skip (key, timestamp, value)
 				// matches. We expect this from callers who may need to deal with
 				// duplicates caused by retransmission.
@@ -373,7 +421,7 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value 
 			// at the exact key and timestamp is unexpected and one of the two values
 			// would be completely lost.
 			return kvserverbase.NewDuplicateKeyError(key.Key, value)
-		} else if b.skipDuplicates && bytes.Equal(b.batchEndValue, value) {
+		} else if b.skipDuplicates && bytes.Equal(b.batch.endValue, value) {
 			// If skipDuplicates is set, we allow and skip (key, value) matches.
 			return nil
 		}
@@ -390,22 +438,22 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value 
 	}
 
 	if b.writeAtBatchTS {
-		if b.batchTS.IsEmpty() {
-			b.batchTS = b.db.Clock().Now()
+		if b.batch.ts.IsEmpty() {
+			b.batch.ts = b.db.Clock().Now()
 		}
-		key.Timestamp = b.batchTS
+		key.Timestamp = b.batch.ts
 	}
 
 	// Update the range currently represented in this batch, as necessary.
-	if len(b.batchStartKey) == 0 {
-		b.batchStartKey = append(b.batchStartKey[:0], key.Key...)
+	if len(b.batch.startKey) == 0 {
+		b.batch.startKey = append(b.batch.startKey[:0], key.Key...)
 	}
 
-	b.batchEndTimestamp = key.Timestamp
-	b.batchEndKey = append(b.batchEndKey[:0], key.Key...)
-	b.batchEndValue = append(b.batchEndValue[:0], value...)
+	b.batch.endTimestamp = key.Timestamp
+	b.batch.endKey = append(b.batch.endKey[:0], key.Key...)
+	b.batch.endValue = append(b.batch.endValue[:0], value...)
 
-	if err := b.batchRowCounter.Count(key.Key); err != nil {
+	if err := b.batch.rowCounter.Count(key.Key); err != nil {
 		return err
 	}
 
@@ -414,43 +462,27 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value 
 	// ingest unique keys. This saves us an extra iteration in AddSSTable which
 	// has been identified as a significant performance regression for IMPORT.
 	if !b.disallowShadowingBelow.IsEmpty() {
-		b.updateMVCCStats(key, value)
+		b.batch.updateMVCCStats(key, value)
 	}
-	return b.sstWriter.PutRawMVCC(key, value)
+	return b.batch.sstWriter.PutRawMVCC(key, value)
 }
 
 // Reset clears all state in the batcher and prepares it for reuse.
 func (b *SSTBatcher) Reset(ctx context.Context) {
+	// TODO(jeffswenson): split `Reset` into:
+	// `init`: to be called once when the batcher is created to initialize fields like `SendWaitByStore`.
+	// `batch.reset`: to be called every time a flush is completed to reset the batch state.
+	// `waitForFlushes`: to be called when the batcher needs to wait for all in-progress flushes to complete.
+
 	if err := b.asyncAddSSTs.Wait(); err != nil {
 		log.Warningf(ctx, "closing with flushes in-progress encountered an error: %v", err)
 	}
 	b.asyncAddSSTs = ctxgroup.Group{}
 
-	b.sstWriter.Close()
+	b.batch.reset(ctx, b.settings, b.writeAtBatchTS)
 
-	b.sstFile = &storage.MemObject{}
-	// Create sstables intended for ingestion using the newest format that all
-	// nodes can support. MakeIngestionSSTWriter will handle cluster version
-	// gating using b.settings.
-	b.sstWriter = storage.MakeIngestionSSTWriter(ctx, b.settings, b.sstFile)
-	b.batchStartKey = b.batchStartKey[:0]
-	b.batchEndKey = b.batchEndKey[:0]
-	b.batchEndValue = b.batchEndValue[:0]
-	b.batchEndTimestamp = hlc.Timestamp{}
-	b.flushKey = nil
-	b.flushKeyChecked = false
 	b.valueScratch = b.valueScratch[:0]
-	b.ms.Reset()
 
-	if b.writeAtBatchTS {
-		b.batchTS = hlc.Timestamp{}
-	}
-
-	b.batchRowCounter.BulkOpSummary.Reset()
-
-	if b.currentStats.SendWaitByStore == nil {
-		b.currentStats.SendWaitByStore = make(map[roachpb.StoreID]time.Duration)
-	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.mu.totalStats.SendWaitByStore == nil {
@@ -469,8 +501,8 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 	// the end of the range it is in so we can flush the SST before crossing it,
 	// because AddSSTable cannot span ranges and will need to be split and retried
 	// from scratch if we generate an SST that ends up doing so.
-	if !b.flushKeyChecked && b.rc != nil {
-		b.flushKeyChecked = true
+	if !b.batch.flushKeyChecked && b.rc != nil {
+		b.batch.flushKeyChecked = true
 		if k, err := keys.Addr(nextKey); err != nil {
 			log.Warningf(ctx, "failed to get RKey for flush key lookup: %v", err)
 		} else {
@@ -478,13 +510,13 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 				log.Warningf(ctx, "failed to lookup range cache entry for key %v: %v", k, err)
 			} else {
 				k := r.Desc.EndKey.AsRawKey()
-				b.flushKey = k
+				b.batch.flushKey = k
 				log.VEventf(ctx, 3, "%s building sstable that will flush before %v", b.name, k)
 			}
 		}
 	}
 
-	shouldFlushDueToRange := b.flushKey != nil && b.flushKey.Compare(nextKey) <= 0
+	shouldFlushDueToRange := b.batch.flushKey != nil && b.batch.flushKey.Compare(nextKey) <= 0
 
 	if shouldFlushDueToRange {
 		if err := b.doFlush(ctx, rangeFlush); err != nil {
@@ -494,7 +526,7 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 		return nil
 	}
 
-	if b.sstWriter.DataSize >= ingestFileSize(b.settings) {
+	if b.batch.sstWriter.DataSize >= ingestFileSize(b.settings) {
 		// We're at/over size target, so we want to flush, but first check if we are
 		// at a new row boundary. Having row-aligned boundaries is not actually
 		// required by anything, but has the nice property of meaning a split will
@@ -505,7 +537,7 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 		// starts, so when we split at that row, that overhang into the RHS that we
 		// just wrote will be rewritten by the subsequent scatter. By waiting for a
 		// row boundary, we ensure any split is actually between files.
-		prevRow, prevErr := keys.EnsureSafeSplitKey(b.batchEndKey)
+		prevRow, prevErr := keys.EnsureSafeSplitKey(b.batch.endKey)
 		nextRow, nextErr := keys.EnsureSafeSplitKey(nextKey)
 		if prevErr == nil && nextErr == nil && bytes.Equal(prevRow, nextRow) {
 			// An error decoding either key implies it is not a valid row key and thus
@@ -540,7 +572,7 @@ func (b *SSTBatcher) Flush(ctx context.Context) error {
 			if err := b.db.Clock().SleepUntil(ctx, b.mu.maxWriteTS); err != nil {
 				return err
 			}
-			b.currentStats.CommitWait += timeutil.Since(now.GoTime())
+			b.batch.stats.CommitWait += timeutil.Since(now.GoTime())
 		}
 		b.mu.maxWriteTS.Reset()
 	}
@@ -549,12 +581,12 @@ func (b *SSTBatcher) Flush(ctx context.Context) error {
 }
 
 func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
-	if b.sstWriter.DataSize == 0 {
+	if b.batch.sstWriter.DataSize == 0 {
 		return nil
 	}
 	beforeFlush := timeutil.Now()
 
-	b.currentStats.Batches++
+	b.batch.stats.Batches++
 
 	if delay := ingestDelay.Get(&b.settings.SV); delay != 0 {
 		if delay > time.Second || log.V(1) {
@@ -567,23 +599,23 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 		}
 	}
 
-	if err := b.sstWriter.Finish(); err != nil {
+	if err := b.batch.sstWriter.Finish(); err != nil {
 		return errors.Wrapf(err, "finishing constructed sstable")
 	}
 
-	start := roachpb.Key(append([]byte(nil), b.batchStartKey...))
+	start := roachpb.Key(append([]byte(nil), b.batch.startKey...))
 	// The end key of the WriteBatch request is exclusive, but batchEndKey is
 	// currently the largest key in the batch. Increment it.
-	end := roachpb.Key(append([]byte(nil), b.batchEndKey...)).Next()
+	end := roachpb.Key(append([]byte(nil), b.batch.endKey...)).Next()
 
-	size := sz(b.sstWriter.DataSize)
+	size := sz(b.batch.sstWriter.DataSize)
 
 	if reason == sizeFlush {
 		log.VEventf(ctx, 3, "%s flushing %s SST due to size > %s", b.name, size, sz(ingestFileSize(b.settings)))
-		b.currentStats.BatchesDueToSize++
+		b.batch.stats.BatchesDueToSize++
 	} else if reason == rangeFlush {
 		log.VEventf(ctx, 3, "%s flushing %s SST due to range boundary", b.name, size)
-		b.currentStats.BatchesDueToRange++
+		b.batch.stats.BatchesDueToRange++
 	}
 
 	// If this file is starting in the same span we last added to and is bigger
@@ -612,11 +644,11 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 			} else {
 				beforeSplit := timeutil.Now()
 				err := b.db.AdminSplit(ctx, splitAbove, expire)
-				b.currentStats.SplitWait += timeutil.Since(beforeSplit)
+				b.batch.stats.SplitWait += timeutil.Since(beforeSplit)
 				if err != nil {
 					log.Warningf(ctx, "%s failed to split-above: %v", b.name, err)
 				} else {
-					b.currentStats.Splits++
+					b.batch.stats.Splits++
 				}
 			}
 		}
@@ -627,18 +659,18 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 		} else {
 			beforeSplit := timeutil.Now()
 			err := b.db.AdminSplit(ctx, splitAt, expire)
-			b.currentStats.SplitWait += timeutil.Since(beforeSplit)
+			b.batch.stats.SplitWait += timeutil.Since(beforeSplit)
 			if err != nil {
 				log.Warningf(ctx, "%s failed to split: %v", b.name, err)
 			} else {
-				b.currentStats.Splits++
+				b.batch.stats.Splits++
 
 				if !b.disableScatters {
 					// Now scatter the RHS before we proceed to ingest into it. We know it
 					// should be empty since we split above if there was a nextExistingKey.
 					beforeScatter := timeutil.Now()
 					resp, err := b.db.AdminScatter(ctx, splitAt, maxScatterSize)
-					b.currentStats.ScatterWait += timeutil.Since(beforeScatter)
+					b.batch.stats.ScatterWait += timeutil.Since(beforeScatter)
 					if err != nil {
 						// TODO(dt): switch to a typed error.
 						if strings.Contains(err.Error(), "existing range size") {
@@ -647,8 +679,8 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 							log.Warningf(ctx, "%s failed to scatter	: %v", b.name, err)
 						}
 					} else {
-						b.currentStats.Scatters++
-						b.currentStats.ScatterMoved += resp.ReplicasScatteredBytes
+						b.batch.stats.Scatters++
+						b.batch.stats.ScatterMoved += resp.ReplicasScatteredBytes
 						if resp.ReplicasScatteredBytes > 0 {
 							log.VEventf(ctx, 1, "%s split scattered %s in non-empty range %s", b.name, sz(resp.ReplicasScatteredBytes), resp.RangeInfos[0].Desc.KeySpan().AsRawSpanWithNoLocals())
 						}
@@ -660,16 +692,17 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 
 	// If the stats have been computed on-the-fly, set the last updated time
 	// before ingesting the SST.
-	if (b.ms != enginepb.MVCCStats{}) {
-		b.ms.LastUpdateNanos = timeutil.Now().UnixNano()
+	if (b.batch.ms != enginepb.MVCCStats{}) {
+		b.batch.ms.LastUpdateNanos = timeutil.Now().UnixNano()
 	}
 
 	// Take a copy of the fields that can be captured by the call to addSSTable
 	// below, that could occur asynchronously.
-	stats := b.ms
-	data := b.sstFile.Data()
-	batchTS := b.batchTS
-	currentBatchSummary := b.batchRowCounter.BulkOpSummary
+	mvccStats := b.batch.ms
+	data := b.batch.sstFile.Data()
+	batchTS := b.batch.ts
+	currentBatchSummary := b.batch.rowCounter.BulkOpSummary
+	performanceStats := b.batch.copyStats()
 	res, err := b.limiter.Begin(ctx)
 	if err != nil {
 		return err
@@ -711,17 +744,10 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 		}
 	}
 
-	// Here we make a copy currentStats right before the flush so that it could be
-	// combined into totalStats as part of the asynchronous flush. The batcher's
-	// currentStats is reset afterwards in preparation for the next batch.
-	currentBatchStatsCopy := b.currentStats.Identity().(*bulkpb.IngestionPerformanceStats)
-	currentBatchStatsCopy.Combine(&b.currentStats)
-	b.currentStats.Reset()
-
 	fn := func(ctx context.Context) error {
 		defer res.Release()
 		defer b.mem.Shrink(ctx, reserved)
-		results, err := b.adder.AddSSTable(ctx, batchTS, start, end, data, stats, currentBatchStatsCopy)
+		results, err := b.adder.AddSSTable(ctx, batchTS, start, end, data, mvccStats, performanceStats)
 		if err != nil {
 			return err
 		}
@@ -762,22 +788,22 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 			b.mu.onFlush(currentBatchSummary)
 		}
 
-		currentBatchStatsCopy.LogicalDataSize += int64(size)
-		currentBatchStatsCopy.SSTDataSize += int64(len(data))
+		performanceStats.LogicalDataSize += int64(size)
+		performanceStats.SSTDataSize += int64(len(data))
 		afterFlush := timeutil.Now()
-		currentBatchStatsCopy.BatchWait += afterFlush.Sub(beforeFlush)
-		currentBatchStatsCopy.Duration = afterFlush.Sub(b.mu.lastFlush)
-		currentBatchStatsCopy.LastFlushTime = hlc.Timestamp{WallTime: b.mu.lastFlush.UnixNano()}
-		currentBatchStatsCopy.CurrentFlushTime = hlc.Timestamp{WallTime: afterFlush.UnixNano()}
+		performanceStats.BatchWait += afterFlush.Sub(beforeFlush)
+		performanceStats.Duration = afterFlush.Sub(b.mu.lastFlush)
+		performanceStats.LastFlushTime = hlc.Timestamp{WallTime: b.mu.lastFlush.UnixNano()}
+		performanceStats.CurrentFlushTime = hlc.Timestamp{WallTime: afterFlush.UnixNano()}
 
 		// Combine the statistics of this batch into the running aggregate
 		// maintained by the SSTBatcher.
 		b.mu.totalBulkOpSummary.Add(currentBatchSummary)
-		b.mu.totalStats.Combine(currentBatchStatsCopy)
+		b.mu.totalStats.Combine(performanceStats)
 
 		b.mu.lastFlush = afterFlush
 		if b.mu.tracingSpan != nil {
-			b.mu.tracingSpan.RecordStructured(currentBatchStatsCopy)
+			b.mu.tracingSpan.RecordStructured(performanceStats)
 		}
 		return nil
 	}
@@ -795,7 +821,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 
 // Close closes the underlying SST builder.
 func (b *SSTBatcher) Close(ctx context.Context) {
-	b.sstWriter.Close()
+	b.batch.close()
 	if err := b.asyncAddSSTs.Wait(); err != nil {
 		log.Warningf(ctx, "closing with flushes in-progress encountered an error: %v", err)
 	}
