@@ -8,7 +8,9 @@ package tpcc
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"flag"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -20,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -139,6 +142,7 @@ func startCluster(
 					TestingNoLocalClientOptimization: true,
 				},
 			},
+			SQLMemoryPoolSize: 1 << 30, // 1 GiB
 		}
 	}
 
@@ -148,7 +152,7 @@ func startCluster(
 		ParallelStart:     true,
 	})
 
-	// Generate a PG URL.
+	// Generate PG URLs.
 	for node := 0; node < nodes; node++ {
 		pgURL, cleanupURL := tc.ApplicationLayer(0).PGUrl(b, serverutils.DBName(dbName))
 		pgURLs[node] = pgURL.String()
@@ -162,9 +166,18 @@ func startCluster(
 
 	// Load the TPC-C workload data.
 	gen := tpccGenerator(b, []string{"--db=" + dbName})
-	var loader workloadsql.InsertsDataLoader
-	if _, err := workloadsql.Setup(ctx, tc.ServerConn(0), gen, loader); err != nil {
+	var loader workloadccl.ImportDataLoader
+	sqlDB, err := gosql.Open(`cockroach`, strings.Join(pgURLs[:], " "))
+	if err != nil {
 		b.Fatal(err)
+	}
+	if _, err := workloadsql.Setup(ctx, sqlDB, gen, loader); err != nil {
+		b.Fatal(err)
+	}
+
+	// Collect stats on each table.
+	for _, table := range gen.Tables() {
+		r.Exec(b, fmt.Sprintf("ANALYZE %q", table.Name))
 	}
 
 	return tc, pgURLs
