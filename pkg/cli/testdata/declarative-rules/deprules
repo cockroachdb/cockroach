@@ -3603,6 +3603,22 @@ deprules
     - SmallerSeqNumFirst(*scpb.DatabaseZoneConfig, *scpb.DatabaseZoneConfig)($later-seqNum, $earlier-seqNum)
     - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
     - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
+- name: ensure index columns are in increasing order
+  from: later-column-Node
+  kind: Precedence
+  to: earlier-column-Node
+  query:
+    - $later-column[Type] = '*scpb.IndexColumn'
+    - joinTargetNode($later-column, $later-column-Target, $later-column-Node)
+    - $earlier-column[Type] = '*scpb.IndexColumn'
+    - joinOnIndexID($later-column, $earlier-column, $table-id, $index-id)
+    - ToPublicOrTransient($later-column-Target, $earlier-column-Target)
+    - ToPublicOrTransient($later-column-Target, $earlier-column-Target)
+    - $later-column-Node[CurrentStatus] = PUBLIC
+    - $earlier-column-Node[CurrentStatus] = PUBLIC
+    - SmallerColumnIDFirst(*scpb.IndexColumn, *scpb.IndexColumn)($later-column, $earlier-column)
+    - joinTargetNode($later-column, $later-column-Target, $later-column-Node)
+    - joinTargetNode($earlier-column, $earlier-column-Target, $earlier-column-Node)
 - name: ensure index zone configs are in increasing seqNum order
   from: later-seqNum-Node
   kind: Precedence
