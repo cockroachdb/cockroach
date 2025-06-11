@@ -9,6 +9,7 @@ go_test(
     data = glob(["testdata/**"]),
     deps = [
         "//pkg/base",
+        "//pkg/ccl/workloadccl",
         "//pkg/rpc/nodedialer",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
