@@ -1535,11 +1535,7 @@ define VectorMutationSearchPrivate {
 [Relational]
 define Barrier {
     Input RelExpr
-    _ BarrierPrivate
-}
 
-[Private]
-define BarrierPrivate {
     # LeakproofPermeable indicates that leakproof expressions are allowed to
     # move across this barrier. This enables the optimizer to reorder or push
     # leakproof filters and projections past the barrier, while still

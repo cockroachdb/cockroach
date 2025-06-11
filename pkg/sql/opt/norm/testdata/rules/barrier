@@ -17,11 +17,11 @@ exprnorm expect=EliminateRedundantBarrier
              (Scan [ (Table "xy") (Cols "x,y") ])
              [ (Eq (Var "y") (Const 3 "int")) ]
           )
-          [ (LeakproofPermeable "true") ]
+          "true"
      )
-     [ (LeakproofPermeable "true") ]
+     "true"
   )
-  [ (LeakproofPermeable "true") ]
+  "true"
 )
 ----
 barrier
@@ -47,9 +47,9 @@ exprnorm expect-not=EliminateRedundantBarrier
              (Scan [ (Table "xy") (Cols "x,y") ])
              [ (Eq (Var "y") (Const 3 "int")) ]
           )
-          [ (LeakproofPermeable "true") ]
+          "true"
      )
-  [ (LeakproofPermeable "false") ]
+  "false"
 )
 ----
 barrier
