@@ -11820,3 +11820,17 @@ func TestCloudstorageParallelCompression(t *testing.T) {
 		}
 	})
 }
+
+func TestDatabaseLevelChangefeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE DATABASE foo`)
+		sqlDB.Exec(t, `CREATE TABLE foo.bar(id int primary key, s string)`)
+		sqlDB.Exec(t, `INSERT INTO foo.bar(id, s) VALUES (0, 'hello'), (1, null)`)
+		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED for DATABASE foo`, "database-level changefeed is not implemented")
+	}
+	cdcTest(t, testFn)
+}
