@@ -2,7 +2,7 @@
 # cluster-opt: disable-mvcc-range-tombstones-for-point-deletes
 
 statement ok
-SET CLUSTER SETTING sql.txn.write_buffering_for_read_committed.enabled=true
+SET CLUSTER SETTING sql.txn.write_buffering_for_weak_isolation.enabled=true
 
 statement ok
 SET CLUSTER SETTING kv.lock_table.unreplicated_lock_reliability.split.enabled=false
@@ -37,7 +37,7 @@ INSERT INTO t VALUES (1)
 
 user testuser
 
-# Add another write to t to ensure we are propogating the ts correctly.
+# Add another write to t to ensure we are propagating the ts correctly.
 # Note that currently we don't detect the failure here. If we add the lock loss
 # detection to locking gets we could.
 statement ok
