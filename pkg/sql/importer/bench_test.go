@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -63,7 +62,7 @@ func toTableDescriptor(
 	// ID because we know it's valid.
 	parentID := descpb.ID(keys.SystemDatabaseID)
 	testSettings := cluster.MakeTestingClusterSettings()
-	tableDesc, err := sqlutils.MakeTestingSimpleTableDescriptor(
+	tableDesc, err := importer.MakeTestingSimpleTableDescriptor(
 		ctx, &semaCtx, testSettings, createTable, parentID, keys.PublicSchemaID, tableID, ts.UnixNano(),
 	)
 	if err != nil {
