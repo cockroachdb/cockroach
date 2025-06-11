@@ -3,7 +3,8 @@
 1:
 -
 IMPORT
-PGDUMP 'http://test'
+  INTO foo
+  AVRO DATA ($1)
   WITH skip = '2'
 
 
