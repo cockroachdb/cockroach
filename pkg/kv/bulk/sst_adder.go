@@ -9,12 +9,14 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk/bulkpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -23,30 +25,71 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+type sstAdder struct {
+	settings *cluster.Settings
+	db       *kv.DB
+
+	// disallowShadowingBelow is described on kvpb.AddSSTableRequest.
+	disallowShadowingBelow hlc.Timestamp
+
+	// priority is the admission priority used for AddSSTable
+	// requests.
+	priority admissionpb.WorkPriority
+
+	// writeAtBatchTS is true if the SST should be written at the
+	// batch timestamp. If this is set to true, then all the keys in
+	//the sst must have the same timestamp and they must be equal to
+	// the batch timestamp.
+	// TODO(jeffswenson): remove this from `sstAdder` in a stand alone PR.
+	writeAtBatchTS bool
+}
+
+func newSSTAdder(
+	db *kv.DB,
+	settings *cluster.Settings,
+	writeAtBatchTS bool,
+	disallowShadowingBelow hlc.Timestamp,
+	priority admissionpb.WorkPriority,
+) *sstAdder {
+	return &sstAdder{
+		db:                     db,
+		disallowShadowingBelow: disallowShadowingBelow,
+		priority:               priority,
+		settings:               settings,
+		writeAtBatchTS:         writeAtBatchTS,
+	}
+}
+
 type sstSpan struct {
 	start, end roachpb.Key // [inclusive, exclusive)
 	sstBytes   []byte
 	stats      enginepb.MVCCStats
 }
 
+type addSSTResult struct {
+	timestamp                        hlc.Timestamp
+	availableBytes                   int64
+	followingLikelyNonEmptySpanStart roachpb.Key
+	rangeSpan                        roachpb.Span
+}
+
 // addSSTable retries db.AddSSTable if retryable errors occur, including if the
 // SST spans a split, in which case it is iterated and split into two SSTs, one
 // for each side of the split in the error, and each are retried.
-func (b *SSTBatcher) addSSTable(
+func (a *sstAdder) AddSSTable(
 	ctx context.Context,
 	batchTS hlc.Timestamp,
 	start, end roachpb.Key,
 	sstBytes []byte,
 	stats enginepb.MVCCStats,
-	updatesLastRange bool,
 	ingestionPerformanceStats *bulkpb.IngestionPerformanceStats,
-) error {
+) ([]addSSTResult, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "*SSTBatcher.addSSTable")
 	defer sp.Finish()
 
 	sendStart := timeutil.Now()
 	if ingestionPerformanceStats == nil {
-		return errors.AssertionFailedf("ingestionPerformanceStats should not be nil")
+		return nil, errors.AssertionFailedf("ingestionPerformanceStats should not be nil")
 	}
 
 	// Currently, the SSTBatcher cannot ingest range keys, so it is safe to
@@ -58,21 +101,25 @@ func (b *SSTBatcher) addSSTable(
 	}
 	iter, err := storage.NewMemSSTIterator(sstBytes, true, iterOpts)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer iter.Close()
 
-	if (stats == enginepb.MVCCStats{}) {
+	if stats == (enginepb.MVCCStats{}) {
+		// TODO(jeffswenson): Audit AddSST callers to see if they generate
+		// server side stats now. Accurately computing stats in the face of replays
+		// requires the server to do it.
 		iter.SeekGE(storage.MVCCKey{Key: start})
 		// NB: even though this ComputeStatsForIter call exhausts the iterator, we
 		// can reuse/re-seek on the iterator, as part of the MVCCIterator contract.
 		stats, err = storage.ComputeStatsForIter(iter, sendStart.UnixNano())
 		if err != nil {
-			return errors.Wrapf(err, "computing stats for SST [%s, %s)", start, end)
+			return nil, errors.Wrapf(err, "computing stats for SST [%s, %s)", start, end)
 		}
 	}
 
 	work := []*sstSpan{{start: start, end: end, sstBytes: sstBytes, stats: stats}}
+	var results []addSSTResult
 	var files int
 	for len(work) > 0 {
 		item := work[0]
@@ -97,7 +144,7 @@ func (b *SSTBatcher) addSSTable(
 				// detection - making it is simpler to just always use the same API
 				// and just switch how it writes its result.
 				ingestAsWriteBatch := false
-				if b.settings != nil && int64(len(item.sstBytes)) < tooSmallSSTSize.Get(&b.settings.SV) {
+				if a.settings != nil && int64(len(item.sstBytes)) < tooSmallSSTSize.Get(&a.settings.SV) {
 					log.VEventf(ctx, 3, "ingest data is too small (%d keys/%d bytes) for SSTable, adding via regular batch", item.stats.KeyCount, len(item.sstBytes))
 					ingestAsWriteBatch = true
 					ingestionPerformanceStats.AsWrites++
@@ -106,29 +153,30 @@ func (b *SSTBatcher) addSSTable(
 				req := &kvpb.AddSSTableRequest{
 					RequestHeader:                          kvpb.RequestHeader{Key: item.start, EndKey: item.end},
 					Data:                                   item.sstBytes,
-					DisallowShadowingBelow:                 b.disallowShadowingBelow,
+					DisallowShadowingBelow:                 a.disallowShadowingBelow,
 					MVCCStats:                              &item.stats,
 					IngestAsWrites:                         ingestAsWriteBatch,
 					ReturnFollowingLikelyNonEmptySpanStart: true,
 				}
-				if b.writeAtBatchTS {
+				if a.writeAtBatchTS {
 					req.SSTTimestampToRequestTimestamp = batchTS
 				}
 
 				ba := &kvpb.BatchRequest{
 					Header: kvpb.Header{Timestamp: batchTS, ClientRangeInfo: roachpb.ClientRangeInfo{ExplicitlyRequested: true}},
 					AdmissionHeader: kvpb.AdmissionHeader{
-						Priority:                 int32(b.priority),
+						Priority:                 int32(a.priority),
 						CreateTime:               timeutil.Now().UnixNano(),
 						Source:                   kvpb.AdmissionHeader_FROM_SQL,
 						NoMemoryReservedAtSource: true,
 					},
 				}
+
 				ba.Add(req)
 				beforeSend := timeutil.Now()
 
 				sendCtx, sendSp := tracing.ChildSpan(ctx, "*SSTBatcher.addSSTable/Send")
-				br, pErr := b.db.NonTransactionalSender().Send(sendCtx, ba)
+				br, pErr := a.db.NonTransactionalSender().Send(sendCtx, ba)
 				sendSp.Finish()
 
 				sendTime := timeutil.Since(beforeSend)
@@ -147,23 +195,12 @@ func (b *SSTBatcher) addSSTable(
 
 				if pErr == nil {
 					resp := br.Responses[0].GetInner().(*kvpb.AddSSTableResponse)
-					b.mu.Lock()
-					if b.writeAtBatchTS {
-						b.mu.maxWriteTS.Forward(br.Timestamp)
-					}
-					b.mu.Unlock()
-					// If this was sent async then, by the time the reply gets back, it
-					// might not be the last range anymore. We can just discard the last
-					// range reply in this case though because async sends are only used
-					// for SSTs sent due to range boundaries, i.e. when we are done with
-					// with that range anyway.
-					if updatesLastRange {
-						b.lastRange.span = resp.RangeSpan
-						if resp.RangeSpan.Valid() {
-							b.lastRange.remaining = sz(resp.AvailableBytes)
-							b.lastRange.nextExistingKey = resp.FollowingLikelyNonEmptySpanStart
-						}
-					}
+					results = append(results, addSSTResult{
+						timestamp:                        br.Timestamp,
+						availableBytes:                   resp.AvailableBytes,
+						followingLikelyNonEmptySpanStart: resp.FollowingLikelyNonEmptySpanStart,
+						rangeSpan:                        resp.RangeSpan,
+					})
 					files++
 					log.VEventf(ctx, 3, "adding %s AddSSTable [%s,%s) took %v", sz(len(item.sstBytes)), item.start, item.end, sendTime)
 					return nil
@@ -185,7 +222,7 @@ func (b *SSTBatcher) addSSTable(
 					}
 					split := mr.Desc.EndKey.AsRawKey()
 					log.Infof(ctx, "SSTable cannot be added spanning range bounds %v, retrying...", split)
-					left, right, err := createSplitSSTable(ctx, item.start, split, iter, b.settings)
+					left, right, err := createSplitSSTable(ctx, item.start, split, iter, a.settings)
 					if err != nil {
 						return err
 					}
@@ -199,7 +236,7 @@ func (b *SSTBatcher) addSSTable(
 			}
 			return err
 		}(); err != nil {
-			return errors.Wrapf(err, "addsstable [%s,%s)", item.start, item.end)
+			return nil, errors.Wrapf(err, "addsstable [%s,%s)", item.start, item.end)
 		}
 		// explicitly deallocate SST. This will not deallocate the
 		// top level SST which is kept around to iterate over.
@@ -208,7 +245,7 @@ func (b *SSTBatcher) addSSTable(
 	ingestionPerformanceStats.SplitRetries += int64(files - 1)
 
 	log.VEventf(ctx, 3, "AddSSTable [%v, %v) added %d files and took %v", start, end, files, timeutil.Since(sendStart))
-	return nil
+	return results, nil
 }
 
 // createSplitSSTable is a helper for splitting up SSTs. The iterator
