@@ -266,8 +266,9 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 
 		t.Status("running 75 second workload to collect profiles")
 		{
-			// Create the profiles directory in the artifacts directory.
-			profilesDir := filepath.Join(t.ArtifactsDir(), "profiles")
+			// We store profiles in the perf directory. That way, they're not zipped
+			// up and are available for retrieval for pgo updates more easily.
+			profilesDir := filepath.Join(t.ArtifactsDir(), "1.perf", "profiles")
 			require.NoError(t, os.MkdirAll(profilesDir, 0755))
 
 			// Start a short sysbench test in order to collect the profiles from an
@@ -583,7 +584,7 @@ func exportSysbenchResults(
 
 	// Copy the metrics to the artifacts directory, so it can be exported to roachperf.
 	// Assume single node artifacts, since the metrics we get are aggregated amongst the cluster.
-	perfDir := fmt.Sprintf("%s/1.perf", t.ArtifactsDir())
+	perfDir := filepath.Join(t.ArtifactsDir(), "/1.perf")
 	if err := os.MkdirAll(perfDir, 0755); err != nil {
 		return err
 	}
