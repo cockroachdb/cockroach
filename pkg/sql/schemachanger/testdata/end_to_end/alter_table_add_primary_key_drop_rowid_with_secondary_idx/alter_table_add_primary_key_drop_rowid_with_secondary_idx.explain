@@ -44,18 +44,18 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":3,"TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":8,"IndexID":10,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":11}}
  │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":10,"Kind":2,"TableID":104}
- │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":10,"Ordinal":1,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":10,"Kind":2,"Ordinal":1,"TableID":104}
  │              ├── MakeAbsentTempIndexDeleteOnly {"Index":{"ConstraintID":9,"IndexID":11,"IsUnique":true,"SourceIndexID":1,"TableID":104}}
  │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":11,"Kind":2,"TableID":104}
- │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":11,"Ordinal":1,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":11,"Kind":2,"Ordinal":1,"TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":10,"IndexID":12,"IsUnique":true,"SourceIndexID":10,"TableID":104,"TemporaryIndexID":13}}
- │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":12,"Ordinal":1,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":12,"Kind":2,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":5,"IndexID":10,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":5,"IndexID":11,"TableID":104}
- │              └── AddColumnToIndex {"ColumnID":5,"IndexID":12,"TableID":104}
+ │              ├── AddColumnToIndex {"ColumnID":5,"IndexID":12,"TableID":104}
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":10,"Ordinal":1,"TableID":104}
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":11,"Ordinal":1,"TableID":104}
+ │              └── AddColumnToIndex {"ColumnID":1,"IndexID":12,"Ordinal":1,"TableID":104}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 9 elements transitioning toward PUBLIC
@@ -123,20 +123,20 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":8,"IndexID":10,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":11}}
  │              ├── MaybeAddSplitForIndex {"IndexID":10,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":10,"Kind":2,"TableID":104}
- │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":10,"Ordinal":1,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":10,"Kind":2,"Ordinal":1,"TableID":104}
  │              ├── MakeAbsentTempIndexDeleteOnly {"Index":{"ConstraintID":9,"IndexID":11,"IsUnique":true,"SourceIndexID":1,"TableID":104}}
  │              ├── MaybeAddSplitForIndex {"IndexID":11,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":11,"Kind":2,"TableID":104}
- │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":11,"Ordinal":1,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":11,"Kind":2,"Ordinal":1,"TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":10,"IndexID":12,"IsUnique":true,"SourceIndexID":10,"TableID":104,"TemporaryIndexID":13}}
  │              ├── MaybeAddSplitForIndex {"IndexID":12,"TableID":104}
- │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":12,"Ordinal":1,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":12,"Kind":2,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":5,"IndexID":10,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":5,"IndexID":11,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":5,"IndexID":12,"TableID":104}
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":10,"Ordinal":1,"TableID":104}
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":11,"Ordinal":1,"TableID":104}
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":12,"Ordinal":1,"TableID":104}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  ├── PostCommitPhase
@@ -221,7 +221,6 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │    │    └── 29 Mutation operations
  │    │         ├── MakeAbsentTempIndexDeleteOnly {"Index":{"ConstraintID":11,"IndexID":13,"IsUnique":true,"SourceIndexID":10,"TableID":104}}
  │    │         ├── MaybeAddSplitForIndex {"IndexID":13,"TableID":104}
- │    │         ├── AddColumnToIndex {"ColumnID":1,"IndexID":13,"Ordinal":1,"TableID":104}
  │    │         ├── AddColumnToIndex {"ColumnID":2,"IndexID":13,"Kind":2,"TableID":104}
  │    │         ├── AddColumnToIndex {"ColumnID":5,"IndexID":13,"TableID":104}
  │    │         ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
@@ -246,6 +245,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │    │         ├── AddColumnToIndex {"ColumnID":2,"IndexID":9,"Ordinal":1,"TableID":104}
  │    │         ├── AddColumnToIndex {"ColumnID":1,"IndexID":9,"Kind":1,"TableID":104}
  │    │         ├── AddColumnToIndex {"ColumnID":5,"IndexID":9,"Kind":1,"Ordinal":1,"TableID":104}
+ │    │         ├── AddColumnToIndex {"ColumnID":1,"IndexID":13,"Ordinal":1,"TableID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    ├── Stage 9 of 16 in PostCommitPhase

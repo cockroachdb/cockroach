@@ -1115,6 +1115,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 3}, PUBLIC]
+  to:   [IndexColumn:{DescID: 107, ColumnID: 4, IndexID: 3}, PUBLIC]
+  kind: Precedence
+  rule: ensure index columns are added in increasing order
+- from: [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 3}, PUBLIC]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: index-column added to index before index is backfilled
@@ -1122,6 +1126,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
+- from: [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 4}, PUBLIC]
+  to:   [IndexColumn:{DescID: 107, ColumnID: 4, IndexID: 4}, PUBLIC]
+  kind: Precedence
+  rule: ensure index columns are added in increasing order
 - from: [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 4}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -2635,6 +2643,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 3}, PUBLIC]
+  to:   [IndexColumn:{DescID: 107, ColumnID: 4, IndexID: 3}, PUBLIC]
+  kind: Precedence
+  rule: ensure index columns are added in increasing order
+- from: [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 3}, PUBLIC]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: index-column added to index before index is backfilled
@@ -2642,6 +2654,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
+- from: [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 4}, PUBLIC]
+  to:   [IndexColumn:{DescID: 107, ColumnID: 4, IndexID: 4}, PUBLIC]
+  kind: Precedence
+  rule: ensure index columns are added in increasing order
 - from: [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 4}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -3510,6 +3526,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN udfcol;
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 3}, PUBLIC]
+  to:   [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 3}, PUBLIC]
+  kind: Precedence
+  rule: ensure index columns are added in increasing order
+- from: [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 3}, PUBLIC]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: index-column added to index before index is backfilled
@@ -3517,6 +3537,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN udfcol;
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
+- from: [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 4}, PUBLIC]
+  to:   [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 4}, PUBLIC]
+  kind: Precedence
+  rule: ensure index columns are added in increasing order
 - from: [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 4}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
