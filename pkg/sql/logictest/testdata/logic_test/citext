@@ -1,0 +1,4 @@
+query T
+SELECT pg_typeof(CITEXT '$.a')
+----
+text

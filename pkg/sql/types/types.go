@@ -338,6 +338,11 @@ var (
 	VarChar = &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_varchar, Locale: &emptyLocale}}
 
+	// Citext is the type of a case-insensitive string and is similar to AnyCollatedString,
+	// but has a differing Locale (case-insensitive) and a differing OID (T_citext).
+	Citext = &T{InternalType: InternalType{
+		Family: CollatedStringFamily, Oid: oidext.T_citext, Locale: &caseInsensitiveLocale}}
+
 	// QChar is the special "char" type that is a single-character column type.
 	// It's used by system tables. It is reported as "char" (with double quotes
 	// included) in SHOW CREATE and "char" in introspection for compatibility
@@ -815,7 +820,8 @@ const (
 )
 
 var (
-	emptyLocale = ""
+	emptyLocale           = ""
+	caseInsensitiveLocale = "und-u-ks-level2"
 )
 
 // MakeScalar constructs a new instance of a scalar type (i.e. not array or
@@ -969,10 +975,10 @@ func MakeChar(width int32) *T {
 		Family: StringFamily, Oid: oid.T_bpchar, Width: width, Locale: &emptyLocale}}
 }
 
-// oidCanBeCollatedString returns true if the given oid is can be a CollatedString.
+// oidCanBeCollatedString returns true if the given oid can be a CollatedString.
 func oidCanBeCollatedString(o oid.Oid) bool {
 	switch o {
-	case oid.T_text, oid.T_varchar, oid.T_bpchar, oid.T_char, oid.T_name:
+	case oid.T_text, oid.T_varchar, oid.T_bpchar, oid.T_char, oid.T_name, oidext.T_citext:
 		return true
 	}
 	return false
@@ -1679,6 +1685,8 @@ func (t *T) Name() string {
 			return "varchar"
 		case oid.T_name:
 			return "name"
+		case oidext.T_citext:
+			return "citext"
 		}
 		panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 
@@ -1891,6 +1899,8 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		case oid.T_name:
 			// Type modifiers not allowed for name.
 			return "name"
+		case oidext.T_citext:
+			return "citext"
 		default:
 			panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 		}
@@ -2719,6 +2729,8 @@ func (t *T) downgradeType() error {
 			t.InternalType.VisibleType = visibleQCHAR
 		case oid.T_name:
 			t.InternalType.Family = name
+		case oidext.T_citext:
+			// Nothing to do
 		default:
 			return errors.AssertionFailedf("unexpected Oid: %d", t.Oid())
 		}
@@ -2766,6 +2778,10 @@ func (t *T) downgradeType() error {
 func (t *T) String() string {
 	switch t.Family() {
 	case CollatedStringFamily:
+		switch t.Oid() {
+		case oidext.T_citext:
+			return t.Name()
+		}
 		if t.Locale() == "" {
 			// Used in telemetry.
 			return fmt.Sprintf("collated%s{*}", t.Name())
@@ -3011,6 +3027,11 @@ func IsWildcardTupleType(t *T) bool {
 //	STRING COLLATE EN
 //	VARCHAR(20)[] COLLATE DE
 func (t *T) collatedStringTypeSQL(isArray bool) string {
+	switch t.Oid() {
+	case oidext.T_citext:
+		return "CITEXT"
+	}
+
 	var buf bytes.Buffer
 	buf.WriteString(t.stringTypeSQL())
 	if isArray {
