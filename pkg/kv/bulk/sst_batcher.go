@@ -94,14 +94,11 @@ func MakeAndRegisterConcurrencyLimiter(sv *settings.Values) limit.ConcurrentRequ
 type SSTBatcher struct {
 	name     string
 	db       *kv.DB
+	adder    *sstAdder
 	rc       *rangecache.RangeCache
 	settings *cluster.Settings
 	mem      *mon.ConcurrentBoundAccount
 	limiter  limit.ConcurrentRequestLimiter
-
-	// priority is the admission priority used for AddSSTable
-	// requests.
-	priority admissionpb.WorkPriority
 
 	// disallowShadowingBelow is described on kvpb.AddSSTableRequest.
 	disallowShadowingBelow hlc.Timestamp
@@ -222,13 +219,13 @@ func MakeSSTBatcher(
 	b := &SSTBatcher{
 		name:                   name,
 		db:                     db,
+		adder:                  newSSTAdder(db, settings, writeAtBatchTs, disallowShadowingBelow, admissionpb.BulkNormalPri),
 		settings:               settings,
 		disallowShadowingBelow: disallowShadowingBelow,
 		writeAtBatchTS:         writeAtBatchTs,
 		disableScatters:        !scatterSplitRanges,
 		mem:                    mem,
 		limiter:                sendLimiter,
-		priority:               admissionpb.BulkNormalPri,
 	}
 	b.mu.lastFlush = timeutil.Now()
 	b.mu.tracingSpan = tracing.SpanFromContext(ctx)
@@ -248,8 +245,13 @@ func MakeStreamSSTBatcher(
 	onFlush func(summary kvpb.BulkOpSummary),
 ) (*SSTBatcher, error) {
 	b := &SSTBatcher{
-		db:        db,
-		rc:        rc,
+		db: db,
+		rc: rc,
+		// We use NormalPri since anything lower than normal priority is assumed to
+		// be able to handle reduced throughput. We are OK with his for now since
+		// the consuming cluster of a replication stream does not have a latency
+		// sensitive workload running against it.
+		adder:     newSSTAdder(db, settings, false /*writeAtBatchTS*/, hlc.Timestamp{}, admissionpb.BulkNormalPri),
 		settings:  settings,
 		ingestAll: true,
 		mem:       mem,
@@ -263,11 +265,6 @@ func MakeStreamSSTBatcher(
 		// does not however make sense to scatter that range as the RHS maybe
 		// non-empty.
 		disableScatters: true,
-		// We use NormalPri since anything lower than normal priority is assumed to
-		// be able to handle reduced throughput. We are OK with his for now since
-		// the consuming cluster of a replication stream does not have a latency
-		// sensitive workload running against it.
-		priority: admissionpb.NormalPri,
 	}
 	b.mu.lastFlush = timeutil.Now()
 	b.mu.tracingSpan = tracing.SpanFromContext(ctx)
@@ -289,12 +286,12 @@ func MakeTestingSSTBatcher(
 ) (*SSTBatcher, error) {
 	b := &SSTBatcher{
 		db:             db,
+		adder:          newSSTAdder(db, settings, false, hlc.Timestamp{}, admissionpb.BulkNormalPri),
 		settings:       settings,
 		skipDuplicates: skipDuplicates,
 		ingestAll:      ingestAll,
 		mem:            mem,
 		limiter:        sendLimiter,
-		priority:       admissionpb.BulkNormalPri,
 	}
 	b.Reset(ctx)
 	return b, nil
@@ -724,14 +721,33 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 	fn := func(ctx context.Context) error {
 		defer res.Release()
 		defer b.mem.Shrink(ctx, reserved)
-		if err := b.addSSTable(ctx, batchTS, start, end, data, stats, !flushAsync, currentBatchStatsCopy); err != nil {
+		results, err := b.adder.AddSSTable(ctx, batchTS, start, end, data, stats, currentBatchStatsCopy)
+		if err != nil {
 			return err
 		}
 
 		// Now that we have completed ingesting the SSTables we take a lock and
-		// update the statistics on the SSTBatcher.
+		// process the flush results.
 		b.mu.Lock()
 		defer b.mu.Unlock()
+
+		for _, addResult := range results {
+			if b.writeAtBatchTS {
+				b.mu.maxWriteTS.Forward(addResult.timestamp)
+			}
+			if !flushAsync {
+				// If this was sent async then, by the time the reply gets back, it
+				// might not be the last range anymore. We can just discard the last
+				// range reply in this case though because async sends are only used
+				// for SSTs sent due to range boundaries, i.e. when we are done with
+				// with that range anyway.
+				b.lastRange.span = addResult.rangeSpan
+				if addResult.rangeSpan.Valid() {
+					b.lastRange.remaining = sz(addResult.availableBytes)
+					b.lastRange.nextExistingKey = addResult.followingLikelyNonEmptySpanStart
+				}
+			}
+		}
 
 		// Update the statistics associated with the current batch. We do this on
 		// our captured copy of the currentBatchSummary instead of the
