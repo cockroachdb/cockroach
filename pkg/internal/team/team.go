@@ -32,8 +32,6 @@ type Team struct {
 	Aliases map[Alias]Purpose `yaml:"aliases"`
 	// GitHub label will be added to issues posted for this team.
 	Label string `yaml:"label"`
-	// TriageColumnID is the GitHub Column ID to assign issues to.
-	TriageColumnID int `yaml:"triage_column_id"`
 	// SilenceMentions is true if @-mentions should be supressed for this team.
 	SilenceMentions bool `yaml:"silence_mentions"`
 }

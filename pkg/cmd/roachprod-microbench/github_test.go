@@ -59,7 +59,6 @@ func formatPostRequest(formatter issues.IssueFormatter, req issues.PostRequest) 
 	// These fields can vary based on the test env so we set them to arbitrary
 	// values here.
 	req.MentionOnCreate = []string{"@test-eng"}
-	req.ProjectColumnID = 0
 
 	data := issues.TemplateData{
 		PostRequest:      req,
