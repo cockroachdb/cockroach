@@ -142,6 +142,10 @@ func (t TxnMeta) Short() redact.SafeString {
 	return redact.SafeString(t.ID.Short().String())
 }
 
+func (ms MVCCStats) IsEmpty() bool {
+	return ms == MVCCStats{}
+}
+
 // Total returns the range size as the sum of the key and value
 // bytes. This includes all non-live keys and all versioned values,
 // both for point and range keys.
