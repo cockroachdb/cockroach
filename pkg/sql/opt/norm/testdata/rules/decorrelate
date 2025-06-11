@@ -5815,7 +5815,7 @@ union
            └── true [as=bool:43]
 
 # This is a more synthetic regression test for #130398.
-exprnorm expect=HoistJoinSubquery disable=PushFilterIntoJoinLeft
+exprnorm expect=HoistJoinSubquery disable=(PushFilterIntoJoinLeft,SimplifyIsCondition)
 (SemiJoin
     (Scan [ (Table "xy") (Cols "x,y") ])
     (Select
@@ -5867,7 +5867,7 @@ group-by (hash)
            └── y:2
 
 # This is a synthetic regression test for #130398 that tests an anti-join.
-exprnorm expect=HoistJoinSubquery disable=PushFilterIntoJoinLeft
+exprnorm expect=HoistJoinSubquery disable=(PushFilterIntoJoinLeft, SimplifyIsCondition)
 (AntiJoin
     (Scan [ (Table "xy") (Cols "x,y") ])
     (Select
