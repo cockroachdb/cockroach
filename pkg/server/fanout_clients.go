@@ -76,6 +76,19 @@ type ServerIterator interface {
 	getServerIDSQLAddress(context.Context, serverID) (*util.UnresolvedAddr, roachpb.Locality, error)
 }
 
+// nodeDialer wraps a ServerIterator to provide a `rpcbase.Dialer`
+// implementation that can be use to create RPC clients. nodeDialer allows
+// reusing utity function in serverpb package to create RPC clients.
+type nodeDialer struct {
+	si ServerIterator
+}
+
+func (d *nodeDialer) Dial(
+	ctx context.Context, nodeID roachpb.NodeID, _ rpcbase.ConnectionClass,
+) (*grpc.ClientConn, error) {
+	return d.si.dialNode(ctx, serverID(nodeID))
+}
+
 type tenantFanoutClient struct {
 	sqlServer *SQLServer
 	rpcCtx    *rpc.Context

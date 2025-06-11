@@ -74,7 +74,8 @@ func TestServerWithTimeseriesImport(t *testing.T) {
 }
 
 func dumpTSNonempty(t *testing.T, cc *grpc.ClientConn, dest string) (bytes int64) {
-	names, err := serverpb.GetInternalTimeseriesNamesFromServer(context.Background(), cc)
+	ac := serverpb.NewAdminClient(cc)
+	names, err := serverpb.GetInternalTimeseriesNamesFromServer(context.Background(), ac)
 	require.NoError(t, err)
 	c, err := tspb.NewTimeSeriesClient(cc).DumpRaw(context.Background(), &tspb.DumpRequest{
 		Names: names,
