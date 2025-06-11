@@ -1212,7 +1212,7 @@ func UpdateSSTTimestamps(
 	sst []byte,
 	from, to hlc.Timestamp,
 	concurrency int,
-	stats *enginepb.MVCCStats,
+	stats enginepb.MVCCStats,
 ) ([]byte, enginepb.MVCCStats, error) {
 	if from.IsEmpty() {
 		return nil, enginepb.MVCCStats{}, errors.Errorf("from timestamp not given")
@@ -1225,7 +1225,7 @@ func UpdateSSTTimestamps(
 	sstOut.Buffer.Grow(len(sst))
 
 	var statsDelta enginepb.MVCCStats
-	if stats != nil {
+	if !stats.IsEmpty() {
 		// There could be a GCBytesAge delta between the old and new timestamps.
 		// Calculate this delta by subtracting all the relevant stats at the
 		// old timestamp, and then aging the stats to the new timestamp before

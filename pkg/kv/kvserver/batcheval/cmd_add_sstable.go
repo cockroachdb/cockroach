@@ -187,7 +187,7 @@ func EvalAddSSTable(
 			log.VEventf(ctx, 2, "rewriting timestamps for SSTable [%s,%s) from %s to %s",
 				start.Key, end.Key, sstToReqTS, h.Timestamp)
 			sst, sstReqStatsDelta, err = storage.UpdateSSTTimestamps(
-				ctx, st, sst, sstToReqTS, h.Timestamp, conc, args.MVCCStats)
+				ctx, st, sst, sstToReqTS, h.Timestamp, conc, *args.MVCCStats)
 			if err != nil {
 				return result.Result{}, errors.Wrap(err, "updating SST timestamps")
 			}

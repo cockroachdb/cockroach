@@ -172,7 +172,7 @@ func runUpdateSSTTimestamps(ctx context.Context, b *testing.B, numKeys int, conc
 		var ms enginepb.MVCCStats
 		var err error
 		res, _, err = UpdateSSTTimestamps(
-			ctx, st, sstFile.Bytes(), sstTimestamp, reqTimestamp, concurrency, &ms)
+			ctx, st, sstFile.Bytes(), sstTimestamp, reqTimestamp, concurrency, ms)
 		if err != nil {
 			require.NoError(b, err) // for performance
 		}
