@@ -226,10 +226,6 @@ func changefeedPlanHook(
 	}
 	opts := changefeedbase.MakeStatementOptions(rawOpts)
 
-	if changefeedStmt.Level == tree.ChangefeedLevelDatabase {
-		return nil, nil, false, errors.UnimplementedError(errors.IssueLink{}, "database-level changefeed is not implemented")
-	}
-
 	description, err := makeChangefeedDescription(ctx, changefeedStmt.CreateChangefeed, sinkURI, opts)
 	if err != nil {
 		return nil, nil, false, err
@@ -463,6 +459,19 @@ func evalCursor(
 	return asOf.Timestamp, nil
 }
 
+func getTargetList(changefeedStmt *annotatedChangefeedStatement) tree.BackupTargetList {
+	targetList := tree.BackupTargetList{}
+	if changefeedStmt.Level == tree.ChangefeedLevelTable {
+		for _, t := range changefeedStmt.TableTargets {
+			targetList.Tables.TablePatterns = append(targetList.Tables.TablePatterns, t.TableName)
+		}
+
+	} else if changefeedStmt.Level == tree.ChangefeedLevelDatabase {
+		targetList.Databases = tree.NameList{changefeedStmt.DatabaseTarget.DatabaseName}
+	}
+	return targetList
+}
+
 func createChangefeedJobRecord(
 	ctx context.Context,
 	p sql.PlanHookState,
@@ -530,49 +539,66 @@ func createChangefeedJobRecord(
 		}
 	}
 
-	tableOnlyTargetList := tree.BackupTargetList{}
-	for _, t := range changefeedStmt.TableTargets {
-		tableOnlyTargetList.Tables.TablePatterns = append(tableOnlyTargetList.Tables.TablePatterns, t.TableName)
-	}
+	targetList := getTargetList(changefeedStmt)
+	var details jobspb.ChangefeedDetails
 
-	// This grabs table descriptors once to get their ids.
-	targetDescs, err := getTableDescriptors(ctx, p, &tableOnlyTargetList, statementTime, initialHighWater)
+	targetTableDescs, targetDatabaseDescs, err := getTargetDescriptors(ctx, p, &targetList, statementTime, initialHighWater)
+
 	if err != nil {
 		return nil, err
 	}
+	targets := []jobspb.ChangefeedTargetSpecification{}
+	tables := jobspb.ChangefeedTargets{}
+	if changefeedStmt.Level == tree.ChangefeedLevelTable {
+		// This grabs table descriptors once to get their ids.
+		targets, tables, err = getTargetsAndTables(ctx, p, targetTableDescs, changefeedStmt.TableTargets,
+			changefeedStmt.originalSpecs, opts.ShouldUseFullStatementTimeName())
 
-	for _, t := range targetDescs {
-		if tbl, ok := t.(catalog.TableDescriptor); ok && tbl.ExternalRowData() != nil {
-			if tbl.ExternalRowData().TenantID.IsSet() {
-				return nil, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on a replication target are not supported")
+		if err != nil {
+			return nil, err
+		}
+
+		for _, t := range targetTableDescs {
+			if tbl, ok := t.(catalog.TableDescriptor); ok && tbl.ExternalRowData() != nil {
+				if tbl.ExternalRowData().TenantID.IsSet() {
+					return nil, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on a replication target are not supported")
+				}
+				return nil, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on external tables are not supported")
 			}
-			return nil, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on external tables are not supported")
+		}
+
+		sd := p.SessionData().Clone()
+		// Add non-local session data state (localization, etc).
+		sessiondata.MarshalNonLocal(p.SessionData(), &sd.SessionData)
+		details = jobspb.ChangefeedDetails{
+			Tables:               tables,
+			SinkURI:              sinkURI,
+			StatementTime:        statementTime,
+			EndTime:              endTime,
+			TargetSpecifications: targets,
+			SessionData:          &sd.SessionData,
+		}
+	} else if changefeedStmt.Level == tree.ChangefeedLevelDatabase {
+		if len(targetDatabaseDescs) == 0 || len(targetDatabaseDescs) > 1 {
+			return nil, errors.Errorf("only one database target is supported")
+		}
+		targets = getDatabaseTargets(targetDatabaseDescs)
+		details = jobspb.ChangefeedDetails{
+			TargetSpecifications: targets,
+			SinkURI:              sinkURI,
+			StatementTime:        statementTime,
+			EndTime:              endTime,
 		}
 	}
-
-	targets, tables, err := getTargetsAndTables(ctx, p, targetDescs, changefeedStmt.TableTargets,
-		changefeedStmt.originalSpecs, opts.ShouldUseFullStatementTimeName())
-
-	if err != nil {
-		return nil, err
+	if changefeedStmt.Level == tree.ChangefeedLevelDatabase {
+		return nil, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on databases are not supported")
 	}
 	tolerances := opts.GetCanHandle()
-	sd := p.SessionData().Clone()
-	// Add non-local session data state (localization, etc).
-	sessiondata.MarshalNonLocal(p.SessionData(), &sd.SessionData)
-	details := jobspb.ChangefeedDetails{
-		Tables:               tables,
-		SinkURI:              sinkURI,
-		StatementTime:        statementTime,
-		EndTime:              endTime,
-		TargetSpecifications: targets,
-		SessionData:          &sd.SessionData,
-	}
 
 	specs := AllTargets(details)
 	hasSelectPrivOnAllTables := true
 	hasChangefeedPrivOnAllTables := true
-	for _, desc := range targetDescs {
+	for _, desc := range targetTableDescs {
 		if table, isTable := desc.(catalog.TableDescriptor); isTable {
 			if err := changefeedvalidators.ValidateTable(specs, table, tolerances); err != nil {
 				return nil, err
@@ -598,7 +624,7 @@ func createChangefeedJobRecord(
 	if changefeedStmt.Select != nil {
 		// Serialize changefeed expression.
 		normalized, withDiff, err := validateAndNormalizeChangefeedExpression(
-			ctx, p, opts, changefeedStmt.Select, targetDescs, targets, statementTime,
+			ctx, p, opts, changefeedStmt.Select, targetTableDescs, targets, statementTime,
 		)
 		if err != nil {
 			return nil, err
@@ -854,7 +880,7 @@ Few hours to a few days range are appropriate values for this option.`
 		Description: description,
 		Username:    p.User(),
 		DescriptorIDs: func() (sqlDescIDs []descpb.ID) {
-			for _, desc := range targetDescs {
+			for _, desc := range targetTableDescs {
 				sqlDescIDs = append(sqlDescIDs, desc.GetID())
 			}
 			return sqlDescIDs
@@ -887,31 +913,31 @@ func validateSettings(ctx context.Context, needsRangeFeed bool, execCfg *sql.Exe
 	return nil
 }
 
-func getTableDescriptors(
+func getTargetDescriptors(
 	ctx context.Context,
 	p sql.PlanHookState,
 	targets *tree.BackupTargetList,
 	statementTime hlc.Timestamp,
 	initialHighWater hlc.Timestamp,
-) (map[tree.TablePattern]catalog.Descriptor, error) {
+) (map[tree.TablePattern]catalog.Descriptor, []catalog.DatabaseDescriptor, error) {
 	// For now, disallow targeting a database or wildcard table selection.
 	// Getting it right as tables enter and leave the set over time is
 	// tricky.
-	if len(targets.Databases) > 0 {
-		return nil, errors.Errorf(`CHANGEFEED cannot target %s`,
-			tree.AsString(targets))
+	if len(targets.Databases) > 0 && len(targets.Tables.TablePatterns) > 0 {
+		return nil, nil, errors.Errorf(`CHANGEFEED cannot target both databases and tables`)
 	}
+
 	for _, t := range targets.Tables.TablePatterns {
 		p, err := t.NormalizeTablePattern()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if _, ok := p.(*tree.TableName); !ok {
-			return nil, errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(t))
+			return nil, nil, errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(t))
 		}
 	}
 
-	_, _, _, targetDescs, err := backupresolver.ResolveTargetsToDescriptors(ctx, p, statementTime, targets)
+	_, _, targetDatabaseDescs, targetTableDescs, err := backupresolver.ResolveTargetsToDescriptors(ctx, p, statementTime, targets)
 	if err != nil {
 		var m *backupresolver.MissingTableErr
 		if errors.As(err, &m) {
@@ -925,7 +951,7 @@ func getTableDescriptors(
 				"do the targets exist at the specified cursor time %s?", initialHighWater)
 		}
 	}
-	return targetDescs, err
+	return targetTableDescs, targetDatabaseDescs, err
 }
 
 func getTargetsAndTables(
@@ -999,6 +1025,21 @@ func getTargetsAndTables(
 	}
 
 	return targets, tables, nil
+}
+
+func getDatabaseTargets(
+	targetDatabaseDescs []catalog.DatabaseDescriptor,
+) []jobspb.ChangefeedTargetSpecification {
+	targets := make([]jobspb.ChangefeedTargetSpecification, len(targetDatabaseDescs))
+
+	for i, desc := range targetDatabaseDescs {
+		targets[i] = jobspb.ChangefeedTargetSpecification{
+			DescID:            desc.GetID(),
+			Type:              jobspb.ChangefeedTargetSpecification_DATABASE,
+			StatementTimeName: desc.GetName(),
+		}
+	}
+	return targets
 }
 
 func validateSink(
