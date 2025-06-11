@@ -123,8 +123,18 @@ func runGetRequests(
 	// We can ensure we request from in-memory tables by requesting stats from
 	// a time range for which no data is available, as the in-memory table
 	// is only used when no data is available from system tables.
-	if err := s.requestSQLStatsFromEmptyInterval(ctx, roachNodes, statsType, addToTableSources); err != nil {
-		return errors.Wrap(err, "failed to request stats for empty interval")
+	reqEmpty := func() error {
+		if err := s.requestSQLStatsFromEmptyInterval(ctx, roachNodes, statsType, addToTableSources); err != nil {
+			return errors.Wrap(err, "failed to request stats for empty interval")
+		}
+		return nil
+	}
+	if err := withRetries(ctx, retry.Options{
+		InitialBackoff: 10 * time.Second,
+		MaxBackoff:     30 * time.Second,
+		MaxRetries:     6, // 6 * 30s = 3m, which is well past the flush interval.
+	}, reqEmpty); err != nil {
+		return err
 	}
 	inMemTable := crdbInternalStmtStatsCombined
 	if statsType == serverpb.CombinedStatementsStatsRequest_TxnStatsOnly {
@@ -134,29 +144,24 @@ func runGetRequests(
 		return errors.Newf("expected to find in-memory tables in response, found %v", maps.Keys(foundTableSources))
 	}
 
-	// Now we'll wait for the flush to occur and request stats from the persisted tables.
-	r := retry.StartWithCtx(ctx, retry.Options{
-		InitialBackoff: 10 * time.Second,
-		MaxBackoff:     30 * time.Second,
-		MaxRetries:     6, // 6 * 30s = 3m, which is well past the flush interval.
-	})
-	foundFlushedStats := false
-	for r.Next() {
+	reqTwoHours := func() error {
 		// Requesting data from the last two hours should return data from the persisted tables eventually.
 		if err := s.requestSQLStatsFromLastTwoHours(ctx, roachNodes, statsType, addToTableSources); err != nil {
 			return errors.Wrap(err, "failed to request stats for last two hours")
 		}
-		if len(foundTableSources) >= expectedTableCount {
-			foundFlushedStats = true
-			break
+		if len(foundTableSources) < expectedTableCount {
+			l.Printf("waiting for flushed stats...")
+			return errors.Newf("failed to find flushed stats, found: %v", maps.Keys(foundTableSources))
 		}
-		l.Printf("waiting for flushed stats...")
-	}
-	if !foundFlushedStats {
-		return errors.Newf("failed to find flushed stats, found: %v", maps.Keys(foundTableSources))
+		return nil
 	}
 
-	return nil
+	// Now we'll wait for the flush to occur and request stats from the persisted tables.
+	return withRetries(ctx, retry.Options{
+		InitialBackoff: 10 * time.Second,
+		MaxBackoff:     30 * time.Second,
+		MaxRetries:     6, // 6 * 30s = 3m, which is well past the flush interval.
+	}, reqTwoHours)
 }
 
 func getCombinedStatementStatsURL(

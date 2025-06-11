@@ -216,53 +216,55 @@ func testEndpoint(
 
 	l.Printf("testing endpoint: %s", fullURL)
 	var resp *http.Response
-	switch ep.Method {
-	case http.MethodGet:
-		resp, err = client.Get(ctx, fullURL)
-	default:
-		return errors.Newf("unsupported HTTP method: %s", ep.Method)
-	}
+	f := func() error {
+		switch ep.Method {
+		case http.MethodGet:
+			resp, err = client.Get(ctx, fullURL)
+		default:
+			return errors.Newf("unsupported HTTP method: %s", ep.Method)
+		}
+		if err != nil {
+			return errors.Wrapf(err, "failed to %s %s", ep.Method, fullURL)
+		}
+		defer resp.Body.Close()
 
-	if err != nil {
-		return errors.Wrapf(err, "failed to %s %s", ep.Method, fullURL)
-	}
-	defer resp.Body.Close()
-
-	// Note(alyshan): In multiversion tests, some endpoints may be unavailable
-	// as we may be acting as a secondary tenant (401, 501), or the database is on a version
-	// that does not support the endpoint (409).
-	if multiVersionTest {
-		// Since nodes get restarted in multiversion tests there is a race where certain nodes have
-		// not registered certain routes yet. Retry a few times to handle transient 404s.
-		if resp.StatusCode == http.StatusNotFound {
-			r := retry.StartWithCtx(ctx, retry.Options{
-				MaxRetries: 10,
-			})
-			for r.Next() {
-				resp, err = client.Get(ctx, fullURL)
-				if err != nil {
-					return errors.Wrapf(err, "failed to %s %s", ep.Method, fullURL)
-				}
-				if resp.StatusCode != http.StatusNotFound {
-					break
-				}
+		// Note(alyshan): In multiversion tests, some endpoints may be unavailable
+		// as we may be acting as a secondary tenant (401, 501), or the database is on a version
+		// that does not support the endpoint (409).
+		if multiVersionTest {
+			if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusNotImplemented ||
+				resp.StatusCode == http.StatusConflict {
+				l.Printf("%v returned %v in multiversion testing mode", fullURL, resp.StatusCode)
+				return nil
 			}
 		}
 
-		// TODO(alyshan): Consider explicitly noting which endpoints fall into this category.
-		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusNotImplemented ||
-			resp.StatusCode == http.StatusConflict {
-			l.Printf("%v returned %v in multiversion testing mode", fullURL, resp.StatusCode)
-			return nil
+		err = verifyResponse(resp)
+		if err != nil {
+			return errors.Wrap(err, "failed to verify response")
 		}
+
+		return nil
 	}
 
-	err = verifyResponse(resp)
-	if err != nil {
-		return errors.Wrap(err, "failed to verify response")
-	}
+	return withRetries(ctx, retry.Options{MaxRetries: 10}, f)
+}
 
-	return nil
+// withRetries runs the given function f with the provided retry options.
+// If f returns nil, the retry loop breaks and nil is returned.
+// If f returns an error it is retried.
+// Once retries are exhausted, all errors are returned via errors.Join.
+func withRetries(ctx context.Context, opts retry.Options, f func() error) error {
+	var lastErr error
+	r := retry.StartWithCtx(ctx, opts)
+	for r.Next() {
+		if err := f(); err != nil {
+			lastErr = errors.Join(lastErr, err)
+			continue
+		}
+		return nil
+	}
+	return lastErr
 }
 
 // initializeSchemaAndIDs ensures schema objects are created in the cluster, and determines
