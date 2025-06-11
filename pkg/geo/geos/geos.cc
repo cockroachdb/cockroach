@@ -415,8 +415,9 @@ CR_GEOS_String toGEOSString(const char* data, size_t len) {
   if (len == 0) {
     return result;
   }
-  result.data = static_cast<char*>(malloc(len));
+  result.data = static_cast<char*>(malloc(len+1));
   memcpy(result.data, data, len);
+  result.data[len] = '\0';
   return result;
 }
 
