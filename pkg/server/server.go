@@ -408,6 +408,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	}
 
 	gossip.RegisterGossipServer(grpcServer.Server, g)
+	if err := gossip.DRPCRegisterGossip(drpcServer, g.AsDRPCServer()); err != nil {
+		return nil, err
+	}
 
 	var dialerKnobs nodedialer.DialerTestingKnobs
 	if dk := cfg.TestingKnobs.DialerKnobs; dk != nil {

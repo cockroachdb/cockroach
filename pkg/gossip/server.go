@@ -103,6 +103,11 @@ func (s *server) GetNodeMetrics() *Metrics {
 // The received delta is combined with the infostore, and this
 // node's own gossip is returned to requesting client.
 func (s *server) Gossip(stream Gossip_GossipServer) error {
+	return s.gossip(stream)
+}
+
+// gossip is the shared implementation for Gossip for both gRPC and DRPC.
+func (s *server) gossip(stream RPCGossip_GossipStream) error {
 	args, err := stream.Recv()
 	if err != nil {
 		return err
