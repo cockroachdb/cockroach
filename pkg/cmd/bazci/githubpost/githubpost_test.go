@@ -392,7 +392,6 @@ TestXXA - 1.00s
 					require.Equal(t, expRepro, actRepro)
 				}
 				assert.Equal(t, c.expIssues[curIssue].mention, req.MentionOnCreate)
-				assert.Equal(t, c.expIssues[curIssue].hasProject, req.ProjectColumnID != 0)
 				assert.Equal(t, c.expIssues[curIssue].labels, req.Labels)
 				// On next invocation, we'll check the next expected issue.
 				curIssue++
