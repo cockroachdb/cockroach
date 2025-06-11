@@ -1099,7 +1099,7 @@ message ChangefeedTargetSpecification {
     COLUMN_FAMILY = 2;
 
     // Add TargetTypes for database, secondary index, etc. when implemented
-
+    DATABASE = 3;
   }
 
   TargetType type = 1;
