@@ -4696,6 +4696,67 @@ DROP FUNCTION f1;
 
 subtest end
 
+subtest self_ref_and_fk
+
+statement ok
+CREATE SCHEMA sc1;
+
+statement ok
+CREATE TABLE sc1.tab1 (
+    col1 INT,
+    PRIMARY KEY (col1)
+);
+
+# Self-referencing FK
+statement ok
+ALTER TABLE sc1.tab1
+ADD CONSTRAINT fk_self FOREIGN KEY (col1)
+REFERENCES sc1.tab1 (col1)
+ON DELETE CASCADE;
+
+# Trigger function that selects from same table
+statement ok
+CREATE FUNCTION tf1() RETURNS TRIGGER AS $$
+BEGIN
+  SELECT 1 FROM sc1.tab1;
+  RETURN NULL;
+END;
+$$ LANGUAGE PLpgSQL;
+
+# Create the trigger that adds a forward and backward reference on sc1.tab1.
+statement ok
+CREATE TRIGGER tr1
+BEFORE INSERT OR UPDATE ON sc1.tab1
+FOR EACH ROW EXECUTE FUNCTION tf1();
+
+# Drop the trigger. Prior to #147981, this used to leave the backref to sc1.tab1
+# around causing an infinite loop during DROP SCHEMA.
+statement ok
+DROP TRIGGER tr1 ON sc1.tab1;
+
+# This test doesn't run with the legacy schema config because CREATE/DROP
+# trigger isn't implemented there. We enable legacy to run DROP DDL to verify
+# the dependencies handling. We do that in a transaction that is rolled back so
+# we can retry with the DSC.
+let $use_decl_sc
+SHOW use_declarative_schema_changer
+
+statement ok
+set use_declarative_schema_changer = 'off';
+
+statement ok
+BEGIN;
+DROP SCHEMA sc1 CASCADE;
+ROLLBACK;
+
+statement ok
+set use_declarative_schema_changer = $use_decl_sc;
+
+statement ok
+DROP SCHEMA sc1 CASCADE;
+
+subtest end
+
 # ==============================================================================
 # Test information_schema.triggers and pg_catalog.pg_trigger
 # ==============================================================================
