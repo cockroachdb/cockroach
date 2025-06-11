@@ -10,6 +10,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"io"
+	"math/rand"
 	"net/http"
 	"strconv"
 	"strings"
@@ -19,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -88,6 +91,38 @@ func registerDBConsoleEndpoints(r registry.Registry) {
 		Run:              runDBConsole,
 		Timeout:          1 * time.Hour,
 	})
+}
+
+func registerDBConsoleEndpointsMixedVersion(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:             "db-console/mixed-version-endpoints",
+		Owner:            registry.OwnerObservability,
+		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode()),
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+		Randomized:       true,
+		Run:              runDBConsoleMixedVersion,
+		Timeout:          1 * time.Hour,
+	})
+}
+
+func runDBConsoleMixedVersion(ctx context.Context, t test.Test, c cluster.Cluster) {
+	mvt := mixedversion.NewTest(ctx, t, t.L(), c,
+		c.CRDBNodes(),
+		// We test only upgrades from 23.2 in this test because it uses
+		// the `workload init` command, which is only supported
+		// reliably multi-tenant mode starting from that version.
+		mixedversion.MinimumSupportedVersion("v23.2.0"),
+	)
+
+	mvt.InMixedVersion("test db console endpoints", func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+		if err := initializeSchemaAndIDs(ctx, c, t.L()); err != nil {
+			t.Fatal(err)
+		}
+		return testEndpoints(ctx, c, l, getEndpoints(t), true)
+	})
+
+	mvt.Run()
 }
 
 func runDBConsole(ctx context.Context, t test.Test, c cluster.Cluster) {
