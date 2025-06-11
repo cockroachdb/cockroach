@@ -35,12 +35,10 @@ var (
 	teamsYaml = `cockroachdb/unowned:
   aliases:
     cockroachdb/rfc-prs: other
-  triage_column_id: 0
 cockroachdb/test-eng:
   label: T-testeng
-  triage_column_id: 14041337
 cockroachdb/dev-inf:
-  triage_column_id: 10210759`
+  label: T-dev-inf`
 
 	validTeamsFn   = func() (team.Map, error) { return loadYamlTeams(teamsYaml) }
 	invalidTeamsFn = func() (team.Map, error) { return loadYamlTeams("invalid yaml") }
