@@ -119,7 +119,7 @@ idle_in_transaction_session_timeout                        0
 idle_session_timeout                                       0
 index_join_streamer_batch_size                             8.0 MiB
 index_recommendations_enabled                              off
-initial_retry_backoff_for_read_committed                   0
+initial_retry_backoff_for_read_committed                   2
 inject_retry_errors_enabled                                off
 inject_retry_errors_on_commit_enabled                      off
 integer_datetimes                                          on
@@ -144,7 +144,7 @@ max_connections                                            -1
 max_identifier_length                                      128
 max_index_keys                                             32
 max_prepared_transactions                                  2147483647
-max_retries_for_read_committed                             10
+max_retries_for_read_committed                             100
 node_id                                                    1
 null_ordered_last                                          off
 on_update_rehome_row_enabled                               on

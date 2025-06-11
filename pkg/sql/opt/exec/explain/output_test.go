@@ -362,6 +362,8 @@ func TestRetryFields(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	sqlDB.Exec(t, "CREATE SEQUENCE s")
 	sqlDB.Exec(t, "CREATE TABLE a (a INT)")
+	// Speed up retries.
+	sqlDB.Exec(t, "SET initial_retry_backoff_for_read_committed = '1us'")
 
 	retryCountRE := regexp.MustCompile(`number of transaction retries: (\d+)`)
 	retryTimeRE := regexp.MustCompile(`time spent retrying the transaction: ([\d\.]+)[µsm]+`)
