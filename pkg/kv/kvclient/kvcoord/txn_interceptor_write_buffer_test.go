@@ -2520,3 +2520,139 @@ func TestTxnWriteBufferChecksForExclusionLoss(t *testing.T) {
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
 }
+
+// TestTxnWriteBufferCorrectlyRollsbackExclusionTimestamp verifies that
+// decomposed writes don't attach an exclusion timestamp that was established at
+// a sequence number that was subsequently rolled back.
+func TestTxnWriteBufferCorrectlyRollsbackExclusionTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+
+	txn := makeTxnProto()
+	txn.Sequence = 10
+	initialReadTimestamp := txn.ReadTimestamp
+
+	keyA := roachpb.Key("a")
+	valStr := "val"
+
+	savepoint := &savepoint{seqNum: txn.Sequence}
+	twb.createSavepointLocked(ctx, savepoint)
+
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	putReq := putArgs(keyA, valStr, txn.Sequence)
+	putReq.MustAcquireExclusiveLock = true
+	ba.Add(putReq)
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		resp := ba.CreateReply()
+		resp.Txn = ba.Txn
+		return resp, nil
+	})
+
+	br, pErr := twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	twb.rollbackToSavepointLocked(ctx, *savepoint)
+	txn.Sequence++
+
+	// Another write on keyA
+	nextReadTimestamp := initialReadTimestamp.Next()
+	txn.BumpReadTimestamp(nextReadTimestamp)
+	txn.Sequence++
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	putReq = putArgs(keyA, valStr, txn.Sequence)
+	putReq.MustAcquireExclusiveLock = true
+	ba.Add(putReq)
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		resp := ba.CreateReply()
+		resp.Txn = ba.Txn
+		return resp, nil
+	})
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	// Commit the transaction and verify that the request has the expected exclusion timestamp.
+	txn.BumpReadTimestamp(nextReadTimestamp.Next())
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.EndTxnRequest{Commit: true})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 2)
+
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+		putReq := ba.Requests[0].GetInner().(*kvpb.PutRequest)
+		require.Equal(t, keyA, putReq.Key)
+		require.Equal(t, nextReadTimestamp, putReq.ExpectExclusionSince)
+
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[1].GetInner())
+
+		resp := ba.CreateReply()
+		resp.Txn = ba.Txn
+		return resp, nil
+	})
+
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+}
+
+func TestLockKeyInfo(t *testing.T) {
+	ts1 := hlc.Timestamp{WallTime: 1}
+	ts2 := hlc.Timestamp{WallTime: 2}
+
+	t.Run("held", func(t *testing.T) {
+		lki := newLockedKeyInfo(lock.Exclusive, 1, ts1)
+		require.True(t, lki.held(lock.Exclusive))
+		require.False(t, lki.held(lock.Shared))
+
+		lki = newLockedKeyInfo(lock.Shared, 1, ts1)
+		require.True(t, lki.held(lock.Shared))
+		require.False(t, lki.held(lock.Exclusive))
+	})
+	t.Run("heldGE", func(t *testing.T) {
+		lki := newLockedKeyInfo(lock.Exclusive, 1, ts1)
+		require.True(t, lki.heldGE(lock.Exclusive))
+		require.True(t, lki.heldGE(lock.Shared))
+
+		lki = newLockedKeyInfo(lock.Shared, 1, ts1)
+		require.False(t, lki.heldGE(lock.Exclusive))
+		require.True(t, lki.heldGE(lock.Shared))
+	})
+	t.Run("acquireLock", func(t *testing.T) {
+		lki := newLockedKeyInfo(lock.Exclusive, 1, ts1)
+		lki.acquireLock(lock.Shared, 1, ts2)
+		require.Equal(t, ts1, lki.ts)
+		require.True(t, lki.held(lock.Exclusive))
+		require.True(t, lki.held(lock.Shared))
+
+		lki = newLockedKeyInfo(lock.Shared, 1, ts1)
+		lki.acquireLock(lock.Exclusive, 1, ts2)
+		require.Equal(t, ts1, lki.ts)
+		require.True(t, lki.held(lock.Exclusive))
+		require.True(t, lki.held(lock.Shared))
+	})
+	t.Run("rollbackSequence", func(t *testing.T) {
+		lki := newLockedKeyInfo(lock.Shared, 2, ts1)
+		lki.acquireLock(lock.Exclusive, 2, ts2)
+		require.False(t, lki.rollbackSequence(1))
+		require.False(t, lki.ts.IsSet())
+
+		lki = newLockedKeyInfo(lock.Shared, 2, ts1)
+		lki.acquireLock(lock.Exclusive, 3, ts2)
+		require.True(t, lki.rollbackSequence(3))
+		require.Equal(t, ts1, lki.ts)
+		require.True(t, lki.held(lock.Shared))
+		require.False(t, lki.held(lock.Exclusive))
+	})
+}

@@ -99,6 +99,7 @@ go_library(
         "@com_github_cockroachdb_errors//errorspb",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_cockroachdb_redact//interfaces",
         "@com_github_gogo_protobuf//proto",
         "@com_github_google_btree//:btree",
         "@io_opentelemetry_go_otel//attribute",

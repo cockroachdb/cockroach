@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/redact/interfaces"
 )
 
 // BufferedWritesEnabled is used to enable write buffering.
@@ -619,6 +621,7 @@ func (twb *txnWriteBuffer) rollbackToSavepointLocked(ctx context.Context, s save
 	toDelete := make([]*bufferedWrite, 0)
 	it := twb.buffer.MakeIter()
 	for it.First(); it.Valid(); it.Next() {
+		it.Cur().rollbackLockInfo(s.seqNum)
 		bufferedVals := it.Cur().vals
 		// NB: the savepoint is being rolled back to s.seqNum (inclusive). So,
 		// idx is the index of the first value that is considered rolled back.
@@ -1116,23 +1119,32 @@ func (rr requestRecord) toResp(
 			pErr.SetErrorIndex(int32(rr.index))
 			return kvpb.ResponseUnion{}, pErr
 		}
-		exclusionTS := hlc.Timestamp{}
+
+		var lei *lockAcquisition
 		if exclusionTimestampRequired {
-			exclusionTS = txn.ReadTimestamp
+			lei = &lockAcquisition{
+				str: lock.Exclusive,
+				seq: req.Sequence,
+				ts:  txn.ReadTimestamp,
+			}
 		}
 
 		// The condition was satisfied; buffer the write and return a
 		// synthesized response.
 		ru.MustSetInner(&kvpb.ConditionalPutResponse{})
-		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq, exclusionTS)
+		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq, lei)
 
 	case *kvpb.PutRequest:
-		exclusionTS := hlc.Timestamp{}
+		var lei *lockAcquisition
 		if req.MustAcquireExclusiveLock && exclusionTimestampRequired {
-			exclusionTS = txn.ReadTimestamp
+			lei = &lockAcquisition{
+				str: lock.Exclusive,
+				seq: req.Sequence,
+				ts:  txn.ReadTimestamp,
+			}
 		}
 		ru.MustSetInner(&kvpb.PutResponse{})
-		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq, exclusionTS)
+		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq, lei)
 
 	case *kvpb.DeleteRequest:
 		// To correctly populate FoundKey in the response, we must prefer any
@@ -1164,15 +1176,20 @@ func (rr requestRecord) toResp(
 			// clarify the behaviour on DeleteRequest.
 			foundKey = false
 		}
-		exclusionTS := hlc.Timestamp{}
+
+		var lei *lockAcquisition
 		if req.MustAcquireExclusiveLock && exclusionTimestampRequired {
-			exclusionTS = txn.ReadTimestamp
+			lei = &lockAcquisition{
+				str: lock.Exclusive,
+				seq: req.Sequence,
+				ts:  txn.ReadTimestamp,
+			}
 		}
 
 		ru.MustSetInner(&kvpb.DeleteResponse{
 			FoundKey: foundKey,
 		})
-		twb.addToBuffer(req.Key, roachpb.Value{}, req.Sequence, req.KVNemesisSeq, exclusionTS)
+		twb.addToBuffer(req.Key, roachpb.Value{}, req.Sequence, req.KVNemesisSeq, lei)
 
 	case *kvpb.GetRequest:
 		val, served := twb.maybeServeRead(req.Key, req.Sequence)
@@ -1267,13 +1284,22 @@ func (rr requestRecords) Summary() string {
 	return b.String()
 }
 
+// lockAcquisition represents a request that acquired a lock.
+type lockAcquisition struct {
+	str lock.Strength
+	seq enginepb.TxnSeq
+
+	// ts is the ReadTimestamp of the request that acquired the lock.
+	ts hlc.Timestamp
+}
+
 // addToBuffer adds a write to the given key to the buffer.
 func (twb *txnWriteBuffer) addToBuffer(
 	key roachpb.Key,
 	val roachpb.Value,
 	seq enginepb.TxnSeq,
 	kvNemSeq kvnemesisutil.Container,
-	ts hlc.Timestamp,
+	lockInfo *lockAcquisition,
 ) {
 	it := twb.buffer.MakeIter()
 	seek := twb.seekItemForSpan(key, nil)
@@ -1284,10 +1310,8 @@ func (twb *txnWriteBuffer) addToBuffer(
 		bw := it.Cur()
 		val := bufferedValue{val: val, seq: seq, kvNemesisSeq: kvNemSeq}
 		bw.vals = append(bw.vals, val)
-		if bw.ts.IsEmpty() {
-			bw.ts = ts
-		} else {
-			assertTrue(bw.ts.LessEq(ts), "unexpected exclusion timestamp regression")
+		if lockInfo != nil {
+			bw.acquireLock(lockInfo)
 		}
 		twb.bufferSize += val.size()
 	} else {
@@ -1295,8 +1319,10 @@ func (twb *txnWriteBuffer) addToBuffer(
 		bw := &bufferedWrite{
 			id:   twb.bufferIDAlloc,
 			key:  key,
-			ts:   ts,
 			vals: []bufferedValue{{val: val, seq: seq, kvNemesisSeq: kvNemSeq}},
+		}
+		if lockInfo != nil {
+			bw.acquireLock(lockInfo)
 		}
 		twb.buffer.Set(bw)
 		twb.bufferSize += bw.size()
@@ -1435,13 +1461,9 @@ type bufferedWrite struct {
 	// and also in the keyLocks struct.
 	endKey roachpb.Key // used in btree iteration
 
-	// ts, if non-zero, is lowest timestamp at which we had exclusive access.
-	//
-	// TODO(review): Are we OK with requiring exclusion across savepoint
-	// rollbacks? If not, we'll need to track this on a per-value level and then
-	// and flush time send the lowest value when writing in the key. That's not hard
-	// but it isn't clear to me what behavior we expect.
-	ts hlc.Timestamp
+	// lki stores information about locks that have been acquired for this key.
+	// NB: In the future it may also cache previously read values of this key.
+	lki *lockedKeyInfo
 	// TODO(arul): instead of this slice, consider adding a small (fixed size,
 	// maybe 1) array instead.
 	vals []bufferedValue // sorted in increasing sequence number order
@@ -1453,6 +1475,34 @@ func (bw *bufferedWrite) size() int64 {
 		size += v.size()
 	}
 	return size
+}
+
+func (bw *bufferedWrite) acquireLock(li *lockAcquisition) {
+	if bw.lki == nil {
+		bw.lki = newLockedKeyInfo(li.str, li.seq, li.ts)
+	} else {
+		bw.lki.acquireLock(li.str, li.seq, li.ts)
+	}
+}
+
+// exclusionExpectedSinceTimestamp returns the earliest read timestamp at which
+// a write-exclusive lock was acquired.
+func (bw *bufferedWrite) exclusionExpectedSinceTimestamp() hlc.Timestamp {
+	if bw.lki != nil {
+		assertTrue(bw.lki.ts.IsSet(), "unexpected empty timestamp on lockedKeyInfo")
+		return bw.lki.ts
+	}
+	return hlc.Timestamp{}
+}
+
+func (bw *bufferedWrite) rollbackLockInfo(seq enginepb.TxnSeq) {
+	if bw.lki == nil {
+		return
+	}
+
+	if !bw.lki.rollbackSequence(seq) {
+		bw.lki = nil
+	}
 }
 
 const bufferedValueStructOverhead = int64(unsafe.Sizeof(bufferedValue{}))
@@ -1535,7 +1585,7 @@ func (bw *bufferedWrite) SetEndKey(v []byte)  { bw.endKey = v }
 func (bw *bufferedWrite) toRequest() kvpb.RequestUnion {
 	// As we store values in increasing sequence number order, the most recent
 	// write should be the last value in the slice.
-	return bw.vals[len(bw.vals)-1].toRequestUnion(bw.key, bw.ts)
+	return bw.vals[len(bw.vals)-1].toRequestUnion(bw.key, bw.exclusionExpectedSinceTimestamp())
 }
 
 // toAllRevisionRequests returns requests for all revisions of the buffered
@@ -1545,9 +1595,138 @@ func (bw *bufferedWrite) toRequest() kvpb.RequestUnion {
 func (bw *bufferedWrite) toAllRevisionRequests() []kvpb.RequestUnion {
 	rus := make([]kvpb.RequestUnion, 0, len(bw.vals))
 	for _, val := range bw.vals {
-		rus = append(rus, val.toRequestUnion(bw.key, bw.ts))
+		rus = append(rus, val.toRequestUnion(bw.key, bw.exclusionExpectedSinceTimestamp()))
 	}
 	return rus
+}
+
+// lockedKeyInfo holds information about locks that have been acquired for a
+// key. For now, it is used to correctly track the read timestamp of the first
+// request to acquire a write-exclusive lock (NB: both Shared and Exclusive
+// locks exclude writers).
+//
+// In the future, we will also use this to elide unnecessary locking requests
+// and to buffer the responses of locking get requests.
+//
+// TODO(ssd): There is some duplication here with the data structures in
+// pkg/kvserver/concurrency/lock_table.go. But, since our use cases are a little
+// different, we've opted for duplication for now.
+type lockedKeyInfo struct {
+	// heldStrengths stores the minimum sequence number at which the given lock
+	// strength was acquired.
+	heldStrengths [2]enginepb.TxnSeq
+
+	// ts is the ReadTimestamp of the first request that acquired a
+	// write-exclusive lock.
+	//
+	// Note that all locks tracked by this struct are unreplicated. Locks do not
+	// truly have an associated timestamp. All such locks MUST be replaced by a
+	// replicated write to provide isolation up to the commit timestamp.
+	//
+	// Should never be empty while locks are held. Set on initialization and does
+	// not advance.
+	ts hlc.Timestamp
+}
+
+func newLockedKeyInfo(str lock.Strength, seqNum enginepb.TxnSeq, ts hlc.Timestamp) *lockedKeyInfo {
+	lki := &lockedKeyInfo{
+		ts:            ts,
+		heldStrengths: [2]enginepb.TxnSeq{notHeldSentinel, notHeldSentinel},
+	}
+	lki.acquireLock(str, seqNum, ts)
+	return lki
+}
+
+const notHeldSentinel = -1
+
+// Fixed length slice for all supported lock strengths for unreplicated locks.
+// May be used to iterate supported lock strengths in strength order (strongest
+// to weakest).
+var unreplicatedHolderStrengths = [...]lock.Strength{lock.Exclusive, lock.Shared}
+
+// heldStrengthToIndexMap returns a mapping between (strength, index) pairs that
+// can be used to index into the bufferedLockingRead.heldStrengths array.
+var heldStrengthToIndexMap = func() [lock.MaxStrength + 1]int {
+	var m [lock.MaxStrength + 1]int
+	// Initialize all to -1.
+	for str := range m {
+		m[str] = notHeldSentinel
+	}
+	// Set the indices of the valid strengths.
+	for i, str := range unreplicatedHolderStrengths {
+		m[str] = i
+	}
+	return m
+}()
+
+func (li *lockedKeyInfo) String() string {
+	return redact.Sprint(li).StripMarkers()
+}
+
+// SafeFormat is part of redact.SafeFormatter.
+func (li *lockedKeyInfo) SafeFormat(s interfaces.SafePrinter, verb rune) {
+	s.Printf("held: [")
+	for i, str := range unreplicatedHolderStrengths {
+		minSeq := li.heldStrengths[heldStrengthToIndexMap[str]]
+		if minSeq != notHeldSentinel {
+			sep := " "
+			if i == 0 {
+				sep = ""
+			}
+			s.Printf("%s%s@%d", sep, str, minSeq)
+		}
+	}
+	s.Printf("], ts: %s", li.ts)
+}
+
+var _ redact.SafeFormatter = &lockedKeyInfo{}
+
+func (li *lockedKeyInfo) acquireLock(str lock.Strength, seq enginepb.TxnSeq, ts hlc.Timestamp) {
+	assertTrue(li.ts.LessEq(ts), "new acquisition by request at lower timestamp than first locking request")
+
+	minSeq := li.heldStrengths[heldStrengthToIndexMap[str]]
+	if minSeq == notHeldSentinel {
+		li.heldStrengths[heldStrengthToIndexMap[str]] = seq
+	} else {
+		assertTrue(minSeq <= seq, "new acquisition at lower sequence number")
+	}
+}
+
+// held returns true if a lock has been acquired at the given strength.
+func (li *lockedKeyInfo) held(str lock.Strength) bool {
+	minSeq := li.heldStrengths[heldStrengthToIndexMap[str]]
+	return minSeq != notHeldSentinel
+}
+
+// heldGE returns true if a lock has been acquired at the given strength or
+// greater.
+func (li *lockedKeyInfo) heldGE(str lock.Strength) bool {
+	for _, minSeq := range li.heldStrengths[0 : heldStrengthToIndexMap[str]+1] {
+		if minSeq != notHeldSentinel {
+			return true
+		}
+	}
+	return false
+}
+
+// rollbackSequence rolls back the given sequence number. It returns false if
+// the lock is no longer held at any sequence number.
+func (li *lockedKeyInfo) rollbackSequence(seq enginepb.TxnSeq) bool {
+	stillHeld := false
+	for i := range li.heldStrengths {
+		if li.heldStrengths[i] >= seq {
+			li.heldStrengths[i] = notHeldSentinel
+		} else {
+			stillHeld = true
+		}
+	}
+	if !stillHeld {
+		// The caller should completely remove us in this case, but just in case,
+		// let's also unset this timestamp which is no longer valid if all locks
+		// have been rolled back.
+		li.ts = hlc.Timestamp{}
+	}
+	return stillHeld
 }
 
 // getKey reads the key for the next KV from a slice of BatchResponses field of
