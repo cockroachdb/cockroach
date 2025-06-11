@@ -66,11 +66,6 @@ var profileFlag = flag.String("profile", "",
 func BenchmarkTPCC(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
-	// Setup the cluster once for all benchmarks.
-	ctx := context.Background()
-	tc, pgURLs := startCluster(b, ctx)
-	defer tc.Stopper().Stop(ctx)
-
 	for _, impl := range []struct{ name, flag string }{
 		{"literal", "--literal-implementation=true"},
 		{"optimized", "--literal-implementation=false"},
@@ -84,9 +79,37 @@ func BenchmarkTPCC(b *testing.B) {
 				{"stock_level", "--mix=stockLevel=1"},
 				{"default", "--mix=newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1"},
 			} {
+				var tc serverutils.TestClusterInterface
+				var pgURLs [nodes]string
 				b.Run(mix.name, func(b *testing.B) {
+					ctx := context.Background()
+					// TODO(mgartner): This is a hack to avoid repeatedly
+					// setting up the cluster for a single benchmark run. Go's
+					// benchmarking tooling will run a benchmark with b.N=1
+					// first, and ramp up b.N until the benchmark hits a time
+					// threshold. This means that the setup code will run
+					// multiple times for a single benchmark result. To avoid
+					// the high latency this would incur, we only run the setup
+					// code when on the first execution of each iteration of the
+					// benchmark, when b.N=1. If the benchmark is run with
+					// --count greater than 1, then b.N will be reset to 1 for
+					// each iteration, and a new cluster will be created,
+					// ensuring benchmark results across interations remain
+					// independent. This won't be necessary in Go 1.24+ when
+					// b.Loop can be used instead.
+					if b.N == 1 && tc != nil {
+						tc.Stopper().Stop(ctx)
+						tc = nil
+					}
+					// Setup the cluster.
+					if tc == nil {
+						tc, pgURLs = startCluster(b, ctx)
+					}
 					run(b, ctx, pgURLs, []string{impl.flag, mix.flag})
 				})
+				if tc != nil {
+					tc.Stopper().Stop(context.Background())
+				}
 			}
 		})
 	}
