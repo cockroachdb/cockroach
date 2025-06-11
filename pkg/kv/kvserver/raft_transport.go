@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
+	drpc "storj.io/drpc"
 )
 
 const (
@@ -78,7 +79,7 @@ type RaftMessageResponseStream interface {
 // Send. Note that the default implementation of grpc.Stream for server
 // responses (grpc.serverStream) is not safe for concurrent calls to Send.
 type lockedRaftMessageResponseStream struct {
-	wrapped MultiRaft_RaftMessageBatchServer
+	wrapped RPCMultiRaft_RaftMessageBatchStream
 	sendMu  syncutil.Mutex
 }
 
@@ -235,9 +236,7 @@ func NewDummyRaftTransport(
 	resolver := func(roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
 		return nil, roachpb.Locality{}, errors.New("dummy resolver")
 	}
-	return NewRaftTransport(ambient, st, nil, clock, nodedialer.New(nil, resolver), nil,
-		nil, nil, nil,
-	)
+	return NewRaftTransport(ambient, st, nil, clock, nodedialer.New(nil, resolver), nil, nil, nil, nil, nil)
 }
 
 // NewRaftTransport creates a new RaftTransport.
@@ -248,6 +247,7 @@ func NewRaftTransport(
 	clock *hlc.Clock,
 	dialer *nodedialer.Dialer,
 	grpcServer *grpc.Server,
+	drpcMux drpc.Mux,
 	piggybackReader node_rac2.PiggybackMsgReader,
 	piggybackedResponseScheduler PiggybackedAdmittedResponseScheduler,
 	knobs *RaftTransportTestingKnobs,
@@ -270,6 +270,9 @@ func NewRaftTransport(
 	t.initMetrics()
 	if grpcServer != nil {
 		RegisterMultiRaftServer(grpcServer, t)
+	}
+	if drpcMux != nil {
+		_ = DRPCRegisterMultiRaft(drpcMux, t.AsDRPCServer())
 	}
 	return t
 }
@@ -375,8 +378,29 @@ func newRaftMessageResponse(
 	return resp
 }
 
+type drpcRaftTransport RaftTransport
+
+// AsDRPCServer returns the DRPC server implementation for the Raft service.
+func (t *RaftTransport) AsDRPCServer() DRPCMultiRaftServer {
+	return (*drpcRaftTransport)(t)
+}
+
+// RaftMessageBatch proxies the incoming requests to the listening server interface.
+func (t *drpcRaftTransport) RaftMessageBatch(
+	stream DRPCMultiRaft_RaftMessageBatchStream,
+) (lastErr error) {
+	return (*RaftTransport)(t).raftMessageBatch(stream)
+}
+
 // RaftMessageBatch proxies the incoming requests to the listening server interface.
 func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer) (lastErr error) {
+	return t.raftMessageBatch(stream)
+}
+
+// raftMessageBatch is the shared implementation for RaftMessageBatch for both gRPC and DRPC.
+func (t *RaftTransport) raftMessageBatch(
+	stream RPCMultiRaft_RaftMessageBatchStream,
+) (lastErr error) {
 	errCh := make(chan error, 1)
 
 	// Node stopping error is caught below in the select.
@@ -448,7 +472,22 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 // DelegateRaftSnapshot handles incoming delegated snapshot requests and passes
 // the request to pass off to the sender store. Errors during the snapshots
 // process are sent back as a response.
+func (t *drpcRaftTransport) DelegateRaftSnapshot(
+	stream DRPCMultiRaft_DelegateRaftSnapshotStream,
+) error {
+	return (*RaftTransport)(t).delegateRaftSnapshot(stream)
+}
+
+// DelegateRaftSnapshot handles incoming delegated snapshot requests and passes
+// the request to pass off to the sender store. Errors during the snapshots
+// process are sent back as a response.
 func (t *RaftTransport) DelegateRaftSnapshot(stream MultiRaft_DelegateRaftSnapshotServer) error {
+	return t.delegateRaftSnapshot(stream)
+}
+
+// delegateRaftSnapshot is the shared implementation for DelegateRaftSnapshot
+// for both gRPC and DRPC.
+func (t *RaftTransport) delegateRaftSnapshot(stream RPCMultiRaft_DelegateRaftSnapshotStream) error {
 	ctx, cancel := t.stopper.WithCancelOnQuiesce(stream.Context())
 	defer cancel()
 	req, err := stream.Recv()
@@ -496,7 +535,17 @@ func (t *RaftTransport) InternalDelegateRaftSnapshot(
 }
 
 // RaftSnapshot handles incoming streaming snapshot requests.
+func (t *drpcRaftTransport) RaftSnapshot(stream DRPCMultiRaft_RaftSnapshotStream) error {
+	return (*RaftTransport)(t).raftSnapshot(stream)
+}
+
+// RaftSnapshot handles incoming streaming snapshot requests.
 func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error {
+	return t.raftSnapshot(stream)
+}
+
+// raftSnapshot is the shared implementation for RaftSnapshot for both gRPC and DRPC.
+func (t *RaftTransport) raftSnapshot(stream RPCMultiRaft_RaftSnapshotStream) error {
 	ctx, cancel := t.stopper.WithCancelOnQuiesce(stream.Context())
 	defer cancel()
 	req, err := stream.Recv()
@@ -548,7 +597,7 @@ func (t *RaftTransport) StopOutgoingMessage(storeID roachpb.StoreID) {
 // lost and a new instance of processQueue will be started by the next message
 // to be sent.
 func (t *RaftTransport) processQueue(
-	q *raftSendQueue, stream MultiRaft_RaftMessageBatchClient, _ rpcbase.ConnectionClass,
+	q *raftSendQueue, stream RPCMultiRaft_RaftMessageBatchClient, _ rpcbase.ConnectionClass,
 ) error {
 	errCh := make(chan error, 1)
 

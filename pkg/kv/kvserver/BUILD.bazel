@@ -262,6 +262,7 @@ go_library(
         "@com_github_prometheus_client_model//go",
         "@com_github_raduberinde_btreemap//:btreemap",
         "@io_opentelemetry_go_otel//attribute",
+        "@io_storj_drpc//:drpc",
         "@org_golang_google_grpc//:grpc",
         "@org_golang_x_time//rate",
     ],

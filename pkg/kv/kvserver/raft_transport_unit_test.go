@@ -53,6 +53,8 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 
 	grpcServer, err := rpc.NewServer(ctx, rpcC)
 	require.NoError(t, err)
+	drpcServer, err := rpc.NewDRPCServer(ctx, rpcC)
+	require.NoError(t, err)
 	// RegisterMultiRaftServer(grpcServer, mrs)
 
 	var addr net.Addr
@@ -71,6 +73,7 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 		hlc.NewClockForTesting(nil),
 		nodedialer.New(rpcC, resolver),
 		grpcServer,
+		drpcServer,
 		(*node_rac2.AdmittedPiggybacker)(nil),
 		nil, /* PiggybackedAdmittedResponseScheduler */
 		nil, /* knobs */
