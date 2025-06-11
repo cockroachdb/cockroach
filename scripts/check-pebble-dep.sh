@@ -11,8 +11,9 @@ set -euo pipefail
 
 RELEASES="23.2 24.1 24.3 25.1 25.2 master"
 
+EXIT_CODE=0
 for REL in $RELEASES; do
-  if [ "$REL" == "master" ]; then
+  if [ "$REL" = "master" ]; then
     BRANCH=master
     PEBBLE_BRANCH=master
   else
@@ -26,25 +27,16 @@ for REL in $RELEASES; do
     grep "refs/heads/$PEBBLE_BRANCH" |
     grep -o -E '^[a-f0-9]{12}')
   
-  if [ "$DEP_SHA" == "$TIP_SHA" ]; then
+  if [ "$DEP_SHA" != "$TIP_SHA" ]; then
     echo Branch $BRANCH pebble dependency up to date.
     continue
   fi
 
   echo Branch $BRANCH pebble dependency not up to date: $DEP_SHA vs current $TIP_SHA
-  if [ "$BRANCH" == "master" ]; then
-    # Do nothing on master.
-    # TODO(radu): run scripts/bump-pebble.sh and open PR?
-    :
-  else
-    # File an issue, unless one is filed already.
-    TITLE="release-$REL: update pebble dependency"
-    if [ $(gh issue list -R github.com/cockroachdb/cockroach --search "$TITLE" --json id) == "[]" ]; then
-      echo "Filing issue for release-$REL."
-      BODY="Branch dependency is cockroachdb/pebble@$DEP_SHA. Tip of $PEBBLE_BRANCH is cockroachdb/pebble@$TIP_SHA"
-      gh issue create -R github.com/cockroachdb/cockroach --title "$TITLE" --body "$BODY" --label T-storage --label A-storage
-    else
-      echo "Issue for release-$REL already exists."
-    fi
+  if [ "$REL" != "master" ]; then
+    # Return an error if a release branch is not up to date.
+    EXIT_CODE=1
   fi
 done
+
+exit $EXIT_CODE
