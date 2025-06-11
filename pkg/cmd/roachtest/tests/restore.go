@@ -359,23 +359,33 @@ func registerRestore(r registry.Registry) {
 			timeout:  24 * time.Hour,
 			suites:   registry.Suites(registry.Weekly),
 		},
-		// Following two tests are just used to benchmark classic restore against
-		// OR with the exact same fixtures and hardware.
+		// OR Benchmarking tests
+		// See benchmark plan here: https://docs.google.com/spreadsheets/d/1uPcQ1YPohXKxwFxWWDUMJrYLKQOuqSZKVrI8SJam5n8
 		{
-			hardware:       makeHardwareSpecs(hardwareSpecs{}),
-			backup:         backupSpecs{cloud: spec.GCE, fixture: SmallFixture},
-			timeout:        1 * time.Hour,
-			suites:         registry.Suites(registry.Nightly),
+			hardware: makeHardwareSpecs(hardwareSpecs{
+				nodes: 10, volumeSize: 1500,
+			}),
+			backup: backupSpecs{
+				cloud:   spec.GCE,
+				fixture: MediumFixture,
+			},
+			timeout:        3 * time.Hour,
 			fullBackupOnly: true,
-			skip:           "used for adhoc benchmarking against OR",
+			suites:         registry.Suites(registry.Nightly),
+			skip:           "used for OR benchmarking purposes",
 		},
 		{
-			hardware:       makeHardwareSpecs(hardwareSpecs{nodes: 10, volumeSize: 1500, workloadNode: true}),
-			backup:         backupSpecs{cloud: spec.GCE, fixture: MediumFixture},
+			hardware: makeHardwareSpecs(hardwareSpecs{
+				nodes: 10, volumeSize: 1500, ebsIOPS: 15_000, ebsThroughput: 800,
+			}),
+			backup: backupSpecs{
+				cloud:   spec.AWS,
+				fixture: MediumFixture,
+			},
 			timeout:        3 * time.Hour,
-			suites:         registry.Suites(registry.Nightly),
 			fullBackupOnly: true,
-			skip:           "used for adhoc benchmarking against OR",
+			suites:         registry.Suites(registry.Nightly),
+			skip:           "used for OR benchmarking purposes",
 		},
 		// TODO(msbutler): add the following tests once roachperf/grafana is hooked up and old tests are
 		// removed:
@@ -483,8 +493,13 @@ type hardwareSpecs struct {
 	useLocalSSD bool
 
 	// ebsThroughput is the min provisioned throughput of the EBS volume, in MB/s.
-	// TODO(pavelkalinnikov): support provisioning throughput not only on EBS.
+	// Ignored if not running on AWS. Defaults to 125 MiB/s for the default gp3
+	// volume.
 	ebsThroughput int
+
+	// ebsIOPS is the configured IOPS for the EBS volume. Ignored if not running
+	// on AWS. Defaults to 3000 IOPS for the default gp3 volume.
+	ebsIOPS int
 
 	// mem is the memory per cpu.
 	mem spec.MemPerCPU
@@ -502,6 +517,9 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry) spec.ClusterSpec {
 	}
 	if hw.ebsThroughput != 0 {
 		clusterOpts = append(clusterOpts, spec.AWSVolumeThroughput(hw.ebsThroughput))
+	}
+	if hw.ebsIOPS != 0 {
+		clusterOpts = append(clusterOpts, spec.AWSVolumeIOPS(hw.ebsIOPS))
 	}
 
 	if hw.useLocalSSD {
@@ -599,6 +617,9 @@ func makeHardwareSpecs(override hardwareSpecs) hardwareSpecs {
 	}
 	if override.ebsThroughput != 0 {
 		specs.ebsThroughput = override.ebsThroughput
+	}
+	if override.ebsIOPS != 0 {
+		specs.ebsIOPS = override.ebsIOPS
 	}
 	if specs.useLocalSSD {
 		specs.volumeSize = 0
