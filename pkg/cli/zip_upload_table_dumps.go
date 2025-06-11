@@ -317,23 +317,41 @@ func processTableDump(
 
 // makeTableIterator returns the headers slice and an iterator
 func makeTableIterator(f io.Reader) ([]string, func(func(string) error) error) {
-	scanner := bufio.NewScanner(f)
+	reader := bufio.NewReader(f)
 
-	// some of the rows can be very large, bigger than the bufio.MaxTokenSize
-	// (65kb). So, we need to increase the buffer size and split by lines while
-	// scanning.
-	scanner.Buffer(nil, 5<<20) // 5 MB
-	scanner.Split(bufio.ScanLines)
+	// Read first line for headers
+	headerLine, err := reader.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return nil, func(func(string) error) error { return err }
+	}
 
-	scanner.Scan() // scan the first line to get the headers
-	return strings.Split(scanner.Text(), "\t"), func(fn func(string) error) error {
-		for scanner.Scan() {
-			if err := fn(scanner.Text()); err != nil {
+	// Trim the newline character if present
+	headerLine = strings.TrimSuffix(headerLine, "\n")
+	headers := strings.Split(headerLine, "\t")
+
+	return headers, func(fn func(string) error) error {
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				if err == io.EOF {
+					// Process any remaining content before EOF
+					if line != "" {
+						if err := fn(strings.TrimSuffix(line, "\n")); err != nil {
+							return err
+						}
+					}
+					break
+				}
+				return err
+			}
+
+			// Trim the newline character
+			line = strings.TrimSuffix(line, "\n")
+			if err := fn(line); err != nil {
 				return err
 			}
 		}
-
-		return scanner.Err()
+		return nil
 	}
 }
 
