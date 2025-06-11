@@ -49,6 +49,13 @@ func (b *Builder) addRowLevelSecurityFilter(
 
 	tableScope.expr = b.factory.ConstructSelect(tableScope.expr,
 		memo.FiltersExpr{b.factory.ConstructFiltersItem(scalar)})
+	// Wrap the RLS filter in a Barrier to prevent it from being reordered across
+	// non-leakproof expressions. This ensures that queries can't leak information
+	// about the existence of rows the caller isn't authorized to see. The
+	// Barrier is marked as LeakproofPermeable, allowing the optimizer to move
+	// leak-proof filters past it while still blocking non-leakproof expressions.
+	tableScope.expr = b.factory.ConstructBarrier(tableScope.expr,
+		&memo.BarrierPrivate{LeakproofPermeable: true})
 	b.factory.Metadata().GetRLSMeta().RefreshNoPoliciesAppliedForTable(tabMeta.MetaID)
 }
 

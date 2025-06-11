@@ -34,12 +34,14 @@ SELECT c1 FROM T1;
 ----
 project
  ├── columns: c1:1
- └── select
+ └── barrier
       ├── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
-      ├── scan t1
-      │    └── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
-      └── filters
-           └── false
+      └── select
+           ├── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+           ├── scan t1
+           │    └── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+           └── filters
+                └── false
 
 # Add a policy with a USING expression to see that a SELECT will include that
 # expression in its filter.
@@ -53,12 +55,14 @@ SELECT c1 FROM T1;
 ----
 project
  ├── columns: c1:1!null
- └── select
+ └── barrier
       ├── columns: c1:1!null c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
-      ├── scan t1
-      │    └── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
-      └── filters
-           └── c1:1 > 0
+      └── select
+           ├── columns: c1:1!null c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+           ├── scan t1
+           │    └── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+           └── filters
+                └── c1:1 > 0
 
 # Introduce a contradiction with the policy expression to verify that
 # the optimizer eliminates the scan.
@@ -69,12 +73,14 @@ project
  ├── columns: c1:1!null
  └── select
       ├── columns: c1:1!null c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
-      ├── select
+      ├── barrier
       │    ├── columns: c1:1!null c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
-      │    ├── scan t1
-      │    │    └── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
-      │    └── filters
-      │         └── c1:1 > 0
+      │    └── select
+      │         ├── columns: c1:1!null c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      │         ├── scan t1
+      │         │    └── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      │         └── filters
+      │              └── c1:1 > 0
       └── filters
            └── c1:1 < 0
 
@@ -109,13 +115,15 @@ update t1
       │    ├── columns: c1_new:13!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       │    ├── select
       │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    ├── select
+      │    │    ├── barrier
       │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    │    ├── scan t1
-      │    │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    │    │    └── flags: avoid-full-scan
-      │    │    │    └── filters
-      │    │    │         └── ((c1:7 % 2) = 0) AND false
+      │    │    │    └── select
+      │    │    │         ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │         ├── scan t1
+      │    │    │         │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │         │    └── flags: avoid-full-scan
+      │    │    │         └── filters
+      │    │    │              └── ((c1:7 % 2) = 0) AND false
       │    │    └── filters
       │    │         └── c1:7 > 0
       │    └── projections
@@ -142,13 +150,15 @@ update t1
       │    ├── columns: c1_new:13!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       │    ├── select
       │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    ├── select
+      │    │    ├── barrier
       │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    │    ├── scan t1
-      │    │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    │    │    └── flags: avoid-full-scan
-      │    │    │    └── filters
-      │    │    │         └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
+      │    │    │    └── select
+      │    │    │         ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │         ├── scan t1
+      │    │    │         │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │         │    └── flags: avoid-full-scan
+      │    │    │         └── filters
+      │    │    │              └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
       │    │    └── filters
       │    │         └── c1:7 > 0
       │    └── projections
@@ -174,13 +184,15 @@ update t1
       │    ├── columns: c1_new:13!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       │    ├── select
       │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    ├── select
+      │    │    ├── barrier
       │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    │    ├── scan t1
-      │    │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    │    │    └── flags: avoid-full-scan
-      │    │    │    └── filters
-      │    │    │         └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
+      │    │    │    └── select
+      │    │    │         ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │         ├── scan t1
+      │    │    │         │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │         │    └── flags: avoid-full-scan
+      │    │    │         └── filters
+      │    │    │              └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
       │    │    └── filters
       │    │         └── true
       │    └── projections
@@ -210,13 +222,15 @@ project
  │         │    ├── columns: c1_new:13!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
  │         │    ├── select
  │         │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
- │         │    │    ├── select
+ │         │    │    ├── barrier
  │         │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
- │         │    │    │    ├── scan t1
- │         │    │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
- │         │    │    │    │    └── flags: avoid-full-scan
- │         │    │    │    └── filters
- │         │    │    │         └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
+ │         │    │    │    └── select
+ │         │    │    │         ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+ │         │    │    │         ├── scan t1
+ │         │    │    │         │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+ │         │    │    │         │    └── flags: avoid-full-scan
+ │         │    │    │         └── filters
+ │         │    │    │              └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
  │         │    │    └── filters
  │         │    │         └── true
  │         │    └── projections
@@ -241,13 +255,15 @@ update t1
       │    ├── columns: c1_new:13!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       │    ├── select
       │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    ├── select
+      │    │    ├── barrier
       │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    │    ├── scan t1
-      │    │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    │    │    └── flags: avoid-full-scan
-      │    │    │    └── filters
-      │    │    │         └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
+      │    │    │    └── select
+      │    │    │         ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │         ├── scan t1
+      │    │    │         │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │         │    └── flags: avoid-full-scan
+      │    │    │         └── filters
+      │    │    │              └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
       │    │    └── filters
       │    │         └── true
       │    └── projections
@@ -270,13 +286,15 @@ update t1
       │    ├── columns: c1_new:13!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       │    ├── select
       │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    ├── select
+      │    │    ├── barrier
       │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    │    ├── scan t1
-      │    │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    │    │    └── flags: avoid-full-scan
-      │    │    │    └── filters
-      │    │    │         └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
+      │    │    │    └── select
+      │    │    │         ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │         ├── scan t1
+      │    │    │         │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │         │    └── flags: avoid-full-scan
+      │    │    │         └── filters
+      │    │    │              └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
       │    │    └── filters
       │    │         └── c1:7 > 0
       │    └── projections
@@ -306,13 +324,15 @@ project
            │    ├── columns: c1_new:13!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
            │    ├── select
            │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-           │    │    ├── select
+           │    │    ├── barrier
            │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-           │    │    │    ├── scan t1
-           │    │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-           │    │    │    │    └── flags: avoid-full-scan
-           │    │    │    └── filters
-           │    │    │         └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
+           │    │    │    └── select
+           │    │    │         ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+           │    │    │         ├── scan t1
+           │    │    │         │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+           │    │    │         │    └── flags: avoid-full-scan
+           │    │    │         └── filters
+           │    │    │              └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
            │    │    └── filters
            │    │         └── true
            │    └── projections
@@ -345,13 +365,15 @@ update t1
       │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12 k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
       │    │    ├── inner-join (cross)
       │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12 k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
-      │    │    │    ├── select
+      │    │    │    ├── barrier
       │    │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12
-      │    │    │    │    ├── scan t1
-      │    │    │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12
-      │    │    │    │    │    └── flags: avoid-full-scan
-      │    │    │    │    └── filters
-      │    │    │    │         └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
+      │    │    │    │    └── select
+      │    │    │    │         ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12
+      │    │    │    │         ├── scan t1
+      │    │    │    │         │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12
+      │    │    │    │         │    └── flags: avoid-full-scan
+      │    │    │    │         └── filters
+      │    │    │    │              └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
       │    │    │    ├── scan other
       │    │    │    │    └── columns: k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
       │    │    │    └── filters (true)
@@ -402,13 +424,15 @@ update t1
       │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12 k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
       │    │    │    ├── inner-join (cross)
       │    │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12 k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
-      │    │    │    │    ├── select
+      │    │    │    │    ├── barrier
       │    │    │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12
-      │    │    │    │    │    ├── scan t1
-      │    │    │    │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12
-      │    │    │    │    │    │    └── flags: avoid-full-scan
-      │    │    │    │    │    └── filters
-      │    │    │    │    │         └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
+      │    │    │    │    │    └── select
+      │    │    │    │    │         ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12
+      │    │    │    │    │         ├── scan t1
+      │    │    │    │    │         │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12
+      │    │    │    │    │         │    └── flags: avoid-full-scan
+      │    │    │    │    │         └── filters
+      │    │    │    │    │              └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
       │    │    │    │    ├── scan other
       │    │    │    │    │    └── columns: k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
       │    │    │    │    └── filters (true)
@@ -466,13 +490,15 @@ project
            │    │    ├── grouping columns: rowid:10!null
            │    │    ├── inner-join (cross)
            │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12 k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
-           │    │    │    ├── select
+           │    │    │    ├── barrier
            │    │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12
-           │    │    │    │    ├── scan t1
-           │    │    │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12
-           │    │    │    │    │    └── flags: avoid-full-scan
-           │    │    │    │    └── filters
-           │    │    │    │         └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
+           │    │    │    │    └── select
+           │    │    │    │         ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12
+           │    │    │    │         ├── scan t1
+           │    │    │    │         │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12
+           │    │    │    │         │    └── flags: avoid-full-scan
+           │    │    │    │         └── filters
+           │    │    │    │              └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
            │    │    │    ├── scan other
            │    │    │    │    └── columns: k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
            │    │    │    └── filters (true)
@@ -510,13 +536,15 @@ delete t1
  ├── fetch columns: c1:7 c2:8 c3:9 rowid:10
  └── select
       ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      ├── select
+      ├── barrier
       │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    ├── scan t1
-      │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    └── flags: avoid-full-scan
-      │    └── filters
-      │         └── ((c1:7 % 2) = 0) AND false
+      │    └── select
+      │         ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │         ├── scan t1
+      │         │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │         │    └── flags: avoid-full-scan
+      │         └── filters
+      │              └── ((c1:7 % 2) = 0) AND false
       └── filters
            └── (c1:7 >= 0) AND (c1:7 <= 20)
 
@@ -532,13 +560,15 @@ delete t1
  ├── fetch columns: c1:7 c2:8 c3:9 rowid:10
  └── select
       ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      ├── select
+      ├── barrier
       │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    ├── scan t1
-      │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    └── flags: avoid-full-scan
-      │    └── filters
-      │         └── ((c1:7 % 2) = 0) AND ((c1:7 >= 8) AND (c1:7 <= 12))
+      │    └── select
+      │         ├── columns: c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │         ├── scan t1
+      │         │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │         │    └── flags: avoid-full-scan
+      │         └── filters
+      │              └── ((c1:7 % 2) = 0) AND ((c1:7 >= 8) AND (c1:7 <= 12))
       └── filters
            └── (c1:7 >= 0) AND (c1:7 <= 20)
 
@@ -571,12 +601,14 @@ project
  ├── columns: c1:1!null
  └── select
       ├── columns: c1:1!null c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
-      ├── select
+      ├── barrier
       │    ├── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
-      │    ├── scan t1
-      │    │    └── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
-      │    └── filters
-      │         └── false
+      │    └── select
+      │         ├── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      │         ├── scan t1
+      │         │    └── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      │         └── filters
+      │              └── false
       └── filters
            └── (c1:1 >= 0) AND (c1:1 <= 9)
 
@@ -591,12 +623,14 @@ project
  ├── columns: c1:1!null
  └── select
       ├── columns: c1:1!null c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
-      ├── select
+      ├── barrier
       │    ├── columns: c1:1!null c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
-      │    ├── scan t1
-      │    │    └── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
-      │    └── filters
-      │         └── c1:1 > 0
+      │    └── select
+      │         ├── columns: c1:1!null c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      │         ├── scan t1
+      │         │    └── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      │         └── filters
+      │              └── c1:1 > 0
       └── filters
            └── (c1:1 >= 0) AND (c1:1 <= 9)
 
@@ -719,13 +753,15 @@ update t1
       ├── columns: rls:14 c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 c2_new:13!null
       ├── project
       │    ├── columns: c2_new:13!null c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    ├── select
+      │    ├── barrier
       │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    ├── scan t1
-      │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    │    └── flags: avoid-full-scan
-      │    │    └── filters
-      │    │         └── (true OR ((c2:8 = 'Hello, World') OR (c3:9 = '2024-12-24'))) AND ((c2:8 = 'Hello, World') OR (c3:9 = '2024-12-24'))
+      │    │    └── select
+      │    │         ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │         ├── scan t1
+      │    │         │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │         │    └── flags: avoid-full-scan
+      │    │         └── filters
+      │    │              └── (true OR ((c2:8 = 'Hello, World') OR (c3:9 = '2024-12-24'))) AND ((c2:8 = 'Hello, World') OR (c3:9 = '2024-12-24'))
       │    └── projections
       │         └── 'new val' [as=c2_new:13]
       └── projections
@@ -775,13 +811,15 @@ update t1
       ├── columns: rls:14!null c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 c2_new:13!null
       ├── project
       │    ├── columns: c2_new:13!null c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    ├── select
+      │    ├── barrier
       │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    ├── scan t1
-      │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    │    └── flags: avoid-full-scan
-      │    │    └── filters
-      │    │         └── true AND false
+      │    │    └── select
+      │    │         ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │         ├── scan t1
+      │    │         │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │         │    └── flags: avoid-full-scan
+      │    │         └── filters
+      │    │              └── true AND false
       │    └── projections
       │         └── 'new val' [as=c2_new:13]
       └── projections
@@ -819,12 +857,14 @@ insert t1
       │    ├── columns: rowid_default:13 c1:7 c2:8 c3:9!null
       │    ├── project
       │    │    ├── columns: c1:7 c2:8 c3:9!null
-      │    │    └── select
+      │    │    └── barrier
       │    │         ├── columns: c1:7 c2:8 c3:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │         ├── scan t1
-      │    │         │    └── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │         └── filters
-      │    │              └── c3:9 IN ('2013-06-02', '1988-07-01')
+      │    │         └── select
+      │    │              ├── columns: c1:7 c2:8 c3:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │              ├── scan t1
+      │    │              │    └── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │              └── filters
+      │    │                   └── c3:9 IN ('2013-06-02', '1988-07-01')
       │    └── projections
       │         └── unique_rowid() [as=rowid_default:13]
       └── projections
@@ -1028,13 +1068,15 @@ update t1
       ├── columns: rls:14 c1:7 c2:8 c3:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 c1_new:13
       ├── project
       │    ├── columns: c1_new:13 c1:7 c2:8 c3:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    ├── select
+      │    ├── barrier
       │    │    ├── columns: c1:7 c2:8 c3:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    ├── scan t1
-      │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    │    └── flags: avoid-full-scan
-      │    │    └── filters
-      │    │         └── true AND (c3:9 IN ('2025-01-01', '2024-12-31'))
+      │    │    └── select
+      │    │         ├── columns: c1:7 c2:8 c3:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │         ├── scan t1
+      │    │         │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │         │    └── flags: avoid-full-scan
+      │    │         └── filters
+      │    │              └── true AND (c3:9 IN ('2025-01-01', '2024-12-31'))
       │    └── projections
       │         └── c1:7 + 1 [as=c1_new:13]
       └── projections
@@ -1046,26 +1088,30 @@ SELECT c2 FROM t1 FOR SHARE
 ----
 project
  ├── columns: c2:2
- └── select
+ └── barrier
       ├── columns: c1:1 c2:2 c3:3!null rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
-      ├── scan t1
-      │    ├── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
-      │    └── locking: for-share
-      └── filters
-           └── true AND (c3:3 IN ('2025-01-01', '2024-12-31'))
+      └── select
+           ├── columns: c1:1 c2:2 c3:3!null rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+           ├── scan t1
+           │    ├── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+           │    └── locking: for-share
+           └── filters
+                └── true AND (c3:3 IN ('2025-01-01', '2024-12-31'))
 
 build
 SELECT c3 FROM t1 FOR UPDATE
 ----
 project
  ├── columns: c3:3!null
- └── select
+ └── barrier
       ├── columns: c1:1 c2:2 c3:3!null rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
-      ├── scan t1
-      │    ├── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
-      │    └── locking: for-update
-      └── filters
-           └── true AND (c3:3 IN ('2025-01-01', '2024-12-31'))
+      └── select
+           ├── columns: c1:1 c2:2 c3:3!null rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+           ├── scan t1
+           │    ├── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+           │    └── locking: for-update
+           └── filters
+                └── true AND (c3:3 IN ('2025-01-01', '2024-12-31'))
 
 exec-ddl
 DROP POLICY p_update on t1;
@@ -1318,12 +1364,14 @@ project
  ├── columns: c2:2
  └── select
       ├── columns: c1:1!null c2:2 c3:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
-      ├── select
+      ├── barrier
       │    ├── columns: c1:1!null c2:2 c3:3 crdb_internal_mvcc_timestamp:4 tableoid:5
-      │    ├── scan t1_explicit_pk
-      │    │    └── columns: c1:1!null c2:2 c3:3 crdb_internal_mvcc_timestamp:4 tableoid:5
-      │    └── filters
-      │         └── ((((((c2:2 = '(c2) p_select policy') OR (c1:1 = 1)) OR (c1:1 = 2)) OR (c1:1 = 3)) OR (c1:1 = 4)) AND ((c1:1 % 2) = 0)) AND ((c1:1 % 3) = 0)
+      │    └── select
+      │         ├── columns: c1:1!null c2:2 c3:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      │         ├── scan t1_explicit_pk
+      │         │    └── columns: c1:1!null c2:2 c3:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      │         └── filters
+      │              └── ((((((c2:2 = '(c2) p_select policy') OR (c1:1 = 1)) OR (c1:1 = 2)) OR (c1:1 = 3)) OR (c1:1 = 4)) AND ((c1:1 % 2) = 0)) AND ((c1:1 % 3) = 0)
       └── filters
            └── c3:3 >= '2025-01-01'
 
@@ -1360,13 +1408,15 @@ update t1_explicit_pk
       │    ├── columns: c3_new:11!null c1:6!null c2:7 c3:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    ├── select
       │    │    ├── columns: c1:6!null c2:7 c3:8 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    ├── select
+      │    │    ├── barrier
       │    │    │    ├── columns: c1:6!null c2:7 c3:8 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    │    ├── scan t1_explicit_pk
-      │    │    │    │    ├── columns: c1:6!null c2:7 c3:8 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    │    │    └── flags: avoid-full-scan
-      │    │    │    └── filters
-      │    │    │         └── (((((((c2:7 = '(c2) p_select policy') OR (c1:6 = 1)) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0)) AND ((((((c1:6 = 1) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0))
+      │    │    │    └── select
+      │    │    │         ├── columns: c1:6!null c2:7 c3:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    │         ├── scan t1_explicit_pk
+      │    │    │         │    ├── columns: c1:6!null c2:7 c3:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    │         │    └── flags: avoid-full-scan
+      │    │    │         └── filters
+      │    │    │              └── (((((((c2:7 = '(c2) p_select policy') OR (c1:6 = 1)) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0)) AND ((((((c1:6 = 1) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0))
       │    │    └── filters
       │    │         └── c1:6 = 18
       │    └── projections
@@ -1439,12 +1489,14 @@ project
  ├── columns: c1:1!null
  └── select
       ├── columns: c1:1!null c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
-      ├── select
+      ├── barrier
       │    ├── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
-      │    ├── scan t1
-      │    │    └── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
-      │    └── filters
-      │         └── true OR (c2:2 != 'out of policy')
+      │    └── select
+      │         ├── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      │         ├── scan t1
+      │         │    └── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      │         └── filters
+      │              └── true OR (c2:2 != 'out of policy')
       └── filters
            └── (c1:1 >= 0) AND (c1:1 <= 9)
 
@@ -1518,19 +1570,21 @@ SELECT * FROM t
 ----
 project
  ├── columns: k:1!null a:2 b:3 c:4 v:5!null
- └── select
+ └── barrier
       ├── columns: k:1!null a:2 b:3 c:4 v:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
-      ├── project
-      │    ├── columns: v:5 k:1!null a:2 b:3 c:4 crdb_internal_mvcc_timestamp:6 tableoid:7
-      │    ├── scan t
-      │    │    ├── columns: k:1!null a:2 b:3 c:4 crdb_internal_mvcc_timestamp:6 tableoid:7
-      │    │    └── computed column expressions
-      │    │         └── v:5
-      │    │              └── c:4 + 1
-      │    └── projections
-      │         └── c:4 + 1 [as=v:5]
-      └── filters
-           └── v:5 > 0
+      └── select
+           ├── columns: k:1!null a:2 b:3 c:4 v:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+           ├── project
+           │    ├── columns: v:5 k:1!null a:2 b:3 c:4 crdb_internal_mvcc_timestamp:6 tableoid:7
+           │    ├── scan t
+           │    │    ├── columns: k:1!null a:2 b:3 c:4 crdb_internal_mvcc_timestamp:6 tableoid:7
+           │    │    └── computed column expressions
+           │    │         └── v:5
+           │    │              └── c:4 + 1
+           │    └── projections
+           │         └── c:4 + 1 [as=v:5]
+           └── filters
+                └── v:5 > 0
 
 # Do a SELECT that doesn't reference the virtual column.
 build
@@ -1540,19 +1594,21 @@ project
  ├── columns: k:1!null c:4
  └── select
       ├── columns: k:1!null a:2 b:3 c:4 v:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
-      ├── select
+      ├── barrier
       │    ├── columns: k:1!null a:2 b:3 c:4 v:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
-      │    ├── project
-      │    │    ├── columns: v:5 k:1!null a:2 b:3 c:4 crdb_internal_mvcc_timestamp:6 tableoid:7
-      │    │    ├── scan t
-      │    │    │    ├── columns: k:1!null a:2 b:3 c:4 crdb_internal_mvcc_timestamp:6 tableoid:7
-      │    │    │    └── computed column expressions
-      │    │    │         └── v:5
-      │    │    │              └── c:4 + 1
-      │    │    └── projections
-      │    │         └── c:4 + 1 [as=v:5]
-      │    └── filters
-      │         └── v:5 > 0
+      │    └── select
+      │         ├── columns: k:1!null a:2 b:3 c:4 v:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+      │         ├── project
+      │         │    ├── columns: v:5 k:1!null a:2 b:3 c:4 crdb_internal_mvcc_timestamp:6 tableoid:7
+      │         │    ├── scan t
+      │         │    │    ├── columns: k:1!null a:2 b:3 c:4 crdb_internal_mvcc_timestamp:6 tableoid:7
+      │         │    │    └── computed column expressions
+      │         │    │         └── v:5
+      │         │    │              └── c:4 + 1
+      │         │    └── projections
+      │         │         └── c:4 + 1 [as=v:5]
+      │         └── filters
+      │              └── v:5 > 0
       └── filters
            └── a:2 IS NULL
 
@@ -1598,20 +1654,22 @@ update t
       │    │    ├── columns: c_new:15!null k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
       │    │    ├── select
       │    │    │    ├── columns: k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
-      │    │    │    ├── select
+      │    │    │    ├── barrier
       │    │    │    │    ├── columns: k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
-      │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: v:12 k:8!null a:9 b:10 c:11 crdb_internal_mvcc_timestamp:13 tableoid:14
-      │    │    │    │    │    ├── scan t
-      │    │    │    │    │    │    ├── columns: k:8!null a:9 b:10 c:11 crdb_internal_mvcc_timestamp:13 tableoid:14
-      │    │    │    │    │    │    ├── computed column expressions
-      │    │    │    │    │    │    │    └── v:12
-      │    │    │    │    │    │    │         └── c:11 + 1
-      │    │    │    │    │    │    └── flags: avoid-full-scan
-      │    │    │    │    │    └── projections
-      │    │    │    │    │         └── c:11 + 1 [as=v:12]
-      │    │    │    │    └── filters
-      │    │    │    │         └── (v:12 > 0) AND (v:12 > 5)
+      │    │    │    │    └── select
+      │    │    │    │         ├── columns: k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │         ├── project
+      │    │    │    │         │    ├── columns: v:12 k:8!null a:9 b:10 c:11 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │         │    ├── scan t
+      │    │    │    │         │    │    ├── columns: k:8!null a:9 b:10 c:11 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │         │    │    ├── computed column expressions
+      │    │    │    │         │    │    │    └── v:12
+      │    │    │    │         │    │    │         └── c:11 + 1
+      │    │    │    │         │    │    └── flags: avoid-full-scan
+      │    │    │    │         │    └── projections
+      │    │    │    │         │         └── c:11 + 1 [as=v:12]
+      │    │    │    │         └── filters
+      │    │    │    │              └── (v:12 > 0) AND (v:12 > 5)
       │    │    │    └── filters
       │    │    │         └── k:8 = 1
       │    │    └── projections
@@ -1670,15 +1728,17 @@ SELECT * FROM t
 ----
 project
  ├── columns: k:1!null a:2 b:3 c:4 v:5!null
- └── select
+ └── barrier
       ├── columns: k:1!null a:2 b:3 c:4 v:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
-      ├── scan t
-      │    ├── columns: k:1!null a:2 b:3 c:4 v:5 crdb_internal_mvcc_timestamp:6 tableoid:7
-      │    └── computed column expressions
-      │         └── v:5
-      │              └── c:4 + 1
-      └── filters
-           └── v:5 > 0
+      └── select
+           ├── columns: k:1!null a:2 b:3 c:4 v:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+           ├── scan t
+           │    ├── columns: k:1!null a:2 b:3 c:4 v:5 crdb_internal_mvcc_timestamp:6 tableoid:7
+           │    └── computed column expressions
+           │         └── v:5
+           │              └── c:4 + 1
+           └── filters
+                └── v:5 > 0
 
 # Do a SELECT that doesn't reference the stored column.
 build
@@ -1688,15 +1748,17 @@ project
  ├── columns: k:1!null c:4
  └── select
       ├── columns: k:1!null a:2 b:3 c:4 v:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
-      ├── select
+      ├── barrier
       │    ├── columns: k:1!null a:2 b:3 c:4 v:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
-      │    ├── scan t
-      │    │    ├── columns: k:1!null a:2 b:3 c:4 v:5 crdb_internal_mvcc_timestamp:6 tableoid:7
-      │    │    └── computed column expressions
-      │    │         └── v:5
-      │    │              └── c:4 + 1
-      │    └── filters
-      │         └── v:5 > 0
+      │    └── select
+      │         ├── columns: k:1!null a:2 b:3 c:4 v:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+      │         ├── scan t
+      │         │    ├── columns: k:1!null a:2 b:3 c:4 v:5 crdb_internal_mvcc_timestamp:6 tableoid:7
+      │         │    └── computed column expressions
+      │         │         └── v:5
+      │         │              └── c:4 + 1
+      │         └── filters
+      │              └── v:5 > 0
       └── filters
            └── a:2 IS NULL
 
@@ -1742,16 +1804,18 @@ update t
       │    │    ├── columns: c_new:15!null k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
       │    │    ├── select
       │    │    │    ├── columns: k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
-      │    │    │    ├── select
+      │    │    │    ├── barrier
       │    │    │    │    ├── columns: k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
-      │    │    │    │    ├── scan t
-      │    │    │    │    │    ├── columns: k:8!null a:9 b:10 c:11 v:12 crdb_internal_mvcc_timestamp:13 tableoid:14
-      │    │    │    │    │    ├── computed column expressions
-      │    │    │    │    │    │    └── v:12
-      │    │    │    │    │    │         └── c:11 + 1
-      │    │    │    │    │    └── flags: avoid-full-scan
-      │    │    │    │    └── filters
-      │    │    │    │         └── (v:12 > 0) AND (v:12 > 5)
+      │    │    │    │    └── select
+      │    │    │    │         ├── columns: k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │         ├── scan t
+      │    │    │    │         │    ├── columns: k:8!null a:9 b:10 c:11 v:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │         │    ├── computed column expressions
+      │    │    │    │         │    │    └── v:12
+      │    │    │    │         │    │         └── c:11 + 1
+      │    │    │    │         │    └── flags: avoid-full-scan
+      │    │    │    │         └── filters
+      │    │    │    │              └── (v:12 > 0) AND (v:12 > 5)
       │    │    │    └── filters
       │    │    │         └── k:8 = 1
       │    │    └── projections
@@ -1788,12 +1852,14 @@ SELECT id, customer_id FROM orders
 ----
 project
  ├── columns: id:1!null customer_id:2
- └── select
+ └── barrier
       ├── columns: id:1!null customer_id:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      ├── scan orders
-      │    └── columns: id:1!null customer_id:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── filters
-           └── false
+      └── select
+           ├── columns: id:1!null customer_id:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           ├── scan orders
+           │    └── columns: id:1!null customer_id:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           └── filters
+                └── false
 
 # Update the customer ID. This should cascade the update to orders, bypassing
 # RLS on orders.
@@ -2019,3 +2085,90 @@ root
                 └── filters
                      ├── customer_id:14 = 2
                      └── customer_id:14 IS DISTINCT FROM CAST(NULL AS INT8)
+
+# Show that optimization barriers are added to prevent reordering of predicates if
+# we use any non-leakproof functions in the WHERE clause.
+
+exec-ddl
+CREATE TABLE ob (x INT PRIMARY KEY, y INT, user_has_access BOOL);
+----
+
+exec-ddl
+CREATE INDEX ON ob(y);
+----
+
+exec-ddl
+ALTER TABLE ob ENABLE ROW LEVEL SECURITY;
+----
+
+exec-ddl
+CREATE POLICY p1 ON ob USING (user_has_access);
+----
+
+# No barrier needed since expressions are all leakproof. Barrier will be
+# in the plan, but at the outer most part of the tree.
+norm
+SELECT * FROM ob WHERE y = 20;
+----
+project
+ ├── columns: x:1!null y:2!null user_has_access:3!null
+ └── barrier
+      ├── columns: x:1!null y:2!null user_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── select
+           ├── columns: x:1!null y:2!null user_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+           ├── scan ob
+           │    └── columns: x:1!null y:2 user_has_access:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+           └── filters
+                ├── user_has_access:3
+                └── y:2 = 20
+
+# Barrier needed. Try to expose with a division by zero error.
+norm
+SELECT * FROM ob WHERE y = 20 AND y/0 = 0;
+----
+project
+ ├── columns: x:1!null y:2!null user_has_access:3!null
+ └── select
+      ├── columns: x:1!null y:2!null user_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── barrier
+      │    ├── columns: x:1!null y:2!null user_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      │    └── select
+      │         ├── columns: x:1!null y:2!null user_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      │         ├── scan ob
+      │         │    └── columns: x:1!null y:2 user_has_access:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      │         └── filters
+      │              ├── user_has_access:3
+      │              └── y:2 = 20
+      └── filters
+           └── (20 / 0) = 0
+
+# Barrier needed. Filters are added outside of a WHERE (as JOIN predicates).
+norm
+SELECT * FROM ob t1 INNER JOIN ob t2 ON t1.y = 20 AND t2.y/0 = 0;
+----
+project
+ ├── columns: x:1!null y:2!null user_has_access:3!null x:6!null y:7 user_has_access:8!null
+ └── inner-join (cross)
+      ├── columns: x:1!null y:2!null user_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5 x:6!null y:7 user_has_access:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      ├── barrier
+      │    ├── columns: x:1!null y:2!null user_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      │    └── select
+      │         ├── columns: x:1!null y:2!null user_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      │         ├── scan ob
+      │         │    └── columns: x:1!null y:2 user_has_access:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      │         └── filters
+      │              ├── user_has_access:3
+      │              └── y:2 = 20
+      ├── select
+      │    ├── columns: x:6!null y:7 user_has_access:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── barrier
+      │    │    ├── columns: x:6!null y:7 user_has_access:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    └── select
+      │    │         ├── columns: x:6!null y:7 user_has_access:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │         ├── scan ob
+      │    │         │    └── columns: x:6!null y:7 user_has_access:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │         └── filters
+      │    │              └── user_has_access:8
+      │    └── filters
+      │         └── (y:7 / 0) = 0
+      └── filters (true)

@@ -1,0 +1,72 @@
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT);
+----
+
+# --------------------------------------------------
+# EliminateRedundantBarrier
+# --------------------------------------------------
+
+# TODO(sql-queries): for simplicity, we should eliminate the barrier expression
+# at the root in this case. It serves no purpose because the filters were able
+# to permeate it.
+exprnorm expect=EliminateRedundantBarrier
+(Barrier
+  (Barrier
+     (Barrier
+          (Select
+             (Scan [ (Table "xy") (Cols "x,y") ])
+             [ (Eq (Var "y") (Const 3 "int")) ]
+          )
+          [ (LeakproofPermeable "true") ]
+     )
+     [ (LeakproofPermeable "true") ]
+  )
+  [ (LeakproofPermeable "true") ]
+)
+----
+barrier
+ ├── columns: x:1!null y:2!null
+ ├── key: (1)
+ ├── fd: ()-->(2)
+ └── select
+      ├── columns: x:1!null y:2!null
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── scan xy
+      │    ├── columns: x:1!null y:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── y:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+
+# Don't eliminate the barriers because they aren't equal.
+exprnorm expect-not=EliminateRedundantBarrier
+(Barrier
+     (Barrier
+          (Select
+             (Scan [ (Table "xy") (Cols "x,y") ])
+             [ (Eq (Var "y") (Const 3 "int")) ]
+          )
+          [ (LeakproofPermeable "true") ]
+     )
+  [ (LeakproofPermeable "false") ]
+)
+----
+barrier
+ ├── columns: x:1!null y:2!null
+ ├── key: (1)
+ ├── fd: ()-->(2)
+ └── barrier
+      ├── columns: x:1!null y:2!null
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      └── select
+           ├── columns: x:1!null y:2!null
+           ├── key: (1)
+           ├── fd: ()-->(2)
+           ├── scan xy
+           │    ├── columns: x:1!null y:2
+           │    ├── key: (1)
+           │    └── fd: (1)-->(2)
+           └── filters
+                └── y:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
