@@ -5522,3 +5522,116 @@ statement ok
 DROP ROLE can_createdb_global;
 
 subtest end
+
+subtest filter_pushdown_leaks
+
+statement ok
+CREATE ROLE alice;
+
+statement ok
+CREATE TABLE t (x INT PRIMARY KEY, y INT, alice_has_access BOOL);
+
+statement ok
+CREATE INDEX ON t(y);
+
+statement ok
+INSERT INTO t VALUES (1, 10, true), (2, 20, false);
+
+statement ok
+GRANT SELECT, INSERT, UPDATE, DELETE ON t TO alice;
+
+statement ok
+ALTER TABLE t ENABLE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY select_policy_alice
+ON t
+FOR SELECT
+TO alice
+USING (alice_has_access);
+
+statement ok
+SET ROLE alice;
+
+# Attempt various runtime errors to test whether the system leaks the existence
+# of a row with y = 20, which is hidden from the user by the RLS policy.
+
+# Division by zero
+query IIB
+SELECT * FROM t WHERE y = 20 AND y/0 = 0;
+----
+
+# Out of range error
+query IIB
+SELECT * FROM t WHERE y = 20 AND ARRAY[1,2,3][10] = 1;
+----
+
+# Out of range error
+query IIB
+UPDATE t SET y = y WHERE y = 20 AND ARRAY[1,2,3][10] = 1 RETURNING *;
+----
+
+# Custom function that raise an exception.
+statement ok
+CREATE FUNCTION fail() RETURNS INT AS $$ BEGIN RAISE EXCEPTION 'fail'; END; $$ LANGUAGE plpgsql;
+
+query IIB
+DELETE FROM t WHERE y = 20 AND fail() = 1 RETURNING *;
+----
+
+# Custom function that is designated as leakproof
+statement ok
+CREATE FUNCTION divbyzero() RETURNS INT IMMUTABLE LEAKPROOF
+AS $$
+ BEGIN
+   SELECT 20 / 0;
+   RETURN 1;
+ END;
+$$ LANGUAGE plpgsql;
+
+# Show that queries on rows we can see will cause the query to fail
+statement error pq: division by zero
+SELECT * FROM t WHERE y = 10 AND divbyzero() = 1;
+
+# But queries on rows we cannot see won't see any error.
+query IIB
+SELECT * FROM t WHERE y = 20 AND divbyzero() = 1;
+----
+
+# Invalid regular expression
+query IIB
+SELECT * FROM t WHERE y = 20 AND 'a' ~ '(';
+----
+
+# Unicode errors
+query IIB
+UPDATE t SET y = y WHERE y = 20 AND power(1e400, 1) > 0 RETURNING *;
+----
+
+# CTEs
+query IIB
+WITH rows AS (
+  SELECT x FROM t WHERE y = 20 AND y/0 = 0
+)
+DELETE FROM t WHERE x IN (SELECT x FROM rows) RETURNING *;
+----
+
+# INSERT w/ ON CONFLICT. This leaks information because the update attempts
+# to modify a row that is filtered out by RLS, and fails. Postgres behaves the
+# same, so this is left here as an example of that behaviour.
+statement error pq: new row violates row-level security policy for table "t"
+INSERT INTO t VALUES (2, 20, false) ON CONFLICT(x) DO UPDATE SET y = 20;
+
+statement ok
+RESET ROLE;
+
+statement ok
+DROP TABLE t;
+
+statement ok
+DROP FUNCTION fail, divbyzero;
+
+statement ok
+DROP ROLE alice;
+
+subtest end
