@@ -54,8 +54,7 @@ func (b *Builder) addRowLevelSecurityFilter(
 	// about the existence of rows the caller isn't authorized to see. The
 	// Barrier is marked as LeakproofPermeable, allowing the optimizer to move
 	// leak-proof filters past it while still blocking non-leakproof expressions.
-	tableScope.expr = b.factory.ConstructBarrier(tableScope.expr,
-		&memo.BarrierPrivate{LeakproofPermeable: true})
+	tableScope.expr = b.factory.ConstructBarrier(tableScope.expr, true /* leakproofPermeable */)
 	b.factory.Metadata().GetRLSMeta().RefreshNoPoliciesAppliedForTable(tabMeta.MetaID)
 }
 

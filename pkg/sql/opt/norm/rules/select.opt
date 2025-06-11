@@ -460,7 +460,7 @@ $input
 (Select
     (Barrier
         $input:*
-        $private:* & (IsBarrierLeakproofPermeable $private)
+        $leakproofPermeable:* & (If $leakproofPermeable)
     )
     $filters:* &
         (Let
@@ -474,6 +474,9 @@ $input
 )
 =>
 (Select
-    (Barrier (Select $input $leakproofFilters) $private)
+    (Barrier
+        (Select $input $leakproofFilters)
+        $leakproofPermeable
+    )
     $remainingFilters
 )
