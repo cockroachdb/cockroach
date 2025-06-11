@@ -134,6 +134,10 @@ func EvalAddSSTable(
 	start, end := storage.MVCCKey{Key: args.Key}, storage.MVCCKey{Key: args.EndKey}
 	sst := args.Data
 	sstToReqTS := args.SSTTimestampToRequestTimestamp
+	sstStats := enginepb.MVCCStats{}
+	if args.MVCCStats != nil {
+		sstStats = *args.MVCCStats
+	}
 
 	var span *tracing.Span
 	var err error
@@ -167,7 +171,7 @@ func EvalAddSSTable(
 	// Under the race detector, check that the SST contents satisfy AddSSTable
 	// requirements. We don't always do this otherwise, due to the cost.
 	if util.RaceEnabled {
-		if err := assertSSTContents(sst, sstToReqTS, args.MVCCStats); err != nil {
+		if err := assertSSTContents(sst, sstToReqTS, sstStats); err != nil {
 			return result.Result{}, err
 		}
 	}
@@ -187,7 +191,7 @@ func EvalAddSSTable(
 			log.VEventf(ctx, 2, "rewriting timestamps for SSTable [%s,%s) from %s to %s",
 				start.Key, end.Key, sstToReqTS, h.Timestamp)
 			sst, sstReqStatsDelta, err = storage.UpdateSSTTimestamps(
-				ctx, st, sst, sstToReqTS, h.Timestamp, conc, *args.MVCCStats)
+				ctx, st, sst, sstToReqTS, h.Timestamp, conc, sstStats)
 			if err != nil {
 				return result.Result{}, errors.Wrap(err, "updating SST timestamps")
 			}
@@ -217,12 +221,12 @@ func EvalAddSSTable(
 		if err == nil {
 			usePrefixSeek = bytes > prefixSeekCollisionCheckRatio*uint64(len(sst))
 		}
-		if args.MVCCStats != nil {
+		if !sstStats.IsEmpty() {
 			// If the incoming SST is small, use a prefix seek. Very little time is
 			// usually spent iterating over keys in these cases anyway, so it makes
 			// sense to use prefix seeks when the max number of seeks we'll do is
 			// bounded with a small number on the SST side.
-			usePrefixSeek = usePrefixSeek || args.MVCCStats.KeyCount < 100
+			usePrefixSeek = usePrefixSeek || sstStats.KeyCount < 100
 		}
 		desc := cArgs.EvalCtx.Desc()
 		leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
@@ -276,8 +280,8 @@ func EvalAddSSTable(
 
 	// Get the MVCCStats for the SST being ingested.
 	var stats enginepb.MVCCStats
-	if args.MVCCStats != nil {
-		stats = *args.MVCCStats
+	if !sstStats.IsEmpty() {
+		stats = sstStats
 	} else {
 		log.VEventf(ctx, 2, "computing MVCCStats for SSTable [%s,%s)", start.Key, end.Key)
 		stats, err = storage.ComputeStatsForIter(sstIter, h.Timestamp.WallTime)
@@ -512,7 +516,7 @@ func EvalAddSSTable(
 // * If sstTimestamp is set, all MVCC timestamps equal it.
 // * The LocalTimestamp in the MVCCValueHeader is empty.
 // * Given MVCC stats match the SST contents.
-func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.MVCCStats) error {
+func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats enginepb.MVCCStats) error {
 
 	// Check SST point keys.
 	iter, err := storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
@@ -601,7 +605,7 @@ func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.M
 	// Compare statistics with those passed by client. We calculate them at the
 	// same timestamp as the given statistics, since they may contain
 	// timing-dependent values (typically MVCC garbage, i.e. multiple versions).
-	if stats != nil {
+	if !stats.IsEmpty() {
 		iter, err = storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
 			KeyTypes:   storage.IterKeyTypePointsAndRanges,
 			LowerBound: keys.MinKey,
@@ -613,14 +617,13 @@ func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.M
 		defer iter.Close()
 		iter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
 
-		given := *stats
-		actual, err := storage.ComputeStatsForIter(iter, given.LastUpdateNanos)
+		actual, err := storage.ComputeStatsForIter(iter, stats.LastUpdateNanos)
 		if err != nil {
 			return errors.Wrap(err, "failed to compare stats: %w")
 		}
-		if !given.Equal(actual) {
+		if !stats.Equal(actual) {
 			return errors.AssertionFailedf("SST stats are incorrect: diff(given, actual) = %s",
-				pretty.Diff(given, actual))
+				pretty.Diff(stats, actual))
 		}
 	}
 
