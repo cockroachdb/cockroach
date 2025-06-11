@@ -223,7 +223,18 @@ func processArtifactsZip(f *zip.File, profilesChan chan *profile.Profile, wg *sy
 // location. wg.Done() will be called at the end of this function.
 func processPprofFiles(profilesChan chan *profile.Profile, wg *sync.WaitGroup) {
 	var profiles []*profile.Profile
+	var first *profile.Profile
+	// Normalize all profiles to the first one, meaning that we give equal weight
+	// to each profile, regardless of how much CPU time it represents. This
+	// prevents large machines or longer profiles from skewing the results.
 	for prof := range profilesChan {
+		if first == nil {
+			first = prof
+		} else {
+			if err := prof.Normalize(first); err != nil {
+				panic(err)
+			}
+		}
 		profiles = append(profiles, prof)
 	}
 	if len(profiles) == 0 {
