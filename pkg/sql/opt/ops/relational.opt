@@ -1535,6 +1535,16 @@ define VectorMutationSearchPrivate {
 [Relational]
 define Barrier {
     Input RelExpr
+    _ BarrierPrivate
+}
+
+[Private]
+define BarrierPrivate {
+    # LeakproofPermeable indicates that leakproof expressions are allowed to
+    # move across this barrier. This enables the optimizer to reorder or push
+    # leakproof filters and projections past the barrier, while still
+    # preserving it to block unsafe (non-leakproof) expressions.
+    LeakproofPermeable bool
 }
 
 # FakeRel is a mock relational operator used for testing and as a dummy binding
