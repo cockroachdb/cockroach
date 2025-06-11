@@ -46,7 +46,7 @@ go_library(
         "node.go",
         "nodelocal.go",
         "prefixer.go",
-        "rpc_client.go",
+        "rpc_clients.go",
         "rpc_node_shutdown.go",
         "sql_client.go",
         "sql_shell_cmd.go",
