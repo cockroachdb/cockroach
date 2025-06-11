@@ -205,21 +205,20 @@ func testTenantDecisionFromEnvironment(
 	return baseArg, false
 }
 
-var globalDefaultDRPCEnableOverride struct {
+var globalDefaultDRPCOptionOverride struct {
 	isSet bool
-	value base.DefaultTestDRPCEnableOption
+	value base.DefaultTestDRPCOption
 }
 
-// TestingGlobalDRPCEnableOption sets the package-level
-// DefaultTestDRPCEnableOption.
+// TestingGlobalDRPCOption sets the package-level DefaultTestDRPCOption.
 //
 // Note: This override will be superseded by any more specific options provided
 // when starting the server or cluster.
-func TestingGlobalDRPCEnableOption(v base.DefaultTestDRPCEnableOption) func() {
-	globalDefaultDRPCEnableOverride.isSet = true
-	globalDefaultDRPCEnableOverride.value = v
+func TestingGlobalDRPCOption(v base.DefaultTestDRPCOption) func() {
+	globalDefaultDRPCOptionOverride.isSet = true
+	globalDefaultDRPCOptionOverride.value = v
 	return func() {
-		globalDefaultDRPCEnableOverride.isSet = false
+		globalDefaultDRPCOptionOverride.isSet = false
 	}
 }
 
@@ -279,7 +278,7 @@ func StartServerOnlyE(t TestLogger, params base.TestServerArgs) (TestServerInter
 	// start the service for a default test tenant.
 	params.DefaultTestTenant = ShouldStartDefaultTestTenant(t, params.DefaultTestTenant)
 
-	TryEnableDRPCSetting(context.Background(), t, &params)
+	TryEnableDRPCSetting(ctx, t, &params)
 
 	s, err := NewServer(params)
 	if err != nil {
@@ -543,12 +542,12 @@ func WaitForTenantCapabilities(
 }
 
 // TryEnableDRPCSetting determines whether to enable the DRPC cluster setting
-// based on the DefaultTestDRPCEnableOption and updates the
+// based on the `TestServerArgs.DefaultDRPCOption` and updates the
 // `TestServerArgs.Settings` based on that.
 func TryEnableDRPCSetting(ctx context.Context, t TestLogger, args *base.TestServerArgs) {
 	option := args.DefaultDRPCOption
-	if option == base.TestDRPCDisabled && globalDefaultDRPCEnableOverride.isSet {
-		option = globalDefaultDRPCEnableOverride.value
+	if option == base.TestDRPCDisabled && globalDefaultDRPCOptionOverride.isSet {
+		option = globalDefaultDRPCOptionOverride.value
 	}
 	enableDRPC := false
 	switch option {
@@ -565,5 +564,5 @@ func TryEnableDRPCSetting(ctx context.Context, t TestLogger, args *base.TestServ
 	if args.Settings == nil {
 		args.Settings = cluster.MakeClusterSettings()
 	}
-	rpc.ExperimentalDRPCEnabled.Override(context.Background(), &args.Settings.SV, true)
+	rpc.ExperimentalDRPCEnabled.Override(ctx, &args.Settings.SV, true)
 }

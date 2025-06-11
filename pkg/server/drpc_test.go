@@ -162,7 +162,7 @@ func TestStreamContextCancel(t *testing.T) {
 	}
 }
 
-func TestDRPCEnableOption(t *testing.T) {
+func TestDefaultDRPCOption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

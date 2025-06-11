@@ -159,10 +159,10 @@ type TestServerArgs struct {
 	// below for alternative options that suits your test case.
 	DefaultTestTenant DefaultTestTenantOptions
 
-	// DefaultTestDRPCEnableOption specifies the DRPC enablement mode for a test
+	// DefaultDRPCOption specifies the DRPC enablement mode for a test
 	// server. This controls whether inter-node connectivity uses DRPC, just
 	// gRPC, or is chosen randomly.
-	DefaultDRPCOption DefaultTestDRPCEnableOption
+	DefaultDRPCOption DefaultTestDRPCOption
 
 	// DefaultTenantName is the name of the tenant created implicitly according
 	// to DefaultTestTenant. It is typically `test-tenant` for unit tests and
@@ -229,15 +229,15 @@ type SlimTestServerConfig struct {
 	Options slimOptions
 }
 
-// DefaultTestDRPCEnableOption specifies the DRPC enablement mode for a test
+// DefaultTestDRPCOption specifies the DRPC enablement mode for a test
 // server. This controls whether inter-node connectivity uses DRPC, just gRPC,
 // or is chosen randomly.
-type DefaultTestDRPCEnableOption uint8
+type DefaultTestDRPCOption uint8
 
 const (
 	// TestDRPCDisabled disables DRPC; all inter-node connectivity will use gRPC
 	// only.
-	TestDRPCDisabled DefaultTestDRPCEnableOption = iota
+	TestDRPCDisabled DefaultTestDRPCOption = iota
 
 	// TestDRPCEnabled enables DRPC. Some services may still use gRPC if they
 	// have not yet migrated to DRPC.
