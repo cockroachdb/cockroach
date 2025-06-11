@@ -99,20 +99,17 @@ type poster struct {
 		opts *github.CommitsListOptions) ([]*github.RepositoryCommit, *github.Response, error)
 	listMilestones func(ctx context.Context, owner string, repo string,
 		opt *github.MilestoneListOptions) ([]*github.Milestone, *github.Response, error)
-	createProjectCard func(ctx context.Context, columnID int64,
-		opt *github.ProjectCardOptions) (*github.ProjectCard, *github.Response, error)
 }
 
 func newPoster(l Logger, client *github.Client, opts *Options) *poster {
 	return &poster{
-		Options:           opts,
-		l:                 l,
-		createIssue:       client.Issues.Create,
-		searchIssues:      client.Search.Issues,
-		createComment:     client.Issues.CreateComment,
-		listCommits:       client.Repositories.ListCommits,
-		listMilestones:    client.Issues.ListMilestones,
-		createProjectCard: client.Projects.CreateProjectCard,
+		Options:        opts,
+		l:              l,
+		createIssue:    client.Issues.Create,
+		searchIssues:   client.Search.Issues,
+		createComment:  client.Issues.CreateComment,
+		listCommits:    client.Repositories.ListCommits,
+		listMilestones: client.Issues.ListMilestones,
 	}
 }
 
@@ -441,19 +438,6 @@ func (p *poster) post(
 		result.Type = TestFailureNewIssue
 		result.ID = *issue.Number
 		p.l.Printf("%s", result)
-		if req.ProjectColumnID != 0 {
-			_, _, err := p.createProjectCard(ctx, int64(req.ProjectColumnID), &github.ProjectCardOptions{
-				ContentID:   *issue.ID,
-				ContentType: "Issue",
-			})
-			if err != nil {
-				// Tough luck, keep going.
-				//
-				// TODO(tbg): retrieve the project column ID before posting, so that if
-				// it can't be found we can mention that in the issue we'll file anyway.
-				p.l.Printf("could not create GitHub project card: %v", err)
-			}
-		}
 	} else {
 		comment := github.IssueComment{Body: github.String(body)}
 		if _, _, err := p.createComment(
@@ -558,10 +542,6 @@ type PostRequest struct {
 	// A help section of the issue, for example with links to documentation or
 	// instructions on how to reproduce the issue.
 	HelpCommand func(*Renderer)
-
-	// ProjectColumnID is the id of the GitHub project column to add the issue to,
-	// or 0 if none.
-	ProjectColumnID int
 }
 
 func (r PostRequest) labels() []string {

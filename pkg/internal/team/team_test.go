@@ -18,10 +18,8 @@ sql:
   aliases:
     sql-alias: other
     sql-roachtest: roachtest
-  triage_column_id: 1
   silence_mentions: true
 test-infra-team:
-  triage_column_id: 2
 `)
 	ret, err := LoadTeams(bytes.NewReader(yamlFile))
 	require.NoError(t, err)
@@ -31,7 +29,6 @@ test-infra-team:
 			"sql-alias":     PurposeOther,
 			"sql-roachtest": PurposeRoachtest,
 		},
-		TriageColumnID:  1,
 		SilenceMentions: true,
 	}
 	require.Equal(t, sqlTeam.TeamName, sqlTeam.Name())
@@ -63,8 +60,7 @@ test-infra-team:
 			"sql-alias":     sqlTeam,
 			"sql-roachtest": sqlTeam,
 			"test-infra-team": {
-				TeamName:       "test-infra-team",
-				TriageColumnID: 2,
+				TeamName: "test-infra-team",
 			},
 		},
 		ret,
