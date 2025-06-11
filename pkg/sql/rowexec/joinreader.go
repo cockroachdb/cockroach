@@ -238,11 +238,6 @@ type joinReader struct {
 	// and requires that the spec has MaintainOrdering set to true.
 	outputGroupContinuationForLeftRow bool
 
-	// lookupBatchBytesLimit controls the TargetBytes of lookup requests. If 0, a
-	// default will be used. Regardless of this value, bytes limits aren't always
-	// used.
-	lookupBatchBytesLimit rowinfra.BytesLimit
-
 	// limitHintHelper is used in limiting batches of input rows in the presence
 	// of hard and soft limits.
 	limitHintHelper execinfra.LimitHintHelper
@@ -363,7 +358,6 @@ func newJoinReader(
 		readerType:                          readerType,
 		txn:                                 txn,
 		usesStreamer:                        useStreamer,
-		lookupBatchBytesLimit:               rowinfra.BytesLimit(spec.LookupBatchBytesLimit),
 		limitHintHelper:                     execinfra.MakeLimitHintHelper(spec.LimitHint, post),
 		errorOnLookup:                       errorOnLookup,
 		allowEnforceHomeRegionFollowerReads: flowCtx.EvalCtx.SessionData().EnforceHomeRegionFollowerReadsEnabled,
@@ -873,11 +867,10 @@ func (jr *joinReader) getBatchBytesLimit() rowinfra.BytesLimit {
 		// DistSender-level parallelism.
 		return rowinfra.NoBytesLimit
 	}
-	bytesLimit := jr.lookupBatchBytesLimit
-	if bytesLimit == 0 {
-		bytesLimit = rowinfra.GetDefaultBatchBytesLimit(jr.FlowCtx.EvalCtx.TestingKnobs.ForceProductionValues)
+	if testingLimit := jr.FlowCtx.Cfg.TestingKnobs.JoinReaderBatchBytesLimit; testingLimit != 0 {
+		return rowinfra.BytesLimit(testingLimit)
 	}
-	return bytesLimit
+	return rowinfra.GetDefaultBatchBytesLimit(jr.FlowCtx.EvalCtx.TestingKnobs.ForceProductionValues)
 }
 
 // readInput reads the next batch of input rows and starts an index scan, which

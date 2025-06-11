@@ -169,14 +169,14 @@ func newColBatchScanBase(
 		s.MakeSpansCopy()
 	}
 
-	if spec.LimitHint > 0 || spec.BatchBytesLimit > 0 {
+	if spec.LimitHint > 0 {
 		// Parallelize shouldn't be set when there's a limit hint, but double-check
 		// just in case.
 		spec.Parallelize = false
 	}
 	var batchBytesLimit rowinfra.BytesLimit
 	if !spec.Parallelize {
-		batchBytesLimit = rowinfra.BytesLimit(spec.BatchBytesLimit)
+		batchBytesLimit = rowinfra.BytesLimit(flowCtx.Cfg.TestingKnobs.TableReaderBatchBytesLimit)
 		if batchBytesLimit == 0 {
 			batchBytesLimit = rowinfra.GetDefaultBatchBytesLimit(flowCtx.EvalCtx.TestingKnobs.ForceProductionValues)
 		}
