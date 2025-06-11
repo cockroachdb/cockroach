@@ -1,1 +1,1 @@
-import pgdump 'http://test' with skip = '2'
+import into foo avro data ($1) with skip = '2'

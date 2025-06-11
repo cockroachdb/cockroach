@@ -3,13 +3,27 @@
 1:
 -
 IMPORT
-PGDUMP
-	'http://test'
+INTO
+	foo
+AVRO
+	DATA (
+		$1
+	)
 WITH
 	skip = '2'
 
-43:
--------------------------------------------
-IMPORT PGDUMP 'http://test' WITH skip = '2'
+13:
+-------------
+IMPORT
+INTO
+	foo
+AVRO
+	DATA ($1)
+WITH
+	skip = '2'
+
+46:
+----------------------------------------------
+IMPORT INTO foo AVRO DATA ($1) WITH skip = '2'
 
 
