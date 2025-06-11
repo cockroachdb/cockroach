@@ -182,7 +182,10 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	rttc.clocks[nodeID] = clockWithManualSource{manual: manual, clock: clock}
-	grpcServer, err := rpc.NewServer(context.Background(), rttc.nodeRPCContext)
+	ctx := context.Background()
+	grpcServer, err := rpc.NewServer(ctx, rttc.nodeRPCContext)
+	require.NoError(rttc.t, err)
+	drpcServer, err := rpc.NewDRPCServer(ctx, rttc.nodeRPCContext)
 	require.NoError(rttc.t, err)
 	transport := kvserver.NewRaftTransport(
 		log.MakeTestingAmbientCtxWithNewTracer(),
@@ -191,6 +194,7 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 		clock,
 		nodedialer.New(rttc.nodeRPCContext, gossip.AddressResolver(rttc.gossip)),
 		grpcServer,
+		drpcServer,
 		piggybacker,
 		piggybackedResponseScheduler,
 		knobs,

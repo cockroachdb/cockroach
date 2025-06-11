@@ -186,7 +186,9 @@ func createTestStoreWithoutStart(
 	}
 	rpcContext := rpc.NewContext(ctx, rpcOpts)
 	stopper.SetTracer(cfg.AmbientCtx.Tracer)
-	server, err := rpc.NewServer(ctx, rpcContext) // never started
+	grpcServer, err := rpc.NewServer(ctx, rpcContext) // never started
+	require.NoError(t, err)
+	drpcServer, err := rpc.NewDRPCServer(ctx, rpcContext) // never started
 	require.NoError(t, err)
 
 	// Some tests inject their own Gossip and StorePool, via
@@ -235,7 +237,8 @@ func createTestStoreWithoutStart(
 		stopper,
 		cfg.Clock,
 		cfg.NodeDialer,
-		server,
+		grpcServer,
+		drpcServer,
 		(*node_rac2.AdmittedPiggybacker)(nil),
 		nil, /* PiggybackedAdmittedResponseScheduler */
 		nil, /* knobs */
@@ -246,7 +249,7 @@ func createTestStoreWithoutStart(
 		supportGracePeriod := rpcContext.StoreLivenessWithdrawalGracePeriod()
 		options := storeliveness.NewOptions(livenessInterval, heartbeatInterval, supportGracePeriod)
 		transport := storeliveness.NewTransport(
-			cfg.AmbientCtx, stopper, cfg.Clock, cfg.NodeDialer, server, nil, /* knobs */
+			cfg.AmbientCtx, stopper, cfg.Clock, cfg.NodeDialer, grpcServer, nil, /* knobs */
 		)
 		knobs := cfg.TestingKnobs.StoreLivenessKnobs
 		cfg.StoreLiveness = storeliveness.NewNodeContainer(stopper, options, transport, knobs)
