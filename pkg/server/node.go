@@ -1592,9 +1592,16 @@ func checkNoUnknownRequest(reqs []kvpb.RequestUnion) *kvpb.UnsupportedRequestErr
 	return nil
 }
 
+var ExtraAllocs atomic.Int32
+
 func (n *Node) batchInternal(
 	ctx context.Context, tenID roachpb.TenantID, args *kvpb.BatchRequest,
 ) (br *kvpb.BatchResponse, _ error) {
+	if n := ExtraAllocs.Load(); n > 0 {
+		for i := 0; i < int(n); i++ {
+			ctx = context.WithValue(ctx, i, "bar")
+		}
+	}
 	if detail := checkNoUnknownRequest(args.Requests); detail != nil {
 		br = &kvpb.BatchResponse{}
 		br.Error = kvpb.NewError(detail)

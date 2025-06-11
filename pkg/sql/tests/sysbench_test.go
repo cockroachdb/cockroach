@@ -18,6 +18,7 @@ import (
 	"runtime"
 	runtimepprof "runtime/pprof"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -862,33 +864,38 @@ func benchmarkSysbenchImpl(b *testing.B, parallel bool) {
 	}
 	for _, driver := range drivers {
 		b.Run(driver.name, func(b *testing.B) {
-			for _, workload := range workloads {
-				b.Run(workload.name, func(b *testing.B) {
-					defer func() {
-						if r := recover(); r != nil {
-							b.Fatalf("%+v", r)
-						}
-					}()
+			for _, extraAllocs := range []int{0, 1, 2, 4, 8, 16} {
+				server.ExtraAllocs.Store(int32(extraAllocs))
+				b.Run("extraAllocs="+strconv.Itoa(extraAllocs), func(b *testing.B) {
+					for _, workload := range workloads {
+						b.Run(workload.name, func(b *testing.B) {
+							defer func() {
+								if r := recover(); r != nil {
+									b.Fatalf("%+v", r)
+								}
+							}()
 
-					// NB: this can be removed once this test is refactored to use `b.Loop`
-					// available starting in go1.24[1]
-					//
-					// [1]: https://tip.golang.org/doc/go1.24#new-benchmark-function
-					var benchtime string
-					require.NoError(b, sniffarg.DoEnv("test.benchtime", &benchtime))
-					if strings.HasSuffix(benchtime, "x") && b.N == 1 && benchtime != "1x" {
-						// The Go benchmark harness invokes tests first with b.N == 1 which
-						// helps it adjust the number of iterations to run to the benchtime.
-						// But if we specify the number of iterations, there's no point in
-						// it doing that, so we no-op on the first run.
-						// This speeds up benchmarking (by several seconds per subtest!)
-						// since it avoids setting up an extra test cluster.
-						b.Log("skipping benchmark on initial run; benchtime specifies an iteration count")
-						return
+							// NB: this can be removed once this test is refactored to use `b.Loop`
+							// available starting in go1.24[1]
+							//
+							// [1]: https://tip.golang.org/doc/go1.24#new-benchmark-function
+							var benchtime string
+							require.NoError(b, sniffarg.DoEnv("test.benchtime", &benchtime))
+							if strings.HasSuffix(benchtime, "x") && b.N == 1 && benchtime != "1x" {
+								// The Go benchmark harness invokes tests first with b.N == 1 which
+								// helps it adjust the number of iterations to run to the benchtime.
+								// But if we specify the number of iterations, there's no point in
+								// it doing that, so we no-op on the first run.
+								// This speeds up benchmarking (by several seconds per subtest!)
+								// since it avoids setting up an extra test cluster.
+								b.Log("skipping benchmark on initial run; benchtime specifies an iteration count")
+								return
+							}
+							sys, cleanup := driver.constructorFn(context.Background(), b)
+							defer cleanup()
+							runSysbenchOuter(b, sys, workload.opFn, parallel)
+						})
 					}
-					sys, cleanup := driver.constructorFn(context.Background(), b)
-					defer cleanup()
-					runSysbenchOuter(b, sys, workload.opFn, parallel)
 				})
 			}
 		})
