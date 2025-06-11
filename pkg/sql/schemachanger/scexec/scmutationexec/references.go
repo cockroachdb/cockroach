@@ -689,7 +689,9 @@ func (i *immediateVisitor) UpdateTableBackReferencesInRelations(
 	if err != nil {
 		return err
 	}
-	forwardRefs := backRefTbl.GetAllReferencedTableIDs()
+	// Collect all forward references from this table, excluding foreign keys.
+	// Foreign key dependencies are not tracked via DependedOnBy, so we skip them here.
+	forwardRefs := backRefTbl.GetAllReferencedRelationIDsExceptFKs()
 	for _, ref := range op.RelationReferences {
 		referenced, err := i.checkOutTable(ctx, ref.ID)
 		if err != nil {
