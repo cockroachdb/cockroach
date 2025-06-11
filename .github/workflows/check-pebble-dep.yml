@@ -2,6 +2,7 @@ name: Check Pebble dep
 on:
   schedule:
     - cron: '0 8 * * 0,3' # Every Sun and Wed at 8:00 UTC
+  workflow_dispatch:
 
 jobs:
   check-pebble-dep:
@@ -9,10 +10,34 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Check Pebble deps
-        shell: bash
-        run: scripts/check-pebble-dep.sh
+        id: run_script
+        run: |
+          EXIT_CODE=0
+          OUTPUT=$(scripts/check-pebble-dep.sh 2>&1) || EXIT_CODE=$?
+          echo "$OUTPUT"
+          # Set output as a multi-line string.
+          echo "output<<EOF" >> $GITHUB_OUTPUT
+          echo "$OUTPUT"     >> $GITHUB_OUTPUT
+          echo "EOF"         >> $GITHUB_OUTPUT
+          # Set exit code.
+          echo "exitcode=$EXIT_CODE" >> $GITHUB_OUTPUT
+
+      - name: Notify Slack on failure
+        if: steps.run_script.outputs.exitcode != '0'
+        uses: slackapi/slack-github-action@v2.1.0
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.PEBBLE_SLACK_BOT_TOKEN }}
+          # The channel ID is for #storage-notifications.
+          payload: |
+            channel: C08JE13CM9S
+            text: |
+            Some Pebble dependencies are not up to date. Details below:
+            ```
+            ${{ steps.run_script.outputs.output }}
+            ```
