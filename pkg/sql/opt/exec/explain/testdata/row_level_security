@@ -174,10 +174,13 @@ select t1.c1 from t1, t2 where t1.c1 = t2.c1 and t1.c1 = 1;
 ----
 • cross join
 │
-├── • scan
-│     table: t1@t1_idx
-│     spans: 1+ spans
-│     policies: policy 1, p2, p3, r1, r2
+├── • index join
+│   │ table: t1@t1_pkey
+│   │
+│   └── • scan
+│         table: t1@t1_idx
+│         spans: 1+ spans
+│         policies: policy 1, p2, p3, r1, r2
 │
 └── • filter
     │ filter: c1 = _
@@ -303,6 +306,9 @@ exec-ddl
 CREATE POLICY p_update2 ON writer FOR UPDATE WITH CHECK (value IN ('updater: a', 'updater: b', 'updater: c'))
 ----
 
+# TODO(mgartner): We used to record the locking strength in this plan, but it
+# appears that optimization no longer applies since introducing the barrier for
+# the RLS expression.
 plan
 UPDATE writer SET key = key * 11;
 ----
@@ -317,7 +323,6 @@ UPDATE writer SET key = key * 11;
     └── • scan
           table: writer@writer_pkey
           spans: 1+ spans
-          locking strength: for update
           policies: p_select, p_update1
 
 plan
@@ -353,7 +358,6 @@ UPDATE writer SET value = 'updated' WHERE key between 1 and 100;
     └── • scan
           table: writer@writer_pkey
           spans: 1+ spans
-          locking strength: for update
           policies: p_select, p_update1
 
 plan
@@ -370,7 +374,6 @@ UPDATE writer SET value = value WHERE key = 5;
     └── • scan
           table: writer@writer_pkey
           spans: 1+ spans
-          locking strength: for update
           policies: p_select, p_update1
 
 # Should not apply select policy for the new row because columns weren't
@@ -389,7 +392,6 @@ UPDATE writer SET key = 10 WHERE true;
     └── • scan
           table: writer@writer_pkey
           spans: 1+ spans
-          locking strength: for update
           policies: p_select, p_update1
 
 
@@ -434,11 +436,14 @@ CREATE POLICY p_delete ON writer FOR DELETE USING (key = 1);
 plan
 DELETE FROM writer WHERE key = 1;
 ----
-• delete range
-  from: writer
-  auto commit
-  spans: 1+ spans
-  policies: p_select, p_delete
+• delete
+│ from: writer
+│ auto commit
+│
+└── • scan
+      table: writer@writer_pkey
+      spans: 1+ spans
+      policies: p_select, p_delete
 
 plan
 DELETE FROM writer WHERE value = 'some-val' or value = 'other-val';

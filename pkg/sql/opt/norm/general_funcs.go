@@ -1560,3 +1560,34 @@ func (c *CustomFuncs) DuplicateJoinPrivate(jp *memo.JoinPrivate) *memo.JoinPriva
 		SkipReorderJoins: jp.SkipReorderJoins,
 	}
 }
+
+// IsBarrierLeakproofPermeable returns true if the barrier allows for leakproof
+// filters to permeate through it.
+func (c *CustomFuncs) IsBarrierLeakproofPermeable(priv *memo.BarrierPrivate) bool {
+	return priv.LeakproofPermeable
+}
+
+// SplitLeakproofFilters separates a list of filters into two groups: those that
+// are leakproof and those that are not. Leakproof filters are expressions that
+// do not reveal information about underlying data through their evaluation
+// behavior.
+//
+// This function is typically used to determine which filters can be safely
+// reordered or pushed past a Barrier marked as LeakproofPermeable. It returns
+// the leakproof filters, the remaining filters, and a boolean indicating
+// whether any leakproof filters were found.
+func (c *CustomFuncs) SplitLeakproofFilters(
+	filters memo.FiltersExpr,
+) (leakproofFilters, remainingFilters memo.FiltersExpr, hasLeakproofFilters bool) {
+	for i := range filters {
+		if filters[i].ScalarProps().VolatilitySet.IsLeakproof() {
+			leakproofFilters = append(leakproofFilters, filters[i])
+		} else {
+			remainingFilters = append(remainingFilters, filters[i])
+		}
+	}
+	if len(leakproofFilters) > 0 {
+		return leakproofFilters, remainingFilters, true
+	}
+	return nil, filters, false
+}

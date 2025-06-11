@@ -25,6 +25,30 @@ CREATE TABLE e
 )
 ----
 
+exec-ddl
+CREATE TABLE rls (x INT PRIMARY KEY, y INT, alice_has_access BOOL);
+----
+
+exec-ddl
+CREATE INDEX ON rls(y);
+----
+
+exec-ddl
+ALTER TABLE rls ENABLE ROW LEVEL SECURITY;
+----
+
+exec-ddl
+CREATE POLICY select_policy_alice
+ON rls
+FOR SELECT
+TO alice
+USING (alice_has_access);
+----
+
+exec-ddl
+CREATE ROLE alice;
+----
+
 # --------------------------------------------------
 # SimplifySelectFilters
 # --------------------------------------------------
@@ -2477,3 +2501,68 @@ project
       │         └── row-number [as=row_num:25]
       └── filters
            └── row_num:25 <= 100 [outer=(25), constraints=(/25: (/NULL - /100]; tight)]
+
+# --------------------------------------------------
+# PushLeakproofFiltersIntoPermeableBarrier
+# --------------------------------------------------
+
+exec-ddl
+SET ROLE alice;
+----
+
+# The 'y/0 = 0' predicate is not leakproof, so it should exist outside of the
+# barrier that includes the injected RLS filter.
+norm expect=PushLeakproofFiltersIntoPermeableBarrier
+SELECT * FROM rls WHERE y = 20 AND y/0 = 0;
+----
+project
+ ├── columns: x:1!null y:2!null alice_has_access:3!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: ()-->(2,3)
+ └── select
+      ├── columns: x:1!null y:2!null alice_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── immutable
+      ├── key: (1)
+      ├── fd: ()-->(2,3), (1)-->(4,5)
+      ├── barrier
+      │    ├── columns: x:1!null y:2!null alice_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2,3), (1)-->(4,5)
+      │    └── select
+      │         ├── columns: x:1!null y:2!null alice_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      │         ├── key: (1)
+      │         ├── fd: ()-->(2,3), (1)-->(4,5)
+      │         ├── scan rls
+      │         │    ├── columns: x:1!null y:2 alice_has_access:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      │         │    ├── key: (1)
+      │         │    └── fd: (1)-->(2-5)
+      │         └── filters
+      │              ├── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+      │              └── y:2 = 20 [outer=(2), constraints=(/2: [/20 - /20]; tight), fd=()-->(2)]
+      └── filters
+           └── (20 / 0) = 0 [immutable]
+
+# All filters are leakproof, so barrier pushed entirely out of the select.
+norm expect=PushLeakproofFiltersIntoPermeableBarrier
+SELECT * FROM rls WHERE y = 20;
+----
+project
+ ├── columns: x:1!null y:2!null alice_has_access:3!null
+ ├── key: (1)
+ ├── fd: ()-->(2,3)
+ └── barrier
+      ├── columns: x:1!null y:2!null alice_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── key: (1)
+      ├── fd: ()-->(2,3), (1)-->(4,5)
+      └── select
+           ├── columns: x:1!null y:2!null alice_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+           ├── key: (1)
+           ├── fd: ()-->(2,3), (1)-->(4,5)
+           ├── scan rls
+           │    ├── columns: x:1!null y:2 alice_has_access:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+           │    ├── key: (1)
+           │    └── fd: (1)-->(2-5)
+           └── filters
+                ├── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+                └── y:2 = 20 [outer=(2), constraints=(/2: [/20 - /20]; tight), fd=()-->(2)]
