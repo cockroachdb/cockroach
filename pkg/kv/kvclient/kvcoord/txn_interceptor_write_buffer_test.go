@@ -2056,6 +2056,190 @@ func TestTxnWriteBufferBatchRequestValidation(t *testing.T) {
 	}
 }
 
+// TestTxnWriteBufferHasBufferedAllPrecedingWrites verifies that the
+// txnWriteBuffer correctly sets the HasBufferedAllPrecedingWrites flag.
+func TestTxnWriteBufferHasBufferedAllPrecedingWrites(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	txn := makeTxnProto()
+	txn.Sequence = 1
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+
+	for _, tc := range []struct {
+		name                             string
+		setup                            func(*txnWriteBuffer)
+		ba                               func(ba *kvpb.BatchRequest)
+		mockSend                         func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error)
+		expHasBufferedAllPrecedingWrites bool
+	}{
+		{
+			name: "batch with two Get requests",
+			ba: func(ba *kvpb.BatchRequest) {
+				getA := &kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, Sequence: txn.Sequence}}
+				getB := &kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyB, Sequence: txn.Sequence}}
+				ba.Add(getA, getB)
+			},
+			mockSend: func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+				require.Len(t, ba.Requests, 2)
+				require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
+				require.IsType(t, &kvpb.GetRequest{}, ba.Requests[1].GetInner())
+
+				require.True(t, ba.HasBufferedAllPrecedingWrites)
+
+				br := ba.CreateReply()
+				br.Txn = ba.Txn
+				return br, nil
+			},
+			expHasBufferedAllPrecedingWrites: true,
+		},
+		{
+			name: "batch with one Put and one Get request",
+			ba: func(ba *kvpb.BatchRequest) {
+				putA := putArgs(keyA, "valA", txn.Sequence)
+				getB := &kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyB, Sequence: txn.Sequence}}
+				ba.Add(putA, getB)
+			},
+			mockSend: func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+				require.Len(t, ba.Requests, 1)
+				require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
+
+				require.True(t, ba.HasBufferedAllPrecedingWrites)
+
+				br := ba.CreateReply()
+				br.Txn = ba.Txn
+				return br, nil
+			},
+			expHasBufferedAllPrecedingWrites: true,
+		},
+		{
+			name: "batch with one Put, one Get, and one Delete request",
+			ba: func(ba *kvpb.BatchRequest) {
+				putA := putArgs(keyA, "valA", txn.Sequence)
+				getB := &kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyB, Sequence: txn.Sequence}}
+				delC := delArgs(keyC, txn.Sequence)
+
+				ba.Add(putA, getB, delC)
+			},
+			mockSend: func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+				require.Len(t, ba.Requests, 1)
+				require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
+
+				require.True(t, ba.HasBufferedAllPrecedingWrites)
+
+				br := ba.CreateReply()
+				br.Txn = ba.Txn
+				return br, nil
+			},
+			expHasBufferedAllPrecedingWrites: true,
+		},
+		{
+			name: "batch with one DeleteRange and one Get request",
+			ba: func(ba *kvpb.BatchRequest) {
+				delRange := delRangeArgs(keyA, keyB, txn.Sequence)
+				getB := &kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyB, Sequence: txn.Sequence}}
+
+				ba.Add(delRange, getB)
+			},
+			mockSend: func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+				require.Len(t, ba.Requests, 2)
+				require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[0].GetInner())
+				require.IsType(t, &kvpb.GetRequest{}, ba.Requests[1].GetInner())
+
+				require.True(t, ba.HasBufferedAllPrecedingWrites)
+
+				br := ba.CreateReply()
+				br.Txn = ba.Txn
+				return br, nil
+			},
+			expHasBufferedAllPrecedingWrites: false,
+		},
+		{
+			name: "flushed due to size limit",
+			setup: func(twb *txnWriteBuffer) {
+				bufferedWritesMaxBufferSize.Override(context.Background(), &twb.st.SV, 1)
+			},
+			ba: func(ba *kvpb.BatchRequest) {
+				putA := putArgs(keyA, "valA", txn.Sequence)
+
+				ba.Add(putA)
+			},
+			mockSend: func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+				require.Len(t, ba.Requests, 1)
+				require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+
+				require.True(t, ba.HasBufferedAllPrecedingWrites)
+
+				br := ba.CreateReply()
+				br.Txn = ba.Txn
+				return br, nil
+			},
+			expHasBufferedAllPrecedingWrites: false,
+		},
+		{
+			name: "write buffering disabled",
+			setup: func(twb *txnWriteBuffer) {
+				twb.setEnabled(false)
+			},
+			ba: func(ba *kvpb.BatchRequest) {
+				putA := putArgs(keyA, "valA", txn.Sequence)
+
+				ba.Add(putA)
+			},
+			mockSend: func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+				require.Len(t, ba.Requests, 1)
+				require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+
+				// NB: Should never be set if write buffering is disabled
+				require.False(t, ba.HasBufferedAllPrecedingWrites)
+
+				br := ba.CreateReply()
+				br.Txn = ba.Txn
+				return br, nil
+			},
+			expHasBufferedAllPrecedingWrites: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			st := cluster.MakeTestingClusterSettings()
+			twb, mockSender := makeMockTxnWriteBuffer(st)
+
+			if tc.setup != nil {
+				tc.setup(&twb)
+			}
+
+			ba := &kvpb.BatchRequest{}
+			tc.ba(ba)
+			mockSender.MockSend(tc.mockSend)
+
+			br, pErr := twb.SendLocked(ctx, ba)
+			require.Nil(t, pErr)
+			require.NotNil(t, br)
+
+			// Go to commit the transaction and ensure HasBufferedAllPrecedingWrites
+			// is set correctly.
+			mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+				require.Equal(t, tc.expHasBufferedAllPrecedingWrites, ba.HasBufferedAllPrecedingWrites)
+
+				br = ba.CreateReply()
+				br.Txn = ba.Txn
+				return br, nil
+			})
+
+			ba = &kvpb.BatchRequest{}
+			ba.Header = kvpb.Header{Txn: &txn}
+			ba.Add(&kvpb.EndTxnRequest{Commit: true})
+
+			br, pErr = twb.SendLocked(ctx, ba)
+			require.Nil(t, pErr)
+			require.NotNil(t, br)
+			require.Len(t, br.Responses, 1)
+			require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
+		})
+	}
+}
+
 // BenchmarkTxnWriteBuffer benchmarks the txnWriteBuffer. The test sets up a
 // transaction with an existing buffer and runs a single batch through
 // SendLocked and flushBufferAndSendBatch. The test varies the state of the
