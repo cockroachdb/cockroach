@@ -215,7 +215,7 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			if err := s.cf.StartScan(
 				s.Ctx,
 				spans,
-				false, /* limitBatches */
+				true, /* parallelize */
 				rowinfra.NoBytesLimit,
 				rowinfra.NoRowLimit,
 			); err != nil {

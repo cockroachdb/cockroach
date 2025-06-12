@@ -74,11 +74,6 @@ message TableReaderSpec {
   // limit hint.
   optional bool parallelize = 12 [(gogoproto.nullable) = false];
 
-  // batch_bytes_limit, if non-zero, controls the TargetBytes limits that the
-  // TableReader will use for its scans. If zero, then the server-side default
-  // is used. If parallelize is set, this cannot be set.
-  optional int64 batch_bytes_limit = 17 [(gogoproto.nullable) = false];
-
   // If non-zero, this enables inconsistent historical scanning where different
   // batches can be read with different timestamps. This is used for
   // long-running table statistics which may outlive the TTL. Using this setting
@@ -124,7 +119,7 @@ message TableReaderSpec {
   // leaseholder of the beginning of the key spans to be scanned).
   optional bool ignore_misplanned_ranges = 22 [(gogoproto.nullable) = false];
 
-  reserved 1, 2, 4, 6, 7, 8, 13, 14, 15, 16, 19;
+  reserved 1, 2, 4, 6, 7, 8, 13, 14, 15, 16, 17, 19;
 }
 
 // FiltererSpec is the specification for a processor that filters input rows
@@ -303,17 +298,9 @@ message JoinReaderSpec {
   // variables @(N+1) to @(N+M) refer to fetched columns.
   optional Expression on_expr = 4 [(gogoproto.nullable) = false];
 
-  // This used to be used for an extra index filter expression. It was removed
-  // in DistSQL version 24.
-  reserved 5;
-
   // For lookup joins. Only JoinType_INNER and JoinType_LEFT_OUTER are
   // supported.
   optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
-
-  // This field used to be a visibility level of the columns that should be
-  // produced. We now produce the columns in the FetchSpec.
-  reserved 7;
 
   // Indicates the row-level locking strength to be used by the join. If set to
   // FOR_NONE, no row-level locking should be performed.
@@ -335,8 +322,6 @@ message JoinReaderSpec {
   // optimizations.
   optional bool maintain_ordering = 11 [(gogoproto.nullable) = false];
 
-  reserved 12, 13;
-
   // LeftJoinWithPairedJoiner is used when a left {outer,anti,semi} join is
   // being achieved by pairing two joins, and this is the second join. See
   // the comment above.
@@ -348,13 +333,6 @@ message JoinReaderSpec {
   // OutputGroupContinuationForLeftRow is true, MaintainOrdering must also
   // be true.
   optional bool output_group_continuation_for_left_row = 15 [(gogoproto.nullable) = false];
-
-  // lookup_batch_bytes_limit, if non-zero, controls the TargetBytes limits that
-  // the joiner will use for its lookups. If zero, then the server-side default
-  // is used. Note that, regardless of this setting, bytes limits are not always
-  // used for lookups - it depends on whether the joiner decides it wants
-  // DistSender-parallelism or not.
-  optional int64 lookup_batch_bytes_limit = 18 [(gogoproto.nullable) = false];
 
   // A hint for how many rows the consumer of the join reader output might
   // need. This is used to size the initial batches of input rows to try to
@@ -384,6 +362,8 @@ message JoinReaderSpec {
   // reverse order. This is only useful if a lookup can return more than one
   // row.
   optional bool reverse_scans = 25 [(gogoproto.nullable) = false];
+
+  reserved 5, 7, 12, 13, 18;
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting
