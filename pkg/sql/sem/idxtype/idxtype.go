@@ -29,6 +29,13 @@ func (t T) HasLinearOrdering() bool {
 	return t == FORWARD
 }
 
+// HasScannablePrefix is true if compound indexes of this type can be used with
+// inequality constraints. For example, a VECTOR index's prefix can only be used
+// with equality constraints and so returns false.
+func (t T) HasScannablePrefix() bool {
+	return t != VECTOR
+}
+
 // AllowsPrefixColumns is true if this index type allows other columns from the
 // table to act as a key prefix that separates indexed values into distinct
 // groupings, e.g. by user or customer.
