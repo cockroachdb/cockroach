@@ -7,6 +7,7 @@ package sql
 
 import (
 	"context"
+	"math/rand"
 	"sync/atomic"
 	"time"
 
@@ -85,6 +86,11 @@ type txnState struct {
 	// often root spans, as SQL txns are frequently the level at which we do
 	// tracing. This context is hijacked when session tracing is enabled.
 	Ctx context.Context
+
+	rng *rand.Rand
+
+	// recording indicates that sp is recording
+	shouldRecord bool
 
 	// recordingThreshold, is not zero, indicates that sp is recording and that
 	// the recording should be dumped to the log if execution of the transaction
@@ -199,7 +205,9 @@ func (ts *txnState) resetForNewSQLTxn(
 
 	var sp *tracing.Span
 	duration := traceTxnThreshold.Get(&tranCtx.settings.SV)
-	if alreadyRecording || duration > 0 {
+	probabilisticTracePct := traceTxnPct.Get(&tranCtx.settings.SV)
+	ts.shouldRecord = ts.rng.Float64() < probabilisticTracePct && duration > 0
+	if alreadyRecording || ts.shouldRecord {
 		ts.Ctx, sp = tracing.EnsureChildSpan(connCtx, tranCtx.tracer, opName,
 			tracing.WithRecording(tracingpb.RecordingVerbose))
 	} else if ts.testingForceRealTracingSpans {
@@ -211,7 +219,7 @@ func (ts *txnState) resetForNewSQLTxn(
 		sp.SetTag("implicit", attribute.StringValue("true"))
 	}
 
-	if !alreadyRecording && (duration > 0) {
+	if !alreadyRecording && ts.shouldRecord {
 		ts.recordingThreshold = duration
 		ts.recordingStart = timeutil.Now()
 	}
@@ -271,7 +279,7 @@ func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timesta
 		panic(errors.AssertionFailedf("No span in context? Was resetForNewSQLTxn() called previously?"))
 	}
 
-	if ts.recordingThreshold > 0 {
+	if ts.shouldRecord {
 		if elapsed := timeutil.Since(ts.recordingStart); elapsed >= ts.recordingThreshold {
 			logTraceAboveThreshold(ts.Ctx,
 				sp.GetRecording(sp.RecordingType()), /* recording */
@@ -285,6 +293,7 @@ func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timesta
 
 	sp.Finish()
 	ts.Ctx = nil
+	ts.shouldRecord = false
 	ts.recordingThreshold = 0
 	return func() (txnID uuid.UUID, timestamp hlc.Timestamp) {
 		ts.mu.Lock()

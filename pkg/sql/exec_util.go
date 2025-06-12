@@ -281,6 +281,14 @@ var traceTxnThreshold = settings.RegisterDurationSetting(
 		"client communication (e.g. retries)", 0,
 	settings.WithPublic)
 
+var traceTxnPct = settings.RegisterFloatSetting(
+	settings.ApplicationLevel,
+	"sql.trace.txn.percent",
+	"Percentage of transactions that will be traced",
+	0,
+	settings.NonNegativeFloatWithMaximum(1.0),
+	settings.WithPublic)
+
 // TraceStmtThreshold is identical to traceTxnThreshold except it applies to
 // individual statements in a transaction. The motivation for this setting is
 // to be able to reduce the noise associated with a larger transaction (e.g.
