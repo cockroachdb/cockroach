@@ -586,7 +586,7 @@ func bumpClusterVersion(
 	req := &serverpb.BumpClusterVersionRequest{ClusterVersion: &clusterVersion}
 	op := fmt.Sprintf("bump-cluster-version=%s", req.ClusterVersion.PrettyPrint())
 	return forEveryNodeUntilClusterStable(ctx, op, c, func(
-		ctx context.Context, client serverpb.MigrationClient,
+		ctx context.Context, client serverpb.RPCMigrationClient,
 	) error {
 		_, err := client.BumpClusterVersion(ctx, req)
 		return err
@@ -601,7 +601,7 @@ func validateTargetClusterVersion(
 	req := &serverpb.ValidateTargetClusterVersionRequest{ClusterVersion: &clusterVersion}
 	op := fmt.Sprintf("validate-cluster-version=%s", req.ClusterVersion.PrettyPrint())
 	return forEveryNodeUntilClusterStable(ctx, op, c, func(
-		tx context.Context, client serverpb.MigrationClient,
+		tx context.Context, client serverpb.RPCMigrationClient,
 	) error {
 		_, err := client.ValidateTargetClusterVersion(ctx, req)
 		// The tenant upgrade interlock is new in 23.1, as a result, before
@@ -624,7 +624,7 @@ func forEveryNodeUntilClusterStable(
 	ctx context.Context,
 	op string,
 	c upgrade.Cluster,
-	f func(ctx context.Context, client serverpb.MigrationClient) error,
+	f func(ctx context.Context, client serverpb.RPCMigrationClient) error,
 ) error {
 	log.Infof(ctx, "executing operation %s", redact.Safe(op))
 	return c.UntilClusterStable(ctx, retry.Options{

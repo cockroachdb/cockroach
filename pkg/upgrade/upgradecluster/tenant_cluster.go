@@ -188,7 +188,7 @@ const BumpClusterVersionOpName = "bump-cluster-version"
 // ForEveryNodeOrServer is part of the upgrade.Cluster interface.
 // TODO(ajstorm): Make the op here more structured.
 func (t *TenantCluster) ForEveryNodeOrServer(
-	ctx context.Context, op string, fn func(context.Context, serverpb.MigrationClient) error,
+	ctx context.Context, op string, fn func(context.Context, serverpb.RPCMigrationClient) error,
 ) error {
 	// Get the list of all SQL instances running. We must do this using the
 	// "NoCache" method, as the upgrade interlock requires a consistent view of
@@ -224,7 +224,7 @@ func (t *TenantCluster) ForEveryNodeOrServer(
 		grp.GoCtx(func(ctx context.Context) error {
 			defer alloc.Release()
 
-			var client serverpb.MigrationClient
+			var client serverpb.RPCMigrationClient
 			retryOpts := retry.Options{
 				InitialBackoff: 1 * time.Millisecond,
 				MaxRetries:     20,
