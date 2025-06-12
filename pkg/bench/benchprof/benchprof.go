@@ -23,8 +23,35 @@ import (
 type StopFn func(testing.TB)
 
 // Stop stops profiling.
-func (f StopFn) Stop(b testing.TB) {
-	f(b)
+func (f StopFn) Stop(tb testing.TB) {
+	f(tb)
+}
+
+func noOpStopFn(testing.TB) {}
+
+// StartAllProfiles starts collection of CPU, heap, and mutex profiles, if the
+// "-test.cpuprofile", "-test.memprofile", or "-test.mutexprofile" flags are
+// set. See StartCPUProfile, StartMemProfile, and StartMutexProfile for more
+// details.
+//
+// Example usage:
+//
+//	func BenchmarkFoo(b *testing.B) {
+//	    // ..
+//	    b.Run("case", func(b *testing.B) {
+//	        defer benchprof.StartAllProfiles(b).Stop(b)
+//	        // Benchmark loop.
+//	    })
+//	}
+func StartAllProfiles(tb testing.TB) StopFn {
+	cpuStop := StartCPUProfile(tb)
+	memStop := StartMemProfile(tb)
+	mutexStop := StartMutexProfile(tb)
+	return func(b testing.TB) {
+		cpuStop(b)
+		memStop(b)
+		mutexStop(b)
+	}
 }
 
 // StartCPUProfile starts collection of a CPU profile if the "-test.cpuprofile"
@@ -56,29 +83,25 @@ func StartCPUProfile(tb testing.TB) StopFn {
 	}
 	if cpuProfFile == "" {
 		// Not CPU profile requested.
-		return func(b testing.TB) {}
+		return noOpStopFn
 	}
 
 	prefix := profilePrefix(cpuProfFile)
+	dir := outputDir(tb)
+	if dir != "" {
+		cpuProfFile = filepath.Join(dir, cpuProfFile)
+	}
 
 	// Hijack the harness's profile to make a clean profile.
 	// The flag is set, so likely a CPU profile started by the Go harness is
 	// running (unless -count is specified, but StopCPUProfile is idempotent).
 	runtimepprof.StopCPUProfile()
 
-	var outputDir string
-	if err := sniffarg.DoEnv("test.outputdir", &outputDir); err != nil {
-		tb.Fatal(err)
-	}
-	if outputDir != "" {
-		cpuProfFile = filepath.Join(outputDir, cpuProfFile)
-	}
-
-	// Remove the harness's profile file to avoid confusion.
+	// Remove the harness's profile file. It would not be an accurate profile.
 	_ = os.Remove(cpuProfFile)
 
 	// Create a new profile file.
-	fileName := profileFileName(tb, outputDir, prefix, "cpu")
+	fileName := profileFileName(tb, dir, prefix, "cpu")
 	f, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		tb.Fatal(err)
@@ -126,25 +149,75 @@ func StartMemProfile(tb testing.TB) StopFn {
 	}
 	if memProfFile == "" {
 		// No heap profile requested.
-		return func(b testing.TB) {}
+		return noOpStopFn
 	}
 
 	prefix := profilePrefix(memProfFile)
-
-	var outputDir string
-	if err := sniffarg.DoEnv("test.outputdir", &outputDir); err != nil {
-		tb.Fatal(err)
-	}
-	if outputDir != "" {
-		memProfFile = filepath.Join(outputDir, memProfFile)
+	dir := outputDir(tb)
+	if dir != "" {
+		memProfFile = filepath.Join(dir, memProfFile)
 	}
 
 	// Create a new profile file.
-	fileName := profileFileName(tb, outputDir, prefix, "mem")
+	fileName := profileFileName(tb, dir, prefix, "mem")
 	diffAllocs := diffProfile(func() []byte {
 		p := runtimepprof.Lookup("allocs")
 		var buf bytes.Buffer
 		runtime.GC()
+		if err := p.WriteTo(&buf, 0); err != nil {
+			tb.Fatal(err)
+		}
+		return buf.Bytes()
+	})
+
+	return func(b testing.TB) {
+		if sl := diffAllocs(b); len(sl) > 0 {
+			if err := os.WriteFile(fileName, sl, 0644); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+}
+
+// StartMutexProfile starts collection of a mutex profile if the
+// "-test.cpuprofile" flag has been set. The profile will only collect data
+// between calling StartMutexProfile and calling the returned StopFn.
+//
+// Example usage:
+//
+//	func BenchmarkFoo(b *testing.B) {
+//	    // ..
+//	    b.Run("case", func(b *testing.B) {
+//	        defer benchprof.StartMutexProfile(b).Stop(b)
+//	        // Benchmark loop.
+//	    })
+//	}
+//
+// The file name of the profile will include the prefix of the profile flags and
+// the benchmark names. For example, "foo_benchmark_thing_1.mutex" would be
+// created for a "BenchmarkThing/1" benchmark if the
+// "-test.mutexprofile=foo.mutex" flag is set.
+func StartMutexProfile(tb testing.TB) StopFn {
+	var mutexProfFile string
+	if err := sniffarg.DoEnv("test.mutexprofile", &mutexProfFile); err != nil {
+		tb.Fatal(err)
+	}
+	if mutexProfFile == "" {
+		// No CPU profile requested, do not collect a mutex profile.
+		return noOpStopFn
+	}
+
+	prefix := profilePrefix(mutexProfFile)
+	dir := outputDir(tb)
+	if dir != "" {
+		mutexProfFile = filepath.Join(dir, mutexProfFile)
+	}
+
+	// Create a new profile file.
+	fileName := profileFileName(tb, dir, prefix, "mutex")
+	diffAllocs := diffProfile(func() []byte {
+		p := runtimepprof.Lookup("mutex")
+		var buf bytes.Buffer
 		if err := p.WriteTo(&buf, 0); err != nil {
 			tb.Fatal(err)
 		}
@@ -191,6 +264,14 @@ func diffProfile(take func() []byte) func(testing.TB) []byte {
 		}
 		return buf.Bytes()
 	}
+}
+
+func outputDir(tb testing.TB) string {
+	var dir string
+	if err := sniffarg.DoEnv("test.outputdir", &dir); err != nil {
+		tb.Fatal(err)
+	}
+	return dir
 }
 
 func profilePrefix(profileArg string) string {
