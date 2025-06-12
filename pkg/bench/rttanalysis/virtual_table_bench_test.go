@@ -15,7 +15,7 @@ func init() {
 		{
 			Name: "select crdb_internal.tables with 1 fk",
 			Setup: `
-CREATE TABLE t1 (i INT PRIMARY KEY);
+CREATE TABLE t1 (i INT PRI	MARY KEY);
 CREATE TABLE t2 (i INT PRIMARY KEY, j INT REFERENCES t1(i));
 `,
 			Stmt: `SELECT * FROM "".crdb_internal.tables`,
