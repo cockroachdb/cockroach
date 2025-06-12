@@ -3723,11 +3723,7 @@ func (s *adminServer) queryTableID(
 func (s *adminServer) dialNode(
 	ctx context.Context, nodeID roachpb.NodeID,
 ) (serverpb.AdminClient, error) {
-	conn, err := s.serverIterator.dialNode(ctx, serverID(nodeID))
-	if err != nil {
-		return nil, err
-	}
-	return serverpb.NewAdminClient(conn), nil
+	return serverpb.DialAdminClient(s.nd, ctx, nodeID)
 }
 
 func (s *adminServer) ListTracingSnapshots(

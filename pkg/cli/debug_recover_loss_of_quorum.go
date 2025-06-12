@@ -308,11 +308,12 @@ func runDebugDeadReplicaCollect(cmd *cobra.Command, args []string) error {
 	var stats loqrecovery.CollectionStats
 
 	if len(debugRecoverCollectInfoOpts.Stores.Specs) == 0 {
-		c, finish, err := getAdminClient(ctx, serverCfg)
+		c, finish, err := dialAdminClient(ctx, serverCfg)
 		if err != nil {
 			return errors.Wrapf(err, "failed to get admin connection to cluster")
 		}
 		defer finish()
+
 		replicaInfo, stats, err = loqrecovery.CollectRemoteReplicaInfo(ctx, c,
 			debugRecoverCollectInfoOpts.maxConcurrency, stderr /* logOutput */)
 		if err != nil {
@@ -426,11 +427,12 @@ func runDebugPlanReplicaRemoval(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		// If no replica info is provided, try to connect to a cluster default or
 		// explicitly provided to retrieve replica info.
-		c, finish, err := getAdminClient(ctx, serverCfg)
+		c, finish, err := dialAdminClient(ctx, serverCfg)
 		if err != nil {
 			return errors.Wrapf(err, "failed to get admin connection to cluster")
 		}
 		defer finish()
+
 		replicas, stats, err = loqrecovery.CollectRemoteReplicaInfo(ctx, c,
 			debugRecoverPlanOpts.maxConcurrency, stderr /* logOutput */)
 		if err != nil {
@@ -675,7 +677,7 @@ func stageRecoveryOntoCluster(
 	ignoreInternalVersion bool,
 	maxConcurrency int,
 ) error {
-	c, finish, err := getAdminClient(ctx, serverCfg)
+	c, finish, err := dialAdminClient(ctx, serverCfg)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get admin connection to cluster")
 	}
@@ -686,6 +688,7 @@ func stageRecoveryOntoCluster(
 		nodeID roachpb.NodeID
 		planID string
 	}
+
 	vr, err := c.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{
 		MaxConcurrency: int32(maxConcurrency),
 	})
@@ -948,11 +951,12 @@ func runDebugVerify(cmd *cobra.Command, args []string) error {
 		_, _ = fmt.Printf("Checking application of recovery plan %s\n", updatePlan.PlanID)
 	}
 
-	c, finish, err := getAdminClient(ctx, serverCfg)
+	c, finish, err := dialAdminClient(ctx, serverCfg)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get admin connection to cluster")
 	}
 	defer finish()
+
 	req := serverpb.RecoveryVerifyRequest{
 		DecommissionedNodeIDs: updatePlan.DecommissionedNodeIDs,
 		MaxReportedRanges:     20,

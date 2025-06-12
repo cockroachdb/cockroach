@@ -407,7 +407,7 @@ func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*La
 		if err != nil {
 			return err
 		}
-		client := serverpb.NewAdminClient(conn)
+		client := conn.NewAdminClient()
 
 		resp, err := client.ChartCatalog(ctx, &serverpb.ChartCatalogRequest{})
 		if err != nil {

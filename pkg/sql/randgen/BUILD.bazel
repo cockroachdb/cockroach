@@ -9,6 +9,8 @@ go_library(
         "expr.go",
         "mutator.go",
         "schema.go",
+        "table.go",
+        "table_opt.go",
         "type.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/randgen",
