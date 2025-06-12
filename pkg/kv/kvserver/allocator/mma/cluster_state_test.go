@@ -116,12 +116,15 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 					rMsg.RangeID = roachpb.RangeID(parseInt(t, parts[1]))
 				case "load":
 					rMsg.RangeLoad.Load = parseLoadVector(t, parts[1])
+					rMsg.Populated = true
 				case "raft-cpu":
 					rMsg.RangeLoad.RaftCPU = LoadValue(parseInt(t, parts[1]))
+					rMsg.Populated = true
 				}
 			}
 		} else if strings.HasPrefix(line, "config=") {
 			rMsg.Conf = spanconfigtestutils.ParseZoneConfig(t, strings.TrimPrefix(line, "config=")).AsSpanConfig()
+			rMsg.Populated = true
 		} else {
 			var repl StoreIDAndReplicaState
 			fields := strings.Fields(line)
@@ -145,6 +148,7 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 				}
 			}
 			rMsg.Replicas = append(rMsg.Replicas, repl)
+			rMsg.Populated = true
 		}
 	}
 	if rMsg.RangeID != 0 {
