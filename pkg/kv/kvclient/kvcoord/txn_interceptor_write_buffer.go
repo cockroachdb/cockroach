@@ -146,26 +146,26 @@ type txnWriteBuffer struct {
 	// and disable write buffering going forward out of an abundance of caution.
 	// This is opted into by SQL.
 	//
-	// As a result, we have a nice invariant: if write buffering is enabled, then
-	// all writes performed by the transaction are buffered in memory. We can
-	// never have the case where a part of the write set is buffered, and the
-	// other part is replicated.
+	// As a result, we have a nice invariant: if write buffering is enabled,
+	// then all writes performed by the transaction are buffered in memory. We
+	// can never have the case where a part of the write set is buffered, and
+	// the other part is replicated.
 	//
-	// In the future, the invariant above allows us to omit checking the AbortSpan
-	// for transactions that have buffered writes enabled. The AbortSpan is used
-	// to ensure we don't violate read-your-own-write semantics for transactions
-	// that have been aborted by a conflicting transaction. As read-your-own-write
-	// semantics are upheld by the client, not the server, for transactions that
-	// use buffered writes, we can skip the AbortSpan check on the server.
+	// The invariant above allows us to omit checking the AbortSpan for
+	// transactions that have buffered writes enabled. The AbortSpan is used to
+	// ensure we don't violate read-your-own-write semantics for transactions
+	// that have been aborted by a conflicting transaction. As
+	// read-your-own-write semantics are upheld by the client, not the server,
+	// for transactions that use buffered writes, we can skip the AbortSpan
+	// check on the server.
 	//
 	// We currently track this via two state variables: `enabled` and `flushed`.
 	// Writes are only buffered if enabled && !flushed.
 	//
-	// `enabled` tracks whether buffering has been enabled/disabled externally via
-	// txn.SetBufferedWritesEnabled or because we are operating on a leaf
+	// `enabled` tracks whether buffering has been enabled/disabled externally
+	// via txn.SetBufferedWritesEnabled or because we are operating on a leaf
 	// transaction.
 	enabled bool
-	//
 	// `flushed` tracks whether the buffer has been previously flushed.
 	flushed bool
 
@@ -210,6 +210,15 @@ func (twb *txnWriteBuffer) SendLocked(
 
 	if !twb.shouldBuffer() {
 		return twb.wrapped.SendLocked(ctx, ba)
+	} else {
+		// If we're here, write buffering is enabled, and all writes until now
+		// have been buffered. Set the flag to indicate this.
+		//
+		// NB: We don't need a version check here (for v25.3) because this is only
+		// used by the server to optimize away the AbortSpan check. Even if we set
+		// this field, and the server is on a previous version, the worst that can
+		// happen is we'll perform this check, which is harmless.
+		ba.HasBufferedAllPrecedingWrites = true
 	}
 
 	if etArg, ok := ba.GetArg(kvpb.EndTxn); ok {
