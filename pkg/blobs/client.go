@@ -47,11 +47,11 @@ var _ BlobClient = &remoteClient{}
 // remoteClient uses the node dialer and blob service clients
 // to Read or Write bulk files from/to other nodes.
 type remoteClient struct {
-	blobClient blobspb.BlobClient
+	blobClient blobspb.RPCBlobClient
 }
 
 // newRemoteClient instantiates a remote blob service client.
-func newRemoteClient(blobClient blobspb.BlobClient) BlobClient {
+func newRemoteClient(blobClient blobspb.RPCBlobClient) BlobClient {
 	return &remoteClient{blobClient: blobClient}
 }
 
@@ -71,7 +71,7 @@ func (c *remoteClient) ReadFile(
 }
 
 type streamWriter struct {
-	s   blobspb.Blob_PutStreamClient
+	s   blobspb.RPCBlob_PutStreamClient
 	buf blobspb.StreamChunk
 }
 
