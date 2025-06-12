@@ -8,14 +8,20 @@ package rpc
 import (
 	"context"
 	"math"
+	"sort"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/montanaflynn/stats"
+	"github.com/stretchr/testify/require"
 )
 
 const errOffsetGreaterThanMaxOffset = "clock synchronization error: this node is more than .+ away from at least half of the known nodes"
@@ -254,5 +260,96 @@ func TestResettingMaxTrigger(t *testing.T) {
 		if tr.triggers(td.value, td.resetThreshold, td.triggerThreshold) != td.expected {
 			t.Errorf("Failed in iteration %v: %v", i, td)
 		}
+	}
+}
+
+// TestStatsFuncs tests our descriptive stats functions against the stats
+// package.
+func TestStatsFuncs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	rng, _ := randutil.NewTestRand()
+	size := rng.Intn(1000) + 1
+	data := make(stats.Float64Data, size)
+	for i := range size {
+		neg := 1
+		if rng.Float64() > 0.5 {
+			neg = -1
+		}
+		data[i] = float64(neg) * float64(rng.Int63())
+	}
+
+	// TODO(ssd): You'll note differences between whether the test compares
+	// operations on the unsorted data or the sorted data. This is to avoid
+	// failures caused by floating point error. I had hoped to always compare the
+	// unsorted data passed to the reference implementation with the sorted data
+	// passed to our implementation. But even the floatWithinReasonableTolerance
+	// function below, with enough operations the non-associativity of floating
+	// point arithmetic really seems to accumulate.
+	sortedData := make(stats.Float64Data, size)
+	copy(sortedData, data)
+	sort.Float64s(sortedData)
+
+	mean, err := sortedData.Mean()
+	require.NoError(t, err)
+
+	floatWithinReasonableTolerance := func(t *testing.T, expected, actual float64) {
+		const tolerance = 0.0001
+		withinTolerance := cmp.Equal(expected, actual, cmpopts.EquateApprox(tolerance, 0))
+		if !withinTolerance {
+			t.Errorf("values outside tolerance\n  %f (expected)\n  %f (actual)\n  %f (tolerance)", expected, actual, tolerance)
+		}
+	}
+
+	t.Run("StandardDeviationPopulationKnownMean", func(t *testing.T) {
+		ourStdDev := StandardDeviationPopulationKnownMean(data, mean)
+		theirStdDev, err := stats.StandardDeviation(data)
+		require.NoError(t, err)
+		floatWithinReasonableTolerance(t, theirStdDev, ourStdDev)
+	})
+
+	t.Run("MedianSortedInput", func(t *testing.T) {
+		ourMedian := MedianSortedInput(sortedData)
+		theirMedian, err := stats.Median(data)
+		require.NoError(t, err)
+		floatWithinReasonableTolerance(t, theirMedian, ourMedian)
+	})
+
+	t.Run("PopulationVarianceKnownMean", func(t *testing.T) {
+		ourVar := PopulationVarianceKnownMean(sortedData, mean)
+		theirVar, err := stats.PopulationVariance(sortedData)
+		require.NoError(t, err)
+		floatWithinReasonableTolerance(t, theirVar, ourVar)
+	})
+
+	t.Run("MedianAbsoluteDeviationPopulationSortedInput", func(t *testing.T) {
+		ourMedAbsDev := MedianAbsoluteDeviationPopulationSortedInput(sortedData)
+		theirMedianAbsDev, err := stats.MedianAbsoluteDeviationPopulation(data)
+		require.NoError(t, err)
+		floatWithinReasonableTolerance(t, theirMedianAbsDev, ourMedAbsDev)
+	})
+}
+
+func BenchmarkVerifyClockOffset(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+
+	clock := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	maxOffset := 50 * time.Nanosecond
+	monitor := newRemoteClockMonitor(clock, maxOffset, time.Hour, 0)
+	rng, _ := randutil.NewTestRand()
+
+	offsetCount := 1000
+	monitor.mu.offsets = make(map[roachpb.NodeID]RemoteOffset)
+	for i := range offsetCount {
+		neg := int64(1)
+		if rng.Float64() > 0.5 {
+			neg = -1
+		}
+		offset := neg * int64(rng.Float64()*float64(maxOffset))
+		monitor.mu.offsets[roachpb.NodeID(i)] = RemoteOffset{Offset: offset}
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		require.NoError(b, monitor.VerifyClockOffset(context.Background()))
 	}
 }
