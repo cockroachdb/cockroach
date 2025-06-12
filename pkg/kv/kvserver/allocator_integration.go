@@ -91,28 +91,12 @@ func (as *AllocatorSync) NonMMAPreTransferLease(
 		transferTo,
 		transferFrom,
 	)
-	// TODO(mma): RegisterExternalChanges would panic when the mma.Allocator state
-	// didn't contain a range for the external replica change being registered.
-	// Currently, this is handled by creating an empty range state for the range
-	// but this is also flawed, because a removal change could be registered
-	// against the empty range.
-	//
-	// Possible solutions to this problem:
-	//
-	// 1. Never let mma cluster state get out of sync with the storepool state.
-	// That only seems possible if we sequence store leaseholder messages before
-	// any external change registration.
-	//
-	// 2. Track using a different ID here, and then return that ID to the caller.
-	// Then, return an error when the range doesn't yet exist in the
-	// clusterState, the storepool still gets updated and drop the update to the
-	// mma cluster state.
-	//
-	// 3. Update the external change registration to also include the range
-	// descriptor, so that the cluster state can be updated if it doesn't exist
-	// yet e.g., pass in a mma.RangeMsg alongside the replica changes on each
-	// call to RegisterExternalChanges.
+	log.Infof(context.Background(), "registering external lease transfer change: usage=%v changes=%v",
+		usage, replicaChanges)
 	changeIDs := as.mmAllocator.RegisterExternalChanges(replicaChanges[:])
+	if changeIDs == nil {
+		log.Info(context.Background(), "mma did not track lease transfer, skipping")
+	}
 	trackedChange := trackedAllocatorChange{
 		typ:          AllocatorChangeTypeLeaseTransfer,
 		usage:        usage,
@@ -250,12 +234,11 @@ func (as *AllocatorSync) MMAPreApply(
 // the old allocator components (lease queue, replicate queue and store
 // rebalancer), as well as the new mma.Allocator.
 func (as *AllocatorSync) PostApply(syncChangeID SyncChangeID, success bool) {
-	trackedChange := as.trackedChanges[syncChangeID]
 	tracked, ok := as.trackedChanges[syncChangeID]
 	if !ok {
 		panic("PostApply called with unknown SyncChangeID")
 	}
-	if changeIDs := trackedChange.changeIDs; changeIDs != nil {
+	if changeIDs := tracked.changeIDs; changeIDs != nil {
 		as.mmAllocator.AdjustPendingChangesDisposition(changeIDs, success)
 	}
 	delete(as.trackedChanges, syncChangeID)
