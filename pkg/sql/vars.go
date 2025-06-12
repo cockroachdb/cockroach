@@ -2248,8 +2248,10 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension. Configures the maximum number of automatic retries
-	// to perform for statements in explicit READ COMMITTED transactions that
-	// see a transaction retry error.
+	// to perform for statements in explicit READ COMMITTED transactions that see
+	// a transaction retry error. (See also
+	// initial_retry_backoff_for_read_committed which should be tuned with
+	// max_retries_for_read_committed.)
 	`max_retries_for_read_committed`: {
 		GetStringVal: makeIntGetStringValFn(`max_retries_for_read_committed`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
@@ -4014,6 +4016,33 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseExistsFilterHoistRule), nil
 		},
 		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension. Configures the initial backoff duration for
+	// automatic retries of statements in explicit READ COMMITTED transactions
+	// that see a transaction retry error. For statements experiencing contention
+	// under READ COMMITTED isolation, this should be set to a duration
+	// proportional to the typical execution time of the statement (in addition to
+	// also increasing `max_retries_for_read_committed`).
+	`initial_retry_backoff_for_read_committed`: {
+		GetStringVal: makeTimeoutVarGetter(`initial_retry_backoff_for_read_committed`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			duration, err := validateTimeoutVar(m.data.GetIntervalStyle(), s,
+				"initial_retry_backoff_for_read_committed",
+			)
+			if err != nil {
+				return err
+			}
+			m.SetInitialRetryBackoffForReadCommitted(duration)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			ms := evalCtx.SessionData().InitialRetryBackoffForReadCommitted.Nanoseconds() / int64(time.Millisecond)
+			return strconv.FormatInt(ms, 10), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "0s"
+		},
 	},
 }
 
