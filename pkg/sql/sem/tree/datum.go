@@ -6393,18 +6393,37 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 	switch typ.Family() {
 	case types.StringFamily, types.CollatedStringFamily:
 		var sv string
+		var isString, isCollatedString bool
+		// maybeModified will track whether we might have modified the string
+		// value somehow. If it's false, then we definitely didn't modify the
+		// string.
+		var maybeModified bool
 		if v, ok := AsDString(inVal); ok {
 			sv = string(v)
+			isString = true
 		} else if v, ok := inVal.(*DCollatedString); ok {
 			sv = v.Contents
+			isCollatedString = true
 		}
 		switch typ.Oid() {
 		case oid.T_char:
 			// "char" is supposed to truncate long values.
+			//
+			// Compute maybeModified via the same fast-paths present in
+			// util.TruncateString.
+			maybeModified = len(sv) > 1 || utf8.RuneCountInString(sv) > 1
 			sv = util.TruncateString(sv, 1)
 		case oid.T_bpchar:
 			// bpchar types truncate trailing whitespace.
-			sv = strings.TrimRight(sv, " ")
+			//
+			// This loop is equivalent to what strings.TrimRight(sv, " ") does
+			// since it has a fast-path that invokes strings.trimRightByte()
+			// when only a single byte-represented character comprises the
+			// cutset.
+			for len(sv) > 0 && sv[len(sv)-1] == ' ' {
+				sv = sv[:len(sv)-1]
+				maybeModified = true
+			}
 		}
 
 		var overlength int
@@ -6422,6 +6441,7 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 					break
 				}
 				sv = sv[:len(sv)-1]
+				maybeModified = true
 				overlength--
 			}
 		}
@@ -6432,9 +6452,12 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 		}
 
 		if typ.Oid() == oid.T_bpchar || typ.Oid() == oid.T_char || typ.Oid() == oid.T_varchar {
-			if _, ok := AsDString(inVal); ok {
+			if isString {
+				if !maybeModified {
+					return inVal, nil
+				}
 				return NewDString(sv), nil
-			} else if _, ok := inVal.(*DCollatedString); ok {
+			} else if isCollatedString {
 				return NewDCollatedString(sv, typ.Locale(), &CollationEnvironment{})
 			}
 		}
