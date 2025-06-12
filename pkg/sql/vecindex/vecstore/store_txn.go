@@ -49,7 +49,7 @@ type Txn struct {
 
 	// fullVecFetchSpec is used to fetch vectors from the primary index.
 	fullVecFetchSpec *vecstorepb.GetFullVectorsFetchSpec
-	pkDecoder        pkDecoder
+	pkDecoder        PKDecoder
 
 	// Retained allocations to prevent excessive reallocation.
 	tmpSpans   []roachpb.Span
@@ -370,7 +370,7 @@ func InitGetFullVectorsFetchSpec(
 }
 
 // PKDecoder is used to extract the primary key from a vector index.
-type pkDecoder struct {
+type PKDecoder struct {
 	fetchSpec *fetchpb.IndexFetchSpec
 	output    rowenc.EncDatumRow
 	scratch   rowenc.EncDatumRow
@@ -379,7 +379,7 @@ type pkDecoder struct {
 
 // Init initializes the PKDecoder with the given fetch spec from the
 // GetFullVectorsFetchSpec.
-func (d *pkDecoder) Init(fetchSpec *fetchpb.IndexFetchSpec) {
+func (d *PKDecoder) Init(fetchSpec *fetchpb.IndexFetchSpec) {
 	d.fetchSpec = fetchSpec
 	if cap(d.output) < len(fetchSpec.FetchedColumns) {
 		d.output = make(rowenc.EncDatumRow, len(fetchSpec.FetchedColumns))
@@ -391,9 +391,9 @@ func (d *pkDecoder) Init(fetchSpec *fetchpb.IndexFetchSpec) {
 	}
 }
 
-// Decode decodes the primary key from the given key bytes. The key returned
+// ExtractPrimaryKeyBytes decodes the primary key from the given key bytes. The key returned
 // remains valid until the next row is decoded.
-func (d *pkDecoder) Decode(
+func (d *PKDecoder) ExtractPrimaryKeyBytes(
 	treeKey cspann.TreeKey, keyBytes []byte,
 ) (row rowenc.EncDatumRow, err error) {
 	decodeFromKey := func(keyCols []fetchpb.IndexFetchSpec_KeyColumn, keyBytes []byte) error {
@@ -432,6 +432,23 @@ func (d *pkDecoder) Decode(
 		return nil, err
 	}
 
+	if buildutil.CrdbTestBuild {
+		for i, d := range d.output {
+			if d.IsUnset() {
+				return nil, errors.AssertionFailedf("primary key contains unset column %d", i)
+			}
+		}
+	}
+
+	return d.output, nil
+}
+
+// DecodeValueBytes uses the provided ValueBytes to decode composite columns.
+func (d *PKDecoder) DecodeValueBytes(valueBytes []byte) (rowenc.EncDatumRow, error) {
+	_, err := rowenc.DecodeValueBytes(d.colOrdMap, valueBytes, len(d.fetchSpec.FetchedColumns), d.output)
+	if err != nil {
+		return nil, err
+	}
 	return d.output, nil
 }
 
@@ -464,7 +481,7 @@ func (tx *Txn) getFullVectorsFromPK(
 				"cannot mix partition key and primary key requests to GetFullVectors")
 		}
 
-		pk, err := tx.pkDecoder.Decode(treeKey, ref.Key.KeyBytes)
+		pk, err := tx.pkDecoder.ExtractPrimaryKeyBytes(treeKey, ref.Key.KeyBytes)
 		if err != nil {
 			return err
 		}
@@ -473,21 +490,9 @@ func (tx *Txn) getFullVectorsFromPK(
 		// index relies upon not having to decode them. This code ensures that we
 		// have bytes for each datum and that they're encoded in the correct
 		// direction.
-		if buildutil.CrdbTestBuild {
-			for i, encCol := range pk {
-				if enc, ok := encCol.Encoding(); !ok {
-					return errors.AssertionFailedf("primary key column %d is not pre-encoded", i)
-				} else {
-					direction := tx.fullVecFetchSpec.FetchSpec.KeyAndSuffixColumns[i].Direction
-					if direction == catenumpb.IndexColumn_DESC && enc != catenumpb.DatumEncoding_DESCENDING_KEY {
-						return errors.AssertionFailedf("primary key column %d has direction %s, expected %s", i, enc.String(), catenumpb.IndexColumn_DESC)
-					} else if direction == catenumpb.IndexColumn_ASC && enc != catenumpb.DatumEncoding_ASCENDING_KEY {
-						return errors.AssertionFailedf("primary key column %d has direction %s, expected %s", i, enc.String(), catenumpb.IndexColumn_ASC)
-					}
-				}
-			}
+		if buildutil.CrdbTestBuild && !spanBuilder.IsPreEncoded(pk) {
+			return errors.AssertionFailedf("primary key columns must be pre-encoded in the proper direction")
 		}
-
 		span, containsNull, err := spanBuilder.SpanFromEncDatums(pk)
 		if err != nil {
 			return err
