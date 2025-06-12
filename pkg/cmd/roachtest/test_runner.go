@@ -1686,7 +1686,7 @@ func (r *testRunner) maybeSaveClusterDueToInvariantProblems(
 		return // test only
 	}
 	dets, err := c.RunWithDetails(ctx, t.L(), option.WithNodes(c.All()),
-		"([ -d logs ] && grep -RE '^F.*raft' logs) || true",
+		"([ -d logs ] && grep -RE '^F.*Was the raft log corrupted' logs) || true",
 	)
 	for _, det := range dets {
 		err = errors.CombineErrors(err, det.Err)
