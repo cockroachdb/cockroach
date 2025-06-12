@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -847,6 +848,8 @@ type clusterState struct {
 	stores map[roachpb.StoreID]*storeState
 	ranges map[roachpb.RangeID]*rangeState
 
+	scratchRangeMap map[roachpb.RangeID]struct{}
+
 	// Added to when a change is proposed. Will also add to corresponding
 	// rangeState.pendingChanges and to the affected storeStates.
 	//
@@ -867,6 +870,7 @@ func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterS
 		nodes:                map[roachpb.NodeID]*nodeState{},
 		stores:               map[roachpb.StoreID]*storeState{},
 		ranges:               map[roachpb.RangeID]*rangeState{},
+		scratchRangeMap:      map[roachpb.RangeID]struct{}{},
 		pendingChanges:       map[ChangeID]*pendingReplicaChange{},
 		constraintMatcher:    newConstraintMatcher(interner),
 		localityTierInterner: newLocalityTierInterner(interner),
@@ -938,12 +942,20 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 	now := cs.ts.Now()
 	cs.gcPendingChanges(now)
 
+	clear(cs.scratchRangeMap)
 	for _, rangeMsg := range msg.Ranges {
+		cs.scratchRangeMap[rangeMsg.RangeID] = struct{}{}
 		rs, ok := cs.ranges[rangeMsg.RangeID]
 		if !ok {
 			// This is the first time we've seen this range.
+			if !rangeMsg.Populated {
+				panic(errors.AssertionFailedf("rangeMsg for new range r%v is not populated", rangeMsg.RangeID))
+			}
 			rs = newRangeState()
 			cs.ranges[rangeMsg.RangeID] = rs
+		}
+		if !rangeMsg.Populated {
+			continue
 		}
 		// Set the range state and store state to match the range message state
 		// initially. The pending changes which are not enacted in the range
@@ -1007,6 +1019,43 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// assuming the leaseholder wouldn't have sent the message if there was no
 		// change.
 		rs.constraints = nil
+	}
+	// Remove ranges for which no longer the leaseholder.
+	for r, rs := range cs.ranges {
+		_, ok := cs.scratchRangeMap[r]
+		if ok {
+			continue
+		}
+		// Not the leaseholder for this range. Consider removing it.
+		//
+		// TODO(sumeer): in a multi-store setting this is inefficient.
+		remove := false
+		for _, repl := range rs.replicas {
+			if repl.IsLeaseholder {
+				if repl.StoreID == msg.StoreID {
+					remove = true
+				}
+				break
+			}
+		}
+		if !remove {
+			continue
+		}
+		// Since this range is going away, mark all the pending changes as
+		// enacted. This will allow the load adjustments to also be garbage
+		// collected in the future.
+		for _, change := range rs.pendingChanges {
+			cs.pendingChangeEnacted(change.ChangeID, now)
+		}
+		// Remove from the storeStates.
+		for _, replica := range rs.replicas {
+			ss := cs.stores[replica.StoreID]
+			if ss == nil {
+				panic(fmt.Sprintf("store %d not found stores=%v", replica.StoreID, cs.stores))
+			}
+			delete(cs.stores[replica.StoreID].adjusted.replicas, r)
+		}
+		delete(cs.ranges, r)
 	}
 	localss := cs.stores[msg.StoreID]
 	cs.meansMemo.clear()
