@@ -112,8 +112,7 @@ func BenchmarkTPCC(b *testing.B) {
 
 // run executes the TPC-C workload with the specified workload flags.
 func run(b *testing.B, ctx context.Context, pgURLs [nodes]string, workloadFlags []string) {
-	defer benchprof.StartCPUProfile(b).Stop(b)
-	defer benchprof.StartMemProfile(b).Stop(b)
+	defer benchprof.StartAllProfiles(b).Stop(b)
 
 	flags := append([]string{
 		"--wait=0",
