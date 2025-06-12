@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -249,12 +250,16 @@ func getSink(
 			return makeNullSink(&changefeedbase.SinkURL{URL: u}, metricsBuilder(nullIsAccounted))
 		case isKafkaSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.KafkaValidOptions, func() (Sink, error) {
+				targets, err := AllTargets(feedCfg, ctx, serverCfg.ExecutorConfig.(*sql.ExecutorConfig))
+				if err != nil {
+					return nil, err
+				}
 				if KafkaV2Enabled.Get(&serverCfg.Settings.SV) {
-					return makeKafkaSinkV2(ctx, &changefeedbase.SinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(),
+					return makeKafkaSinkV2(ctx, &changefeedbase.SinkURL{URL: u}, targets, opts.GetKafkaConfigJSON(),
 						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
 						serverCfg.Settings, metricsBuilder, kafkaSinkV2Knobs{})
 				} else {
-					return makeKafkaSink(ctx, &changefeedbase.SinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(), serverCfg.Settings, metricsBuilder)
+					return makeKafkaSink(ctx, &changefeedbase.SinkURL{URL: u}, targets, opts.GetKafkaConfigJSON(), serverCfg.Settings, metricsBuilder)
 				}
 			})
 		case isPulsarSink(u):
@@ -262,7 +267,11 @@ func getSink(
 			if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok {
 				testingKnobs = knobs
 			}
-			return makePulsarSink(ctx, &changefeedbase.SinkURL{URL: u}, encodingOpts, AllTargets(feedCfg), opts.GetKafkaConfigJSON(),
+			targets, err := AllTargets(feedCfg, ctx, serverCfg.ExecutorConfig.(*sql.ExecutorConfig))
+			if err != nil {
+				return nil, err
+			}
+			return makePulsarSink(ctx, &changefeedbase.SinkURL{URL: u}, encodingOpts, targets, opts.GetKafkaConfigJSON(),
 				serverCfg.Settings, metricsBuilder, testingKnobs)
 		case isWebhookSink(u):
 			webhookOpts, err := opts.GetWebhookSinkOptions()
@@ -279,7 +288,11 @@ func getSink(
 			if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok {
 				testingKnobs = knobs
 			}
-			return makePubsubSink(ctx, u, encodingOpts, opts.GetPubsubConfigJSON(), AllTargets(feedCfg),
+			targets, err := AllTargets(feedCfg, ctx, serverCfg.ExecutorConfig.(*sql.ExecutorConfig))
+			if err != nil {
+				return nil, err
+			}
+			return makePubsubSink(ctx, u, encodingOpts, opts.GetPubsubConfigJSON(), targets,
 				opts.IsSet(changefeedbase.OptUnordered), numSinkIOWorkers(serverCfg),
 				newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
 				metricsBuilder, serverCfg.Settings, testingKnobs)
@@ -302,7 +315,11 @@ func getSink(
 			})
 		case u.Scheme == changefeedbase.SinkSchemeExperimentalSQL:
 			return validateOptionsAndMakeSink(changefeedbase.SQLValidOptions, func() (Sink, error) {
-				return makeSQLSink(&changefeedbase.SinkURL{URL: u}, sqlSinkTableName, AllTargets(feedCfg), metricsBuilder)
+				targets, err := AllTargets(feedCfg, ctx, serverCfg.ExecutorConfig.(*sql.ExecutorConfig))
+				if err != nil {
+					return nil, err
+				}
+				return makeSQLSink(&changefeedbase.SinkURL{URL: u}, sqlSinkTableName, targets, metricsBuilder)
 			})
 		case u.Scheme == changefeedbase.SinkSchemeExternalConnection:
 			return validateOptionsAndMakeSink(changefeedbase.ExternalConnectionValidOptions, func() (Sink, error) {
