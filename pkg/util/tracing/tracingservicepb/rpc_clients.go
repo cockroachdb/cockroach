@@ -14,16 +14,16 @@ import (
 
 // DialTracingClient establishes a DRPC connection if enabled; otherwise,
 // it falls back to gRPC. The established connection is used to create a
-// TracingClient.
+// RPCTracingClient.
 func DialTracingClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
-) (TracingClient, error) {
+) (RPCTracingClient, error) {
 	if !rpcbase.TODODRPC {
 		conn, err := nd.Dial(ctx, nodeID, class)
 		if err != nil {
 			return nil, err
 		}
-		return NewTracingClient(conn), nil
+		return NewGRPCTracingClientAdapter(conn), nil
 	}
 	return nil, nil
 }
