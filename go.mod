@@ -146,7 +146,7 @@ require (
 	github.com/cockroachdb/tokenbucket v0.0.0-20250429170803-42689b6311bb
 	github.com/cockroachdb/tools v0.0.0-20211112185054-642e51449b40
 	github.com/cockroachdb/ttycolor v0.0.0-20210902133924-c7d7dcdde4e8
-	github.com/cockroachdb/version v0.0.0-20250314144055-3860cd14adf2
+	github.com/cockroachdb/version v0.0.0-20250509181251-54dac3003410
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd
 	github.com/containerd/containerd v1.6.18
 	github.com/coreos/go-oidc v2.2.1+incompatible

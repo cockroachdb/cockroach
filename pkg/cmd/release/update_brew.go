@@ -10,19 +10,19 @@ import (
 	"log"
 	"os/exec"
 
-	"github.com/Masterminds/semver/v3"
+	"github.com/cockroachdb/version"
 )
 
 // updateBrew runs commands in the homebrew-tap repo in order to update the cockroachdb version.
-func updateBrew(workDir string, version *semver.Version, latestMajor bool) error {
+func updateBrew(workDir string, ver version.Version, latestMajor bool) error {
 	// cockroach@major.minor is supported for all releases
 	commands := []*exec.Cmd{
-		exec.Command("make", fmt.Sprintf("VERSION=%s", version.String()), fmt.Sprintf("PRODUCT=cockroach@%d.%d", version.Major(), version.Minor())),
+		exec.Command("make", ver.Format("VERSION=%X.%Y.%Z"), ver.Format("PRODUCT=cockroach@%X.%Y")),
 	}
 	// limited to the latest release only
 	if latestMajor {
-		commands = append(commands, exec.Command("make", fmt.Sprintf("VERSION=%s", version.String()), "PRODUCT=cockroach"))
-		commands = append(commands, exec.Command("make", fmt.Sprintf("VERSION=%s", version.String()), "PRODUCT=cockroach-sql"))
+		commands = append(commands, exec.Command("make", ver.Format("VERSION=%X.%Y.%Z"), "PRODUCT=cockroach"))
+		commands = append(commands, exec.Command("make", ver.Format("VERSION=%X.%Y.%Z"), "PRODUCT=cockroach-sql"))
 	}
 	commands = append(commands, exec.Command("git", "add", "Formula"))
 	for _, cmd := range commands {
