@@ -369,8 +369,7 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 	mean := sum / float64(len(offsets))
 	stdDev := StandardDeviationPopulationKnownMean(offsets, mean)
 	median := MedianSortedInput(offsets)
-	// WARNING: offsets is unusable after this point as it has been modified.
-	medianAbsoluteDeviation := MedianAbsoluteDeviationPopulationSortedInputMutatesInput(offsets)
+	medianAbsoluteDeviation := MedianAbsoluteDeviationPopulationSortedInput(offsets)
 
 	r.metrics.ClockOffsetMeanNanos.Update(int64(mean))
 	r.metrics.ClockOffsetStdDevNanos.Update(int64(stdDev))
@@ -517,21 +516,36 @@ func MedianSortedInput(sortedInput stats.Float64Data) float64 {
 	}
 }
 
-// MedianAbsoluteDeviationPopulationSortedInputMutatesInput calculates the
-// median absolute deviation from a pre-sorted population.
-//
-// WARNING: This function mutates its input to avoid further allocations.
-func MedianAbsoluteDeviationPopulationSortedInputMutatesInput(
-	sortedInput stats.Float64Data,
-) float64 {
-	if sortedInput.Len() == 0 {
+// MedianAbsoluteDeviationPopulationSortedInput calculates the median absolute
+// deviation from a pre-sorted population.
+func MedianAbsoluteDeviationPopulationSortedInput(sortedInput stats.Float64Data) float64 {
+	switch sortedInput.Len() {
+	case 0:
 		return math.NaN()
+	case 1:
+		return 0
 	}
 
 	m := MedianSortedInput(sortedInput)
-	for key, value := range sortedInput {
-		sortedInput[key] = math.Abs(value - m)
+	a := sortedInput
+
+	// Peal off the largest difference on either end until we reach the midpoint(s).
+	last := 0.0
+	for len(a) > (len(sortedInput) / 2) {
+		leftDiff := m - a[0]
+		rightDiff := a[len(a)-1] - m
+		if leftDiff >= rightDiff {
+			last = leftDiff
+			a = a[1:]
+		} else {
+			last = rightDiff
+			a = a[:len(a)-1]
+		}
 	}
-	sort.Float64s(sortedInput)
-	return MedianSortedInput(sortedInput)
+
+	if len(sortedInput)%2 == 1 {
+		return last
+	} else {
+		return (max(m-a[0], a[len(a)-1]-m) + last) * 0.5
+	}
 }
