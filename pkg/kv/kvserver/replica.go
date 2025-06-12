@@ -3054,12 +3054,24 @@ type laggingState struct {
 	// hasSendQueue bool
 }
 
-// TryConstructMMARangeMsg ...
+// TryConstructMMARangeMsg constructs a mma.RangeMsg for the Replica iff the
+// replica is currently th leaseholder, in which case it returns true.
+//
+// When it is the leaseholder, there are two possibilities:
+//
+//   - There is at least one change that warrants informing MMA, in which case
+//     all the fields are populated, and Populated is true.
+//
+//   - Nothing has changed, in which case only the RangeID is set and Populated
+//     is false.
 //
 // Called periodically by the same entity (and must not be called
 // concurrently). If this method returned true the last time, that message
 // must have been fed to the allocator.
 func (r *Replica) TryConstructMMARangeMsg() (mma.RangeMsg, bool) {
+	if !r.IsInitialized() {
+		return mma.RangeMsg{}, false
+	}
 	var isLeaseholder bool
 	var wasLeaseholder bool
 	func() {
@@ -3074,14 +3086,10 @@ func (r *Replica) TryConstructMMARangeMsg() (mma.RangeMsg, bool) {
 		r.mu.mmaRangeMessageNeeded.lastIsLeaseholder = isLeaseholder
 	}()
 	// Fast path.
-	if !isLeaseholder && !wasLeaseholder {
+	if !isLeaseholder {
 		return mma.RangeMsg{}, false
 	}
-	if !isLeaseholder {
-		// wasLeaseholder is true.
-		return mma.RangeMsg{RangeID: r.RangeID}, true
-	}
-	// isLeaseholder is true. wasLeaseholder may be true or false.
+	// isLeaseholder is true.
 	rload := r.RangeLoad()
 	sendStreamStats := r.mu.mmaRangeMessageNeeded.getSendStreamStatsScratch()
 	r.flowControlV2.SendStreamStats(sendStreamStats)
@@ -3096,12 +3104,14 @@ func (r *Replica) TryConstructMMARangeMsg() (mma.RangeMsg, bool) {
 		needed = r.mu.mmaRangeMessageNeeded.getNeededAndReset(
 			rload, raftStatus, sendStreamStats)
 		if needed {
+			// TODO(sumeer): confirm that the descriptor is guaranteed to contain
+			// this Replica as a voter.
 			desc = r.descRLocked()
 			conf = r.mu.conf
 		}
 	}()
 	if !needed {
-		return mma.RangeMsg{}, false
+		return mma.RangeMsg{RangeID: r.RangeID}, true
 	}
 	var replicas []mma.StoreIDAndReplicaState
 	for _, repl := range desc.InternalReplicas {
@@ -3125,6 +3135,7 @@ func (r *Replica) TryConstructMMARangeMsg() (mma.RangeMsg, bool) {
 	}
 	return mma.RangeMsg{
 		RangeID:   r.RangeID,
+		Populated: true,
 		Replicas:  replicas,
 		Conf:      conf,
 		RangeLoad: rload,

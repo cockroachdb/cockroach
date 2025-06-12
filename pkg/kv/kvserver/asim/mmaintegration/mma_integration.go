@@ -31,6 +31,7 @@ func MakeStoreLeaseholderMsgFromState(
 		}
 		simReplicas := rng.Replicas()
 		replicas := make([]mma.StoreIDAndReplicaState, 0, len(simReplicas))
+		foundSelf := false
 		for _, r := range simReplicas {
 			rs := mma.StoreIDAndReplicaState{
 				StoreID: roachpb.StoreID(r.StoreID()),
@@ -52,13 +53,20 @@ func MakeStoreLeaseholderMsgFromState(
 						replica.Range(), storeID))
 				}
 			}
-			if rs.IsLeaseholder && rs.StoreID != roachpb.StoreID(storeID) {
-				panic(fmt.Sprintf(
-					"simulator state inconsistent for r%d when constructing leaseholder "+
-						"msg for s%d: remote store s%d is leaseholder",
-					replica.Range(), storeID, rs.StoreID))
+			if rs.IsLeaseholder {
+				if rs.StoreID != roachpb.StoreID(storeID) {
+					panic(fmt.Sprintf(
+						"simulator state inconsistent for r%d when constructing leaseholder "+
+							"msg for s%d: remote store s%d is leaseholder",
+						replica.Range(), storeID, rs.StoreID))
+				}
+				foundSelf = true
 			}
 			replicas = append(replicas, rs)
+		}
+		if !foundSelf {
+			panic(fmt.Sprintf("simulator state inconsistent for r%d when constructing leaseholder "+
+				"msg for s%d: did not find itself in the set of replicas", replica.Range(), storeID))
 		}
 
 		var rl mma.RangeLoad
@@ -70,6 +78,7 @@ func MakeStoreLeaseholderMsgFromState(
 
 		rangeMessages = append(rangeMessages, mma.RangeMsg{
 			RangeID:   roachpb.RangeID(replica.Range()),
+			Populated: true,
 			Replicas:  replicas,
 			Conf:      *rng.SpanConfig(),
 			RangeLoad: rl,

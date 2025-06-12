@@ -46,9 +46,13 @@ store-load-msg
   store-id=2 node-id=2 load=[45,40,50] capacity=[100,100,50] secondary-load=1 load-time=0s
 ----
 
-# Empty StoreLeaseholderMsg, since the range states have not changed.
+# StoreLeaseholderMsg, with empty ranges, since the range states have not changed.
 store-leaseholder-msg
 store-id=1
+  range-id=1
+  range-id=2
+  range-id=3
+  range-id=4
 ----
 
 # The top-2 ranges for store 2 are based on ByteSize.
@@ -58,3 +62,18 @@ store-id=1 node-id=1 reported=[100,40,50] adjusted=[100,40,50] node-reported-cpu
   top-k-ranges (local-store-id=1) dim=CPURate: r4 r3
 store-id=2 node-id=2 reported=[45,40,50] adjusted=[45,40,50] node-reported-cpu=45 node-adjusted-cpu=45 seq=2
   top-k-ranges (local-store-id=1) dim=ByteSize: r1 r2
+
+# StoreLeaseholderMsg not containing r1 and r4 since no longer the leaseholder.
+store-leaseholder-msg
+store-id=1
+  range-id=2
+  range-id=3
+----
+
+# r1 and r4 no longer mentioned in the top-k.
+get-load-info
+----
+store-id=1 node-id=1 reported=[100,40,50] adjusted=[100,40,50] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
+  top-k-ranges (local-store-id=1) dim=CPURate: r3 r2
+store-id=2 node-id=2 reported=[45,40,50] adjusted=[45,40,50] node-reported-cpu=45 node-adjusted-cpu=45 seq=2
+  top-k-ranges (local-store-id=1) dim=ByteSize: r2 r3
