@@ -320,10 +320,6 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(IndexID, "IndexID"),
 	),
-	rel.EntityMapping(t((*scpb.SecondaryIndexPartial)(nil)),
-		rel.EntityAttr(DescID, "TableID"),
-		rel.EntityAttr(IndexID, "IndexID"),
-	),
 	// Constraint elements.
 	rel.EntityMapping(t((*scpb.ConstraintWithoutIndexName)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
