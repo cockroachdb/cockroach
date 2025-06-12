@@ -321,8 +321,8 @@ func TestStatsFuncs(t *testing.T) {
 		floatWithinReasonableTolerance(t, theirVar, ourVar)
 	})
 
-	t.Run("MedianAbsoluteDeviationPopulationSortedInputMutatesInput", func(t *testing.T) {
-		ourMedAbsDev := MedianAbsoluteDeviationPopulationSortedInputMutatesInput(sortedData)
+	t.Run("MedianAbsoluteDeviationPopulationSortedInput", func(t *testing.T) {
+		ourMedAbsDev := MedianAbsoluteDeviationPopulationSortedInput(sortedData)
 		theirMedianAbsDev, err := stats.MedianAbsoluteDeviationPopulation(data)
 		require.NoError(t, err)
 		floatWithinReasonableTolerance(t, theirMedianAbsDev, ourMedAbsDev)
