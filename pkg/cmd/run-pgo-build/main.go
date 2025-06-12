@@ -56,6 +56,7 @@ type Build struct {
 	ID         int64
 	FinishDate string
 	Status     string
+	WebUrl     string
 }
 
 type ReadAtCloser interface {
@@ -197,7 +198,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("queued build with ID %d\n", build.ID)
+	fmt.Printf("queued build with ID %d: %s\n", build.ID, build.WebUrl)
 
 	for {
 		if build.FinishDate != "" {
