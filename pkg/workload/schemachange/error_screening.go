@@ -1726,3 +1726,32 @@ func (og *operationGenerator) tableHasUniqueConstraintMutation(
 			AND (m->'index'->>'unique')::BOOL IS TRUE
 		);`, tableName)
 }
+
+// tableHasForeignKeyMutation determines if a table has any foreign key constraint
+// mutation ongoing. This means either being added or dropped.
+func (og *operationGenerator) tableHasForeignKeyMutation(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
+) (bool, error) {
+	return og.scanBool(ctx, tx, `
+		WITH table_desc AS (
+			SELECT crdb_internal.pb_to_json(
+				'desc',
+				descriptor,
+				false
+			)->'table' as d
+			FROM system.descriptor
+			WHERE id = $1::REGCLASS
+		)
+		SELECT EXISTS (
+			SELECT * FROM (
+			SELECT jsonb_array_elements(
+				CASE WHEN d->'mutations' IS NULL
+				THEN '[]'::JSONB
+				ELSE d->'mutations'
+				END
+			) as m
+			FROM table_desc)
+			WHERE (m->>'direction')::STRING IN ('ADD', 'DROP')
+			AND (m->'constraint'->>'foreign_key') IS NOT NULL
+		);`, tableName)
+}
