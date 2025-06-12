@@ -202,7 +202,6 @@ func runInvariantCheckDetectionSuccess(ctx context.Context, t test.Test, c clust
 }
 
 func runInvariantCheckDetection(ctx context.Context, t test.Test, c cluster.Cluster, failed bool) {
-	c.Put(ctx, t.Cockroach(), "cockroach")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, 3))
 	require.NoError(t, c.PutString(ctx, `
 foo br baz
