@@ -630,20 +630,18 @@ func TestChangefeedIdleness(t *testing.T) {
 
 		registry := s.Server.JobRegistry().(*jobs.Registry)
 		currentlyIdle := registry.MetricsStruct().JobMetrics[jobspb.TypeChangefeed].CurrentlyIdle
-		// Use a wait group for cases when the number of idle changefeeds temporarily
-		// decreases, to avoid a race condition where the changefeed becomes idle
-		// before the idleness is checked.
-		var wg sync.WaitGroup
+
 		waitForIdleCount := func(numIdle int64) {
-			wg.Add(1)
 			testutils.SucceedsSoon(t, func() error {
 				if currentlyIdle.Value() != numIdle {
 					return fmt.Errorf("expected (%+v) idle changefeeds, found (%+v)", numIdle, currentlyIdle.Value())
 				}
 				return nil
 			})
-			wg.Done()
 		}
+
+		// Use this workload and channel to make sure that feeds remain active
+		// while we wait for the idle count to go to 0.
 		done := make(chan bool)
 		workload := func() {
 			for {
@@ -666,8 +664,7 @@ func TestChangefeedIdleness(t *testing.T) {
 		defer closeFeed(t, cf1)
 
 		go workload()
-		go waitForIdleCount(0)
-		wg.Wait()
+		waitForIdleCount(0)
 		done <- true
 		waitForIdleCount(2) // Both should eventually be considered idle
 
@@ -682,8 +679,7 @@ func TestChangefeedIdleness(t *testing.T) {
 		waitForIdleCount(1) // The cancelled changefeed isn't considered idle
 
 		go workload()
-		go waitForIdleCount(0)
-		wg.Wait()
+		waitForIdleCount(0)
 		done <- true
 		waitForIdleCount(1)
 
