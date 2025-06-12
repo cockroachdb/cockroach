@@ -369,8 +369,7 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 	mean := sum / float64(len(offsets))
 	stdDev := StandardDeviationPopulationKnownMean(offsets, mean)
 	median := MedianSortedInput(offsets)
-	// WARNING: offsets is unusable after this point as it has been modified.
-	medianAbsoluteDeviation := MedianAbsoluteDeviationPopulationSortedInputMutatesInput(offsets)
+	medianAbsoluteDeviation := MedianAbsoluteDeviationPopulationSortedInput(offsets)
 
 	r.metrics.ClockOffsetMeanNanos.Update(int64(mean))
 	r.metrics.ClockOffsetStdDevNanos.Update(int64(stdDev))
@@ -517,21 +516,68 @@ func MedianSortedInput(sortedInput stats.Float64Data) float64 {
 	}
 }
 
-// MedianAbsoluteDeviationPopulationSortedInputMutatesInput calculates the
-// median absolute deviation from a pre-sorted population.
-//
-// WARNING: This function mutates its input to avoid further allocations.
-func MedianAbsoluteDeviationPopulationSortedInputMutatesInput(
-	sortedInput stats.Float64Data,
-) float64 {
+// MedianAbsoluteDeviationPopulationSortedInput calculates the median absolute
+// deviation from a pre-sorted population.
+func MedianAbsoluteDeviationPopulationSortedInput(sortedInput stats.Float64Data) float64 {
 	if sortedInput.Len() == 0 {
 		return math.NaN()
 	}
 
 	m := MedianSortedInput(sortedInput)
-	for key, value := range sortedInput {
-		sortedInput[key] = math.Abs(value - m)
+	a := sortedInput
+
+	// Peal off the largest difference on either end until we reach the midpoint(s).
+	isEven := len(a)%2 == 0
+	targetLen := len(a)/2 + 1
+	for len(a) > targetLen {
+		leftDiff := m - a[0]
+		rightDiff := a[len(a)-1] - m
+		if leftDiff >= rightDiff {
+			a = a[1:]
+		} else {
+			a = a[:len(a)-1]
+		}
 	}
-	sort.Float64s(sortedInput)
-	return MedianSortedInput(sortedInput)
+
+	if isEven {
+		// In the even case, we want to take the average of the two highest
+		// deviations.
+		high := m - a[0]
+		next := a[len(a)-1] - m
+
+		// If we just have 2, life is easy.
+		if len(a) <= 2 {
+			return (high + next) / 2.0
+		}
+
+		// If we have more than 2, we want to find the two greatest amongst the
+		// first two and last two elements of the slice.
+		if next > high {
+			next, high = high, next
+		}
+
+		// Check next on the left.
+		mid3 := m - a[1]
+		if mid3 > high {
+			high = mid3
+			next = high
+		} else if mid3 > next {
+			next = mid3
+		}
+
+		// Check next on the right.
+		mid4 := a[len(a)-2] - m
+		if mid4 > high {
+			high = mid4
+			next = high
+		} else if mid4 > next {
+			next = mid4
+		}
+		return (high + next) / 2.0
+	} else {
+		// In the odd case, the midpoint is simply the max.
+		mid1 := m - a[0]
+		mid2 := a[len(a)-1] - m
+		return max(mid1, mid2)
+	}
 }
