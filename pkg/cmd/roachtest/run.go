@@ -152,12 +152,20 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	CtrlC(ctx, l, cancel, cr)
-	// Install goroutine leak checker and run it at the end of the entire test
-	// run. If a test is leaking a goroutine, then it will likely be still around.
-	// We could diff goroutine snapshots before/after each executed test, but that
-	// could yield false positives; e.g., user-specified test teardown goroutines
-	// may still be running long after the test has completed.
-	defer leaktest.AfterTest(l)()
+	if false {
+		// Install goroutine leak checker and run it at the end of the entire test
+		// run. If a test is leaking a goroutine, then it will likely be still around.
+		// We could diff goroutine snapshots before/after each executed test, but that
+		// could yield false positives; e.g., user-specified test teardown goroutines
+		// may still be running long after the test has completed.
+		//
+		// NB: we currently don't do this since it's been firing for a long time and
+		// nobody has cleaned up the leaks. While there are leaks, the leaktest
+		// output pollutes stdout and makes roachtest annoying to use.
+		//
+		// Tracking issue: https://github.com/cockroachdb/cockroach/issues/148196
+		defer leaktest.AfterTest(l)()
+	}
 
 	// We allow roachprod users to set a default auth-mode through the
 	// ROACHPROD_DEFAULT_AUTH_MODE env var. However, roachtests shouldn't
