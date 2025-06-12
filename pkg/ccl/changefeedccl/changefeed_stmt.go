@@ -224,6 +224,11 @@ func changefeedPlanHook(
 	if err != nil {
 		return nil, nil, false, err
 	}
+
+	// Treat all tables inside a database as if "split_column_families" is set.
+	if changefeedStmt.Level == tree.ChangefeedLevelDatabase {
+		rawOpts[changefeedbase.OptSplitColumnFamilies] = `yes`
+	}
 	opts := changefeedbase.MakeStatementOptions(rawOpts)
 
 	if changefeedStmt.Level == tree.ChangefeedLevelDatabase {
@@ -280,7 +285,7 @@ func changefeedPlanHook(
 			p.ExtendedEvalContext().Descs.ReleaseAll(ctx)
 
 			telemetry.Count(`changefeed.create.core`)
-			logCreateChangefeedTelemetry(ctx, jr, changefeedStmt.Select != nil)
+			logCreateChangefeedTelemetry(ctx, jr, changefeedStmt.Select != nil, p.ExecCfg())
 			if err := maybeShowCursorAgeWarning(ctx, p, opts); err != nil {
 				return err
 			}
@@ -321,7 +326,7 @@ func changefeedPlanHook(
 				ctx,
 				codec,
 				jobID,
-				AllTargets(details),
+				AllTargets(details, ctx, p.ExecCfg()),
 				details.StatementTime,
 			)
 			progress.GetChangefeed().ProtectedTimestampRecord = ptr.ID.GetUUID()
@@ -383,7 +388,7 @@ func changefeedPlanHook(
 			return err
 		}
 
-		logCreateChangefeedTelemetry(ctx, jr, changefeedStmt.Select != nil)
+		logCreateChangefeedTelemetry(ctx, jr, changefeedStmt.Select != nil, p.ExecCfg())
 
 		select {
 		case <-ctx.Done():
@@ -577,15 +582,14 @@ func createChangefeedJobRecord(
 			return nil, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on external tables are not supported")
 		}
 	}
-
 	// This grabs table descriptors once to get their ids.
-	targets, tables, err := getTargetsAndTables(ctx, p, tableNameToDescriptor, changefeedStmt.TableTargets,
+	tableTargets, tables, err := getTargetsAndTables(ctx, p, tableNameToDescriptor, changefeedStmt.TableTargets,
 		changefeedStmt.originalSpecs, opts.ShouldUseFullStatementTimeName())
 
 	if err != nil {
 		return nil, err
 	}
-	tolerances := opts.GetCanHandle()
+
 	sd := p.SessionData().Clone()
 	// Add non-local session data state (localization, etc).
 	sessiondata.MarshalNonLocal(p.SessionData(), &sd.SessionData)
@@ -604,16 +608,15 @@ func createChangefeedJobRecord(
 			SinkURI:              sinkURI,
 			StatementTime:        statementTime,
 			EndTime:              endTime,
-			TargetSpecifications: targets,
+			TargetSpecifications: tableTargets,
 			SessionData:          &sd.SessionData,
 		}
 	} else if changefeedStmt.Level == tree.ChangefeedLevelDatabase {
 		if len(targetDatabaseDescs) == 0 || len(targetDatabaseDescs) > 1 {
 			return nil, errors.Errorf("only one database target is supported")
 		}
-		targets = getDatabaseTargets(targetDatabaseDescs)
 		details = jobspb.ChangefeedDetails{
-			TargetSpecifications: targets,
+			TargetSpecifications: getDatabaseTargets(targetDatabaseDescs),
 			SinkURI:              sinkURI,
 			StatementTime:        statementTime,
 			EndTime:              endTime,
@@ -622,12 +625,14 @@ func createChangefeedJobRecord(
 	} else {
 		return nil, errors.AssertionFailedf("unknown changefeed level: %s", changefeedStmt.Level)
 	}
+	tolerances := opts.GetCanHandle()
 
-	specs := AllTargets(details)
+	specs := AllTargets(details, ctx, p.ExecCfg())
 	hasSelectPrivOnAllTables := true
 	hasChangefeedPrivOnAllTables := true
 	for _, desc := range tableNameToDescriptor {
 		if table, isTable := desc.(catalog.TableDescriptor); isTable {
+			fmt.Println("create changefeed recorc")
 			if err := changefeedvalidators.ValidateTable(specs, table, tolerances); err != nil {
 				return nil, err
 			}
@@ -652,7 +657,7 @@ func createChangefeedJobRecord(
 	if changefeedStmt.Select != nil {
 		// Serialize changefeed expression.
 		normalized, withDiff, err := validateAndNormalizeChangefeedExpression(
-			ctx, p, opts, changefeedStmt.Select, tableNameToDescriptor, targets, statementTime,
+			ctx, p, opts, changefeedStmt.Select, tableNameToDescriptor, tableTargets, statementTime,
 		)
 		if err != nil {
 			return nil, err
@@ -734,7 +739,7 @@ func createChangefeedJobRecord(
 	if err != nil {
 		return nil, err
 	}
-	if _, err := getEncoder(ctx, encodingOpts, AllTargets(details), details.Select != "",
+	if _, err := getEncoder(ctx, encodingOpts, AllTargets(details, ctx, p.ExecCfg()), details.Select != "",
 		makeExternalConnectionProvider(ctx, p.ExecCfg().InternalDB), nil, sourceProvider); err != nil {
 		return nil, err
 	}
@@ -1754,11 +1759,11 @@ func (b *changefeedResumer) OnFailOrCancel(
 		errors.DecodeError(ctx, *b.job.Payload().FinalResumeError),
 	) {
 		telemetry.Count(`changefeed.enterprise.cancel`)
-		logChangefeedCanceledTelemetry(ctx, b.job)
+		logChangefeedCanceledTelemetry(ctx, b.job, execCfg)
 	} else {
 		telemetry.Count(`changefeed.enterprise.fail`)
 		exec.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics).Failures.Inc(1)
-		logChangefeedFailedTelemetry(ctx, b.job, changefeedbase.UnknownError)
+		logChangefeedFailedTelemetry(ctx, b.job, changefeedbase.UnknownError, execCfg)
 	}
 	return nil
 }
@@ -1842,11 +1847,13 @@ func getChangefeedTargetName(
 	return desc.GetName(), nil
 }
 
-func logCreateChangefeedTelemetry(ctx context.Context, jr *jobs.Record, isTransformation bool) {
+func logCreateChangefeedTelemetry(
+	ctx context.Context, jr *jobs.Record, isTransformation bool, execCfg *sql.ExecutorConfig,
+) {
 	var changefeedEventDetails eventpb.CommonChangefeedEventDetails
 	if jr != nil {
 		changefeedDetails := jr.Details.(jobspb.ChangefeedDetails)
-		changefeedEventDetails = makeCommonChangefeedEventDetails(ctx, changefeedDetails, jr.Description, jr.JobID)
+		changefeedEventDetails = makeCommonChangefeedEventDetails(ctx, changefeedDetails, jr.Description, jr.JobID, execCfg)
 	}
 
 	createChangefeedEvent := &eventpb.CreateChangefeed{
@@ -1857,12 +1864,14 @@ func logCreateChangefeedTelemetry(ctx context.Context, jr *jobs.Record, isTransf
 	log.StructuredEvent(ctx, severity.INFO, createChangefeedEvent)
 }
 
-func logAlterChangefeedTelemetry(ctx context.Context, job *jobs.Job, prevDescription string) {
+func logAlterChangefeedTelemetry(
+	ctx context.Context, job *jobs.Job, prevDescription string, execCfg *sql.ExecutorConfig,
+) {
 	var changefeedEventDetails eventpb.CommonChangefeedEventDetails
 	if job != nil {
 		changefeedDetails := job.Details().(jobspb.ChangefeedDetails)
 		changefeedEventDetails = makeCommonChangefeedEventDetails(
-			ctx, changefeedDetails, job.Payload().Description, job.ID())
+			ctx, changefeedDetails, job.Payload().Description, job.ID(), execCfg)
 	}
 
 	alterChangefeedEvent := &eventpb.AlterChangefeed{
@@ -1874,12 +1883,15 @@ func logAlterChangefeedTelemetry(ctx context.Context, job *jobs.Job, prevDescrip
 }
 
 func logChangefeedFailedTelemetry(
-	ctx context.Context, job *jobs.Job, failureType changefeedbase.FailureType,
+	ctx context.Context,
+	job *jobs.Job,
+	failureType changefeedbase.FailureType,
+	execCfg *sql.ExecutorConfig,
 ) {
 	var changefeedEventDetails eventpb.CommonChangefeedEventDetails
 	if job != nil {
 		changefeedDetails := job.Details().(jobspb.ChangefeedDetails)
-		changefeedEventDetails = makeCommonChangefeedEventDetails(ctx, changefeedDetails, job.Payload().Description, job.ID())
+		changefeedEventDetails = makeCommonChangefeedEventDetails(ctx, changefeedDetails, job.Payload().Description, job.ID(), execCfg)
 	}
 
 	changefeedFailedEvent := &eventpb.ChangefeedFailed{
@@ -1901,11 +1913,13 @@ func logChangefeedFailedTelemetryDuringStartup(
 	log.StructuredEvent(ctx, severity.INFO, changefeedFailedEvent)
 }
 
-func logChangefeedCanceledTelemetry(ctx context.Context, job *jobs.Job) {
+func logChangefeedCanceledTelemetry(
+	ctx context.Context, job *jobs.Job, execCfg *sql.ExecutorConfig,
+) {
 	var changefeedEventDetails eventpb.CommonChangefeedEventDetails
 	if job != nil {
 		changefeedDetails := job.Details().(jobspb.ChangefeedDetails)
-		changefeedEventDetails = makeCommonChangefeedEventDetails(ctx, changefeedDetails, job.Payload().Description, job.ID())
+		changefeedEventDetails = makeCommonChangefeedEventDetails(ctx, changefeedDetails, job.Payload().Description, job.ID(), execCfg)
 	}
 
 	changefeedCanceled := &eventpb.ChangefeedCanceled{
@@ -1915,7 +1929,11 @@ func logChangefeedCanceledTelemetry(ctx context.Context, job *jobs.Job) {
 }
 
 func makeCommonChangefeedEventDetails(
-	ctx context.Context, details jobspb.ChangefeedDetails, description string, jobID jobspb.JobID,
+	ctx context.Context,
+	details jobspb.ChangefeedDetails,
+	description string,
+	jobID jobspb.JobID,
+	execCfg *sql.ExecutorConfig,
 ) eventpb.CommonChangefeedEventDetails {
 	opts := details.Opts
 
@@ -1954,7 +1972,7 @@ func makeCommonChangefeedEventDetails(
 		Description: description,
 		SinkType:    sinkType,
 		// TODO: Rename this field to NumTargets.
-		NumTables:   int32(AllTargets(details).Size),
+		NumTables:   int32(AllTargets(details, ctx, execCfg).Size),
 		Resolved:    resolved,
 		Format:      opts[changefeedbase.OptFormat],
 		InitialScan: initialScan,
