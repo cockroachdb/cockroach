@@ -3026,40 +3026,48 @@ func FetchLogs(
 			if err != nil {
 				return err
 			}
-
+			// Found logs and corresponding nodes, which contain at least one log directory.
 			logDirs := make(map[string]struct{})
+			nodes := install.Nodes{}
+
 			for _, r := range results {
 				if r.Err != nil {
 					l.Printf("will not fetch logs for n%d due to error: %v", r.Node, r.Err)
+					continue
 				}
-
+				nodes = append(nodes, r.Node)
 				for _, logDir := range strings.Fields(r.Stdout) {
 					logDirs[logDir] = struct{}{}
 				}
 			}
-
+			if len(logDirs) == 0 {
+				l.Printf("no log directories found")
+				return nil
+			}
+			// For each found log directory, recursively scp its contents under the destination, prefixed by node id.
+			// E.g., n1's contents will show up under 1.unredacted, etc.
 			for logDir := range logDirs {
 				dirPath := filepath.Join(destination, logDir, "unredacted")
 				if err := os.MkdirAll(filepath.Dir(dirPath), 0755); err != nil {
 					return err
 				}
-
-				if err := c.Get(ctx, l, c.Nodes, logDir /* src */, dirPath /* dest */); err != nil {
+				// Runs a recursive scp in parallel.
+				if err := c.Get(ctx, l, nodes, logDir /* src */, dirPath /* dest */); err != nil {
 					l.Printf("failed to fetch log directory %s: %v", logDir, err)
 					if ctx.Err() != nil {
 						return errors.Wrap(err, "cluster.FetchLogs")
 					}
 				}
 			}
-
-			if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(c.Nodes), "", fmt.Sprintf("mkdir -p logs/redacted && %s debug merge-logs --redact logs/*.log > logs/redacted/combined.log", test.DefaultCockroachPath)); err != nil {
+			// Create a single redacted log.
+			if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(nodes), "", fmt.Sprintf("mkdir -p logs/redacted && %s debug merge-logs --redact logs/*.log > logs/redacted/combined.log", test.DefaultCockroachPath)); err != nil {
 				l.Printf("failed to redact logs: %v", err)
 				if ctx.Err() != nil {
 					return err
 				}
 			}
 			dest := filepath.Join(destination, "logs/cockroach.log")
-			return errors.Wrap(c.Get(ctx, l, c.Nodes, "logs/redacted/combined.log" /* src */, dest), "cluster.FetchLogs")
+			return errors.Wrap(c.Get(ctx, l, nodes, "logs/redacted/combined.log" /* src */, dest), "cluster.FetchLogs")
 		})
 }
 
