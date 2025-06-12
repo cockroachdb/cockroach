@@ -442,6 +442,29 @@ type entryDecoderV1 struct {
 	truncatedLastEntry bool
 }
 
+// entryDecoderV1ZipUpload is a specialized variant of entryDecoderV1 that uses
+// bufio.Reader instead of bufio.Scanner. This implementation is designed for use
+// in CLI tools (like debug zip upload) where:
+//  1. The 64KB token size limitation of bufio.Scanner needs to be removed
+//  2. Memory constraints are less critical for short-lived CLI processes
+//  3. Complete data capture is essential for debug tools - no entries should be truncated
+type entryDecoderV1ZipUpload struct {
+	reader          *bufio.Reader
+	sensitiveEditor redactEditor
+}
+
+// Decode decodes the next log entry into the provided protobuf message.
+func (d *entryDecoderV1ZipUpload) Decode(entry *logpb.Entry) error {
+	buf, err := d.reader.ReadBytes('\n')
+	if err == io.EOF && len(buf) == 0 {
+		return io.EOF
+	} else if err != nil && !errors.Is(err, bufio.ErrBufferFull) && errors.Is(err, io.EOF) {
+		return err
+	}
+
+	return parseEntryV1(buf, entry, d.sensitiveEditor)
+}
+
 func decodeTimestamp(fragment []byte) (unixNano int64, err error) {
 	timeFormat := MessageTimeFormat
 	if len(fragment) > 7 && (fragment[len(fragment)-7] == '+' || fragment[len(fragment)-7] == '-') {
@@ -464,112 +487,127 @@ func (d *entryDecoderV1) Decode(entry *logpb.Entry) error {
 			}
 			return io.EOF
 		}
-		b := d.scanner.Bytes()
-		m := entryREV1.FindSubmatch(b)
-		if m == nil {
-			continue
-		}
 
-		// Erase all the fields, to be sure.
-		*entry = logpb.Entry{}
+		if err := parseEntryV1(d.scanner.Bytes(), entry, d.sensitiveEditor); err != nil {
+			if errors.Is(err, io.EOF) || errors.Is(err, errNoLogEntry) {
+				continue
+			}
 
-		// Process the severity.
-		entry.Severity = Severity(strings.IndexByte(severityChar, m[1][0]) + 1)
-
-		// Process the timestamp.
-		var err error
-		entry.Time, err = decodeTimestamp(m[2])
-		if err != nil {
 			return err
 		}
-
-		// Process the goroutine ID.
-		if len(m[3]) > 0 {
-			goroutine, err := strconv.Atoi(string(m[3]))
-			if err != nil {
-				return err
-			}
-			entry.Goroutine = int64(goroutine)
-		}
-
-		// Process the channel/file/line details.
-		entry.File = string(m[4])
-		if idx := strings.IndexByte(entry.File, '@'); idx != -1 {
-			ch, err := strconv.Atoi(entry.File[:idx])
-			if err != nil {
-				return err
-			}
-			entry.Channel = Channel(ch)
-			entry.File = entry.File[idx+1:]
-		}
-
-		line, err := strconv.Atoi(string(m[5]))
-		if err != nil {
-			return err
-		}
-		entry.Line = int64(line)
-
-		// Process the context tags.
-		redactable := len(m[6]) != 0
-		// Look for a tenant ID tag. Default to system otherwise.
-		entry.TenantID = serverident.SystemTenantID
-		tagsToProcess := m[7]
-		entry.TenantID, entry.TenantName, tagsToProcess = maybeReadTenantDetails(tagsToProcess)
-
-		// Process any remaining tags.
-		if len(tagsToProcess) != 0 {
-			r := redactablePackage{
-				msg:        tagsToProcess,
-				redactable: redactable,
-			}
-			r = d.sensitiveEditor(r)
-			entry.Tags = string(r.msg)
-		}
-
-		// If there's an entry counter at the start of the message, process it.
-		msg := b[len(m[0]):]
-		i := 0
-		for ; i < len(msg) && msg[i] >= '0' && msg[i] <= '9'; i++ {
-			entry.Counter = entry.Counter*10 + uint64(msg[i]-'0')
-		}
-		if i > 0 && i < len(msg) && msg[i] == ' ' {
-			// Only accept the entry counter if followed by a space. In all
-			// other cases, the number was part of the message string.
-			msg = msg[i+1:]
-		} else {
-			// This was not truly an entry counter. Ignore the work done previously.
-			entry.Counter = 0
-		}
-
-		// Process the remainder of the log message.
-		r := redactablePackage{
-			msg:        trimFinalNewLines(msg),
-			redactable: redactable,
-		}
-		r = d.sensitiveEditor(r)
-		entry.Message = string(r.msg)
-		entry.Redactable = r.redactable
-
-		if strings.HasPrefix(entry.Message, structuredEntryPrefix+"{") /* crdb-v1 prefix */ {
-			// Note: we do not recognize the v2 marker here (" ={") because
-			// v2 entries can be split across multiple lines.
-			entry.StructuredStart = uint32(len(structuredEntryPrefix))
-
-			if nl := strings.IndexByte(entry.Message, '\n'); nl != -1 {
-				entry.StructuredEnd = uint32(nl)
-				entry.StackTraceStart = uint32(nl + 1)
-			} else {
-				entry.StructuredEnd = uint32(len(entry.Message))
-			}
-		}
-		// Note: we only know how to populate entry.StackTraceStart upon
-		// parse if the entry was structured (see above). If it is not
-		// structured, we cannot distinguish where the message ends and
-		// where the stack trace starts. This is another reason why the
-		// crdb-v1 format is lossy.
-
 		return nil
 	}
+}
+
+var errNoLogEntry = errors.New("no log entry found in buffer")
+
+// parseEntryV1 parses a log entry from a byte slice into the provided protobuf message.
+// It contains the common parsing logic used by both decoder implementations.
+func parseEntryV1(buf []byte, entry *logpb.Entry, sensitiveEditor redactEditor) error {
+	m := entryREV1.FindSubmatch(buf)
+	if m == nil {
+		return errNoLogEntry
+	}
+
+	// Erase all the fields, to be sure.
+	*entry = logpb.Entry{}
+
+	// Process the severity.
+	entry.Severity = Severity(strings.IndexByte(severityChar, m[1][0]) + 1)
+
+	// Process the timestamp.
+	var err error
+	entry.Time, err = decodeTimestamp(m[2])
+	if err != nil {
+		return err
+	}
+
+	// Process the goroutine ID.
+	if len(m[3]) > 0 {
+		goroutine, err := strconv.Atoi(string(m[3]))
+		if err != nil {
+			return err
+		}
+		entry.Goroutine = int64(goroutine)
+	}
+
+	// Process the channel/file/line details.
+	entry.File = string(m[4])
+	if idx := strings.IndexByte(entry.File, '@'); idx != -1 {
+		ch, err := strconv.Atoi(entry.File[:idx])
+		if err != nil {
+			return err
+		}
+		entry.Channel = Channel(ch)
+		entry.File = entry.File[idx+1:]
+	}
+
+	line, err := strconv.Atoi(string(m[5]))
+	if err != nil {
+		return err
+	}
+	entry.Line = int64(line)
+
+	// Process the context tags.
+	redactable := len(m[6]) != 0
+	// Look for a tenant ID tag. Default to system otherwise.
+	entry.TenantID = serverident.SystemTenantID
+	tagsToProcess := m[7]
+	entry.TenantID, entry.TenantName, tagsToProcess = maybeReadTenantDetails(tagsToProcess)
+
+	// Process any remaining tags.
+	if len(tagsToProcess) != 0 {
+		r := redactablePackage{
+			msg:        tagsToProcess,
+			redactable: redactable,
+		}
+		r = sensitiveEditor(r)
+		entry.Tags = string(r.msg)
+	}
+
+	// If there's an entry counter at the start of the message, process it.
+	msg := buf[len(m[0]):]
+	i := 0
+	for ; i < len(msg) && msg[i] >= '0' && msg[i] <= '9'; i++ {
+		entry.Counter = entry.Counter*10 + uint64(msg[i]-'0')
+	}
+	if i > 0 && i < len(msg) && msg[i] == ' ' {
+		// Only accept the entry counter if followed by a space. In all
+		// other cases, the number was part of the message string.
+		msg = msg[i+1:]
+	} else {
+		// This was not truly an entry counter. Ignore the work done previously.
+		entry.Counter = 0
+	}
+
+	// Process the remainder of the log message.
+	r := redactablePackage{
+		msg:        trimFinalNewLines(msg),
+		redactable: redactable,
+	}
+	r = sensitiveEditor(r)
+	entry.Message = string(r.msg)
+	entry.Redactable = r.redactable
+
+	if strings.HasPrefix(entry.Message, structuredEntryPrefix+"{") /* crdb-v1 prefix */ {
+		// Note: we do not recognize the v2 marker here (" ={") because
+		// v2 entries can be split across multiple lines.
+		entry.StructuredStart = uint32(len(structuredEntryPrefix))
+
+		if nl := strings.IndexByte(entry.Message, '\n'); nl != -1 {
+			entry.StructuredEnd = uint32(nl)
+			entry.StackTraceStart = uint32(nl + 1)
+		} else {
+			entry.StructuredEnd = uint32(len(entry.Message))
+		}
+	}
+	// Note: we only know how to populate entry.StackTraceStart upon
+	// parse if the entry was structured (see above). If it is not
+	// structured, we cannot distinguish where the message ends and
+	// where the stack trace starts. This is another reason why the
+	// crdb-v1 format is lossy.
+
+	return nil
 }
 
 // maybeReadTenantDetails reads the tenant ID and name. If neither the
