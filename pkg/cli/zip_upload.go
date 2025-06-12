@@ -483,7 +483,7 @@ func processLogFile(
 			debugZipUploadOpts.tags..., // user provided tags
 		), getUploadType(currentTimestamp))
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println("logEntryToJSON:", err)
 			continue
 		}
 
