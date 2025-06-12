@@ -306,10 +306,10 @@ func WithLogical() Option {
 	}
 }
 
-func processOptions(opts []Option) *options {
-	ret := &options{}
+func processOptions(opts []Option) options {
+	ret := options{}
 	for _, o := range opts {
-		o(ret)
+		o(&ret)
 	}
 	return ret
 }
