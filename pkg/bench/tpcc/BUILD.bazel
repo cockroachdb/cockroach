@@ -9,6 +9,7 @@ go_test(
     data = glob(["testdata/**"]),
     deps = [
         "//pkg/base",
+        "//pkg/bench/benchprof",
         "//pkg/ccl/workloadccl",
         "//pkg/rpc/nodedialer",
         "//pkg/security/securityassets",
@@ -17,7 +18,6 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql/stats",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/sniffarg",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/ts",
@@ -27,6 +27,5 @@ go_test(
         "//pkg/workload/histogram",
         "//pkg/workload/tpcc",
         "//pkg/workload/workloadsql",
-        "@com_github_google_pprof//profile",
     ],
 )
