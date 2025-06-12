@@ -6393,11 +6393,15 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 	switch typ.Family() {
 	case types.StringFamily, types.CollatedStringFamily:
 		var sv string
+		var isString, isCollatedString bool
 		if v, ok := AsDString(inVal); ok {
 			sv = string(v)
+			isString = true
 		} else if v, ok := inVal.(*DCollatedString); ok {
 			sv = v.Contents
+			isCollatedString = true
 		}
+		origLen := len(sv)
 		switch typ.Oid() {
 		case oid.T_char:
 			// "char" is supposed to truncate long values.
@@ -6432,9 +6436,14 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 		}
 
 		if typ.Oid() == oid.T_bpchar || typ.Oid() == oid.T_char || typ.Oid() == oid.T_varchar {
-			if _, ok := AsDString(inVal); ok {
+			if isString {
+				if len(sv) == origLen {
+					// The string wasn't modified, so we can just return the
+					// original datum.
+					return inVal, nil
+				}
 				return NewDString(sv), nil
-			} else if _, ok := inVal.(*DCollatedString); ok {
+			} else if isCollatedString {
 				return NewDCollatedString(sv, typ.Locale(), &CollationEnvironment{})
 			}
 		}
