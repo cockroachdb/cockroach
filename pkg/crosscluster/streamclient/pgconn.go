@@ -62,7 +62,7 @@ func setupPGXConfig(remote url.URL, options *options) (*pgx.ConnConfig, error) {
 	config.DialFunc = dialer.DialContext
 
 	// If the user hasn't given us an application name.
-	if _, ok := config.RuntimeParams["application_name"]; !ok {
+	if _, ok := config.RuntimeParams["application_name"]; !ok && options != nil {
 		config.RuntimeParams["application_name"] = options.appName()
 	}
 
@@ -107,6 +107,9 @@ func uriWithInlineTLSCertsRemoved(remote url.URL) (url.URL, *tlsCerts, error) {
 		// are deprecated in the stdlib. For now, I've skipped
 		// it.
 		block, _ := pem.Decode([]byte(key))
+		if block == nil {
+			return url.URL{}, nil, errors.New("unable to decode sslkey PEM data")
+		}
 		pemKey := pem.EncodeToMemory(block)
 		keyPair, err := tls.X509KeyPair([]byte(cert), pemKey)
 		if err != nil {
