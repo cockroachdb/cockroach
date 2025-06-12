@@ -55,7 +55,7 @@ func TestHelperEveryNode(t *testing.T) {
 			MaxRetries:     10,
 		}, func() error {
 			return h.ForEveryNodeOrServer(ctx, "dummy-op", func(
-				context.Context, serverpb.MigrationClient,
+				context.Context, serverpb.RPCMigrationClient,
 			) error {
 				mu.Lock()
 				defer mu.Unlock()
@@ -94,7 +94,7 @@ func TestHelperEveryNode(t *testing.T) {
 			MaxRetries:     10,
 		}, func() error {
 			return h.ForEveryNodeOrServer(ctx, "dummy-op", func(
-				context.Context, serverpb.MigrationClient,
+				context.Context, serverpb.RPCMigrationClient,
 			) error {
 				mu.Lock()
 				defer mu.Unlock()
@@ -136,7 +136,7 @@ func TestHelperEveryNode(t *testing.T) {
 			MaxRetries:     10,
 		}, func() error {
 			return h.ForEveryNodeOrServer(ctx, "dummy-op", func(
-				context.Context, serverpb.MigrationClient,
+				context.Context, serverpb.RPCMigrationClient,
 			) error {
 				mu.Lock()
 				defer mu.Unlock()
@@ -160,7 +160,7 @@ func TestHelperEveryNode(t *testing.T) {
 			MaxRetries:     10,
 		}, func() error {
 			return h.ForEveryNodeOrServer(ctx, "dummy-op", func(
-				context.Context, serverpb.MigrationClient,
+				context.Context, serverpb.RPCMigrationClient,
 			) error {
 				return nil
 			})
