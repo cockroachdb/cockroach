@@ -1,0 +1,90 @@
+# LogicTest: !local-legacy-schema-changer
+
+statement ok
+CREATE DATABASE d;
+
+statement ok
+USE d;
+
+statement ok
+CREATE TABLE t1 (a INT, b INT, c INT);
+
+statement ok
+CREATE TABLE t2 (a INT, b INT, c INT);
+
+statement ok
+INSERT INTO t1 VALUES (1, 2, 3);
+
+statement ok
+INSERT INTO t2 VALUES (4, 5, 6);
+
+statement ok
+CREATE OR REPLACE FUNCTION trigger_func()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    RAISE NOTICE 'Row inserted: %', NEW;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+statement ok
+CREATE TRIGGER t1_trigger
+  AFTER INSERT ON t1
+  FOR EACH ROW
+  EXECUTE FUNCTION trigger_func();
+
+query T colnames,nosort
+SHOW CREATE ALL TRIGGERS;
+----
+create_statement
+CREATE TRIGGER t1_trigger AFTER INSERT ON d.public.t1 FOR EACH ROW EXECUTE FUNCTION d.public.trigger_func();
+
+statement ok
+CREATE TRIGGER t2_trigger
+  AFTER INSERT ON t2
+  FOR EACH ROW
+  EXECUTE FUNCTION trigger_func();
+
+query T colnames,nosort
+SHOW CREATE ALL TRIGGERS;
+----
+create_statement
+CREATE TRIGGER t1_trigger AFTER INSERT ON d.public.t1 FOR EACH ROW EXECUTE FUNCTION d.public.trigger_func();
+CREATE TRIGGER t2_trigger AFTER INSERT ON d.public.t2 FOR EACH ROW EXECUTE FUNCTION d.public.trigger_func();
+
+statement ok
+CREATE OR REPLACE FUNCTION trigger_func2()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    RAISE NOTICE 'Row inserted: %', NEW;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+statement ok
+CREATE TRIGGER t1_trigger2
+  AFTER INSERT ON t1
+  FOR EACH ROW
+  EXECUTE FUNCTION trigger_func2();
+
+query T colnames,nosort
+SHOW CREATE ALL TRIGGERS;
+----
+create_statement
+CREATE TRIGGER t1_trigger AFTER INSERT ON d.public.t1 FOR EACH ROW EXECUTE FUNCTION d.public.trigger_func();
+CREATE TRIGGER t1_trigger2 AFTER INSERT ON d.public.t1 FOR EACH ROW EXECUTE FUNCTION d.public.trigger_func2();
+CREATE TRIGGER t2_trigger AFTER INSERT ON d.public.t2 FOR EACH ROW EXECUTE FUNCTION d.public.trigger_func();
+
+statement ok
+DROP TRIGGER t1_trigger2 ON t1;
+
+query T colnames,nosort
+SHOW CREATE ALL TRIGGERS;
+----
+create_statement
+CREATE TRIGGER t1_trigger AFTER INSERT ON d.public.t1 FOR EACH ROW EXECUTE FUNCTION d.public.trigger_func();
+CREATE TRIGGER t2_trigger AFTER INSERT ON d.public.t2 FOR EACH ROW EXECUTE FUNCTION d.public.trigger_func();

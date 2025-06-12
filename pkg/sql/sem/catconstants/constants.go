@@ -139,6 +139,7 @@ const (
 	CrdbInternalCreateProcedureStmtsTableID
 	CrdbInternalCreateSchemaStmtsTableID
 	CrdbInternalCreateStmtsTableID
+	CrdbInternalCreateTriggerStmtsTableID
 	CrdbInternalCreateTypeStmtsTableID
 	CrdbInternalDatabasesTableID
 	CrdbInternalFeatureUsageID

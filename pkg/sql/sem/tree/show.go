@@ -859,6 +859,14 @@ func (node *ShowCreateAllTables) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CREATE ALL TABLES")
 }
 
+// ShowCreateAllTriggers represents a SHOW CREATE ALL TRIGGERS statement.
+type ShowCreateAllTriggers struct{}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowCreateAllTriggers) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW CREATE ALL TRIGGERS")
+}
+
 // ShowCreateAllTypes represents a SHOW CREATE ALL TYPES statement.
 type ShowCreateAllTypes struct{}
 

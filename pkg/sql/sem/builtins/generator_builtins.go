@@ -575,6 +575,18 @@ The output can be used to recreate a database.'
 			volatility.Volatile,
 		),
 	),
+	"crdb_internal.show_create_all_triggers": makeBuiltin(
+		tree.FunctionProperties{},
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "database_name", Typ: types.String},
+			},
+			showCreateAllTriggersGeneratorType,
+			makeShowCreateAllTriggersGenerator,
+			`Returns rows of CREATE trigger statements. The output can be used to recreate a database.`,
+			volatility.Volatile,
+		),
+	),
 	"crdb_internal.show_create_all_types": makeBuiltin(
 		tree.FunctionProperties{},
 		makeGeneratorOverload(
@@ -2827,6 +2839,7 @@ func (p *payloadsForTraceGenerator) Close(_ context.Context) {
 }
 
 var showCreateAllSchemasGeneratorType = types.String
+var showCreateAllTriggersGeneratorType = types.String
 var showCreateAllTypesGeneratorType = types.String
 var showCreateAllTablesGeneratorType = types.String
 var showCreateAllRoutinesGeneratorType = types.String
@@ -3075,6 +3088,83 @@ func makeShowCreateAllTablesGenerator(
 		dbName:      dbName,
 		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),
 		sessionData: evalCtx.SessionData(),
+	}, nil
+}
+
+// showCreateAllTriggersGenerator supports the execution of
+// crdb_internal.show_create_all_triggers(dbName).
+type showCreateAllTriggersGenerator struct {
+	evalPlanner eval.Planner
+	txn         *kv.Txn
+	ids         []tableTriggerPair
+	dbName      string
+	acc         mon.BoundAccount
+
+	// The following variables are updated during
+	// calls to Next() and change throughout the lifecycle of
+	// showCreateAllTriggersGenerator.
+	curr tree.Datum
+	idx  int
+}
+
+// ResolvedType implements the eval.ValueGenerator interface.
+func (s *showCreateAllTriggersGenerator) ResolvedType() *types.T {
+	return showCreateAllTriggersGeneratorType
+}
+
+// Start implements the eval.ValueGenerator interface.
+func (s *showCreateAllTriggersGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+	ids, err := getTriggerIds(
+		ctx, s.evalPlanner, txn, s.dbName, &s.acc)
+
+	if err != nil {
+		return err
+	}
+
+	s.ids = ids
+	s.txn = txn
+	s.idx = -1
+	return nil
+}
+
+// Next implements the eval.ValueGenerator interface.
+func (s *showCreateAllTriggersGenerator) Next(ctx context.Context) (bool, error) {
+	s.idx++
+	if s.idx >= len(s.ids) {
+		return false, nil
+	}
+
+	createStmt, err := getTriggerCreateStatement(
+		ctx, s.evalPlanner, s.txn, s.ids[s.idx], s.dbName)
+
+	if err != nil {
+		return false, err
+	}
+	createStmtStr := string(tree.MustBeDString(createStmt))
+	s.curr = tree.NewDString(createStmtStr + ";")
+	return true, nil
+}
+
+// Values implements the eval.ValueGenerator interface.
+func (s *showCreateAllTriggersGenerator) Values() (tree.Datums, error) {
+	return tree.Datums{s.curr}, nil
+}
+
+// Close implements the eval.ValueGenerator interface.
+func (s *showCreateAllTriggersGenerator) Close(ctx context.Context) {
+	s.acc.Close(ctx)
+}
+
+// makeShowCreateAllTriggersGenerator creates a generator to support the
+// crdb_internal.show_create_all_triggers(dbName) builtin.
+func makeShowCreateAllTriggersGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	dbName := string(tree.MustBeDString(args[0]))
+	return &showCreateAllTriggersGenerator{
+		evalPlanner: evalCtx.Planner,
+		dbName:      dbName,
+		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),
 	}, nil
 }
 

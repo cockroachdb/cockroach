@@ -169,21 +169,21 @@ quality of service: regular
         │       │           └── • filter
         │       │               │ sql nodes: <hidden>
         │       │               │ regions: <hidden>
-        │       │               │ actual row count: 330
+        │       │               │ actual row count: 331
         │       │               │ execution time: 0µs
         │       │               │ filter: relkind IN ('S', 'm', __more1_10__, 'v')
         │       │               │
         │       │               └── • virtual table
         │       │                     sql nodes: <hidden>
         │       │                     regions: <hidden>
-        │       │                     actual row count: 362
+        │       │                     actual row count: 364
         │       │                     execution time: 0µs
         │       │                     table: pg_class@primary
         │       │
         │       └── • distinct
         │           │ sql nodes: <hidden>
         │           │ regions: <hidden>
-        │           │ actual row count: 330
+        │           │ actual row count: 331
         │           │ execution time: 0µs
         │           │ estimated max memory allocated: 0 B
         │           │ distinct on: table_id
@@ -191,7 +191,7 @@ quality of service: regular
         │           └── • virtual table
         │                 sql nodes: <hidden>
         │                 regions: <hidden>
-        │                 actual row count: 330
+        │                 actual row count: 331
         │                 execution time: 0µs
         │                 table: table_row_statistics@primary
         │
