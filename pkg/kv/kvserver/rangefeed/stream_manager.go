@@ -189,6 +189,7 @@ func (sm *StreamManager) Stop(ctx context.Context) {
 	sm.sender.cleanup(ctx)
 	sm.streams.Lock()
 	defer sm.streams.Unlock()
+	log.VInfof(ctx, 3, "stopping stream manager: disconnecting %d streams", len(sm.streams.m))
 	rangefeedClosedErr := kvpb.NewError(
 		kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED))
 	sm.metrics.ActiveMuxRangeFeed.Dec(int64(len(sm.streams.m)))
