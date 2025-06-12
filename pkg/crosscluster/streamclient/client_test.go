@@ -326,3 +326,112 @@ func TestStreamClientAppName(t *testing.T) {
 	expectAppName(t, "$ internal repstream")
 	expectAppName(t, "$ internal repstream job id=1337", WithStreamID(1337))
 }
+
+func TestInlineSSLCertParsing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// These are valid but totally unused certs and keys.
+	// Generated with the following command:
+	// openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -sha256 -nodes -days 365
+	const validCert = `-----BEGIN CERTIFICATE-----
+MIIC4jCCAkugAwIBAgIBADANBgkqhkiG9w0BAQ0FADCBjTELMAkGA1UEBhMCdXMx
+DzANBgNVBAgMBkFzZ2FyZDEUMBIGA1UECgwLQ29ja3JvYWNoREIxGDAWBgNVBAMM
+D2NvY2tyb2FjaGRiLmNvbTE9MDsGCSqGSIb3DQEJARYubGlrZUlzYWlkdG90YWxs
+eWludmFsaWRjZXJ0c0Bub3RhcmVhbGVtYWlsLmNvbTAeFw0yNTA2MTIyMTM2MzJa
+Fw0yNjA2MTIyMTM2MzJaMIGNMQswCQYDVQQGEwJ1czEPMA0GA1UECAwGQXNnYXJk
+MRQwEgYDVQQKDAtDb2Nrcm9hY2hEQjEYMBYGA1UEAwwPY29ja3JvYWNoZGIuY29t
+MT0wOwYJKoZIhvcNAQkBFi5saWtlSXNhaWR0b3RhbGx5aW52YWxpZGNlcnRzQG5v
+dGFyZWFsZW1haWwuY29tMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDY6E7v
+T5R0U9hhfvXFqkgQt25I+kWNvP/E7tbJAq1012SB97YMkLMDPA3vQXe1oZIHd0A7
+GyYUd3uY8yCGfW+sc+dij7CXHpxwdyv3tQ8HQDA6qgC9AkkVuiu7xuP6lT9fgi+p
+l0UOWOeUi+uedmybk24fRRE2VO6LJ1ULLMduWQIDAQABo1AwTjAdBgNVHQ4EFgQU
+gkrW97/Ie1krxfJMKRYcdjfdc5YwHwYDVR0jBBgwFoAUgkrW97/Ie1krxfJMKRYc
+djfdc5YwDAYDVR0TBAUwAwEB/zANBgkqhkiG9w0BAQ0FAAOBgQA6LspJ1yDlls+I
+gtCkbJWE/v5zmiVloj5xeMpLgJN4csApXDXPVO5Po4mc5+WIe25yJLRrcErpTyfn
+aG/DuKXZTNJ6WHb4uOBRJ41t+i7CT0OJ2mxnHO2MwN/3JKVLaZlMJpgT6DyCha2h
+qEAr+iWb85uXBq1QOxUIOc+eolWWLg==
+-----END CERTIFICATE-----`
+	const validKey = `-----BEGIN PRIVATE KEY-----
+MIICdgIBADANBgkqhkiG9w0BAQEFAASCAmAwggJcAgEAAoGBANjoTu9PlHRT2GF+
+9cWqSBC3bkj6RY28/8Tu1skCrXTXZIH3tgyQswM8De9Bd7Whkgd3QDsbJhR3e5jz
+IIZ9b6xz52KPsJcenHB3K/e1DwdAMDqqAL0CSRW6K7vG4/qVP1+CL6mXRQ5Y55SL
+6552bJuTbh9FETZU7osnVQssx25ZAgMBAAECgYATyDQSvUZDybXNRn/xtBL4e1Iy
+k6iuQZNuCX5LPNRG+LHw7H+M69F3tQ1sSaM6TG7+AVE5UsOJUFBUZbAMs/nwLFbF
+MONoI3ZRu5jL38Mgk6FPDC7+lmbpsKEyMIg6bipIcHao8IeYEwUgeF9lfV1IeX85
+UNieOJpzGYghxNGJUQJBAPzzrIIeHyNHok2NcTrbUYl9D3t65MTGJGs1YIGtmzvD
+tS4Zoc7dykO6aeGTCgn2n6KwXJBrCgSX49AxIKyVn70CQQDbhXEcJuBdvKlq0/VB
+wDksBLuAKBkGwJKAIxRlnhFLfVpJ2GEppj6H/1EQNBgCorTZwQYTWdh7/0qcxfmf
+RtTNAkBXceWxFbit+ZWiOcNrFWaaoSE5DsMHQ3hTl6BFND716jI4PaQyX3oM7+Sq
+lqphx2BoXY+iXV6ZN+kJj/I7t34BAkEAzX/7JhaCvV2K37Wyh63SF5IKkOt4miiW
+PJwaURKLMDcV2cFVG+9D5H4vvdJ2k6kLUjnvXRgjn9iaWW6/wspFFQJAV2dUQR+f
+ywVy1aYZnLNXZkiO5eWGBgPSXdjq5qxdd2vuDdJGKUpZ9dtReu84OQQ53KrtpXzY
+SXy25ZnLdt1xMg==
+-----END PRIVATE KEY-----`
+	const invalidCert = "This is not a cert"
+	const invalidKey = "This is not a key"
+
+	t.Run("all valid certs", func(t *testing.T) {
+		query := url.Values{}
+		query.Add(SslInlineURLParam, "true")
+		query.Add(sslCertURLParam, validCert)
+		query.Add(sslKeyURLParam, validKey)
+		query.Add(sslRootCertURLParam, validCert)
+
+		remote := url.URL{
+			Scheme:   "postgresql",
+			Host:     "localhost:26257",
+			RawQuery: query.Encode(),
+		}
+		_, err := setupPGXConfig(remote, options{})
+		require.NoError(t, err)
+	})
+
+	t.Run("invalid cert", func(t *testing.T) {
+		query := url.Values{}
+		query.Add(SslInlineURLParam, "true")
+		query.Add(sslCertURLParam, invalidCert)
+		query.Add(sslKeyURLParam, validKey)
+		query.Add(sslRootCertURLParam, validCert)
+
+		remote := url.URL{
+			Scheme:   "postgresql",
+			Host:     "localhost:26257",
+			RawQuery: query.Encode(),
+		}
+		_, err := setupPGXConfig(remote, options{})
+		require.Error(t, err)
+	})
+
+	t.Run("invalid key", func(t *testing.T) {
+		query := url.Values{}
+		query.Add(SslInlineURLParam, "true")
+		query.Add(sslCertURLParam, validCert)
+		query.Add(sslKeyURLParam, invalidKey)
+		query.Add(sslRootCertURLParam, validCert)
+
+		remote := url.URL{
+			Scheme:   "postgresql",
+			Host:     "localhost:26257",
+			RawQuery: query.Encode(),
+		}
+		_, err := setupPGXConfig(remote, options{})
+		require.Error(t, err)
+	})
+
+	t.Run("invalid root cert", func(t *testing.T) {
+		query := url.Values{}
+		query.Add(SslInlineURLParam, "true")
+		query.Add(sslCertURLParam, validCert)
+		query.Add(sslKeyURLParam, validKey)
+		query.Add(sslRootCertURLParam, invalidCert)
+
+		remote := url.URL{
+			Scheme:   "postgresql",
+			Host:     "localhost:26257",
+			RawQuery: query.Encode(),
+		}
+		_, err := setupPGXConfig(remote, options{})
+		require.Error(t, err)
+	})
+}
