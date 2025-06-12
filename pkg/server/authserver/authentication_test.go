@@ -859,7 +859,7 @@ func TestGRPCAuthentication(t *testing.T) {
 			return err
 		}, true},
 		{"closedTimestamp", func(ctx context.Context, conn *grpc.ClientConn) error {
-			stream, err := ctpb.NewSideTransportClient(conn).PushUpdates(ctx)
+			stream, err := ctpb.NewGRPCSideTransportClientAdapter(conn).PushUpdates(ctx)
 			if err != nil {
 				return err
 			}
