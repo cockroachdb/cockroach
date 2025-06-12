@@ -27,6 +27,13 @@ import (
 	"github.com/google/pprof/profile"
 )
 
+// NB: this code could be condensed significantly if we set up the Generate
+// Profile job with a build and artifact dependency on the job that runs the
+// roachtests that provide the CPU profiles. We would not need TC credentials,
+// we would not need any code that triggers and waits for a delegate build, and
+// we would not need to download artifacts, plus it would be easier to reason
+// about the jobs since they would be more obviously connected on TeamCity.
+
 const (
 	buildConfigID = "Cockroach_Nightlies_Roachtests_ValidateProfile"
 )
