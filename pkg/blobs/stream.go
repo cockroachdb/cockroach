@@ -43,7 +43,7 @@ type streamReceiver interface {
 // This is needed as Blob_GetStreamClient does not have a Close() function, whereas
 // the other sender, Blob_PutStreamServer, does.
 type nopSendAndClose struct {
-	blobspb.Blob_GetStreamClient
+	blobspb.RPCBlob_GetStreamClient
 }
 
 func (*nopSendAndClose) SendAndClose(*blobspb.StreamResponse) error {
@@ -52,7 +52,7 @@ func (*nopSendAndClose) SendAndClose(*blobspb.StreamResponse) error {
 
 // newGetStreamReader creates an io.ReadCloser that uses gRPC's streaming API
 // to read chunks of data.
-func newGetStreamReader(client blobspb.Blob_GetStreamClient) ioctx.ReadCloserCtx {
+func newGetStreamReader(client blobspb.RPCBlob_GetStreamClient) ioctx.ReadCloserCtx {
 	return &blobStreamReader{
 		stream: &nopSendAndClose{client},
 	}
