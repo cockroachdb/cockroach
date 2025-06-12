@@ -5330,9 +5330,9 @@ func TestImportWorkerFailure(t *testing.T) {
 	)
 }
 
-// TestImportMVCCChecksums verifies that MVCC checksums are correctly
-// computed by issuing a secondary index change that runs a CPut on the
-// index. See #23984.
+// TestImportMVCCChecksums is a regression test for #23984 where we didn't set
+// the MVCC checksums on roachpb.Values produced by the IMPORT when it was
+// required. Doing so is now optional.
 func TestImportMVCCChecksums(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

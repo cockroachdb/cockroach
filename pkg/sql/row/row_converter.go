@@ -349,7 +349,6 @@ func NewDatumRowConverter(
 		db:      db,
 	}
 	c.kvInserter = func(kv roachpb.KeyValue) {
-		kv.Value.InitChecksum(kv.Key)
 		c.KvBatch.KVs = append(c.KvBatch.KVs, kv)
 		c.KvBatch.MemSize += int64(cap(kv.Key) + cap(kv.Value.RawBytes))
 	}
