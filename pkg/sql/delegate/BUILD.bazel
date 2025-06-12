@@ -35,6 +35,7 @@ go_library(
         "show_table.go",
         "show_tables.go",
         "show_transactions.go",
+        "show_triggers.go",
         "show_types.go",
         "show_var.go",
         "show_zone_config.go",

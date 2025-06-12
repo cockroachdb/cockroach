@@ -24,6 +24,7 @@ go_library(
         "show_create_all_routines_builtin.go",
         "show_create_all_schemas_builtin.go",
         "show_create_all_tables_builtin.go",
+        "show_create_all_triggers_builtin.go",
         "show_create_all_types_builtin.go",
         "trigram_builtins.go",
         "tsearch_builtins.go",

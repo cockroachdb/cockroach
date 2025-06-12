@@ -201,7 +201,7 @@ sort
       │    │    └── filters
       │    │         ├── column86:86 = object_id:82 [outer=(82,86), constraints=(/82: (/NULL - ]; /86: (/NULL - ]), fd=(82)==(86), (86)==(82)]
       │    │         ├── sub_id:83 = attnum:6 [outer=(6,83), constraints=(/6: (/NULL - ]; /83: (/NULL - ]), fd=(6)==(83), (83)==(6)]
-      │    │         └── attrelid:1 < 4294966962 [outer=(1), constraints=(/1: (/NULL - /4294966961]; tight)]
+      │    │         └── attrelid:1 < 4294966961 [outer=(1), constraints=(/1: (/NULL - /4294966960]; tight)]
       │    └── aggregations
       │         ├── const-agg [as=attname:2, outer=(2)]
       │         │    └── attname:2

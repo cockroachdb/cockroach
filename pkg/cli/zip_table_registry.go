@@ -272,6 +272,19 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"crdb_internal.hide_sql_constants(create_statement) as create_statement",
 		},
 	},
+	`"".crdb_internal.create_trigger_statements`: {
+		nonSensitiveCols: NonSensitiveColumns{
+			"database_id",
+			"database_name",
+			"schema_id",
+			"schema_name",
+			"table_id",
+			"table_name",
+			"trigger_id",
+			"trigger_name",
+			"crdb_internal.hide_sql_constants(create_statement) as create_statement",
+		},
+	},
 	`"".crdb_internal.create_procedure_statements`: {
 		nonSensitiveCols: NonSensitiveColumns{
 			"database_id",
