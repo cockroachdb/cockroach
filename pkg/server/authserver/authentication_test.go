@@ -850,7 +850,7 @@ func TestGRPCAuthentication(t *testing.T) {
 			return err
 		}, true},
 		{"raft", func(ctx context.Context, conn *grpc.ClientConn) error {
-			stream, err := kvserver.NewMultiRaftClient(conn).RaftMessageBatch(ctx)
+			stream, err := kvserver.NewGRPCMultiRaftClientAdapter(conn).RaftMessageBatch(ctx)
 			if err != nil {
 				return err
 			}

@@ -14,16 +14,16 @@ import (
 
 // DialMultiRaftClient establishes a DRPC connection if enabled; otherwise,
 // it falls back to gRPC. The established connection is used to create a
-// MultiRaftClient.
+// RPCMultiRaftClient.
 func DialMultiRaftClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
-) (MultiRaftClient, error) {
+) (RPCMultiRaftClient, error) {
 	if !rpcbase.TODODRPC {
 		conn, err := nd.Dial(ctx, nodeID, class)
 		if err != nil {
 			return nil, err
 		}
-		return NewMultiRaftClient(conn), nil
+		return NewGRPCMultiRaftClientAdapter(conn), nil
 	}
 	return nil, nil
 }
