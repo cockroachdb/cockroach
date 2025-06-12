@@ -1619,6 +1619,126 @@ func registerTPCC(r registry.Registry) {
 		Clouds: registry.OnlyGCE,
 		Suites: registry.Suites(registry.Weekly),
 	})
+
+	// Buffered writes (with pipelining turned off) benchmarks. These are
+	// duplicates of variants above.
+	registerTPCCBenchSpec(
+		r, tpccBenchSpec{
+			Nodes: 3,
+			CPUs:  4,
+
+			LoadWarehousesGCE:   1000,
+			LoadWarehousesAWS:   1000,
+			LoadWarehousesAzure: 1000,
+			LoadWarehousesIBM:   1000,
+			EstimatedMaxGCE:     750,
+			EstimatedMaxAWS:     900,
+			EstimatedMaxAzure:   900,
+			EstimatedMaxIBM:     900,
+			WriteOptimization:   registry.Buffering,
+
+			Clouds: registry.OnlyGCE,
+			Suites: registry.Suites(registry.Nightly),
+		},
+	)
+	registerTPCCBenchSpec(
+		r, tpccBenchSpec{
+			Nodes: 3,
+			CPUs:  16,
+
+			LoadWarehousesGCE:   3500,
+			LoadWarehousesAWS:   3900,
+			LoadWarehousesAzure: 3900,
+			LoadWarehousesIBM:   3900,
+			EstimatedMaxGCE:     3100,
+			EstimatedMaxAWS:     3600,
+			EstimatedMaxAzure:   3600,
+			EstimatedMaxIBM:     3600,
+			WriteOptimization:   registry.Buffering,
+
+			Clouds: registry.AllClouds,
+			Suites: registry.Suites(registry.Nightly),
+		},
+	)
+	registerTPCCBenchSpec(
+		r, tpccBenchSpec{
+			Nodes: 12,
+			CPUs:  16,
+
+			LoadWarehousesGCE:   11500,
+			LoadWarehousesAWS:   11500,
+			LoadWarehousesAzure: 11500,
+			LoadWarehousesIBM:   11500,
+			EstimatedMaxGCE:     10000,
+			EstimatedMaxAWS:     10000,
+			EstimatedMaxAzure:   10000,
+			EstimatedMaxIBM:     10000,
+			WriteOptimization:   registry.Buffering,
+
+			Clouds: registry.OnlyGCE,
+			Suites: registry.Suites(registry.Weekly),
+		},
+	)
+
+	// Buffered writes (with pipelining turned on) benchmarks. These are
+	// duplicates of variants above.
+	registerTPCCBenchSpec(
+		r, tpccBenchSpec{
+			Nodes: 3,
+			CPUs:  4,
+
+			LoadWarehousesGCE:   1000,
+			LoadWarehousesAWS:   1000,
+			LoadWarehousesAzure: 1000,
+			LoadWarehousesIBM:   1000,
+			EstimatedMaxGCE:     750,
+			EstimatedMaxAWS:     900,
+			EstimatedMaxAzure:   900,
+			EstimatedMaxIBM:     900,
+			WriteOptimization:   registry.PipeliningBuffering,
+
+			Clouds: registry.OnlyGCE,
+			Suites: registry.Suites(registry.Nightly),
+		},
+	)
+	registerTPCCBenchSpec(
+		r, tpccBenchSpec{
+			Nodes: 3,
+			CPUs:  16,
+
+			LoadWarehousesGCE:   3500,
+			LoadWarehousesAWS:   3900,
+			LoadWarehousesAzure: 3900,
+			LoadWarehousesIBM:   3900,
+			EstimatedMaxGCE:     3100,
+			EstimatedMaxAWS:     3600,
+			EstimatedMaxAzure:   3600,
+			EstimatedMaxIBM:     3600,
+			WriteOptimization:   registry.PipeliningBuffering,
+
+			Clouds: registry.AllClouds,
+			Suites: registry.Suites(registry.Nightly),
+		},
+	)
+	registerTPCCBenchSpec(
+		r, tpccBenchSpec{
+			Nodes: 12,
+			CPUs:  16,
+
+			LoadWarehousesGCE:   11500,
+			LoadWarehousesAWS:   11500,
+			LoadWarehousesAzure: 11500,
+			LoadWarehousesIBM:   11500,
+			EstimatedMaxGCE:     10000,
+			EstimatedMaxAWS:     10000,
+			EstimatedMaxAzure:   10000,
+			EstimatedMaxIBM:     10000,
+			WriteOptimization:   registry.PipeliningBuffering,
+
+			Clouds: registry.OnlyGCE,
+			Suites: registry.Suites(registry.Weekly),
+		},
+	)
 }
 
 func valueForCloud(cloud spec.Cloud, gce, aws, azure, ibm int) int {
@@ -1730,6 +1850,9 @@ type tpccBenchSpec struct {
 	// SharedProcessMT, if true, indicates that the cluster should run in
 	// shared-process mode of multi-tenancy.
 	SharedProcessMT bool
+	// WriteOptimization specifies the write optimization to use (e.g. pipelining,
+	// buffering, or both).
+	WriteOptimization registry.WriteOptimizationType
 }
 
 func (s tpccBenchSpec) EstimatedMax(cloud spec.Cloud) int {
@@ -1829,6 +1952,10 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 		nameParts = append(nameParts, "mt-shared-process")
 	}
 
+	if b.WriteOptimization != registry.DefaultWriteOptimization {
+		nameParts = append(nameParts, fmt.Sprintf("write-optimization=%s", b.WriteOptimization.String()))
+	}
+
 	name := strings.Join(nameParts, "/")
 
 	numNodes := b.Nodes + b.LoadConfig.numLoadNodes(b.Distribution)
@@ -1844,6 +1971,7 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 		Suites:                 b.Suites,
 		EncryptionSupport:      encryptionSupport,
 		Leases:                 leases,
+		WriteOptimization:      b.WriteOptimization,
 		PostProcessPerfMetrics: getMaxWarehousesAboveEfficiency,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCCBench(ctx, t, c, b)
