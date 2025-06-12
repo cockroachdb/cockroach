@@ -13,6 +13,7 @@ import (
 
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -368,6 +369,7 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 	mean := sum / float64(len(offsets))
 	stdDev := StandardDeviationPopulationKnownMean(offsets, mean)
 	median := MedianSortedInput(offsets)
+	// WARNING: offsets is unusable after this point as it has been modified.
 	medianAbsoluteDeviation := MedianAbsoluteDeviationPopulationSortedInputMutatesInput(offsets)
 
 	r.metrics.ClockOffsetMeanNanos.Update(int64(mean))
@@ -499,11 +501,15 @@ func PopulationVarianceKnownMean(input stats.Float64Data, mean float64) float64 
 // MedianSortedInput calculates the median of the input, assuming it is already
 // sorted.
 func MedianSortedInput(sortedInput stats.Float64Data) float64 {
+	if buildutil.CrdbTestBuild {
+		if !sort.IsSorted(sortedInput) {
+			panic("MedianSortedInput expects sorted input")
+		}
+	}
+
 	l := len(sortedInput)
 	if l == 0 {
 		return math.NaN()
-	} else if l == 1 {
-		return sortedInput[0]
 	} else if l%2 == 0 {
 		return (sortedInput[(l/2)-1] + sortedInput[(l/2)]) / 2.0
 	} else {
