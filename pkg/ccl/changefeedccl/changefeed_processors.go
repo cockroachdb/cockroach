@@ -305,7 +305,7 @@ func (ca *changeAggregator) wrapMetricsRecorderWithTelemetry(
 		description = job.Payload().Description
 	}
 
-	recorderWithTelemetry, err := wrapMetricsRecorderWithTelemetry(ctx, details, description, jobID, ca.FlowCtx.Cfg.Settings, recorder, ca.knobs)
+	recorderWithTelemetry, err := wrapMetricsRecorderWithTelemetry(ctx, details, description, jobID, ca.FlowCtx.Cfg.Settings, recorder, ca.knobs, ca.FlowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig))
 	if err != nil {
 		return ca.sliMetrics, err
 	}
@@ -348,8 +348,15 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		return
 	}
 
-	feed := makeChangefeedConfigFromJobDetails(ca.spec.Feed)
-
+	feed, err := makeChangefeedConfigFromJobDetails(ca.spec.Feed, ctx, ca.FlowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig))
+	if err != nil {
+		if log.V(2) {
+			log.Infof(ca.Ctx(), "change aggregator moving to draining due to error making changefeed config: %v", err)
+		}
+		ca.MoveToDraining(err)
+		ca.cancel()
+		return
+	}
 	opts := feed.Opts
 
 	timestampOracle := &changeAggregatorLowerBoundOracle{
@@ -533,11 +540,20 @@ func (ca *changeAggregator) makeKVFeedCfg(
 	if schemaChange.Policy == changefeedbase.OptSchemaChangePolicyIgnore || initialScanOnly {
 		sf = schemafeed.DoNothingSchemaFeed
 	} else {
-		sf = schemafeed.New(ctx, cfg, schemaChange.EventClass, AllTargets(ca.spec.Feed),
+		targets, err := AllTargets(ctx, ca.spec.Feed, ca.FlowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig))
+		if err != nil {
+			return kvfeed.Config{}, err
+		}
+		sf = schemafeed.New(ctx, cfg, schemaChange.EventClass, targets,
 			initialHighWater, &ca.metrics.SchemaFeedMetrics, config.Opts.GetCanHandle())
 	}
 
 	monitoringCfg, err := makeKVFeedMonitoringCfg(ctx, ca.sliMetrics, opts, ca.FlowCtx.Cfg.Settings)
+	if err != nil {
+		return kvfeed.Config{}, err
+	}
+
+	targets, err := AllTargets(ctx, ca.spec.Feed, ca.FlowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig))
 	if err != nil {
 		return kvfeed.Config{}, err
 	}
@@ -550,7 +566,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		Clock:                cfg.DB.KV().Clock(),
 		Spans:                spans,
 		SpanLevelCheckpoint:  ca.spec.SpanLevelCheckpoint,
-		Targets:              AllTargets(ca.spec.Feed),
+		Targets:              targets,
 		Metrics:              &ca.metrics.KVFeedMetrics,
 		MM:                   memMon,
 		InitialHighWater:     initialHighWater,
@@ -1286,8 +1302,12 @@ func newChangeFrontierProcessor(
 	if err != nil {
 		return nil, err
 	}
+	targets, err := AllTargets(ctx, spec.Feed, flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig))
+	if err != nil {
+		return nil, err
+	}
 	if cf.encoder, err = getEncoder(
-		ctx, encodingOpts, AllTargets(spec.Feed), spec.Feed.Select != "",
+		ctx, encodingOpts, targets, spec.Feed.Select != "",
 		makeExternalConnectionProvider(ctx, flowCtx.Cfg.DB), sliMetrics,
 		sourceProvider,
 	); err != nil {
@@ -1894,10 +1914,13 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	if highWater.Less(cf.highWaterAtStart) {
 		highWater = cf.highWaterAtStart
 	}
-
+	targets, err := AllTargets(ctx, cf.spec.Feed, cf.FlowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig))
+	if err != nil {
+		return false, err
+	}
 	if progress.ProtectedTimestampRecord == uuid.Nil {
 		ptr := createProtectedTimestampRecord(
-			ctx, cf.FlowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), highWater,
+			ctx, cf.FlowCtx.Codec(), cf.spec.JobID, targets, highWater,
 		)
 		progress.ProtectedTimestampRecord = ptr.ID.GetUUID()
 		return true, pts.Protect(ctx, ptr)
@@ -1924,7 +1947,11 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	// If we've identified more tables that need to be protected since this
 	// changefeed was created, it will be missing here. If so, we "migrate" it
 	// to include all the appropriate targets.
-	if targets := AllTargets(cf.spec.Feed); !makeTargetToProtect(targets).Equal(rec.Target) {
+	targets, err = AllTargets(ctx, cf.spec.Feed, cf.FlowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig))
+	if err != nil {
+		return false, err
+	}
+	if !makeTargetToProtect(targets).Equal(rec.Target) {
 		if preservePTSTargets := cf.knobs.PreservePTSTargets != nil && cf.knobs.PreservePTSTargets(); preservePTSTargets {
 			return false, nil
 		}
@@ -1957,8 +1984,12 @@ func (cf *changeFrontier) remakePTSRecord(
 	resolved hlc.Timestamp,
 ) error {
 	prevRecordId := progress.ProtectedTimestampRecord
+	targets, err := AllTargets(ctx, cf.spec.Feed, cf.FlowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig))
+	if err != nil {
+		return err
+	}
 	ptr := createProtectedTimestampRecord(
-		ctx, cf.FlowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), resolved,
+		ctx, cf.FlowCtx.Codec(), cf.spec.JobID, targets, resolved,
 	)
 	if err := pts.Protect(ctx, ptr); err != nil {
 		return err
