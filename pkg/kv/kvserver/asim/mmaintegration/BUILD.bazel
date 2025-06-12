@@ -10,6 +10,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/allocator",
         "//pkg/kv/kvserver/allocator/mma",
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/op",

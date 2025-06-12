@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op"
@@ -39,7 +40,7 @@ type MMAStoreRebalancer struct {
 	pendingChangeIdx int
 	// pendingChanges is the most recent list of pendingChanges from the
 	// allocator.
-	pendingChanges []mma.PendingRangeChange
+	pendingChanges []pendingChangeAndRangeUsageInfo
 	// pendingTicket is the ticket of the operation currently in progress, if
 	// there is one, otherwise -1.
 	pendingTicket op.DispatchedTicket
@@ -51,6 +52,11 @@ type MMAStoreRebalancer struct {
 	// tracking the last time a store shed leases, with the intention to use it
 	// to populate StoreCapacity the no_leases_shed_last_rebalance field.
 	lastLeaseTransfer time.Time
+}
+
+type pendingChangeAndRangeUsageInfo struct {
+	change mma.PendingRangeChange
+	usage  allocator.RangeUsageInfo
 }
 
 // NewMMAStoreRebalancer creates a new MMAStoreRebalancer.
@@ -126,7 +132,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 				} else {
 					log.VInfof(ctx, 1, "operation for pendingChange=%v completed successfully", curChange)
 				}
-				msr.as.PostApply(curChange.ChangeIDs(), success)
+				msr.as.PostApply(curChange.change.ChangeIDs(), success)
 				msr.pendingChangeIdx++
 			} else {
 				log.VInfof(ctx, 1, "operation for pendingChange=%v is still in progress", curChange)
@@ -143,9 +149,16 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 			log.VInfof(ctx, 1, "no more pending changes to process, will call compute changes again")
 			storeLeaseholderMsg := MakeStoreLeaseholderMsgFromState(s, msr.localStoreID)
 			msr.allocator.ProcessStoreLeaseholderMsg(&storeLeaseholderMsg)
-			msr.pendingChanges = msr.allocator.ComputeChanges(ctx, mma.ChangeOptions{
+			pendingChanges := msr.allocator.ComputeChanges(ctx, mma.ChangeOptions{
 				LocalStoreID: roachpb.StoreID(msr.localStoreID),
 			})
+			for _, change := range pendingChanges {
+				usageInfo := s.RangeUsageInfo(state.RangeID(change.RangeID), msr.localStoreID)
+				msr.pendingChanges = append(msr.pendingChanges, pendingChangeAndRangeUsageInfo{
+					change: change,
+					usage:  usageInfo,
+				})
+			}
 			log.Infof(ctx, "store %d: computed %d changes %v", msr.localStoreID, len(msr.pendingChanges), msr.pendingChanges)
 			if len(msr.pendingChanges) == 0 {
 				// Nothing to do, there were no changes returned.
@@ -156,39 +169,37 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 
 			// Record the last time a lease transfer was requested.
 			for _, change := range msr.pendingChanges {
-				if change.IsTransferLease() {
+				if change.change.IsTransferLease() {
 					msr.lastLeaseTransfer = tick
 				}
 			}
 		}
 
 		curChange := msr.pendingChanges[msr.pendingChangeIdx]
-		if _, ok := s.Range(state.RangeID(curChange.RangeID)); !ok {
+		if _, ok := s.Range(state.RangeID(curChange.change.RangeID)); !ok {
+			// TODO: if ranges can go away because of merge, we should not be panicking here.
 			panic(fmt.Sprintf("range doesn't exist returned from change=%v", curChange))
 		}
 
 		var curOp op.ControlledOperation
-		if msr.pendingChanges[msr.pendingChangeIdx].IsTransferLease() {
+		if msr.pendingChanges[msr.pendingChangeIdx].change.IsTransferLease() {
 			curOp = op.NewTransferLeaseOp(
 				tick,
-				curChange.RangeID,
+				curChange.change.RangeID,
 				roachpb.StoreID(msr.localStoreID),
-				curChange.LeaseTransferTarget(),
+				curChange.change.LeaseTransferTarget(),
 			)
-		} else if curChange.IsChangeReplicas() {
+		} else if curChange.change.IsChangeReplicas() {
 			curOp = op.NewChangeReplicasOp(
 				tick,
-				curChange.RangeID,
-				curChange.ReplicationChanges(),
+				curChange.change.RangeID,
+				curChange.change.ReplicationChanges(),
 			)
 		} else {
 			panic(fmt.Sprintf("unexpected pending change type: %v", curChange))
 		}
 		log.VInfof(ctx, 1, "dispatching operation for pendingChange=%v", curChange)
-		msr.as.MMAPreApply(
-			s.RangeUsageInfo(state.RangeID(curChange.RangeID), msr.localStoreID),
-			curChange,
-		)
+		msr.as.MMAPreApply(curChange.usage, curChange.change)
 		msr.pendingTicket = msr.controller.Dispatch(ctx, tick, s, curOp)
 	}
 }
