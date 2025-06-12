@@ -1965,10 +1965,10 @@ def go_deps():
         name = "com_github_cockroachdb_version",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/version",
-        sha256 = "4e734ab8c4e4ff81003fedffa30dc5727f9b210c72a188ee3127eeedea09f644",
-        strip_prefix = "github.com/cockroachdb/version@v0.0.0-20250314144055-3860cd14adf2",
+        sha256 = "05edbf709b51a4a95b8cbcc932ca725c5137d235dce9cb0d59027662257e7ac5",
+        strip_prefix = "github.com/cockroachdb/version@v0.0.0-20250509181251-54dac3003410",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/version/com_github_cockroachdb_version-v0.0.0-20250314144055-3860cd14adf2.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/version/com_github_cockroachdb_version-v0.0.0-20250509181251-54dac3003410.zip",
         ],
     )
     go_repository(

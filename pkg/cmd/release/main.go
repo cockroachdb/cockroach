@@ -36,8 +36,6 @@ func main() {
 }
 
 func init() {
-	rootCmd.AddCommand(setOrchestrationVersionCmd)
 	rootCmd.AddCommand(updateReleasesTestFilesCmd)
-	rootCmd.AddCommand(setCockroachVersionCmd)
 	rootCmd.AddCommand(updateVersionsCmd)
 }
