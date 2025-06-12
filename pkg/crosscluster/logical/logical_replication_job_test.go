@@ -913,7 +913,7 @@ func TestRandomTables(t *testing.T) {
 			rng,
 			tableName,
 			1,
-			randgen.TableOptSkipColumnFamilyMutations)
+			[]randgen.TableOption{randgen.WithSkipColumnFamilyMutations()})
 		stmt := tree.SerializeForDisplay(createStmt)
 		t.Log(stmt)
 		runnerA.Exec(t, stmt)

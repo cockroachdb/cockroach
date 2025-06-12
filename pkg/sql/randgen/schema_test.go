@@ -46,7 +46,7 @@ func TestPopulateTableWithRandData(t *testing.T) {
 	numTables := 10
 
 	stmts := randgen.RandCreateTables(
-		ctx, rng, tablePrefix, numTables, randgen.TableOptNone,
+		ctx, rng, tablePrefix, numTables, nil,
 		randgen.PartialIndexMutator, randgen.ForeignKeyMutator,
 	)
 

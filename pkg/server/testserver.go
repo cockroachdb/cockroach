@@ -76,7 +76,6 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
-	"google.golang.org/grpc"
 )
 
 // makeTestConfig returns a config for testing. It overrides the
@@ -2621,7 +2620,7 @@ func (ts *testServer) NewClientRPCContext(
 // RPCClientConn is part of the serverutils.ApplicationLayerInterface.
 func (ts *testServer) RPCClientConn(
 	test serverutils.TestFataler, user username.SQLUsername,
-) *grpc.ClientConn {
+) serverutils.RPCConn {
 	conn, err := ts.RPCClientConnE(user)
 	if err != nil {
 		test.Fatal(err)
@@ -2630,22 +2629,26 @@ func (ts *testServer) RPCClientConn(
 }
 
 // RPCClientConnE is part of the serverutils.ApplicationLayerInterface.
-func (ts *testServer) RPCClientConnE(user username.SQLUsername) (*grpc.ClientConn, error) {
+func (ts *testServer) RPCClientConnE(user username.SQLUsername) (serverutils.RPCConn, error) {
 	ctx := context.Background()
 	rpcCtx := ts.NewClientRPCContext(ctx, user)
-	return rpcCtx.GRPCDialNode(ts.AdvRPCAddr(), ts.NodeID(), ts.Locality(), rpcbase.DefaultClass).Connect(ctx)
+	conn, err := rpcCtx.GRPCDialNode(ts.AdvRPCAddr(), ts.NodeID(), ts.Locality(), rpcbase.DefaultClass).Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return serverutils.FromGRPCConn(conn), nil
 }
 
 // GetAdminClient is part of the serverutils.ApplicationLayerInterface.
 func (ts *testServer) GetAdminClient(test serverutils.TestFataler) serverpb.AdminClient {
 	conn := ts.RPCClientConn(test, username.RootUserName())
-	return serverpb.NewAdminClient(conn)
+	return conn.NewAdminClient()
 }
 
 // GetStatusClient is part of the serverutils.ApplicationLayerInterface.
 func (ts *testServer) GetStatusClient(test serverutils.TestFataler) serverpb.StatusClient {
 	conn := ts.RPCClientConn(test, username.RootUserName())
-	return serverpb.NewStatusClient(conn)
+	return conn.NewStatusClient()
 }
 
 // NewClientRPCContext is part of the serverutils.ApplicationLayerInterface.
@@ -2662,7 +2665,7 @@ func (t *testTenant) NewClientRPCContext(
 // RPCClientConn is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) RPCClientConn(
 	test serverutils.TestFataler, user username.SQLUsername,
-) *grpc.ClientConn {
+) serverutils.RPCConn {
 	conn, err := t.RPCClientConnE(user)
 	if err != nil {
 		test.Fatal(err)
@@ -2671,22 +2674,29 @@ func (t *testTenant) RPCClientConn(
 }
 
 // RPCClientConnE is part of the serverutils.ApplicationLayerInterface.
-func (t *testTenant) RPCClientConnE(user username.SQLUsername) (*grpc.ClientConn, error) {
+func (t *testTenant) RPCClientConnE(user username.SQLUsername) (serverutils.RPCConn, error) {
 	ctx := context.Background()
 	rpcCtx := t.NewClientRPCContext(ctx, user)
-	return rpcCtx.GRPCDialPod(t.AdvRPCAddr(), t.SQLInstanceID(), t.Locality(), rpcbase.DefaultClass).Connect(ctx)
+	if !rpcbase.TODODRPC {
+		conn, err := rpcCtx.GRPCDialPod(t.AdvRPCAddr(), t.SQLInstanceID(), t.Locality(), rpcbase.DefaultClass).Connect(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return serverutils.FromGRPCConn(conn), nil
+	}
+	return nil, nil
 }
 
 // GetAdminClient is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) GetAdminClient(test serverutils.TestFataler) serverpb.AdminClient {
 	conn := t.RPCClientConn(test, username.RootUserName())
-	return serverpb.NewAdminClient(conn)
+	return conn.NewAdminClient()
 }
 
 // GetStatusClient is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) GetStatusClient(test serverutils.TestFataler) serverpb.StatusClient {
 	conn := t.RPCClientConn(test, username.RootUserName())
-	return serverpb.NewStatusClient(conn)
+	return conn.NewStatusClient()
 }
 
 func newClientRPCContext(
