@@ -50,7 +50,7 @@ func ParseProvisioningSource(sourceStr string) (source *Source, err error) {
 }
 
 func parseAuthMethod(sourceStr string) (authMethod string, idp string, err error) {
-	supportedProvisioningMethods := []string{"ldap"}
+	supportedProvisioningMethods := []string{supportedAuthMethodLDAP}
 	for _, method := range supportedProvisioningMethods {
 		prefix := method + ":"
 		if strings.HasPrefix(sourceStr, prefix) {
@@ -71,4 +71,8 @@ func parseIDP(idp string) (u *url.URL, err error) {
 
 func (source *Source) Size() int {
 	return len(source.authMethod) + len(source.idp.String())
+}
+
+func (source *Source) String() string {
+	return source.authMethod + ":" + source.idp.String()
 }
