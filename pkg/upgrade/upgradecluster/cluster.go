@@ -110,7 +110,7 @@ func (c *Cluster) NumNodesOrServers(ctx context.Context) (int, error) {
 
 // ForEveryNodeOrTenantPod is part of the upgrade.Cluster interface.
 func (c *Cluster) ForEveryNodeOrServer(
-	ctx context.Context, op string, fn func(context.Context, serverpb.MigrationClient) error,
+	ctx context.Context, op string, fn func(context.Context, serverpb.RPCMigrationClient) error,
 ) error {
 
 	live, _, err := NodesFromNodeLiveness(ctx, c.c.NodeLiveness)
