@@ -11,13 +11,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/errors"
-	"github.com/stretchr/testify/require"
 )
 
 func registerAcceptance(r registry.Registry) {
@@ -83,22 +80,6 @@ func registerAcceptance(r registry.Registry) {
 				// Disabled on IBM because s390x is only built on master
 				// and version upgrade is impossible to test as of 05/2025.
 				incompatibleClouds: registry.OnlyIBM,
-			},
-			// Tests for maybeSaveClusterDueToInvariantProblems. These don't verify
-			// that everything works as it should, but they can be run to verify
-			// manually that the cluster is saved correctly and the log output is
-			// helpful.
-			{
-				name:    "invariant-check-detection/failed=true",
-				fn:      runInvariantCheckDetectionFailed,
-				timeout: time.Hour,
-				skip:    "manual only",
-			},
-			{
-				name:    "invariant-check-detection/failed=false",
-				fn:      runInvariantCheckDetectionSuccess,
-				timeout: time.Hour,
-				skip:    "manual only",
 			},
 		},
 		registry.OwnerDisasterRecovery: {
@@ -190,25 +171,5 @@ func registerAcceptance(r registry.Registry) {
 			}
 			r.Add(testSpec)
 		}
-	}
-}
-
-func runInvariantCheckDetectionFailed(ctx context.Context, t test.Test, c cluster.Cluster) {
-	runInvariantCheckDetection(ctx, t, c, true)
-}
-
-func runInvariantCheckDetectionSuccess(ctx context.Context, t test.Test, c cluster.Cluster) {
-	runInvariantCheckDetection(ctx, t, c, false)
-}
-
-func runInvariantCheckDetection(ctx context.Context, t test.Test, c cluster.Cluster, failed bool) {
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, 3))
-	require.NoError(t, c.PutString(ctx, `
-foo br baz
-F250502 11:37:20.387424 1036 raft/raft.go:2411 ⋮ [T1,Vsystem,n1,s1,r155/1:‹/Table/113/1/{43/578…-51/201…}›] 80 match(30115) is out of range [lastIndex(30114)]. Was the raft log corrupted, truncated, or lost?
-asdasds
-`, "logs/foo.log", 0644, c.Node(2)))
-	if failed {
-		t.Error("boom")
 	}
 }
