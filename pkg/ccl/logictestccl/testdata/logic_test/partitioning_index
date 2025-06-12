@@ -211,11 +211,11 @@ SHOW CREATE TABLE vector
             b INT8 NULL,
             v VECTOR(3) NULL,
             CONSTRAINT vector_pkey PRIMARY KEY (a ASC),
-            VECTOR INDEX vector_b_v_idx (b ASC, v vector_l2_ops) PARTITION BY LIST (b) (
+            VECTOR INDEX vector_b_v_idx (b, v vector_l2_ops) PARTITION BY LIST (b) (
               PARTITION p1 VALUES IN ((1)),
               PARTITION pu VALUES IN ((NULL))
             ),
-            VECTOR INDEX vector_idx (a ASC, b ASC, v vector_l2_ops) PARTITION BY LIST (a, b) (
+            VECTOR INDEX vector_idx (a, b, v vector_l2_ops) PARTITION BY LIST (a, b) (
               PARTITION p1 VALUES IN ((1, 1), (2, 2))
             )
           ) WITH (schema_locked = true)

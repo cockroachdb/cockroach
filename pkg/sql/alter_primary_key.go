@@ -845,10 +845,13 @@ func setKeySuffixAndStoredColumnIDsFromPrimary(
 				"primary key column %s cannot be present in an inverted index",
 				col.GetName(),
 			)
-		} else if vecIdx && colID == toAdd.VectorColumnID() {
-			// VECTOR columns are not allowed in the primary key.
-			return errors.AssertionFailedf(
-				"indexed vector column cannot be part of the primary key")
+		} else if vecIdx {
+			if colID == toAdd.VectorColumnID() {
+				// VECTOR columns are not allowed in the primary key.
+				return errors.AssertionFailedf(
+					"indexed vector column cannot be part of the primary key")
+			}
+			tabledesc.UpdateVectorIndexPrefixColDirections(toAdd, primary)
 		}
 	}
 	// Finally, add all the stored columns if it is not already a key or key suffix column.

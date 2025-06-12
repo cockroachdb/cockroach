@@ -10,7 +10,7 @@ CREATE TABLE t (
   INDEX t_a_plus_b_idx ((a + b)),
   INDEX t_lower_c_a_plus_b_idx (lower(c), (a + b)),
   INVERTED INDEX t_b_j_a_asc (b DESC, (j->'a') ASC),
-  VECTOR INDEX t_vec (a DESC, (v::VECTOR(3))),
+  VECTOR INDEX t_vec (a, (v::VECTOR(3))),
   FAMILY (k, a, b, c, j, v)
 )
 
@@ -30,7 +30,7 @@ CREATE TABLE public.t (
   INDEX t_a_plus_b_idx ((a + b) ASC),
   INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
   INVERTED INDEX t_b_j_a_asc (b DESC, (j->'a':::STRING)),
-  VECTOR INDEX t_vec (a DESC, (v::VECTOR(3)) vector_l2_ops),
+  VECTOR INDEX t_vec (a, (v::VECTOR(3)) vector_l2_ops),
   FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
 );
 
@@ -50,7 +50,7 @@ CREATE TABLE public.t (
   INDEX t_a_plus_b_idx ((a + b) ASC),
   INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
   INVERTED INDEX t_b_j_a_asc (b DESC, (j->'a':::STRING)),
-  VECTOR INDEX t_vec (a DESC, (v::VECTOR(3)) vector_l2_ops),
+  VECTOR INDEX t_vec (a, (v::VECTOR(3)) vector_l2_ops),
   FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
 ) WITH (schema_locked = true);
 
@@ -70,7 +70,7 @@ CREATE TABLE public.t (
   INDEX t_a_plus_b_idx ((a + b) ASC),
   INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
   INVERTED INDEX t_b_j_a_asc (b DESC, (j->‹×›:::STRING)),
-  VECTOR INDEX t_vec (a DESC, (v::VECTOR(3)) vector_l2_ops),
+  VECTOR INDEX t_vec (a, (v::VECTOR(3)) vector_l2_ops),
   FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
 );
 
@@ -90,7 +90,7 @@ CREATE TABLE public.t (
   INDEX t_a_plus_b_idx ((a + b) ASC),
   INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
   INVERTED INDEX t_b_j_a_asc (b DESC, (j->‹×›:::STRING)),
-  VECTOR INDEX t_vec (a DESC, (v::VECTOR(3)) vector_l2_ops),
+  VECTOR INDEX t_vec (a, (v::VECTOR(3)) vector_l2_ops),
   FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
 ) WITH (schema_locked = true);
 
@@ -178,7 +178,7 @@ CREATE TABLE err (a INT, b INT, VECTOR INDEX (a, (a + b)))
 statement error column \(vec1::VECTOR\(3\)\) has type vector, which is only allowed as the last column in a vector index
 CREATE TABLE err (a INT, vec1 VECTOR, VECTOR INDEX ((vec1::VECTOR(3)), a))
 
-statement error the last column in a vector index cannot have the DESC option
+statement error pq: a vector index does not support the DESC option
 CREATE TABLE err (a INT, vec1 VECTOR, VECTOR INDEX (a, (vec1::VECTOR(3)) DESC))
 
 statement error vector column \(vec1::VECTOR\) does not have a fixed number of dimensions, so it cannot be indexed\nDETAIL: specify the number of dimensions in the type, like VECTOR\(128\) for 128 dimensions
@@ -476,7 +476,7 @@ CREATE VECTOR INDEX err ON t (a, (a + b))
 statement error column \(v::VECTOR\(3\)\) has type vector, which is only allowed as the last column in a vector index
 CREATE VECTOR INDEX err ON t ((v::VECTOR(3)), a)
 
-statement error the last column in a vector index cannot have the DESC option
+statement error pq: a vector index does not support the DESC option
 CREATE VECTOR INDEX err ON t (a, (v::VECTOR(3)) DESC)
 
 statement error vector column \(v::VECTOR\) does not have a fixed number of dimensions, so it cannot be indexed\nDETAIL: specify the number of dimensions in the type, like VECTOR\(128\) for 128 dimensions
@@ -640,7 +640,7 @@ CREATE TABLE public.copy_indexes (
   INDEX named_idx ((a + 1:::INT8) ASC),
   UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
   INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING)),
-  VECTOR INDEX src_b_expr_idx (b ASC, (v::VECTOR(3)) vector_l2_ops)
+  VECTOR INDEX src_b_expr_idx (b, (v::VECTOR(3)) vector_l2_ops)
 );
 
 skipif config schema-locked-disabled
@@ -659,7 +659,7 @@ CREATE TABLE public.copy_indexes (
   INDEX named_idx ((a + 1:::INT8) ASC),
   UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
   INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING)),
-  VECTOR INDEX src_b_expr_idx (b ASC, (v::VECTOR(3)) vector_l2_ops)
+  VECTOR INDEX src_b_expr_idx (b, (v::VECTOR(3)) vector_l2_ops)
 ) WITH (schema_locked = true);
 
 # Inaccessible expression index columns should be copied if the indexes are
@@ -689,7 +689,7 @@ CREATE TABLE public.copy_all (
   INDEX named_idx ((a + 1:::INT8) ASC),
   UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
   INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING)),
-  VECTOR INDEX src_b_expr_idx (b ASC, (v::VECTOR(3)) vector_l2_ops)
+  VECTOR INDEX src_b_expr_idx (b, (v::VECTOR(3)) vector_l2_ops)
 );
 
 skipif config schema-locked-disabled
@@ -708,7 +708,7 @@ CREATE TABLE public.copy_all (
   INDEX named_idx ((a + 1:::INT8) ASC),
   UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
   INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING)),
-  VECTOR INDEX src_b_expr_idx (b ASC, (v::VECTOR(3)) vector_l2_ops)
+  VECTOR INDEX src_b_expr_idx (b, (v::VECTOR(3)) vector_l2_ops)
 ) WITH (schema_locked = true);
 
 # Inaccessible expression index columns should be copied if the indexes are
