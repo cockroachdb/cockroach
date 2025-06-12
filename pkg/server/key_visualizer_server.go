@@ -74,7 +74,7 @@ func (s *KeyVisualizerServer) getSamplesFromFanOut(
 	}
 
 	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
-		samples, err := client.(keyvispb.KeyVisualizerClient).GetSamples(ctx,
+		samples, err := client.(keyvispb.RPCKeyVisualizerClient).GetSamples(ctx,
 			&keyvispb.GetSamplesRequest{
 				NodeID:             nodeID,
 				CollectedOnOrAfter: timestamp,
