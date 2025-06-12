@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -44,25 +43,28 @@ const (
 	nodes  = 3
 )
 
-var profileFlag = flag.String("profile", "",
-	"if set, CPU and heap profiles are collected with the given file name prefix")
-
 // BenchmarkTPCC runs TPC-C transactions against a single warehouse. Both the
 // optimized and literal implementations of our TPC-C workload are benchmarked.
 // There are benchmarks for running each transaction individually, as well as a
 // "default" mix that runs the standard mix of TPC-C transactions.
 //
-// CPU and heap profiles can be collected by passing the "-profile" flag with a
-// prefix for the profile file names. The profile names will include the
-// benchmark names, e.g., "foo_tpcc_literal_new_order.cpu" and
-// "foo_tpcc_literal_new_order.mem" will be created when running the benchmark:
+// If CPU or heap profiles are requested with the "-test.cpuprofile" or
+// "-test.memprofile" flags, the benchmark will "hijack" the standard profiles
+// and create new profiles that omit CPU samples and allocations made during the
+// setup phase of the benchmark.
+//
+// The profile names will include the prefix of the profile flags and the
+// benchmark names. For example, the profiles "foo_tpcc_literal_new_order.cpu"
+// and "foo_tpcc_literal_new_order.mem" will be created when running the
+// benchmark:
 //
 //	./dev bench pkg/bench/tpcc -f BenchmarkTPCC/literal/new_order \
-//	  --test-args '-test.benchtime=30s -profile=foo'
+//	  --test-args '-test.cpuprofile=foo.cpu -test.memprofile=foo.mem'
 //
-// These profiles will omit CPU samples and allocations made during the setup
-// phase of the benchmark, unlike profiles collected with the "-test.cpuprofile"
-// and "-test.memprofile" flags.
+// NB: The "foo.cpu" file will not be created because we must stop the global
+// CPU profiler in order to collect profiles that omit setup samples. The
+// "foo.mem" file will created and include all allocations made during the
+// entire duration of the benchmark.
 func BenchmarkTPCC(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
@@ -237,17 +239,41 @@ func (f doneFn) Stop(b testing.TB) {
 }
 
 func startCPUProfile(b testing.TB) doneFn {
-	prefix := *profileFlag
-	if prefix == "" {
+	var cpuProfFile string
+	if err := sniffarg.DoEnv("test.cpuprofile", &cpuProfFile); err != nil {
+		b.Fatal(err)
+	}
+	if cpuProfFile == "" {
+		// Not CPU profile requested.
 		return func(b testing.TB) {}
 	}
 
-	fileName := profileFileName(b, prefix, "cpu")
+	prefix := profilePrefix(cpuProfFile)
+
+	// Hijack the harness's profile to make a clean profile.
+	// The flag is set, so likely a CPU profile started by the Go harness is
+	// running (unless -count is specified, but StopCPUProfile is idempotent).
+	runtimepprof.StopCPUProfile()
+
+	var outputDir string
+	if err := sniffarg.DoEnv("test.outputdir", &outputDir); err != nil {
+		b.Fatal(err)
+	}
+	if outputDir != "" {
+		cpuProfFile = filepath.Join(outputDir, cpuProfFile)
+	}
+
+	// Remove the harness's profile file to avoid confusion.
+	_ = os.Remove(cpuProfFile)
+
+	// Create a new profile file.
+	fileName := profileFileName(b, outputDir, prefix, "cpu")
 	f, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		b.Fatal(err)
 	}
 
+	// Start profiling.
 	if err := runtimepprof.StartCPUProfile(f); err != nil {
 		b.Fatal(err)
 	}
@@ -261,12 +287,27 @@ func startCPUProfile(b testing.TB) doneFn {
 }
 
 func startAllocsProfile(b testing.TB) doneFn {
-	prefix := *profileFlag
-	if prefix == "" {
+	var memProfFile string
+	if err := sniffarg.DoEnv("test.memprofile", &memProfFile); err != nil {
+		b.Fatal(err)
+	}
+	if memProfFile == "" {
+		// No heap profile requested.
 		return func(b testing.TB) {}
 	}
 
-	fileName := profileFileName(b, prefix, "mem")
+	prefix := profilePrefix(memProfFile)
+
+	var outputDir string
+	if err := sniffarg.DoEnv("test.outputdir", &outputDir); err != nil {
+		b.Fatal(err)
+	}
+	if outputDir != "" {
+		memProfFile = filepath.Join(outputDir, memProfFile)
+	}
+
+	// Create a new profile file.
+	fileName := profileFileName(b, outputDir, prefix, "mem")
 	diffAllocs := diffProfile(b, func() []byte {
 		p := runtimepprof.Lookup("allocs")
 		var buf bytes.Buffer
@@ -295,13 +336,13 @@ func diffProfile(b testing.TB, take func() []byte) func(testing.TB) []byte {
 	if baseBytes == nil {
 		return func(tb testing.TB) []byte { return nil }
 	}
-	pBase, err := profile.ParseData(baseBytes)
-	if err != nil {
-		b.Fatal(err)
-	}
-
 	return func(b testing.TB) []byte {
-		pNew, err := profile.ParseData(take())
+		newBytes := take()
+		pBase, err := profile.ParseData(baseBytes)
+		if err != nil {
+			b.Fatal(err)
+		}
+		pNew, err := profile.ParseData(newBytes)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -321,12 +362,15 @@ func diffProfile(b testing.TB, take func() []byte) func(testing.TB) []byte {
 	}
 }
 
-func profileFileName(b testing.TB, prefix, suffix string) string {
-	var outputDir string
-	if err := sniffarg.DoEnv("test.outputdir", &outputDir); err != nil {
-		b.Fatal(err)
+func profilePrefix(profileArg string) string {
+	i := strings.Index(profileArg, ".")
+	if i == -1 {
+		return profileArg
 	}
+	return profileArg[:i]
+}
 
+func profileFileName(b testing.TB, outputDir, prefix, suffix string) string {
 	saniRE := regexp.MustCompile(`\W+`)
 	testName := strings.TrimPrefix(b.Name(), "Benchmark")
 	testName = strings.ToLower(testName)
