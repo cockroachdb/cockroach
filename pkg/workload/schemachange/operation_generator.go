@@ -3082,6 +3082,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	// we will need to evaluate generated expressions below.
 	hasUniqueConstraints := false
 	hasUniqueConstraintsMutations := false
+	hasForeignKeyMutations := false
 	fkViolation := false
 	if !anyInvalidInserts {
 		// Verify if the new row may violate unique constraints by checking the
@@ -3103,18 +3104,25 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		if err != nil {
 			return nil, err
 		}
-
+		// Determine if a foreign key mutation exists.
+		hasForeignKeyMutations, err = og.tableHasForeignKeyMutation(ctx, tx, tableName)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	stmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UniqueViolation, condition: hasUniqueConstraints || hasUniqueConstraintsMutations},
-		{code: pgcode.ForeignKeyViolation, condition: fkViolation},
+		{code: pgcode.ForeignKeyViolation, condition: fkViolation || hasForeignKeyMutations},
 		{code: pgcode.NotNullViolation, condition: true},
 		{code: pgcode.CheckViolation, condition: true},
 		{code: pgcode.InsufficientPrivilege, condition: true}, // For RLS violations
 	})
 	og.expectedCommitErrors.addAll(codesWithConditions{
-		{code: pgcode.ForeignKeyViolation, condition: fkViolation},
+		{code: pgcode.ForeignKeyViolation, condition: fkViolation && !hasForeignKeyMutations},
+	})
+	og.potentialCommitErrors.addAll(codesWithConditions{
+		{code: pgcode.ForeignKeyViolation, condition: hasForeignKeyMutations},
 	})
 
 	var formattedRows []string
