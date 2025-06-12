@@ -16,7 +16,7 @@ import (
 // HasDeprecatedElements returns if the target contains any element or fields
 // marked for deprecation.
 func HasDeprecatedElements(version clusterversion.ClusterVersion, target Target) bool {
-	return target.GetSecondaryIndexPartial() != nil
+	return false
 }
 
 // migrateDeprecatedFields will check if any of the deprecated fields are being
@@ -82,16 +82,9 @@ func migrateDeprecatedFields(
 func migrateTargetElement(targets []Target, idx int) {
 	targetToMigrate := targets[idx]
 	switch t := targetToMigrate.Element().(type) {
-	case *SecondaryIndexPartial:
-		for _, target := range targets {
-			if secondaryIndex := target.GetSecondaryIndex(); secondaryIndex != nil &&
-				secondaryIndex.TableID == t.TableID &&
-				secondaryIndex.IndexID == t.IndexID &&
-				target.TargetStatus == targetToMigrate.TargetStatus {
-				secondaryIndex.EmbeddedExpr = &t.Expression
-				break
-			}
-		}
+	default:
+		// No-op case to defeat unused linter when there are no elements to migrate.
+		_ = t.element
 	}
 }
 

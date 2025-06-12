@@ -151,8 +151,11 @@ func redactElement(element scpb.Element) error {
 		e.PhysicalRepresentation = []byte("_")
 	case *scpb.IndexPartitioning:
 		redactPartitioning(&e.PartitioningDescriptor)
-	case *scpb.SecondaryIndexPartial:
-		return redactExpr(&e.Expression.Expr)
+	case *scpb.SecondaryIndex:
+		if e.EmbeddedExpr != nil {
+			return redactExpr(&e.EmbeddedExpr.Expr)
+		}
+		return nil
 	case *scpb.CheckConstraint:
 		return redactExpr(&e.Expression.Expr)
 	case *scpb.ColumnDefaultExpression:
