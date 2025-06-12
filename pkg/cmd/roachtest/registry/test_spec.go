@@ -131,6 +131,12 @@ type TestSpec struct {
 	// to epoch leases.
 	Leases LeaseType
 
+	// WriteOptimization specifies what kind of write optimization to use.
+	// Defaults to pipelining. This is currently used only in benchmark tests.
+	// If used in a non-benchmark test, this setting will be overwritten to enable
+	// pipelining and additionally, with 50% probability, buffering.
+	WriteOptimization WriteOptimizationType
+
 	// SkipPostValidations is a bit-set of post-validations that should be skipped
 	// after the test completes. This is useful for tests that are known to be
 	// incompatible with some validations. By default, tests will run all
@@ -283,6 +289,35 @@ const (
 //
 // The list does not contain aliases like "default" and "metamorphic".
 var LeaseTypes = []LeaseType{EpochLeases, ExpirationLeases, LeaderLeases}
+
+// WriteOptimizationType specifies the type of write optimization to use.
+type WriteOptimizationType int
+
+func (w WriteOptimizationType) String() string {
+	switch w {
+	case DefaultWriteOptimization:
+		return "default"
+	case Pipelining:
+		return "pipelining"
+	case Buffering:
+		return "buffering"
+	case PipeliningBuffering:
+		return "pipelining-buffering"
+	default:
+		return fmt.Sprintf("writeoptimization-%d", w)
+	}
+}
+
+const (
+	// DefaultWriteOptimization uses the default cluster settings.
+	DefaultWriteOptimization = WriteOptimizationType(iota)
+	// Pipelining uses write pipelining.
+	Pipelining
+	// Buffering uses client-side write buffering.
+	Buffering
+	// PipeliningBuffering uses both buffering and pipelining.
+	PipeliningBuffering
+)
 
 // CloudSet represents a set of clouds.
 //
