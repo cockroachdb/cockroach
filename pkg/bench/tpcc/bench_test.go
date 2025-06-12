@@ -6,27 +6,21 @@
 package tpcc
 
 import (
-	"bytes"
 	"context"
 	gosql "database/sql"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
-	"regexp"
-	"runtime"
-	runtimepprof "runtime/pprof"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/bench/benchprof"
 	"github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sniffarg"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
-	"github.com/google/pprof/profile"
 )
 
 const (
@@ -119,8 +112,8 @@ func BenchmarkTPCC(b *testing.B) {
 
 // run executes the TPC-C workload with the specified workload flags.
 func run(b *testing.B, ctx context.Context, pgURLs [nodes]string, workloadFlags []string) {
-	defer startCPUProfile(b).Stop(b)
-	defer startAllocsProfile(b).Stop(b)
+	defer benchprof.StartCPUProfile(b).Stop(b)
+	defer benchprof.StartMemProfile(b).Stop(b)
 
 	flags := append([]string{
 		"--wait=0",
@@ -230,155 +223,4 @@ func tpccGenerator(b *testing.B, flags []string) generator {
 		b.Fatal(err)
 	}
 	return gen
-}
-
-type doneFn func(testing.TB)
-
-func (f doneFn) Stop(b testing.TB) {
-	f(b)
-}
-
-func startCPUProfile(b testing.TB) doneFn {
-	var cpuProfFile string
-	if err := sniffarg.DoEnv("test.cpuprofile", &cpuProfFile); err != nil {
-		b.Fatal(err)
-	}
-	if cpuProfFile == "" {
-		// Not CPU profile requested.
-		return func(b testing.TB) {}
-	}
-
-	prefix := profilePrefix(cpuProfFile)
-
-	// Hijack the harness's profile to make a clean profile.
-	// The flag is set, so likely a CPU profile started by the Go harness is
-	// running (unless -count is specified, but StopCPUProfile is idempotent).
-	runtimepprof.StopCPUProfile()
-
-	var outputDir string
-	if err := sniffarg.DoEnv("test.outputdir", &outputDir); err != nil {
-		b.Fatal(err)
-	}
-	if outputDir != "" {
-		cpuProfFile = filepath.Join(outputDir, cpuProfFile)
-	}
-
-	// Remove the harness's profile file to avoid confusion.
-	_ = os.Remove(cpuProfFile)
-
-	// Create a new profile file.
-	fileName := profileFileName(b, outputDir, prefix, "cpu")
-	f, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	// Start profiling.
-	if err := runtimepprof.StartCPUProfile(f); err != nil {
-		b.Fatal(err)
-	}
-
-	return func(b testing.TB) {
-		runtimepprof.StopCPUProfile()
-		if err := f.Close(); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-func startAllocsProfile(b testing.TB) doneFn {
-	var memProfFile string
-	if err := sniffarg.DoEnv("test.memprofile", &memProfFile); err != nil {
-		b.Fatal(err)
-	}
-	if memProfFile == "" {
-		// No heap profile requested.
-		return func(b testing.TB) {}
-	}
-
-	prefix := profilePrefix(memProfFile)
-
-	var outputDir string
-	if err := sniffarg.DoEnv("test.outputdir", &outputDir); err != nil {
-		b.Fatal(err)
-	}
-	if outputDir != "" {
-		memProfFile = filepath.Join(outputDir, memProfFile)
-	}
-
-	// Create a new profile file.
-	fileName := profileFileName(b, outputDir, prefix, "mem")
-	diffAllocs := diffProfile(b, func() []byte {
-		p := runtimepprof.Lookup("allocs")
-		var buf bytes.Buffer
-
-		runtime.GC()
-		if err := p.WriteTo(&buf, 0); err != nil {
-			b.Fatal(err)
-		}
-
-		return buf.Bytes()
-	})
-
-	return func(b testing.TB) {
-		if sl := diffAllocs(b); len(sl) > 0 {
-			if err := os.WriteFile(fileName, sl, 0644); err != nil {
-				b.Fatal(err)
-			}
-		}
-	}
-}
-
-func diffProfile(b testing.TB, take func() []byte) func(testing.TB) []byte {
-	// The below is essentially cribbed from pprof.go in net/http/pprof.
-
-	baseBytes := take()
-	if baseBytes == nil {
-		return func(tb testing.TB) []byte { return nil }
-	}
-	return func(b testing.TB) []byte {
-		newBytes := take()
-		pBase, err := profile.ParseData(baseBytes)
-		if err != nil {
-			b.Fatal(err)
-		}
-		pNew, err := profile.ParseData(newBytes)
-		if err != nil {
-			b.Fatal(err)
-		}
-		pBase.Scale(-1)
-		pMerged, err := profile.Merge([]*profile.Profile{pBase, pNew})
-		if err != nil {
-			b.Fatal(err)
-		}
-		pMerged.TimeNanos = pNew.TimeNanos
-		pMerged.DurationNanos = pNew.TimeNanos - pBase.TimeNanos
-
-		buf := bytes.Buffer{}
-		if err := pMerged.Write(&buf); err != nil {
-			b.Fatal(err)
-		}
-		return buf.Bytes()
-	}
-}
-
-func profilePrefix(profileArg string) string {
-	i := strings.Index(profileArg, ".")
-	if i == -1 {
-		return profileArg
-	}
-	return profileArg[:i]
-}
-
-func profileFileName(b testing.TB, outputDir, prefix, suffix string) string {
-	saniRE := regexp.MustCompile(`\W+`)
-	testName := strings.TrimPrefix(b.Name(), "Benchmark")
-	testName = strings.ToLower(testName)
-	testName = saniRE.ReplaceAllString(testName, "_")
-
-	fileName := prefix + "_" + testName + "." + suffix
-	if outputDir != "" {
-		fileName = filepath.Join(outputDir, fileName)
-	}
-	return fileName
 }
