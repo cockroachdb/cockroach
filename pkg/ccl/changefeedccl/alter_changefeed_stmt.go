@@ -266,7 +266,7 @@ func alterChangefeedPlanHook(
 
 		telemetry.Count(telemetryPath)
 
-		logAlterChangefeedTelemetry(ctx, j, jobPayload.Description)
+		logAlterChangefeedTelemetry(ctx, j, jobPayload.Description, p.ExecCfg())
 
 		select {
 		case <-ctx.Done():
@@ -462,7 +462,7 @@ func generateAndValidateNewTargets(
 		return nil, nil, hlc.Timestamp{}, nil, err
 	}
 
-	prevTargets := AllTargets(prevDetails)
+	prevTargets := AllTargets(prevDetails, ctx, p.ExecCfg())
 	noLongerExist := make(map[string]descpb.ID)
 	if err := prevTargets.EachTarget(func(targetSpec changefeedbase.Target) error {
 		k := targetKey{TableID: targetSpec.DescID, FamilyName: tree.Name(targetSpec.FamilyName)}

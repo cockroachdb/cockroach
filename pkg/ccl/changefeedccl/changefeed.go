@@ -12,6 +12,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -37,33 +42,74 @@ type ChangefeedConfig struct {
 
 // makeChangefeedConfigFromJobDetails creates a ChangefeedConfig struct from any
 // version of the ChangefeedDetails protobuf.
-func makeChangefeedConfigFromJobDetails(d jobspb.ChangefeedDetails) ChangefeedConfig {
+func makeChangefeedConfigFromJobDetails(
+	d jobspb.ChangefeedDetails, ctx context.Context, execCfg *sql.ExecutorConfig,
+) ChangefeedConfig {
 	return ChangefeedConfig{
 		SinkURI:  d.SinkURI,
 		Opts:     changefeedbase.MakeStatementOptions(d.Opts),
 		ScanTime: d.StatementTime,
 		EndTime:  d.EndTime,
-		Targets:  AllTargets(d),
+		Targets:  AllTargets(d, ctx, execCfg),
 	}
 }
 
 // AllTargets gets all the targets listed in a ChangefeedDetails,
 // from the statement time name map in old protos
 // or the TargetSpecifications in new ones.
-func AllTargets(cd jobspb.ChangefeedDetails) (targets changefeedbase.Targets) {
+func AllTargets(cd jobspb.ChangefeedDetails, ctx context.Context, execCfg *sql.ExecutorConfig) (targets changefeedbase.Targets) {
 	// TODO: Use a version gate for this once we have CDC version gates
 	if len(cd.TargetSpecifications) > 0 {
 		for _, ts := range cd.TargetSpecifications {
 			if ts.DescID > 0 {
-				if ts.StatementTimeName == "" {
-					ts.StatementTimeName = cd.Tables[ts.DescID].StatementTimeName
+				if ts.Type == jobspb.ChangefeedTargetSpecification_DATABASE {
+					err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, descs *descs.Collection) error {
+						databaseDescriptor, err := descs.ByIDWithLeased(txn.KV()).Get().Database(ctx, ts.DescID)
+						if err != nil {
+							return err
+						}
+						tables, err := descs.GetAllTablesInDatabase(ctx, txn.KV(), databaseDescriptor)
+						if err != nil {
+							return err
+						}
+						for _, desc := range tables.OrderedDescriptors() {
+							// Skip system tables and virtual tables
+							tableDesc, err := catalog.AsTableDescriptor(desc)
+							if err != nil {
+								continue
+							}
+							if !tableDesc.IsPhysicalTable() || desc.GetParentID() == keys.SystemDatabaseID {
+								continue
+							}
+							var tableType jobspb.ChangefeedTargetSpecification_TargetType
+							if len(tableDesc.GetFamilies()) == 1 {
+								tableType = jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY
+							} else {
+								tableType = jobspb.ChangefeedTargetSpecification_EACH_FAMILY
+							}
+
+							targets.Add(changefeedbase.Target{
+								Type:              tableType,
+								DescID:            desc.GetID(),
+								StatementTimeName: changefeedbase.StatementTimeName(desc.GetName()),
+							})
+						}
+						return nil
+					})
+					if err != nil {
+						return changefeedbase.Targets{}
+					}
+				} else {
+					if ts.StatementTimeName == "" {
+						ts.StatementTimeName = cd.Tables[ts.DescID].StatementTimeName
+					}
+					targets.Add(changefeedbase.Target{
+						Type:              ts.Type,
+						DescID:            ts.DescID,
+						FamilyName:        ts.FamilyName,
+						StatementTimeName: changefeedbase.StatementTimeName(ts.StatementTimeName),
+					})
 				}
-				targets.Add(changefeedbase.Target{
-					Type:              ts.Type,
-					DescID:            ts.DescID,
-					FamilyName:        ts.FamilyName,
-					StatementTimeName: changefeedbase.StatementTimeName(ts.StatementTimeName),
-				})
 			}
 		}
 	} else {

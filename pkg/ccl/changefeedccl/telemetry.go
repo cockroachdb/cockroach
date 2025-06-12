@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -55,10 +56,11 @@ func makePeriodicTelemetryLogger(
 	description string,
 	jobID jobspb.JobID,
 	s *cluster.Settings,
+	execCfg *sql.ExecutorConfig,
 ) (*periodicTelemetryLogger, error) {
 	return &periodicTelemetryLogger{
 		ctx:               ctx,
-		changefeedDetails: makeCommonChangefeedEventDetails(ctx, details, description, jobID),
+		changefeedDetails: makeCommonChangefeedEventDetails(ctx, details, description, jobID, execCfg),
 		sinkTelemetryData: sinkTelemetryData{},
 		settings:          s,
 	}, nil
@@ -131,9 +133,10 @@ func wrapMetricsRecorderWithTelemetry(
 	s *cluster.Settings,
 	mb metricsRecorder,
 	knobs TestingKnobs,
+	execCfg *sql.ExecutorConfig,
 ) (*telemetryMetricsRecorder, error) {
 	var logger telemetryLogger
-	logger, err := makePeriodicTelemetryLogger(ctx, details, description, jobID, s)
+	logger, err := makePeriodicTelemetryLogger(ctx, details, description, jobID, s, execCfg)
 	if err != nil {
 		return &telemetryMetricsRecorder{}, err
 	}
