@@ -660,9 +660,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		livenessInterval, heartbeatInterval := cfg.StoreLivenessDurations()
 		supportGracePeriod := rpcContext.StoreLivenessWithdrawalGracePeriod()
 		options := storeliveness.NewOptions(livenessInterval, heartbeatInterval, supportGracePeriod)
-		transport := storeliveness.NewTransport(
-			cfg.AmbientCtx, stopper, clock, kvNodeDialer, grpcServer.Server, nil, /* knobs */
+		transport, err := storeliveness.NewTransport(
+			cfg.AmbientCtx, stopper, clock, kvNodeDialer,
+			grpcServer.Server, drpcServer.DRPCServer, nil, /* knobs */
 		)
+		if err != nil {
+			return nil, err
+		}
 		nodeRegistry.AddMetricStruct(transport.Metrics())
 		var knobs *storeliveness.TestingKnobs
 		if storeKnobs := cfg.TestingKnobs.Store; storeKnobs != nil {
