@@ -1702,8 +1702,12 @@ func (r *testRunner) maybeSaveClusterDueToInvariantProblems(
 	for _, det := range dets {
 		if det.Stdout != "" {
 			_ = c.Extend(ctx, 7*24*time.Hour, t.L())
-			snapName := "invariant-problem-" + c.Name() + "-" + strconv.Itoa(rand.Int())
-			_, _ = c.CreateSnapshot(ctx, snapName)
+			timestamp := timeutil.Now().Format("20060102_150405")
+			snapName := fmt.Sprintf("invariant-problem-%s-%s", c.Name(), timestamp)
+			if _, err := c.CreateSnapshot(ctx, snapName); err != nil {
+				t.L().Printf("failed to create snapshot %q: %s", snapName, err)
+				snapName = "<failed>"
+			}
 			c.Save(ctx, "invariant problem - snap name "+snapName, t.L())
 			t.Error("invariant problem - snap name " + snapName + ":\n" + det.Stdout)
 			return
