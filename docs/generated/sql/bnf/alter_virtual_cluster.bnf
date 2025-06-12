@@ -1,0 +1,13 @@
+alter_virtual_cluster_stmt ::=
+	'ALTER' 'VIRTUAL' 'CLUSTER' virtual_cluster_spec 'PAUSE' 'REPLICATION'
+	| 'ALTER' 'VIRTUAL' 'CLUSTER' virtual_cluster_spec 'RESUME' 'REPLICATION'
+	| 'ALTER' 'VIRTUAL' 'CLUSTER' virtual_cluster_spec 'COMPLETE' 'REPLICATION' 'TO' 'SYSTEM' 'TIME' timestamp
+	| 'ALTER' 'VIRTUAL' 'CLUSTER' virtual_cluster_spec 'COMPLETE' 'REPLICATION' 'TO' 'LATEST'
+	| 'ALTER' 'VIRTUAL' 'CLUSTER' virtual_cluster_spec 'SET' 'REPLICATION' replication_options ( ( ',' replication_options ) )*
+	| 'ALTER' 'VIRTUAL' 'CLUSTER' virtual_cluster_spec 'SET' 'REPLICATION' 'SOURCE' source_replication_options_list
+	| 'ALTER' 'VIRTUAL' 'CLUSTER' virtual_cluster_spec 'START' 'REPLICATION' 'OF' virtual_cluster_spec 'ON' physical_cluster opt_with_replication_options
+	| 'ALTER' 'VIRTUAL' 'CLUSTER' virtual_cluster_spec 'GRANT' 'ALL' 'CAPABILITIES'
+	| 'ALTER' 'VIRTUAL' 'CLUSTER' virtual_cluster_spec 'REVOKE' 'ALL' 'CAPABILITIES'
+	| 'ALTER' 'VIRTUAL' 'CLUSTER' virtual_cluster_spec 'RENAME' 'TO' virtual_cluster_spec
+	| 'ALTER' 'VIRTUAL' 'CLUSTER' virtual_cluster_spec 'START' 'SERVICE' 'SHARED'
+	| 'ALTER' 'VIRTUAL' 'CLUSTER' virtual_cluster_spec 'STOP' 'SERVICE'
