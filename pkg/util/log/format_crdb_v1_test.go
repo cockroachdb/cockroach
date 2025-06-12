@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCrdbV1EncodeDecode(t *testing.T) {
@@ -107,9 +108,9 @@ func TestCrdbV1EncodeDecode(t *testing.T) {
 	})
 }
 
-func TestCrdbV1EntryDecoderForVeryLargeEntries(t *testing.T) {
+func entryFormatter() func(s Severity, c Channel, now time.Time, gid int, file string, line int, tags, msg string) string {
 	entryIdx := 1
-	formatEntry := func(s Severity, c Channel, now time.Time, gid int, file string, line int, tags, msg string) string {
+	return func(s Severity, c Channel, now time.Time, gid int, file string, line int, tags, msg string) string {
 		entry := logpb.Entry{
 			Severity:  s,
 			Channel:   c,
@@ -126,7 +127,10 @@ func TestCrdbV1EntryDecoderForVeryLargeEntries(t *testing.T) {
 		_ = FormatLegacyEntry(entry, &buf)
 		return buf.String()
 	}
+}
 
+func TestCrdbV1EntryDecoderForVeryLargeEntries(t *testing.T) {
+	formatEntry := entryFormatter()
 	t1 := timeutil.Now().Round(time.Microsecond)
 	t2 := t1.Add(time.Microsecond)
 
@@ -192,6 +196,64 @@ func TestCrdbV1EntryDecoderForVeryLargeEntries(t *testing.T) {
 	if !reflect.DeepEqual(expected, entries) {
 		t.Fatalf("%s\n", strings.Join(pretty.Diff(expected, entries), "\n"))
 	}
+}
+
+func TestCrdbV1ZipUploadEntryDecoderForVeryLargeEntries(t *testing.T) {
+	formatEntry := entryFormatter()
+	t1 := timeutil.Now().Round(time.Microsecond)
+	t2 := t1.Add(time.Microsecond)
+
+	preambleLength := len(formatEntry(severity.INFO, channel.DEV, t1, 0, "somefile.go", 136, ``, ""))
+	maxMessageLength := bufio.MaxScanTokenSize - preambleLength - 1
+	reallyLongEntry := string(bytes.Repeat([]byte("a"), maxMessageLength)) // just short of MaxScanTokenSize
+	tooLongEntry := reallyLongEntry + "a"                                  // one byte too long
+
+	contents := formatEntry(severity.INFO, channel.DEV, t1, 2, "somefile.go", 138, ``, reallyLongEntry)
+	contents += formatEntry(severity.INFO, channel.DEV, t2, 3, "somefile.go", 139, ``, tooLongEntry)
+
+	decoder, err := NewEntryDecoderWithFormat(
+		strings.NewReader(contents), WithFlattenedSensitiveData, "crdb-v1-zip-upload",
+	)
+	require.NoError(t, err, "error while constructing decoder")
+
+	var entries []logpb.Entry
+	var entry logpb.Entry
+	for {
+		if err := decoder.Decode(&entry); err != nil {
+			if err == io.EOF {
+				break
+			}
+			require.NoError(t, err, "error while decoding")
+		}
+		entries = append(entries, entry)
+	}
+
+	expected := []logpb.Entry{
+		{
+			Severity:  severity.INFO,
+			Channel:   channel.DEV,
+			Time:      t1.UnixNano(),
+			Goroutine: 2,
+			File:      `somefile.go`,
+			Line:      138,
+			Message:   reallyLongEntry,
+			Counter:   2,
+			TenantID:  serverident.SystemTenantID,
+		},
+		{
+			Severity:  severity.INFO,
+			Channel:   channel.DEV,
+			Time:      t2.UnixNano(),
+			Goroutine: 3,
+			File:      `somefile.go`,
+			Line:      139,
+			Message:   tooLongEntry, // Should have the entire length, not truncated.
+			Counter:   3,
+			TenantID:  serverident.SystemTenantID,
+		},
+	}
+
+	require.Equal(t, expected, entries, "entries do not match")
 }
 
 func TestReadTenantDetails(t *testing.T) {

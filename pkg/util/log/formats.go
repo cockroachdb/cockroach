@@ -29,6 +29,7 @@ type logFormatter interface {
 
 // FormatParsers maps the user facing format names to the internal representation.
 var FormatParsers = map[string]string{
+	"crdb-v1-zip-upload":  "v1-zip-upload",
 	"crdb-v1":             "v1",
 	"crdb-v1-count":       "v1",
 	"crdb-v1-tty":         "v1",
