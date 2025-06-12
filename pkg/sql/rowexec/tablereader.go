@@ -199,17 +199,14 @@ func (tr *tableReader) startScan(ctx context.Context) error {
 	if cb := tr.FlowCtx.Cfg.TestingKnobs.TableReaderStartScanCb; cb != nil {
 		cb()
 	}
-	limitBatches := !tr.parallelize
-	var bytesLimit rowinfra.BytesLimit
-	if !limitBatches {
-		bytesLimit = rowinfra.NoBytesLimit
-	} else {
+	bytesLimit := rowinfra.NoBytesLimit
+	if !tr.parallelize {
 		bytesLimit = rowinfra.BytesLimit(tr.FlowCtx.Cfg.TestingKnobs.TableReaderBatchBytesLimit)
 		if bytesLimit == 0 {
 			bytesLimit = rowinfra.GetDefaultBatchBytesLimit(tr.FlowCtx.EvalCtx.TestingKnobs.ForceProductionValues)
 		}
 	}
-	log.VEventf(ctx, 1, "starting scan with limitBatches %t", limitBatches)
+	log.VEventf(ctx, 1, "starting scan with parallelize=%t", tr.parallelize)
 	var err error
 	if tr.maxTimestampAge == 0 {
 		err = tr.fetcher.StartScan(
