@@ -232,34 +232,35 @@ func (as *AllocatorSync) MMAPreApply(
 func (as *AllocatorSync) PostApply(changeIDs []mma.ChangeID, success bool) {
 	as.mmAllocator.AdjustPendingChangesDisposition(changeIDs, success)
 
-	for _, changeID := range changeIDs {
-		tracked, ok := as.trackedChanges[changeID]
-		if !ok {
-			// Deleted in a previous iteration, see below.
-			continue
+	if len(changeIDs) == 0 {
+		// No changes to apply, nothing to do.
+		return
+	}
+
+	trackedChangeID := changeIDs[0]
+	tracked, ok := as.trackedChanges[trackedChangeID]
+	if !ok {
+		// Deleted in a previous iteration, see below.
+		panic(fmt.Sprintf("changeID %d not found in tracked changes", trackedChangeID))
+	}
+	delete(as.trackedChanges, trackedChangeID)
+	if !success {
+		// Don't need to update the storepool stats if the change failed.
+		return
+	}
+	switch tracked.typ {
+	case AllocatorChangeTypeLeaseTransfer:
+		as.sp.UpdateLocalStoresAfterLeaseTransfer(tracked.transferFrom,
+			tracked.transferTo, tracked.usage)
+	case AllocatorChangeTypeChangeReplicas:
+		for _, chg := range tracked.chgs {
+			as.sp.UpdateLocalStoreAfterRebalance(
+				chg.Target.StoreID, tracked.usage, chg.ChangeType)
 		}
-		for _, id := range tracked.changeIDs {
-			// Delete any associated changes, which were registered in the same call.
-			delete(as.trackedChanges, id)
-		}
-		if !success {
-			// Don't need to update the storepool stats if the change failed.
-			continue
-		}
-		switch tracked.typ {
-		case AllocatorChangeTypeLeaseTransfer:
-			as.sp.UpdateLocalStoresAfterLeaseTransfer(tracked.transferFrom,
-				tracked.transferTo, tracked.usage)
-		case AllocatorChangeTypeChangeReplicas:
-			for _, chg := range tracked.chgs {
-				as.sp.UpdateLocalStoreAfterRebalance(
-					chg.Target.StoreID, tracked.usage, chg.ChangeType)
-			}
-		case AllocatorChangeTypeRelocateRange:
-			// TODO(kvoli): We don't need to implement this until later, as only one
-			// store rebalancer will run at a time and only the old store rebalancer
-			// issues relocate range commands.
-			panic("unimplemented")
-		}
+	case AllocatorChangeTypeRelocateRange:
+		// TODO(kvoli): We don't need to implement this until later, as only one
+		// store rebalancer will run at a time and only the old store rebalancer
+		// issues relocate range commands.
+		panic("unimplemented")
 	}
 }
