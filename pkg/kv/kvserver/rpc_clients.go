@@ -46,16 +46,16 @@ func DialPerReplicaClient(
 
 // DialPerStoreClient establishes a DRPC connection if enabled; otherwise,
 // it falls back to gRPC. The established connection is used to create a
-// PerStoreClient.
+// RPCPerStoreClient.
 func DialPerStoreClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
-) (PerStoreClient, error) {
+) (RPCPerStoreClient, error) {
 	if !rpcbase.TODODRPC {
 		conn, err := nd.Dial(ctx, nodeID, class)
 		if err != nil {
 			return nil, err
 		}
-		return NewPerStoreClient(conn), nil
+		return NewGRPCPerStoreClientAdapter(conn), nil
 	}
 	return nil, nil
 }
