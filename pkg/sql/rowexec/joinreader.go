@@ -341,15 +341,24 @@ func newJoinReader(
 		if flowCtx.EvalCtx.SessionData().ParallelizeMultiKeyLookupJoinsEnabled {
 			parallelize = true
 		}
+		if spec.MaintainLookupOrdering {
+			// We need to disable parallelism for the traditional fetcher in
+			// order to ensure the lookups are ordered.
+			parallelize = false
+		}
 	}
 	if spec.MaintainLookupOrdering {
-		// MaintainLookupOrdering indicates the output of the lookup joiner
-		// should be sorted by <inputCols>, <lookupCols>. It doesn't make sense
-		// for MaintainLookupOrdering to be true when MaintainOrdering is not.
-		//
-		// Additionally, we need to disable parallelism for the traditional
-		// fetcher in order to ensure the lookups are ordered.
-		spec.MaintainOrdering, parallelize = true, false
+		if !spec.MaintainOrdering {
+			// MaintainLookupOrdering indicates the output of the lookup joiner
+			// should be sorted by <inputCols>, <lookupCols>. It doesn't make
+			// sense for MaintainLookupOrdering to be true when MaintainOrdering
+			// is not.
+			return nil, errors.AssertionFailedf("MaintainLookupOrdering requires that MaintainOrdering is set")
+		}
+		if spec.Parallelize {
+			// Parallelization must have been disabled in the execbuilder.
+			return nil, errors.AssertionFailedf("Parallelize requires that MaintainLookupOrdering is not set")
+		}
 	}
 	useStreamer, txn, err := flowCtx.UseStreamer(ctx)
 	if err != nil {
