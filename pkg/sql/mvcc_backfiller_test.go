@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -216,6 +217,9 @@ func TestIndexBackfillFractionTracking(t *testing.T) {
 
 	var codec keys.SQLCodec
 	params.Knobs = base.TestingKnobs{
+		UpgradeManager: &upgradebase.TestingKnobs{
+			SkipHotRangesLoggerJobBootstrap: true,
+		},
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
 			RunBeforeResume: func(id jobspb.JobID) error {

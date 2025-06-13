@@ -372,6 +372,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_StandbyReadTsPoller{StandbyReadTsPoller: &d}
 	case SqlActivityFlushProgress:
 		return &Progress_SqlActivityFlush{SqlActivityFlush: &d}
+	case HotRangesLoggerProgress:
+		return &Progress_HotRangesLogger{HotRangesLogger: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown progress type %T", d))
 	}

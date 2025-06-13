@@ -215,6 +215,7 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/upgrade/upgradebase",
         "//pkg/util",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding/csv",
