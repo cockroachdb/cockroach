@@ -36,7 +36,6 @@ type client struct {
 	resolvedPlaceholder   bool                     // Whether we've resolved the nodeSet's placeholder for this client
 	addr                  net.Addr                 // Peer node network address
 	locality              roachpb.Locality         // Peer node locality (if known)
-	nodeDialer            rpcbase.NodeDialer       // Dialer for dialing connections to the peer node
 	forwardAddr           *util.UnresolvedAddr     // Set if disconnected with an alternate addr
 	prevHighWaterStamps   map[roachpb.NodeID]int64 // Last high water timestamps sent to remote server
 	remoteHighWaterStamps map[roachpb.NodeID]int64 // Remote server's high water timestamps
