@@ -79,6 +79,13 @@ func (s *LogSpy) ReadAll() []logpb.Entry {
 	return s.readLocked(math.MaxUint32)
 }
 
+// Clear clears the logs contained within the spy.
+func (s *LogSpy) Clear() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.logs = []logpb.Entry{}
+}
+
 // ReadAll consumes the specified number of logs contained within
 // the spy and returns them as a list. Once the logs are consumed
 // they cannot be read again.
