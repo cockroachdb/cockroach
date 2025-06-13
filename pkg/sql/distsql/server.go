@@ -354,7 +354,6 @@ func (ds *ServerImpl) setupFlow(
 			ReCache:                   ds.regexpCache,
 			ToCharFormatCache:         ds.toCharFormatCache,
 			Locality:                  ds.ServerConfig.Locality,
-			OriginalLocality:          ds.ServerConfig.Locality,
 			Tracer:                    ds.ServerConfig.Tracer,
 			Planner:                   &faketreeeval.DummyEvalPlanner{Monitor: monitor},
 			StreamManagerFactory:      &faketreeeval.DummyStreamManagerFactory{},

@@ -2969,7 +2969,6 @@ func createSchemaChangeEvalCtx(
 			NodeID:               execCfg.NodeInfo.NodeID,
 			Codec:                execCfg.Codec,
 			Locality:             execCfg.Locality,
-			OriginalLocality:     execCfg.Locality,
 			Tracer:               execCfg.AmbientCtx.Tracer,
 		},
 	}
