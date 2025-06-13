@@ -238,7 +238,7 @@ func (m *Outbox) mainLoop(ctx context.Context, wg *sync.WaitGroup) (retErr error
 			log.VWarningf(ctx, 1, "Outbox Dial connection error, distributed query will fail: %+v", err)
 			return err
 		}
-		client := execinfrapb.NewDistSQLClient(conn)
+		client := execinfrapb.NewGRPCDistSQLClientAdapter(conn)
 		if log.V(2) {
 			log.Infof(ctx, "outbox: calling FlowStream")
 		}

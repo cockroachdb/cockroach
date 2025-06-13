@@ -868,7 +868,7 @@ func TestGRPCAuthentication(t *testing.T) {
 			return err
 		}, true},
 		{"distSQL", func(ctx context.Context, conn *grpc.ClientConn) error {
-			stream, err := execinfrapb.NewDistSQLClient(conn).FlowStream(ctx)
+			stream, err := execinfrapb.NewGRPCDistSQLClientAdapter(conn).FlowStream(ctx)
 			if err != nil {
 				return err
 			}
