@@ -940,3 +940,22 @@ subtest end
 # Regression test for incorrectly marking this variable as boolean.
 statement ok
 SET copy_num_retries_per_batch = 5;
+
+# Tests for a byte-size setting where integer values are provided (which are
+# treated as number of bytes).
+statement ok
+SET distsql_workmem = 1048576
+
+query T
+SHOW distsql_workmem
+----
+1.0 MiB
+
+statement error distsql_workmem cannot be set to a negative value
+SET distsql_workmem = -1
+
+statement error distsql_workmem can only be set to a value greater than 1
+SET distsql_workmem = 1
+
+statement ok
+RESET distsql_workmem

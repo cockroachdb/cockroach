@@ -851,3 +851,41 @@ func (b *Builder) makePLpgSQLRaiseFn(args memo.ScalarListExpr) opt.ScalarExpr {
 		},
 	)
 }
+
+// appendOrdinaryColumnsFromTable adds all non-mutation and non-system columns
+// from the given table metadata to the given scope. References to these columns
+// will be tracked in the schema dependencies, if trackSchemaDeps is set.
+func (b *Builder) appendOrdinaryColumnsFromTable(
+	s *scope, tabMeta *opt.TableMeta, alias *tree.TableName,
+) {
+	tab := tabMeta.Table
+	if s.cols == nil {
+		s.cols = make([]scopeColumn, 0, tab.ColumnCount())
+	}
+	for i, n := 0, tab.ColumnCount(); i < n; i++ {
+		tabCol := tab.Column(i)
+		if tabCol.Kind() != cat.Ordinary {
+			continue
+		}
+		s.cols = append(s.cols, scopeColumn{
+			name:       scopeColName(tabCol.ColName()),
+			table:      *alias,
+			typ:        tabCol.DatumType(),
+			id:         tabMeta.MetaID.ColumnID(i),
+			visibility: columnVisibility(tabCol.Visibility()),
+		})
+	}
+	if b.trackSchemaDeps && b.evalCtx.SessionData().UseImprovedRoutineDependencyTracking {
+		dep := opt.SchemaDep{DataSource: tab}
+		for i, n := 0, tab.ColumnCount(); i < n; i++ {
+			if tab.Column(i).Kind() != cat.Ordinary {
+				continue
+			}
+			if dep.ColumnIDToOrd == nil {
+				dep.ColumnIDToOrd = make(map[opt.ColumnID]int)
+			}
+			dep.ColumnIDToOrd[tabMeta.MetaID.ColumnID(i)] = i
+		}
+		b.schemaDeps = append(b.schemaDeps, dep)
+	}
+}

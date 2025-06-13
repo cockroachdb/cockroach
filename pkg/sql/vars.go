@@ -77,6 +77,11 @@ type sessionVar struct {
 	// either by SHOW or in the pg_catalog table.
 	Get func(evalCtx *extendedEvalContext, kv *kv.Txn) (string, error)
 
+	// Unit, if set, is a string representing the unit in which the value of
+	// this session variable is expressed by default. It can be empty in which
+	// case the unit is not defined.
+	Unit string
+
 	// Exists returns true if this custom session option exists in the current
 	// context. It's needed to support the current_setting builtin for custom
 	// options. It is only defined for custom options.
@@ -97,6 +102,10 @@ type sessionVar struct {
 	// the Set() method has to operate on strings, because it can be
 	// invoked at a point where there is no evalContext yet (e.g.
 	// upon session initialization in pgwire).
+	//
+	// Additional use case for this field is when we want to allow values of
+	// multiple types to be used when setting the variable (e.g. to accept both
+	// strings and integers).
 	GetStringVal getStringValFn
 
 	// Set performs mutations to effect the change desired by SET commands.
@@ -354,6 +363,7 @@ var varGen = map[string]sessionVar{
 			ms := evalCtx.SessionData().DeadlockTimeout.Nanoseconds() / int64(time.Millisecond)
 			return strconv.FormatInt(ms, 10), nil
 		},
+		Unit: "ms",
 		GlobalDefault: func(sv *settings.Values) string {
 			return "0s"
 		},
@@ -590,6 +600,8 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return string(humanizeutil.IBytes(evalCtx.SessionData().WorkMemLimit)), nil
 		},
+		Unit:         "B",
+		GetStringVal: makeByteSizeVarGetter("distsql_workmem"),
 		GlobalDefault: func(sv *settings.Values) string {
 			return string(humanizeutil.IBytes(settingWorkMemBytes.Get(sv)))
 		},
@@ -1260,6 +1272,7 @@ var varGen = map[string]sessionVar{
 			ms := evalCtx.SessionData().LockTimeout.Nanoseconds() / int64(time.Millisecond)
 			return strconv.FormatInt(ms, 10), nil
 		},
+		Unit: "ms",
 		GlobalDefault: func(sv *settings.Values) string {
 			return clusterLockTimeout.String(sv)
 		},
@@ -1498,6 +1511,7 @@ var varGen = map[string]sessionVar{
 			ms := evalCtx.SessionData().TransactionTimeout.Nanoseconds() / int64(time.Millisecond)
 			return strconv.FormatInt(ms, 10), nil
 		},
+		Unit: "ms",
 		GlobalDefault: func(sv *settings.Values) string {
 			return "0s"
 		},
@@ -1661,6 +1675,7 @@ var varGen = map[string]sessionVar{
 			ms := evalCtx.SessionData().StmtTimeout.Nanoseconds() / int64(time.Millisecond)
 			return strconv.FormatInt(ms, 10), nil
 		},
+		Unit: "ms",
 		GlobalDefault: func(sv *settings.Values) string {
 			return clusterStatementTimeout.String(sv)
 		},
@@ -1674,6 +1689,7 @@ var varGen = map[string]sessionVar{
 			ms := evalCtx.SessionData().IdleInSessionTimeout.Nanoseconds() / int64(time.Millisecond)
 			return strconv.FormatInt(ms, 10), nil
 		},
+		Unit: "ms",
 		GlobalDefault: func(sv *settings.Values) string {
 			return clusterIdleInSessionTimeout.String(sv)
 		},
@@ -1686,6 +1702,7 @@ var varGen = map[string]sessionVar{
 			ms := evalCtx.SessionData().IdleInTransactionSessionTimeout.Nanoseconds() / int64(time.Millisecond)
 			return strconv.FormatInt(ms, 10), nil
 		},
+		Unit: "ms",
 		GlobalDefault: func(sv *settings.Values) string {
 			return clusterIdleInTransactionSessionTimeout.String(sv)
 		},
@@ -2295,6 +2312,8 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return string(humanizeutil.IBytes(evalCtx.SessionData().JoinReaderOrderingStrategyBatchSize)), nil
 		},
+		Unit:         "B",
+		GetStringVal: makeByteSizeVarGetter("join_reader_ordering_strategy_batch_size"),
 		GlobalDefault: func(sv *settings.Values) string {
 			return string(humanizeutil.IBytes(rowexec.JoinReaderOrderingStrategyBatchSize.Get(sv)))
 		},
@@ -2316,6 +2335,8 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return string(humanizeutil.IBytes(evalCtx.SessionData().JoinReaderNoOrderingStrategyBatchSize)), nil
 		},
+		Unit:         "B",
+		GetStringVal: makeByteSizeVarGetter("join_reader_no_ordering_strategy_batch_size"),
 		GlobalDefault: func(sv *settings.Values) string {
 			return string(humanizeutil.IBytes(rowexec.JoinReaderNoOrderingStrategyBatchSize.Get(sv)))
 		},
@@ -2337,6 +2358,8 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return string(humanizeutil.IBytes(evalCtx.SessionData().JoinReaderIndexJoinStrategyBatchSize)), nil
 		},
+		Unit:         "B",
+		GetStringVal: makeByteSizeVarGetter("join_reader_index_join_strategy_batch_size"),
 		GlobalDefault: func(sv *settings.Values) string {
 			return string(humanizeutil.IBytes(execinfra.JoinReaderIndexJoinStrategyBatchSize.Get(sv)))
 		},
@@ -2358,6 +2381,8 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return string(humanizeutil.IBytes(evalCtx.SessionData().IndexJoinStreamerBatchSize)), nil
 		},
+		Unit:         "B",
+		GetStringVal: makeByteSizeVarGetter("index_join_streamer_batch_size"),
 		GlobalDefault: func(sv *settings.Values) string {
 			return string(humanizeutil.IBytes(colfetcher.IndexJoinStreamerBatchSize.Get(sv)))
 		},
@@ -3053,6 +3078,8 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return string(humanizeutil.IBytes(evalCtx.SessionData().PreparedStatementsCacheSize)), nil
 		},
+		Unit:         "B",
+		GetStringVal: makeByteSizeVarGetter("prepared_statements_cache_size"),
 		GlobalDefault: func(_ *settings.Values) string {
 			return string(humanizeutil.IBytes(0))
 		},
@@ -4062,6 +4089,23 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: func(sv *settings.Values) string {
 			return "2ms"
 		},
+	},
+
+	// CockroachDB extension.
+	`use_improved_routine_dependency_tracking`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`use_improved_routine_dependency_tracking`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("use_improved_routine_dependency_tracking", s)
+			if err != nil {
+				return err
+			}
+			m.SetUseImprovedRoutineDependencyTracking(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().UseImprovedRoutineDependencyTracking), nil
+		},
+		GlobalDefault: globalTrue,
 	},
 }
 

@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -227,28 +226,6 @@ func (s *scope) appendColumnsFromScope(src *scope) {
 	// the new scope.
 	for i := l; i < len(s.cols); i++ {
 		s.cols[i].scalar = nil
-	}
-}
-
-// appendOrdinaryColumnsFromTable adds all non-mutation and non-system columns from the
-// given table metadata to this scope.
-func (s *scope) appendOrdinaryColumnsFromTable(tabMeta *opt.TableMeta, alias *tree.TableName) {
-	tab := tabMeta.Table
-	if s.cols == nil {
-		s.cols = make([]scopeColumn, 0, tab.ColumnCount())
-	}
-	for i, n := 0, tab.ColumnCount(); i < n; i++ {
-		tabCol := tab.Column(i)
-		if tabCol.Kind() != cat.Ordinary {
-			continue
-		}
-		s.cols = append(s.cols, scopeColumn{
-			name:       scopeColName(tabCol.ColName()),
-			table:      *alias,
-			typ:        tabCol.DatumType(),
-			id:         tabMeta.MetaID.ColumnID(i),
-			visibility: columnVisibility(tabCol.Visibility()),
-		})
 	}
 }
 

@@ -264,3 +264,166 @@ statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(b > 1:::IN
 SELECT f_checkb();
 
 subtest end
+
+subtest regression_146414
+
+statement ok
+CREATE TABLE t146414 (
+  a INT NOT NULL,
+  b INT AS (a + 1) VIRTUAL
+)
+
+statement ok
+CREATE FUNCTION f146414() RETURNS INT LANGUAGE SQL AS $$
+  INSERT INTO t146414 (a) VALUES (100) RETURNING b;
+  SELECT 1;
+$$;
+
+statement error pgcode 2BP01 pq: cannot drop column "b" because function "f146414" depends on it
+ALTER TABLE t146414 DROP COLUMN b;
+
+statement ok
+SELECT f146414()
+
+subtest end
+
+subtest regression_145098
+
+statement ok
+CREATE TABLE t_computed (
+  a INT NOT NULL,
+  b INT AS (a + 1) STORED,
+  c INT AS (a * 2) VIRTUAL,
+  INDEX i (a ASC) USING HASH
+)
+
+# An insert routine created with use_improved_routine_dependency_tracking = true
+# (the default) should not depend on columns other than the target column "a".
+statement ok
+CREATE FUNCTION f145098() RETURNS INT LANGUAGE SQL AS $$
+  INSERT INTO t_computed VALUES (100);
+  SELECT 1;
+$$;
+
+statement ok
+SELECT f145098();
+
+query III
+SELECT * FROM t_computed;
+----
+100  101  200
+
+# The internal computed column used by the hash-sharded index should not be
+# included in the routine's dependencies, and the drop should succeed.
+statement ok
+DROP INDEX i;
+
+statement ok
+SELECT f145098();
+
+query III
+SELECT * FROM t_computed;
+----
+100  101  200
+100  101  200
+
+statement ok
+ALTER TABLE t_computed DROP COLUMN c;
+
+statement ok
+SELECT f145098();
+
+query II
+SELECT * FROM t_computed;
+----
+100  101
+100  101
+100  101
+
+statement ok
+ALTER TABLE t_computed DROP COLUMN b;
+
+statement ok
+SELECT f145098();
+
+query I
+SELECT * FROM t_computed;
+----
+100
+100
+100
+100
+
+statement error pgcode 2BP01 pq: cannot drop column "a" because function "f145098" depends on it
+ALTER TABLE t_computed DROP COLUMN a;
+
+statement ok
+DROP FUNCTION f145098;
+
+statement ok
+DROP TABLE t_computed;
+
+statement ok
+CREATE TABLE t_computed (
+  a INT NOT NULL,
+  b INT AS (a + 1) STORED,
+  c INT AS (a * 2) VIRTUAL,
+  INDEX i (a ASC) USING HASH
+)
+
+# With use_improved_routine_dependency_tracking = false, the insert routine
+# will depend on all columns in the table.
+statement ok
+SET use_improved_routine_dependency_tracking = false;
+
+statement ok
+CREATE FUNCTION f145098() RETURNS INT LANGUAGE SQL AS $$
+  INSERT INTO t_computed VALUES (100);
+  SELECT 1;
+$$;
+
+statement ok
+RESET use_improved_routine_dependency_tracking;
+
+statement error pgcode 2BP01 pq: cannot drop column "crdb_internal_a_shard_16" because function "f145098" depends on it
+DROP INDEX i;
+
+statement error pgcode 2BP01 pq: cannot drop column "c" because function "f145098" depends on it
+ALTER TABLE t_computed DROP COLUMN c;
+
+statement error pgcode 2BP01 pq: cannot drop column "b" because function "f145098" depends on it
+ALTER TABLE t_computed DROP COLUMN b;
+
+statement ok
+DROP FUNCTION f145098;
+
+statement ok
+DROP TABLE t_computed;
+
+# Case where the INSERT statement has a RETURNING clause that references the
+# hash-sharded index column. In this case, a dependency *should* be added.
+statement ok
+CREATE TABLE t_hash_sharded (
+  a INT NOT NULL,
+  INDEX i (a ASC) USING HASH
+)
+
+statement ok
+CREATE FUNCTION f145098() RETURNS INT LANGUAGE SQL AS $$
+  INSERT INTO t_hash_sharded VALUES (100) RETURNING crdb_internal_a_shard_16;
+  SELECT 1;
+$$;
+
+statement error pgcode 2BP01 pq: cannot drop column "crdb_internal_a_shard_16" because function "f145098" depends on it
+DROP INDEX i;
+
+statement ok
+SELECT f145098();
+
+statement ok
+DROP FUNCTION f145098;
+
+statement ok
+DROP TABLE t_hash_sharded;
+
+subtest end
