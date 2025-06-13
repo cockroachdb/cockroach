@@ -992,6 +992,7 @@ vectorized: true
     │ estimated row count: 10 (missing stats)
     │ table: tc@tc_pkey
     │ key columns: rowid
+    │ parallel
     │
     └── • scan
           columns: (a, rowid)
@@ -1020,6 +1021,7 @@ vectorized: true
     │ estimated row count: 10 (missing stats)
     │ table: tc@tc_pkey
     │ key columns: rowid
+    │ parallel
     │
     └── • scan
           columns: (a, rowid)

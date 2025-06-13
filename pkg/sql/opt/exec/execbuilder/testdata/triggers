@@ -960,6 +960,7 @@ quality of service: regular
         │           │ table: parent@parent_pkey
         │           │ equality: (fk_new) = (k)
         │           │ equality cols are key
+        │           │ parallel
         │           │
         │           └── • filter
         │               │ columns: (fk_new)

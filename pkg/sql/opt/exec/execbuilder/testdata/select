@@ -1624,6 +1624,7 @@ vectorized: true
     │ estimated row count: 2 (missing stats)
     │ table: a@a_pkey
     │ key columns: a
+    │ parallel
     │
     └── • scan
           columns: (a, item)
@@ -1648,6 +1649,7 @@ vectorized: true
     │ estimated row count: 110 (missing stats)
     │ table: a@a_pkey
     │ key columns: a
+    │ parallel
     │
     └── • scan
           columns: (a, price)
@@ -1834,6 +1836,7 @@ vectorized: true
     │ estimated row count: 110 (missing stats)
     │ table: a@a_pkey
     │ key columns: a
+    │ parallel
     │
     └── • scan
           columns: (a, price)
