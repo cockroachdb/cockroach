@@ -465,7 +465,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/eclipse/paho.mqtt.golang/com_github_eclipse_paho_mqtt_golang-v1.2.0.zip": "d36337c4b5a2752b91bcd437bd74e0907bf6c9e6c611dab88407bcca8462e918",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/edsrzf/mmap-go/com_github_edsrzf_mmap_go-v1.0.0.zip": "851a1d4d6e30f97ab23b7e4a6a7da9d1842f126d738f7386010c6ee7bf82518e",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/eknkc/amber/com_github_eknkc_amber-v0.0.0-20171010120322-cdade1c07385.zip": "b1dde9f3713742ad0961825a2d962bd99d9390daf8596e7680dfb5f395e54e22",
-    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/elastic/gosigar/com_github_elastic_gosigar-v0.14.3.zip": "abbc9f20d419423001a1fa3d326082759d92b6f6ee0c40b703b036894702d65a",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/elastic/gosigar/com_github_elastic_gosigar-v0.14.4-0.20250606160555-44388520074d.zip": "e9138d19e29c9f9818a4372babc575932cd6e7f4fe89707d26ca3e650f624bef",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/elazarl/go-bindata-assetfs/com_github_elazarl_go_bindata_assetfs-v1.0.1.zip": "ee91e4dedf0efd24ddf201e8f8b62f0b79a64efd0d205b30bcd9fa95f905cd15",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/elazarl/goproxy/com_github_elazarl_goproxy-v0.0.0-20180725130230-947c36da3153.zip": "21b7d89eab7acb25fb1b3affa494281fae8c31becf1ee2c6009da7249320d328",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/emicklei/dot/com_github_emicklei_dot-v0.15.0.zip": "b298e957fd7e38cd76b3953e47afcfd673a4f051884818a294ec4703476b6a39",
