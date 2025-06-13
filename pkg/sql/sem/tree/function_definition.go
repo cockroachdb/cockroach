@@ -105,14 +105,11 @@ type FunctionProperties struct {
 	// considered undocumented.
 	Private bool
 
-	// DistsqlBlocklist is set to true when a function depends on
-	// members of the EvalContext that are not marshaled by DistSQL
-	// (e.g. planner). Currently used for DistSQL to determine if
-	// expressions can be evaluated on a different node without sending
-	// over the EvalContext.
-	//
-	// TODO(andrei): Get rid of the planner from the EvalContext and then we can
-	// get rid of this blocklist.
+	// DistsqlBlocklist is set to true when a function depends on members of the
+	// EvalContext that are not marshaled by DistSQL (e.g. anything inside Planner
+	// other than Mon() which is implemented by DummyEvalPlanner). Currently used
+	// for DistSQL to determine if expressions can be evaluated on a different
+	// node without sending over the EvalContext.
 	DistsqlBlocklist bool
 
 	// Category is used to generate documentation strings.

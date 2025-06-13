@@ -922,7 +922,10 @@ var pgBuiltins = map[string]builtinDefinition{
 	// none.
 	// https://www.postgresql.org/docs/11/functions-info.html
 	"pg_my_temp_schema": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Oid),
@@ -955,7 +958,10 @@ var pgBuiltins = map[string]builtinDefinition{
 	// session's temporary schema.
 	// https://www.postgresql.org/docs/11/functions-info.html
 	"pg_is_other_temp_schema": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),

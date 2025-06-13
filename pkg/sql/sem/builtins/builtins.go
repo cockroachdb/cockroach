@@ -4439,7 +4439,8 @@ value if you rely on the HLC for accuracy.`,
 
 	"oidvectortypes": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategoryCompatibility,
+			Category:         builtinconstants.CategoryCompatibility,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -4631,7 +4632,10 @@ value if you rely on the HLC for accuracy.`,
 		}),
 
 	"crdb_internal.read_file": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "uri", Typ: types.String},
@@ -4647,7 +4651,10 @@ value if you rely on the HLC for accuracy.`,
 		}),
 
 	"crdb_internal.write_file": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "data", Typ: types.Bytes},
@@ -7805,7 +7812,8 @@ table's zone configuration this will return NULL.`,
 	// for table %d"
 	"crdb_internal.force_delete_table_data": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemRepair,
+			Category:         builtinconstants.CategorySystemRepair,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "id", Typ: types.Int}},
@@ -7826,7 +7834,8 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.serialize_session": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
@@ -7841,7 +7850,8 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.deserialize_session": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "session", Typ: types.Bytes}},
@@ -7857,7 +7867,8 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.create_session_revival_token": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
@@ -7871,7 +7882,8 @@ table's zone configuration this will return NULL.`,
 	),
 	"crdb_internal.validate_session_revival_token": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "token", Typ: types.Bytes}},
@@ -7887,7 +7899,8 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.validate_ttl_scheduled_jobs": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
@@ -7907,7 +7920,8 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.repair_ttl_table_scheduled_job": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
@@ -8007,7 +8021,8 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.revalidate_unique_constraints_in_all_tables": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
@@ -8429,7 +8444,8 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 	),
 	"crdb_internal.fingerprint": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		tree.Overload{
 			// If the second arg is set to true, this overload allows the caller to
@@ -9015,8 +9031,9 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 		},
 	),
 	"crdb_internal.plpgsql_gen_cursor_name": makeBuiltin(tree.FunctionProperties{
-		Category:     builtinconstants.CategoryIDGeneration,
-		Undocumented: true,
+		Category:         builtinconstants.CategoryIDGeneration,
+		Undocumented:     true,
+		DistsqlBlocklist: true, // applicable only on the gateway
 	},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -9036,8 +9053,9 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 		},
 	),
 	"crdb_internal.plpgsql_close": makeBuiltin(tree.FunctionProperties{
-		Category:     builtinconstants.CategoryString,
-		Undocumented: true,
+		Category:         builtinconstants.CategoryString,
+		Undocumented:     true,
+		DistsqlBlocklist: true, // applicable only on the gateway
 	},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "name", Typ: types.RefCursor}},
@@ -9056,8 +9074,9 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 		},
 	),
 	"crdb_internal.plpgsql_fetch": makeBuiltin(tree.FunctionProperties{
-		Category:     builtinconstants.CategoryString,
-		Undocumented: true,
+		Category:         builtinconstants.CategoryString,
+		Undocumented:     true,
+		DistsqlBlocklist: true, // applicable only on the gateway
 	},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -9112,8 +9131,9 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 	),
 	"crdb_internal.protect_mvcc_history": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     builtinconstants.CategoryClusterReplication,
-			Undocumented: true,
+			Category:         builtinconstants.CategoryClusterReplication,
+			Undocumented:     true,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -9150,8 +9170,9 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 	),
 	"crdb_internal.extend_mvcc_history_protection": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     builtinconstants.CategoryClusterReplication,
-			Undocumented: true,
+			Category:         builtinconstants.CategoryClusterReplication,
+			Undocumented:     true,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -9174,8 +9195,9 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 	),
 	"crdb_internal.clear_query_plan_cache": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     builtinconstants.CategorySystemRepair,
-			Undocumented: true,
+			Category:         builtinconstants.CategorySystemRepair,
+			Undocumented:     true,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
@@ -9190,8 +9212,9 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 	),
 	"crdb_internal.clear_table_stats_cache": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     builtinconstants.CategorySystemRepair,
-			Undocumented: true,
+			Category:         builtinconstants.CategorySystemRepair,
+			Undocumented:     true,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
@@ -9221,7 +9244,11 @@ WHERE object_id = table_descriptor_id
 			Language:   tree.RoutineLangSQL,
 		},
 	),
-	"crdb_internal.type_is_indexable": makeBuiltin(defProps(),
+	"crdb_internal.type_is_indexable": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -9244,8 +9271,9 @@ WHERE object_id = table_descriptor_id
 	),
 	"crdb_internal.backup_compaction": makeBuiltin(
 		tree.FunctionProperties{
-			Undocumented: true,
-			ReturnLabels: []string{"job_id"},
+			Undocumented:     true,
+			DistsqlBlocklist: true, // applicable only on the gateway
+			ReturnLabels:     []string{"job_id"},
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{

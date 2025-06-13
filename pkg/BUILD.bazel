@@ -858,6 +858,7 @@ GO_TARGETS = [
     "//pkg/base/serverident:serverident",
     "//pkg/base:base",
     "//pkg/base:base_test",
+    "//pkg/bench/benchprof:benchprof",
     "//pkg/bench/cmd/pgbenchsetup:pgbenchsetup",
     "//pkg/bench/cmd/pgbenchsetup:pgbenchsetup_lib",
     "//pkg/bench/hashbench:hashbench_test",
