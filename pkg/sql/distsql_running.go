@@ -11,6 +11,7 @@ import (
 	"math"
 	"reflect"
 	"runtime"
+	"runtime/trace"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -724,6 +725,7 @@ func (dsp *DistSQLPlanner) Run(
 	evalCtx *eval.Context,
 	finishedSetupFn func(localFlow flowinfra.Flow),
 ) {
+	defer trace.StartRegion(ctx, "DistSQLPlannerRun").End()
 	// Ignore the cleanup function since we will release each spec separately.
 	flows, _ := plan.GenerateFlowSpecs()
 	gatewayFlowSpec, ok := flows[dsp.gatewaySQLInstanceID]
@@ -1764,6 +1766,7 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 	recv *DistSQLReceiver,
 	evalCtxFactory func(usedConcurrently bool) *extendedEvalContext,
 ) (retErr error) {
+	defer trace.StartRegion(ctx, "PlanAndRunAll").End()
 	defer func() {
 		if ppInfo := planCtx.getPortalPauseInfo(); ppInfo != nil && !ppInfo.resumableFlow.cleanup.isComplete {
 			ppInfo.resumableFlow.cleanup.isComplete = true

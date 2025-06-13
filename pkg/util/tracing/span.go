@@ -7,6 +7,7 @@ package tracing
 
 import (
 	"fmt"
+	runtimetrace "runtime/trace"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -44,6 +45,7 @@ import (
 // Span is a fairly thin wrapper around spanInner, dealing with guarding against
 // use-after-Finish and reference counting for pooling and re-allocating.
 type Span struct {
+	reg *runtimetrace.Region
 	// helper is the allocation helper that this span is part of. Used to release
 	// back into a pool on Finish().
 	helper *spanAllocHelper

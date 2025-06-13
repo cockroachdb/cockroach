@@ -8,6 +8,7 @@ package log
 import (
 	"context"
 	"fmt"
+	"runtime/trace"
 	"strings"
 	"time"
 
@@ -51,6 +52,7 @@ func logfDepthInternal(
 	format string,
 	args ...interface{},
 ) {
+	trace.Log(ctx, "log", format)
 	if sev == severity.FATAL {
 		// Timeout logic should stay at the top of this call to capture all
 		// writes that happen afterwards.

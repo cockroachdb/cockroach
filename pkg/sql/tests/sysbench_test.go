@@ -898,6 +898,15 @@ func benchmarkSysbenchImpl(b *testing.B, parallel bool) {
 func runSysbenchOuter(b *testing.B, sys sysbenchDriver, opFn sysbenchWorkload, parallel bool) {
 	sys.prep(rand.New(rand.NewSource(0)))
 
+	// Hijack CPU profile to make a clean profile.
+	if outCPU := testProfileFile(b, "cpuprofile"); outCPU != "" {
+		runtimepprof.StopCPUProfile()
+		f, err := os.Create(outCPU)
+		require.NoError(b, err)
+		defer f.Close()
+		require.NoError(b, runtimepprof.StartCPUProfile(f))
+		defer runtimepprof.StopCPUProfile()
+	}
 	defer startAllocsProfile(b).Stop(b)
 	defer b.StopTimer()
 

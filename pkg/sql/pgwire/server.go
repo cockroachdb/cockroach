@@ -11,6 +11,7 @@ import (
 	"crypto/tls"
 	"io"
 	"net"
+	"runtime/trace"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1257,6 +1258,7 @@ func (s *Server) serveImpl(
 					}
 				}
 			}
+			defer trace.StartRegion(ctx, "pgwireHandleMsg").End()
 			isSimpleQuery := typ == pgwirebase.ClientMsgSimpleQuery
 			if err != nil {
 				if pgwirebase.IsMessageTooBigError(err) {

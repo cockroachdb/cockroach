@@ -11,6 +11,7 @@ import (
 	"io"
 	"math"
 	"math/rand"
+	"runtime/trace"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -2298,6 +2299,10 @@ func (ex *connExecutor) execCmd() (retErr error) {
 	if err != nil {
 		return err // err could be io.EOF
 	}
+	ctx, task := trace.NewTask(ctx, "ExecPortal")
+	defer task.End()
+
+	defer trace.StartRegion(ctx, cmd.command()).End()
 
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		ex.sessionEventf(ctx, "[%s pos:%d] executing %s",

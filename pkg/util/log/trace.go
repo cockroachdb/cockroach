@@ -7,6 +7,7 @@ package log
 
 import (
 	"context"
+	"runtime/trace"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
@@ -82,6 +83,7 @@ func Event(ctx context.Context, msg string) {
 // Eventf looks for a tracing span in the context and formats and logs the
 // given message to it.
 func Eventf(ctx context.Context, format string, args ...interface{}) {
+	trace.Log(ctx, "event", format)
 	sp := getSpan(ctx)
 	if sp == nil {
 		// Nothing to log. Skip the work.
@@ -117,6 +119,7 @@ func vEventf(
 	format string,
 	args ...interface{},
 ) {
+	trace.Log(ctx, "veventf", format)
 	if VDepth(level, 1+depth) {
 		// Log the message (which also logs an event).
 		sev := severity.INFO
