@@ -2230,43 +2230,6 @@ func (c *ElementCollection[E]) FilterSecondaryIndex() *ElementCollection[*Second
 	return (*ElementCollection[*SecondaryIndex])(ret)
 }
 
-func (e SecondaryIndexPartial) element() {}
-
-// Element implements ElementGetter.
-func (e * ElementProto_SecondaryIndexPartial) Element() Element {
-	return e.SecondaryIndexPartial
-}
-
-// ForEachSecondaryIndexPartial iterates over elements of type SecondaryIndexPartial.
-// Deprecated
-func ForEachSecondaryIndexPartial(
-	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *SecondaryIndexPartial),
-) {
-  c.FilterSecondaryIndexPartial().ForEach(fn)
-}
-
-// FindSecondaryIndexPartial finds the first element of type SecondaryIndexPartial.
-// Deprecated
-func FindSecondaryIndexPartial(
-	c *ElementCollection[Element],
-) (current Status, target TargetStatus, element *SecondaryIndexPartial) {
-	if tc := c.FilterSecondaryIndexPartial(); !tc.IsEmpty() {
-		var e Element
-		current, target, e = tc.Get(0)
-		element = e.(*SecondaryIndexPartial)
-	}
-	return current, target, element
-}
-
-// SecondaryIndexPartialElements filters elements of type SecondaryIndexPartial.
-func (c *ElementCollection[E]) FilterSecondaryIndexPartial() *ElementCollection[*SecondaryIndexPartial] {
-	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
-		_, ok := e.(*SecondaryIndexPartial)
-		return ok
-	})
-	return (*ElementCollection[*SecondaryIndexPartial])(ret)
-}
-
 func (e Sequence) element() {}
 
 // Element implements ElementGetter.
@@ -3428,8 +3391,6 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_SchemaParent{ SchemaParent: t}
 		case *SecondaryIndex:
 			e.ElementOneOf = &ElementProto_SecondaryIndex{ SecondaryIndex: t}
-		case *SecondaryIndexPartial:
-			e.ElementOneOf = &ElementProto_SecondaryIndexPartial{ SecondaryIndexPartial: t}
 		case *Sequence:
 			e.ElementOneOf = &ElementProto_Sequence{ Sequence: t}
 		case *SequenceOption:
@@ -3552,7 +3513,6 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_SchemaComment)(nil)),
 	((*ElementProto_SchemaParent)(nil)),
 	((*ElementProto_SecondaryIndex)(nil)),
-	((*ElementProto_SecondaryIndexPartial)(nil)),
 	((*ElementProto_Sequence)(nil)),
 	((*ElementProto_SequenceOption)(nil)),
 	((*ElementProto_SequenceOwner)(nil)),
@@ -3648,7 +3608,6 @@ func GetElementTypes() []interface{} {
 	((*SchemaComment)(nil)),
 	((*SchemaParent)(nil)),
 	((*SecondaryIndex)(nil)),
-	((*SecondaryIndexPartial)(nil)),
 	((*Sequence)(nil)),
 	((*SequenceOption)(nil)),
 	((*SequenceOwner)(nil)),

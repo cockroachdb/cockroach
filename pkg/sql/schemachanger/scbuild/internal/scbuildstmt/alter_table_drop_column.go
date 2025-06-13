@@ -330,8 +330,6 @@ func walkColumnDependencies(
 				sequenceDeps.Add(elt.SequenceID)
 			case *scpb.SecondaryIndex:
 				indexDeps.Add(elt.IndexID)
-			case *scpb.SecondaryIndexPartial:
-				indexDeps.Add(elt.IndexID)
 			case *scpb.IndexColumn:
 				indexDeps.Add(elt.IndexID)
 			case *scpb.ForeignKeyConstraint:
@@ -432,10 +430,6 @@ func panicIfColReferencedInPredicate(
 		switch elt := e.(type) {
 		case *scpb.SecondaryIndex:
 			if elt.EmbeddedExpr != nil && contains(elt.EmbeddedExpr.ReferencedColumnIDs, col.ColumnID) {
-				violatingIndex = elt.IndexID
-			}
-		case *scpb.SecondaryIndexPartial:
-			if contains(elt.ReferencedColumnIDs, col.ColumnID) {
 				violatingIndex = elt.IndexID
 			}
 		case *scpb.UniqueWithoutIndexConstraint:

@@ -167,11 +167,6 @@ func getExpression(element scpb.Element) (*scpb.Expression, error) {
 			return nil, nil
 		}
 		return e.EmbeddedExpr, nil
-	case *scpb.SecondaryIndexPartial:
-		if e == nil {
-			return nil, nil
-		}
-		return &e.Expression, nil
 	case *scpb.CheckConstraint:
 		if e == nil {
 			return nil, nil
@@ -248,7 +243,7 @@ func isIndexDependent(e scpb.Element) bool {
 	case *scpb.IndexName, *scpb.IndexComment, *scpb.IndexColumn,
 		*scpb.IndexZoneConfig:
 		return true
-	case *scpb.IndexPartitioning, *scpb.PartitionZoneConfig, *scpb.SecondaryIndexPartial:
+	case *scpb.IndexPartitioning, *scpb.PartitionZoneConfig:
 		return true
 	}
 	return false
