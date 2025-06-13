@@ -92,6 +92,12 @@ func NewEntryDecoderWithFormat(
 		}
 		decoder.scanner.Split(decoder.split)
 		d = decoder
+	case "v1-zip-upload":
+		decoder := &entryDecoderV1ZipUpload{
+			reader:          bufio.NewReader(in),
+			sensitiveEditor: getEditor(editMode),
+		}
+		d = decoder
 	case "json":
 		d = &entryDecoderJSON{
 			decoder:         json.NewDecoder(in),

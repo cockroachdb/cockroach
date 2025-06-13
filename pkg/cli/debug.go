@@ -1566,7 +1566,7 @@ func init() {
 		"Name of the cluster to associate with the debug zip artifacts. This can be used to identify data in the upstream observability tool.")
 	f.Var(&debugZipUploadOpts.from, "from", "oldest timestamp to include (inclusive)")
 	f.Var(&debugZipUploadOpts.to, "to", "newest timestamp to include (inclusive)")
-	f.StringVar(&debugZipUploadOpts.logFormat, "log-format", "crdb-v1",
+	f.StringVar(&debugZipUploadOpts.logFormat, "log-format", "crdb-v1-zip-upload",
 		"log format of the input files")
 	// the log-format flag is depricated. It will
 	// eventually be removed completely. keeping it hidden for now incase we ever
@@ -1574,6 +1574,9 @@ func init() {
 	f.Lookup("log-format").Hidden = true
 	f.StringVar(&debugZipUploadOpts.gcpProjectID, "gcp-project-id",
 		defaultGCPProjectID, "GCP project ID to use to send debug.zip logs to GCS")
+	// --dry-run is a hidden flag that is only meant to be used for testing and diagnostics
+	f.BoolVar(&debugZipUploadOpts.dryRun, "dry-run", false, "run in dry-run mode without making any actual uploads")
+	f.Lookup("dry-run").Hidden = true
 
 	f = debugDecodeKeyCmd.Flags()
 	f.Var(&decodeKeyOptions.encoding, "encoding", "key argument encoding")
