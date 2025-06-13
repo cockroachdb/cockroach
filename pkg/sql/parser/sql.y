@@ -3160,7 +3160,11 @@ identity_option_elem:
                                   $$.val = tree.SequenceOption{Name: tree.SeqOptCycle} }
   | SET NO CYCLE                     { $$.val = tree.SequenceOption{Name: tree.SeqOptNoCycle} }
   | SET CACHE signed_iconst64        { x := $3.int64()
-                                  $$.val = tree.SequenceOption{Name: tree.SeqOptCache, IntVal: &x} }
+                                  $$.val = tree.SequenceOption{Name: tree.SeqOptCacheNode, IntVal: &x} }
+  | SET PER NODE CACHE signed_iconst64        { x := $5.int64()
+                                  $$.val = tree.SequenceOption{Name: tree.SeqOptCacheNode, IntVal: &x} }
+  | SET PER SESSION CACHE signed_iconst64        { x := $5.int64()
+                                  $$.val = tree.SequenceOption{Name: tree.SeqOptCacheSession, IntVal: &x} }
   | SET INCREMENT signed_iconst64    { x := $3.int64()
                                   $$.val = tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &x} }
   | SET INCREMENT BY signed_iconst64 { x := $4.int64()
@@ -11728,9 +11732,11 @@ sequence_option_elem:
                                      }
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptOwnedBy, ColumnItemVal: columnItem} }
 | CACHE signed_iconst64        { x := $2.int64()
-                                 $$.val = tree.SequenceOption{Name: tree.SeqOptCache, IntVal: &x} }
+                                 $$.val = tree.SequenceOption{Name: tree.SeqOptCacheNode, IntVal: &x} }
 | PER NODE CACHE signed_iconst64  { x := $4.int64()
                                     $$.val = tree.SequenceOption{Name: tree.SeqOptCacheNode, IntVal: &x} }
+| PER SESSION CACHE signed_iconst64  { x := $4.int64()
+                                    $$.val = tree.SequenceOption{Name: tree.SeqOptCacheSession, IntVal: &x} }
 | INCREMENT signed_iconst64    { x := $2.int64()
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &x} }
 | INCREMENT BY signed_iconst64 { x := $3.int64()
