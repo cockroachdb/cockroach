@@ -479,6 +479,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 		// TODO(yuzefovich): re-evaluate whether we want to allow buffered
 		// writes for internal executor.
 		false, /* bufferedWritesEnabled */
+		ex.rng.internal,
 	)
 
 	// Modify the Collection to match the parent executor's Collection.
