@@ -3543,6 +3543,7 @@ authentication failure.
 | 7 | CREDENTIALS_EXPIRED | occur when the credentials provided by the client are expired. |
 | 8 | NO_REPLICATION_ROLEOPTION | occurs when the connection requires a replication role option, but the user does not have it. |
 | 9 | AUTHORIZATION_ERROR | is used for errors during the authorization phase. For example, this would include issues with mapping LDAP groups to SQL roles and granting those roles to the user. |
+| 10 | PROVISIONING_ERROR | is used for errors during the user provisioning phase. This would include errors when the transaction to provision the authenticating user failed to execute. |
 
 
 
