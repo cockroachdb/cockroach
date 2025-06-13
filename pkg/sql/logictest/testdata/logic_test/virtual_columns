@@ -821,7 +821,7 @@ a  b   v
 2  20  22
 3  30  33
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE sc SET (schema_locked = false);
 
@@ -839,7 +839,7 @@ ALTER TABLE sc ADD COLUMN w2 INT AS (b*2) VIRTUAL
 statement ok
 COMMIT
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE sc SET (schema_locked = true);
 
@@ -885,7 +885,7 @@ DROP INDEX v_idx
 statement ok
 ALTER TABLE sc DROP COLUMN v
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE sc SET (schema_locked = false);
 
@@ -903,7 +903,7 @@ CREATE INDEX v_idx ON sc(v)
 statement ok
 END
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE sc SET (schema_locked = true);
 
@@ -920,7 +920,7 @@ DROP INDEX v_idx
 statement ok
 ALTER TABLE sc DROP COLUMN v
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE sc SET (schema_locked = false);
 
@@ -939,7 +939,7 @@ CREATE INDEX partial_idx ON sc(b) WHERE v > 20
 statement ok
 END
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE sc SET (schema_locked = true);
 
@@ -1209,7 +1209,7 @@ statement ok
 CREATE TABLE t63167_a (a INT, v INT AS (a + 1) VIRTUAL);
 CREATE TABLE t63167_b (LIKE t63167_a INCLUDING ALL);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t63167_b]
 ----
@@ -1220,7 +1220,7 @@ CREATE TABLE public.t63167_b (
   CONSTRAINT t63167_b_pkey PRIMARY KEY (rowid ASC)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t63167_b]
 ----
@@ -1334,7 +1334,7 @@ ALTER TABLE virtual_pk ADD COLUMN d INT NOT NULL DEFAULT 42;
 statement ok
 ALTER TABLE virtual_pk DROP COLUMN d;
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE virtual_pk SET (schema_locked = false)
 
@@ -1354,7 +1354,7 @@ SET LOCAL use_declarative_schema_changer = off;
 ALTER TABLE virtual_pk DROP COLUMN d;
 COMMIT;
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE virtual_pk SET (schema_locked = true)
 
@@ -1395,7 +1395,7 @@ ALTER TABLE t_added ADD COLUMN i2 INT2 GENERATED ALWAYS AS (2) VIRTUAL;
 #    CONSTRAINT t_added_pkey PRIMARY KEY (i ASC)
 # )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_added]
 ----
@@ -1409,7 +1409,7 @@ CREATE TABLE public.t_added (
   CONSTRAINT t_added_pkey PRIMARY KEY (i ASC)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_added]
 ----

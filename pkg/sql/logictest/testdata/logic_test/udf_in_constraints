@@ -71,7 +71,7 @@ SELECT get_checks($tbl_id);
     }
 ]
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t1];
 ----
@@ -83,7 +83,7 @@ CREATE TABLE public.t1 (
   CONSTRAINT check_b CHECK (public.f1(b) > 1:::INT8)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t1];
 ----
@@ -401,7 +401,7 @@ ALTER FUNCTION f1 RENAME to f2;
 statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(public\.f2\(b\) > 1:::INT8\)
 INSERT INTO t1 VALUES (2, -1);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t1]
 ----
@@ -414,7 +414,7 @@ CREATE TABLE public.t1 (
   CONSTRAINT cka CHECK (public.f2(a) > 1:::INT8)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t1]
 ----
@@ -442,7 +442,7 @@ CREATE TABLE t(
   FAMILY fam_0_b_a (b, a)
 );
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
@@ -454,7 +454,7 @@ CREATE TABLE public.t (
   CONSTRAINT check_b CHECK (sc1.f1(b) > 1:::INT8)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
@@ -488,7 +488,7 @@ CREATE TABLE alter_add_check_constraint();
 ALTER TABLE alter_add_check_constraint ADD CONSTRAINT noop CHECK (true_is_true());
 COMMIT;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE alter_add_check_constraint];
 ----
@@ -498,7 +498,7 @@ CREATE TABLE public.alter_add_check_constraint (
   CONSTRAINT noop CHECK (public.true_is_true())
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE alter_add_check_constraint];
 ----
@@ -532,7 +532,7 @@ CREATE TABLE a (
 ALTER TABLE a ADD CONSTRAINT is_a_or_b CHECK (is_a_or_b(account_id, account_type));
 COMMIT;
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE a];
 ----
@@ -544,7 +544,7 @@ CREATE TABLE public.a (
   CONSTRAINT is_a_or_b CHECK (public.is_a_or_b(account_id, account_type))
 ) WITH (schema_locked = true);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE a];
 ----

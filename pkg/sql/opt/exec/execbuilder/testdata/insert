@@ -496,7 +496,7 @@ vectorized: true
 # ------------------------------------------------------------------------------
 
 statement ok
-CREATE TABLE mutation(x INT, y INT NOT NULL DEFAULT(10)); INSERT INTO mutation VALUES (1, 1)
+CREATE TABLE mutation(x INT, y INT NOT NULL DEFAULT(10)) WITH (schema_locked=false); INSERT INTO mutation VALUES (1, 1)
 
 statement ok
 BEGIN;

@@ -39,7 +39,7 @@ CREATE TABLE s (
   FAMILY (geom)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE s]
 ----
@@ -54,7 +54,7 @@ CREATE TABLE public.s (
   FAMILY fam_2_geom (geom)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE s]
 ----
@@ -81,7 +81,7 @@ CREATE TABLE drop_j (
 );
 ALTER TABLE drop_j DROP COLUMN j;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE drop_j]
 ----
@@ -93,7 +93,7 @@ CREATE TABLE public.drop_j (
   FAMILY fam_0_a_b_j_rowid (a, b, rowid)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE drop_j]
 ----
@@ -117,7 +117,7 @@ CREATE TABLE drop_a (
 );
 ALTER TABLE drop_a DROP COLUMN a;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE drop_a]
 ----
@@ -129,7 +129,7 @@ CREATE TABLE public.drop_a (
   FAMILY fam_0_a_b_j_rowid (b, j, rowid)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE drop_a]
 ----
@@ -146,7 +146,7 @@ statement ok
 CREATE TABLE src (a INT, b INT, j JSON, INVERTED INDEX (a, j), INVERTED INDEX (a, b, j));
 CREATE TABLE dst (LIKE src INCLUDING INDEXES);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE dst]
 ----
@@ -160,7 +160,7 @@ CREATE TABLE public.dst (
   INVERTED INDEX src_a_b_j_idx (a ASC, b ASC, j)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE dst]
 ----

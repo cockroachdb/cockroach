@@ -14,7 +14,7 @@ CREATE TABLE t (
   FAMILY (k, a, b, c, j, v)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
@@ -34,7 +34,7 @@ CREATE TABLE public.t (
   FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
@@ -54,7 +54,7 @@ CREATE TABLE public.t (
   FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
 ) WITH (schema_locked = true);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t WITH REDACT]
 ----
@@ -74,7 +74,7 @@ CREATE TABLE public.t (
   FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t WITH REDACT]
 ----
@@ -238,7 +238,7 @@ CREATE INDEX t_a_plus_ten_idx ON t ((a + 10))
 statement error index \"err\" contains duplicate expression
 CREATE INDEX err ON t ((a + 10), (a + 10))
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
@@ -258,7 +258,7 @@ CREATE TABLE public.t (
   FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
@@ -278,7 +278,7 @@ CREATE TABLE public.t (
   FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
 ) WITH (schema_locked = true);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE t SET (schema_locked=false);
 
@@ -308,7 +308,7 @@ CREATE INDEX err ON t (crdb_internal_idx_expr_2)
 statement error column \"crdb_internal_idx_expr_2\" is inaccessible and cannot be referenced
 CREATE INDEX err ON t (a) WHERE crdb_internal_idx_expr_2 > 0
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE t SET (schema_locked=true);
 
@@ -414,7 +414,7 @@ ALTER TABLE t ADD COLUMN crdb_internal_idx_expr INT
 statement ok
 ALTER TABLE t DROP COLUMN crdb_internal_idx_expr
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE t SET (schema_locked=false);
 
@@ -433,7 +433,7 @@ CREATE INDEX err ON t (a, (NULL), b)
 statement ok
 CREATE INDEX t_cast_idx ON t (a, (NULL::TEXT), b)
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE t SET (schema_locked=true);
 
@@ -542,7 +542,7 @@ CREATE TABLE copy_generated (LIKE src INCLUDING GENERATED);
 CREATE TABLE copy_indexes (LIKE src INCLUDING INDEXES);
 CREATE TABLE copy_all (LIKE src INCLUDING ALL)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE copy]
 ----
@@ -557,7 +557,7 @@ CREATE TABLE public.copy (
   CONSTRAINT copy_pkey PRIMARY KEY (rowid ASC)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE copy]
 ----
@@ -583,7 +583,7 @@ SELECT count(*) FROM (
 ----
 0
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE copy_generated]
 ----
@@ -598,7 +598,7 @@ CREATE TABLE public.copy_generated (
   CONSTRAINT copy_generated_pkey PRIMARY KEY (rowid ASC)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE copy_generated]
 ----
@@ -624,7 +624,7 @@ SELECT count(*) FROM (
 ----
 0
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE copy_indexes]
 ----
@@ -643,7 +643,7 @@ CREATE TABLE public.copy_indexes (
   VECTOR INDEX src_b_expr_idx (b ASC, (v::VECTOR(3)) vector_l2_ops)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE copy_indexes]
 ----
@@ -673,7 +673,7 @@ SELECT count(*) FROM (
 ----
 5
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE copy_all]
 ----
@@ -692,7 +692,7 @@ CREATE TABLE public.copy_all (
   VECTOR INDEX src_b_expr_idx (b ASC, (v::VECTOR(3)) vector_l2_ops)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE copy_all]
 ----
@@ -738,7 +738,7 @@ CREATE UNIQUE INDEX ON anon (lower(c), b);
 CREATE INDEX ON anon ((a + 10), b, lower(c));
 CREATE INDEX ON anon ((a + 10), (b + 100), lower(c));
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE anon]
 ----
@@ -756,7 +756,7 @@ CREATE TABLE public.anon (
   FAMILY fam_0_k_a_b_c (k, a, b, c)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE anon]
 ----
@@ -791,7 +791,7 @@ CREATE TABLE anon (
   FAMILY (k, a, b, c)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE anon]
 ----
@@ -810,7 +810,7 @@ CREATE TABLE public.anon (
 );
 
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE anon]
 ----
@@ -1379,7 +1379,7 @@ CREATE INDEX t72012_idx ON t72012 ((abs(col)));
 statement ok
 ALTER TABLE t72012 ALTER COLUMN col SET NOT NULL
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t72012
 ----
@@ -1390,7 +1390,7 @@ t72012  CREATE TABLE public.t72012 (
           INDEX t72012_idx (abs(col) ASC)
         );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t72012
 ----
@@ -1421,7 +1421,7 @@ CREATE TABLE t74216 (
     UNIQUE ((a::STRING))
 )
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE t SET (schema_locked = false)
 
@@ -1433,7 +1433,7 @@ CREATE INDEX t_a_times_three_idx ON t ((a * 3));
 SELECT crdb_internal.force_retry('10ms');
 COMMIT
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE t SET (schema_locked = true)
 
@@ -1465,7 +1465,7 @@ CREATE TABLE expr_tab (
   FAMILY fam (a, b, c)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE expr_tab]
 ----
@@ -1478,7 +1478,7 @@ CREATE TABLE public.expr_tab (
   FAMILY fam (a, b, c)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE expr_tab]
 ----
@@ -1511,7 +1511,7 @@ CREATE TABLE expr_tab2 (
   FAMILY fam (a, b, c)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE expr_tab2]
 ----
@@ -1524,7 +1524,7 @@ CREATE TABLE public.expr_tab2 (
   FAMILY fam (a, b, c)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE expr_tab2]
 ----
@@ -1557,7 +1557,7 @@ CREATE TABLE expr_tab3 (
   FAMILY fam (a, b, c)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE expr_tab3]
 ----
@@ -1570,7 +1570,7 @@ CREATE TABLE public.expr_tab3 (
   FAMILY fam (a, b, c)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE expr_tab3]
 ----
@@ -1603,7 +1603,7 @@ CREATE TABLE expr_tab4 (
   FAMILY fam (a, b)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE expr_tab4]
 ----
@@ -1615,7 +1615,7 @@ CREATE TABLE public.expr_tab4 (
   FAMILY fam (a, b)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE expr_tab4]
 ----
@@ -1651,7 +1651,7 @@ CREATE TABLE expr_tab5 (
   FAMILY fam (a, b, c, j, v)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE expr_tab5]
 ----
@@ -1668,7 +1668,7 @@ CREATE TABLE public.expr_tab5 (
   FAMILY fam (a, b, c, j, v)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE expr_tab5]
 ----

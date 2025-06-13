@@ -33,7 +33,7 @@ CREATE TABLE c (
   FAMILY "primary" (id, foo, "bAr", "qUuX")
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE c
 ----
@@ -47,7 +47,7 @@ c  CREATE TABLE public.c (
      INVERTED INDEX "c_bAr_idx" ("bAr")
    );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE c
 ----
@@ -1568,7 +1568,7 @@ INSERT INTO c VALUES(1, ARRAY[], ARRAY['foo', 'bar', 'baz'])
 statement ok
 CREATE INDEX ON c USING GIN (bar)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE c
 ----
@@ -1581,7 +1581,7 @@ c  CREATE TABLE public.c (
      INVERTED INDEX c_bar_idx (bar)
    );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE c
 ----
@@ -1952,7 +1952,7 @@ CREATE TABLE table_desc_inverted_index (
    FAMILY f2 (testdata)
 );
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE table_desc_inverted_index];
 ----
@@ -1966,7 +1966,7 @@ CREATE TABLE public.table_desc_inverted_index (
   FAMILY f2 (testdata)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE table_desc_inverted_index];
 ----

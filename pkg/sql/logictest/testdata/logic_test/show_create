@@ -24,7 +24,7 @@ COMMENT ON INDEX c_a_b_idx IS 'index'
 statement ok
 CREATE TABLE d (d INT PRIMARY KEY)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT colnames
 SHOW CREATE c
 ----
@@ -44,7 +44,7 @@ c           CREATE TABLE public.c (
             COMMENT ON COLUMN public.c.a IS 'column';
             COMMENT ON INDEX public.c@c_a_b_idx IS 'index';
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT colnames
 SHOW CREATE c
 ----
@@ -71,7 +71,7 @@ ALTER TABLE c ADD CONSTRAINT unique_a UNIQUE (a);
 ALTER TABLE c ADD CONSTRAINT unique_b UNIQUE WITHOUT INDEX (b) NOT VALID;
 ALTER TABLE c ADD CONSTRAINT unique_b_partial UNIQUE WITHOUT INDEX (b) WHERE a > 0 NOT VALID;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE c
 ----
@@ -95,7 +95,7 @@ c  CREATE TABLE public.c (
    COMMENT ON COLUMN public.c.a IS 'column';
    COMMENT ON INDEX public.c@c_a_b_idx IS 'index';
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE c
 ----
@@ -136,7 +136,7 @@ onlyif config local-legacy-schema-changer
 statement ok
 ALTER TABLE c VALIDATE CONSTRAINT unique_a;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE c
 ----
@@ -160,7 +160,7 @@ c  CREATE TABLE public.c (
    COMMENT ON COLUMN public.c.a IS 'column';
    COMMENT ON INDEX public.c@c_a_b_idx IS 'index';
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE c
 ----
@@ -184,7 +184,7 @@ c  CREATE TABLE public.c (
    COMMENT ON COLUMN public.c.a IS 'column';
    COMMENT ON INDEX public.c@c_a_b_idx IS 'index';
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE c WITH REDACT
 ----
@@ -208,7 +208,7 @@ c  CREATE TABLE public.c (
    COMMENT ON COLUMN public.c.a IS 'column';
    COMMENT ON INDEX public.c@c_a_b_idx IS 'index';
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE c WITH REDACT
 ----
@@ -232,7 +232,7 @@ c  CREATE TABLE public.c (
    COMMENT ON COLUMN public.c.a IS 'column';
    COMMENT ON INDEX public.c@c_a_b_idx IS 'index';
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE c WITH IGNORE_FOREIGN_KEYS
 ----
@@ -255,7 +255,7 @@ c  CREATE TABLE public.c (
    COMMENT ON COLUMN public.c.a IS 'column';
    COMMENT ON INDEX public.c@c_a_b_idx IS 'index';
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE c WITH IGNORE_FOREIGN_KEYS
 ----
@@ -290,7 +290,7 @@ CREATE TABLE t (c INT);
 statement ok
 COMMENT ON COLUMN t.c IS 'first comment';
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -301,7 +301,7 @@ CREATE TABLE public.t (
 );
 COMMENT ON COLUMN public.t.c IS 'first comment';
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -320,7 +320,7 @@ statement ok
 ALTER TABLE t ALTER COLUMN c TYPE character varying;
 
 skipif config local-legacy-schema-changer
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -332,7 +332,7 @@ CREATE TABLE public.t (
 COMMENT ON COLUMN public.t.c IS 'first comment';
 
 skipif config local-legacy-schema-changer
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -344,7 +344,7 @@ CREATE TABLE public.t (
 COMMENT ON COLUMN public.t.c IS 'first comment';
 
 skipif config local-legacy-schema-changer
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t WITH REDACT];
 ----
@@ -356,7 +356,7 @@ CREATE TABLE public.t (
 COMMENT ON COLUMN public.t.c IS 'first comment';
 
 skipif config local-legacy-schema-changer
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t WITH REDACT];
 ----
@@ -412,7 +412,7 @@ CREATE TYPE SC2.COMP1 AS (C SMALLINT, D BOOL);
 statement ok
 CREATE TABLE T_WITH_COMPS (C1 INT PRIMARY KEY, SC1 SC1.COMP1, SC2 SC2.COMP1, FAMILY F1(C1, SC1, SC2));
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE T_WITH_COMPS];
 ----
@@ -424,7 +424,7 @@ CREATE TABLE public.t_with_comps (
   FAMILY f1 (c1, sc1, sc2)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE T_WITH_COMPS];
 ----
@@ -451,7 +451,7 @@ CREATE TABLE roaches (id UUID PRIMARY KEY, x STRING, y STRING, FAMILY f1 (id, x,
 statement ok
 CREATE INDEX ON roaches USING GIN (x, y gin_trgm_ops);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE roaches];
 ----
@@ -464,7 +464,7 @@ CREATE TABLE public.roaches (
   FAMILY f1 (id, x, y)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE roaches];
 ----

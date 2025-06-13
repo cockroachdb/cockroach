@@ -10,8 +10,10 @@ CREATE DATABASE region_test_db PRIMARY REGION "ap-southeast-2" SURVIVE ZONE FAIL
 statement ok
 USE region_test_db;
 
+# This test is only focused on locality changes which are only supported
+# by the legacy schema changer.
 statement ok
-CREATE TABLE t (i INT8 NULL, INDEX (i));
+CREATE TABLE t (i INT8 NULL, INDEX (i)) WITH (schema_locked = false);
 
 statement ok
 INSERT INTO t VALUES (1);

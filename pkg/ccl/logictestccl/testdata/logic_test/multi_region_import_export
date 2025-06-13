@@ -102,4 +102,4 @@ team  CREATE TABLE public.team (
         likes STRING[] NULL,
         dislikes STRING[] NULL,
         CONSTRAINT team_pkey PRIMARY KEY (id ASC)
-      ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+      ) WITH (schema_locked = true) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;

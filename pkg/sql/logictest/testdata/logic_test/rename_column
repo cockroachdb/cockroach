@@ -141,7 +141,7 @@ id
 species
 username
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE users SET (schema_locked=false);
 
@@ -150,7 +150,7 @@ statement ok
 ALTER TABLE users RENAME COLUMN species TO species_old,
                   ADD COLUMN species STRING AS (species_old || ' woo') STORED
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE users SET (schema_locked=true);
 

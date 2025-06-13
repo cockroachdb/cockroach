@@ -37,7 +37,7 @@ CREATE TABLE public.partition_all_by_nothing (
   UNIQUE INDEX partition_all_by_nothing_b_key (b ASC),
   INDEX partition_all_by_nothing_b_idx (b ASC),
   FAMILY fam_0_pk_a_b_c (pk, a, b, c)
-) PARTITION ALL BY NOTHING;
+) PARTITION ALL BY NOTHING WITH (schema_locked = true);
 
 statement error cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition
 CREATE INDEX idx ON partition_all_by_nothing(pk) PARTITION BY LIST(pk) (PARTITION one VALUES IN (1))
@@ -59,4 +59,4 @@ CREATE TABLE public.partition_all_by_nothing (
   INDEX partition_all_by_nothing_b_idx (b ASC),
   INDEX idx (pk ASC),
   FAMILY fam_0_pk_a_b_c (pk, a, b, c)
-) PARTITION ALL BY NOTHING;
+) PARTITION ALL BY NOTHING WITH (schema_locked = true);

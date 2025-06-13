@@ -118,7 +118,13 @@ TABLE tbl  ALTER TABLE tbl CONFIGURE ZONE USING
              lease_preferences = '[[+region=ca-central-1], [+region=ap-southeast-2]]'
 
 statement ok
+ALTER TABLE tbl SET (schema_locked = false)
+
+statement ok
 ALTER TABLE tbl SET LOCALITY REGIONAL IN "ca-central-1"
+
+statement ok
+ALTER TABLE tbl SET (schema_locked = true)
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl
@@ -134,7 +140,13 @@ TABLE tbl  ALTER TABLE tbl CONFIGURE ZONE USING
              lease_preferences = '[[+region=ca-central-1], [+region=ap-southeast-2]]'
 
 statement ok
+ALTER TABLE tbl SET (schema_locked = false)
+
+statement ok
 ALTER TABLE tbl SET LOCALITY REGIONAL IN "ap-southeast-2"
+
+statement ok
+ALTER TABLE tbl SET (schema_locked = true)
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl
@@ -150,7 +162,13 @@ TABLE tbl  ALTER TABLE tbl CONFIGURE ZONE USING
              lease_preferences = '[[+region=ap-southeast-2], [+region=us-east-1]]'
 
 statement ok
+ALTER TABLE tbl SET (schema_locked = false)
+
+statement ok
 ALTER TABLE tbl SET LOCALITY REGIONAL IN "us-east-1"
+
+statement ok
+ALTER TABLE tbl SET (schema_locked = true)
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl
@@ -168,7 +186,13 @@ TABLE tbl  ALTER TABLE tbl CONFIGURE ZONE USING
 # GLOBAL zone config extensions.
 
 statement ok
+ALTER TABLE tbl SET (schema_locked = false)
+
+statement ok
 ALTER TABLE tbl SET LOCALITY GLOBAL
+
+statement ok
+ALTER TABLE tbl SET (schema_locked = true)
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl

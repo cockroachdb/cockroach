@@ -44,7 +44,7 @@ CREATE INDEX geog_idx_1 ON geo_table USING GIST(geog) WITH (s2_level_mod=2)
 statement ok
 CREATE INDEX geog_idx_2 ON geo_table USING GIST(geog)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE geo_table]
 ----
@@ -64,7 +64,7 @@ CREATE TABLE public.geo_table (
   FAMILY fam_2_id (id)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE geo_table]
 ----
@@ -93,7 +93,7 @@ DROP TABLE geo_table;
 statement ok
 $create_table
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE geo_table]
 ----
@@ -113,7 +113,7 @@ CREATE TABLE public.geo_table (
   FAMILY fam_2_id (id)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE geo_table]
 ----

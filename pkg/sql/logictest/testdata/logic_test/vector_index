@@ -45,7 +45,7 @@ CREATE INDEX ON simple USING cspann (vec1 ASC);
 statement ok
 CREATE INDEX ON simple USING hnsw (vec1);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE simple
 ----
@@ -62,7 +62,7 @@ simple  CREATE TABLE public.simple (
           FAMILY fam_0_a_vec1_b (a, vec1, b)
         );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE simple
 ----
@@ -103,7 +103,7 @@ CREATE TABLE alt_syntax (
 statement notice CREATE VECTOR INDEX will disable writes to the table while the index is being built
 CREATE VECTOR INDEX another_index ON alt_syntax (vec1)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE alt_syntax
 ----
@@ -117,7 +117,7 @@ alt_syntax  CREATE TABLE public.alt_syntax (
             );
 
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE alt_syntax
 ----
@@ -144,7 +144,7 @@ CREATE TABLE multiple_indexes (
   FAMILY (a, vec1, vec2)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE multiple_indexes
 ----
@@ -158,7 +158,7 @@ multiple_indexes  CREATE TABLE public.multiple_indexes (
                     FAMILY fam_0_a_vec1_vec2 (a, vec1, vec2)
                   );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE multiple_indexes
 ----
@@ -195,7 +195,7 @@ CREATE TABLE prefix_cols (
 statement ok
 CREATE VECTOR INDEX another_index ON prefix_cols (b, c DESC, vec1)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE prefix_cols
 ----
@@ -210,7 +210,7 @@ prefix_cols  CREATE TABLE public.prefix_cols (
                FAMILY fam_0_a_b_c_vec1 (a, b, c, vec1)
              );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE prefix_cols
 ----
@@ -254,7 +254,7 @@ CREATE TABLE storage_params (
 statement ok
 CREATE VECTOR INDEX ON storage_params (v) WITH (min_partition_size = 8, max_partition_size = 64)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE storage_params
 ----
@@ -267,7 +267,7 @@ storage_params  CREATE TABLE public.storage_params (
                   FAMILY fam_0_a_v (a, v)
                 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE storage_params
 ----
@@ -304,6 +304,25 @@ CREATE INDEX ON operator_class USING cspann (vec1 vector_cosine_ops)
 statement ok
 CREATE INDEX ON operator_class USING cspann (b, vec1 vector_ip_ops)
 
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE operator_class
+----
+operator_class  CREATE TABLE public.operator_class (
+                  a INT8 NOT NULL,
+                  b INT8 NULL,
+                  vec1 VECTOR(3) NULL,
+                  CONSTRAINT operator_class_pkey PRIMARY KEY (a ASC),
+                  VECTOR INDEX operator_class_vec1_idx (vec1 vector_l2_ops),
+                  VECTOR INDEX operator_class_b_vec1_idx (b ASC, vec1 vector_cosine_ops),
+                  VECTOR INDEX operator_class_vec1_idx1 (vec1 vector_ip_ops),
+                  VECTOR INDEX operator_class_b_vec1_idx1 (b ASC, vec1 vector_l2_ops),
+                  VECTOR INDEX operator_class_vec1_idx2 (vec1 vector_cosine_ops),
+                  VECTOR INDEX operator_class_b_vec1_idx2 (b ASC, vec1 vector_ip_ops),
+                  FAMILY fam_0_a_b_vec1 (a, b, vec1)
+                ) WITH (schema_locked = true);
+
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE operator_class
 ----
@@ -458,7 +477,7 @@ CREATE TABLE alter_test (
 statement ok
 ALTER TABLE alter_test ALTER PRIMARY KEY USING COLUMNS (b)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE alter_test
 ----
@@ -472,7 +491,7 @@ alter_test  CREATE TABLE public.alter_test (
               FAMILY fam_0_a_b_vec1 (a, b, vec1)
             );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE alter_test
 ----

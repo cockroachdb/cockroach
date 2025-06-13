@@ -84,9 +84,15 @@ statement ok
 SET autocommit_before_ddl = false
 
 statement ok
+ALTER TABLE data SET (schema_locked = false)
+
+statement ok
 ALTER TABLE data DROP COLUMN _bool;
 ALTER TABLE data DROP COLUMN _bytes;
 ALTER TABLE data DROP COLUMN _bit;
+
+statement ok
+ALTER TABLE data SET (schema_locked = true)
 
 query T
 EXPLAIN (DISTSQL) SELECT sum(a) FROM data

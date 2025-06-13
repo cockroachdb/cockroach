@@ -61,7 +61,7 @@ copy_num_retries_per_batch                                 5
 copy_transaction_quality_of_service                        background
 copy_write_pipelining_enabled                              off
 cost_scans_with_default_col_size                           off
-create_table_with_schema_locked                            off
+create_table_with_schema_locked                            on
 database                                                   test
 datestyle                                                  ISO, MDY
 deadlock_timeout                                           0

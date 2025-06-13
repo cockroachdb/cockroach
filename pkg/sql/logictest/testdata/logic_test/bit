@@ -11,7 +11,7 @@ CREATE TABLE bits (
   FAMILY "primary" (a, b, c, d, rowid)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT colnames
 SHOW CREATE TABLE bits
 ----
@@ -25,7 +25,7 @@ bits        CREATE TABLE public.bits (
               CONSTRAINT bits_pkey PRIMARY KEY (rowid ASC)
             );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT colnames
 SHOW CREATE TABLE bits
 ----
@@ -277,7 +277,7 @@ CREATE TABLE obitsa(x VARBIT(20)[]);
  (ARRAY[B'01', B'01001001010101']),
  (ARRAY[B'01', B'11001001010101'])
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE obitsa]
 ----
@@ -287,7 +287,7 @@ CREATE TABLE public.obitsa (
   CONSTRAINT obitsa_pkey PRIMARY KEY (rowid ASC)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE obitsa]
 ----

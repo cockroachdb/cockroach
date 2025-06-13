@@ -72,7 +72,7 @@ ALTER TABLE t ALTER COLUMN i DROP STORED
 statement ok
 ALTER TABLE t DROP COLUMN b CASCADE
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT colnames
 show create table t
 ----
@@ -84,7 +84,7 @@ t           CREATE TABLE public.t (
               INDEX idx2 (i ASC)
             );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT colnames
 show create table t
 ----
@@ -236,7 +236,7 @@ id2    STRING  true   NULL            ·  {t3_pkey}  false
 id3    INT8    true   NULL            ·  {t3_pkey}  false
 rowid  INT8    false  unique_rowid()  ·  {t3_pkey}  true
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT colnames
 show create table t3
 ----
@@ -250,7 +250,7 @@ t3          CREATE TABLE public.t3 (
               FAMILY f1 (id3, id2, id, rowid)
             );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT colnames
 show create table t3
 ----
@@ -341,7 +341,7 @@ ALTER TABLE t8 ALTER COLUMN x TYPE INT
 statement error .*could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax
 ALTER TABLE t8 ALTER COLUMN x TYPE INT USING x::INT8
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t8
 ----
@@ -351,7 +351,7 @@ t8  CREATE TABLE public.t8 (
       CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC)
     );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t8
 ----
@@ -448,7 +448,7 @@ ALTER TABLE t17 ALTER COLUMN y TYPE INT
 statement error on update for column "y" cannot be cast automatically to type INT8
 ALTER TABLE t17 ALTER COLUMN y TYPE INT USING y::INT8
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT colnames
 show create table t17
 ----
@@ -461,7 +461,7 @@ t17         CREATE TABLE public.t17 (
               FAMILY f1 (x, y, rowid)
             );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT colnames
 show create table t17
 ----
@@ -569,7 +569,7 @@ INSERT INTO t24 VALUES ('1'), ('hello');
 statement error .*could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax
 ALTER TABLE t24  ALTER COLUMN x TYPE INT USING (x::int + 5)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT colnames
 show create table t24
 ----
@@ -580,7 +580,7 @@ t24         CREATE TABLE public.t24 (
               CONSTRAINT t24_pkey PRIMARY KEY (rowid ASC)
             );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT colnames
 show create table t24
 ----
@@ -812,7 +812,7 @@ SELECT vis1, hid1 FROM t_with_hidden ORDER BY vis1
 2 1
 3 1
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t_with_hidden
 ----
@@ -824,7 +824,7 @@ t_with_hidden  CREATE TABLE public.t_with_hidden (
                  FAMILY f1 (vis1, hid1, rowid)
                );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t_with_hidden
 ----
@@ -892,7 +892,7 @@ SELECT a, b FROM t_with_on_update ORDER BY a
 1001 3
 10000 NULL
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t_with_on_update
 ----
@@ -903,7 +903,7 @@ t_with_on_update  CREATE TABLE public.t_with_on_update (
                     FAMILY f1 (a, b)
                   );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t_with_on_update
 ----
@@ -941,7 +941,7 @@ SELECT * FROM t_with_default ORDER BY c1
 ----
 32767
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t_with_default
 ----
@@ -952,7 +952,7 @@ t_with_default  CREATE TABLE public.t_with_default (
                   FAMILY f1 (rowid, c1)
                 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t_with_default
 ----
@@ -1105,7 +1105,7 @@ c2     CHAR(4) true   NULL            ·  {t_bytes_pkey}  false
 c3     UUID    true   NULL            ·  {t_bytes_pkey}  false
 rowid  INT8    false  unique_rowid()  ·  {t_bytes_pkey}  true
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT colnames
 show create table t_bytes
 ----
@@ -1119,7 +1119,7 @@ t_bytes     CREATE TABLE public.t_bytes (
               FAMILY f1 (c1, c2, c3, rowid)
             );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT colnames
 show create table t_bytes
 ----
@@ -1188,7 +1188,7 @@ c2     DECIMAL(10,2) true   NULL            ·  {t_decimal_pkey}  false
 c3     DECIMAL(6,1)  true   NULL            ·  {t_decimal_pkey}  false
 rowid  INT8          false  unique_rowid()  ·  {t_decimal_pkey}  true
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT colnames
 show create table t_decimal
 ----
@@ -1202,7 +1202,7 @@ t_decimal   CREATE TABLE public.t_decimal (
               FAMILY f1 (c1, c2, c3, rowid)
             );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT colnames
 show create table t_decimal
 ----
@@ -1503,7 +1503,7 @@ SELECT * FROM stored1 ORDER BY A;
 statement ok
 ALTER TABLE stored1 ALTER COLUMN COMP1 SET DATA TYPE BIGINT;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE stored1;
 ----
@@ -1514,7 +1514,7 @@ stored1  CREATE TABLE public.stored1 (
            FAMILY f1 (a, comp1)
          );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE stored1;
 ----
@@ -1546,7 +1546,7 @@ DELETE FROM stored1 WHERE a = 2147483648;
 statement ok
 ALTER TABLE stored1 ALTER COLUMN COMP1 SET DATA TYPE INT4;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE stored1;
 ----
@@ -1557,7 +1557,7 @@ stored1  CREATE TABLE public.stored1 (
            FAMILY f1 (a, comp1)
          );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE stored1;
 ----
@@ -1593,7 +1593,7 @@ statement ok
 INSERT INTO stored1 VALUES (-1000);
 
 skipif config local-mixed-24.3
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE stored1;
 ----
@@ -1604,7 +1604,7 @@ stored1  CREATE TABLE public.stored1 (
            FAMILY f1 (a, comp1)
          );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE stored1;
 ----
@@ -1625,7 +1625,7 @@ SELECT * FROM stored1 ORDER BY A;
 2000 -1
 2147483647  -1
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE stored1 SET (schema_locked=false);
 
@@ -1633,7 +1633,7 @@ ALTER TABLE stored1 SET (schema_locked=false);
 statement error pq: unimplemented: ALTER COLUMN TYPE operations that require rewriting on-disk data cannot be combined with other ALTER TABLE commands
 ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE INT4 USING -1, ALTER COLUMN comp1 drop stored;
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE stored1 SET (schema_locked=true);
 
@@ -1661,7 +1661,7 @@ SELECT * from virt1 ORDER BY c1;
 100 100
 2147483647 2147483647
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE virt1;
 ----
@@ -1671,7 +1671,7 @@ virt1  CREATE TABLE public.virt1 (
          CONSTRAINT virt1_pkey PRIMARY KEY (c1 ASC)
        );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE virt1;
 ----
@@ -1699,7 +1699,7 @@ SELECT * from virt1 ORDER BY c1;
 -9999 -9999
 100 100
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE virt1;
 ----
@@ -1709,7 +1709,7 @@ virt1  CREATE TABLE public.virt1 (
          CONSTRAINT virt1_pkey PRIMARY KEY (c1 ASC)
        );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE virt1;
 ----
@@ -1749,7 +1749,7 @@ SELECT * FROM virt2 ORDER BY c1;
 ----
 2024-10-31 16:50:00.123456 +0000 +0000  2024-10-31 16:50:00.12 +0000 +0000
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE virt2;
 ----
@@ -1759,7 +1759,7 @@ virt2  CREATE TABLE public.virt2 (
          CONSTRAINT virt2_pkey PRIMARY KEY (c1 ASC)
        );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE virt2;
 ----
@@ -1777,7 +1777,7 @@ SELECT * FROM virt2 ORDER BY c1;
 ----
 2024-10-31 16:50:00.123456 +0000 +0000  2024-10-31 16:50:00.12346 +0000 +0000
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE virt2;
 ----
@@ -1787,7 +1787,7 @@ virt2  CREATE TABLE public.virt2 (
          CONSTRAINT virt2_pkey PRIMARY KEY (c1 ASC)
        );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE virt2;
 ----
@@ -1825,7 +1825,7 @@ SELECT * FROM virt3 ORDER BY c1;
 1.235 1.24
 12.346 12.35
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE virt3;
 ----
@@ -1835,7 +1835,7 @@ virt3  CREATE TABLE public.virt3 (
          CONSTRAINT virt3_pkey PRIMARY KEY (c1 ASC)
        );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE virt3;
 ----
@@ -1858,7 +1858,7 @@ SELECT * FROM virt3 ORDER BY c1;
 1.235 1.2350
 12.346 12.3460
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE virt3;
 ----
@@ -1868,7 +1868,7 @@ virt3  CREATE TABLE public.virt3 (
          CONSTRAINT virt3_pkey PRIMARY KEY (c1 ASC)
        );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE virt3;
 ----
@@ -1911,7 +1911,7 @@ rollback;
 statement ok
 RESET autocommit_before_ddl
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t_droppedcol;
 ----
@@ -1981,7 +1981,7 @@ select * from t_multi_alter order by c1;
 20 20 2024-04-22 00:00:00 +0000 +0000
 
 skipif config local-mixed-24.3
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT colnames
 show create table t_multi_alter
 ----
@@ -1994,7 +1994,7 @@ t_multi_alter  CREATE TABLE public.t_multi_alter (
                  FAMILY f1 (c1, c2, c3)
                );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT colnames
 show create table t_multi_alter
 ----

@@ -111,7 +111,7 @@ CREATE TABLE public.regional_by_row_table_explicit_crdb_region_column (
   crdb_region public.crdb_internal_region NOT NULL,
   CONSTRAINT regional_by_row_table_explicit_crdb_region_column_pkey PRIMARY KEY (pk ASC),
   FAMILY fam_0_pk_a_crdb_region (pk, a, crdb_region)
-) LOCALITY REGIONAL BY ROW;
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row_table_explicit_crdb_region_column]
@@ -182,7 +182,7 @@ CREATE TABLE public.regional_by_row_table (
   UNIQUE INDEX regional_by_row_table_b_key (b ASC),
   INVERTED INDEX regional_by_row_table_j_idx (j),
   FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
-) LOCALITY REGIONAL BY ROW;
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row_table]
@@ -257,7 +257,7 @@ CREATE TABLE public.regional_by_row_table (
   UNIQUE INDEX regional_by_row_table_b_key (b ASC),
   INVERTED INDEX regional_by_row_table_j_idx (j),
   FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
-) LOCALITY REGIONAL BY ROW;
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row_table@regional_by_row_table_a_idx CONFIGURE ZONE USING "gc.ttlseconds" = 10;
 
 # Prohibit certain actions on a REGIONAL BY ROW table.
@@ -301,7 +301,7 @@ CREATE TABLE public.regional_by_row_table (
   INVERTED INDEX regional_by_row_table_j_idx (j),
   UNIQUE INDEX regional_by_row_table_unique_col_key (unique_col ASC),
   FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region, unique_col)
-) LOCALITY REGIONAL BY ROW;
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row_table@regional_by_row_table_a_idx CONFIGURE ZONE USING "gc.ttlseconds" = 10;
 
 query TTT
@@ -476,7 +476,7 @@ CREATE TABLE public.regional_by_row_table (
   UNIQUE INDEX unique_b_a (b ASC, a ASC),
   UNIQUE INDEX regional_by_row_table_pk_key (pk ASC),
   FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
-) LOCALITY REGIONAL BY ROW;
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row_table@regional_by_row_table_a_idx CONFIGURE ZONE USING "gc.ttlseconds" = 10;
 
 query TT
@@ -531,7 +531,7 @@ CREATE TABLE public.regional_by_row_table_pk_defined_separately (
   pk INT8 NOT NULL,
   crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
   CONSTRAINT "primary" PRIMARY KEY (pk ASC)
-) LOCALITY REGIONAL BY ROW;
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 # Tests for REGIONAL BY TABLE AS
 statement error cannot use column crdb_region_col which has type INT8 in REGIONAL BY ROW\nDETAIL: REGIONAL BY ROW AS must reference a column of type crdb_internal_region
@@ -573,7 +573,7 @@ CREATE TABLE public.regional_by_row_table_as (
   INDEX regional_by_row_table_as_a_idx (a ASC),
   UNIQUE INDEX regional_by_row_table_as_b_key (b ASC),
   FAMILY fam_0_pk_a_b_crdb_region_col (pk, a, b, crdb_region_col)
-) LOCALITY REGIONAL BY ROW AS crdb_region_col;
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW AS crdb_region_col;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row_table_as]
@@ -803,7 +803,7 @@ regional_by_row  CREATE TABLE public.regional_by_row (
                    CONSTRAINT regional_by_row_pkey PRIMARY KEY (pk ASC),
                    INDEX regional_by_row_i_idx (i ASC),
                    FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
-                 ) LOCALITY REGIONAL BY ROW;
+                 ) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -835,7 +835,7 @@ regional_by_row_as  CREATE TABLE public.regional_by_row_as (
                       CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                       INDEX regional_by_row_as_i_idx (i ASC),
                       FAMILY fam_0_cr_pk_i (cr, pk, i)
-                    ) LOCALITY REGIONAL BY ROW AS cr;
+                    ) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW AS cr;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row_as]
@@ -875,7 +875,7 @@ regional_by_row  CREATE TABLE public.regional_by_row (
                    CONSTRAINT regional_by_row_pkey PRIMARY KEY (pk ASC),
                    INDEX regional_by_row_i_idx (i ASC),
                    FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
-                 ) LOCALITY REGIONAL BY ROW;
+                 ) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -909,7 +909,7 @@ regional_by_row_as  CREATE TABLE public.regional_by_row_as (
                       CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                       INDEX regional_by_row_as_i_idx (i ASC),
                       FAMILY fam_0_cr_pk_i (cr, pk, i)
-                    ) LOCALITY REGIONAL BY ROW AS cr;
+                    ) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW AS cr;
 
 
 query TTT
@@ -948,7 +948,7 @@ regional_by_row  CREATE TABLE public.regional_by_row (
                    CONSTRAINT regional_by_row_pkey PRIMARY KEY (pk ASC),
                    INDEX regional_by_row_i_idx (i ASC),
                    FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
-                 ) LOCALITY REGIONAL BY ROW;
+                 ) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 
 query TTT
@@ -985,7 +985,7 @@ regional_by_row_as  CREATE TABLE public.regional_by_row_as (
                       CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                       INDEX regional_by_row_as_i_idx (i ASC),
                       FAMILY fam_0_cr_pk_i (cr, pk, i)
-                    ) LOCALITY REGIONAL BY ROW AS cr;
+                    ) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW AS cr;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row_as]
@@ -1051,7 +1051,7 @@ regional_by_row  CREATE TABLE public.regional_by_row (
                    CONSTRAINT regional_by_row_pkey PRIMARY KEY (pk ASC),
                    INDEX regional_by_row_i_idx (i ASC),
                    FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
-                 ) LOCALITY REGIONAL BY ROW;
+                 ) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -1089,7 +1089,7 @@ regional_by_row_like  CREATE TABLE public.regional_by_row_like (
                         crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL,
                         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                         CONSTRAINT regional_by_row_like_pkey PRIMARY KEY (rowid ASC)
-                      ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+                      ) WITH (schema_locked = true) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 statement ok
 DROP TABLE regional_by_row_like
@@ -1106,7 +1106,7 @@ regional_by_row_like  CREATE TABLE public.regional_by_row_like (
                         crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
                         CONSTRAINT regional_by_row_pkey PRIMARY KEY (crdb_region ASC, pk ASC),
                         INDEX regional_by_row_i_idx (crdb_region ASC, i ASC)
-                      ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+                      ) WITH (schema_locked = true) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 
 statement ok
@@ -1124,7 +1124,7 @@ regional_by_row_like  CREATE TABLE public.regional_by_row_like (
                         crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
                         CONSTRAINT regional_by_row_pkey PRIMARY KEY (crdb_region ASC, pk ASC),
                         INDEX regional_by_row_i_idx (crdb_region ASC, i ASC)
-                      ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+                      ) WITH (schema_locked = true) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 statement ok
 DROP TABLE regional_by_row_like
@@ -1139,7 +1139,7 @@ regional_by_row_as  CREATE TABLE public.regional_by_row_as (
                       CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                       INDEX regional_by_row_as_i_idx (i ASC),
                       FAMILY fam_0_cr_pk_i (cr, pk, i)
-                    ) LOCALITY REGIONAL BY ROW AS cr;
+                    ) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW AS cr;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row_as]
@@ -1190,7 +1190,7 @@ regional_by_row_unique_in_column  CREATE TABLE public.regional_by_row_unique_in_
                                     UNIQUE INDEX regional_by_row_unique_in_column_b_key (b ASC),
                                     UNIQUE INDEX regional_by_row_unique_in_column_d_e_key (d ASC, e ASC),
                                     FAMILY fam_0_a_b_c_d_e_crdb_region (a, b, c, d, e, crdb_region)
-                                  ) LOCALITY REGIONAL BY ROW;
+                                  ) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 statement ok
 CREATE TABLE regional_by_row_fk (
@@ -1220,7 +1220,7 @@ regional_by_row_fk  CREATE TABLE public.regional_by_row_fk (
                       UNIQUE INDEX regional_by_row_fk_g_key (g ASC),
                       UNIQUE INDEX regional_by_row_fk_h_key (h ASC),
                       FAMILY fam_0_f_g_h_i_j_crdb_region (f, g, h, i, j, crdb_region)
-                    ) LOCALITY REGIONAL BY ROW;
+                    ) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 statement ok
 CREATE DATABASE drop_regions PRIMARY REGION "ca-central-1" REGIONS "us-east-1", "ap-southeast-2";
@@ -1280,7 +1280,7 @@ regional_by_row  CREATE TABLE public.regional_by_row (
                    CONSTRAINT regional_by_row_pkey PRIMARY KEY (pk ASC),
                    INDEX regional_by_row_i_idx (i ASC),
                    FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
-                 ) LOCALITY REGIONAL BY ROW;
+                 ) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row_as]
@@ -1314,7 +1314,7 @@ regional_by_row_as  CREATE TABLE public.regional_by_row_as (
                       CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                       INDEX regional_by_row_as_i_idx (i ASC),
                       FAMILY fam_0_cr_pk_i (cr, pk, i)
-                    ) LOCALITY REGIONAL BY ROW AS cr;
+                    ) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW AS cr;
 
 
 statement ok
@@ -1355,7 +1355,7 @@ regional_by_row  CREATE TABLE public.regional_by_row (
                    CONSTRAINT regional_by_row_pkey PRIMARY KEY (pk ASC),
                    INDEX regional_by_row_i_idx (i ASC),
                    FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
-                 ) LOCALITY REGIONAL BY ROW;
+                 ) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row_as]
@@ -1389,7 +1389,7 @@ regional_by_row_as  CREATE TABLE public.regional_by_row_as (
                       CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                       INDEX regional_by_row_as_i_idx (i ASC),
                       FAMILY fam_0_cr_pk_i (cr, pk, i)
-                    ) LOCALITY REGIONAL BY ROW AS cr;
+                    ) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW AS cr;
 
 # Drop us-east-1 so that only the primary region remains.
 statement ok

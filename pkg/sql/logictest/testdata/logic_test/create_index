@@ -180,7 +180,7 @@ query T noticetrace
 CREATE INDEX CONCURRENTLY IF NOT EXISTS create_index_concurrently_idx ON create_index_concurrently_tbl(a)
 ----
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE create_index_concurrently_tbl
 ----
@@ -191,7 +191,7 @@ create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl
                                  INDEX create_index_concurrently_idx (a ASC)
                                );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE create_index_concurrently_tbl
 ----
@@ -222,7 +222,7 @@ onlyif config weak-iso-level-configs
 statement ok
 DROP INDEX CONCURRENTLY create_index_concurrently_idx
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE create_index_concurrently_tbl
 ----
@@ -232,7 +232,7 @@ create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl
                                  CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC)
                                );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE create_index_concurrently_tbl
 ----
@@ -431,7 +431,7 @@ CREATE INDEX idx_t_hash_a ON t_hash (a) USING HASH WITH BUCKET_COUNT = 5;
 statement ok
 CREATE UNIQUE INDEX idx_t_hash_b ON t_hash (b) USING HASH WITH BUCKET_COUNT = 5;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_hash]
 ----
@@ -447,7 +447,7 @@ CREATE TABLE public.t_hash (
   FAMILY fam_0_pk_a_b (pk, a, b)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_hash]
 ----
@@ -666,7 +666,7 @@ statement ok
 CREATE UNIQUE INDEX tbl_with_collate_expr3 ON tbl_with_collate ((c1::text COLLATE "en-us"));
 
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE tbl_with_collate
 ----
@@ -679,7 +679,7 @@ tbl_with_collate  CREATE TABLE public.tbl_with_collate (
                     UNIQUE INDEX tbl_with_collate_expr3 ((c1::STRING COLLATE en_US) ASC)
                   );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE tbl_with_collate
 ----

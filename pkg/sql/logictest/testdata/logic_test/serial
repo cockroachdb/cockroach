@@ -9,7 +9,7 @@ CREATE TABLE serial (
   FAMILY "primary" (a, b, c)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE serial
 ----
@@ -21,7 +21,7 @@ serial  CREATE TABLE public.serial (
           UNIQUE INDEX serial_c_key (c ASC)
         );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE serial
 ----
@@ -59,7 +59,7 @@ CREATE TABLE smallbig (
 statement ok
 INSERT INTO smallbig (c) VALUES (7), (7)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE smallbig
 ----
@@ -71,7 +71,7 @@ smallbig  CREATE TABLE public.smallbig (
             CONSTRAINT smallbig_pkey PRIMARY KEY (rowid ASC)
           );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE smallbig
 ----
@@ -94,7 +94,7 @@ CREATE TABLE serials (
   FAMILY "primary" (a, b, c, d, rowid)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE serials
 ----
@@ -107,7 +107,7 @@ serials  CREATE TABLE public.serials (
            CONSTRAINT serials_pkey PRIMARY KEY (rowid ASC)
          );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE serials
 ----
@@ -150,7 +150,7 @@ CREATE TABLE serial (
   FAMILY "primary" (a, b, c)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE serial
 ----
@@ -162,7 +162,7 @@ serial  CREATE TABLE public.serial (
           UNIQUE INDEX serial_c_key (c ASC)
         );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE serial
 ----
@@ -205,7 +205,7 @@ CREATE TABLE smallbig (
 statement ok
 INSERT INTO smallbig (c) VALUES (7), (7)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE smallbig
 ----
@@ -217,7 +217,7 @@ smallbig  CREATE TABLE public.smallbig (
             CONSTRAINT smallbig_pkey PRIMARY KEY (rowid ASC)
           );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE smallbig
 ----
@@ -240,7 +240,7 @@ CREATE TABLE serials (
   FAMILY "primary" (a, b, c, d, rowid)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE serials
 ----
@@ -253,7 +253,7 @@ serials  CREATE TABLE public.serials (
            CONSTRAINT serials_pkey PRIMARY KEY (rowid ASC)
          );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE serials
 ----
@@ -292,7 +292,7 @@ CREATE TABLE serial (
   FAMILY "primary" (a, b, c)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE serial
 ----
@@ -304,7 +304,7 @@ serial  CREATE TABLE public.serial (
           UNIQUE INDEX serial_c_key (c ASC)
         );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE serial
 ----
@@ -371,7 +371,7 @@ CREATE TABLE "serial_MixedCase" (
   FAMILY "primary" (a, b, c)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE "serial_MixedCase"
 ----
@@ -383,7 +383,7 @@ SHOW CREATE TABLE "serial_MixedCase"
                       UNIQUE INDEX "serial_MixedCase_c_key" (c ASC)
                     );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE "serial_MixedCase"
 ----
@@ -410,7 +410,7 @@ CREATE TABLE smallbig (
 statement ok
 INSERT INTO smallbig (c) VALUES (7), (7)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE smallbig
 ----
@@ -422,7 +422,7 @@ smallbig  CREATE TABLE public.smallbig (
             CONSTRAINT smallbig_pkey PRIMARY KEY (rowid ASC)
           );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE smallbig
 ----
@@ -445,7 +445,7 @@ CREATE TABLE serials (
   FAMILY "primary" (a, b, c, d, rowid)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE serials
 ----
@@ -458,7 +458,7 @@ serials  CREATE TABLE public.serials (
            CONSTRAINT serials_pkey PRIMARY KEY (rowid ASC)
          );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE serials
 ----

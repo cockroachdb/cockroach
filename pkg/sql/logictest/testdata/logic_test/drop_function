@@ -316,7 +316,7 @@ statement ok
 SELECT * FROM  f_called_by_b2();
 
 skipif config local-legacy-schema-changer
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t1_with_b_2_ref];
 ----
@@ -326,7 +326,7 @@ CREATE TABLE public.t1_with_b_2_ref (
   CONSTRAINT t1_with_b_2_ref_pkey PRIMARY KEY (rowid ASC)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 skipif config local-legacy-schema-changer
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t1_with_b_2_ref];

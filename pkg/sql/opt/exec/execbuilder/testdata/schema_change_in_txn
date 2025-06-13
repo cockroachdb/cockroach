@@ -11,7 +11,7 @@ CREATE TABLE t (
   --UNIQUE INDEX t_secondary (c, d), -- Fails due to #46276
   FAMILY (a, b, c),
   FAMILY (d, e, f)
-)
+) WITH (schema_locked = false)
 
 statement ok
 INSERT INTO t VALUES (100, 500.5, 'stuff' COLLATE en_US, 600.6, '12:12:12')

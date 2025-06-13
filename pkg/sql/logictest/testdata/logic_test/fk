@@ -494,7 +494,7 @@ CREATE TABLE delivery (
   FAMILY "primary" (ts, "order", shipment, item, rowid)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE delivery
 ----
@@ -510,7 +510,7 @@ delivery  CREATE TABLE public.delivery (
             INDEX delivery_item_idx (item ASC)
           );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE delivery
 ----
@@ -597,11 +597,11 @@ statement ok
 INSERT INTO "user content"."customer reviews" (id, product, body, "order") VALUES (3, '780', 'i ordered 100 of them', 9)
 
 # Cross database references are used below
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE "user content"."customer reviews" SET (schema_locked=false);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE orders SET (schema_locked=false);
 
@@ -611,11 +611,11 @@ ALTER TABLE "user content"."customer reviews"
   ADD CONSTRAINT orderfk2 FOREIGN KEY ("order", shipment) REFERENCES orders (id, shipment)
 
 # Cross database references are used below
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE "user content"."customer reviews" SET (schema_locked=true);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE orders SET (schema_locked=true);
 
@@ -855,7 +855,7 @@ refpairs    refpairs_pkey       false       2             a            a        
 refpairs    refpairs_pkey       false       3             b            b           N/A        true     false     true     1
 refpairs    refpairs_pkey       false       4             c            c           N/A        true     false     true     1
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE refpairs
 ----
@@ -869,7 +869,7 @@ refpairs  CREATE TABLE public.refpairs (
             INDEX refpairs_a_b_c_idx (a ASC, b ASC, c ASC)
           );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE refpairs
 ----
@@ -1096,7 +1096,7 @@ CREATE INDEX foo ON refers (a)
 statement ok
 ALTER INDEX refers@b_idx RENAME TO another_idx
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE refers
 ----
@@ -1110,7 +1110,7 @@ refers  CREATE TABLE public.refers (
           INDEX foo (a ASC)
         );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE refers
 ----
@@ -1195,7 +1195,7 @@ CREATE TABLE pkref_a (a INT PRIMARY KEY)
 statement ok
 CREATE TABLE pkref_b (b INT PRIMARY KEY REFERENCES pkref_a ON UPDATE NO ACTION ON DELETE RESTRICT)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE pkref_b
 ----
@@ -1205,7 +1205,7 @@ pkref_b  CREATE TABLE public.pkref_b (
            CONSTRAINT pkref_b_b_fkey FOREIGN KEY (b) REFERENCES public.pkref_a(a) ON DELETE RESTRICT
          );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE pkref_b
 ----
@@ -2814,11 +2814,11 @@ CREATE TABLE childid (
 statement ok
 INSERT INTO parentid (k, v) VALUES (0, 1); INSERT INTO childid (id) VALUES (2);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE parentid SET (schema_locked=false)
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE childid SET (schema_locked=false)
 
@@ -2832,11 +2832,11 @@ statement ok
 ROLLBACK;
 
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE parentid SET (schema_locked=true)
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE childid SET (schema_locked=true)
 
@@ -4248,11 +4248,11 @@ statement ok
 CREATE TABLE drop_fk_during_addition (name INT8);
 CREATE TABLE drop_fk_during_addition_ref (name INT8 PRIMARY KEY);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE drop_fk_during_addition SET (schema_locked=false);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 statement ok
 ALTER TABLE drop_fk_during_addition_ref SET (schema_locked=false);
 
@@ -4383,7 +4383,7 @@ NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
 NOTICE: type of foreign key column "t1_fk_col1" (CHAR(5)) is not identical to referenced column "t1_fk"."col1" (CHAR(7))
 
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE TABLE t2_fk
@@ -4398,7 +4398,7 @@ t2_fk  CREATE TABLE public.t2_fk (
          FAMILY f1 (pk, t1_fk_col1, t1_fk_col2, col3)
        );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t2_fk
 ----

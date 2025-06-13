@@ -223,7 +223,7 @@ CREATE TABLE test.precision (x DECIMAL(0, 2))
 statement error at or near "\)": syntax error: scale \(4\) must be between 0 and precision \(2\)
 CREATE TABLE test.precision (x DECIMAL(2, 4))
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE test.users
 ----
@@ -245,7 +245,7 @@ test.public.users  CREATE TABLE public.users (
                      CONSTRAINT check_nickname CHECK (length(nickname) < 10:::INT8)
                    );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE test.users
 ----
@@ -303,7 +303,7 @@ CREATE TABLE test.named_constraints (
   FAMILY fam_3_username_email (username, email)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE test.named_constraints
 ----
@@ -327,7 +327,7 @@ test.public.named_constraints  CREATE TABLE public.named_constraints (
                                  CONSTRAINT ck1 CHECK (length(nickname) < 10:::INT8)
                                );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE test.named_constraints
 ----
@@ -542,7 +542,7 @@ CREATE TABLE test.null_default (
   ts timestamp NULL DEFAULT NULL
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE test.null_default
 ----
@@ -552,7 +552,7 @@ test.public.null_default  CREATE TABLE public.null_default (
                             CONSTRAINT null_default_pkey PRIMARY KEY (rowid ASC)
                          );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE test.null_default
 ----

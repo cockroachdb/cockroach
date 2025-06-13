@@ -10,7 +10,7 @@ SELECT id FROM system.namespace WHERE name='t';
 statement ok
 ALTER TABLE t SET (exclude_data_from_backup = true);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t
 ----
@@ -19,7 +19,7 @@ t  CREATE TABLE public.t (
      CONSTRAINT t_pkey PRIMARY KEY (x ASC)
    ) WITH (exclude_data_from_backup = true);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t
 ----
@@ -31,7 +31,7 @@ t  CREATE TABLE public.t (
 statement ok
 ALTER TABLE t SET (exclude_data_from_backup = false);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t
 ----
@@ -40,7 +40,7 @@ t  CREATE TABLE public.t (
      CONSTRAINT t_pkey PRIMARY KEY (x ASC)
    );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t
 ----
@@ -70,7 +70,7 @@ ALTER TABLE t SET (exclude_data_from_backup = 'on');
 statement ok
 ALTER TABLE t2 SET (exclude_data_from_backup = 'true');
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t2
 ----
@@ -81,7 +81,7 @@ t2  CREATE TABLE public.t2 (
       CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t(x) ON DELETE CASCADE
     ) WITH (exclude_data_from_backup = true);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t2
 ----
@@ -96,7 +96,7 @@ t2  CREATE TABLE public.t2 (
 statement ok
 ALTER TABLE t2 RESET (exclude_data_from_backup);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t2
 ----
@@ -107,7 +107,7 @@ t2  CREATE TABLE public.t2 (
       CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t(x) ON DELETE CASCADE
     );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t2
 ----

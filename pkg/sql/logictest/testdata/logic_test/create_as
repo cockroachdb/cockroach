@@ -160,7 +160,7 @@ CREATE TABLE foo5 (
 ) AS
   SELECT * FROM baz
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo5
 ----
@@ -171,7 +171,7 @@ foo5  CREATE TABLE public.foo5 (
         CONSTRAINT foo5_pkey PRIMARY KEY (b ASC)
       );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo5
 ----
@@ -189,7 +189,7 @@ CREATE TABLE foo6 (
 ) AS
   SELECT * FROM baz
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo6
 ----
@@ -200,7 +200,7 @@ foo6  CREATE TABLE public.foo6 (
         CONSTRAINT foo6_pkey PRIMARY KEY (a ASC)
       );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo6
 ----
@@ -217,7 +217,7 @@ CREATE TABLE foo7 (x PRIMARY KEY) AS VALUES (1), (NULL);
 statement ok
 BEGIN; CREATE TABLE foo8 (item PRIMARY KEY, qty, FAMILY "primary" (item, qty)) AS SELECT * FROM stock UNION VALUES ('spoons', 25), ('knives', 50); END
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo8
 ----
@@ -227,7 +227,7 @@ foo8  CREATE TABLE public.foo8 (
         CONSTRAINT foo8_pkey PRIMARY KEY (item ASC)
       );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo8
 ----
@@ -246,7 +246,7 @@ CREATE TABLE foo9 (
 ) AS
   SELECT * FROM baz
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo9
 ----
@@ -257,7 +257,7 @@ foo9  CREATE TABLE public.foo9 (
         CONSTRAINT foo9_pkey PRIMARY KEY (a ASC, c ASC)
       );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo9
 ----
@@ -271,7 +271,7 @@ foo9  CREATE TABLE public.foo9 (
 statement ok
 CREATE TABLE foo10 (a, PRIMARY KEY (c, b, a), b, c, FAMILY "primary" (a, b, c)) AS SELECT * FROM foo9
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo10
 ----
@@ -282,7 +282,7 @@ foo10  CREATE TABLE public.foo10 (
          CONSTRAINT foo10_pkey PRIMARY KEY (c ASC, b ASC, a ASC)
        );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo10
 ----
@@ -301,7 +301,7 @@ CREATE TABLE foo11 (
 ) AS
   VALUES (1, 3, 4), (10, 20, 40);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo11
 ----
@@ -312,7 +312,7 @@ foo11  CREATE TABLE public.foo11 (
          CONSTRAINT foo11_pkey PRIMARY KEY (x ASC, z ASC)
        );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo11
 ----
@@ -339,7 +339,7 @@ CREATE TABLE abcd(
 statement ok
 CREATE TABLE foo12 (a PRIMARY KEY FAMILY f1, b, c FAMILY fam_1_c, d) AS SELECT * FROM abcd;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo12
 ----
@@ -353,7 +353,7 @@ foo12  CREATE TABLE public.foo12 (
          FAMILY fam_1_c (c)
        );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo12
 ----
@@ -371,7 +371,7 @@ foo12  CREATE TABLE public.foo12 (
 statement ok
 CREATE TABLE foo13 (a, b, c, d, PRIMARY KEY(a, b), FAMILY pk (a, b), FAMILY (c, d)) AS SELECT * FROM abcd;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo13
 ----
@@ -385,7 +385,7 @@ foo13  CREATE TABLE public.foo13 (
          FAMILY fam_1_c_d (c, d)
        );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo13
 ----
@@ -406,7 +406,7 @@ ALTER TABLE foo13 RENAME d TO z
 statement ok
 ALTER TABLE foo13 RENAME c TO e
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo13
 ----
@@ -420,7 +420,7 @@ foo13  CREATE TABLE public.foo13 (
          FAMILY fam_1_c_d (e, z)
        );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo13
 ----
