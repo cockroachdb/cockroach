@@ -109,67 +109,67 @@ stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_b
 del: "r": found key false
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+9 gc_bytes_age=+2162
 >> put k=a v=a7 t=A
-put: lock acquisition = {a id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=a id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
 >> put k=b v=b7 t=A
-put: lock acquisition = {b id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=b id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_bytes=+48 gc_bytes_age=+1767 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
 >> put k=c v=c7 t=A
-put: lock acquisition = {c id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=c id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-198 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
 >> del k=d t=A
 del: "d": found key false
-del: lock acquisition = {d id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=d id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+48 gc_bytes_age=+5766 intent_count=+1 intent_bytes=+12 lock_count=+1 lock_age=+93
 >> del k=e t=A
 del: "e": found key true
-del: lock acquisition = {e id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=e id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: key_bytes=+12 val_count=+1 val_bytes=+48 live_count=-1 live_bytes=-21 gc_bytes_age=+7533 intent_count=+1 intent_bytes=+12 lock_count=+1 lock_age=+93
 >> del k=f localTs=5.9 t=A
 del: "f": found key false
-del: lock acquisition = {f id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=f id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: key_bytes=+12 val_count=+1 val_bytes=+61 gc_bytes_age=+6777 intent_count=+1 intent_bytes=+25 lock_count=+1 lock_age=+93
 >> put k=g v=g7 t=A
-put: lock acquisition = {g id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=g id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
 >> put k=h v=h7 t=A
-put: lock acquisition = {h id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=h id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-194 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
 >> put k=i v=i7 t=A
-put: lock acquisition = {i id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=i id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-198 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
 >> del k=j t=A
 del: "j": found key false
-del: lock acquisition = {j id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=j id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+48 gc_bytes_age=+5766 intent_count=+1 intent_bytes=+12 lock_count=+1 lock_age=+93
 >> del k=k t=A
 del: "k": found key false
-del: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: key_bytes=+12 val_count=+1 val_bytes=+48 gc_bytes_age=+5572 intent_count=+1 intent_bytes=+12 lock_count=+1 lock_age=+93
 >> del k=l localTs=5.9 t=A
 del: "l": found key false
-del: lock acquisition = {l id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=l id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: key_bytes=+12 val_count=+1 val_bytes=+61 gc_bytes_age=+6777 intent_count=+1 intent_bytes=+25 lock_count=+1 lock_age=+93
 >> put k=m v=m7 t=A
-put: lock acquisition = {m id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=m id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
 >> put k=n v=n7 t=A
-put: lock acquisition = {n id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=n id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_bytes=+48 gc_bytes_age=+1767 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
 >> put k=o v=o7 t=A
-put: lock acquisition = {o id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=o id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-188 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
 >> del k=p t=A
 del: "p": found key false
-del: lock acquisition = {p id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=p id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+48 gc_bytes_age=+5766 intent_count=+1 intent_bytes=+12 lock_count=+1 lock_age=+93
 >> del k=q t=A
 del: "q": found key true
-del: lock acquisition = {q id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=q id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: key_bytes=+12 val_count=+1 val_bytes=+48 live_count=-1 live_bytes=-21 gc_bytes_age=+7533 intent_count=+1 intent_bytes=+12 lock_count=+1 lock_age=+93
 >> del k=r localTs=5.9 t=A
 del: "r": found key false
-del: lock acquisition = {r id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=r id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: key_bytes=+12 val_count=+1 val_bytes=+61 gc_bytes_age=+6787 intent_count=+1 intent_bytes=+25 lock_count=+1 lock_age=+93
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 gul=0,0
@@ -257,67 +257,67 @@ with t=A ts=8
   del k=r
 ----
 >> put k=a v=a8 t=A ts=8
-put: lock acquisition = {a id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=a id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: lock_age=-1
 >> put k=b v=b8 t=A ts=8
-put: lock acquisition = {b id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=b id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: gc_bytes_age=-19 lock_age=-1
 >> put k=c v=c8 t=A ts=8
-put: lock acquisition = {c id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=c id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: lock_age=-1
 >> del k=d t=A ts=8
 del: "d": found key false
-del: lock acquisition = {d id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=d id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: gc_bytes_age=-62 lock_age=-1
 >> del k=e t=A ts=8
 del: "e": found key true
-del: lock acquisition = {e id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=e id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: gc_bytes_age=-81 lock_age=-1
 >> del k=f t=A ts=8
 del: "f": found key false
-del: lock acquisition = {f id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=f id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=-13 gc_bytes_age=-1271 intent_bytes=-13 lock_age=-1
 >> put k=g v=g8 t=A ts=8
-put: lock acquisition = {g id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=g id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: lock_age=-1
 >> put k=h v=h8 t=A ts=8
-put: lock acquisition = {h id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=h id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: lock_age=-1
 >> put k=i v=i8 t=A ts=8
-put: lock acquisition = {i id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=i id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: lock_age=-1
 >> del k=j t=A ts=8
 del: "j": found key false
-del: lock acquisition = {j id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=j id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: gc_bytes_age=-62 lock_age=-1
 >> del k=k t=A ts=8
 del: "k": found key false
-del: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: gc_bytes_age=-62 lock_age=-1
 >> del k=l t=A ts=8
 del: "l": found key false
-del: lock acquisition = {l id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=l id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=-13 gc_bytes_age=-1271 intent_bytes=-13 lock_age=-1
 >> put k=m v=m8 t=A ts=8
-put: lock acquisition = {m id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=m id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: lock_age=-1
 >> put k=n v=n8 t=A ts=8
-put: lock acquisition = {n id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=n id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: gc_bytes_age=-19 lock_age=-1
 >> put k=o v=o8 t=A ts=8
-put: lock acquisition = {o id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=o id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: lock_age=-1
 >> del k=p t=A ts=8
 del: "p": found key false
-del: lock acquisition = {p id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=p id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: gc_bytes_age=-62 lock_age=-1
 >> del k=q t=A ts=8
 del: "q": found key true
-del: lock acquisition = {q id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=q id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: gc_bytes_age=-81 lock_age=-1
 >> del k=r t=A ts=8
 del: "r": found key false
-del: lock acquisition = {r id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=r id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=-13 gc_bytes_age=-1271 intent_bytes=-13 lock_age=-1
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=8.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=8.000000000,0 gul=0,0
@@ -406,66 +406,66 @@ with t=A ts=9
 ----
 >> del k=a t=A ts=9
 del: "a": found key false
-del: lock acquisition = {a id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=a id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=-7 live_count=-1 live_bytes=-69 gc_bytes_age=+5642 intent_bytes=-7 lock_age=-1
 >> del k=b t=A ts=9
 del: "b": found key true
-del: lock acquisition = {b id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=b id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=-7 live_count=-1 live_bytes=-69 gc_bytes_age=+5623 intent_bytes=-7 lock_age=-1
 >> del k=c t=A ts=9
 del: "c": found key false
-del: lock acquisition = {c id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=c id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=-7 live_count=-1 live_bytes=-69 gc_bytes_age=+5642 intent_bytes=-7 lock_age=-1
 >> put k=d v=d9 t=A ts=9
-put: lock acquisition = {d id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=d id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=+7 live_count=+1 live_bytes=+69 gc_bytes_age=-5704 intent_bytes=+7 lock_age=-1
 >> put k=e v=e9 t=A ts=9
-put: lock acquisition = {e id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=e id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=+7 live_count=+1 live_bytes=+69 gc_bytes_age=-5723 intent_bytes=+7 lock_age=-1
 >> put k=f v=f9 t=A ts=9
-put: lock acquisition = {f id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=f id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=+7 live_count=+1 live_bytes=+69 gc_bytes_age=-5704 intent_bytes=+7 lock_age=-1
 >> del k=g t=A ts=9
 del: "g": found key false
-del: lock acquisition = {g id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=g id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=-7 live_count=-1 live_bytes=-69 gc_bytes_age=+5642 intent_bytes=-7 lock_age=-1
 >> del k=h t=A ts=9
 del: "h": found key false
-del: lock acquisition = {h id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=h id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=-7 live_count=-1 live_bytes=-69 gc_bytes_age=+5642 intent_bytes=-7 lock_age=-1
 >> del k=i t=A ts=9
 del: "i": found key false
-del: lock acquisition = {i id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=i id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=-7 live_count=-1 live_bytes=-69 gc_bytes_age=+5642 intent_bytes=-7 lock_age=-1
 >> put k=j v=j9 t=A ts=9
-put: lock acquisition = {j id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=j id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=+7 live_count=+1 live_bytes=+69 gc_bytes_age=-5704 intent_bytes=+7 lock_age=-1
 >> put k=k v=k9 t=A ts=9
-put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=+7 live_count=+1 live_bytes=+69 gc_bytes_age=-5704 intent_bytes=+7 lock_age=-1
 >> put k=l v=l9 t=A ts=9
-put: lock acquisition = {l id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=l id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=+7 live_count=+1 live_bytes=+69 gc_bytes_age=-5704 intent_bytes=+7 lock_age=-1
 >> del k=m t=A ts=9
 del: "m": found key false
-del: lock acquisition = {m id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=m id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=-7 live_count=-1 live_bytes=-69 gc_bytes_age=+5642 intent_bytes=-7 lock_age=-1
 >> del k=n t=A ts=9
 del: "n": found key true
-del: lock acquisition = {n id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=n id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=-7 live_count=-1 live_bytes=-69 gc_bytes_age=+5623 intent_bytes=-7 lock_age=-1
 >> del k=o t=A ts=9
 del: "o": found key false
-del: lock acquisition = {o id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 Replicated Intent []}
+del: lock acquisition = {span=o id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=-7 live_count=-1 live_bytes=-69 gc_bytes_age=+5642 intent_bytes=-7 lock_age=-1
 >> put k=p v=p9 t=A ts=9
-put: lock acquisition = {p id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=p id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=+7 live_count=+1 live_bytes=+69 gc_bytes_age=-5704 intent_bytes=+7 lock_age=-1
 >> put k=q v=q9 t=A ts=9
-put: lock acquisition = {q id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=q id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=+7 live_count=+1 live_bytes=+69 gc_bytes_age=-5723 intent_bytes=+7 lock_age=-1
 >> put k=r v=r9 t=A ts=9
-put: lock acquisition = {r id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=r id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=+7 live_count=+1 live_bytes=+69 gc_bytes_age=-5704 intent_bytes=+7 lock_age=-1
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=9.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=9.000000000,0 gul=0,0

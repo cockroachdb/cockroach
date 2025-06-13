@@ -11,10 +11,10 @@ with t=A k=k2
   get
 ----
 >> put v=a t=A k=k2
-put: lock acquisition = {k2 id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=10 Replicated Intent []}
+put: lock acquisition = {span=k2 id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=10 durability=Replicated strength=Intent ignored=[]}
 stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+60 live_count=+1 live_bytes=+75 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+99
 >> put v=b t=A k=k2
-put: lock acquisition = {k2 id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=20 Replicated Intent [{5 15}]}
+put: lock acquisition = {span=k2 id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=20 durability=Replicated strength=Intent ignored=[{5 15}]}
 stats: val_bytes=-2 live_bytes=-2
 get: "k2" -> /BYTES/b @1.000000000,0
 get: "k2" -> <no data>
@@ -33,11 +33,11 @@ with t=A k=k3
   del
 ----
 >> put v=a t=A k=k3
-put: lock acquisition = {k3 id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=30 Replicated Intent [{5 25}]}
+put: lock acquisition = {span=k3 id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=30 durability=Replicated strength=Intent ignored=[{5 25}]}
 stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+60 live_count=+1 live_bytes=+75 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+99
 >> del t=A k=k3
 del: "k3": found key false
-del: lock acquisition = {k3 id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=40 Replicated Intent [{5 35}]}
+del: lock acquisition = {span=k3 id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=40 durability=Replicated strength=Intent ignored=[{5 35}]}
 stats: val_bytes=-8 live_count=-1 live_bytes=-75 gc_bytes_age=+6633 intent_bytes=-6
 >> at end:
 txn: "A" meta={id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=1.000000000,0 gul=0,0 isn=1
@@ -58,13 +58,13 @@ with t=A k=k4
   cput      v=c
 ----
 >> put v=a t=A k=k4
-put: lock acquisition = {k4 id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=50 Replicated Intent [{5 35}]}
+put: lock acquisition = {span=k4 id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=50 durability=Replicated strength=Intent ignored=[{5 35}]}
 stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+60 live_count=+1 live_bytes=+75 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+99
 >> cput v=b cond=a t=A k=k4
-cput: lock acquisition = {k4 id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=51 Replicated Intent [{5 35}]}
+cput: lock acquisition = {span=k4 id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=51 durability=Replicated strength=Intent ignored=[{5 35}]}
 stats: val_bytes=+10 live_bytes=+10
 >> cput v=c t=A k=k4
-cput: lock acquisition = {k4 id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=60 Replicated Intent [{5 55}]}
+cput: lock acquisition = {span=k4 id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=60 durability=Replicated strength=Intent ignored=[{5 55}]}
 stats: val_bytes=-12 live_bytes=-12
 >> at end:
 txn: "A" meta={id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=60} lock=true stat=PENDING rts=1.000000000,0 gul=0,0 isn=1
@@ -97,17 +97,17 @@ with t=B k=k5
 >> put k=k5 v=foo ts=3
 stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+8 live_count=+1 live_bytes=+23
 >> put v=a t=B k=k5
-put: lock acquisition = {k5 id=00000002 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=10 Replicated Intent []}
+put: lock acquisition = {span=k5 id=00000002 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=10 durability=Replicated strength=Intent ignored=[]}
 stats: key_bytes=+12 val_count=+1 val_bytes=+60 live_bytes=+52 gc_bytes_age=+1900 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+95
 >> put v=b t=B k=k5
-put: lock acquisition = {k5 id=00000002 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=20 Replicated Intent []}
+put: lock acquisition = {span=k5 id=00000002 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=20 durability=Replicated strength=Intent ignored=[]}
 stats: val_bytes=+10 live_bytes=+10
 >> put v=c t=B k=k5
-put: lock acquisition = {k5 id=00000002 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=30 Replicated Intent [{15 25}]}
+put: lock acquisition = {span=k5 id=00000002 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=30 durability=Replicated strength=Intent ignored=[{15 25}]}
 stats: no change
 meta: "k5" -> txn={id=00000002 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=30} ts=5.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 >> put v=d t=B k=k5
-put: lock acquisition = {k5 id=00000002 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=40 Replicated Intent [{5 35}]}
+put: lock acquisition = {span=k5 id=00000002 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=40 durability=Replicated strength=Intent ignored=[{5 35}]}
 stats: no change
 meta: "k5" -> txn={id=00000002 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=40} ts=5.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 >> resolve_intent status=COMMITTED t=B k=k5
