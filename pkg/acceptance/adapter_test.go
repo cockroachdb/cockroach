@@ -69,6 +69,7 @@ func TestDockerNodeJS(t *testing.T) {
 	export SHOULD_FAIL=%v
 	# Get access to globally installed node modules.
 	export NODE_PATH=$NODE_PATH:/usr/lib/node
+	export NODE_TLS_REJECT_UNAUTHORIZED=0
 	# Have a 10 second timeout on promises, in case the server is slow.
 	/usr/lib/node/.bin/mocha -t 10000 . 
 	`
@@ -110,9 +111,12 @@ func TestDockerPython(t *testing.T) {
 	ctx := context.Background()
 	t.Run("Success", func(t *testing.T) {
 		testDockerSuccess(ctx, t, "python", []string{"sh", "-c", "cd /mnt/data/python && python test.py 3"})
+		testDockerSuccess(ctx, t, "python", []string{"sh", "-c", "cd /mnt/data/python && python3 test_pyscopg3.py 3"})
+
 	})
 	t.Run("Fail", func(t *testing.T) {
 		testDockerFail(ctx, t, "python", []string{"sh", "-c", "cd /mnt/data/python && python test.py 2"})
+		testDockerFail(ctx, t, "python", []string{"sh", "-c", "cd /mnt/data/python && python3 test_pyscopg3.py 2"})
 	})
 }
 
