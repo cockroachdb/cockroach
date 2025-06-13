@@ -257,23 +257,28 @@ var SecondaryTenantScatterEnabled = settings.RegisterBoolSetting(
 	settings.WithName("sql.virtual_cluster.feature_access.manual_range_scatter.enabled"),
 )
 
-// traceTxnThreshold can be used to log SQL transactions that take
-// longer than duration to complete. For example, traceTxnThreshold=1s
-// will log the trace for any transaction that takes 1s or longer. To
-// log traces for all transactions use traceTxnThreshold=1ns. Note
-// that any positive duration will enable tracing and will slow down
-// all execution because traces are gathered for all transactions even
-// if they are not output.
+// traceTxnThreshold logs SQL transactions exceeding a duration, captured via
+// probabilistic tracing. For example, with `sql.trace.txn.percent` set to 0.5,
+// 50% of transactions are traced, and those exceeding this threshold are
+// logged.
 var traceTxnThreshold = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"sql.trace.txn.enable_threshold",
-	"enables tracing on all transactions; transactions open for longer than "+
-		"this duration will have their trace logged (set to 0 to disable); "+
-		"note that enabling this may have a negative performance impact; "+
-		"this setting is coarser-grained than sql.trace.stmt.enable_threshold "+
-		"because it applies to all statements within a transaction as well as "+
-		"client communication (e.g. retries)",
+	"enables transaction traces for transactions exceeding this duration, used "+
+		"with 'sql.trace.txn.percent'.",
 	0,
+	settings.WithPublic)
+
+// traceTxnPct Enables probabilistic transaction tracing.
+var traceTxnPct = settings.RegisterFloatSetting(
+	settings.ApplicationLevel,
+	"sql.trace.txn.percent",
+	"enables probabilistic transaction tracing. It should be used in conjunction "+
+		"with traceTxnThreshold. A percentage of transactions between 0 and 1.0 "+
+		"will have tracing enabled, and only those which exceed the configured "+
+		"threshold will be logged.",
+	0,
+	settings.NonNegativeFloatWithMaximum(1.0),
 	settings.WithPublic)
 
 // TraceStmtThreshold is identical to traceTxnThreshold except it applies to
