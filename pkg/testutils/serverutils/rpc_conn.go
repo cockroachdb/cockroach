@@ -44,6 +44,6 @@ func (c *grpcConn) NewInternalClient() kvpb.InternalClient {
 	return kvpb.NewInternalClient(c.conn)
 }
 
-func (c *grpcConn) NewDistSQLClient() execinfrapb.DistSQLClient {
-	return execinfrapb.NewDistSQLClient(c.conn)
+func (c *grpcConn) NewDistSQLClient() execinfrapb.RPCDistSQLClient {
+	return execinfrapb.NewGRPCDistSQLClientAdapter(c.conn)
 }

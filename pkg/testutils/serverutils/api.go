@@ -157,7 +157,7 @@ type RPCConn interface {
 	NewInitClient() serverpb.InitClient
 	NewTimeSeriesClient() tspb.TimeSeriesClient
 	NewInternalClient() kvpb.InternalClient
-	NewDistSQLClient() execinfrapb.DistSQLClient
+	NewDistSQLClient() execinfrapb.RPCDistSQLClient
 }
 
 // ApplicationLayerInterface defines accessors to the application
