@@ -223,6 +223,12 @@ func emitExplain(
 		if err != nil {
 			return err.Error()
 		}
+		// Show up to 20 physical spans.
+		var more string
+		if maxSpans := 20; len(spans) > maxSpans {
+			more = fmt.Sprintf(" … (%d more)", len(spans)-maxSpans)
+			spans = spans[:maxSpans]
+		}
 		// skip is how many fields to skip when pretty-printing spans.
 		// Usually 2, but can be 4 when running EXPLAIN from a tenant since there
 		// will be an extra tenant prefix and ID. For example:
@@ -235,7 +241,7 @@ func emitExplain(
 		if !codec.ForSystemTenant() {
 			skip = 4
 		}
-		return catalogkeys.PrettySpans(idx, spans, skip)
+		return catalogkeys.PrettySpans(idx, spans, skip) + more
 	}
 
 	return explain.Emit(ctx, evalCtx, explainPlan, ob, spanFormatFn, createPostQueryPlanIfMissing)
