@@ -2462,3 +2462,34 @@ vectorized: true
       estimated row count: 1,000,000,000,000 (100% of the table; stats collected <hidden> ago)
       table: very_large_table@very_large_table_pkey
       spans: FULL SCAN
+
+statement ok
+CREATE TABLE t_float (k FLOAT PRIMARY KEY);
+
+# A query with relatively large number of physical spans.
+query T
+EXPLAIN (VERBOSE) SELECT count(*) FROM t_float
+  WHERE k = ANY (
+                 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+                 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+                 21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+                 31, 32, 33, 34, 35, 36, 37, 38, 39, 40
+                );
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: count_rows()
+│
+└── • project
+    │ columns: ()
+    │
+    └── • scan
+          columns: (k)
+          estimated row count: 40 (missing stats)
+          table: t_float@t_float_pkey
+          spans: /1/0 /2/0 /3/0 /4/0 /5/0 /6/0 /7/0 /8/0 /9/0 /10/0 /11/0 /12/0 /13/0 /14/0 /15/0 /16/0 /17/0 /18/0 /19/0 /20/0 … (20 more)
+          parallel
