@@ -59,6 +59,31 @@ vectorized: true
       table: abc@abc_pkey
       spans: FULL SCAN
 
+# Same as above but with lookup join parallelization.
+statement ok
+SET parallelize_multi_key_lookup_joins_enabled = true;
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 99
+│ table: def@def_pkey
+│ equality: (b) = (f)
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+statement ok
+RESET parallelize_multi_key_lookup_joins_enabled;
+
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND e = c
 ----
