@@ -132,8 +132,8 @@ func TestEffectiveCacheSize(t *testing.T) {
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			opts := TableDescriptor_SequenceOpts{
-				CacheSize:     tt.session,
-				NodeCacheSize: tt.node,
+				SessionCacheSize: tt.session,
+				NodeCacheSize:    tt.node,
 			}
 			result := opts.EffectiveCacheSize()
 			if result != tt.expectedResult {
