@@ -4188,17 +4188,17 @@ https://www.postgresql.org/docs/13/view-pg-sequences.html
 				// SEQUENE sequencename OWNED BY table.column, This is not the expected
 				// value on sequenceowner.
 				return addRow(
-					tree.NewDString(sc.GetName()),           // schemaname
-					tree.NewDString(table.GetName()),        // sequencename
-					owner,                                   // sequenceowner
-					tree.NewDOid(oid.T_int8),                // data_type
-					tree.NewDInt(tree.DInt(opts.Start)),     // start_value
-					tree.NewDInt(tree.DInt(opts.MinValue)),  // min_value
-					tree.NewDInt(tree.DInt(opts.MaxValue)),  // max_value
-					tree.NewDInt(tree.DInt(opts.Increment)), // increment_by
-					tree.DBoolFalse,                         // cycle
-					tree.NewDInt(tree.DInt(opts.CacheSize)), // cache_size
-					lastValue,                               // last_value
+					tree.NewDString(sc.GetName()),                      // schemaname
+					tree.NewDString(table.GetName()),                   // sequencename
+					owner,                                              // sequenceowner
+					tree.NewDOid(oid.T_int8),                           // data_type
+					tree.NewDInt(tree.DInt(opts.Start)),                // start_value
+					tree.NewDInt(tree.DInt(opts.MinValue)),             // min_value
+					tree.NewDInt(tree.DInt(opts.MaxValue)),             // max_value
+					tree.NewDInt(tree.DInt(opts.Increment)),            // increment_by
+					tree.DBoolFalse,                                    // cycle
+					tree.NewDInt(tree.DInt(opts.EffectiveCacheSize())), // cache_size
+					lastValue, // last_value
 				)
 			},
 		)

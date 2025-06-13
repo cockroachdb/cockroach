@@ -2099,7 +2099,7 @@ query T colnames,rowsort
 SELECT make_timestamptz(-2013, 7, 15, 8, 15, 23.5)
 ----
 make_timestamptz
--2013-07-15 08:15:23.5 -0500 EST
+-2013-07-15 08:15:23.5 -0500 -0500
 
 query T colnames,rowsort
 SELECT make_timestamptz(2013, 7, 15, 8, 15, 23.5231231244234)

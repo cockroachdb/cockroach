@@ -38,7 +38,7 @@ func BenchmarkSequenceIncrement(b *testing.B) {
 
 			sqlDB := cluster.ServerConn(0)
 			if _, err := sqlDB.Exec(fmt.Sprintf(`
-				CREATE SEQUENCE seq CACHE %d;
+				CREATE SEQUENCE seq PER SESSION CACHE %d;
 				CREATE TABLE tbl (
 					id INT PRIMARY KEY DEFAULT nextval('seq'),
 					foo text
@@ -450,7 +450,7 @@ func TestCachedSequences(t *testing.T) {
 			test: func(t *testing.T) {
 				execStmt(t, `
 				CREATE SEQUENCE s
-									CACHE 5
+									PER SESSION CACHE 5
 				   INCREMENT BY 2
 					   START WITH 2
 			  `)
@@ -502,14 +502,14 @@ func TestCachedSequences(t *testing.T) {
 			test: func(t *testing.T) {
 				execStmt(t, `
 				CREATE SEQUENCE s1
-									CACHE 5
+									PER SESSION CACHE 5
 				   INCREMENT BY 2
 					   START WITH 2
 			  `)
 
 				execStmt(t, `
 				CREATE SEQUENCE s2
-									CACHE 4
+									PER SESSION CACHE 4
 				   INCREMENT BY 3
 					   START WITH 3
 			  `)
@@ -1122,7 +1122,7 @@ func TestSequencesZeroCacheSize(t *testing.T) {
 
 	// Alter the descriptor to have a cache size of 0.
 	seqDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "seq")
-	seqDesc.SequenceOpts.CacheSize = 0
+	seqDesc.SequenceOpts.SessionCacheSize = 0
 	err := kvDB.Put(
 		context.Background(),
 		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, seqDesc.GetID()),

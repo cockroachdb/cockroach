@@ -27,7 +27,7 @@ SELECT nextval('foo')
 7
 
 statement ok
-ALTER SEQUENCE foo CACHE 100
+ALTER SEQUENCE foo PER SESSION CACHE 100
 
 query I
 SELECT nextval('foo');
@@ -39,19 +39,19 @@ user root
 query I
 SELECT nextval('foo');
 ----
-512
+17
 
 user testuser
 
 query I
 SELECT nextval('foo');
 ----
-17
+22
 
 query T
 SELECT create_statement FROM [SHOW CREATE SEQUENCE foo]
 ----
-CREATE SEQUENCE public.foo MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 5 START 1 CACHE 100;
+CREATE SEQUENCE public.foo MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 5 START 1 PER NODE CACHE 100;
 
 statement ok
 ALTER SEQUENCE foo CACHE 1

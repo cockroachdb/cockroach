@@ -1524,7 +1524,7 @@ CREATE SEQUENCE cache_test CACHE 10 INCREMENT 1
 query TT
 SHOW CREATE SEQUENCE cache_test
 ----
-cache_test  CREATE SEQUENCE public.cache_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 CACHE 10;
+cache_test  CREATE SEQUENCE public.cache_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 PER NODE CACHE 10;
 
 # Verify cache invalidation with schema changes.
 
@@ -1854,7 +1854,7 @@ SELECT currval('seq71135')
 query I
 SELECT nextval('seq71135')
 ----
-201
+2
 
 # The 2-parameter version of setval uses is_called=true.
 query I
@@ -1875,7 +1875,7 @@ SELECT currval('seq71135')
 query I
 SELECT nextval('seq71135')
 ----
-501
+3
 
 subtest sequence_in_txn
 
