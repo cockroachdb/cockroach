@@ -38,7 +38,5 @@ jobs:
           payload: |
             {
               "channel": "C08JE13CM9S",
-              "text": ${{ toJson(format(
-                'Some Pebble dependencies are not up to date. Details below:\n```{0}```',
-                steps.run_script.outputs.output)) }}
+              "text": ${{ toJson(steps.run_script.outputs.output) }}
             }
