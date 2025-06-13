@@ -18,8 +18,8 @@ put k=f ts=1 v=f1
 put_rangekey k=b end=d ts=5
 put_rangekey k=e end=g ts=5
 ----
-put: lock acquisition = {c id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 Replicated Intent []}
-put: lock acquisition = {e id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {span=c id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=e id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 durability=Replicated strength=Intent ignored=[]}
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 gul=0,0
 rangekey: {b-d}/[5.000000000,0=/<empty>]

@@ -289,7 +289,17 @@ const (
 	extendedPreludeSize    = extendedMVCCValLenSize + 1
 )
 
-var _ redact.SafeFormatter = ValueType(0)
+var _ redact.SafeFormatter = new(ValueType)
+var _ redact.SafeFormatter = new(LockStateInfo)
+var _ redact.SafeFormatter = new(RKey)
+var _ redact.SafeFormatter = new(Key)
+var _ redact.SafeFormatter = new(StoreProperties)
+var _ redact.SafeFormatter = new(Transaction)
+var _ redact.SafeFormatter = new(ChangeReplicasTrigger)
+var _ redact.SafeFormatter = new(Lease)
+var _ redact.SafeFormatter = new(Span)
+var _ redact.SafeFormatter = new(RSpan)
+var _ redact.SafeFormatter = new(LockAcquisition)
 
 // Safeformat implements the redact.SafeFormatter interface.
 func (t ValueType) SafeFormat(w redact.SafePrinter, _ rune) {
@@ -2362,6 +2372,11 @@ func (m *LockAcquisition) Empty() bool {
 	return m.Span.Equal(Span{})
 }
 
+func (m LockAcquisition) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("{span=%v %v durability=%v strength=%v ignored=%v}",
+		m.Span, m.Txn, m.Durability, m.Strength, m.IgnoredSeqNums)
+}
+
 // MakeLockUpdate makes a lock update from the given txn and span.
 //
 // See also txn.LocksAsLockUpdates().
@@ -2585,8 +2600,13 @@ func (s Span) AsRange() interval.Range {
 }
 
 func (s Span) String() string {
+	return redact.StringWithoutMarkers(s)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (s Span) SafeFormat(w redact.SafePrinter, _ rune) {
 	const maxChars = math.MaxInt32
-	return PrettyPrintRange(s.Key, s.EndKey, maxChars).StripMarkers()
+	w.Print(PrettyPrintRange(s.Key, s.EndKey, maxChars))
 }
 
 // SplitOnKey returns two spans where the left span has EndKey and right span
@@ -2782,8 +2802,12 @@ func (rs RSpan) ContainsKeyRange(start, end RKey) bool {
 }
 
 func (rs RSpan) String() string {
+	return redact.StringWithoutMarkers(rs)
+}
+
+func (rs RSpan) SafeFormat(w redact.SafePrinter, r rune) {
 	const maxChars = math.MaxInt32
-	return PrettyPrintRange(Key(rs.Key), Key(rs.EndKey), maxChars).StripMarkers()
+	w.Print(PrettyPrintRange(Key(rs.Key), Key(rs.EndKey), maxChars))
 }
 
 // Intersect returns the intersection of the current span and the
