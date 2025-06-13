@@ -3319,15 +3319,17 @@ func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) *tenan
 	for {
 		if m, ok := sm.tenants.Load(tenantID); ok {
 			if alreadyDestroyed := incRef(m); !alreadyDestroyed {
-				return &tenantMetricsRef{
-					_tenantID: tenantID,
-				}
+				return &m.ref
 			}
 			// Somebody else concurrently took the reference count to zero, go back
 			// around. Because of the locking in releaseTenant, we know that we'll
 			// find a different value or no value at all on the next iteration.
 		} else {
-			m := &tenantStorageMetrics{}
+			m := &tenantStorageMetrics{
+				ref: tenantMetricsRef{
+					_tenantID: tenantID,
+				},
+			}
 			m.mu.Lock()
 			_, loaded := sm.tenants.LoadOrStore(tenantID, m)
 			if loaded {
@@ -3359,9 +3361,7 @@ func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) *tenan
 			m.SysCount = sm.SysCount.AddChild(tenantIDStr)
 			m.AbortSpanBytes = sm.AbortSpanBytes.AddChild(tenantIDStr)
 			m.mu.Unlock()
-			return &tenantMetricsRef{
-				_tenantID: tenantID,
-			}
+			return &m.ref
 		}
 	}
 }
@@ -3370,11 +3370,8 @@ func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) *tenan
 // acquired with acquireTenant. It will fatally log if no entry exists for this
 // tenant.
 func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, ref *tenantMetricsRef) {
-	m := sm.getTenant(ctx, ref) // NB: asserts against use-after-release
-	if atomic.SwapInt32(&ref._state, 1) != 0 {
-		ref.assert(ctx) // this will fatal
-		return          // unreachable
-	}
+	m := sm.getTenant(ctx, ref)
+
 	ref._stack.Lock()
 	ref._stack.SafeStack = debugutil.Stack()
 	ref._stack.Unlock()
@@ -3385,6 +3382,11 @@ func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, ref *tenantM
 		log.Fatalf(ctx, "invalid refCount on metrics for tenant %v: %d", ref._tenantID, m.mu.refCount)
 	} else if m.mu.refCount > 0 {
 		return
+	}
+
+	if atomic.SwapInt32(&ref._state, 1) != 0 {
+		log.FatalfDepth(ctx, 1, "tenant metrics already released in:\n%s", ref._stack.SafeStack)
+		return // unreachable
 	}
 
 	// The refCount is zero, delete this instance after destroying its metrics.
@@ -3434,7 +3436,8 @@ func (sm *TenantsStorageMetrics) getTenant(
 }
 
 type tenantStorageMetrics struct {
-	mu struct {
+	ref tenantMetricsRef
+	mu  struct {
 		syncutil.Mutex
 		refCount int
 	}
