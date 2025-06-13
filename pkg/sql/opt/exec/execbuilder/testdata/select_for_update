@@ -786,6 +786,7 @@ vectorized: true
     │ equality: (b) = (a)
     │ equality cols are key
     │ locking strength: for update
+    │ parallel
     │
     └── • distinct
         │ columns: (b)
@@ -813,6 +814,7 @@ vectorized: true
     │ table: t@t_pkey
     │ equality: (b) = (a)
     │ equality cols are key
+    │ parallel
     │
     └── • distinct
         │ columns: (b)
@@ -842,6 +844,7 @@ vectorized: true
     │ equality: (b) = (a)
     │ equality cols are key
     │ locking strength: for update
+    │ parallel
     │
     └── • distinct
         │ columns: (b)
@@ -869,6 +872,7 @@ vectorized: true
     │ table: t@t_pkey
     │ equality: (b) = (a)
     │ equality cols are key
+    │ parallel
     │
     └── • distinct
         │ columns: (b)
@@ -1740,6 +1744,7 @@ vectorized: true
     │ equality: (b) = (a)
     │ equality cols are key
     │ locking strength: for update
+    │ parallel
     │
     └── • scan
           columns: (a, b)
@@ -1764,6 +1769,7 @@ vectorized: true
     │ equality: (b) = (a)
     │ equality cols are key
     │ locking strength: for update
+    │ parallel
     │
     └── • scan
           columns: (a, b)
@@ -1786,6 +1792,7 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ locking strength: for update
+│ parallel
 │
 └── • lookup join (inner)
     │ columns: (a, b, a, b)
@@ -1829,6 +1836,7 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ locking strength: for update
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -1896,6 +1904,7 @@ vectorized: true
     │ equality cols are key
     │ pred: b @> b
     │ locking strength: for update
+    │ parallel
     │
     └── • project
         │ columns: (a, b, c, a)
@@ -1964,6 +1973,7 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ locking strength: for update
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -2720,6 +2730,7 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ locking strength: for update
+│ parallel
 │
 └── • filter
     │ columns: (a, b)
@@ -2747,6 +2758,7 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ locking strength: for update
+│ parallel
 │
 └── • scan
       columns: (a, b)
@@ -2788,6 +2800,7 @@ vectorized: true
 │ equality: (b) = (a)
 │ equality cols are key
 │ locking strength: for update
+│ parallel
 │
 └── • scan
       columns: (a, b)
@@ -2810,6 +2823,7 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ locking strength: for update
+│ parallel
 │
 └── • lookup join (inner)
     │ columns: (a, b, a, b, c)
@@ -2818,6 +2832,7 @@ vectorized: true
     │ equality: (b) = (a)
     │ equality cols are key
     │ pred: c < a
+    │ parallel
     │
     └── • scan
           columns: (a, b)
@@ -2839,6 +2854,7 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ locking strength: for update
+│ parallel
 │
 └── • lookup join (inner)
     │ columns: (a, b, a, b)
@@ -2866,6 +2882,7 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ locking strength: for update
+│ parallel
 │
 └── • lookup join (inner)
     │ columns: (a, b, a, b, c)
@@ -2873,6 +2890,7 @@ vectorized: true
     │ table: u@u_pkey
     │ equality: (b) = (a)
     │ equality cols are key
+    │ parallel
     │
     └── • scan
           columns: (a, b)
@@ -2894,6 +2912,7 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ locking strength: for update
+│ parallel
 │
 └── • lookup join (inner)
     │ columns: (a, b, a, b)
@@ -2901,6 +2920,7 @@ vectorized: true
     │ table: t@t_pkey
     │ equality: (b) = (a)
     │ equality cols are key
+    │ parallel
     │
     └── • scan
           columns: (a, b)
@@ -2922,6 +2942,7 @@ vectorized: true
 │ equality: (b) = (a)
 │ equality cols are key
 │ locking strength: for update
+│ parallel
 │
 └── • scan
       columns: (a, b)
@@ -2958,6 +2979,7 @@ vectorized: true
     │ equality: (x) = (x)
     │ equality cols are key
     │ locking strength: for update
+    │ parallel
     │
     └── • scan
           columns: (x, y)
@@ -2999,6 +3021,7 @@ vectorized: true
     │ equality: (x) = (x)
     │ equality cols are key
     │ locking strength: for share
+    │ parallel
     │
     └── • project
         │ columns: (x, y)
@@ -3049,6 +3072,7 @@ vectorized: true
 │ equality: (x) = (x)
 │ equality cols are key
 │ locking strength: for update
+│ parallel
 │
 └── • lookup join (inner)
     │ columns: (a, b, x)
@@ -3056,6 +3080,7 @@ vectorized: true
     │ table: xyz@xyz_pkey
     │ equality: (b) = (x)
     │ equality cols are key
+    │ parallel
     │
     └── • scan
           columns: (a, b)
@@ -3077,6 +3102,7 @@ vectorized: true
 │ equality: (b) = (x)
 │ equality cols are key
 │ locking strength: for update
+│ parallel
 │
 └── • scan
       columns: (a, b)

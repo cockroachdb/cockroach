@@ -843,6 +843,7 @@ func (e *distSQLSpecExecFactory) ConstructIndexJoin(
 	reqOrdering exec.OutputOrdering,
 	locking opt.Locking,
 	limitHint int64,
+	parallelize bool,
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(input)
 	tabDesc := table.(*optTable).desc
@@ -865,6 +866,7 @@ func (e *distSQLSpecExecFactory) ConstructIndexJoin(
 		keyCols:     keyCols,
 		reqOrdering: ReqOrdering(reqOrdering),
 		limitHint:   limitHint,
+		parallelize: parallelize,
 	}
 
 	recommendation := canDistribute
@@ -902,6 +904,7 @@ func (e *distSQLSpecExecFactory) ConstructLookupJoin(
 	limitHint int64,
 	remoteOnlyLookups bool,
 	reverseScans bool,
+	parallelize bool,
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(input)
 	var planNodesToClose []planNode
@@ -950,6 +953,7 @@ func (e *distSQLSpecExecFactory) ConstructLookupJoin(
 			limitHint:                  limitHint,
 			remoteOnlyLookups:          remoteOnlyLookups,
 			reverseScans:               reverseScans,
+			parallelize:                parallelize,
 		}
 		if onCond != tree.DBoolTrue {
 			planInfo.onCond = onCond

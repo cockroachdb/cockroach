@@ -78,6 +78,7 @@ vectorized: true
             │ table: t@t_pkey
             │ equality: (k) = (k)
             │ equality cols are key
+            │ parallel
             │
             └── • vector search
                   columns: (k)
@@ -113,6 +114,7 @@ vectorized: true
             │ table: t@t_pkey
             │ equality: (k) = (k)
             │ equality cols are key
+            │ parallel
             │
             └── • vector search
                   columns: (k)
@@ -152,6 +154,7 @@ vectorized: true
             │ table: t_multi_col@t_multi_col_pkey
             │ equality: (x, y) = (x, y)
             │ equality cols are key
+            │ parallel
             │
             └── • vector search
                   columns: (x, y)
@@ -192,6 +195,7 @@ vectorized: true
             │ table: t_multi_col@t_multi_col_pkey
             │ equality: (x, y) = (x, y)
             │ equality cols are key
+            │ parallel
             │
             └── • vector search
                   columns: (x, y)

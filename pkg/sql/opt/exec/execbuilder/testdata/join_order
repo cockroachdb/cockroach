@@ -48,6 +48,7 @@ vectorized: true
 │ table: cy@cy_pkey
 │ equality: (c) = (c)
 │ equality cols are key
+│ parallel
 │
 └── • lookup join (inner)
     │ columns: (a, b, c, d, b, x)
@@ -55,6 +56,7 @@ vectorized: true
     │ table: bx@bx_pkey
     │ equality: (b) = (b)
     │ equality cols are key
+    │ parallel
     │
     └── • scan
           columns: (a, b, c, d)
@@ -77,6 +79,7 @@ vectorized: true
 │ table: cy@cy_pkey
 │ equality: (c) = (c)
 │ equality cols are key
+│ parallel
 │
 └── • lookup join (inner)
     │ columns: (a, b, c, d, b, x)
@@ -84,6 +87,7 @@ vectorized: true
     │ table: bx@bx_pkey
     │ equality: (b) = (b)
     │ equality cols are key
+    │ parallel
     │
     └── • scan
           columns: (a, b, c, d)
