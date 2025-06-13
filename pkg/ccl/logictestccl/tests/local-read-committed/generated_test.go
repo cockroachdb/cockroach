@@ -2715,6 +2715,13 @@ func TestReadCommittedLogic_zone_config_system_tenant(
 	runLogicTest(t, "zone_config_system_tenant")
 }
 
+func TestReadCommittedLogicCCL_buffered_writes_lock_loss(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "buffered_writes_lock_loss")
+}
+
 func TestReadCommittedLogicCCL_fips_ready(
 	t *testing.T,
 ) {

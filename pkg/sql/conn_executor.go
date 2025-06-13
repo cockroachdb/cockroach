@@ -3543,7 +3543,7 @@ func (ex *connExecutor) setTransactionModes(
 		if err := ex.state.setIsolationLevel(level); err != nil {
 			return pgerror.WithCandidateCode(err, pgcode.ActiveSQLTransaction)
 		}
-		if level != isolation.Serializable {
+		if (level != isolation.Serializable) && !allowBufferedWritesAlways.Get(&ex.server.cfg.Settings.SV) {
 			// TODO(#143497): we currently only support buffered writes under
 			// serializable isolation.
 			ex.state.mu.txn.SetBufferedWritesEnabled(false)
@@ -3584,6 +3584,13 @@ var allowRepeatableReadIsolation = settings.RegisterBoolSetting(
 	false,
 	settings.WithName("sql.txn.repeatable_read_isolation.enabled"),
 	settings.WithPublic,
+)
+
+var allowBufferedWritesAlways = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.txn.write_buffering_for_read_committed.enabled",
+	"set to true to allow write buffering in the READ COMMITTED and SNAPSHOT isolation levels",
+	false,
 )
 
 var logIsolationLevelLimiter = log.Every(10 * time.Second)

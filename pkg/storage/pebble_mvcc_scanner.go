@@ -444,7 +444,7 @@ type pebbleMVCCScanner struct {
 	// extended encoding of any returned value. This includes the
 	// MVCCValueHeader.
 	rawMVCCValues    bool
-	failOnMoreRecent bool
+	moreRecentPolicy MVCCGetMoreRecentPolicy
 	keyBuf           []byte
 	savedBuf         []byte
 	lazyFetcherBuf   pebble.LazyFetcher
@@ -571,12 +571,12 @@ func (p *pebbleMVCCScanner) init(
 	// future-time timestamps with earlier local timestamps. We are only able
 	// to skip uncertainty checks if p.ts >= global_uncertainty_limit.
 	//
-	// We disable checkUncertainty when the scanner is configured with failOnMoreRecent.
-	// This avoids cases in which a scan would have failed with a WriteTooOldError
-	// but instead gets an unexpected ReadWithinUncertaintyIntervalError
-	// See:
+	// We disable checkUncertainty when the scanner is configured with a
+	// moreRecentPolicy other than IgnoreMoreRecent. This avoids cases in which a
+	// scan would have failed with a WriteTooOldError or ExclusionViolationError
+	// but instead gets an unexpected ReadWithinUncertaintyIntervalError See:
 	// https://github.com/cockroachdb/cockroach/issues/119681
-	p.checkUncertainty = p.ts.Less(p.uncertainty.GlobalLimit) && !p.failOnMoreRecent
+	p.checkUncertainty = p.ts.Less(p.uncertainty.GlobalLimit) && p.moreRecentPolicy == IgnoreMoreRecent
 }
 
 // get seeks to the start key exactly once and adds one KV to the result set.
@@ -793,9 +793,15 @@ func (p *pebbleMVCCScanner) maybeFailOnMoreRecent() {
 	if p.err != nil || p.mostRecentTS.IsEmpty() {
 		return
 	}
-	// The txn can't write at the existing timestamp, so we provide the error
-	// with the timestamp immediately after it.
-	p.err = kvpb.NewWriteTooOldError(p.ts, p.mostRecentTS.Next(), p.mostRecentKey)
+
+	switch p.moreRecentPolicy {
+	case WriteTooOldErrorOnMoreRecent:
+		// The txn can't write at the existing timestamp, so we provide the error
+		// with the timestamp immediately after it.
+		p.err = kvpb.NewWriteTooOldError(p.ts, p.mostRecentTS.Next(), p.mostRecentKey)
+	case ExclusionViolationErrorOnMoreRecent:
+		p.err = kvpb.NewExclusionViolationError(p.ts, p.mostRecentTS, p.mostRecentKey)
+	}
 	p.results.clear()
 	p.intents.Reset()
 }
@@ -861,7 +867,7 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 
 		// ts == read_ts
 		if p.curUnsafeKey.Timestamp == p.ts {
-			if p.failOnMoreRecent {
+			if p.moreRecentPolicy != IgnoreMoreRecent {
 				// 2. Our txn's read timestamp is equal to the most recent
 				// version's timestamp and the scanner has been configured to
 				// throw a write too old error on equal or more recent versions.
@@ -893,7 +899,7 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 		}
 
 		// ts > read_ts
-		if p.failOnMoreRecent {
+		if p.moreRecentPolicy != IgnoreMoreRecent {
 			// 4. Our txn's read timestamp is less than the most recent
 			// version's timestamp and the scanner has been configured to
 			// throw a write too old error on equal or more recent versions.
@@ -976,7 +982,7 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 
 	ownIntent := p.txn != nil && p.meta.Txn.ID.Equal(p.txn.ID)
 	if !ownIntent {
-		conflictingIntent := metaTS.LessEq(p.ts) || p.failOnMoreRecent
+		conflictingIntent := metaTS.LessEq(p.ts) || (p.moreRecentPolicy != IgnoreMoreRecent)
 		if !conflictingIntent {
 			// 8. The key contains an intent, but we're reading below the intent.
 			// Seek to the desired version, checking for uncertainty if necessary.
@@ -1572,7 +1578,7 @@ func (p *pebbleMVCCScanner) processRangeKeys(seeked bool, reverse bool) bool {
 			// Check for conflicts with range keys at or above the read timestamp.
 			// We don't need to handle e.g. skipLocked, because range keys don't
 			// currently have intents.
-			if p.failOnMoreRecent {
+			if p.moreRecentPolicy != IgnoreMoreRecent {
 				if key := p.parent.UnsafeKey(); !hasPoint || !key.Timestamp.IsEmpty() {
 					if newest := p.curRangeKeys.Newest(); p.ts.LessEq(newest) {
 						if p.mostRecentTS.Forward(newest) {
