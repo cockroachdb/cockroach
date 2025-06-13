@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/errors"
@@ -39,7 +40,12 @@ func processProfiles(profilesChan chan *profile.Profile) (*profile.Profile, erro
 				return nil, err
 			}
 		}
-		profiles = append(profiles, prof)
+		for i := range prof.Sample {
+			// Drop labels, which are not used by pprof but can inflate the profile
+			// size significantly.
+			prof.Sample[i].Label = nil
+		}
+		profiles = append(profiles, prof.Compact())
 	}
 	if len(profiles) == 0 {
 		return nil, errors.Errorf("no profiles found")
@@ -82,6 +88,10 @@ func main() {
 			return err
 		}
 		if d.IsDir() || d.Name() != "merged.cpu.pb.gz" {
+			return nil
+		}
+		if !strings.Contains(path, "/run_1/") {
+			fmt.Printf("ignoring profile %s (not from run_1)\n", path)
 			return nil
 		}
 		fmt.Printf("found profile %s\n", path)
