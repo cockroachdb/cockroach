@@ -407,6 +407,7 @@ go_library(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/catalog/zone",
+        "//pkg/sql/check",
         "//pkg/sql/clusterunique",
         "//pkg/sql/colexec",
         "//pkg/sql/colexecerror",
