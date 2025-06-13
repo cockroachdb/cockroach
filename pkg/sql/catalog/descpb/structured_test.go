@@ -74,3 +74,72 @@ func TestColumnIDsPermutationOf(t *testing.T) {
 		})
 	}
 }
+
+func TestEffectiveCacheSize(t *testing.T) {
+	type testCase struct {
+		name           string
+		session, node  int64
+		expectedResult int64
+	}
+
+	testCases := []testCase{
+		{
+			name:           "both unset",
+			session:        0,
+			node:           0,
+			expectedResult: 1,
+		},
+		{
+			name:           "session unset",
+			session:        0,
+			node:           5,
+			expectedResult: 5,
+		},
+		{
+			name:           "node unset",
+			session:        5,
+			node:           0,
+			expectedResult: 5,
+		},
+
+		{
+			name:           "both disabled",
+			session:        0,
+			node:           0,
+			expectedResult: 1,
+		},
+		{
+			name:           "session disabled",
+			session:        1,
+			node:           5,
+			expectedResult: 5,
+		},
+		{
+			name:           "session disabled",
+			session:        5,
+			node:           1,
+			expectedResult: 5,
+		},
+
+		{
+			name:           "both enabled",
+			session:        11,
+			node:           13,
+			expectedResult: 11,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := TableDescriptor_SequenceOpts{
+				CacheSize:     tt.session,
+				NodeCacheSize: tt.node,
+			}
+			result := opts.EffectiveCacheSize()
+			if result != tt.expectedResult {
+				t.Errorf("EffectiveCacheSize() %s: got %v, want %v", tt.name, result, tt.expectedResult)
+			}
+		})
+	}
+
+}
