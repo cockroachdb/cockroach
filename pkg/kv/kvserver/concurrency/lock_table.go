@@ -3112,7 +3112,7 @@ func (kl *keyLocks) markLockIneligibleForExport(acq *roachpb.LockAcquisition) {
 		//
 		// But, we avoid that for now in case we are overlooking any cases where it
 		// would be possible for a transaction to acquire a new unreplicated lock
-		// after the poisoning on this key that should also be poisoned.
+		// on this key that would also be a problem to export.
 		tl.unreplicatedInfo.ineligibleForExport = true
 	}
 }

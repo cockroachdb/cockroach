@@ -703,9 +703,8 @@ type lockTable interface {
 	AcquireLock(*roachpb.LockAcquisition) error
 
 	// MarkIneligibleForExport marks any locks held by this transaction on the
-	// same key at greater or equal strength as ineligible for exported from the
-	// lock table for replication since doing so could result in a transaction
-	// being erroneously committed.
+	// same key as ineligible for export from the lock table for replication since
+	// doing so could result in a transaction being erroneously committed.
 	MarkIneligibleForExport(*roachpb.LockAcquisition) error
 
 	// UpdateLocks informs the lockTable that an existing lock or range of locks
