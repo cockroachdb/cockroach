@@ -933,6 +933,22 @@ func (r *testRunner) runWorker(
 					t.Fatalf("unknown lease type %s", leases)
 				}
 
+				// Choose which write optimization to use. These are currently used only
+				// in benchmark tests. For non-benchmark tests, write buffering will be
+				// enabled metamorphically below.
+				switch testSpec.WriteOptimization {
+				case registry.DefaultWriteOptimization:
+				case registry.Pipelining:
+					c.clusterSettings["kv.transaction.write_pipelining.enabled"] = "true"
+					c.clusterSettings["kv.transaction.write_buffering.enabled"] = "false"
+				case registry.Buffering:
+					c.clusterSettings["kv.transaction.write_buffering.enabled"] = "true"
+					c.clusterSettings["kv.transaction.write_pipelining.enabled"] = "false"
+				case registry.PipeliningBuffering:
+					c.clusterSettings["kv.transaction.write_pipelining.enabled"] = "true"
+					c.clusterSettings["kv.transaction.write_buffering.enabled"] = "true"
+				}
+
 				// Apply metamorphic settings not explicitly defined by the test.
 				// These settings should only be applied to non-benchmark tests.
 				if !testSpec.Benchmark {

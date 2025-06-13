@@ -540,6 +540,9 @@ func getDescriptors(
 		return nil
 	}
 	if err := execCfg.InternalDB.DescsTxn(ctx, f, isql.WithPriority(admissionpb.NormalPri)); err != nil {
+		if errors.Is(err, catalog.ErrDescriptorDropped) {
+			err = changefeedbase.WithTerminalError(err)
+		}
 		return nil, nil, nil, err
 	}
 	return tableDescriptor, dbDescriptor, schemaDescriptor, nil
