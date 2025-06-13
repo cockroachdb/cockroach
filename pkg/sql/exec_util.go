@@ -1262,6 +1262,18 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaTxnRetry = metric.Metadata{
+		Name:        "sql.txn.auto_retry.count",
+		Help:        "Number of SQL transaction automatic retries",
+		Measurement: "SQL Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaStatementRetry = metric.Metadata{
+		Name:        "sql.statements.auto_retry.count",
+		Help:        "Number of SQL statement automatic retries",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {
@@ -4048,6 +4060,10 @@ func (m *sessionDataMutator) SetPropagateAdmissionHeaderToLeafTransactions(val b
 
 func (m *sessionDataMutator) SetOptimizerUseExistsFilterHoistRule(val bool) {
 	m.data.OptimizerUseExistsFilterHoistRule = val
+}
+
+func (m *sessionDataMutator) SetInitialRetryBackoffForReadCommitted(val time.Duration) {
+	m.data.InitialRetryBackoffForReadCommitted = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.
