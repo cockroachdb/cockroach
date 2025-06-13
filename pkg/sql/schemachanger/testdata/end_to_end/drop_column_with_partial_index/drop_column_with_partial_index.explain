@@ -137,14 +137,13 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
       │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (t_j_idx-)}
       │    │    ├── VALIDATED             → DELETE_ONLY      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_j_idx-), RecreateSourceIndexID: 0}
       │    │    └── PUBLIC                → ABSENT           IndexName:{DescID: 104 (t), Name: "t_j_idx", IndexID: 2 (t_j_idx-)}
-      │    └── 14 Mutation operations
+      │    └── 13 Mutation operations
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":104}
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
       │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
       │         ├── SetIndexName {"IndexID":3,"Name":"t_pkey","TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":4,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
-      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":2,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
       │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":3,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":4,"TableID":104}
@@ -158,7 +157,8 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (j-), IndexID: 1 (t_pkey-)}
       │    │    ├── VALIDATED   → DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
       │    │    └── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_j_idx-), RecreateSourceIndexID: 0}
-      │    └── 6 Mutation operations
+      │    └── 7 Mutation operations
+      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":2,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"TableID":104}

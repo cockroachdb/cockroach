@@ -40,6 +40,16 @@ func init() {
 						BackReferencedColumnID: this.ColumnID,
 					}
 				}),
+				emit(func(this *scpb.ColumnOnUpdateExpression) *scop.AddTableColumnBackReferencesInFunctions {
+					if len(this.UsesFunctionIDs) == 0 {
+						return nil
+					}
+					return &scop.AddTableColumnBackReferencesInFunctions{
+						FunctionIDs:            this.UsesFunctionIDs,
+						BackReferencedTableID:  this.TableID,
+						BackReferencedColumnID: this.ColumnID,
+					}
+				}),
 			),
 		),
 		toAbsent(
@@ -66,6 +76,16 @@ func init() {
 					}
 					return &scop.UpdateTableBackReferencesInSequences{
 						SequenceIDs:            this.UsesSequenceIDs,
+						BackReferencedTableID:  this.TableID,
+						BackReferencedColumnID: this.ColumnID,
+					}
+				}),
+				emit(func(this *scpb.ColumnOnUpdateExpression) *scop.RemoveTableColumnBackReferencesInFunctions {
+					if len(this.UsesFunctionIDs) == 0 {
+						return nil
+					}
+					return &scop.RemoveTableColumnBackReferencesInFunctions{
+						FunctionIDs:            this.UsesFunctionIDs,
 						BackReferencedTableID:  this.TableID,
 						BackReferencedColumnID: this.ColumnID,
 					}

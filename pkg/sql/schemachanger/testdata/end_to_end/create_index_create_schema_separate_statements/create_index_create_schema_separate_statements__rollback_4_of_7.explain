@@ -24,10 +24,11 @@ Schema change plan for rolling back CREATE SCHEMA defaultdb.sc; following CREATE
       │    │    ├── PUBLIC           → ABSENT      Owner:{DescID: 105 (sc-)}
       │    │    ├── PUBLIC           → ABSENT      UserPrivileges:{DescID: 105 (sc-), Name: "admin"}
       │    │    └── PUBLIC           → ABSENT      UserPrivileges:{DescID: 105 (sc-), Name: "root"}
-      │    └── 17 Mutation operations
+      │    └── 18 Mutation operations
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
+      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":2,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"TableID":104}

@@ -1158,7 +1158,7 @@ begin transaction #17
 validate forward indexes [14] in table #104
 commit transaction #17
 begin transaction #18
-## PostCommitNonRevertiblePhase stage 1 of 4 with 37 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 4 with 35 MutationType ops
 upsert descriptor #104
   ...
            statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j)
@@ -1309,7 +1309,7 @@ upsert descriptor #104
   -      name: crdb_internal_index_9_name_placeholder
   +      name: crdb_internal_index_2_name_placeholder
          partitioning: {}
-  -      predicate: i <= 0:::INT8
+         predicate: i <= 0:::INT8
          sharded: {}
   -      storeColumnNames: []
   -      useDeletePreservingEncoding: true
@@ -1335,7 +1335,7 @@ upsert descriptor #104
   +      - 1
   +      name: crdb_internal_index_4_name_placeholder
          partitioning: {}
-  -      predicate: j <= 0:::INT8
+         predicate: j <= 0:::INT8
          sharded: {}
   -      storeColumnNames: []
   -      useDeletePreservingEncoding: true
@@ -1532,11 +1532,11 @@ upsert descriptor #104
   +  version: "33"
 persist all catalog changes to storage
 adding table for stats refresh: 104
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 4 with 7 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 4 with 9 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #18
 begin transaction #19
-## PostCommitNonRevertiblePhase stage 2 of 4 with 9 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 4 with 11 MutationType ops
 upsert descriptor #104
   ...
      - direction: DROP
@@ -1555,6 +1555,7 @@ upsert descriptor #104
   -      - i
   -      name: crdb_internal_index_2_name_placeholder
   -      partitioning: {}
+  -      predicate: i <= 0:::INT8
   -      sharded: {}
   -      vecConfig: {}
   -      version: 4
@@ -1578,6 +1579,7 @@ upsert descriptor #104
   -      - 1
   -      name: crdb_internal_index_4_name_placeholder
   -      partitioning: {}
+  -      predicate: j <= 0:::INT8
   -      sharded: {}
   -      vecConfig: {}
   -      version: 4

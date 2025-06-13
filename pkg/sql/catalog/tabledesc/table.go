@@ -170,6 +170,7 @@ func MakeColumnDefDescs(
 		if err != nil {
 			return nil, err
 		}
+
 		if err := funcdesc.MaybeFailOnUDFUsage(ret.DefaultExpr, defaultExprCtx, evalCtx.Settings.Version.ActiveVersion(ctx)); err != nil {
 			return nil, err
 		}
@@ -199,6 +200,10 @@ func MakeColumnDefDescs(
 			return nil, err
 		}
 		if err := funcdesc.MaybeFailOnUDFUsage(ret.OnUpdateExpr, tree.ColumnOnUpdateExpr, evalCtx.Settings.Version.ActiveVersion(ctx)); err != nil {
+			return nil, err
+		}
+		ret.OnUpdateExpr, err = schemaexpr.MaybeReplaceUDFNameWithOIDReferenceInTypedExpr(ret.OnUpdateExpr)
+		if err != nil {
 			return nil, err
 		}
 

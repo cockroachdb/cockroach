@@ -2367,18 +2367,25 @@ func TestTenantLogic_udf_fk(
 	runLogicTest(t, "udf_fk")
 }
 
-func TestTenantLogic_udf_in_column_defaults(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "udf_in_column_defaults")
-}
-
 func TestTenantLogic_udf_in_constraints(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_in_constraints")
+}
+
+func TestTenantLogic_udf_in_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_in_index")
+}
+
+func TestTenantLogic_udf_in_table(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_in_table")
 }
 
 func TestTenantLogic_udf_insert(
