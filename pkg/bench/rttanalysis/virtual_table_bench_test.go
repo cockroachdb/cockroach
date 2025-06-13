@@ -59,5 +59,12 @@ SELECT * FROM crdb_internal.tables;
 SELECT * FROM t1;
 SELECT * FROM t2;`,
 		},
+		// This test checks the performance of the crdb_internal virtual tables used by
+		// SHOW CREATE ALL ROUTINES.
+		{
+			Name:  "show_create_all_routines",
+			Setup: buildNFunctions(100),
+			Stmt:  `SHOW CREATE ALL ROUTINES`,
+		},
 	})
 }
