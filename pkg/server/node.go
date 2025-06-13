@@ -1899,19 +1899,19 @@ func (n *Node) batchStreamImpl(stream kvpb.RPCKVBatch_BatchStreamStream) error {
 	}
 }
 
+type kvBatchServer Node
+
 func (n *Node) AsDRPCKVBatchServer() kvpb.DRPCKVBatchServer {
-	return (*drpcNode)(n)
+	return (*kvBatchServer)(n)
 }
 
-type drpcNode Node
-
-func (n *drpcNode) Batch(
+func (n *kvBatchServer) Batch(
 	ctx context.Context, request *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, error) {
 	return (*Node)(n).Batch(ctx, request)
 }
 
-func (n *drpcNode) BatchStream(stream kvpb.DRPCKVBatch_BatchStreamStream) error {
+func (n *kvBatchServer) BatchStream(stream kvpb.DRPCKVBatch_BatchStreamStream) error {
 	return (*Node)(n).batchStreamImpl(stream)
 }
 
@@ -2055,7 +2055,6 @@ func filterRangeLookupResponseForTenant(
 	return truncated
 }
 
-// RangeLookup implements the kvpb.InternalServer interface.
 func (n *Node) RangeLookup(
 	ctx context.Context, req *kvpb.RangeLookupRequest,
 ) (*kvpb.RangeLookupResponse, error) {
@@ -2393,6 +2392,12 @@ func (n *Node) ResetQuorum(
 func (n *Node) GossipSubscription(
 	args *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer,
 ) error {
+	return n.gossipSubscription(args, stream)
+}
+
+func (n *Node) gossipSubscription(
+	args *kvpb.GossipSubscriptionRequest, stream kvpb.RPCInternal_GossipSubscriptionStream,
+) error {
 	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
 	ctxDone := ctx.Done()
 
@@ -2481,6 +2486,12 @@ func (n *Node) waitForTenantWatcherReadiness(
 // TenantSettings implements the kvpb.InternalServer interface.
 func (n *Node) TenantSettings(
 	args *kvpb.TenantSettingsRequest, stream kvpb.Internal_TenantSettingsServer,
+) error {
+	return n.tenantSettings(args, stream)
+}
+
+func (n *Node) tenantSettings(
+	args *kvpb.TenantSettingsRequest, stream kvpb.RPCTenantService_TenantSettingsStream,
 ) error {
 	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
 	ctxDone := ctx.Done()
@@ -2888,6 +2899,12 @@ func (n *Node) SpanConfigConformance(
 func (n *Node) GetRangeDescriptors(
 	args *kvpb.GetRangeDescriptorsRequest, stream kvpb.Internal_GetRangeDescriptorsServer,
 ) error {
+	return n.getRangeDescriptors(args, stream)
+}
+
+func (n *Node) getRangeDescriptors(
+	args *kvpb.GetRangeDescriptorsRequest, stream kvpb.RPCTenantService_GetRangeDescriptorsStream,
+) error {
 
 	iter, err := n.execCfg.RangeDescIteratorFactory.NewLazyIterator(stream.Context(), args.Span, int(args.BatchSize))
 	if err != nil {
@@ -2913,4 +2930,38 @@ func (n *Node) GetRangeDescriptors(
 	return stream.Send(&kvpb.GetRangeDescriptorsResponse{
 		RangeDescriptors: rangeDescriptors,
 	})
+}
+
+type tenantServiceServer Node
+
+func (n *Node) AsDRPCTenantServiceServer() kvpb.DRPCTenantServiceServer {
+	return (*tenantServiceServer)(n)
+}
+
+// GossipSubscription implements the kvpb.DRPCTenantServiceServer interface.
+func (n *tenantServiceServer) GossipSubscription(
+	args *kvpb.GossipSubscriptionRequest, stream kvpb.DRPCTenantService_GossipSubscriptionStream,
+) error {
+	return (*Node)(n).gossipSubscription(args, stream)
+}
+
+// TenantSettings implements the kvpb.DRPCTenantServiceServer interface.
+func (n *tenantServiceServer) TenantSettings(
+	args *kvpb.TenantSettingsRequest, stream kvpb.DRPCTenantService_TenantSettingsStream,
+) error {
+	return (*Node)(n).tenantSettings(args, stream)
+}
+
+// RangeLookup implements the kvpb.DRPCTenantServiceServer interface.
+func (n *tenantServiceServer) RangeLookup(
+	ctx context.Context, req *kvpb.RangeLookupRequest,
+) (*kvpb.RangeLookupResponse, error) {
+	return (*Node)(n).RangeLookup(ctx, req)
+}
+
+// GetRangeDescriptors implements the kvpb.DRPCTenantServiceServer interface.
+func (n *tenantServiceServer) GetRangeDescriptors(
+	args *kvpb.GetRangeDescriptorsRequest, stream kvpb.DRPCTenantService_GetRangeDescriptorsStream,
+) error {
+	return (*Node)(n).getRangeDescriptors(args, stream)
 }

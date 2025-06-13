@@ -3650,17 +3650,38 @@ message JoinNodeResponse {
   roachpb.Version active_version = 4;
 }
 
+// TODO(server): Remove the methods of these serivces from the 'Internal'
+// service once the migration to DRPC complete, making these service the sole
+// definition. Also, update the comments here.
+
+// TODO(server,kv): Improve the code comment documentation of these methods.
+// Many of these methods are simply undocumented.
+
 // KVBatch defines Batch RPCs of Internal service (see below) for DRPC use only.
 //
 // During the gRPC to DRPC migration:
 // - gRPC clients will continue to use the full 'Internal' service client.
 // - DRPC clients targeting Batch* RPCs will use clients generated from this.
-//
-// TODO(server): Remove these methods from the 'Internal' service once the
-// migration to DRPC complete, making this service the sole definition.
 service KVBatch {
   rpc Batch(BatchRequest) returns (BatchResponse) {}
   rpc BatchStream(stream BatchRequest) returns (stream BatchResponse) {}
+}
+
+// TenantService provides RPCs for secondary tenants to access data that is
+// exclusively available in the system tenant. This service is used by the
+// tenant connector.
+service TenantService {
+  // TenantSettings is used by tenants to obtain and stay up to date with tenant
+  // setting overrides.
+  rpc TenantSettings(TenantSettingsRequest) returns (stream TenantSettingsEvent) {}
+
+  rpc GossipSubscription(GossipSubscriptionRequest) returns (stream GossipSubscriptionEvent) {}
+
+  rpc RangeLookup(RangeLookupRequest) returns (RangeLookupResponse) {}
+
+  // GetRangeDescriptors is used by tenants to get range descriptors for their
+  // own ranges.
+  rpc GetRangeDescriptors(GetRangeDescriptorsRequest) returns (stream GetRangeDescriptorsResponse) {}
 }
 
 // Batch and RangeFeed service implemented by nodes for KV API requests.
