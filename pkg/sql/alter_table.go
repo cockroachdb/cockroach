@@ -1252,8 +1252,11 @@ func applyColumnMutation(
 
 		opts := seqDesc.GetSequenceOpts()
 		optsNode := tree.SequenceOptions{}
-		if opts.CacheSize > 1 {
-			optsNode = append(optsNode, tree.SequenceOption{Name: tree.SeqOptCache, IntVal: &opts.CacheSize})
+		if opts.SessionCacheSize > 1 {
+			optsNode = append(optsNode, tree.SequenceOption{Name: tree.SeqOptCacheSession, IntVal: &opts.SessionCacheSize})
+		}
+		if opts.NodeCacheSize > 1 {
+			optsNode = append(optsNode, tree.SequenceOption{Name: tree.SeqOptCacheNode, IntVal: &opts.NodeCacheSize})
 		}
 		optsNode = append(optsNode, tree.SequenceOption{Name: tree.SeqOptMinValue, IntVal: &opts.MinValue})
 		optsNode = append(optsNode, tree.SequenceOption{Name: tree.SeqOptMaxValue, IntVal: &opts.MaxValue})

@@ -1194,8 +1194,8 @@ message TableDescriptor {
     optional SequenceOwner sequence_owner = 6 [(gogoproto.nullable) = false];
 
     // The number of values (which have already been created in KV)
-    // that a node can cache locally.
-    optional int64 cache_size = 7 [(gogoproto.nullable) = false];
+    // that a session can cache locally.
+    optional int64 session_cache_size = 7 [(gogoproto.nullable) = false];
     // AS option value for CREATE SEQUENCE, which specifies the default
     // min and max values a sequence can take on.
     optional string as_integer_type = 8 [(gogoproto.nullable) = false];

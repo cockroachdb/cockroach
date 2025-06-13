@@ -616,11 +616,10 @@ func ShowCreateSequence(
 	if opts.Virtual {
 		f.Printf(" VIRTUAL")
 	}
-	if opts.CacheSize > 1 {
-		f.Printf(" CACHE %d", opts.CacheSize)
-	}
-	if opts.CacheSize == 1 && opts.NodeCacheSize > 0 {
-		f.Printf(" PER NODE CACHE %d", opts.NodeCacheSize)
+	if opts.SessionCacheSize > 1 {
+		f.Printf(" PER SESSION CACHE %d", opts.SessionCacheSize)
+	} else if opts.NodeCacheSize > 1 {
+		f.Printf(" CACHE %d", opts.NodeCacheSize)
 	}
 	return f.CloseAndGetString(), nil
 }
