@@ -103,7 +103,7 @@ statement error pgcode 55000 pq: lastval is not yet defined in this session
 SELECT lastval()
 
 statement ok
-CREATE SEQUENCE S2 CACHE 10
+CREATE SEQUENCE S2 PER SESSION CACHE 10
 
 query I
 SELECT nextval('s2')

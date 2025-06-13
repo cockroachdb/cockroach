@@ -14,7 +14,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    ├── ABSENT → PUBLIC        Namespace:{DescID: 107 (tbl_serial_id_seq+), Name: "tbl_serial_id_seq", ReferencedDescID: 104 (db)}
  │         │    ├── ABSENT → PUBLIC        SchemaChild:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 105 (public)}
  │         │    ├── ABSENT → PUBLIC        TableData:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 104 (db)}
- │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "CACHE"}
+ │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "PER SESSION CACHE"}
  │         │    ├── ABSENT → PUBLIC        Column:{DescID: 107 (tbl_serial_id_seq+), ColumnID: 1 (value+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 107 (tbl_serial_id_seq+), ColumnFamilyID: 0, ColumnID: 1 (value+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC        ColumnNotNull:{DescID: 107 (tbl_serial_id_seq+), ColumnID: 1 (value+), IndexID: 0}
@@ -46,7 +46,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │              ├── SetNameInDescriptor {"DescriptorID":107,"Name":"tbl_serial_id_se..."}
  │              ├── AddDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"tbl_serial_id_se...","SchemaID":105}}
  │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":107,"SchemaID":105}}
- │              ├── SetSequenceOptions {"Key":"CACHE","SequenceID":107,"Value":"256"}
+ │              ├── SetSequenceOptions {"Key":"PER SESSION CACH...","SequenceID":107,"Value":"256"}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":107}}
  │              ├── UpsertColumnType {"ColumnType":{"ColumnID":1,"TableID":107}}
  │              ├── SetColumnName {"ColumnID":1,"Name":"value","TableID":107}
@@ -86,7 +86,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    │    │    ├── PUBLIC        → ABSENT Namespace:{DescID: 107 (tbl_serial_id_seq+), Name: "tbl_serial_id_seq", ReferencedDescID: 104 (db)}
  │    │    │    ├── PUBLIC        → ABSENT SchemaChild:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 105 (public)}
  │    │    │    ├── PUBLIC        → ABSENT TableData:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 104 (db)}
- │    │    │    ├── PUBLIC        → ABSENT SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "CACHE"}
+ │    │    │    ├── PUBLIC        → ABSENT SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "PER SESSION CACHE"}
  │    │    │    ├── PUBLIC        → ABSENT Column:{DescID: 107 (tbl_serial_id_seq+), ColumnID: 1 (value+)}
  │    │    │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 107 (tbl_serial_id_seq+), ColumnFamilyID: 0, ColumnID: 1 (value+), TypeName: "INT8"}
  │    │    │    ├── PUBLIC        → ABSENT ColumnNotNull:{DescID: 107 (tbl_serial_id_seq+), ColumnID: 1 (value+), IndexID: 0}
@@ -120,7 +120,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    ├── ABSENT → PUBLIC        Namespace:{DescID: 107 (tbl_serial_id_seq+), Name: "tbl_serial_id_seq", ReferencedDescID: 104 (db)}
  │         │    ├── ABSENT → PUBLIC        SchemaChild:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 105 (public)}
  │         │    ├── ABSENT → PUBLIC        TableData:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 104 (db)}
- │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "CACHE"}
+ │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "PER SESSION CACHE"}
  │         │    ├── ABSENT → PUBLIC        Column:{DescID: 107 (tbl_serial_id_seq+), ColumnID: 1 (value+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 107 (tbl_serial_id_seq+), ColumnFamilyID: 0, ColumnID: 1 (value+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC        ColumnNotNull:{DescID: 107 (tbl_serial_id_seq+), ColumnID: 1 (value+), IndexID: 0}
@@ -152,7 +152,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │              ├── SetNameInDescriptor {"DescriptorID":107,"Name":"tbl_serial_id_se..."}
  │              ├── AddDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"tbl_serial_id_se...","SchemaID":105}}
  │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":107,"SchemaID":105}}
- │              ├── SetSequenceOptions {"Key":"CACHE","SequenceID":107,"Value":"256"}
+ │              ├── SetSequenceOptions {"Key":"PER SESSION CACH...","SequenceID":107,"Value":"256"}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":107}}
  │              ├── UpsertColumnType {"ColumnType":{"ColumnID":1,"TableID":107}}
  │              ├── SetColumnName {"ColumnID":1,"Name":"value","TableID":107}

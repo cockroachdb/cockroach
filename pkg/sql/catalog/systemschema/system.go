@@ -1737,11 +1737,11 @@ var (
 		),
 		func(tbl *descpb.TableDescriptor) {
 			tbl.SequenceOpts = &descpb.TableDescriptor_SequenceOpts{
-				Increment: 1,
-				MinValue:  1,
-				MaxValue:  math.MaxInt64,
-				Start:     1,
-				CacheSize: 1,
+				Increment:        1,
+				MinValue:         1,
+				MaxValue:         math.MaxInt64,
+				Start:            1,
+				SessionCacheSize: 1,
 			}
 			tbl.NextColumnID = 0
 			tbl.NextFamilyID = 0
@@ -1781,11 +1781,11 @@ var (
 		),
 		func(tbl *descpb.TableDescriptor) {
 			opts := &descpb.TableDescriptor_SequenceOpts{
-				Increment: 1,
-				MinValue:  100,
-				MaxValue:  math.MaxInt32,
-				Start:     100,
-				CacheSize: 1,
+				Increment:        1,
+				MinValue:         100,
+				MaxValue:         math.MaxInt32,
+				Start:            100,
+				SessionCacheSize: 1,
 			}
 			tbl.SequenceOpts = opts
 			tbl.NextColumnID = 0
@@ -1826,11 +1826,11 @@ var (
 		),
 		func(tbl *descpb.TableDescriptor) {
 			tbl.SequenceOpts = &descpb.TableDescriptor_SequenceOpts{
-				Increment: 1,
-				MinValue:  1,
-				MaxValue:  math.MaxInt64,
-				Start:     1,
-				CacheSize: 1,
+				Increment:        1,
+				MinValue:         1,
+				MaxValue:         math.MaxInt64,
+				Start:            1,
+				SessionCacheSize: 1,
 			}
 			tbl.NextColumnID = 0
 			tbl.NextFamilyID = 0

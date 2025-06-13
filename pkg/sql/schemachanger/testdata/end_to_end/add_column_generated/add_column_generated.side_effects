@@ -94,12 +94,12 @@ upsert descriptor #107
   +  replacementOf:
   +    time: {}
   +  sequenceOpts:
-  +    cacheSize: "1"
   +    increment: "32"
   +    maxValue: "9223372036854775807"
   +    sequenceOwner:
   +      ownerColumnId: 2
   +      ownerTableId: 106
+  +    sessionCacheSize: "1"
   +  unexposedParentSchemaId: 105
   +  version: "1"
 upsert descriptor #106
@@ -293,12 +293,12 @@ upsert descriptor #107
   +  replacementOf:
   +    time: {}
   +  sequenceOpts:
-  +    cacheSize: "1"
   +    increment: "32"
   +    maxValue: "9223372036854775807"
   +    sequenceOwner:
   +      ownerColumnId: 2
   +      ownerTableId: 106
+  +    sessionCacheSize: "1"
   +  unexposedParentSchemaId: 105
   +  version: "1"
 upsert descriptor #106
@@ -494,7 +494,7 @@ upsert descriptor #106
   +  version: "3"
 upsert descriptor #107
   ...
-         ownerTableId: 106
+       sessionCacheSize: "1"
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
@@ -522,7 +522,7 @@ upsert descriptor #106
   +  version: "4"
 upsert descriptor #107
   ...
-         ownerTableId: 106
+       sessionCacheSize: "1"
      unexposedParentSchemaId: 105
   -  version: "2"
   +  version: "3"
@@ -546,7 +546,7 @@ upsert descriptor #106
   +  version: "5"
 upsert descriptor #107
   ...
-         ownerTableId: 106
+       sessionCacheSize: "1"
      unexposedParentSchemaId: 105
   -  version: "3"
   +  version: "4"
@@ -583,7 +583,7 @@ upsert descriptor #106
   +  version: "6"
 upsert descriptor #107
   ...
-         ownerTableId: 106
+       sessionCacheSize: "1"
      unexposedParentSchemaId: 105
   -  version: "4"
   +  version: "5"
@@ -764,7 +764,7 @@ upsert descriptor #107
        targetRanks: <redacted>
        targets: <redacted>
   ...
-         ownerTableId: 106
+       sessionCacheSize: "1"
      unexposedParentSchemaId: 105
   -  version: "5"
   +  version: "6"
@@ -790,7 +790,7 @@ upsert descriptor #106
   +  version: "8"
 upsert descriptor #107
   ...
-         ownerTableId: 106
+       sessionCacheSize: "1"
      unexposedParentSchemaId: 105
   -  version: "6"
   +  version: "7"
@@ -837,7 +837,7 @@ upsert descriptor #106
   +  version: "9"
 upsert descriptor #107
   ...
-         ownerTableId: 106
+       sessionCacheSize: "1"
      unexposedParentSchemaId: 105
   -  version: "7"
   +  version: "8"
@@ -914,7 +914,7 @@ upsert descriptor #107
      dependedOnBy:
      - byId: true
   ...
-         ownerTableId: 106
+       sessionCacheSize: "1"
      unexposedParentSchemaId: 105
   -  version: "8"
   +  version: "9"

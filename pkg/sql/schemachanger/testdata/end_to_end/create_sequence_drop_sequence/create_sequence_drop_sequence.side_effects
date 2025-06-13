@@ -73,11 +73,11 @@ upsert descriptor #104
   +  replacementOf:
   +    time: {}
   +  sequenceOpts:
-  +    cacheSize: "1"
   +    increment: "1"
   +    maxValue: "9223372036854775807"
   +    minValue: "1"
   +    sequenceOwner: {}
+  +    sessionCacheSize: "1"
   +    start: "32"
   +  unexposedParentSchemaId: 101
   +  version: "1"
@@ -94,7 +94,7 @@ write *eventpb.DropSequence to event log:
 delete object namespace entry {100 101 sq1} -> 104
 upsert descriptor #104
   ...
-       sequenceOwner: {}
+       sessionCacheSize: "1"
        start: "32"
   +  state: DROP
      unexposedParentSchemaId: 101
