@@ -82,6 +82,9 @@ func GetTableSchemaInfo(
 		return nil
 	})
 	if err != nil {
+		if errors.Is(err, catalog.ErrDescriptorDropped) {
+			err = changefeedbase.WithTerminalError(err)
+		}
 		return nil, err
 	}
 
