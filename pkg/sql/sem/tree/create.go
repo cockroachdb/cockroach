@@ -1712,7 +1712,7 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 			ctx.WriteString(option.AsIntegerType.SQLString())
 		case SeqOptCycle, SeqOptNoCycle:
 			ctx.WriteString(option.Name)
-		case SeqOptCache, SeqOptCacheNode:
+		case SeqOptCacheNode, SeqOptCacheSession:
 			ctx.WriteString(option.Name)
 			ctx.WriteByte(' ')
 			// TODO(knz): replace all this with ctx.FormatNode if/when
@@ -1809,18 +1809,18 @@ type SequenceOption struct {
 
 // Names of options on CREATE SEQUENCE.
 const (
-	SeqOptAs        = "AS"
-	SeqOptCycle     = "CYCLE"
-	SeqOptNoCycle   = "NO CYCLE"
-	SeqOptOwnedBy   = "OWNED BY"
-	SeqOptCache     = "CACHE"
-	SeqOptCacheNode = "PER NODE CACHE"
-	SeqOptIncrement = "INCREMENT"
-	SeqOptMinValue  = "MINVALUE"
-	SeqOptMaxValue  = "MAXVALUE"
-	SeqOptStart     = "START"
-	SeqOptRestart   = "RESTART"
-	SeqOptVirtual   = "VIRTUAL"
+	SeqOptAs           = "AS"
+	SeqOptCycle        = "CYCLE"
+	SeqOptNoCycle      = "NO CYCLE"
+	SeqOptOwnedBy      = "OWNED BY"
+	SeqOptCacheNode    = "PER NODE CACHE"
+	SeqOptCacheSession = "PER SESSION CACHE"
+	SeqOptIncrement    = "INCREMENT"
+	SeqOptMinValue     = "MINVALUE"
+	SeqOptMaxValue     = "MAXVALUE"
+	SeqOptStart        = "START"
+	SeqOptRestart      = "RESTART"
+	SeqOptVirtual      = "VIRTUAL"
 
 	// Avoid unused warning for constants.
 	_ = SeqOptAs

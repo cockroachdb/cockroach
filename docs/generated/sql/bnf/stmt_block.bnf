@@ -3743,6 +3743,7 @@ sequence_option_elem ::=
 	| 'OWNED' 'BY' column_path
 	| 'CACHE' signed_iconst64
 	| 'PER' 'NODE' 'CACHE' signed_iconst64
+	| 'PER' 'SESSION' 'CACHE' signed_iconst64
 	| 'INCREMENT' signed_iconst64
 	| 'INCREMENT' 'BY' signed_iconst64
 	| 'MINVALUE' signed_iconst64
@@ -4939,6 +4940,8 @@ col_qual_list ::=
 identity_option_elem ::=
 	'SET' 'NO' 'CYCLE'
 	| 'SET' 'CACHE' signed_iconst64
+	| 'SET' 'PER' 'NODE' 'CACHE' signed_iconst64
+	| 'SET' 'PER' 'SESSION' 'CACHE' signed_iconst64
 	| 'SET' 'INCREMENT' signed_iconst64
 	| 'SET' 'INCREMENT' 'BY' signed_iconst64
 	| 'SET' 'MINVALUE' signed_iconst64
