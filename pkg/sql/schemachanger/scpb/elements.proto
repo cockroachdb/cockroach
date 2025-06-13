@@ -115,7 +115,6 @@ message ElementProto {
     // Index elements.
     IndexName index_name = 40 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
     IndexPartitioning index_partitioning = 41 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
-    SecondaryIndexPartial secondary_index_partial = 42 [(gogoproto.moretags) = "parent:\"SecondaryIndex\""];
     IndexComment index_comment = 43 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
     IndexColumn index_column = 44 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, TemporaryIndex, Column\""];
     IndexData index_data = 45 [(gogoproto.customname) = "IndexData", (gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, TemporaryIndex\""];
@@ -180,6 +179,9 @@ message ElementProto {
 
     // Next element group start id: 250
   }
+
+  // Reserved for the now-removed SecondaryIndexPartial element.
+  reserved 42;
 }
 
 // TypeT is a wrapper for a types.T which contains its user-defined type ID
@@ -356,13 +358,6 @@ message TemporaryIndex {
   Index embedded_index = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bool is_using_secondary_encoding = 2;
   Expression expr = 3 [(gogoproto.nullable) = true];
-}
-
-message SecondaryIndexPartial {
-  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
-  Expression embedded_expr = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  reserved 10;
 }
 
 // SchemaParent models the schema to parent database relationship.

@@ -280,30 +280,6 @@ func init() {
 			}
 		},
 	)
-
-	registerDepRuleForDrop(
-		"secondary index partial no longer public before referenced column",
-		scgraph.Precedence,
-		"secondary-partial-index", "column",
-		scpb.Status_ABSENT, scpb.Status_WRITE_ONLY,
-		func(from, to NodeVars) rel.Clauses {
-			return rel.Clauses{
-				from.Type((*scpb.SecondaryIndexPartial)(nil)),
-				to.Type((*scpb.Column)(nil)),
-				JoinOnDescID(from, to, "table-id"),
-				descriptorIsNotBeingDropped(from.El),
-				FilterElements("secondaryIndexReferencesColumn", from, to,
-					func(index *scpb.SecondaryIndexPartial, column *scpb.Column) bool {
-						for _, refColumns := range index.ReferencedColumnIDs {
-							if refColumns == column.ColumnID {
-								return true
-							}
-						}
-						return false
-					}),
-			}
-		},
-	)
 }
 
 // Special rules to ensure that swapping default expressions is done in order.

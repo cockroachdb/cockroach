@@ -100,7 +100,7 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 		*scpb.TableLocalitySecondaryRegion, *scpb.TableLocalityRegionalByRow,
 		*scpb.ColumnName, *scpb.ColumnType, *scpb.ColumnDefaultExpression,
 		*scpb.ColumnOnUpdateExpression, *scpb.SequenceOwner, *scpb.ColumnComment,
-		*scpb.IndexName, *scpb.IndexPartitioning, *scpb.SecondaryIndexPartial,
+		*scpb.IndexName, *scpb.IndexPartitioning,
 		*scpb.IndexComment, *scpb.ConstraintWithoutIndexName, *scpb.ConstraintComment,
 		*scpb.Namespace, *scpb.Owner, *scpb.UserPrivileges,
 		*scpb.DatabaseRegionConfig, *scpb.DatabaseRoleSetting, *scpb.DatabaseComment,

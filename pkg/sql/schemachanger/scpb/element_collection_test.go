@@ -98,15 +98,15 @@ func TestElementCollection(t *testing.T) {
 	t.Run("predicates", func(t *testing.T) {
 		require.False(t, c.IsEmpty())
 		require.False(t, c.FilterSchema().IsEmpty())
-		require.True(t, c.FilterSecondaryIndexPartial().IsEmpty())
+		require.True(t, c.FilterSecondaryIndex().IsEmpty())
 
 		require.False(t, c.IsSingleton())
 		require.True(t, c.FilterSchema().IsSingleton())
-		require.False(t, c.FilterSecondaryIndexPartial().IsSingleton())
+		require.False(t, c.FilterSecondaryIndex().IsSingleton())
 
 		require.True(t, c.IsMany())
 		require.False(t, c.FilterSchema().IsMany())
-		require.False(t, c.FilterSecondaryIndexPartial().IsMany())
+		require.False(t, c.FilterSecondaryIndex().IsMany())
 	})
 	t.Run("assertions", func(t *testing.T) {
 		e, err := recoverFromPanic(c.MustGetZeroOrOneElement)
@@ -123,10 +123,10 @@ func TestElementCollection(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, e)
 
-		e, err = recoverFromPanic(c.FilterSecondaryIndexPartial().MustGetZeroOrOneElement)
+		e, err = recoverFromPanic(c.FilterSecondaryIndex().MustGetZeroOrOneElement)
 		require.NoError(t, err)
 		require.Nil(t, e)
-		e, err = recoverFromPanic(c.FilterSecondaryIndexPartial().MustGetOneElement)
+		e, err = recoverFromPanic(c.FilterSecondaryIndex().MustGetOneElement)
 		require.Error(t, err)
 		require.Nil(t, e)
 	})

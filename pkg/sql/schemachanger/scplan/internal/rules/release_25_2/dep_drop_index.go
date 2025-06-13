@@ -105,34 +105,6 @@ func init() {
 			}
 		},
 	)
-
-	// Special case for removal of partial predicates, which hold references to
-	// other descriptors.
-	//
-	// When the whole table is dropped, we can (and in fact, should) remove these
-	// right away in-txn. However, when only the index is dropped but the table
-	// remains, we need to wait until the index is DELETE_ONLY, which happens
-	// post-commit because of the need to uphold the 2-version invariant.
-	//
-	// We distinguish the two cases using a flag in SecondaryIndexPartial which is
-	// set iff the parent relation is dropped. This is a dirty hack, ideally we
-	// should be able to express the _absence_ of a target element as a query
-	// clause.
-	registerDepRuleForDrop(
-		"partial predicate removed right before secondary index when not dropping relation",
-		scgraph.SameStagePrecedence,
-		"partial-predicate", "index",
-		scpb.Status_ABSENT, scpb.Status_ABSENT,
-		func(from, to NodeVars) rel.Clauses {
-			return rel.Clauses{
-				from.Type((*scpb.SecondaryIndexPartial)(nil)),
-				descriptorIsNotBeingDropped(from.El),
-				to.Type((*scpb.SecondaryIndex)(nil)),
-				JoinOnIndexID(from, to, "table-id", "index-id"),
-			}
-		},
-	)
-
 }
 
 func init() {

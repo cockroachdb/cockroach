@@ -239,7 +239,7 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			dropCascadeDescriptor(next, t.TableID)
 		case *scpb.PolicyDeps:
 			dropCascadeDescriptor(next, t.TableID)
-		case *scpb.Column, *scpb.ColumnType, *scpb.SecondaryIndexPartial:
+		case *scpb.Column, *scpb.ColumnType:
 			// These only have type references.
 			break
 		case *scpb.Namespace, *scpb.Function, *scpb.SecondaryIndex, *scpb.PrimaryIndex,
@@ -545,7 +545,6 @@ type indexSpec struct {
 	temporary *scpb.TemporaryIndex
 
 	name          *scpb.IndexName
-	partial       *scpb.SecondaryIndexPartial
 	partitioning  *scpb.IndexPartitioning
 	columns       []*scpb.IndexColumn
 	idxComment    *scpb.IndexComment
@@ -602,9 +601,6 @@ func (s *indexSpec) apply(fn func(e scpb.Element)) {
 	if s.name != nil {
 		fn(s.name)
 	}
-	if s.partial != nil {
-		fn(s.partial)
-	}
 	if s.partitioning != nil {
 		fn(s.partitioning)
 	}
@@ -641,9 +637,6 @@ func (s *indexSpec) clone() (c indexSpec) {
 	}
 	if s.name != nil {
 		c.name = protoutil.Clone(s.name).(*scpb.IndexName)
-	}
-	if s.partial != nil {
-		c.partial = protoutil.Clone(s.partial).(*scpb.SecondaryIndexPartial)
 	}
 	if s.partitioning != nil {
 		c.partitioning = protoutil.Clone(s.partitioning).(*scpb.IndexPartitioning)
@@ -852,7 +845,6 @@ func makeIndexSpec(b BuildCtx, tableID catid.DescID, indexID catid.IndexID) (s i
 			tableID, indexID, s.primary != nil, s.secondary != nil, s.temporary != nil))
 	}
 	_, _, s.name = scpb.FindIndexName(idxElts)
-	_, _, s.partial = scpb.FindSecondaryIndexPartial(idxElts)
 	_, _, s.partitioning = scpb.FindIndexPartitioning(idxElts)
 	scpb.ForEachIndexColumn(idxElts, func(_ scpb.Status, _ scpb.TargetStatus, ic *scpb.IndexColumn) {
 		s.columns = append(s.columns, ic)
@@ -903,9 +895,6 @@ func makeTempIndexSpec(src indexSpec) indexSpec {
 	}
 	if newTempSpec.partitioning != nil {
 		newTempSpec.partitioning.IndexID = tempID
-	}
-	if newTempSpec.partial != nil {
-		newTempSpec.partial.IndexID = tempID
 	}
 	for _, ic := range newTempSpec.columns {
 		ic.IndexID = tempID
@@ -1007,9 +996,6 @@ func makeSwapIndexSpec(
 		idx.ConstraintID = inConstraintID
 		if in.name != nil {
 			in.name.IndexID = inID
-		}
-		if in.partial != nil {
-			in.partial.IndexID = inID
 		}
 		if in.partitioning != nil {
 			in.partitioning.IndexID = inID
