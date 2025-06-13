@@ -2521,11 +2521,45 @@ func (writeOptions *WriteOptions) GetOriginTimestamp() hlc.Timestamp {
 	return writeOptions.OriginTimestamp
 }
 
-func (r *ConditionalPutRequest) Validate() error {
+func (r *ConditionalPutRequest) Validate(_ Header) error {
 	if !r.OriginTimestamp.IsEmpty() {
 		if r.AllowIfDoesNotExist {
 			return errors.AssertionFailedf("invalid ConditionalPutRequest: AllowIfDoesNotExist and non-empty OriginTimestamp are incompatible")
 		}
+	}
+	return nil
+}
+
+func (r *PutRequest) Validate(bh Header) error {
+	if err := validateExclusionTimestampForBatch(r.ExpectExclusionSince, bh); err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid PutRequest")
+	}
+	return nil
+}
+
+func (r *DeleteRequest) Validate(bh Header) error {
+	if err := validateExclusionTimestampForBatch(r.ExpectExclusionSince, bh); err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid DeleteRequest")
+	}
+	return nil
+}
+
+func validateExclusionTimestampForBatch(ts hlc.Timestamp, h Header) error {
+	if ts.IsEmpty() {
+		return nil
+	}
+
+	// TODO(ssd): It would be nice to put this first, but then we fail the
+	// gcassert linter, I assume because the code gets optimized away.
+	if !buildutil.CrdbTestBuild {
+		return nil
+	}
+
+	// CanForwardReadTimestamp implies we haven't served a read, so it makes no
+	// sense that ExpectExclusionSince would be set since it is the result of a
+	// locking read.
+	if h.CanForwardReadTimestamp {
+		return errors.New("unexpected ExpectExclusionSince in batch with CanForwardReadTimestamp set")
 	}
 	return nil
 }

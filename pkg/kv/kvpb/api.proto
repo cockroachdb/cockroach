@@ -292,6 +292,13 @@ message PutRequest {
   // no lower than "exclusive" needs to be acquired on the key, even if it
   // doesn't exist.
   bool must_acquire_exclusive_lock = 5;
+
+  // ExpectExclusionSince, if set, indicates that the request should return an
+  // error if this key has been written to at a timestamp at or after the given
+  // timestamp. This is different from the ReadTimestamp of the transaction in
+  // that it allows a writer to verify an unreplicated lock acquired at an
+  // earlier timestamp has provided the required protection.
+  util.hlc.Timestamp expect_exclusion_since = 6 [(gogoproto.nullable) = false];
 }
 
 // A PutResponse is the return value from the Put() method.
@@ -411,6 +418,13 @@ message DeleteRequest {
   //
   // TODO(ssd): Separate the behaviour of FoundKey to not depend on this flag.
   bool must_acquire_exclusive_lock = 2;
+
+  // ExpectExclusionSince, if set, indicates that the request should return an
+  // error if this key has been written to at a timestamp at or after the given
+  // timestamp. This is different from the ReadTimestamp of the transaction in
+  // that it allows a writer to verify an unreplicated lock acquired at an
+  // earlier timestamp has provided the require protection.
+  util.hlc.Timestamp expect_exclusion_since = 3 [(gogoproto.nullable) = false];
 }
 
 // A DeleteResponse is the return value from the Delete() method.

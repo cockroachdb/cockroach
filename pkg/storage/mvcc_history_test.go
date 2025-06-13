@@ -1244,6 +1244,7 @@ func cmdDelete(e *evalCtx) error {
 			Stats:                          e.ms,
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
+			ExclusionTimestamp:             e.getTsWithName("expect-exclusion-since"),
 		}
 		foundKey, acq, err := storage.MVCCDelete(e.ctx, rw, key, ts, opts)
 		if err == nil || errors.HasType(err, &kvpb.WriteTooOldError{}) {
@@ -1508,6 +1509,7 @@ func cmdPut(e *evalCtx) error {
 			Stats:                          e.ms,
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
+			ExclusionTimestamp:             e.getTsWithName("expect-exclusion-since"),
 		}
 		acq, err := storage.MVCCPut(e.ctx, rw, key, ts, val, opts)
 		if err != nil {
