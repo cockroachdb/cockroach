@@ -4782,7 +4782,7 @@ func TestUnexpectedCommitOnTxnRecovery(t *testing.T) {
 				require.Equal(t, res.ValueBytes(), []byte("valueB"))
 				err = txn.Commit(ctx)
 				require.Error(t, err)
-				// require.ErrorContains(t, err, "IntentMissingError")
+				require.ErrorContains(t, err, "RETRY_ASYNC_WRITE_FAILURE")
 				// Transfer the lease to n3.
 				transferLease(2)
 				close(startTxn2)
@@ -4790,15 +4790,15 @@ func TestUnexpectedCommitOnTxnRecovery(t *testing.T) {
 				<-blockCh
 				return err
 			case 2:
-				// My our second retry, txrecovery should have correctly aborted this
-				// transaction, which we'll discover here.
+				// On our second retry we should discover that txn recovery has correctly
+				// aborted this transaction.
 				err := txn.Put(ctx, keyA, "value")
 				require.Error(t, err)
 				require.ErrorContains(t, err, "ABORT_REASON_ABORT_SPAN")
 				return err
 			case 3:
-				// Since txn recovery correctly aborts us, we get retried again. This
-				// time we just return. Writing nothing.
+				// Since txn recovery aborted us, we get retried again. This time we
+				// just return. Writing nothing.
 				return nil
 			default:
 				t.Errorf("unexpected retry number: %d", retryNum.Load())
