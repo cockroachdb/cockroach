@@ -1,6 +1,6 @@
 name: Microbenchmarks CI
 on:
-  pull_request_target:
+  pull_request:
     types: [ opened, reopened, synchronize ]
     branches: [ master ]
 concurrency:
@@ -91,7 +91,6 @@ jobs:
         env:
           BASE_SHA: ${{ needs.base.outputs.merge_base }}
           HEAD_SHA: ${{ env.HEAD }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPO: "cockroachdb/cockroach"
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
       - name: Clean up
