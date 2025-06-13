@@ -4679,13 +4679,10 @@ func TestUnexpectedCommitOnTxnRecovery(t *testing.T) {
 
 	var (
 		targetTxnIDString atomic.Value
-		retryNum          atomic.Int32
 		cmdID             atomic.Value
 	)
 	cmdID.Store(kvserverbase.CmdIDKey(""))
 	targetTxnIDString.Store("")
-	retryNum.Store(0)
-
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	// This test relies on unreplicated locks to be replicated on lease transfers.
@@ -4706,9 +4703,10 @@ func TestUnexpectedCommitOnTxnRecovery(t *testing.T) {
 						}
 						getReq, ok := fArgs.Req.Requests[0].GetInner().(*kvpb.GetRequest)
 						// Only fail replication on the first retry.
-						if ok && getReq.KeyLockingDurability == lock.Replicated && retryNum.Load() == 1 {
-							t.Logf("will fail application for txn %s; req: %+v; raft cmdID: %s",
-								fArgs.Req.Header.Txn.ID.String(), getReq, fArgs.CmdID)
+						epoch := fArgs.Req.Header.Txn.Epoch
+						if ok && getReq.KeyLockingDurability == lock.Replicated && epoch == 0 {
+							t.Logf("will fail application for txn %s@epoch=%d; req: %+v; raft cmdID: %s",
+								fArgs.Req.Header.Txn.ID.String(), epoch, getReq, fArgs.CmdID)
 							cmdID.Store(fArgs.CmdID)
 						}
 						return nil
@@ -4763,15 +4761,18 @@ func TestUnexpectedCommitOnTxnRecovery(t *testing.T) {
 		defer wg.Done()
 
 		err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			retryNum.Add(1)
-			if targetTxnIDString.Load() == "" {
+			if txnID := targetTxnIDString.Load(); txnID == "" {
 				// Store the txnID for the testing knobs.
 				targetTxnIDString.Store(txn.ID().String())
 				t.Logf("txn1 ID is: %s", txn.ID())
+			} else if txnID != txn.ID() {
+				// Since txn recovery aborted us, we get retried again but with an
+				// entirely new txnID. This time we just return. Writing nothing.
+				return nil
 			}
 
-			switch retryNum.Load() {
-			case 1:
+			switch txn.Epoch() {
+			case 0:
 				err := txn.Put(ctx, keyA, "value")
 				require.NoError(t, err)
 				res, err := txn.GetForUpdate(ctx, keyB, kvpb.BestEffort)
@@ -4789,19 +4790,15 @@ func TestUnexpectedCommitOnTxnRecovery(t *testing.T) {
 				// Block until Txn2 recovers us.
 				<-blockCh
 				return err
-			case 2:
-				// On our second retry we should discover that txn recovery has correctly
-				// aborted this transaction.
+			case 1:
+				// When retrying the write failure we should discover that txn recovery
+				// has aborted this transaction.
 				err := txn.Put(ctx, keyA, "value")
 				require.Error(t, err)
 				require.ErrorContains(t, err, "ABORT_REASON_ABORT_SPAN")
 				return err
-			case 3:
-				// Since txn recovery aborted us, we get retried again. This time we
-				// just return. Writing nothing.
-				return nil
 			default:
-				t.Errorf("unexpected retry number: %d", retryNum.Load())
+				t.Errorf("unexpected epoch: %d", txn.Epoch())
 			}
 			return nil
 		})
