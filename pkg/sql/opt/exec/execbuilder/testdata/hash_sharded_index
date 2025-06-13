@@ -15,7 +15,7 @@ ALTER TABLE sharded_primary INJECT STATISTICS '[
 ]'
 
 query T
-EXPLAIN (VERBOSE) INSERT INTO sharded_primary (a) VALUES (1), (2)
+EXPLAIN (VERBOSE, TYPES) INSERT INTO sharded_primary (a) VALUES (1), (2)
 ----
 distribution: local
 vectorized: true
@@ -27,21 +27,21 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ columns: (crdb_internal_a_shard_11_comp, column1, check1)
-    │ render check1: crdb_internal_a_shard_11_comp IN (0, 1, __more1_10__, 10)
-    │ render column1: column1
-    │ render crdb_internal_a_shard_11_comp: crdb_internal_a_shard_11_comp
+    │ columns: (crdb_internal_a_shard_11_comp int, column1 int, check1 bool)
+    │ render check1: ((crdb_internal_a_shard_11_comp)[int] IN (((0)[int], (1)[int], __more1_10__, (10)[int]))[tuple{int, int, int, int, int, int, int, int, int, int, int}])[bool]
+    │ render column1: (column1)[int]
+    │ render crdb_internal_a_shard_11_comp: (crdb_internal_a_shard_11_comp)[int]
     │
     └── • render
-        │ columns: (crdb_internal_a_shard_11_comp, column1)
-        │ render crdb_internal_a_shard_11_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 11)
-        │ render column1: column1
+        │ columns: (crdb_internal_a_shard_11_comp int, column1 int)
+        │ render crdb_internal_a_shard_11_comp: (mod((fnv32((md5((crdb_internal.datums_to_bytes((column1)[int]))[bytes]))[string]))[int], (11)[int]))[int]
+        │ render column1: (column1)[int]
         │
         └── • values
-              columns: (column1)
+              columns: (column1 int)
               size: 1 column, 2 rows
-              row 0, expr 0: 1
-              row 1, expr 0: 2
+              row 0, expr 0: (1)[int]
+              row 1, expr 0: (2)[int]
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM sharded_primary WHERE (a % 2) = 0 ORDER BY a LIMIT 10;
@@ -294,7 +294,7 @@ statement ok
 CREATE TABLE sharded_secondary (a INT8, INDEX (a) USING HASH WITH (bucket_count=12))
 
 query T
-EXPLAIN (VERBOSE) INSERT INTO sharded_secondary (a) VALUES (1), (2)
+EXPLAIN (VERBOSE, TYPES) INSERT INTO sharded_secondary (a) VALUES (1), (2)
 ----
 distribution: local
 vectorized: true
@@ -306,23 +306,23 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ columns: (column1, crdb_internal_a_shard_12_comp, rowid_default, check1)
-    │ render check1: crdb_internal_a_shard_12_comp IN (0, 1, __more1_10__, 11)
-    │ render column1: column1
-    │ render rowid_default: rowid_default
-    │ render crdb_internal_a_shard_12_comp: crdb_internal_a_shard_12_comp
+    │ columns: (column1 int, crdb_internal_a_shard_12_comp int, rowid_default int, check1 bool)
+    │ render check1: ((crdb_internal_a_shard_12_comp)[int] IN (((0)[int], (1)[int], __more1_10__, (11)[int]))[tuple{int, int, int, int, int, int, int, int, int, int, int, int}])[bool]
+    │ render column1: (column1)[int]
+    │ render rowid_default: (rowid_default)[int]
+    │ render crdb_internal_a_shard_12_comp: (crdb_internal_a_shard_12_comp)[int]
     │
     └── • render
-        │ columns: (crdb_internal_a_shard_12_comp, rowid_default, column1)
-        │ render crdb_internal_a_shard_12_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 12)
-        │ render rowid_default: unique_rowid()
-        │ render column1: column1
+        │ columns: (crdb_internal_a_shard_12_comp int, rowid_default int, column1 int)
+        │ render crdb_internal_a_shard_12_comp: (mod((fnv32((md5((crdb_internal.datums_to_bytes((column1)[int]))[bytes]))[string]))[int], (12)[int]))[int]
+        │ render rowid_default: (unique_rowid())[int]
+        │ render column1: (column1)[int]
         │
         └── • values
-              columns: (column1)
+              columns: (column1 int)
               size: 1 column, 2 rows
-              row 0, expr 0: 1
-              row 1, expr 0: 2
+              row 0, expr 0: (1)[int]
+              row 1, expr 0: (2)[int]
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM sharded_secondary WHERE a > 100 ORDER BY a LIMIT 10;
