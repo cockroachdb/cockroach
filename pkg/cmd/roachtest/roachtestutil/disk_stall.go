@@ -75,7 +75,8 @@ func (s *cgroupDiskStaller) Setup(ctx context.Context) {
 		// Safety measure.
 		s.f.Fatalf("cluster needs ReusePolicyNone to support disk stalls")
 	}
-	if err := s.Failer.Setup(ctx, s.f.L(), failures.DiskStallArgs{
+	l := newDiskStallLogger(s.f.L(), s.c.CRDBNodes(), "Setup")
+	if err := s.Failer.Setup(ctx, l, failures.DiskStallArgs{
 		StallLogs: s.stallLogs,
 		Nodes:     s.c.CRDBNodes().InstallNodes(),
 	}); err != nil {
@@ -83,14 +84,16 @@ func (s *cgroupDiskStaller) Setup(ctx context.Context) {
 	}
 }
 func (s *cgroupDiskStaller) Cleanup(ctx context.Context) {
-	err := s.Failer.Cleanup(ctx, s.f.L())
+	l := newDiskStallLogger(s.f.L(), s.c.CRDBNodes(), "Cleanup")
+	err := s.Failer.Cleanup(ctx, l)
 	if err != nil {
 		s.f.Fatalf("failed to cleanup disk stall: %s", err)
 	}
 }
 
 func (s *cgroupDiskStaller) Stall(ctx context.Context, nodes option.NodeListOption) {
-	if err := s.Failer.Inject(ctx, s.f.L(), failures.DiskStallArgs{
+	l := newDiskStallLogger(s.f.L(), nodes, "Stall")
+	if err := s.Failer.Inject(ctx, l, failures.DiskStallArgs{
 		StallLogs:   s.stallLogs,
 		StallWrites: true,
 		StallReads:  s.stallReads,
@@ -103,7 +106,8 @@ func (s *cgroupDiskStaller) Stall(ctx context.Context, nodes option.NodeListOpti
 func (s *cgroupDiskStaller) Slow(
 	ctx context.Context, nodes option.NodeListOption, bytesPerSecond int,
 ) {
-	if err := s.Failer.Inject(ctx, s.f.L(), failures.DiskStallArgs{
+	l := newDiskStallLogger(s.f.L(), nodes, "Slow")
+	if err := s.Failer.Inject(ctx, l, failures.DiskStallArgs{
 		StallLogs:   s.stallLogs,
 		StallWrites: true,
 		StallReads:  s.stallReads,
@@ -115,7 +119,8 @@ func (s *cgroupDiskStaller) Slow(
 }
 
 func (s *cgroupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOption) {
-	if err := s.Failer.Recover(ctx, s.f.L()); err != nil {
+	l := newDiskStallLogger(s.f.L(), nodes, "Unstall")
+	if err := s.Failer.Recover(ctx, l); err != nil {
 		s.f.Fatalf("failed to unstall disk: %s", err)
 	}
 }
@@ -141,19 +146,22 @@ func (s *dmsetupDiskStaller) Setup(ctx context.Context) {
 		// We disable journaling and do all kinds of things below.
 		s.f.Fatalf("cluster needs ReusePolicyNone to support disk stalls")
 	}
-	if err := s.Failer.Setup(ctx, s.f.L(), failures.DiskStallArgs{Nodes: s.c.CRDBNodes().InstallNodes()}); err != nil {
+	l := newDiskStallLogger(s.f.L(), s.c.CRDBNodes(), "Setup")
+	if err := s.Failer.Setup(ctx, l, failures.DiskStallArgs{Nodes: s.c.CRDBNodes().InstallNodes()}); err != nil {
 		s.f.Fatalf("failed to setup disk stall: %s", err)
 	}
 }
 
 func (s *dmsetupDiskStaller) Cleanup(ctx context.Context) {
-	if err := s.Failer.Cleanup(ctx, s.f.L()); err != nil {
+	l := newDiskStallLogger(s.f.L(), s.c.CRDBNodes(), "Cleanup")
+	if err := s.Failer.Cleanup(ctx, l); err != nil {
 		s.f.Fatalf("failed to cleanup disk stall: %s", err)
 	}
 }
 
 func (s *dmsetupDiskStaller) Stall(ctx context.Context, nodes option.NodeListOption) {
-	if err := s.Failer.Inject(ctx, s.f.L(), failures.DiskStallArgs{
+	l := newDiskStallLogger(s.f.L(), nodes, "Stall")
+	if err := s.Failer.Inject(ctx, l, failures.DiskStallArgs{
 		Nodes: nodes.InstallNodes(),
 	}); err != nil {
 		s.f.Fatalf("failed to stall disk: %s", err)
@@ -168,10 +176,24 @@ func (s *dmsetupDiskStaller) Slow(
 }
 
 func (s *dmsetupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOption) {
-	if err := s.Failer.Recover(ctx, s.f.L()); err != nil {
+	l := newDiskStallLogger(s.f.L(), nodes, "Unstall")
+	if err := s.Failer.Recover(ctx, l); err != nil {
 		s.f.Fatalf("failed to unstall disk: %s", err)
 	}
 }
 
 func (s *dmsetupDiskStaller) DataDir() string { return "{store-dir}" }
 func (s *dmsetupDiskStaller) LogDir() string  { return "logs" }
+
+// newDiskStallLogger attempts to create a quiet child logger for a given
+// disk staller method. If the child logger cannot be created, it logs
+// a warning and continues with the parent logger.
+func newDiskStallLogger(l *logger.Logger, nodes option.NodeListOption, name string) *logger.Logger {
+	quietLogger, file, err := LoggerForCmd(l, nodes, name)
+	if err != nil {
+		l.Printf("WARN: failed to create child logger for %s(): %s", name, err)
+		return l
+	}
+	l.Printf("%s() details in %s.log", name, file)
+	return quietLogger
+}
