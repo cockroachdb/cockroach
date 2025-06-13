@@ -2881,8 +2881,25 @@ func (b *Builder) buildLookupJoin(
 		// We choose parallelism when we know that each lookup returns at most
 		// one row.
 		parallelize = true
-	} else if b.evalCtx.SessionData().ParallelizeMultiKeyLookupJoinsEnabled {
+	} else if sd := b.evalCtx.SessionData(); sd.ParallelizeMultiKeyLookupJoinsEnabled {
 		parallelize = true
+	} else {
+		// TODO: think about the case when LookupExpr is set.
+		if len(keyCols) > 0 {
+			if tableStats, ok := memo.GetTableStats(md, join.Table); ok && tableStats.Available {
+				var indexLookupCols opt.ColSet
+				for i := range keyCols {
+					ord := idx.Column(i).Ordinal()
+					indexLookupCols.Add(join.Table.ColumnID(ord))
+				}
+				if colStat, ok := tableStats.ColStats.Lookup(indexLookupCols); ok {
+					allowedRatio := sd.ParallelizeLookupRatio
+					estimatedRatio := tableStats.RowCount / colStat.DistinctCount
+					parallelize = allowedRatio != 0 && estimatedRatio != 0 && estimatedRatio <= allowedRatio
+					log.VEventf(b.ctx, 2, "estimated lookup join ratio %.2f, parallelize=%t", estimatedRatio, parallelize)
+				}
+			}
+		}
 	}
 	for _, c := range reqOrdering {
 		if c.ColIdx >= numInputCols {
