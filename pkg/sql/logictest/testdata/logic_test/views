@@ -1546,7 +1546,7 @@ DROP table t1nest CASCADE
 # Validate the objects being dropped
 query IT
 SELECT "reportingID",
-       (info::JSONB - 'Timestamp' - 'DescriptorID')
+       (info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp')
        || (
 			SELECT json_build_object(
 					'CascadeDroppedViews',

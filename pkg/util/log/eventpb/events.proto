@@ -45,6 +45,10 @@ message CommonSQLEventDetails {
 
   // The mapping of SQL placeholders to their values, for prepared statements.
   repeated string placeholder_values = 5 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The current read timestamp of the transaction that triggered the event, if
+  // in a transaction.
+  int64 txn_timestamp = 7 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 // CommonJobEventDetails contains the fields common to all job events.

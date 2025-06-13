@@ -247,12 +247,8 @@ func logEventInternalForSQLStatements(
 ) error {
 	// Inject the common fields into the payload provided by the caller.
 	injectCommonFields := func(event logpb.EventPayload) error {
-		if txn == nil {
-			// No txn is set (e.g. for COPY or BEGIN), so use now instead.
-			event.CommonDetails().Timestamp = timeutil.Now().UnixNano()
-		} else {
-			event.CommonDetails().Timestamp = txn.KV().ReadTimestamp().WallTime
-		}
+		event.CommonDetails().Timestamp = timeutil.Now().UnixNano()
+
 		sqlCommon, ok := event.(eventpb.EventWithCommonSQLPayload)
 		if !ok {
 			return errors.AssertionFailedf("unknown event type: %T", event)
@@ -277,6 +273,10 @@ func logEventInternalForSQLStatements(
 
 		// Overwrite with the common details.
 		*m = commonSQLEventDetails
+
+		if txn != nil {
+			m.TxnTimestamp = txn.KV().ReadTimestamp().WallTime
+		}
 
 		// If the common details didn't have a descriptor ID, keep the
 		// one that was in the event already.
