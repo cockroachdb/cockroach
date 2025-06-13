@@ -1251,11 +1251,26 @@ func (c *conn) Flush(pos sql.CmdPos) error {
 	// the underlying ring buffer memory for reuse.
 	c.writerState.fi.cmdStarts.Reset()
 
-	_ /* n */, err := c.writerState.buf.WriteTo(c.conn)
-	if err != nil {
-		c.setErr(err)
-		return err
+	// When flushing, writes into the socket buffer limit how many bytes
+	// are written into an SSL frame at a time. Stock Postgres will at most
+	// write 8 kilobytes of unencrypted data at a time. libpq can also only
+	// consume 8 kilobytes (via PQConsumeInput), so async clients will hang
+	// if bigger SSL frames are sent.
+	const maxWriteSize = 8192
+	bytesToWrite := c.writerState.buf.Bytes()
+	for i := 0; i < len(bytesToWrite); i += maxWriteSize {
+		targetSize := min(len(bytesToWrite)-i, maxWriteSize)
+		m, err := c.conn.Write(bytesToWrite[i : i+targetSize])
+		if err == nil && m < targetSize {
+			err = io.ErrShortWrite
+		}
+		if err != nil {
+			c.setErr(err)
+			c.writerState.buf.Reset()
+			return err
+		}
 	}
+	c.writerState.buf.Reset()
 	return nil
 }
 
