@@ -63,6 +63,9 @@ func main() {
 	go func() {
 		defer readWg.Done()
 		res, err := processProfiles(profilesChan)
+		if err != nil {
+			panic(err)
+		}
 		w, err := os.Create(*outFile)
 		if err != nil {
 			panic(err)
@@ -75,6 +78,9 @@ func main() {
 	}()
 
 	if err := filepath.WalkDir("./artifacts", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
 		if d.IsDir() || d.Name() != "merged.cpu.pb.gz" {
 			return nil
 		}
