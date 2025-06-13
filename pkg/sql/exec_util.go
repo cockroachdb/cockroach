@@ -3935,10 +3935,6 @@ func (m *sessionDataMutator) SetInjectRetryErrorsOnCommitEnabled(val bool) {
 	m.data.InjectRetryErrorsOnCommitEnabled = val
 }
 
-func (m *sessionDataMutator) SetEnforceHomeRegionFollowerReadsEnabled(val bool) {
-	m.data.EnforceHomeRegionFollowerReadsEnabled = val
-}
-
 func (m *sessionDataMutator) SetOptimizerAlwaysUseHistograms(val bool) {
 	m.data.OptimizerAlwaysUseHistograms = val
 }

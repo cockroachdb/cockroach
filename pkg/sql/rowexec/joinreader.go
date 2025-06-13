@@ -251,11 +251,6 @@ type joinReader struct {
 	// only lookups to rows in remote regions and remote accesses are set to
 	// error out via a session setting.
 	errorOnLookup bool
-
-	// allowEnforceHomeRegionFollowerReads, if true, causes errors produced by the
-	// above `errorOnLookup` flag to be retryable, and use follower reads to find
-	// the query's home region during the retries.
-	allowEnforceHomeRegionFollowerReads bool
 }
 
 var _ execinfra.Processor = &joinReader{}
@@ -353,19 +348,18 @@ func newJoinReader(
 		flowCtx.EvalCtx.Planner != nil && flowCtx.EvalCtx.Planner.EnforceHomeRegion()
 
 	jr := &joinReader{
-		fetchSpec:                           spec.FetchSpec,
-		splitFamilyIDs:                      spec.SplitFamilyIDs,
-		maintainOrdering:                    spec.MaintainOrdering,
-		input:                               input,
-		lookupCols:                          lookupCols,
-		outputGroupContinuationForLeftRow:   spec.OutputGroupContinuationForLeftRow,
-		parallelize:                         parallelize,
-		readerType:                          readerType,
-		txn:                                 txn,
-		usesStreamer:                        useStreamer,
-		limitHintHelper:                     execinfra.MakeLimitHintHelper(spec.LimitHint, post),
-		errorOnLookup:                       errorOnLookup,
-		allowEnforceHomeRegionFollowerReads: flowCtx.EvalCtx.SessionData().EnforceHomeRegionFollowerReadsEnabled,
+		fetchSpec:                         spec.FetchSpec,
+		splitFamilyIDs:                    spec.SplitFamilyIDs,
+		maintainOrdering:                  spec.MaintainOrdering,
+		input:                             input,
+		lookupCols:                        lookupCols,
+		outputGroupContinuationForLeftRow: spec.OutputGroupContinuationForLeftRow,
+		parallelize:                       parallelize,
+		readerType:                        readerType,
+		txn:                               txn,
+		usesStreamer:                      useStreamer,
+		limitHintHelper:                   execinfra.MakeLimitHintHelper(spec.LimitHint, post),
+		errorOnLookup:                     errorOnLookup,
 	}
 	if readerType != indexJoinReaderType {
 		jr.groupingState = &inputBatchGroupingState{doGrouping: spec.LeftJoinWithPairedJoiner}
@@ -1031,11 +1025,7 @@ func (jr *joinReader) readInput() (
 		// If spans has a non-zero length, the call to StartScan below will
 		// perform a batch lookup of kvs, so error out before that happens if
 		// we were instructed to do so via the errorOnLookup flag.
-		err = noHomeRegionError
-		if jr.allowEnforceHomeRegionFollowerReads {
-			err = execinfra.NewDynamicQueryHasNoHomeRegionError(err)
-		}
-		jr.MoveToDraining(err)
+		jr.MoveToDraining(noHomeRegionError)
 		return jrStateUnknown, nil, jr.DrainHelper()
 	}
 

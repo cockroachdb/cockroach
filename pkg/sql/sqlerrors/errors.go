@@ -41,6 +41,11 @@ const (
 // information for users or app developers.
 const EnforceHomeRegionFurtherInfo = "For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region"
 
+// QueryNotRunningInHomeRegionMessagePrefix is the common message prefix for
+// erroring out queries with no home region when the enforce_home_region session
+// flag is set.
+const QueryNotRunningInHomeRegionMessagePrefix = "Query is not running in its home region"
+
 // NewSchemaChangeOnLockedTableErr creates an error signaling schema
 // change statement is attempted on a table with locked schema.
 func NewSchemaChangeOnLockedTableErr(tableName string) error {

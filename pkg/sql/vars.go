@@ -2937,31 +2937,8 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`enforce_home_region_follower_reads_enabled`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`enforce_home_region_follower_reads_enabled`),
-		SetWithPlanner: func(ctx context.Context, p *planner, local bool, s string) error {
-			p.BufferClientNotice(ctx, pgnotice.Newf(
-				"enforce_home_region_follower_reads_enabled is deprecated and will be removed in a future "+
-					"release",
-			))
-			return p.applyOnSessionDataMutators(
-				ctx,
-				local,
-				func(m sessionDataMutator) error {
-					b, err := paramparse.ParseBoolVar("enforce_home_region_follower_reads_enabled", s)
-					if err != nil {
-						return err
-					}
-					m.SetEnforceHomeRegionFollowerReadsEnabled(b)
-					return nil
-				},
-			)
-		},
-		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnforceHomeRegionFollowerReadsEnabled), nil
-		},
-		GlobalDefault: globalFalse,
-	},
+	// This is only kept for backwards compatibility and no longer has any effect.
+	`enforce_home_region_follower_reads_enabled`: makeBackwardsCompatBoolVar("enforce_home_region_follower_reads_enabled", false),
 
 	// CockroachDB extension.
 	`optimizer_always_use_histograms`: {
