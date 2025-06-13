@@ -33,7 +33,7 @@ func createDummyStream(
 	t *testing.T,
 ) (
 	serverStream execinfrapb.DistSQL_FlowStreamServer,
-	clientStream execinfrapb.DistSQL_FlowStreamClient,
+	clientStream execinfrapb.RPCDistSQL_FlowStreamClient,
 	cleanup func(),
 ) {
 	stopper := stop.NewStopper()
@@ -50,7 +50,7 @@ func createDummyStream(
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := execinfrapb.NewDistSQLClient(conn)
+	client := execinfrapb.NewGRPCDistSQLClientAdapter(conn)
 	clientStream, err = client.FlowStream(ctx)
 	if err != nil {
 		t.Fatal(err)
