@@ -47,21 +47,21 @@ var errSequenceOperators = unimplemented.NewWithIssue(42508,
 func (so *DummySequenceOperators) GetSerialSequenceNameFromColumn(
 	ctx context.Context, tn *tree.TableName, columnName tree.Name,
 ) (*tree.TableName, error) {
-	return nil, errors.WithStack(errSequenceOperators)
+	return nil, errors.HandleAsAssertionFailure(errSequenceOperators)
 }
 
 // ResolveTableName is part of the eval.DatabaseCatalog interface.
 func (so *DummySequenceOperators) ResolveTableName(
 	ctx context.Context, tn *tree.TableName,
 ) (tree.ID, error) {
-	return 0, errors.WithStack(errSequenceOperators)
+	return 0, errors.HandleAsAssertionFailure(errSequenceOperators)
 }
 
 // SchemaExists is part of the eval.DatabaseCatalog interface.
 func (so *DummySequenceOperators) SchemaExists(
 	ctx context.Context, dbName, scName string,
 ) (bool, error) {
-	return false, errors.WithStack(errSequenceOperators)
+	return false, errors.HandleAsAssertionFailure(errSequenceOperators)
 }
 
 // HasAnyPrivilegeForSpecifier is part of the eval.DatabaseCatalog interface.
@@ -71,14 +71,14 @@ func (so *DummySequenceOperators) HasAnyPrivilegeForSpecifier(
 	user username.SQLUsername,
 	privs []privilege.Privilege,
 ) (eval.HasAnyPrivilegeResult, error) {
-	return eval.HasNoPrivilege, errors.WithStack(errEvalPlanner)
+	return eval.HasNoPrivilege, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // IncrementSequenceByID is part of the eval.SequenceOperators interface.
 func (so *DummySequenceOperators) IncrementSequenceByID(
 	ctx context.Context, seqID int64,
 ) (int64, error) {
-	return 0, errors.WithStack(errSequenceOperators)
+	return 0, errors.HandleAsAssertionFailure(errSequenceOperators)
 }
 
 // GetLatestValueInSessionForSequenceByID implements the eval.SequenceOperators
@@ -86,21 +86,21 @@ func (so *DummySequenceOperators) IncrementSequenceByID(
 func (so *DummySequenceOperators) GetLatestValueInSessionForSequenceByID(
 	ctx context.Context, seqID int64,
 ) (int64, error) {
-	return 0, errors.WithStack(errSequenceOperators)
+	return 0, errors.HandleAsAssertionFailure(errSequenceOperators)
 }
 
 // GetLastSequenceValueByID implements the eval.SequenceOperators interface.
 func (so *DummySequenceOperators) GetLastSequenceValueByID(
 	ctx context.Context, seqID uint32,
 ) (int64, bool, error) {
-	return 0, false, errors.WithStack(errSequenceOperators)
+	return 0, false, errors.HandleAsAssertionFailure(errSequenceOperators)
 }
 
 // SetSequenceValueByID implements the eval.SequenceOperators interface.
 func (so *DummySequenceOperators) SetSequenceValueByID(
 	ctx context.Context, seqID uint32, newVal int64, isCalled bool,
 ) error {
-	return errors.WithStack(errSequenceOperators)
+	return errors.HandleAsAssertionFailure(errSequenceOperators)
 }
 
 // DummyRegionOperator implements the tree.RegionOperator interface by
@@ -116,14 +116,14 @@ var errRegionOperator = unimplemented.NewWithIssue(42508,
 func (so *DummyRegionOperator) CurrentDatabaseRegionConfig(
 	_ context.Context,
 ) (eval.DatabaseRegionConfig, error) {
-	return nil, errors.WithStack(errRegionOperator)
+	return nil, errors.HandleAsAssertionFailure(errRegionOperator)
 }
 
 // ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the eval.RegionOperator interface.
 func (so *DummyRegionOperator) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
 	_ context.Context,
 ) error {
-	return errors.WithStack(errRegionOperator)
+	return errors.HandleAsAssertionFailure(errRegionOperator)
 }
 
 // ResetMultiRegionZoneConfigsForTable is part of the eval.RegionOperator
@@ -131,7 +131,7 @@ func (so *DummyRegionOperator) ValidateAllMultiRegionZoneConfigsInCurrentDatabas
 func (so *DummyRegionOperator) ResetMultiRegionZoneConfigsForTable(
 	_ context.Context, id int64, forceSurviveZone bool,
 ) error {
-	return errors.WithStack(errRegionOperator)
+	return errors.HandleAsAssertionFailure(errRegionOperator)
 }
 
 // ResetMultiRegionZoneConfigsForDatabase is part of the eval.RegionOperator
@@ -139,7 +139,7 @@ func (so *DummyRegionOperator) ResetMultiRegionZoneConfigsForTable(
 func (so *DummyRegionOperator) ResetMultiRegionZoneConfigsForDatabase(
 	_ context.Context, id int64,
 ) error {
-	return errors.WithStack(errRegionOperator)
+	return errors.HandleAsAssertionFailure(errRegionOperator)
 }
 
 // DummyStreamManagerFactory implements the eval.StreamManagerFactory interface by
@@ -150,14 +150,14 @@ type DummyStreamManagerFactory struct{}
 func (smf *DummyStreamManagerFactory) GetReplicationStreamManager(
 	ctx context.Context,
 ) (eval.ReplicationStreamManager, error) {
-	return nil, errors.WithStack(errors.New("Stream manager factory not implemented"))
+	return nil, errors.HandleAsAssertionFailure(errors.New("Stream manager factory not implemented"))
 }
 
 // GetStreamIngestManager implements the eval.StreamManagerFactory interface.
 func (smf *DummyStreamManagerFactory) GetStreamIngestManager(
 	ctx context.Context,
 ) (eval.StreamIngestManager, error) {
-	return nil, errors.WithStack(errors.New("Stream manager factory not implemented"))
+	return nil, errors.HandleAsAssertionFailure(errors.New("Stream manager factory not implemented"))
 }
 
 // DummyEvalPlanner implements the eval.Planner interface by returning
@@ -170,150 +170,150 @@ type DummyEvalPlanner struct {
 func (ep *DummyEvalPlanner) ResolveOIDFromString(
 	ctx context.Context, resultType *types.T, toResolve *tree.DString,
 ) (*tree.DOid, bool, error) {
-	return nil, false, errors.WithStack(errEvalPlanner)
+	return nil, false, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // ResolveOIDFromOID is part of the Planner interface.
 func (ep *DummyEvalPlanner) ResolveOIDFromOID(
 	ctx context.Context, resultType *types.T, toResolve *tree.DOid,
 ) (*tree.DOid, bool, error) {
-	return nil, false, errors.WithStack(errEvalPlanner)
+	return nil, false, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // GenerateTestObjects is part of the Planner interface.
 func (ep *DummyEvalPlanner) GenerateTestObjects(
 	ctx context.Context, params string,
 ) (string, error) {
-	return "", errors.WithStack(errEvalPlanner)
+	return "", errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // UnsafeUpsertDescriptor is part of the Planner interface.
 func (ep *DummyEvalPlanner) UnsafeUpsertDescriptor(
 	ctx context.Context, descID int64, encodedDescriptor []byte, force bool,
 ) error {
-	return errors.WithStack(errEvalPlanner)
+	return errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // UnsafeDeleteDescriptor is part of the Planner interface.
 func (ep *DummyEvalPlanner) UnsafeDeleteDescriptor(
 	ctx context.Context, descID int64, force bool,
 ) error {
-	return errors.WithStack(errEvalPlanner)
+	return errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // ForceDeleteTableData is part of the Planner interface.
 func (ep *DummyEvalPlanner) ForceDeleteTableData(ctx context.Context, descID int64) error {
-	return errors.WithStack(errEvalPlanner)
+	return errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // UnsafeUpsertNamespaceEntry is part of the Planner interface.
 func (ep *DummyEvalPlanner) UnsafeUpsertNamespaceEntry(
 	ctx context.Context, parentID, parentSchemaID int64, name string, descID int64, force bool,
 ) error {
-	return errors.WithStack(errEvalPlanner)
+	return errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // UnsafeDeleteNamespaceEntry is part of the Planner interface.
 func (ep *DummyEvalPlanner) UnsafeDeleteNamespaceEntry(
 	ctx context.Context, parentID, parentSchemaID int64, name string, descID int64, force bool,
 ) error {
-	return errors.WithStack(errEvalPlanner)
+	return errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // UpsertDroppedRelationGCTTL is part of the Planner interface.
 func (ep *DummyEvalPlanner) UpsertDroppedRelationGCTTL(
 	ctx context.Context, id int64, ttl duration.Duration,
 ) error {
-	return errors.WithStack(errEvalPlanner)
+	return errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // UserHasAdminRole is part of the Planner interface.
 func (ep *DummyEvalPlanner) UserHasAdminRole(
 	ctx context.Context, user username.SQLUsername,
 ) (bool, error) {
-	return false, errors.WithStack(errEvalPlanner)
+	return false, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // MemberOfWithAdminOption is part of the Planner interface.
 func (ep *DummyEvalPlanner) MemberOfWithAdminOption(
 	ctx context.Context, member username.SQLUsername,
 ) (map[username.SQLUsername]bool, error) {
-	return nil, errors.WithStack(errEvalPlanner)
+	return nil, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // ExternalReadFile is part of the Planner interface.
 func (*DummyEvalPlanner) ExternalReadFile(ctx context.Context, uri string) ([]byte, error) {
-	return nil, errors.WithStack(errEvalPlanner)
+	return nil, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // ExternalWriteFile is part of the Planner interface.
 func (*DummyEvalPlanner) ExternalWriteFile(ctx context.Context, uri string, content []byte) error {
-	return errors.WithStack(errEvalPlanner)
+	return errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // DecodeGist is part of the Planner interface.
 func (*DummyEvalPlanner) DecodeGist(
 	ctx context.Context, gist string, external bool,
 ) ([]string, error) {
-	return nil, errors.WithStack(errEvalPlanner)
+	return nil, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // SerializeSessionState is part of the Planner interface.
 func (*DummyEvalPlanner) SerializeSessionState() (*tree.DBytes, error) {
-	return nil, errors.WithStack(errEvalPlanner)
+	return nil, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // DeserializeSessionState is part of the Planner interface.
 func (*DummyEvalPlanner) DeserializeSessionState(
 	ctx context.Context, token *tree.DBytes,
 ) (*tree.DBool, error) {
-	return nil, errors.WithStack(errEvalPlanner)
+	return nil, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // CreateSessionRevivalToken is part of the Planner interface.
 func (*DummyEvalPlanner) CreateSessionRevivalToken() (*tree.DBytes, error) {
-	return nil, errors.WithStack(errEvalPlanner)
+	return nil, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // ValidateSessionRevivalToken is part of the Planner interface.
 func (*DummyEvalPlanner) ValidateSessionRevivalToken(token *tree.DBytes) (*tree.DBool, error) {
-	return nil, errors.WithStack(errEvalPlanner)
+	return nil, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // RevalidateUniqueConstraintsInCurrentDB is part of the Planner interface.
 func (*DummyEvalPlanner) RevalidateUniqueConstraintsInCurrentDB(ctx context.Context) error {
-	return errors.WithStack(errEvalPlanner)
+	return errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // RevalidateUniqueConstraintsInTable is part of the Planner interface.
 func (*DummyEvalPlanner) RevalidateUniqueConstraintsInTable(
 	ctx context.Context, tableID int,
 ) error {
-	return errors.WithStack(errEvalPlanner)
+	return errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // RevalidateUniqueConstraint is part of the Planner interface.
 func (*DummyEvalPlanner) RevalidateUniqueConstraint(
 	ctx context.Context, tableID int, constraintName string,
 ) error {
-	return errors.WithStack(errEvalPlanner)
+	return errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // IsConstraintActive is part of the EvalPlanner interface.
 func (*DummyEvalPlanner) IsConstraintActive(
 	ctx context.Context, tableID int, constraintName string,
 ) (bool, error) {
-	return false, errors.WithStack(errEvalPlanner)
+	return false, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // ValidateTTLScheduledJobsInCurrentDB is part of the Planner interface.
 func (*DummyEvalPlanner) ValidateTTLScheduledJobsInCurrentDB(ctx context.Context) error {
-	return errors.WithStack(errEvalPlanner)
+	return errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // RepairTTLScheduledJobForTable is part of the Planner interface.
 func (*DummyEvalPlanner) RepairTTLScheduledJobForTable(ctx context.Context, tableID int64) error {
-	return errors.WithStack(errEvalPlanner)
+	return errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // Mon is part of the eval.Planner interface.
@@ -338,24 +338,24 @@ func (*DummyEvalPlanner) GenUniqueCursorName() tree.Name {
 
 // PLpgSQLCloseCursor is part of the eval.Planner interface.
 func (*DummyEvalPlanner) PLpgSQLCloseCursor(_ tree.Name) error {
-	return errors.WithStack(errEvalPlanner)
+	return errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // PLpgSQLFetchCursor is part of the Planner interface.
 func (*DummyEvalPlanner) PLpgSQLFetchCursor(
 	context.Context, *tree.CursorStmt,
 ) (tree.Datums, error) {
-	return nil, errors.WithStack(errEvalPlanner)
+	return nil, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 func (p *DummyEvalPlanner) StartHistoryRetentionJob(
 	ctx context.Context, desc string, protectTS hlc.Timestamp, expiration time.Duration,
 ) (jobspb.JobID, error) {
-	return 0, errors.WithStack(errEvalPlanner)
+	return 0, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 func (p *DummyEvalPlanner) ExtendHistoryRetention(ctx context.Context, id jobspb.JobID) error {
-	return errors.WithStack(errEvalPlanner)
+	return errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 var _ eval.Planner = &DummyEvalPlanner{}
@@ -367,7 +367,7 @@ var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessi
 func (ep *DummyEvalPlanner) CurrentDatabaseRegionConfig(
 	_ context.Context,
 ) (eval.DatabaseRegionConfig, error) {
-	return nil, errors.WithStack(errEvalPlanner)
+	return nil, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 func (ep *DummyEvalPlanner) FingerprintSpan(
@@ -379,7 +379,7 @@ func (ep *DummyEvalPlanner) FingerprintSpan(
 // ResetMultiRegionZoneConfigsForTable is part of the eval.RegionOperator
 // interface.
 func (ep *DummyEvalPlanner) ResetMultiRegionZoneConfigsForTable(_ context.Context, _ int64) error {
-	return errors.WithStack(errEvalPlanner)
+	return errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // ResetMultiRegionZoneConfigsForDatabase is part of the eval.RegionOperator
@@ -387,19 +387,19 @@ func (ep *DummyEvalPlanner) ResetMultiRegionZoneConfigsForTable(_ context.Contex
 func (ep *DummyEvalPlanner) ResetMultiRegionZoneConfigsForDatabase(
 	_ context.Context, _ int64,
 ) error {
-	return errors.WithStack(errEvalPlanner)
+	return errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the eval.RegionOperator interface.
 func (ep *DummyEvalPlanner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
 	_ context.Context,
 ) error {
-	return errors.WithStack(errEvalPlanner)
+	return errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // SchemaExists is part of the eval.DatabaseCatalog interface.
 func (ep *DummyEvalPlanner) SchemaExists(ctx context.Context, dbName, scName string) (bool, error) {
-	return false, errors.WithStack(errEvalPlanner)
+	return false, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // HasAnyPrivilegeForSpecifier is part of the eval.DatabaseCatalog interface.
@@ -409,33 +409,33 @@ func (ep *DummyEvalPlanner) HasAnyPrivilegeForSpecifier(
 	user username.SQLUsername,
 	privs []privilege.Privilege,
 ) (eval.HasAnyPrivilegeResult, error) {
-	return eval.HasNoPrivilege, errors.WithStack(errEvalPlanner)
+	return eval.HasNoPrivilege, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // ResolveTableName is part of the eval.DatabaseCatalog interface.
 func (ep *DummyEvalPlanner) ResolveTableName(
 	ctx context.Context, tn *tree.TableName,
 ) (tree.ID, error) {
-	return 0, errors.WithStack(errEvalPlanner)
+	return 0, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // GetTypeFromValidSQLSyntax is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) GetTypeFromValidSQLSyntax(
 	ctx context.Context, sql string,
 ) (*types.T, error) {
-	return nil, errors.WithStack(errEvalPlanner)
+	return nil, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // EvalSubquery is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) EvalSubquery(expr *tree.Subquery) (tree.Datum, error) {
-	return nil, errors.WithStack(errEvalPlanner)
+	return nil, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // EvalRoutineExpr is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) EvalRoutineExpr(
 	ctx context.Context, expr *tree.RoutineExpr, args tree.Datums,
 ) (tree.Datum, error) {
-	return nil, errors.WithStack(errEvalPlanner)
+	return nil, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // RoutineExprGenerator is part of the eval.Planner interface.
@@ -449,19 +449,19 @@ func (ep *DummyEvalPlanner) RoutineExprGenerator(
 func (ep *DummyEvalPlanner) EvalTxnControlExpr(
 	ctx context.Context, expr *tree.TxnControlExpr, args tree.Datums,
 ) (tree.Datum, error) {
-	return nil, errors.WithStack(errEvalPlanner)
+	return nil, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // ResolveTypeByOID implements the tree.TypeReferenceResolver interface.
 func (ep *DummyEvalPlanner) ResolveTypeByOID(_ context.Context, _ oid.Oid) (*types.T, error) {
-	return nil, errors.WithStack(errEvalPlanner)
+	return nil, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // ResolveType implements the tree.TypeReferenceResolver interface.
 func (ep *DummyEvalPlanner) ResolveType(
 	_ context.Context, _ *tree.UnresolvedObjectName,
 ) (*types.T, error) {
-	return nil, errors.WithStack(errEvalPlanner)
+	return nil, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // QueryRowEx is part of the eval.Planner interface.
@@ -472,7 +472,7 @@ func (ep *DummyEvalPlanner) QueryRowEx(
 	stmt string,
 	qargs ...interface{},
 ) (tree.Datums, error) {
-	return nil, errors.WithStack(errEvalPlanner)
+	return nil, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // QueryIteratorEx is part of the eval.Planner interface.
@@ -483,7 +483,7 @@ func (ep *DummyEvalPlanner) QueryIteratorEx(
 	stmt string,
 	qargs ...interface{},
 ) (eval.InternalRows, error) {
-	return nil, errors.WithStack(errEvalPlanner)
+	return nil, errors.HandleAsAssertionFailure(errEvalPlanner)
 }
 
 // IsActive is part of the Planner interface.
@@ -589,19 +589,19 @@ var errEvalPrivileged = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSe
 func (ep *DummyPrivilegedAccessor) LookupNamespaceID(
 	ctx context.Context, parentID int64, parentSchemaID int64, name string,
 ) (tree.DInt, bool, error) {
-	return 0, false, errors.WithStack(errEvalPrivileged)
+	return 0, false, errors.HandleAsAssertionFailure(errEvalPrivileged)
 }
 
 // LookupZoneConfigByNamespaceID is part of the tree.PrivilegedAccessor interface.
 func (ep *DummyPrivilegedAccessor) LookupZoneConfigByNamespaceID(
 	ctx context.Context, id int64,
 ) (tree.DBytes, bool, error) {
-	return "", false, errors.WithStack(errEvalPrivileged)
+	return "", false, errors.HandleAsAssertionFailure(errEvalPrivileged)
 }
 
 // IsSystemTable is part of the tree.PrivilegedAccessor interface.
 func (ep *DummyPrivilegedAccessor) IsSystemTable(ctx context.Context, id int64) (bool, error) {
-	return false, errors.WithStack(errEvalPrivileged)
+	return false, errors.HandleAsAssertionFailure(errEvalPrivileged)
 }
 
 // DummySessionAccessor implements the eval.SessionAccessor interface by returning errors.
@@ -616,14 +616,14 @@ var errEvalSessionVar = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSe
 func (ep *DummySessionAccessor) GetSessionVar(
 	_ context.Context, _ string, _ bool,
 ) (bool, string, error) {
-	return false, "", errors.WithStack(errEvalSessionVar)
+	return false, "", errors.HandleAsAssertionFailure(errEvalSessionVar)
 }
 
 // SetSessionVar is part of the eval.SessionAccessor interface.
 func (ep *DummySessionAccessor) SetSessionVar(
 	ctx context.Context, settingName, newValue string, isLocal bool,
 ) error {
-	return errors.WithStack(errEvalSessionVar)
+	return errors.HandleAsAssertionFailure(errEvalSessionVar)
 }
 
 // HasGlobalPrivilegeOrRoleOption is part of the eval.SessionAccessor interface.
@@ -637,14 +637,14 @@ func (ep *DummySessionAccessor) HasGlobalPrivilegeOrRoleOption(
 func (ep *DummySessionAccessor) CheckPrivilege(
 	_ context.Context, _ privilege.Object, _ privilege.Kind,
 ) error {
-	return errors.WithStack(errEvalSessionVar)
+	return errors.HandleAsAssertionFailure(errEvalSessionVar)
 }
 
 // HasViewActivityOrViewActivityRedactedRole is part of the eval.SessionAccessor interface.
 func (ep *DummySessionAccessor) HasViewActivityOrViewActivityRedactedRole(
 	context.Context,
 ) (bool, bool, error) {
-	return false, false, errors.WithStack(errEvalSessionVar)
+	return false, false, errors.HandleAsAssertionFailure(errEvalSessionVar)
 }
 
 // DummyClientNoticeSender implements the eval.ClientNoticeSender interface.
@@ -670,21 +670,21 @@ var errEvalTenant = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessio
 
 // CreateTenant is part of the tree.TenantOperator interface.
 func (c *DummyTenantOperator) CreateTenant(_ context.Context, _ string) (roachpb.TenantID, error) {
-	return roachpb.TenantID{}, errors.WithStack(errEvalTenant)
+	return roachpb.TenantID{}, errors.HandleAsAssertionFailure(errEvalTenant)
 }
 
 // LookupTenantID is part of the tree.TenantOperator interface.
 func (c *DummyTenantOperator) LookupTenantID(
 	ctx context.Context, tenantName roachpb.TenantName,
 ) (roachpb.TenantID, error) {
-	return roachpb.TenantID{}, errors.WithStack(errEvalTenant)
+	return roachpb.TenantID{}, errors.HandleAsAssertionFailure(errEvalTenant)
 }
 
 // DropTenantByID is part of the tree.TenantOperator interface.
 func (c *DummyTenantOperator) DropTenantByID(
 	ctx context.Context, tenantID uint64, synchronous, ignoreServiceMode bool,
 ) error {
-	return errors.WithStack(errEvalTenant)
+	return errors.HandleAsAssertionFailure(errEvalTenant)
 }
 
 // UpdateTenantResourceLimits is part of the tree.TenantOperator interface.
@@ -695,7 +695,7 @@ func (c *DummyTenantOperator) UpdateTenantResourceLimits(
 	refillRate float64,
 	maxBurstTokens float64,
 ) error {
-	return errors.WithStack(errEvalTenant)
+	return errors.HandleAsAssertionFailure(errEvalTenant)
 }
 
 // DummyPreparedStatementState implements the tree.PreparedStatementState
