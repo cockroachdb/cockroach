@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"google.golang.org/grpc"
 )
 
 // client is a client-side RPC connection to a gossip peer node.
@@ -100,24 +101,12 @@ func (c *client) startLocked(
 		}()
 
 		stream, err := func() (Gossip_GossipClient, error) {
-			// Note: avoid using `grpc.WithBlock` here. This code is already
-			// asynchronous from the caller's perspective, so the only effect of
-			// `WithBlock` here is blocking shutdown - at the time of this writing,
-			// that ends ups up making `kv` tests take twice as long.
-			var connection *rpc.GRPCConnection
-			if c.peerID != 0 {
-				connection = rpcCtx.GRPCDialNode(c.addr.String(), c.peerID, c.locality, rpcbase.SystemClass)
-			} else {
-				// TODO(baptist): Use this as a temporary connection for getting
-				// onto gossip and then replace with a validated connection.
-				log.Infof(ctx, "unvalidated bootstrap gossip dial to %s", c.addr)
-				connection = rpcCtx.GRPCUnvalidatedDial(c.addr.String(), c.locality)
-			}
-			conn, err := connection.Connect(ctx)
+			gc, err := c.dialGossipClient(ctx, rpcCtx)
 			if err != nil {
 				return nil, err
 			}
-			stream, err := NewGossipClient(conn).Gossip(ctx)
+
+			stream, err := gc.Gossip(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -405,4 +394,37 @@ func (c *client) gossip(
 			count++
 		}
 	}
+}
+
+// dials the peer node and returns a gRPC connection to the peer node.
+func (c *client) dial(ctx context.Context, rpcCtx *rpc.Context) (*grpc.ClientConn, error) {
+	// Note: avoid using `grpc.WithBlock` here. This code is already
+	// asynchronous from the caller's perspective, so the only effect of
+	// `WithBlock` here is blocking shutdown - at the time of this writing,
+	// that ends ups up making `kv` tests take twice as long.
+	var conn *rpc.GRPCConnection
+	if c.peerID != 0 {
+		conn = rpcCtx.GRPCDialNode(c.addr.String(), c.peerID, c.locality, rpcbase.SystemClass)
+	} else {
+		// TODO(baptist): Use this as a temporary connection for getting
+		// onto gossip and then replace with a validated connection.
+		log.Infof(ctx, "unvalidated bootstrap gossip dial to %s", c.addr)
+		conn = rpcCtx.GRPCUnvalidatedDial(c.addr.String(), c.locality)
+	}
+
+	return conn.Connect(ctx)
+}
+
+// dialGossipClient establishes a DRPC connection if enabled; otherwise,
+// it falls back to gRPC. The established connection is used to create a
+// GossipClient.
+func (c *client) dialGossipClient(ctx context.Context, rpcCtx *rpc.Context) (GossipClient, error) {
+	if !rpcbase.TODODRPC {
+		conn, err := c.dial(ctx, rpcCtx)
+		if err != nil {
+			return nil, err
+		}
+		return NewGossipClient(conn), nil
+	}
+	return nil, nil
 }
