@@ -17,6 +17,10 @@ BRANCHES=$(git branch -r --format='%(refname)' \
 
 EXIT_CODE=0
 for BRANCH in $BRANCHES; do
+  if [ "$BRANCH" = "release-24.2" ]; then
+    # Skip the release-24.2 branch, which is frozen.
+    continue
+  fi
   PEBBLE_BRANCH="crl-$BRANCH"
   DEP_SHA=$(git show "origin/$BRANCH:go.mod" |
     grep 'github.com/cockroachdb/pebble' |
