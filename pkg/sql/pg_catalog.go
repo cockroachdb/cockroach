@@ -3083,6 +3083,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-settings.html`,
 				return err
 			}
 			valueDatum := tree.NewDString(value)
+			var valueUnit = tree.DNull
+			if gen.Unit != "" {
+				valueUnit = tree.NewDString(gen.Unit)
+			}
 			var bootDatum tree.Datum = tree.DNull
 			var resetDatum tree.Datum = tree.DNull
 			if gen.Set == nil && gen.RuntimeSet == nil && gen.SetWithPlanner == nil {
@@ -3106,7 +3110,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-settings.html`,
 			if err := addRow(
 				tree.NewDString(strings.ToLower(vName)), // name
 				valueDatum,                              // setting
-				tree.DNull,                              // unit
+				valueUnit,                               // unit
 				tree.DNull,                              // category
 				tree.DNull,                              // short_desc
 				tree.DNull,                              // extra_desc

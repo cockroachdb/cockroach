@@ -848,6 +848,11 @@ func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList
 		// Remember id of newly synthesized column.
 		colIDs[i] = newCol
 
+		// Track columns that were not explicitly set in the insert statement.
+		if mb.b.trackSchemaDeps && mb.b.evalCtx.SessionData().UseImprovedRoutineDependencyTracking {
+			mb.implicitInsertCols.Add(newCol)
+		}
+
 		// Add corresponding target column.
 		mb.targetColList = append(mb.targetColList, tabColID)
 		mb.targetColSet.Add(tabColID)
@@ -1702,7 +1707,7 @@ func (mb *mutationBuilder) buildReturningScopes(
 	//   4. Project columns in same order as defined in table schema.
 	//
 	inScope = mb.outScope.replace()
-	inScope.appendOrdinaryColumnsFromTable(mb.md.TableMeta(mb.tabID), &mb.alias)
+	mb.b.appendOrdinaryColumnsFromTable(inScope, mb.md.TableMeta(mb.tabID), &mb.alias)
 
 	// extraAccessibleCols contains all the columns that the RETURNING
 	// clause can refer to in addition to the table columns. This is useful for

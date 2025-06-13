@@ -4133,6 +4133,7 @@ unbounded_parallel_scans                                   off
 unconstrained_non_covering_index_scan_enabled              off
 unsafe_allow_triggers_modifying_cascades                   off
 use_cputs_on_non_unique_indexes                            off
+use_improved_routine_dependency_tracking                   on
 use_pre_25_2_variadic_builtins                             off
 variable_inequality_lookup_join_enabled                    on
 vector_search_beam_size                                    32
