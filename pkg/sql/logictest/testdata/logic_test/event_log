@@ -30,7 +30,7 @@ statement ok
 DROP ROLE r, r2
 
 query ITT
-SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" IN ('create_role', 'drop_role', 'alter_role')
 ORDER BY "timestamp", info
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
 ##################
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
   FROM system.eventlog
  WHERE "eventType" = 'create_table'
 ORDER BY "timestamp", info
@@ -73,7 +73,7 @@ ORDER BY "timestamp", info
 ##################
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'create_table'
   AND info::JSONB->>'Statement' LIKE 'CREATE TABLE test.public.a%'
@@ -81,7 +81,7 @@ WHERE "eventType" = 'create_table'
 1  {"EventType": "create_table", "Statement": "CREATE TABLE test.public.a (id INT8 PRIMARY KEY)", "TableName": "test.public.a", "Tag": "CREATE TABLE", "User": "root"}
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'create_table'
   AND info::JSONB->>'Statement' LIKE 'CREATE TABLE IF NOT EXISTS test.public.b%'
@@ -103,7 +103,7 @@ WHERE "eventType" = 'create_table'
 ##################
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp' FROM system.eventlog
 WHERE "eventType" = 'alter_table'
 ----
 
@@ -111,13 +111,13 @@ statement ok
 ALTER TABLE a ADD val INT
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp' FROM system.eventlog
 WHERE "eventType" = 'alter_table'
 ----
 1  {"EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE test.public.a ADD COLUMN val INT8", "TableName": "test.public.a", "Tag": "ALTER TABLE", "User": "root"}
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'LatencyNanos' FROM system.eventlog
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp' - 'LatencyNanos' FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ----
 1  {"EventType": "finish_schema_change", "InstanceID": 1}
@@ -136,7 +136,7 @@ WHERE "eventType" = 'reverse_schema_change'
 # statement.
 ##################
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp' FROM system.eventlog
 WHERE "eventType" = 'alter_table'
   AND info::JSONB->>'Statement' LIKE 'ALTER TABLE test.public.a%'
 ----
@@ -153,7 +153,7 @@ statement error pgcode 23505 violates unique constraint \"foo\"
 ALTER TABLE a ADD CONSTRAINT foo UNIQUE(val)
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp' FROM system.eventlog
 WHERE "eventType" in ('alter_table', 'create_index')
 ORDER BY "timestamp", info
 ----
@@ -161,20 +161,20 @@ ORDER BY "timestamp", info
 1  {"EventType": "create_index", "IndexName": "foo", "MutationID": 1, "Statement": "ALTER TABLE test.public.a ADD CONSTRAINT foo UNIQUE (val)", "TableName": "test.public.a", "Tag": "ALTER TABLE", "User": "root"}
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'LatencyNanos' FROM system.eventlog
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp' - 'LatencyNanos' FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ----
 1  {"EventType": "finish_schema_change", "InstanceID": 1}
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'Error' - 'LatencyNanos'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp' - 'Error' - 'LatencyNanos'
   FROM system.eventlog
 WHERE "eventType" = 'reverse_schema_change'
 ----
 1  {"EventType": "reverse_schema_change", "InstanceID": 1, "SQLSTATE": "23505"}
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'LatencyNanos' FROM system.eventlog
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp' - 'LatencyNanos' FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change_rollback'
 ----
 1  {"EventType": "finish_schema_change_rollback", "InstanceID": 1}
@@ -186,14 +186,14 @@ statement ok
 CREATE INDEX a_foo ON a (val)
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp' FROM system.eventlog
 WHERE "eventType" = 'create_index'
   AND info::JSONB->>'Statement' LIKE 'CREATE INDEX %a_foo%'
 ----
 1  {"EventType": "create_index", "IndexName": "a_foo", "MutationID": 1, "Statement": "CREATE INDEX a_foo ON test.public.a (val)", "TableName": "test.public.a", "Tag": "CREATE INDEX", "User": "root"}
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'LatencyNanos' FROM system.eventlog
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp' - 'LatencyNanos' FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ORDER BY "timestamp", info
 ----
@@ -204,14 +204,14 @@ statement ok
 CREATE INDEX ON a (val)
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp' FROM system.eventlog
 WHERE "eventType" = 'create_index'
   AND info::JSONB->>'Statement' LIKE 'CREATE INDEX ON%'
 ----
 1  {"EventType": "create_index", "IndexName": "a_val_idx", "MutationID": 1, "Statement": "CREATE INDEX ON test.public.a (val)", "TableName": "test.public.a", "Tag": "CREATE INDEX", "User": "root"}
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'LatencyNanos' FROM system.eventlog
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp' - 'LatencyNanos' FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ORDER BY "timestamp", info
 ----
@@ -226,14 +226,14 @@ statement ok
 DROP INDEX a@a_foo
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp' FROM system.eventlog
 WHERE "eventType" = 'drop_index'
   AND info::JSONB->>'Statement' LIKE 'DROP INDEX%a_foo'
 ----
 1  {"EventType": "drop_index", "IndexName": "a_foo", "MutationID": 1, "Statement": "DROP INDEX test.public.a@a_foo", "TableName": "test.public.a", "Tag": "DROP INDEX", "User": "root"}
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'LatencyNanos' FROM system.eventlog
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp' - 'LatencyNanos' FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ORDER BY "timestamp", info
 ----
@@ -249,7 +249,7 @@ statement ok
 TRUNCATE TABLE a
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'truncate_table'
 ----
@@ -273,7 +273,7 @@ DROP TABLE IF EXISTS b
 ##################
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'drop_table'
 ORDER BY "timestamp", info
@@ -285,7 +285,7 @@ ORDER BY "timestamp", info
 ##################
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'drop_table'
   AND info::JSONB->>'Statement' LIKE 'DROP TABLE test.public.a%'
@@ -293,7 +293,7 @@ WHERE "eventType" = 'drop_table'
 1  {"EventType": "drop_table", "Statement": "DROP TABLE test.public.a", "TableName": "test.public.a", "Tag": "DROP TABLE", "User": "root"}
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'drop_table'
   AND info::JSONB->>'Statement' LIKE 'DROP TABLE IF EXISTS test.public.b%'
@@ -314,7 +314,7 @@ ALTER TABLE toberenamed RENAME TO renamedtable;
 ##################
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'rename_table'
   AND info::JSONB->>'Statement' LIKE 'ALTER TABLE %toberenamed% RENAME TO %renamedtable%'
@@ -343,7 +343,7 @@ CREATE DATABASE IF NOT EXISTS othereventlogtest
 ##################
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'create_database'
   AND info::JSONB->>'Statement' LIKE 'CREATE DATABASE eventlogtest%'
@@ -351,7 +351,7 @@ WHERE "eventType" = 'create_database'
 1  {"DatabaseName": "eventlogtest", "EventType": "create_database", "Statement": "CREATE DATABASE eventlogtest", "Tag": "CREATE DATABASE", "User": "root"}
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'create_database'
   AND info::JSONB->>'Statement' LIKE 'CREATE DATABASE IF NOT EXISTS othereventlogtest%'
@@ -389,7 +389,7 @@ DROP DATABASE IF EXISTS othereventlogtest CASCADE
 
 query IT
 SELECT "reportingID",
-       (info::JSONB - 'Timestamp' - 'DescriptorID')
+       (info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp')
        || (
 			SELECT json_build_object(
 					'DroppedSchemaObjects',
@@ -407,7 +407,7 @@ SELECT "reportingID",
 1  {"DatabaseName": "eventlogtest", "DroppedSchemaObjects": ["eventlogtest.public.anothertesttable", "eventlogtest.public.testtable"], "EventType": "drop_database", "Statement": "DROP DATABASE eventlogtest CASCADE", "Tag": "DROP DATABASE", "User": "root"}
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'drop_database'
   AND info::JSONB->>'Statement' LIKE 'DROP DATABASE IF EXISTS othereventlogtest%'
@@ -433,7 +433,7 @@ ALTER DATABASE eventlogtorename RENAME TO eventlogtonewname
 ##################
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'rename_database'
   AND info::JSONB->>'Statement' LIKE 'ALTER DATABASE %eventlogtorename% RENAME TO %eventlogtonewname%'
@@ -471,7 +471,7 @@ EXECUTE set_setting('some string')
 ##################
 onlyif config local
 query IT
-SELECT "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'set_cluster_setting'
 AND info NOT LIKE '%version%'
@@ -492,7 +492,7 @@ ORDER BY "timestamp", info
 
 onlyif config 3node-tenant-default-configs
 query IT
-SELECT "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'set_cluster_setting'
 AND info NOT LIKE '%version%'
@@ -543,7 +543,7 @@ ALTER INDEX a@bar CONFIGURE ZONE USING gc.ttlseconds = 15000
 ##################
 skipif config 3node-tenant-default-configs
 query IT
-SELECT "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID' - 'Statement'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp' - 'Statement'
 FROM system.eventlog
 WHERE "eventType" = 'set_zone_config'
 ORDER BY "timestamp", info
@@ -560,7 +560,7 @@ ORDER BY "timestamp", info
 
 skipif config 3node-tenant-default-configs
 query IT
-SELECT "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID' - 'Statement'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp' - 'Statement'
 FROM system.eventlog
 WHERE "eventType" = 'remove_zone_config'
 ORDER BY "timestamp", info
@@ -583,7 +583,7 @@ statement ok
 DROP SEQUENCE s
 
 query TIT
-SELECT "eventType", "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "eventType", "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
   FROM system.eventlog
  WHERE "eventType" in ('create_sequence', 'alter_sequence', 'drop_sequence')
 ORDER BY "timestamp", info
@@ -601,7 +601,7 @@ statement ok
 DROP VIEW v
 
 query TIT
-SELECT "eventType", "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "eventType", "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
   FROM system.eventlog
  WHERE "eventType" in ('create_view', 'drop_view')
 ORDER BY "timestamp", info
@@ -668,10 +668,10 @@ statement ok
 REVOKE ALL ON * FROM u
 
 query ITT
-SELECT "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID', "eventType"
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp', "eventType"
 FROM system.eventlog
 WHERE "eventType" LIKE 'change_%_privilege'
-ORDER BY "timestamp", info
+ORDER BY "timestamp", info::JSONB ->> 'TableName'
 ----
 1  {"EventType": "change_table_privilege", "GrantedPrivileges": ["INSERT"], "Grantee": "u", "Statement": "GRANT INSERT ON TABLE a, b TO u", "TableName": "a", "Tag": "GRANT", "User": "root"}                   change_table_privilege
 1  {"EventType": "change_table_privilege", "GrantedPrivileges": ["INSERT"], "Grantee": "u", "Statement": "GRANT INSERT ON TABLE a, b TO u", "TableName": "b", "Tag": "GRANT", "User": "root"}                   change_table_privilege
@@ -683,15 +683,15 @@ ORDER BY "timestamp", info
 1  {"EventType": "change_schema_privilege", "Grantee": "v", "RevokedPrivileges": ["CREATE"], "SchemaName": "sc", "Statement": "REVOKE CREATE ON SCHEMA \"\".sc FROM u, v", "Tag": "REVOKE", "User": "root"}     change_schema_privilege
 1  {"DatabaseName": "dbt", "EventType": "change_database_privilege", "Grantee": "u", "RevokedPrivileges": ["CREATE"], "Statement": "REVOKE CREATE ON DATABASE dbt FROM u, v", "Tag": "REVOKE", "User": "root"}  change_database_privilege
 1  {"DatabaseName": "dbt", "EventType": "change_database_privilege", "Grantee": "v", "RevokedPrivileges": ["CREATE"], "Statement": "REVOKE CREATE ON DATABASE dbt FROM u, v", "Tag": "REVOKE", "User": "root"}  change_database_privilege
-1  {"EventType": "change_table_privilege", "GrantedPrivileges": ["ALL"], "Grantee": "u", "Statement": "GRANT ALL ON TABLE * TO u", "TableName": "renamedtable", "Tag": "GRANT", "User": "root"}                 change_table_privilege
 1  {"EventType": "change_table_privilege", "GrantedPrivileges": ["ALL"], "Grantee": "u", "Statement": "GRANT ALL ON TABLE * TO u", "TableName": "a", "Tag": "GRANT", "User": "root"}                            change_table_privilege
 1  {"EventType": "change_table_privilege", "GrantedPrivileges": ["ALL"], "Grantee": "u", "Statement": "GRANT ALL ON TABLE * TO u", "TableName": "b", "Tag": "GRANT", "User": "root"}                            change_table_privilege
 1  {"EventType": "change_table_privilege", "GrantedPrivileges": ["ALL"], "Grantee": "u", "Statement": "GRANT ALL ON TABLE * TO u", "TableName": "c", "Tag": "GRANT", "User": "root"}                            change_table_privilege
+1  {"EventType": "change_table_privilege", "GrantedPrivileges": ["ALL"], "Grantee": "u", "Statement": "GRANT ALL ON TABLE * TO u", "TableName": "renamedtable", "Tag": "GRANT", "User": "root"}                 change_table_privilege
 1  {"EventType": "change_table_privilege", "GrantedPrivileges": ["ALL"], "Grantee": "u", "Statement": "GRANT ALL ON TABLE * TO u", "TableName": "sq", "Tag": "GRANT", "User": "root"}                           change_table_privilege
-1  {"EventType": "change_table_privilege", "Grantee": "u", "RevokedPrivileges": ["ALL"], "Statement": "REVOKE ALL ON TABLE * FROM u", "TableName": "renamedtable", "Tag": "REVOKE", "User": "root"}             change_table_privilege
 1  {"EventType": "change_table_privilege", "Grantee": "u", "RevokedPrivileges": ["ALL"], "Statement": "REVOKE ALL ON TABLE * FROM u", "TableName": "a", "Tag": "REVOKE", "User": "root"}                        change_table_privilege
 1  {"EventType": "change_table_privilege", "Grantee": "u", "RevokedPrivileges": ["ALL"], "Statement": "REVOKE ALL ON TABLE * FROM u", "TableName": "b", "Tag": "REVOKE", "User": "root"}                        change_table_privilege
 1  {"EventType": "change_table_privilege", "Grantee": "u", "RevokedPrivileges": ["ALL"], "Statement": "REVOKE ALL ON TABLE * FROM u", "TableName": "c", "Tag": "REVOKE", "User": "root"}                        change_table_privilege
+1  {"EventType": "change_table_privilege", "Grantee": "u", "RevokedPrivileges": ["ALL"], "Statement": "REVOKE ALL ON TABLE * FROM u", "TableName": "renamedtable", "Tag": "REVOKE", "User": "root"}             change_table_privilege
 1  {"EventType": "change_table_privilege", "Grantee": "u", "RevokedPrivileges": ["ALL"], "Statement": "REVOKE ALL ON TABLE * FROM u", "TableName": "sq", "Tag": "REVOKE", "User": "root"}                       change_table_privilege
 
 statement ok
@@ -731,7 +731,7 @@ statement ok
 CREATE SCHEMA AUTHORIZATION u
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'create_schema'
 ORDER BY "timestamp", info
@@ -744,7 +744,7 @@ statement ok
 ALTER SCHEMA u RENAME TO t
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'rename_schema'
 ----
@@ -757,7 +757,7 @@ statement ok
 DROP USER u
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'drop_schema'
 ORDER BY "timestamp", info
@@ -779,7 +779,7 @@ statement ok
 DROP ROLE rinvisible
 
 query ITT
-SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" LIKE '%_role' AND info LIKE '%invisible%'
 ----
@@ -875,7 +875,7 @@ sc      u     NULL  NULL  NULL  NULL
 
 # Verify that events were logged.
 query ITT
-SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
   FROM system.eventlog
  WHERE "eventType" LIKE '%_owner'
 ORDER BY "timestamp", info
@@ -915,7 +915,7 @@ sc      v     NULL  NULL  NULL  NULL
 
 # Verify that the ownership was transferred to v even including the view and sequence.
 query ITT
-SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
   FROM system.eventlog
  WHERE "eventType" LIKE '%_owner' AND info::JSONB->>'Owner' = 'v'
 ORDER BY "timestamp", info
@@ -946,7 +946,7 @@ statement ok
 CREATE TYPE eventlog AS ENUM ('event', 'log')
 
 query ITT
-SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
   FROM system.eventlog
  WHERE "eventType" = 'create_type' AND info::JSONB->>'TypeName' LIKE '%eventlog'
 ORDER BY "timestamp", info
@@ -970,7 +970,7 @@ statement ok
 ALTER TYPE eventlog RENAME TO eventlog_renamed
 
 query ITT
-SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
   FROM system.eventlog
  WHERE ("eventType" = 'alter_type' OR "eventType" = 'rename_type') AND info::JSONB->>'TypeName' LIKE '%eventlog%'
 ORDER BY "timestamp", info
@@ -985,7 +985,7 @@ statement ok
 DROP TYPE eventlog_renamed
 
 query ITT
-SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
   FROM system.eventlog
  WHERE "eventType" = 'drop_type' AND info::JSONB->>'TypeName' LIKE '%eventlog%'
 ORDER BY "timestamp", info
@@ -1002,7 +1002,7 @@ statement ok
 COMMENT ON COLUMN a.id IS 'This is a column.'
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'comment_on_column'
 ----
@@ -1015,7 +1015,7 @@ statement ok
 COMMENT ON INDEX b_index IS 'This is an index.'
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'comment_on_index'
 ----
@@ -1025,7 +1025,7 @@ statement ok
 COMMENT ON TABLE a IS 'This is a table.'
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'comment_on_table'
 ----
@@ -1036,7 +1036,7 @@ CREATE SCHEMA sc;
 COMMENT ON SCHEMA defaultdb.sc IS 'This is a schema';
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'comment_on_schema'
 ----
@@ -1067,7 +1067,7 @@ statement ok
 ALTER VIEW v SET SCHEMA test_sc
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'set_schema'
 ORDER BY "timestamp", info
@@ -1098,7 +1098,7 @@ DROP TABLE x CASCADE
 # Note that the CascadedDroppedViews field should be populated. It is omitted
 # temporarily because of #84206.
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'CascadedDroppedViews'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp' - 'CascadedDroppedViews'
 FROM system.eventlog
 WHERE "eventType" = 'drop_table'
 ORDER BY "timestamp" DESC, info
@@ -1119,7 +1119,7 @@ statement ok
 DROP INDEX t@t_i_idx CASCADE
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'drop_index'
 ORDER BY "timestamp" DESC, info
@@ -1140,7 +1140,7 @@ statement ok
 ALTER TABLE x DROP COLUMN b CASCADE
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'alter_table'
 ORDER BY "timestamp" DESC, info
@@ -1158,7 +1158,7 @@ statement ok
 drop function f
 
 query TT
-SELECT "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "eventType", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp'
 FROM system.eventlog
 WHERE "eventType" IN ('create_function', 'drop_function')
 ORDER BY "timestamp" DESC, info
@@ -1176,7 +1176,7 @@ statement ok
 EXPLAIN (DDL) ALTER TABLE t1 ADD COLUMN j int;
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnTimestamp' FROM system.eventlog
 WHERE "eventType" = 'alter_table'
 AND info::JSONB->>'Statement' LIKE 'ALTER TABLE t1%'
 ORDER BY "timestamp" DESC, info
