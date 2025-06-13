@@ -3430,6 +3430,9 @@ func (dsp *DistSQLPlanner) planLookupJoin(
 		if planInfo.reqOrdering[i].ColIdx >= numInputCols {
 			// We need to maintain the index ordering on each lookup.
 			maintainLookupOrdering = true
+			if planInfo.parallelize {
+				return errors.AssertionFailedf("parallelization should have been disabled")
+			}
 			break
 		}
 	}

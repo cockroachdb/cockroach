@@ -24,7 +24,6 @@ vectorized: true
 │ estimated row count: 10,000 (missing stats)
 │ table: uv@uv_pkey
 │ equality: (x) = (u)
-│ parallel
 │
 └── • scan
       columns: (x, y, z)

@@ -2883,6 +2883,14 @@ func (b *Builder) buildLookupJoin(
 	} else if b.evalCtx.SessionData().ParallelizeMultiKeyLookupJoinsEnabled {
 		parallelize = true
 	}
+	for _, c := range reqOrdering {
+		if c.ColIdx >= numInputCols {
+			// We need to maintain lookup ordering, in which case we cannot use
+			// the DistSender-level parallelism.
+			parallelize = false
+			break
+		}
+	}
 	var res execPlan
 	res.root, err = b.factory.ConstructLookupJoin(
 		joinType,
