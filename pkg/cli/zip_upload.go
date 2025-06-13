@@ -124,6 +124,7 @@ var debugZipUploadOpts = struct {
 	from, to             timestampValue
 	logFormat            string
 	maxConcurrentUploads int
+	dryRun               bool
 }{
 	maxConcurrentUploads: system.NumCPU() * 4,
 }
@@ -217,6 +218,10 @@ func runDebugZipUpload(cmd *cobra.Command, args []string) error {
 		artifactsToUpload = debugZipUploadOpts.include
 	}
 
+	if debugZipUploadOpts.dryRun {
+		fmt.Println("DRY RUN MODE: No actual uploads will be performed")
+	}
+
 	// run the upload functions for each artifact type. This can run sequentially.
 	// All the concurrency is contained within the upload functions.
 	for _, artType := range artifactsToUpload {
@@ -237,6 +242,10 @@ func validateZipUploadReadiness() error {
 		includeLookup     = map[string]struct{}{}
 		artifactsToUpload = zipArtifactTypes
 	)
+
+	if debugZipUploadOpts.dryRun {
+		return nil
+	}
 
 	if len(debugZipUploadOpts.include) > 0 {
 		artifactsToUpload = debugZipUploadOpts.include
@@ -474,7 +483,7 @@ func processLogFile(
 			debugZipUploadOpts.tags..., // user provided tags
 		), getUploadType(currentTimestamp))
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println("logEntryToJSON:", err)
 			continue
 		}
 
@@ -896,6 +905,11 @@ func startWriterPool(
 // writing to GCS. The concurrency has to be handled by the caller.
 // This function implements the logUploadFunc signature.
 var gcsLogUpload = func(ctx context.Context, sig logUploadSig) (int, error) {
+	data := bytes.Join(sig.logLines, []byte("\n"))
+	if debugZipUploadOpts.dryRun {
+		return len(data), nil
+	}
+
 	gcsClient, closeGCSClient, err := newGCSClient(ctx)
 	if err != nil {
 		return 0, err
@@ -910,7 +924,6 @@ var gcsLogUpload = func(ctx context.Context, sig logUploadSig) (int, error) {
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.MaxRetries = zipUploadRetries
 
-	data := bytes.Join(sig.logLines, []byte("\n"))
 	for retry := retry.Start(retryOpts); retry.Next(); {
 		objectWriter := gcsClient.Bucket(ddArchiveBucketName).Object(filename).NewWriter(ctx)
 		w := gzip.NewWriter(objectWriter)
@@ -1137,6 +1150,10 @@ func makeDDTag(key, value string) string {
 // There is also some error handling logic in this function. This is a variable so that
 // we can mock this function in the tests.
 var doUploadReq = func(req *http.Request) ([]byte, error) {
+	if debugZipUploadOpts.dryRun {
+		return []byte("{}"), nil
+	}
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
