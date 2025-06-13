@@ -37,7 +37,7 @@ CREATE TABLE foo (
     FAMILY "primary" (i, j)
 );
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT descriptor FROM redacted_descriptors WHERE id = 'foo'::REGCLASS;
 ----
@@ -173,7 +173,7 @@ SELECT descriptor FROM redacted_descriptors WHERE id = 'foo'::REGCLASS;
     }
 }
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT descriptor FROM redacted_descriptors WHERE id = 'foo'::REGCLASS;
 ----

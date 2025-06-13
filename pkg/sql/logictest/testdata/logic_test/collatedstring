@@ -224,7 +224,7 @@ CREATE TABLE t (
   a STRING COLLATE en
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t
 ----
@@ -234,7 +234,7 @@ t  CREATE TABLE public.t (
      CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
    );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t
 ----
@@ -380,7 +380,7 @@ CREATE TABLE quoted_coll (
   FAMILY "primary" (a, b, c, d, e, rowid)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE quoted_coll
 ----
@@ -394,7 +394,7 @@ quoted_coll  CREATE TABLE public.quoted_coll (
                CONSTRAINT quoted_coll_pkey PRIMARY KEY (rowid ASC)
              );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE quoted_coll
 ----
@@ -525,7 +525,7 @@ Bbb
 statement ok
 CREATE TABLE collation_name_case (s STRING COLLATE en_us_u_ks_level2);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE collation_name_case
 ----
@@ -535,7 +535,7 @@ collation_name_case  CREATE TABLE public.collation_name_case (
                        CONSTRAINT collation_name_case_pkey PRIMARY KEY (rowid ASC)
                      );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE collation_name_case
 ----

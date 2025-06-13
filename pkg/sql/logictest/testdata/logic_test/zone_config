@@ -157,7 +157,7 @@ SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
      lease_preferences = '[[+region=test]]'
 
 # Test SHOW CREATE TABLE correctly shows the CREATE TABLE.
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE a
 ----
@@ -173,7 +173,7 @@ a  CREATE TABLE public.a (
      constraints = '[+region=test]',
      lease_preferences = '[[+region=test]]';
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE a
 ----
@@ -353,7 +353,7 @@ CREATE SCHEMA alternative_schema;
 CREATE TABLE alternative_schema.same_table_name();
 ALTER TABLE alternative_schema.same_table_name CONFIGURE ZONE USING gc.ttlseconds = 600
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE same_table_name
 ----
@@ -364,7 +364,7 @@ same_table_name  CREATE TABLE public.same_table_name (
                  ALTER TABLE test.public.same_table_name CONFIGURE ZONE USING
                    gc.ttlseconds = 500;
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE same_table_name
 ----
@@ -375,7 +375,7 @@ same_table_name  CREATE TABLE public.same_table_name (
                  ALTER TABLE test.public.same_table_name CONFIGURE ZONE USING
                    gc.ttlseconds = 500;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE alternative_schema.same_table_name
 ----
@@ -387,7 +387,7 @@ alternative_schema.same_table_name  CREATE TABLE alternative_schema.same_table_n
                                       gc.ttlseconds = 600;
 
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE alternative_schema.same_table_name
 ----

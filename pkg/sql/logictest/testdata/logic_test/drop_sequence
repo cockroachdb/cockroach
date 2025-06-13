@@ -30,7 +30,7 @@ CREATE SEQUENCE drop_test
 statement ok
 CREATE TABLE t1 (i INT NOT NULL DEFAULT nextval('drop_test'))
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t1
 ----
@@ -40,7 +40,7 @@ t1  CREATE TABLE public.t1 (
       CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC)
     );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t1
 ----
@@ -61,7 +61,7 @@ DROP SEQUENCE drop_test
 statement ok
 DROP SEQUENCE drop_test CASCADE
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t1
 ----
@@ -71,7 +71,7 @@ t1  CREATE TABLE public.t1 (
       CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC)
     );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t1
 ----
@@ -111,7 +111,7 @@ CREATE TABLE foo (
   FAMILY (i, j)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo
 ----
@@ -123,7 +123,7 @@ foo  CREATE TABLE public.foo (
        FAMILY fam_0_i_j_rowid (i, j, rowid)
      );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo
 ----
@@ -146,7 +146,7 @@ DROP DATABASE other_db
 statement ok
 DROP DATABASE other_db CASCADE
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo
 ----
@@ -158,7 +158,7 @@ foo  CREATE TABLE public.foo (
        FAMILY fam_0_i_j_rowid (i, j, rowid)
      );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo
 ----
@@ -196,7 +196,7 @@ CREATE TABLE bar (
   FAMILY (i, j)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE bar
 ----
@@ -208,7 +208,7 @@ bar  CREATE TABLE public.bar (
        FAMILY fam_0_i_j_rowid (i, j, rowid)
      );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE bar
 ----
@@ -231,7 +231,7 @@ DROP SCHEMA other_sc
 statement ok
 DROP SCHEMA other_sc CASCADE
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE bar
 ----
@@ -243,7 +243,7 @@ bar  CREATE TABLE public.bar (
        FAMILY fam_0_i_j_rowid (i, j, rowid)
      );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE bar
 ----
@@ -288,7 +288,7 @@ DROP TABLE t2
 statement ok
 DROP TABLE t2 CASCADE
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t3
 ----
@@ -298,7 +298,7 @@ t3  CREATE TABLE public.t3 (
       CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC)
     );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t3
 ----
@@ -333,7 +333,7 @@ public.s3
 statement ok
 DROP TABLE t3 CASCADE
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t4
 ----
@@ -343,7 +343,7 @@ t4  CREATE TABLE public.t4 (
       CONSTRAINT t4_pkey PRIMARY KEY (rowid ASC)
     );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t4
 ----
@@ -389,7 +389,7 @@ SET sql_safe_updates = false
 statement ok
 ALTER TABLE t5 DROP COLUMN i CASCADE
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t6
 ----
@@ -399,7 +399,7 @@ t6  CREATE TABLE public.t6 (
       CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC)
     );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t6
 ----

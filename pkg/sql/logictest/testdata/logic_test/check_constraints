@@ -228,7 +228,7 @@ CREATE TABLE t7 (
   FAMILY "primary" (x, y, z, rowid)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t7
 ----
@@ -245,7 +245,7 @@ t7  CREATE TABLE public.t7 (
       CONSTRAINT named_constraint CHECK (z = 1:::INT8)
     );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t7
 ----
@@ -262,7 +262,7 @@ t7  CREATE TABLE public.t7 (
       CONSTRAINT named_constraint CHECK (z = 1:::INT8)
     ) WITH (schema_locked = true);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t7 WITH REDACT
 ----
@@ -279,7 +279,7 @@ t7  CREATE TABLE public.t7 (
       CONSTRAINT named_constraint CHECK (z = ‹×›:::INT8)
     );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t7 WITH REDACT
 ----
@@ -318,7 +318,7 @@ CREATE TABLE t8 (
   CHECK (test.t8.a > 0)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t8
 ----
@@ -331,7 +331,7 @@ t8  CREATE TABLE public.t8 (
       CONSTRAINT check_a2 CHECK (a > 0:::INT8)
     );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t8
 ----

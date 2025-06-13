@@ -828,7 +828,7 @@ SET experimental_computed_column_rewrites = "(ts :: STRING) -> (to_char(ts AT TI
 statement ok
 ALTER TABLE trewrite ADD COLUMN c STRING AS (ts::STRING) STORED
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
 ----
@@ -840,7 +840,7 @@ CREATE TABLE public.trewrite (
   FAMILY fam_0_k_ts (k, ts, c)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
 ----
@@ -1469,7 +1469,7 @@ ALTER TABLE t ADD COLUMN j INT DEFAULT 42;
 statement ok
 COMMIT
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
@@ -1481,7 +1481,7 @@ CREATE TABLE public.t (
   UNIQUE INDEX t_k_key (k ASC)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----

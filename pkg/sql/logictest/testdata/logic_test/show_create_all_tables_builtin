@@ -41,7 +41,7 @@ CREATE SEQUENCE d.s
 # parent should come before full_test due to dependency ordering.
 # if dependency's aren't considered, full_test will appear first due to
 # lexicographical ordering.
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T nosort
 SELECT crdb_internal.show_create_all_tables('d')
 ----
@@ -74,7 +74,7 @@ ALTER TABLE public.full_test ADD CONSTRAINT test_fk FOREIGN KEY (x) REFERENCES p
 ALTER TABLE public.full_test VALIDATE CONSTRAINT full_test_x_y_z_fkey;
 ALTER TABLE public.full_test VALIDATE CONSTRAINT test_fk;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T nosort
 SELECT crdb_internal.show_create_all_tables('d')
 ----
@@ -123,7 +123,7 @@ GRANT CREATE on DATABASE d TO testuser
 # CREATE privilege on the database.
 # TODO(richardjcai): Replace this with CONNECT and
 # add CONNECT privilege required on the builtin description once #59676 is in.
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T nosort
 SELECT crdb_internal.show_create_all_tables('d')
 ----
@@ -156,7 +156,7 @@ ALTER TABLE public.full_test ADD CONSTRAINT test_fk FOREIGN KEY (x) REFERENCES p
 ALTER TABLE public.full_test VALIDATE CONSTRAINT full_test_x_y_z_fkey;
 ALTER TABLE public.full_test VALIDATE CONSTRAINT test_fk;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T nosort
 SELECT crdb_internal.show_create_all_tables('d')
 ----
@@ -238,7 +238,7 @@ statement ok
 RESET autocommit_before_ddl
 
 # Table order should be B, A, E, G, F, D, C, sequence s, s_tbl.
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T nosort
 SELECT crdb_internal.show_create_all_tables('test_fk_order')
 ----
@@ -296,7 +296,7 @@ ALTER TABLE public.d VALIDATE CONSTRAINT d_e_fkey;
 ALTER TABLE public.d VALIDATE CONSTRAINT d_f_fkey;
 ALTER TABLE public.c VALIDATE CONSTRAINT c_i_fkey;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T nosort
 SELECT crdb_internal.show_create_all_tables('test_fk_order')
 ----
@@ -380,7 +380,7 @@ statement ok
 ALTER TABLE loop_a ADD CONSTRAINT b_id_delete_constraint
 FOREIGN KEY (b_id) REFERENCES loop_b (id) ON DELETE CASCADE;
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T nosort
 SELECT crdb_internal.show_create_all_tables('test_cycle')
 ----
@@ -403,7 +403,7 @@ ALTER TABLE public.loop_a ADD CONSTRAINT b_id_delete_constraint FOREIGN KEY (b_i
 ALTER TABLE public.loop_b VALIDATE CONSTRAINT loop_b_a_id_fkey;
 ALTER TABLE public.loop_a VALIDATE CONSTRAINT b_id_delete_constraint;
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T nosort
 SELECT crdb_internal.show_create_all_tables('test_cycle')
 ----
@@ -436,7 +436,7 @@ CREATE TABLE test_primary_key.t (
 	CONSTRAINT pk_name PRIMARY KEY (i)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT crdb_internal.show_create_all_tables('test_primary_key')
 ----
@@ -445,7 +445,7 @@ CREATE TABLE public.t (
   CONSTRAINT pk_name PRIMARY KEY (i ASC)
 ) WITH (schema_locked = true);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT crdb_internal.show_create_all_tables('test_primary_key')
 ----
@@ -463,7 +463,7 @@ CREATE TABLE test_computed_column.t (
 	FAMILY f1 (a, b)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT crdb_internal.show_create_all_tables('test_computed_column')
 ----
@@ -474,7 +474,7 @@ CREATE TABLE public.t (
   FAMILY f1 (a, b)
 ) WITH (schema_locked = true);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT crdb_internal.show_create_all_tables('test_computed_column')
 ----
@@ -492,7 +492,7 @@ CREATE DATABASE test_escaping;
 CREATE TABLE test_escaping.";" (";" int, index (";"));
 INSERT INTO test_escaping.";" VALUES (1);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT crdb_internal.show_create_all_tables('test_escaping')
 ----
@@ -503,7 +503,7 @@ CREATE TABLE public.";" (
   INDEX ";_;_idx" (";" ASC)
 ) WITH (schema_locked = true);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT crdb_internal.show_create_all_tables('test_escaping')
 ----
@@ -523,7 +523,7 @@ COMMENT ON TABLE test_comment."t   t" IS 'has '' quotes';
 COMMENT ON INDEX test_comment."t   t"@"t   t_pkey" IS 'has '' more '' quotes';
 COMMENT ON COLUMN test_comment."t   t"."x'" IS 'i '' just '' love '' quotes';
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT crdb_internal.show_create_all_tables('test_comment')
 ----
@@ -535,7 +535,7 @@ COMMENT ON TABLE public."t   t" IS e'has \' quotes';
 COMMENT ON COLUMN public."t   t"."x'" IS e'i \' just \' love \' quotes';
 COMMENT ON INDEX public."t   t"@"t   t_pkey" IS e'has \' more \' quotes';
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT crdb_internal.show_create_all_tables('test_comment')
 ----
@@ -556,7 +556,7 @@ CREATE SCHEMA sc2;
 CREATE TABLE sc1.t (x int);
 CREATE TABLE sc2.t (x int);
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T nosort
 SELECT crdb_internal.show_create_all_tables('test_schema')
 ----
@@ -571,7 +571,7 @@ CREATE TABLE sc2.t (
   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 ) WITH (schema_locked = true);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T nosort
 SELECT crdb_internal.show_create_all_tables('test_schema')
 ----
@@ -602,7 +602,7 @@ CREATE SEQUENCE public.s1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 123 
 statement ok
 USE test_schema;
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T nosort
 BEGIN;
 SELECT crdb_internal.show_create_all_tables('test_schema');
@@ -619,7 +619,7 @@ CREATE TABLE sc2.t (
   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 ) WITH (schema_locked = true);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T nosort
 BEGIN;
 SELECT crdb_internal.show_create_all_tables('test_schema');
@@ -636,7 +636,7 @@ CREATE TABLE sc2.t (
   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T nosort
 BEGIN;
 SELECT * FROM sc1.t;
@@ -654,7 +654,7 @@ CREATE TABLE sc2.t (
   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 ) WITH (schema_locked = true);
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T nosort
 BEGIN;
 SELECT * FROM sc1.t;

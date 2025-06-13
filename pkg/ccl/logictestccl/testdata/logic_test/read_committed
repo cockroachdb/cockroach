@@ -322,6 +322,9 @@ statement ok
 SET autocommit_before_ddl = false
 
 statement ok
+SET create_table_with_schema_locked=false
+
+statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 CREATE TABLE single_stmt_explicit (a INT PRIMARY KEY);
 COMMIT
@@ -481,6 +484,9 @@ ROLLBACK
 
 statement ok
 RESET autocommit_before_ddl
+
+statement ok
+RESET create_table_with_schema_locked
 
 subtest end
 

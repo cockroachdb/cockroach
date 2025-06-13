@@ -109,7 +109,7 @@ CREATE TABLE public.t (
   FAMILY fam_0_pk_a_b_c_d_j (pk, a, b, c, d, j)
 ) PARTITION BY LIST (a) (
   PARTITION pk_implicit VALUES IN ((1))
-)
+) WITH (schema_locked = true)
 -- Warning: Partitioned table with no zone configurations.
 ;
 
@@ -147,7 +147,7 @@ CREATE TABLE public.t (
   FAMILY fam_0_pk_a_b_c_d_j (pk, a, b, c, d, j)
 ) PARTITION BY LIST (a) (
   PARTITION pk_implicit VALUES IN ((1))
-)
+) WITH (schema_locked = true)
 -- Warning: Partitioned table with no zone configurations.
 ;
 
@@ -250,7 +250,7 @@ CREATE TABLE public.fk_using_implicit_columns_against_t_one_family (
   CONSTRAINT fk_using_implicit_columns_against_t_one_family_ref_t_pk_fkey FOREIGN KEY (ref_t_pk) REFERENCES public.t(pk),
   CONSTRAINT fk_using_implicit_columns_against_t_one_family_ref_t_c_fkey FOREIGN KEY (ref_t_c) REFERENCES public.t(c),
   FAMILY fam_0_pk_ref_t_pk_ref_t_c (pk, ref_t_pk, ref_t_c)
-);
+) WITH (schema_locked = true);
 
 
 query T
@@ -516,7 +516,7 @@ CREATE TABLE public.t (
 ) PARTITION ALL BY LIST (partition_by) (
   PARTITION one VALUES IN ((1)),
   PARTITION two VALUES IN ((2))
-)
+) WITH (schema_locked = true)
 -- Warning: Partitioned table with no zone configurations.
 ;
 
@@ -617,7 +617,7 @@ CREATE TABLE public.t (
 ) PARTITION ALL BY LIST (partition_by) (
   PARTITION one VALUES IN ((1)),
   PARTITION two VALUES IN ((2))
-)
+) WITH (schema_locked = true)
 -- Warning: Partitioned table with no zone configurations.
 ;
 
@@ -721,7 +721,7 @@ CREATE TABLE public.t (
 ) PARTITION ALL BY RANGE (partition_by) (
   PARTITION one VALUES FROM (MINVALUE) TO (2),
   PARTITION two VALUES FROM (2) TO (MAXVALUE)
-)
+) WITH (schema_locked = true)
 -- Warning: Partitioned table with no zone configurations.
 ;
 

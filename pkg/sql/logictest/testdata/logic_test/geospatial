@@ -71,7 +71,7 @@ CREATE TABLE geometry (a geometry)
 statement error type .*geography.* already exists
 CREATE TABLE geography (a geography)
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE geom_table_negative_values]
 ----
@@ -81,7 +81,7 @@ CREATE TABLE public.geom_table_negative_values (
   CONSTRAINT geom_table_negative_values_pkey PRIMARY KEY (rowid ASC)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE geom_table_negative_values]
 ----
@@ -96,7 +96,7 @@ CREATE TABLE geog_table_negative_values(
   a geography(geometry, -1)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE geog_table_negative_values]
 ----
@@ -106,7 +106,7 @@ CREATE TABLE public.geog_table_negative_values (
   CONSTRAINT geog_table_negative_values_pkey PRIMARY KEY (rowid ASC)
 );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE geog_table_negative_values]
 ----

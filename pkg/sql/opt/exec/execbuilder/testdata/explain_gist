@@ -81,7 +81,7 @@ SELECT crdb_internal.decode_plan_gist('$gist')
 
 # Regression test for #76800
 statement ok
-CREATE TABLE t2 (a int, b int, c int, d int, e int)
+CREATE TABLE t2 (a int, b int, c int, d int, e int) WITH (schema_locked = false)
 
 let $gist
 EXPLAIN (GIST) SELECT * FROM t2

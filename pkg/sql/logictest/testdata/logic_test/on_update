@@ -188,7 +188,7 @@ CREATE TABLE test_show_default (
   FAMILY fam_1_k (k)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE test_show_default
 ----
@@ -200,7 +200,7 @@ test_show_default  CREATE TABLE public.test_show_default (
                      FAMILY fam_1_k (k)
                    );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE test_show_default
 ----
@@ -222,7 +222,7 @@ CREATE TABLE test_show_fk (
   FAMILY fam_2_k (k)
 )
 
-skipif config local-schema-locked
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE test_show_fk
 ----
@@ -237,7 +237,7 @@ test_show_fk  CREATE TABLE public.test_show_fk (
                 FAMILY fam_2_k (k)
               );
 
-onlyif config local-schema-locked
+skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE test_show_fk
 ----
