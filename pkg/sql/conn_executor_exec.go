@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -1050,36 +1049,6 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmtCtx = ctx
 	}
 
-	var rollbackHomeRegionSavepoint *tree.RollbackToSavepoint
-	var releaseHomeRegionSavepoint *tree.ReleaseSavepoint
-	enforceHomeRegion := p.EnforceHomeRegion()
-	_, isSelectStmt := stmt.AST.(*tree.Select)
-	if enforceHomeRegion && ex.state.mu.txn.IsOpen() && isSelectStmt {
-		// Create a savepoint at a point before which rows were read so that we can
-		// roll back to it, which will allow the txn to be modified with a
-		// historical timestamp (so that the locality-optimized ops used for error
-		// reporting can run locally and not incur latency). This is currently only
-		// supported for SELECT statements.
-		// Add some unprintable ASCII characters to the name of the savepoint to
-		// decrease the likelihood of collision with a user-created savepoint.
-		const enforceHomeRegionSavepointName = "enforce_home_region_sp\x11\x12\x13"
-		s := &tree.Savepoint{Name: enforceHomeRegionSavepointName}
-		var event fsm.Event
-		var eventPayload fsm.EventPayload
-		if event, eventPayload, err = ex.execSavepointInOpenState(ctx, s, res); err != nil {
-			return event, eventPayload, err
-		}
-
-		releaseHomeRegionSavepoint = &tree.ReleaseSavepoint{Savepoint: enforceHomeRegionSavepointName}
-		rollbackHomeRegionSavepoint = &tree.RollbackToSavepoint{Savepoint: enforceHomeRegionSavepointName}
-		defer func() {
-			// The default case is to roll back the internally-generated savepoint
-			// after every request. We only need it if a retryable "query has no home
-			// region" error occurs.
-			ex.execRelease(ctx, releaseHomeRegionSavepoint, res)
-		}()
-	}
-
 	if ex.state.mu.autoRetryReason != nil {
 		p.autoRetryCounter = int(ex.state.mu.autoRetryCounter)
 		ex.sessionTracing.TraceRetryInformation(
@@ -1130,54 +1099,6 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 
 	if err = res.Err(); err != nil {
-		setErrorAndRestoreLocality := func(err error) {
-			res.SetError(err)
-			// We won't be faking the gateway region any more. Restore the original
-			// locality.
-			p.EvalContext().Locality = p.EvalContext().OriginalLocality
-		}
-		if execinfra.IsDynamicQueryHasNoHomeRegionError(err) {
-			if rollbackHomeRegionSavepoint != nil {
-				// A retryable "query has no home region" error has occurred.
-				// Roll back to the internal savepoint in preparation for the next
-				// planning and execution of this query with a different gateway region
-				// (as considered by the optimizer).
-				p.StmtNoConstantsWithHomeRegionEnforced = p.stmt.StmtNoConstants
-				event, eventPayload := ex.execRollbackToSavepointInOpenState(
-					ctx, rollbackHomeRegionSavepoint, res,
-				)
-				_, isTxnRestart := event.(eventTxnRestart)
-				rollbackToSavepointFailed := !isTxnRestart || eventPayload != nil
-				if ex.implicitTxn() && rollbackToSavepointFailed {
-					err = errors.AssertionFailedf(
-						"unable to roll back to internal savepoint for enforce_home_region",
-					)
-					setErrorAndRestoreLocality(err)
-				} else if rollbackToSavepointFailed || int(ex.state.mu.autoRetryCounter) == len(ex.planner.EvalContext().RemoteRegions) {
-					// If rollback to savepoint in the transaction failed (perhaps because
-					// the txn was aborted) and we're in an explicit transaction, or we
-					// have retried the statement using each remote region as a fake
-					// gateway region, then give up and return the generic "query has no
-					// home region" error message.
-					err = execinfra.MaybeGetNonRetryableDynamicQueryHasNoHomeRegionError(err)
-					setErrorAndRestoreLocality(err)
-				}
-			} else {
-				err = execinfra.MaybeGetNonRetryableDynamicQueryHasNoHomeRegionError(err)
-				setErrorAndRestoreLocality(err)
-			}
-		} else if execinfra.IsDynamicQueryHasNoHomeRegionError(ex.state.mu.autoRetryReason) {
-			// If we are retrying a dynamic "query has no home region" error and
-			// we get a different error message when executing with locality-optimized
-			// ops using a different local region (for example, relation does not
-			// exist, due to the AOST read), return the original error message in
-			// non-retryable form.
-			errorMessage := err.Error()
-			if !strings.HasPrefix(errorMessage, execinfra.QueryNotRunningInHomeRegionMessagePrefix) {
-				err = execinfra.MaybeGetNonRetryableDynamicQueryHasNoHomeRegionError(ex.state.mu.autoRetryReason)
-				setErrorAndRestoreLocality(err)
-			}
-		}
 		return makeErrEvent(err)
 	}
 
@@ -2106,38 +2027,6 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		stmtCtx = ctx
 	}
 
-	var rollbackHomeRegionSavepoint *tree.RollbackToSavepoint
-	var releaseHomeRegionSavepoint *tree.ReleaseSavepoint
-	enforceHomeRegion := p.EnforceHomeRegion()
-	_, isSelectStmt := vars.stmt.AST.(*tree.Select)
-	// TODO(sql-sessions): ensure this is not broken for pausable portals.
-	// https://github.com/cockroachdb/cockroach/issues/99408
-	if enforceHomeRegion && ex.state.mu.txn.IsOpen() && isSelectStmt {
-		// Create a savepoint at a point before which rows were read so that we can
-		// roll back to it, which will allow the txn to be modified with a
-		// historical timestamp (so that the locality-optimized ops used for error
-		// reporting can run locally and not incur latency). This is currently only
-		// supported for SELECT statements.
-		// Add some unprintable ASCII characters to the name of the savepoint to
-		// decrease the likelihood of collision with a user-created savepoint.
-		const enforceHomeRegionSavepointName = "enforce_home_region_sp\x11\x12\x13"
-		s := &tree.Savepoint{Name: enforceHomeRegionSavepointName}
-		var event fsm.Event
-		var eventPayload fsm.EventPayload
-		if event, eventPayload, err = ex.execSavepointInOpenState(ctx, s, res); err != nil {
-			return event, eventPayload, err
-		}
-
-		releaseHomeRegionSavepoint = &tree.ReleaseSavepoint{Savepoint: enforceHomeRegionSavepointName}
-		rollbackHomeRegionSavepoint = &tree.RollbackToSavepoint{Savepoint: enforceHomeRegionSavepointName}
-		defer func() {
-			// The default case is to roll back the internally-generated savepoint
-			// after every request. We only need it if a retryable "query has no home
-			// region" error occurs.
-			ex.execRelease(ctx, releaseHomeRegionSavepoint, res)
-		}()
-	}
-
 	if ex.state.mu.autoRetryReason != nil {
 		p.autoRetryCounter = int(ex.state.mu.autoRetryCounter)
 		ex.sessionTracing.TraceRetryInformation(
@@ -2188,54 +2077,6 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	}
 
 	if err = res.Err(); err != nil {
-		setErrorAndRestoreLocality := func(err error) {
-			res.SetError(err)
-			// We won't be faking the gateway region any more. Restore the original
-			// locality.
-			p.EvalContext().Locality = p.EvalContext().OriginalLocality
-		}
-		if execinfra.IsDynamicQueryHasNoHomeRegionError(err) {
-			if rollbackHomeRegionSavepoint != nil {
-				// A retryable "query has no home region" error has occurred.
-				// Roll back to the internal savepoint in preparation for the next
-				// planning and execution of this query with a different gateway region
-				// (as considered by the optimizer).
-				p.StmtNoConstantsWithHomeRegionEnforced = p.stmt.StmtNoConstants
-				event, eventPayload := ex.execRollbackToSavepointInOpenState(
-					ctx, rollbackHomeRegionSavepoint, res,
-				)
-				_, isTxnRestart := event.(eventTxnRestart)
-				rollbackToSavepointFailed := !isTxnRestart || eventPayload != nil
-				if ex.implicitTxn() && rollbackToSavepointFailed {
-					err = errors.AssertionFailedf(
-						"unable to roll back to internal savepoint for enforce_home_region",
-					)
-					setErrorAndRestoreLocality(err)
-				} else if rollbackToSavepointFailed || int(ex.state.mu.autoRetryCounter) == len(ex.planner.EvalContext().RemoteRegions) {
-					// If rollback to savepoint in the transaction failed (perhaps because
-					// the txn was aborted) and we're in an explicit transaction, or we
-					// have retried the statement using each remote region as a fake
-					// gateway region, then give up and return the generic "query has no
-					// home region" error message.
-					err = execinfra.MaybeGetNonRetryableDynamicQueryHasNoHomeRegionError(err)
-					setErrorAndRestoreLocality(err)
-				}
-			} else {
-				err = execinfra.MaybeGetNonRetryableDynamicQueryHasNoHomeRegionError(err)
-				setErrorAndRestoreLocality(err)
-			}
-		} else if execinfra.IsDynamicQueryHasNoHomeRegionError(ex.state.mu.autoRetryReason) {
-			// If we are retrying a dynamic "query has no home region" error and
-			// we get a different error message when executing with locality-optimized
-			// ops using a different local region (for example, relation does not
-			// exist, due to the AOST read), return the original error message in
-			// non-retryable form.
-			errorMessage := err.Error()
-			if !strings.HasPrefix(errorMessage, execinfra.QueryNotRunningInHomeRegionMessagePrefix) {
-				err = execinfra.MaybeGetNonRetryableDynamicQueryHasNoHomeRegionError(ex.state.mu.autoRetryReason)
-				setErrorAndRestoreLocality(err)
-			}
-		}
 		return makeErrEvent(err)
 	}
 
@@ -2295,23 +2136,6 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 		return errors.AssertionFailedf(
 			"cannot handle AOST clause without a transaction",
 		)
-	} else if execinfra.IsDynamicQueryHasNoHomeRegionError(ex.state.mu.autoRetryReason) {
-		asOfClause := tree.AsOfClause{Expr: followerReadTimestampExpr}
-		// Set the timestamp used by current_timestamp().
-		asOf, err := p.EvalAsOfTimestamp(ctx, asOfClause, asof.OptionAllowBoundedStaleness)
-		if err != nil {
-			return errors.AssertionFailedf(
-				"problem evaluating follower read timestamp for enforce_home_region dynamic error checking",
-			)
-		}
-		// Set up AOST in the txn so re-running of the query with different possible
-		// home regions does not have to read rows from remote regions.
-		p.extendedEvalCtx.SetTxnTimestamp(asOf.Timestamp.GoTime())
-		if err := ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp); err != nil {
-			// If the table was just created, we may not be able to set a historical
-			// timestamp.
-			return execinfra.MaybeGetNonRetryableDynamicQueryHasNoHomeRegionError(ex.state.mu.autoRetryReason)
-		}
 	}
 	asOf, err := p.isAsOf(ctx, stmt)
 	if err != nil {
@@ -3134,36 +2958,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	if limitsErr := ex.handleTxnRowsWrittenReadLimits(ctx); limitsErr != nil && res.Err() == nil {
 		res.SetError(limitsErr)
-	}
-	if res.Err() == nil && err == nil {
-		autoRetryReason := ex.state.mu.autoRetryReason
-		if execinfra.IsDynamicQueryHasNoHomeRegionError(autoRetryReason) {
-			if homeRegion, ok := planner.EvalContext().Locality.Find("region"); ok &&
-				planner.StmtNoConstantsWithHomeRegionEnforced == planner.stmt.StmtNoConstants {
-				// If this is the same query as ran when the dynamic "query has no home
-				// region" error occurred, but this time it didn't error out, report
-				// back the query's home region.
-				err = pgerror.Newf(pgcode.QueryNotRunningInHomeRegion,
-					`%s. Try running the query from region '%s'. %s`,
-					execinfra.QueryNotRunningInHomeRegionMessagePrefix,
-					homeRegion,
-					sqlerrors.EnforceHomeRegionFurtherInfo,
-				)
-				res.SetError(err)
-				// We won't be faking the gateway region any more. Restore the original
-				// locality.
-				planner.EvalContext().Locality = planner.EvalContext().OriginalLocality
-				return nil
-			}
-			// If for some reason we're not running the same query as before, report
-			// the original "query has no home region" error in non-retryable form.
-			err = execinfra.MaybeGetNonRetryableDynamicQueryHasNoHomeRegionError(autoRetryReason)
-			res.SetError(err)
-			// We won't be faking the gateway region any more. Restore the original
-			// locality.
-			planner.EvalContext().Locality = planner.EvalContext().OriginalLocality
-			return nil
-		}
 	}
 
 	return err

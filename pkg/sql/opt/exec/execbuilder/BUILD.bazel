@@ -19,7 +19,6 @@ go_library(
         "//pkg/server/telemetry",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/execinfra",
         "//pkg/sql/lexbase",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",

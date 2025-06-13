@@ -357,7 +357,7 @@ SET enforce_home_region = true
 query T noticetrace
 SET enforce_home_region_follower_reads_enabled = true
 ----
-NOTICE: enforce_home_region_follower_reads_enabled is deprecated and will be removed in a future release
+NOTICE: enforce_home_region_follower_reads_enabled no longer has any effect
 
 # An insert with uniqueness checks which access all regions should error out.
 retry
@@ -954,9 +954,6 @@ CREATE TABLE messages (
 statement ok
 SET enforce_home_region = true
 
-statement ok
-SET enforce_home_region_follower_reads_enabled = true
-
 # Tables in non-multiregion databases have no home region.
 retry
 statement error pq: Query has no home region. Try accessing only tables in multi-region databases with ZONE survivability\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
@@ -1161,7 +1158,7 @@ INSERT INTO parent (crdb_region, p_id) VALUES('ca-central-1', 2);
 statement ok
 INSERT INTO child (crdb_region, c_id, c_p_id) VALUES('ap-southeast-2', 11, 2);
 
-subtest enforce_home_region_phase_2_3
+subtest enforce_home_region_phase_2
 
 retry
 statement ok
@@ -1175,36 +1172,29 @@ INSERT INTO messages_global SELECT * FROM messages_rbr WHERE crdb_region != 'ap-
 statement ok
 SET enforce_home_region = true;
 
-statement ok
-SET enforce_home_region_follower_reads_enabled = true
-
 # Querying the row in the local region succeeds.
 query III retry
 SELECT * FROM t1 WHERE a=3;
 ----
 3  1  1
 
-## Phase 3, dynamically detect a query's home region.
-# Querying a row in a remote region errors out, and indicates the home region.
+# Querying a row in a remote region errors out.
 retry
-statement error pq: Query is not running in its home region\. Try running the query from region 'us-east-1'\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+statement error pq: Query has no home region\. Try using a lower LIMIT value or running the query from a different region\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 SELECT * FROM t1 WHERE a=1;
 
-# Phase 3, dynamically detect a query's home region.
-# Querying a row in a remote region errors out, and indicates the home region.
+# Querying a row in a remote region errors out.
 retry
-statement error pq: Query is not running in its home region\. Try running the query from region 'ca-central-1'\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+statement error pq: Query has no home region\. Try using a lower LIMIT value or running the query from a different region\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 SELECT * FROM t1 WHERE a=2;
 
 retry
 statement ok
 PREPARE s1 AS SELECT * FROM t1 WHERE a=$1
 
-# Phase 3, dynamically detect a query's home region.
-# Prepared statement accessing a row in a remote region errors out,
-# and indicates the home region.
+# Prepared statement accessing a row in a remote region errors out.
 retry
-statement error pq: Query is not running in its home region\. Try running the query from region 'ca-central-1'\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+statement error pq: 
 EXECUTE s1('2')
 
 statement ok
@@ -1213,11 +1203,9 @@ BEGIN
 statement ok
 SAVEPOINT foo
 
-# Phase 3, dynamically detect a query's home region.
-# An explicit transaction accessing a remote region errors out,
-# and indicates the home region.
+# An explicit transaction accessing a remote region errors out.
 retry
-statement error pq: Query is not running in its home region\. Try running the query from region 'ca-central-1'\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+statement error pq: 
 SELECT * FROM t1 WHERE a=2;
 
 # Verify we can still roll back to the savepoint.
@@ -1253,10 +1241,9 @@ SELECT rbr.message FROM messages_rbr rbr, (SELECT * FROM messages_rbt ORDER BY a
 ----
 Hello, Region!
 
-# Phase 3, dynamically detect a query's home region.
-# Locality-optimized lookup join should report a query's home region.
+# Locality-optimized lookup join accessing a remote region errors out.
 retry
-statement error pq: Query is not running in its home region\. Try running the query from region 'us-east-1'\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+statement error pq: 
 SELECT rbr.message FROM messages_rbr rbr, (SELECT * FROM messages_global ORDER BY account_id LIMIT 1) rbg
        WHERE rbr.account_id = rbg.account_id LIMIT 1
 
@@ -1310,10 +1297,9 @@ SELECT message FROM (SELECT * FROM messages_rbt ORDER BY account_id LIMIT 1) rbt
                      (SELECT account_id FROM messages_rbr rbr) LIMIT 1
 ----
 
-# Phase 3, dynamically detect a query's home region.
-# Locality-optimized lookup antijoin should report a query's home region.
+# Locality-optimized lookup antijoin reading into a remote region fails.
 retry
-statement error pq: Query is not running in its home region\. Try running the query from region 'us-east-1'\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+statement error pq: Query has no home region\. Try using a lower LIMIT value or running the query from a different region\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 SELECT message FROM (SELECT * FROM messages_global ORDER BY account_id LIMIT 1) rbg WHERE account_id NOT IN
                      (SELECT account_id FROM messages_rbr rbr) LIMIT 1
 
@@ -1342,10 +1328,9 @@ statement error pq: Query has no home region\. Try using a lower LIMIT value or 
 SELECT rbr.message FROM messages_rbr rbr INNER LOOKUP JOIN messages_rbt rbt
        ON rbr.account_id = rbt.account_id LIMIT 2
 
-# Run a locality-optimized scan that dynamically detects the home region with
-# tracing.
+# Run a locality-optimized scan that fails with tracing.
 retry
-statement error pq: Query is not running in its home region\. Try running the query from region 'ca-central-1'\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+statement error pq: Query has no home region\. Try using a lower LIMIT value or running the query from a different region\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 SET TRACING = "on", kv, results;
 SELECT * FROM t1 WHERE a=2;
 SET TRACING = off
@@ -1365,13 +1350,10 @@ ORDER BY
 ----
 sending batch to (n1,s1):1
 execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
-sending batch to (n1,s1):1
-output row: [2 1 1]
 
-# Run a locality-optimized join that dynamically detects the home region with
-# tracing.
+# Run a locality-optimized join that fails with tracing.
 retry
-statement error pq: Query is not running in its home region\. Try running the query from region 'us-east-1'\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+statement error pq: Query has no home region\. Try using a lower LIMIT value or running the query from a different region\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 SET TRACING = "on", kv, results;
 SELECT rbr.message FROM messages_rbr rbr, (SELECT * FROM messages_global ORDER BY account_id LIMIT 1) rbg
        WHERE rbr.account_id = rbg.account_id LIMIT 1;
@@ -1393,25 +1375,14 @@ ORDER BY
 sending batch to (n1,s1):1
 execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 sending batch to (n1,s1):1
-output row: [2 1 1]
-sending batch to (n1,s1):1
 output row: ['execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region']
 sending batch to (n1,s1):1
-output row: ['output row: [2 1 1]']
-sending batch to (n1,s1):1
 sending batch to (n1,s1):1
 execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
-sending batch to (n1,s1):1
-sending batch to (n1,s1):1
-execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
-sending batch to (n1,s1):1
-sending batch to (n1,s1):1
-output row: ['Hola, Region!']
 
-# Run a locality-optimized antijoin that dynamically detects the home region
-# with tracing.
+# Run a locality-optimized antijoin that fails with tracing.
 retry
-statement error pq: Query is not running in its home region\. Try running the query from region 'us-east-1'\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+statement error pq: Query has no home region\. Try using a lower LIMIT value or running the query from a different region\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 SET TRACING = "on", kv, results;
 SELECT message FROM (SELECT * FROM messages_global ORDER BY account_id LIMIT 1) rbg WHERE account_id NOT IN
                      (SELECT account_id FROM messages_rbr rbr) LIMIT 1;
@@ -1433,45 +1404,20 @@ ORDER BY
 sending batch to (n1,s1):1
 execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 sending batch to (n1,s1):1
-output row: [2 1 1]
-sending batch to (n1,s1):1
 output row: ['execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region']
-sending batch to (n1,s1):1
-output row: ['output row: [2 1 1]']
 sending batch to (n1,s1):1
 sending batch to (n1,s1):1
 execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 sending batch to (n1,s1):1
-sending batch to (n1,s1):1
-execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
-sending batch to (n1,s1):1
-sending batch to (n1,s1):1
-output row: ['Hola, Region!']
-sending batch to (n1,s1):1
 output row: ['execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region']
-sending batch to (n1,s1):1
-output row: ['output row: [2 1 1]']
 sending batch to (n1,s1):1
 output row: [e'output row: [\'execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region\']']
 sending batch to (n1,s1):1
-output row: [e'output row: [\'output row: [2 1 1]\']']
-sending batch to (n1,s1):1
 sending batch to (n1,s1):1
 output row: ['execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region']
 sending batch to (n1,s1):1
 sending batch to (n1,s1):1
-output row: ['execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region']
-sending batch to (n1,s1):1
-sending batch to (n1,s1):1
-output row: [e'output row: [\'Hola, Region!\']']
-sending batch to (n1,s1):1
-sending batch to (n1,s1):1
 execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
-sending batch to (n1,s1):1
-sending batch to (n1,s1):1
-execution failed after 0 rows: Query has no home region. Try using a lower LIMIT value or running the query from a different region. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
-sending batch to (n1,s1):1
-sending batch to (n1,s1):1
 
 statement ok
 BEGIN
@@ -1479,10 +1425,8 @@ BEGIN
 statement ok
 SAVEPOINT foo
 
-# Phase 3, dynamically detect a query's home region.
-# An explicit transaction accessing a remote region errors out,
-# and indicates the home region.
-statement error pq: Query is not running in its home region. Try running the query from region 'ca-central-1'\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+# An explicit transaction accessing a remote region errors out.
+statement error pq: Query has no home region\. Try using a lower LIMIT value or running the query from a different region\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 SELECT * FROM t1 WHERE a=2;
 
 # Verify we can still roll back to the savepoint.
@@ -1498,17 +1442,13 @@ BEGIN
 statement ok
 SAVEPOINT foo
 
-# Read some rows in an explicit transaction, which invalidates use of
-# switching to AOST follower_read_timestamp() internally in the next statement.
+# Read some rows in an explicit transaction.
 query III
 SELECT * FROM t1 WHERE a=3;
 ----
 3  1  1
 
-# Phase 3, dynamically detect a query's home region.
 # An explicit transaction accessing a remote region errors out,
-# and indicates "Query has no home region" if any rows were read
-# in the transaction already.
 statement error pq: Query has no home region\. Try using a lower LIMIT value or running the query from a different region\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 SELECT * FROM t1 WHERE a=2;
 
@@ -1543,7 +1483,7 @@ INSERT INTO xy (z, x, y) SELECT z, x, y FROM xyz WHERE x < 1;
 
 # Insert fast-path should error on inserting to a remote region.
 retry
-statement error pq: Query has no home region\. Try running the query from region 'ca-central-1'\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+statement error pq: Query has no home region. Try running the query from region 'ca-central-1'. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 INSERT INTO xy (z, x, y) VALUES (0, 0, 0);
 
 # Upsert should error on looking up the matching row.
