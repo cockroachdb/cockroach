@@ -548,13 +548,11 @@ type Replica struct {
 	// [^1]: TODO(pavelkalinnikov): we can but it'd be a larger refactor.
 	tenantLimiter tenantrate.Limiter
 
-	// tenantMetricsRef is a metrics reference indicating the tenant under
-	// which to track the range's contributions. This is determined by the
-	// start key of the Replica, once initialized.
-	// Its purpose is to help track down missing/extraneous release operations
-	// that would not be apparent or easy to resolve when refcounting at the store
-	// level only.
-	tenantMetricsRef *tenantMetricsRef
+	// tenantMetricsRef is a struct for per-tenant metrics contributed by this
+	// replica. It is determined by the start key of the Replica, once
+	// initialized. See tenantStorageMetrics for precautions that must be taken
+	// when accessing this.
+	tenantMetricsRef *tenantStorageMetrics
 
 	// sideTransportClosedTimestamp encapsulates state related to the closed
 	// timestamp's information about the range. Note that the
