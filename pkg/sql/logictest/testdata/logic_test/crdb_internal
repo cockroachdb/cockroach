@@ -1770,7 +1770,10 @@ statement ok
 CREATE TABLE foo (a INT PRIMARY KEY, INDEX idx(a)); INSERT INTO foo VALUES(1);
 
 statement ok
-CREATE TABLE bar (a INT PRIMARY KEY, INDEX idx(a));
+CREATE SCHEMA droptest;
+
+statement ok
+CREATE TABLE droptest.bar (a INT PRIMARY KEY, INDEX idx(a));
 
 query TB rowsort
 SELECT name, dropped  
@@ -1781,7 +1784,7 @@ foo    false
 bar    false
 
 statement ok
-DROP TABLE bar
+DROP SCHEMA droptest CASCADE
 
 query TB rowsort
 SELECT name, dropped  
