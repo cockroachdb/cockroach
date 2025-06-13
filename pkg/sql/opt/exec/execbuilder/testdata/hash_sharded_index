@@ -28,7 +28,7 @@ vectorized: true
 │
 └── • render
     │ columns: (crdb_internal_a_shard_11_comp int, column1 int, check1 bool)
-    │ render check1: ((crdb_internal_a_shard_11_comp)[int] IN (((0)[int], (1)[int], __more1_10__, (10)[int]))[tuple{int, int, int, int, int, int, int, int, int, int, int}])[bool]
+    │ render check1: ((crdb_internal_a_shard_11_comp)[int] IN (((0)[int], (1)[int], __more1_10__, (10)[int]))[tuple{int, int, __more1_10__, int}])[bool]
     │ render column1: (column1)[int]
     │ render crdb_internal_a_shard_11_comp: (crdb_internal_a_shard_11_comp)[int]
     │
@@ -307,7 +307,7 @@ vectorized: true
 │
 └── • render
     │ columns: (column1 int, crdb_internal_a_shard_12_comp int, rowid_default int, check1 bool)
-    │ render check1: ((crdb_internal_a_shard_12_comp)[int] IN (((0)[int], (1)[int], __more1_10__, (11)[int]))[tuple{int, int, int, int, int, int, int, int, int, int, int, int}])[bool]
+    │ render check1: ((crdb_internal_a_shard_12_comp)[int] IN (((0)[int], (1)[int], __more1_10__, (11)[int]))[tuple{int, int, __more1_10__, int}])[bool]
     │ render column1: (column1)[int]
     │ render rowid_default: (rowid_default)[int]
     │ render crdb_internal_a_shard_12_comp: (crdb_internal_a_shard_12_comp)[int]
