@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
 	"storj.io/drpc"
@@ -38,24 +39,65 @@ type drpcMuxI interface {
 
 type drpcServer struct {
 	serveModeHandler
-	srv     drpcServerI
-	mux     drpcMuxI
-	tlsCfg  *tls.Config
-	enabled bool
+	srv                    drpcServerI
+	mux                    drpcMuxI
+	tlsCfg                 *tls.Config
+	enabled                bool
+	serverInterceptorsInfo []drpcserver.ServerInterceptor
 }
 
 var _ drpcServerI = (*drpcserver.Server)(nil)
 var _ drpcServerI = (*drpcOffServer)(nil)
 
 // TODO: Register DRPC Heartbeat service
-func newDRPCServer(_ context.Context, rpcCtx *rpc.Context) (*drpcServer, error) {
-	var dmux drpcMuxI = &drpcOffServer{}
+func newDRPCServer(
+	_ context.Context, rpcCtx *rpc.Context, metricsRegistry *metric.Registry,
+) (*drpcServer, error) {
+	d := &drpcServer{}
+	d.mode.set(modeInitializing) // Set initial mode for interceptors
+
 	var dsrv drpcServerI = &drpcOffServer{}
+	var dmux drpcMuxI = &drpcOffServer{}
 	var tlsCfg *tls.Config
 	enabled := false
+	var serverInterceptors []drpcserver.ServerInterceptor
 
 	if rpc.ExperimentalDRPCEnabled.Get(&rpcCtx.Settings.SV) {
 		enabled = true
+
+		// 1. Stopper Interceptor
+		serverInterceptors = append(serverInterceptors, drpcStopperInterceptor(rpcCtx))
+
+		// 2. Metrics Interceptor
+		requestMetrics := rpc.NewRequestMetrics()
+		if metricsRegistry != nil {
+			metricsRegistry.AddMetricStruct(requestMetrics)
+		}
+		metricsRecorder := &rpc.CommonMetricsRecorder{
+			RequestMetrics: requestMetrics,
+			ShouldRecord: func(method string) bool {
+				// reusing the same feature flag as used in GRPC server here.
+				// Idea is, if metric collection is enabled for GRPC, it should also be enabled for DRPC
+				// for DRPC server to be on par with GRPC server in terms of metrics.
+				return shouldRecordRequestDuration(rpcCtx.Settings, method)
+			},
+		}
+		serverInterceptors = append(serverInterceptors, metricsRecorder.NewDRPCInterceptor())
+
+		// 3. Access Control Interceptor
+		accessControlInterceptor := func(
+			ictx context.Context,
+			methodName string,
+			stream drpc.Stream,
+			handler drpc.Handler,
+		) error {
+			if err := d.intercept(methodName); err != nil {
+				return err
+			}
+			return handler.HandleRPC(stream, methodName)
+		}
+		serverInterceptors = append(serverInterceptors, accessControlInterceptor)
+
 		mux := drpcmux.New()
 		dsrv = drpcserver.NewWithOptions(mux, drpcserver.Options{
 			Log: func(err error) {
@@ -64,7 +106,7 @@ func newDRPCServer(_ context.Context, rpcCtx *rpc.Context) (*drpcServer, error) 
 			// The reader's max buffer size defaults to 4mb, and if it is exceeded (such
 			// as happens with AddSSTable) the RPCs fail.
 			Manager: drpcmanager.Options{Reader: drpcwire.ReaderOptions{MaximumBufferSize: math.MaxInt}},
-		})
+		}, drpcserver.WithChainServerInterceptor(serverInterceptors...))
 		dmux = mux
 
 		var err error
@@ -73,30 +115,13 @@ func newDRPCServer(_ context.Context, rpcCtx *rpc.Context) (*drpcServer, error) 
 			return nil, err
 		}
 
-		// NB: any server middleware (server interceptors in gRPC parlance) would go
-		// here:
-		//     dmux = whateverMiddleware1(dmux)
-		//     dmux = whateverMiddleware2(dmux)
-		//     ...
-		//
-		// Each middleware must implement the Handler interface:
-		//
-		//   HandleRPC(stream Stream, rpc string) error
-		//
-		// where Stream
-		// See here for an example:
-		// https://github.com/bryk-io/pkg/blob/4da5fbfef47770be376e4022eab5c6c324984bf7/net/drpc/server.go#L91-L101
 	}
 
-	d := &drpcServer{
-		srv:     dsrv,
-		mux:     dmux,
-		tlsCfg:  tlsCfg,
-		enabled: enabled,
-	}
-
-	d.setMode(modeInitializing)
-
+	d.srv = dsrv
+	d.mux = dmux
+	d.tlsCfg = tlsCfg
+	d.enabled = enabled
+	d.serverInterceptorsInfo = serverInterceptors
 	return d, nil
 }
 
@@ -129,5 +154,28 @@ func (s *drpcServer) health(ctx context.Context) error {
 		return nil
 	default:
 		return srverrors.ServerError(ctx, errors.Newf("unknown mode: %v", sm))
+	}
+}
+
+// intercept implements filtering rules for each server state for dRPC.
+// It is analogous to grpcServer.intercept.
+func (s *drpcServer) intercept(fullName string) error {
+	return intercept(&s.serveModeHandler, fullName, newDRPCWaitingForInitError)
+}
+
+// newDRPCWaitingForInitError creates a dRPC-specific error indicating that the
+// server cannot run the specified method until the node has been initialized.
+func newDRPCWaitingForInitError(methodName string) error {
+	return drpcerr.WithCode(errors.Newf("node waiting for init; %s not available", methodName), uint64(codes.Unavailable))
+}
+
+// drpcStopperInterceptor wraps the dRPC handler execution in a Stopper task.
+func drpcStopperInterceptor(rpcCtx *rpc.Context) drpcserver.ServerInterceptor {
+	return func(ctx context.Context, rpcName string, stream drpc.Stream, handler drpc.Handler) error {
+		return rpcCtx.Stopper.RunTaskWithErr(stream.Context(), rpcName, func(taskCtx context.Context) error {
+			// Here, we align with how gRPC interceptor uses its context i.e. we pass stream.Context() to the task.
+			// The original handler.HandleRPC will manage sending responses/errors through the stream.
+			return handler.HandleRPC(stream, rpcName)
+		})
 	}
 }

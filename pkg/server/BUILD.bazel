@@ -62,6 +62,7 @@ go_library(
         "server_http.go",
         "server_sql.go",
         "server_systemlog_gc.go",
+        "serverutils.go",
         "session_writer.go",
         "settings_cache.go",
         "span_download.go",

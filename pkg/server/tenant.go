@@ -212,7 +212,11 @@ func NewSeparateProcessTenantServer(
 		// advantage of to begin with.
 		nodeIDGetter:          nil,
 		costControllerFactory: NewTenantSideCostController,
-		spanLimiterFactory: func(ie isql.Executor, st *cluster.Settings, knobs *spanconfig.TestingKnobs) spanconfig.Limiter {
+		spanLimiterFactory: func(
+			ie isql.Executor,
+			st *cluster.Settings,
+			knobs *spanconfig.TestingKnobs,
+		) spanconfig.Limiter {
 			return spanconfiglimiter.New(ie, st, knobs)
 		},
 	}
@@ -1313,7 +1317,7 @@ func makeTenantSQLServerArgs(
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
-	drpcServer, err := newDRPCServer(startupCtx, rpcContext)
+	drpcServer, err := newDRPCServer(startupCtx, rpcContext, registry)
 	if err != nil {
 		return sqlServerArgs{}, err
 	}

@@ -128,17 +128,17 @@ type ServerOption func(*serverOpts)
 
 // WithInterceptor adds an additional interceptor. The interceptor is called before
 // streaming and unary RPCs and may inject an error.
-func WithInterceptor(f func(fullMethod string) error) ServerOption {
+func WithInterceptor(newInterceptor func(fullMethod string) error) ServerOption {
 	return func(opts *serverOpts) {
 		if opts.interceptor == nil {
-			opts.interceptor = f
+			opts.interceptor = newInterceptor
 		} else {
-			f := opts.interceptor
+			originalInterceptor := opts.interceptor
 			opts.interceptor = func(fullMethod string) error {
-				if err := f(fullMethod); err != nil {
+				if err := newInterceptor(fullMethod); err != nil {
 					return err
 				}
-				return f(fullMethod)
+				return originalInterceptor(fullMethod)
 			}
 		}
 	}

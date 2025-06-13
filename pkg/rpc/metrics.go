@@ -23,6 +23,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"storj.io/drpc"
+	"storj.io/drpc/drpcserver"
 )
 
 // gwRequestKey is a field set on the context to indicate a request
@@ -398,26 +400,33 @@ func NewRequestMetrics() *RequestMetrics {
 
 type RequestMetricsInterceptor grpc.UnaryServerInterceptor
 
-// NewRequestMetricsInterceptor creates a new gRPC server interceptor that records
-// the duration of each RPC. The metric is labeled by the method name and the
-// status code of the RPC. The interceptor will only record durations if
-// shouldRecord returns true. Otherwise, this interceptor will be a no-op.
-func NewRequestMetricsInterceptor(
-	requestMetrics *RequestMetrics, shouldRecord func(fullMethodName string) bool,
-) RequestMetricsInterceptor {
+// CommonMetricsRecorder provides both gRPC and dRPC interceptors
+// that record request metrics using a shared configuration.
+type CommonMetricsRecorder struct {
+	RequestMetrics *RequestMetrics
+	ShouldRecord   func(fullMethodName string) bool
+}
+
+// NewGRPCInterceptor creates a new gRPC server interceptor that records
+// the duration of each RPC using the configuration in CommonMetricsRecorder.
+// The metric is labeled by the method name and the status code of the RPC.
+// The interceptor will only record durations if shouldRecord returns true.
+// Otherwise, this interceptor will be a no-op.
+func (cmr *CommonMetricsRecorder) NewGRPCInterceptor() RequestMetricsInterceptor {
 	return func(
 		ctx context.Context,
 		req interface{},
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (interface{}, error) {
-		if !shouldRecord(info.FullMethod) {
+		if !cmr.ShouldRecord(info.FullMethod) {
 			return handler(ctx, req)
 		}
 
 		startTime := timeutil.Now()
 		resp, err := handler(ctx, req)
 		duration := timeutil.Since(startTime)
+
 		var code codes.Code
 		if err != nil {
 			code = status.Code(err)
@@ -425,11 +434,50 @@ func NewRequestMetricsInterceptor(
 			code = codes.OK
 		}
 
-		requestMetrics.Duration.Observe(map[string]string{
+		cmr.RequestMetrics.Duration.Observe(map[string]string{
 			RpcMethodLabel:     info.FullMethod,
 			RpcStatusCodeLabel: code.String(),
 		}, float64(duration.Nanoseconds()))
 		return resp, err
+	}
+}
+
+// NewDRPCInterceptor creates a new dRPC server interceptor that records
+// the duration of each RPC using the configuration in CommonMetricsRecorder.
+func (cmr *CommonMetricsRecorder) NewDRPCInterceptor() drpcserver.ServerInterceptor {
+	return func(
+		ctx context.Context,
+		methodName string,
+		stream drpc.Stream,
+		handler drpc.Handler,
+	) error {
+		if !cmr.ShouldRecord(methodName) {
+			return handler.HandleRPC(stream, methodName)
+		}
+
+		startTime := timeutil.Now()
+		err := handler.HandleRPC(stream, methodName)
+		duration := timeutil.Since(startTime)
+
+		var code codes.Code
+		if err != nil {
+			// Attempt to get gRPC status code.
+			// TODO check if dRPC errors are compatible with grpc.
+			if s, ok := status.FromError(err); ok {
+				code = s.Code()
+			} else {
+				// For now, using Unknown for non-gRPC status errors.
+				code = codes.Unknown
+			}
+		} else {
+			code = codes.OK
+		}
+
+		cmr.RequestMetrics.Duration.Observe(map[string]string{
+			RpcMethodLabel:     methodName,
+			RpcStatusCodeLabel: code.String(),
+		}, float64(duration.Nanoseconds()))
+		return err
 	}
 }
 

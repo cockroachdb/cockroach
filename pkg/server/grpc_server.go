@@ -36,14 +36,20 @@ func newGRPCServer(
 	s.mode.set(modeInitializing)
 	requestMetrics := rpc.NewRequestMetrics()
 	metricsRegistry.AddMetricStruct(requestMetrics)
+
+	metricsRecorder := &rpc.CommonMetricsRecorder{
+		RequestMetrics: requestMetrics,
+		ShouldRecord: func(method string) bool {
+			return shouldRecordRequestDuration(rpcCtx.Settings, method)
+		},
+	}
+
 	srv, interceptorInfo, err := rpc.NewServerEx(
 		ctx, rpcCtx, rpc.WithInterceptor(func(path string) error {
 			return s.intercept(path)
 		}), rpc.WithMetricsServerInterceptor(
-			rpc.NewRequestMetricsInterceptor(requestMetrics, func(method string) bool {
-				return shouldRecordRequestDuration(rpcCtx.Settings, method)
-			},
-			)))
+			metricsRecorder.NewGRPCInterceptor(),
+		))
 	if err != nil {
 		return nil, err
 	}
@@ -68,22 +74,9 @@ func (s *grpcServer) health(ctx context.Context) error {
 	}
 }
 
-var rpcsAllowedWhileBootstrapping = map[string]struct{}{
-	"/cockroach.rpc.Heartbeat/Ping":             {},
-	"/cockroach.gossip.Gossip/Gossip":           {},
-	"/cockroach.server.serverpb.Init/Bootstrap": {},
-	"/cockroach.server.serverpb.Admin/Health":   {},
-}
-
 // intercept implements filtering rules for each server state.
 func (s *grpcServer) intercept(fullName string) error {
-	if s.operational() {
-		return nil
-	}
-	if _, allowed := rpcsAllowedWhileBootstrapping[fullName]; !allowed {
-		return NewWaitingForInitError(fullName)
-	}
-	return nil
+	return intercept(&s.serveModeHandler, fullName, NewWaitingForInitError)
 }
 
 // NewWaitingForInitError creates an error indicating that the server cannot run

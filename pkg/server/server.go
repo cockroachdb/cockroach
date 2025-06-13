@@ -405,7 +405,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		return nil, err
 	}
 
-	drpcServer, err := newDRPCServer(ctx, rpcContext)
+	drpcServer, err := newDRPCServer(ctx, rpcContext, appRegistry)
 	if err != nil {
 		return nil, err
 	}

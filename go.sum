@@ -581,8 +581,6 @@ github.com/cockroachdb/datadriven v0.0.0-20190809214429-80d97fb3cbaa/go.mod h1:z
 github.com/cockroachdb/datadriven v1.0.2/go.mod h1:a9RdTaap04u637JoCzcUoIcDmvwSUtcUFtT/C3kJlTU=
 github.com/cockroachdb/datadriven v1.0.3-0.20250407164829-2945557346d5 h1:UycK/E0TkisVrQbSoxvU827FwgBBcZ95nRRmpj/12QI=
 github.com/cockroachdb/datadriven v1.0.3-0.20250407164829-2945557346d5/go.mod h1:jsaKMvD3RBCATk1/jbUZM8C9idWBJME9+VRZ5+Liq1g=
-github.com/cockroachdb/drpc v0.0.0-20250507084558-a793c5c40d3d h1:O43v15qZJIut4hLBaYfuK9gnm9eWpto2Qj/Q6MZeLTY=
-github.com/cockroachdb/drpc v0.0.0-20250507084558-a793c5c40d3d/go.mod h1:Y9LZaa8esL1PW2IDMqJE7CFSNq7d5bQ3RI7mGPtmKMg=
 github.com/cockroachdb/errors v1.9.1/go.mod h1:2sxOtL2WIc096WSZqZ5h8fa17rdDq9HZOZLBCor4mBk=
 github.com/cockroachdb/errors v1.12.0 h1:d7oCs6vuIMUQRVbi6jWWWEJZahLCfJpnJSVobd1/sUo=
 github.com/cockroachdb/errors v1.12.0/go.mod h1:SvzfYNNBshAVbZ8wzNc/UPK3w1vf0dKDUP41ucAIf7g=
@@ -2230,6 +2228,8 @@ github.com/segmentio/kafka-go v0.1.0/go.mod h1:X6itGqS9L4jDletMsxZ7Dz+JFWxM6JHfP
 github.com/segmentio/kafka-go v0.2.0/go.mod h1:X6itGqS9L4jDletMsxZ7Dz+JFWxM6JHfPOCvTvk+EJo=
 github.com/sergi/go-diff v1.0.0 h1:Kpca3qRNrduNnOQeazBd0ysaKrUJiIuISHxogkT9RPQ=
 github.com/sergi/go-diff v1.0.0/go.mod h1:0CfEIISq7TuYL3j771MWULgwwjU+GofnZX9QAmXWZgo=
+github.com/shaikzakiriitm/drpc v0.0.0-20250609112305-2f6c30fde4a2 h1:OX1pybxO2BgJGBx+TYz4RxbEQ8F6dcmsudyzEWuZ/Pk=
+github.com/shaikzakiriitm/drpc v0.0.0-20250609112305-2f6c30fde4a2/go.mod h1:UWP+upGv1Z+4nWxcdwhv3/wQXSOgCZteytaRVez5PDc=
 github.com/shirou/gopsutil/v3 v3.21.12 h1:VoGxEW2hpmz0Vt3wUvHIl9fquzYLNpVpgNNB7pGJimA=
 github.com/shirou/gopsutil/v3 v3.21.12/go.mod h1:BToYZVTlSVlfazpDDYFnsVZLaoRG+g8ufT6fPQLdJzA=
 github.com/shopspring/decimal v0.0.0-20180709203117-cd690d0c9e24/go.mod h1:M+9NzErvs504Cn4c5DxATwIqPbtswREoFCre64PpcG4=

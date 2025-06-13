@@ -122,9 +122,15 @@ func TestServerRequestInstrumentInterceptor(t *testing.T) {
 				}
 				return nil, status.Error(tc.statusCode, tc.statusCode.String())
 			}
-			interceptor := NewRequestMetricsInterceptor(requestMetrics, func(fullMethodName string) bool {
-				return tc.shouldRecord
-			})
+
+			commonMetricsRecorder := &CommonMetricsRecorder{
+				RequestMetrics: requestMetrics,
+				ShouldRecord: func(fullMethodName string) bool {
+					return tc.shouldRecord
+				},
+			}
+			interceptor := commonMetricsRecorder.NewGRPCInterceptor()
+
 			_, err := interceptor(ctx, req, info, handler)
 			if err != nil {
 				require.Equal(t, tc.statusCode, status.Code(err))
