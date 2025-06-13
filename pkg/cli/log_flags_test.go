@@ -57,8 +57,7 @@ func TestSetupLogging(t *testing.T) {
 		`flush-trigger-size: 1.0MiB, ` +
 		`max-buffer-size: 50MiB, ` +
 		`format: newline}}`
-	const defaultOtlpConfig = `otlp-defaults: {` +
-		`insecure: false, ` +
+	const defaultOTLPConfig = `otlp-defaults: {` +
 		`compression: gzip, ` +
 		`filter: INFO, ` +
 		`format: json, ` +
@@ -200,7 +199,7 @@ func TestSetupLogging(t *testing.T) {
 		// Shorten the configuration for legibility during reviews of test changes.
 		actual = strings.ReplaceAll(actual, defaultFluentConfig, "<fluentDefaults>")
 		actual = strings.ReplaceAll(actual, defaultHTTPConfig, "<httpDefaults>")
-		actual = strings.ReplaceAll(actual, defaultOtlpConfig, "<otlpDefaults>")
+		actual = strings.ReplaceAll(actual, defaultOTLPConfig, "<otlpDefaults>")
 		actual = stdFileDefaultsRe.ReplaceAllString(actual, "<stdFileDefaults($path)>")
 		actual = fileDefaultsNoMaxSizeRe.ReplaceAllString(actual, "<fileDefaultsNoMaxSize($path)>")
 		actual = strings.ReplaceAll(actual, fileDefaultsNoDir, "<fileDefaultsNoDir>")
