@@ -1,7 +1,7 @@
 name: Check Pebble dep
 on:
   schedule:
-    - cron: '0 8 * * 0,3' # Every Sun and Wed at 8:00 UTC
+    - cron: '0 8 * * *' # Every day at 8:00 UTC
   workflow_dispatch:
 
 jobs:
@@ -38,7 +38,5 @@ jobs:
           payload: |
             {
               "channel": "C08JE13CM9S",
-              "text": ${{ toJson(format(
-                'Some Pebble dependencies are not up to date. Details below:\n```{0}```',
-                steps.run_script.outputs.output)) }}
+              "text": ${{ toJson(steps.run_script.outputs.output) }}
             }
