@@ -2358,18 +2358,25 @@ func TestRepeatableReadLogic_udf_fk(
 	runLogicTest(t, "udf_fk")
 }
 
-func TestRepeatableReadLogic_udf_in_column_defaults(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "udf_in_column_defaults")
-}
-
 func TestRepeatableReadLogic_udf_in_constraints(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_in_constraints")
+}
+
+func TestRepeatableReadLogic_udf_in_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_in_index")
+}
+
+func TestRepeatableReadLogic_udf_in_table(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_in_table")
 }
 
 func TestRepeatableReadLogic_udf_insert(

@@ -412,7 +412,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
       │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 6 (t_k_idx-)}
       │    │    ├── VALIDATED             → DELETE_ONLY      SecondaryIndex:{DescID: 104 (t), IndexID: 6 (t_k_idx-), RecreateSourceIndexID: 0}
       │    │    └── PUBLIC                → ABSENT           IndexName:{DescID: 104 (t), Name: "t_k_idx", IndexID: 6 (t_k_idx-)}
-      │    └── 37 Mutation operations
+      │    └── 35 Mutation operations
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
       │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
       │         ├── SetIndexName {"IndexID":16,"Name":"t_pkey","TableID":104}
@@ -429,10 +429,8 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":15,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":15,"Kind":1,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
-      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":2,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":4,"TableID":104}
-      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":4,"TableID":104}
       │         ├── SetIndexName {"IndexID":4,"Name":"crdb_internal_in...","TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":6,"TableID":104}
       │         ├── SetIndexName {"IndexID":6,"Name":"crdb_internal_in...","TableID":104}
@@ -459,8 +457,10 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
       │    │    ├── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_idx-), RecreateSourceIndexID: 0}
       │    │    ├── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_j_idx-), RecreateSourceIndexID: 0}
       │    │    └── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 104 (t), IndexID: 6 (t_k_idx-), RecreateSourceIndexID: 0}
-      │    └── 9 Mutation operations
+      │    └── 11 Mutation operations
+      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":2,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
+      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":4,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":4,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":6,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":104}

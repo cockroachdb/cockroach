@@ -51,10 +51,9 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (idx-)}
       │    │    ├── VALIDATED  → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
       │    │    └── PUBLIC     → ABSENT      IndexName:{DescID: 104 (t), Name: "idx", IndexID: 2 (idx-)}
-      │    └── 8 Mutation operations
+      │    └── 7 Mutation operations
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
-      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":2,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":2,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":104}
@@ -67,8 +66,9 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
       │    │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_idx_expr-), TypeName: "STRING"}
       │    │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
       │    │    └── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 2 (idx-)}
-      │    └── 6 Mutation operations
+      │    └── 7 Mutation operations
       │         ├── RemoveColumnComputeExpression {"ColumnID":3,"TableID":104}
+      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":2,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
       │         ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
       │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":104}

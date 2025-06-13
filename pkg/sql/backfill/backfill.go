@@ -18,11 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -230,7 +230,7 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 	var defaultExprs, computedExprs []tree.TypedExpr
 	// Install type metadata in the target descriptors, as well as resolve any
 	// user defined types in the column expressions.
-	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+	if err := flowCtx.Cfg.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		resolver := flowCtx.NewTypeResolver(txn.KV())
 		// Hydrate all the types present in the table.
 		if err := typedesc.HydrateTypesInDescriptor(ctx, desc, &resolver); err != nil {
@@ -239,6 +239,7 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 		// Set up a SemaContext to type check the default and computed expressions.
 		semaCtx := tree.MakeSemaContext(&resolver)
 		semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(evalCtx.Settings.Version)
+		semaCtx.FunctionResolver = descs.NewDistSQLFunctionResolver(txn.Descriptors(), txn.KV())
 		var err error
 		defaultExprs, err = schemaexpr.MakeDefaultExprs(
 			ctx, cb.added, &transform.ExprTransformContext{}, evalCtx, &semaCtx,
@@ -758,7 +759,7 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 
 	// Install type metadata in the target descriptors, as well as resolve any
 	// user defined types in partial index predicate expressions.
-	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
+	if err := flowCtx.Cfg.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) (err error) {
 		resolver := flowCtx.NewTypeResolver(txn.KV())
 		// Hydrate all the types present in the table.
 		if err = typedesc.HydrateTypesInDescriptor(ctx, desc, &resolver); err != nil {
@@ -767,6 +768,7 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 		// Set up a SemaContext to type check the default and computed expressions.
 		semaCtx := tree.MakeSemaContext(&resolver)
 		semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(evalCtx.Settings.Version)
+		semaCtx.FunctionResolver = descs.NewDistSQLFunctionResolver(txn.Descriptors(), txn.KV())
 		// Convert any partial index predicate strings into expressions.
 		predicates, colExprs, referencedColumns, err = constructExprs(
 			ctx, desc, ib.added, ib.cols, ib.addedCols, ib.computedCols, evalCtx, &semaCtx,

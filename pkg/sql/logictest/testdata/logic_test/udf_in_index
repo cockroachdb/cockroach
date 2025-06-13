@@ -1,0 +1,399 @@
+# LogicTest: !local-mixed-25.2
+
+# Set up functions that inspect function dependencies.
+statement ok
+CREATE VIEW v_col_fn_ids AS
+SELECT
+id,
+(json_array_elements(
+  crdb_internal.pb_to_json(
+    'cockroach.sql.sqlbase.Descriptor',
+    descriptor,
+    false
+  )->'table'->'columns'
+)->'id')::INT as col_id,
+json_array_elements(
+  crdb_internal.pb_to_json(
+    'cockroach.sql.sqlbase.Descriptor',
+    descriptor,
+    false
+  )->'table'->'columns'
+)->'computeExpr' as compute_expr,
+json_array_elements(
+  crdb_internal.pb_to_json(
+    'cockroach.sql.sqlbase.Descriptor',
+    descriptor,
+    false
+  )->'table'->'columns'
+)->'usesFunctionIds' as uses_fn_ids
+FROM system.descriptor
+
+statement ok
+CREATE FUNCTION get_col_fn_ids(table_id INT) RETURNS SETOF v_col_fn_ids
+LANGUAGE SQL
+AS $$
+  SELECT *
+  FROM v_col_fn_ids
+  WHERE id = table_id
+$$;
+
+statement ok
+CREATE VIEW v_idx_fn_ids AS
+SELECT
+id,
+(json_array_elements(
+  crdb_internal.pb_to_json(
+    'cockroach.sql.sqlbase.Descriptor',
+    descriptor,
+    false
+  )->'table'->'indexes'
+)->'id')::INT as idx_id,
+json_array_elements(
+  crdb_internal.pb_to_json(
+    'cockroach.sql.sqlbase.Descriptor',
+    descriptor,
+    false
+  )->'table'->'indexes'
+)->'predicate' as predicate_expr
+FROM system.descriptor
+
+statement ok
+CREATE FUNCTION get_idx_fn_ids(table_id INT) RETURNS SETOF v_idx_fn_ids
+LANGUAGE SQL
+AS $$
+  SELECT *
+  FROM v_idx_fn_ids
+  WHERE id = table_id
+$$;
+
+statement ok
+CREATE VIEW v_fn_depended_on_by AS
+SELECT
+     id,
+     jsonb_pretty(
+       crdb_internal.pb_to_json(
+         'cockroach.sql.sqlbase.Descriptor',
+         descriptor,
+         false
+       )->'function'->'dependedOnBy'
+     ) as depended_on_by
+FROM system.descriptor
+
+statement ok
+CREATE FUNCTION get_fn_depended_on_by(function_id INT) RETURNS STRING
+LANGUAGE SQL
+AS $$
+  SELECT depended_on_by
+  FROM v_fn_depended_on_by
+  WHERE id = function_id
+$$;
+
+statement ok
+CREATE FUNCTION test_tbl_f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+
+# Test that UDF can be used in index creation while creating table.
+statement ok
+CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT, INDEX idx_b((1 + test_tbl_f())));
+
+let $tbl_id
+SELECT id FROM system.namespace WHERE name = 'test_tbl_t';
+
+let $fn_id
+SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'test_tbl_f';
+
+query IITT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
+----
+id   col_id  compute_expr                      uses_fn_ids
+113  1       NULL                              NULL
+113  2       NULL                              NULL
+113  3       "1:::INT8 + [FUNCTION 100112]()"  [112]
+
+query T
+SELECT get_fn_depended_on_by($fn_id)
+----
+[
+    {
+        "columnIds": [
+            3
+        ],
+        "id": 113
+    }
+]
+
+# Test UDF index creation after table exists.
+statement ok
+CREATE INDEX t_idx ON test_tbl_t((2 + test_tbl_f()));
+
+query IITT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
+----
+id   col_id  compute_expr                      uses_fn_ids
+113  1       NULL                              NULL
+113  2       NULL                              NULL
+113  3       "1:::INT8 + [FUNCTION 100112]()"  [112]
+113  4       "2:::INT8 + [FUNCTION 100112]()"  [112]
+
+query T
+SELECT get_fn_depended_on_by($fn_id)
+----
+[
+    {
+        "columnIds": [
+            3,
+            4
+        ],
+        "id": 113
+    }
+]
+
+# Test partial index with UDF in WHERE clause.
+statement ok
+CREATE FUNCTION test_tbl_partial_f(b INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT b $$;
+
+let $partial_fn_id
+SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'test_tbl_partial_f';
+
+statement ok
+CREATE INDEX t_idx2 ON test_tbl_t(b) WHERE test_tbl_partial_f(b) > 0;
+
+query IITT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
+----
+id   col_id  compute_expr                      uses_fn_ids
+113  1       NULL                              NULL
+113  2       NULL                              NULL
+113  3       "1:::INT8 + [FUNCTION 100112]()"  [112]
+113  4       "2:::INT8 + [FUNCTION 100112]()"  [112]
+
+query IIT colnames
+SELECT * FROM get_idx_fn_ids($tbl_id) ORDER BY 1, 2;
+----
+id   idx_id  predicate_expr
+113  2       NULL
+113  3       NULL
+113  5       "[FUNCTION 100114](b) > 0:::INT8"
+
+query T
+SELECT get_fn_depended_on_by($partial_fn_id)
+----
+[
+    {
+        "id": 113,
+        "indexIds": [
+            5
+        ]
+    }
+]
+
+statement ok
+INSERT INTO test_tbl_t VALUES (1, 1), (2, -2), (3, 3);
+
+# Verify that we can select from the partial index.
+query II
+SELECT * FROM test_tbl_t@t_idx2 WHERE test_tbl_partial_f(b) > 0 ORDER BY 1, 2;
+----
+1  1
+3  3
+
+statement error index "t_idx2" is a partial index that does not contain all the rows needed to execute this query
+SELECT * FROM test_tbl_t@t_idx2;
+
+statement error cannot drop function "test_tbl_partial_f" because other objects \(\[test.public.test_tbl_t\]\) still depend on it
+DROP FUNCTION test_tbl_partial_f;
+
+statement ok
+DELETE FROM test_tbl_t WHERE true;
+
+# Test expression index with UDF in expression.
+statement ok
+CREATE INDEX t_idx3 ON test_tbl_t((b + test_tbl_f()));
+
+query IITT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
+----
+id   col_id  compute_expr                      uses_fn_ids
+113  1       NULL                              NULL
+113  2       NULL                              NULL
+113  3       "1:::INT8 + [FUNCTION 100112]()"  [112]
+113  4       "2:::INT8 + [FUNCTION 100112]()"  [112]
+113  5       "b + [FUNCTION 100112]()"         [112]
+
+query T
+SELECT get_fn_depended_on_by($fn_id)
+----
+[
+    {
+        "columnIds": [
+            3,
+            4,
+            5
+        ],
+        "id": 113
+    }
+]
+
+# Test multiple UDFs in index expression.
+statement ok
+CREATE INDEX t_idx4 ON test_tbl_t(test_tbl_f(), b, (test_tbl_f() + 1));
+
+query IITT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
+----
+id   col_id  compute_expr                      uses_fn_ids
+113  1       NULL                              NULL
+113  2       NULL                              NULL
+113  3       "1:::INT8 + [FUNCTION 100112]()"  [112]
+113  4       "2:::INT8 + [FUNCTION 100112]()"  [112]
+113  5       "b + [FUNCTION 100112]()"         [112]
+113  6       "[FUNCTION 100112]()"             [112]
+113  7       "[FUNCTION 100112]() + 1:::INT8"  [112]
+
+query T
+SELECT get_fn_depended_on_by($fn_id)
+----
+[
+    {
+        "columnIds": [
+            3,
+            4,
+            5,
+            6,
+            7
+        ],
+        "id": 113
+    }
+]
+
+# Test dropping index removes function dependencies.
+statement ok
+DROP INDEX t_idx;
+
+query IITT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
+----
+id   col_id  compute_expr                      uses_fn_ids
+113  1       NULL                              NULL
+113  2       NULL                              NULL
+113  3       "1:::INT8 + [FUNCTION 100112]()"  [112]
+113  5       "b + [FUNCTION 100112]()"         [112]
+113  6       "[FUNCTION 100112]()"             [112]
+113  7       "[FUNCTION 100112]() + 1:::INT8"  [112]
+
+query T
+SELECT get_fn_depended_on_by($fn_id)
+----
+[
+    {
+        "columnIds": [
+            3,
+            5,
+            6,
+            7
+        ],
+        "id": 113
+    }
+]
+
+# Test that function cannot be dropped if used in indexes.
+statement error pgcode 2BP01 cannot drop function "test_tbl_f" because other objects \(\[test.public.test_tbl_t\]\) still depend on it
+DROP FUNCTION test_tbl_f;
+
+# Verify that dependencies are cleaned up when indexes are dropped.
+statement ok
+DROP INDEX t_idx2;
+
+query IITT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
+----
+id   col_id  compute_expr                      uses_fn_ids
+113  1       NULL                              NULL
+113  2       NULL                              NULL
+113  3       "1:::INT8 + [FUNCTION 100112]()"  [112]
+113  5       "b + [FUNCTION 100112]()"         [112]
+113  6       "[FUNCTION 100112]()"             [112]
+113  7       "[FUNCTION 100112]() + 1:::INT8"  [112]
+
+query T
+SELECT get_fn_depended_on_by($fn_id)
+----
+[
+    {
+        "columnIds": [
+            3,
+            5,
+            6,
+            7
+        ],
+        "id": 113
+    }
+]
+
+statement ok
+DROP INDEX t_idx3;
+
+query IITT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
+----
+id   col_id  compute_expr                      uses_fn_ids
+113  1       NULL                              NULL
+113  2       NULL                              NULL
+113  3       "1:::INT8 + [FUNCTION 100112]()"  [112]
+113  6       "[FUNCTION 100112]()"             [112]
+113  7       "[FUNCTION 100112]() + 1:::INT8"  [112]
+
+query T
+SELECT get_fn_depended_on_by($fn_id)
+----
+[
+    {
+        "columnIds": [
+            3,
+            6,
+            7
+        ],
+        "id": 113
+    }
+]
+
+statement ok
+DROP INDEX t_idx4;
+
+query IITT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
+----
+id   col_id  compute_expr                      uses_fn_ids
+113  1       NULL                              NULL
+113  2       NULL                              NULL
+113  3       "1:::INT8 + [FUNCTION 100112]()"  [112]
+
+query T
+SELECT get_fn_depended_on_by($fn_id)
+----
+[
+    {
+        "columnIds": [
+            3
+        ],
+        "id": 113
+    }
+]
+
+statement ok
+DROP INDEX idx_b;
+
+query IITT colnames
+SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
+----
+id   col_id  compute_expr  uses_fn_ids
+113  1       NULL          NULL
+113  2       NULL          NULL
+
+query T
+SELECT get_fn_depended_on_by($fn_id)
+----
+NULL
+
+# Now function should be droppable.
+statement ok
+DROP FUNCTION test_tbl_f;

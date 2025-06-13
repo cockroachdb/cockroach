@@ -386,7 +386,10 @@ func (i *immediateVisitor) RemoveColumnDefaultExpression(
 	if err := updateColumnExprSequenceUsage(d); err != nil {
 		return err
 	}
-	return updateColumnExprFunctionsUsage(d)
+	if err := updateColumnExprFunctionsUsage(d); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (i *immediateVisitor) AddColumnOnUpdateExpression(
@@ -411,6 +414,14 @@ func (i *immediateVisitor) AddColumnOnUpdateExpression(
 		d.UsesSequenceIds = append(d.UsesSequenceIds, seqID)
 		refs.Add(seqID)
 	}
+	fnRefs := catalog.MakeDescriptorIDSet(d.UsesFunctionIds...)
+	for _, fnID := range op.OnUpdate.UsesFunctionIDs {
+		if fnRefs.Contains(fnID) {
+			continue
+		}
+		d.UsesFunctionIds = append(d.UsesFunctionIds, fnID)
+		fnRefs.Add(fnID)
+	}
 	return nil
 }
 
@@ -427,7 +438,13 @@ func (i *immediateVisitor) RemoveColumnOnUpdateExpression(
 	}
 	d := col.ColumnDesc()
 	d.OnUpdateExpr = nil
-	return updateColumnExprSequenceUsage(d)
+	if err := updateColumnExprSequenceUsage(d); err != nil {
+		return err
+	}
+	if err := updateColumnExprFunctionsUsage(d); err != nil {
+		return err
+	}
+	return nil
 }
 
 // updateExistingColumnType will handle data type changes to existing columns.
