@@ -328,6 +328,7 @@ ALL_TESTS = [
     "//pkg/roachprod/vm/ibm:ibm_test",
     "//pkg/roachprod/vm/local:local_test",
     "//pkg/roachprod/vm:vm_test",
+    "//pkg/roachprod:roachprod_disallowed_imports_test",
     "//pkg/roachprod:roachprod_test",
     "//pkg/rpc/nodedialer:nodedialer_test",
     "//pkg/rpc:rpc_test",
