@@ -24,6 +24,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization/v3"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/monitor/armmonitor"
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/to"
@@ -46,6 +47,12 @@ const (
 	remoteUser   = "ubuntu"
 	tagComment   = "comment"
 	tagSubnet    = "subnetPrefix"
+
+	// UserManagedIdentity expected to exist in the subscription.
+	// This identity will be associated to the VMs and will grant permissions
+	// for roachprod testing.
+	userManagedIdentityName          = "roachprod-testing"
+	userManagedIdentityResourceGroup = "roachprod-testing"
 )
 
 // providerInstance is the instance to be registered into vm.Providers by Init.
@@ -94,11 +101,18 @@ type Provider struct {
 		syncutil.Mutex
 
 		authorizer     autorest.Authorizer
+		identity       azcore.TokenCredential
 		subscriptionId string
 		resourceGroups map[string]resources.Group
 		subnets        map[string]network.Subnet
 		securityGroups map[string]network.SecurityGroup
+		roles          map[string]fetchedRole
 	}
+}
+
+type fetchedRole struct {
+	role *armauthorization.RoleDefinition
+	err  error
 }
 
 func (p *Provider) SupportsSpotVMs() bool {
@@ -270,6 +284,7 @@ func New() *Provider {
 	p.mu.resourceGroups = make(map[string]resources.Group)
 	p.mu.securityGroups = make(map[string]network.SecurityGroup)
 	p.mu.subnets = make(map[string]network.Subnet)
+	p.mu.roles = make(map[string]fetchedRole)
 	return p
 }
 
@@ -983,6 +998,17 @@ func (p *Provider) createVM(
 		Location: group.Location,
 		Zones:    to.StringSlicePtr([]string{zone.AvailabilityZone}),
 		Tags:     tags,
+		Identity: &compute.VirtualMachineIdentity{
+			Type: compute.ResourceIdentityTypeUserAssigned,
+			UserAssignedIdentities: map[string]*compute.UserAssignedIdentitiesValue{
+				fmt.Sprintf(
+					"/subscriptions/%s/resourceGroups/%s/providers/Microsoft.ManagedIdentity/userAssignedIdentities/%s",
+					sub,
+					userManagedIdentityResourceGroup,
+					userManagedIdentityName,
+				): {},
+			},
+		},
 		VirtualMachineProperties: &compute.VirtualMachineProperties{
 			HardwareProfile: &compute.HardwareProfile{
 				VMSize: compute.VirtualMachineSizeTypes(providerOpts.MachineType),
@@ -1102,6 +1128,7 @@ func (p *Provider) createVM(
 	if err = future.WaitForCompletionRef(ctx, client.Client); err != nil {
 		return
 	}
+
 	return future.Result(client)
 }
 
