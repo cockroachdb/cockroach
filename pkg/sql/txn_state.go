@@ -7,6 +7,7 @@ package sql
 
 import (
 	"context"
+	"math/rand"
 	"sync/atomic"
 	"time"
 
@@ -91,6 +92,11 @@ type txnState struct {
 	// txnCancelFn is a function that can be used to cancel the current
 	// txn context.
 	txnCancelFn context.CancelFunc
+
+	rng *rand.Rand
+
+	// recording indicates that sp is recording
+	shouldRecord bool
 
 	// recordingThreshold, is not zero, indicates that sp is recording and that
 	// the recording should be dumped to the log if execution of the transaction
@@ -205,7 +211,9 @@ func (ts *txnState) resetForNewSQLTxn(
 	ctx, cancelFn := context.WithCancel(connCtx)
 	var sp *tracing.Span
 	duration := traceTxnThreshold.Get(&tranCtx.settings.SV)
-	if alreadyRecording || duration > 0 {
+	probabilisticTracePct := traceTxnPct.Get(&tranCtx.settings.SV)
+	ts.shouldRecord = probabilisticTracePct > 0 && ts.rng.Float64() < probabilisticTracePct && duration > 0
+	if alreadyRecording || ts.shouldRecord {
 		ts.Ctx, sp = tracing.EnsureChildSpan(ctx, tranCtx.tracer, opName,
 			tracing.WithRecording(tracingpb.RecordingVerbose))
 	} else if ts.testingForceRealTracingSpans {
@@ -218,7 +226,7 @@ func (ts *txnState) resetForNewSQLTxn(
 		sp.SetTag("implicit", attribute.StringValue("true"))
 	}
 
-	if !alreadyRecording && (duration > 0) {
+	if !alreadyRecording && ts.shouldRecord {
 		ts.recordingThreshold = duration
 		ts.recordingStart = timeutil.Now()
 	}
@@ -283,7 +291,7 @@ func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timesta
 	ts.mon.Stop(ts.Ctx)
 	sp := tracing.SpanFromContext(ts.Ctx)
 
-	if ts.recordingThreshold > 0 {
+	if ts.shouldRecord {
 		if elapsed := timeutil.Since(ts.recordingStart); elapsed >= ts.recordingThreshold {
 			logTraceAboveThreshold(ts.Ctx,
 				sp.GetRecording(sp.RecordingType()), /* recording */
@@ -300,6 +308,7 @@ func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timesta
 		ts.txnCancelFn()
 	}
 	ts.Ctx = nil
+	ts.shouldRecord = false
 	ts.recordingThreshold = 0
 	return func() (txnID uuid.UUID, timestamp hlc.Timestamp) {
 		ts.mu.Lock()

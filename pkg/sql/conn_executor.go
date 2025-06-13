@@ -1159,6 +1159,7 @@ func (s *Server) newConnExecutor(
 		sessionDataStack:    sdMutIterator.sds,
 		dataMutatorIterator: sdMutIterator,
 		state: txnState{
+			rng:                          rand.New(rand.NewSource(time.Now().UnixNano())),
 			mon:                          txnMon,
 			connCtx:                      ctx,
 			testingForceRealTracingSpans: s.cfg.TestingKnobs.ForceRealTracingSpans,
