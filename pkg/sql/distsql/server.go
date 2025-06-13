@@ -97,6 +97,12 @@ func NewServer(
 	return ds
 }
 
+type drpcServerImpl ServerImpl
+
+func (ds *ServerImpl) AsDRPCServer() execinfrapb.DRPCDistSQLServer {
+	return (*drpcServerImpl)(ds)
+}
+
 // Start launches workers for the server.
 //
 // Note that the initialization of the server required for performing the
@@ -614,6 +620,13 @@ func (ds *ServerImpl) setupSpanForIncomingRPC(
 		tracing.WithServerSpanKind)
 }
 
+// SetupFlow is part of the execinfrapb.DRPCDistSQLServer interface.
+func (ds *drpcServerImpl) SetupFlow(
+	ctx context.Context, req *execinfrapb.SetupFlowRequest,
+) (*execinfrapb.SimpleResponse, error) {
+	return (*ServerImpl)(ds).SetupFlow(ctx, req)
+}
+
 // SetupFlow is part of the execinfrapb.DistSQLServer interface.
 func (ds *ServerImpl) SetupFlow(
 	ctx context.Context, req *execinfrapb.SetupFlowRequest,
@@ -676,6 +689,13 @@ func (ds *ServerImpl) SetupFlow(
 	return &execinfrapb.SimpleResponse{}, nil
 }
 
+// CancelDeadFlows is part of the execinfrapb.DRPCDistSQLServer interface.
+func (ds *drpcServerImpl) CancelDeadFlows(
+	ctx context.Context, req *execinfrapb.CancelDeadFlowsRequest,
+) (*execinfrapb.SimpleResponse, error) {
+	return (*ServerImpl)(ds).CancelDeadFlows(ctx, req)
+}
+
 // CancelDeadFlows is part of the execinfrapb.DistSQLServer interface.
 func (ds *ServerImpl) CancelDeadFlows(
 	ctx context.Context, req *execinfrapb.CancelDeadFlowsRequest,
@@ -686,7 +706,7 @@ func (ds *ServerImpl) CancelDeadFlows(
 }
 
 func (ds *ServerImpl) flowStreamInt(
-	ctx context.Context, stream execinfrapb.DistSQL_FlowStreamServer,
+	ctx context.Context, stream execinfrapb.RPCDistSQL_FlowStreamStream,
 ) error {
 	// Receive the first message.
 	msg, err := stream.Recv()
@@ -720,8 +740,17 @@ func (ds *ServerImpl) flowStreamInt(
 	return streamStrategy.Run(ctx, stream, msg, f)
 }
 
+// FlowStream is part of the execinfrapb.DRPCDistSQLServer interface.
+func (ds *drpcServerImpl) FlowStream(stream execinfrapb.DRPCDistSQL_FlowStreamStream) error {
+	return (*ServerImpl)(ds).flowStream(stream)
+}
+
 // FlowStream is part of the execinfrapb.DistSQLServer interface.
 func (ds *ServerImpl) FlowStream(stream execinfrapb.DistSQL_FlowStreamServer) error {
+	return ds.flowStream(stream)
+}
+
+func (ds *ServerImpl) flowStream(stream execinfrapb.RPCDistSQL_FlowStreamStream) error {
 	ctx := ds.AnnotateCtx(stream.Context())
 	err := ds.flowStreamInt(ctx, stream)
 	if err != nil && log.V(2) {

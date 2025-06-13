@@ -32,7 +32,7 @@ import (
 func createDummyStream(
 	t *testing.T,
 ) (
-	serverStream execinfrapb.DistSQL_FlowStreamServer,
+	serverStream execinfrapb.RPCDistSQL_FlowStreamStream,
 	clientStream execinfrapb.RPCDistSQL_FlowStreamClient,
 	cleanup func(),
 ) {
