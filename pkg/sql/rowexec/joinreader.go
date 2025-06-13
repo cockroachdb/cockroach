@@ -323,17 +323,24 @@ func newJoinReader(
 	default:
 		return nil, errors.AssertionFailedf("unsupported joinReaderType")
 	}
-	// The joiner has a choice to make between getting DistSender-level
-	// parallelism for its lookup batches and setting row and memory limits (due
-	// to implementation limitations, you can't have both at the same time). We
-	// choose parallelism when we know that each lookup returns at most one row:
-	// in case of indexJoinReaderType, we know that there's exactly one lookup
-	// row for each input row. Similarly, in case of spec.LookupColumnsAreKey,
-	// we know that there's at most one lookup row per input row. In other
-	// cases, we disable parallelism and use the TargetBytes limit.
-	parallelize := spec.LookupColumnsAreKey || readerType == indexJoinReaderType
-	if flowCtx.EvalCtx.SessionData().ParallelizeMultiKeyLookupJoinsEnabled {
-		parallelize = true
+	parallelize := spec.Parallelize
+	if !parallelize {
+		// The joiner has a choice to make between getting DistSender-level
+		// parallelism for its lookup batches and setting row and memory limits
+		// (due to implementation limitations, you can't have both at the same
+		// time). We choose parallelism when we know that each lookup returns at
+		// most one row: in case of indexJoinReaderType, we know that there's
+		// exactly one lookup row for each input row. Similarly, in case of
+		// spec.LookupColumnsAreKey, we know that there's at most one lookup row
+		// per input row. In other cases, we disable parallelism and use the
+		// TargetBytes limit.
+		// TODO(yuzefovich): remove this once compatibility with 25.2 is no
+		// longer needed - the execbuilder is now fully-responsible for making
+		// this determination.
+		parallelize = spec.LookupColumnsAreKey || readerType == indexJoinReaderType
+		if flowCtx.EvalCtx.SessionData().ParallelizeMultiKeyLookupJoinsEnabled {
+			parallelize = true
+		}
 	}
 	if spec.MaintainLookupOrdering {
 		// MaintainLookupOrdering indicates the output of the lookup joiner
