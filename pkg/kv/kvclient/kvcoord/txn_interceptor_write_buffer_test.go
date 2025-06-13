@@ -2425,7 +2425,7 @@ func TestTxnWriteBufferCorrectlyRollsbackExclusionTimestamp(t *testing.T) {
 
 func TestLockKeyInfo(t *testing.T) {
 	ts1 := hlc.Timestamp{WallTime: 1}
-	ts2 := hlc.Timestamp{WallTime: 1}
+	ts2 := hlc.Timestamp{WallTime: 2}
 
 	t.Run("held", func(t *testing.T) {
 		lki := newLockedKeyInfo(lock.Exclusive, 1, ts1)
@@ -2448,11 +2448,13 @@ func TestLockKeyInfo(t *testing.T) {
 	t.Run("acquireLock", func(t *testing.T) {
 		lki := newLockedKeyInfo(lock.Exclusive, 1, ts1)
 		lki.acquireLock(lock.Shared, 1, ts2)
+		require.Equal(t, ts1, lki.ts)
 		require.True(t, lki.held(lock.Exclusive))
 		require.True(t, lki.held(lock.Shared))
 
 		lki = newLockedKeyInfo(lock.Shared, 1, ts1)
 		lki.acquireLock(lock.Exclusive, 1, ts2)
+		require.Equal(t, ts1, lki.ts)
 		require.True(t, lki.held(lock.Exclusive))
 		require.True(t, lki.held(lock.Shared))
 	})
@@ -2460,10 +2462,12 @@ func TestLockKeyInfo(t *testing.T) {
 		lki := newLockedKeyInfo(lock.Shared, 2, ts1)
 		lki.acquireLock(lock.Exclusive, 2, ts2)
 		require.False(t, lki.rollbackSequence(1))
+		require.False(t, lki.ts.IsSet())
 
 		lki = newLockedKeyInfo(lock.Shared, 2, ts1)
 		lki.acquireLock(lock.Exclusive, 3, ts2)
 		require.True(t, lki.rollbackSequence(3))
+		require.Equal(t, ts1, lki.ts)
 		require.True(t, lki.held(lock.Shared))
 		require.False(t, lki.held(lock.Exclusive))
 	})

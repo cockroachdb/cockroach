@@ -1470,11 +1470,10 @@ func (bw *bufferedWrite) size() int64 {
 
 func (bw *bufferedWrite) acquireLock(li *lockAcquisition) {
 	if bw.lki == nil {
-		bw.lki = &lockedKeyInfo{
-			ts: li.ts,
-		}
+		bw.lki = newLockedKeyInfo(li.str, li.seq, li.ts)
+	} else {
+		bw.lki.acquireLock(li.str, li.seq, li.ts)
 	}
-	bw.lki.acquireLock(li.str, li.seq, li.ts)
 }
 
 // exclusionExpectedSinceTimestamp returns the earliest read timestamp at which
@@ -1606,8 +1605,6 @@ func (bw *bufferedWrite) toAllRevisionRequests() []kvpb.RequestUnion {
 type lockedKeyInfo struct {
 	// heldStrengths stores the minimum sequence number at which the given lock
 	// strength was acquired.
-	//
-	// This read should be removed from the tree when it isn't held at any level.
 	heldStrengths [2]enginepb.TxnSeq
 
 	// ts is the ReadTimestamp of the first request that acquired a
@@ -1695,7 +1692,6 @@ func (li *lockedKeyInfo) held(str lock.Strength) bool {
 // heldGE returns true if a lock has been acquired at the given strength or
 // greater.
 func (li *lockedKeyInfo) heldGE(str lock.Strength) bool {
-	// heldStrengths
 	for _, minSeq := range li.heldStrengths[0 : heldStrengthToIndexMap[str]+1] {
 		if minSeq != notHeldSentinel {
 			return true
