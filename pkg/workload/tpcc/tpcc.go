@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"io"
 	"math/rand/v2"
 	"os"
 	"regexp"
@@ -48,6 +49,7 @@ const (
 )
 
 type tpcc struct {
+	out          io.Writer
 	flags        workload.Flags
 	connFlags    *workload.ConnFlags
 	workloadName string
@@ -245,6 +247,7 @@ var tpccMeta = workload.Meta{
 	RandomSeed: RandomSeed,
 	New: func() workload.Generator {
 		g := &tpcc{
+			out:          os.Stdout,
 			workloadName: "tpcc",
 		}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
@@ -602,7 +605,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 		PostRun: func(startElapsed time.Duration) error {
 			w.auditor.runChecks(w.localWarehouses)
 			const totalHeader = "\n_elapsed_______tpmC____efc__avg(ms)__p50(ms)__p90(ms)__p95(ms)__p99(ms)_pMax(ms)"
-			fmt.Println(totalHeader)
+			fmt.Fprintln(w.out, totalHeader)
 
 			partitionFactor := 1
 			countAffinity := len(w.affinityPartitions)
@@ -614,7 +617,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 			w.reg.Tick(func(t histogram.Tick) {
 				if newOrderName == t.Name {
 					tpmC := float64(t.Cumulative.TotalCount()) / startElapsed.Seconds() * 60
-					fmt.Printf("%7.1fs %10.1f %5.1f%% %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f\n",
+					fmt.Fprintf(w.out, "%7.1fs %10.1f %5.1f%% %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f\n",
 						startElapsed.Seconds(),
 						tpmC,
 						100*tpmC/(SpecWarehouseFactor*float64(w.activeWarehouses/partitionFactor)),
@@ -891,8 +894,8 @@ func (w *tpcc) Ops(
 	// Limit the number of connections per pool (otherwise preparing statements at
 	// startup can be slow).
 	cfg.MaxConnsPerPool = w.connFlags.Concurrency
-	fmt.Printf("Max Total connections %d Max connections per pool %d \n", cfg.MaxTotalConnections, cfg.MaxConnsPerPool)
-	fmt.Printf("Initializing %d connections...\n", w.numConns)
+	fmt.Fprintf(w.out, "Max Total connections %d Max connections per pool %d \n", cfg.MaxTotalConnections, cfg.MaxConnsPerPool)
+	fmt.Fprintf(w.out, "Initializing %d connections...\n", w.numConns)
 
 	// If queries were specified before each operation, then lets
 	// execute those.
@@ -988,7 +991,7 @@ func (w *tpcc) Ops(
 		}
 	}
 
-	fmt.Printf("Initializing %d idle connections...\n", w.idleConns)
+	fmt.Fprintf(w.out, "Initializing %d idle connections...\n", w.idleConns)
 	var conns []*pgx.Conn
 	for i := 0; i < w.idleConns; i++ {
 		for _, url := range urls {
@@ -1003,7 +1006,7 @@ func (w *tpcc) Ops(
 			conns = append(conns, conn)
 		}
 	}
-	fmt.Printf("Initializing %d workers and preparing statements...\n", w.workers)
+	fmt.Fprintf(w.out, "Initializing %d workers and preparing statements...\n", w.workers)
 	ql := workload.QueryLoad{}
 	ql.WorkerFns = make([]func(context.Context) error, 0, w.workers)
 	var group errgroup.Group
@@ -1099,6 +1102,13 @@ func (w *tpcc) Ops(
 		return nil
 	}
 	return ql, nil
+}
+
+// SetOutput allows overriding where the TPCC output is sent.
+// Note that this is not connected to the --display-format flag,
+// which lives at the main workload level.
+func (w *tpcc) SetOutput(out io.Writer) {
+	w.out = out
 }
 
 // executeTx runs fn inside a transaction with retries, if enabled. On
