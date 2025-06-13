@@ -471,6 +471,7 @@ func runTPCC(
 		cmd := roachtestutil.NewCommand("%s workload check %s", test.DefaultCockroachPath, opts.getWorkloadCmd()).
 			MaybeFlag(opts.DB != "", "db", opts.DB).
 			MaybeOption(opts.ExpensiveChecks, "expensive-checks").
+			Flag("last-duration", opts.Duration).
 			Flag("warehouses", opts.Warehouses).
 			Arg("{pgurl:1}")
 
