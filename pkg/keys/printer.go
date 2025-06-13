@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/redact/interfaces"
 )
 
 // PrettyPrintTimeseriesKey is a hook for pretty printing a timeseries key. The
@@ -869,83 +870,161 @@ func init() {
 //
 //	start
 //
-// It prints at most maxChars, truncating components as needed. See
-// TestPrettyPrintRange for some examples.
-func PrettyPrintRange(start, end roachpb.Key, maxChars int) string {
-	var b bytes.Buffer
+// It prints at most maxChars, truncating components as needed. The output is
+// redactable and honors redaction markers that may already be present in the
+// start and end keys. See TestPrettyPrintRange for some examples.
+func PrettyPrintRange(start, end roachpb.Key, maxChars int) redact.RedactableString {
+	var b redact.StringBuilder
 	if maxChars < 8 {
 		maxChars = 8
 	}
-	prettyStart := safeFormatInternal(nil /* valDirs */, start, DontQuoteRaw).StripMarkers()
+
+	prettyStart := safeFormatInternal(nil /* valDirs */, start, DontQuoteRaw)
 	if len(end) == 0 {
-		if len(prettyStart) <= maxChars {
+		if utf8.RuneCountInString(string(prettyStart)) <= maxChars {
 			return prettyStart
 		}
-		copyEscape(&b, prettyStart[:maxChars-1])
-		b.WriteRune('…')
-		return b.String()
+		CopyEscapeTrunc(&b, string(prettyStart), maxChars)
+		return b.RedactableString()
 	}
-	prettyEnd := safeFormatInternal(nil /* valDirs */, end, DontQuoteRaw).StripMarkers()
+
+	prettyEnd := safeFormatInternal(nil /* valDirs */, end, DontQuoteRaw)
 	i := 0
 	// Find the common prefix.
 	for ; i < len(prettyStart) && i < len(prettyEnd) && prettyStart[i] == prettyEnd[i]; i++ {
 	}
+
 	// If we don't have space for at least '{a…-b…}' after the prefix, only print
 	// the prefix (or part of it).
-	if i > maxChars-7 {
-		if i > maxChars-1 {
-			i = maxChars - 1
+	prefixCharCount := utf8.RuneCountInString(string(prettyStart[:i]))
+	if prefixCharCount > maxChars-7 {
+		CopyEscapeTrunc(&b, string(prettyStart[:i]), maxChars)
+		if prefixCharCount <= maxChars {
+			b.SafeRune('…')
 		}
-		copyEscape(&b, prettyStart[:i])
-		b.WriteRune('…')
-		return b.String()
-	}
-	b.WriteString(prettyStart[:i])
-	remaining := (maxChars - i - 3) / 2
-
-	printTrunc := func(b *bytes.Buffer, what string, maxChars int) {
-		if len(what) <= maxChars {
-			copyEscape(b, what)
-		} else {
-			copyEscape(b, what[:maxChars-1])
-			b.WriteRune('…')
-		}
+		return b.RedactableString()
 	}
 
-	b.WriteByte('{')
-	printTrunc(&b, prettyStart[i:], remaining)
-	b.WriteByte('-')
-	printTrunc(&b, prettyEnd[i:], remaining)
-	b.WriteByte('}')
+	// copy the common prefix
+	CopyEscapeTrunc(&b, string(prettyStart[:i]), prefixCharCount)
+	remaining := (maxChars - prefixCharCount - 3) / 2
 
-	return b.String()
+	b.SafeRune('{')
+	CopyEscapeTrunc(&b, string(prettyStart[i:]), remaining)
+	b.SafeRune('-')
+	CopyEscapeTrunc(&b, string(prettyEnd[i:]), remaining)
+	b.SafeRune('}')
+	return b.RedactableString()
 }
 
-// copyEscape copies the string to the buffer, and avoids writing
-// invalid UTF-8 sequences and control characters.
-func copyEscape(buf *bytes.Buffer, s string) {
-	buf.Grow(len(s))
-	// k is the index in s before which characters have already
-	// been copied into buf.
-	k := 0
-	for i := 0; i < len(s); i++ {
-		c := s[i]
+// CopyEscapeTrunc copies the string to the buffer, and avoids writing invalid UTF-8
+// sequences and control characters. If redaction markers are found the chars
+// within it will be marked as unsafe and the rest will be marked as safe. This
+// will work even if the redaction markers are partially present in the string.
+func CopyEscapeTrunc(buf *redact.StringBuilder, s string, maxChars int) {
+	strCharCount := utf8.RuneCountInString(s)
+	if maxChars > strCharCount {
+		maxChars = strCharCount
+	}
+
+	isTruncated := false
+	if maxChars < strCharCount {
+		// if we are truncating the string, we need to account for the ellipsis
+		maxChars -= 1
+		isTruncated = true
+	}
+
+	buf.Grow(maxChars)
+
+	// Set initial safety state based on the presence of redaction markers:
+	//   * If we encounter an open `›` later in the string, sets `safe` to
+	//   `false` because all chars until `›` are unsafe.
+	//   * If we encounter a close `‹` later in the string, sets `safe` to
+	//   `true` because all chars until `‹` are safe.
+	//   * If there are no redaction markers, everything is safe.
+	safe := true
+	for _, r := range s {
+		if r == '‹' {
+			break
+		}
+		if r == '›' {
+			safe = false
+			break
+		}
+	}
+
+	printStr := func(str string) {
+		if safe {
+			buf.Print(redact.SafeString(str))
+			return
+		}
+
+		buf.Print(str)
+	}
+
+	printByte := func(c byte) {
+		if safe {
+			buf.SafeByte(interfaces.SafeByte(c))
+			return
+		}
+
+		buf.UnsafeByte(c)
+	}
+
+	var writtenTill, currIdx, charsWritten int
+	for currIdx = 0; currIdx < len(s) && charsWritten < maxChars; currIdx++ {
+		c := s[currIdx]
 		if c < utf8.RuneSelf && strconv.IsPrint(rune(c)) {
+			charsWritten++
 			continue
 		}
-		buf.WriteString(s[k:i])
-		l, width := utf8.DecodeRuneInString(s[i:])
-		if l == utf8.RuneError || l < 0x20 {
+
+		l, width := utf8.DecodeRuneInString(s[currIdx:])
+		switch {
+		case l == utf8.RuneError || l < 0x20:
+			// write everything from writtenTill to current index before processing the invalid
+			// character
+			if writtenTill < currIdx {
+				printStr(s[writtenTill:currIdx])
+			}
+
 			const hex = "0123456789abcdef"
-			buf.WriteByte('\\')
-			buf.WriteByte('x')
-			buf.WriteByte(hex[c>>4])
-			buf.WriteByte(hex[c&0xf])
-		} else {
-			buf.WriteRune(l)
+			printByte('\\')
+			printByte('x')
+			printByte(hex[c>>4])
+			printByte(hex[c&0xf])
+
+			writtenTill = currIdx + width
+			currIdx += width - 1
+			charsWritten += 1 // count this as a single char
+
+		case l == '‹':
+			// write everything from writtenTill to current index as safe and flip the safe
+			// flag to false
+			printStr(s[writtenTill:currIdx])
+			writtenTill = currIdx + width
+			currIdx += width - 1
+			safe = false
+
+		case l == '›':
+			// write everything from writtenTill to current index as unsafe and flip the safe
+			// flag to true
+			printStr(s[writtenTill:currIdx])
+			writtenTill = currIdx + width
+			currIdx += width - 1
+			safe = true
+
+		default:
+			charsWritten++
+			currIdx += width - 1
 		}
-		k = i + width
-		i += width - 1
 	}
-	buf.WriteString(s[k:])
+
+	if writtenTill < currIdx {
+		printStr(s[writtenTill:currIdx])
+	}
+
+	if isTruncated {
+		buf.SafeRune('…')
+	}
 }
