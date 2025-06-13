@@ -25,7 +25,7 @@ func TestNightlyLint(t *testing.T) {
 	// TestHelpURLs checks that all help texts have a valid documentation URL.
 	t.Run("TestHelpURLs", func(t *testing.T) {
 		skip.UnderShort(t)
-		if build.ParsedVersion().IsPrerelease() || build.ParsedVersion().IsCustomOrNightlyBuild() {
+		if build.ParsedVersion().IsPrerelease() || build.ParsedVersion().IsCustomOrAdhocBuild() {
 			skip.IgnoreLint(t, "pre-release or customized build")
 		}
 		if pkgSpecified {
