@@ -122,6 +122,7 @@ var AddSSTableRequireAtRequestTimestamp = settings.RegisterBoolSetting(
 const prefixSeekCollisionCheckRatio = 10
 
 var forceRewrite = metamorphic.ConstantWithTestBool("addsst-rewrite-forced", false)
+var validateAddSST = metamorphic.ConstantWithTestBool("addsst-validate-sst", false)
 
 // EvalAddSSTable evaluates an AddSSTable command. For details, see doc comment
 // on AddSSTableRequest.
