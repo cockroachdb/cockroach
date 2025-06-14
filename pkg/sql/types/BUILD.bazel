@@ -48,7 +48,6 @@ go_test(
         "//pkg/sql/sem/catid",
         "//pkg/util/protoutil",
         "@com_github_lib_pq//oid",
-        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )

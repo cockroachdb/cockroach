@@ -158,44 +158,6 @@ var oidToArrayOid = map[oid.Oid]oid.Oid{
 	oidext.T_jsonpath:  oidext.T__jsonpath,
 }
 
-// familyToOid maps each type family to a default OID value that is used when
-// another Oid is not present (e.g. when deserializing a type saved by a
-// previous version of CRDB).
-var familyToOid = map[Family]oid.Oid{
-	BoolFamily:           oid.T_bool,
-	IntFamily:            oid.T_int8,
-	FloatFamily:          oid.T_float8,
-	DecimalFamily:        oid.T_numeric,
-	DateFamily:           oid.T_date,
-	TimestampFamily:      oid.T_timestamp,
-	IntervalFamily:       oid.T_interval,
-	StringFamily:         oid.T_text,
-	BytesFamily:          oid.T_bytea,
-	TimestampTZFamily:    oid.T_timestamptz,
-	CollatedStringFamily: oid.T_text,
-	OidFamily:            oid.T_oid,
-	PGLSNFamily:          oid.T_pg_lsn,
-	RefCursorFamily:      oid.T_refcursor,
-	UnknownFamily:        oid.T_unknown,
-	UuidFamily:           oid.T_uuid,
-	ArrayFamily:          oid.T_anyarray,
-	INetFamily:           oid.T_inet,
-	TimeFamily:           oid.T_time,
-	TimeTZFamily:         oid.T_timetz,
-	JsonFamily:           oid.T_jsonb,
-	TSQueryFamily:        oid.T_tsquery,
-	TSVectorFamily:       oid.T_tsvector,
-	TupleFamily:          oid.T_record,
-	BitFamily:            oid.T_bit,
-	AnyFamily:            oid.T_anyelement,
-
-	GeometryFamily:  oidext.T_geometry,
-	GeographyFamily: oidext.T_geography,
-	Box2DFamily:     oidext.T_box2d,
-	PGVectorFamily:  oidext.T_pgvector,
-	JsonpathFamily:  oidext.T_jsonpath,
-}
-
 // ArrayOids is a set of all oids which correspond to an array type.
 var ArrayOids = map[oid.Oid]struct{}{}
 
