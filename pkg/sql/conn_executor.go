@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry/schematelemetrycontroller"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
@@ -3490,14 +3489,6 @@ func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event,
 	}
 
 	retriable := errIsRetriable(err)
-	if retriable && execinfra.IsDynamicQueryHasNoHomeRegionError(err) {
-		// Retry only # of remote regions times if the retry is due to the
-		// enforce_home_region setting.
-		retriable = int(ex.state.mu.autoRetryCounter) < len(ex.planner.EvalContext().RemoteRegions)
-		if !retriable {
-			err = execinfra.MaybeGetNonRetryableDynamicQueryHasNoHomeRegionError(err)
-		}
-	}
 	if retriable {
 		var rc rewindCapability
 		var canAutoRetry bool
@@ -3927,22 +3918,6 @@ func (ex *connExecutor) resetPlanner(
 ) {
 	p.resetPlanner(ctx, txn, ex.sessionData(), ex.state.mon, ex.sessionMon)
 	ex.maybeAdjustMaxTimestampBound(p, txn)
-	// Make sure the default locality specifies the actual gateway region at the
-	// start of query compilation. It could have been overridden to a remote
-	// region when the enforce_home_region session setting is true.
-	p.EvalContext().Locality = p.EvalContext().OriginalLocality
-	if execinfra.IsDynamicQueryHasNoHomeRegionError(ex.state.mu.autoRetryReason) {
-		if int(ex.state.mu.autoRetryCounter) <= len(p.EvalContext().RemoteRegions) {
-			// Set a fake gateway region for use by the optimizer to inform its
-			// decision on which region to access first in locality-optimized
-			// scan and join operations. This setting does not affect the
-			// distsql planner, and local plans will continue to be run from the
-			// actual gateway region.
-			p.EvalContext().Locality = p.EvalContext().Locality.CopyReplaceKeyValue(
-				"region" /* key */, string(p.EvalContext().RemoteRegions[ex.state.mu.autoRetryCounter-1]),
-			)
-		}
-	}
 	ex.resetEvalCtx(&p.extendedEvalCtx, txn, stmtTS)
 }
 
