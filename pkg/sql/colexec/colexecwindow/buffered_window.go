@@ -346,7 +346,8 @@ func (b *bufferedWindowOp) Close(ctx context.Context) error {
 		return nil
 	}
 	b.windower.Close(ctx)
-	return b.bufferQueue.Close(ctx)
+	b.bufferQueue.Close(ctx)
+	return nil
 }
 
 // partitionSeekerBase extracts common fields and methods for buffered windower

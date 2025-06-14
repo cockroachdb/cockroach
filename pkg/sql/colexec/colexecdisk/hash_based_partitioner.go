@@ -393,9 +393,7 @@ func (op *hashBasedPartitioner) partitionBatch(
 				}
 				scratchBatch.SetLength(len(sel))
 			})
-			if err := op.partitioners[inputIdx].Enqueue(op.Ctx, partitionIdx, scratchBatch); err != nil {
-				colexecutils.HandleErrorFromDiskQueue(err)
-			}
+			op.partitioners[inputIdx].Enqueue(op.Ctx, partitionIdx, scratchBatch)
 			partitionInfo, ok := op.partitionsToProcessUsingMain[partitionIdx]
 			if !ok {
 				partitionInfo = &hbpPartitionInfo{}
@@ -441,9 +439,7 @@ StateChanged:
 				// from before doing that to exempt them from releasing their
 				// FDs to the semaphore.
 				for i := range op.inputs {
-					if err := op.partitioners[i].CloseAllOpenWriteFileDescriptors(op.Ctx); err != nil {
-						colexecerror.InternalError(err)
-					}
+					op.partitioners[i].CloseAllOpenWriteFileDescriptors(op.Ctx)
 				}
 				op.inMemMainOp.Init(op.Ctx)
 				op.partitionIdxOffset += op.numBuckets
@@ -486,9 +482,7 @@ StateChanged:
 					partitioner := op.partitioners[i]
 					for {
 						op.unlimitedAllocator.PerformOperation(batch.ColVecs(), func() {
-							if err := partitioner.Dequeue(op.Ctx, parentPartitionIdx, batch); err != nil {
-								colexecerror.InternalError(err)
-							}
+							partitioner.Dequeue(op.Ctx, parentPartitionIdx, batch)
 						})
 						if batch.Length() == 0 {
 							break
@@ -497,9 +491,7 @@ StateChanged:
 					}
 					// We're done reading from this partition, and it will never
 					// be read from again, so we can close it.
-					if err := partitioner.CloseInactiveReadPartitions(op.Ctx); err != nil {
-						colexecerror.InternalError(err)
-					}
+					partitioner.CloseInactiveReadPartitions(op.Ctx)
 					// We're done writing to the newly created partitions.
 					// TODO(yuzefovich): we should not release the descriptors
 					// here. The invariant should be: we're entering
@@ -511,9 +503,7 @@ StateChanged:
 					// descriptors and whatever number of write partitions we
 					// want. This will allow us to remove the call to
 					// CloseAllOpen... in the first state as well.
-					if err := partitioner.CloseAllOpenWriteFileDescriptors(op.Ctx); err != nil {
-						colexecerror.InternalError(err)
-					}
+					partitioner.CloseAllOpenWriteFileDescriptors(op.Ctx)
 				}
 				for idx := 0; idx < op.numBuckets; idx++ {
 					newPartitionIdx := op.partitionIdxOffset + idx
@@ -593,9 +583,7 @@ StateChanged:
 				// We're done processing these partitions, so we close them and
 				// transition to processing new ones.
 				for i := range op.inputs {
-					if err := op.partitioners[i].CloseInactiveReadPartitions(op.Ctx); err != nil {
-						colexecerror.InternalError(err)
-					}
+					op.partitioners[i].CloseInactiveReadPartitions(op.Ctx)
 				}
 				op.state = hbpProcessNewPartitionUsingMain
 				continue
@@ -624,9 +612,7 @@ StateChanged:
 				// We're done processing these partitions, so we close them and
 				// transition to processing new ones.
 				for i := range op.inputs {
-					if err := op.partitioners[i].CloseInactiveReadPartitions(op.Ctx); err != nil {
-						colexecerror.InternalError(err)
-					}
+					op.partitioners[i].CloseInactiveReadPartitions(op.Ctx)
 				}
 				op.state = hbpProcessNewPartitionUsingFallback
 				continue
@@ -652,9 +638,7 @@ func (op *hashBasedPartitioner) Close(ctx context.Context) error {
 	log.VEventf(ctx, 1, "%s is closed", op.name)
 	var retErr error
 	for i := range op.inputs {
-		if err := op.partitioners[i].Close(ctx); err != nil {
-			retErr = err
-		}
+		op.partitioners[i].Close(ctx)
 	}
 	// The in-memory main operator might be a Closer (e.g. the in-memory hash
 	// aggregator), and we need to close it if so.
