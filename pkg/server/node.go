@@ -63,7 +63,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1562,18 +1561,9 @@ func (n *Node) recordJoinEvent(ctx context.Context) {
 func (n *Node) logStructuredEvent(ctx context.Context, event logpb.EventPayload) {
 	// Ensure that the event goes to log files even if LogRangeAndNodeEvents is
 	// disabled (which means skip the system.eventlog _table_).
-	log.StructuredEvent(ctx, severity.INFO, event)
-
-	if !n.storeCfg.LogRangeAndNodeEvents {
-		return
-	}
-
-	// InsertEventRecord processes the event asynchronously.
-	sql.InsertEventRecords(ctx, n.execCfg,
-		sql.LogToSystemTable|sql.LogToDevChannelIfVerbose, /* not LogExternally: we already call log.StructuredEvent above */
-		event,
-	)
-
+	logger := log.NewSEventLogger(n.execCfg.AmbientCtx)
+	logger.StructuredEvent(ctx, event, log.WithWriteToTable(n.storeCfg.LogRangeAndNodeEvents), log.WriteAsync())
+	log.VInfof(ctx, 2, "SQL event: payload %+v", event)
 	if n.onStructuredEvent != nil {
 		n.onStructuredEvent(ctx, event)
 	}
