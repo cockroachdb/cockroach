@@ -261,7 +261,7 @@ func (m *Outbox) mainLoop(ctx context.Context, wg *sync.WaitGroup) (retErr error
 	// Make sure to always close the stream if it is still usable (if not, then
 	// the field is set to nil).
 	defer func() {
-		if stream, ok := m.stream.(execinfrapb.DistSQL_FlowStreamClient); ok {
+		if stream, ok := m.stream.(execinfrapb.RPCDistSQL_FlowStreamClient); ok {
 			closeErr := stream.CloseSend()
 			if retErr == nil {
 				retErr = closeErr
