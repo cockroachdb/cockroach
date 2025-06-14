@@ -145,7 +145,9 @@ func registerAcceptance(r registry.Registry) {
 					tc.name,
 				))
 			}
-			suites := append([]string{registry.Nightly, registry.Quick, registry.Acceptance}, tc.suites...)
+			var suites []string
+			suites = append(suites, registry.Nightly, registry.Quick, registry.Acceptance)
+			suites = append(suites, tc.suites...)
 			testSpec := registry.TestSpec{
 				Name:              "acceptance/" + tc.name,
 				Owner:             owner,
