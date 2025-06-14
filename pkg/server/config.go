@@ -770,7 +770,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 		storageConfigOpts := []storage.ConfigOption{
 			walFailoverConfig,
-			storage.Attributes(spec.Attributes),
+			storage.Attributes(roachpb.Attributes{Attrs: spec.Attributes}),
 			storage.If(storeKnobs.SmallEngineBlocks, storage.BlockSize(1)),
 			storage.BlockConcurrencyLimitDivisor(len(cfg.Stores.Specs)),
 		}

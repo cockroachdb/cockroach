@@ -15,7 +15,6 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/errors"
@@ -86,26 +85,7 @@ func parseStoreProvisionedRate(
 // StoreSpec contains the details that can be specified in the cli pertaining
 // to the --store flag.
 type StoreSpec struct {
-	Path        string
-	Size        storageconfig.Size
-	BallastSize *storageconfig.Size
-	InMemory    bool
-	Attributes  roachpb.Attributes
-	// StickyVFSID is a unique identifier associated with a given store which
-	// will preserve the in-memory virtual file system (VFS) even after the
-	// storage engine has been closed. This only applies to in-memory storage
-	// engine.
-	StickyVFSID string
-	// PebbleOptions contains Pebble-specific options in the same format as a
-	// Pebble OPTIONS file. For example:
-	// [Options]
-	// delete_range_flush_delay=2s
-	// flush_split_bytes=4096
-	PebbleOptions string
-	// EncryptionOptions is set if encryption is enabled.
-	EncryptionOptions *storageconfig.EncryptionOptions
-	// ProvisionedRate is optional.
-	ProvisionedRate storageconfig.ProvisionedRate
+	storageconfig.Store
 }
 
 // String returns a fully parsable version of the store spec.
@@ -132,9 +112,9 @@ func (ss StoreSpec) String() string {
 			fmt.Fprintf(&buffer, "ballast-size=%s%%,", humanize.Ftoa(ss.BallastSize.Percent))
 		}
 	}
-	if len(ss.Attributes.Attrs) > 0 {
+	if len(ss.Attributes) > 0 {
 		fmt.Fprint(&buffer, "attrs=")
-		for i, attr := range ss.Attributes.Attrs {
+		for i, attr := range ss.Attributes {
 			if i != 0 {
 				fmt.Fprint(&buffer, ":")
 			}
@@ -157,11 +137,6 @@ func (ss StoreSpec) String() string {
 		buffer.Truncate(l - 1)
 	}
 	return buffer.String()
-}
-
-// IsEncrypted returns whether the StoreSpec has encryption enabled.
-func (ss StoreSpec) IsEncrypted() bool {
-	return ss.EncryptionOptions != nil
 }
 
 // NewStoreSpec parses the string passed into a --store flag and returns a
@@ -251,9 +226,9 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 				attrMap[attribute] = struct{}{}
 			}
 			for attribute := range attrMap {
-				ss.Attributes.Attrs = append(ss.Attributes.Attrs, attribute)
+				ss.Attributes = append(ss.Attributes, attribute)
 			}
-			sort.Strings(ss.Attributes.Attrs)
+			sort.Strings(ss.Attributes)
 		case "type":
 			if value == "mem" {
 				ss.InMemory = true
