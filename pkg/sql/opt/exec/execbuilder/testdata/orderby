@@ -1101,6 +1101,7 @@ vectorized: true
             │ table: kv@kv_pkey
             │ equality: (column1) = (k)
             │ equality cols are key
+            │ parallel
             │
             └── • values
                   columns: (column1)
@@ -1166,6 +1167,7 @@ vectorized: true
     │ estimated row count: 10 (missing stats)
     │ table: xyz@xyz_pkey
     │ key columns: rowid
+    │ parallel
     │
     └── • scan
           columns: (y, z, rowid)

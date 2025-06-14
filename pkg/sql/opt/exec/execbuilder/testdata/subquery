@@ -93,6 +93,7 @@ vectorized: true
 │       │ table: abc@abc_pkey
 │       │ equality: (any_not_null) = (a)
 │       │ equality cols are key
+│       │ parallel
 │       │
 │       └── • group (scalar)
 │           │ columns: (any_not_null)
