@@ -455,7 +455,7 @@ func expectNodesDecommissioned(
 
 func runDecommissionNodeImpl(
 	ctx context.Context,
-	c serverpb.AdminClient,
+	c serverpb.RPCAdminClient,
 	wait nodeDecommissionWaitType,
 	checks nodeDecommissionCheckMode,
 	dryRun bool,

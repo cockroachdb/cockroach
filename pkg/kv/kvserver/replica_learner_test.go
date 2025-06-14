@@ -1023,7 +1023,7 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 	require.Equal(t, receiverMapDelta[""], receiverMapDelta[".recovery"])
 }
 
-func drain(ctx context.Context, t *testing.T, client serverpb.AdminClient, drainingNodeID int) {
+func drain(ctx context.Context, t *testing.T, client serverpb.RPCAdminClient, drainingNodeID int) {
 	stream, err := client.Drain(ctx, &serverpb.DrainRequest{
 		NodeId:  strconv.Itoa(drainingNodeID),
 		DoDrain: true,

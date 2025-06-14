@@ -22,7 +22,7 @@ import (
 // them without changing the caller code.
 type rpcConn interface {
 	NewStatusClient() serverpb.StatusClient
-	NewAdminClient() serverpb.AdminClient
+	NewAdminClient() serverpb.RPCAdminClient
 	NewInitClient() serverpb.InitClient
 	NewTimeSeriesClient() tspb.RPCTimeSeriesClient
 	NewInternalClient() kvpb.InternalClient
@@ -39,8 +39,8 @@ func (c *grpcConn) NewStatusClient() serverpb.StatusClient {
 	return serverpb.NewStatusClient(c.conn)
 }
 
-func (c *grpcConn) NewAdminClient() serverpb.AdminClient {
-	return serverpb.NewAdminClient(c.conn)
+func (c *grpcConn) NewAdminClient() serverpb.RPCAdminClient {
+	return serverpb.NewGRPCAdminClientAdapter(c.conn)
 }
 
 func (c *grpcConn) NewInitClient() serverpb.InitClient {
@@ -81,7 +81,9 @@ func newClientConn(ctx context.Context, cfg server.Config) (rpcConn, func(), err
 
 // dialAdminClient dials a client connection and returns an AdminClient and a
 // closure that must be invoked to free associated resources.
-func dialAdminClient(ctx context.Context, cfg server.Config) (serverpb.AdminClient, func(), error) {
+func dialAdminClient(
+	ctx context.Context, cfg server.Config,
+) (serverpb.RPCAdminClient, func(), error) {
 	cc, finish, err := newClientConn(ctx, cfg)
 	if err != nil {
 		return nil, nil, err

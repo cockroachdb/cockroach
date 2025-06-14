@@ -65,7 +65,7 @@ import (
 
 type serverEntry struct {
 	serverutils.TestServerInterface
-	adminClient    serverpb.AdminClient
+	adminClient    serverpb.RPCAdminClient
 	nodeID         roachpb.NodeID
 	decommissioned bool
 }
@@ -87,7 +87,7 @@ type transientCluster struct {
 
 	stickyVFSRegistry fs.StickyRegistry
 
-	drainAndShutdown func(ctx context.Context, adminClient serverpb.AdminClient) error
+	drainAndShutdown func(ctx context.Context, adminClient serverpb.RPCAdminClient) error
 
 	infoLog  LoggerFn
 	warnLog  LoggerFn
@@ -146,7 +146,7 @@ func NewDemoCluster(
 	warnLog LoggerFn,
 	shoutLog ShoutLoggerFn,
 	startStopper func(ctx context.Context) (*stop.Stopper, error),
-	drainAndShutdown func(ctx context.Context, s serverpb.AdminClient) error,
+	drainAndShutdown func(ctx context.Context, s serverpb.RPCAdminClient) error,
 ) (DemoCluster, error) {
 	c := &transientCluster{
 		demoCtx:          demoCtx,
@@ -1083,9 +1083,9 @@ func (c *transientCluster) DrainAndShutdown(ctx context.Context, nodeID int32) e
 // server than the one referred to by the node ID.
 func (c *transientCluster) findOtherServer(
 	ctx context.Context, nodeID int32, op string,
-) (serverpb.AdminClient, error) {
+) (serverpb.RPCAdminClient, error) {
 	// Find a node to use as the sender.
-	var adminClient serverpb.AdminClient
+	var adminClient serverpb.RPCAdminClient
 	for _, s := range c.servers {
 		if s.adminClient != nil && s.nodeID != roachpb.NodeID(nodeID) {
 			adminClient = s.adminClient

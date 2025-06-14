@@ -66,16 +66,16 @@ func DialStatusClient(
 
 // DialAdminClient establishes a DRPC connection if enabled; otherwise, it
 // falls back to gRPC. The established connection is used to create a
-// AdminClient.
+// RPCAdminClient.
 func DialAdminClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID,
-) (AdminClient, error) {
+) (RPCAdminClient, error) {
 	if !rpcbase.TODODRPC {
 		conn, err := nd.Dial(ctx, nodeID, rpcbase.DefaultClass)
 		if err != nil {
 			return nil, err
 		}
-		return NewAdminClient(conn), nil
+		return NewGRPCAdminClientAdapter(conn), nil
 	}
 	return nil, nil
 }
@@ -86,13 +86,13 @@ func DialAdminClient(
 // does not check the breaker before dialing the connection.
 func DialAdminClientNoBreaker(
 	nd rpcbase.NodeDialerNoBreaker, ctx context.Context, nodeID roachpb.NodeID,
-) (AdminClient, error) {
+) (RPCAdminClient, error) {
 	if !rpcbase.TODODRPC {
 		conn, err := nd.DialNoBreaker(ctx, nodeID, rpcbase.DefaultClass)
 		if err != nil {
 			return nil, err
 		}
-		return NewAdminClient(conn), nil
+		return NewGRPCAdminClientAdapter(conn), nil
 	}
 	return nil, nil
 }

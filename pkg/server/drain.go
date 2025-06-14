@@ -239,7 +239,7 @@ func (s *drainServer) maybeShutdownAfterDrain(
 func delegateDrain(
 	ctx context.Context,
 	req *serverpb.DrainRequest,
-	client serverpb.AdminClient,
+	client serverpb.RPCAdminClient,
 	stream serverpb.Admin_DrainServer,
 ) error {
 	// Retrieve the stream interface to the target node.
