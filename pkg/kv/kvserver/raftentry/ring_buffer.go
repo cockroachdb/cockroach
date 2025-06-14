@@ -49,9 +49,9 @@ func (b *ringBuf) add(ents []raftpb.Entry) (addedBytes, addedEntries int32) {
 	for i, e := range ents {
 		if i < before || i >= firstNewAfter {
 			addedEntries++
-			addedBytes += int32(e.Size())
+			addedBytes += int32(e.SizeEst())
 		} else {
-			addedBytes += int32(e.Size() - it.entry(b).Size())
+			addedBytes += int32(e.SizeEst()) - int32(it.entry(b).SizeEst())
 		}
 		it = it.push(b, e)
 	}
@@ -75,7 +75,7 @@ func (b *ringBuf) truncateFrom(lo kvpb.RaftIndex) (removedBytes, removedEntries 
 	}
 	it, ok := iterateFrom(b, lo)
 	for ok {
-		removedBytes += int32(it.entry(b).Size())
+		removedBytes += int32(it.entry(b).SizeEst()) // TODO(pav-kv): use 64-bit types
 		removedEntries++
 		it.clear(b)
 		it, ok = it.next(b)
@@ -106,7 +106,7 @@ func (b *ringBuf) clearTo(hi kvpb.RaftIndex) (removedBytes, removedEntries int32
 	it := first(b)
 	ok := it.valid(b) // true
 	for ok && it.index(b) <= hi {
-		removedBytes += int32(it.entry(b).Size())
+		removedBytes += int32(it.entry(b).SizeEst())
 		removedEntries++
 		it.clear(b)
 		it, ok = it.next(b)
@@ -136,7 +136,7 @@ func (b *ringBuf) scan(
 	it, ok := iterateFrom(b, lo)
 	for ok && !exceededMaxBytes && it.index(b) < hi {
 		e := it.entry(b)
-		s := uint64(e.Size())
+		s := e.SizeEst()
 		exceededMaxBytes = bytes+s > maxBytes
 		if exceededMaxBytes && len(ents) > 0 {
 			break
