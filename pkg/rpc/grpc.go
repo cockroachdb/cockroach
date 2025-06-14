@@ -46,10 +46,4 @@ func (g *grpcCloseNotifier) CloseNotify(ctx context.Context) <-chan struct{} {
 	return ch
 }
 
-type grpcHeartbeatClient heartbeatClient
-
-func (g *grpcHeartbeatClient) Ping(ctx context.Context, in *PingRequest) (*PingResponse, error) {
-	return (*heartbeatClient)(g).Ping(ctx, in)
-}
-
 type GRPCConnection = Connection[*grpc.ClientConn]
