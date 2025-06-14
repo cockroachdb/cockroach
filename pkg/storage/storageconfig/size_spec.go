@@ -6,27 +6,23 @@
 package storageconfig
 
 import (
-	"bytes"
-	"fmt"
 	"regexp"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/crlib/crhumanize"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	humanize "github.com/dustin/go-humanize"
-	"github.com/spf13/pflag"
 )
 
-// SizeSpec is used to specify an on-disk size in bytes, either as an absolute
+// Size is used to specify an on-disk size in bytes, either as an absolute
 // value or as a percentage of the total disk capacity.
-type SizeSpec struct {
-	// Capacity is how much space on the file system to use. if 0 then use the
-	// entire disk.
-	// TODO(radu): rename.
-	Capacity int64
-	// Percent can only be set if capacity is 0. If it is set then capacity is
-	// computed based on the space on this percent of the disk.
+type Size struct {
+	// Bytes is an absolute value in bytes.
+	// At most one of Bytes and Percent can be non-zero.
+	Bytes int64
+	// Percent is a relative value as a percentage of the total disk capacity.
+	// At most one of Bytes and Percent can be non-zero.
 	Percent float64
 }
 
@@ -44,22 +40,27 @@ type SizeSpec struct {
 // a separate check.
 var fractionRegex = regexp.MustCompile(`^([-]?([0-9]+\.[0-9]*|[0-9]*\.[0-9]+|[0-9]+(\.[0-9]*)?%))$`)
 
-type IntInterval struct {
-	Min *int64
-	Max *int64
+// SizeSpecConstraints describes acceptable values when parsing a Size
+// value. The zero struct value is valid and means that there are no
+// constraints.
+type SizeSpecConstraints struct {
+	// MinBytes is the minimum acceptable size in bytes when an absolute bytes
+	// value is used.
+	MinBytes int64
+	// MinPercent is the minimum acceptable relative size when a percentage value
+	// is used.
+	MinPercent float64
+	// MaxPercent is the maximum acceptable relative size when a percentage value
+	// is used. If 0, there is no limit (up to 100%).
+	MaxPercent float64
 }
 
-type FloatInterval struct {
-	Min *float64
-	Max *float64
-}
-
-// NewSizeSpec parses the string passed into a --size flag and returns a
-// SizeSpec if it is correctly parsed.
-func NewSizeSpec(
-	field redact.SafeString, value string, bytesRange *IntInterval, percentRange *FloatInterval,
-) (SizeSpec, error) {
-	var size SizeSpec
+// ParseSizeSpec parses a string into a Size. The string contains one of:
+//   - an absolute bytes value, possibly humanized; e.g. "10000", "100MiB".
+//   - a percentage value (relative to the total disk capacity); e.g. "10%".
+//   - a fractional value which is converted to a percentage; e.g. "0.1" is
+//     equivalent to "10%".
+func ParseSizeSpec(value string, constraints SizeSpecConstraints) (Size, error) {
 	if fractionRegex.MatchString(value) {
 		percentFactor := 100.0
 		factorValue := value
@@ -67,73 +68,32 @@ func NewSizeSpec(
 			percentFactor = 1.0
 			factorValue = value[:len(value)-1]
 		}
-		var err error
-		size.Percent, err = strconv.ParseFloat(factorValue, 64)
-		size.Percent *= percentFactor
+		percent, err := strconv.ParseFloat(factorValue, 64)
+		percent *= percentFactor
 		if err != nil {
-			return SizeSpec{}, errors.Wrapf(err, "could not parse %s size (%s)", field, value)
+			return Size{}, errors.Wrapf(err, "could not parse size (%s)", redact.Safe(value))
 		}
-		if percentRange != nil {
-			if (percentRange.Min != nil && size.Percent < *percentRange.Min) ||
-				(percentRange.Max != nil && size.Percent > *percentRange.Max) {
-				return SizeSpec{}, errors.Newf(
-					"%s size (%s) must be between %f%% and %f%%",
-					field,
-					value,
-					*percentRange.Min,
-					*percentRange.Max,
-				)
-			}
+		minPercent := constraints.MinPercent
+		maxPercent := constraints.MaxPercent
+		if maxPercent == 0 {
+			maxPercent = 100.0
 		}
-	} else {
-		var err error
-		size.Capacity, err = humanizeutil.ParseBytes(value)
-		if err != nil {
-			return SizeSpec{}, errors.Wrapf(err, "could not parse %s size (%s)", field, value)
+		if percent < minPercent || percent > maxPercent {
+			return Size{}, errors.Newf(
+				"size (%s) must be between %s%% and %s%%",
+				redact.Safe(value), crhumanize.Float(minPercent, 6), crhumanize.Float(maxPercent, 6),
+			)
 		}
-		if bytesRange != nil {
-			if bytesRange.Min != nil && size.Capacity < *bytesRange.Min {
-				return SizeSpec{}, errors.Newf("%s size (%s) must be larger than %s",
-					field, value, humanizeutil.IBytes(*bytesRange.Min))
-			}
-			if bytesRange.Max != nil && size.Capacity > *bytesRange.Max {
-				return SizeSpec{}, errors.Newf("%s size (%s) must be smaller than %s",
-					field, value, humanizeutil.IBytes(*bytesRange.Max))
-			}
-		}
+		return Size{Percent: percent}, nil
 	}
-	return size, nil
-}
 
-// String returns a string representation of the SizeSpec. This is part
-// of pflag's value interface.
-func (ss *SizeSpec) String() string {
-	var buffer bytes.Buffer
-	if ss.Capacity != 0 {
-		fmt.Fprintf(&buffer, "--size=%s,", humanizeutil.IBytes(ss.Capacity))
-	}
-	if ss.Percent != 0 {
-		fmt.Fprintf(&buffer, "--size=%s%%,", humanize.Ftoa(ss.Percent))
-	}
-	return buffer.String()
-}
-
-// Type returns the underlying type in string form. This is part of pflag's
-// value interface.
-func (ss *SizeSpec) Type() string {
-	return "SizeSpec"
-}
-
-var _ pflag.Value = &SizeSpec{}
-
-// Set adds a new value to the StoreSpecValue. It is the important part of
-// pflag's value interface.
-func (ss *SizeSpec) Set(value string) error {
-	spec, err := NewSizeSpec("specified", value, nil, nil)
+	bytes, err := humanizeutil.ParseBytes(value)
 	if err != nil {
-		return err
+		return Size{}, errors.Wrapf(err, "could not parse size (%s)", redact.Safe(value))
 	}
-	ss.Capacity = spec.Capacity
-	ss.Percent = spec.Percent
-	return nil
+	if bytes < constraints.MinBytes {
+		return Size{}, errors.Newf("size (%s) must be at least %s",
+			redact.Safe(value), crhumanize.BytesExact(constraints.MinBytes))
+	}
+	return Size{Bytes: bytes}, nil
 }

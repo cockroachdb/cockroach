@@ -36,7 +36,7 @@ func TestStickyVFS(t *testing.T) {
 		InMemory:    true,
 		StickyVFSID: "engine1",
 		Attributes:  attrs,
-		Size:        storageconfig.SizeSpec{Capacity: storeSize},
+		Size:        storageconfig.Size{Bytes: storeSize},
 	}
 	fs1 := registry.Get(spec1.StickyVFSID)
 	env, err := fs.InitEnvFromStoreSpec(ctx, spec1, fs.ReadWrite, registry, nil /* statsCollector */)

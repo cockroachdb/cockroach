@@ -93,8 +93,8 @@ func newStoreProvisionedRateSpec(
 // to the --store flag.
 type StoreSpec struct {
 	Path        string
-	Size        storageconfig.SizeSpec
-	BallastSize *storageconfig.SizeSpec
+	Size        storageconfig.Size
+	BallastSize *storageconfig.Size
 	InMemory    bool
 	Attributes  roachpb.Attributes
 	// StickyVFSID is a unique identifier associated with a given store which
@@ -124,15 +124,15 @@ func (ss StoreSpec) String() string {
 	if ss.InMemory {
 		fmt.Fprint(&buffer, "type=mem,")
 	}
-	if ss.Size.Capacity > 0 {
-		fmt.Fprintf(&buffer, "size=%s,", humanizeutil.IBytes(ss.Size.Capacity))
+	if ss.Size.Bytes > 0 {
+		fmt.Fprintf(&buffer, "size=%s,", humanizeutil.IBytes(ss.Size.Bytes))
 	}
 	if ss.Size.Percent > 0 {
 		fmt.Fprintf(&buffer, "size=%s%%,", humanize.Ftoa(ss.Size.Percent))
 	}
 	if ss.BallastSize != nil {
-		if ss.BallastSize.Capacity > 0 {
-			fmt.Fprintf(&buffer, "ballast-size=%s,", humanizeutil.IBytes(ss.BallastSize.Capacity))
+		if ss.BallastSize.Bytes > 0 {
+			fmt.Fprintf(&buffer, "ballast-size=%s,", humanizeutil.IBytes(ss.BallastSize.Bytes))
 		}
 		if ss.BallastSize.Percent > 0 {
 			fmt.Fprintf(&buffer, "ballast-size=%s%%,", humanize.Ftoa(ss.BallastSize.Percent))
@@ -229,30 +229,22 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 			ss.Path = value
 		case "size":
 			var err error
-			var minBytesAllowed int64 = MinimumStoreSize
-			var minPercent float64 = 1
-			var maxPercent float64 = 100
-			ss.Size, err = storageconfig.NewSizeSpec(
-				"store",
-				value,
-				&storageconfig.IntInterval{Min: &minBytesAllowed},
-				&storageconfig.FloatInterval{Min: &minPercent, Max: &maxPercent},
-			)
+			constraints := storageconfig.SizeSpecConstraints{
+				MinBytes:   MinimumStoreSize,
+				MinPercent: 1,
+				MaxPercent: 100,
+			}
+			ss.Size, err = storageconfig.ParseSizeSpec(value, constraints)
 			if err != nil {
 				return StoreSpec{}, err
 			}
 		case "ballast-size":
-			var minBytesAllowed int64
-			var minPercent float64 = 0
-			var maxPercent float64 = 50
-			ballastSize, err := storageconfig.NewSizeSpec(
-				"ballast",
-				value,
-				&storageconfig.IntInterval{Min: &minBytesAllowed},
-				&storageconfig.FloatInterval{Min: &minPercent, Max: &maxPercent},
-			)
+			constraints := storageconfig.SizeSpecConstraints{
+				MaxPercent: 50,
+			}
+			ballastSize, err := storageconfig.ParseSizeSpec(value, constraints)
 			if err != nil {
-				return StoreSpec{}, err
+				return StoreSpec{}, errors.Wrap(err, "ballast")
 			}
 			ss.BallastSize = &ballastSize
 		case "attrs":
@@ -326,7 +318,7 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 		if ss.Path != "" {
 			return StoreSpec{}, fmt.Errorf("path specified for in memory store")
 		}
-		if ss.Size.Percent == 0 && ss.Size.Capacity == 0 {
+		if ss.Size.Percent == 0 && ss.Size.Bytes == 0 {
 			return StoreSpec{}, fmt.Errorf("size must be specified for an in memory store")
 		}
 		if ss.BallastSize != nil {

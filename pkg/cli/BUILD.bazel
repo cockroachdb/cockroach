@@ -246,6 +246,7 @@ go_library(
         "//pkg/workload/workloadsql",
         "//pkg/workload/ycsb",
         "@com_github_cockroachdb_apd_v3//:apd",
+        "@com_github_cockroachdb_crlib//crhumanize",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//hintdetail",
         "@com_github_cockroachdb_errors//oserror",
