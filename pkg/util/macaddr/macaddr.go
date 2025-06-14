@@ -42,9 +42,8 @@ var errInvalidMACAddr = pgerror.New(pgcode.InvalidTextRepresentation,
 
 // ParseMAC parses Postgres-style 6-byte MACAddr types.
 // While Go's net.ParseMAC supports MAC addresses up to 20 octets,
-// Postgres only supports 6-byte formats. This implementation is
-// adapted from net.ParseMAC but modified to parse directly into a
-// uint64 to avoid extra allocations.
+// Postgres only supports 6-byte formats. The unused bits of a 6-byte
+// MacAddr may be set to anything.
 //
 // It supports the following Postgres-documented formats:
 //   - '08:00:2b:01:02:03'  (17 characters)
@@ -75,18 +74,21 @@ func ParseMAC(s string) (MACAddr, error) {
 }
 
 func parseMAC(s string) (MACAddr, error) {
+
+	// Check for leading/trailing spaces.
+	trimmed := strings.TrimSpace(s)
+	leadingOrTrailing := len(s) != len(trimmed)
+	s = trimmed
+
 	// We'll collect each "group" of hex digits here.
 	groups := make([]uint32, 0, 8)
-
-	// Trim all leading and trailing whitespace.
-	s = strings.TrimSpace(s)
 
 	var (
 		// The first separator we encounter: '.', ':' or '-' ).
 		sep byte
 		// Have we encountered any separator at all?
 		sawSep bool
-		// Accumulator for the current group’s value.
+		// Accumulator for the current group's value.
 		gv uint32
 		// The length of a group.
 		// This cannot exceed 12 since a MAC address
@@ -99,21 +101,27 @@ func parseMAC(s string) (MACAddr, error) {
 	for i := range len(s) {
 		c := s[i]
 
-		// Spaces in the middle are not allowed.
-		if c <= ' ' {
-			return 0, errInvalidChar
+		// Handle spaces in the middle.
+		if c == ' ' {
+			// We can't allow spaces in the middle if there are leading and/or trailing spaces.
+			if leadingOrTrailing {
+				return 0, errInvalidChar
+			}
+
+			// Spaces in the middle are okay if no leading and/or trailing spaces.
+			continue
 		}
 
 		if v := hexMap[c]; v >= 0 {
 			// If we found a valid hex digit then it's part of our group.
+			// Each digit is shifted left by 4 bits and OR'd with the new digit.
+			// This naturally handles leading zeros - e.g. "008" becomes 8 because
+			// shifting 0 left and OR'ing with 0 gives 0, then shifting 0 left and
+			// OR'ing with 8 gives 8.
+			// The total length of the group (including leading zeros) is tracked
+			// for max group length validation.
 			gv = (gv << 4) | uint32(v)
 			gl++
-			// No group may exceed 12 nibbles because
-			// 12 nibbles = 48 bits, which is the max width
-			// of a 6 byte MAC address.
-			if gl > 12 {
-				return 0, errInvalidHexCount
-			}
 			continue
 		}
 
@@ -124,7 +132,7 @@ func parseMAC(s string) (MACAddr, error) {
 				sep = c
 				sawSep = true
 			} else if c != sep {
-				// We don't allow mixed sperators.
+				// We don't allow mixed separators.
 				return 0, errInvalidChar
 			}
 
@@ -161,55 +169,67 @@ func parseMAC(s string) (MACAddr, error) {
 	// 08002b-010203
 	// 0800-2b01-0203
 	// 0800.2b01.0203
-	case (sep == '-' || sep == ':' || sep == '.'):
-
-		// These formats can only have 2, 3, 4 or 6 groups in total.
-		if n < 2 || n == 5 || n > 6 {
+	case sep == ':':
+		// Allow 2 or 6 groups for ':'.
+		if !(n == 2 || n == 6) {
 			return 0, errInvalidGroupCnt
 		}
-
-		// Determine how many bytes per group there are.
 		var bytesPerGroup int
 		if n == 2 {
-			// Two group format: 08002b-010203 or 08002b:010203
-			// has 3 bytes in each group which makes up
-			// the 6 byte MAC address.
 			bytesPerGroup = 3
-		} else if n == 3 && (sep == '-' || sep == '.') {
-			// Three group format: 0800.2b01.0203 or 0800-2b01-0203
-			// has 2 bytes in each group which makes up
-			// the 6 byte MAC address. Note 0800:2b01:0203 is not a valid
-			// format.
-			bytesPerGroup = 2
 		} else {
-			// 08-00-2b-01-02-13 or 08:00:2b:01:02:3f has 1 byte per group.
 			bytesPerGroup = 1
 		}
-
-		// Byte-width mask for each group. It’s exactly the maximum
-		// value you can represent in bytesPerGroup.
 		maxv := uint32(1<<(8*bytesPerGroup)) - 1
-
 		var r MACAddr
 		for _, gv := range groups {
-			// Make sure each group cannot overflow it's max bytes.
-			if gv > maxv {
-				return 0, errGroupOverflow
-			}
-
-			// Concatenate each parsed group into our MACAddr.
+			gv = gv & maxv
 			r = (r << uint(8*bytesPerGroup)) | MACAddr(gv)
 		}
-
 		return r, nil
-
+	case sep == '-':
+		// Allow 2, 3, 4, or 6 groups for '-'.
+		if !(n == 2 || n == 3 || n == 4 || n == 6) {
+			return 0, errInvalidGroupCnt
+		}
+		var bytesPerGroup int
+		if n == 2 {
+			bytesPerGroup = 3
+		} else if n == 3 {
+			bytesPerGroup = 2
+		} else {
+			bytesPerGroup = 1
+		}
+		maxv := uint32(1<<(8*bytesPerGroup)) - 1
+		var r MACAddr
+		for _, gv := range groups {
+			gv = gv & maxv
+			r = (r << uint(8*bytesPerGroup)) | MACAddr(gv)
+		}
+		return r, nil
+	case sep == '.':
+		// Only 3 groups are valid for '.'
+		if n != 3 {
+			return 0, errInvalidGroupCnt
+		}
+		bytesPerGroup := 2
+		maxv := uint32(1<<(8*bytesPerGroup)) - 1
+		var r MACAddr
+		for _, gv := range groups {
+			gv = gv & maxv
+			r = (r << uint(8*bytesPerGroup)) | MACAddr(gv)
+		}
+		return r, nil
 	// Bare-hex (no separators) means everything is in a single group.
 	default:
+		if gl > 12 {
+			return 0, errInvalidHexCount
+		}
 		return MACAddr(groups[0]), nil
 	}
 }
 
-// parseError is a string‐backed error type so all messages live in static data.
+// parseError is a string-backed error type so all messages live in static data.
 type parseError string
 
 func (e parseError) Error() string { return string(e) }
@@ -247,9 +267,9 @@ func (m MACAddr) Compare(addr MACAddr) int {
 	}
 }
 
-// MACAddrNot performs bitwise NOT on the MAC address.
+// MACAddrNot performs bitwise NOT (invert) on a MAC address.
 func MACAddrNot(addr MACAddr) MACAddr {
-	return MACAddr(^uint64(addr))
+	return MACAddr(^uint64(addr) & 0xFFFFFFFFFFFF)
 }
 
 // MACAddrAnd performs bitwise AND between two MAC addresses.
