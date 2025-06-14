@@ -1897,15 +1897,6 @@ func (m *CommonSQLEventDetails) AppendJSONFields(printComma bool, b redact.Redac
 		b = append(b, ']')
 	}
 
-	if m.TxnTimestamp != 0 {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"TxnTimestamp\":"...)
-		b = strconv.AppendInt(b, int64(m.TxnTimestamp), 10)
-	}
-
 	return printComma, b
 }
 
