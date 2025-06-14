@@ -50,43 +50,37 @@ func GetAbsoluteFSPath(fieldName string, p string) (string, error) {
 	return ret, nil
 }
 
-// ProvisionedRateSpec is an optional part of the StoreSpec.
-type ProvisionedRateSpec struct {
-	// ProvisionedBandwidth is the bandwidth provisioned for this store in bytes/s.
-	ProvisionedBandwidth int64
-}
-
-func newStoreProvisionedRateSpec(
+func parseStoreProvisionedRate(
 	field redact.SafeString, value string,
-) (ProvisionedRateSpec, error) {
+) (storageconfig.ProvisionedRate, error) {
 	split := strings.Split(value, "=")
 	if len(split) != 2 {
-		return ProvisionedRateSpec{}, errors.Errorf("%s field has invalid value %s", field, value)
+		return storageconfig.ProvisionedRate{}, errors.Errorf("%s field has invalid value %s", field, value)
 	}
 	subField := split[0]
 	subValue := split[1]
 	if subField != "bandwidth" {
-		return ProvisionedRateSpec{}, errors.Errorf("%s field does not have bandwidth sub-field", field)
+		return storageconfig.ProvisionedRate{}, errors.Errorf("%s field does not have bandwidth sub-field", field)
 	}
 	if len(subValue) == 0 {
-		return ProvisionedRateSpec{}, errors.Errorf("%s field has no value specified for bandwidth", field)
+		return storageconfig.ProvisionedRate{}, errors.Errorf("%s field has no value specified for bandwidth", field)
 	}
 	if len(subValue) <= 2 || subValue[len(subValue)-2:] != "/s" {
-		return ProvisionedRateSpec{},
+		return storageconfig.ProvisionedRate{},
 			errors.Errorf("%s field does not have bandwidth sub-field %s ending in /s",
 				field, subValue)
 	}
 	bandwidthString := subValue[:len(subValue)-2]
 	bandwidth, err := humanizeutil.ParseBytes(bandwidthString)
 	if err != nil {
-		return ProvisionedRateSpec{},
+		return storageconfig.ProvisionedRate{},
 			errors.Wrapf(err, "could not parse bandwidth in field %s", field)
 	}
 	if bandwidth == 0 {
-		return ProvisionedRateSpec{},
+		return storageconfig.ProvisionedRate{},
 			errors.Errorf("%s field is trying to set bandwidth to 0", field)
 	}
-	return ProvisionedRateSpec{ProvisionedBandwidth: bandwidth}, nil
+	return storageconfig.ProvisionedRate{ProvisionedBandwidth: bandwidth}, nil
 }
 
 // StoreSpec contains the details that can be specified in the cli pertaining
@@ -110,8 +104,8 @@ type StoreSpec struct {
 	PebbleOptions string
 	// EncryptionOptions is set if encryption is enabled.
 	EncryptionOptions *storageconfig.EncryptionOptions
-	// ProvisionedRateSpec is optional.
-	ProvisionedRateSpec ProvisionedRateSpec
+	// ProvisionedRate is optional.
+	ProvisionedRate storageconfig.ProvisionedRate
 }
 
 // String returns a fully parsable version of the store spec.
@@ -154,9 +148,9 @@ func (ss StoreSpec) String() string {
 		fmt.Fprint(&buffer, optsStr)
 		fmt.Fprint(&buffer, ",")
 	}
-	if ss.ProvisionedRateSpec.ProvisionedBandwidth > 0 {
+	if ss.ProvisionedRate.ProvisionedBandwidth > 0 {
 		fmt.Fprintf(&buffer, "provisioned-rate=bandwidth=%s/s,",
-			humanizeutil.IBytes(ss.ProvisionedRateSpec.ProvisionedBandwidth))
+			humanizeutil.IBytes(ss.ProvisionedRate.ProvisionedBandwidth))
 	}
 	// Trim the extra comma from the end if it exists.
 	if l := buffer.Len(); l > 0 {
@@ -303,11 +297,11 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 			}
 			ss.PebbleOptions = buf.String()
 		case "provisioned-rate":
-			rateSpec, err := newStoreProvisionedRateSpec("provisioned-rate", value)
+			rateSpec, err := parseStoreProvisionedRate("provisioned-rate", value)
 			if err != nil {
 				return StoreSpec{}, err
 			}
-			ss.ProvisionedRateSpec = rateSpec
+			ss.ProvisionedRate = rateSpec
 
 		default:
 			return StoreSpec{}, fmt.Errorf("%s is not a valid store field", field)
