@@ -784,7 +784,7 @@ func TestServerDump(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	readDataFromDump := func(t *testing.T, dumpClient tspb.TimeSeries_DumpClient) (totalMsgCount int, _ map[string]map[string]tspb.TimeSeriesData) {
+	readDataFromDump := func(t *testing.T, dumpClient tspb.RPCTimeSeries_DumpClient) (totalMsgCount int, _ map[string]map[string]tspb.TimeSeriesData) {
 		t.Helper()
 		// Read data from dump command.
 		resultMap := make(map[string]map[string]tspb.TimeSeriesData)

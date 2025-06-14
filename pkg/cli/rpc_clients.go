@@ -24,7 +24,7 @@ type rpcConn interface {
 	NewStatusClient() serverpb.StatusClient
 	NewAdminClient() serverpb.AdminClient
 	NewInitClient() serverpb.InitClient
-	NewTimeSeriesClient() tspb.TimeSeriesClient
+	NewTimeSeriesClient() tspb.RPCTimeSeriesClient
 	NewInternalClient() kvpb.InternalClient
 }
 
@@ -47,8 +47,8 @@ func (c *grpcConn) NewInitClient() serverpb.InitClient {
 	return serverpb.NewInitClient(c.conn)
 }
 
-func (c *grpcConn) NewTimeSeriesClient() tspb.TimeSeriesClient {
-	return tspb.NewTimeSeriesClient(c.conn)
+func (c *grpcConn) NewTimeSeriesClient() tspb.RPCTimeSeriesClient {
+	return tspb.NewGRPCTimeSeriesClientAdapter(c.conn)
 }
 
 func (c *grpcConn) NewInternalClient() kvpb.InternalClient {

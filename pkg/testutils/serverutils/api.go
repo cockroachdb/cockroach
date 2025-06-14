@@ -155,7 +155,7 @@ type RPCConn interface {
 	NewStatusClient() serverpb.StatusClient
 	NewAdminClient() serverpb.AdminClient
 	NewInitClient() serverpb.InitClient
-	NewTimeSeriesClient() tspb.TimeSeriesClient
+	NewTimeSeriesClient() tspb.RPCTimeSeriesClient
 	NewInternalClient() kvpb.InternalClient
 	NewDistSQLClient() execinfrapb.RPCDistSQLClient
 }
