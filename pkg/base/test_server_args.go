@@ -595,9 +595,11 @@ var (
 	// DefaultTestStoreSpec is just a single in memory store of 512 MiB
 	// with no special attributes.
 	DefaultTestStoreSpec = StoreSpec{
-		InMemory: true,
-		Size: storageconfig.SizeSpec{
-			Capacity: 512 << 20,
+		Store: storageconfig.Store{
+			InMemory: true,
+			Size: storageconfig.Size{
+				Bytes: 512 << 20,
+			},
 		},
 	}
 )

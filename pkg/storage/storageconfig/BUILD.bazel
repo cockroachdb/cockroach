@@ -6,6 +6,7 @@ go_library(
         "encryption_spec.go",
         "node.go",
         "size_spec.go",
+        "store.go",
         "wal_failover.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/storage/storageconfig",
@@ -13,9 +14,9 @@ go_library(
     deps = [
         "//pkg/cli/cliflags",
         "//pkg/util/humanizeutil",
+        "@com_github_cockroachdb_crlib//crhumanize",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
-        "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_spf13_pflag//:pflag",
     ],
 )
