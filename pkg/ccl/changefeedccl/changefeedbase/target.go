@@ -14,7 +14,7 @@ import (
 // Target provides a version-agnostic wrapper around jobspb.ChangefeedTargetSpecification.
 type Target struct {
 	Type              jobspb.ChangefeedTargetSpecification_TargetType
-	TableID           descpb.ID
+	DescID            descpb.ID
 	FamilyName        string
 	StatementTimeName StatementTimeName
 }
@@ -71,7 +71,7 @@ func (ts *Targets) Add(t Target) {
 	if ts.m == nil {
 		ts.m = make(map[descpb.ID]targetsByTable)
 	}
-	ts.m[t.TableID] = ts.m[t.TableID].add(t)
+	ts.m[t.DescID] = ts.m[t.DescID].add(t)
 	ts.Size++
 }
 
