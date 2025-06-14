@@ -885,7 +885,7 @@ func TestGRPCAuthentication(t *testing.T) {
 			return err
 		}, false},
 		{"status", func(ctx context.Context, conn *grpc.ClientConn) error {
-			_, err := serverpb.NewStatusClient(conn).ListSessions(ctx, &serverpb.ListSessionsRequest{})
+			_, err := serverpb.NewGRPCStatusClientAdapter(conn).ListSessions(ctx, &serverpb.ListSessionsRequest{})
 			return err
 		}, false},
 	}

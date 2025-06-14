@@ -418,7 +418,7 @@ func TestRPCPaginatorWithTimeout(t *testing.T) {
 
 	s := server.StatusServer().(*systemStatusServer)
 
-	nodeFn := func(ctx context.Context, client serverpb.StatusClient, nodeID roachpb.NodeID) ([]interface{}, error) {
+	nodeFn := func(ctx context.Context, client serverpb.RPCStatusClient, nodeID roachpb.NodeID) ([]interface{}, error) {
 		select {
 		case <-time.After(time.Second * 10):
 		case <-ctx.Done():

@@ -21,7 +21,7 @@ import (
 // underlying RPC connection (gRPC or DRPC), making it easy to swap
 // them without changing the caller code.
 type rpcConn interface {
-	NewStatusClient() serverpb.StatusClient
+	NewStatusClient() serverpb.RPCStatusClient
 	NewAdminClient() serverpb.RPCAdminClient
 	NewInitClient() serverpb.RPCInitClient
 	NewTimeSeriesClient() tspb.RPCTimeSeriesClient
@@ -35,8 +35,8 @@ type grpcConn struct {
 	conn *grpc.ClientConn
 }
 
-func (c *grpcConn) NewStatusClient() serverpb.StatusClient {
-	return serverpb.NewStatusClient(c.conn)
+func (c *grpcConn) NewStatusClient() serverpb.RPCStatusClient {
+	return serverpb.NewGRPCStatusClientAdapter(c.conn)
 }
 
 func (c *grpcConn) NewAdminClient() serverpb.RPCAdminClient {
