@@ -32,8 +32,8 @@ func (c *grpcConn) NewAdminClient() serverpb.RPCAdminClient {
 	return serverpb.NewGRPCAdminClientAdapter(c.conn)
 }
 
-func (c *grpcConn) NewInitClient() serverpb.InitClient {
-	return serverpb.NewInitClient(c.conn)
+func (c *grpcConn) NewInitClient() serverpb.RPCInitClient {
+	return serverpb.NewGRPCInitClientAdapter(c.conn)
 }
 
 func (c *grpcConn) NewTimeSeriesClient() tspb.RPCTimeSeriesClient {

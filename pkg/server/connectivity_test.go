@@ -217,7 +217,7 @@ func TestClusterConnectivity(t *testing.T) {
 						_ = conn.Close() // nolint:grpcconnclose
 					}()
 
-					client := serverpb.NewInitClient(conn)
+					client := serverpb.NewGRPCInitClientAdapter(conn)
 					_, err = client.Bootstrap(context.Background(), &serverpb.BootstrapRequest{})
 					return err
 				})

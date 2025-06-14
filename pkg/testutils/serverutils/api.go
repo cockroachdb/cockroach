@@ -154,7 +154,7 @@ func (d DeploymentMode) IsExternal() bool {
 type RPCConn interface {
 	NewStatusClient() serverpb.StatusClient
 	NewAdminClient() serverpb.RPCAdminClient
-	NewInitClient() serverpb.InitClient
+	NewInitClient() serverpb.RPCInitClient
 	NewTimeSeriesClient() tspb.RPCTimeSeriesClient
 	NewInternalClient() kvpb.InternalClient
 	NewDistSQLClient() execinfrapb.RPCDistSQLClient

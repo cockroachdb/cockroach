@@ -23,7 +23,7 @@ import (
 type rpcConn interface {
 	NewStatusClient() serverpb.StatusClient
 	NewAdminClient() serverpb.RPCAdminClient
-	NewInitClient() serverpb.InitClient
+	NewInitClient() serverpb.RPCInitClient
 	NewTimeSeriesClient() tspb.RPCTimeSeriesClient
 	NewInternalClient() kvpb.InternalClient
 }
@@ -43,8 +43,8 @@ func (c *grpcConn) NewAdminClient() serverpb.RPCAdminClient {
 	return serverpb.NewGRPCAdminClientAdapter(c.conn)
 }
 
-func (c *grpcConn) NewInitClient() serverpb.InitClient {
-	return serverpb.NewInitClient(c.conn)
+func (c *grpcConn) NewInitClient() serverpb.RPCInitClient {
+	return serverpb.NewGRPCInitClientAdapter(c.conn)
 }
 
 func (c *grpcConn) NewTimeSeriesClient() tspb.RPCTimeSeriesClient {
