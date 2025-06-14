@@ -225,7 +225,7 @@ type client struct {
 	kvpb.InternalClient
 	serverpb.StatusClient
 	serverpb.AdminClient
-	tspb.TimeSeriesClient
+	tspb.RPCTimeSeriesClient
 }
 
 // connector is capable of providing information on each of the KV nodes in the
@@ -983,10 +983,10 @@ func (c *connector) dialAddrs(ctx context.Context) (*client, error) {
 					continue
 				}
 				return &client{
-					InternalClient:   kvpb.NewInternalClient(conn),
-					StatusClient:     serverpb.NewStatusClient(conn),
-					AdminClient:      serverpb.NewAdminClient(conn),
-					TimeSeriesClient: tspb.NewTimeSeriesClient(conn),
+					InternalClient:      kvpb.NewInternalClient(conn),
+					StatusClient:        serverpb.NewStatusClient(conn),
+					AdminClient:         serverpb.NewAdminClient(conn),
+					RPCTimeSeriesClient: tspb.NewGRPCTimeSeriesClientAdapter(conn),
 				}, nil
 			}
 		}
