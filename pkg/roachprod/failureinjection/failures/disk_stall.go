@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -28,8 +29,10 @@ type CGroupDiskStaller struct {
 	GenericFailure
 }
 
-func MakeCgroupDiskStaller(clusterName string, l *logger.Logger, secure bool) (FailureMode, error) {
-	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(secure))
+func MakeCgroupDiskStaller(
+	clusterName string, l *logger.Logger, clusterOpts ClusterOptions,
+) (FailureMode, error) {
+	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(clusterOpts.secure))
 	if err != nil {
 		return nil, err
 	}
@@ -63,27 +66,58 @@ func (s *CGroupDiskStaller) Description() string {
 func (s *CGroupDiskStaller) Setup(ctx context.Context, l *logger.Logger, args FailureArgs) error {
 	diskStallArgs := args.(DiskStallArgs)
 
-	// To stall logs we need to create a symlink that points to our stalled
-	// store directory. In order to do that we need to temporarily move the
-	// existing logs directory and copy the contents over after. If a symlink
-	// already exists, don't attempt to recreate it.
+	// Cgroup throttles a specific disk device, however our logs directory
+	// is usually mounted on a different device than our cockroach data. To
+	// stall both logs and the cockroach process, they must both be mounted
+	// on the same device. To do so, we create a new logs directory in our
+	// stalled device, e.g. {store-dir}/logs, and create a symlink from logs
+	// to that directory.
+	//
+	// If the cluster is already running, we want to make sure we don't lose
+	// any existing logs. We first move our existing logs to a temporary
+	// directory, before copying them into the new symlinked directory.
 	if diskStallArgs.StallLogs {
-		createSymlinkCmd := `
+		// N.B. Because multiple FS operations aren't atomic, we must temporarily
+		// stop the cluster before moving the logs directory.
+		if diskStallArgs.RestartNodes {
+			if err := s.StopCluster(ctx, l, roachprod.DefaultStopOpts()); err != nil {
+				return err
+			}
+		}
+
+		tmpLogsDir := fmt.Sprintf("tmp-disk-stall-%d", timeutil.Now().Unix())
+		createSymlinkCmd := fmt.Sprintf(`
 if [ ! -L logs ]; then
-	echo "creating symlink";
-	mkdir -p {store-dir}/logs;
-	ln -s {store-dir}/logs logs;
+    if [ -e logs ]; then
+				echo "moving existing logs to tmp directory %[1]s"
+				mv logs %[1]s
+    fi
+    mkdir -p {store-dir}/logs
+		echo "creating symlink logs -> {store-dir}/logs";
+    ln -s {store-dir}/logs logs
+		if [ -e %[1]s ]; then
+				echo "copying tmp directory %[1]s to logs";
+				cp -va %[1]s/* logs/
+		fi
+else
+		echo "symlink already exists, not creating";
 fi
-`
+`, tmpLogsDir)
 		if err := s.Run(ctx, l, diskStallArgs.Nodes, createSymlinkCmd); err != nil {
 			return err
+		}
+		if diskStallArgs.RestartNodes {
+			if err := s.StartCluster(ctx, l); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 func (s *CGroupDiskStaller) Cleanup(ctx context.Context, l *logger.Logger, args FailureArgs) error {
+	diskStallArgs := args.(DiskStallArgs)
 	stallType := []bandwidthType{readBandwidth, writeBandwidth}
-	nodes := args.(DiskStallArgs).Nodes
+	nodes := diskStallArgs.Nodes
 
 	// Setting cgroup limits is idempotent so attempt to unlimit reads/writes in case
 	// something went wrong in Recover.
@@ -92,8 +126,21 @@ func (s *CGroupDiskStaller) Cleanup(ctx context.Context, l *logger.Logger, args 
 		l.PrintfCtx(ctx, "error unstalling the disk; stumbling on: %v", err)
 	}
 	if args.(DiskStallArgs).StallLogs {
-		if err = s.Run(ctx, l, nodes, "unlink logs/logs"); err != nil {
+		// Cleanup our symlinked logs. Similar to Setup(), we must first stop the cluster
+		// to stop the cockroach process from concurrently writing to the logs directory.
+		if err = s.Run(ctx, l, nodes, "unlink logs"); err != nil {
 			return err
+		}
+		if diskStallArgs.RestartNodes {
+			if err = s.StopCluster(ctx, l, roachprod.DefaultStopOpts()); err != nil {
+				return err
+			}
+		}
+		if err = s.Run(ctx, l, nodes, "cp -r {store-dir}/logs logs"); err != nil {
+			return err
+		}
+		if diskStallArgs.RestartNodes {
+			return s.StartCluster(ctx, l)
 		}
 	}
 	return nil
@@ -316,9 +363,9 @@ type DmsetupDiskStaller struct {
 }
 
 func MakeDmsetupDiskStaller(
-	clusterName string, l *logger.Logger, secure bool,
+	clusterName string, l *logger.Logger, clusterOpts ClusterOptions,
 ) (FailureMode, error) {
-	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(secure))
+	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(clusterOpts.secure))
 	if err != nil {
 		return nil, err
 	}
