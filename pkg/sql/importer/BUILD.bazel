@@ -38,7 +38,6 @@ go_library(
         "//pkg/jobs/joberror",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobsprofiler",
-        "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverbase",

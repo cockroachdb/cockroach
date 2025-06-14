@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -33,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
@@ -42,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -346,10 +343,6 @@ func importPlanHook(
 		return nil, nil, false, nil
 	}
 
-	if !importStmt.Bundle && !importStmt.Into {
-		p.BufferClientNotice(ctx, pgnotice.Newf("IMPORT TABLE has been deprecated in 21.2, and will be removed in a future version."+
-			" Instead, use CREATE TABLE with the desired schema, and IMPORT INTO the newly created table."))
-	}
 	switch f := strings.ToUpper(importStmt.FileFormat); f {
 	case "PGDUMP", "MYSQLDUMP":
 		p.BufferClientNotice(ctx, pgnotice.Newf(
@@ -456,64 +449,30 @@ func importPlanHook(
 			}
 		}
 
-		// Typically the SQL grammar means it is only possible to specifying exactly
-		// one pgdump/mysqldump URI, but glob-expansion could have changed that.
-		if importStmt.Bundle && len(files) != 1 {
-			return pgerror.New(pgcode.FeatureNotSupported, "SQL dump files must be imported individually")
-		}
-
 		table := importStmt.Table
-		var db catalog.DatabaseDescriptor
-		var sc catalog.SchemaDescriptor
-		if table != nil {
-			// TODO: As part of work for #34240, we should be operating on
-			//  UnresolvedObjectNames here, rather than TableNames.
-			// We have a target table, so it might specify a DB in its name.
-			un := table.ToUnresolvedObjectName()
-			found, prefix, resPrefix, err := resolver.ResolveTarget(ctx,
-				un, p, p.SessionData().Database, p.SessionData().SearchPath)
-			if err != nil {
-				return pgerror.Wrap(err, pgcode.UndefinedTable,
-					"resolving target import name")
-			}
-			if !found {
-				// Check if database exists right now. It might not after the import is done,
-				// but it's better to fail fast than wait until restore.
-				return pgerror.Newf(pgcode.UndefinedObject,
-					"database does not exist: %q", table)
-			}
-			table.ObjectNamePrefix = prefix
-			db = resPrefix.Database
-			sc = resPrefix.Schema
-			// If this is a non-INTO import that will thus be making a new table, we
-			// need the CREATE priv in the target DB.
-			if !importStmt.Into {
-				if err := p.CheckPrivilege(ctx, db, privilege.CREATE); err != nil {
-					return err
-				}
-			}
+		// TODO: As part of work for #34240, we should be operating on
+		//  UnresolvedObjectNames here, rather than TableNames.
+		// We have a target table, so it might specify a DB in its name.
+		un := table.ToUnresolvedObjectName()
+		foundDB, prefix, resPrefix, err := resolver.ResolveTarget(ctx,
+			un, p, p.SessionData().Database, p.SessionData().SearchPath)
+		if err != nil {
+			return pgerror.Wrap(err, pgcode.UndefinedTable,
+				"resolving target import name")
+		}
+		if !foundDB {
+			// Check if database exists right now. It might not after the import is done,
+			// but it's better to fail fast than wait until restore.
+			return pgerror.Newf(pgcode.UndefinedObject,
+				"database does not exist: %q", table)
+		}
+		table.ObjectNamePrefix = prefix
+		db := resPrefix.Database
 
-			switch sc.SchemaKind() {
-			case catalog.SchemaVirtual:
-				return pgerror.Newf(pgcode.InvalidSchemaName,
-					"cannot import into schema %q", table.SchemaName)
-			}
-		} else {
-			// No target table means we're importing whatever we find into the session
-			// database, so it must exist.
-			db, err = p.MustGetCurrentSessionDatabase(ctx)
-			if err != nil {
-				return pgerror.Wrap(err, pgcode.UndefinedObject,
-					"could not resolve current database")
-			}
-			// If this is a non-INTO import that will thus be making a new table, we
-			// need the CREATE priv in the target DB.
-			if !importStmt.Into {
-				if err := p.CheckPrivilege(ctx, db, privilege.CREATE); err != nil {
-					return err
-				}
-			}
-			sc = schemadesc.GetPublicSchema()
+		switch resPrefix.Schema.SchemaKind() {
+		case catalog.SchemaVirtual:
+			return pgerror.Newf(pgcode.InvalidSchemaName,
+				"cannot import into schema %q", table.SchemaName)
 		}
 
 		format := roachpb.IOFileFormat{}
@@ -766,122 +725,91 @@ func importPlanHook(
 			return err
 		}
 
-		if importStmt.Into {
-			if _, ok := allowedIntoFormats[importStmt.FileFormat]; !ok {
-				return errors.Newf(
-					"%s file format is currently unsupported by IMPORT INTO",
-					importStmt.FileFormat)
-			}
-			_, found, err := p.ResolveMutableTableDescriptor(ctx, table, true, tree.ResolveRequireTableDesc)
-			if err != nil {
-				return err
-			}
+		if _, ok := allowedIntoFormats[importStmt.FileFormat]; !ok {
+			return errors.Newf(
+				"%s file format is currently unsupported by IMPORT INTO",
+				importStmt.FileFormat)
+		}
+		_, found, err := p.ResolveMutableTableDescriptor(ctx, table, true, tree.ResolveRequireTableDesc)
+		if err != nil {
+			return err
+		}
 
-			err = ensureRequiredPrivileges(ctx, importIntoRequiredPrivileges, p, found)
-			if err != nil {
-				return err
-			}
-			// Check if the table has any vector indexes
-			for _, idx := range found.NonDropIndexes() {
-				if idx.GetType() == idxtype.VECTOR {
-					return unimplemented.NewWithIssueDetail(145227, "import.vector-index",
-						"IMPORT INTO is not supported for tables with vector indexes")
-				}
-			}
-
-			if len(found.LDRJobIDs) > 0 {
-				return errors.Newf("cannot run an import on table %s which is apart of a Logical Data Replication stream", table)
-			}
-
-			// Import into an RLS table is blocked, unless this is the admin. It is
-			// allowed for admins since they are exempt from RLS policies and have
-			// unrestricted read/write access.
-			if found.IsRowLevelSecurityEnabled() {
-				admin, err := p.HasAdminRole(ctx)
-				if err != nil {
-					return err
-				} else if !admin {
-					return pgerror.New(pgcode.FeatureNotSupported,
-						"IMPORT INTO not supported with row-level security for non-admin users")
-				}
-			}
-
-			// Validate target columns.
-			var intoCols []string
-			isTargetCol := make(map[string]bool)
-			for _, name := range importStmt.IntoCols {
-				active, err := catalog.MustFindPublicColumnsByNameList(found, tree.NameList{name})
-				if err != nil {
-					return errors.Wrap(err, "verifying target columns")
-				}
-
-				isTargetCol[active[0].GetName()] = true
-				intoCols = append(intoCols, active[0].GetName())
-			}
-
-			// Ensure that non-target columns that don't have default
-			// expressions are nullable.
-			if len(isTargetCol) != 0 {
-				for _, col := range found.VisibleColumns() {
-					if !(isTargetCol[col.GetName()] || col.IsNullable() || col.HasDefault() || col.IsComputed()) {
-						return errors.Newf(
-							"all non-target columns in IMPORT INTO must be nullable "+
-								"or have default expressions, or have computed expressions"+
-								" but violated by column %q",
-							col.GetName(),
-						)
-					}
-					if isTargetCol[col.GetName()] && col.IsComputed() {
-						return schemaexpr.CannotWriteToComputedColError(col.GetName())
-					}
-				}
-			}
-
-			{
-				// Resolve the UDTs used by the table being imported into.
-				typeDescs, err := resolveUDTsUsedByImportInto(ctx, p, found)
-				if err != nil {
-					return errors.Wrap(err, "resolving UDTs used by table being imported into")
-				}
-				if len(typeDescs) > 0 {
-					typeDetails = make([]jobspb.ImportDetails_Type, 0, len(typeDescs))
-				}
-				for _, typeDesc := range typeDescs {
-					typeDetails = append(typeDetails, jobspb.ImportDetails_Type{Desc: typeDesc.TypeDesc()})
-				}
-			}
-
-			tableDetails = []jobspb.ImportDetails_Table{{Desc: &found.TableDescriptor, IsNew: false, TargetCols: intoCols}}
-		} else if importStmt.Bundle {
-			// If we target a single table, populate details with one entry of tableName.
-			if table != nil {
-				tableDetails = make([]jobspb.ImportDetails_Table, 1)
-				tableName := table.ObjectName.String()
-				// PGDUMP supports importing tables from non-public schemas, thus we
-				// must prepend the target table name with the target schema name.
-				if format.Format == roachpb.IOFileFormat_PgDump {
-					if table.Schema() == "" {
-						return errors.Newf("expected schema for target table %s to be resolved",
-							tableName)
-					}
-					tableName = fmt.Sprintf("%s.%s", table.SchemaName.String(),
-						table.ObjectName.String())
-				}
-				tableDetails[0] = jobspb.ImportDetails_Table{
-					Name:  tableName,
-					IsNew: true,
-				}
-			}
-
-			// Due to how we generate and rewrite descriptor ID's for import, we run
-			// into problems when using user defined schemas.
-			publicSchemaID := db.GetSchemaID(catconstants.PublicSchemaName)
-			if sc.GetID() != publicSchemaID && sc.GetID() != keys.PublicSchemaID {
-				err := errors.New("cannot use IMPORT with a user defined schema")
-				hint := errors.WithHint(err, "create the table with CREATE TABLE and use IMPORT INTO instead")
-				return hint
+		err = ensureRequiredPrivileges(ctx, importIntoRequiredPrivileges, p, found)
+		if err != nil {
+			return err
+		}
+		// Check if the table has any vector indexes
+		for _, idx := range found.NonDropIndexes() {
+			if idx.GetType() == idxtype.VECTOR {
+				return unimplemented.NewWithIssueDetail(145227, "import.vector-index",
+					"IMPORT INTO is not supported for tables with vector indexes")
 			}
 		}
+
+		if len(found.LDRJobIDs) > 0 {
+			return errors.Newf("cannot run an import on table %s which is apart of a Logical Data Replication stream", table)
+		}
+
+		// Import into an RLS table is blocked, unless this is the admin. It is
+		// allowed for admins since they are exempt from RLS policies and have
+		// unrestricted read/write access.
+		if found.IsRowLevelSecurityEnabled() {
+			admin, err := p.HasAdminRole(ctx)
+			if err != nil {
+				return err
+			} else if !admin {
+				return pgerror.New(pgcode.FeatureNotSupported,
+					"IMPORT INTO not supported with row-level security for non-admin users")
+			}
+		}
+
+		// Validate target columns.
+		var intoCols []string
+		isTargetCol := make(map[string]bool)
+		for _, name := range importStmt.IntoCols {
+			active, err := catalog.MustFindPublicColumnsByNameList(found, tree.NameList{name})
+			if err != nil {
+				return errors.Wrap(err, "verifying target columns")
+			}
+
+			isTargetCol[active[0].GetName()] = true
+			intoCols = append(intoCols, active[0].GetName())
+		}
+
+		// Ensure that non-target columns that don't have default
+		// expressions are nullable.
+		if len(isTargetCol) != 0 {
+			for _, col := range found.VisibleColumns() {
+				if !(isTargetCol[col.GetName()] || col.IsNullable() || col.HasDefault() || col.IsComputed()) {
+					return errors.Newf(
+						"all non-target columns in IMPORT INTO must be nullable "+
+							"or have default expressions, or have computed expressions"+
+							" but violated by column %q",
+						col.GetName(),
+					)
+				}
+				if isTargetCol[col.GetName()] && col.IsComputed() {
+					return schemaexpr.CannotWriteToComputedColError(col.GetName())
+				}
+			}
+		}
+
+		{
+			// Resolve the UDTs used by the table being imported into.
+			typeDescs, err := resolveUDTsUsedByImportInto(ctx, p, found)
+			if err != nil {
+				return errors.Wrap(err, "resolving UDTs used by table being imported into")
+			}
+			if len(typeDescs) > 0 {
+				typeDetails = make([]jobspb.ImportDetails_Type, 0, len(typeDescs))
+			}
+			for _, typeDesc := range typeDescs {
+				typeDetails = append(typeDetails, jobspb.ImportDetails_Type{Desc: typeDesc.TypeDesc()})
+			}
+		}
+
+		tableDetails = []jobspb.ImportDetails_Table{{Desc: &found.TableDescriptor, IsNew: false, TargetCols: intoCols}}
 
 		// Store the primary region of the database being imported into. This is
 		// used during job execution to evaluate certain default expressions and
@@ -919,9 +847,7 @@ func importPlanHook(
 				break
 			}
 		}
-		if importStmt.Into {
-			telemetry.Count("import.into")
-		}
+		telemetry.Count("import.into")
 
 		// Here we create the job in a side transaction and then kick off the job.
 		// This is awful. Rather we should be disallowing this statement in an
@@ -936,7 +862,6 @@ func importPlanHook(
 			Tables:                tableDetails,
 			Types:                 typeDetails,
 			SkipFKs:               skipFKs,
-			ParseBundleSchema:     importStmt.Bundle,
 			DefaultIntSize:        p.SessionData().DefaultIntSize,
 			DatabasePrimaryRegion: databasePrimaryRegion,
 		}
