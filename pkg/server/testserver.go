@@ -2646,7 +2646,7 @@ func (ts *testServer) GetAdminClient(test serverutils.TestFataler) serverpb.RPCA
 }
 
 // GetStatusClient is part of the serverutils.ApplicationLayerInterface.
-func (ts *testServer) GetStatusClient(test serverutils.TestFataler) serverpb.StatusClient {
+func (ts *testServer) GetStatusClient(test serverutils.TestFataler) serverpb.RPCStatusClient {
 	conn := ts.RPCClientConn(test, username.RootUserName())
 	return conn.NewStatusClient()
 }
@@ -2694,7 +2694,7 @@ func (t *testTenant) GetAdminClient(test serverutils.TestFataler) serverpb.RPCAd
 }
 
 // GetStatusClient is part of the serverutils.ApplicationLayerInterface.
-func (t *testTenant) GetStatusClient(test serverutils.TestFataler) serverpb.StatusClient {
+func (t *testTenant) GetStatusClient(test serverutils.TestFataler) serverpb.RPCStatusClient {
 	conn := t.RPCClientConn(test, username.RootUserName())
 	return conn.NewStatusClient()
 }

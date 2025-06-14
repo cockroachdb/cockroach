@@ -152,7 +152,7 @@ func (d DeploymentMode) IsExternal() bool {
 // underlying RPC connection (gRPC or DRPC), making it easy to swap
 // them without changing the caller code.
 type RPCConn interface {
-	NewStatusClient() serverpb.StatusClient
+	NewStatusClient() serverpb.RPCStatusClient
 	NewAdminClient() serverpb.RPCAdminClient
 	NewInitClient() serverpb.RPCInitClient
 	NewTimeSeriesClient() tspb.RPCTimeSeriesClient
@@ -301,7 +301,7 @@ type ApplicationLayerInterface interface {
 
 	// GetStatusClient creates a serverpb.StatusClient connection to the server.
 	// Shorthand for serverpb.StatusClient(.RPCClientConn(t, "root"))
-	GetStatusClient(t TestFataler) serverpb.StatusClient
+	GetStatusClient(t TestFataler) serverpb.RPCStatusClient
 
 	// AnnotateCtx annotates a context.
 	AnnotateCtx(context.Context) context.Context

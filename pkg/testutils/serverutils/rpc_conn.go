@@ -24,8 +24,8 @@ func FromGRPCConn(conn *grpc.ClientConn) RPCConn {
 	return &grpcConn{conn: conn}
 }
 
-func (c *grpcConn) NewStatusClient() serverpb.StatusClient {
-	return serverpb.NewStatusClient(c.conn)
+func (c *grpcConn) NewStatusClient() serverpb.RPCStatusClient {
+	return serverpb.NewGRPCStatusClientAdapter(c.conn)
 }
 
 func (c *grpcConn) NewAdminClient() serverpb.RPCAdminClient {

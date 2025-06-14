@@ -1680,7 +1680,7 @@ func (tc *TestCluster) WaitForNodeStatuses(t serverutils.TestFataler) {
 		if err != nil {
 			return err
 		}
-		client := serverpb.NewStatusClient(conn)
+		client := serverpb.NewGRPCStatusClientAdapter(conn)
 		response, err := client.Nodes(context.Background(), &serverpb.NodesRequest{})
 		if err != nil {
 			return err
@@ -2038,7 +2038,7 @@ func (tc *TestCluster) GetAdminClient(
 // GetStatusClient gets the severpb.StatusClient for the specified server.
 func (tc *TestCluster) GetStatusClient(
 	t serverutils.TestFataler, serverIdx int,
-) serverpb.StatusClient {
+) serverpb.RPCStatusClient {
 	return tc.Server(serverIdx).GetStatusClient(t)
 }
 
