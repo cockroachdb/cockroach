@@ -69,7 +69,7 @@ func (s *statusServer) IndexUsageStatistics(
 		return statusClient.IndexUsageStatistics(ctx, localReq)
 	}
 
-	fetchIndexUsageStats := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
+	fetchIndexUsageStats := func(ctx context.Context, statusClient serverpb.RPCStatusClient, _ roachpb.NodeID) (interface{}, error) {
 		return statusClient.IndexUsageStatistics(ctx, localReq)
 	}
 
@@ -167,7 +167,7 @@ func (s *statusServer) ResetIndexUsageStats(
 		return statusClient.ResetIndexUsageStats(ctx, localReq)
 	}
 
-	resetIndexUsageStats := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
+	resetIndexUsageStats := func(ctx context.Context, statusClient serverpb.RPCStatusClient, _ roachpb.NodeID) (interface{}, error) {
 		return statusClient.ResetIndexUsageStats(ctx, localReq)
 	}
 

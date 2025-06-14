@@ -63,7 +63,7 @@ type visitNodesAdminFn func(ctx context.Context, retryOpts retry.Options, maxCon
 ) error
 
 type visitNodeStatusFn func(ctx context.Context, nodeID roachpb.NodeID, retryOpts retry.Options,
-	visitor func(client serverpb.StatusClient) error,
+	visitor func(client serverpb.RPCStatusClient) error,
 ) error
 
 type Server struct {
@@ -531,7 +531,7 @@ func (s Server) Verify(
 	) (serverpb.RangeInfo, error) {
 		var info serverpb.RangeInfo
 		err := s.visitStatusNode(ctx, nID, fanOutConnectionRetryOptions,
-			func(c serverpb.StatusClient) error {
+			func(c serverpb.RPCStatusClient) error {
 				resp, err := c.Range(ctx, &serverpb.RangeRequest{RangeId: int64(rID)})
 				if err != nil {
 					return err
@@ -805,10 +805,10 @@ func visitNodeWithRetry(
 // to the visitor to mark appropriate errors are retryable.
 func makeVisitNode(nd rpcbase.NodeDialerNoBreaker) visitNodeStatusFn {
 	return func(ctx context.Context, nodeID roachpb.NodeID, retryOpts retry.Options,
-		visitor func(client serverpb.StatusClient) error,
+		visitor func(client serverpb.RPCStatusClient) error,
 	) error {
 		var err error
-		var client serverpb.StatusClient
+		var client serverpb.RPCStatusClient
 
 		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 			log.Infof(ctx, "visiting node n%d, attempt %d", nodeID, r.CurrentAttempt())

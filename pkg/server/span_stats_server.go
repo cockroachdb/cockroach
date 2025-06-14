@@ -116,7 +116,7 @@ func (s *systemStatusServer) spanStatsFanOut(
 			return nil, nil
 		}
 
-		resp, err := client.(serverpb.StatusClient).SpanStats(ctx,
+		resp, err := client.(serverpb.RPCStatusClient).SpanStats(ctx,
 			&roachpb.SpanStatsRequest{
 				NodeID: nodeID.String(),
 				Spans:  spansPerNode[nodeID],

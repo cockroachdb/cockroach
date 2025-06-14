@@ -124,7 +124,7 @@ func (s *statusServer) ResetSQLStats(
 		return status.ResetSQLStats(ctx, localReq)
 	}
 
-	resetSQLStats := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
+	resetSQLStats := func(ctx context.Context, status serverpb.RPCStatusClient, _ roachpb.NodeID) (interface{}, error) {
 		return status.ResetSQLStats(ctx, localReq)
 	}
 
@@ -186,7 +186,7 @@ func (s *statusServer) DrainSqlStats(
 		return statusCli.DrainSqlStats(ctx, localReq)
 	}
 
-	drainStats := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.DrainStatsResponse, error) {
+	drainStats := func(ctx context.Context, status serverpb.RPCStatusClient, _ roachpb.NodeID) (*serverpb.DrainStatsResponse, error) {
 		return status.DrainSqlStats(ctx, localReq)
 	}
 
