@@ -284,7 +284,7 @@ func (p *planner) CheckPrivilege(
 // options are inherited from parent roles.
 func (p *planner) MustCheckGrantOptionsForUser(
 	ctx context.Context,
-	privs *catpb.PrivilegeDescriptor,
+	privs *catpb.LockedPrivilegeDescriptor,
 	privilegeObject privilege.Object,
 	privList privilege.List,
 	user username.SQLUsername,
@@ -317,7 +317,7 @@ func (p *planner) MustCheckGrantOptionsForUser(
 // user has the priviliges in question.
 func (p *planner) CheckGrantOptionsForUser(
 	ctx context.Context,
-	privs *catpb.PrivilegeDescriptor,
+	privs *catpb.LockedPrivilegeDescriptor,
 	privilegeObject privilege.Object,
 	privList privilege.List,
 	user username.SQLUsername,
