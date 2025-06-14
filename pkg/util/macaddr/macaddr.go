@@ -7,7 +7,6 @@ package macaddr
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -42,9 +41,8 @@ var errInvalidMACAddr = pgerror.New(pgcode.InvalidTextRepresentation,
 
 // ParseMAC parses Postgres-style 6-byte MACAddr types.
 // While Go's net.ParseMAC supports MAC addresses up to 20 octets,
-// Postgres only supports 6-byte formats. This implementation is
-// adapted from net.ParseMAC but modified to parse directly into a
-// uint64 to avoid extra allocations.
+// Postgres only supports 6-byte formats. The unused bits of a 6-byte
+// MacAddr may be set to anything.
 //
 // It supports the following Postgres-documented formats:
 //   - '08:00:2b:01:02:03'  (17 characters)
@@ -74,142 +72,193 @@ func ParseMAC(s string) (MACAddr, error) {
 	return p, nil
 }
 
+// isWhitespace checks for ASCII whitespace characters like PostgreSQL
+func isWhitespace(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f'
+}
+
 func parseMAC(s string) (MACAddr, error) {
-	// We'll collect each "group" of hex digits here.
-	groups := make([]uint32, 0, 8)
+	// Find bounds without string slicing allocation - trim all ASCII whitespace
+	start := 0
+	end := len(s)
+	for start < end && isWhitespace(s[start]) {
+		start++
+	}
+	for end > start && isWhitespace(s[end-1]) {
+		end--
+	}
+	leadingOrTrailing := start > 0 || end < len(s)
 
-	// Trim all leading and trailing whitespace.
-	s = strings.TrimSpace(s)
-
+	// Zero-allocation parsing with direct indexing
+	var groups [8]uint32
+	var numGroups int
 	var (
-		// The first separator we encounter: '.', ':' or '-' ).
-		sep byte
-		// Have we encountered any separator at all?
-		sawSep bool
-		// Accumulator for the current group’s value.
-		gv uint32
-		// The length of a group.
-		// This cannot exceed 12 since a MAC address
-		// with no seperator e.g: ffffffffffff has max
-		// length of 12.
-		gl int
+		sep               byte
+		sawSep            bool
+		gv                uint32
+		gl                int
+		groupLengths      [8]int
+		trackGroupLengths bool
+		sawInternalSpace  bool
 	)
 
-	// 1) Accumulate hex groups.
-	for i := range len(s) {
+	// Parse directly using start/end indices to avoid slice allocation
+	for i := start; i < end; i++ {
 		c := s[i]
 
-		// Spaces in the middle are not allowed.
-		if c <= ' ' {
-			return 0, errInvalidChar
-		}
-
+		// Hot path optimization - most characters are hex digits
 		if v := hexMap[c]; v >= 0 {
-			// If we found a valid hex digit then it's part of our group.
 			gv = (gv << 4) | uint32(v)
 			gl++
-			// No group may exceed 12 nibbles because
-			// 12 nibbles = 48 bits, which is the max width
-			// of a 6 byte MAC address.
-			if gl > 12 {
-				return 0, errInvalidHexCount
+			continue
+		}
+
+		// Optimized space handling
+		if c == ' ' {
+			sawInternalSpace = true
+			if sawSep && sep != ':' {
+				return 0, errInvalidChar
 			}
 			continue
 		}
 
-		// If it's not a valid hex nibble we may have encountered
-		// a separator. So let's determine which type of separator it is.
-		if c == '.' || c == ':' || c == '-' {
+		// Separator handling - optimized for common patterns
+		switch c {
+		case ':', '-', '.':
 			if !sawSep {
 				sep = c
 				sawSep = true
+				if leadingOrTrailing && sawInternalSpace && c != ':' {
+					return 0, errInvalidChar
+				}
+				trackGroupLengths = (c == ':' || c == '.')
 			} else if c != sep {
-				// We don't allow mixed sperators.
 				return 0, errInvalidChar
 			}
 
-			// Add each group to our collection of groups
-			groups = append(groups, gv)
-
-			// Reset so we can parse next group.
+			if numGroups >= 8 {
+				return 0, errInvalidGroupCnt
+			}
+			groups[numGroups] = gv
+			if trackGroupLengths {
+				groupLengths[numGroups] = gl
+			}
+			numGroups++
 			gv, gl = 0, 0
-			continue
+		default:
+			return 0, errInvalidChar
 		}
-
-		// Anything else is invalid.
-		return 0, errInvalidChar
 	}
 
 	// Up until now we collected each group after we encountered
 	// a separator. But if it's a MAC address without any separators
 	// or if it's the last group, we would still need to collect.
 	if gl > 0 {
-		groups = append(groups, gv)
+		if numGroups >= 8 {
+			return 0, errInvalidGroupCnt
+		}
+		groups[numGroups] = gv
+
+		// Track group lengths for validation
+		if trackGroupLengths {
+			groupLengths[numGroups] = gl
+		}
+		numGroups++
 	} else {
 		// no hex at all
 		return 0, errInvalidHexCount
 	}
 
 	// This is where the fun begins. Decide style, combine and pad.
-	n := len(groups)
 
-	switch {
-	// Handle dash or colon grouping separator formats. These are:
-	// 08-00-2b-01-02-13
-	// 08:00:2b:01:02:3f
-	// 08002b:010203
-	// 08002b-010203
-	// 0800-2b01-0203
-	// 0800.2b01.0203
-	case (sep == '-' || sep == ':' || sep == '.'):
+	// Handle the most common cases first for better branch prediction
+	if sep == 0 {
+		// Bare-hex (no separators) means everything is in a single group.
+		// PostgreSQL accepts 11-12 hex chars for contiguous bare hex, or any reasonable length with spaces
+		if !sawInternalSpace && (gl < 11 || gl > 12) {
+			return 0, errInvalidHexCount
+		} else if gl > 12 {
+			return 0, errInvalidHexCount
+		}
+		return MACAddr(groups[0]), nil
+	}
 
-		// These formats can only have 2, 3, 4 or 6 groups in total.
-		if n < 2 || n == 5 || n > 6 {
+	if sep == ':' {
+		if !(numGroups == 2 || numGroups == 6) {
 			return 0, errInvalidGroupCnt
 		}
 
-		// Determine how many bytes per group there are.
-		var bytesPerGroup int
-		if n == 2 {
-			// Two group format: 08002b-010203 or 08002b:010203
-			// has 3 bytes in each group which makes up
-			// the 6 byte MAC address.
-			bytesPerGroup = 3
-		} else if n == 3 && (sep == '-' || sep == '.') {
-			// Three group format: 0800.2b01.0203 or 0800-2b01-0203
-			// has 2 bytes in each group which makes up
-			// the 6 byte MAC address. Note 0800:2b01:0203 is not a valid
-			// format.
-			bytesPerGroup = 2
-		} else {
-			// 08-00-2b-01-02-13 or 08:00:2b:01:02:3f has 1 byte per group.
-			bytesPerGroup = 1
+		if numGroups == 2 {
+			// 2 groups, validate lengths and construct result
+			if trackGroupLengths && (groupLengths[0] != 6 || groupLengths[1] != 6) {
+				return 0, errInvalidGroupLen
+			}
+			return MACAddr(groups[0])<<24 | MACAddr(groups[1]&0xFFFFFF), nil
 		}
 
-		// Byte-width mask for each group. It’s exactly the maximum
-		// value you can represent in bytesPerGroup.
-		maxv := uint32(1<<(8*bytesPerGroup)) - 1
+		// 6 groups - let compiler optimize
+		var r MACAddr
+		for i := range 6 {
+			r = (r << 8) | MACAddr(groups[i]&0xFF)
+		}
+		return r, nil
+	}
+
+	if sep == '-' {
+		if !(numGroups == 2 || numGroups == 3 || numGroups == 4 || numGroups == 6) {
+			return 0, errInvalidGroupCnt
+		}
+
+		switch numGroups {
+		case 2:
+			var r MACAddr
+			for i := range 2 {
+				r = (r << 24) | MACAddr(groups[i]&0xFFFFFF)
+			}
+			return r, nil
+		case 3:
+			var r MACAddr
+			for i := range 3 {
+				r = (r << 16) | MACAddr(groups[i]&0xFFFF)
+			}
+			return r, nil
+		case 6:
+			var r MACAddr
+			for i := range 6 {
+				r = (r << 8) | MACAddr(groups[i]&0xFF)
+			}
+			return r, nil
+		default: // case 4
+			var r MACAddr
+			for i := range 4 {
+				r = (r << 8) | MACAddr(groups[i]&0xFF)
+			}
+			return r, nil
+		}
+	}
+
+	if sep == '.' {
+		if numGroups != 3 {
+			return 0, errInvalidGroupCnt
+		}
+
+		// Validate group lengths inline
+		if trackGroupLengths && (groupLengths[0] > 4 || groupLengths[1] > 4 || groupLengths[2] > 4) {
+			return 0, errInvalidGroupLen
+		}
 
 		var r MACAddr
-		for _, gv := range groups {
-			// Make sure each group cannot overflow it's max bytes.
-			if gv > maxv {
-				return 0, errGroupOverflow
-			}
-
-			// Concatenate each parsed group into our MACAddr.
-			r = (r << uint(8*bytesPerGroup)) | MACAddr(gv)
+		for i := range 3 {
+			r = (r << 16) | MACAddr(groups[i]&0xFFFF)
 		}
-
 		return r, nil
-
-	// Bare-hex (no separators) means everything is in a single group.
-	default:
-		return MACAddr(groups[0]), nil
 	}
+
+	// Should never reach here
+	return 0, errInvalidChar
 }
 
-// parseError is a string‐backed error type so all messages live in static data.
+// parseError is a string-backed error type so all messages live in static data.
 type parseError string
 
 func (e parseError) Error() string { return string(e) }
@@ -247,9 +296,9 @@ func (m MACAddr) Compare(addr MACAddr) int {
 	}
 }
 
-// MACAddrNot performs bitwise NOT on the MAC address.
+// MACAddrNot performs bitwise NOT (invert) on a MAC address.
 func MACAddrNot(addr MACAddr) MACAddr {
-	return MACAddr(^uint64(addr))
+	return MACAddr(^uint64(addr) & 0xFFFFFFFFFFFF)
 }
 
 // MACAddrAnd performs bitwise AND between two MAC addresses.
