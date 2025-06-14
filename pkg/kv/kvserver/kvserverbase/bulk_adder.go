@@ -46,6 +46,8 @@ type BulkAdderOptions struct {
 	// BatchTimestamp is the timestamp to use on AddSSTable requests (which can be
 	// different from the timestamp used to construct the adder which is what is
 	// actually applied to each key).
+	//
+	// TODO(jeffswenson): this setting is a no-op. See comment in `MakeBulkAdder`.
 	BatchTimestamp hlc.Timestamp
 
 	// WriteAtBatchTimestamp will rewrite the SST to use the batch timestamp, even

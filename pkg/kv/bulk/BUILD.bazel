@@ -7,6 +7,7 @@ go_library(
         "bulk_metrics.go",
         "kv_buf.go",
         "setting.go",
+        "sst_adder.go",
         "sst_batcher.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/bulk",
