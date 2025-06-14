@@ -881,7 +881,7 @@ func TestGRPCAuthentication(t *testing.T) {
 			return err
 		}, true},
 		{"admin", func(ctx context.Context, conn *grpc.ClientConn) error {
-			_, err := serverpb.NewAdminClient(conn).Databases(ctx, &serverpb.DatabasesRequest{})
+			_, err := serverpb.NewGRPCAdminClientAdapter(conn).Databases(ctx, &serverpb.DatabasesRequest{})
 			return err
 		}, false},
 		{"status", func(ctx context.Context, conn *grpc.ClientConn) error {

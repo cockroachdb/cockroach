@@ -2031,7 +2031,7 @@ func (tc *TestCluster) GetRaftLeader(
 // GetAdminClient gets the severpb.AdminClient for the specified server.
 func (tc *TestCluster) GetAdminClient(
 	t serverutils.TestFataler, serverIdx int,
-) serverpb.AdminClient {
+) serverpb.RPCAdminClient {
 	return tc.Server(serverIdx).GetAdminClient(t)
 }
 

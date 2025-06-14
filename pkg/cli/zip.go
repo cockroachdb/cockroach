@@ -52,7 +52,7 @@ type debugZipContext struct {
 	z              *zipper
 	clusterPrinter *zipReporter
 	timeout        time.Duration
-	admin          serverpb.AdminClient
+	admin          serverpb.RPCAdminClient
 	status         serverpb.StatusClient
 	prefix         string
 

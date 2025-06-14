@@ -28,8 +28,8 @@ func (c *grpcConn) NewStatusClient() serverpb.StatusClient {
 	return serverpb.NewStatusClient(c.conn)
 }
 
-func (c *grpcConn) NewAdminClient() serverpb.AdminClient {
-	return serverpb.NewAdminClient(c.conn)
+func (c *grpcConn) NewAdminClient() serverpb.RPCAdminClient {
+	return serverpb.NewGRPCAdminClientAdapter(c.conn)
 }
 
 func (c *grpcConn) NewInitClient() serverpb.InitClient {

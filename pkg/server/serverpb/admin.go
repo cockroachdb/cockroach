@@ -74,7 +74,9 @@ func (r *RecoveryVerifyResponse_UnavailableRanges) Empty() bool {
 // can't tell what the true prefix for each metric is). Additionally, for histograms
 // we generate the names for the quantiles that are exported (internal TSDB does
 // not support full histograms).
-func GetInternalTimeseriesNamesFromServer(ctx context.Context, ac AdminClient) ([]string, error) {
+func GetInternalTimeseriesNamesFromServer(
+	ctx context.Context, ac RPCAdminClient,
+) ([]string, error) {
 	resp, err := ac.AllMetricMetadata(ctx, &MetricMetadataRequest{})
 	if err != nil {
 		return nil, err

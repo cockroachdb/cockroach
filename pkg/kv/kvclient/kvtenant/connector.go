@@ -224,7 +224,7 @@ type connector struct {
 type client struct {
 	kvpb.InternalClient
 	serverpb.StatusClient
-	serverpb.AdminClient
+	serverpb.RPCAdminClient
 	tspb.RPCTimeSeriesClient
 }
 
@@ -985,7 +985,7 @@ func (c *connector) dialAddrs(ctx context.Context) (*client, error) {
 				return &client{
 					InternalClient:      kvpb.NewInternalClient(conn),
 					StatusClient:        serverpb.NewStatusClient(conn),
-					AdminClient:         serverpb.NewAdminClient(conn),
+					RPCAdminClient:      serverpb.NewGRPCAdminClientAdapter(conn),
 					RPCTimeSeriesClient: tspb.NewGRPCTimeSeriesClientAdapter(conn),
 				}, nil
 			}
