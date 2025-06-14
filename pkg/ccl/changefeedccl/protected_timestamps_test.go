@@ -495,7 +495,7 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	fooDescr := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "d", "foo")
 	var targets changefeedbase.Targets
 	targets.Add(changefeedbase.Target{
-		TableID: fooDescr.GetID(),
+		DescID: fooDescr.GetID(),
 	})
 
 	// We need to give our PTS record a legit job ID so the protected ts

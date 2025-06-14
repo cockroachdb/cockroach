@@ -870,7 +870,7 @@ func TestFullyQualifyTables(t *testing.T) {
 	defer cleanupPlanHook()
 
 	tablePatterns := make([]tree.TablePattern, 0)
-	for _, target := range createChangeFeedStmt.Targets {
+	for _, target := range createChangeFeedStmt.TableTargets {
 		tablePatterns = append(tablePatterns, target.TableName)
 	}
 

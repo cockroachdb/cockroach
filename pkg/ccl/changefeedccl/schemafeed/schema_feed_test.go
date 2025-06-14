@@ -235,7 +235,7 @@ func TestFetchDescriptorVersionsCPULimiterPagination(t *testing.T) {
 		&tableID, &statementTimeName)
 	targets.Add(changefeedbase.Target{
 		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-		TableID:           tableID,
+		DescID:            tableID,
 		FamilyName:        "primary",
 		StatementTimeName: statementTimeName,
 	})
@@ -243,7 +243,7 @@ func TestFetchDescriptorVersionsCPULimiterPagination(t *testing.T) {
 		&tableID, &statementTimeName)
 	targets.Add(changefeedbase.Target{
 		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-		TableID:           tableID,
+		DescID:            tableID,
 		FamilyName:        "primary",
 		StatementTimeName: statementTimeName,
 	})
@@ -288,7 +288,7 @@ func TestSchemaFeedHandlesCascadeDatabaseDrop(t *testing.T) {
 	sqlDB.QueryRow(t, "SELECT 'test.foo'::regclass::int").Scan(&tableID)
 	targets.Add(changefeedbase.Target{
 		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-		TableID:           tableID,
+		DescID:            tableID,
 		FamilyName:        "primary",
 		StatementTimeName: "foo",
 	})

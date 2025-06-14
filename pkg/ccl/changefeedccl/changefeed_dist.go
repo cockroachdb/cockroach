@@ -238,7 +238,7 @@ func startDistChangefeed(
 	onTracingEvent func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents),
 ) error {
 	execCfg := execCtx.ExecCfg()
-	tableDescs, err := fetchTableDescriptors(ctx, execCfg, AllTargets(details), schemaTS)
+	tableDescs, err := fetchTableDescriptors(ctx, execCfg, AllTargets(details, ctx, execCfg), schemaTS)
 	if err != nil {
 		return err
 	}
