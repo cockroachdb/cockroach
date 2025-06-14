@@ -877,7 +877,7 @@ func TestGRPCAuthentication(t *testing.T) {
 			return err
 		}, false},
 		{"init", func(ctx context.Context, conn *grpc.ClientConn) error {
-			_, err := serverpb.NewInitClient(conn).Bootstrap(ctx, &serverpb.BootstrapRequest{})
+			_, err := serverpb.NewGRPCInitClientAdapter(conn).Bootstrap(ctx, &serverpb.BootstrapRequest{})
 			return err
 		}, true},
 		{"admin", func(ctx context.Context, conn *grpc.ClientConn) error {
