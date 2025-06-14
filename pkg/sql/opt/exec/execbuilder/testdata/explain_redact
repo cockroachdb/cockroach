@@ -388,6 +388,7 @@ vectorized: true
                     │ table: bc@bc_pkey
                     │ equality: (?column?) = (b)
                     │ equality cols are key
+                    │ parallel
                     │
                     └── • distinct
                         │ columns: (c_comp, "?column?")

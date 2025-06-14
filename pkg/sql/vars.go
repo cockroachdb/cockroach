@@ -2407,6 +2407,30 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// CockroachDB extension.
+	`parallelize_lookup_ratio`: {
+		GetStringVal: makeFloatGetStringValFn(`parallelize_lookup_ratio`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			if f < 0 {
+				return pgerror.Newf(
+					pgcode.InvalidParameterValue, "parallelize_lookup_ratio must be non-negative",
+				)
+			}
+			m.SetParallelizeLookupRatio(f)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatFloatAsPostgresSetting(evalCtx.SessionData().ParallelizeLookupRatio), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatFloatAsPostgresSetting(10)
+		},
+	},
+
 	// TODO(harding): Remove this when costing scans based on average column size
 	// is fully supported.
 	// CockroachDB extension.

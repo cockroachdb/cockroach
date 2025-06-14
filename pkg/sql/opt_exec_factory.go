@@ -682,6 +682,7 @@ func (ef *execFactory) ConstructIndexJoin(
 	reqOrdering exec.OutputOrdering,
 	locking opt.Locking,
 	limitHint int64,
+	parallelize bool,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	colCfg := makeScanColumnsConfig(table, tableCols)
@@ -713,6 +714,7 @@ func (ef *execFactory) ConstructIndexJoin(
 			keyCols:     keyCols,
 			reqOrdering: ReqOrdering(reqOrdering),
 			limitHint:   limitHint,
+			parallelize: parallelize,
 		},
 	}
 
@@ -738,6 +740,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	limitHint int64,
 	remoteOnlyLookups bool,
 	reverseScans bool,
+	parallelize bool,
 ) (exec.Node, error) {
 	if table.IsVirtualTable() {
 		return constructVirtualTableLookupJoin(
@@ -781,6 +784,7 @@ func (ef *execFactory) ConstructLookupJoin(
 			limitHint:                  limitHint,
 			remoteOnlyLookups:          remoteOnlyLookups,
 			reverseScans:               reverseScans,
+			parallelize:                parallelize,
 		},
 	}
 	if onCond != tree.DBoolTrue {
