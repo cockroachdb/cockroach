@@ -592,7 +592,7 @@ func startReporterTest(
 	}
 
 	storeSpec := base.DefaultTestStoreSpec
-	storeSpec.Attributes = roachpb.Attributes{Attrs: []string{elemName}}
+	storeSpec.Attributes = []string{elemName}
 	rt.serverArgs = base.TestServerArgs{
 		DefaultTestTenant: defaultTestTenant,
 		StoreSpecs: []base.StoreSpec{
