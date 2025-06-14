@@ -30,16 +30,16 @@ func DialMultiRaftClient(
 
 // DialPerReplicaClient establishes a DRPC connection if enabled; otherwise,
 // it falls back to gRPC. The established connection is used to create a
-// PerReplicaClient.
+// RPCPerReplicaClient.
 func DialPerReplicaClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
-) (PerReplicaClient, error) {
+) (RPCPerReplicaClient, error) {
 	if !rpcbase.TODODRPC {
 		conn, err := nd.Dial(ctx, nodeID, class)
 		if err != nil {
 			return nil, err
 		}
-		return NewPerReplicaClient(conn), nil
+		return NewGRPCPerReplicaClientAdapter(conn), nil
 	}
 	return nil, nil
 }
