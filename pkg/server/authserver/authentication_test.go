@@ -846,7 +846,7 @@ func TestGRPCAuthentication(t *testing.T) {
 			return err
 		}, true},
 		{"perReplica", func(ctx context.Context, conn *grpc.ClientConn) error {
-			_, err := kvserver.NewPerReplicaClient(conn).CollectChecksum(ctx, &kvserver.CollectChecksumRequest{})
+			_, err := kvserver.NewGRPCPerReplicaClientAdapter(conn).CollectChecksum(ctx, &kvserver.CollectChecksumRequest{})
 			return err
 		}, true},
 		{"raft", func(ctx context.Context, conn *grpc.ClientConn) error {
