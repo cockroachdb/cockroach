@@ -3144,7 +3144,7 @@ func (s *systemAdminServer) EnqueueRange(
 		return client, err
 	}
 	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
-		admin := client.(serverpb.AdminClient)
+		admin := client.(serverpb.RPCAdminClient)
 		req := *req
 		req.NodeID = nodeID
 		return admin.EnqueueRange(ctx, &req)
@@ -3722,7 +3722,7 @@ func (s *adminServer) queryTableID(
 // responsibility to convert them to srverrors.ServerErrors.
 func (s *adminServer) dialNode(
 	ctx context.Context, nodeID roachpb.NodeID,
-) (serverpb.AdminClient, error) {
+) (serverpb.RPCAdminClient, error) {
 	return serverpb.DialAdminClient(s.nd, ctx, nodeID)
 }
 

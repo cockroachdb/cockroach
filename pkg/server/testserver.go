@@ -2640,7 +2640,7 @@ func (ts *testServer) RPCClientConnE(user username.SQLUsername) (serverutils.RPC
 }
 
 // GetAdminClient is part of the serverutils.ApplicationLayerInterface.
-func (ts *testServer) GetAdminClient(test serverutils.TestFataler) serverpb.AdminClient {
+func (ts *testServer) GetAdminClient(test serverutils.TestFataler) serverpb.RPCAdminClient {
 	conn := ts.RPCClientConn(test, username.RootUserName())
 	return conn.NewAdminClient()
 }
@@ -2688,7 +2688,7 @@ func (t *testTenant) RPCClientConnE(user username.SQLUsername) (serverutils.RPCC
 }
 
 // GetAdminClient is part of the serverutils.ApplicationLayerInterface.
-func (t *testTenant) GetAdminClient(test serverutils.TestFataler) serverpb.AdminClient {
+func (t *testTenant) GetAdminClient(test serverutils.TestFataler) serverpb.RPCAdminClient {
 	conn := t.RPCClientConn(test, username.RootUserName())
 	return conn.NewAdminClient()
 }
