@@ -697,7 +697,7 @@ func newTestDirectoryCache(
 	require.NoError(t, err)
 	// nolint:grpcconnclose
 	clusterStopper.AddCloser(stop.CloserFn(func() { require.NoError(t, conn.Close() /* nolint:grpcconnclose */) }))
-	client := tenant.NewDirectoryClient(conn)
+	client := tenant.NewGRPCDirectoryClientAdapter(conn)
 	directoryCache, err = tenant.NewDirectoryCache(context.Background(), clusterStopper, client, opts...)
 	require.NoError(t, err)
 	return
