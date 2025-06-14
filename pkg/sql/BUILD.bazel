@@ -544,6 +544,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/sql/vecindex",
         "//pkg/sql/vecindex/vecpb",
+        "//pkg/sql/vecindex/vecstore",
         "//pkg/sql/vtable",
         "//pkg/storage",
         "//pkg/storage/enginepb",
