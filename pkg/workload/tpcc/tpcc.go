@@ -184,6 +184,37 @@ func (w *waitSetter) String() string {
 	}
 }
 
+// lastDurationSetter is a pflag.Value implementation that sets the last
+// duration of a workload run for consistency checks. It is used to determine
+// which consistency checks to skip for long duration workloads. It sets the
+// `isLongDurationWorkload` field on the `tpcc` to true if the duration is
+// greater than or equal to the long duration workload threshold.
+type lastDurationSetter struct {
+	val  *time.Duration
+	tpcc *tpcc
+}
+
+// Set implements the pflag.Value interface.
+func (p *lastDurationSetter) Set(val string) error {
+	duration, err := time.ParseDuration(val)
+	if err != nil {
+		return err
+	}
+	p.val = &duration
+	p.tpcc.isLongDurationWorkload = duration >= longDurationWorkloadThreshold
+	return nil
+}
+
+// String implements the pflag.Value interface.
+func (p *lastDurationSetter) String() string {
+	return p.val.String()
+}
+
+// Type implements the pflag.Value interface.
+func (p *lastDurationSetter) Type() string {
+	return "duration"
+}
+
 var _ pgx.QueryTracer = fileLoggerQueryTracer{}
 
 type fileLoggerQueryTracer struct {
@@ -270,6 +301,7 @@ var tpccMeta = workload.Meta{
 			`txn-retries`:              {RuntimeOnly: true},
 			`repair-order-ids`:         {RuntimeOnly: true},
 			`expensive-checks`:         {RuntimeOnly: true, CheckConsistencyOnly: true},
+			`last-duration`:            {RuntimeOnly: true, CheckConsistencyOnly: true},
 			`local-warehouses`:         {RuntimeOnly: true},
 			`regions`:                  {RuntimeOnly: true},
 			`survival-goal`:            {RuntimeOnly: true},
@@ -324,6 +356,7 @@ var tpccMeta = workload.Meta{
 			"This is an optional parameter to specify AOST; used exclusively in conjunction with the TPC-C consistency "+
 				"check. Example values are (\"'-1m'\", \"'-1h'\")")
 		g.flags.BoolVar(&g.literalImplementation, "literal-implementation", false, "If true, use a literal implementation of the TPC-C kit instead of an optimized version")
+		g.flags.Var(&lastDurationSetter{val: &[]time.Duration{0}[0], tpcc: g}, "last-duration", "The duration of the previous workload run (Used to determine which consistency checks to skip for long duration workloads).")
 
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
