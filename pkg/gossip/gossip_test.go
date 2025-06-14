@@ -529,7 +529,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 				return err
 			}
 
-			stream, err := NewGossipClient(conn).Gossip(ctx)
+			stream, err := NewGRPCGossipClientAdapter(conn).Gossip(ctx)
 			if err != nil {
 				return err
 			}
@@ -1008,10 +1008,10 @@ func TestServerSendsHighStampsDiff(t *testing.T) {
 	conn, err := localCxt.GRPCUnvalidatedDial(c.addr.String(), roachpb.Locality{}).Connect(ctx)
 	require.NoError(t, err)
 
-	stream, err := NewGossipClient(conn).Gossip(ctx)
+	stream, err := NewGRPCGossipClientAdapter(conn).Gossip(ctx)
 	require.NoError(t, err)
 
-	requestGossip := func(g *Gossip, stream Gossip_GossipClient) Response {
+	requestGossip := func(g *Gossip, stream RPCGossip_GossipClient) Response {
 		err := c.requestGossip(g, stream)
 		require.NoError(t, err)
 		resp := &Response{}

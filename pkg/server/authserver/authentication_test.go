@@ -833,7 +833,7 @@ func TestGRPCAuthentication(t *testing.T) {
 		storageOnly bool
 	}{
 		{"gossip", func(ctx context.Context, conn *grpc.ClientConn) error {
-			stream, err := gossip.NewGossipClient(conn).Gossip(ctx)
+			stream, err := gossip.NewGRPCGossipClientAdapter(conn).Gossip(ctx)
 			if err != nil {
 				return err
 			}
