@@ -103,7 +103,7 @@ func TimeSinceUpdate(updateTime time.Time) (time.Duration, error) {
 // If the wrapped error tree of an error does not contain an instance of
 // rperrors.Error, the error will automatically be wrapped with
 // rperrors.Unclassified.
-func wrap(f func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Command, args []string) {
+func Wrap(f func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Command, args []string) {
 	return func(cmd *cobra.Command, args []string) {
 		var err error
 		isSecure, err = isSecureCluster(cmd)
