@@ -920,6 +920,7 @@ CREATE TABLE system.sql_instances (
     crdb_region    BYTES NOT NULL,
     binary_version STRING,
     is_draining    BOOL NULL,
+    locality_address_list JSONB NULL,
     CONSTRAINT "primary" PRIMARY KEY (crdb_region, id),
     FAMILY "primary" (
       id, 
@@ -929,7 +930,8 @@ CREATE TABLE system.sql_instances (
       sql_addr, 
       crdb_region, 
       binary_version, 
-      is_draining
+      is_draining,
+      locality_address_list
     )
 )`
 
@@ -1370,7 +1372,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V25_3_AddEventLogColumnAndIndex.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V25_3_SQLInstancesAddLocalityAddressList.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -3949,13 +3951,14 @@ var (
 					{Name: "crdb_region", ID: 6, Type: types.Bytes, Nullable: false},
 					{Name: "binary_version", ID: 7, Type: types.String, Nullable: true},
 					{Name: "is_draining", ID: 8, Type: types.Bool, Nullable: true},
+					{Name: "locality_address_list", ID: 9, Type: types.Jsonb, Nullable: true},
 				},
 				[]descpb.ColumnFamilyDescriptor{
 					{
 						Name:            "primary",
 						ID:              0,
-						ColumnNames:     []string{"id", "addr", "session_id", "locality", "sql_addr", "crdb_region", "binary_version", "is_draining"},
-						ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8},
+						ColumnNames:     []string{"id", "addr", "session_id", "locality", "sql_addr", "crdb_region", "binary_version", "is_draining", "locality_address_list"},
+						ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9},
 						DefaultColumnID: 0,
 					},
 				},
