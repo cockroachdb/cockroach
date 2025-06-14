@@ -15,7 +15,7 @@ func init() {
 		{
 			Name: "select crdb_internal.tables with 1 fk",
 			Setup: `
-CREATE TABLE t1 (i INT PRIMARY KEY);
+CREATE TABLE t1 (i INT PRI	MARY KEY);
 CREATE TABLE t2 (i INT PRIMARY KEY, j INT REFERENCES t1(i));
 `,
 			Stmt: `SELECT * FROM "".crdb_internal.tables`,
@@ -58,6 +58,13 @@ CREATE TABLE t2 (i INT PRIMARY KEY, j INT);`,
 SELECT * FROM crdb_internal.tables;
 SELECT * FROM t1;
 SELECT * FROM t2;`,
+		},
+		// This test checks the performance of the crdb_internal virtual tables used by
+		// SHOW CREATE ALL ROUTINES.
+		{
+			Name:  "show_create_all_routines",
+			Setup: buildNFunctions(100),
+			Stmt:  `SHOW CREATE ALL ROUTINES`,
 		},
 	})
 }
