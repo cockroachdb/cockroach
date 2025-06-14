@@ -7,6 +7,8 @@ package changefeedccl
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"net/url"
 	"sort"
@@ -73,6 +75,12 @@ var featureChangefeedEnabled = settings.RegisterBoolSetting(
 	featureflag.FeatureFlagEnabledDefault,
 	settings.WithPublic)
 
+var featureChangefeedDuplicateCheckEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"feature.changefeed.duplicate_check.enabled",
+	"set to true to enable duplicate check for changefeeds, false to disable; default is false",
+	false)
+
 func init() {
 	sql.AddPlanHook("changefeed", changefeedPlanHook, changefeedTypeCheck)
 	jobs.RegisterConstructor(
@@ -136,6 +144,26 @@ func changefeedTypeCheck(
 		return true, sinklessHeader, nil
 	}
 	return true, withSinkHeader, nil
+}
+
+func maybeShowDuplicateChangefeedNotice(
+	ctx context.Context, jr *jobs.Record, txn isql.Txn, p sql.PlanHookState,
+) error {
+	// For purposes of duplicates, an identity is a combination of sinkURI and target table IDs.
+	// The changefeed identity is hashed and added to the job_info table on (1) new changefeed creation, and (2) when a changefeed job is altered.
+	// On changefeed creation, active jobs are searched for matching changefeed identity hashes.
+
+	found, err := p.ExecCfg().JobRegistry.FindDuplicateChangefeedJob(ctx, *jr, txn)
+	if err != nil {
+		return err
+	}
+	if found {
+		err = p.SendClientNotice(ctx, pgnotice.Newf("You have created a duplicate changefeed"), true)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func maybeShowCursorAgeWarning(
@@ -345,6 +373,15 @@ func changefeedPlanHook(
 			if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jr.JobID, txn, *jr); err != nil {
 					return err
+				}
+				if featureChangefeedDuplicateCheckEnabled.Get(&p.ExecCfg().Settings.SV) {
+					if err := maybeShowDuplicateChangefeedNotice(ctx, jr, txn, p); err != nil {
+						return err
+					}
+					// Add changefeed identity hash to job info, even though adding as job is "resumed" as it's started - maybe?
+					if err := p.ExecCfg().JobRegistry.AddChangefeedIdentityHashToJobInfo(ctx, *jr, txn); err != nil {
+						return err
+					}
 				}
 				if ptr != nil {
 					return p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
@@ -1444,6 +1481,11 @@ func (b *changefeedResumer) resumeWithRetries(
 	for r := getRetry(ctx); r.Next(); {
 		flowErr := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec)
 
+		dupErr := addDuplicateCheckToJobInfo(ctx, execCfg, jobID)
+		if dupErr != nil {
+			return dupErr
+		}
+
 		if flowErr == nil {
 			// startedCh is normally used to signal back to the creator of the job that
 			// the job has started; however, in this case nothing will ever receive
@@ -1897,6 +1939,37 @@ func failureTypeForStartupError(err error) changefeedbase.FailureType {
 		return tag
 	}
 	return changefeedbase.OnStartup
+}
+
+func addDuplicateCheckToJobInfo(
+	ctx context.Context, execCfg *sql.ExecutorConfig, jobID jobspb.JobID,
+) error {
+	if !featureChangefeedDuplicateCheckEnabled.Get(&execCfg.Settings.SV) {
+		return nil
+	}
+	return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		job, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, txn)
+		if err != nil {
+			return err
+		}
+		jobDetails := job.Details().(jobspb.ChangefeedDetails)
+		hasher := sha256.New()
+		hasher.Write([]byte(jobDetails.SinkURI))
+		tableIDs := make([]uint32, 0, len(jobDetails.Tables))
+		for tableID := range jobDetails.Tables {
+			tableIDs = append(tableIDs, uint32(tableID))
+		}
+		sort.Slice(tableIDs, func(i, j int) bool {
+			return tableIDs[i] < tableIDs[j]
+		})
+		for _, tableID := range tableIDs {
+			var b [4]byte
+			binary.BigEndian.PutUint32(b[:], tableID)
+			hasher.Write(b[:])
+		}
+		changefeedHash := hasher.Sum(nil)
+		return job.InfoStorage(txn).Write(ctx, "changefeed_identity_hash", changefeedHash)
+	})
 }
 
 // maybeUpgradePreProductionReadyExpression updates job record for the
