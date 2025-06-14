@@ -277,6 +277,25 @@ func authCCLRunTest(t *testing.T, insecure bool) {
 								t.Fatalf("unknown value for jwt_cluster_setting jwks_auto_fetch.enabled: %s", a.Vals[0])
 							}
 							jwtauthccl.JWKSAutoFetchEnabled.Override(ctx, sv, v)
+						case "authorization.enabled":
+							if len(a.Vals) != 1 {
+								t.Fatalf("wrong number of arguments to jwt_cluster_setting authorization.enabled")
+							}
+							v, err := strconv.ParseBool(a.Vals[0])
+							if err != nil {
+								t.Fatalf("unknown value for jwt_cluster_setting authorization.enabled: %s", a.Vals[0])
+							}
+							jwtauthccl.JWTAuthZEnabled.Override(ctx, sv, v)
+						case "group_claim":
+							if len(a.Vals) != 1 {
+								t.Fatalf("wrong number of arguments to jwt_cluster_setting group_claim")
+							}
+							jwtauthccl.JWTAuthGroupClaim.Override(ctx, sv, a.Vals[0])
+						case "userinfo_group_key":
+							if len(a.Vals) != 1 {
+								t.Fatalf("wrong number of arguments to jwt_cluster_setting userinfo_group_key")
+							}
+							jwtauthccl.JWTAuthUserinfoGroupKey.Override(ctx, sv, a.Vals[0])
 						default:
 							t.Fatalf("unknown jwt_cluster_setting: %s", a.Key)
 						}
