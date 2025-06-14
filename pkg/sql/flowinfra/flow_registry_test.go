@@ -520,7 +520,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 		close(delayCh)
 		injectedErr := errors.New("injected error")
 		serverStream = &delayedErrorServerStream{
-			DistSQL_FlowStreamServer: serverStream,
+			RPCDistSQL_FlowStreamStream: serverStream,
 			// Make rpcCalledCh a buffered channel so that the RPC is not
 			// blocked.
 			rpcCalledCh: make(chan struct{}, 1),
@@ -705,7 +705,7 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 // allows to block (on delayCh) Send() calls which always result in the
 // provided error.
 type delayedErrorServerStream struct {
-	execinfrapb.DistSQL_FlowStreamServer
+	execinfrapb.RPCDistSQL_FlowStreamStream
 	// rpcCalledCh is sent on in the very beginning of every Send() call.
 	rpcCalledCh chan<- struct{}
 	delayCh     <-chan struct{}
@@ -761,10 +761,10 @@ func TestErrorOnSlowHandshake(t *testing.T) {
 
 	rpcCalledCh, delayCh := make(chan struct{}), make(chan struct{})
 	serverStream = &delayedErrorServerStream{
-		DistSQL_FlowStreamServer: serverStream,
-		rpcCalledCh:              rpcCalledCh,
-		delayCh:                  delayCh,
-		err:                      errors.New("dummy error"),
+		RPCDistSQL_FlowStreamStream: serverStream,
+		rpcCalledCh:                 rpcCalledCh,
+		delayCh:                     delayCh,
+		err:                         errors.New("dummy error"),
 	}
 
 	receiver := &distsqlutils.RowBuffer{}
