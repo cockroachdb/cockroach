@@ -26,16 +26,10 @@ type rpcConn interface {
 	comparable
 }
 
-// rpcHeartbeatClient offers a unified Ping interface compatible with both
-// gRPC and DRPC.
-type rpcHeartbeatClient interface {
-	Ping(ctx context.Context, in *PingRequest) (*PingResponse, error)
-}
-
 // heartbeatClientConstructor is a function type that creates a HeartbeatClient
 // for a given rpc connection. This allows us to use different implementations of
 // HeartbeatClient for different types of connections (e.g., gRPC and DRPC).
-type heartbeatClientConstructor[Conn rpcConn] func(Conn) rpcHeartbeatClient
+type heartbeatClientConstructor[Conn rpcConn] func(Conn) RPCHeartbeatClient
 
 // closeNotifier signals via a channel when its underlying gRPC or DRPC connection closes.
 type closeNotifier interface {

@@ -114,7 +114,7 @@ func TenantWatcher(tenantWatcher chan *WatchTenantsResponse) func(opts *dirOptio
 type directoryCache struct {
 	// client is the directory client instance used to make directory server
 	// calls.
-	client DirectoryClient
+	client RPCDirectoryClient
 
 	// stopper is used for graceful shutdown of the pod watcher.
 	stopper *stop.Stopper
@@ -144,7 +144,7 @@ var _ DirectoryCache = &directoryCache{}
 // NOTE: stopper.Stop must be called on the directory when it is no longer
 // needed.
 func NewDirectoryCache(
-	ctx context.Context, stopper *stop.Stopper, client DirectoryClient, opts ...DirOption,
+	ctx context.Context, stopper *stop.Stopper, client RPCDirectoryClient, opts ...DirOption,
 ) (DirectoryCache, error) {
 	dir := &directoryCache{client: client, stopper: stopper}
 
@@ -380,7 +380,7 @@ func (d *directoryCache) watchPods(ctx context.Context, stopper *stop.Stopper) e
 	waitInit.Add(1)
 
 	err := stopper.RunAsyncTask(ctx, "watch-pods-client", func(ctx context.Context) {
-		var client Directory_WatchPodsClient
+		var client RPCDirectory_WatchPodsClient
 		var err error
 		firstRun := true
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
@@ -492,7 +492,7 @@ func (d *directoryCache) updateTenantPodEntry(ctx context.Context, pod *Pod) {
 // notification and update the directory to reflect that change.
 func (d *directoryCache) watchTenants(ctx context.Context, stopper *stop.Stopper) error {
 	return stopper.RunAsyncTask(ctx, "watch-tenants-client", func(ctx context.Context) {
-		var client Directory_WatchTenantsClient
+		var client RPCDirectory_WatchTenantsClient
 		var err error
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()

@@ -833,7 +833,7 @@ func TestGRPCAuthentication(t *testing.T) {
 		storageOnly bool
 	}{
 		{"gossip", func(ctx context.Context, conn *grpc.ClientConn) error {
-			stream, err := gossip.NewGossipClient(conn).Gossip(ctx)
+			stream, err := gossip.NewGRPCGossipClientAdapter(conn).Gossip(ctx)
 			if err != nil {
 				return err
 			}
@@ -846,11 +846,11 @@ func TestGRPCAuthentication(t *testing.T) {
 			return err
 		}, true},
 		{"perReplica", func(ctx context.Context, conn *grpc.ClientConn) error {
-			_, err := kvserver.NewPerReplicaClient(conn).CollectChecksum(ctx, &kvserver.CollectChecksumRequest{})
+			_, err := kvserver.NewGRPCPerReplicaClientAdapter(conn).CollectChecksum(ctx, &kvserver.CollectChecksumRequest{})
 			return err
 		}, true},
 		{"raft", func(ctx context.Context, conn *grpc.ClientConn) error {
-			stream, err := kvserver.NewMultiRaftClient(conn).RaftMessageBatch(ctx)
+			stream, err := kvserver.NewGRPCMultiRaftClientAdapter(conn).RaftMessageBatch(ctx)
 			if err != nil {
 				return err
 			}
@@ -859,7 +859,7 @@ func TestGRPCAuthentication(t *testing.T) {
 			return err
 		}, true},
 		{"closedTimestamp", func(ctx context.Context, conn *grpc.ClientConn) error {
-			stream, err := ctpb.NewSideTransportClient(conn).PushUpdates(ctx)
+			stream, err := ctpb.NewGRPCSideTransportClientAdapter(conn).PushUpdates(ctx)
 			if err != nil {
 				return err
 			}
@@ -868,7 +868,7 @@ func TestGRPCAuthentication(t *testing.T) {
 			return err
 		}, true},
 		{"distSQL", func(ctx context.Context, conn *grpc.ClientConn) error {
-			stream, err := execinfrapb.NewDistSQLClient(conn).FlowStream(ctx)
+			stream, err := execinfrapb.NewGRPCDistSQLClientAdapter(conn).FlowStream(ctx)
 			if err != nil {
 				return err
 			}
@@ -877,15 +877,15 @@ func TestGRPCAuthentication(t *testing.T) {
 			return err
 		}, false},
 		{"init", func(ctx context.Context, conn *grpc.ClientConn) error {
-			_, err := serverpb.NewInitClient(conn).Bootstrap(ctx, &serverpb.BootstrapRequest{})
+			_, err := serverpb.NewGRPCInitClientAdapter(conn).Bootstrap(ctx, &serverpb.BootstrapRequest{})
 			return err
 		}, true},
 		{"admin", func(ctx context.Context, conn *grpc.ClientConn) error {
-			_, err := serverpb.NewAdminClient(conn).Databases(ctx, &serverpb.DatabasesRequest{})
+			_, err := serverpb.NewGRPCAdminClientAdapter(conn).Databases(ctx, &serverpb.DatabasesRequest{})
 			return err
 		}, false},
 		{"status", func(ctx context.Context, conn *grpc.ClientConn) error {
-			_, err := serverpb.NewStatusClient(conn).ListSessions(ctx, &serverpb.ListSessionsRequest{})
+			_, err := serverpb.NewGRPCStatusClientAdapter(conn).ListSessions(ctx, &serverpb.ListSessionsRequest{})
 			return err
 		}, false},
 	}

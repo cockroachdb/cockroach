@@ -386,7 +386,7 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func getLocalNodeID(ctx context.Context, s serverpb.StatusClient) (roachpb.NodeID, error) {
+func getLocalNodeID(ctx context.Context, s serverpb.RPCStatusClient) (roachpb.NodeID, error) {
 	var nodeID roachpb.NodeID
 	resp, err := s.Node(ctx, &serverpb.NodeRequest{NodeId: "local"})
 	if err != nil {
@@ -414,7 +414,7 @@ func handleNodeDecommissionSelf(
 }
 
 func expectNodesDecommissioned(
-	ctx context.Context, s serverpb.StatusClient, nodeIDs []roachpb.NodeID, expDecommissioned bool,
+	ctx context.Context, s serverpb.RPCStatusClient, nodeIDs []roachpb.NodeID, expDecommissioned bool,
 ) error {
 	resp, err := s.Nodes(ctx, &serverpb.NodesRequest{})
 	if err != nil {
@@ -455,7 +455,7 @@ func expectNodesDecommissioned(
 
 func runDecommissionNodeImpl(
 	ctx context.Context,
-	c serverpb.AdminClient,
+	c serverpb.RPCAdminClient,
 	wait nodeDecommissionWaitType,
 	checks nodeDecommissionCheckMode,
 	dryRun bool,

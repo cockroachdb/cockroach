@@ -55,7 +55,7 @@ func IsRetryableError(err error) bool {
 	return errors.Is(err, errMarkRetry)
 }
 
-type visitNodeAdminFn func(nodeID roachpb.NodeID, client serverpb.AdminClient) error
+type visitNodeAdminFn func(nodeID roachpb.NodeID, client serverpb.RPCAdminClient) error
 
 type visitNodesAdminFn func(ctx context.Context, retryOpts retry.Options, maxConcurrency int32,
 	nodeFilter func(nodeID roachpb.NodeID) bool,
@@ -63,7 +63,7 @@ type visitNodesAdminFn func(ctx context.Context, retryOpts retry.Options, maxCon
 ) error
 
 type visitNodeStatusFn func(ctx context.Context, nodeID roachpb.NodeID, retryOpts retry.Options,
-	visitor func(client serverpb.StatusClient) error,
+	visitor func(client serverpb.RPCStatusClient) error,
 ) error
 
 type Server struct {
@@ -226,7 +226,7 @@ func serveClusterReplicasParallelFn(
 	forwardReplicaFilter func(*serverpb.RecoveryCollectLocalReplicaInfoResponse) error,
 	replicas, nodes *atomic.Int64,
 ) visitNodeAdminFn {
-	return func(nodeID roachpb.NodeID, client serverpb.AdminClient) error {
+	return func(nodeID roachpb.NodeID, client serverpb.RPCAdminClient) error {
 		log.Infof(ctx, "trying to get info from node n%d", nodeID)
 		var nodeReplicas int64
 		inStream, err := client.RecoveryCollectLocalReplicaInfo(ctx,
@@ -420,7 +420,7 @@ func stagePlanRecoveryNodeStatusParallelFn(
 	plan loqrecoverypb.ReplicaUpdatePlan,
 	foundNodes *threadSafeMap[roachpb.NodeID, bool],
 ) visitNodeAdminFn {
-	return func(nodeID roachpb.NodeID, client serverpb.AdminClient) error {
+	return func(nodeID roachpb.NodeID, client serverpb.RPCAdminClient) error {
 		res, err := client.RecoveryNodeStatus(ctx, &serverpb.RecoveryNodeStatusRequest{})
 		if err != nil {
 			return errors.Mark(err, errMarkRetry)
@@ -442,7 +442,7 @@ func stagePlanRecoveryStagePlanParallelFn(
 	foundNodes *threadSafeMap[roachpb.NodeID, bool],
 	nodeErrors *threadSafeSlice[string],
 ) visitNodeAdminFn {
-	return func(nodeID roachpb.NodeID, client serverpb.AdminClient) error {
+	return func(nodeID roachpb.NodeID, client serverpb.RPCAdminClient) error {
 		foundNodes.Delete(nodeID)
 		res, err := client.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
 			Plan:                      req.Plan,
@@ -531,7 +531,7 @@ func (s Server) Verify(
 	) (serverpb.RangeInfo, error) {
 		var info serverpb.RangeInfo
 		err := s.visitStatusNode(ctx, nID, fanOutConnectionRetryOptions,
-			func(c serverpb.StatusClient) error {
+			func(c serverpb.RPCStatusClient) error {
 				resp, err := c.Range(ctx, &serverpb.RangeRequest{RangeId: int64(rID)})
 				if err != nil {
 					return err
@@ -615,7 +615,7 @@ func (s Server) Verify(
 func verifyRecoveryNodeStatusParallelFn(
 	ctx context.Context, nss *threadSafeSlice[loqrecoverypb.NodeRecoveryStatus],
 ) visitNodeAdminFn {
-	return func(nodeID roachpb.NodeID, client serverpb.AdminClient) error {
+	return func(nodeID roachpb.NodeID, client serverpb.RPCAdminClient) error {
 		return timeutil.RunWithTimeout(ctx, redact.Sprintf("retrieve status of n%d", nodeID),
 			retrieveNodeStatusTimeout,
 			func(ctx context.Context) error {
@@ -760,7 +760,7 @@ func visitNodeWithRetry(
 	node roachpb.NodeDescriptor,
 ) error {
 	var err error
-	var ac serverpb.AdminClient
+	var ac serverpb.RPCAdminClient
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		log.Infof(ctx, "visiting node n%d, attempt %d", node.NodeID, r.CurrentAttempt())
 		// Note that we use ConnectNoBreaker here to avoid any race with probe
@@ -805,10 +805,10 @@ func visitNodeWithRetry(
 // to the visitor to mark appropriate errors are retryable.
 func makeVisitNode(nd rpcbase.NodeDialerNoBreaker) visitNodeStatusFn {
 	return func(ctx context.Context, nodeID roachpb.NodeID, retryOpts retry.Options,
-		visitor func(client serverpb.StatusClient) error,
+		visitor func(client serverpb.RPCStatusClient) error,
 	) error {
 		var err error
-		var client serverpb.StatusClient
+		var client serverpb.RPCStatusClient
 
 		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 			log.Infof(ctx, "visiting node n%d, attempt %d", nodeID, r.CurrentAttempt())

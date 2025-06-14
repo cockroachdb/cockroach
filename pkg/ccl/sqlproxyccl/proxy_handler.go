@@ -279,7 +279,7 @@ func newProxyHandler(
 		dirOpts = append(dirOpts, handler.testingKnobs.dirOpts...)
 	}
 
-	client := tenant.NewDirectoryClient(conn)
+	client := tenant.NewGRPCDirectoryClientAdapter(conn)
 	handler.directoryCache, err = tenant.NewDirectoryCache(ctx, stopper, client, dirOpts...)
 	if err != nil {
 		return nil, err
