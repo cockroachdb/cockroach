@@ -1397,7 +1397,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 4 (36% of the table; stats collected <hidden> ago)
+  estimated row count: 4 (40% of the table; stats collected <hidden> ago)
   table: ka@ka_a_idx
   spans: [/6 - ]
 
@@ -1436,3 +1436,38 @@ vectorized: true
   estimated row count: 1 (9.1% of the table; stats collected <hidden> ago)
   table: ka@ka_a_idx
   spans: [/10 - /10]
+
+subtest regression_148316
+
+# Ensure we can run DELETE statement on system.table_statistics.
+statement ok
+INSERT INTO system.users VALUES ('node', NULL, true, 3);
+
+statement ok
+GRANT node TO root;
+
+# Keep only partial stats on the target table.
+statement ok
+DELETE FROM system.table_statistics WHERE name NOT LIKE '%partial%' AND "tableID" = 'ka'::REGCLASS::OID;
+
+query TT
+SELECT statistics_name, column_names FROM [SHOW STATISTICS FOR TABLE ka] ORDER BY created
+----
+ka_partialstat  {a}
+
+# Ensure that the system table is read on the next query.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+query T
+EXPLAIN SELECT * FROM ka WHERE a = 10
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: ka@ka_a_idx
+  spans: [/10 - /10]
+
+subtest end
