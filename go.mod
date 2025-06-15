@@ -157,7 +157,7 @@ require (
 	github.com/docker/go-connections v0.4.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/edsrzf/mmap-go v1.0.0
-	github.com/elastic/gosigar v0.14.3
+	github.com/elastic/gosigar v0.14.4-0.20250606160555-44388520074d
 	github.com/emicklei/dot v0.15.0
 	github.com/fatih/color v1.16.0
 	github.com/fatih/structs v1.1.0
