@@ -71,5 +71,6 @@ go_test(
         "//pkg/util/vector",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
+        "@org_gonum_v1_gonum//floats/scalar",
     ],
 )

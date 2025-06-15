@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
+	"gonum.org/v1/gonum/floats/scalar"
 )
 
 // Basic tests.
@@ -77,13 +78,12 @@ func TestRaBitQuantizerSimple(t *testing.T) {
 	})
 
 	t.Run("empty quantized set with capacity", func(t *testing.T) {
-		quantizer := NewRaBitQuantizer(65, 42, vecpb.L2SquaredDistance)
+		quantizer := NewRaBitQuantizer(65, 42, vecpb.InnerProductDistance)
 		centroid := make([]float32, 65)
 		for i := range centroid {
 			centroid[i] = float32(i)
 		}
-		quantizedSet := quantizer.NewQuantizedVectorSet(
-			5, centroid).(*RaBitQuantizedVectorSet)
+		quantizedSet := quantizer.NewQuantizedVectorSet(5, centroid).(*RaBitQuantizedVectorSet)
 		require.Equal(t, centroid, quantizedSet.Centroid)
 		require.Equal(t, 0, quantizedSet.Codes.Count)
 		require.Equal(t, 2, quantizedSet.Codes.Width)
@@ -91,6 +91,8 @@ func TestRaBitQuantizerSimple(t *testing.T) {
 		require.Equal(t, 5, cap(quantizedSet.CodeCounts))
 		require.Equal(t, 5, cap(quantizedSet.CentroidDistances))
 		require.Equal(t, 5, cap(quantizedSet.QuantizedDotProducts))
+		require.Equal(t, 5, cap(quantizedSet.CentroidDotProducts))
+		require.Equal(t, float64(299.07), scalar.Round(float64(quantizedSet.CentroidNorm), 2))
 	})
 }
 
