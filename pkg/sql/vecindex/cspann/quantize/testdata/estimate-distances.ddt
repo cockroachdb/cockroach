@@ -103,7 +103,28 @@ Cosine
   (-1, 0): exact is 2, estimate is 2 ± 0.7071
   (1, 0): exact is 0, estimate is 0 ± 0.7071
 
-# Query vector is equal to the centroid.
+# Query vector is equal to the centroid at the origin.
+estimate-distances query=[0,0]
+[-2,0]
+[2,0]
+----
+L2Squared
+  Query = (0, 0)
+  Centroid = (0, 0)
+  (-2, 0): exact is 4, estimate is 4
+  (2, 0): exact is 4, estimate is 4
+InnerProduct
+  Query = (0, 0)
+  Centroid = (0, 0)
+  (-2, 0): exact is 0, estimate is 0
+  (2, 0): exact is 0, estimate is 0
+Cosine
+  Query = (0, 0)
+  Centroid = (0, 0)
+  (-1, 0): exact is 1, estimate is 1
+  (1, 0): exact is 1, estimate is 1
+
+# Query vector is equal to the centroid at a non-origin point.
 estimate-distances query=[2,2]
 [0,2]
 [4,2]

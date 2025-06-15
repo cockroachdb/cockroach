@@ -35,9 +35,9 @@ message RaBitQuantizedVectorSet {
   // Centroid is the average of vectors in the set, representing its "center of
   // mass". Note that the centroid is computed when a vector set is created and
   // is not updated when vectors are added or removed.
-  // NOTE: By default, this is the mean centroid for the L2Squared distance
-  // metric, but is the spherical centroid for InnerProduct and Cosine metrics.
-  // The spherical centroid is simply the mean centroid, but normalized.
+  // NOTE: This is always the mean centroid, regardless of the distance metric.
+  // The caller is responsible for converting this to a spherical centroid when
+  // that's needed.
   // NOTE: The centroid should be treated as immutable.
   repeated float centroid = 1;
   // Codes is a set of RaBitQ quantization codes, with one code per quantized
@@ -55,7 +55,11 @@ message RaBitQuantizedVectorSet {
   repeated float quantized_dot_products = 5;
   // CentroidDotProducts is a slice of the exact inner products between the
   // original full-size vectors and the centroid.
+  // NOTE: This is always nil when using the L2Squared distance metric.
   repeated float centroid_dot_products = 6;
+  // CentroidNorm is the L2 norm of the mean centroid.
+  // NOTE: This is always nil when using the L2Squared distance metric.
+  float centroid_norm = 7;
 }
 
 // UnQuantizedVectorSet trivially implements the QuantizedVectorSet interface,

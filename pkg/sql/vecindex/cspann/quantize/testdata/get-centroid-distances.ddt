@@ -1,0 +1,54 @@
+# Centroid is at [0,0].
+get-centroid-distances dims=2
+[-2,0]
+[2,0]
+----
+L2Squared
+  Centroid = (0, 0)
+  Mean Centroid Distances = (4, 4)
+  Spherical Centroid Distances = (4, 4)
+InnerProduct
+  Centroid = (0, 0)
+  Mean Centroid Distances = (0, 0)
+  Spherical Centroid Distances = (0, 0)
+Cosine
+  Centroid = (0, 0)
+  Mean Centroid Distances = (1, 1)
+  Spherical Centroid Distances = (1, 1)
+
+# Centroid is at [0,2].
+get-centroid-distances dims=2
+[-2,2]
+[2,2]
+----
+L2Squared
+  Centroid = (0, 2)
+  Mean Centroid Distances = (4, 4)
+  Spherical Centroid Distances = (4, 4)
+InnerProduct
+  Centroid = (0, 2)
+  Mean Centroid Distances = (-4, -4)
+  Spherical Centroid Distances = (-2, -2)
+Cosine
+  Centroid = (0, 0.7071)
+  Mean Centroid Distances = (0.2929, 0.2929)
+  Spherical Centroid Distances = (0.2929, 0.2929)
+
+# Centroid is at [3,4].
+get-centroid-distances dims=2
+[2,6]
+[4,3]
+[3,3]
+----
+L2Squared
+  Centroid = (3, 4)
+  Mean Centroid Distances = (5, 2, 1)
+  Spherical Centroid Distances = (5, 2, 1)
+InnerProduct
+  Centroid = (3, 4)
+  Mean Centroid Distances = (-30, -24, -21)
+  Spherical Centroid Distances = (-6, -4.8, -4.2)
+Cosine
+  Centroid = (0.6078, 0.7519)
+  Mean Centroid Distances = (0.0634, 0.0305, 0.0056)
+  Spherical Centroid Distances = (0.0634, 0.0305, 0.0056)
