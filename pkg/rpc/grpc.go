@@ -73,8 +73,8 @@ func newGRPCPeerOptions(rpcCtx *Context, k peerKey, locality roachpb.Locality) *
 				return &grpcCloseNotifier{stopper: stopper, conn: cc}
 			},
 		},
-		newHeartbeatClient: func(cc *grpc.ClientConn) rpcHeartbeatClient {
-			return (*grpcHeartbeatClient)(&heartbeatClient{cc: cc})
+		newHeartbeatClient: func(cc *grpc.ClientConn) RPCHeartbeatClient {
+			return NewGRPCHeartbeatClientAdapter(cc)
 		},
 		pm: pm,
 	}
