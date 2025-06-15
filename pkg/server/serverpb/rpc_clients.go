@@ -14,18 +14,23 @@ import (
 
 // DialMigrationClient establishes a DRPC connection if enabled; otherwise,
 // it falls back to gRPC. The established connection is used to create a
-// MigrationClient.
+// RPCMigrationClient.
 func DialMigrationClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
-) (MigrationClient, error) {
+) (RPCMigrationClient, error) {
 	if !rpcbase.TODODRPC {
 		conn, err := nd.Dial(ctx, nodeID, class)
 		if err != nil {
 			return nil, err
 		}
-		return NewMigrationClient(conn), nil
+		return NewGRPCMigrationClientAdapter(conn), nil
+	} else {
+		conn, err := nd.DRPCDial(ctx, nodeID, class)
+		if err != nil {
+			return nil, err
+		}
+		return NewDRPCMigrationClientAdapter(conn), nil
 	}
-	return nil, nil
 }
 
 // DialStatusClientNoBreaker establishes a DRPC connection if enabled;
@@ -37,47 +42,62 @@ func DialStatusClientNoBreaker(
 	ctx context.Context,
 	nodeID roachpb.NodeID,
 	class rpcbase.ConnectionClass,
-) (StatusClient, error) {
+) (RPCStatusClient, error) {
 	if !rpcbase.TODODRPC {
 		conn, err := nd.DialNoBreaker(ctx, nodeID, class)
 		if err != nil {
 			return nil, err
 		}
-		return NewStatusClient(conn), nil
+		return NewGRPCStatusClientAdapter(conn), nil
+	} else {
+		conn, err := nd.DRPCDialNoBreaker(ctx, nodeID, class)
+		if err != nil {
+			return nil, err
+		}
+		return NewDRPCStatusClientAdapter(conn), nil
 	}
-	return nil, nil
 }
 
 // DialStatusClient establishes a DRPC connection if enabled; otherwise, it
 // falls back to gRPC. The established connection is used to create a
-// StatusClient.
+// RPCStatusClient.
 func DialStatusClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID,
-) (StatusClient, error) {
+) (RPCStatusClient, error) {
 	if !rpcbase.TODODRPC {
 		conn, err := nd.Dial(ctx, nodeID, rpcbase.DefaultClass)
 		if err != nil {
 			return nil, err
 		}
-		return NewStatusClient(conn), nil
+		return NewGRPCStatusClientAdapter(conn), nil
+	} else {
+		conn, err := nd.DRPCDial(ctx, nodeID, rpcbase.DefaultClass)
+		if err != nil {
+			return nil, err
+		}
+		return NewDRPCStatusClientAdapter(conn), nil
 	}
-	return nil, nil
 }
 
 // DialAdminClient establishes a DRPC connection if enabled; otherwise, it
 // falls back to gRPC. The established connection is used to create a
-// AdminClient.
+// RPCAdminClient.
 func DialAdminClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID,
-) (AdminClient, error) {
+) (RPCAdminClient, error) {
 	if !rpcbase.TODODRPC {
 		conn, err := nd.Dial(ctx, nodeID, rpcbase.DefaultClass)
 		if err != nil {
 			return nil, err
 		}
-		return NewAdminClient(conn), nil
+		return NewGRPCAdminClientAdapter(conn), nil
+	} else {
+		conn, err := nd.DRPCDial(ctx, nodeID, rpcbase.DefaultClass)
+		if err != nil {
+			return nil, err
+		}
+		return NewDRPCAdminClientAdapter(conn), nil
 	}
-	return nil, nil
 }
 
 // DialAdminClientNoBreaker establishes a DRPC connection if enabled;
@@ -86,13 +106,18 @@ func DialAdminClient(
 // does not check the breaker before dialing the connection.
 func DialAdminClientNoBreaker(
 	nd rpcbase.NodeDialerNoBreaker, ctx context.Context, nodeID roachpb.NodeID,
-) (AdminClient, error) {
+) (RPCAdminClient, error) {
 	if !rpcbase.TODODRPC {
 		conn, err := nd.DialNoBreaker(ctx, nodeID, rpcbase.DefaultClass)
 		if err != nil {
 			return nil, err
 		}
-		return NewAdminClient(conn), nil
+		return NewGRPCAdminClientAdapter(conn), nil
+	} else {
+		conn, err := nd.DRPCDialNoBreaker(ctx, nodeID, rpcbase.DefaultClass)
+		if err != nil {
+			return nil, err
+		}
+		return NewDRPCAdminClientAdapter(conn), nil
 	}
-	return nil, nil
 }

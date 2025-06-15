@@ -106,6 +106,28 @@ func (n *Dialer) Dial(
 	return conn, err
 }
 
+// DRPCDial returns a drpc connection to the given node. It logs whenever the
+// node first becomes unreachable or reachable. This method is similar to
+// Dial, but it dials a DRPC connection instead of a gRPC connection.
+func (n *Dialer) DRPCDial(
+	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+) (drpc.Conn, error) {
+	if n == nil || n.resolver == nil {
+		return nil, errors.New("no node dialer configured")
+	}
+	// Don't trip the breaker if we're already canceled.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, errors.Wrap(ctxErr, "dial")
+	}
+	addr, locality, err := n.resolver(nodeID)
+	if err != nil {
+		err = errors.Wrapf(err, "failed to resolve n%d", nodeID)
+		return nil, err
+	}
+	conn, _, err := n.drpcDial(ctx, nodeID, addr, locality, true, class)
+	return conn, err
+}
+
 // DialNoBreaker is like Dial, but will not check the circuit breaker before
 // trying to connect. This function should only be used when there is good
 // reason to believe that the node is reachable.
@@ -120,6 +142,23 @@ func (n *Dialer) DialNoBreaker(
 		return nil, err
 	}
 	conn, _, _, _, err := n.dial(ctx, nodeID, addr, locality, false, class)
+	return conn, err
+}
+
+// DRPCDialNoBreaker is like DRPCDial, but will not check the circuit breaker
+// before trying to connect. This function should only be used when there is
+// good reason to believe that the node is reachable.
+func (n *Dialer) DRPCDialNoBreaker(
+	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+) (drpc.Conn, error) {
+	if n == nil || n.resolver == nil {
+		return nil, errors.New("no node dialer configured")
+	}
+	addr, locality, err := n.resolver(nodeID)
+	if err != nil {
+		return nil, err
+	}
+	conn, _, err := n.drpcDial(ctx, nodeID, addr, locality, false, class)
 	return conn, err
 }
 
@@ -213,6 +252,41 @@ func (n *Dialer) dial(
 	return conn, pool, dconn, drpcStreamPool, nil
 }
 
+// drcpDial performs the dialing of the remote connection. If checkBreaker
+// is set (which it usually is), circuit breakers for the peer will be
+// checked. This method is similar to dial, but it dials a DRPC
+// connection instead of a gRPC connection.
+func (n *Dialer) drpcDial(
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	addr net.Addr,
+	locality roachpb.Locality,
+	checkBreaker bool,
+	class rpcbase.ConnectionClass,
+) (drpc.Conn, *rpc.DRPCBatchStreamPool, error) {
+	const ctxWrapMsg = "drpcDial"
+	// Don't trip the breaker if we're already canceled.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, nil, errors.Wrap(ctxErr, ctxWrapMsg)
+	}
+	rpcConn := n.rpcContext.DRPCDialNode(addr.String(), nodeID, locality, class)
+	connect := rpcConn.ConnectEx
+	if !checkBreaker {
+		connect = rpcConn.ConnectNoBreaker
+	}
+	_, dconn, err := connect(ctx)
+	if err != nil {
+		// If we were canceled during the dial, don't trip the breaker.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, nil, errors.Wrap(ctxErr, ctxWrapMsg)
+		}
+		err = errors.Wrapf(err, "failed to connect to n%d at %v", nodeID, addr)
+		return nil, nil, err
+	}
+	drpcStreamPool := rpcConn.DRPCBatchStreamPool()
+	return dconn, drpcStreamPool, nil
+}
+
 // ConnHealth returns nil if we have an open connection of the request
 // class to the given node that succeeded on its most recent heartbeat.
 // Returns circuit.ErrBreakerOpen if the breaker is tripped, otherwise
@@ -254,9 +328,15 @@ func (n *Dialer) ConnHealthTryDial(nodeID roachpb.NodeID, class rpcbase.Connecti
 	if err != nil {
 		return err
 	}
-	// NB: This will always return `ErrNotHeartbeated` since the heartbeat will
-	// not be done by the time `Health` is called since GRPCDialNode is async.
-	return n.rpcContext.GRPCDialNode(addr.String(), nodeID, locality, class).Health()
+	if !rpcbase.TODODRPC {
+		// NB: This will always return `ErrNotHeartbeated` since the heartbeat will
+		// not be done by the time `Health` is called since GRPCDialNode is async.
+		return n.rpcContext.GRPCDialNode(addr.String(), nodeID, locality, class).Health()
+	} else {
+		// NB: This will always return `ErrNotHeartbeated` since the heartbeat will
+		// not be done by the time `Health` is called since DRPCDialNode is async.
+		return n.rpcContext.DRPCDialNode(addr.String(), nodeID, locality, class).Health()
+	}
 }
 
 // ConnHealthTryDialInstance returns nil if we have an open connection of the
@@ -271,7 +351,12 @@ func (n *Dialer) ConnHealthTryDialInstance(id base.SQLInstanceID, addr string) e
 		addr, roachpb.NodeID(id), rpcbase.DefaultClass); err == nil {
 		return nil
 	}
-	return n.rpcContext.GRPCDialPod(addr, id, roachpb.Locality{}, rpcbase.DefaultClass).Health()
+
+	if !rpcbase.TODODRPC {
+		return n.rpcContext.GRPCDialPod(addr, id, roachpb.Locality{}, rpcbase.DefaultClass).Health()
+	} else {
+		return n.rpcContext.DRPCDialPod(addr, id, roachpb.Locality{}, rpcbase.DefaultClass).Health()
+	}
 }
 
 // GetCircuitBreaker retrieves the circuit breaker for connections to the

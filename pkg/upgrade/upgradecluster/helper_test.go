@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 type NoopDialer struct{}
@@ -26,6 +27,12 @@ type NoopDialer struct{}
 func (n NoopDialer) Dial(
 	ctx context.Context, id roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (*grpc.ClientConn, error) {
+	return nil, nil
+}
+
+func (n NoopDialer) DRPCDial(
+	ctx context.Context, id roachpb.NodeID, class rpcbase.ConnectionClass,
+) (drpc.Conn, error) {
 	return nil, nil
 }
 
@@ -55,7 +62,7 @@ func TestHelperEveryNode(t *testing.T) {
 			MaxRetries:     10,
 		}, func() error {
 			return h.ForEveryNodeOrServer(ctx, "dummy-op", func(
-				context.Context, serverpb.MigrationClient,
+				context.Context, serverpb.RPCMigrationClient,
 			) error {
 				mu.Lock()
 				defer mu.Unlock()
@@ -94,7 +101,7 @@ func TestHelperEveryNode(t *testing.T) {
 			MaxRetries:     10,
 		}, func() error {
 			return h.ForEveryNodeOrServer(ctx, "dummy-op", func(
-				context.Context, serverpb.MigrationClient,
+				context.Context, serverpb.RPCMigrationClient,
 			) error {
 				mu.Lock()
 				defer mu.Unlock()
@@ -136,7 +143,7 @@ func TestHelperEveryNode(t *testing.T) {
 			MaxRetries:     10,
 		}, func() error {
 			return h.ForEveryNodeOrServer(ctx, "dummy-op", func(
-				context.Context, serverpb.MigrationClient,
+				context.Context, serverpb.RPCMigrationClient,
 			) error {
 				mu.Lock()
 				defer mu.Unlock()
@@ -160,7 +167,7 @@ func TestHelperEveryNode(t *testing.T) {
 			MaxRetries:     10,
 		}, func() error {
 			return h.ForEveryNodeOrServer(ctx, "dummy-op", func(
-				context.Context, serverpb.MigrationClient,
+				context.Context, serverpb.RPCMigrationClient,
 			) error {
 				return nil
 			})

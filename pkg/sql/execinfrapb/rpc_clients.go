@@ -14,16 +14,21 @@ import (
 
 // DialDistSQLClient establishes a DRPC connection if enabled; otherwise,
 // it falls back to gRPC. The established connection is used to create a
-// DistSQLClient.
+// RPCDistSQLClient.
 func DialDistSQLClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
-) (DistSQLClient, error) {
+) (RPCDistSQLClient, error) {
 	if !rpcbase.TODODRPC {
 		conn, err := nd.Dial(ctx, nodeID, class)
 		if err != nil {
 			return nil, err
 		}
-		return NewDistSQLClient(conn), nil
+		return NewGRPCDistSQLClientAdapter(conn), nil
+	} else {
+		conn, err := nd.DRPCDial(ctx, nodeID, class)
+		if err != nil {
+			return nil, err
+		}
+		return NewDRPCDistSQLClientAdapter(conn), nil
 	}
-	return nil, nil
 }

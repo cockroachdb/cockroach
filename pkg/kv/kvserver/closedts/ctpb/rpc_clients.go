@@ -14,16 +14,21 @@ import (
 
 // DialSideTransportClient establishes a DRPC connection if enabled; otherwise,
 // it falls back to gRPC. The established connection is used to create a
-// SideTransportClient.
+// RPCSideTransportClient.
 func DialSideTransportClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
-) (SideTransportClient, error) {
+) (RPCSideTransportClient, error) {
 	if !rpcbase.TODODRPC {
 		conn, err := nd.Dial(ctx, nodeID, class)
 		if err != nil {
 			return nil, err
 		}
-		return NewSideTransportClient(conn), nil
+		return NewGRPCSideTransportClientAdapter(conn), nil
+	} else {
+		conn, err := nd.DRPCDial(ctx, nodeID, class)
+		if err != nil {
+			return nil, err
+		}
+		return NewDRPCSideTransportClientAdapter(conn), nil
 	}
-	return nil, nil
 }

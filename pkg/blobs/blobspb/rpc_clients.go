@@ -14,16 +14,21 @@ import (
 
 // DialBlobClient establishes a DRPC connection if enabled; otherwise,
 // it falls back to gRPC. The established connection is used to create a
-// BlobClient.
+// RPCBlobClient.
 func DialBlobClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
-) (BlobClient, error) {
+) (RPCBlobClient, error) {
 	if !rpcbase.TODODRPC {
 		conn, err := nd.Dial(ctx, nodeID, class)
 		if err != nil {
 			return nil, err
 		}
-		return NewBlobClient(conn), nil
+		return NewGRPCBlobClientAdapter(conn), nil
+	} else {
+		conn, err := nd.DRPCDial(ctx, nodeID, class)
+		if err != nil {
+			return nil, err
+		}
+		return NewDRPCBlobClientAdapter(conn), nil
 	}
-	return nil, nil
 }

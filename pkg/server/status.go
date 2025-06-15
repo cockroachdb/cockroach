@@ -718,7 +718,7 @@ func (s *statusServer) parseNodeID(nodeIDParam string) (roachpb.NodeID, bool, er
 // a StatusClient.
 func (s *statusServer) dialNode(
 	ctx context.Context, nodeID roachpb.NodeID,
-) (serverpb.StatusClient, error) {
+) (serverpb.RPCStatusClient, error) {
 	if s.knobs != nil && s.knobs.DialNodeCallback != nil {
 		if err := s.knobs.DialNodeCallback(ctx, nodeID); err != nil {
 			return nil, err
@@ -1738,7 +1738,7 @@ func (s *statusServer) fetchProfileFromAllNodes(
 	senderServerVersion := resp.Desc.ServerVersion
 
 	opName := redact.Sprintf("fetch cluster-wide %s profile", req.Type)
-	nodeFn := func(ctx context.Context, statusClient serverpb.StatusClient, nodeID roachpb.NodeID) (*profData, error) {
+	nodeFn := func(ctx context.Context, statusClient serverpb.RPCStatusClient, nodeID roachpb.NodeID) (*profData, error) {
 		var pd *profData
 		err := timeutil.RunWithTimeout(ctx, opName, 1*time.Minute, func(ctx context.Context) error {
 			resp, err := statusClient.Profile(ctx, &serverpb.ProfileRequest{
@@ -2263,7 +2263,7 @@ func (s *systemStatusServer) NetworkConnectivity(
 
 	// No NodeID parameter specified, so fan-out to all nodes and collect results.
 	remoteRequest := serverpb.NetworkConnectivityRequest{NodeID: "local"}
-	nodeFn := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.NetworkConnectivityResponse, error) {
+	nodeFn := func(ctx context.Context, statusClient serverpb.RPCStatusClient, _ roachpb.NodeID) (*serverpb.NetworkConnectivityResponse, error) {
 		return statusClient.NetworkConnectivity(ctx, &remoteRequest)
 	}
 	responseFn := func(nodeID roachpb.NodeID, r *serverpb.NetworkConnectivityResponse) {
@@ -2952,7 +2952,7 @@ func (s *systemStatusServer) HotRangesV2(
 		PerNodeLimit: req.PerNodeLimit,
 		StatsOnly:    req.StatsOnly,
 	}
-	nodeFn := func(ctx context.Context, status serverpb.StatusClient, nodeID roachpb.NodeID) ([]*serverpb.HotRangesResponseV2_HotRange, error) {
+	nodeFn := func(ctx context.Context, status serverpb.RPCStatusClient, nodeID roachpb.NodeID) ([]*serverpb.HotRangesResponseV2_HotRange, error) {
 		nodeResp, err := status.HotRangesV2(ctx, &remoteRequest)
 		if err != nil {
 			return nil, err
@@ -3185,7 +3185,7 @@ func (s *statusServer) Range(
 		RangeIDs: []roachpb.RangeID{roachpb.RangeID(req.RangeId)},
 	}
 
-	nodeFn := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.RangesResponse, error) {
+	nodeFn := func(ctx context.Context, status serverpb.RPCStatusClient, _ roachpb.NodeID) (*serverpb.RangesResponse, error) {
 		return status.Ranges(ctx, rangesRequest)
 	}
 	nowNanos := timeutil.Now().UnixNano()
@@ -3375,7 +3375,7 @@ func paginatedIterateNodes[Result any](
 	pagState paginationState,
 	requestedNodes []roachpb.NodeID,
 	nodeFnTimeout time.Duration,
-	nodeFn func(ctx context.Context, client serverpb.StatusClient, nodeID roachpb.NodeID) ([]Result, error),
+	nodeFn func(ctx context.Context, client serverpb.RPCStatusClient, nodeID roachpb.NodeID) ([]Result, error),
 	responseFn func(nodeID roachpb.NodeID, resp []Result),
 	errorFn func(nodeID roachpb.NodeID, nodeFnError error),
 ) (next paginationState, err error) {
@@ -3409,7 +3409,7 @@ func paginatedIterateNodes[Result any](
 	}
 	nodeIDs = append(nodeIDs, pagState.nodesToQuery...)
 
-	paginator := &rpcNodePaginator[serverpb.StatusClient, Result]{
+	paginator := &rpcNodePaginator[serverpb.RPCStatusClient, Result]{
 		limit:        limit,
 		numNodes:     len(nodeIDs),
 		errorCtx:     errorCtx,
@@ -3456,7 +3456,7 @@ func (s *statusServer) listSessionsHelper(
 		InternalAppNamePrefix: catconstants.InternalAppNamePrefix,
 	}
 
-	nodeFn := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) ([]serverpb.Session, error) {
+	nodeFn := func(ctx context.Context, statusClient serverpb.RPCStatusClient, _ roachpb.NodeID) ([]serverpb.Session, error) {
 		resp, err := statusClient.ListLocalSessions(ctx, req)
 		if resp != nil && err == nil {
 			if len(resp.Errors) > 0 {
@@ -3695,7 +3695,7 @@ func (s *statusServer) ListContentionEvents(
 	}
 
 	var response serverpb.ListContentionEventsResponse
-	nodeFn := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.ListContentionEventsResponse, error) {
+	nodeFn := func(ctx context.Context, statusClient serverpb.RPCStatusClient, _ roachpb.NodeID) (*serverpb.ListContentionEventsResponse, error) {
 		resp, err := statusClient.ListLocalContentionEvents(ctx, req)
 		if err != nil {
 			return nil, err
@@ -3740,7 +3740,7 @@ func (s *statusServer) ListDistSQLFlows(
 	}
 
 	var response serverpb.ListDistSQLFlowsResponse
-	nodeFn := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.ListDistSQLFlowsResponse, error) {
+	nodeFn := func(ctx context.Context, statusClient serverpb.RPCStatusClient, _ roachpb.NodeID) (*serverpb.ListDistSQLFlowsResponse, error) {
 		resp, err := statusClient.ListLocalDistSQLFlows(ctx, request)
 		if err != nil {
 			return nil, err
@@ -3801,7 +3801,7 @@ func (s *statusServer) ListExecutionInsights(
 
 	var response serverpb.ListExecutionInsightsResponse
 
-	nodeFn := func(ctx context.Context, statusClient serverpb.StatusClient, nodeID roachpb.NodeID) (*serverpb.ListExecutionInsightsResponse, error) {
+	nodeFn := func(ctx context.Context, statusClient serverpb.RPCStatusClient, nodeID roachpb.NodeID) (*serverpb.ListExecutionInsightsResponse, error) {
 		resp, err := statusClient.ListExecutionInsights(ctx, &localRequest)
 		if err != nil {
 			return nil, err
@@ -3894,7 +3894,7 @@ func (s *systemStatusServer) TenantServiceStatus(
 
 	// Send TenantStatusService request to all stores on all nodes.
 	remoteRequest := serverpb.TenantServiceStatusRequest{NodeID: "local", TenantID: req.TenantID}
-	nodeFn := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.TenantServiceStatusResponse, error) {
+	nodeFn := func(ctx context.Context, status serverpb.RPCStatusClient, _ roachpb.NodeID) (*serverpb.TenantServiceStatusResponse, error) {
 		return status.TenantServiceStatus(ctx, &remoteRequest)
 	}
 	responseFn := func(nodeID roachpb.NodeID, remoteResp *serverpb.TenantServiceStatusResponse) {
@@ -4231,7 +4231,7 @@ func (s *statusServer) TransactionContentionEvents(
 		return statusClient.TransactionContentionEvents(ctx, req)
 	}
 
-	rpcCallFn := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.TransactionContentionEventsResponse, error) {
+	rpcCallFn := func(ctx context.Context, statusClient serverpb.RPCStatusClient, _ roachpb.NodeID) (*serverpb.TransactionContentionEventsResponse, error) {
 		return statusClient.TransactionContentionEvents(ctx, &serverpb.TransactionContentionEventsRequest{
 			NodeID: "local",
 		})
@@ -4380,7 +4380,7 @@ func (s *statusServer) GetThrottlingMetadata(
 		return statusClient.GetThrottlingMetadata(ctx, req)
 	}
 
-	rpcCallFn := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.GetThrottlingMetadataResponse, error) {
+	rpcCallFn := func(ctx context.Context, statusClient serverpb.RPCStatusClient, _ roachpb.NodeID) (*serverpb.GetThrottlingMetadataResponse, error) {
 		return statusClient.GetThrottlingMetadata(ctx, &serverpb.GetThrottlingMetadataRequest{
 			NodeID: "local",
 		})

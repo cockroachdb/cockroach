@@ -14,16 +14,21 @@ import (
 
 // DialStoreLivenessClient establishes a DRPC connection if enabled; otherwise,
 // it falls back to gRPC. The established connection is used to create a
-// StoreLivenessClient.
+// RPCStoreLivenessClient.
 func DialStoreLivenessClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
-) (StoreLivenessClient, error) {
+) (RPCStoreLivenessClient, error) {
 	if !rpcbase.TODODRPC {
 		conn, err := nd.Dial(ctx, nodeID, class)
 		if err != nil {
 			return nil, err
 		}
-		return NewStoreLivenessClient(conn), nil
+		return NewGRPCStoreLivenessClientAdapter(conn), nil
+	} else {
+		conn, err := nd.DRPCDial(ctx, nodeID, class)
+		if err != nil {
+			return nil, err
+		}
+		return NewDRPCStoreLivenessClientAdapter(conn), nil
 	}
-	return nil, nil
 }

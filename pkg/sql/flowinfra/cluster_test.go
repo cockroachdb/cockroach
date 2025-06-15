@@ -49,7 +49,7 @@ func runTestClusterFlow(
 	t *testing.T,
 	servers []serverutils.ApplicationLayerInterface,
 	conns []*gosql.DB,
-	clients []execinfrapb.DistSQLClient,
+	clients []execinfrapb.RPCDistSQLClient,
 ) {
 	ctx := context.Background()
 	const numRows = 100
@@ -263,7 +263,7 @@ func TestClusterFlow(t *testing.T) {
 
 	servers := make([]serverutils.ApplicationLayerInterface, numNodes)
 	conns := make([]*gosql.DB, numNodes)
-	clients := make([]execinfrapb.DistSQLClient, numNodes)
+	clients := make([]execinfrapb.RPCDistSQLClient, numNodes)
 	for i := 0; i < numNodes; i++ {
 		s := tc.Server(i).ApplicationLayer()
 		servers[i] = s
@@ -289,7 +289,7 @@ func TestTenantClusterFlow(t *testing.T) {
 
 	pods := make([]serverutils.ApplicationLayerInterface, numPods)
 	podConns := make([]*gosql.DB, numPods)
-	clients := make([]execinfrapb.DistSQLClient, numPods)
+	clients := make([]execinfrapb.RPCDistSQLClient, numPods)
 	tenantID := serverutils.TestTenantID()
 	for i := 0; i < numPods; i++ {
 		pods[i], podConns[i] = serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
@@ -300,11 +300,20 @@ func TestTenantClusterFlow(t *testing.T) {
 		})
 		defer podConns[i].Close()
 		pod := pods[i]
-		conn, err := pod.RPCContext().GRPCDialPod(pod.RPCAddr(), pod.SQLInstanceID(), pod.Locality(), rpcbase.DefaultClass).Connect(ctx)
-		if err != nil {
-			t.Fatal(err)
+
+		if !rpcbase.TODODRPC {
+			conn, err := pod.RPCContext().GRPCDialPod(pod.RPCAddr(), pod.SQLInstanceID(), pod.Locality(), rpcbase.DefaultClass).Connect(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			clients[i] = execinfrapb.NewGRPCDistSQLClientAdapter(conn)
+		} else {
+			conn, err := pod.RPCContext().DRPCDialPod(pod.RPCAddr(), pod.SQLInstanceID(), pod.Locality(), rpcbase.DefaultClass).Connect(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			clients[i] = execinfrapb.NewDRPCDistSQLClientAdapter(conn)
 		}
-		clients[i] = execinfrapb.NewDistSQLClient(conn)
 	}
 
 	runTestClusterFlow(t, pods, podConns, clients)
@@ -771,7 +780,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 					}
 					reqs[0].Flow.Processors = append(reqs[0].Flow.Processors, lastProc)
 
-					var clients []execinfrapb.DistSQLClient
+					var clients []execinfrapb.RPCDistSQLClient
 
 					for i := 0; i < numNodes; i++ {
 						s := tc.Server(i)
