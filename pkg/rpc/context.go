@@ -719,7 +719,7 @@ func makeInternalClientAdapter(
 	batchServerHandler := chainUnaryServerInterceptors(
 		&grpc.UnaryServerInfo{
 			Server:     server,
-			FullMethod: grpcinterceptor.BatchMethodName,
+			FullMethod: tracing.BatchMethodName,
 		},
 		serverUnaryInterceptors,
 		func(ctx context.Context, req interface{}) (interface{}, error) {
@@ -803,7 +803,7 @@ func makeInternalClientAdapter(
 				ctx = tracing.ContextWithSpan(ctx, nil)
 			}
 
-			err := batchClientHandler(ctx, grpcinterceptor.BatchMethodName, ba, reply, nil /* ClientConn */, opts...)
+			err := batchClientHandler(ctx, tracing.BatchMethodName, ba, reply, nil /* ClientConn */, opts...)
 			return reply, err
 		},
 	}

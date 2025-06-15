@@ -43,33 +43,6 @@ func setGRPCErrorTag(sp *tracing.Span, err error) {
 	sp.SetOtelStatus(codes.Error, s.Message())
 }
 
-// BatchMethodName is the method name of Internal.Batch RPC.
-const BatchMethodName = "/cockroach.roachpb.Internal/Batch"
-
-// BatchStreamMethodName is the method name of the Internal.BatchStream RPC.
-const BatchStreamMethodName = "/cockroach.roachpb.Internal/BatchStream"
-
-// sendKVBatchMethodName is the method name for adminServer.SendKVBatch.
-const sendKVBatchMethodName = "/cockroach.server.serverpb.Admin/SendKVBatch"
-
-// SetupFlowMethodName is the method name of DistSQL.SetupFlow RPC.
-const SetupFlowMethodName = "/cockroach.sql.distsqlrun.DistSQL/SetupFlow"
-const flowStreamMethodName = "/cockroach.sql.distsqlrun.DistSQL/FlowStream"
-
-// methodExcludedFromTracing returns true if a call to the given RPC method does
-// not need to propagate tracing info. Some RPCs (Internal.Batch,
-// DistSQL.SetupFlow) have dedicated fields for passing along the tracing
-// context in the request, which is more efficient than letting the RPC
-// interceptors deal with it. Others (DistSQL.FlowStream) are simply exempt from
-// tracing because it's not worth it.
-func methodExcludedFromTracing(method string) bool {
-	return method == BatchMethodName ||
-		method == BatchStreamMethodName ||
-		method == sendKVBatchMethodName ||
-		method == SetupFlowMethodName ||
-		method == flowStreamMethodName
-}
-
 // ServerInterceptor returns a grpc.UnaryServerInterceptor suitable
 // for use in a grpc.NewServer call.
 //
@@ -92,7 +65,7 @@ func ServerInterceptor(tracer *tracing.Tracer) grpc.UnaryServerInterceptor {
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (interface{}, error) {
-		if methodExcludedFromTracing(info.FullMethod) {
+		if tracing.MethodExcludedFromTracing(info.FullMethod) {
 			return handler(ctx, req)
 		}
 
@@ -139,7 +112,7 @@ func ServerInterceptor(tracer *tracing.Tracer) grpc.UnaryServerInterceptor {
 // application-specific gRPC handler(s) to access.
 func StreamServerInterceptor(tracer *tracing.Tracer) grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		if methodExcludedFromTracing(info.FullMethod) {
+		if tracing.MethodExcludedFromTracing(info.FullMethod) {
 			return handler(srv, ss)
 		}
 		spanMeta, err := ExtractSpanMetaFromGRPCCtx(ss.Context(), tracer)
@@ -250,7 +223,7 @@ func ClientInterceptor(
 
 		// For most RPCs we pass along tracing info as gRPC metadata. Some select
 		// RPCs carry the tracing in the request protos, which is more efficient.
-		if !methodExcludedFromTracing(method) {
+		if !tracing.MethodExcludedFromTracing(method) {
 			ctx = injectSpanMeta(ctx, tracer, clientSpan)
 		}
 		if invoker != nil {
@@ -313,7 +286,7 @@ func StreamClientInterceptor(
 		)
 		init(clientSpan)
 
-		if !methodExcludedFromTracing(method) {
+		if !tracing.MethodExcludedFromTracing(method) {
 			ctx = injectSpanMeta(ctx, tracer, clientSpan)
 		}
 

@@ -8,6 +8,7 @@ package server
 import (
 	"context"
 	"crypto/tls"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/drpcinterceptor"
 	"math"
 	"net"
 
@@ -97,6 +98,11 @@ func newDRPCServer(
 			return handler.HandleRPC(stream, methodName)
 		}
 		serverInterceptors = append(serverInterceptors, accessControlInterceptor)
+
+		// 4. Tracing Interceptor
+		if tracer := rpcCtx.Stopper.Tracer(); tracer != nil {
+			serverInterceptors = append(serverInterceptors, drpcinterceptor.ServerInterceptor(tracer))
+		}
 
 		mux := drpcmux.New()
 		dsrv = drpcserver.NewWithOptions(mux, drpcserver.Options{

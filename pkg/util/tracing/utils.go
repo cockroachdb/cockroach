@@ -56,3 +56,31 @@ func RedactAndTruncateError(err error) string {
 	}
 	return redactedErr[:maxErrLength]
 }
+
+const flowStreamMethodName = "/cockroach.sql.distsqlrun.DistSQL/FlowStream"
+
+// BatchMethodName is the method name of Internal.Batch RPC.
+const BatchMethodName = "/cockroach.roachpb.Internal/Batch"
+
+// BatchStreamMethodName is the method name of the Internal.BatchStream RPC.
+const BatchStreamMethodName = "/cockroach.roachpb.Internal/BatchStream"
+
+// sendKVBatchMethodName is the method name for adminServer.SendKVBatch.
+const sendKVBatchMethodName = "/cockroach.server.serverpb.Admin/SendKVBatch"
+
+// SetupFlowMethodName is the method name of DistSQL.SetupFlow RPC.
+const SetupFlowMethodName = "/cockroach.sql.distsqlrun.DistSQL/SetupFlow"
+
+// methodExcludedFromTracing returns true if a call to the given RPC method does
+// not need to propagate tracing info. Some RPCs (Internal.Batch,
+// DistSQL.SetupFlow) have dedicated fields for passing along the tracing
+// context in the request, which is more efficient than letting the RPC
+// interceptors deal with it. Others (DistSQL.FlowStream) are simply exempt from
+// tracing because it's not worth it.
+func MethodExcludedFromTracing(method string) bool {
+	return method == BatchMethodName ||
+		method == BatchStreamMethodName ||
+		method == sendKVBatchMethodName ||
+		method == SetupFlowMethodName ||
+		method == flowStreamMethodName
+}

@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/stretchr/testify/require"
 	oteltrace "go.opentelemetry.io/otel/trace"
@@ -144,7 +143,7 @@ func TestTraceForTenantWithLocalKVServer(t *testing.T) {
 	// Check that the trace contains a server-side Batch span.
 	var found bool
 	for _, sp := range testStmtTrace {
-		if sp.Operation != grpcinterceptor.BatchMethodName {
+		if sp.Operation != tracing.BatchMethodName {
 			continue
 		}
 		tag, ok := sp.FindTagGroup(tracingpb.AnonymousTagGroupName).FindTag(tracing.SpanKindTagKey)
