@@ -1,0 +1,57 @@
+/* setup */
+CREATE DATABASE db;
+USE db;
+CREATE TABLE t1 (id INT PRIMARY KEY, name STRING);
+INSERT INTO t1 VALUES (1, 'foo');
+----
+...
++database {0 0 db} -> 104
++schema {104 0 public} -> 105
++object {104 105 t1} -> 106
+
+/* test */
+ALTER TABLE t1 RENAME TO t2;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+## StatementPhase stage 1 of 1 with 3 MutationType ops
+delete object namespace entry {104 105 t1} -> 106
+add object namespace entry {104 105 t2} -> 106
+upsert descriptor #106
+  ...
+     id: 106
+     modificationTime: {}
+  -  name: t1
+  +  name: t2
+     nextColumnId: 3
+     nextConstraintId: 2
+  ...
+     schemaLocked: true
+     unexposedParentSchemaId: 105
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 3 MutationType ops
+delete object namespace entry {104 105 t1} -> 106
+add object namespace entry {104 105 t2} -> 106
+upsert descriptor #106
+  ...
+     id: 106
+     modificationTime: {}
+  -  name: t1
+  +  name: t2
+     nextColumnId: 3
+     nextConstraintId: 2
+  ...
+     schemaLocked: true
+     unexposedParentSchemaId: 105
+  -  version: "1"
+  +  version: "2"
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1
