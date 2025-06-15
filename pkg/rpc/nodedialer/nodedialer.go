@@ -328,9 +328,15 @@ func (n *Dialer) ConnHealthTryDial(nodeID roachpb.NodeID, class rpcbase.Connecti
 	if err != nil {
 		return err
 	}
-	// NB: This will always return `ErrNotHeartbeated` since the heartbeat will
-	// not be done by the time `Health` is called since GRPCDialNode is async.
-	return n.rpcContext.GRPCDialNode(addr.String(), nodeID, locality, class).Health()
+	if !rpcbase.TODODRPC {
+		// NB: This will always return `ErrNotHeartbeated` since the heartbeat will
+		// not be done by the time `Health` is called since GRPCDialNode is async.
+		return n.rpcContext.GRPCDialNode(addr.String(), nodeID, locality, class).Health()
+	} else {
+		// NB: This will always return `ErrNotHeartbeated` since the heartbeat will
+		// not be done by the time `Health` is called since DRPCDialNode is async.
+		return n.rpcContext.DRPCDialNode(addr.String(), nodeID, locality, class).Health()
+	}
 }
 
 // ConnHealthTryDialInstance returns nil if we have an open connection of the
@@ -345,7 +351,12 @@ func (n *Dialer) ConnHealthTryDialInstance(id base.SQLInstanceID, addr string) e
 		addr, roachpb.NodeID(id), rpcbase.DefaultClass); err == nil {
 		return nil
 	}
-	return n.rpcContext.GRPCDialPod(addr, id, roachpb.Locality{}, rpcbase.DefaultClass).Health()
+
+	if !rpcbase.TODODRPC {
+		return n.rpcContext.GRPCDialPod(addr, id, roachpb.Locality{}, rpcbase.DefaultClass).Health()
+	} else {
+		return n.rpcContext.DRPCDialPod(addr, id, roachpb.Locality{}, rpcbase.DefaultClass).Health()
+	}
 }
 
 // GetCircuitBreaker retrieves the circuit breaker for connections to the

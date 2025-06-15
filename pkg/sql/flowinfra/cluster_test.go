@@ -300,11 +300,20 @@ func TestTenantClusterFlow(t *testing.T) {
 		})
 		defer podConns[i].Close()
 		pod := pods[i]
-		conn, err := pod.RPCContext().GRPCDialPod(pod.RPCAddr(), pod.SQLInstanceID(), pod.Locality(), rpcbase.DefaultClass).Connect(ctx)
-		if err != nil {
-			t.Fatal(err)
+
+		if !rpcbase.TODODRPC {
+			conn, err := pod.RPCContext().GRPCDialPod(pod.RPCAddr(), pod.SQLInstanceID(), pod.Locality(), rpcbase.DefaultClass).Connect(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			clients[i] = execinfrapb.NewGRPCDistSQLClientAdapter(conn)
+		} else {
+			conn, err := pod.RPCContext().DRPCDialPod(pod.RPCAddr(), pod.SQLInstanceID(), pod.Locality(), rpcbase.DefaultClass).Connect(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			clients[i] = execinfrapb.NewDRPCDistSQLClientAdapter(conn)
 		}
-		clients[i] = execinfrapb.NewGRPCDistSQLClientAdapter(conn)
 	}
 
 	runTestClusterFlow(t, pods, podConns, clients)

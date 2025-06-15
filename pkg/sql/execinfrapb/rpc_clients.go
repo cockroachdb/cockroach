@@ -24,6 +24,11 @@ func DialDistSQLClient(
 			return nil, err
 		}
 		return NewGRPCDistSQLClientAdapter(conn), nil
+	} else {
+		conn, err := nd.DRPCDial(ctx, nodeID, class)
+		if err != nil {
+			return nil, err
+		}
+		return NewDRPCDistSQLClientAdapter(conn), nil
 	}
-	return nil, nil
 }
