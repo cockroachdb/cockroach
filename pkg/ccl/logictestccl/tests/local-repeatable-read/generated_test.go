@@ -2701,6 +2701,13 @@ func TestRepeatableReadLogic_zone_config_system_tenant(
 	runLogicTest(t, "zone_config_system_tenant")
 }
 
+func TestRepeatableReadLogicCCL_buffered_writes_lock_loss(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "buffered_writes_lock_loss")
+}
+
 func TestRepeatableReadLogicCCL_fips_ready(
 	t *testing.T,
 ) {

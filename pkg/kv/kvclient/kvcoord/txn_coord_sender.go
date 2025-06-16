@@ -887,6 +887,9 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(ctx context.Context, pErr *kv
 	case *kvpb.ReadWithinUncertaintyIntervalError:
 		tc.metrics.RestartsReadWithinUncertainty.Inc()
 
+	case *kvpb.ExclusionViolationError:
+		tc.metrics.RestartsExclusionViolation.Inc()
+
 	case *kvpb.TransactionAbortedError:
 		tc.metrics.RestartsTxnAborted.Inc()
 

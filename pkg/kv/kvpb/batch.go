@@ -94,10 +94,28 @@ func (ba *BatchRequest) EarliestActiveTimestamp() hlc.Timestamp {
 	ts := ba.Timestamp
 	for _, ru := range ba.Requests {
 		switch t := ru.GetInner().(type) {
+		case *DeleteRequest:
+			// A DeleteRequest with ExpectExclusionSince set need to be able to
+			// observe MVCC versions from the specified time to correctly detect
+			// isolation violations.
+			//
+			// See the example in RefreshRequest for more details.
+			if !t.ExpectExclusionSince.IsEmpty() {
+				ts.Backward(t.ExpectExclusionSince.Next())
+			}
 		case *ExportRequest:
 			if !t.StartTime.IsEmpty() {
 				// NB: StartTime.Next() because StartTime is exclusive.
 				ts.Backward(t.StartTime.Next())
+			}
+		case *PutRequest:
+			// A PutRequest with ExpectExclusionSince set need to be able to observe MVCC
+			// versions from the specified time to correctly detect isolation
+			// violations.
+			//
+			// See the example in RefreshRequest for more details.
+			if !t.ExpectExclusionSince.IsEmpty() {
+				ts.Backward(t.ExpectExclusionSince)
 			}
 		case *RevertRangeRequest:
 			// This method is only used to check GC Threshold so Revert requests that
