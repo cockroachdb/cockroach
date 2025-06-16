@@ -13,6 +13,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -152,6 +154,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	pkgs, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	var (
+		cpu          = mustGetFlagInt(cmd, "cpu")
 		filter       = mustGetFlagString(cmd, filterFlag)
 		ignoreCache  = mustGetFlagBool(cmd, ignoreCacheFlag)
 		race         = mustGetFlagBool(cmd, raceFlag)
@@ -324,6 +327,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 			}
 		}
 	}
+	args = append(args, "--test_arg", "-test.cpu="+strconv.Itoa(cpu))
 	if showDiff {
 		args = append(args, "--test_arg", "-show-diff")
 	}
@@ -336,9 +340,20 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 			// Default to 1000 unless a different count was provided.
 			count = 1000
 		}
+		if numBazelCPU > 0 {
+			args = append(args, fmt.Sprintf("--jobs=%d", numBazelCPU))
+		} else if cpu > runtime.GOMAXPROCS(0) {
+			// If the CPU flag was increased (relative to the default), be helpful
+			// and guide the user toward what they likely want: to also have that
+			// many copies of the test running concurrently.
+			log.Printf("NOTE: --cpu=%d exceeds GOMAXPROCS. If the goal is to "+
+				"stress a test under high concurrency,  consider also specifying --bazel-cpu=%d",
+				cpu, cpu)
+		}
 		args = append(args,
 			"--test_env=COCKROACH_STRESS=true",
 			"--notest_keep_going",
+			"--local_resources=memory=HOST_RAM",
 		)
 	}
 

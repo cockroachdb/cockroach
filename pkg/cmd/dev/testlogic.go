@@ -12,6 +12,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -63,7 +64,7 @@ func makeTestLogicCmd(runE func(cmd *cobra.Command, args []string) error) *cobra
 	testLogicCmd.Flags().Bool(showDiffFlag, false, "generate a diff for expectation mismatches when possible")
 	testLogicCmd.Flags().Bool(flexTypesFlag, false, "tolerate when a result column is produced with a different numeric type")
 	testLogicCmd.Flags().Bool(workmemFlag, false, "disable randomization of sql.distsql.temp_storage.workmem")
-
+	addCPUFlag(testLogicCmd)
 	addCommonBuildFlags(testLogicCmd)
 	return testLogicCmd
 }
@@ -74,6 +75,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 
 	var (
 		bigtest        = mustGetFlagBool(cmd, bigtestFlag)
+		cpu            = mustGetFlagInt(cmd, cpuFlag)
 		configs        = mustGetFlagStringSlice(cmd, configsFlag)
 		files          = mustGetFlagString(cmd, filesFlag)
 		ignoreCache    = mustGetFlagBool(cmd, ignoreCacheFlag)
@@ -245,6 +247,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 	if stress && streamOutput {
 		return fmt.Errorf("cannot combine --%s and --%s", stressFlag, streamOutputFlag)
 	}
+	args = append(args, "--test_arg", "-test.cpu="+strconv.Itoa(cpu))
 	if showDiff {
 		args = append(args, "--test_arg", "-show-diff")
 	}
