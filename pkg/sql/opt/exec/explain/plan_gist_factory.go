@@ -35,7 +35,7 @@ import (
 )
 
 func init() {
-	if numOperators != 65 {
+	if numOperators != 67 {
 		// This error occurs when an operator has been added or removed in
 		// pkg/sql/opt/exec/explain/factory.opt. If an operator is added at the
 		// end of factory.opt, simply adjust the hardcoded value above. If an
