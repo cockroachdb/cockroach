@@ -2774,7 +2774,10 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 			}
 
 			if isClusterBackup {
-				err := u.resetCluster(ctx, l, v, h.ExpectDeaths, []install.ClusterSettingOption{})
+				// The mixedversion framework uses the global test monitor, which
+				// already handles marking node deaths as expected for simple restarts.
+				expectDeaths := func(numNodes int) {}
+				err := u.resetCluster(ctx, l, v, expectDeaths, []install.ClusterSettingOption{})
 				if err != nil {
 					err := errors.Wrapf(err, "%s", v)
 					l.Printf("error resetting cluster: %v", err)
@@ -2872,6 +2875,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 		CompatibleClouds:          registry.Clouds(spec.GCE, spec.Local),
 		Suites:                    registry.Suites(registry.MixedVersion, registry.Nightly),
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+		Monitor:                   true,
 		Randomized:                true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			enabledDeploymentModes := []mixedversion.DeploymentMode{
