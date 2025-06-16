@@ -169,10 +169,11 @@ const (
 	OptEnvelopeBare          EnvelopeType = `bare`
 	OptEnvelopeEnriched      EnvelopeType = `enriched`
 
-	OptFormatJSON    FormatType = `json`
-	OptFormatAvro    FormatType = `avro`
-	OptFormatCSV     FormatType = `csv`
-	OptFormatParquet FormatType = `parquet`
+	OptFormatJSON     FormatType = `json`
+	OptFormatAvro     FormatType = `avro`
+	OptFormatCSV      FormatType = `csv`
+	OptFormatParquet  FormatType = `parquet`
+	OptFormatProtobuf FormatType = `protobuf`
 
 	OptOnErrorFail  OnErrorType = `fail`
 	OptOnErrorPause OnErrorType = `pause`
@@ -376,7 +377,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptCustomKeyColumn:                    stringOption,
 	OptEndTime:                            timestampOption,
 	OptEnvelope:                           enum("row", "key_only", "wrapped", "deprecated_row", "bare", "enriched"),
-	OptFormat:                             enum("json", "avro", "csv", "experimental_avro", "parquet"),
+	OptFormat:                             enum("json", "avro", "csv", "experimental_avro", "parquet", "protobuf"),
 	OptFullTableName:                      flagOption,
 	OptKeyInValue:                         flagOption,
 	OptTopicInValue:                       flagOption,
@@ -948,7 +949,7 @@ func (e EncodingOptions) Validate() error {
 	}
 
 	// TODO(#140110): refactor this logic.
-	if (e.Envelope != OptEnvelopeWrapped && e.Envelope != OptEnvelopeEnriched) && e.Format != OptFormatJSON && e.Format != OptFormatParquet {
+	if (e.Envelope != OptEnvelopeWrapped && e.Envelope != OptEnvelopeEnriched) && e.Format != OptFormatProtobuf && e.Format != OptFormatJSON && e.Format != OptFormatParquet {
 		requiresWrap := []struct {
 			k string
 			b bool

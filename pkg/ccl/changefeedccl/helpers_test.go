@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kcjsonschema"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl" // allow locality-related mutations
@@ -58,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -363,6 +365,14 @@ func assertPayloadsBaseErr(
 	if err != nil {
 		return err
 	}
+	// Detect if this is a protobuf feed and format accordingly.
+	useProtobuf := false
+	if ef, ok := f.(cdctest.EnterpriseTestFeed); ok {
+		details, _ := ef.Details()
+		if details.Opts[changefeedbase.OptFormat] == string(changefeedbase.OptFormatProtobuf) {
+			useProtobuf = true
+		}
+	}
 
 	if didForceEnriched {
 		for i, m := range actual {
@@ -376,7 +386,27 @@ func assertPayloadsBaseErr(
 
 	var actualFormatted []string
 	for _, m := range actual {
+		if useProtobuf {
+			var msg changefeedpb.Message
+			if err := protoutil.Unmarshal(m.Value, &msg); err != nil {
+				return err
+			}
+			m.Value, err = gojson.Marshal(msg.GetBare())
+			if err != nil {
+				return err
+			}
+
+			var key changefeedpb.Key
+			if err := protoutil.Unmarshal(m.Key, &key); err != nil {
+				return err
+			}
+			m.Key, err = gojson.Marshal(key.Key)
+			if err != nil {
+				return err
+			}
+		}
 		actualFormatted = append(actualFormatted, m.String())
+
 	}
 
 	if perKeyOrdered {
