@@ -7,7 +7,7 @@ SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
 ----
 
 exec
-CREATE TABLE t(pk INT PRIMARY KEY);
+CREATE TABLE t(pk INT PRIMARY KEY) WITH (schema_locked = false);
 INSERT INTO t VALUES (1);
 ----
 
@@ -245,7 +245,7 @@ query idx=2
 SELECT * FROM t2 AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE pk = 2
 ----
 pq: referenced descriptor ID 105: looking up ID 105: descriptor not found
-events (8 found):
+events (10 found):
  * event 1: colbatchscan trace on node_idx 2: local read
  * event 2: transaction retry on node_idx: 2
  * event 3: colbatchscan trace on node_idx 2: local read
@@ -254,12 +254,14 @@ events (8 found):
  * event 6: transaction retry on node_idx: 2
  * event 7: colbatchscan trace on node_idx 2: local read
  * event 8: transaction retry on node_idx: 2
+ * event 9: colbatchscan trace on node_idx 2: local read
+ * event 10: transaction retry on node_idx: 2
 
 query idx=2
 SELECT * FROM t2 AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE pk = 2
 ----
 pq: referenced descriptor ID 105: looking up ID 105: descriptor not found
-events (8 found):
+events (10 found):
  * event 1: colbatchscan trace on node_idx 2: local read
  * event 2: transaction retry on node_idx: 2
  * event 3: colbatchscan trace on node_idx 2: local read
@@ -268,3 +270,5 @@ events (8 found):
  * event 6: transaction retry on node_idx: 2
  * event 7: colbatchscan trace on node_idx 2: local read
  * event 8: transaction retry on node_idx: 2
+ * event 9: colbatchscan trace on node_idx 2: local read
+ * event 10: transaction retry on node_idx: 2

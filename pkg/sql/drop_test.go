@@ -1134,6 +1134,7 @@ func TestDropIndexHandlesRetriableErrors(t *testing.T) {
 	// after planning has concluded.
 
 	tdb := sqlutils.MakeSQLRunner(conn)
+	tdb.Exec(t, "SET create_table_with_schema_locked=false")
 	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY, j INT, INDEX j_idx (j))")
 
 	var tableID uint32

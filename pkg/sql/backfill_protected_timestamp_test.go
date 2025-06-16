@@ -324,6 +324,7 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 	}
 
 	for _, sql := range []string{
+		"SET create_table_with_schema_locked=false",
 		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'",
 		"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval ='10ms'",
 		"SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval ='10ms'",
@@ -331,6 +332,7 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 		rSys.Exec(t, sql)
 	}
 	for _, sql := range []string{
+		"SET create_table_with_schema_locked=false",
 		"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
 		"ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 5",
 	} {

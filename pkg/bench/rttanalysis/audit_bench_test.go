@@ -12,7 +12,7 @@ func init() {
 	reg.Register("Audit", []RoundTripBenchTestCase{
 		{
 			Name: "select from an audit table",
-			Setup: `CREATE TABLE audit_table(a INT);
+			Setup: `CREATE TABLE audit_table(a INT) WITH (schema_locked = false);
 							ALTER TABLE audit_table EXPERIMENTAL_AUDIT SET READ WRITE;`,
 			Stmt: "SELECT * from audit_table",
 		},

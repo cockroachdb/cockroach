@@ -103,8 +103,9 @@ func AlterPrimaryKeyCorrectZoneConfigTest(
 			s, sqlDB, _ := serverutils.StartServer(t, params)
 			db = sqlDB
 			defer s.Stopper().Stop(ctx)
-
-			_, err := sqlDB.Exec(fmt.Sprintf(`
+			_, err := sqlDB.Exec("SET create_table_with_schema_locked=false")
+			require.NoError(t, err)
+			_, err = sqlDB.Exec(fmt.Sprintf(`
 				%s;
 				USE t;
 				%s
