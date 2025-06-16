@@ -977,9 +977,6 @@ func (s *vectorizedFlowCreator) setupInput(
 			var err error
 			if input.EnforceHomeRegionError != nil {
 				err = input.EnforceHomeRegionError.ErrorDetail(ctx)
-				if flowCtx.EvalCtx.SessionData().EnforceHomeRegionFollowerReadsEnabled {
-					err = execinfra.NewDynamicQueryHasNoHomeRegionError(err)
-				}
 			}
 			sync := colexec.NewSerialUnorderedSynchronizer(
 				flowCtx, processorID, allocator, input.ColumnTypes, inputStreamOps,

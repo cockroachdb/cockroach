@@ -6,7 +6,6 @@ go_library(
     name = "execinfra",
     srcs = [
         "base.go",
-        "errors.go",
         "flow_context.go",
         "metrics.go",
         "outboxbase.go",
@@ -52,7 +51,6 @@ go_library(
         "//pkg/sql/evalcatalog",
         "//pkg/sql/execinfra/execexpr",
         "//pkg/sql/execinfrapb",
-        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/valueside",
         "//pkg/sql/rowinfra",
