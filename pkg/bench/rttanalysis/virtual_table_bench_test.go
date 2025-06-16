@@ -66,5 +66,12 @@ SELECT * FROM t2;`,
 			Setup: buildNFunctions(100),
 			Stmt:  `SHOW CREATE ALL ROUTINES`,
 		},
+		// This test checks the performance of the crdb_internal virtual tables used by
+		// SHOW CREATE ALL TRIGGERS.
+		{
+			Name:  "show_create_all_triggers",
+			Setup: buildNTablesWithTriggers(100),
+			Stmt:  `SHOW CREATE ALL TRIGGERS`,
+		},
 	})
 }
