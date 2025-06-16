@@ -21,10 +21,10 @@ import (
 // underlying RPC connection (gRPC or DRPC), making it easy to swap
 // them without changing the caller code.
 type rpcConn interface {
-	NewStatusClient() serverpb.StatusClient
-	NewAdminClient() serverpb.AdminClient
-	NewInitClient() serverpb.InitClient
-	NewTimeSeriesClient() tspb.TimeSeriesClient
+	NewStatusClient() serverpb.RPCStatusClient
+	NewAdminClient() serverpb.RPCAdminClient
+	NewInitClient() serverpb.RPCInitClient
+	NewTimeSeriesClient() tspb.RPCTimeSeriesClient
 	NewInternalClient() kvpb.InternalClient
 }
 
@@ -35,20 +35,20 @@ type grpcConn struct {
 	conn *grpc.ClientConn
 }
 
-func (c *grpcConn) NewStatusClient() serverpb.StatusClient {
-	return serverpb.NewStatusClient(c.conn)
+func (c *grpcConn) NewStatusClient() serverpb.RPCStatusClient {
+	return serverpb.NewGRPCStatusClientAdapter(c.conn)
 }
 
-func (c *grpcConn) NewAdminClient() serverpb.AdminClient {
-	return serverpb.NewAdminClient(c.conn)
+func (c *grpcConn) NewAdminClient() serverpb.RPCAdminClient {
+	return serverpb.NewGRPCAdminClientAdapter(c.conn)
 }
 
-func (c *grpcConn) NewInitClient() serverpb.InitClient {
-	return serverpb.NewInitClient(c.conn)
+func (c *grpcConn) NewInitClient() serverpb.RPCInitClient {
+	return serverpb.NewGRPCInitClientAdapter(c.conn)
 }
 
-func (c *grpcConn) NewTimeSeriesClient() tspb.TimeSeriesClient {
-	return tspb.NewTimeSeriesClient(c.conn)
+func (c *grpcConn) NewTimeSeriesClient() tspb.RPCTimeSeriesClient {
+	return tspb.NewGRPCTimeSeriesClientAdapter(c.conn)
 }
 
 func (c *grpcConn) NewInternalClient() kvpb.InternalClient {
@@ -81,7 +81,9 @@ func newClientConn(ctx context.Context, cfg server.Config) (rpcConn, func(), err
 
 // dialAdminClient dials a client connection and returns an AdminClient and a
 // closure that must be invoked to free associated resources.
-func dialAdminClient(ctx context.Context, cfg server.Config) (serverpb.AdminClient, func(), error) {
+func dialAdminClient(
+	ctx context.Context, cfg server.Config,
+) (serverpb.RPCAdminClient, func(), error) {
 	cc, finish, err := newClientConn(ctx, cfg)
 	if err != nil {
 		return nil, nil, err

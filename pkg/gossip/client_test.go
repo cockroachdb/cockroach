@@ -570,7 +570,7 @@ func TestClientSendsHighStampsDiff(t *testing.T) {
 	conn, err := rCtx.GRPCUnvalidatedDial(c.addr.String(), roachpb.Locality{}).Connect(ctxNew)
 	require.NoError(t, err)
 
-	stream, err := NewGossipClient(conn).Gossip(ctx)
+	stream, err := NewGRPCGossipClientAdapter(conn).Gossip(ctx)
 	require.NoError(t, err)
 
 	// Add an info to generate some deltas and allow the request to be sent.

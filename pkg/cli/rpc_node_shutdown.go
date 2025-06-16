@@ -23,7 +23,9 @@ import (
 
 // drainAndShutdown attempts to drain the server and then shut it
 // down.
-func drainAndShutdown(ctx context.Context, c serverpb.AdminClient, targetNode string) (err error) {
+func drainAndShutdown(
+	ctx context.Context, c serverpb.RPCAdminClient, targetNode string,
+) (err error) {
 	hardError, remainingWork, err := doDrain(ctx, c, targetNode)
 	if hardError {
 		return err
@@ -52,7 +54,7 @@ func drainAndShutdown(ctx context.Context, c serverpb.AdminClient, targetNode st
 // proceed with an alternate strategy (it's likely the server has gone
 // away).
 func doDrain(
-	ctx context.Context, c serverpb.AdminClient, targetNode string,
+	ctx context.Context, c serverpb.RPCAdminClient, targetNode string,
 ) (hardError, remainingWork bool, err error) {
 	// The next step is to drain. The timeout is configurable
 	// via --drain-wait.
@@ -109,7 +111,7 @@ func doDrain(
 }
 
 func doDrainNoTimeout(
-	ctx context.Context, c serverpb.AdminClient, targetNode string,
+	ctx context.Context, c serverpb.RPCAdminClient, targetNode string,
 ) (hardError, remainingWork bool, err error) {
 	defer func() {
 		if grpcutil.IsWaitingForInit(err) {
@@ -207,7 +209,7 @@ func doDrainNoTimeout(
 // draining. Use doDrain() prior to perform a drain, or
 // drainAndShutdown() to combine both.
 func doShutdown(
-	ctx context.Context, c serverpb.AdminClient, targetNode string,
+	ctx context.Context, c serverpb.RPCAdminClient, targetNode string,
 ) (hardError bool, err error) {
 	defer func() {
 		if err != nil {

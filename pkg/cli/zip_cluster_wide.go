@@ -40,7 +40,7 @@ const (
 // makeClusterWideZipRequests defines the zipRequests that are to be
 // performed just once for the entire cluster.
 func makeClusterWideZipRequests(
-	zr *zipReporter, admin serverpb.AdminClient, status serverpb.StatusClient, prefix string,
+	zr *zipReporter, admin serverpb.RPCAdminClient, status serverpb.RPCStatusClient, prefix string,
 ) []zipRequest {
 	var zipRequests []zipRequest
 

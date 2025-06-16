@@ -152,12 +152,12 @@ func (d DeploymentMode) IsExternal() bool {
 // underlying RPC connection (gRPC or DRPC), making it easy to swap
 // them without changing the caller code.
 type RPCConn interface {
-	NewStatusClient() serverpb.StatusClient
-	NewAdminClient() serverpb.AdminClient
-	NewInitClient() serverpb.InitClient
-	NewTimeSeriesClient() tspb.TimeSeriesClient
+	NewStatusClient() serverpb.RPCStatusClient
+	NewAdminClient() serverpb.RPCAdminClient
+	NewInitClient() serverpb.RPCInitClient
+	NewTimeSeriesClient() tspb.RPCTimeSeriesClient
 	NewInternalClient() kvpb.InternalClient
-	NewDistSQLClient() execinfrapb.DistSQLClient
+	NewDistSQLClient() execinfrapb.RPCDistSQLClient
 }
 
 // ApplicationLayerInterface defines accessors to the application
@@ -297,11 +297,11 @@ type ApplicationLayerInterface interface {
 
 	// GetAdminClient creates a serverpb.AdminClient connection to the server.
 	// Shorthand for serverpb.AdminClient(.RPCClientConn(t, "root"))
-	GetAdminClient(t TestFataler) serverpb.AdminClient
+	GetAdminClient(t TestFataler) serverpb.RPCAdminClient
 
 	// GetStatusClient creates a serverpb.StatusClient connection to the server.
 	// Shorthand for serverpb.StatusClient(.RPCClientConn(t, "root"))
-	GetStatusClient(t TestFataler) serverpb.StatusClient
+	GetStatusClient(t TestFataler) serverpb.RPCStatusClient
 
 	// AnnotateCtx annotates a context.
 	AnnotateCtx(context.Context) context.Context
