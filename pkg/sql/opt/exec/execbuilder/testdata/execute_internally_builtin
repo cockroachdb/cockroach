@@ -122,9 +122,6 @@ SELECT crdb_internal.execute_internally(1);
 statement error unknown signature
 SELECT crdb_internal.execute_internally('SELECT 1;', false, true);
 
-statement error when session bound internal executor is used, it always uses the session txn - omit the last argument
-SELECT crdb_internal.execute_internally('SELECT 1;', true, '', true);
-
 query error internally-executed-query-builtin: relation "foo" does not exist
 SELECT crdb_internal.execute_internally('SELECT col FROM foo;');
 
@@ -140,9 +137,6 @@ SELECT crdb_internal.execute_internally('');
 statement error this statement is disallowed
 SELECT crdb_internal.execute_internally('BEGIN;');
 
-statement error this statement is disallowed
-SELECT crdb_internal.execute_internally('COMMIT;', 'Database=test', true);
-
 # Check transactionality.
 statement ok
 BEGIN;
@@ -153,33 +147,12 @@ SET LOCAL autocommit_before_ddl=off;
 statement ok
 CREATE TABLE t2 (k INT PRIMARY KEY);
 
-# When running in a separate txn, we cannot see the newly created table.
+# Since we're running in a separate txn, we cannot see the newly created table.
 query error internally-executed-query-builtin: relation "t2" does not exist
-SELECT crdb_internal.execute_internally('SELECT k FROM t2;', 'Database=test', false);
+SELECT crdb_internal.execute_internally('SELECT k FROM t2;', 'Database=test');
 
 statement ok
 ROLLBACK;
-
-statement ok
-BEGIN;
-
-statement ok
-CREATE TABLE t2 (k INT PRIMARY KEY);
-
-# But using the session's txn with non-session-bound executor should work.
-statement ok
-SELECT crdb_internal.execute_internally('SELECT k FROM t2;', 'Database=test', true);
-
-statement ok
-SELECT crdb_internal.execute_internally('INSERT INTO t2 VALUES (1);', 'Database=test', true);
-
-query T
-SELECT crdb_internal.execute_internally('SELECT * FROM t2;', 'Database=test', true);
-----
-1
-
-statement ok
-COMMIT;
 
 user testuser
 

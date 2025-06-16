@@ -817,12 +817,10 @@ The last argument is a JSONB object containing the following optional fields:
 			Category:         builtinconstants.CategoryGenerator,
 			DistsqlBlocklist: true, // applicable only on the gateway
 		},
-		makeInternallyExecutedQueryGeneratorOverload(false /* withSessionBound */, false /* withOverrides */, false /* withTxn */),
-		makeInternallyExecutedQueryGeneratorOverload(true /* withSessionBound */, false /* withOverrides */, false /* withTxn */),
-		makeInternallyExecutedQueryGeneratorOverload(false /* withSessionBound */, true /* withOverrides */, false /* withTxn */),
-		makeInternallyExecutedQueryGeneratorOverload(true /* withSessionBound */, true /* withOverrides */, false /* withTxn */),
-		makeInternallyExecutedQueryGeneratorOverload(false /* withSessionBound */, true /* withOverrides */, true /* withTxn */),
-		makeInternallyExecutedQueryGeneratorOverload(true /* withSessionBound */, true /* withOverrides */, true /* withTxn */),
+		makeInternallyExecutedQueryGeneratorOverload(false /* withSessionBound */, false /* withOverrides */),
+		makeInternallyExecutedQueryGeneratorOverload(true /* withSessionBound */, false /* withOverrides */),
+		makeInternallyExecutedQueryGeneratorOverload(false /* withSessionBound */, true /* withOverrides */),
+		makeInternallyExecutedQueryGeneratorOverload(true /* withSessionBound */, true /* withOverrides */),
 	),
 }
 
@@ -3919,7 +3917,7 @@ func makeSpanStatsGenerator(
 var internallyExecutedQueryGeneratorType = types.String
 
 func makeInternallyExecutedQueryGeneratorOverload(
-	withSessionBound, withOverrides, withTxn bool,
+	withSessionBound, withOverrides bool,
 ) tree.Overload {
 	inputTypes := tree.ParamTypes{{Name: "query", Typ: types.String}}
 	if withSessionBound {
@@ -3927,15 +3925,6 @@ func makeInternallyExecutedQueryGeneratorOverload(
 	}
 	if withOverrides {
 		inputTypes = append(inputTypes, tree.ParamType{Name: "overrides", Typ: types.String})
-	}
-	if withTxn {
-		if !withOverrides {
-			// In order to not confuse two boolean arguments we require that
-			// whenever 'use_session_txn' is specified, 'overrides' must be
-			// specified too.
-			panic(errors.AssertionFailedf("'use_session_txn' requires 'overrides' to be used"))
-		}
-		inputTypes = append(inputTypes, tree.ParamType{Name: "use_session_txn", Typ: types.Bool})
 	}
 	return makeGeneratorOverload(
 		inputTypes,
@@ -3946,17 +3935,13 @@ func makeInternallyExecutedQueryGeneratorOverload(
 			); err != nil {
 				return nil, err
 			}
-			numExpectedArgs, queryIdx, sessionBoundIdx, overridesIdx, txnIdx := 1, 0, 1, 2, 3
+			numExpectedArgs, queryIdx, sessionBoundIdx, overridesIdx := 1, 0, 1, 2
 			if withSessionBound {
 				numExpectedArgs++
 			} else {
 				overridesIdx--
-				txnIdx--
 			}
 			if withOverrides {
-				numExpectedArgs++
-			}
-			if withTxn {
 				numExpectedArgs++
 			}
 			if len(args) != numExpectedArgs {
@@ -4002,18 +3987,7 @@ func makeInternallyExecutedQueryGeneratorOverload(
 				}
 				overrides = string(*o)
 			}
-			var useTxn bool
-			if withTxn {
-				t, ok := args[txnIdx].(*tree.DBool)
-				if !ok {
-					return nil, errors.Newf("expected string argument for 'use_session_txn', got %s", args[txnIdx].ResolvedType())
-				}
-				useTxn = bool(*t)
-				if sessionBound && useTxn {
-					return nil, errors.New("when session bound internal executor is used, it always uses the session txn - omit the last argument")
-				}
-			}
-			return newInternallyExecutedQueryIterator(evalCtx, query, sessionBound, overrides, useTxn), nil
+			return newInternallyExecutedQueryIterator(evalCtx, query, sessionBound, overrides), nil
 		},
 		"Executes the provided query via the Internal Executor and prints "+
 			"out the result, in which each row is converted to a single string. "+
@@ -4034,7 +4008,6 @@ type internallyExecutedQueryIterator struct {
 	query        string
 	sessionBound bool
 	overrides    string
-	useTxn       bool
 	formatter    *tree.FmtCtx
 
 	rows eval.InternalRows
@@ -4043,25 +4016,24 @@ type internallyExecutedQueryIterator struct {
 }
 
 func newInternallyExecutedQueryIterator(
-	evalCtx *eval.Context, query string, sessionBound bool, overrides string, useTxn bool,
+	evalCtx *eval.Context, query string, sessionBound bool, overrides string,
 ) *internallyExecutedQueryIterator {
 	return &internallyExecutedQueryIterator{
 		evalCtx:      evalCtx,
 		query:        query,
 		sessionBound: sessionBound,
 		overrides:    overrides,
-		useTxn:       useTxn,
 		formatter:    tree.NewFmtCtx(tree.FmtExport),
 	}
 }
 
 // ExecuteQueryViaJobExecContext executes the provided query via the JobExecCtx
-// of the eval.Context. The method is initialized in the sql package to avoid
-// import cycles.
-var ExecuteQueryViaJobExecContext func(*eval.Context, context.Context, redact.RedactableString, *kv.Txn, sessiondata.InternalExecutorOverride, string, ...interface{}) (eval.InternalRows, error)
+// of the eval.Context with nil txn argument. The method is initialized in the
+// sql package to avoid import cycles.
+var ExecuteQueryViaJobExecContext func(*eval.Context, context.Context, redact.RedactableString, sessiondata.InternalExecutorOverride, string, ...interface{}) (eval.InternalRows, error)
 
 // Start implements the eval.ValueGenerator interface.
-func (qi *internallyExecutedQueryIterator) Start(ctx context.Context, txn *kv.Txn) error {
+func (qi *internallyExecutedQueryIterator) Start(ctx context.Context, _ *kv.Txn) error {
 	var opName redact.RedactableString = "internally-executed-query-builtin"
 	var ieo sessiondata.InternalExecutorOverride
 	// Always use the session's user, even in "jobs-like" mode.
@@ -4072,11 +4044,7 @@ func (qi *internallyExecutedQueryIterator) Start(ctx context.Context, txn *kv.Tx
 	if qi.sessionBound {
 		rows, err = qi.evalCtx.Planner.QueryIteratorEx(ctx, opName, ieo, qi.query)
 	} else {
-		var txnArg *kv.Txn
-		if qi.useTxn {
-			txnArg = txn
-		}
-		rows, err = ExecuteQueryViaJobExecContext(qi.evalCtx, ctx, opName, txnArg, ieo, qi.query)
+		rows, err = ExecuteQueryViaJobExecContext(qi.evalCtx, ctx, opName, ieo, qi.query)
 	}
 	if err != nil {
 		return err
