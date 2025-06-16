@@ -1,0 +1,57 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "isession",
+    srcs = [
+        "command_result.go",
+        "internal_session.go",
+        "result_buffer.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/isession",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/security/username",
+        "//pkg/sql",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/parser/statements",
+        "//pkg/sql/pgwire/pgnotice",
+        "//pkg/sql/pgwire/pgwirebase",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondatapb",
+        "//pkg/sql/types",
+        "//pkg/util/mon",
+        "//pkg/util/stop",
+        "@com_github_cockroachdb_crlib//crtime",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "isession_test",
+    srcs = [
+        "internal_session_test.go",
+        "main_test.go",
+    ],
+    embed = [":isession"],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl",
+        "//pkg/ccl/storageccl",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
