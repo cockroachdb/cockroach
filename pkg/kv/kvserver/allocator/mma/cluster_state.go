@@ -1005,9 +1005,10 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			// made by the replicate and lease queues.
 			cs.pendingChangeEnacted(change.ChangeID, now)
 		}
-		// Re-apply the remaining changes.
+		// Re-apply the remaining changes. Note that the load change was not
+		// undone above, so we pass !applyLoadChange, to avoid applying it again.
 		for _, change := range remainingChanges {
-			cs.applyReplicaChange(change.ReplicaChange)
+			cs.applyReplicaChange(change.ReplicaChange, false)
 		}
 		normSpanConfig, err := makeNormalizedSpanConfig(&rangeMsg.Conf, cs.constraintMatcher.interner)
 		if err != nil {
@@ -1224,7 +1225,7 @@ func (cs *clusterState) createPendingChanges(changes ...ReplicaChange) []*pendin
 	now := cs.ts.Now()
 
 	for _, change := range changes {
-		cs.applyReplicaChange(change)
+		cs.applyReplicaChange(change, true)
 		cs.changeSeqGen++
 		cid := cs.changeSeqGen
 		pendingChange := &pendingReplicaChange{
@@ -1248,7 +1249,7 @@ func (cs *clusterState) hasRange(rangeID roachpb.RangeID) bool {
 	return ok
 }
 
-func (cs *clusterState) applyReplicaChange(change ReplicaChange) {
+func (cs *clusterState) applyReplicaChange(change ReplicaChange, applyLoadChange bool) {
 	storeState, ok := cs.stores[change.target.StoreID]
 	if !ok {
 		panic(fmt.Sprintf("store %v not found in cluster state", change.target.StoreID))
@@ -1287,7 +1288,9 @@ func (cs *clusterState) applyReplicaChange(change ReplicaChange) {
 	} else {
 		panic(fmt.Sprintf("unknown replica change %+v", change))
 	}
-	cs.applyChangeLoadDelta(change)
+	if applyLoadChange {
+		cs.applyChangeLoadDelta(change)
+	}
 }
 
 func (cs *clusterState) undoReplicaChange(change ReplicaChange) {
