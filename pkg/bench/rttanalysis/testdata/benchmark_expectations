@@ -131,5 +131,6 @@ exp,benchmark
 2,UseManyRoles/use_50_roles
 1,VirtualTableQueries/select_crdb_internal.invalid_objects_with_1_fk
 1,VirtualTableQueries/select_crdb_internal.tables_with_1_fk
+0,VirtualTableQueries/show_create_all_routines
 5,VirtualTableQueries/virtual_table_cache_with_point_lookups
 10,VirtualTableQueries/virtual_table_cache_with_schema_change

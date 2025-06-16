@@ -3912,6 +3912,79 @@ func createRoutinePopulate(
 	}
 }
 
+func createRoutinePopulateByFnIndex(
+	ctx context.Context,
+	unwrappedConstraint tree.Datum,
+	p *planner,
+	db catalog.DatabaseDescriptor,
+	addRow func(...tree.Datum) error,
+) (matched bool, err error) {
+	// In here, we start from the DatabaseDescriptor and a routine ID and populate the remainder of a row
+	// in the virtual table. This function, thus, is used to populate when indexing into the routine virtual tables,
+	// `crdb_internal.create_function_statements` and `crdb_internal.create_procedure_statements`, helping
+	// optimize the queries for the create statements output in `SHOW CREATE ALL ROUTINES`.
+	fnID := descpb.ID(tree.MustBeDInt(unwrappedConstraint))
+	fnDesc, err := p.Descriptors().ByIDWithoutLeased(p.txn).WithoutNonPublic().Get().Function(ctx, fnID)
+	if err != nil || fnDesc == nil {
+		if errors.Is(err, catalog.ErrDescriptorNotFound) || fnDesc == nil {
+			return false, nil
+		}
+		return false, err
+	}
+	scID := fnDesc.GetParentSchemaID()
+	sc, err := p.Descriptors().ByIDWithoutLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, scID)
+	if err != nil || sc == nil {
+		return false, err
+	}
+	scName := sc.GetName()
+	dbName := db.GetName()
+	dbID := db.GetID()
+
+	treeNode, err := fnDesc.ToCreateExpr()
+	treeNode.Name.ObjectNamePrefix = tree.ObjectNamePrefix{
+		ExplicitSchema: true,
+		SchemaName:     tree.Name(scName),
+	}
+	if err != nil {
+		return false, err
+	}
+	for i := range treeNode.Options {
+		if body, ok := treeNode.Options[i].(tree.RoutineBodyStr); ok {
+			bodyStr := string(body)
+			bodyStr, err = formatFunctionQueryTypesForDisplay(ctx, p.EvalContext(), &p.semaCtx, p.SessionData(), bodyStr, fnDesc.GetLanguage())
+			if err != nil {
+				return false, err
+			}
+			bodyStr, err = formatQuerySequencesForDisplay(ctx, &p.semaCtx, bodyStr, true /* multiStmt */, fnDesc.GetLanguage())
+			if err != nil {
+				return false, err
+			}
+			bodyStr = strings.TrimSpace(bodyStr)
+			stmtStrs := strings.Split(bodyStr, "\n")
+			for i := range stmtStrs {
+				if stmtStrs[i] != "" {
+					stmtStrs[i] = "\t" + stmtStrs[i]
+				}
+			}
+			p := &treeNode.Options[i]
+			*p = tree.RoutineBodyStr("\n" + strings.Join(stmtStrs, "\n") + "\n")
+		}
+	}
+	createStatement := tree.AsString(treeNode)
+	if err := addRow(
+		tree.NewDInt(tree.DInt(dbID)),           // database_id
+		tree.NewDString(dbName),                 // database_name
+		tree.NewDInt(tree.DInt(scID)),           // schema_id
+		tree.NewDString(scName),                 // schema_name
+		tree.NewDInt(tree.DInt(fnDesc.GetID())), // function_id
+		tree.NewDString(fnDesc.GetName()),       // function_name
+		tree.NewDString(createStatement),        // create_statement
+	); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 var crdbInternalCreateFunctionStmtsTable = virtualSchemaTable{
 	comment: "CREATE statements for all user-defined functions",
 	schema: `
@@ -3922,10 +3995,15 @@ CREATE TABLE crdb_internal.create_function_statements (
   schema_name STRING,
   function_id INT,
   function_name STRING,
-  create_statement STRING
-)
-`,
+  create_statement STRING,
+  INDEX (function_id)
+)`,
 	populate: createRoutinePopulate(false /* procedure */),
+	indexes: []virtualIndex{
+		{
+			populate: createRoutinePopulateByFnIndex,
+		},
+	},
 }
 
 var crdbInternalCreateProcedureStmtsTable = virtualSchemaTable{
@@ -3938,10 +4016,15 @@ CREATE TABLE crdb_internal.create_procedure_statements (
   schema_name STRING,
   procedure_id INT,
   procedure_name STRING,
-  create_statement STRING
-)
-`,
+  create_statement STRING,
+  INDEX (procedure_id)
+)`,
 	populate: createRoutinePopulate(true /* procedure */),
+	indexes: []virtualIndex{
+		{
+			populate: createRoutinePopulateByFnIndex,
+		},
+	},
 }
 
 func createTriggerPopulate(
