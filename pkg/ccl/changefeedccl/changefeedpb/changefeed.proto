@@ -1,0 +1,153 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+// TODO(#149703): Move this .proto file to the new changefeedpb repo,
+// import it into CockroachDB, and update usages accordingly.
+
+syntax = "proto3";
+package cockroach.ccl.changefeedccl;
+option go_package = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb";
+
+import "google/protobuf/timestamp.proto";
+
+// MessageBatch is a batch of messages for use in webhook sinks.
+message MessageBatch {
+    repeated Message payload = 1;
+}
+
+// Message is an enum of the different envelope types. This is what will be emitted to the client.
+message Message {
+    oneof data {
+        // wrapped is a Message in WrappedEnvelope format.
+        WrappedEnvelope wrapped = 1;
+
+        // bare is a Message in BareEnvelope format.
+        BareEnvelope bare = 2;
+
+        // enriched is a Message in EnrichedEnvelope format.
+        EnrichedEnvelope enriched = 3;
+
+         // resolved is a Message in Resolved format for Resolved Timestamps.
+        Resolved resolved = 4;
+
+        // bareResolved wraps a resolved envelope inside a BareResolved format for Resolved Timestamps in Bare envelopes.
+        BareResolved bareResolved = 5;
+    }
+}
+
+// WrappedEnvelope includes both the changed data and contextual metadata about the change.
+message WrappedEnvelope {
+    Record after = 1;
+    Record before = 2;
+    string updated = 4;
+    string mvcc_timestamp = 5;
+    Key key = 6;
+    string topic = 7;
+}
+
+// BareEnvelope contains change data as a flat map along with
+// CockroachDB-specific metadata under the '__crdb__' field.
+message BareEnvelope {
+    map<string, Value> values = 1;
+    Metadata __crdb__ = 2;
+}
+
+// BareResolved is a minimal envelope that wraps a resolved timestamp in a '__crdb__' field.
+message BareResolved {
+    Resolved __crdb__ = 1;
+}
+
+// EnrichedEnvelope includes detailed context about the change event and source.
+message EnrichedEnvelope {
+    Record after = 1;
+    Record before = 2;
+    Op op = 3;
+    int64 ts_ns = 4;
+    EnrichedSource source = 5;
+}
+
+// Resolved carries resolved timestamp information for a changefeed span.
+message Resolved {
+    string resolved = 1;
+}
+
+// EnrichedSource records information about the origin and context
+// of a change event, for operational traceability.
+message EnrichedSource {
+    string job_id = 1;
+    string changefeed_sink = 2;
+    string db_version = 3;
+    string cluster_name = 4;
+    string cluster_id = 5;
+    string source_node_locality = 6;
+    string node_name = 7;
+    string node_id = 8;
+    string mvcc_timestamp = 9;
+    int64 ts_ns = 10;
+    string ts_hlc = 11;
+    string origin = 12;
+    string database_name = 13;
+    string schema_name = 14;
+    string table_name = 15;
+    repeated string primary_keys = 16;
+}
+
+// Op enumerates the types of operations represented in a change event.
+enum Op {
+    OP_UNSPECIFIED = 0;
+    OP_CREATE = 1;
+    OP_UPDATE = 2;
+    OP_DELETE = 3;
+}
+
+// Metadata contains CockroachDB-specific metadata about a change event.
+// This message is also referred to as '__crdb__'.
+message Metadata {
+    string updated = 1;
+    string mvcc_timestamp = 2;
+    Key key = 3;
+    string topic = 4;
+}
+
+// Value represents a value of arbitrary type carried in a change event.
+message Value {
+    oneof value {
+        string string_value = 1;
+        bytes bytes_value = 2;
+        int32 int32_value = 3;
+        int64 int64_value = 4;
+        float float_value = 5;
+        double double_value = 6;
+        bool bool_value = 7;
+        google.protobuf.Timestamp timestamp_value = 8;
+        Array array_value = 9;
+        Record tuple_value = 10;
+        Decimal decimal_value = 11;
+        string date_value = 12;
+        string interval_value = 13;
+        string time_value = 14;
+        string uuid_value = 15;
+    }
+}
+
+// Key contains the primary key values for a row.
+message Key {
+	map<string, Value> key = 1;
+}
+
+// Array represents an ordered list of values.
+message Array {
+  repeated Value values = 1;
+}
+
+// Decimal contains a fixed-point decimal value represented as a string.
+message Decimal {
+  string value = 1;
+}
+
+// Record represents a flat mapping of column names to values for a row.
+message Record {
+    map<string, Value> values = 1;
+}
