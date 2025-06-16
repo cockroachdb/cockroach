@@ -9,6 +9,8 @@
     "test:debug": "./build/start-crdb-then.sh pnpm cy:debug",
     "cy:run": "cypress run --e2e",
     "cy:debug": "cypress open --e2e --browser=chrome",
+    "cy:scale:debug": "cypress open --config-file cypress.scale.config.ts --browser=chrome",
+    "cy:scale": "cypress run --config-file cypress.scale.config.ts --browser=chrome",
     "lint": "eslint './**/*.ts'",
     "lint:fix": "eslint --fix './**/*.ts'"
   },
