@@ -1101,6 +1101,7 @@ vectorized: true
             │ table: kv@kv_pkey
             │ equality: (column1) = (k)
             │ equality cols are key
+            │ parallel
             │
             └── • values
                   columns: (column1)
