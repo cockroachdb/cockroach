@@ -514,6 +514,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 			// tests to fail.
 			rd.FlowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
 			rd.FlowCtx.Cfg.BulkSenderLimiter,
+			nil,
 		)
 		if err != nil {
 			return summary, err
@@ -717,7 +718,6 @@ func reserveRestoreWorkerMemory(
 // implement a mock SSTBatcher used purely for job progress tracking.
 type SSTBatcherExecutor interface {
 	AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error
-	Reset(ctx context.Context)
 	Flush(ctx context.Context) error
 	Close(ctx context.Context)
 	GetSummary() kvpb.BulkOpSummary
@@ -734,9 +734,6 @@ var _ SSTBatcherExecutor = &sstBatcherNoop{}
 func (b *sstBatcherNoop) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error {
 	return b.totalRows.Count(key.Key)
 }
-
-// Reset resets the counter
-func (b *sstBatcherNoop) Reset(ctx context.Context) {}
 
 // Flush noops.
 func (b *sstBatcherNoop) Flush(ctx context.Context) error {
