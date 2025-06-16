@@ -158,6 +158,28 @@ type Store interface {
 		expected PartitionMetadata,
 	) (removed bool, err error)
 
+	// TryMoveVector attempts to move a single vector from the source partition to
+	// the target partition, as an atommic operation. If either partition does not
+	// exist, it returns moved=false. If the vector does not exist in the source
+	// partition, or already exists in the target partition, it returns
+	// moved=false.
+	//
+	// Before performing any action, TryMoveVector checks the target partition's
+	// metadata and returns a ConditionFailedError if it is not the same as the
+	// expected metadata.
+	//
+	// NOTE: The source and target partitions must be on the same level. Results
+	// are not defined if this is not true.
+	TryMoveVector(
+		ctx context.Context,
+		treeKey TreeKey,
+		sourcePartitionKey, targetPartitionKey PartitionKey,
+		vec vector.T,
+		childKey ChildKey,
+		valueBytes ValueBytes,
+		expected PartitionMetadata,
+	) (moved bool, err error)
+
 	// TryClearPartition removes all vectors in the specified partition and
 	// returns the number of vectors that were cleared. It returns
 	// ErrPartitionNotFound if the partition does not exist.
