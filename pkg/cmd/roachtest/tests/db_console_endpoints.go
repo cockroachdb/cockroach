@@ -100,6 +100,7 @@ func registerDBConsoleEndpointsMixedVersion(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode()),
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+		Monitor:          true,
 		Randomized:       true,
 		Run:              runDBConsoleMixedVersion,
 		Timeout:          1 * time.Hour,
