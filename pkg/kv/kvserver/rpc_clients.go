@@ -24,8 +24,13 @@ func DialMultiRaftClient(
 			return nil, err
 		}
 		return NewGRPCMultiRaftClientAdapter(conn), nil
+	} else {
+		drpcConn, err := nd.DRPCDial(ctx, nodeID, class)
+		if err != nil {
+			return nil, err
+		}
+		return NewDRPCMultiRaftClientAdapter(drpcConn), nil
 	}
-	return nil, nil
 }
 
 // DialPerReplicaClient establishes a DRPC connection if enabled; otherwise,
@@ -40,8 +45,13 @@ func DialPerReplicaClient(
 			return nil, err
 		}
 		return NewGRPCPerReplicaClientAdapter(conn), nil
+	} else {
+		drpcConn, err := nd.DRPCDial(ctx, nodeID, class)
+		if err != nil {
+			return nil, err
+		}
+		return NewDRPCPerReplicaClientAdapter(drpcConn), nil
 	}
-	return nil, nil
 }
 
 // DialPerStoreClient establishes a DRPC connection if enabled; otherwise,
@@ -56,6 +66,11 @@ func DialPerStoreClient(
 			return nil, err
 		}
 		return NewGRPCPerStoreClientAdapter(conn), nil
+	} else {
+		drpcConn, err := nd.DRPCDial(ctx, nodeID, class)
+		if err != nil {
+			return nil, err
+		}
+		return NewDRPCPerStoreClientAdapter(drpcConn), nil
 	}
-	return nil, nil
 }

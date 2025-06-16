@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 // TODODRPC is a marker to identify each RPC client creation site that needs to
@@ -20,6 +21,7 @@ const TODODRPC = false
 // node IDs.
 type NodeDialer interface {
 	Dial(context.Context, roachpb.NodeID, ConnectionClass) (_ *grpc.ClientConn, err error)
+	DRPCDial(context.Context, roachpb.NodeID, ConnectionClass) (_ drpc.Conn, err error)
 }
 
 // NodeDialerNoBreaker interface defines methods for dialing peer nodes using their
@@ -27,4 +29,5 @@ type NodeDialer interface {
 // breaker before dialing.
 type NodeDialerNoBreaker interface {
 	DialNoBreaker(context.Context, roachpb.NodeID, ConnectionClass) (_ *grpc.ClientConn, err error)
+	DRPCDialNoBreaker(context.Context, roachpb.NodeID, ConnectionClass) (_ drpc.Conn, err error)
 }
