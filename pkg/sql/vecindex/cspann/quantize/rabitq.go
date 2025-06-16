@@ -112,7 +112,7 @@ func (q *RaBitQuantizer) Quantize(w *workspace.T, vectors vector.Set) QuantizedV
 		centroid = vectors.Centroid(make(vector.T, vectors.Dims))
 	}
 
-	quantizedSet := q.NewQuantizedVectorSet(vectors.Count, centroid)
+	quantizedSet := q.NewSet(vectors.Count, centroid)
 	q.quantizeHelper(w, quantizedSet.(*RaBitQuantizedVectorSet), vectors)
 	return quantizedSet
 }
@@ -124,8 +124,8 @@ func (q *RaBitQuantizer) QuantizeInSet(
 	q.quantizeHelper(w, quantizedSet.(*RaBitQuantizedVectorSet), vectors)
 }
 
-// NewQuantizedVectorSet implements the Quantizer interface
-func (q *RaBitQuantizer) NewQuantizedVectorSet(capacity int, centroid vector.T) QuantizedVectorSet {
+// NewSet implements the Quantizer interface
+func (q *RaBitQuantizer) NewSet(capacity int, centroid vector.T) QuantizedVectorSet {
 	codeWidth := RaBitQCodeSetWidth(q.GetDims())
 	dataBuffer := make([]uint64, 0, capacity*codeWidth)
 	if capacity <= 1 {

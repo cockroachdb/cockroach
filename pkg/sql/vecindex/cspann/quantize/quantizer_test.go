@@ -103,7 +103,7 @@ func (s *testState) estimateDistances(t *testing.T, d *datadriven.TestData) stri
 
 		// Now add the vectors one-by-one and ensure that distances and error
 		// bounds stay the same.
-		quantizedSet = quantizer.NewQuantizedVectorSet(vectors.Count, centroid)
+		quantizedSet = quantizer.NewSet(vectors.Count, centroid)
 		for i := range vectors.Count {
 			quantizer.QuantizeInSet(&s.Workspace, quantizedSet, vectors.Slice(i, 1))
 		}

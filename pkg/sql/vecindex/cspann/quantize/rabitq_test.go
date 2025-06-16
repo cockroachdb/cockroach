@@ -83,7 +83,7 @@ func TestRaBitQuantizerSimple(t *testing.T) {
 		for i := range centroid {
 			centroid[i] = float32(i)
 		}
-		quantizedSet := quantizer.NewQuantizedVectorSet(5, centroid).(*RaBitQuantizedVectorSet)
+		quantizedSet := quantizer.NewSet(5, centroid).(*RaBitQuantizedVectorSet)
 		require.Equal(t, centroid, quantizedSet.Centroid)
 		require.Equal(t, 0, quantizedSet.Codes.Count)
 		require.Equal(t, 2, quantizedSet.Codes.Width)
@@ -198,7 +198,7 @@ func TestRaBitQuantizerInnerProduct(t *testing.T) {
 	require.Equal(t, []float32{1.41, 3.16, 2.83}, testutils.RoundFloats(errorBounds, 2))
 
 	// Call NewQuantizedSet and ensure capacity.
-	quantizedSet = quantizer.NewQuantizedVectorSet(
+	quantizedSet = quantizer.NewSet(
 		5, quantizedSet.Centroid).(*RaBitQuantizedVectorSet)
 	require.Equal(t, 5, cap(quantizedSet.CentroidDotProducts))
 
@@ -233,7 +233,7 @@ func TestRaBitQuantizerCosine(t *testing.T) {
 	// Call NewQuantizedSet and ensure capacity.
 	centroid := slices.Clone(quantizedSet.Centroid)
 	num32.Normalize(centroid)
-	quantizedSet = quantizer.NewQuantizedVectorSet(5, centroid).(*RaBitQuantizedVectorSet)
+	quantizedSet = quantizer.NewSet(5, centroid).(*RaBitQuantizedVectorSet)
 	require.Equal(t, 5, cap(quantizedSet.CentroidDotProducts))
 
 	// Add vectors to already-created set.

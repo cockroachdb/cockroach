@@ -118,7 +118,7 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 
 		switch quantizedSet.(type) {
 		case *quantize.UnQuantizedVectorSet:
-			decodedSet = quantizer.NewQuantizedVectorSet(set.Count, decodedMetadata.Centroid)
+			decodedSet = quantizer.NewSet(set.Count, decodedMetadata.Centroid)
 			for range set.Count {
 				remainder, err = vecencoding.DecodeUnquantizerVectorToSet(
 					remainder, decodedSet.(*quantize.UnQuantizedVectorSet),
@@ -128,7 +128,7 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 			// Verify remaining bytes match trailing data
 			require.Equal(t, trailingData, testutils.NormalizeSlice(remainder))
 		case *quantize.RaBitQuantizedVectorSet:
-			decodedSet = quantizer.NewQuantizedVectorSet(set.Count, decodedMetadata.Centroid)
+			decodedSet = quantizer.NewSet(set.Count, decodedMetadata.Centroid)
 			for range set.Count {
 				remainder, err = vecencoding.DecodeRaBitQVectorToSet(
 					remainder,
