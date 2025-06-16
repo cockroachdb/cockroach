@@ -43,6 +43,10 @@ type result[Resp any] struct {
 // that stream pools eventually shrink when the load decreases.
 const defaultPooledStreamIdleTimeout = 10 * time.Second
 
+// equalsFunc is a generic function type used to compare two RPC connections
+// for equivalence.
+type equalsFunc[Conn rpcConn] func(a, b Conn) bool
+
 // pooledStream is a wrapper around a grpc.ClientStream that is managed by a
 // streamPool. It is responsible for sending a single request and receiving a
 // single response on the stream at a time, mimicking the behavior of a gRPC
@@ -194,6 +198,7 @@ type streamPool[Req, Resp any, Conn rpcConn] struct {
 	stopper     *stop.Stopper
 	idleTimeout time.Duration
 	newStream   streamConstructor[Req, Resp, Conn]
+	connEquals  equalsFunc[Conn]
 
 	// cc and ccCtx are set on bind, when the gRPC connection is established.
 	cc Conn
@@ -207,12 +212,13 @@ type streamPool[Req, Resp any, Conn rpcConn] struct {
 }
 
 func makeStreamPool[Req, Resp any, Conn rpcConn](
-	stopper *stop.Stopper, newStream streamConstructor[Req, Resp, Conn],
+	stopper *stop.Stopper, newStream streamConstructor[Req, Resp, Conn], connEquals equalsFunc[Conn],
 ) streamPool[Req, Resp, Conn] {
 	return streamPool[Req, Resp, Conn]{
 		stopper:     stopper,
 		idleTimeout: defaultPooledStreamIdleTimeout,
 		newStream:   newStream,
+		connEquals:  connEquals,
 	}
 }
 
@@ -280,7 +286,7 @@ func (p *streamPool[Req, Resp, Conn]) remove(s *pooledStream[Req, Resp, Conn]) b
 
 func (p *streamPool[Req, Resp, Conn]) newPooledStream() (*pooledStream[Req, Resp, Conn], error) {
 	var zero Conn
-	if p.cc == zero {
+	if p.connEquals(p.cc, zero) {
 		return nil, errors.AssertionFailedf("streamPool not bound to a client conn")
 	}
 
