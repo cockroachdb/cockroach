@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kcjsonschema"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl" // allow locality-related mutations
@@ -58,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -363,6 +365,14 @@ func assertPayloadsBaseErr(
 	if err != nil {
 		return err
 	}
+	// Detect if this is a protobuf feed and format accordingly.
+	useProtobuf := false
+	if ef, ok := f.(cdctest.EnterpriseTestFeed); ok {
+		details, _ := ef.Details()
+		if details.Opts[changefeedbase.OptFormat] == string(changefeedbase.OptFormatProtobuf) {
+			useProtobuf = true
+		}
+	}
 
 	if didForceEnriched {
 		for i, m := range actual {
@@ -376,7 +386,27 @@ func assertPayloadsBaseErr(
 
 	var actualFormatted []string
 	for _, m := range actual {
-		actualFormatted = append(actualFormatted, m.String())
+		if useProtobuf {
+			var msg changefeedpb.Message
+			if err := protoutil.Unmarshal(m.Value, &msg); err != nil {
+				return err
+			}
+			valJSON, err := gojson.Marshal(protoMessage{&msg})
+			if err != nil {
+				return err
+			}
+			var key changefeedpb.Key
+			if err := protoutil.Unmarshal(m.Key, &key); err != nil {
+				return err
+			}
+			keyJSON, err := gojson.Marshal(parseProtobuf(key.Key))
+			if err != nil {
+				return err
+			}
+			actualFormatted = append(actualFormatted, fmt.Sprintf(`%s: %s->%s`, m.Topic, keyJSON, valJSON))
+		} else {
+			actualFormatted = append(actualFormatted, m.String())
+		}
 	}
 
 	if perKeyOrdered {
@@ -488,6 +518,99 @@ func avroToJSON(t testing.TB, reg *cdctest.SchemaRegistry, avroBytes []byte) []b
 	json, err := reg.AvroToJSON(avroBytes)
 	require.NoError(t, err)
 	return json
+}
+
+type protoMessage struct {
+	*changefeedpb.Message
+}
+
+func (m protoMessage) MarshalJSON() ([]byte, error) {
+	bare := m.GetBare()
+	out := make(map[string]any, len(bare.Values)+1)
+
+	for k, v := range bare.Values {
+		out[k] = unwrapProtobufValue(v)
+	}
+
+	if parsedMeta := parseProtobuf(bare.XCrdb__); parsedMeta != nil {
+		out["__crdb__"] = parsedMeta
+	}
+
+	return gojson.Marshal(out)
+}
+
+func parseProtobuf(v any) any {
+	switch t := v.(type) {
+	case *changefeedpb.Value:
+		return unwrapProtobufValue(t)
+	case map[string]*changefeedpb.Value:
+		m := make(map[string]any, len(t))
+		for k, v := range t {
+			m[k] = parseProtobuf(v)
+		}
+		return m
+	case *changefeedpb.Metadata:
+		if t == nil {
+			return nil
+		}
+		meta := make(map[string]any)
+		if t.Updated != "" {
+			meta["updated"] = t.Updated
+		}
+		if t.MvccTimestamp != "" {
+			meta["mvcc_timestamp"] = t.MvccTimestamp
+		}
+		if t.Topic != "" {
+			meta["topic"] = t.Topic
+		}
+		if t.Key != nil {
+			meta["key"] = parseProtobuf(t.Key.Key)
+		}
+		return meta
+	default:
+		return t
+	}
+}
+
+func unwrapProtobufValue(v *changefeedpb.Value) any {
+	switch val := v.GetValue().(type) {
+	case *changefeedpb.Value_BoolValue:
+		return val.BoolValue
+	case *changefeedpb.Value_Int64Value:
+		return val.Int64Value
+	case *changefeedpb.Value_DoubleValue:
+		return val.DoubleValue
+	case *changefeedpb.Value_StringValue:
+		return val.StringValue
+	case *changefeedpb.Value_DecimalValue:
+		return val.DecimalValue.Value
+	case *changefeedpb.Value_TimestampValue:
+		return val.TimestampValue
+	case *changefeedpb.Value_DateValue:
+		return val.DateValue
+	case *changefeedpb.Value_IntervalValue:
+		return val.IntervalValue
+	case *changefeedpb.Value_UuidValue:
+		return val.UuidValue
+	case *changefeedpb.Value_BytesValue:
+		return string(val.BytesValue)
+	case *changefeedpb.Value_TimeValue:
+		return val.TimeValue
+	case *changefeedpb.Value_ArrayValue:
+		arr := make([]any, 0, len(val.ArrayValue.Values))
+		for _, elem := range val.ArrayValue.Values {
+			arr = append(arr, unwrapProtobufValue(elem))
+		}
+		return arr
+	case *changefeedpb.Value_TupleValue:
+		m := make(map[string]any, len(val.TupleValue.Values))
+		for k, v := range val.TupleValue.Values {
+			m[k] = unwrapProtobufValue(v)
+		}
+		return m
+	default:
+		return errors.AssertionFailedf("unexpected protobuf value type: %T", v.GetValue())
+	}
 }
 
 func parseJSON(s string) (map[string]any, error) {

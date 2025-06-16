@@ -12051,3 +12051,38 @@ func TestDatabaseLevelChangefeed(t *testing.T) {
 	}
 	cdcTest(t, testFn)
 }
+
+func TestChangefeedBareFullProtobuf(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `
+			CREATE TABLE pricing (
+				id INT PRIMARY KEY,
+				name STRING,
+				discount FLOAT,
+				tax DECIMAL,
+				options STRING[]
+			)`)
+		sqlDB.Exec(t, `
+			INSERT INTO pricing VALUES
+				(1, 'Chair', 15.75, 2.500, ARRAY['Brown', 'Black']), 
+				(2, 'Table', 20.00, 1.23456789, ARRAY['Brown', 'Black'])
+		`)
+		pricingFeed := feed(t, f,
+			`CREATE CHANGEFEED FOR pricing WITH envelope='bare', format='protobuf', key_in_value, topic_in_value`)
+		defer closeFeed(t, pricingFeed)
+
+		expected := []string{
+			`pricing: {"id":1}->{"__crdb__":{"key":{"id":1},"topic":"pricing"},"discount":15.75,"id":1,"name":"Chair","options":["Brown","Black"],"tax":"2.500"}`,
+			`pricing: {"id":2}->{"__crdb__":{"key":{"id":2},"topic":"pricing"},"discount":20,"id":2,"name":"Table","options":["Brown","Black"],"tax":"1.23456789"}`,
+		}
+
+		assertPayloads(t, pricingFeed, expected)
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
