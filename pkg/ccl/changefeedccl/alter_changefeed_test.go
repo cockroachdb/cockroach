@@ -513,8 +513,11 @@ func TestAlterChangefeedDropTargetFamily(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, FAMILY onlya (a), FAMILY onlyb (b))`)
 
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY onlya, foo FAMILY onlyb`,
-			optOutOfMetamorphicEnrichedEnvelope{"requires families"})
+		var args []any
+		if _, ok := f.(*webhookFeedFactory); ok {
+			args = append(args, optOutOfMetamorphicEnrichedEnvelope{reason: "metamorphic enriched envelope does not support column families for webhook sinks"})
+		}
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY onlya, foo FAMILY onlyb`, args...)
 		defer closeFeed(t, testFeed)
 
 		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
@@ -1192,7 +1195,11 @@ func TestAlterChangefeedColumnFamilyDatabaseScope(t *testing.T) {
 			`INSERT INTO movr.drivers VALUES (1, 'Alice')`,
 		)
 
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers WITH diff, split_column_families`)
+		var args []any
+		if _, ok := f.(*webhookFeedFactory); ok {
+			args = append(args, optOutOfMetamorphicEnrichedEnvelope{reason: "metamorphic enriched envelope does not support column families for webhook sinks"})
+		}
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers WITH diff, split_column_families`, args...)
 		defer closeFeed(t, testFeed)
 
 		assertPayloads(t, testFeed, []string{
