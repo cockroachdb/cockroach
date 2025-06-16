@@ -147,7 +147,6 @@ func (ubs *UnbufferedSender) run(
 			for _, clientErr := range toSend {
 				onError(clientErr.StreamID)
 				if err := ubs.sender.Send(clientErr); err != nil {
-					log.Infof(ctx, "failed to send rangefeed error to client: %v", err)
 					return err
 				}
 			}
