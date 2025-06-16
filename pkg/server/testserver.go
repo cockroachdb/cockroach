@@ -2640,13 +2640,13 @@ func (ts *testServer) RPCClientConnE(user username.SQLUsername) (serverutils.RPC
 }
 
 // GetAdminClient is part of the serverutils.ApplicationLayerInterface.
-func (ts *testServer) GetAdminClient(test serverutils.TestFataler) serverpb.AdminClient {
+func (ts *testServer) GetAdminClient(test serverutils.TestFataler) serverpb.RPCAdminClient {
 	conn := ts.RPCClientConn(test, username.RootUserName())
 	return conn.NewAdminClient()
 }
 
 // GetStatusClient is part of the serverutils.ApplicationLayerInterface.
-func (ts *testServer) GetStatusClient(test serverutils.TestFataler) serverpb.StatusClient {
+func (ts *testServer) GetStatusClient(test serverutils.TestFataler) serverpb.RPCStatusClient {
 	conn := ts.RPCClientConn(test, username.RootUserName())
 	return conn.NewStatusClient()
 }
@@ -2688,13 +2688,13 @@ func (t *testTenant) RPCClientConnE(user username.SQLUsername) (serverutils.RPCC
 }
 
 // GetAdminClient is part of the serverutils.ApplicationLayerInterface.
-func (t *testTenant) GetAdminClient(test serverutils.TestFataler) serverpb.AdminClient {
+func (t *testTenant) GetAdminClient(test serverutils.TestFataler) serverpb.RPCAdminClient {
 	conn := t.RPCClientConn(test, username.RootUserName())
 	return conn.NewAdminClient()
 }
 
 // GetStatusClient is part of the serverutils.ApplicationLayerInterface.
-func (t *testTenant) GetStatusClient(test serverutils.TestFataler) serverpb.StatusClient {
+func (t *testTenant) GetStatusClient(test serverutils.TestFataler) serverpb.RPCStatusClient {
 	conn := t.RPCClientConn(test, username.RootUserName())
 	return conn.NewStatusClient()
 }

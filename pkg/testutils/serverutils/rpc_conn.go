@@ -24,26 +24,26 @@ func FromGRPCConn(conn *grpc.ClientConn) RPCConn {
 	return &grpcConn{conn: conn}
 }
 
-func (c *grpcConn) NewStatusClient() serverpb.StatusClient {
-	return serverpb.NewStatusClient(c.conn)
+func (c *grpcConn) NewStatusClient() serverpb.RPCStatusClient {
+	return serverpb.NewGRPCStatusClientAdapter(c.conn)
 }
 
-func (c *grpcConn) NewAdminClient() serverpb.AdminClient {
-	return serverpb.NewAdminClient(c.conn)
+func (c *grpcConn) NewAdminClient() serverpb.RPCAdminClient {
+	return serverpb.NewGRPCAdminClientAdapter(c.conn)
 }
 
-func (c *grpcConn) NewInitClient() serverpb.InitClient {
-	return serverpb.NewInitClient(c.conn)
+func (c *grpcConn) NewInitClient() serverpb.RPCInitClient {
+	return serverpb.NewGRPCInitClientAdapter(c.conn)
 }
 
-func (c *grpcConn) NewTimeSeriesClient() tspb.TimeSeriesClient {
-	return tspb.NewTimeSeriesClient(c.conn)
+func (c *grpcConn) NewTimeSeriesClient() tspb.RPCTimeSeriesClient {
+	return tspb.NewGRPCTimeSeriesClientAdapter(c.conn)
 }
 
 func (c *grpcConn) NewInternalClient() kvpb.InternalClient {
 	return kvpb.NewInternalClient(c.conn)
 }
 
-func (c *grpcConn) NewDistSQLClient() execinfrapb.DistSQLClient {
-	return execinfrapb.NewDistSQLClient(c.conn)
+func (c *grpcConn) NewDistSQLClient() execinfrapb.RPCDistSQLClient {
+	return execinfrapb.NewGRPCDistSQLClientAdapter(c.conn)
 }
