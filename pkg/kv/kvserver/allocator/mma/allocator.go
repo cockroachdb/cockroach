@@ -151,6 +151,11 @@ type Allocator interface {
 	AdminScatterOne(
 		rangeID roachpb.RangeID, canTransferLease bool, opts ChangeOptions,
 	) ([]pendingReplicaChange, error)
+
+	// KnowsStores is a temporary hack to deal with staleness in calling SetStore.
+	//
+	// TODO(sumeer): remove once the integration is properly done.
+	KnowsStores(stores map[roachpb.StoreID]struct{}) bool
 }
 
 // Avoid unused lint errors.
