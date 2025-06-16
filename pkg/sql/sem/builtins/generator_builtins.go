@@ -2520,9 +2520,8 @@ type spanKeyIterator struct {
 	// The span to iterate
 	span roachpb.Span
 
-	// The transaction to use.
-	txn *kv.Txn
-	acc mon.BoundAccount
+	planner eval.Planner
+	acc     mon.BoundAccount
 
 	// kvs is a set of K/V pairs currently accessed by the iterator.
 	// It is not all of the K/V pairs in the target span. Instead,
@@ -2541,17 +2540,17 @@ type spanKeyIterator struct {
 
 func newSpanKeyIterator(evalCtx *eval.Context, span roachpb.Span) *spanKeyIterator {
 	return &spanKeyIterator{
-		acc:  evalCtx.Planner.Mon().MakeBoundAccount(),
-		span: span,
+		planner: evalCtx.Planner,
+		span:    span,
 	}
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (sp *spanKeyIterator) Start(ctx context.Context, txn *kv.Txn) error {
+func (sp *spanKeyIterator) Start(ctx context.Context, _ *kv.Txn) error {
+	sp.acc = sp.planner.Mon().MakeBoundAccount()
 	if err := sp.acc.Grow(ctx, spanKeyIteratorChunkBytes); err != nil {
 		return err
 	}
-	sp.txn = txn
 	return sp.scan(ctx, sp.span.Key, sp.span.EndKey)
 }
 
@@ -2582,21 +2581,10 @@ func (sp *spanKeyIterator) Next(ctx context.Context) (bool, error) {
 func (sp *spanKeyIterator) scan(
 	ctx context.Context, startKey roachpb.Key, endKey roachpb.Key,
 ) error {
-	ba := &kvpb.BatchRequest{}
-	ba.TargetBytes = spanKeyIteratorChunkBytes
-	ba.MaxSpanRequestKeys = spanKeyIteratorChunkKeys
-	ba.Add(&kvpb.ScanRequest{
-		RequestHeader: kvpb.RequestHeader{
-			Key:    startKey,
-			EndKey: endKey,
-		},
-		ScanFormat: kvpb.KEY_VALUES,
-	})
-	br, pErr := sp.txn.Send(ctx, ba)
-	if pErr != nil {
-		return pErr.GoError()
+	resp, err := sp.planner.ScanKeySpan(ctx, startKey, endKey, spanKeyIteratorChunkBytes, spanKeyIteratorChunkKeys)
+	if err != nil {
+		return err
 	}
-	resp := br.Responses[0].GetScan()
 	sp.kvs = resp.Rows
 	sp.resumeSpan = resp.ResumeSpan
 	// The user of the generator first calls Next(), then Values(), so the index
@@ -2647,7 +2635,7 @@ func makeRangeKeyIterator(
 	rangeID := roachpb.RangeID(tree.MustBeDInt(args[0]))
 	return &rangeKeyIterator{
 		spanKeyIterator: spanKeyIterator{
-			acc: planner.Mon().MakeBoundAccount(),
+			planner: planner,
 		},
 		rangeID: rangeID,
 		planner: planner,
@@ -2660,7 +2648,7 @@ func (rk *rangeKeyIterator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (rk *rangeKeyIterator) Start(ctx context.Context, txn *kv.Txn) (err error) {
+func (rk *rangeKeyIterator) Start(ctx context.Context, _ *kv.Txn) (err error) {
 	// Scan the range meta K/V's to find the target range. We do this in a
 	// chunk-wise fashion to avoid loading all ranges into memory.
 	rangeDesc, err := rk.planner.GetRangeDescByID(ctx, rk.rangeID)
@@ -2668,7 +2656,7 @@ func (rk *rangeKeyIterator) Start(ctx context.Context, txn *kv.Txn) (err error) 
 		return err
 	}
 	rk.span = rangeDesc.KeySpan().AsRawSpanWithNoLocals()
-	return rk.spanKeyIterator.Start(ctx, txn)
+	return rk.spanKeyIterator.Start(ctx, nil /* txn */)
 }
 
 // Values implements the eval.ValueGenerator interface.
