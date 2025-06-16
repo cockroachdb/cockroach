@@ -42,8 +42,7 @@ var _ Allocator = &allocatorState{}
 
 // TODO(sumeer): temporary constants.
 const (
-	RebalanceInterval           time.Duration = 10 * time.Second
-	maxFractionPendingThreshold               = 0.1
+	maxFractionPendingThreshold = 0.1
 )
 
 func NewAllocatorState(ts timeutil.TimeSource, rand *rand.Rand) *allocatorState {
@@ -941,6 +940,18 @@ func (a *allocatorState) computeCandidatesForRange(
 	}
 	cset.means = means
 	return cset, sheddingSLS
+}
+
+// KnowsStores implements the Allocator interface.
+func (a *allocatorState) KnowsStores(stores map[roachpb.StoreID]struct{}) bool {
+	// The allocatorState is a wrapper around the clusterState, which contains
+	// all the stores.
+	for storeID := range stores {
+		if _, ok := a.cs.stores[storeID]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // Diversity scoring is very amenable to caching, since the set of unique
