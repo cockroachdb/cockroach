@@ -10,308 +10,102 @@
 package main
 
 import (
-	"archive/zip"
 	"bytes"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
-	"math"
-	"net/http"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
-	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/google/pprof/profile"
 )
 
-const (
-	buildConfigID = "Cockroach_Nightlies_RoachtestGceForceProfile"
-)
+var outFile = flag.String("out", "", "where to store the result pprof profile")
 
-var (
-	branch    = os.Getenv("TC_BUILD_BRANCH")
-	serverURL = os.Getenv("TC_SERVER_URL")
-	username  = os.Getenv("TC_API_USER")
-	password  = os.Getenv("TC_API_PASSWORD")
-
-	outFile = flag.String("out", "", "where to store the result pprof profile")
-)
-
-type profileWithName struct {
-	filename        string
-	profileContents []byte
-}
-
-type Build struct {
-	ID         int64
-	FinishDate string
-	Status     string
-}
-
-type ReadAtCloser interface {
-	io.ReaderAt
-	io.ReadCloser
-}
-
-func doRequest(req *http.Request) (*Build, error) {
-	req.SetBasicAuth(username, password)
-	req.Header.Add("Accept", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("failed to send HTTP request; got status code %d", resp.StatusCode)
-	}
-	defer resp.Body.Close()
-	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, resp.Body); err != nil {
-		return nil, err
-	}
-	var ret Build
-	if err := json.Unmarshal(buf.Bytes(), &ret); err != nil {
-		return nil, err
-	}
-	return &ret, nil
-}
-
-func queueBuild(buildConfigID, branch string) (*Build, error) {
-	reqStruct := struct {
-		BuildTypeID string `json:"buildTypeId,omitempty"`
-		BranchName  string `json:"branchName,omitempty"`
-	}{
-		BuildTypeID: buildConfigID,
-		BranchName:  branch,
-	}
-	reqJson, err := json.Marshal(reqStruct)
-	if err != nil {
-		return nil, err
-	}
-	req, err := http.NewRequest("POST", fmt.Sprintf("https://%s/httpAuth/app/rest/buildQueue", serverURL), bytes.NewReader(reqJson))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Add("Content-Type", "application/json")
-	return doRequest(req)
-}
-
-func getBuild(id int64) (*Build, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("https://%s/httpAuth/app/rest/builds/id:%d?fields=id,finishDate,status", serverURL, id), nil)
-	if err != nil {
-		return nil, err
-	}
-	return doRequest(req)
-}
-
-// downloadArtifacts downloads the artifacts.zip archive for the given build and
-// returns the ReadAtCloser corresponding to it. The file will be stored on
-// disk in the given tmpDir. The caller is responsible for closing the file.
-// The returned int64 is the length of the file.
-func downloadArtifacts(buildID int64, tmpDir string) (ReadAtCloser, int64, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("https://%s/repository/downloadAll/%s/%d:id", serverURL, buildConfigID, buildID), nil)
-	if err != nil {
-		return nil, 0, err
-	}
-	req.SetBasicAuth(username, password)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, 0, err
-	}
-	if resp.StatusCode >= 400 {
-		return nil, 0, fmt.Errorf("failed to download artifacts: got status code %d", resp.StatusCode)
-	}
-	defer resp.Body.Close()
-
-	zipFile, err := os.Create(filepath.Join(tmpDir, "artifacts.zip"))
-	if err != nil {
-		return nil, 0, err
-	}
-	zipLength, err := io.Copy(zipFile, resp.Body)
-	if err != nil {
-		zipFile.Close()
-		return nil, 0, err
-	}
-	_, err = zipFile.Seek(0, 0)
-	if err != nil {
-		zipFile.Close()
-		return nil, 0, err
-	}
-
-	return zipFile, zipLength, nil
-}
-
-// processArtifactsZip processes a file named artifacts.zip inside the larger
-// artifacts zip archive. This is confusing, but the `.pprof` files for any
-// given node are inside a sub-zip archive named `artifacts.zip`, which is one
-// of the files in the giant zip archive that we fetch for the build. This
-// function processes that sub-zip archive and extracts all the CPU (.pprof)
-// files.
-//
-// The .pprof files will be parsed and put into the profilesChan.
-// wg.Done() will be called when this function completes.
-func processArtifactsZip(f *zip.File, profilesChan chan *profile.Profile, wg *sync.WaitGroup) {
-	fmt.Printf("processing zip file %s\n", f.FileHeader.Name)
-	archive, err := f.Open()
-	if err != nil {
-		panic(err)
-	}
-	defer archive.Close()
-	var archiveBuf bytes.Buffer
-	_, err = io.Copy(&archiveBuf, archive)
-	if err != nil {
-		panic(err)
-	}
-	zipReader, err := zip.NewReader(bytes.NewReader(archiveBuf.Bytes()), int64(f.UncompressedSize64))
-	if err != nil {
-		panic(err)
-	}
-	profilesByDir := make(map[string][]profileWithName)
-	for _, file := range zipReader.File {
-		if strings.HasSuffix(file.FileHeader.Name, ".pprof") &&
-			strings.Contains(file.FileHeader.Name, "/cpuprof.") &&
-			file.UncompressedSize64 > 0 {
-			pprofFile, err := file.Open()
-			if err != nil {
-				panic(err)
-			}
-			var buf bytes.Buffer
-			if _, err := io.Copy(&buf, pprofFile); err != nil {
-				panic(err)
-			}
-			if err := pprofFile.Close(); err != nil {
-				fmt.Printf("Failed to close profile file from zip reader: %+v (this is not a fatal error)\n", err)
-				continue
-			}
-			key := filepath.Base(filepath.Dir(file.FileHeader.Name))
-			profilesByDir[key] = append(profilesByDir[key], profileWithName{
-				filename:        filepath.Base(file.FileHeader.Name),
-				profileContents: buf.Bytes(),
-			})
-		}
-	}
-	for _, val := range profilesByDir {
-		// The profiles contain a timestamp in their filenames, so sorting them
-		// puts them in chronological order.
-		slices.SortFunc(val, func(a, b profileWithName) int {
-			return strings.Compare(a.filename, b.filename)
-		})
-	}
-	for key, profiles := range profilesByDir {
-		// We select one profile from about 75% of the way through the
-		// test. The idea is that at around this time, the node is
-		// likely to be doing interesting work that is related to the
-		// test (as opposed to something less relevant like setup
-		// tasks).
-		selected := int(math.Floor(0.75 * float64(len(profiles))))
-		fmt.Printf("Selected profile %d of %d from dir %s (%s)\n", selected, len(profiles), key, profiles[selected].filename)
-		contents := profiles[selected].profileContents
-		prof, err := profile.Parse(bytes.NewReader(contents))
-		if err != nil {
-			panic(err)
-		}
-		profilesChan <- prof
-	}
-	wg.Done()
-}
-
-// processPprofFiles reads all the parsed profiles from the given channel,
-// merges all of the profiles, and dumps the results profile to a final
-// location. wg.Done() will be called at the end of this function.
-func processPprofFiles(profilesChan chan *profile.Profile, wg *sync.WaitGroup) {
+// processProfiles reads all the parsed profiles from the given channel,
+// normalizes and merges all the profiles, and returns the merged result.
+func processProfiles(profilesChan chan *profile.Profile) (*profile.Profile, error) {
 	var profiles []*profile.Profile
+	var first *profile.Profile
+	// Normalize all profiles to the first one, meaning that we give equal weight
+	// to each profile, regardless of how much CPU time it represents. This
+	// prevents large machines or longer profiles from skewing the results.
 	for prof := range profilesChan {
-		profiles = append(profiles, prof)
+		if first == nil {
+			first = prof
+		} else {
+			if err := prof.Normalize(first); err != nil {
+				return nil, err
+			}
+		}
+		for i := range prof.Sample {
+			// Drop labels, which are not used by pprof but can inflate the profile
+			// size significantly.
+			prof.Sample[i].Label = nil
+		}
+		profiles = append(profiles, prof.Compact())
 	}
 	if len(profiles) == 0 {
-		panic("expected to find a profile; found none")
+		return nil, errors.Errorf("no profiles found")
 	}
-	res, err := profile.Merge(profiles)
-	if err != nil {
-		panic(err)
-	}
-	w, err := os.Create(*outFile)
-	if err != nil {
-		panic(err)
-	}
-	defer w.Close()
-	err = res.Write(w)
-	if err != nil {
-		panic(err)
-	}
-	wg.Done()
+	return profile.Merge(profiles)
 }
 
 func main() {
 	flag.Parse()
 
-	if branch == "" || serverURL == "" || username == "" || password == "" {
-		panic("ensure credentials, server URL, and branch are supplied")
-	}
 	if *outFile == "" {
 		panic("must supply -out")
 	}
 
-	tmpDir, err := os.MkdirTemp("", "run-pgo-build")
-	if err != nil {
-		panic(err)
-	}
-	defer func() {
-		_ = os.RemoveAll(tmpDir)
+	var readWg sync.WaitGroup
+	readWg.Add(1)
+	profilesChan := make(chan *profile.Profile)
+	defer readWg.Wait()
+	defer close(profilesChan)
+
+	go func() {
+		defer readWg.Done()
+		res, err := processProfiles(profilesChan)
+		if err != nil {
+			panic(err)
+		}
+		w, err := os.Create(*outFile)
+		if err != nil {
+			panic(err)
+		}
+		defer w.Close()
+		err = res.Write(w)
+		if err != nil {
+			panic(err)
+		}
 	}()
 
-	build, err := queueBuild(buildConfigID, branch)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("queued build with ID %d\n", build.ID)
-
-	for {
-		if build.FinishDate != "" {
-			break
-		}
-		time.Sleep(3 * time.Minute)
-		lookupID := build.ID
-		newBuild, err := getBuild(lookupID)
+	if err := filepath.WalkDir("./artifacts", func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			fmt.Printf("failed to get build %d; got error %+v -- this will be retried\n", lookupID, err)
-		} else {
-			build = newBuild
+			return err
 		}
-	}
-
-	if build.Status != "SUCCESS" {
-		panic(fmt.Sprintf("expected build to succeed; got status %s for build %+v", build.Status, build))
-	}
-
-	zipFile, zipLength, err := downloadArtifacts(build.ID, tmpDir)
-	if err != nil {
+		if d.IsDir() || d.Name() != "merged.cpu.pb.gz" {
+			return nil
+		}
+		if !strings.Contains(path, "/run_1/") {
+			fmt.Printf("ignoring profile %s (not from run_1)\n", path)
+			return nil
+		}
+		fmt.Printf("found profile %s\n", path)
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		prof, err := profile.Parse(bytes.NewReader(b))
+		if err != nil {
+			return err
+		}
+		profilesChan <- prof
+		return nil
+	}); err != nil {
 		panic(err)
 	}
-	defer zipFile.Close()
-
-	zipReader, err := zip.NewReader(zipFile, zipLength)
-	if err != nil {
-		panic(err)
-	}
-
-	// wg tracks the progress of loading the profiles, readWg tracks the
-	// progress of reading them.
-	var wg, readWg sync.WaitGroup
-	// All parsed profiles will be sent to profilesChan.
-	profilesChan := make(chan *profile.Profile)
-	for _, file := range zipReader.File {
-		if strings.HasSuffix(file.FileHeader.Name, "/artifacts.zip") {
-			wg.Add(1)
-			go processArtifactsZip(file, profilesChan, &wg)
-		}
-	}
-	readWg.Add(1)
-	go processPprofFiles(profilesChan, &readWg)
-	wg.Wait()
-	close(profilesChan)
-	readWg.Wait()
 }
