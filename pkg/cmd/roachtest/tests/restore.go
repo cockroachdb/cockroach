@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -431,7 +432,7 @@ func registerRestore(r registry.Registry) {
 						}
 					}
 
-					if err := roachtestutil.WaitForReplication(ctx, t.L(), db, 3, roachtestutil.AtLeastReplicationFactor); err != nil {
+					if err := roachtestutil.WaitForReplication(ctx, t.L(), db, 3, roachprod.AtLeastReplicationFactor); err != nil {
 						return err
 					}
 					if err := waitForRebalance(
