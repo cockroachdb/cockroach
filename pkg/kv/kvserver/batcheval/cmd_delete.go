@@ -28,11 +28,16 @@ func Delete(
 	h := cArgs.Header
 	reply := resp.(*kvpb.DeleteResponse)
 
+	if err := args.Validate(h); err != nil {
+		return result.Result{}, err
+	}
+
 	opts := storage.MVCCWriteOptions{
 		Txn:                            h.Txn,
 		LocalTimestamp:                 cArgs.Now,
 		Stats:                          cArgs.Stats,
 		ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
+		ExclusionTimestamp:             args.ExpectExclusionSince,
 		OmitInRangefeeds:               cArgs.OmitInRangefeeds,
 		OriginID:                       h.WriteOptions.GetOriginID(),
 		OriginTimestamp:                h.WriteOptions.GetOriginTimestamp(),

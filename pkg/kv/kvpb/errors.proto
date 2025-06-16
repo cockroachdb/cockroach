@@ -793,8 +793,8 @@ message InsufficientSpaceError {
 }
 
 
-// PebbleCorruptionError indicates that pebble thinks that there is a data                                                                                                                                                                                  
-// corruption.                                                                                                                                                                                                                                                
+// PebbleCorruptionError indicates that pebble thinks that there is a data
+// corruption.
 message PebbleCorruptionError {
   optional int64 store_id = 1 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "StoreID",
@@ -803,4 +803,16 @@ message PebbleCorruptionError {
   optional bool is_remote = 3 [(gogoproto.nullable) = false];
   optional string extra_msg = 4 [(gogoproto.nullable) = false];
 }
-   
+
+// ExclusionViolationError indicates that a key was written to at a timestamp at
+// which a caller assumed it had an exclusive lock on the key.
+message ExclusionViolationError {
+  // ExclusionTimestamp is the timestamp at which the request expected its
+  // exclusive access started.
+  optional util.hlc.Timestamp expected_exclusion_since_timestamp = 1 [(gogoproto.nullable) = false];
+  // ViolationTimestamp is the timestamp at which the request found a write that
+  // violated its exclusive access.
+  optional util.hlc.Timestamp violation_timestamp = 2 [(gogoproto.nullable) = false];
+  // Key is the key on which exclusion was violated.
+  optional bytes key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+}
