@@ -880,3 +880,22 @@ file-defaults:
     max-buffer-size: 50MiB
 ----
 ERROR: File-based audit logging cannot coexist with buffering configuration. Disable either the buffering configuration ("buffering") or auditable log ("auditable") configuration.
+
+# Check that missing address in OTLP is reported.
+yaml
+sinks:
+  otlp-servers:
+    custom:
+----
+ERROR: otlp server "custom": address cannot be empty
+
+# Check that invalid proto is rejected.
+yaml
+sinks:
+  otlp-servers:
+    custom:
+      address: localhost:4317
+      compression: ''
+----
+ERROR: otlp server "custom": compression must be 'gzip' or 'none'
+otlp server "custom": no channel selected
