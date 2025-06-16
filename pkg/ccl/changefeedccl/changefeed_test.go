@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
@@ -105,6 +107,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
+	"github.com/gogo/protobuf/proto"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -11683,4 +11686,112 @@ func TestCloudstorageParallelCompression(t *testing.T) {
 			time.Sleep(checkStatusInterval)
 		}
 	})
+}
+
+func TestChangefeedBareFullProtobuf(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `
+			CREATE TABLE pricing (
+				id INT PRIMARY KEY,
+				name STRING,
+				discount FLOAT,
+				tax DECIMAL,
+				options STRING[]
+			)`)
+
+		sqlDB.Exec(t, `
+			INSERT INTO pricing VALUES
+				(1, 'Chair', 15.75, 2.500, ARRAY['Brown', 'Black']),
+				(2, 'Table', 20.00, 1.23456789, ARRAY['Brown', 'Black'])
+		`)
+
+		pricingFeed := feed(t, f, `CREATE CHANGEFEED FOR pricing WITH envelope='bare', format='protobuf', mvcc_timestamp, updated, key_in_value, topic_in_value`)
+		defer closeFeed(t, pricingFeed)
+
+		type rowExpectations struct {
+			name     string
+			discount float64
+			tax      *apd.Decimal
+			options  []string
+			//details  map[string]any
+		}
+
+		decimal1 := new(apd.Decimal)
+		decimal2 := new(apd.Decimal)
+
+		var err error
+		_, _, err = decimal1.SetString("2.500")
+		require.NoError(t, err)
+		_, _, err = decimal2.SetString("1.23456789")
+		require.NoError(t, err)
+
+		expected := map[int64]rowExpectations{
+			1: {
+				name:     "Chair",
+				discount: 15.75,
+				tax:      decimal1,
+				options:  []string{"Brown", "Black"},
+				//details:  map[string]any{"material": "oak", "height": int64(54)},
+			},
+			2: {
+				name:     "Table",
+				discount: 20.00,
+				tax:      decimal2,
+				options:  []string{"Brown", "Black"},
+				//details:  map[string]any{"material": "birch", "height": int64(62)},
+			},
+		}
+
+		received := make(map[int64]bool)
+		for len(received) < len(expected) {
+			row, err := pricingFeed.Next()
+			require.NoError(t, err)
+
+			msg := new(changefeedpb.Message)
+			require.NoError(t, protoutil.Unmarshal(row.Value, msg))
+			t.Log(context.Background(), "Decoded message:\n%s", proto.MarshalTextString(msg))
+			require.NotNil(t, msg.GetBare())
+
+			bare := msg.GetBare()
+			vals := bare.Values
+			meta := bare.XCrdb__
+			// Metadata
+			require.NotEmpty(t, meta.Updated)
+			require.NotEmpty(t, meta.MvccTimestamp)
+			require.NotNil(t, meta.Key)
+			require.Equal(t, "pricing", meta.Topic)
+
+			id := vals["id"].GetInt64Value()
+			require.Contains(t, expected, id)
+			exp := expected[id]
+
+			require.Equal(t, exp.name, vals["name"].GetStringValue())
+			require.Equal(t, exp.discount, vals["discount"].GetDoubleValue())
+
+			// Decimal
+			taxVal := vals["tax"].GetDecimalValue()
+			require.NotNil(t, taxVal)
+
+			taxDecimal := new(apd.Decimal)
+			_, _, err = taxDecimal.SetString(taxVal.Value)
+			require.NoError(t, err)
+			require.Equal(t, 0, taxDecimal.Cmp(exp.tax), "expected %s, got %s", exp.tax, taxDecimal)
+
+			// Array
+			optVal := vals["options"].GetArrayValue()
+			require.Len(t, optVal.Values, len(exp.options))
+			for i, expectedStr := range exp.options {
+				require.Equal(t, expectedStr, optVal.Values[i].GetStringValue())
+			}
+
+			received[id] = true
+		}
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
