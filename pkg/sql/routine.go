@@ -246,7 +246,11 @@ func (g *routineGenerator) ResolvedType() *types.T {
 }
 
 // Start is part of the eval.ValueGenerator interface.
-func (g *routineGenerator) Start(ctx context.Context, txn *kv.Txn) (err error) {
+func (g *routineGenerator) Start(ctx context.Context, _ *kv.Txn) (err error) {
+	// Currently, we cannot distribute plans that have RoutineExpr, so we must
+	// disable usage of leaf txns, which means that we're running on the gateway
+	// and are using the root txn (that we can access from the planner).
+	txn := g.p.txn
 	enabledStepping := false
 	var prevSteppingMode kv.SteppingMode
 	var prevSeqNum enginepb.TxnSeq

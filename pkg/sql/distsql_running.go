@@ -862,6 +862,13 @@ func (dsp *DistSQLPlanner) Run(
 			}
 		}
 		if localState.MustUseLeafTxn() {
+			if planCtx.distSQLProhibitedErr != nil && !localState.MustUseLeaf {
+				recv.SetError(errors.NewAssertionErrorWithWrappedErrf(
+					planCtx.distSQLProhibitedErr,
+					"DistSQL is prohibited yet must use leaf txn %v", localState,
+				))
+				return
+			}
 			// Set up leaf txns using the txnCoordMeta if we need to.
 			tis, err := txn.GetLeafTxnInputState(ctx)
 			if err != nil {
