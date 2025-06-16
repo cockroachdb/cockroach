@@ -115,16 +115,15 @@ type CallbackValueGenerator struct {
 	// as prev initially, and the value it previously returned for subsequent
 	// invocations. Once it returns -1 or an error, it will not be invoked any
 	// more.
-	cb  func(ctx context.Context, prev int, txn *kv.Txn) (int, error)
+	cb  func(ctx context.Context, prev int) (int, error)
 	val int
-	txn *kv.Txn
 }
 
 var _ ValueGenerator = &CallbackValueGenerator{}
 
 // NewCallbackValueGenerator creates a new CallbackValueGenerator.
 func NewCallbackValueGenerator(
-	cb func(ctx context.Context, prev int, txn *kv.Txn) (int, error),
+	cb func(ctx context.Context, prev int) (int, error),
 ) *CallbackValueGenerator {
 	return &CallbackValueGenerator{
 		cb: cb,
@@ -137,15 +136,14 @@ func (c *CallbackValueGenerator) ResolvedType() *types.T {
 }
 
 // Start is part of the ValueGenerator interface.
-func (c *CallbackValueGenerator) Start(_ context.Context, txn *kv.Txn) error {
-	c.txn = txn
+func (c *CallbackValueGenerator) Start(context.Context, *kv.Txn) error {
 	return nil
 }
 
 // Next is part of the ValueGenerator interface.
 func (c *CallbackValueGenerator) Next(ctx context.Context) (bool, error) {
 	var err error
-	c.val, err = c.cb(ctx, c.val, c.txn)
+	c.val, err = c.cb(ctx, c.val)
 	if err != nil {
 		return false, err
 	}

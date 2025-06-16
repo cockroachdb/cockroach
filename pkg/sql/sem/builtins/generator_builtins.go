@@ -1357,7 +1357,7 @@ func (w *WorkloadIndexRecsGenerator) ResolvedType() *types.T {
 	return WorkloadIndexRecsGeneratorType
 }
 
-func (w *WorkloadIndexRecsGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+func (w *WorkloadIndexRecsGenerator) Start(ctx context.Context, _ *kv.Txn) error {
 	w.idx = -1
 	return nil
 }
@@ -2314,7 +2314,6 @@ func (j *jsonRecordSetGenerator) Next(ctx context.Context) (bool, error) {
 }
 
 type checkConsistencyGenerator struct {
-	txn                *kv.Txn // to load range descriptors
 	consistencyChecker eval.ConsistencyCheckRunner
 	rangeDescIterator  rangedesc.Iterator
 	mode               kvpb.ChecksumMode
@@ -2398,7 +2397,6 @@ func makeCheckConsistencyGenerator(
 		return nil, err
 	}
 	return &checkConsistencyGenerator{
-		txn:                evalCtx.Txn,
 		consistencyChecker: evalCtx.ConsistencyChecker,
 		rangeDescIterator:  rangeDescIterator,
 		mode:               mode,
@@ -2890,7 +2888,6 @@ const (
 // crdb_internal.show_create_all_schemas(dbName).
 type showCreateAllSchemasGenerator struct {
 	evalPlanner eval.Planner
-	txn         *kv.Txn
 	ids         []int64
 	dbName      string
 	acc         mon.BoundAccount
@@ -2908,17 +2905,13 @@ func (s *showCreateAllSchemasGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (s *showCreateAllSchemasGenerator) Start(ctx context.Context, txn *kv.Txn) error {
-	ids, err := getSchemaIDs(
-		ctx, s.evalPlanner, txn, s.dbName, &s.acc,
-	)
+func (s *showCreateAllSchemasGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+	ids, err := getSchemaIDs(ctx, s.evalPlanner, s.dbName, &s.acc)
 	if err != nil {
 		return err
 	}
 
 	s.ids = ids
-
-	s.txn = txn
 	s.idx = -1
 	return nil
 }
@@ -2930,7 +2923,7 @@ func (s *showCreateAllSchemasGenerator) Next(ctx context.Context) (bool, error) 
 	}
 
 	createStmt, err := getSchemaCreateStatement(
-		ctx, s.evalPlanner, s.txn, s.ids[s.idx], s.dbName,
+		ctx, s.evalPlanner, s.ids[s.idx], s.dbName,
 	)
 	if err != nil {
 		return false, err
@@ -2970,7 +2963,6 @@ func makeShowCreateAllSchemasGenerator(
 // crdb_internal.show_create_all_tables(dbName).
 type showCreateAllTablesGenerator struct {
 	evalPlanner eval.Planner
-	txn         *kv.Txn
 	ids         []int64
 	dbName      string
 	acc         mon.BoundAccount
@@ -2993,7 +2985,7 @@ func (s *showCreateAllTablesGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (s *showCreateAllTablesGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+func (s *showCreateAllTablesGenerator) Start(ctx context.Context, _ *kv.Txn) error {
 	// Note: All the table ids are accumulated in ram before the generator
 	// starts generating values.
 	// This is reasonable under the assumption that:
@@ -3006,15 +2998,13 @@ func (s *showCreateAllTablesGenerator) Start(ctx context.Context, txn *kv.Txn) e
 	// We also account for the memory in the BoundAccount memory monitor in
 	// showCreateAllTablesGenerator.
 	ids, err := getTopologicallySortedTableIDs(
-		ctx, s.evalPlanner, txn, s.dbName, &s.acc,
+		ctx, s.evalPlanner, s.dbName, &s.acc,
 	)
 	if err != nil {
 		return err
 	}
 
 	s.ids = ids
-
-	s.txn = txn
 	s.idx = -1
 	s.phase = create
 	return nil
@@ -3032,7 +3022,7 @@ func (s *showCreateAllTablesGenerator) Next(ctx context.Context) (bool, error) {
 		}
 
 		createStmt, err := getCreateStatement(
-			ctx, s.evalPlanner, s.txn, s.ids[s.idx], s.dbName,
+			ctx, s.evalPlanner, s.ids[s.idx], s.dbName,
 		)
 		if err != nil {
 			return false, err
@@ -3078,7 +3068,7 @@ func (s *showCreateAllTablesGenerator) Next(ctx context.Context) (bool, error) {
 			statementReturnType = alterValidateFKStatements
 		}
 		alterStmt, err := getAlterStatements(
-			ctx, s.evalPlanner, s.txn, s.ids[s.idx], s.dbName, statementReturnType,
+			ctx, s.evalPlanner, s.ids[s.idx], s.dbName, statementReturnType,
 		)
 		if err != nil {
 			return false, err
@@ -3127,7 +3117,6 @@ func makeShowCreateAllTablesGenerator(
 // crdb_internal.show_create_all_triggers(dbName).
 type showCreateAllTriggersGenerator struct {
 	evalPlanner eval.Planner
-	txn         *kv.Txn
 	ids         []tableTriggerPair
 	dbName      string
 	acc         mon.BoundAccount
@@ -3145,16 +3134,12 @@ func (s *showCreateAllTriggersGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (s *showCreateAllTriggersGenerator) Start(ctx context.Context, txn *kv.Txn) error {
-	ids, err := getTriggerIds(
-		ctx, s.evalPlanner, txn, s.dbName, &s.acc)
-
+func (s *showCreateAllTriggersGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+	ids, err := getTriggerIds(ctx, s.evalPlanner, s.dbName, &s.acc)
 	if err != nil {
 		return err
 	}
-
 	s.ids = ids
-	s.txn = txn
 	s.idx = -1
 	return nil
 }
@@ -3166,9 +3151,7 @@ func (s *showCreateAllTriggersGenerator) Next(ctx context.Context) (bool, error)
 		return false, nil
 	}
 
-	createStmt, err := getTriggerCreateStatement(
-		ctx, s.evalPlanner, s.txn, s.ids[s.idx], s.dbName)
-
+	createStmt, err := getTriggerCreateStatement(ctx, s.evalPlanner, s.ids[s.idx], s.dbName)
 	if err != nil {
 		return false, err
 	}
@@ -3204,7 +3187,6 @@ func makeShowCreateAllTriggersGenerator(
 // crdb_internal.show_create_all_types(dbName).
 type showCreateAllTypesGenerator struct {
 	evalPlanner eval.Planner
-	txn         *kv.Txn
 	ids         []int64
 	dbName      string
 	acc         mon.BoundAccount
@@ -3222,17 +3204,13 @@ func (s *showCreateAllTypesGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (s *showCreateAllTypesGenerator) Start(ctx context.Context, txn *kv.Txn) error {
-	ids, err := getTypeIDs(
-		ctx, s.evalPlanner, txn, s.dbName, &s.acc,
-	)
+func (s *showCreateAllTypesGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+	ids, err := getTypeIDs(ctx, s.evalPlanner, s.dbName, &s.acc)
 	if err != nil {
 		return err
 	}
 
 	s.ids = ids
-
-	s.txn = txn
 	s.idx = -1
 	return nil
 }
@@ -3244,7 +3222,7 @@ func (s *showCreateAllTypesGenerator) Next(ctx context.Context) (bool, error) {
 	}
 
 	createStmt, err := getTypeCreateStatement(
-		ctx, s.evalPlanner, s.txn, s.ids[s.idx], s.dbName,
+		ctx, s.evalPlanner, s.ids[s.idx], s.dbName,
 	)
 	if err != nil {
 		return false, err
@@ -3284,7 +3262,6 @@ func makeShowCreateAllTypesGenerator(
 // crdb_internal.show_create_all_routines(dbName).
 type showCreateAllRoutinesGenerator struct {
 	evalPlanner  eval.Planner
-	txn          *kv.Txn
 	dbName       string
 	acc          mon.BoundAccount
 	functionIds  []int64
@@ -3303,17 +3280,15 @@ func (s *showCreateAllRoutinesGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (s *showCreateAllRoutinesGenerator) Start(ctx context.Context, txn *kv.Txn) error {
-	functionIds, procedureIds, err := getRoutineCreateStatementIds(ctx, s.evalPlanner, txn, s.dbName, &s.acc)
+func (s *showCreateAllRoutinesGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+	functionIds, procedureIds, err := getRoutineCreateStatementIds(ctx, s.evalPlanner, s.dbName, &s.acc)
 	if err != nil {
 		return err
 	}
 	s.functionIds = functionIds
 	s.procedureIds = procedureIds
-	s.txn = txn
 	s.idxFuncs = -1
 	s.idxProcs = -1
-
 	return nil
 }
 
@@ -3321,7 +3296,7 @@ func (s *showCreateAllRoutinesGenerator) Next(ctx context.Context) (bool, error)
 	s.idxFuncs++
 	if s.idxFuncs < len(s.functionIds) {
 		createStmt, err := getFunctionCreateStatement(
-			ctx, s.evalPlanner, s.txn, s.functionIds[s.idxFuncs], s.dbName,
+			ctx, s.evalPlanner, s.functionIds[s.idxFuncs], s.dbName,
 		)
 		if err != nil {
 			return false, err
@@ -3334,7 +3309,7 @@ func (s *showCreateAllRoutinesGenerator) Next(ctx context.Context) (bool, error)
 	s.idxProcs++
 	if s.idxProcs < len(s.procedureIds) {
 		createStmt, err := getProcedureCreateStatement(
-			ctx, s.evalPlanner, s.txn, s.procedureIds[s.idxProcs], s.dbName,
+			ctx, s.evalPlanner, s.procedureIds[s.idxProcs], s.dbName,
 		)
 		if err != nil {
 			return false, err
@@ -3392,7 +3367,7 @@ func (s *identGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (s *identGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+func (s *identGenerator) Start(ctx context.Context, _ *kv.Txn) error {
 	return nil
 }
 
@@ -3884,7 +3859,7 @@ func (s *spanStatsValueGenerator) ResolvedType() *types.T {
 	return spanStatsGeneratorType
 }
 
-func (s *spanStatsValueGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+func (s *spanStatsValueGenerator) Start(ctx context.Context, _ *kv.Txn) error {
 	res, err := s.p.SpanStats(ctx, s.spans)
 	s.res = res
 	return err

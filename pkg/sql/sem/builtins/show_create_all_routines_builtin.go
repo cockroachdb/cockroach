@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -23,7 +22,7 @@ import (
 // separate internal virtual tables and this is a convenient way to get CREATE statements for all routines
 // from the same generator and command.
 func getRoutineCreateStatementIds(
-	ctx context.Context, evalPlanner eval.Planner, txn *kv.Txn, dbName string, acc *mon.BoundAccount,
+	ctx context.Context, evalPlanner eval.Planner, dbName string, acc *mon.BoundAccount,
 ) (funcIDs []int64, procIDs []int64, retErr error) {
 	escapedDB := lexbase.EscapeSQLIdent(dbName)
 
@@ -95,7 +94,7 @@ func getRoutineCreateStatementIds(
 }
 
 func getFunctionCreateStatement(
-	ctx context.Context, evalPlanner eval.Planner, txn *kv.Txn, id int64, dbName string,
+	ctx context.Context, evalPlanner eval.Planner, id int64, dbName string,
 ) (tree.Datum, error) {
 	query := fmt.Sprintf(`
 		SELECT create_statement
@@ -117,7 +116,7 @@ func getFunctionCreateStatement(
 }
 
 func getProcedureCreateStatement(
-	ctx context.Context, evalPlanner eval.Planner, txn *kv.Txn, id int64, dbName string,
+	ctx context.Context, evalPlanner eval.Planner, id int64, dbName string,
 ) (tree.Datum, error) {
 	query := fmt.Sprintf(`
 		SELECT create_statement

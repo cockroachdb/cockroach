@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -22,7 +21,7 @@ import (
 // getSchemaIDs returns the set of schema ids from
 // crdb_internal.show_create_all_schemas for a specified database.
 func getSchemaIDs(
-	ctx context.Context, evalPlanner eval.Planner, txn *kv.Txn, dbName string, acc *mon.BoundAccount,
+	ctx context.Context, evalPlanner eval.Planner, dbName string, acc *mon.BoundAccount,
 ) (schemaIDs []int64, retErr error) {
 	query := fmt.Sprintf(`
 		SELECT descriptor_id
@@ -62,7 +61,7 @@ func getSchemaIDs(
 // getSchemaCreateStatement gets the create statement to recreate a schema (ignoring fks)
 // for a given schema id in a database.
 func getSchemaCreateStatement(
-	ctx context.Context, evalPlanner eval.Planner, txn *kv.Txn, id int64, dbName string,
+	ctx context.Context, evalPlanner eval.Planner, id int64, dbName string,
 ) (tree.Datum, error) {
 	query := fmt.Sprintf(`
 		SELECT

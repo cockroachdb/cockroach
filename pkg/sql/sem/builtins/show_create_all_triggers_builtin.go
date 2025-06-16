@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -25,7 +24,7 @@ type tableTriggerPair struct {
 }
 
 func getTriggerIds(
-	ctx context.Context, evalPlanner eval.Planner, txn *kv.Txn, dbName string, acc *mon.BoundAccount,
+	ctx context.Context, evalPlanner eval.Planner, dbName string, acc *mon.BoundAccount,
 ) (triggerIds []tableTriggerPair, retErr error) { //TODO: Check up on ID field names etc
 	query := fmt.Sprintf(`
 SELECT trigger_id, table_id 
@@ -62,11 +61,7 @@ WHERE database_name=$1`, lexbase.EscapeSQLIdent(dbName))
 }
 
 func getTriggerCreateStatement(
-	ctx context.Context,
-	evalPlanner eval.Planner,
-	txn *kv.Txn,
-	tableTriggerIds tableTriggerPair,
-	dbName string,
+	ctx context.Context, evalPlanner eval.Planner, tableTriggerIds tableTriggerPair, dbName string,
 ) (_ tree.Datum, err error) {
 	// Here, we query by `table_id` and 'trigger_id' but the query is only actually indexed by 'table_id'.
 	// This is because the `crdb_internal.create_trigger_statements` table only has a virtual index on `table_id`

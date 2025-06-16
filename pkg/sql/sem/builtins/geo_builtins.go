@@ -423,7 +423,7 @@ func (m *minimumBoundRadiusGen) ResolvedType() *types.T {
 	return minimumBoundingRadiusReturnType
 }
 
-func (m *minimumBoundRadiusGen) Start(ctx context.Context, txn *kv.Txn) error {
+func (m *minimumBoundRadiusGen) Start(ctx context.Context, _ *kv.Txn) error {
 	return nil
 }
 
