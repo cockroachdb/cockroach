@@ -132,6 +132,7 @@ func (r *Replica) canServeFollowerRead(
 		// Signal the clients that we want an update so that future requests can succeed.
 		log.Eventf(ctx, "can't serve follower read; closed timestamp too low by: %s; maxClosed: %s ts: %s uncertaintyLimit: %s",
 			tsDiff, maxClosed, ba.Timestamp, uncertaintyLimitStr)
+		r.store.metrics.FollowerReadsMisses.Inc(1)
 		return false
 	}
 
