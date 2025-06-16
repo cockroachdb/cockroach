@@ -99,14 +99,12 @@ func (s *Suite) binURL(revision Revision, benchmark *Benchmark) string {
 		Bucket, s.revisionSHA(revision), benchmark.binaryName())
 }
 
-func (s *Suite) changeDetected() bool {
-	for _, status := range []Status{Regressed} {
-		for _, benchmark := range suite.Benchmarks {
-			markerFile := path.Join(s.artifactsDir(New), benchmark.markerName(status))
-			_, err := os.Stat(markerFile)
-			if err == nil {
-				return true
-			}
+func (s *Suite) hasPerformanceChange(status Status) bool {
+	for _, benchmark := range suite.Benchmarks {
+		markerFile := path.Join(s.artifactsDir(New), benchmark.markerName(status))
+		_, err := os.Stat(markerFile)
+		if err == nil {
+			return true
 		}
 	}
 	return false
@@ -150,38 +148,52 @@ func makeCompareCommand() *cobra.Command {
 			return err
 		}
 
-		// If the `PerfLabel` is present on the PR, or a change was detected, we
-		// post a comment to GitHub. If a change was detected, we also add the
-		// label to the PR, if it is not already present.
+		// If the `PerfRegressionLabel` is present on the PR, or a regression
+		// was detected, we post a comment to GitHub. If a change was detected,
+		// we also add the label to the PR, if it is not already present. If a
+		// performance gain was detected, we do not post but only add a
+		// performance gain label.
 		if post {
+			skipPermissionError := func(err error, action string) error {
+				if err == nil {
+					return nil
+				}
+				// If this is a permission error, we don't want to fail the build. This
+				// can happen if the GitHub token has read-only access, for example when
+				// testing the pull_request trigger from a fork.
+				if strings.Contains(err.Error(), "403") {
+					log.Printf("WARNING: Skipped %s, because GitHub token does not have write access to the repository", action)
+					return nil
+				}
+				return err
+			}
 			github, err := NewGithubConfig()
 			if err != nil {
 				return err
 			}
-			hasLabel, err := github.hasLabel(PerfLabel)
+			hasRegressionLabel, err := github.hasLabel(PerfRegressionLabel)
 			if err != nil {
 				return err
 			}
-			if hasLabel || suite.changeDetected() {
-				skipPermissionError := func(err error, action string) error {
-					if err == nil {
-						return nil
-					}
-					// If this is a permission error, we don't want to fail the build. This
-					// can happen if the GitHub token has read-only access, for example when
-					// testing the pull_request trigger from a fork.
-					if strings.Contains(err.Error(), "403") {
-						log.Printf("WARNING: Skipped %s, because GitHub token does not have write access to the repository", action)
-						return nil
-					}
-					return err
-				}
+			if hasRegressionLabel || suite.hasPerformanceChange(Regressed) {
 				err = github.postComment(summaryText)
 				if skipPermissionError(err, "posting a comment") != nil {
 					return err
 				}
-				if !hasLabel {
-					err = github.addLabel(PerfLabel)
+				if !hasRegressionLabel {
+					err = github.addLabel(PerfRegressionLabel)
+					if skipPermissionError(err, "adding a label") != nil {
+						return err
+					}
+				}
+			}
+			if suite.hasPerformanceChange(Improved) {
+				hasGainLabel, err := github.hasLabel(PerfGainLabel)
+				if err != nil {
+					return err
+				}
+				if !hasGainLabel {
+					err = github.addLabel(PerfGainLabel)
 					if skipPermissionError(err, "adding a label") != nil {
 						return err
 					}
