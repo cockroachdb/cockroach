@@ -387,9 +387,6 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	args = append(args, d.getTestOutputArgs(verbose, showLogs, streamOutput)...)
 	args = append(args, additionalBazelArgs...)
 	logCommand("bazel", args...)
-	if stress {
-		d.warnAboutChangeInStressBehavior(timeout)
-	}
 
 	// Do not log --build_event_binary_file=... because it is not relevant to the actual call
 	// from the user perspective.
