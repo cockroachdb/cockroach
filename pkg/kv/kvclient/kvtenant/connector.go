@@ -222,7 +222,9 @@ type connector struct {
 
 // client represents an RPC client that proxies to a KV instance.
 type client struct {
-	kvpb.InternalClient
+	kvpb.RPCTenantServiceClient
+	kvpb.RPCTenantUsageClient
+	kvpb.RPCTenantSpanConfigClient
 	serverpb.RPCStatusClient
 	serverpb.RPCAdminClient
 	tspb.RPCTimeSeriesClient
@@ -983,10 +985,12 @@ func (c *connector) dialAddrs(ctx context.Context) (*client, error) {
 					continue
 				}
 				return &client{
-					InternalClient:      kvpb.NewInternalClient(conn),
-					RPCStatusClient:     serverpb.NewGRPCStatusClientAdapter(conn),
-					RPCAdminClient:      serverpb.NewGRPCAdminClientAdapter(conn),
-					RPCTimeSeriesClient: tspb.NewGRPCTimeSeriesClientAdapter(conn),
+					RPCTenantServiceClient:    kvpb.NewGRPCInternalToTenantServiceClientAdapter(conn),
+					RPCTenantSpanConfigClient: kvpb.NewGRPCInternalClientAdapter(conn),
+					RPCTenantUsageClient:      kvpb.NewGRPCInternalClientAdapter(conn),
+					RPCStatusClient:           serverpb.NewGRPCStatusClientAdapter(conn),
+					RPCAdminClient:            serverpb.NewGRPCAdminClientAdapter(conn),
+					RPCTimeSeriesClient:       tspb.NewGRPCTimeSeriesClientAdapter(conn),
 				}, nil
 			}
 		}
@@ -1005,7 +1009,7 @@ func (c *connector) dialAddr(ctx context.Context, addr string) (conn *grpc.Clien
 	return conn, err
 }
 
-func (c *connector) tryForgetClient(ctx context.Context, client kvpb.InternalClient) {
+func (c *connector) tryForgetClient(ctx context.Context, client any) {
 	if ctx.Err() != nil {
 		// Error (may be) due to context. Don't forget client.
 		return
