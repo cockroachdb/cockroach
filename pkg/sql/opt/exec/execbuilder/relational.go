@@ -414,8 +414,9 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 				// The first stat is the most recent full one.
 				var first int
 				for first < tab.StatisticCount() &&
-					tab.Statistic(first).IsPartial() ||
-					(tab.Statistic(first).IsForecast() && !b.evalCtx.SessionData().OptimizerUseForecasts) {
+					(tab.Statistic(first).IsPartial() ||
+						(tab.Statistic(first).IsMerged() && !b.evalCtx.SessionData().OptimizerUseMergedPartialStatistics) ||
+						(tab.Statistic(first).IsForecast() && !b.evalCtx.SessionData().OptimizerUseForecasts)) {
 					first++
 				}
 

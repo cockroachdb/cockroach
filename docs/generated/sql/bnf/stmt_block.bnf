@@ -238,9 +238,7 @@ explain_stmt ::=
 	| 'EXPLAIN' 'ANALYSE' '(' explain_option_list ')' explainable_stmt
 
 import_stmt ::=
-	'IMPORT' import_format string_or_placeholder opt_with_options
-	| 'IMPORT' 'TABLE' table_name 'FROM' import_format string_or_placeholder opt_with_options
-	| 'IMPORT' 'INTO' table_name '(' insert_column_list ')' import_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
+	'IMPORT' 'INTO' table_name '(' insert_column_list ')' import_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
 	| 'IMPORT' 'INTO' table_name import_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
 
 insert_stmt ::=
@@ -719,23 +717,19 @@ explainable_stmt ::=
 explain_option_list ::=
 	( explain_option_name ) ( ( ',' explain_option_name ) )*
 
+insert_column_list ::=
+	( insert_column_item ) ( ( ',' insert_column_item ) )*
+
 import_format ::=
 	name
 
-string_or_placeholder ::=
-	non_reserved_word_or_sconst
-	| 'PLACEHOLDER'
+string_or_placeholder_list ::=
+	( string_or_placeholder ) ( ( ',' string_or_placeholder ) )*
 
 opt_with_options ::=
 	'WITH' kv_option_list
 	| 'WITH' 'OPTIONS' '(' kv_option_list ')'
 	| 
-
-insert_column_list ::=
-	( insert_column_item ) ( ( ',' insert_column_item ) )*
-
-string_or_placeholder_list ::=
-	( string_or_placeholder ) ( ( ',' string_or_placeholder ) )*
 
 insert_target ::=
 	table_name_opt_idx
@@ -774,6 +768,10 @@ reset_session_stmt ::=
 
 reset_csetting_stmt ::=
 	'RESET' 'CLUSTER' 'SETTING' var_name
+
+string_or_placeholder ::=
+	non_reserved_word_or_sconst
+	| 'PLACEHOLDER'
 
 opt_with_restore_options ::=
 	'WITH' restore_options_list
@@ -2032,15 +2030,11 @@ drop_policy_stmt ::=
 explain_option_name ::=
 	non_reserved_word
 
-non_reserved_word_or_sconst ::=
-	non_reserved_word
-	| 'SCONST'
+insert_column_item ::=
+	column_name
 
 kv_option_list ::=
 	( kv_option ) ( ( ',' kv_option ) )*
-
-insert_column_item ::=
-	column_name
 
 session_var ::=
 	'identifier'
@@ -2058,6 +2052,10 @@ session_var ::=
 var_name ::=
 	name
 	| name attrs
+
+non_reserved_word_or_sconst ::=
+	non_reserved_word
+	| 'SCONST'
 
 restore_options_list ::=
 	( restore_options ) ( ( ',' restore_options ) )*
@@ -2925,14 +2923,14 @@ non_reserved_word ::=
 	| col_name_keyword
 	| type_func_name_keyword
 
+column_name ::=
+	name
+
 kv_option ::=
 	name '=' string_or_placeholder
 	| name
 	| 'SCONST' '=' string_or_placeholder
 	| 'SCONST'
-
-column_name ::=
-	name
 
 session_var_parts ::=
 	( '.' 'identifier' ) ( ( '.' 'identifier' ) )*

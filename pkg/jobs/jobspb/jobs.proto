@@ -714,6 +714,7 @@ message ImportDetails {
   bool schemas_published = 24;
   bool tables_published = 13;
 
+  // TODO(yuzefovich): remove this.
   bool parse_bundle_schema = 14;
 
   // DefaultIntSize is the integer type that a "naked" int will be resolved

@@ -191,7 +191,6 @@ func TestExplainGist(t *testing.T) {
 				// Ignore all errors except the internal ones.
 				for _, knownErr := range []string{
 					"expected equivalence dependants to be its closure", // #119045
-					"not in index", // #133129
 				} {
 					if strings.Contains(err.Error(), knownErr) {
 						// Don't fail the test on a set of known errors.

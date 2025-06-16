@@ -4136,53 +4136,20 @@ alter_unsupported_stmt:
 // %Help: IMPORT - load data from file in a distributed manner
 // %Category: CCL
 // %Text:
-// -- Import both schema and table data:
-// IMPORT [ TABLE <tablename> FROM ]
-//        <format> <datafile>
-//        [ WITH <option> [= <value>] [, ...] ]
-//
-// Formats:
-//    MYSQLDUMP
-//    PGDUMP
-//
-// Options:
-//    distributed = '...'
-//    temp = '...'
-//
 // Use CREATE TABLE followed by IMPORT INTO to create and import into a table
 // from external files that only have table data.
 //
 // %SeeAlso: CREATE TABLE, WEBDOCS/import-into.html
 import_stmt:
- IMPORT import_format '(' string_or_placeholder ')' opt_with_options
-  {
-    /* SKIP DOC */
-    $$.val = &tree.Import{Bundle: true, FileFormat: $2, Files: tree.Exprs{$4.expr()}, Options: $6.kvOptions()}
-  }
-| IMPORT import_format string_or_placeholder opt_with_options
-  {
-    $$.val = &tree.Import{Bundle: true, FileFormat: $2, Files: tree.Exprs{$3.expr()}, Options: $4.kvOptions()}
-  }
-| IMPORT TABLE table_name FROM import_format '(' string_or_placeholder ')' opt_with_options
-  {
-    /* SKIP DOC */
-    name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Import{Bundle: true, Table: &name, FileFormat: $5, Files: tree.Exprs{$7.expr()}, Options: $9.kvOptions()}
-  }
-| IMPORT TABLE table_name FROM import_format string_or_placeholder opt_with_options
+ IMPORT INTO table_name '(' insert_column_list ')' import_format DATA '(' string_or_placeholder_list ')' opt_with_options
   {
     name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Import{Bundle: true, Table: &name, FileFormat: $5, Files: tree.Exprs{$6.expr()}, Options: $7.kvOptions()}
-  }
-| IMPORT INTO table_name '(' insert_column_list ')' import_format DATA '(' string_or_placeholder_list ')' opt_with_options
-  {
-    name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Import{Table: &name, Into: true, IntoCols: $5.nameList(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
+    $$.val = &tree.Import{Table: &name, IntoCols: $5.nameList(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
   }
 | IMPORT INTO table_name import_format DATA '(' string_or_placeholder_list ')' opt_with_options
   {
     name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Import{Table: &name, Into: true, IntoCols: nil, FileFormat: $4, Files: $7.exprs(), Options: $9.kvOptions()}
+    $$.val = &tree.Import{Table: &name, IntoCols: nil, FileFormat: $4, Files: $7.exprs(), Options: $9.kvOptions()}
   }
 | IMPORT error // SHOW HELP: IMPORT
 
