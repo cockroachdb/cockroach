@@ -1103,7 +1103,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 // - TENANT_ALL is used to differentiate `ALTER TENANT <id>` from
 // `ALTER TENANT ALL`. Ditto `CLUSTER_ALL` and `CLUSTER ALL`.
 %token NOT_LA NULLS_LA WITH_LA AS_LA GENERATED_ALWAYS GENERATED_BY_DEFAULT RESET_ALL ROLE_ALL
-%token USER_ALL ON_LA TENANT_ALL CLUSTER_ALL SET_TRACING
+%token USER_ALL ON_LA TENANT_ALL CLUSTER_ALL SET_TRACING CREATE_CHANGEFEED_FOR_DATABASE
 
 %union {
   id    int32
@@ -4901,11 +4901,11 @@ logical_replication_create_table_options:
   }
 | UNIDIRECTIONAL
   {
-   $$.val = &tree.LogicalReplicationOptions{Unidirectional: tree.MakeDBool(true)} 
+   $$.val = &tree.LogicalReplicationOptions{Unidirectional: tree.MakeDBool(true)}
   }
 | BIDIRECTIONAL ON string_or_placeholder
   {
-   $$.val = &tree.LogicalReplicationOptions{BidirectionalURI: $3.expr()} 
+   $$.val = &tree.LogicalReplicationOptions{BidirectionalURI: $3.expr()}
   }
 
 
@@ -6229,6 +6229,15 @@ create_changefeed_stmt:
       Targets: $4.changefeedTargets(),
       SinkURI: $5.expr(),
       Options: $6.kvOptions(),
+    }
+  }
+| CREATE_CHANGEFEED_FOR_DATABASE CHANGEFEED FOR DATABASE changefeed_targets opt_changefeed_sink opt_with_options
+  // TODO: Create the correct AST node here.
+  {
+    $$.val = &tree.CreateChangefeed{
+      Targets: $5.changefeedTargets(),
+      SinkURI: $6.expr(),
+      Options: $7.kvOptions(),
     }
   }
 | CREATE CHANGEFEED /*$3=*/ opt_changefeed_sink /*$4=*/ opt_with_options
