@@ -608,7 +608,7 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
-			po.TableDesc.SchemaLocked = false
+			po.TableDesc.SchemaLocked = evalCtx.SessionData().CreateTableWithSchemaLocked
 			return nil
 		},
 	},

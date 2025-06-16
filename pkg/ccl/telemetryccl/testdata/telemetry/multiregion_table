@@ -41,10 +41,10 @@ sql.multiregion.create_table.locality.global
 #####################################################################
 
 exec
-CREATE TABLE t1_to_row () LOCALITY REGIONAL BY TABLE;
-CREATE TABLE t1_to_global () LOCALITY REGIONAL BY TABLE;
-CREATE TABLE t1_to_table_in () LOCALITY REGIONAL BY TABLE;
-CREATE TABLE t1_to_row_as () LOCALITY REGIONAL BY TABLE;
+CREATE TABLE t1_to_row () WITH (schema_locked=false) LOCALITY REGIONAL BY TABLE;
+CREATE TABLE t1_to_global () WITH (schema_locked=false) LOCALITY REGIONAL BY TABLE;
+CREATE TABLE t1_to_table_in () WITH (schema_locked=false) LOCALITY REGIONAL BY TABLE;
+CREATE TABLE t1_to_row_as () WITH (schema_locked=false) LOCALITY REGIONAL BY TABLE;
 ALTER TABLE t1_to_row_as ADD COLUMN cr crdb_internal_region NOT NULL;
 ----
 
@@ -73,10 +73,10 @@ sql.multiregion.alter_table.locality.from.regional_by_table.to.regional_by_row_a
 #####################################################################
 
 exec
-CREATE TABLE t2_to_row () LOCALITY REGIONAL BY TABLE IN "ap-southeast-2";
-CREATE TABLE t2_to_global () LOCALITY REGIONAL BY TABLE IN "ap-southeast-2";
-CREATE TABLE t2_to_table () LOCALITY REGIONAL BY TABLE IN "ap-southeast-2";
-CREATE TABLE t2_to_row_as () LOCALITY REGIONAL BY TABLE IN "ap-southeast-2";
+CREATE TABLE t2_to_row () WITH (schema_locked = false) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2";
+CREATE TABLE t2_to_global () WITH (schema_locked = false) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2";
+CREATE TABLE t2_to_table () WITH (schema_locked = false) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2";
+CREATE TABLE t2_to_row_as () WITH (schema_locked = false) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2";
 ALTER TABLE t2_to_row_as ADD COLUMN cr crdb_internal_region NOT NULL;
 ----
 
@@ -106,10 +106,10 @@ sql.multiregion.alter_table.locality.from.regional_by_table_in.to.regional_by_ro
 #####################################################################exec
 
 exec
-CREATE TABLE t3_to_row () LOCALITY GLOBAL;
-CREATE TABLE t3_to_table () LOCALITY GLOBAL;
-CREATE TABLE t3_to_table_in () LOCALITY GLOBAL;
-CREATE TABLE t3_to_row_as () LOCALITY GLOBAL;
+CREATE TABLE t3_to_row () WITH (schema_locked = false) LOCALITY GLOBAL;
+CREATE TABLE t3_to_table () WITH (schema_locked = false) LOCALITY GLOBAL;
+CREATE TABLE t3_to_table_in () WITH (schema_locked = false) LOCALITY GLOBAL;
+CREATE TABLE t3_to_row_as () WITH (schema_locked = false) LOCALITY GLOBAL;
 ALTER TABLE t3_to_row_as ADD COLUMN cr crdb_internal_region NOT NULL;
 ----
 

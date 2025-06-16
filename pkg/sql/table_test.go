@@ -660,6 +660,9 @@ func TestJobsCache(t *testing.T) {
 	// we're altering.
 	// Further schema changes to the table should have an existing cache
 	// entry for the job.
+	if _, err := conn.ExecContext(ctx, `SET create_table_with_schema_locked=false`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := conn.ExecContext(ctx, `CREATE TABLE t1()`); err != nil {
 		t.Fatal(err)
 	}

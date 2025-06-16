@@ -22,6 +22,13 @@ defaultdb root <nil> <nil> {} <nil>
 postgres root <nil> <nil> {} <nil>
 system node <nil> <nil> {} <nil>
 
+# We need to currently unset and set schema_locked when
+# modifying table locality, since this functionality is not
+# supported in the declarative schema changer.
+exec-sql
+ALTER TABLE d.t SET (schema_locked=false);
+----
+
 # make our table regional by row
 exec-sql
 ALTER TABLE d.t SET LOCALITY REGIONAL BY ROW;

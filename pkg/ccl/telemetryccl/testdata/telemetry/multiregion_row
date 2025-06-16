@@ -13,17 +13,17 @@ ALTER DATABASE d ADD REGION "ap-southeast-2"
 ----
 
 feature-usage
-CREATE TABLE t4 () LOCALITY GLOBAL
+CREATE TABLE t4 () WITH (schema_locked=false) LOCALITY GLOBAL
 ----
 sql.multiregion.create_table.locality.global
 
 feature-usage
-CREATE TABLE t5 () LOCALITY REGIONAL BY ROW
+CREATE TABLE t5 () WITH (schema_locked=false) LOCALITY REGIONAL BY ROW
 ----
 sql.multiregion.create_table.locality.regional_by_row
 
 feature-usage
-CREATE TABLE t6 (cr crdb_internal_region) LOCALITY REGIONAL BY ROW AS cr
+CREATE TABLE t6 (cr crdb_internal_region) WITH (schema_locked=false) LOCALITY REGIONAL BY ROW AS cr
 ----
 sql.multiregion.create_table.locality.regional_by_row_as
 

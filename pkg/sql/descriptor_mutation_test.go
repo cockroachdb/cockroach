@@ -898,6 +898,7 @@ SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
 		t.Fatal(err)
 	}
 	if _, err := sqlDB.Exec(`
+SET create_table_with_schema_locked=false;
 SET use_declarative_schema_changer = 'off';
 CREATE DATABASE t;
 CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
@@ -1113,6 +1114,7 @@ func TestTableMutationQueue(t *testing.T) {
 
 	// Create a table with column i and an index on v and i.
 	if _, err := sqlDB.Exec(`
+SET create_table_with_schema_locked=false;
 SET use_declarative_schema_changer = 'off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR UNIQUE);
