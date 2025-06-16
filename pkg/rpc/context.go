@@ -2002,6 +2002,16 @@ func (rpcCtx *Context) GRPCUnvalidatedDial(
 	return rpcCtx.grpcDialNodeInternal(target, 0, locality, rpcbase.SystemClass)
 }
 
+// DRPCUnvalidatedDial uses DRPCDialNode and disables validation of the
+// node ID between client and server. This function should only be
+// used with the gossip client and CLI commands which can talk to any
+// node. This method implies a SystemClass.
+func (rpcCtx *Context) DRPCUnvalidatedDial(
+	target string, locality roachpb.Locality,
+) *DRPCConnection {
+	return rpcCtx.drpcDialNodeInternal(target, 0, locality, rpcbase.SystemClass)
+}
+
 // GRPCDialNode calls grpc.Dial with options appropriate for the
 // context and class (see the comment on ConnectionClass).
 //
