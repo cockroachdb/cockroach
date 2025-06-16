@@ -39,6 +39,7 @@ func registerElasticWorkloadMixedVersion(r registry.Registry) {
 		Owner:            registry.OwnerKV,
 		Timeout:          3 * time.Hour,
 		Benchmark:        true,
+		Monitor:          true,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Cluster: r.MakeClusterSpec(4, spec.CPU(8),
