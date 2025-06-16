@@ -85,7 +85,13 @@ func newDRPCServer(
 		}
 		serverInterceptors = append(serverInterceptors, metricsRecorder.NewDRPCInterceptor())
 
-		// 3. Access Control Interceptor
+		// 3. Authentication and authorization interceptor
+		if !rpcCtx.ContextOptions.Insecure {
+			authInterceptor := rpc.NewDrpcAuthInterceptor(rpcCtx)
+			serverInterceptors = append(serverInterceptors, authInterceptor)
+		}
+
+		// 4. Access Control Interceptor
 		accessControlInterceptor := func(
 			ictx context.Context,
 			methodName string,
@@ -99,7 +105,7 @@ func newDRPCServer(
 		}
 		serverInterceptors = append(serverInterceptors, accessControlInterceptor)
 
-		// 4. Tracing Interceptor
+		// 5. Tracing Interceptor
 		if tracer := rpcCtx.Stopper.Tracer(); tracer != nil {
 			serverInterceptors = append(serverInterceptors, drpcinterceptor.ServerInterceptor(tracer))
 		}

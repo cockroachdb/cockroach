@@ -7,6 +7,7 @@ package rpc
 
 import (
 	"context"
+	drpc "storj.io/drpc"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -560,4 +561,33 @@ func (ss *wrappedServerStream) Context() context.Context {
 // RecvMsg overrides the nested grpc.ServerStream.RecvMsg().
 func (ss *wrappedServerStream) RecvMsg(m interface{}) error {
 	return ss.recv(m)
+}
+
+// wrappedDrpcStream wraps a drpc.Stream to provide a modified context.
+// For streaming RPCs that require per-message authorization (e.g., tenant to KV),
+// it intercepts the MsgRecv call to perform authorization after each message is received.
+type wrappedDrpcStream struct {
+	drpc.Stream
+	ctx context.Context
+
+	// doAuthRecv, if non-nil, is a function called by this stream's MsgRecv method.
+	// It's responsible for calling the underlying stream's MsgRecv to get the message
+	// and then performing authorization on that message.
+	doAuthRecv func(msg drpc.Message, enc drpc.Encoding) error
+}
+
+// Context returns the enhanced context associated with this wrapped stream.
+// This is the context that the dRPC handler will see.
+func (w *wrappedDrpcStream) Context() context.Context {
+	return w.ctx
+}
+
+// MsgRecv implements the drpc.Stream interface.
+// If doAuthRecv is set (for per-message authorization), it calls that function.
+// Otherwise, it delegates to the underlying (embedded) stream's MsgRecv method.
+func (w *wrappedDrpcStream) MsgRecv(msg drpc.Message, enc drpc.Encoding) error {
+	if w.doAuthRecv != nil {
+		return w.doAuthRecv(msg, enc)
+	}
+	return w.Stream.MsgRecv(msg, enc)
 }

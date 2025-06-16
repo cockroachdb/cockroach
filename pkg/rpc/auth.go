@@ -9,6 +9,8 @@ import (
 	"context"
 	"crypto/x509"
 	"fmt"
+	drpc "storj.io/drpc"
+	"storj.io/drpc/drpcserver"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -46,6 +48,106 @@ type kvAuth struct {
 // kvAuth implements the auth interface.
 func (a kvAuth) AuthUnary() grpc.UnaryServerInterceptor   { return a.unaryInterceptor }
 func (a kvAuth) AuthStream() grpc.StreamServerInterceptor { return a.streamInterceptor }
+func (a kvAuth) AuthDrpc() drpcserver.ServerInterceptor {
+	return a.serverDrpcInterceptor
+}
+
+// NewDrpcAuthInterceptor creates a new DRPC server interceptor for authentication and authorization.
+// It uses the provided rpc.Context to configure the underlying authentication and authorization mechanisms.
+func NewDrpcAuthInterceptor(
+	rpcCtx *Context, // Changed to accept *rpc.Context
+) drpcserver.ServerInterceptor {
+	auth := kvAuth{
+		sv: &rpcCtx.Settings.SV, // Assumes Settings is an exported field of rpc.Context and SV is a field of Settings
+		tenant: tenantAuthorizer{
+			tenantID:               rpcCtx.tenID,                  // Accesses field from rpc.Context (can be unexported)
+			capabilitiesAuthorizer: rpcCtx.capabilitiesAuthorizer, // Accesses field from rpc.Context (can be unexported)
+		},
+	}
+	return auth.AuthDrpc()
+}
+
+// serverDrpcInterceptor implements server-side authentication and authorization for dRPC requests.
+// dRPC typically carries the relevant request context on the stream itself (stream.Context()).
+func (a kvAuth) serverDrpcInterceptor(
+	_ context.Context, rpcName string, stream drpc.Stream, handler drpc.Handler,
+) error {
+	// Step 1: Authenticate the request and select an authorization rule.
+	authnRes, authz, err := a.authenticateAndSelectAuthzRule(stream.Context())
+	if err != nil {
+		// Authentication or selection of authorization rule failed.
+		return err // Return error to terminate RPC.
+	}
+
+	// Step 2: Enhance the context.
+	// This creates a new context, potentially with client tenant information,
+	// based on the authentication result. This enhanced context will be
+	// made available to the RPC handler.
+	enhancedCtx := contextForRequest(stream.Context(), authnRes)
+
+	// Step 3: Prepare a wrapped stream.
+	// This stream will carry the enhancedCtx. For certain authorization cases,
+	// it will also intercept message receiving (MsgRecv) for per-message checks.
+	wrappedStream := &wrappedDrpcStream{
+		Stream: stream,      // The original dRPC stream from the transport.
+		ctx:    enhancedCtx, // The context the handler will see via wrappedStream.Context().
+	}
+
+	// Step 4: Apply authorization logic based on the determined authorization method.
+	switch ar := authz.(type) {
+	case authzTenantServerToKVServer:
+		// Handles requests from a tenant server to a KV server.
+		// These requests require per-message authorization to ensure a tenant
+		// only accesses its own data.
+
+		// Clear any leftover gRPC incoming metadata from the context.
+		// This prevents unintended metadata propagation if the dRPC call
+		// is part of a chain (e.g., gRPC -> dRPC).
+		finalCtxForHandler := enhancedCtx
+		// rpcName is equivalent to gRPC's FullMethod (e.g., "/package.Service/Method").
+		// Special handling for Blob/PutStream to preserve 'filename' metadata, similar to gRPC interceptor.
+		if rpcName == "/cockroach.blobs.Blob/PutStream" { // Match dRPC service/method name.
+			finalCtxForHandler = grpcutil.ClearIncomingContextExcept(finalCtxForHandler, "filename")
+		} else {
+			finalCtxForHandler = grpcutil.ClearIncomingContext(finalCtxForHandler)
+		}
+		wrappedStream.ctx = finalCtxForHandler // Update context on the wrapped stream.
+
+		// Set up per-message authorization by providing the doAuthRecv function.
+		wrappedStream.doAuthRecv = func(msg drpc.Message, enc drpc.Encoding) error {
+			// First, receive the actual message using the underlying (original) stream.
+			// wrappedStream.Stream is the original stream passed to the interceptor.
+			if err := wrappedStream.Stream.MsgRecv(msg, enc); err != nil {
+				return err // Error during message receive.
+			}
+			// After successfully receiving, 'msg' is populated. Authorize it.
+			// The finalCtxForHandler contains authentication details (e.g., tenant ID).
+			// roachpb.TenantID(ar) provides the client tenant ID for authorization.
+			return a.tenant.authorize(finalCtxForHandler, a.sv, roachpb.TenantID(ar), rpcName, msg)
+		}
+
+	case authzTenantServerToTenantServer:
+		// Handles requests from one tenant server to another.
+		// After initial authentication, these are generally allowed.
+		// No additional per-message authorization is typically needed.
+		// The wrappedStream with its enhancedCtx is passed along.
+
+	case authzPrivilegedPeerToServer:
+		// Handles requests from privileged peers (e.g., root/node users, other KV nodes).
+		// These are generally allowed full access after initial authentication.
+		// No additional per-message authorization.
+		// The wrappedStream with its enhancedCtx is passed along.
+
+	default:
+		// Should not happen. Indicates a programming error (unhandled authorization case).
+		return errors.AssertionFailedf("unhandled authz case in dRPC interceptor: %T", ar)
+	}
+
+	// Step 5: Call the actual dRPC handler.
+	// The handler receives the wrappedStream (which provides the enhanced context
+	// and potentially per-message authorization via its MsgRecv method) and the rpcName.
+	return handler.HandleRPC(wrappedStream, rpcName)
+}
 
 func (a kvAuth) unaryInterceptor(
 	ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,

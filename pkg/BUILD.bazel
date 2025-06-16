@@ -2768,6 +2768,7 @@ GO_TARGETS = [
     "//pkg/util/tochar:tochar_test",
     "//pkg/util/tracing/collector:collector",
     "//pkg/util/tracing/collector:collector_test",
+    "//pkg/util/tracing/drpcinterceptor:drpcinterceptor",
     "//pkg/util/tracing/grpcinterceptor:grpcinterceptor",
     "//pkg/util/tracing/grpcinterceptor:grpcinterceptor_test",
     "//pkg/util/tracing/service:service",

@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "drpcinterceptor",
+    srcs = ["drpc_interceptor.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/drpcinterceptor",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/tracing",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel//codes",
+        "@io_storj_drpc//:drpc",
+        "@io_storj_drpc//drpcmetadata",
+        "@io_storj_drpc//drpcserver",
+        "@org_golang_google_grpc//status",
+    ],
+)
