@@ -548,13 +548,11 @@ type Replica struct {
 	// [^1]: TODO(pavelkalinnikov): we can but it'd be a larger refactor.
 	tenantLimiter tenantrate.Limiter
 
-	// tenantMetricsRef is a metrics reference indicating the tenant under
-	// which to track the range's contributions. This is determined by the
-	// start key of the Replica, once initialized.
-	// Its purpose is to help track down missing/extraneous release operations
-	// that would not be apparent or easy to resolve when refcounting at the store
-	// level only.
-	tenantMetricsRef *tenantMetricsRef
+	// tenantMetricsRef is a struct for per-tenant metrics contributed by this
+	// replica. It is determined by the start key of the Replica, once
+	// initialized. See tenantStorageMetrics for precautions that must be taken
+	// when accessing this.
+	tenantMetricsRef *tenantStorageMetrics
 
 	// sideTransportClosedTimestamp encapsulates state related to the closed
 	// timestamp's information about the range. Note that the
@@ -2770,9 +2768,23 @@ func init() {
 
 // MeasureReqCPUNanos measures the cpu time spent on this replica processing
 // requests.
-func (r *Replica) MeasureReqCPUNanos(start time.Duration) {
+func (r *Replica) MeasureReqCPUNanos(ctx context.Context, start time.Duration) {
 	r.measureNanosRunning(start, func(dur float64) {
 		r.loadStats.RecordReqCPUNanos(dur)
+		// NB: the caller also has a tenant ID, but we use the replica's here for
+		// simplicity. There is no established pattern for short-lived references
+		// to a specific tenant's metrics.
+		if r.tenantMetricsRef != nil {
+			// We can *not* use the tenant metrics directly because nothing in this
+			// current code path prevents the surrounding replica from getting
+			// destroyed, which could zero the refcount and release the metrics
+			// object. Instead, we go through acquireTenant, which gives us an object
+			// that is and remain valid. This is not an expensive operation in
+			// the common case (the replica still exists).
+			tm := r.store.metrics.acquireTenant(r.tenantMetricsRef.tenantID)
+			tm.ReqCPUNanos.Inc(dur)
+			r.store.metrics.releaseTenant(ctx, tm)
+		}
 	})
 }
 

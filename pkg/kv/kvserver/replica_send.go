@@ -123,10 +123,23 @@ func (r *Replica) Send(
 func (r *Replica) SendWithWriteBytes(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvadmission.StoreWriteBytes, *kvpb.Error) {
+	tenantIDOrZero, _ := roachpb.ClientTenantFromContext(ctx)
+
+	// Record the CPU time processing the request for this replica. This is
+	// recorded regardless of errors that are encountered.
+	startCPU := grunning.Time()
+	defer r.MeasureReqCPUNanos(ctx, startCPU)
+
 	if r.store.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
 		defer pprof.SetGoroutineLabels(ctx)
 		// Note: the defer statement captured the previous context.
-		ctx = pprof.WithLabels(ctx, pprof.Labels("range_str", r.rangeStr.ID()))
+		var lbls pprof.LabelSet
+		if tenantIDOrZero.IsSet() {
+			lbls = pprof.Labels("range_str", r.rangeStr.ID(), "tenant_id", tenantIDOrZero.String())
+		} else {
+			lbls = pprof.Labels("range_str", r.rangeStr.ID())
+		}
+		ctx = pprof.WithLabels(ctx, lbls)
 		pprof.SetGoroutineLabels(ctx)
 	}
 	if trace.IsEnabled() {
@@ -134,11 +147,6 @@ func (r *Replica) SendWithWriteBytes(
 	}
 	// Add the range log tag.
 	ctx = r.AnnotateCtx(ctx)
-
-	// Record the CPU time processing the request for this replica. This is
-	// recorded regardless of errors that are encountered.
-	startCPU := grunning.Time()
-	defer r.MeasureReqCPUNanos(startCPU)
 
 	isReadOnly := ba.IsReadOnly()
 	if err := r.checkBatchRequest(ba, isReadOnly); err != nil {
@@ -148,7 +156,7 @@ func (r *Replica) SendWithWriteBytes(
 	if err := r.maybeBackpressureBatch(ctx, ba); err != nil {
 		return nil, nil, kvpb.NewError(err)
 	}
-	if err := r.maybeRateLimitBatch(ctx, ba); err != nil {
+	if err := r.maybeRateLimitBatch(ctx, ba, tenantIDOrZero); err != nil {
 		return nil, nil, kvpb.NewError(err)
 	}
 	if err := r.maybeCommitWaitBeforeCommitTrigger(ctx, ba); err != nil {

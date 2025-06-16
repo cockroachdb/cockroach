@@ -27,15 +27,14 @@ import (
 func TestTenantsStorageMetricsRelease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	m := newTenantsStorageMetrics()
-	var refs []*tenantMetricsRef
+	var refs []*tenantStorageMetrics
 	const tenants = 7
 	for i := 0; i < tenants; i++ {
 		id := roachpb.MustMakeTenantID(roachpb.MinTenantID.InternalValue + uint64(i))
-		ref := m.acquireTenant(id)
-		tm := m.getTenant(context.Background(), ref)
+		tm := m.acquireTenant(id)
 		tm.SysBytes.Update(1023)
 		tm.KeyCount.Inc(123)
-		refs = append(refs, ref)
+		refs = append(refs, tm)
 	}
 	for i, ref := range refs {
 		require.Equal(t, int64(1023*(tenants-i)), m.SysBytes.Value(), i)
