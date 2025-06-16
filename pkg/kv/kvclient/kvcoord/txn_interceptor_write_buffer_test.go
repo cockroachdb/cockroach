@@ -2671,6 +2671,15 @@ func TestLockKeyInfo(t *testing.T) {
 		require.False(t, lki.rollbackSequence(1))
 		require.False(t, lki.ts.IsSet())
 
+		// Also test rollback with only one lock type acquired.
+		lki = newLockedKeyInfo(lock.Shared, 2, ts1)
+		require.False(t, lki.rollbackSequence(1))
+		require.False(t, lki.ts.IsSet())
+
+		lki = newLockedKeyInfo(lock.Exclusive, 2, ts1)
+		require.False(t, lki.rollbackSequence(1))
+		require.False(t, lki.ts.IsSet())
+
 		lki = newLockedKeyInfo(lock.Shared, 2, ts1)
 		lki.acquireLock(lock.Exclusive, 3, ts2)
 		require.True(t, lki.rollbackSequence(3))
