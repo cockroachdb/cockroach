@@ -174,7 +174,7 @@ func alterChangefeedPlanHook(
 				changefeedProgress.SpanLevelCheckpoint = nil
 			}
 		}
-		newChangefeedStmt.Targets = newTargets
+		newChangefeedStmt.TableTargets = newTargets
 
 		if prevDetails.Select != "" {
 			query, err := cdceval.ParseChangefeedExpression(prevDetails.Select)
@@ -395,10 +395,10 @@ func generateAndValidateNewTargets(
 	prevProgress jobspb.Progress,
 	sinkURI string,
 ) (
-	tree.ChangefeedTargets,
+	tree.ChangefeedTableTargets,
 	*jobspb.Progress,
 	hlc.Timestamp,
-	map[tree.ChangefeedTarget]jobspb.ChangefeedTargetSpecification,
+	map[tree.ChangefeedTableTarget]jobspb.ChangefeedTargetSpecification,
 	error,
 ) {
 
@@ -406,8 +406,8 @@ func generateAndValidateNewTargets(
 		TableID    descpb.ID
 		FamilyName tree.Name
 	}
-	newTargets := make(map[targetKey]tree.ChangefeedTarget)
-	droppedTargets := make(map[targetKey]tree.ChangefeedTarget)
+	newTargets := make(map[targetKey]tree.ChangefeedTableTarget)
+	droppedTargets := make(map[targetKey]tree.ChangefeedTableTarget)
 	newTableDescs := make(map[descpb.ID]catalog.Descriptor)
 
 	// originalSpecs provides a mapping between tree.ChangefeedTargets that
@@ -415,7 +415,7 @@ func generateAndValidateNewTargets(
 	// jobspb.ChangefeedTargetSpecification. The purpose of this mapping is to ensure
 	// that the StatementTimeName of the existing targets are not modified when the
 	// name of the target was modified.
-	originalSpecs := make(map[tree.ChangefeedTarget]jobspb.ChangefeedTargetSpecification)
+	originalSpecs := make(map[tree.ChangefeedTableTarget]jobspb.ChangefeedTargetSpecification)
 
 	// We want to store the value of whether or not the original changefeed had
 	// initial_scan set to only so that we only do an initial scan on an alter
@@ -465,15 +465,15 @@ func generateAndValidateNewTargets(
 	prevTargets := AllTargets(prevDetails)
 	noLongerExist := make(map[string]descpb.ID)
 	if err := prevTargets.EachTarget(func(targetSpec changefeedbase.Target) error {
-		k := targetKey{TableID: targetSpec.TableID, FamilyName: tree.Name(targetSpec.FamilyName)}
+		k := targetKey{TableID: targetSpec.DescID, FamilyName: tree.Name(targetSpec.FamilyName)}
 		var desc catalog.TableDescriptor
-		if d, exists := descResolver.DescByID[targetSpec.TableID]; exists {
+		if d, exists := descResolver.DescByID[targetSpec.DescID]; exists {
 			desc = d.(catalog.TableDescriptor)
 		} else {
 			// Table was dropped; that's okay since the changefeed likely
 			// will handle DROP alter command below; and if not, then we'll resume
 			// the changefeed, which will promptly fail if the table no longer exist.
-			noLongerExist[string(targetSpec.StatementTimeName)] = targetSpec.TableID
+			noLongerExist[string(targetSpec.StatementTimeName)] = targetSpec.DescID
 			return nil
 		}
 
@@ -487,16 +487,16 @@ func generateAndValidateNewTargets(
 			return err
 		}
 
-		newTarget := tree.ChangefeedTarget{
+		newTarget := tree.ChangefeedTableTarget{
 			TableName:  tablePattern,
 			FamilyName: tree.Name(targetSpec.FamilyName),
 		}
 		newTargets[k] = newTarget
-		newTableDescs[targetSpec.TableID] = descResolver.DescByID[targetSpec.TableID]
+		newTableDescs[targetSpec.DescID] = descResolver.DescByID[targetSpec.DescID]
 
 		originalSpecs[newTarget] = jobspb.ChangefeedTargetSpecification{
 			Type:              targetSpec.Type,
-			TableID:           targetSpec.TableID,
+			DescID:            targetSpec.DescID,
 			FamilyName:        targetSpec.FamilyName,
 			StatementTimeName: string(targetSpec.StatementTimeName),
 		}
@@ -571,7 +571,7 @@ func generateAndValidateNewTargets(
 					return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
 						pgcode.InvalidParameterValue,
 						`target %q does not exist`,
-						tree.ErrString(&target),
+						tree.ErrString(target),
 					)
 				}
 
@@ -617,7 +617,7 @@ func generateAndValidateNewTargets(
 						return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
 							pgcode.InvalidParameterValue,
 							`target %q does not exist`,
-							tree.ErrString(&target),
+							tree.ErrString(target),
 						)
 					}
 				}
@@ -628,7 +628,7 @@ func generateAndValidateNewTargets(
 					return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
 						pgcode.InvalidParameterValue,
 						`target %q already not watched by changefeed`,
-						tree.ErrString(&target),
+						tree.ErrString(target),
 					)
 				}
 				newTableDescs[desc.GetID()] = desc
@@ -659,7 +659,7 @@ func generateAndValidateNewTargets(
 		}
 	}
 
-	newTargetList := tree.ChangefeedTargets{}
+	newTargetList := tree.ChangefeedTableTargets{}
 
 	for _, target := range newTargets {
 		newTargetList = append(newTargetList, target)
@@ -689,7 +689,7 @@ func generateAndValidateNewTargets(
 func validateNewTargets(
 	ctx context.Context,
 	p sql.PlanHookState,
-	newTargets tree.ChangefeedTargets,
+	newTargets tree.ChangefeedTableTargets,
 	jobProgress jobspb.Progress,
 	jobStatementTime hlc.Timestamp,
 ) error {
