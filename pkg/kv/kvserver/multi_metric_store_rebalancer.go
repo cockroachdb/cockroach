@@ -8,6 +8,7 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -32,7 +33,7 @@ type multiMetricStoreRebalancer struct {
 //     gossip callback presumably).
 //   - Allocator.UpdateFailureDetectionSummary() upon node liveness
 //     status changing. (draining|dead|live|unavailable).
-
+//
 // In the future, it would also be responsible for:
 //   - Allocator.UpdateStoreMembership() upon a store being marked as
 //     decommissioning. We can defer this for now, since we don't need to
@@ -43,7 +44,7 @@ func (m *multiMetricStoreRebalancer) start(ctx context.Context, stopper *stop.St
 	_ = stopper.RunAsyncTask(ctx, "multi-metric-store-rebalancer", func(ctx context.Context) {
 		var timer timeutil.Timer
 		defer timer.Stop()
-		timer.Reset(jitteredInterval(mma.RebalanceInterval))
+		timer.Reset(jitteredInterval(allocator.LoadBasedRebalanceInterval.Get(&m.st.SV)))
 		for {
 			// Wait out the first tick before doing anything since the store is still
 			// starting up and we might as well wait for some stats to accumulate.
@@ -52,25 +53,36 @@ func (m *multiMetricStoreRebalancer) start(ctx context.Context, stopper *stop.St
 				return
 			case <-timer.C:
 				timer.Read = true
-				timer.Reset(jitteredInterval(mma.RebalanceInterval))
+				timer.Reset(jitteredInterval(allocator.LoadBasedRebalanceInterval.Get(&m.st.SV)))
 			}
 			if LoadBasedRebalancingMode.Get(&m.st.SV) != LBRebalancingMultiMetric {
 				continue
 			}
-			m.rebalance(ctx)
+			// Loop until no more changes are attempted.
+			for {
+				attemptedChanges := m.rebalance(ctx)
+				if !attemptedChanges {
+					break
+				}
+			}
 		}
 	})
 }
 
-func (m *multiMetricStoreRebalancer) rebalance(ctx context.Context) {
+func (m *multiMetricStoreRebalancer) rebalance(ctx context.Context) (attemptedChanges bool) {
 	// We first construct a message containing the up-to-date store range
 	// information before any allocator pass. This ensures up to date
 	// allocator state.
-	storeLeaseholderMsg := m.store.MakeStoreLeaseholderMsg()
+	storeLeaseholderMsg, allStores := m.store.MakeStoreLeaseholderMsg()
+	if !m.allocator.KnowsStores(allStores) {
+		log.Info(ctx, "mma rebalancer: noop since the allocator does not know all stores")
+		return false
+	}
 	m.allocator.ProcessStoreLeaseholderMsg(&storeLeaseholderMsg)
 	changes := m.allocator.ComputeChanges(ctx, mma.ChangeOptions{
 		LocalStoreID: m.store.StoreID(),
 	})
+	// TODO: feed these changes to allocatorSync.
 
 	var success bool
 	for _, change := range changes {
@@ -108,6 +120,8 @@ func (m *multiMetricStoreRebalancer) rebalance(ctx context.Context) {
 				}
 			}
 		}
+		// TODO: call into allocatorSync instead.
 		m.allocator.AdjustPendingChangesDisposition(change.ChangeIDs(), success)
 	}
+	return len(changes) > 0
 }

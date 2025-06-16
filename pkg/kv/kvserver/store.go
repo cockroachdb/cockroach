@@ -4223,19 +4223,26 @@ func (s *Store) getNodeRangeCount() int64 {
 	return s.cfg.RangeCount.Load()
 }
 
-func (s *Store) MakeStoreLeaseholderMsg() mma.StoreLeaseholderMsg {
+func (s *Store) MakeStoreLeaseholderMsg() (
+	msg mma.StoreLeaseholderMsg,
+	allStores map[roachpb.StoreID]struct{},
+) {
 	var msgs []mma.RangeMsg
+	allStores = map[roachpb.StoreID]struct{}{}
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		msg, ok := r.TryConstructMMARangeMsg()
 		if ok {
 			msgs = append(msgs, msg)
+			for _, repl := range msg.Replicas {
+				allStores[repl.StoreID] = struct{}{}
+			}
 		}
 		return true
 	})
 	return mma.StoreLeaseholderMsg{
 		StoreID: s.StoreID(),
 		Ranges:  msgs,
-	}
+	}, allStores
 }
 
 // TestingMMStoreRebalance is a testing-only method that triggers the store's
