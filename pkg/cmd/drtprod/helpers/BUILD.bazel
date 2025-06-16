@@ -6,7 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/drtprod/helpers",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachprod/errors",
+        "//pkg/cmd/roachprod/cli",
         "@com_github_spf13_cobra//:cobra",
     ],
 )
