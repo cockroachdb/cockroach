@@ -7800,7 +7800,6 @@ alter_virtual_cluster_reset_stmt:
 alter_virtual_cluster_rename_stmt:
   ALTER virtual_cluster virtual_cluster_spec RENAME TO d_expr
   {
-    /* SKIP DOC */
     $$.val = &tree.AlterTenantRename{
       TenantSpec: $3.tenantSpec(),
       NewName: &tree.TenantSpec{IsName: true, Expr: $6.expr()},
@@ -7824,7 +7823,6 @@ alter_virtual_cluster_service_stmt:
   }
 | ALTER virtual_cluster virtual_cluster_spec START SERVICE SHARED
   {
-    /* SKIP DOC */
     $$.val = &tree.AlterTenantService{
       TenantSpec: $3.tenantSpec(),
       Command: tree.TenantStartServiceShared,
@@ -7832,7 +7830,6 @@ alter_virtual_cluster_service_stmt:
   }
 | ALTER virtual_cluster virtual_cluster_spec STOP SERVICE
   {
-    /* SKIP DOC */
     $$.val = &tree.AlterTenantService{
       TenantSpec: $3.tenantSpec(),
       Command: tree.TenantStopService,
@@ -7854,7 +7851,6 @@ alter_virtual_cluster_service_stmt:
 alter_virtual_cluster_replication_stmt:
   ALTER virtual_cluster virtual_cluster_spec PAUSE REPLICATION
   {
-    /* SKIP DOC */
     $$.val = &tree.AlterTenantReplication{
       TenantSpec: $3.tenantSpec(),
       Command: tree.PauseJob,
@@ -7862,7 +7858,6 @@ alter_virtual_cluster_replication_stmt:
   }
 | ALTER virtual_cluster virtual_cluster_spec RESUME REPLICATION
   {
-    /* SKIP DOC */
     $$.val = &tree.AlterTenantReplication{
       TenantSpec: $3.tenantSpec(),
       Command: tree.ResumeJob,
@@ -7870,7 +7865,6 @@ alter_virtual_cluster_replication_stmt:
   }
 | ALTER virtual_cluster virtual_cluster_spec COMPLETE REPLICATION TO SYSTEM TIME a_expr
   {
-    /* SKIP DOC */
     $$.val = &tree.AlterTenantReplication{
       TenantSpec: $3.tenantSpec(),
       Cutover: &tree.ReplicationCutoverTime{
@@ -7880,7 +7874,6 @@ alter_virtual_cluster_replication_stmt:
   }
 | ALTER virtual_cluster virtual_cluster_spec COMPLETE REPLICATION TO LATEST
   {
-    /* SKIP DOC */
     $$.val = &tree.AlterTenantReplication{
       TenantSpec: $3.tenantSpec(),
       Cutover: &tree.ReplicationCutoverTime{
@@ -7890,7 +7883,6 @@ alter_virtual_cluster_replication_stmt:
   }
 | ALTER virtual_cluster virtual_cluster_spec SET REPLICATION replication_options_list
   {
-    /* SKIP DOC */
     $$.val = &tree.AlterTenantReplication{
       TenantSpec: $3.tenantSpec(),
       Options: *$6.tenantReplicationOptions(),
@@ -7898,7 +7890,6 @@ alter_virtual_cluster_replication_stmt:
   }
 | ALTER virtual_cluster virtual_cluster_spec SET REPLICATION SOURCE source_replication_options_list
   {
-    /* SKIP DOC */
     $$.val = &tree.AlterTenantReplication{
       TenantSpec: $3.tenantSpec(),
       Producer: true,
@@ -7907,7 +7898,6 @@ alter_virtual_cluster_replication_stmt:
   }
 | ALTER virtual_cluster virtual_cluster_spec START REPLICATION OF d_expr ON d_expr opt_with_replication_options
   {
-    /* SKIP DOC */
     $$.val = &tree.AlterTenantReplication{
       TenantSpec: $3.tenantSpec(),
       ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $7.expr()},
@@ -7970,7 +7960,6 @@ to_or_eq:
 alter_virtual_cluster_capability_stmt:
   ALTER virtual_cluster virtual_cluster_spec GRANT CAPABILITY virtual_cluster_capability_list
   {
-    /* SKIP DOC */
     $$.val = &tree.AlterTenantCapability{
       TenantSpec: $3.tenantSpec(),
       Capabilities: $6.tenantCapabilities(),
@@ -7978,7 +7967,6 @@ alter_virtual_cluster_capability_stmt:
   }
 | ALTER virtual_cluster virtual_cluster_spec GRANT ALL CAPABILITIES
   {
-    /* SKIP DOC */
     $$.val = &tree.AlterTenantCapability{
       TenantSpec: $3.tenantSpec(),
       AllCapabilities: true,
@@ -7986,7 +7974,6 @@ alter_virtual_cluster_capability_stmt:
   }
 | ALTER virtual_cluster virtual_cluster_spec REVOKE CAPABILITY virtual_cluster_capability_list
   {
-    /* SKIP DOC */
     $$.val = &tree.AlterTenantCapability{
       TenantSpec: $3.tenantSpec(),
       Capabilities: $6.tenantCapabilities(),
@@ -7995,7 +7982,6 @@ alter_virtual_cluster_capability_stmt:
   }
 | ALTER virtual_cluster virtual_cluster_spec REVOKE ALL CAPABILITIES
   {
-    /* SKIP DOC */
     $$.val = &tree.AlterTenantCapability{
       TenantSpec: $3.tenantSpec(),
       AllCapabilities: true,
