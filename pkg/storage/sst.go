@@ -356,6 +356,7 @@ func ComputeSSTStatsDiff(
 		prevSSTKey.Timestamp = sstIterKey.Timestamp
 		sstIter.Next()
 	}
+	ms.LastUpdateNanos = nowNanos
 	return ms, nil
 }
 
