@@ -220,7 +220,7 @@ func (a *doNothingKeyAdder) Flush(_ context.Context) error {
 func (*doNothingKeyAdder) IsEmpty() bool                             { return true }
 func (*doNothingKeyAdder) CurrentBufferFill() float32                { return 0 }
 func (*doNothingKeyAdder) GetSummary() kvpb.BulkOpSummary            { return kvpb.BulkOpSummary{} }
-func (*doNothingKeyAdder) Close(_ context.Context)                   {}
+func (*doNothingKeyAdder) Close(_ context.Context) error             { return nil }
 func (a *doNothingKeyAdder) SetOnFlush(f func(_ kvpb.BulkOpSummary)) { a.onFlush = f }
 
 var eofOffset int64 = math.MaxInt64
