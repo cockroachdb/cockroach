@@ -28,6 +28,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+var moveFailedErr = errors.New("TryMoveVector failed to find source vector")
+
 // Store implements the cspann.Store interface for KV backed vector indices.
 type Store struct {
 	db descs.DB // Used to generate new partition IDs
@@ -503,11 +505,9 @@ func (s *Store) TryRemoveFromPartition(
 		vectorKey := vecencoding.EncodePrefixVectorKey(metadataKey, metadata.Level)
 		vectorKey = slices.Clip(vectorKey)
 
-		// Quantize the vectors and add them to the partition with CPut commands
-		// that only take action if there is no value present yet.
+		// Quantize the vectors and remove them from the partition with Del
+		// commands.
 		b = txn.NewBatch()
-		codec := makePartitionCodec(s.rootQuantizer, s.quantizer)
-		codec.InitForDecoding(partitionKey, metadata, 1)
 		for _, childKey := range childKeys {
 			encodedKey := vecencoding.EncodeChildKey(vectorKey, childKey)
 			b.Del(encodedKey)
@@ -527,6 +527,107 @@ func (s *Store) TryRemoveFromPartition(
 
 		return nil
 	})
+}
+
+// TryMoveVector is part of the cspann.Store interface. It moves a vector from
+// one partition to another.
+func (s *Store) TryMoveVector(
+	ctx context.Context,
+	treeKey cspann.TreeKey,
+	sourcePartitionKey, targetPartitionKey cspann.PartitionKey,
+	vec vector.T,
+	childKey cspann.ChildKey,
+	valueBytes cspann.ValueBytes,
+	expected cspann.PartitionMetadata,
+) (moved bool, err error) {
+	if s.ReadOnly() {
+		return moved, errors.AssertionFailedf("cannot add to partition in read-only mode")
+	}
+
+	if sourcePartitionKey == targetPartitionKey {
+		// No-op move.
+		return false, nil
+	}
+
+	err = s.kv.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Acquire a shared lock on the target partition, to ensure that another
+		// agent doesn't modify it. Also, this will be used to verify expected
+		// metadata.
+		b := txn.NewBatch()
+		targetMetadataKey := vecencoding.EncodeMetadataKey(s.prefix, treeKey, targetPartitionKey)
+		b.GetForShare(targetMetadataKey, kvpb.BestEffort)
+		if err = txn.Run(ctx, b); err != nil {
+			return errors.Wrapf(err, "locking target partition %d for move from partition %d",
+				targetPartitionKey, sourcePartitionKey)
+		}
+
+		// Verify expected target metadata.
+		targetMetadata, err := s.getMetadataFromKVResult(targetPartitionKey, &b.Results[0])
+		if err != nil {
+			if errors.Is(err, cspann.ErrPartitionNotFound) {
+				// Suppress partition not found error.
+				return nil
+			}
+			return err
+		}
+		if !targetMetadata.Equal(&expected) {
+			return cspann.NewConditionFailedError(targetMetadata)
+		}
+
+		// Cap the target key so that appends allocate a new slice.
+		targetVectorKey := vecencoding.EncodePrefixVectorKey(targetMetadataKey, targetMetadata.Level)
+		targetVectorKey = slices.Clip(targetVectorKey)
+
+		// Quantize the vector and add it to the target partition with CPut command
+		// that only takes action if there is no value present yet.
+		b = txn.NewBatch()
+		codec := makePartitionCodec(s.rootQuantizer, s.quantizer)
+		encodedValue, err := codec.EncodeVector(targetPartitionKey, vec, targetMetadata.Centroid)
+		if err != nil {
+			return err
+		}
+		encodedValue = append(encodedValue, valueBytes...)
+		encodedKey := vecencoding.EncodeChildKey(targetVectorKey, childKey)
+		b.CPut(encodedKey, encodedValue, nil /* expValue */)
+
+		// Cap the source key so that appends allocate a new slice.
+		sourceMetadataKey := vecencoding.EncodeMetadataKey(s.prefix, treeKey, sourcePartitionKey)
+		sourceVectorKey := vecencoding.EncodePrefixVectorKey(sourceMetadataKey, targetMetadata.Level)
+		sourceVectorKey = slices.Clip(sourceVectorKey)
+
+		// Remove the vector from the source partition.
+		encodedKey = vecencoding.EncodeChildKey(sourceVectorKey, childKey)
+		b.Del(encodedKey)
+
+		if err = txn.Run(ctx, b); err != nil {
+			var errConditionFailed *kvpb.ConditionFailedError
+			if errors.As(err, &errConditionFailed) {
+				// The vector already exists in the target partition.
+				return nil
+			}
+			return errors.Wrapf(err, "adding vector to partition %d from partition %d",
+				targetPartitionKey, sourcePartitionKey)
+		}
+
+		// If vector was not removed from the source partition, then abort the
+		// transaction and return moved = false.
+		del := b.RawResponse().Responses[1].GetDelete()
+		if !del.FoundKey {
+			return moveFailedErr
+		}
+
+		moved = true
+		return nil
+	})
+	if err != nil {
+		if errors.Is(err, moveFailedErr) {
+			// Suppress moveFailedErr, since it only exists to trigger abort of the
+			// transaction (and roll back the add).
+			err = nil
+		}
+		return false, err
+	}
+	return moved, nil
 }
 
 // TryClearPartition is part of the cspann.Store interface. It removes vectors
