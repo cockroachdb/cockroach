@@ -62,6 +62,8 @@ func getEncoder(
 		//of both encoder and sink. See parquet_sink_cloudstorage.go file for more
 		//information on why this was needed.
 		return nil, nil
+	case changefeedbase.OptFormatProtobuf:
+		return newProtobufEncoder(ctx, protobufEncoderOptions{EncodingOptions: opts}, targets), nil
 	default:
 		return nil, errors.AssertionFailedf(`unknown format: %s`, opts.Format)
 	}
