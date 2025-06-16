@@ -1,0 +1,106 @@
+# LogicTest: !3node-tenant
+# cluster-opt: disable-mvcc-range-tombstones-for-point-deletes
+
+statement ok
+SET CLUSTER SETTING sql.txn.write_buffering_for_weak_isolation.enabled=true
+
+statement ok
+SET CLUSTER SETTING kv.lock_table.unreplicated_lock_reliability.split.enabled=false
+
+statement ok
+CREATE TABLE t (pk INT PRIMARY KEY)
+
+statement ok
+GRANT ALL ON t TO testuser
+
+subtest read_committed_discovers_lost_lock_at_commit
+user testuser
+
+statement ok
+SET kv_transaction_buffered_writes_enabled=true
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+INSERT INTO t VALUES (1)
+
+user root
+
+# This split clears the lock table.
+statement ok
+ALTER TABLE t SPLIT AT VALUES (10)
+
+# This write should block but doesn't because of the lost lock.
+statement ok
+INSERT INTO t VALUES (1)
+
+user testuser
+
+# Add another write to t to ensure we are propagating the ts correctly.
+# Note that currently we don't detect the failure here. If we add the lock loss
+# detection to locking gets we could.
+statement ok
+UPSERT INTO t VALUES (1)
+
+# Lock loss detection should detect the lost lock on commit when we go to
+# write the value.
+statement error write exclusion on key
+COMMIT
+
+subtest read_committed_discovers_lost_lock_at_mid_txn_flush
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+INSERT INTO t VALUES (2)
+
+user root
+
+# This split clears the lock table.
+statement ok
+ALTER TABLE t SPLIT AT VALUES (8)
+
+# This write should block but doesn't because of the lost lock.
+statement ok
+INSERT INTO t VALUES (2)
+
+user testuser
+
+# Lock loss detection should detect the lost lock when we
+# flush the buffer because of a DeleteRangeRequest
+statement error write exclusion on key
+DELETE FROM t WHERE pk > 10
+
+statement ok
+ROLLBACK
+
+subtest serializable_observes_write_too_old
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+statement ok
+INSERT INTO t VALUES (3)
+
+user root
+
+# This split clears the lock table.
+statement ok
+ALTER TABLE t SPLIT AT VALUES (7)
+
+# This write should block but doesn't because of the lost lock.
+statement ok
+INSERT INTO t VALUES (3)
+
+user testuser
+
+# A serializable transaction should see a WriteTooOld error here since the read timestamp doesn't move.
+statement error WriteTooOld
+DELETE FROM t WHERE pk > 10
+
+statement ok
+ROLLBACK
