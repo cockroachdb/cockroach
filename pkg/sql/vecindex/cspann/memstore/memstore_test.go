@@ -197,10 +197,11 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 		require.Equal(t, []cspann.CVStats{}, stats.CVStats)
 
 		// Increase root partition level and check stats.
-		metadata, err := store.TryGetPartitionMetadata(ctx, treeKey, cspann.RootKey)
+		toGet := []cspann.PartitionMetadataToGet{{Key: cspann.RootKey}}
+		err = store.TryGetPartitionMetadata(ctx, treeKey, toGet)
 		require.NoError(t, err)
 
-		expected := metadata
+		expected := toGet[0].Metadata
 		metadata.Level = 3
 		err = store.TryUpdatePartitionMetadata(ctx, treeKey, cspann.RootKey, metadata, expected)
 		require.NoError(t, err)

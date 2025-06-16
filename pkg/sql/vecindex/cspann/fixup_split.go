@@ -7,6 +7,7 @@ package cspann
 
 import (
 	"context"
+	"math"
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
@@ -209,6 +210,7 @@ func (fw *fixupWorker) splitPartition(
 			return errors.Wrapf(errFixupAborted, "reloading partition, metadata timestamp changed")
 		}
 	} else if metadata.StateDetails.State != MissingState {
+		// Fetch metadata for already created left and right partitions.
 		leftMetadata, err = fw.getPartitionMetadata(ctx, leftPartitionKey)
 		if err != nil {
 			return err
@@ -222,6 +224,15 @@ func (fw *fixupWorker) splitPartition(
 	if metadata.StateDetails.State == DrainingForSplitState {
 		// Get the full vectors for the splitting partition.
 		vectors, err = fw.getFullVectorsForPartition(ctx, partitionKey, partition)
+		if err != nil {
+			return err
+		}
+
+		// While most vectors will be assigned to the new sub-partitions, some may
+		// need to be reassigned to siblings that are closer.
+		vectors, err = fw.reassignToSiblings(
+			ctx, parentPartitionKey, partitionKey, partition, vectors,
+			leftPartitionKey, rightPartitionKey)
 		if err != nil {
 			return err
 		}
@@ -345,6 +356,149 @@ func (fw *fixupWorker) splitPartition(
 	return nil
 }
 
+// reassignToSiblings checks if the vectors in a splitting partition need to be
+// assigned to partitions other than the left and right sub-partitions. If a
+// vector is closer to a sibling partition's centroid than it is to the left or
+// right partitions' centroids, then it will be added to the sibling partition.
+// It is also removed from "sourcePartition" and from "sourceVectors".
+//
+// reassignToSiblings returns the source vectors, minus any reassigned vectors.
+func (fw *fixupWorker) reassignToSiblings(
+	ctx context.Context,
+	parentPartitionKey, sourcePartitionKey PartitionKey,
+	sourcePartition *Partition,
+	sourceVectors vector.Set,
+	leftPartitionKey, rightPartitionKey PartitionKey,
+) (vector.Set, error) {
+	// No siblings if this is the root.
+	if parentPartitionKey == InvalidKey {
+		return sourceVectors, nil
+	}
+
+	// Fetch parent partition. If it does not exist, then it could be because
+	// another agent completed the split or because the parent was itself split.
+	// In either case, abort this split. If it's not yet done, it will be
+	// restarted at a later time with the new parent.
+	parentPartition, err := fw.getPartition(ctx, parentPartitionKey)
+	if err != nil {
+		return vector.Set{}, err
+	}
+	if parentPartition == nil {
+		return vector.Set{}, errors.Wrapf(errFixupAborted,
+			"parent partition %d of partition %d no longer exists",
+			parentPartitionKey, sourcePartitionKey)
+	}
+
+	// Remove the splitting partition, since vectors cannot be assigned to it. If
+	// it is not a child of the parent, then abort the split. This can happen if
+	// another agent has completed the split or if the splitting partition has
+	// been re-parented when a new level was added to the tree.
+	if !parentPartition.ReplaceWithLastByKey(ChildKey{PartitionKey: sourcePartitionKey}) {
+		return vector.Set{}, errors.Wrapf(errFixupAborted,
+			"partition %d is no longer a child of parent partition %d",
+			sourcePartitionKey, parentPartitionKey)
+	}
+
+	// Lazily get sibling metadata only if it's actually needed.
+	fw.tempMetadataToGet = fw.tempMetadataToGet[:0]
+	getSiblingMetadata := func() ([]PartitionMetadataToGet, error) {
+		if len(fw.tempMetadataToGet) == 0 {
+			fw.tempMetadataToGet = ensureSliceLen(fw.tempMetadataToGet, parentPartition.Count())
+			for i := range len(fw.tempMetadataToGet) {
+				fw.tempMetadataToGet[i].Key = parentPartition.ChildKeys()[i].PartitionKey
+			}
+			err = fw.index.store.TryGetPartitionMetadata(ctx, fw.treeKey, fw.tempMetadataToGet)
+			if err != nil {
+				return nil, errors.Wrapf(err,
+					"getting partition metadata for %d siblings of partition %d (parent=%d)",
+					len(fw.tempMetadataToGet)-1, sourcePartitionKey, parentPartitionKey)
+			}
+		}
+		return fw.tempMetadataToGet, nil
+	}
+
+	tempSiblingDistances := fw.workspace.AllocFloats(parentPartition.Count())
+	defer fw.workspace.FreeFloats(tempSiblingDistances)
+	tempSiblingErrorBounds := fw.workspace.AllocFloats(parentPartition.Count())
+	defer fw.workspace.FreeFloats(tempSiblingErrorBounds)
+
+	for i := 0; i < sourceVectors.Count; i++ {
+		// Check whether the vector is closer to a sibling centroid than its own
+		// new centroid.
+		vec := sourceVectors.At(i)
+		parentPartition.Quantizer().EstimateDistances(&fw.workspace,
+			parentPartition.QuantizedSet(), vec, tempSiblingDistances, tempSiblingErrorBounds)
+
+		var leftDistance, rightDistance float32
+		minDistance := float32(math.MaxFloat32)
+		for offset, childKey := range parentPartition.ChildKeys() {
+			minDistance = min(minDistance, tempSiblingDistances[offset])
+			if childKey.PartitionKey == leftPartitionKey {
+				leftDistance = tempSiblingDistances[offset]
+			} else if childKey.PartitionKey == rightPartitionKey {
+				rightDistance = tempSiblingDistances[offset]
+			}
+		}
+		if minDistance >= leftDistance && minDistance >= rightDistance {
+			// Could not find a closer sibling, so done with this vector.
+			continue
+		}
+
+		// Lazily fetch metadata for sibling partitions.
+		allSiblingMetadata, err := getSiblingMetadata()
+		if err != nil {
+			return vector.Set{}, err
+		}
+
+		// Find nearest sibling that allows inserts and is closer than either the
+		// left or right sub-partitions.
+		siblingOffset := -1
+		minDistance = min(leftDistance, rightDistance)
+		for offset, distance := range tempSiblingDistances {
+			if distance >= minDistance {
+				continue
+			} else if !fw.tempMetadataToGet[offset].Metadata.StateDetails.State.AllowAddOrRemove() {
+				continue
+			}
+			siblingOffset = offset
+			minDistance = distance
+		}
+		if siblingOffset == -1 {
+			// No closer sibling could be found, so return.
+			continue
+		}
+
+		// Attempt to insert into the partition.
+		siblingPartitionKey := parentPartition.ChildKeys()[siblingOffset].PartitionKey
+		siblingMetadata := allSiblingMetadata[siblingOffset].Metadata
+		childKey := sourcePartition.ChildKeys()[i : i+1]
+		valueBytes := sourcePartition.ValueBytes()[i : i+1]
+		_, err = fw.addToPartition(ctx, siblingPartitionKey, vec.AsSet(),
+			childKey, valueBytes, siblingMetadata)
+		if err != nil {
+			allSiblingMetadata[siblingOffset].Metadata, err = suppressRaceErrors(err)
+			if err == nil {
+				// Another worker raced to update the metadata, so just skip.
+				continue
+			}
+			return vector.Set{}, errors.Wrapf(err,
+				"adding vector from splitting partition %d to partition %d",
+				sourcePartitionKey, siblingPartitionKey)
+		}
+
+		// Add succeeded, so remove the vector from the splitting partition.
+		sourceVectors.ReplaceWithLast(i)
+		sourcePartition.ReplaceWithLast(i)
+		i--
+
+		log.VEventf(ctx, 3,
+			"reassigning vector from splitting partition %d (parent=%d) to sibling partition %d",
+			sourcePartitionKey, parentPartitionKey, siblingPartitionKey)
+	}
+
+	return sourceVectors, nil
+}
+
 // getPartition returns the partition with the given key, or nil if it does not
 // exist.
 func (fw *fixupWorker) getPartition(
@@ -365,14 +519,13 @@ func (fw *fixupWorker) getPartition(
 func (fw *fixupWorker) getPartitionMetadata(
 	ctx context.Context, partitionKey PartitionKey,
 ) (PartitionMetadata, error) {
-	metadata, err := fw.index.store.TryGetPartitionMetadata(ctx, fw.treeKey, partitionKey)
+	fw.tempMetadataToGet = ensureSliceLen(fw.tempMetadataToGet, 1)
+	fw.tempMetadataToGet[0].Key = partitionKey
+	err := fw.index.store.TryGetPartitionMetadata(ctx, fw.treeKey, fw.tempMetadataToGet)
 	if err != nil {
-		metadata, err = suppressRaceErrors(err)
-		if err != nil {
-			return PartitionMetadata{}, errors.Wrapf(err, "getting metadata for partition %d", partitionKey)
-		}
+		return PartitionMetadata{}, errors.Wrapf(err, "getting metadata for partition %d", partitionKey)
 	}
-	return metadata, nil
+	return fw.tempMetadataToGet[0].Metadata, nil
 }
 
 // updateMetadata updates the given partition's metadata record, on the
@@ -569,6 +722,7 @@ func (fw *fixupWorker) createSplitSubPartition(
 	err = fw.index.store.TryCreateEmptyPartition(ctx, fw.treeKey, partitionKey, targetMetadata)
 	if err != nil {
 		targetMetadata, err = suppressRaceErrors(err)
+		centroid = targetMetadata.Centroid
 		if err != nil {
 			return PartitionMetadata{}, errors.Wrap(err, "creating empty sub-partition")
 		}
@@ -586,8 +740,7 @@ func (fw *fixupWorker) createSplitSubPartition(
 		// Load parent metadata to verify that it's in a state that allows inserts.
 		parentMetadata, err := fw.getPartitionMetadata(ctx, parentPartitionKey)
 		if err != nil {
-			return PartitionMetadata{}, errors.Wrapf(err,
-				"getting parent partition %d metadata", parentPartitionKey)
+			return PartitionMetadata{}, err
 		}
 
 		parentLevel := sourceMetadata.Level + 1
@@ -631,7 +784,7 @@ func (fw *fixupWorker) addToParentPartition(
 		centroid = tempCentroid
 	}
 
-	// Add the target partition key to the root paritition.
+	// Add the target partition key to the parent partition.
 	fw.tempChildKey[0] = ChildKey{PartitionKey: partitionKey}
 	fw.tempValueBytes[0] = nil
 	added, err := fw.addToPartition(ctx, parentPartitionKey,
