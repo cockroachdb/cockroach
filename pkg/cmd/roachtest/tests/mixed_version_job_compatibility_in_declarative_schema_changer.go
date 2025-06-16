@@ -34,6 +34,8 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 		// is impossible to test as of 05/2025.
 		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+		Monitor:          true,
+		Randomized:       true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runDeclarativeSchemaChangerJobCompatibilityInMixedVersion(ctx, t, c)
 		},
