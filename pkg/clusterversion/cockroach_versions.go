@@ -311,7 +311,7 @@ const V25_3 = Latest
 //     binary in a dev cluster.
 //
 // See devOffsetKeyStart for more details.
-const DevelopmentBranch = true
+const DevelopmentBranch = false
 
 // finalVersion should be set on a release branch to the minted final cluster
 // version key, e.g. to V23_2 on the release-23.2 branch once it is minted.
