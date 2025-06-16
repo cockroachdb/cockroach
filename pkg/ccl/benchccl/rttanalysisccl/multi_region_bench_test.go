@@ -214,7 +214,7 @@ func init() {
 			Setup: `
 CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3";
 USE test;
-CREATE TABLE test (p int) LOCALITY GLOBAL;
+CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY GLOBAL;
 `,
 			Stmt:  `ALTER TABLE test SET LOCALITY REGIONAL IN PRIMARY REGION`,
 			Reset: "DROP DATABASE test",
@@ -224,7 +224,7 @@ CREATE TABLE test (p int) LOCALITY GLOBAL;
 			Setup: `
 CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3";
 USE test;
-CREATE TABLE test (p int) LOCALITY REGIONAL IN PRIMARY REGION;
+CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY REGIONAL IN PRIMARY REGION;
 `,
 			Stmt:  `ALTER TABLE test SET LOCALITY GLOBAL`,
 			Reset: "DROP DATABASE test",
@@ -234,7 +234,7 @@ CREATE TABLE test (p int) LOCALITY REGIONAL IN PRIMARY REGION;
 			Setup: `
 CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3";
 USE test;
-CREATE TABLE test (p int) LOCALITY GLOBAL;
+CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY GLOBAL;
 `,
 			Stmt:  `ALTER TABLE test SET LOCALITY REGIONAL BY ROW`,
 			Reset: "DROP DATABASE test",
@@ -244,7 +244,7 @@ CREATE TABLE test (p int) LOCALITY GLOBAL;
 			Setup: `
 CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3";
 USE test;
-CREATE TABLE test (p int) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 `,
 			Stmt:  `ALTER TABLE test SET LOCALITY REGIONAL BY ROW`,
 			Reset: "DROP DATABASE test",
@@ -254,7 +254,7 @@ CREATE TABLE test (p int) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 			Setup: `
 CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3";
 USE test;
-CREATE TABLE test (p int) LOCALITY REGIONAL BY ROW;
+CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY REGIONAL BY ROW;
 `,
 			Stmt:  `ALTER TABLE test SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION`,
 			Reset: "DROP DATABASE test",
@@ -264,7 +264,7 @@ CREATE TABLE test (p int) LOCALITY REGIONAL BY ROW;
 			Setup: `
 CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3";
 USE test;
-CREATE TABLE test (p int) LOCALITY REGIONAL BY ROW;
+CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY REGIONAL BY ROW;
 `,
 			Stmt:  `ALTER TABLE test SET LOCALITY GLOBAL`,
 			Reset: "DROP DATABASE test",

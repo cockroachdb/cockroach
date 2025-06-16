@@ -47,7 +47,7 @@ func TestSpanConfigUpdatesApplyInCorrectOrder(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '50ms'`)
 
 	sqlDB.Exec(t, `CREATE DATABASE mr PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3"; USE mr`)
-	sqlDB.Exec(t, `CREATE TABLE t() LOCALITY REGIONAL BY ROW`)
+	sqlDB.Exec(t, `CREATE TABLE t() WITH (schema_locked=false) LOCALITY REGIONAL BY ROW`)
 
 	testutils.SucceedsSoon(t, func() error {
 		var count int

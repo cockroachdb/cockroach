@@ -95,6 +95,10 @@ feature-usage
 ALTER TABLE t9 CONFIGURE ZONE USING gc.ttlseconds=5
 ----
 
+exec
+ALTER TABLE t9 SET (schema_locked = false);
+----
+
 feature-usage
 SET override_multi_region_zone_config = true;
 ALTER TABLE t9 SET LOCALITY GLOBAL;
@@ -116,6 +120,11 @@ ALTER TABLE t9 SET LOCALITY GLOBAL;
 SET override_multi_region_zone_config = false
 ----
 sql.multiregion.zone_configuration.override.system.table
+
+
+exec
+ALTER TABLE t9 SET (schema_locked = true);
+----
 
 feature-usage
 SET override_multi_region_zone_config = true;

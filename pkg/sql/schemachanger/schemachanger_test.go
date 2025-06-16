@@ -82,6 +82,7 @@ func TestSchemaChangerJobRunningStatus(t *testing.T) {
 	jr = s.ApplicationLayer().JobRegistry().(*jobs.Registry)
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, "SET create_table_with_schema_locked=false")
 	tdb.Exec(t, `SET use_declarative_schema_changer = 'off'`)
 	tdb.Exec(t, `CREATE DATABASE db`)
 	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
@@ -122,6 +123,7 @@ func TestSchemaChangerJobErrorDetails(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, "SET create_table_with_schema_locked=false")
 	tdb.Exec(t, `SET use_declarative_schema_changer = 'off'`)
 	tdb.Exec(t, `CREATE DATABASE db`)
 	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
@@ -222,6 +224,7 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 	}
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, "SET create_table_with_schema_locked=false")
 	tdb.Exec(t, `CREATE DATABASE db`)
 	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
 	desc := getTableDescriptor()
@@ -351,6 +354,7 @@ func TestDropJobCancelable(t *testing.T) {
 
 			// Setup.
 			_, err := sqlDB.Exec(`
+SET create_table_with_schema_locked=false;
 CREATE DATABASE db;
 CREATE TABLE db.t1 (name VARCHAR(256));
 CREATE TABLE db.t2 (name VARCHAR(256));
@@ -451,6 +455,7 @@ func TestSchemaChangeWaitsForConcurrentSchemaChanges(t *testing.T) {
 		defer cancel()
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
 
+		tdb.Exec(t, "SET create_table_with_schema_locked=false;")
 		tdb.Exec(t, "CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL);")
 		tdb.Exec(t, "INSERT INTO t SELECT k, k+1 FROM generate_series(1,1000) AS tmp(k);")
 
@@ -624,6 +629,9 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 
 	createSchema := func(conn *gosql.DB) error {
 		return testutils.SucceedsSoonError(func() error {
+			if _, err := conn.Exec("SET create_table_with_schema_locked=false"); err != nil {
+				return err
+			}
 			_, err := conn.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %v;", dbName))
 			if err != nil {
 				return err
@@ -941,6 +949,7 @@ func TestSchemaChangerFailsOnMissingDesc(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, "SET create_table_with_schema_locked=false")
 	tdb.Exec(t, `SET use_declarative_schema_changer = 'off'`)
 	tdb.Exec(t, `CREATE DATABASE db`)
 	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)

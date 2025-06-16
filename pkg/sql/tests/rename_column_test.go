@@ -103,6 +103,7 @@ func TestRenameColumnDuringConcurrentMutation(t *testing.T) {
 			tdb := sqlutils.MakeSQLRunner(db)
 			tdb.Exec(t, "SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';")
 			tdb.Exec(t, "SET use_declarative_schema_changer = 'off';")
+			tdb.Exec(t, "SET create_table_with_schema_locked=false;")
 			tdb.Exec(t, "CREATE DATABASE "+dbName)
 			tdb.Exec(t, "CREATE TABLE "+dbName+".foo (i INT PRIMARY KEY)")
 			scDone := make(chan error)
