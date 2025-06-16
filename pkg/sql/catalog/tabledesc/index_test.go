@@ -459,6 +459,7 @@ func TestLatestIndexDescriptorVersionValues(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
 	// Test relies on legacy schema changer testing knobs.
+	tdb.Exec(t, "SET create_table_with_schema_locked=false")
 	tdb.Exec(t, "SET use_declarative_schema_changer = 'off'")
 	// Populate the test cluster with all manner of indexes and index mutations.
 	tdb.Exec(t, "CREATE SEQUENCE s")
