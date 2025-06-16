@@ -135,6 +135,7 @@ func (vs *RaBitQuantizedVectorSet) ReplaceWithLast(offset int) {
 // Clone implements the QuantizedVectorSet interface.
 func (vs *RaBitQuantizedVectorSet) Clone() QuantizedVectorSet {
 	return &RaBitQuantizedVectorSet{
+		Metric:               vs.Metric,
 		Centroid:             vs.Centroid, // Centroid is immutable
 		Codes:                vs.Codes.Clone(),
 		CodeCounts:           slices.Clone(vs.CodeCounts),
@@ -167,14 +168,16 @@ func (vs *RaBitQuantizedVectorSet) Clear(centroid vector.T) {
 	vs.CentroidDistances = vs.CentroidDistances[:0]
 	vs.QuantizedDotProducts = vs.QuantizedDotProducts[:0]
 	vs.CentroidDotProducts = vs.CentroidDotProducts[:0]
-	if &vs.Centroid[0] != &centroid[0] {
-		vs.CentroidNorm = num32.Norm(centroid)
+	if vs.Metric != vecpb.L2SquaredDistance {
+		if &vs.Centroid[0] != &centroid[0] {
+			vs.CentroidNorm = num32.Norm(centroid)
+		}
 	}
 }
 
 // AddUndefined adds the given number of quantized vectors to this set. The new
 // quantized vector information should be set to defined values before use.
-func (vs *RaBitQuantizedVectorSet) AddUndefined(count int, distanceMetric vecpb.DistanceMetric) {
+func (vs *RaBitQuantizedVectorSet) AddUndefined(count int) {
 	newCount := len(vs.CodeCounts) + count
 	vs.Codes.AddUndefined(count)
 	vs.CodeCounts = slices.Grow(vs.CodeCounts, count)
@@ -183,7 +186,7 @@ func (vs *RaBitQuantizedVectorSet) AddUndefined(count int, distanceMetric vecpb.
 	vs.CentroidDistances = vs.CentroidDistances[:newCount]
 	vs.QuantizedDotProducts = slices.Grow(vs.QuantizedDotProducts, count)
 	vs.QuantizedDotProducts = vs.QuantizedDotProducts[:newCount]
-	if distanceMetric != vecpb.L2SquaredDistance {
+	if vs.Metric != vecpb.L2SquaredDistance {
 		// L2Squared doesn't need this.
 		vs.CentroidDotProducts = slices.Grow(vs.CentroidDotProducts, count)
 		vs.CentroidDotProducts = vs.CentroidDotProducts[:newCount]

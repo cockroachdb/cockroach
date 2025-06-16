@@ -126,37 +126,41 @@ func (q *RaBitQuantizer) QuantizeInSet(
 
 // NewSet implements the Quantizer interface
 func (q *RaBitQuantizer) NewSet(capacity int, centroid vector.T) QuantizedVectorSet {
-	codeWidth := RaBitQCodeSetWidth(q.GetDims())
-	dataBuffer := make([]uint64, 0, capacity*codeWidth)
+	var vs *RaBitQuantizedVectorSet
+
 	if capacity <= 1 {
 		// Special case capacity of zero or one by using in-line storage.
-		var quantized raBitQuantizedVector
-		quantized.Centroid = centroid
-		quantized.Codes = MakeRaBitQCodeSetFromRawData(dataBuffer, codeWidth)
+		quantized := &raBitQuantizedVector{}
 		quantized.CodeCounts = quantized.codeCountStorage[:0]
 		quantized.CentroidDistances = quantized.centroidDistanceStorage[:0]
 		quantized.QuantizedDotProducts = quantized.quantizedDotProductStorage[:0]
 
-		// L2Squared doesn't use these, so don't make extra calculations.
+		// L2Squared doesn't use this.
 		if q.distanceMetric != vecpb.L2SquaredDistance {
 			quantized.CentroidDotProducts = quantized.centroidDotProductStorage[:0]
-			quantized.CentroidNorm = num32.Norm(centroid)
 		}
-		return &quantized.RaBitQuantizedVectorSet
+		vs = &quantized.RaBitQuantizedVectorSet
+	} else {
+		vs = &RaBitQuantizedVectorSet{
+			CodeCounts:           make([]uint32, 0, capacity),
+			CentroidDistances:    make([]float32, 0, capacity),
+			QuantizedDotProducts: make([]float32, 0, capacity),
+		}
+		// L2Squared doesn't use these, so don't make extra allocation or calculation.
+		if q.distanceMetric != vecpb.L2SquaredDistance {
+			vs.CentroidDotProducts = make([]float32, 0, capacity)
+		}
 	}
 
-	vs := &RaBitQuantizedVectorSet{
-		Centroid:             centroid,
-		Codes:                MakeRaBitQCodeSetFromRawData(dataBuffer, codeWidth),
-		CodeCounts:           make([]uint32, 0, capacity),
-		CentroidDistances:    make([]float32, 0, capacity),
-		QuantizedDotProducts: make([]float32, 0, capacity),
-	}
-	// L2Squared doesn't use these, so don't make extra allocation or calculation.
+	vs.Metric = q.distanceMetric
+	vs.Centroid = centroid
+	codeWidth := RaBitQCodeSetWidth(q.GetDims())
+	dataBuffer := make([]uint64, 0, capacity*codeWidth)
+	vs.Codes = MakeRaBitQCodeSetFromRawData(dataBuffer, codeWidth)
 	if q.distanceMetric != vecpb.L2SquaredDistance {
-		vs.CentroidDotProducts = make([]float32, 0, capacity)
 		vs.CentroidNorm = num32.Norm(centroid)
 	}
+
 	return vs
 }
 
@@ -412,7 +416,7 @@ func (q *RaBitQuantizer) quantizeHelper(
 	// Extend any existing slices in the vector set.
 	count := vectors.Count
 	oldCount := qs.GetCount()
-	qs.AddUndefined(count, q.distanceMetric)
+	qs.AddUndefined(count)
 
 	// L2Squared doesn't use this, so don't store it.
 	if q.distanceMetric != vecpb.L2SquaredDistance {
