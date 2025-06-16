@@ -1969,7 +1969,7 @@ func TestTxnWriteBufferBatchRequestValidation(t *testing.T) {
 
 	tests := []testCase{
 		{
-			name: "batch with OriginTimestamp",
+			name: "batch with OriginTimestamp in WriteOptions",
 			ba: func() *kvpb.BatchRequest {
 				header := kvpb.Header{
 					Txn: &txn,
@@ -1981,7 +1981,7 @@ func TestTxnWriteBufferBatchRequestValidation(t *testing.T) {
 			},
 		},
 		{
-			name: "batch with OriginID",
+			name: "batch with OriginID in WriteOptions",
 			ba: func() *kvpb.BatchRequest {
 				header := kvpb.Header{
 					Txn: &txn,
@@ -1990,6 +1990,20 @@ func TestTxnWriteBufferBatchRequestValidation(t *testing.T) {
 					},
 				}
 				return &kvpb.BatchRequest{Header: header}
+			},
+		},
+		{
+			name: "batch with OriginTimestamp in ConditionalPutRequest",
+			ba: func() *kvpb.BatchRequest {
+				header := kvpb.Header{
+					Txn: &txn,
+				}
+				b := &kvpb.BatchRequest{Header: header}
+				r := &kvpb.ConditionalPutRequest{
+					OriginTimestamp: hlc.Timestamp{WallTime: 1},
+				}
+				b.Add(r)
+				return b
 			},
 		},
 		{
@@ -2048,6 +2062,15 @@ func TestTxnWriteBufferBatchRequestValidation(t *testing.T) {
 					ScanFormat:    kvpb.COL_BATCH_RESPONSE,
 					RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: txn.Sequence},
 				}
+				b.Add(r)
+				return b
+			},
+		},
+		{
+			name: "batch with unsupported request",
+			ba: func() *kvpb.BatchRequest {
+				b := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+				r := &kvpb.TruncateLogRequest{}
 				b.Add(r)
 				return b
 			},
