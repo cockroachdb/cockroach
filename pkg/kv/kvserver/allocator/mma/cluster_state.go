@@ -568,21 +568,28 @@ type storeState struct {
 		// various leaseholders in storeLeaseholderMsgs and adjusted for pending
 		// changes in clusterState.pendingChanges/rangeState.pendingChanges.
 		//
+		// This is consistent with the union of state in clusterState.ranges,
+		// filtered for replicas that are on this store.
+		//
 		// NB: this can include LEARNER and VOTER_DEMOTING_LEARNER replicas.
 		replicas map[roachpb.RangeID]ReplicaState
 		// topKRanges along some load dimension. If the store is overloaded along
 		// one resource dimension, that is the dimension chosen when picking the
-		// top-k. It includes ranges whose replicas are being removed via pending
-		// changes, since those pending changes may be reversed, and we don't want
-		// to bother recomputing the top-k.
+		// top-k.
 		//
-		// We may decide to keep this top-k up-to-date incrementally. Since
-		// StoreLeaseholderMsg is incremental about the ranges it reports, that
-		// may provide a building block for the incremental computation.
+		// It includes ranges whose replicas are being removed via pending
+		// changes, or lease transfers. That is, it does not account for pending
+		// or enacted changes made since the last time top-k was computed.
 		//
 		// The key in this map is a local store-id.
 		//
 		// NB: this does not include LEARNER and VOTER_DEMOTING_LEARNER replicas.
+		//
+		// We may decide to keep this top-k up-to-date incrementally instead of
+		// recomputing it from scratch on each StoreLeaseholderMsg. Since
+		// StoreLeaseholderMsg is incremental about the ranges it reports, that
+		// may provide a building block for the incremental computation.
+		//
 		topKRanges map[roachpb.StoreID]*topKReplicas
 	}
 	// This is a locally incremented seqnum which is incremented whenever the
@@ -842,10 +849,41 @@ func (rs *rangeState) removePendingChangeTracking(changeID ChangeID) {
 // adjustments based on pending changes. It does not include additional
 // indexing needed for constraint matching, or for tracking ranges that may
 // need attention etc. (those happen at a higher layer).
+//
+// We maintain one clusterState per node, even in multi-store settings. This
+// allows us to allow for coordination between the different local store
+// rebalancers, and queues making changes.
 type clusterState struct {
 	ts     timeutil.TimeSource
 	nodes  map[roachpb.NodeID]*nodeState
 	stores map[roachpb.StoreID]*storeState
+	// A range is present in the ranges map if any of the local stores is the
+	// leaseholder for that range. If a local store is shedding the lease for
+	// the range, this map will continue to contain that range until that change
+	// is enacted according to a StoreLeaseholderMsg. However, rangeState
+	// internally maintains adjusted state, along with the pending changes, so
+	// that adjustment will already be reflected in that adjusted state.
+	//
+	// Of course, if the lease shedding was done as part of moving the replica
+	// from one local store to another local store, then the rangeState will
+	// just change hands, and continue to be in the map if the
+	// StoreLeaseholderMsg of the new (local) leaseholder store is received with
+	// the enacted change before the StoreLeaseholderMsg of the old (local)
+	// leaseholder store is received with the enacted change (if vice versa, the
+	// range will be removed, and later a new rangeState will be created).
+	//
+	// Maintaining a single rangeState for a RangeID, instead of one per local
+	// store which is the leaseholder, allows us to ensure there is one view of
+	// the range across clusterState. One complication around this is that we
+	// also need to gc from ranges, and having a view per local store that is
+	// the leaseholder would allow for more efficient gc when receiving a
+	// StoreLeaseholderMsg. For now, we avoid denormalizing and taking the
+	// efficiency hit.
+	//
+	// TODO(sumeer): we use StoreLeaseholderMsg as the fully authoritative
+	// source of truth. But clusterState.pendingChangesEnacted also marks things
+	// as enacted, but doesn't remove ranges from this map. This could be made
+	// cleaner.
 	ranges map[roachpb.RangeID]*rangeState
 
 	scratchRangeMap map[roachpb.RangeID]struct{}
@@ -1007,6 +1045,10 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		}
 		// Re-apply the remaining changes. Note that the load change was not
 		// undone above, so we pass !applyLoadChange, to avoid applying it again.
+		//
+		// TODO(sumeer): if the leaseholder executed a change that MMA was
+		// completely unaware of, we may not be able to apply the remaining
+		// changes here. We should discard such pending changes.
 		for _, change := range remainingChanges {
 			cs.applyReplicaChange(change.ReplicaChange, false)
 		}
@@ -1029,7 +1071,12 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		}
 		// Not the leaseholder for this range. Consider removing it.
 		//
-		// TODO(sumeer): in a multi-store setting this is inefficient.
+		// In a multi-store setting this is inefficient, since we are iterating
+		// over all ranges for which any local store is the leaseholder. We could
+		// be more efficient by maintaining an additional
+		// map[roachpb.StoreID]map[roachpb.RangeID]*rangeState, where the first
+		// map is keyed by a local StoreID. But we will only do this if we find
+		// the efficiency gains are worth it.
 		remove := false
 		for _, repl := range rs.replicas {
 			if repl.IsLeaseholder {
@@ -1125,6 +1172,12 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			// replica. We don't want to add this replica to the topKReplicas as it
 			// controls which ranges are eligible to be shed. When no longer the
 			// leaseholder, we cannot shed a replica or lease.
+			//
+			// NB: this should only happen when the lease transfer has begun, but
+			// not yet completed. Once completed, this store will not have this
+			// range in its set of replicas since there can be only one replica of a
+			// range on a node, and clusterState only maintains ranges for which
+			// some local store is a leaseholder.
 			continue
 		}
 		rs := cs.ranges[rangeID]
