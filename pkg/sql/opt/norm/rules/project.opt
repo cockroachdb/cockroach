@@ -25,10 +25,10 @@
         (JoinDoesNotDuplicateLeftRows $join) &
         (JoinPreservesLeftRows $join)
     $projections:*
-    $passthrough:* &
+    $private:* &
         (CanRemapCols
             $fromCols:(UnionCols
-                $passthrough
+                (Passthrough $private)
                 (ProjectionOuterCols $projections)
             )
             $leftCols:(OutputCols $left)
@@ -41,10 +41,19 @@
     $left
     (MergeProjections
         (RemapProjectionCols $projections $leftCols $fds)
-        (ProjectRemappedCols $passthrough $leftCols $fds)
-        $passthrough
+        (ProjectRemappedCols
+            (Passthrough $private)
+            $leftCols
+            $fds
+        )
+        (Passthrough $private)
     )
-    (DifferenceCols $passthrough (OutputCols $right))
+    (MakePassthrough
+        (DifferenceCols
+            (Passthrough $private)
+            (OutputCols $right)
+        )
+    )
 )
 
 # EliminateJoinUnderProjectRight mirrors EliminateJoinUnderProjectLeft, except
@@ -55,10 +64,10 @@
         (JoinDoesNotDuplicateRightRows $join) &
         (JoinPreservesRightRows $join)
     $projections:*
-    $passthrough:* &
+    $private:* &
         (CanRemapCols
             $fromCols:(UnionCols
-                $passthrough
+                (Passthrough $private)
                 (ProjectionOuterCols $projections)
             )
             $rightCols:(OutputCols $right)
@@ -71,10 +80,19 @@
     $right
     (MergeProjections
         (RemapProjectionCols $projections $rightCols $fds)
-        (ProjectRemappedCols $passthrough $rightCols $fds)
-        $passthrough
+        (ProjectRemappedCols
+            (Passthrough $private)
+            $rightCols
+            $fds
+        )
+        (Passthrough $private)
     )
-    (DifferenceCols $passthrough (OutputCols $left))
+    (MakePassthrough
+        (DifferenceCols
+            (Passthrough $private)
+            (OutputCols $left)
+        )
+    )
 )
 
 # EliminateProject discards a Project operator which is not adding or removing
@@ -83,8 +101,8 @@
 (Project
     $input:*
     $projections:[]
-    $passthrough:* &
-        (ColsAreEqual $passthrough (OutputCols $input))
+    $private:* &
+        (ColsAreEqual (Passthrough $private) (OutputCols $input))
 )
 =>
 $input
@@ -97,7 +115,7 @@ $input
     $input:(Project $innerInput:* $innerProjections:*)
     $projections:* &
         (CanMergeProjections $projections $innerProjections)
-    $passthrough:*
+    $private:*
 )
 =>
 (Project
@@ -105,11 +123,13 @@ $input
     (MergeProjections
         $projections
         $innerProjections
-        $passthrough
+        (Passthrough $private)
     )
-    (DifferenceCols
-        $passthrough
-        (ProjectionCols $innerProjections)
+    (MakePassthrough
+        (DifferenceCols
+            (Passthrough $private)
+            (ProjectionCols $innerProjections)
+        )
     )
 )
 
@@ -132,10 +152,14 @@ $input
             $projections
             (OutputCols $input)
         )
-    $passthrough:*
+    $private:*
 )
 =>
-(MergeProjectWithValues $projections $passthrough $input)
+(MergeProjectWithValues
+    $projections
+    (Passthrough $private)
+    $input
+)
 
 # PushColumnRemappingIntoValues folds ProjectionsItems into the passthrough set
 # if they simply remap Values output columns that are not already in
@@ -168,15 +192,19 @@ $input
 (Project
     $input:(Values)
     $projections:*
-    $passthrough:* &
+    $private:* &
         (CanPushColumnRemappingIntoValues
             $projections
-            $passthrough
+            (Passthrough $private)
             $input
         )
 )
 =>
-(PushColumnRemappingIntoValues $input $projections $passthrough)
+(PushColumnRemappingIntoValues
+    $input
+    $projections
+    (Passthrough $private)
+)
 
 # PushAssignmentCastsIntoValues pushes assignment cast projections into Values
 # rows.
@@ -221,12 +249,12 @@ $input
 (Project
     $input:(Values)
     $projections:*
-    $passthrough:* &
+    $private:* &
         ^(ColsAreEmpty
             $castCols:(IntersectionCols
                 (DifferenceCols
                     (AssignmentCastCols $projections)
-                    $passthrough
+                    (Passthrough $private)
                 )
                 (OutputCols $input)
             )
@@ -236,7 +264,7 @@ $input
 (PushAssignmentCastsIntoValues
     $input
     $projections
-    $passthrough
+    (Passthrough $private)
     $castCols
 )
 
@@ -266,7 +294,7 @@ $input
             $projections
             $col:(SingleColFromSet (OutputCols $input))
         )
-    $passthrough:* & (ColsAreEmpty $passthrough)
+    $private:* & (ColsAreEmpty (Passthrough $private))
 )
 =>
 (Project
@@ -275,7 +303,7 @@ $input
         $tupleCols:(MakeColsForUnnestTuples $col)
     )
     (FoldTupleColumnAccess $projections $tupleCols $col)
-    $passthrough
+    $private
 )
 
 # FoldJSONAccessIntoValues replaces a Values operator that has a single JSON
@@ -319,7 +347,7 @@ $input
             $projections
             $col:(SingleColFromSet (OutputCols $input))
         )
-    $passthrough:* & (ColsAreEmpty $passthrough)
+    $private:* & (ColsAreEmpty (Passthrough $private))
 )
 =>
 (Project
@@ -328,7 +356,7 @@ $input
         $jsonCols:(MakeColsForUnnestJSON $input $col)
     )
     (FoldJSONFieldAccess $projections $jsonCols $col $input)
-    $passthrough
+    $private
 )
 
 # FoldIsNullProject folds "x IS NULL" projections to false if "x" is not null in
@@ -343,11 +371,11 @@ $input
             ...
         ] &
         (IsColNotNull $col $input)
-    $passthrough:*
+    $private:*
 )
 =>
 (Project
     $input
     (FoldIsNullProjectionsItems $projections $input)
-    $passthrough
+    $private
 )

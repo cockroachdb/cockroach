@@ -649,7 +649,11 @@ func (b *Builder) constructScalarWindowGroup(
 
 	scalarAggExpr := b.factory.ConstructScalarGroupBy(input, aggs, &memo.GroupingPrivate{})
 	if len(projections) != 0 {
-		return b.factory.ConstructProject(scalarAggExpr, projections, passthrough)
+		return b.factory.ConstructProject(scalarAggExpr, projections,
+			&memo.ProjectPrivate{
+				Passthrough: passthrough,
+			},
+		)
 	}
 	return scalarAggExpr
 }
