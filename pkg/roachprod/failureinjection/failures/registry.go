@@ -33,6 +33,7 @@ func (r *FailureRegistry) Register() {
 	registerDmsetupDiskStall(r)
 	registerIPTablesPartitionFailure(r)
 	registerNetworkLatencyFailure(r)
+	registerResetVM(r)
 	registerNoopFailure(r)
 	registerProcessKillFailure(r)
 }

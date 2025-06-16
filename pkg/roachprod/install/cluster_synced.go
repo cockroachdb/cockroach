@@ -2725,3 +2725,20 @@ done <<< "$HOSTS_LIST"
 
 	return nil
 }
+
+// Reset resets VMs in a cluster.
+func (c *SyncedCluster) Reset(l *logger.Logger) error {
+	if c.IsLocal() {
+		return nil
+	}
+
+	nodes := c.TargetNodes()
+	targetVMs := make(vm.List, len(nodes))
+	for idx, node := range nodes {
+		targetVMs[idx] = c.VMs[node-1]
+	}
+
+	return vm.FanOut(targetVMs, func(p vm.Provider, vms vm.List) error {
+		return p.Reset(l, vms)
+	})
+}
