@@ -209,6 +209,10 @@ func (a *allocatorState) rebalanceStores(
 					continue
 				}
 				if rstate.constraints.leaseholderID != store.StoreID {
+					// We should not panic here since the leaseQueue may have shed the
+					// lease and informed MMA, since the last time MMA computed the
+					// top-k ranges. This is useful for debugging in the prototype, due
+					// to the lack of unit tests.
 					panic(fmt.Sprintf("internal state inconsistency: "+
 						"store=%v range_id=%v should be leaseholder but isn't",
 						store.StoreID, rangeID))
@@ -360,6 +364,10 @@ func (a *allocatorState) rebalanceStores(
 			}
 			isVoter, isNonVoter := rstate.constraints.replicaRole(store.StoreID)
 			if !isVoter && !isNonVoter {
+				// We should not panic here since the replicateQueue may have shed the
+				// lease and informed MMA, since the last time MMA computed the top-k
+				// ranges. This is useful for debugging in the prototype, due to the
+				// lack of unit tests.
 				panic(fmt.Sprintf("internal state inconsistency: "+
 					"store=%v range_id=%v pending-changes=%v "+
 					"rstate_replicas=%v rstate_constraints=%v",
