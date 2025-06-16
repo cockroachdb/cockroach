@@ -1913,8 +1913,13 @@ func TestNoBackfillAfterNonTargetColumnDrop(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE hasfams (id int primary key, a string, b string, c string, FAMILY id_a (id, a), FAMILY b_and_c (b, c))`)
 		sqlDB.Exec(t, `INSERT INTO hasfams values (0, 'a', 'b', 'c')`)
 
+		var args []any
+		if _, ok := f.(*webhookFeedFactory); ok {
+			args = append(args, optOutOfMetamorphicEnrichedEnvelope{reason: "metamorphic enriched envelope does not support column families for webhook sinks"})
+		}
+
 		// Open up the changefeed.
-		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE hasfams FAMILY b_and_c`)
+		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE hasfams FAMILY b_and_c`, args...)
 		defer closeFeed(t, cf)
 		assertPayloads(t, cf, []string{
 			`hasfams.b_and_c: [0]->{"after": {"b": "b", "c": "c"}}`,
@@ -1951,8 +1956,12 @@ func TestChangefeedColumnDropsWithFamilyAndNonFamilyTargets(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO hasfams values (0, 'a', 'b', 'c')`)
 		sqlDB.Exec(t, `INSERT INTO nofams values (0, 'a', 'b', 'c')`)
 
+		var args []any
+		if _, ok := f.(*webhookFeedFactory); ok {
+			args = append(args, optOutOfMetamorphicEnrichedEnvelope{reason: "metamorphic enriched envelope does not support column families for webhook sinks"})
+		}
 		// Open up the changefeed.
-		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE hasfams FAMILY b_and_c, TABLE nofams`)
+		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE hasfams FAMILY b_and_c, TABLE nofams`, args...)
 		defer closeFeed(t, cf)
 		assertPayloads(t, cf, []string{
 			`hasfams.b_and_c: [0]->{"after": {"b": "b", "c": "c"}}`,
@@ -2000,8 +2009,13 @@ func TestChangefeedColumnDropsOnMultipleFamiliesWithTheSameName(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO hasfams values (0, 'a', 'b', 'c')`)
 		sqlDB.Exec(t, `INSERT INTO alsohasfams values (0, 'a', 'b', 'c')`)
 
+		var args []any
+		if _, ok := f.(*webhookFeedFactory); ok {
+			args = append(args, optOutOfMetamorphicEnrichedEnvelope{reason: "metamorphic enriched envelope does not support column families for webhook sinks"})
+		}
+
 		// Open up the changefeed.
-		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE hasfams FAMILY b_and_c, TABLE alsohasfams FAMILY id_a`)
+		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE hasfams FAMILY b_and_c, TABLE alsohasfams FAMILY id_a`, args...)
 		defer closeFeed(t, cf)
 		assertPayloads(t, cf, []string{
 			`hasfams.b_and_c: [0]->{"after": {"b": "b", "c": "c"}}`,
@@ -2089,8 +2103,13 @@ func TestNoStopAfterNonTargetAddColumnWithBackfill(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE hasfams (id INT PRIMARY KEY, a STRING, b STRING, c STRING, FAMILY id_a (id, a), FAMILY b_and_c (b, c))`)
 		sqlDB.Exec(t, `INSERT INTO hasfams values (0, 'a', 'b', 'c')`)
 
+		var args []any
+		if _, ok := f.(*webhookFeedFactory); ok {
+			args = append(args, optOutOfMetamorphicEnrichedEnvelope{reason: "metamorphic enriched envelope does not support column families for webhook sinks"})
+		}
+
 		// Open up the changefeed.
-		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE hasfams FAMILY b_and_c WITH schema_change_policy='stop'`)
+		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE hasfams FAMILY b_and_c WITH schema_change_policy='stop'`, args...)
 
 		defer closeFeed(t, cf)
 		assertPayloads(t, cf, []string{
@@ -3323,7 +3342,7 @@ func TestChangefeedEachColumnFamily(t *testing.T) {
 		sqlDB.Exec(t, `DELETE FROM foo WHERE a>0`)
 
 		// Deletes send a message for each column family.
-		fooWithDiff := feed(t, f, `CREATE CHANGEFEED FOR foo WITH split_column_families, diff`)
+		fooWithDiff := feed(t, f, `CREATE CHANGEFEED FOR foo WITH split_column_families, diff`, args...)
 		defer closeFeed(t, fooWithDiff)
 		sqlDB.Exec(t, `DELETE FROM foo WHERE a=0`)
 		assertPayloads(t, fooWithDiff, []string{
@@ -3336,7 +3355,7 @@ func TestChangefeedEachColumnFamily(t *testing.T) {
 		// Table with a second column family added after the changefeed starts.
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, FAMILY f_a (a))`)
 		sqlDB.Exec(t, `INSERT INTO bar VALUES (0)`)
-		bar := feed(t, f, `CREATE CHANGEFEED FOR bar`)
+		bar := feed(t, f, `CREATE CHANGEFEED FOR bar`, args...)
 		defer closeFeed(t, bar)
 		assertPayloads(t, bar, []string{
 			`bar: [0]->{"after": {"a": 0}}`,
