@@ -637,6 +637,10 @@ func NewTest(
 	crdbNodes option.NodeListOption,
 	options ...CustomOption,
 ) *Test {
+	if !t.Spec().(*registry.TestSpec).Monitor {
+		t.Fatal("mixedversion tests require enabling the global test monitor in the test spec")
+	}
+
 	opts := defaultTestOptions()
 	for _, fn := range options {
 		fn(&opts)
@@ -853,7 +857,7 @@ func (t *Test) Run() {
 }
 
 func (t *Test) run(plan *TestPlan) error {
-	return newTestRunner(t.ctx, t.cancel, plan, t.options.tag, t.logger, t.cluster).run()
+	return newTestRunner(t.ctx, t.cancel, plan, t.rt, t.options.tag, t.logger, t.cluster).run()
 }
 
 func (t *Test) plan() (plan *TestPlan, retErr error) {

@@ -201,7 +201,6 @@ func (s restartVirtualClusterStep) Run(
 	l.Printf("restarting node %d (tenant %s) into version %s", s.node, s.virtualCluster, s.version)
 	node := h.runner.cluster.Node(s.node)
 
-	h.ExpectDeath()
 	stopOpts := option.StopVirtualClusterOpts(s.virtualCluster, node, option.Graceful(maxWait))
 	if err := h.runner.cluster.StopServiceForVirtualClusterE(ctx, l, stopOpts); err != nil {
 		return errors.Wrap(err, "failed to stop cockroach process for tenant")
@@ -324,13 +323,13 @@ func (s restartWithNewBinaryStep) Run(
 		install.TagOption(systemTag),
 	}, s.settings...)
 
-	h.ExpectDeath()
+	node := h.runner.cluster.Node(s.node)
 	if err := clusterupgrade.RestartNodesWithNewBinary(
 		startCtx,
 		s.rt,
 		l,
 		h.runner.cluster,
-		h.runner.cluster.Node(s.node),
+		node,
 		startOpts(customStartOpts...),
 		s.version,
 		settings...,
@@ -342,7 +341,7 @@ func (s restartWithNewBinaryStep) Run(
 		// If we are in shared-process mode and the tenant is already
 		// running at this point, we wait for the server on the restarted
 		// node to be up before moving on.
-		return waitForTenantProcess(ctx, l, h, h.runner.cluster.Node(s.node), s.deploymentMode)
+		return waitForTenantProcess(ctx, l, h, node, s.deploymentMode)
 	}
 
 	return nil
