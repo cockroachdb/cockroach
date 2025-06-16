@@ -19,7 +19,7 @@ type testMonitorImpl struct {
 
 func newTestMonitor(ctx context.Context, t test.Test, c *clusterImpl) *testMonitorImpl {
 	return &testMonitorImpl{
-		monitorImpl: newMonitor(ctx, t, c),
+		monitorImpl: newMonitor(ctx, t, c, true /* expectExactProcessDeath */),
 	}
 }
 

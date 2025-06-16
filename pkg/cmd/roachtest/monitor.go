@@ -17,9 +17,54 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
+
+// monitorProcess represents a single process that the monitor monitors.
+type monitorProcess struct {
+	node               install.Node
+	virtualClusterName string
+	sqlInstance        int
+}
+
+type expectedNodeHealth struct {
+	syncutil.Mutex
+	expHealth map[monitorProcess]install.MonitorExpectedProcessHealth
+}
+
+func newProcess(node install.Node, virtualClusterName string, sqlInstance int) monitorProcess {
+	if virtualClusterName == "" {
+		virtualClusterName = install.SystemInterfaceName
+	}
+	return monitorProcess{
+		node:               node,
+		virtualClusterName: virtualClusterName,
+		sqlInstance:        sqlInstance,
+	}
+}
+
+func (m *expectedNodeHealth) get(
+	node install.Node, virtualClusterName string, sqlInstance int,
+) install.MonitorExpectedProcessHealth {
+	m.Lock()
+	defer m.Unlock()
+	return m.expHealth[newProcess(node, virtualClusterName, sqlInstance)]
+}
+
+func (m *expectedNodeHealth) set(
+	nodes install.Nodes,
+	virtualClusterName string,
+	sqlInstance int,
+	health install.MonitorExpectedProcessHealth,
+) {
+	m.Lock()
+	defer m.Unlock()
+	for _, node := range nodes {
+		m.expHealth[newProcess(node, virtualClusterName, sqlInstance)] = health
+	}
+}
 
 // monitorImpl implements the Monitor interface. A monitor both
 // manages "user tasks" -- goroutines provided by tests -- as well as
@@ -46,7 +91,13 @@ type monitorImpl struct {
 	monitorGroup *errgroup.Group // monitor goroutine
 	monitorOnce  sync.Once       // guarantees monitor goroutine is only started once
 
-	expDeaths int32 // atomically
+	// expExactProcessDeath if true indicates that the monitor should expect exact process
+	// deaths rather than the number of process deaths. The former is a stronger assertion
+	// used in the new global roachtest monitor, while the latter should be removed
+	// when the cluster monitor is deprecated.
+	expExactProcessDeath bool
+	expDeaths            int32 // atomically
+	expNodeHealth        expectedNodeHealth
 }
 
 func newMonitor(
@@ -58,17 +109,47 @@ func newMonitor(
 		L() *logger.Logger
 	},
 	c cluster.Cluster,
+	expectExactProcessDeath bool,
 	opts ...option.Option,
 ) *monitorImpl {
 	m := &monitorImpl{
-		t:     t,
-		l:     t.L(),
-		nodes: c.MakeNodes(opts...),
+		t:                    t,
+		l:                    t.L(),
+		nodes:                c.MakeNodes(opts...),
+		expExactProcessDeath: expectExactProcessDeath,
+		expNodeHealth: expectedNodeHealth{
+			Mutex:     syncutil.Mutex{},
+			expHealth: make(map[monitorProcess]install.MonitorExpectedProcessHealth),
+		},
 	}
 	m.ctx, m.cancel = context.WithCancel(ctx)
 	m.userGroup, _ = errgroup.WithContext(m.ctx)
 	m.monitorGroup, _ = errgroup.WithContext(m.ctx)
 	return m
+}
+
+func (m *monitorImpl) ExpectNodeHealth(
+	nodes install.Nodes, health install.MonitorExpectedProcessHealth, opts ...option.OptionFunc,
+) {
+	var virtualClusterOptions option.VirtualClusterOptions
+	if err := option.Apply(&virtualClusterOptions, opts...); err != nil {
+		m.t.Fatal(err)
+	}
+	m.expNodeHealth.set(nodes, virtualClusterOptions.VirtualClusterName, virtualClusterOptions.SQLInstance, health)
+}
+
+// ExpectProcessDeath lets the monitor know that a set of processes are about
+// to be killed, and that their deaths should be ignored. Virtual cluster
+// options can be passed to denote a separate process.
+func (m *monitorImpl) ExpectProcessDeath(nodes option.NodeListOption, opts ...option.OptionFunc) {
+	m.ExpectNodeHealth(nodes.InstallNodes(), install.ExpectedDeath, opts...)
+}
+
+// ExpectProcessHealthy lets the monitor know that a set of processes are
+// expected to be healthy. Virtual cluster options can be passed to denote
+// a separate process.
+func (m *monitorImpl) ExpectProcessHealthy(nodes option.NodeListOption, opts ...option.OptionFunc) {
+	m.ExpectNodeHealth(nodes.InstallNodes(), install.ExpectedHealthy, opts...)
 }
 
 // ExpectDeath lets the monitor know that a node is about to be killed, and that
@@ -190,12 +271,16 @@ func (m *monitorImpl) startNodeMonitor() {
 						)
 					}
 				case install.MonitorProcessDead:
-					isExpectedDeath := atomic.AddInt32(&m.expDeaths, -1) >= 0
-					if isExpectedDeath {
-						expectedDeathStr = ": expected"
+					var isExpectedDeath bool
+					if m.expExactProcessDeath {
+						isExpectedDeath = m.expNodeHealth.get(info.Node, e.VirtualClusterName, e.SQLInstance) == install.ExpectedDeath
+					} else {
+						isExpectedDeath = atomic.AddInt32(&m.expDeaths, -1) >= 0
 					}
 
-					if !isExpectedDeath {
+					if isExpectedDeath {
+						expectedDeathStr = ": expected"
+					} else {
 						retErr = fmt.Errorf("unexpected node event: %s", info)
 					}
 				}

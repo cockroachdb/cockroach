@@ -142,10 +142,8 @@ func registerProcessLock(r registry.Registry) {
 								// other operations that were performed
 								// concurrently with the running process did not
 								// corrupt the on-disk state.
-								t.Monitor().ExpectDeath()
 								c.Stop(ctx, l, option.DefaultStopOpts(), c.Node(n))
 								c.Start(ctx, l, startOpts, startSettings, c.Node(n))
-								t.Monitor().ResetDeaths()
 							},
 						}
 						ops[randutil.RandIntInRange(rng, 0, len(ops))]()
