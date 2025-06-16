@@ -1,0 +1,105 @@
+syntax = "proto3";
+package cockroach.ccl.changefeedccl;
+option go_package = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb";
+
+import "google/protobuf/timestamp.proto";
+
+
+// MessageBatch is a batch of messages for use in webhook sinks.
+message MessageBatch {
+    repeated Message payload = 1;
+}
+
+// Message is an enum of the different envelope types. This is what will be emitted to the client.
+message Message {
+    oneof data {
+        WrappedEnvelope wrapped = 1;
+        BareEnvelope bare = 2;
+        EnrichedEnvelope enriched = 3;
+        ResolvedEnvelope resolved = 4;
+    }
+}
+
+message WrappedEnvelope {
+    Record after = 1;
+    Record before = 2;
+    string updated = 4;
+    string mvcc_timestamp = 5;
+    Key key = 6;
+    string topic = 7;
+}
+
+message BareEnvelope {
+    map<string, Value> values = 1;
+    Metadata metadata = 2;
+}
+
+// This should probably be tied to the enriched source provider code, at least in tests, to ensure the implementations don't drift apart.
+message EnrichedEnvelope {
+    Record after = 1;
+    Record before = 2;
+    Op op = 3;
+    int64 ts_ns = 4;
+    EnrichedSource source = 5;
+}
+
+message ResolvedEnvelope {
+    string resolved = 1;
+}
+
+message EnrichedSource {
+    string job_id = 1;
+    string changefeed_sink = 2;
+    string db_version = 3;
+    string cluster_name = 4;
+    string cluster_id = 5;
+    string source_node_locality = 6;
+    string node_name = 7;
+    string node_id = 8;
+    string mvcc_timestamp = 9;
+    int64 ts_ns = 10;
+    string ts_hlc = 11;
+    string origin = 12;
+    string database_name = 13;
+    string schema_name = 14;
+    string table_name = 15;
+    repeated string primary_keys = 16;
+}
+
+enum Op {
+    OP_UNSPECIFIED = 0;
+    OP_CREATE = 1;
+    OP_UPDATE = 2;
+    OP_DELETE = 3;
+}
+
+// aka __crdb__
+message Metadata {
+    string updated = 1;
+    string mvcc_timestamp = 2;
+    Key key = 3;
+    string topic = 4;
+}
+
+message Record {
+    map<string, Value> values = 1;
+}
+
+message Value {
+    oneof value {
+        string string_value = 1;
+        bytes bytes_value = 2;
+        int32 int32_value = 3;
+        int64 int64_value = 4;
+        float float_value = 5;
+        double double_value = 6;
+        bool bool_value = 7;
+        google.protobuf.Timestamp timestamp_value = 8;
+    }
+}
+// Used by EncodeKey (standalone serialization)
+message Key {
+	repeated Value key = 1;
+}
+
+
