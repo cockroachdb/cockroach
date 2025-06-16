@@ -8,9 +8,11 @@ package bulk_test
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -18,10 +20,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	desctestutils "github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	sqlutils "github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -31,8 +41,50 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+// rowEncoder is a helper that encodes rows that can be written via the SSTBatcher and
+// read back via the SQL interface.
+type rowEncoder struct {
+	t         *testing.T
+	tableDesc catalog.TableDescriptor
+	colMap    catalog.TableColMap
+	codec     keys.SQLCodec
+}
+
+func newRowEncoder(t *testing.T, desc *descpb.TableDescriptor, codec keys.SQLCodec) rowEncoder {
+	tableDesc := tabledesc.NewBuilder(desc).BuildImmutableTable()
+	var colMap catalog.TableColMap
+	for i, col := range tableDesc.PublicColumns() {
+		colMap.Set(col.GetID(), i)
+	}
+	return rowEncoder{
+		t:         t,
+		tableDesc: tableDesc,
+		colMap:    colMap,
+		codec:     codec,
+	}
+}
+
+func (e *rowEncoder) encodeRow(row tree.Datums) roachpb.KeyValue {
+	indexEntries, err := rowenc.EncodePrimaryIndex(
+		e.codec,
+		e.tableDesc,
+		e.tableDesc.GetPrimaryIndex(),
+		e.colMap,
+		row,
+		false,
+	)
+	require.NoError(e.t, err)
+	require.Len(e.t, indexEntries, 1)
+	kv := roachpb.KeyValue{
+		Key:   indexEntries[0].Key,
+		Value: indexEntries[0].Value,
+	}
+	return kv
+}
 
 func TestAddBatched(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -440,4 +492,199 @@ func TestImportEpochIngestion(t *testing.T) {
 		}
 	}
 	require.Equal(t, true, checkedJobId)
+}
+
+func TestSSTBatcherError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	knobs := &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+			if len(ba.Requests) > 0 {
+				if _, ok := ba.Requests[0].GetInner().(*kvpb.AddSSTableRequest); ok {
+					return kvpb.NewError(errors.New("this is an unexpected sst error"))
+				}
+			}
+			return nil
+		},
+	}
+
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: knobs,
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	mem := mon.NewUnlimitedMonitor(ctx, mon.Options{Name: mon.MakeName("mvcc-compliance")})
+	reqs := limit.MakeConcurrentRequestLimiter("reqs", 1000)
+	batcher, err := bulk.MakeTestingSSTBatcher(ctx, kvDB, s.ClusterSettings(), false, true, mem.MakeConcurrentBoundAccount(), reqs)
+	require.NoError(t, err)
+	defer batcher.Close(ctx)
+
+	require.NoError(t, batcher.AddMVCCKey(ctx,
+		storage.MVCCKey{Key: []byte("a"), Timestamp: hlc.Timestamp{WallTime: 1}},
+		storageutils.StringValueRaw("value"),
+	))
+
+	require.ErrorContains(t, batcher.Flush(ctx), "this is an unexpected sst error")
+}
+
+func TestSSTBatcherPipelinedFlush(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// Count flush requests and block their completion until we are ready to call Flush. This ensures that
+	// flushes are really async.
+	//
+	// NOTE: If this test hangs, it suggests we are waiting on flushes in the wrong place.
+	blockFlushes := make(chan struct{})
+	var addSSTCount int32
+	knobs := &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+			for _, ru := range ba.Requests {
+				if req, ok := ru.GetInner().(*kvpb.AddSSTableRequest); ok {
+					atomic.AddInt32(&addSSTCount, 1)
+					t.Logf("Intercepted AddSST request for span [%s, %s]", req.Key, req.EndKey)
+					<-blockFlushes
+				}
+			}
+			return nil
+		},
+	}
+
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: knobs,
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(db)
+	tdb.Exec(t, `CREATE TABLE kv (pk INT PRIMARY KEY, v STRING)`)
+
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", "kv")
+	re := newRowEncoder(t, tableDesc.TableDesc(), s.Codec())
+
+	mem := mon.NewUnlimitedMonitor(ctx, mon.Options{Name: mon.MakeName("mvcc-compliance")})
+	reqs := limit.MakeConcurrentRequestLimiter("reqs", 1000)
+	batcher, err := bulk.MakeSSTBatcher(ctx, "test", kvDB, s.ClusterSettings(), hlc.Timestamp{}, true, true, mem.MakeConcurrentBoundAccount(), reqs, nil)
+	require.NoError(t, err)
+	defer batcher.Close(ctx)
+
+	// Create split points at regular intervals to test pipelined flush behavior
+	for i := 100; i <= 900; i += 100 {
+		tdb.Exec(t, fmt.Sprintf(`ALTER TABLE kv SPLIT AT VALUES (%d)`, i))
+	}
+
+	tdb.CheckQueryResultsRetry(t, "SELECT count(*) FROM [SHOW RANGES FROM TABLE kv]", [][]string{{"10"}})
+
+	expected := [][]string{}
+	for i := 0; i < 1000; i++ {
+		row := re.encodeRow(tree.Datums{tree.NewDInt(tree.DInt(i)), tree.NewDString(fmt.Sprintf("val-%d", i))})
+		// The mvcc timestamp is ignored if the SSTBatcher is mvcc compliant.
+		require.NoError(t, batcher.AddMVCCKey(ctx,
+			storage.MVCCKey{Key: row.Key, Timestamp: hlc.Timestamp{WallTime: 1}},
+			row.Value.RawBytes))
+		expected = append(expected, []string{fmt.Sprintf("%d", i), fmt.Sprintf("val-%d", i)})
+	}
+
+	close(blockFlushes)
+
+	require.NoError(t, batcher.Flush(ctx))
+
+	// Verify that we intercepted the expected number of AddSST requests
+	require.Equal(t, int32(10), atomic.LoadInt32(&addSSTCount))
+
+	tdb.CheckQueryResults(t, `SELECT * FROM kv`, expected)
+}
+
+func TestSSTBatcherMvccCompliance(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(db)
+	tdb.Exec(t, `CREATE TABLE kv (pk INT PRIMARY KEY, v STRING)`)
+
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", "kv")
+	re := newRowEncoder(t, tableDesc.TableDesc(), s.Codec())
+
+	mem := mon.NewUnlimitedMonitor(ctx, mon.Options{Name: mon.MakeName("mvcc-compliance")})
+	reqs := limit.MakeConcurrentRequestLimiter("reqs", 1000)
+	batcher, err := bulk.MakeSSTBatcher(ctx, "test", kvDB, s.ClusterSettings(), hlc.Timestamp{}, true, true, mem.MakeConcurrentBoundAccount(), reqs, nil)
+	require.NoError(t, err)
+	defer batcher.Close(ctx)
+
+	// NOTE: the batcher picks a timestamp after the first key is added. So we
+	// have to measure the start time before we add any rows to the batcher.
+	startTS := s.Clock().Now()
+
+	expected := [][]string{}
+	for i := 0; i < 10; i++ {
+		row := re.encodeRow(tree.Datums{tree.NewDInt(tree.DInt(i)), tree.NewDString(fmt.Sprintf("val-%d", i))})
+		// The mvcc timestamp is ignored if the SSTBatcher is mvcc compliant.
+		require.NoError(t, batcher.AddMVCCKey(ctx,
+			storage.MVCCKey{Key: row.Key, Timestamp: hlc.Timestamp{WallTime: 1}},
+			row.Value.RawBytes))
+		expected = append(expected, []string{fmt.Sprintf("%d", i), fmt.Sprintf("val-%d", i)})
+	}
+
+	// TODO(jeffswenson): we can test refresh logic here by reading the table before triggering the flush. The sst timestamp should be
+	// between [startTS, refreshTS], then the actual recorded timestamps would be between [refreshTS, endTS]. We should add this test
+	// when we clean up the timestamp parameters.
+
+	require.NoError(t, batcher.Flush(ctx))
+	endTS := s.Clock().Now()
+
+	tdb.CheckQueryResults(t, `SELECT * FROM kv`, expected)
+
+	// Check that the mvcc timestamps written to the table are within the [startTS, endTS] range that matches when rows are added to the batcher.
+	var minTSStr, maxTSStr apd.Decimal
+	tdb.QueryRow(t, `SELECT min(crdb_internal_mvcc_timestamp) as min_ts, max(crdb_internal_mvcc_timestamp) as max_ts FROM kv`).Scan(&minTSStr, &maxTSStr)
+	minTS, err := hlc.DecimalToHLC(&minTSStr)
+	require.NoError(t, err)
+	maxTS, err := hlc.DecimalToHLC(&maxTSStr)
+	require.NoError(t, err)
+	require.True(t, startTS.Less(minTS), "startTS: %s, minTS: %s", startTS, minTS)
+	require.True(t, maxTS.Less(endTS), "maxTS: %s, endTS: %s", maxTS, endTS)
+}
+
+func TestSSTBatcherRewriteHistory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(db)
+	tdb.Exec(t, `CREATE TABLE kv (pk INT PRIMARY KEY, v STRING)`)
+
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", "kv")
+	re := newRowEncoder(t, tableDesc.TableDesc(), s.Codec())
+
+	mem := mon.NewUnlimitedMonitor(ctx, mon.Options{Name: mon.MakeName("mvcc-compliance")})
+	reqs := limit.MakeConcurrentRequestLimiter("reqs", 1000)
+	batcher, err := bulk.MakeSSTBatcher(ctx, "test", kvDB, s.ClusterSettings(), hlc.Timestamp{}, false, false, mem.MakeConcurrentBoundAccount(), reqs, nil)
+	require.NoError(t, err)
+	defer batcher.Close(ctx)
+
+	expected := [][]string{}
+	for i := 1; i < 11; i++ {
+		// Each row is written at a unique timestamp. Since writeAtBatchTS is
+		// false, the rows timestamp is recorded as the mvcc timestamp.
+		row := re.encodeRow(tree.Datums{tree.NewDInt(tree.DInt(i)), tree.NewDString(fmt.Sprintf("val-%d", i))})
+		require.NoError(t, batcher.AddMVCCKey(ctx, storage.MVCCKey{Key: row.Key, Timestamp: hlc.Timestamp{WallTime: int64(i)}}, row.Value.RawBytes))
+		expected = append(expected, []string{fmt.Sprintf("%d", i), fmt.Sprintf("val-%d", i), fmt.Sprintf("%d", i)})
+	}
+
+	require.NoError(t, batcher.Flush(ctx))
+
+	tdb.CheckQueryResults(t, `SELECT *, crdb_internal_mvcc_timestamp::INT FROM kv`, expected)
 }
