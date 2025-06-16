@@ -15,6 +15,7 @@ start
 config: {<stdFileDefaults(<defaultLogDir>)>,
 <fluentDefaults>,
 <httpDefaults>,
+<otlpDefaults>,
 sinks: {file-groups: {default: <fileCfg(INFO: [DEV,
 OPS],
 WARNING: [HEALTH,
@@ -51,6 +52,7 @@ start-single-node
 config: {<stdFileDefaults(<defaultLogDir>)>,
 <fluentDefaults>,
 <httpDefaults>,
+<otlpDefaults>,
 sinks: {file-groups: {default: <fileCfg(INFO: [DEV,
 OPS],
 WARNING: [HEALTH,
@@ -91,6 +93,7 @@ sql
 config: {<fileDefaultsNoDir>,
 <fluentDefaults>,
 <httpDefaults>,
+<otlpDefaults>,
 sinks: {<stderrEnabledWarningNoRedaction>}}
 
 run
@@ -99,6 +102,7 @@ init
 config: {<fileDefaultsNoDir>,
 <fluentDefaults>,
 <httpDefaults>,
+<otlpDefaults>,
 sinks: {<stderrEnabledWarningNoRedaction>}}
 
 
@@ -112,6 +116,7 @@ bank
 config: {<fileDefaultsNoDir>,
 <fluentDefaults>,
 <httpDefaults>,
+<otlpDefaults>,
 sinks: {<stderrEnabledInfoNoRedaction>}}
 
 
@@ -123,6 +128,7 @@ demo
 config: {<fileDefaultsNoDir>,
 <fluentDefaults>,
 <httpDefaults>,
+<otlpDefaults>,
 sinks: {<stderrCfg(FATAL,false)>}}
 
 
@@ -139,6 +145,7 @@ start
 config: {<fileDefaultsNoDir>,
 <fluentDefaults>,
 <httpDefaults>,
+<otlpDefaults>,
 sinks: {<stderrEnabledInfoNoRedaction>}}
 
 
@@ -152,6 +159,7 @@ start
 config: {<stdFileDefaults(/pathA/logs)>,
 <fluentDefaults>,
 <httpDefaults>,
+<otlpDefaults>,
 sinks: {file-groups: {default: <fileCfg(INFO: [DEV,
 OPS],
 WARNING: [HEALTH,
@@ -190,6 +198,7 @@ start
 config: {<stdFileDefaults(/mypath)>,
 <fluentDefaults>,
 <httpDefaults>,
+<otlpDefaults>,
 sinks: {file-groups: {default: <fileCfg(INFO: [DEV,
 OPS],
 WARNING: [HEALTH,
@@ -229,6 +238,7 @@ start
 config: {<stdFileDefaults(/pathA/logs)>,
 <fluentDefaults>,
 <httpDefaults>,
+<otlpDefaults>,
 sinks: {file-groups: {default: <fileCfg(INFO: [DEV,
 OPS],
 WARNING: [HEALTH,
@@ -273,6 +283,7 @@ start
 config: {<stdFileDefaults(/mypath)>,
 <fluentDefaults>,
 <httpDefaults>,
+<otlpDefaults>,
 sinks: {file-groups: {default: <fileCfg(INFO: [DEV,
 OPS],
 WARNING: [HEALTH,
@@ -310,6 +321,7 @@ start
 config: {<stdFileDefaults(<defaultLogDir>)>,
 <fluentDefaults>,
 <httpDefaults>,
+<otlpDefaults>,
 sinks: {file-groups: {default: <fileCfg(INFO: [DEV,
 OPS],
 WARNING: [HEALTH,
@@ -348,6 +360,7 @@ start
 config: {<stdFileDefaults(<defaultLogDir>)>,
 <fluentDefaults>,
 <httpDefaults>,
+<otlpDefaults>,
 sinks: {file-groups: {default: <fileCfg(INFO: [DEV,
 OPS],
 WARNING: [HEALTH,
@@ -396,6 +409,7 @@ start
 config: {<stdFileDefaults(<defaultLogDir>)>,
 <fluentDefaults>,
 <httpDefaults>,
+<otlpDefaults>,
 sinks: {file-groups: {default: <fileCfg(INFO: [DEV,
 OPS],
 WARNING: [HEALTH,
@@ -455,6 +469,7 @@ start
 config: {<fileDefaultsNoDir>,
 <fluentDefaults>,
 <httpDefaults>,
+<otlpDefaults>,
 sinks: {<stderrEnabledInfoNoRedaction>}}
 
 
@@ -466,6 +481,7 @@ start
 config: {<stdFileDefaults(/mypath)>,
 <fluentDefaults>,
 <httpDefaults>,
+<otlpDefaults>,
 sinks: {file-groups: {default: <fileCfg(INFO: [DEV,
 OPS],
 WARNING: [HEALTH,
@@ -505,6 +521,7 @@ start
 config: {<stdFileDefaults(/pathA)>,
 <fluentDefaults>,
 <httpDefaults>,
+<otlpDefaults>,
 sinks: {file-groups: {default: <fileCfg(INFO: [DEV,
 OPS],
 WARNING: [HEALTH,
@@ -544,6 +561,7 @@ init
 config: {<fileDefaultsNoMaxSize(/mypath)>,
 <fluentDefaults>,
 <httpDefaults>,
+<otlpDefaults>,
 sinks: {file-groups: {default: {channels: {INFO: all},
 dir: /mypath,
 file-permissions: "0640",
@@ -563,6 +581,7 @@ start
 config: {<stdFileDefaults(<defaultLogDir>)>,
 <fluentDefaults>,
 <httpDefaults>,
+<otlpDefaults>,
 sinks: {file-groups: {default: <fileCfg(INFO: [DEV,
 OPS],
 WARNING: [HEALTH,
@@ -600,6 +619,7 @@ start
 config: {<stdFileDefaults(<defaultLogDir>)>,
 <fluentDefaults>,
 <httpDefaults>,
+<otlpDefaults>,
 sinks: {file-groups: {default: <fileCfg(INFO: [DEV,
 OPS],
 WARNING: [HEALTH,
@@ -637,6 +657,7 @@ init
 config: {<fileDefaultsNoDir>,
 <fluentDefaults>,
 <httpDefaults>,
+<otlpDefaults>,
 sinks: {<stderrEnabledInfoNoRedaction>}}
 
 # Default when no severity is specified is WARNING.
@@ -647,6 +668,7 @@ init
 config: {<fileDefaultsNoDir>,
 <fluentDefaults>,
 <httpDefaults>,
+<otlpDefaults>,
 sinks: {<stderrEnabledWarningNoRedaction>}}
 
 
