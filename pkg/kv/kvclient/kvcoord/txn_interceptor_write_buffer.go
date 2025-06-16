@@ -1716,7 +1716,7 @@ func (li *lockedKeyInfo) rollbackSequence(seq enginepb.TxnSeq) bool {
 	for i := range li.heldStrengths {
 		if li.heldStrengths[i] >= seq {
 			li.heldStrengths[i] = notHeldSentinel
-		} else {
+		} else if li.heldStrengths[i] != notHeldSentinel {
 			stillHeld = true
 		}
 	}
