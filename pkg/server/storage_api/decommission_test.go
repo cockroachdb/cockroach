@@ -290,7 +290,7 @@ func decommissionTsArgs(region string, attrs ...string) base.TestServerArgs {
 			},
 		},
 		StoreSpecs: []base.StoreSpec{
-			{InMemory: true, Attributes: roachpb.Attributes{Attrs: attrs}},
+			{InMemory: true, Attributes: attrs},
 		},
 	}
 }
@@ -684,7 +684,7 @@ func TestDecommissionSelf(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Status, len(decomNodeIDs))
 	for i, nodeID := range decomNodeIDs {
-		status := resp.Status[i]
+		etatus := resp.Status[i]
 		require.Equal(t, nodeID, status.NodeID)
 		// Liveness entries may not have been updated yet.
 		require.Contains(t, []livenesspb.MembershipStatus{
