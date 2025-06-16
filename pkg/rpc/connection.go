@@ -10,6 +10,7 @@ import (
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
@@ -21,10 +22,13 @@ import (
 // must implement. It is used as a type constraint for rpc connections and allows
 // the Connection and Peer structs to work seamlessly with both gRPC and DRPC
 // connections.
-type rpcConn interface {
-	io.Closer
-	comparable
-}
+type rpcConn io.Closer
+
+// dialFunc is a generic function type used to establish an RPC connection.
+// It takes a context for cancellation/timeouts, a target string (e.g., address),
+// and a ConnectionClass to categorize the connection's purpose or priority.
+// It returns the established connection (of type Conn) or an error if dialing fails.
+type dialFunc[Conn rpcConn] func(ctx context.Context, target string, class rpcbase.ConnectionClass) (Conn, error)
 
 // heartbeatClientConstructor is a function type that creates a HeartbeatClient
 // for a given rpc connection. This allows us to use different implementations of
@@ -35,6 +39,23 @@ type heartbeatClientConstructor[Conn rpcConn] func(Conn) RPCHeartbeatClient
 type closeNotifier interface {
 	// CloseNotify returns a channel that will be closed once the connection is terminated.
 	CloseNotify(ctx context.Context) <-chan struct{}
+}
+
+// ConnectionOptions allow for customization of connection behaviors such as:
+//   - Establishing a new connection.
+//   - Client constuctors for clients like batch streams.
+//   - Comparing two connections for equivalence.
+type ConnectionOptions[Conn rpcConn] struct {
+	// dial function to open a new connection.
+	dial dialFunc[Conn]
+	// connEquals defines the equivalence function for two RPC connections.
+	connEquals equalsFunc[Conn]
+	// newBatchStreamClient is a constructor function for creating a new batch
+	// stream client associated with a specific RPC connection.
+	newBatchStreamClient streamConstructor[*kvpb.BatchRequest, *kvpb.BatchResponse, Conn]
+	// newCloseNotifier is a constructor function for creating a new
+	// closeNotifier associated with a specific RPC connection.
+	newCloseNotifier closeNotifierConstructor[Conn]
 }
 
 // closeNotifierConstructor is a function type that creates a closeNotifier
@@ -81,16 +102,17 @@ func newConnectionToNodeID[Conn rpcConn](
 	opts *ContextOptions,
 	k peerKey,
 	breakerSignal func() circuit.Signal,
-	newBatchStreamClient streamConstructor[*kvpb.BatchRequest, *kvpb.BatchResponse, Conn],
+	connOptions *ConnectionOptions[Conn],
 ) *Connection[Conn] {
+	drpcConnEquals := func(a, b drpc.Conn) bool { return a == b }
 	c := &Connection[Conn]{
 		breakerSignalFn: breakerSignal,
 		k:               k,
 		connFuture: connFuture[Conn]{
 			ready: make(chan struct{}),
 		},
-		batchStreamPool:     makeStreamPool(opts.Stopper, newBatchStreamClient),
-		drpcBatchStreamPool: makeStreamPool(opts.Stopper, newDRPCBatchStream),
+		batchStreamPool:     makeStreamPool(opts.Stopper, connOptions.newBatchStreamClient, connOptions.connEquals),
+		drpcBatchStreamPool: makeStreamPool(opts.Stopper, newDRPCBatchStream, drpcConnEquals),
 	}
 	return c
 }
@@ -107,10 +129,10 @@ func (c *Connection[Conn]) waitOrDefault(
 	// want it to take precedence over connFuture below (which is closed in
 	// the common case of a connection going bad after having been healthy
 	// for a while).
-	var cc Conn
+	var nilConn Conn
 	select {
 	case <-sig.C():
-		return cc, nil, sig.Err()
+		return nilConn, nil, sig.Err()
 	default:
 	}
 
@@ -121,19 +143,19 @@ func (c *Connection[Conn]) waitOrDefault(
 		select {
 		case <-c.connFuture.C():
 		case <-sig.C():
-			return cc, nil, sig.Err()
+			return nilConn, nil, sig.Err()
 		case <-ctx.Done():
-			return cc, nil, errors.Wrapf(ctx.Err(), "while connecting to n%d at %s", c.k.NodeID, c.k.TargetAddr)
+			return nilConn, nil, errors.Wrapf(ctx.Err(), "while connecting to n%d at %s", c.k.NodeID, c.k.TargetAddr)
 		}
 	} else {
 		select {
 		case <-c.connFuture.C():
 		case <-sig.C():
-			return cc, nil, sig.Err()
+			return nilConn, nil, sig.Err()
 		case <-ctx.Done():
-			return cc, nil, errors.Wrapf(ctx.Err(), "while connecting to n%d at %s", c.k.NodeID, c.k.TargetAddr)
+			return nilConn, nil, errors.Wrapf(ctx.Err(), "while connecting to n%d at %s", c.k.NodeID, c.k.TargetAddr)
 		default:
-			return cc, nil, defErr
+			return nilConn, nil, defErr
 		}
 	}
 
