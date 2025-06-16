@@ -342,6 +342,7 @@ func (kv replicateKV) sourceRunCmd(tenantName string, nodes option.NodeListOptio
 		MaybeFlag(kv.debugRunDuration > 0, "duration", kv.debugRunDuration).
 		MaybeFlag(kv.maxQPS > 0, "max-rate", kv.maxQPS).
 		MaybeFlag(kv.readOnly, "prepare-read-only", true).
+		Option("zipfian").
 		Arg("{pgurl%s:%s}", nodes, tenantName).
 		WithEqualsSyntax()
 	return cmd.String()
@@ -1193,7 +1194,7 @@ func registerClusterToCluster(r registry.Registry) {
 				initWithSplitAndScatter: true,
 			},
 			timeout:                              1 * time.Hour,
-			additionalDuration:                   10 * time.Minute,
+			additionalDuration:                   20 * time.Minute,
 			cutover:                              5 * time.Minute,
 			withReaderWorkload:                   replicateKV{readPercent: 100, readOnly: true, tolerateErrors: true},
 			sometimesTestFingerprintMismatchCode: true,
