@@ -243,6 +243,7 @@ vectorized: true
 │ estimated row count: 110 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a)
@@ -261,6 +262,7 @@ vectorized: true
 │ estimated row count: 110 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a)
@@ -279,6 +281,7 @@ vectorized: true
 │ estimated row count: 110 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a)
@@ -297,6 +300,7 @@ vectorized: true
 │ estimated row count: 110 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a)
@@ -315,6 +319,7 @@ vectorized: true
 │ estimated row count: 110 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a)
@@ -333,6 +338,7 @@ vectorized: true
 │ estimated row count: 110 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a)
@@ -353,6 +359,7 @@ vectorized: true
 │ estimated row count: 110 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -383,6 +390,7 @@ vectorized: true
 │ estimated row count: 110 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -410,6 +418,7 @@ vectorized: true
 │ estimated row count: 111 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a)
@@ -428,6 +437,7 @@ vectorized: true
 │ estimated row count: 111 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a)
@@ -455,6 +465,7 @@ vectorized: true
 │ estimated row count: 111 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -482,6 +493,7 @@ vectorized: true
 │ estimated row count: 111 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -516,6 +528,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -548,6 +561,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -577,6 +591,7 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ pred: (b->'a') @> '[1, 2]'
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -607,6 +622,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -634,6 +650,7 @@ vectorized: true
 │ estimated row count: 111 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a)
@@ -657,6 +674,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -706,6 +724,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -733,6 +752,7 @@ vectorized: true
 │ estimated row count: 111 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a)
@@ -813,6 +833,7 @@ vectorized: true
 │ estimated row count: 111 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -842,6 +863,7 @@ vectorized: true
 │ estimated row count: 333 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -869,6 +891,7 @@ vectorized: true
 │ estimated row count: 12 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -896,6 +919,7 @@ vectorized: true
 │ estimated row count: 12 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -923,6 +947,7 @@ vectorized: true
 │ estimated row count: 12 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -953,6 +978,7 @@ vectorized: true
 │ table: d@d_pkey
 │ equality: (a) = (a)
 │ equality cols are key
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -980,6 +1006,7 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ pred: b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -1006,6 +1033,7 @@ vectorized: true
 │ table: d@d_pkey
 │ equality: (a) = (a)
 │ equality cols are key
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -1035,6 +1063,7 @@ vectorized: true
 │ table: d@d_pkey
 │ equality: (a) = (a)
 │ equality cols are key
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -1062,6 +1091,7 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ pred: b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -1088,6 +1118,7 @@ vectorized: true
 │ table: d@d_pkey
 │ equality: (a) = (a)
 │ equality cols are key
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -1116,6 +1147,7 @@ vectorized: true
 │ estimated row count: 12 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -1143,6 +1175,7 @@ vectorized: true
 │ estimated row count: 12 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -1179,6 +1212,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • sort
         │ columns: (a)
@@ -1216,6 +1250,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • scan
           columns: (a)
@@ -1239,6 +1274,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • scan
           columns: (a)
@@ -1262,6 +1298,7 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: (b->1) = '[1, 2]'
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -1292,6 +1329,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • scan
           columns: (a)
@@ -1315,6 +1353,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • scan
           columns: (a)
@@ -1343,6 +1382,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • sort
             │ columns: (a)
@@ -1376,6 +1416,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • sort
             │ columns: (a)
@@ -1409,6 +1450,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • sort
             │ columns: (a)
@@ -1438,6 +1480,7 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: ((b->0)->1) = '[1, 2]'
+    │ parallel
     │
     └── • sort
         │ columns: (a)
@@ -1473,6 +1516,7 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: ((b->0) = '[1, 2]') AND ((b->1) = '[1]')
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -1505,6 +1549,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • scan
           columns: (a)
@@ -1530,6 +1575,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -1562,6 +1608,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -1594,6 +1641,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -1626,6 +1674,7 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: (b->0) @> '[1, 2]'
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -1656,6 +1705,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -1688,6 +1738,7 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: ((b->0) @> '[1, 2]') AND ((b->1) <@ '[1]')
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -1786,6 +1837,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -1821,6 +1873,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -1858,6 +1911,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -1893,6 +1947,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -1928,6 +1983,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -1963,6 +2019,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -2001,6 +2058,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -2036,6 +2094,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -2071,6 +2130,7 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: b = '[[0, 1, 2]]'
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -2104,6 +2164,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • scan
               columns: (a)
@@ -2130,6 +2191,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • scan
               columns: (a)
@@ -2153,6 +2215,7 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: b = '[1, 2]'
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -2186,6 +2249,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • scan
               columns: (a)
@@ -2212,6 +2276,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -2247,6 +2312,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -2279,6 +2345,7 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: b = '{"a": 1, "b": 2}'
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -2309,6 +2376,7 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: b = '{"a": {"b": "c"}, "d": "e"}'
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -2342,6 +2410,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • scan
               columns: (a)
@@ -2368,6 +2437,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • scan
               columns: (a)
@@ -2392,6 +2462,7 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: b = '[[0, 1, 2], [0, 1, 2], "s"]'
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -2429,6 +2500,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -2464,6 +2536,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -2500,6 +2573,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -2535,6 +2609,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -2570,6 +2645,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -2603,6 +2679,7 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: b = '[[0, 1, 2], [0, 1, 2], "s"]'
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -2773,6 +2850,7 @@ vectorized: true
 │ estimated row count: 110 (missing stats)
 │ table: e@e_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a)
@@ -2849,6 +2927,7 @@ vectorized: true
 │ table: e@e_pkey
 │ equality: (a) = (a)
 │ equality cols are key
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -2875,6 +2954,7 @@ vectorized: true
 │ table: e@e_pkey
 │ equality: (a) = (a)
 │ equality cols are key
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -2906,6 +2986,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: e@e_pkey
     │ key columns: a
+    │ parallel
     │
     └── • scan
           columns: (a)
@@ -2929,6 +3010,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: e@e_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -2961,6 +3043,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: e@e_pkey
     │ key columns: a
+    │ parallel
     │
     └── • scan
           columns: (a)
@@ -2984,6 +3067,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: e@e_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -3016,6 +3100,7 @@ vectorized: true
     │ estimated row count: 0
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • scan
           columns: (a)
@@ -3058,6 +3143,7 @@ vectorized: true
     │ estimated row count: 0
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • scan
           columns: (a)
@@ -3081,6 +3167,7 @@ vectorized: true
     │ estimated row count: 0
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -3113,6 +3200,7 @@ vectorized: true
     │ estimated row count: 0
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -3161,6 +3249,7 @@ vectorized: true
 │ estimated row count: 333 (missing stats)
 │ table: e@e_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -3207,6 +3296,7 @@ vectorized: true
 │ estimated row count: 333 (missing stats)
 │ table: e@e_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -3267,6 +3357,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: geo_table@geo_table_pkey
         │ key columns: k
+        │ parallel
         │
         └── • project
             │ columns: (k)
@@ -3343,6 +3434,7 @@ vectorized: true
     │ equality: (k) = (k)
     │ equality cols are key
     │ pred: st_intersects(geom, geom)
+    │ parallel
     │
     └── • project
         │ columns: (k, geom, k)

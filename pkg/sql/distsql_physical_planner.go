@@ -3335,6 +3335,10 @@ func (dsp *DistSQLPlanner) planIndexJoin(
 	// planning is done.
 	p.AddProjection(pkCols, execinfrapb.Ordering{}, planInfo.finalizeLastStageCb)
 
+	if buildutil.CrdbTestBuild && !planInfo.parallelize {
+		return errors.AssertionFailedf("index join should always have parallelize=true")
+	}
+
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
 		Type:              descpb.InnerJoin,
 		LockingStrength:   planInfo.fetch.lockingStrength,
@@ -3342,6 +3346,7 @@ func (dsp *DistSQLPlanner) planIndexJoin(
 		LockingDurability: planInfo.fetch.lockingDurability,
 		MaintainOrdering:  len(planInfo.reqOrdering) > 0,
 		LimitHint:         planInfo.limitHint,
+		Parallelize:       planInfo.parallelize,
 	}
 
 	fetchColIDs := make([]descpb.ColumnID, len(planInfo.fetch.catalogCols))
@@ -3425,6 +3430,9 @@ func (dsp *DistSQLPlanner) planLookupJoin(
 		if planInfo.reqOrdering[i].ColIdx >= numInputCols {
 			// We need to maintain the index ordering on each lookup.
 			maintainLookupOrdering = true
+			if planInfo.parallelize {
+				return errors.AssertionFailedf("parallelization should have been disabled")
+			}
 			break
 		}
 	}
@@ -3444,6 +3452,7 @@ func (dsp *DistSQLPlanner) planLookupJoin(
 		LimitHint:                         planInfo.limitHint,
 		RemoteOnlyLookups:                 planInfo.remoteOnlyLookups,
 		ReverseScans:                      planInfo.reverseScans,
+		Parallelize:                       planInfo.parallelize,
 	}
 
 	fetchColIDs := make([]descpb.ColumnID, len(planInfo.fetch.catalogCols))

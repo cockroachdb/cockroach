@@ -37,6 +37,8 @@ type indexJoinPlanningInfo struct {
 
 	limitHint int64
 
+	parallelize bool // expected to always be true
+
 	// finalizeLastStageCb will be nil in the spec factory.
 	finalizeLastStageCb func(*physicalplan.PhysicalPlan)
 }

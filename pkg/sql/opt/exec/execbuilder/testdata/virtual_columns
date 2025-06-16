@@ -137,6 +137,7 @@ vectorized: true
     │ estimated row count: 333 (missing stats)
     │ table: t_idx@t_idx_pkey
     │ key columns: a
+    │ parallel
     │
     └── • scan
           columns: (a)
@@ -177,6 +178,7 @@ vectorized: true
 │ table: t_idx@t_idx_pkey
 │ equality: (a) = (a)
 │ equality cols are key
+│ parallel
 │
 └── • lookup join (inner)
     │ columns: (column1, a, v)
@@ -391,6 +393,7 @@ vectorized: true
         │ table: t_idx@t_idx_pkey
         │ key columns: a
         │ locking strength: for update
+        │ parallel
         │
         └── • scan
               columns: (a)
@@ -423,6 +426,7 @@ vectorized: true
         │ table: t_idx@t_idx_pkey
         │ key columns: a
         │ locking strength: for update
+        │ parallel
         │
         └── • scan
               columns: (a)
@@ -625,6 +629,7 @@ vectorized: true
                 │ table: t_idx@t_idx_pkey
                 │ key columns: a
                 │ locking strength: for update
+                │ parallel
                 │
                 └── • scan
                       columns: (a)
@@ -797,6 +802,7 @@ vectorized: true
         │ table: t@t_pkey
         │ equality: (column1) = (a)
         │ equality cols are key
+        │ parallel
         │
         └── • render
             │ columns: (v_comp, column1, column2)
@@ -855,6 +861,7 @@ vectorized: true
                 │ equality: (column1) = (a)
                 │ equality cols are key
                 │ locking strength: for update
+                │ parallel
                 │
                 └── • render
                     │ columns: (v_comp, column1, column2)
@@ -915,6 +922,7 @@ vectorized: true
                 │ equality: (column1) = (a)
                 │ equality cols are key
                 │ locking strength: for update
+                │ parallel
                 │
                 └── • render
                     │ columns: (v_comp, column1, column2)
@@ -968,6 +976,7 @@ vectorized: true
             │ equality: (column1) = (a)
             │ equality cols are key
             │ locking strength: for update
+            │ parallel
             │
             └── • render
                 │ columns: (v_comp, w_comp, column1, column2, column3)
@@ -1043,6 +1052,7 @@ vectorized: true
                 │ equality: (column1) = (a)
                 │ equality cols are key
                 │ locking strength: for update
+                │ parallel
                 │
                 └── • render
                     │ columns: (v_comp, w_comp, column1, column2, column3)
@@ -1090,6 +1100,7 @@ vectorized: true
             │ table: t_idx@t_idx_pkey
             │ equality: (column1) = (a)
             │ equality cols are key
+            │ parallel
             │
             └── • lookup join (anti)
                 │ columns: (v_comp, w_comp, column1, column2, column3)
@@ -1097,6 +1108,7 @@ vectorized: true
                 │ table: t_idx@t_idx_w_key
                 │ equality: (w_comp) = (w)
                 │ equality cols are key
+                │ parallel
                 │
                 └── • render
                     │ columns: (v_comp, w_comp, column1, column2, column3)
@@ -1166,6 +1178,7 @@ vectorized: true
                 │ equality: (column1) = (a)
                 │ equality cols are key
                 │ locking strength: for update
+                │ parallel
                 │
                 └── • render
                     │ columns: (v_comp, w_comp, column1, column2, column3)
@@ -1242,6 +1255,7 @@ vectorized: true
                 │ equality: (column1) = (a)
                 │ equality cols are key
                 │ locking strength: for update
+                │ parallel
                 │
                 └── • render
                     │ columns: (v_comp, w_comp, column1, column2, column3)

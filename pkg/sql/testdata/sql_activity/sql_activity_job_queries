@@ -550,6 +550,7 @@ vectorized: true
                     │ table: statement_statistics@primary
                     │ equality: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id) = (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
                     │ equality cols are key
+                    │ parallel
                     │
                     └── • lookup join (inner)
                         │ columns: (aggregated_ts, fingerprint_id, app_name, cnt_rank, lat_rank, combined_rank, contention_rank, cpu_rank, p99_rank, contention_mean, cpu_mean, p99_latency, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
