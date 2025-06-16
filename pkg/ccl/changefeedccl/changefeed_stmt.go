@@ -88,7 +88,7 @@ func init() {
 
 type annotatedChangefeedStatement struct {
 	*tree.CreateChangefeed
-	originalSpecs       map[tree.ChangefeedTarget]jobspb.ChangefeedTargetSpecification
+	originalSpecs       map[tree.ChangefeedTableTarget]jobspb.ChangefeedTargetSpecification
 	alterChangefeedAsOf hlc.Timestamp
 	CreatedByInfo       *jobs.CreatedByInfo
 }
@@ -224,6 +224,10 @@ func changefeedPlanHook(
 	if err != nil {
 		return nil, nil, false, err
 	}
+
+	if changefeedStmt.Level == tree.ChangefeedLevelDatabase {
+		rawOpts[changefeedbase.OptSplitColumnFamilies] = `yes`
+	}
 	opts := changefeedbase.MakeStatementOptions(rawOpts)
 
 	description, err := makeChangefeedDescription(ctx, changefeedStmt.CreateChangefeed, sinkURI, opts)
@@ -276,7 +280,7 @@ func changefeedPlanHook(
 			p.ExtendedEvalContext().Descs.ReleaseAll(ctx)
 
 			telemetry.Count(`changefeed.create.core`)
-			logCreateChangefeedTelemetry(ctx, jr, changefeedStmt.Select != nil)
+			logCreateChangefeedTelemetry(ctx, jr, changefeedStmt.Select != nil, p.ExecCfg())
 			if err := maybeShowCursorAgeWarning(ctx, p, opts); err != nil {
 				return err
 			}
@@ -308,7 +312,7 @@ func changefeedPlanHook(
 				ctx,
 				codec,
 				jobID,
-				AllTargets(details),
+				AllTargets(details, ctx, p.ExecCfg()),
 				details.StatementTime,
 			)
 			progress.GetChangefeed().ProtectedTimestampRecord = ptr.ID.GetUUID()
@@ -369,7 +373,7 @@ func changefeedPlanHook(
 			return err
 		}
 
-		logCreateChangefeedTelemetry(ctx, jr, changefeedStmt.Select != nil)
+		logCreateChangefeedTelemetry(ctx, jr, changefeedStmt.Select != nil, p.ExecCfg())
 
 		select {
 		case <-ctx.Done():
@@ -459,6 +463,19 @@ func evalCursor(
 	return asOf.Timestamp, nil
 }
 
+func getTargetList(changefeedStmt *annotatedChangefeedStatement) tree.BackupTargetList {
+	targetList := tree.BackupTargetList{}
+	if changefeedStmt.Level == tree.ChangefeedLevelTable {
+		for _, t := range changefeedStmt.TableTargets {
+			targetList.Tables.TablePatterns = append(targetList.Tables.TablePatterns, t.TableName)
+		}
+
+	} else if changefeedStmt.Level == tree.ChangefeedLevelDatabase {
+		targetList.Databases = tree.NameList{changefeedStmt.DatabaseTarget.DatabaseName}
+	}
+	return targetList
+}
+
 func createChangefeedJobRecord(
 	ctx context.Context,
 	p sql.PlanHookState,
@@ -526,49 +543,63 @@ func createChangefeedJobRecord(
 		}
 	}
 
-	tableOnlyTargetList := tree.BackupTargetList{}
-	for _, t := range changefeedStmt.Targets {
-		tableOnlyTargetList.Tables.TablePatterns = append(tableOnlyTargetList.Tables.TablePatterns, t.TableName)
-	}
+	targetList := getTargetList(changefeedStmt)
+	var details jobspb.ChangefeedDetails
 
-	// This grabs table descriptors once to get their ids.
-	targetDescs, err := getTableDescriptors(ctx, p, &tableOnlyTargetList, statementTime, initialHighWater)
+	targetTableDescs, targetDatabaseDescs, err := getTargetDescriptors(ctx, p, &targetList, statementTime, initialHighWater)
+
 	if err != nil {
 		return nil, err
 	}
+	targets := []jobspb.ChangefeedTargetSpecification{}
+	tables := jobspb.ChangefeedTargets{}
+	if changefeedStmt.Level == tree.ChangefeedLevelTable {
+		// This grabs table descriptors once to get their ids.
+		targets, tables, err = getTargetsAndTables(ctx, p, targetTableDescs, changefeedStmt.TableTargets,
+			changefeedStmt.originalSpecs, opts.ShouldUseFullStatementTimeName())
 
-	for _, t := range targetDescs {
-		if tbl, ok := t.(catalog.TableDescriptor); ok && tbl.ExternalRowData() != nil {
-			if tbl.ExternalRowData().TenantID.IsSet() {
-				return nil, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on a replication target are not supported")
+		if err != nil {
+			return nil, err
+		}
+
+		for _, t := range targetTableDescs {
+			if tbl, ok := t.(catalog.TableDescriptor); ok && tbl.ExternalRowData() != nil {
+				if tbl.ExternalRowData().TenantID.IsSet() {
+					return nil, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on a replication target are not supported")
+				}
+				return nil, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on external tables are not supported")
 			}
-			return nil, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on external tables are not supported")
+		}
+
+		sd := p.SessionData().Clone()
+		// Add non-local session data state (localization, etc).
+		sessiondata.MarshalNonLocal(p.SessionData(), &sd.SessionData)
+		details = jobspb.ChangefeedDetails{
+			Tables:               tables,
+			SinkURI:              sinkURI,
+			StatementTime:        statementTime,
+			EndTime:              endTime,
+			TargetSpecifications: targets,
+			SessionData:          &sd.SessionData,
+		}
+	} else if changefeedStmt.Level == tree.ChangefeedLevelDatabase {
+		if len(targetDatabaseDescs) == 0 || len(targetDatabaseDescs) > 1 {
+			return nil, errors.Errorf("only one database target is supported")
+		}
+		targets = getDatabaseTargets(targetDatabaseDescs)
+		details = jobspb.ChangefeedDetails{
+			TargetSpecifications: targets,
+			SinkURI:              sinkURI,
+			StatementTime:        statementTime,
+			EndTime:              endTime,
 		}
 	}
-
-	targets, tables, err := getTargetsAndTables(ctx, p, targetDescs, changefeedStmt.Targets,
-		changefeedStmt.originalSpecs, opts.ShouldUseFullStatementTimeName(), sinkURI)
-
-	if err != nil {
-		return nil, err
-	}
 	tolerances := opts.GetCanHandle()
-	sd := p.SessionData().Clone()
-	// Add non-local session data state (localization, etc).
-	sessiondata.MarshalNonLocal(p.SessionData(), &sd.SessionData)
-	details := jobspb.ChangefeedDetails{
-		Tables:               tables,
-		SinkURI:              sinkURI,
-		StatementTime:        statementTime,
-		EndTime:              endTime,
-		TargetSpecifications: targets,
-		SessionData:          &sd.SessionData,
-	}
 
-	specs := AllTargets(details)
+	specs := AllTargets(details, ctx, p.ExecCfg())
 	hasSelectPrivOnAllTables := true
 	hasChangefeedPrivOnAllTables := true
-	for _, desc := range targetDescs {
+	for _, desc := range targetTableDescs {
 		if table, isTable := desc.(catalog.TableDescriptor); isTable {
 			if err := changefeedvalidators.ValidateTable(specs, table, tolerances); err != nil {
 				return nil, err
@@ -594,7 +625,7 @@ func createChangefeedJobRecord(
 	if changefeedStmt.Select != nil {
 		// Serialize changefeed expression.
 		normalized, withDiff, err := validateAndNormalizeChangefeedExpression(
-			ctx, p, opts, changefeedStmt.Select, targetDescs, targets, statementTime,
+			ctx, p, opts, changefeedStmt.Select, targetTableDescs, targets, statementTime,
 		)
 		if err != nil {
 			return nil, err
@@ -676,7 +707,7 @@ func createChangefeedJobRecord(
 	if err != nil {
 		return nil, err
 	}
-	if _, err := getEncoder(ctx, encodingOpts, AllTargets(details), details.Select != "",
+	if _, err := getEncoder(ctx, encodingOpts, AllTargets(details, ctx, p.ExecCfg()), details.Select != "",
 		makeExternalConnectionProvider(ctx, p.ExecCfg().InternalDB), nil, sourceProvider); err != nil {
 		return nil, err
 	}
@@ -850,7 +881,7 @@ Few hours to a few days range are appropriate values for this option.`
 		Description: description,
 		Username:    p.User(),
 		DescriptorIDs: func() (sqlDescIDs []descpb.ID) {
-			for _, desc := range targetDescs {
+			for _, desc := range targetTableDescs {
 				sqlDescIDs = append(sqlDescIDs, desc.GetID())
 			}
 			return sqlDescIDs
@@ -883,31 +914,31 @@ func validateSettings(ctx context.Context, needsRangeFeed bool, execCfg *sql.Exe
 	return nil
 }
 
-func getTableDescriptors(
+func getTargetDescriptors(
 	ctx context.Context,
 	p sql.PlanHookState,
 	targets *tree.BackupTargetList,
 	statementTime hlc.Timestamp,
 	initialHighWater hlc.Timestamp,
-) (map[tree.TablePattern]catalog.Descriptor, error) {
+) (map[tree.TablePattern]catalog.Descriptor, []catalog.DatabaseDescriptor, error) {
 	// For now, disallow targeting a database or wildcard table selection.
 	// Getting it right as tables enter and leave the set over time is
 	// tricky.
-	if len(targets.Databases) > 0 {
-		return nil, errors.Errorf(`CHANGEFEED cannot target %s`,
-			tree.AsString(targets))
+	if len(targets.Databases) > 0 && len(targets.Tables.TablePatterns) > 0 {
+		return nil, nil, errors.Errorf(`CHANGEFEED cannot target both databases and tables`)
 	}
+
 	for _, t := range targets.Tables.TablePatterns {
 		p, err := t.NormalizeTablePattern()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if _, ok := p.(*tree.TableName); !ok {
-			return nil, errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(t))
+			return nil, nil, errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(t))
 		}
 	}
 
-	_, _, _, targetDescs, err := backupresolver.ResolveTargetsToDescriptors(ctx, p, statementTime, targets)
+	_, _, targetDatabaseDescs, targetTableDescs, err := backupresolver.ResolveTargetsToDescriptors(ctx, p, statementTime, targets)
 	if err != nil {
 		var m *backupresolver.MissingTableErr
 		if errors.As(err, &m) {
@@ -921,21 +952,20 @@ func getTableDescriptors(
 				"do the targets exist at the specified cursor time %s?", initialHighWater)
 		}
 	}
-	return targetDescs, err
+	return targetTableDescs, targetDatabaseDescs, err
 }
 
 func getTargetsAndTables(
 	ctx context.Context,
 	p sql.PlanHookState,
 	targetDescs map[tree.TablePattern]catalog.Descriptor,
-	rawTargets tree.ChangefeedTargets,
-	originalSpecs map[tree.ChangefeedTarget]jobspb.ChangefeedTargetSpecification,
+	rawTargets tree.ChangefeedTableTargets,
+	originalSpecs map[tree.ChangefeedTableTarget]jobspb.ChangefeedTargetSpecification,
 	fullTableName bool,
-	sinkURI string,
 ) ([]jobspb.ChangefeedTargetSpecification, jobspb.ChangefeedTargets, error) {
 	tables := make(jobspb.ChangefeedTargets, len(targetDescs))
 	targets := make([]jobspb.ChangefeedTargetSpecification, len(rawTargets))
-	seen := make(map[jobspb.ChangefeedTargetSpecification]tree.ChangefeedTarget)
+	seen := make(map[jobspb.ChangefeedTargetSpecification]tree.ChangefeedTableTarget)
 
 	for i, ct := range rawTargets {
 		desc, ok := targetDescs[ct.TableName]
@@ -944,7 +974,7 @@ func getTargetsAndTables(
 		}
 		td, ok := desc.(catalog.TableDescriptor)
 		if !ok {
-			return nil, nil, errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(&ct))
+			return nil, nil, errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(ct))
 		}
 
 		if spec, ok := originalSpecs[ct]; ok {
@@ -981,7 +1011,7 @@ func getTargetsAndTables(
 			}
 			targets[i] = jobspb.ChangefeedTargetSpecification{
 				Type:              typ,
-				TableID:           td.GetID(),
+				DescID:            td.GetID(),
 				FamilyName:        string(ct.FamilyName),
 				StatementTimeName: tables[td.GetID()].StatementTimeName,
 			}
@@ -989,13 +1019,28 @@ func getTargetsAndTables(
 		if dup, isDup := seen[targets[i]]; isDup {
 			return nil, nil, errors.Errorf(
 				"CHANGEFEED targets %s and %s are duplicates",
-				tree.AsString(&dup), tree.AsString(&ct),
+				tree.AsString(dup), tree.AsString(ct),
 			)
 		}
 		seen[targets[i]] = ct
 	}
 
 	return targets, tables, nil
+}
+
+func getDatabaseTargets(
+	targetDatabaseDescs []catalog.DatabaseDescriptor,
+) []jobspb.ChangefeedTargetSpecification {
+	targets := make([]jobspb.ChangefeedTargetSpecification, len(targetDatabaseDescs))
+
+	for i, desc := range targetDatabaseDescs {
+		targets[i] = jobspb.ChangefeedTargetSpecification{
+			DescID:            desc.GetID(),
+			Type:              jobspb.ChangefeedTargetSpecification_DATABASE,
+			StatementTimeName: desc.GetName(),
+		}
+	}
+	return targets
 }
 
 func validateSink(
@@ -1110,8 +1155,8 @@ func makeChangefeedDescription(
 	opts changefeedbase.StatementOptions,
 ) (string, error) {
 	c := &tree.CreateChangefeed{
-		Targets: changefeed.Targets,
-		Select:  changefeed.Select,
+		TableTargets: changefeed.TableTargets,
+		Select:       changefeed.Select,
 	}
 
 	if sinkURI != "" {
@@ -1680,11 +1725,11 @@ func (b *changefeedResumer) OnFailOrCancel(
 		errors.DecodeError(ctx, *b.job.Payload().FinalResumeError),
 	) {
 		telemetry.Count(`changefeed.enterprise.cancel`)
-		logChangefeedCanceledTelemetry(ctx, b.job)
+		logChangefeedCanceledTelemetry(ctx, b.job, execCfg)
 	} else {
 		telemetry.Count(`changefeed.enterprise.fail`)
 		exec.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics).Failures.Inc(1)
-		logChangefeedFailedTelemetry(ctx, b.job, changefeedbase.UnknownError)
+		logChangefeedFailedTelemetry(ctx, b.job, changefeedbase.UnknownError, execCfg)
 	}
 	return nil
 }
@@ -1768,11 +1813,11 @@ func getChangefeedTargetName(
 	return desc.GetName(), nil
 }
 
-func logCreateChangefeedTelemetry(ctx context.Context, jr *jobs.Record, isTransformation bool) {
+func logCreateChangefeedTelemetry(ctx context.Context, jr *jobs.Record, isTransformation bool, execCfg *sql.ExecutorConfig) {
 	var changefeedEventDetails eventpb.CommonChangefeedEventDetails
 	if jr != nil {
 		changefeedDetails := jr.Details.(jobspb.ChangefeedDetails)
-		changefeedEventDetails = makeCommonChangefeedEventDetails(ctx, changefeedDetails, jr.Description, jr.JobID)
+		changefeedEventDetails = makeCommonChangefeedEventDetails(ctx, changefeedDetails, jr.Description, jr.JobID, execCfg)
 	}
 
 	createChangefeedEvent := &eventpb.CreateChangefeed{
@@ -1783,12 +1828,12 @@ func logCreateChangefeedTelemetry(ctx context.Context, jr *jobs.Record, isTransf
 	log.StructuredEvent(ctx, severity.INFO, createChangefeedEvent)
 }
 
-func logAlterChangefeedTelemetry(ctx context.Context, job *jobs.Job, prevDescription string) {
+func logAlterChangefeedTelemetry(ctx context.Context, job *jobs.Job, prevDescription string, execCfg *sql.ExecutorConfig) {
 	var changefeedEventDetails eventpb.CommonChangefeedEventDetails
 	if job != nil {
 		changefeedDetails := job.Details().(jobspb.ChangefeedDetails)
 		changefeedEventDetails = makeCommonChangefeedEventDetails(
-			ctx, changefeedDetails, job.Payload().Description, job.ID())
+			ctx, changefeedDetails, job.Payload().Description, job.ID(), execCfg)
 	}
 
 	alterChangefeedEvent := &eventpb.AlterChangefeed{
@@ -1800,12 +1845,12 @@ func logAlterChangefeedTelemetry(ctx context.Context, job *jobs.Job, prevDescrip
 }
 
 func logChangefeedFailedTelemetry(
-	ctx context.Context, job *jobs.Job, failureType changefeedbase.FailureType,
+	ctx context.Context, job *jobs.Job, failureType changefeedbase.FailureType, execCfg *sql.ExecutorConfig,
 ) {
 	var changefeedEventDetails eventpb.CommonChangefeedEventDetails
 	if job != nil {
 		changefeedDetails := job.Details().(jobspb.ChangefeedDetails)
-		changefeedEventDetails = makeCommonChangefeedEventDetails(ctx, changefeedDetails, job.Payload().Description, job.ID())
+		changefeedEventDetails = makeCommonChangefeedEventDetails(ctx, changefeedDetails, job.Payload().Description, job.ID(), execCfg)
 	}
 
 	changefeedFailedEvent := &eventpb.ChangefeedFailed{
@@ -1827,11 +1872,11 @@ func logChangefeedFailedTelemetryDuringStartup(
 	log.StructuredEvent(ctx, severity.INFO, changefeedFailedEvent)
 }
 
-func logChangefeedCanceledTelemetry(ctx context.Context, job *jobs.Job) {
+func logChangefeedCanceledTelemetry(ctx context.Context, job *jobs.Job, execCfg *sql.ExecutorConfig) {
 	var changefeedEventDetails eventpb.CommonChangefeedEventDetails
 	if job != nil {
 		changefeedDetails := job.Details().(jobspb.ChangefeedDetails)
-		changefeedEventDetails = makeCommonChangefeedEventDetails(ctx, changefeedDetails, job.Payload().Description, job.ID())
+		changefeedEventDetails = makeCommonChangefeedEventDetails(ctx, changefeedDetails, job.Payload().Description, job.ID(), execCfg)
 	}
 
 	changefeedCanceled := &eventpb.ChangefeedCanceled{
@@ -1841,7 +1886,7 @@ func logChangefeedCanceledTelemetry(ctx context.Context, job *jobs.Job) {
 }
 
 func makeCommonChangefeedEventDetails(
-	ctx context.Context, details jobspb.ChangefeedDetails, description string, jobID jobspb.JobID,
+	ctx context.Context, details jobspb.ChangefeedDetails, description string, jobID jobspb.JobID, execCfg *sql.ExecutorConfig,
 ) eventpb.CommonChangefeedEventDetails {
 	opts := details.Opts
 
@@ -1880,7 +1925,7 @@ func makeCommonChangefeedEventDetails(
 		Description: description,
 		SinkType:    sinkType,
 		// TODO: Rename this field to NumTargets.
-		NumTables:   int32(AllTargets(details).Size),
+		NumTables:   int32(AllTargets(details, ctx, execCfg).Size),
 		Resolved:    resolved,
 		Format:      opts[changefeedbase.OptFormat],
 		InitialScan: initialScan,

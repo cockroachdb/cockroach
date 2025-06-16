@@ -55,7 +55,7 @@ func makeTopic(name string) *tableDescriptorTopic {
 	desc := tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name, ID: descpb.ID(id)}).BuildImmutableTable()
 	spec := changefeedbase.Target{
 		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-		TableID:           desc.GetID(),
+		DescID:            desc.GetID(),
 		StatementTimeName: changefeedbase.StatementTimeName(name),
 	}
 	return &tableDescriptorTopic{Metadata: makeMetadata(desc), spec: spec}
