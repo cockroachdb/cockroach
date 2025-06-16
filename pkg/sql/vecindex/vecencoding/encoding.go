@@ -202,22 +202,16 @@ func EncodeMetadataValue(metadata cspann.PartitionMetadata) []byte {
 }
 
 // EncodeRaBitQVector encodes a RaBitQ vector into the given byte slice.
-func EncodeRaBitQVector(
-	appendTo []byte,
-	codeCount uint32,
-	centroidDistance float32,
-	quantizedDotProduct float32,
-	centroidDotProduct float32,
-	code quantize.RaBitQCode,
-	metric vecpb.DistanceMetric,
+func EncodeRaBitQVectorFromSet(
+	appendTo []byte, vectorSet *quantize.RaBitQuantizedVectorSet, offset int,
 ) []byte {
-	appendTo = encoding.EncodeUint32Ascending(appendTo, codeCount)
-	appendTo = encoding.EncodeUntaggedFloat32Value(appendTo, centroidDistance)
-	appendTo = encoding.EncodeUntaggedFloat32Value(appendTo, quantizedDotProduct)
-	if metric != vecpb.L2SquaredDistance {
-		appendTo = encoding.EncodeUntaggedFloat32Value(appendTo, centroidDotProduct)
+	appendTo = encoding.EncodeUint32Ascending(appendTo, vectorSet.CodeCounts[offset])
+	appendTo = encoding.EncodeUntaggedFloat32Value(appendTo, vectorSet.CentroidDistances[offset])
+	appendTo = encoding.EncodeUntaggedFloat32Value(appendTo, vectorSet.QuantizedDotProducts[offset])
+	if vectorSet.Metric != vecpb.L2SquaredDistance {
+		appendTo = encoding.EncodeUntaggedFloat32Value(appendTo, vectorSet.CentroidDotProducts[offset])
 	}
-	for _, c := range code {
+	for _, c := range vectorSet.Codes.At(offset) {
 		appendTo = encoding.EncodeUint64Ascending(appendTo, c)
 	}
 	return appendTo
@@ -318,7 +312,7 @@ func DecodeMetadataValue(encMetadata []byte) (metadata cspann.PartitionMetadata,
 // RaBitQuantizedVectorSet. The vector set must have been initialized with the
 // correct number of dimensions. It returns the remainder of the input buffer.
 func DecodeRaBitQVectorToSet(
-	encVector []byte, vectorSet *quantize.RaBitQuantizedVectorSet, metric vecpb.DistanceMetric,
+	encVector []byte, vectorSet *quantize.RaBitQuantizedVectorSet,
 ) ([]byte, error) {
 	encVector, codeCount, err := encoding.DecodeUint32Ascending(encVector)
 	if err != nil {
@@ -332,7 +326,7 @@ func DecodeRaBitQVectorToSet(
 	if err != nil {
 		return nil, err
 	}
-	if metric != vecpb.L2SquaredDistance {
+	if vectorSet.Metric != vecpb.L2SquaredDistance {
 		var centroidDotProduct float32
 		encVector, centroidDotProduct, err = encoding.DecodeUntaggedFloat32Value(encVector)
 		if err != nil {

@@ -28,7 +28,6 @@ go_library(
         "//pkg/sql/vecindex/cspann/quantize",
         "//pkg/sql/vecindex/cspann/workspace",
         "//pkg/sql/vecindex/vecencoding",
-        "//pkg/sql/vecindex/vecpb",
         "//pkg/util/log",
         "//pkg/util/unique",
         "//pkg/util/vector",

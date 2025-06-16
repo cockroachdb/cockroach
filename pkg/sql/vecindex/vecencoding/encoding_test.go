@@ -94,15 +94,7 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 				buf, err = vecencoding.EncodeUnquantizerVector(buf, set.At(i))
 				require.NoError(t, err)
 			case *quantize.RaBitQuantizedVectorSet:
-				var centroidDotProduct float32
-				if distMetric != vecpb.L2SquaredDistance {
-					centroidDotProduct = quantizedSet.CentroidDotProducts[i]
-				}
-				buf = vecencoding.EncodeRaBitQVector(buf,
-					quantizedSet.CodeCounts[i], quantizedSet.CentroidDistances[i],
-					quantizedSet.QuantizedDotProducts[i], centroidDotProduct,
-					quantizedSet.Codes.At(i), distMetric,
-				)
+				buf = vecencoding.EncodeRaBitQVectorFromSet(buf, quantizedSet, i)
 			}
 		}
 
@@ -131,9 +123,7 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 			decodedSet = quantizer.NewSet(set.Count, decodedMetadata.Centroid)
 			for range set.Count {
 				remainder, err = vecencoding.DecodeRaBitQVectorToSet(
-					remainder,
-					decodedSet.(*quantize.RaBitQuantizedVectorSet),
-					distMetric,
+					remainder, decodedSet.(*quantize.RaBitQuantizedVectorSet),
 				)
 				require.NoError(t, err)
 			}
@@ -188,6 +178,7 @@ func testingAssertPartitionsEqual(t *testing.T, l, r *cspann.Partition) {
 	case *quantize.RaBitQuantizedVectorSet:
 		rightSet, ok := q2.(*quantize.RaBitQuantizedVectorSet)
 		require.True(t, ok, "quantized set types do not match")
+		require.Equal(t, leftSet.Metric, rightSet.Metric)
 		require.Equal(t, leftSet.CodeCounts, rightSet.CodeCounts, "code counts do not match")
 		require.Equal(t, leftSet.Codes, rightSet.Codes, "codes do not match")
 		require.Equal(t, leftSet.QuantizedDotProducts, rightSet.QuantizedDotProducts,
