@@ -68,8 +68,8 @@ func (c *Cache[K, V]) LoadValueOutsideOfCacheSingleFlight(
 	if res.Err != nil {
 		return nil, res.Err
 	}
-	val := res.Val.(*V)
-	return val, nil
+	val := res.Val.(V)
+	return &val, nil
 }
 
 // MaybeWriteBackToCache tries to put the key, value into the
