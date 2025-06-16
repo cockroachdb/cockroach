@@ -672,7 +672,7 @@ func TestAudienceCheck(t *testing.T) {
 
 // mockGetHttpResponseWithLocalFileContent is a mock function for getHttpResponse. This is used to intercept the call to
 // getHttpResponse and return the content of a local file instead of making a http call.
-var mockGetHttpResponseWithLocalFileContent = func(ctx context.Context, url string, authenticator *jwtAuthenticator) ([]byte, error) {
+var mockGetHttpResponseWithLocalFileContent = func(ctx context.Context, url string, authenticator *jwtAuthenticator, _ ...http.Header) ([]byte, error) {
 	// remove https:// and replace / with _ in the url to get the testdata file name
 	fileName := "testdata/" + strings.ReplaceAll(strings.ReplaceAll(url, "https://", ""), "/", "_")
 	// read content of the file as a byte array
@@ -999,7 +999,7 @@ func TestJWTAuthClientTimeout(t *testing.T) {
 		testServer.Close()
 	}()
 
-	mockGetHttpResponse := func(ctx context.Context, url string, authenticator *jwtAuthenticator) ([]byte, error) {
+	mockGetHttpResponse := func(ctx context.Context, url string, authenticator *jwtAuthenticator, _ ...http.Header) ([]byte, error) {
 		if strings.Contains(url, "/.well-known/openid-configuration") {
 			return mockGetHttpResponseWithLocalFileContent(ctx, url, authenticator)
 		} else if strings.Contains(url, "/oauth2/v3/certs") {
