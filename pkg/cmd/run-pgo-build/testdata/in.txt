@@ -1,0 +1,230 @@
+PeriodType: cpu nanoseconds
+Period: 10000000
+Time: 2025-01-28 14:54:31.289729 +0000 UTC
+Duration: 41.3
+Samples:
+samples/count cpu/nanoseconds
+         39  390000000: 1 2 3 4 
+       1366 13660000000: 5 6 7 8 
+        793 7930000000: 9 6 7 8 
+         23  230000000: 10 5 6 7 8 
+         92  920000000: 11 12 13 14 15 16 17 18 
+       1055 10550000000: 19 6 7 8 
+          5   50000000: 20 21 13 14 15 16 17 18 
+         34  340000000: 22 7 8 
+         10  100000000: 23 24 25 26 27 28 29 30 31 32 7 8 
+         10  100000000: 33 30 31 32 7 8 
+          2   20000000: 34 35 36 3 4 37 38 26 27 28 29 30 31 32 7 8 
+         17  170000000: 39 40 41 42 4 
+        232 2320000000: 43 6 7 8 
+          1   10000000: 44 45 46 30 31 32 7 8 
+          1   10000000: 47 48 6 7 8 
+          1   10000000: 49 50 51 7 8 
+          1   10000000: 52 50 51 7 8 
+          2   20000000: 53 54 55 56 16 17 18 
+          1   10000000: 57 21 13 14 15 16 17 18 
+          2   20000000: 58 50 51 7 8 
+          2   20000000: 59 60 55 56 16 17 18 
+          1   10000000: 61 50 51 7 8 
+          1   10000000: 62 48 6 7 8 
+         14  140000000: 63 45 46 30 31 32 7 8 
+          1   10000000: 64 6 7 8 
+          1   10000000: 65 30 31 32 7 8 
+          1   10000000: 66 30 31 32 7 8 
+          1   10000000: 67 68 50 51 7 8 
+          1   10000000: 69 7 8 
+          1   10000000: 70 71 72 28 73 50 51 7 8 
+          1   10000000: 74 75 51 7 8 
+          1   10000000: 76 6 7 8 
+          1   10000000: 77 17 75 51 7 8 
+          1   10000000: 78 50 51 7 8 
+          2   20000000: 11 12 13 14 15 79 80 81 82 
+          1   10000000: 83 3 4 37 38 26 27 28 29 30 31 32 7 8 
+          4   40000000: 39 40 84 85 81 82 
+          1   10000000: 86 87 17 75 51 7 8 
+          1   10000000: 88 50 51 7 8 
+          1   10000000: 89 30 31 32 7 8 
+          1   10000000: 10 43 6 7 8 
+          1   10000000: 90 91 36 3 4 37 38 26 27 28 73 50 51 7 8 
+          2   20000000: 92 7 8 
+          1   10000000: 93 56 16 17 18 
+          3   30000000: 94 68 50 51 7 8 
+          1   10000000: 95 32 7 8 
+          1   10000000: 96 30 31 32 7 8 
+          2   20000000: 97 32 7 8 
+          1   10000000: 98 99 45 46 30 31 32 7 8 
+          1   10000000: 100 17 18 
+          1   10000000: 101 50 51 7 8 
+          1   10000000: 102 103 104 105 106 107 108 109 4 110 
+          1   10000000: 111 112 113 114 30 31 32 7 8 
+          1   10000000: 115 51 7 8 
+          1   10000000: 116 50 51 7 8 
+          1   10000000: 117 50 51 7 8 
+          1   10000000: 90 91 36 3 4 37 38 26 27 28 29 30 31 32 7 8 
+          1   10000000: 118 45 46 30 31 32 7 8 
+          1   10000000: 119 30 31 32 7 8 
+          1   10000000: 120 30 31 32 7 8 
+          1   10000000: 78 30 31 32 7 8 
+          1   10000000: 121 122 36 3 4 37 38 26 27 28 29 30 31 32 7 8 
+          1   10000000: 123 75 51 7 8 
+          1   10000000: 124 15 16 17 18 
+          1   10000000: 125 45 46 30 31 32 7 8 
+          1   10000000: 126 127 128 106 107 108 129 4 110 
+          1   10000000: 130 131 13 14 15 16 17 18 
+          1   10000000: 132 45 46 30 31 32 7 8 
+          1   10000000: 10 64 6 7 8 
+          1   10000000: 133 134 135 136 48 6 7 8 
+Locations
+     1: 0x104ef8acb M=1 runtime.madvise /opt/homebrew/opt/go/libexec/src/runtime/sys_darwin.go:284:0 s=283
+     2: 0x104ec911b M=1 runtime.sysUsedOS /opt/homebrew/opt/go/libexec/src/runtime/mem_darwin.go:33:0 s=29
+             runtime.sysUsed /opt/homebrew/opt/go/libexec/src/runtime/mem.go:77:0 s=75
+             runtime.(*mheap).allocSpan /opt/homebrew/opt/go/libexec/src/runtime/mheap.go:1345:0 s=1169
+     3: 0x104ec891b M=1 runtime.(*mheap).alloc.func1 /opt/homebrew/opt/go/libexec/src/runtime/mheap.go:962:0 s=956
+     4: 0x104f1629b M=1 runtime.systemstack /opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:244:0 s=207
+     5: 0x104fb09f0 M=1 github.com/tbg/goplay/pprofexample.doWork /Users/tbg/go/src/github.com/tbg/goplay/pprofexample/main.go:23:0 s=21
+     6: 0x104fb08d3 M=1 github.com/tbg/goplay/pprofexample.main /Users/tbg/go/src/github.com/tbg/goplay/pprofexample/main.go:13:0 s=7
+     7: 0x104fb0a5b M=1 github.com/tbg/goplay/pprofexample.TestProf /Users/tbg/go/src/github.com/tbg/goplay/pprofexample/main_test.go:6:0 s=5
+     8: 0x104f701a3 M=1 testing.tRunner /opt/homebrew/opt/go/libexec/src/testing/testing.go:1690:0 s=1540
+     9: 0x104fb09b8 M=1 github.com/tbg/goplay/pprofexample.doWork /Users/tbg/go/src/github.com/tbg/goplay/pprofexample/main.go:24:0 s=21
+    10: 0x104f19110 M=1 runtime.asyncPreempt /opt/homebrew/opt/go/libexec/src/runtime/preempt_arm64.s:7:0 s=6
+    11: 0x104ef903f M=1 runtime.pthread_cond_signal /opt/homebrew/opt/go/libexec/src/runtime/sys_darwin.go:568:0 s=567
+    12: 0x104ed61b7 M=1 runtime.semawakeup /opt/homebrew/opt/go/libexec/src/runtime/os_darwin.go:84:0 s=77
+    13: 0x104eaea73 M=1 runtime.notewakeup /opt/homebrew/opt/go/libexec/src/runtime/lock_sema.go:163:0 s=144
+    14: 0x104ee0f3b M=1 runtime.startm /opt/homebrew/opt/go/libexec/src/runtime/proc.go:2998:0 s=2912
+    15: 0x104f10913 M=1 runtime.wakep /opt/homebrew/opt/go/libexec/src/runtime/proc.go:3120:0 s=3089
+    16: 0x104ee460b M=1 runtime.goschedImpl /opt/homebrew/opt/go/libexec/src/runtime/proc.go:4133:0 s=4105
+    17: 0x104ef465b M=1 runtime.gopreempt_m /opt/homebrew/opt/go/libexec/src/runtime/proc.go:4153:0 s=4152
+             runtime.newstack /opt/homebrew/opt/go/libexec/src/runtime/stack.go:1084:0 s=976
+    18: 0x104f1639f M=1 runtime.morestack /opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:342:0 s=302
+    19: 0x104fb09d4 M=1 github.com/tbg/goplay/pprofexample.doWork /Users/tbg/go/src/github.com/tbg/goplay/pprofexample/main.go:24:0 s=21
+    20: 0x104ef8eff M=1 runtime.pthread_mutex_lock /opt/homebrew/opt/go/libexec/src/runtime/sys_darwin.go:519:0 s=518
+    21: 0x104ed6193 M=1 runtime.semawakeup /opt/homebrew/opt/go/libexec/src/runtime/os_darwin.go:81:0 s=77
+    22: 0x104fb0900 M=1 github.com/tbg/goplay/pprofexample.main /Users/tbg/go/src/github.com/tbg/goplay/pprofexample/main.go:15:0 s=7
+    23: 0x104f18e78 M=1 runtime.memclrNoHeapPointers /opt/homebrew/opt/go/libexec/src/runtime/memclr_arm64.s:174:0 s=11
+    24: 0x104eb3933 M=1 runtime.(*mspan).initHeapBits /opt/homebrew/opt/go/libexec/src/runtime/mbitmap.go:545:0 s=542
+    25: 0x104eb5b03 M=1 runtime.(*mcentral).grow /opt/homebrew/opt/go/libexec/src/runtime/mcentral.go:263:0 s=250
+    26: 0x104eb591f M=1 runtime.(*mcentral).cacheSpan /opt/homebrew/opt/go/libexec/src/runtime/mcentral.go:170:0 s=81
+    27: 0x104eb4deb M=1 runtime.(*mcache).refill /opt/homebrew/opt/go/libexec/src/runtime/mcache.go:182:0 s=147
+    28: 0x104eafbfb M=1 runtime.(*mcache).nextFree /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:945:0 s=935
+    29: 0x104f0bdef M=1 runtime.mallocgc /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1161:0 s=983
+    30: 0x104eafedb M=1 runtime.newobject /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1386:0 s=1385
+    31: 0x104f63baf M=1 context.WithValue /opt/homebrew/opt/go/libexec/src/context/context.go:723:0 s=713
+    32: 0x104fb08bf M=1 github.com/tbg/goplay/pprofexample.main /Users/tbg/go/src/github.com/tbg/goplay/pprofexample/main.go:11:0 s=7
+    33: 0x104f0bfa4 M=1 runtime.mallocgc /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1299:0 s=983
+    34: 0x104ec9fb0 M=1 runtime.(*mspan).init /opt/homebrew/opt/go/libexec/src/runtime/mheap.go:1699:0 s=1697
+    35: 0x104ec941f M=1 runtime.(*mheap).initSpan /opt/homebrew/opt/go/libexec/src/runtime/mheap.go:1385:0 s=1382
+    36: 0x104ec90a7 M=1 runtime.(*mheap).allocSpan /opt/homebrew/opt/go/libexec/src/runtime/mheap.go:1338:0 s=1169
+    37: 0x104ec8873 M=1 runtime.(*mheap).alloc /opt/homebrew/opt/go/libexec/src/runtime/mheap.go:956:0 s=951
+    38: 0x104eb5acf M=1 runtime.(*mcentral).grow /opt/homebrew/opt/go/libexec/src/runtime/mcentral.go:254:0 s=250
+    39: 0x104ef8e8f M=1 runtime.kevent /opt/homebrew/opt/go/libexec/src/runtime/sys_darwin.go:498:0 s=497
+    40: 0x104ed5a7f M=1 runtime.netpoll /opt/homebrew/opt/go/libexec/src/runtime/netpoll_kqueue.go:107:0 s=87
+    41: 0x104edecbb M=1 runtime.startTheWorldWithSema /opt/homebrew/opt/go/libexec/src/runtime/proc.go:1664:0 s=1659
+    42: 0x104eb99ff M=1 runtime.gcStart.func3 /opt/homebrew/opt/go/libexec/src/runtime/mgc.go:792:0 s=791
+    43: 0x104fb09d8 M=1 github.com/tbg/goplay/pprofexample.doWork /Users/tbg/go/src/github.com/tbg/goplay/pprofexample/main.go:24:0 s=21
+    44: 0x104eb3b1c M=1 runtime.(*mspan).writeHeapBitsSmall /opt/homebrew/opt/go/libexec/src/runtime/mbitmap.go:646:0 s=641
+    45: 0x104eb3d93 M=1 runtime.heapSetType /opt/homebrew/opt/go/libexec/src/runtime/mbitmap.go:714:0 s=705
+    46: 0x104f0bf7b M=1 runtime.mallocgc /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1192:0 s=983
+    47: 0x104f63f98 M=1 context.(*valueCtx).Value /opt/homebrew/opt/go/libexec/src/context/context.go:756:0 s=754
+    48: 0x104fb099b M=1 github.com/tbg/goplay/pprofexample.doWork /Users/tbg/go/src/github.com/tbg/goplay/pprofexample/main.go:22:0 s=21
+    49: 0x104f0bb48 M=1 runtime.mallocgc /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1119:0 s=983
+    50: 0x104f0b7e7 M=1 runtime.convT64 /opt/homebrew/opt/go/libexec/src/runtime/iface.go:404:0 s=400
+    51: 0x104fb088f M=1 github.com/tbg/goplay/pprofexample.main /Users/tbg/go/src/github.com/tbg/goplay/pprofexample/main.go:11:0 s=7
+    52: 0x104f0bc64 M=1 runtime.mallocgc /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1135:0 s=983
+    53: 0x104ef8c63 M=1 runtime.nanotime1 /opt/homebrew/opt/go/libexec/src/runtime/sys_darwin.go:368:0 s=363
+    54: 0x104eeaa73 M=1 runtime.nanotime /opt/homebrew/opt/go/libexec/src/runtime/time_nofake.go:33:0 s=32
+             runtime.pidleget /opt/homebrew/opt/go/libexec/src/runtime/proc.go:6627:0 s=6620
+    55: 0x104eeac4b M=1 runtime.pidlegetSpinning /opt/homebrew/opt/go/libexec/src/runtime/proc.go:6651:0 s=6648
+    56: 0x104f10857 M=1 runtime.wakep /opt/homebrew/opt/go/libexec/src/runtime/proc.go:3105:0 s=3089
+    57: 0x104ef8ee0 M=1 runtime.pthread_mutex_lock /opt/homebrew/opt/go/libexec/src/runtime/sys_darwin.go:518:0 s=518
+    58: 0x104f0c2c4 M=1 runtime.mallocgc /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1302:0 s=983
+    59: 0x104ebcc00 M=1 runtime.(*limiterEvent).stop /opt/homebrew/opt/go/libexec/src/runtime/mgclimit.go:449:0 s=449
+    60: 0x104eeabe3 M=1 runtime.pidleget /opt/homebrew/opt/go/libexec/src/runtime/proc.go:6633:0 s=6620
+    61: 0x104f0bab4 M=1 runtime.mallocgc /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1052:0 s=983
+    62: 0x104f63f90 M=1 context.(*valueCtx).Value /opt/homebrew/opt/go/libexec/src/context/context.go:756:0 s=754
+    63: 0x104eb3ad4 M=1 runtime.(*mspan).writeHeapBitsSmall /opt/homebrew/opt/go/libexec/src/runtime/mbitmap.go:647:0 s=641
+    64: 0x104fb09f8 M=1 github.com/tbg/goplay/pprofexample.doWork /Users/tbg/go/src/github.com/tbg/goplay/pprofexample/main.go:26:0 s=21
+    65: 0x104f0c024 M=1 runtime.mallocgc /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1250:0 s=983
+    66: 0x104f0bd28 M=1 runtime.bool2int /opt/homebrew/opt/go/libexec/src/runtime/stubs.go:451:0 s=448
+             runtime.makeSpanClass /opt/homebrew/opt/go/libexec/src/runtime/mheap.go:563:0 s=562
+             runtime.mallocgc /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1157:0 s=983
+    67: 0x104eafd9c M=1 runtime.deductAssistCredit /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1335:0 s=1333
+    68: 0x104f0ba67 M=1 runtime.mallocgc /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1037:0 s=983
+    69: 0x104fb091c M=1 github.com/tbg/goplay/pprofexample.main /Users/tbg/go/src/github.com/tbg/goplay/pprofexample/main.go:15:0 s=7
+    70: 0x104ed37dc M=1 runtime.(*spanSet).push /opt/homebrew/opt/go/libexec/src/runtime/mspanset.go:136:0 s=74
+    71: 0x104eb5a17 M=1 runtime.(*mcentral).uncacheSpan /opt/homebrew/opt/go/libexec/src/runtime/mcentral.go:244:0 s=204
+    72: 0x104eb4cc7 M=1 runtime.(*mcache).refill /opt/homebrew/opt/go/libexec/src/runtime/mcache.go:159:0 s=147
+    73: 0x104f0bc3f M=1 runtime.mallocgc /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1132:0 s=983
+    74: 0x104ef45ec M=1 runtime.newstack /opt/homebrew/opt/go/libexec/src/runtime/stack.go:1058:0 s=976
+    75: 0x104f0b80f M=1 runtime.convT64 /opt/homebrew/opt/go/libexec/src/runtime/iface.go:400:0 s=400
+    76: 0x104fb09ec M=1 github.com/tbg/goplay/pprofexample.doWork /Users/tbg/go/src/github.com/tbg/goplay/pprofexample/main.go:24:0 s=21
+    77: 0x104ee4430 M=1 runtime.goschedImpl /opt/homebrew/opt/go/libexec/src/runtime/proc.go:4105:0 s=4105
+    78: 0x104f0b9a0 M=1 runtime.mallocgc /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:984:0 s=983
+    79: 0x104ee3af3 M=1 runtime.resetspinning /opt/homebrew/opt/go/libexec/src/runtime/proc.go:3860:0 s=3847
+    80: 0x104ee3fcb M=1 runtime.schedule /opt/homebrew/opt/go/libexec/src/runtime/proc.go:4013:0 s=3966
+    81: 0x104ee4403 M=1 runtime.park_m /opt/homebrew/opt/go/libexec/src/runtime/proc.go:4102:0 s=4068
+    82: 0x104f16203 M=1 runtime.mcall /opt/homebrew/opt/go/libexec/src/runtime/asm_arm64.s:193:0 s=167
+    83: 0x104ec916c M=1 runtime.(*mheap).allocSpan /opt/homebrew/opt/go/libexec/src/runtime/mheap.go:1355:0 s=1169
+    84: 0x104ee2443 M=1 runtime.findRunnable /opt/homebrew/opt/go/libexec/src/runtime/proc.go:3580:0 s=3249
+    85: 0x104ee3f57 M=1 runtime.schedule /opt/homebrew/opt/go/libexec/src/runtime/proc.go:3995:0 s=3966
+    86: 0x104edddc4 M=1 runtime.casgstatus /opt/homebrew/opt/go/libexec/src/runtime/proc.go:1193:0 s=1175
+    87: 0x104ee44df M=1 runtime.goschedImpl /opt/homebrew/opt/go/libexec/src/runtime/proc.go:4122:0 s=4105
+    88: 0x104f0bfbc M=1 runtime.mallocgc /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1211:0 s=983
+    89: 0x104f0be30 M=1 runtime.mallocgc /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1156:0 s=983
+    90: 0x104ec8af4 M=1 runtime.(*mheap).allocNeedsZero /opt/homebrew/opt/go/libexec/src/runtime/mheap.go:1022:0 s=1017
+    91: 0x104ec942f M=1 runtime.(*mheap).initSpan /opt/homebrew/opt/go/libexec/src/runtime/mheap.go:1386:0 s=1382
+    92: 0x104fb08d4 M=1 github.com/tbg/goplay/pprofexample.main /Users/tbg/go/src/github.com/tbg/goplay/pprofexample/main.go:13:0 s=7
+    93: 0x104eeac30 M=1 runtime.pidlegetSpinning /opt/homebrew/opt/go/libexec/src/runtime/proc.go:6648:0 s=6648
+    94: 0x104eafde4 M=1 runtime.deductAssistCredit /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1352:0 s=1333
+    95: 0x104f63bfc M=1 context.WithValue /opt/homebrew/opt/go/libexec/src/context/context.go:723:0 s=713
+    96: 0x104f0bfc0 M=1 runtime.mallocgc /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1211:0 s=983
+    97: 0x104f63c18 M=1 context.WithValue /opt/homebrew/opt/go/libexec/src/context/context.go:723:0 s=713
+    98: 0x104eb39a4 M=1 runtime.heapBitsSlice /opt/homebrew/opt/go/libexec/src/runtime/mbitmap.go:592:0 s=587
+             runtime.(*mspan).heapBits /opt/homebrew/opt/go/libexec/src/runtime/mbitmap.go:579:0 s=563
+    99: 0x104eb3b23 M=1 runtime.(*mspan).writeHeapBitsSmall /opt/homebrew/opt/go/libexec/src/runtime/mbitmap.go:661:0 s=641
+   100: 0x104ee4574 M=1 runtime.dropg /opt/homebrew/opt/go/libexec/src/runtime/proc.go:4059:0 s=4055
+             runtime.goschedImpl /opt/homebrew/opt/go/libexec/src/runtime/proc.go:4127:0 s=4105
+   101: 0x104f0bbcc M=1 runtime.nextFreeFast /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:913:0 s=908
+             runtime.mallocgc /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1130:0 s=983
+   102: 0x104ef85c0 M=1 runtime.pcdatavalue /opt/homebrew/opt/go/libexec/src/runtime/symtab.go:1182:0 s=1182
+   103: 0x104ef5523 M=1 runtime.(*stkframe).getStackMap /opt/homebrew/opt/go/libexec/src/runtime/stkframe.go:172:0 s=157
+   104: 0x104ebf12f M=1 runtime.scanframeworker /opt/homebrew/opt/go/libexec/src/runtime/mgcmark.go:1052:0 s=1003
+   105: 0x104ebeca7 M=1 runtime.scanstack /opt/homebrew/opt/go/libexec/src/runtime/mgcmark.go:888:0 s=819
+   106: 0x104ebd787 M=1 runtime.markroot.func1 /opt/homebrew/opt/go/libexec/src/runtime/mgcmark.go:238:0 s=212
+   107: 0x104ebd457 M=1 runtime.markroot /opt/homebrew/opt/go/libexec/src/runtime/mgcmark.go:212:0 s=161
+   108: 0x104ebf723 M=1 runtime.gcDrain /opt/homebrew/opt/go/libexec/src/runtime/mgcmark.go:1188:0 s=1151
+   109: 0x104ebb697 M=1 runtime.gcDrainMarkWorkerIdle /opt/homebrew/opt/go/libexec/src/runtime/mgcmark.go:1102:0 s=1101
+             runtime.gcBgMarkWorker.func2 /opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1508:0 s=1472
+   110: 0x104ebb35f M=1 runtime.gcBgMarkWorker /opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1472:0 s=1377
+   111: 0x104eae670 M=1 runtime.lock2 /opt/homebrew/opt/go/libexec/src/runtime/lock_sema.go:50:0 s=42
+   112: 0x104ecf56f M=1 runtime.lockWithRank /opt/homebrew/opt/go/libexec/src/runtime/lockrank_off.go:24:0 s=23
+             runtime.lock /opt/homebrew/opt/go/libexec/src/runtime/lock_sema.go:39:0 s=38
+             runtime.mProf_Malloc /opt/homebrew/opt/go/libexec/src/runtime/mprof.go:454:0 s=437
+   113: 0x104eaff83 M=1 runtime.profilealloc /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1459:0 s=1453
+   114: 0x104f0c053 M=1 runtime.mallocgc /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1253:0 s=983
+   115: 0x104f0b7e0 M=1 runtime.convT64 /opt/homebrew/opt/go/libexec/src/runtime/iface.go:404:0 s=400
+   116: 0x104f0bb80 M=1 runtime.releasem /opt/homebrew/opt/go/libexec/src/runtime/runtime1.go:613:0 s=610
+             runtime.mallocgc /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1125:0 s=983
+   117: 0x104f0ba80 M=1 runtime.mallocgc /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1041:0 s=983
+   118: 0x104eb3c0c M=1 runtime.(*mspan).writeHeapBitsSmall /opt/homebrew/opt/go/libexec/src/runtime/mbitmap.go:686:0 s=641
+   119: 0x104f0bfc8 M=1 runtime.mallocgc /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1217:0 s=983
+   120: 0x104f0bf50 M=1 runtime.mallocgc /opt/homebrew/opt/go/libexec/src/runtime/malloc.go:1270:0 s=983
+   121: 0x104ecb06c M=1 runtime.newMarkBits /opt/homebrew/opt/go/libexec/src/runtime/mheap.go:2403:0 s=2396
+   122: 0x104ec953b M=1 runtime.(*mheap).initSpan /opt/homebrew/opt/go/libexec/src/runtime/mheap.go:1418:0 s=1382
+   123: 0x104ef4390 M=1 runtime.newstack /opt/homebrew/opt/go/libexec/src/runtime/stack.go:976:0 s=976
+   124: 0x104ee0d40 M=1 runtime.startm /opt/homebrew/opt/go/libexec/src/runtime/proc.go:2912:0 s=2912
+   125: 0x104eb3b38 M=1 runtime.(*mspan).writeHeapBitsSmall /opt/homebrew/opt/go/libexec/src/runtime/mbitmap.go:665:0 s=641
+   126: 0x104efdc7c M=1 runtime.(*unwinder).resolveInternal /opt/homebrew/opt/go/libexec/src/runtime/traceback.go:282:0 s=252
+   127: 0x104efe0ef M=1 runtime.(*unwinder).next /opt/homebrew/opt/go/libexec/src/runtime/traceback.go:513:0 s=440
+   128: 0x104ebecaf M=1 runtime.scanstack /opt/homebrew/opt/go/libexec/src/runtime/mgcmark.go:887:0 s=819
+   129: 0x104ebb6c3 M=1 runtime.gcDrainMarkWorkerDedicated /opt/homebrew/opt/go/libexec/src/runtime/mgcmark.go:1112:0 s=1107
+             runtime.gcBgMarkWorker.func2 /opt/homebrew/opt/go/libexec/src/runtime/mgc.go:1489:0 s=1472
+   130: 0x104ef8f3f M=1 runtime.pthread_mutex_unlock /opt/homebrew/opt/go/libexec/src/runtime/sys_darwin.go:528:0 s=527
+   131: 0x104ed61c3 M=1 runtime.semawakeup /opt/homebrew/opt/go/libexec/src/runtime/os_darwin.go:86:0 s=77
+   132: 0x104eb3ae4 M=1 runtime.readUintptr /opt/homebrew/opt/go/libexec/src/runtime/mbitmap.go:1436:0 s=1435
+             runtime.(*mspan).writeHeapBitsSmall /opt/homebrew/opt/go/libexec/src/runtime/mbitmap.go:643:0 s=641
+   133: 0x104ea5ed0 M=1 runtime.memequal /opt/homebrew/opt/go/libexec/src/internal/bytealg/equal_arm64.s:11:0 s=9
+   134: 0x104ea7cab M=1 runtime.strequal /opt/homebrew/opt/go/libexec/src/runtime/alg.go:378:0 s=377
+   135: 0x104ea7e0f M=1 runtime.efaceeq /opt/homebrew/opt/go/libexec/src/runtime/alg.go:404:0 s=390
+   136: 0x104f63f53 M=1 context.(*valueCtx).Value /opt/homebrew/opt/go/libexec/src/context/context.go:755:0 s=754
+Mappings
+1: 0x104ea4000/0x104fe8000/0x0 /private/var/folders/xd/8r0_4_v95997lw_pb8_0wftm0000gp/T/go-build4284769300/b001/pprofexample.test  [FN]
