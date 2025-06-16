@@ -205,7 +205,7 @@ func (ps *projectSetProcessor) nextInputRow() (
 			// Store the generator before Start so that it'll be closed even if
 			// Start returns an error.
 			ps.gens[i] = gen
-			if err := gen.Start(ps.Ctx(), ps.FlowCtx.Txn); err != nil {
+			if err := gen.Start(ps.Ctx()); err != nil {
 				return nil, nil, err
 			}
 		}

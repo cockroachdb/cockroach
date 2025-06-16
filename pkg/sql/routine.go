@@ -158,7 +158,7 @@ func (p *planner) EvalRoutineExpr(
 	var g routineGenerator
 	g.init(p, expr, args)
 	defer g.Close(ctx)
-	err = g.Start(ctx, p.Txn())
+	err = g.Start(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +246,7 @@ func (g *routineGenerator) ResolvedType() *types.T {
 }
 
 // Start is part of the eval.ValueGenerator interface.
-func (g *routineGenerator) Start(ctx context.Context, _ *kv.Txn) (err error) {
+func (g *routineGenerator) Start(ctx context.Context) (err error) {
 	// Currently, we cannot distribute plans that have RoutineExpr, so we must
 	// disable usage of leaf txns, which means that we're running on the gateway
 	// and are using the root txn (that we can access from the planner).

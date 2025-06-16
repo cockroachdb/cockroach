@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -56,7 +55,7 @@ func (s *spanConfigEventStream) ResolvedType() *types.T {
 }
 
 // Start implements eval.ValueGenerator interface.
-func (s *spanConfigEventStream) Start(ctx context.Context, txn *kv.Txn) error {
+func (s *spanConfigEventStream) Start(ctx context.Context) error {
 	// ValueGenerator API indicates that Start maybe called again if Next returned
 	// false.  However, this generator never terminates without an error,
 	// so this method should be called once.  Be defensive and return an error

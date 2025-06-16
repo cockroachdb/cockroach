@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -115,11 +114,11 @@ var aclexplodeGeneratorType = types.MakeLabeledTuple(
 // aclExplodeGenerator supports the execution of aclexplode.
 type aclexplodeGenerator struct{}
 
-func (aclexplodeGenerator) ResolvedType() *types.T                   { return aclexplodeGeneratorType }
-func (aclexplodeGenerator) Start(_ context.Context, _ *kv.Txn) error { return nil }
-func (aclexplodeGenerator) Close(_ context.Context)                  {}
-func (aclexplodeGenerator) Next(_ context.Context) (bool, error)     { return false, nil }
-func (aclexplodeGenerator) Values() (tree.Datums, error)             { return nil, nil }
+func (aclexplodeGenerator) ResolvedType() *types.T               { return aclexplodeGeneratorType }
+func (aclexplodeGenerator) Start(_ context.Context) error        { return nil }
+func (aclexplodeGenerator) Close(_ context.Context)              {}
+func (aclexplodeGenerator) Next(_ context.Context) (bool, error) { return false, nil }
+func (aclexplodeGenerator) Values() (tree.Datums, error)         { return nil, nil }
 
 // generators is a map from name to slice of Builtins for all built-in
 // generators.
@@ -840,7 +839,7 @@ func (g *gistPlanGenerator) ResolvedType() *types.T {
 	return types.String
 }
 
-func (g *gistPlanGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+func (g *gistPlanGenerator) Start(ctx context.Context) error {
 	rows, err := g.evalCtx.Planner.DecodeGist(ctx, g.gist, g.external)
 	if err != nil {
 		return err
@@ -937,7 +936,7 @@ func (*regexpSplitToTableGenerator) ResolvedType() *types.T { return types.Strin
 func (*regexpSplitToTableGenerator) Close(_ context.Context) {}
 
 // Start implements the eval.ValueGenerator interface.
-func (g *regexpSplitToTableGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (g *regexpSplitToTableGenerator) Start(_ context.Context) error {
 	g.curr = -1
 	return nil
 }
@@ -979,7 +978,7 @@ func (*optionsToTableGenerator) ResolvedType() *types.T {
 func (*optionsToTableGenerator) Close(_ context.Context) {}
 
 // Start implements the eval.ValueGenerator interface.
-func (g *optionsToTableGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (g *optionsToTableGenerator) Start(_ context.Context) error {
 	return nil
 }
 
@@ -1038,7 +1037,7 @@ func (*keywordsValueGenerator) ResolvedType() *types.T { return keywordsValueGen
 func (*keywordsValueGenerator) Close(_ context.Context) {}
 
 // Start implements the eval.ValueGenerator interface.
-func (k *keywordsValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (k *keywordsValueGenerator) Start(_ context.Context) error {
 	k.curKeyword = -1
 	return nil
 }
@@ -1214,7 +1213,7 @@ func (s *seriesValueGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (s *seriesValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (s *seriesValueGenerator) Start(_ context.Context) error {
 	s.nextOK = true
 	s.start = s.origStart
 	s.value = s.origStart
@@ -1266,7 +1265,7 @@ func (s *multipleArrayValueGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (s *multipleArrayValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (s *multipleArrayValueGenerator) Start(_ context.Context) error {
 	s.datums = make(tree.Datums, len(s.arrays))
 	s.nextIndex = -1
 	return nil
@@ -1355,7 +1354,7 @@ func (w *WorkloadIndexRecsGenerator) ResolvedType() *types.T {
 	return WorkloadIndexRecsGeneratorType
 }
 
-func (w *WorkloadIndexRecsGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+func (w *WorkloadIndexRecsGenerator) Start(ctx context.Context) error {
 	w.idx = -1
 	return nil
 }
@@ -1406,7 +1405,7 @@ func (s *arrayValueGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (s *arrayValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (s *arrayValueGenerator) Start(_ context.Context) error {
 	s.nextIndex = -1
 	return nil
 }
@@ -1455,7 +1454,7 @@ func (s *expandArrayValueGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (s *expandArrayValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (s *expandArrayValueGenerator) Start(_ context.Context) error {
 	s.avg.nextIndex = -1
 	return nil
 }
@@ -1522,7 +1521,7 @@ func (s *subscriptsValueGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (s *subscriptsValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (s *subscriptsValueGenerator) Start(_ context.Context) error {
 	if s.reverse {
 		s.avg.nextIndex = s.avg.array.Len()
 	} else {
@@ -1589,7 +1588,7 @@ func makeUnaryGenerator(
 func (*unaryValueGenerator) ResolvedType() *types.T { return unaryValueGeneratorType }
 
 // Start implements the eval.ValueGenerator interface.
-func (s *unaryValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (s *unaryValueGenerator) Start(_ context.Context) error {
 	s.done = false
 	return nil
 }
@@ -1692,7 +1691,7 @@ func (g *jsonArrayGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (g *jsonArrayGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (g *jsonArrayGenerator) Start(_ context.Context) error {
 	g.nextIndex = -1
 	g.json.JSON = g.json.JSON.MaybeDecode()
 	g.buf[0] = nil
@@ -1766,7 +1765,7 @@ func (g *jsonPathQueryGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (g *jsonPathQueryGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (g *jsonPathQueryGenerator) Start(_ context.Context) error {
 	jsonb, err := jsonpath.JsonpathQuery(g.target, g.path, g.vars, g.silent)
 	if err != nil {
 		return err
@@ -1824,7 +1823,7 @@ func (g *jsonObjectKeysGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (g *jsonObjectKeysGenerator) Start(_ context.Context, _ *kv.Txn) error { return nil }
+func (g *jsonObjectKeysGenerator) Start(_ context.Context) error { return nil }
 
 // Close implements the eval.ValueGenerator interface.
 func (g *jsonObjectKeysGenerator) Close(_ context.Context) {}
@@ -1927,7 +1926,7 @@ func (g *jsonEachGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (g *jsonEachGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (g *jsonEachGenerator) Start(_ context.Context) error {
 	iter, err := g.target.ObjectIter()
 	if err != nil {
 		return err
@@ -2083,7 +2082,7 @@ func (j jsonPopulateRecordGenerator) ResolvedType() *types.T {
 }
 
 // Start is part of the eval.ValueGenerator interface.
-func (j *jsonPopulateRecordGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+func (j *jsonPopulateRecordGenerator) Start(ctx context.Context) error {
 	j.ctx = ctx
 	return nil
 }
@@ -2146,7 +2145,7 @@ type jsonPopulateRecordSetGenerator struct {
 func (j jsonPopulateRecordSetGenerator) ResolvedType() *types.T { return j.input.ResolvedType() }
 
 // Start is part of the eval.ValueGenerator interface.
-func (j jsonPopulateRecordSetGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+func (j jsonPopulateRecordSetGenerator) Start(ctx context.Context) error {
 	j.ctx = ctx
 	return nil
 }
@@ -2220,7 +2219,7 @@ func (j jsonRecordGenerator) ResolvedType() *types.T {
 	return types.AnyTuple
 }
 
-func (j *jsonRecordGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+func (j *jsonRecordGenerator) Start(ctx context.Context) error {
 	j.values = make(tree.Datums, len(j.types))
 	if j.target.Type() != json.ObjectJSONType {
 		return pgerror.Newf(pgcode.InvalidParameterValue,
@@ -2282,7 +2281,7 @@ func makeJSONRecordSetGenerator(
 	}, nil
 }
 
-func (j *jsonRecordSetGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+func (j *jsonRecordSetGenerator) Start(ctx context.Context) error {
 	j.values = make(tree.Datums, len(j.types))
 	if j.arr.Type() != json.ArrayJSONType {
 		return pgerror.Newf(pgcode.InvalidParameterValue,
@@ -2412,7 +2411,7 @@ func (*checkConsistencyGenerator) ResolvedType() *types.T {
 }
 
 // Start is part of the eval.ValueGenerator interface.
-func (c *checkConsistencyGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+func (c *checkConsistencyGenerator) Start(ctx context.Context) error {
 	for c.rangeDescIterator.Valid() {
 		desc := c.rangeDescIterator.CurRangeDescriptor()
 		if len(desc.StartKey) == 0 {
@@ -2546,7 +2545,7 @@ func newSpanKeyIterator(evalCtx *eval.Context, span roachpb.Span) *spanKeyIterat
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (sp *spanKeyIterator) Start(ctx context.Context, _ *kv.Txn) error {
+func (sp *spanKeyIterator) Start(ctx context.Context) error {
 	sp.acc = sp.planner.Mon().MakeBoundAccount()
 	if err := sp.acc.Grow(ctx, spanKeyIteratorChunkBytes); err != nil {
 		return err
@@ -2648,7 +2647,7 @@ func (rk *rangeKeyIterator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (rk *rangeKeyIterator) Start(ctx context.Context, _ *kv.Txn) (err error) {
+func (rk *rangeKeyIterator) Start(ctx context.Context) (err error) {
 	// Scan the range meta K/V's to find the target range. We do this in a
 	// chunk-wise fashion to avoid loading all ranges into memory.
 	rangeDesc, err := rk.planner.GetRangeDescByID(ctx, rk.rangeID)
@@ -2656,7 +2655,7 @@ func (rk *rangeKeyIterator) Start(ctx context.Context, _ *kv.Txn) (err error) {
 		return err
 	}
 	rk.span = rangeDesc.KeySpan().AsRawSpanWithNoLocals()
-	return rk.spanKeyIterator.Start(ctx, nil /* txn */)
+	return rk.spanKeyIterator.Start(ctx)
 }
 
 // Values implements the eval.ValueGenerator interface.
@@ -2713,7 +2712,7 @@ func (p *payloadsForSpanGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (p *payloadsForSpanGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (p *payloadsForSpanGenerator) Start(_ context.Context) error {
 	// The user of the generator first calls Next(), then Values(), so the index
 	// managing the iterator's position needs to start at -1 instead of 0.
 	p.payloadIndex = -1
@@ -2805,7 +2804,7 @@ func (p *payloadsForTraceGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (p *payloadsForTraceGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+func (p *payloadsForTraceGenerator) Start(ctx context.Context) error {
 	const query = `WITH spans AS(
 									SELECT span_id
   	 							FROM crdb_internal.node_inflight_trace_spans
@@ -2891,7 +2890,7 @@ func (s *showCreateAllSchemasGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (s *showCreateAllSchemasGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+func (s *showCreateAllSchemasGenerator) Start(ctx context.Context) error {
 	ids, err := getSchemaIDs(ctx, s.evalPlanner, s.dbName, &s.acc)
 	if err != nil {
 		return err
@@ -2971,7 +2970,7 @@ func (s *showCreateAllTablesGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (s *showCreateAllTablesGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+func (s *showCreateAllTablesGenerator) Start(ctx context.Context) error {
 	// Note: All the table ids are accumulated in ram before the generator
 	// starts generating values.
 	// This is reasonable under the assumption that:
@@ -3120,7 +3119,7 @@ func (s *showCreateAllTriggersGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (s *showCreateAllTriggersGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+func (s *showCreateAllTriggersGenerator) Start(ctx context.Context) error {
 	ids, err := getTriggerIds(ctx, s.evalPlanner, s.dbName, &s.acc)
 	if err != nil {
 		return err
@@ -3190,7 +3189,7 @@ func (s *showCreateAllTypesGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (s *showCreateAllTypesGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+func (s *showCreateAllTypesGenerator) Start(ctx context.Context) error {
 	ids, err := getTypeIDs(ctx, s.evalPlanner, s.dbName, &s.acc)
 	if err != nil {
 		return err
@@ -3266,7 +3265,7 @@ func (s *showCreateAllRoutinesGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (s *showCreateAllRoutinesGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+func (s *showCreateAllRoutinesGenerator) Start(ctx context.Context) error {
 	functionIds, procedureIds, err := getRoutineCreateStatementIds(ctx, s.evalPlanner, s.dbName, &s.acc)
 	if err != nil {
 		return err
@@ -3353,7 +3352,7 @@ func (s *identGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (s *identGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+func (s *identGenerator) Start(ctx context.Context) error {
 	return nil
 }
 
@@ -3448,7 +3447,7 @@ func newTableSpanStatsIterator(
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (tssi *tableSpanStatsIterator) Start(ctx context.Context, _ *kv.Txn) error {
+func (tssi *tableSpanStatsIterator) Start(ctx context.Context) error {
 	var err error = nil
 	tssi.it, err = tssi.p.GetDetailsForSpanStats(ctx, tssi.argDbId, tssi.argTableId)
 	return err
@@ -3594,7 +3593,7 @@ func newTableMetricsIterator(
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (tmi *tableMetricsIterator) Start(ctx context.Context, _ *kv.Txn) error {
+func (tmi *tableMetricsIterator) Start(ctx context.Context) error {
 	var err error
 	tmi.metrics, err = tmi.evalCtx.GetTableMetrics(ctx, tmi.nodeID, tmi.storeID, tmi.start, tmi.end)
 	if err != nil {
@@ -3708,7 +3707,7 @@ func newStorageInternalKeysGenerator(
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (s *storageInternalKeysIterator) Start(ctx context.Context, _ *kv.Txn) error {
+func (s *storageInternalKeysIterator) Start(ctx context.Context) error {
 	var err error
 	s.metrics, err = s.evalCtx.ScanStorageInternalKeys(ctx, s.nodeID, s.storeID, s.start, s.end, s.megabytesPerSecond)
 	if err != nil {
@@ -3845,7 +3844,7 @@ func (s *spanStatsValueGenerator) ResolvedType() *types.T {
 	return spanStatsGeneratorType
 }
 
-func (s *spanStatsValueGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+func (s *spanStatsValueGenerator) Start(ctx context.Context) error {
 	res, err := s.p.SpanStats(ctx, s.spans)
 	s.res = res
 	return err
@@ -4021,7 +4020,7 @@ func newInternallyExecutedQueryIterator(
 var ExecuteQueryViaJobExecContext func(*eval.Context, context.Context, redact.RedactableString, sessiondata.InternalExecutorOverride, string, ...interface{}) (eval.InternalRows, error)
 
 // Start implements the eval.ValueGenerator interface.
-func (qi *internallyExecutedQueryIterator) Start(ctx context.Context, _ *kv.Txn) error {
+func (qi *internallyExecutedQueryIterator) Start(ctx context.Context) error {
 	var opName redact.RedactableString = "internally-executed-query-builtin"
 	var ieo sessiondata.InternalExecutorOverride
 	// Always use the session's user, even in "jobs-like" mode.

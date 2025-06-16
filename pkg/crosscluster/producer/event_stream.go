@@ -95,7 +95,7 @@ func (s *eventStream) ResolvedType() *types.T {
 }
 
 // Start implements eval.ValueGenerator interface.
-func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
+func (s *eventStream) Start(ctx context.Context) (retErr error) {
 	// ValueGenerator API indicates that Start maybe called again if Next returned
 	// false.  However, this generator never terminates without an error,
 	// so this method should be called once.  Be defensive and return an error

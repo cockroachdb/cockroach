@@ -8,7 +8,6 @@ package eval
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -84,10 +83,7 @@ type ValueGenerator interface {
 	// Start initializes the generator. Must be called once before
 	// Next() and Values(). It can be called again to restart
 	// the generator after Next() has returned false.
-	//
-	// txn represents the txn that the generator will run inside of. The generator
-	// is expected to hold on to this txn and use it in Next() calls.
-	Start(ctx context.Context, txn *kv.Txn) error
+	Start(ctx context.Context) error
 
 	// Next determines whether there is a row of data available.
 	Next(context.Context) (bool, error)
@@ -136,7 +132,7 @@ func (c *CallbackValueGenerator) ResolvedType() *types.T {
 }
 
 // Start is part of the ValueGenerator interface.
-func (c *CallbackValueGenerator) Start(context.Context, *kv.Txn) error {
+func (c *CallbackValueGenerator) Start(context.Context) error {
 	return nil
 }
 
