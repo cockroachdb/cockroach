@@ -310,11 +310,12 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			))
 
 			ts := hlc.Timestamp{WallTime: 100}
+			bulkMetrics := bulk.MakeBulkMetrics(base.DefaultHistogramWindowInterval())
 			mem := mon.NewUnlimitedMonitor(ctx, mon.Options{Name: mon.MakeName("lots")})
 			reqs := limit.MakeConcurrentRequestLimiter("reqs", 1000)
 			b, err := bulk.MakeBulkAdder(
 				ctx, kvDB, mockCache, s.ClusterSettings(), ts,
-				kvserverbase.BulkAdderOptions{MaxBufferSize: batchSize}, mem, reqs,
+				kvserverbase.BulkAdderOptions{MaxBufferSize: batchSize}, mem, reqs, &bulkMetrics,
 			)
 			require.NoError(t, err)
 
