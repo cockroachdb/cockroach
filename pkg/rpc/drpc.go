@@ -12,8 +12,11 @@ import (
 	"net"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"storj.io/drpc"
 	"storj.io/drpc/drpcconn"
@@ -28,6 +31,14 @@ import (
 
 // Default idle connection timeout for DRPC connections in the pool.
 var defaultDRPCConnIdleTimeout = 5 * time.Minute
+
+type drpcCloseNotifier struct {
+	conn drpc.Conn
+}
+
+func (d *drpcCloseNotifier) CloseNotify(ctx context.Context) <-chan struct{} {
+	return d.conn.Closed()
+}
 
 func dialDRPC(
 	rpcCtx *Context,
@@ -173,4 +184,83 @@ func (srv *drpcOffServer) Serve(_ context.Context, lis net.Listener) error {
 // when DRPC is disabled.
 func (srv *drpcOffServer) Register(interface{}, drpc.Description) error {
 	return nil
+}
+
+// newDRPDCPeerOptions creates peerOptions for DRPC peers.
+func newDRPCPeerOptions(
+	rpcCtx *Context, k peerKey, locality roachpb.Locality,
+) *peerOptions[drpc.Conn] {
+	pm, _ := rpcCtx.metrics.acquire(k, locality)
+	return &peerOptions[drpc.Conn]{
+		locality: locality,
+		peers:    &rpcCtx.drpcPeers,
+		connOptions: &ConnectionOptions[drpc.Conn]{
+			dial: func(ctx context.Context, target string, _ rpcbase.ConnectionClass) (drpc.Conn, error) {
+				// TODO(server): could use connection class instead of empty key here.
+				pool := drpcpool.New[struct{}, drpcpool.Conn](drpcpool.Options{
+					Expiration: defaultDRPCConnIdleTimeout,
+				})
+				pooledConn := pool.Get(ctx /* unused */, struct{}{}, func(ctx context.Context,
+					_ struct{}) (drpcpool.Conn, error) {
+
+					netConn, err := drpcmigrate.DialWithHeader(ctx, "tcp", target, drpcmigrate.DRPCHeader)
+					if err != nil {
+						return nil, err
+					}
+
+					opts := drpcconn.Options{
+						Manager: drpcmanager.Options{
+							Reader: drpcwire.ReaderOptions{
+								MaximumBufferSize: math.MaxInt,
+							},
+							Stream: drpcstream.Options{
+								MaximumBufferSize: 0, // unlimited
+							},
+							SoftCancel: true, // don't close the transport when stream context is canceled
+						},
+					}
+					var conn *drpcconn.Conn
+					if rpcCtx.ContextOptions.Insecure {
+						conn = drpcconn.NewWithOptions(netConn, opts)
+					} else {
+						tlsConfig, err := rpcCtx.GetClientTLSConfig()
+						if err != nil {
+							return nil, err
+						}
+						// Clone TLS config to avoid modifying a cached TLS config.
+						tlsConfig = tlsConfig.Clone()
+						// TODO(server): remove this hack which is necessary at least in
+						// testing to get TestDRPCSelectQuery to pass.
+						tlsConfig.InsecureSkipVerify = true
+						tlsConn := tls.Client(netConn, tlsConfig)
+						conn = drpcconn.NewWithOptions(tlsConn, opts)
+					}
+
+					return conn, nil
+				})
+				// `pooledConn.Close` doesn't tear down any of the underlying TCP
+				// connections but simply marks the pooledConn handle as returning
+				// errors. When we "close" this conn, we want to tear down all of
+				// the connections in the pool (in effect mirroring the behavior of
+				// gRPC where a single conn is shared).
+				return &closeEntirePoolConn{
+					Conn: pooledConn,
+					pool: pool,
+				}, nil
+			},
+			connEquals: func(a, b drpc.Conn) bool {
+				return a == b
+			},
+			newBatchStreamClient: func(ctx context.Context, cc drpc.Conn) (BatchStreamClient, error) {
+				return kvpb.NewDRPCInternalClientAdapter(cc).BatchStream(ctx)
+			},
+			newCloseNotifier: func(_ *stop.Stopper, cc drpc.Conn) closeNotifier {
+				return &drpcCloseNotifier{conn: cc}
+			},
+		},
+		newHeartbeatClient: func(cc drpc.Conn) RPCHeartbeatClient {
+			return NewDRPCHeartbeatClientAdapter(cc)
+		},
+		pm: pm,
+	}
 }
