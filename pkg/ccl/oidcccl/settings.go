@@ -39,6 +39,9 @@ const (
 	OIDCGenerateClusterSSOTokenSQLPortSettingName  = baseOIDCSettingName + "generate_cluster_sso_token.sql_port"
 	oidcAuthClientTimeoutSettingName               = baseOIDCSettingName + "client.timeout"
 	oidcProviderCustomCASettingName                = baseOIDCSettingName + "provider.custom_ca"
+	OIDCAuthZEnabledSettingName                    = baseOIDCSettingName + "authorization.enabled"
+	OIDCAuthGroupClaimSettingName                  = baseOIDCSettingName + "group_claim"
+	OIDCAuthUserinfoGroupKeySettingName            = baseOIDCSettingName + "userinfo_group_key"
 )
 
 // OIDCEnabled enables or disabled OIDC login for the DB Console.
@@ -81,6 +84,37 @@ var OIDCAuthClientTimeout = settings.RegisterDurationSetting(
 	"sets the client timeout for external calls made during OIDC authentication "+
 		"(e.g. authorization code flow, etc.)",
 	15*time.Second,
+	settings.WithPublic,
+)
+
+// OIDCAuthZEnabled enables authorization for OIDC SSO.
+var OIDCAuthZEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	OIDCAuthZEnabledSettingName, // "server.oidc_authentication.authorization.enabled"
+	"enables role synchronization based on group claims in OIDC tokens",
+	false,
+	settings.WithReportable(true),
+	settings.WithPublic)
+
+// OIDCAuthGroupClaim is the name of the OIDC claim that contains the groups
+var OIDCAuthGroupClaim = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	OIDCAuthGroupClaimSettingName, // "server.oidc_authentication.group_claim"
+	"sets the name of the OIDC claim that contains groups used for role mapping",
+	"groups",
+	settings.WithReportable(true),
+	settings.WithPublic)
+
+// OIDCAuthUserinfoGroupKey is the name of the field in the userinfo response
+// which contains the groups
+// This is an optional fallback for when access_tokens that don't contain a
+// groups claim are used during OIDC auth.
+var OIDCAuthUserinfoGroupKey = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	OIDCAuthUserinfoGroupKeySettingName, // "server.oidc_authentication.userinfo_group_key"
+	"sets the field name to look for in userinfo JSON that lists groups when groups claim is absent from OIDC token",
+	"groups",
+	settings.WithReportable(true),
 	settings.WithPublic,
 )
 
