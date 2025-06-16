@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"sort"
@@ -18,6 +19,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -156,6 +159,59 @@ func TestHealthV2(t *testing.T) {
 	require.NoError(t, resp.Body.Close())
 }
 
+func TestRestartSafetyV2(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	ctx := context.Background()
+	defer testCluster.Stopper().Stop(ctx)
+
+	require.NoError(t, testCluster.WaitForFullReplication())
+
+	ts1 := testCluster.Server(0)
+
+	client, err := ts1.GetAdminHTTPClient()
+	require.NoError(t, err)
+
+	urlStr := ts1.AdminURL().WithPath(apiconstants.APIV2Path + "health/restart_safety/").String()
+	req, err := http.NewRequest("GET", urlStr, nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.Equal(
+		t,
+		http.StatusServiceUnavailable,
+		resp.StatusCode,
+		"expected service unavailable when node is not draining: %s", string(bodyBytes),
+	)
+
+	// Check if an unmarshal into the RestartSafetyResponse struct works.
+	var response RestartSafetyResponse
+	require.NoError(t, json.Unmarshal(bodyBytes, &response))
+
+	// Drain the node; then we'll expect success.
+	require.NoError(t, drain(ctx, ts1, t))
+
+	req, err = http.NewRequest("GET", urlStr, nil)
+	require.NoError(t, err)
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	bodyBytes, err = io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+
+	require.Equal(t, 200, resp.StatusCode, "expected 200: %s", string(bodyBytes))
+	require.NoError(t, json.Unmarshal(bodyBytes, &response))
+}
+
 // TestRulesV2 tests the /api/v2/rules endpoint to ensure it
 // returns valid YAML.
 func TestRulesV2(t *testing.T) {
@@ -274,4 +330,242 @@ func TestAuthV2(t *testing.T) {
 
 	})
 
+}
+
+func TestCheckRestartSafe_Criticality(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(ctx)
+
+	ts1 := testCluster.Server(0)
+
+	res, err := checkRestartSafe(ctx, ts1.NodeID(), ts1.NodeLiveness().(livenesspb.NodeVitalityInterface), ts1.GetStores().(storeVisitor), 3, false)
+	require.NoError(t, err)
+	require.False(t, res.IsRestartSafe)
+
+	// Since we haven't drained, there will be some raft leaders, and others that are simple StoreNotDraining
+	for _, rs := range res.Replicas {
+		switch rs.Status {
+		case "IsRaftLeader":
+		case "StoreNotDraining":
+		default:
+			require.Fail(t, "unexpected status: %v", rs)
+		}
+	}
+
+	err = drain(ctx, ts1, t)
+	require.NoError(t, err)
+
+	res, err = checkRestartSafe(ctx, ts1.NodeID(), ts1.NodeLiveness().(livenesspb.NodeVitalityInterface), ts1.GetStores().(storeVisitor), 3, false)
+	// Now that we've drained, we're ok to restart
+	require.NoError(t, err)
+	require.True(t, res.IsRestartSafe)
+}
+
+func TestCheckRestartSafe_RangeStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var err error
+
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(ctx)
+
+	ts0 := testCluster.Server(0)
+	vitality := livenesspb.TestCreateNodeVitality(testCluster.NodeIDs()...)
+
+	ts1nodeID := testCluster.Server(1).NodeID()
+	vitality.DownNode(ts1nodeID)
+
+	err = drain(ctx, ts0, t)
+	require.NoError(t, err)
+	vitality.Draining(ts0.NodeID(), true)
+
+	require.True(t, vitality.GetNodeVitalityFromCache(ts0.NodeID()).IsDraining())
+	require.False(t, vitality.GetNodeVitalityFromCache(ts1nodeID).IsLive(livenesspb.Metrics))
+
+	res, err := checkRestartSafe(ctx, ts0.NodeID(), vitality, ts0.GetStores().(storeVisitor), 3, false)
+	require.NoError(t, err)
+	require.False(t, res.IsRestartSafe, "expected unsafe since a different node is down")
+
+	foundRange := false
+	for _, rs := range res.Replicas {
+		if rs.Status == "Underreplicated" {
+			foundRange = true
+		}
+	}
+	require.True(t, foundRange)
+}
+
+func updateAllReplicaCounts(
+	t *testing.T, testCluster serverutils.TestClusterInterface, desiredVoters int,
+) {
+	_, err := testCluster.ServerConn(0).Exec("ALTER RANGE default CONFIGURE ZONE USING num_replicas=$1", desiredVoters)
+	require.NoError(t, err)
+	require.NoError(t, testCluster.WaitForFullReplication())
+
+	ts0 := testCluster.Server(0)
+	stores := ts0.GetStores().(storeVisitor)
+	_ = stores.VisitStores(func(store *kvserver.Store) error {
+		store.VisitReplicas(func(repl *kvserver.Replica) bool {
+			testutils.SucceedsSoon(t, func() error {
+				desc := repl.Desc()
+				// Check if the range has the desired number of voting replicas.
+				votersCount := len(desc.Replicas().VoterDescriptors())
+				if votersCount == desiredVoters {
+					return nil
+				}
+
+				return fmt.Errorf("waiting for range %d to have %d voters (current: %d)", repl.RangeID, desiredVoters, votersCount)
+			})
+			return true
+		})
+		return nil
+	})
+}
+
+func TestCheckRestartSafe_AllowMinimumQuorum_Pass(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var err error
+
+	testCluster := serverutils.StartCluster(t, 5, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(ctx)
+
+	// need to set RF=5 on all the ranges
+	updateAllReplicaCounts(t, testCluster, 5)
+
+	ts0 := testCluster.Server(0)
+	vitality := livenesspb.TestCreateNodeVitality(testCluster.NodeIDs()...)
+	stores := ts0.GetStores().(storeVisitor)
+
+	err = drain(ctx, ts0, t)
+	require.NoError(t, err)
+
+	vitality.Draining(ts0.NodeID(), true)
+	res, err := checkRestartSafe(ctx, ts0.NodeID(), vitality, stores, testCluster.NumServers(), false)
+	require.NoError(t, err)
+	replStr := ""
+	for _, rs := range res.Replicas {
+		replStr += fmt.Sprintf("%d: %s\n", rs.RangeID, rs.Status)
+	}
+	require.True(t, res.IsRestartSafe, "expected safe; initial conditions \n%s", replStr)
+
+	ts1nodeID := testCluster.Server(1).NodeID()
+	vitality.DownNode(ts1nodeID)
+
+	require.True(t, vitality.GetNodeVitalityFromCache(ts0.NodeID()).IsDraining())
+	require.False(t, vitality.GetNodeVitalityFromCache(ts1nodeID).IsLive(livenesspb.Metrics))
+
+	res, err = checkRestartSafe(ctx, ts0.NodeID(), vitality, stores, testCluster.NumServers(), true)
+	require.NoError(t, err)
+	replStr = ""
+	for _, rs := range res.Replicas {
+		replStr += fmt.Sprintf("%d: %s\n", rs.RangeID, rs.Status)
+	}
+
+	require.True(t, res.IsRestartSafe, "expected safe since only one other node is down: \n%s", replStr)
+	require.Empty(t, res.Replicas)
+}
+
+func TestCheckRestartSafe_AllowMinimumQuorum_Fail(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var err error
+
+	testCluster := serverutils.StartCluster(t, 5, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(ctx)
+
+	// need to set RF=5 on all the ranges
+	updateAllReplicaCounts(t, testCluster, 5)
+
+	ts0 := testCluster.Server(0)
+	vitality := livenesspb.TestCreateNodeVitality(testCluster.NodeIDs()...)
+
+	vitality.DownNode(testCluster.Server(1).NodeID())
+	vitality.DownNode(testCluster.Server(2).NodeID())
+
+	err = drain(ctx, ts0, t)
+	require.NoError(t, err)
+	vitality.Draining(ts0.NodeID(), true)
+
+	res, err := checkRestartSafe(ctx, ts0.NodeID(), vitality, ts0.GetStores().(storeVisitor), testCluster.NumServers(), true)
+	require.NoError(t, err)
+	require.False(t, res.IsRestartSafe, "expected unsafe since 2/5 other nodes are down")
+	require.NotEmpty(t, res.Replicas)
+}
+
+func TestCheckRestartSafe_Integration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var err error
+
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(ctx)
+
+	ts0 := testCluster.Server(0)
+	vitality := ts0.NodeLiveness().(livenesspb.NodeVitalityInterface)
+
+	ts1nodeID := testCluster.Server(1).NodeID()
+	testCluster.StopServer(1)
+
+	testutils.SucceedsSoon(t, func() error {
+		if vitality.GetNodeVitalityFromCache(ts1nodeID).IsLive(livenesspb.Metrics) {
+			return fmt.Errorf("node is live")
+		}
+		return nil
+	})
+
+	err = drain(ctx, ts0, t)
+	require.NoError(t, err)
+
+	res, err := checkRestartSafe(ctx, ts0.NodeID(), vitality, ts0.GetStores().(storeVisitor), 3, false)
+	require.NoError(t, err)
+	require.False(t, res.IsRestartSafe, "expected unsafe since a different node is down")
+
+	foundRange := false
+	for _, rs := range res.Replicas {
+		if rs.Status == "Underreplicated" {
+			foundRange = true
+		}
+	}
+
+	require.True(t, foundRange)
+}
+
+func drain(ctx context.Context, ts1 serverutils.TestServerInterface, t *testing.T) error {
+	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	err := ts1.DrainClients(ctx)
+	require.NoError(t, err)
+
+	for timeoutCtx.Err() == nil {
+		drainStream, err := ts1.GetAdminClient(t).Drain(timeoutCtx, &serverpb.DrainRequest{
+			Shutdown: false,
+			DoDrain:  true,
+			NodeId:   ts1.NodeID().String(),
+			Verbose:  false,
+		})
+		require.NoError(t, err)
+		drainRes, err := drainStream.Recv()
+		require.NoError(t, err)
+		require.True(t, drainRes.IsDraining)
+		if drainRes.DrainRemainingIndicator == 0 {
+			break
+		}
+	}
+
+	return timeoutCtx.Err()
 }
