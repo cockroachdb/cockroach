@@ -44,6 +44,15 @@ type PartitionToSearch struct {
 	Count int
 }
 
+// PartitionMetadataToGet contains information about partition metadata to be
+// fetched by the TryGetPartitionMetadata method.
+type PartitionMetadataToGet struct {
+	// Key specifies which partition's metadata to fetch and is set by the caller.
+	Key PartitionKey
+	// Metadata is the metadata for the partition and is set by the Store.
+	Metadata PartitionMetadata
+}
+
 // Store encapsulates the component that's actually storing the vectors, whether
 // that's in a CRDB cluster for production or in memory for testing and
 // benchmarking. Callers can use Store to start and commit transactions against
@@ -92,13 +101,14 @@ type Store interface {
 		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey,
 	) (*Partition, error)
 
-	// TryGetPartitionMetadata returns just the metadata of the requested
-	// partition, if it exists, else it returns ErrPartitionNotFound. This is
-	// more efficient than loading the entire partition when only metadata is
-	// needed.
+	// TryGetPartitionMetadata returns the metadata of the requested partitions.
+	// If a partition does not exist, its state is set to Missing.
+	//
+	// NOTE: The caller owns the "toGet" memory. The Store implementation should
+	// not try to use it after returning.
 	TryGetPartitionMetadata(
-		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey,
-	) (PartitionMetadata, error)
+		ctx context.Context, treeKey TreeKey, toGet []PartitionMetadataToGet,
+	) error
 
 	// TryUpdatePartitionMetadata updates the partition's metadata only if it's
 	// equal to the expected value, else it returns a ConditionFailedError. If

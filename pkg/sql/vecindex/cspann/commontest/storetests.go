@@ -72,10 +72,11 @@ type MakeStoreFunc func(quantizer quantize.Quantizer) TestStore
 type StoreTestSuite struct {
 	suite.Suite
 
-	ctx           context.Context
-	makeStore     MakeStoreFunc
-	rootQuantizer quantize.Quantizer
-	quantizer     quantize.Quantizer
+	ctx              context.Context
+	makeStore        MakeStoreFunc
+	rootQuantizer    quantize.Quantizer
+	quantizer        quantize.Quantizer
+	nextPartitionKey cspann.PartitionKey
 }
 
 // NewStoreTestSuite constructs a new suite of tests that run against
@@ -84,10 +85,12 @@ type StoreTestSuite struct {
 // tests.
 func NewStoreTestSuite(ctx context.Context, makeStore MakeStoreFunc) *StoreTestSuite {
 	return &StoreTestSuite{
-		ctx:           ctx,
-		makeStore:     makeStore,
-		rootQuantizer: quantize.NewUnQuantizer(2, vecpb.L2SquaredDistance),
-		quantizer:     quantize.NewRaBitQuantizer(2, 42, vecpb.L2SquaredDistance)}
+		ctx:              ctx,
+		makeStore:        makeStore,
+		rootQuantizer:    quantize.NewUnQuantizer(2, vecpb.L2SquaredDistance),
+		quantizer:        quantize.NewRaBitQuantizer(2, 42, vecpb.L2SquaredDistance),
+		nextPartitionKey: cspann.RootKey + 1,
+	}
 }
 
 func (suite *StoreTestSuite) TestRunTransaction() {
@@ -696,31 +699,38 @@ func (suite *StoreTestSuite) TestTryGetPartitionMetadata() {
 
 	doTest := func(treeID int) {
 		treeKey := store.MakeTreeKey(suite.T(), treeID)
-		partitionKey := cspann.PartitionKey(10)
 
-		// Partition does not yet exist.
-		_, err := store.TryGetPartitionMetadata(suite.ctx, treeKey, partitionKey)
-		suite.ErrorIs(err, cspann.ErrPartitionNotFound)
+		// Create two partition with vectors in them.
+		partitionKey1, partition1 := suite.createTestPartition(store, treeKey)
+		partitionKey2, partition2 := suite.createTestPartition(store, treeKey)
 
-		// Create partition with some vectors in it.
-		partitionKey, partition := suite.createTestPartition(store, treeKey)
-
-		// Fetch back only the metadata and validate it.
-		partitionMetadata, err := store.TryGetPartitionMetadata(suite.ctx, treeKey, partitionKey)
+		// Fetch metadata for the partitions, along with one that doesn't exist.
+		toGet := []cspann.PartitionMetadataToGet{
+			{Key: partitionKey1},
+			{Key: cspann.PartitionKey(9999)},
+			{Key: partitionKey2},
+		}
+		err := store.TryGetPartitionMetadata(suite.ctx, treeKey, toGet)
 		suite.NoError(err)
-		suite.True(partitionMetadata.Equal(partition.Metadata()))
+
+		// Validate that partition 9999 does not exist.
+		suite.Equal(cspann.PartitionMetadata{}, toGet[1].Metadata)
+
+		// Validate metadata for other partitions.
+		suite.True(partition1.Metadata().Equal(&toGet[0].Metadata))
+		suite.True(partition2.Metadata().Equal(&toGet[2].Metadata))
 
 		// Update the metadata and verify we get the updated values.
-		expected := *partition.Metadata()
+		expected := toGet[0].Metadata
 		metadata := expected
 		metadata.StateDetails.MakeUpdating(30)
 		suite.NoError(store.TryUpdatePartitionMetadata(
-			suite.ctx, treeKey, partitionKey, metadata, expected))
+			suite.ctx, treeKey, partitionKey1, metadata, expected))
 
 		// Fetch updated metadata and validate.
-		partitionMetadata, err = store.TryGetPartitionMetadata(suite.ctx, treeKey, partitionKey)
+		err = store.TryGetPartitionMetadata(suite.ctx, treeKey, toGet[:1])
 		suite.NoError(err)
-		suite.True(partitionMetadata.Equal(&metadata))
+		suite.True(toGet[0].Metadata.Equal(&metadata))
 	}
 
 	suite.Run("default tree", func() {
@@ -1039,7 +1049,8 @@ func (suite *StoreTestSuite) TestTryClearPartition() {
 func (suite *StoreTestSuite) createTestPartition(
 	store TestStore, treeKey cspann.TreeKey,
 ) (cspann.PartitionKey, *cspann.Partition) {
-	partitionKey := cspann.PartitionKey(10)
+	partitionKey := suite.nextPartitionKey
+	suite.nextPartitionKey++
 	metadata := cspann.MakeReadyPartitionMetadata(cspann.SecondLevel, vector.T{4, 3})
 	suite.NoError(store.TryCreateEmptyPartition(suite.ctx, treeKey, partitionKey, metadata))
 	vectors := vector.MakeSet(2)
