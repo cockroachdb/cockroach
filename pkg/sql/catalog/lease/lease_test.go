@@ -94,6 +94,11 @@ type leaseTest struct {
 }
 
 func init() {
+	// Disable create table with schema_locked for this entire package.
+	sql.TestForceDisableCreateTableWithSchemaLocked()
+}
+
+func init() {
 	lease.MoveTablePrimaryIndexIDtoTarget = func(
 		ctx context.Context, t *testing.T, s serverutils.ApplicationLayerInterface, id descpb.ID, indexID descpb.IndexID,
 	) {

@@ -32,6 +32,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func init() {
+	// Disable create table with schema_locked for this entire package.
+	sql.TestForceDisableCreateTableWithSchemaLocked()
+}
+
 // TestingWriteResumeSpan writes a checkpoint for the backfill work on origSpan.
 // origSpan is the span of keys that were assigned to be backfilled,
 // resume is the left over work from origSpan.

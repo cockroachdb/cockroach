@@ -754,7 +754,20 @@ var CreateTableWithSchemaLocked = settings.RegisterBoolSetting(
 	"default value for create_table_with_schema_locked; "+
 		"default value for the create_table_with_schema_locked session setting; controls "+
 		"if new created tables will have schema_locked set",
-	false)
+	true)
+
+var createTableWithSchemaLockedForceDisable = false
+
+func TestForceDisableCreateTableWithSchemaLocked() {
+	createTableWithSchemaLockedForceDisable = true
+}
+
+func CreateTableWithSchemaLockedWithTestOverride(setting bool) bool {
+	if createTableWithSchemaLockedForceDisable {
+		return false
+	}
+	return setting
+}
 
 var errNoTransactionInProgress = pgerror.New(pgcode.NoActiveSQLTransaction, "there is no transaction in progress")
 var errTransactionInProgress = pgerror.New(pgcode.ActiveSQLTransaction, "there is already a transaction in progress")

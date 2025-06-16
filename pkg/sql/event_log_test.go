@@ -707,6 +707,7 @@ func TestPerfLogging(t *testing.T) {
 	defer db.Exec(t, `SET CLUSTER SETTING sql.log.slow_query.latency_threshold = DEFAULT`)
 
 	// Test schema.
+	db.Exec(t, "SET create_table_with_schema_locked=false")
 	db.Exec(t, `CREATE TABLE t (i INT PRIMARY KEY, b BOOL, s STRING)`)
 	db.Exec(t, `CREATE TABLE u (i INT PRIMARY KEY, j INT, s STRING, FAMILY f1 (i, j), FAMILY f2 (s))`)
 	defer db.Exec(t, `DROP TABLE t, u`)

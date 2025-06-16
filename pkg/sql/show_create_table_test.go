@@ -32,6 +32,7 @@ func TestShowCreateTableWithConstraintInvalidated(t *testing.T) {
 	s0 := s.ApplicationLayer()
 
 	tdb := sqlutils.MakeSQLRunner(conn)
+	tdb.Exec(t, "SET create_table_with_schema_locked=false")
 	tdb.Exec(t, `CREATE DATABASE db`)
 	tdb.Exec(t, `USE db`)
 	tdb.Exec(t, `CREATE SCHEMA schema`)

@@ -44,6 +44,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func init() {
+	sql.TestForceDisableCreateTableWithSchemaLocked()
+}
+
 func TestBuildDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
