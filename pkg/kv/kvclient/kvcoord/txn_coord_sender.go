@@ -217,6 +217,10 @@ type txnInterceptor interface {
 	// createSavepointLocked().
 	rollbackToSavepointLocked(context.Context, savepoint)
 
+	// releaseSavepointLocked is called when a savepoint is being
+	// released.
+	releaseSavepointLocked(context.Context, *savepoint)
+
 	// closeLocked closes the interceptor. It is called when the TxnCoordSender
 	// shuts down due to either a txn commit or a txn abort. The method will
 	// be called exactly once from cleanupTxnLocked.

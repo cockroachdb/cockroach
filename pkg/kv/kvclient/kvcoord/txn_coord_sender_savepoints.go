@@ -187,7 +187,15 @@ func (tc *TxnCoordSender) ReleaseSavepoint(ctx context.Context, s kv.SavepointTo
 	}
 
 	sp := s.(*savepoint)
-	return tc.checkSavepointLocked(sp, "release")
+	if err := tc.checkSavepointLocked(sp, "release"); err != nil {
+		return err
+	}
+
+	for _, reqInt := range tc.interceptorStack {
+		reqInt.releaseSavepointLocked(ctx, sp)
+	}
+
+	return nil
 }
 
 // CanUseSavepoint is part of the kv.TxnSender interface.

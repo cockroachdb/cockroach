@@ -78,6 +78,9 @@ func (*txnMetricRecorder) epochBumpedLocked() {}
 // createSavepointLocked is part of the txnInterceptor interface.
 func (*txnMetricRecorder) createSavepointLocked(context.Context, *savepoint) {}
 
+// releaseSavepointLocked is part of the txnInterceptor interface.
+func (*txnMetricRecorder) releaseSavepointLocked(context.Context, *savepoint) {}
+
 // rollbackToSavepointLocked is part of the txnInterceptor interface.
 func (*txnMetricRecorder) rollbackToSavepointLocked(context.Context, savepoint) {}
 
