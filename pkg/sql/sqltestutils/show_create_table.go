@@ -43,7 +43,11 @@ func ShowCreateTableTest(
 		},
 	})
 	defer s.Stopper().Stop(context.Background())
-
+	if _, err := sqlDB.Exec(`
+    SET create_table_with_schema_locked=false;
+`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := sqlDB.Exec(`
     SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;
 `); err != nil {

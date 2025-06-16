@@ -361,8 +361,14 @@ FROM TABLE original_rbr;`)
  crdb_region SET DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region;`)
 	require.NoError(t, err)
 
+	_, err = sqlDB.Exec(`ALTER TABLE destination_fake_rbr SET (schema_locked = false)`)
+	require.NoError(t, err)
+
 	_, err = sqlDB.Exec(`ALTER TABLE destination_fake_rbr SET LOCALITY
  REGIONAL BY ROW AS crdb_region;`)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`ALTER TABLE destination_fake_rbr SET (schema_locked = true)`)
 	require.NoError(t, err)
 
 	// Insert some more rows and ensure that the default values get generated.

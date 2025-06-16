@@ -111,10 +111,18 @@ translate database=db
 /Tenant/10/Table/10{6-7}                   num_replicas=7 num_voters=5 rangefeed_enabled=true
 /Tenant/10/Table/10{7-8}                   num_replicas=7 rangefeed_enabled=true
 
+exec-sql
+ALTER TABLE db.t1 SET (schema_locked=false);
+----
+
 # Create an index on t1 to ensure that subzones also see protected timestamps.
 exec-sql
 CREATE INDEX idx ON db.t1(id);
 ALTER INDEX db.t1@idx CONFIGURE ZONE USING gc.ttlseconds = 1;
+----
+
+exec-sql
+ALTER TABLE db.t1 SET (schema_locked=true);
 ----
 
 # We wait for running jobs to complete to ensure that index GC jobs

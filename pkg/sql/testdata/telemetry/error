@@ -50,7 +50,7 @@ SELECT crdb_internal.unsafe_upsert_descriptor(id, crdb_internal.json_to_pb('desc
 feature-usage
 DROP TABLE tbl CASCADE;
 ----
-error: pq: internal error: executing declarative schema change StatementPhase stage 1 of 1 with 46 MutationType ops (rollback=false) for DROP TABLE: error executing StatementPhase stage 1 of 1 with 46 MutationType ops: *scop.MakePublicForeignKeyConstraintValidated: &{{{}} 105 2}: relation "tbl" (...): missing fk back reference "tbl_customer_fkey" to "tbl" from "fktbl"
+error: pq: internal error: executing declarative schema change StatementPhase stage 1 of 1 with 47 MutationType ops (rollback=false) for DROP TABLE: error executing StatementPhase stage 1 of 1 with 47 MutationType ops: *scop.MakePublicForeignKeyConstraintValidated: &{{{}} 105 2}: relation "tbl" (...): missing fk back reference "tbl_customer_fkey" to "tbl" from "fktbl"
 errorcodes.XX000
 sql.schema.validation_errors.read.backward_references.relation
 
@@ -86,7 +86,7 @@ errorcodes.42601
 sql.schema.validation_errors.read.self.type
 
 exec
-CREATE TABLE t (x INT PRIMARY KEY);
+CREATE TABLE t (x INT PRIMARY KEY) WITH (schema_locked=false);
 ----
 
 # Table descriptor validation failure on transaction commit.
