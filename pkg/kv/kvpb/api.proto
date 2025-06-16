@@ -3684,6 +3684,14 @@ service TenantService {
   rpc GetRangeDescriptors(GetRangeDescriptorsRequest) returns (stream GetRangeDescriptorsResponse) {}
 }
 
+// TenantUsage provides RPCs for secondary tenants to report resource
+// consumption and get Request Units available.
+service TenantUsage {
+  // TokenBucket is used by tenants to obtain Request Units and report
+  // consumption.
+  rpc TokenBucket (TokenBucketRequest) returns (TokenBucketResponse) {}
+}
+
 // Batch and RangeFeed service implemented by nodes for KV API requests.
 service Internal {
   rpc Batch (BatchRequest) returns (BatchResponse) {}
