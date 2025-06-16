@@ -8,6 +8,8 @@ The supported log output sink types are documented below.
 
 - [Output to HTTP servers.](#output-to-http-servers.)
 
+- [Output to OpenTelemetry compatible collectors.](#output-to-opentelemetry-compatible-collectors.)
+
 - [Standard error stream](#standard-error-stream)
 
 
@@ -225,6 +227,70 @@ Type-specific configuration options:
 | `headers` | a list of headers to attach to each HTTP request Inherited from `http-defaults.headers` if not specified. |
 | `file-based-headers` | a list of headers with filepaths whose contents are attached to each HTTP request Inherited from `http-defaults.file-based-headers` if not specified. |
 | `compression` | can be "none" or "gzip" to enable gzip compression. Set to "gzip" by default. Inherited from `http-defaults.compression` if not specified. |
+
+
+Configuration options shared across all sink types:
+
+| Field | Description |
+|--|--|
+| `filter` | specifies the default minimum severity for log events to be emitted to this sink, when not otherwise specified by the 'channels' sink attribute. |
+| `format` | the entry format to use. |
+| `format-options` | additional options for the format. |
+| `redact` | whether to strip sensitive information before log events are emitted to this sink. |
+| `redactable` | whether to keep redaction markers in the sink's output. The presence of redaction markers makes it possible to strip sensitive data reliably. |
+| `exit-on-error` | whether the logging system should terminate the process if an error is encountered while writing to this sink. |
+| `auditable` | translated to tweaks to the other settings for this sink during validation. For example, it enables `exit-on-error` and changes the format of files from `crdb-v1` to `crdb-v1-count`. |
+| `buffering` | configures buffering for this log sink, or NONE to explicitly disable. See the [common buffering configuration](#buffering-config) section for details.  |
+
+
+
+<a name="output-to-opentelemetry-compatible-collectors.">
+
+## Sink type: Output to OpenTelemetry compatible collectors.
+
+
+This sink type causes logging data to be sent over the network through gRPC to
+a collector that can ingest log data in an [OTLP](https://opentelemetry.io) format.
+
+The configuration key under the `sinks` key in the YAML
+configuration is `otlp-servers`. Example configuration:
+
+//	sinks:
+//	   otlp-servers:
+//	      health:
+//	         channels: HEALTH
+//	         address: 127.0.0.1:4317
+
+Every new server sink configured automatically inherits the configuration set in the `otlp-defaults` section.
+
+For example:
+
+//	otlp-defaults:
+//	    redactable: false # default: disable redaction markers
+//	sinks:
+//	  otlp-servers:
+//	    health:
+//	       channels: HEALTH
+//	       # This sink has redactable set to false,
+//	       # as the setting is inherited from fluent-defaults
+//	       # unless overridden here.
+
+The default output format for OTLP sinks is
+`json`. [Other supported formats.](log-formats.html)
+
+{{site.data.alerts.callout_info}}
+Run `cockroach debug check-log-config` to verify the effect of defaults inheritance.
+{{site.data.alerts.end}}
+
+
+Type-specific configuration options:
+
+| Field | Description |
+|--|--|
+| `channels` | the list of logging channels that use this sink. See the [channel selection configuration](#channel-format) section for details.  |
+| `address` | the network address of the gRPC endpoint for ingestion of logs on your OpenTelemetry Collector/Platform. The host/address and port parts are separated with a colon. |
+| `insecure` | Disables transport security for the underlying gRPC connection.  Inherited from `otlp-defaults.insecure` if not specified. |
+| `compression` | can be "none" or "gzip" to enable gzip compression. Set to "gzip" by default. Inherited from `otlp-defaults.compression` if not specified. |
 
 
 Configuration options shared across all sink types:
