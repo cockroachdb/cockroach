@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
@@ -105,6 +106,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
+	"github.com/gogo/protobuf/proto"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -11683,4 +11685,209 @@ func TestCloudstorageParallelCompression(t *testing.T) {
 			time.Sleep(checkStatusInterval)
 		}
 	})
+}
+
+// Create a table, insert a row + create changefeed envelope = 'wrapped' and format = 'protobuf'
+func TestChangefeedBasicWrappedProtobuf(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		// 1. Create a table and seed it
+		sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY, val STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'alpha')`)
+
+		// 2. Start the changefeed (wrapped envelope, protobuf format)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH envelope='wrapped', format='protobuf'`)
+		defer closeFeed(t, foo)
+
+		// 3. Decode the emitted row
+
+		msg := new(changefeedpb.Message)
+
+		row, _ := foo.Next()
+		rawValue := row.Value // This is the []byte
+		require.NoError(t, proto.Unmarshal(rawValue, msg))
+
+		log.Infof(context.Background(), "Decoded message:\n%s", proto.MarshalTextString(msg))
+
+		require.NotNil(t, msg.GetWrapped(), "expected wrapped envelope")
+		require.Equal(t, int64(1), msg.GetWrapped().After.Values["id"].GetInt64Value())
+		require.Equal(t, "alpha", msg.GetWrapped().After.Values["val"].GetStringValue())
+		// require.Nil(t, msg.GetWrapped().Before)
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
+
+// Create a table, insert a row + create changefeed envelope = 'bare' and format = 'protobuf'
+func TestChangefeedBasicBareProtobuf(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		// 1. Create a table and seed
+		sqlDB.Exec(t, `CREATE TABLE products (id INT PRIMARY KEY, name STRING, price FLOAT)`)
+		sqlDB.Exec(t, `INSERT INTO products VALUES (1, 'Lamp', 29.99)`)
+
+		// 2. Start the changefeed (bare envelope, protobuf format)
+		products := feed(t, f, `CREATE CHANGEFEED FOR products WITH envelope='bare', format='protobuf'`)
+		defer closeFeed(t, products)
+
+		// 3. Decode the emitted row
+
+		msg := new(changefeedpb.Message)
+
+		row, _ := products.Next()
+		rawValue := row.Value // This is the []byte
+
+		require.NoError(t, proto.Unmarshal(rawValue, msg))
+
+		log.Infof(context.Background(), "Decoded message:\n%s", proto.MarshalTextString(msg))
+
+		require.NotNil(t, msg.GetBare(), "expected bare envelope")
+
+		require.Equal(t, int64(1), msg.GetBare().Values["id"].GetInt64Value())
+		require.Equal(t, "Lamp", msg.GetBare().Values["name"].GetStringValue())
+		require.Equal(t, 29.99, msg.GetBare().Values["price"].GetDoubleValue())
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
+
+func TestChangefeedMultipleBareProtobufMessages(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		// 1. Create a table and insert multiple rows
+		sqlDB.Exec(t, `CREATE TABLE products (id INT PRIMARY KEY, name STRING, price FLOAT)`)
+		sqlDB.Exec(t,
+			`INSERT INTO products VALUES 
+			(1, 'Lamp', 29.99),
+			(2, 'Desk', 149.99),
+			(3, 'Chair', 89.49)`)
+
+		// 2. Start the changefeed
+		products := feed(t, f, `CREATE CHANGEFEED FOR products WITH envelope='bare', format='protobuf'`)
+		defer closeFeed(t, products)
+
+		// 3. Expected values for comparison
+		expected := map[int64]struct {
+			name  string
+			price float64
+		}{
+			1: {"Lamp", 29.99},
+			2: {"Desk", 149.99},
+			3: {"Chair", 89.49},
+		}
+
+		received := make(map[int64]bool)
+
+		ctx := context.Background()
+
+		for len(received) < len(expected) {
+			row, _ := products.Next()
+			rawValue := row.Value
+
+			msg := new(changefeedpb.Message)
+			require.NoError(t, proto.Unmarshal(rawValue, msg))
+			require.NotNil(t, msg.GetBare(), "expected bare envelope")
+
+			bare := msg.GetBare()
+			id := bare.Values["id"].GetInt64Value()
+			name := bare.Values["name"].GetStringValue()
+			price := bare.Values["price"].GetFloatValue()
+
+			log.Infof(ctx, "Decoded message for id=%d: name=%s, price=%f", id, name, price)
+
+			exp, ok := expected[id]
+			require.True(t, ok, "unexpected ID: %d", id)
+			require.Equal(t, exp.name, name)
+			require.InDelta(t, exp.price, price, 0.001)
+			received[id] = true
+		}
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
+
+func TestChangefeedFloatAndDecimalBareProtobuf(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		// 1. Create a table with both FLOAT and DECIMAL columns
+		sqlDB.Exec(t, `
+			CREATE TABLE pricing (
+				id INT PRIMARY KEY,
+				name STRING,
+				discount FLOAT,
+				tax DECIMAL
+			)`)
+
+		sqlDB.Exec(t, `
+			INSERT INTO pricing VALUES
+				(1, 'Chair', 15.75, 2.500),
+				(2, 'Table', 20.00, 1.23456789)
+		`)
+
+		// 2. Start the changefeed with envelope='bare', format='protobuf'
+		pricingFeed := feed(t, f, `CREATE CHANGEFEED FOR pricing WITH envelope='bare', format='protobuf'`)
+		defer closeFeed(t, pricingFeed)
+
+		expected := map[int64]struct {
+			name     string
+			discount float64
+			tax      float64
+		}{
+			1: {"Chair", 15.75, 2.5},
+			2: {"Table", 20.00, 1.23456789},
+		}
+
+		seen := make(map[int64]bool)
+
+		for len(seen) < len(expected) {
+			row, _ := pricingFeed.Next()
+
+			msg := new(changefeedpb.Message)
+			require.NoError(t, proto.Unmarshal(row.Value, msg))
+			require.NotNil(t, msg.GetBare())
+
+			bare := msg.GetBare()
+			vals := bare.Values
+
+			id := vals["id"].GetInt64Value()
+			require.Contains(t, expected, id)
+			exp := expected[id]
+
+			require.Equal(t, exp.name, vals["name"].GetStringValue())
+			require.InDelta(t, exp.discount, vals["discount"].GetDoubleValue(), 0.0001)
+
+			// Accept either double or string for DECIMALs
+			taxVal := vals["tax"]
+			switch v := taxVal.Value.(type) {
+			case *changefeedpb.Value_DoubleValue:
+				require.InDelta(t, exp.tax, v.DoubleValue, 0.0000001)
+			case *changefeedpb.Value_StringValue:
+				parsed, err := strconv.ParseFloat(v.StringValue, 64)
+				require.NoError(t, err)
+				require.InDelta(t, exp.tax, parsed, 0.0000001)
+			default:
+				t.Fatalf("unexpected tax value type: %T", v)
+			}
+
+			seen[id] = true
+		}
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
