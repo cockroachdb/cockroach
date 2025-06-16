@@ -16,7 +16,7 @@ import (
 
 // DumpRawTo is a helper that gob-encodes all messages received from the
 // source stream to the given WriteCloser.
-func DumpRawTo(src tspb.TimeSeries_DumpRawClient, out io.Writer) error {
+func DumpRawTo(src tspb.RPCTimeSeries_DumpRawClient, out io.Writer) error {
 	enc := gob.NewEncoder(out)
 	for {
 		data, err := src.Recv()

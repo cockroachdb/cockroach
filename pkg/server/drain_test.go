@@ -178,7 +178,7 @@ INSERT INTO t.test VALUES (3);
 type testDrainContext struct {
 	*testing.T
 	tc         *testcluster.TestCluster
-	c          serverpb.AdminClient
+	c          serverpb.RPCAdminClient
 	connCloser func()
 }
 
@@ -281,7 +281,7 @@ func (t *testDrainContext) assertEqual(expected int, actual int) {
 }
 
 func (t *testDrainContext) getDrainResponse(
-	stream serverpb.Admin_DrainClient,
+	stream serverpb.RPCAdmin_DrainClient,
 ) (*serverpb.DrainResponse, error) {
 	resp, err := stream.Recv()
 	if err != nil {

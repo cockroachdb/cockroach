@@ -4667,7 +4667,7 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 
 			atomic.StoreInt64(&filterRangeIDAtomic, int64(desc.RangeID))
 			type target struct {
-				client kvserver.PerReplicaClient
+				client kvserver.RPCPerReplicaClient
 				header kvserver.StoreRequestHeader
 			}
 

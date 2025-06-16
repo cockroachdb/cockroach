@@ -205,7 +205,7 @@ func (a *apiV2Server) listRange(w http.ResponseWriter, r *http.Request) {
 		RangeIDs: []roachpb.RangeID{roachpb.RangeID(rangeID)},
 	}
 
-	nodeFn := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
+	nodeFn := func(ctx context.Context, status serverpb.RPCStatusClient, _ roachpb.NodeID) (interface{}, error) {
 		return status.Ranges(ctx, rangesRequest)
 	}
 	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
@@ -498,7 +498,7 @@ func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 	}
 
 	remoteRequest := serverpb.HotRangesRequest{Nodes: []string{"local"}}
-	nodeFn := func(ctx context.Context, status serverpb.StatusClient, nodeID roachpb.NodeID) ([]hotRangeInfo, error) {
+	nodeFn := func(ctx context.Context, status serverpb.RPCStatusClient, nodeID roachpb.NodeID) ([]hotRangeInfo, error) {
 		resp, err := status.HotRangesV2(ctx, &remoteRequest)
 		if err != nil || resp == nil {
 			return nil, err

@@ -413,7 +413,7 @@ type Node struct {
 	cmd            *exec.Cmd
 	rpcPort, pgURL string // legacy: remove once 1.0.x is no longer tested
 	db             *gosql.DB
-	statusClient   serverpb.StatusClient
+	statusClient   serverpb.RPCStatusClient
 }
 
 // RPCPort returns the RPC + Postgres port.
@@ -469,7 +469,7 @@ func (n *Node) Alive() bool {
 }
 
 // StatusClient returns a StatusClient set up to talk to this node.
-func (n *Node) StatusClient(ctx context.Context) serverpb.StatusClient {
+func (n *Node) StatusClient(ctx context.Context) serverpb.RPCStatusClient {
 	n.Lock()
 	existingClient := n.statusClient
 	n.Unlock()
@@ -483,7 +483,7 @@ func (n *Node) StatusClient(ctx context.Context) serverpb.StatusClient {
 		if err != nil {
 			log.Fatalf(context.Background(), "failed to initialize status client: %s", err)
 		}
-		return serverpb.NewStatusClient(conn)
+		return serverpb.NewGRPCStatusClientAdapter(conn)
 	}
 	return nil // This should never happen
 }

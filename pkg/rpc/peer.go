@@ -251,8 +251,8 @@ func (rpcCtx *Context) newPeer(k peerKey, locality roachpb.Locality) *peer[*grpc
 			return rpcCtx.grpcDialRaw(ctx, target, class, additionalDialOpts...)
 		},
 		dialDRPC: dialDRPC(rpcCtx),
-		newHeartbeatClient: func(cc *grpc.ClientConn) rpcHeartbeatClient {
-			return &grpcHeartbeatClient{cc: cc}
+		newHeartbeatClient: func(cc *grpc.ClientConn) RPCHeartbeatClient {
+			return NewGRPCHeartbeatClientAdapter(cc)
 		},
 		newBatchStreamClient: func(ctx context.Context, cc *grpc.ClientConn) (BatchStreamClient, error) {
 			return kvpb.NewInternalClient(cc).BatchStream(ctx)
@@ -433,7 +433,7 @@ func (p *peer[Conn]) runOnce(ctx context.Context, report func(error)) error {
 
 func runSingleHeartbeat(
 	ctx context.Context,
-	heartbeatClient rpcHeartbeatClient,
+	heartbeatClient RPCHeartbeatClient,
 	k peerKey,
 	roundTripLatency ewma.MovingAverage,
 	remoteClocks *RemoteClockMonitor, // nil if no RemoteClocks update should be made

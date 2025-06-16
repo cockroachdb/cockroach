@@ -14,48 +14,48 @@ import (
 
 // DialMultiRaftClient establishes a DRPC connection if enabled; otherwise,
 // it falls back to gRPC. The established connection is used to create a
-// MultiRaftClient.
+// RPCMultiRaftClient.
 func DialMultiRaftClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
-) (MultiRaftClient, error) {
+) (RPCMultiRaftClient, error) {
 	if !rpcbase.TODODRPC {
 		conn, err := nd.Dial(ctx, nodeID, class)
 		if err != nil {
 			return nil, err
 		}
-		return NewMultiRaftClient(conn), nil
+		return NewGRPCMultiRaftClientAdapter(conn), nil
 	}
 	return nil, nil
 }
 
 // DialPerReplicaClient establishes a DRPC connection if enabled; otherwise,
 // it falls back to gRPC. The established connection is used to create a
-// PerReplicaClient.
+// RPCPerReplicaClient.
 func DialPerReplicaClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
-) (PerReplicaClient, error) {
+) (RPCPerReplicaClient, error) {
 	if !rpcbase.TODODRPC {
 		conn, err := nd.Dial(ctx, nodeID, class)
 		if err != nil {
 			return nil, err
 		}
-		return NewPerReplicaClient(conn), nil
+		return NewGRPCPerReplicaClientAdapter(conn), nil
 	}
 	return nil, nil
 }
 
 // DialPerStoreClient establishes a DRPC connection if enabled; otherwise,
 // it falls back to gRPC. The established connection is used to create a
-// PerStoreClient.
+// RPCPerStoreClient.
 func DialPerStoreClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
-) (PerStoreClient, error) {
+) (RPCPerStoreClient, error) {
 	if !rpcbase.TODODRPC {
 		conn, err := nd.Dial(ctx, nodeID, class)
 		if err != nil {
 			return nil, err
 		}
-		return NewPerStoreClient(conn), nil
+		return NewGRPCPerStoreClientAdapter(conn), nil
 	}
 	return nil, nil
 }
