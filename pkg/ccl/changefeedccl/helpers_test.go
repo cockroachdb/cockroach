@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kcjsonschema"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl" // allow locality-related mutations
@@ -58,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -276,7 +278,7 @@ func assertPayloadsBase(
 	require.NoError(t,
 		withTimeout(f, timeout,
 			func(ctx context.Context) (err error) {
-				return assertPayloadsBaseErr(ctx, f, expected, stripTs, perKeyOrdered, nil, envelopeType)
+				return assertPayloadsBaseErr(ctx, f, expected, stripTs, perKeyOrdered, nil, envelopeType, t)
 			},
 		))
 }
@@ -347,6 +349,7 @@ func assertPayloadsBaseErr(
 	perKeyOrdered bool,
 	sourceAssertion func(map[string]any),
 	envelopeType changefeedbase.EnvelopeType,
+	t testing.TB,
 ) error {
 	didForceEnriched := func() bool {
 		if ef, ok := f.(cdctest.EnterpriseTestFeed); ok {
@@ -363,6 +366,14 @@ func assertPayloadsBaseErr(
 	if err != nil {
 		return err
 	}
+	// Detect if this is a protobuf feed and format accordingly.
+	useProtobuf := false
+	if ef, ok := f.(cdctest.EnterpriseTestFeed); ok {
+		details, _ := ef.Details()
+		if details.Opts[changefeedbase.OptFormat] == "protobuf" {
+			useProtobuf = true
+		}
+	}
 
 	if didForceEnriched {
 		for i, m := range actual {
@@ -376,7 +387,11 @@ func assertPayloadsBaseErr(
 
 	var actualFormatted []string
 	for _, m := range actual {
-		actualFormatted = append(actualFormatted, m.String())
+		if useProtobuf {
+			actualFormatted = append(actualFormatted, fmt.Sprintf(`%s: %s->%s`, m.Topic, protobufToJSONKey(t, m.Key), protobufToJSONValue(t, m.Value)))
+		} else {
+			actualFormatted = append(actualFormatted, m.String())
+		}
 	}
 
 	if perKeyOrdered {
@@ -467,7 +482,7 @@ func assertPayloadsEnriched(
 	require.NoError(t,
 		withTimeout(f, timeout,
 			func(ctx context.Context) (err error) {
-				return assertPayloadsBaseErr(ctx, f, expected, true, false, sourceAssertion, changefeedbase.OptEnvelopeEnriched)
+				return assertPayloadsBaseErr(ctx, f, expected, true, false, sourceAssertion, changefeedbase.OptEnvelopeEnriched, t)
 			},
 		))
 }
@@ -488,6 +503,106 @@ func avroToJSON(t testing.TB, reg *cdctest.SchemaRegistry, avroBytes []byte) []b
 	json, err := reg.AvroToJSON(avroBytes)
 	require.NoError(t, err)
 	return json
+}
+
+func convertProtobufValue(t testing.TB, v *changefeedpb.Value) interface{} {
+	switch val := v.GetValue().(type) {
+	case *changefeedpb.Value_BoolValue:
+		return val.BoolValue
+	case *changefeedpb.Value_Int64Value:
+		return val.Int64Value
+	case *changefeedpb.Value_DoubleValue:
+		return val.DoubleValue
+	case *changefeedpb.Value_StringValue:
+		return val.StringValue
+	case *changefeedpb.Value_DecimalValue:
+		return val.DecimalValue.Value
+	case *changefeedpb.Value_TimestampValue:
+		return val.TimestampValue
+	case *changefeedpb.Value_DateValue:
+		return val.DateValue
+	case *changefeedpb.Value_IntervalValue:
+		return val.IntervalValue
+	case *changefeedpb.Value_UuidValue:
+		return val.UuidValue
+	case *changefeedpb.Value_BytesValue:
+		return string(val.BytesValue)
+	case *changefeedpb.Value_TimeValue:
+		return val.TimeValue
+	case *changefeedpb.Value_ArrayValue:
+		arr := make([]any, 0, len(val.ArrayValue.Values))
+		for _, elem := range val.ArrayValue.Values {
+			arr = append(arr, convertProtobufValue(t, elem))
+		}
+		return arr
+	case *changefeedpb.Value_TupleValue:
+		m := make(map[string]any, len(val.TupleValue.Values))
+		for k, v := range val.TupleValue.Values {
+			m[k] = convertProtobufValue(t, v)
+		}
+		return m
+	default:
+		return nil
+	}
+}
+
+// protbufToJSONValue converts protobuf values to json, currently only supports bare envelopes.
+func protobufToJSONValue(t testing.TB, b []byte) []byte {
+	t.Helper()
+
+	var msg changefeedpb.Message
+	require.NoError(t, protoutil.Unmarshal(b, &msg))
+
+	require.NotNil(t, msg.GetBare())
+	bare := msg.GetBare()
+
+	data := make(map[string]any, len(bare.Values))
+	for k, v := range bare.Values {
+		data[k] = convertProtobufValue(t, v)
+	}
+
+	if meta := bare.XCrdb__; meta != nil {
+		metaMap := make(map[string]any)
+
+		if meta.Updated != "" {
+			metaMap["updated"] = meta.Updated
+		}
+		if meta.MvccTimestamp != "" {
+			metaMap["mvcc_timestamp"] = meta.MvccTimestamp
+		}
+		if meta.Topic != "" {
+			metaMap["topic"] = meta.Topic
+		}
+		if meta.Key != nil {
+			keyMap := make(map[string]any, len(meta.Key.Key))
+			for k, v := range meta.Key.Key {
+				keyMap[k] = convertProtobufValue(t, v)
+			}
+			metaMap["key"] = keyMap
+		}
+
+		data["__crdb__"] = metaMap
+	}
+
+	js, err := gojson.Marshal(data)
+	require.NoError(t, err)
+	return js
+}
+
+func protobufToJSONKey(t testing.TB, b []byte) []byte {
+	t.Helper()
+
+	var keyMsg changefeedpb.Key
+	require.NoError(t, protoutil.Unmarshal(b, &keyMsg))
+
+	data := make(map[string]any, len(keyMsg.Key))
+	for k, v := range keyMsg.Key {
+		data[k] = convertProtobufValue(t, v)
+	}
+
+	js, err := gojson.Marshal(data)
+	require.NoError(t, err)
+	return js
 }
 
 func parseJSON(s string) (map[string]any, error) {

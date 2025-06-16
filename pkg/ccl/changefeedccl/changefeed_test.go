@@ -1350,7 +1350,7 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 			for i, id := range expectedRowIDs {
 				assertedPayloads[i] = fmt.Sprintf(`seed: [%s]->{"rowid": %s}`, id, id)
 			}
-			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, false, nil, changefeedbase.OptEnvelopeWrapped)
+			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, false, nil, changefeedbase.OptEnvelopeWrapped, t)
 			closeFeedIgnoreError(t, seedFeed)
 			if err != nil {
 				// Skip errors that may come up during SQL execution. If the SQL query
@@ -10437,7 +10437,7 @@ func TestChangefeedTestTimesOut(t *testing.T) {
 					nada, expectTimeout,
 					func(ctx context.Context) error {
 						return assertPayloadsBaseErr(
-							ctx, nada, []string{`nada: [2]->{"after": {}}`}, false, false, nil, changefeedbase.OptEnvelopeWrapped)
+							ctx, nada, []string{`nada: [2]->{"after": {}}`}, false, false, nil, changefeedbase.OptEnvelopeWrapped, t)
 					})
 				return nil
 			}, 20*expectTimeout))
@@ -11821,16 +11821,37 @@ func TestCloudstorageParallelCompression(t *testing.T) {
 	})
 }
 
-func TestDatabaseLevelChangefeed(t *testing.T) {
+func TestChangefeedBareFullProtobuf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE DATABASE foo`)
-		sqlDB.Exec(t, `CREATE TABLE foo.bar(id int primary key, s string)`)
-		sqlDB.Exec(t, `INSERT INTO foo.bar(id, s) VALUES (0, 'hello'), (1, null)`)
-		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED for DATABASE foo`, "database-level changefeed is not implemented")
+
+		sqlDB.Exec(t, `
+			CREATE TABLE pricing (
+				id INT PRIMARY KEY,
+				name STRING,
+				discount FLOAT,
+				tax DECIMAL,
+				options STRING[]
+			)`)
+		sqlDB.Exec(t, `
+			INSERT INTO pricing VALUES
+				(1, 'Chair', 15.75, 2.500, ARRAY['Brown', 'Black']), 
+				(2, 'Table', 20.00, 1.23456789, ARRAY['Brown', 'Black'])
+		`)
+		pricingFeed := feed(t, f,
+			`CREATE CHANGEFEED FOR pricing WITH envelope='bare', format='protobuf', key_in_value, topic_in_value`)
+		defer closeFeed(t, pricingFeed)
+
+		expected := []string{
+			`pricing: {"id":1}->{"__crdb__":{"key":{"id":1},"topic":"pricing"},"discount":15.75,"id":1,"name":"Chair","options":["Brown","Black"],"tax":"2.500"}`,
+			`pricing: {"id":2}->{"__crdb__":{"key":{"id":2},"topic":"pricing"},"discount":20,"id":2,"name":"Table","options":["Brown","Black"],"tax":"1.23456789"}`,
+		}
+
+		assertPayloads(t, pricingFeed, expected)
 	}
-	cdcTest(t, testFn)
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
