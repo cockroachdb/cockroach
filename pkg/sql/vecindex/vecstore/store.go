@@ -287,18 +287,36 @@ func (s *Store) TryGetPartition(
 }
 
 // TryGetPartitionMetadata is part of the cspann.Store interface. It returns the
-// metadata of an existing partition.
+// metadata for a batch of partitions.
 func (s *Store) TryGetPartitionMetadata(
-	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
-) (cspann.PartitionMetadata, error) {
+	ctx context.Context, treeKey cspann.TreeKey, toGet []cspann.PartitionMetadataToGet,
+) error {
+	// Construct a batch with one Get request per partition.
 	b := s.kv.NewBatch()
-	metadataKey := vecencoding.EncodeMetadataKey(s.prefix, treeKey, partitionKey)
-	b.Get(metadataKey)
-	if err := s.kv.Run(ctx, b); err != nil {
-		return cspann.PartitionMetadata{},
-			errors.Wrapf(err, "getting partition metadata for %d", partitionKey)
+	for i := range toGet {
+		metadataKey := vecencoding.EncodeMetadataKey(s.prefix, treeKey, toGet[i].Key)
+		b.Get(metadataKey)
 	}
-	return s.getMetadataFromKVResult(partitionKey, &b.Results[0])
+
+	// Run the batch and return results.
+	var err error
+	if err = s.kv.Run(ctx, b); err != nil {
+		return errors.Wrapf(err, "getting partition metadata for %d partitions", len(toGet))
+	}
+
+	for i := range toGet {
+		item := &toGet[i]
+		item.Metadata, err = s.getMetadataFromKVResult(item.Key, &b.Results[i])
+
+		// If partition is missing, just return Missing metadata.
+		if err != nil {
+			if !errors.Is(err, cspann.ErrPartitionNotFound) {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 // TryUpdatePartitionMetadata is part of the cspann.Store interface. It updates
