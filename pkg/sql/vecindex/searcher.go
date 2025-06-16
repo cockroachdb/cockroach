@@ -10,8 +10,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore/vecstorepb"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
 
@@ -29,6 +31,7 @@ type Searcher struct {
 	searchSet cspann.SearchSet
 	results   cspann.SearchResults
 	resultIdx int
+	evalCtx   *eval.Context
 }
 
 // Init wraps the given KV transaction in a C-SPANN transaction and initializes
@@ -36,10 +39,20 @@ type Searcher struct {
 //
 // NOTE: The index is expected to come from a call to Manager.Get, and therefore
 // using a vecstore.Store instance.
-func (s *Searcher) Init(idx *cspann.Index, txn *kv.Txn, baseBeamSize, maxResults int) {
+//
+// tableDesc is expected to be leased such that its lifetime is at least as long
+// as txn.
+func (s *Searcher) Init(
+	evalCtx *eval.Context,
+	idx *cspann.Index,
+	txn *kv.Txn,
+	fullVecFetchSpec *vecstorepb.GetFullVectorsFetchSpec,
+	baseBeamSize, maxResults int,
+) {
 	s.idx = idx
-	s.txn.Init(idx.Store().(*vecstore.Store), txn)
+	s.txn.Init(evalCtx, idx.Store().(*vecstore.Store), txn, fullVecFetchSpec)
 	s.idxCtx.Init(&s.txn)
+	s.evalCtx = evalCtx
 
 	// An index-join + top-k operation will handle the re-ranking, so we skip
 	// doing it here.

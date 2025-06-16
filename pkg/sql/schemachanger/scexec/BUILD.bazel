@@ -71,7 +71,6 @@ go_test(
         "//pkg/security/username",
         "//pkg/server",
         "//pkg/settings/cluster",
-        "//pkg/sql",
         "//pkg/sql/catalog",
         # catalogkeys is required to build the generated output of mock_scexec
         "//pkg/sql/catalog/catalogkeys",  # keep
@@ -112,6 +111,7 @@ go_test(
         "//pkg/sql/schemachanger/scplan",
         "//pkg/testutils/testcluster",
         "//pkg/util/ctxgroup",
+        "//pkg/sql",
     ],
 )
 
