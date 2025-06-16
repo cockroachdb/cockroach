@@ -73,7 +73,7 @@ func TestInitialValuesToString(t *testing.T) {
 			d.ScanArgs(t, "hash", &expectedHash)
 			initialValues, actualHash := GetAndHashInitialValuesToString(tenantID)
 			if expectedHash != actualHash {
-				t.Errorf(`Unexpected hash value %s for %s.
+				t.Errorf(`Unexpected hash value %s (expected: %s) for %s.
 If you're seeing this error message, this means that the bootstrapped system
 schema has changed. Assuming that this is expected:
 - If this occurred during development on the main branch, rewrite the expected
@@ -82,7 +82,7 @@ schema has changed. Assuming that this is expected:
   very sure that the underlying change really is expected and is backward-
   compatible and is absolutely necessary. If that's the case, then there are
   hardcoded literals in the main development branch as well as any subsequent
-  release branches that need to be updated also.`, actualHash, d.Cmd)
+  release branches that need to be updated also.`, actualHash, expectedHash, d.Cmd)
 			}
 
 			return initialValues
