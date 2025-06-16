@@ -34,7 +34,7 @@ func makeStoreCodec(quantizer quantize.Quantizer) storeCodec {
 // possible.
 func (sc *storeCodec) Init(centroid vector.T, minCapacity int) {
 	if sc.tmpVectorSet == nil {
-		sc.tmpVectorSet = sc.quantizer.NewQuantizedVectorSet(minCapacity, centroid)
+		sc.tmpVectorSet = sc.quantizer.NewSet(minCapacity, centroid)
 	} else {
 		sc.tmpVectorSet.Clear(centroid)
 	}

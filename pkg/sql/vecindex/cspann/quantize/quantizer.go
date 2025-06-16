@@ -41,9 +41,9 @@ type Quantizer interface {
 	//       vectors.
 	QuantizeInSet(w *workspace.T, quantizedSet QuantizedVectorSet, vectors vector.Set)
 
-	// NewQuantizedVectorSet returns a new empty vector set preallocated to the
-	// number of vectors specified.
-	NewQuantizedVectorSet(capacity int, centroid vector.T) QuantizedVectorSet
+	// NewSet returns a new empty vector set preallocated to the number of vectors
+	// specified.
+	NewSet(capacity int, centroid vector.T) QuantizedVectorSet
 
 	// EstimateDistances returns the estimated distances of the query vector from
 	// each data vector represented in the given quantized vector set, as well as
