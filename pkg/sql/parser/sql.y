@@ -1733,6 +1733,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <[]tree.ColumnID> opt_tableref_col_list tableref_col_list
 
 %type <tree.ChangefeedTargets> changefeed_targets
+%type <tree.ChangefeedTargets> changefeed_database_targets
 %type <tree.ChangefeedTarget> changefeed_target
 %type <tree.BackupTargetList> backup_targets
 %type <*tree.BackupTargetList> opt_backup_targets
@@ -6223,7 +6224,15 @@ create_stats_option:
 //
 // sink: data capture stream destination (Enterprise only)
 create_changefeed_stmt:
-  CREATE CHANGEFEED FOR changefeed_targets opt_changefeed_sink opt_with_options
+  CREATE CHANGEFEED FOR DATABASE changefeed_database_targets opt_changefeed_sink opt_with_options
+  {
+    $$.val = &tree.CreateChangefeed{
+      Targets: $5.changefeedTargets(),
+      SinkURI: $6.expr(),
+      Options: $7.kvOptions(),
+    }
+  }
+| CREATE CHANGEFEED FOR changefeed_targets opt_changefeed_sink opt_with_options
   {
     $$.val = &tree.CreateChangefeed{
       Targets: $4.changefeedTargets(),
@@ -6345,6 +6354,13 @@ changefeed_target:
     $$.val = tree.ChangefeedTarget{
       TableName:  $2.unresolvedObjectName().ToUnresolvedName(),
       FamilyName: tree.Name($3),
+    }
+  }
+
+changefeed_database_targets:
+  name {
+    $$.val = tree.ChangefeedTarget{
+      FamilyName:  tree.Name($1),
     }
   }
 
