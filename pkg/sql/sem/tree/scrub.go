@@ -80,10 +80,12 @@ type ScrubOption interface {
 func (*ScrubOptionIndex) scrubOptionType()      {}
 func (*ScrubOptionPhysical) scrubOptionType()   {}
 func (*ScrubOptionConstraint) scrubOptionType() {}
+func (*ScrubOptionKVStore) scrubOptionType()	{}
 
 func (n *ScrubOptionIndex) String() string      { return AsString(n) }
 func (n *ScrubOptionPhysical) String() string   { return AsString(n) }
 func (n *ScrubOptionConstraint) String() string { return AsString(n) }
+func (n *ScrubOptionKVStore) String() string 	{ return AsString(n) }
 
 // ScrubOptionIndex represents an INDEX scrub check.
 type ScrubOptionIndex struct {
@@ -125,4 +127,12 @@ func (n *ScrubOptionConstraint) Format(ctx *FmtCtx) {
 	} else {
 		ctx.WriteString("ALL")
 	}
+}
+
+// ScrubOptionKVStore represents a KVSTORE scrub check.
+type ScrubOptionKVStore struct{}
+
+// Format implements the NodeFormatter interface.
+func (n *ScrubOptionKVStore) Format(ctx *FmtCtx) {
+	ctx.WriteString("KVSTORE")
 }
