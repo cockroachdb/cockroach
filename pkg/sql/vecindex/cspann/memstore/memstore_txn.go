@@ -79,16 +79,7 @@ func (tx *memTxn) GetPartitionMetadata(
 		defer memPart.lock.ReleaseShared()
 	}
 
-	// Do not allow updates to the partition if the state doesn't allow it.
-	metadata := memPart.lock.partition.Metadata()
-	if forUpdate && !metadata.StateDetails.State.AllowAddOrRemove() {
-		err = cspann.NewConditionFailedError(*metadata)
-		return cspann.PartitionMetadata{}, errors.Wrapf(err,
-			"getting metadata for partition %d (state=%s)",
-			partitionKey, metadata.StateDetails.State.String())
-	}
-
-	return *metadata, nil
+	return *memPart.lock.partition.Metadata(), nil
 }
 
 // AddToPartition implements the Txn interface.
@@ -117,7 +108,7 @@ func (tx *memTxn) AddToPartition(
 	// allow it.
 	partition := memPart.lock.partition
 	state := partition.Metadata().StateDetails.State
-	if !state.AllowAddOrRemove() {
+	if !state.AllowAdd() {
 		return errors.Wrapf(cspann.NewConditionFailedError(*partition.Metadata()),
 			"adding to partition %d (state=%s)", partitionKey, state.String())
 	}
@@ -158,16 +149,8 @@ func (tx *memTxn) RemoveFromPartition(
 	}
 	defer memPart.lock.Release()
 
-	// Do not allow vectors to be removed from the partition if the state doesn't
-	// allow it.
-	partition := memPart.lock.partition
-	state := partition.Metadata().StateDetails.State
-	if !state.AllowAddOrRemove() {
-		return errors.Wrapf(cspann.NewConditionFailedError(*partition.Metadata()),
-			"removing from partition %d (state=%s)", partitionKey, state.String())
-	}
-
 	// Remove vector from the partition.
+	partition := memPart.lock.partition
 	if level != partition.Level() {
 		return errors.Wrapf(cspann.ErrRestartOperation,
 			"removing from partition %d (expected: %d, actual: %d)",

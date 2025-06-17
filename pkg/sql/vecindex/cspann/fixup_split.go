@@ -299,7 +299,7 @@ func (fw *fixupWorker) splitPartition(
 			}
 		}
 
-		// Remove the splitting partition from the its parent. Note that we don't
+		// Remove the splitting partition from its parent. Note that we don't
 		// delete the partition's metadata record, instead leaving it behind as a
 		// "tombstone". This prevents other racing workers from resurrecting the
 		// partition as a zombie, which could otherwise happen like this:
@@ -457,7 +457,7 @@ func (fw *fixupWorker) reassignToSiblings(
 		for offset, distance := range tempSiblingDistances {
 			if distance >= minDistance {
 				continue
-			} else if !fw.tempMetadataToGet[offset].Metadata.StateDetails.State.AllowAddOrRemove() {
+			} else if !fw.tempMetadataToGet[offset].Metadata.StateDetails.State.AllowAdd() {
 				continue
 			}
 			siblingOffset = offset
@@ -593,9 +593,9 @@ func (fw *fixupWorker) addToPartition(
 	valueBytes []ValueBytes,
 	expected PartitionMetadata,
 ) (added bool, err error) {
-	if !expected.StateDetails.State.AllowAddOrRemove() {
+	if !expected.StateDetails.State.AllowAdd() {
 		return false, errors.AssertionFailedf(
-			"cannot add to partition in state that disallows adds/removes")
+			"cannot add to partition in state %s that disallows adds", expected.StateDetails.State)
 	}
 	fw.index.validateVectorsToAdd(expected.Level, vectors)
 
@@ -623,10 +623,11 @@ func (fw *fixupWorker) addToPartition(
 func (fw *fixupWorker) clearPartition(
 	ctx context.Context, partitionKey PartitionKey, metadata PartitionMetadata,
 ) (err error) {
-	if metadata.StateDetails.State.AllowAddOrRemove() {
+	if metadata.StateDetails.State.AllowAdd() {
+		// Something's wrong if partition is being cleared in a state that allows
+		// new vectors to be added.
 		return errors.AssertionFailedf(
-			"cannot clear partition %d in state %s that allows adds/removes",
-			partitionKey, metadata.StateDetails.String())
+			"cannot add to partition in state %s that allows adds", metadata.StateDetails.State)
 	}
 
 	// Remove all children in the partition.
@@ -823,10 +824,9 @@ func (fw *fixupWorker) removeFromParentPartition(
 		return errors.Wrapf(err, "getting parent partition %d metadata", parentPartitionKey)
 	}
 
-	if !parentMetadata.StateDetails.State.AllowAddOrRemove() || parentMetadata.Level != parentLevel {
-		// Child could not be removed from the parent because it doesn't exist or
-		// it no longer allows deletes, or its level has changed (i.e. in root
-		// partition case).
+	if parentMetadata.StateDetails.State.CanSkipRemove() || parentMetadata.Level != parentLevel {
+		// Child should not be removed from the parent that's draining or will be
+		// deleted, or if its level has changed (i.e. in root partition case).
 		return errFixupAborted
 	}
 

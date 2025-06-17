@@ -467,6 +467,10 @@ func (s *Store) TryAddToPartition(
 	if !existing.Equal(&expected) {
 		return false, cspann.NewConditionFailedError(*existing)
 	}
+	if !existing.StateDetails.State.AllowAdd() {
+		return false, errors.AssertionFailedf(
+			"cannot add to partition in state %s that disallows adds", existing.StateDetails.State)
+	}
 
 	// Add the vectors to the partition. Ignore any duplicate vectors.
 	// TODO(andyk): Figure out how to give Store flexible scratch space.
@@ -520,7 +524,7 @@ func (s *Store) TryClearPartition(
 	memPart := s.lockPartition(treeKey, partitionKey, uniqueOwner, true /* isExclusive */)
 	if memPart == nil {
 		// Partition does not exist.
-		return -1, cspann.ErrPartitionNotFound
+		return 0, cspann.ErrPartitionNotFound
 	}
 	defer memPart.lock.Release()
 
@@ -528,7 +532,11 @@ func (s *Store) TryClearPartition(
 	partition := memPart.lock.partition
 	existing := partition.Metadata()
 	if !existing.Equal(&expected) {
-		return -1, cspann.NewConditionFailedError(*existing)
+		return 0, cspann.NewConditionFailedError(*existing)
+	}
+	if existing.StateDetails.State.AllowAdd() {
+		return 0, errors.AssertionFailedf(
+			"cannot clear partition in state %s that allows adds", existing.StateDetails.State)
 	}
 
 	// Remove vectors from the partition and update partition count.

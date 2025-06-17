@@ -270,7 +270,9 @@ func NewIndex(
 		vi.options.MaxInsertAttempts = 32
 	}
 	if vi.options.MaxDeleteAttempts == 0 {
-		vi.options.MaxDeleteAttempts = 3
+		// Note that fetching the batch and getting the first result from the
+		// batch are both counted as "attempts", so this needs to be at least 2.
+		vi.options.MaxDeleteAttempts = 2
 	}
 
 	if vi.options.MaxPartitionSize < 2 {
@@ -504,6 +506,10 @@ func (vi *Index) SearchForInsert(
 		if err != nil {
 			return errors.Wrapf(err, "locking metadata for insert into partition %d", partitionKey)
 		}
+		if !metadata.StateDetails.State.AllowAdd() {
+			// The partition does not allow adds, so go to the next candidate.
+			return NewConditionFailedError(metadata)
+		}
 		result.Vector = metadata.Centroid
 		return nil
 	}
@@ -533,9 +539,15 @@ func (vi *Index) SearchForDelete(
 	// When a candidate delete partition is found, lock its metadata for update.
 	removeFunc := func(ctx context.Context, idxCtx *Context, result *SearchResult) error {
 		partitionKey := result.ParentPartitionKey
-		_, err := idxCtx.txn.GetPartitionMetadata(ctx, treeKey, partitionKey, true /* forUpdate */)
+		metadata, err := idxCtx.txn.GetPartitionMetadata(
+			ctx, treeKey, partitionKey, true /* forUpdate */)
 		if err != nil {
 			return errors.Wrapf(err, "locking metadata for delete from partition %d", partitionKey)
+		}
+		if metadata.StateDetails.State.CanSkipRemove() {
+			// The partition will be cleared or deleted anyway, so no need to
+			// remove from it. Go to the next candidate.
+			return NewConditionFailedError(metadata)
 		}
 		return nil
 	}
@@ -685,6 +697,10 @@ func (vi *Index) searchForUpdateHelper(
 			}
 			if !ok {
 				if idxCtx.forInsert {
+					// Keep aggressively searching for valid insert partition, since
+					// the only alternative is to fail the operation. This is not
+					// necessary in the delete case, since it's OK if there are
+					// dangling vectors in rare cases.
 					return vi.searchForUpdateHelper(ctx, idxCtx, fn, deleteKey, remainingAttempts)
 				}
 				break

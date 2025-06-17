@@ -818,11 +818,12 @@ func (s *testState) loadIndexFromFormat(
 		}
 	}
 
+	// Always create partition in Ready state so that adds are allowed.
 	metadata := cspann.PartitionMetadata{
-		Level:        childLevel,
-		Centroid:     centroid,
-		StateDetails: details,
+		Level:    childLevel,
+		Centroid: centroid,
 	}
+	metadata.StateDetails.MakeReady()
 	err = s.MemStore.TryCreateEmptyPartition(s.Ctx, treeKey, partitionKey, metadata)
 	require.NoError(s.T, err)
 
@@ -832,6 +833,14 @@ func (s *testState) loadIndexFromFormat(
 			s.Ctx, treeKey, partitionKey, childVectors, childKeys, valueBytes, metadata)
 		require.NoError(s.T, err)
 		require.True(s.T, added)
+	}
+
+	if details.State != cspann.ReadyState {
+		// Update the partition's state
+		expected := metadata
+		metadata.StateDetails = details
+		err = s.MemStore.TryUpdatePartitionMetadata(s.Ctx, treeKey, partitionKey, metadata, expected)
+		require.NoError(s.T, err)
 	}
 
 	return lines, childLevel + 1, centroid, cspann.ChildKey{PartitionKey: partitionKey}
