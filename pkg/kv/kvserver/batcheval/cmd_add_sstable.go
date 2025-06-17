@@ -130,6 +130,11 @@ func EvalAddSSTable(
 ) (result.Result, error) {
 	args := cArgs.Args.(*kvpb.AddSSTableRequest)
 	h := cArgs.Header
+
+	if err := args.Validate(h); err != nil {
+		return result.Result{}, err
+	}
+
 	ms := cArgs.Stats
 	start, end := storage.MVCCKey{Key: args.Key}, storage.MVCCKey{Key: args.EndKey}
 	sst := args.Data
@@ -290,34 +295,26 @@ func EvalAddSSTable(
 	if checkConflicts {
 		stats.Add(checkConflictsStatsDelta)
 	}
-	if !(checkConflicts || args.ComputeStatsDiff) {
-		// If CheckSSTConflicts or ComputeStatsDiff are not used to compute stats,
-		// then the stats do not account for overlapping keys in the engine, so we
-		// have to assume they are estimates.
-		stats.ContainsEstimates++
-	}
 	if args.ComputeStatsDiff {
-		if checkConflicts {
-			return result.Result{}, errors.New(
-				"AddSSTableRequest.ComputeStatsDiff cannot be used with DisallowConflicts or DisallowShadowingBelow")
-		}
-		if args.MVCCStats != nil {
-			return result.Result{}, errors.New(
-				"AddSSTableRequest.ComputeStatsDiff cannot be used with precomputed MVCCStats")
-		}
-		statsDiff, err := computeSSTStatsDiffWrapper(ctx, sst, readWriter, h.Timestamp.WallTime, start, end)
+		statsDiff, err := computeSSTStatsDiffWithFallback(ctx, sst, readWriter, h.Timestamp.WallTime, start, end)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "computing SST stats diff")
 		}
 		stats.Add(statsDiff)
 	} else if args.MVCCStats != nil {
 		stats.Add(*args.MVCCStats)
+		if !checkConflicts {
+			stats.ContainsEstimates++
+		}
 	} else {
 		sstStats, err := computeSSTStats(ctx, sst, h.Timestamp.WallTime)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "computing SST stats")
 		}
 		stats.Add(sstStats)
+		if !checkConflicts {
+			stats.ContainsEstimates++
+		}
 	}
 	ms.Add(stats)
 
@@ -468,7 +465,7 @@ func EvalAddSSTable(
 	}, nil
 }
 
-func computeSSTStatsDiffWrapper(
+func computeSSTStatsDiffWithFallback(
 	ctx context.Context,
 	sst []byte,
 	readWriter storage.ReadWriter,
@@ -519,7 +516,7 @@ func computeSSTStats(ctx context.Context, sst []byte, nowNanos int64) (enginepb.
 }
 
 // checkSSTSpanBounds verifies that the keys in the sstable are within the
-// span specified by the request header.
+// span specified by [start, end].
 func checkSSTSpanBounds(ctx context.Context, sst []byte, start, end storage.MVCCKey) error {
 	sstIter, err := storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
