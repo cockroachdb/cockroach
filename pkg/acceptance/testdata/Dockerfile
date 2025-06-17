@@ -63,7 +63,13 @@ RUN curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg > /etc/apt/trusted.gpg.d
     ruby \
     ruby-pg \
     xmlstarlet \
-    yarn
+    yarn \
+    python3-dev \
+    python3-pip \
+    python3-setuptools \
+&& pip3 install --upgrade pip \
+&& pip3 install backports.zoneinfo \
+&& pip3 install psycopg
 
 RUN case ${TARGETPLATFORM} in \
     "linux/amd64") ARCH=amd64; SHASUM=442dae58b727a79f81368127fac141d7f95501ffa05f8c48943d27c4e807deb7 ;; \

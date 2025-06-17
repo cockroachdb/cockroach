@@ -70,7 +70,7 @@ func (s *statusServer) Statements(
 		return status.Statements(ctx, localReq)
 	}
 
-	nodeStatement := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
+	nodeStatement := func(ctx context.Context, status serverpb.RPCStatusClient, _ roachpb.NodeID) (interface{}, error) {
 		return status.Statements(ctx, localReq)
 	}
 

@@ -135,7 +135,7 @@ func TestTenantGRPCServices(t *testing.T) {
 		conn, err := rpcCtx.GRPCDialNode(grpcAddr, nodeID, roachpb.Locality{}, rpcbase.DefaultClass).Connect(ctx)
 		require.NoError(t, err)
 
-		client := serverpb.NewStatusClient(conn)
+		client := serverpb.NewGRPCStatusClientAdapter(conn)
 
 		resp, err := client.Statements(ctx, &serverpb.StatementsRequest{NodeID: "local"})
 		require.NoError(t, err)
@@ -149,7 +149,7 @@ func TestTenantGRPCServices(t *testing.T) {
 		conn, err := rpcCtx.GRPCDialNode(grpcAddr, server.NodeID(), roachpb.Locality{}, rpcbase.DefaultClass).Connect(ctx)
 		require.NoError(t, err)
 
-		client := serverpb.NewStatusClient(conn)
+		client := serverpb.NewGRPCStatusClientAdapter(conn)
 
 		_, err = client.Statements(ctx, &serverpb.StatementsRequest{NodeID: "local"})
 		require.Errorf(t, err, "statements endpoint should not be accessed on KV node by tenant")

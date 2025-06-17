@@ -65,7 +65,6 @@ go_library(
         "opgen_schema_comment.go",
         "opgen_schema_parent.go",
         "opgen_secondary_index.go",
-        "opgen_secondary_index_partial.go",
         "opgen_sequence.go",
         "opgen_sequence_option.go",
         "opgen_sequence_owner.go",

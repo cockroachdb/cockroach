@@ -14,16 +14,16 @@ import (
 
 // DialKeyVisualizerClient establishes a DRPC connection if enabled; otherwise,
 // it falls back to gRPC. The established connection is used to create a
-// KeyVisualizerClient.
+// RPCKeyVisualizerClient.
 func DialKeyVisualizerClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
-) (KeyVisualizerClient, error) {
+) (RPCKeyVisualizerClient, error) {
 	if !rpcbase.TODODRPC {
 		conn, err := nd.Dial(ctx, nodeID, class)
 		if err != nil {
 			return nil, err
 		}
-		return NewKeyVisualizerClient(conn), nil
+		return NewGRPCKeyVisualizerClientAdapter(conn), nil
 	}
 	return nil, nil
 }

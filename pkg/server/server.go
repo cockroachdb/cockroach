@@ -987,7 +987,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		return nil, err
 	}
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
+	if err := kvserver.DRPCRegisterPerReplica(drpcServer, node.perReplicaServer); err != nil {
+		return nil, err
+	}
 	kvserver.RegisterPerStoreServer(grpcServer.Server, node.perReplicaServer)
+	if err := kvserver.DRPCRegisterPerStore(drpcServer, node.perReplicaServer); err != nil {
+		return nil, err
+	}
 	ctpb.RegisterSideTransportServer(grpcServer.Server, ctReceiver)
 
 	// Create blob service for inter-node file sharing.

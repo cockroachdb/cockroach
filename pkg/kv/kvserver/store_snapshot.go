@@ -666,7 +666,7 @@ func SendEmptySnapshot(
 	clusterID uuid.UUID,
 	st *cluster.Settings,
 	tracer *tracing.Tracer,
-	mrc MultiRaftClient,
+	mrc RPCMultiRaftClient,
 	now hlc.Timestamp,
 	desc roachpb.RangeDescriptor,
 	to roachpb.ReplicaDescriptor,

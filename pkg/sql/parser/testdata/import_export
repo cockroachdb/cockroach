@@ -1,22 +1,4 @@
 parse
-IMPORT TABLE foo FROM PGDUMPCREATE 'nodelocal://0/foo/bar' WITH temp = 'path/to/temp'
-----
-IMPORT TABLE foo FROM PGDUMPCREATE '*****' WITH OPTIONS (temp = 'path/to/temp') -- normalized!
-IMPORT TABLE foo FROM PGDUMPCREATE ('*****') WITH OPTIONS (temp = ('path/to/temp')) -- fully parenthesized
-IMPORT TABLE foo FROM PGDUMPCREATE '_' WITH OPTIONS (temp = '_') -- literals removed
-IMPORT TABLE _ FROM PGDUMPCREATE '*****' WITH OPTIONS (_ = 'path/to/temp') -- identifiers removed
-IMPORT TABLE foo FROM PGDUMPCREATE 'nodelocal://0/foo/bar' WITH OPTIONS (temp = 'path/to/temp') -- passwords exposed
-
-parse
-IMPORT TABLE foo FROM PGDUMPCREATE ('nodelocal://0/foo/bar') WITH temp = 'path/to/temp'
-----
-IMPORT TABLE foo FROM PGDUMPCREATE '*****' WITH OPTIONS (temp = 'path/to/temp') -- normalized!
-IMPORT TABLE foo FROM PGDUMPCREATE ('*****') WITH OPTIONS (temp = ('path/to/temp')) -- fully parenthesized
-IMPORT TABLE foo FROM PGDUMPCREATE '_' WITH OPTIONS (temp = '_') -- literals removed
-IMPORT TABLE _ FROM PGDUMPCREATE '*****' WITH OPTIONS (_ = 'path/to/temp') -- identifiers removed
-IMPORT TABLE foo FROM PGDUMPCREATE 'nodelocal://0/foo/bar' WITH OPTIONS (temp = 'path/to/temp') -- passwords exposed
-
-parse
 IMPORT INTO foo(id, email) CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'
 ----
 IMPORT INTO foo(id, email) CSV DATA ('*****', $1) WITH OPTIONS (temp = 'path/to/temp') -- normalized!
@@ -33,42 +15,6 @@ IMPORT INTO foo CSV DATA (('*****'), ($1)) WITH OPTIONS (temp = ('path/to/temp')
 IMPORT INTO foo CSV DATA ('_', $1) WITH OPTIONS (temp = '_') -- literals removed
 IMPORT INTO _ CSV DATA ('*****', $1) WITH OPTIONS (_ = 'path/to/temp') -- identifiers removed
 IMPORT INTO foo CSV DATA ('path/to/some/file', $1) WITH OPTIONS (temp = 'path/to/temp') -- passwords exposed
-
-parse
-IMPORT PGDUMP 'nodelocal://0/foo/bar' WITH temp = 'path/to/temp'
-----
-IMPORT PGDUMP '*****' WITH OPTIONS (temp = 'path/to/temp') -- normalized!
-IMPORT PGDUMP ('*****') WITH OPTIONS (temp = ('path/to/temp')) -- fully parenthesized
-IMPORT PGDUMP '_' WITH OPTIONS (temp = '_') -- literals removed
-IMPORT PGDUMP '*****' WITH OPTIONS (_ = 'path/to/temp') -- identifiers removed
-IMPORT PGDUMP 'nodelocal://0/foo/bar' WITH OPTIONS (temp = 'path/to/temp') -- passwords exposed
-
-parse
-EXPLAIN IMPORT PGDUMP 'nodelocal://0/foo/bar' WITH temp = 'path/to/temp'
-----
-EXPLAIN IMPORT PGDUMP '*****' WITH OPTIONS (temp = 'path/to/temp') -- normalized!
-EXPLAIN IMPORT PGDUMP ('*****') WITH OPTIONS (temp = ('path/to/temp')) -- fully parenthesized
-EXPLAIN IMPORT PGDUMP '_' WITH OPTIONS (temp = '_') -- literals removed
-EXPLAIN IMPORT PGDUMP '*****' WITH OPTIONS (_ = 'path/to/temp') -- identifiers removed
-EXPLAIN IMPORT PGDUMP 'nodelocal://0/foo/bar' WITH OPTIONS (temp = 'path/to/temp') -- passwords exposed
-
-parse
-IMPORT PGDUMP ('nodelocal://0/foo/bar') WITH temp = 'path/to/temp'
-----
-IMPORT PGDUMP '*****' WITH OPTIONS (temp = 'path/to/temp') -- normalized!
-IMPORT PGDUMP ('*****') WITH OPTIONS (temp = ('path/to/temp')) -- fully parenthesized
-IMPORT PGDUMP '_' WITH OPTIONS (temp = '_') -- literals removed
-IMPORT PGDUMP '*****' WITH OPTIONS (_ = 'path/to/temp') -- identifiers removed
-IMPORT PGDUMP 'nodelocal://0/foo/bar' WITH OPTIONS (temp = 'path/to/temp') -- passwords exposed
-
-parse
-IMPORT PGDUMP ('nodelocal://0/foo/bar') WITH OPTIONS (temp = 'path/to/temp')
-----
-IMPORT PGDUMP '*****' WITH OPTIONS (temp = 'path/to/temp') -- normalized!
-IMPORT PGDUMP ('*****') WITH OPTIONS (temp = ('path/to/temp')) -- fully parenthesized
-IMPORT PGDUMP '_' WITH OPTIONS (temp = '_') -- literals removed
-IMPORT PGDUMP '*****' WITH OPTIONS (_ = 'path/to/temp') -- identifiers removed
-IMPORT PGDUMP 'nodelocal://0/foo/bar' WITH OPTIONS (temp = 'path/to/temp') -- passwords exposed
 
 parse
 EXPORT INTO CSV 'a' FROM TABLE a

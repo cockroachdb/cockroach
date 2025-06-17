@@ -45,7 +45,7 @@ type CollectionStats struct {
 // If logOutput is not nil, this function will write when a node is visited,
 // and when a node needs to be revisited.
 func CollectRemoteReplicaInfo(
-	ctx context.Context, c serverpb.AdminClient, maxConcurrency int, logOutput io.Writer,
+	ctx context.Context, c serverpb.RPCAdminClient, maxConcurrency int, logOutput io.Writer,
 ) (loqrecoverypb.ClusterReplicaInfo, CollectionStats, error) {
 	cc, err := c.RecoveryCollectReplicaInfo(ctx, &serverpb.RecoveryCollectReplicaInfoRequest{
 		MaxConcurrency: int32(maxConcurrency),

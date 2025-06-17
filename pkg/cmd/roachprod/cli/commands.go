@@ -199,15 +199,17 @@ Removing nodes from the middle of the cluster is not supported yet.
 }
 
 func (cr *commandRegistry) buildResetCmd() *cobra.Command {
-	return &cobra.Command{
+	resetCmd := &cobra.Command{
 		Use:   "reset <cluster>",
-		Short: "reset *all* VMs in a cluster",
-		Long:  `Reset a cloud VM.`,
+		Short: "reset VMs in a cluster",
+		Long:  `Reset cloud VMs in a cluster.`,
 		Args:  cobra.ExactArgs(1),
 		Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
 			return roachprod.Reset(config.Logger, args[0])
 		}),
 	}
+	addHelpAboutNodes(resetCmd)
+	return resetCmd
 }
 
 func (cr *commandRegistry) buildDestroyCmd() *cobra.Command {

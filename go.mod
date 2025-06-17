@@ -139,7 +139,7 @@ require (
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.19.0
 	github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506
-	github.com/cockroachdb/pebble v0.0.0-20250610195649-24730ad60ca6
+	github.com/cockroachdb/pebble v0.0.0-20250616174800-acc4f6d85f26
 	github.com/cockroachdb/redact v1.1.6
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b
@@ -157,7 +157,7 @@ require (
 	github.com/docker/go-connections v0.4.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/edsrzf/mmap-go v1.0.0
-	github.com/elastic/gosigar v0.14.3
+	github.com/elastic/gosigar v0.14.4-0.20250606160555-44388520074d
 	github.com/emicklei/dot v0.15.0
 	github.com/fatih/color v1.16.0
 	github.com/fatih/structs v1.1.0

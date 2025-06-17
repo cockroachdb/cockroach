@@ -100,7 +100,7 @@ func (c *client) startLocked(
 			disconnected <- c
 		}()
 
-		stream, err := func() (Gossip_GossipClient, error) {
+		stream, err := func() (RPCGossip_GossipClient, error) {
 			gc, err := c.dialGossipClient(ctx, rpcCtx)
 			if err != nil {
 				return nil, err
@@ -155,7 +155,7 @@ func (c *client) close() {
 // requestGossip requests the latest gossip from the remote server by
 // supplying a map of this node's knowledge of other nodes' high water
 // timestamps.
-func (c *client) requestGossip(g *Gossip, stream Gossip_GossipClient) error {
+func (c *client) requestGossip(g *Gossip, stream RPCGossip_GossipClient) error {
 	nodeAddr, highWaterStamps := func() (util.UnresolvedAddr, map[roachpb.NodeID]int64) {
 		g.mu.RLock()
 		defer g.mu.RUnlock()
@@ -178,7 +178,7 @@ func (c *client) requestGossip(g *Gossip, stream Gossip_GossipClient) error {
 
 // sendGossip sends the latest gossip to the remote server, based on
 // the remote server's notion of other nodes' high water timestamps.
-func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient, firstReq bool) error {
+func (c *client) sendGossip(g *Gossip, stream RPCGossip_GossipClient, firstReq bool) error {
 	g.mu.Lock()
 	delta := g.mu.is.delta(c.remoteHighWaterStamps)
 	if firstReq {
@@ -304,7 +304,7 @@ func (c *client) handleResponse(ctx context.Context, g *Gossip, reply *Response)
 func (c *client) gossip(
 	ctx context.Context,
 	g *Gossip,
-	stream Gossip_GossipClient,
+	stream RPCGossip_GossipClient,
 	stopper *stop.Stopper,
 	wg *sync.WaitGroup,
 ) error {
@@ -417,14 +417,16 @@ func (c *client) dial(ctx context.Context, rpcCtx *rpc.Context) (*grpc.ClientCon
 
 // dialGossipClient establishes a DRPC connection if enabled; otherwise,
 // it falls back to gRPC. The established connection is used to create a
-// GossipClient.
-func (c *client) dialGossipClient(ctx context.Context, rpcCtx *rpc.Context) (GossipClient, error) {
+// RPCGossipClient.
+func (c *client) dialGossipClient(
+	ctx context.Context, rpcCtx *rpc.Context,
+) (RPCGossipClient, error) {
 	if !rpcbase.TODODRPC {
 		conn, err := c.dial(ctx, rpcCtx)
 		if err != nil {
 			return nil, err
 		}
-		return NewGossipClient(conn), nil
+		return NewGRPCGossipClientAdapter(conn), nil
 	}
 	return nil, nil
 }

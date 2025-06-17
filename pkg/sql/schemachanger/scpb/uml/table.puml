@@ -385,12 +385,6 @@ SecondaryIndex :  EmbeddedExpr
 SecondaryIndex :  RecreateSourceIndexID
 SecondaryIndex :  RecreateTargetIndexID
 
-object SecondaryIndexPartial
-
-SecondaryIndexPartial :  TableID
-SecondaryIndexPartial :  IndexID
-SecondaryIndexPartial :  Expression
-
 object Sequence
 
 Sequence :  SequenceID
@@ -646,7 +640,6 @@ Schema <|-- SchemaComment
 Schema <|-- SchemaParent
 Table <|-- SecondaryIndex
 View <|-- SecondaryIndex
-SecondaryIndex <|-- SecondaryIndexPartial
 Sequence <|-- SequenceOption
 Column <|-- SequenceOwner
 Table <|-- TableComment

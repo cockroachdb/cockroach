@@ -833,7 +833,7 @@ func (p *Provider) listRegion(l *logger.Logger, r string, opts vm.ListOptions) (
 			}
 		}
 
-		valid, reason := i.isRoachprodAndValidStatus()
+		valid, reason := i.isValidStatus()
 		if !valid {
 			l.Printf("WARN: discarding instance %s in region %s (%s)", *i.instance.CRN, r, reason)
 			continue

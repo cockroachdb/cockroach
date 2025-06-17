@@ -799,20 +799,23 @@ func (s *testState) loadIndexFromFormat(
 	childLevel := cspann.LeafLevel
 	childVectors := vector.MakeSet(len(centroid))
 	childKeys := []cspann.ChildKey(nil)
-	childIndent := 0
 
-	// Loop over children.
-	for len(lines) > 0 && len(lines[0]) > indent {
-		if strings.HasSuffix(lines[0], "│") {
-			childIndent = len(lines[0])
-			lines = lines[1:]
+	if len(lines) > 0 && strings.HasSuffix(lines[0], "│") {
+		// There are children, so loop over them.
+		childIndent := len(lines[0]) - len("│")
+		for len(lines) > 0 && len(lines[0]) > childIndent {
+			remainder := lines[0][childIndent:]
+			if remainder == "│" {
+				// Skip line.
+				lines = lines[1:]
+				continue
+			} else if strings.HasPrefix(remainder, "├") || strings.HasPrefix(remainder, "└") {
+				var childVector vector.T
+				lines, childLevel, childVector, childKey = s.loadIndexFromFormat(treeKey, lines, childIndent)
+				childVectors.Add(childVector)
+				childKeys = append(childKeys, childKey)
+			}
 		}
-		require.Greater(s.T, childIndent, 0)
-
-		var childVector vector.T
-		lines, childLevel, childVector, childKey = s.loadIndexFromFormat(treeKey, lines, childIndent)
-		childVectors.Add(childVector)
-		childKeys = append(childKeys, childKey)
 	}
 
 	metadata := cspann.PartitionMetadata{

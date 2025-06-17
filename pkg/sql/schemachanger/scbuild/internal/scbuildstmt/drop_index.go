@@ -519,11 +519,11 @@ func isIndexUniqueAndCanServeFK(
 	}
 
 	isPartial := false
-	scpb.ForEachSecondaryIndexPartial(b.QueryByID(ie.TableID), func(
-		current scpb.Status, target scpb.TargetStatus, sipe *scpb.SecondaryIndexPartial,
+	scpb.ForEachSecondaryIndex(b.QueryByID(ie.TableID), func(
+		current scpb.Status, target scpb.TargetStatus, sie *scpb.SecondaryIndex,
 	) {
-		if sipe.TableID == ie.TableID && sipe.IndexID == ie.IndexID {
-			isPartial = true
+		if sie.TableID == ie.TableID && sie.IndexID == ie.IndexID {
+			isPartial = sie.EmbeddedExpr != nil
 		}
 	})
 	if isPartial {

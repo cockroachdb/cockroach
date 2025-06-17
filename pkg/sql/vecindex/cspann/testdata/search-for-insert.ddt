@@ -155,7 +155,6 @@ load-index min-partition-size=1 max-partition-size=3 beam-size=2
 • 1 (0, 0) [AddingLevel:2,3]
 │
 ├───• 2 (1, 1)
-│
 └───• 3 (2, 2)
 ----
 Loaded 0 vectors.
@@ -170,7 +169,6 @@ load-index min-partition-size=1 max-partition-size=3 beam-size=2
 • 1 (0, 0)
 │
 ├───• 2 (1, 1) [DeletingForSplit:2,3]
-│
 └───• 3 (2, 2)
 ----
 Loaded 0 vectors.

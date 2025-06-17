@@ -4,11 +4,13 @@ go_library(
     name = "jwtauthccl",
     srcs = [
         "authentication_jwt.go",
+        "authorization_jwt.go",
         "settings.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/ccl/securityccl/jwthelper",
         "//pkg/ccl/utilccl",
         "//pkg/security/username",
         "//pkg/server/telemetry",
@@ -34,6 +36,7 @@ go_test(
     size = "medium",
     srcs = [
         "authentication_jwt_test.go",
+        "authorization_jwt_test.go",
         "main_test.go",
         "settings_test.go",
     ],
@@ -47,6 +50,8 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/sql/pgwire/identmap",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",

@@ -52,8 +52,8 @@ type debugZipContext struct {
 	z              *zipper
 	clusterPrinter *zipReporter
 	timeout        time.Duration
-	admin          serverpb.AdminClient
-	status         serverpb.StatusClient
+	admin          serverpb.RPCAdminClient
+	status         serverpb.RPCStatusClient
 	prefix         string
 
 	firstNodeSQLConn clisqlclient.Conn

@@ -1027,6 +1027,14 @@ func buildNTables(n int) string {
 	return b.String()
 }
 
+func buildNFunctions(n int) string {
+	b := strings.Builder{}
+	for i := 0; i < n; i++ {
+		b.WriteString(fmt.Sprintf("CREATE FUNCTION fn%d() RETURNS int AS 'SELECT 1' LANGUAGE SQL;\n", i))
+	}
+	return b.String()
+}
+
 func buildNTypes(n int) string {
 	b := strings.Builder{}
 	for i := 0; i < n; i++ {

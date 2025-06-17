@@ -219,6 +219,9 @@ func (s *txnSeqNumAllocator) createSavepointLocked(ctx context.Context, sp *save
 	sp.seqNum = s.writeSeq
 }
 
+// releaseSavepointLocked is part of the txnInterceptor interface.
+func (*txnSeqNumAllocator) releaseSavepointLocked(context.Context, *savepoint) {}
+
 // rollbackToSavepointLocked is part of the txnInterceptor interface.
 func (s *txnSeqNumAllocator) rollbackToSavepointLocked(context.Context, savepoint) {
 	// Nothing to restore. The seq nums keep increasing. The TxnCoordSender has

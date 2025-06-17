@@ -223,9 +223,9 @@ type connector struct {
 // client represents an RPC client that proxies to a KV instance.
 type client struct {
 	kvpb.InternalClient
-	serverpb.StatusClient
-	serverpb.AdminClient
-	tspb.TimeSeriesClient
+	serverpb.RPCStatusClient
+	serverpb.RPCAdminClient
+	tspb.RPCTimeSeriesClient
 }
 
 // connector is capable of providing information on each of the KV nodes in the
@@ -983,10 +983,10 @@ func (c *connector) dialAddrs(ctx context.Context) (*client, error) {
 					continue
 				}
 				return &client{
-					InternalClient:   kvpb.NewInternalClient(conn),
-					StatusClient:     serverpb.NewStatusClient(conn),
-					AdminClient:      serverpb.NewAdminClient(conn),
-					TimeSeriesClient: tspb.NewTimeSeriesClient(conn),
+					InternalClient:      kvpb.NewInternalClient(conn),
+					RPCStatusClient:     serverpb.NewGRPCStatusClientAdapter(conn),
+					RPCAdminClient:      serverpb.NewGRPCAdminClientAdapter(conn),
+					RPCTimeSeriesClient: tspb.NewGRPCTimeSeriesClientAdapter(conn),
 				}, nil
 			}
 		}

@@ -1885,10 +1885,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "66a7caf0461fd298e3208b6ef9d225b956fbd997eb086d1c464c743f3204dd44",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20250610195649-24730ad60ca6",
+        sha256 = "9829156559e966e2594026d1eb66db9f18b12129851da4f1a6784e994f1e6f7e",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20250616174800-acc4f6d85f26",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20250610195649-24730ad60ca6.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20250616174800-acc4f6d85f26.zip",
         ],
     )
     go_repository(
@@ -2885,10 +2885,10 @@ def go_deps():
         name = "com_github_elastic_gosigar",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/elastic/gosigar",
-        sha256 = "abbc9f20d419423001a1fa3d326082759d92b6f6ee0c40b703b036894702d65a",
-        strip_prefix = "github.com/elastic/gosigar@v0.14.3",
+        sha256 = "e9138d19e29c9f9818a4372babc575932cd6e7f4fe89707d26ca3e650f624bef",
+        strip_prefix = "github.com/elastic/gosigar@v0.14.4-0.20250606160555-44388520074d",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/elastic/gosigar/com_github_elastic_gosigar-v0.14.3.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/elastic/gosigar/com_github_elastic_gosigar-v0.14.4-0.20250606160555-44388520074d.zip",
         ],
     )
     go_repository(

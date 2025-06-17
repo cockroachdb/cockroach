@@ -1016,16 +1016,6 @@ func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 }
 
 func isIndexPartial(b BuildCtx, tableID catid.DescID, indexID catid.IndexID) (ret bool) {
-	scpb.ForEachSecondaryIndexPartial(b.QueryByID(tableID), func(
-		current scpb.Status, target scpb.TargetStatus, e *scpb.SecondaryIndexPartial,
-	) {
-		if e.IndexID == indexID {
-			ret = true
-		}
-	})
-	if ret {
-		return ret
-	}
 	scpb.ForEachSecondaryIndex(b.QueryByID(tableID), func(
 		current scpb.Status, target scpb.TargetStatus, e *scpb.SecondaryIndex,
 	) {
