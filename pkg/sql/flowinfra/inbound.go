@@ -25,7 +25,7 @@ type InboundStreamHandler interface {
 	// Run is called once a FlowStream RPC is handled and a stream is obtained to
 	// make this stream accessible to the rest of the flow.
 	Run(
-		ctx context.Context, stream execinfrapb.DistSQL_FlowStreamServer, firstMsg *execinfrapb.ProducerMessage, f *FlowBase,
+		ctx context.Context, stream execinfrapb.RPCDistSQL_FlowStreamStream, firstMsg *execinfrapb.ProducerMessage, f *FlowBase,
 	) error
 	// Timeout is called with an error, which results in the teardown of the
 	// stream strategy with the given error.
@@ -45,7 +45,7 @@ var _ InboundStreamHandler = RowInboundStreamHandler{}
 // Run is part of the InboundStreamHandler interface.
 func (s RowInboundStreamHandler) Run(
 	ctx context.Context,
-	stream execinfrapb.DistSQL_FlowStreamServer,
+	stream execinfrapb.RPCDistSQL_FlowStreamStream,
 	firstMsg *execinfrapb.ProducerMessage,
 	f *FlowBase,
 ) error {
@@ -61,13 +61,13 @@ func (s RowInboundStreamHandler) Timeout(err error) {
 	s.ProducerDone()
 }
 
-// processInboundStream receives rows from a DistSQL_FlowStreamServer and sends
+// processInboundStream receives rows from a RPCDistSQL_FlowStreamStream and sends
 // them to a RowReceiver. Optionally processes an initial StreamMessage that was
 // already received (because the first message contains the flow and stream IDs,
 // it needs to be received before we can get here).
 func processInboundStream(
 	ctx context.Context,
-	stream execinfrapb.DistSQL_FlowStreamServer,
+	stream execinfrapb.RPCDistSQL_FlowStreamStream,
 	firstMsg *execinfrapb.ProducerMessage,
 	dst execinfra.RowReceiver,
 	f *FlowBase,
@@ -90,7 +90,7 @@ func processInboundStream(
 
 func processInboundStreamHelper(
 	ctx context.Context,
-	stream execinfrapb.DistSQL_FlowStreamServer,
+	stream execinfrapb.RPCDistSQL_FlowStreamStream,
 	firstMsg *execinfrapb.ProducerMessage,
 	dst execinfra.RowReceiver,
 	f *FlowBase,
@@ -173,7 +173,7 @@ func processInboundStreamHelper(
 // producer that it doesn't need any more rows and the producer should drain. A
 // signal is sent on stream to the producer to ask it to send metadata.
 func sendDrainSignalToStreamProducer(
-	ctx context.Context, stream execinfrapb.DistSQL_FlowStreamServer,
+	ctx context.Context, stream execinfrapb.RPCDistSQL_FlowStreamStream,
 ) error {
 	log.VEvent(ctx, 1, "sending drain signal to producer")
 	sig := execinfrapb.ConsumerSignal{DrainRequest: &execinfrapb.DrainRequest{}}
@@ -187,7 +187,7 @@ func sendDrainSignalToStreamProducer(
 func processProducerMessage(
 	ctx context.Context,
 	flowBase *FlowBase,
-	stream execinfrapb.DistSQL_FlowStreamServer,
+	stream execinfrapb.RPCDistSQL_FlowStreamStream,
 	dst execinfra.RowReceiver,
 	sd *StreamDecoder,
 	draining *bool,
