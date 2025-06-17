@@ -647,6 +647,11 @@ func (ep *DummySessionAccessor) HasViewActivityOrViewActivityRedactedRole(
 	return false, false, errors.WithStack(errEvalSessionVar)
 }
 
+func (ep *DummySessionAccessor) ForEachSessionPendingJob(_ func(job interface{}) error) error {
+	// This is a no-op in the dummy implementation.
+	return nil
+}
+
 // DummyClientNoticeSender implements the eval.ClientNoticeSender interface.
 type DummyClientNoticeSender struct{}
 
