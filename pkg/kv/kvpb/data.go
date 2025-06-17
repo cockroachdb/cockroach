@@ -112,13 +112,6 @@ func PrepareTransactionForRetry(
 		return roachpb.Transaction{}, errors.AssertionFailedf(
 			"unexpected intent missing error (%T); should be transformed into retry error", pErr.GetDetail())
 	case *ExclusionViolationError:
-		// With a fixed read snapshot, we should never see this error as WriteTooOld will take priority.
-		if !txn.IsoLevel.PerStatementReadSnapshot() {
-			return roachpb.Transaction{}, errors.AssertionFailedf(
-				"unexpected exclusion violation error in %s transaction: %s should be transformed into retry error",
-				txn.IsoLevel,
-				pErr)
-		}
 		// An exclusion violation error always requires a restart.
 		txn.WriteTimestamp.Forward(tErr.RetryTimestamp())
 		errorAlwaysRequireRestart = true
