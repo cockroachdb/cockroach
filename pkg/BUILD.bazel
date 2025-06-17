@@ -995,6 +995,7 @@ GO_TARGETS = [
     "//pkg/ccl/schemachangerccl:schemachangerccl",
     "//pkg/ccl/schemachangerccl:schemachangerccl_test",
     "//pkg/ccl/securityccl/fipsccl:fipsccl",
+    "//pkg/ccl/securityccl/jwthelper:jwthelper",
     "//pkg/ccl/serverccl/adminccl:adminccl_test",
     "//pkg/ccl/serverccl/diagnosticsccl:diagnosticsccl_test",
     "//pkg/ccl/serverccl/statusccl:statusccl_test",
