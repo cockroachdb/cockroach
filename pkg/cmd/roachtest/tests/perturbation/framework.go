@@ -619,7 +619,7 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	t.Status("T0: starting nodes")
 
 	// Track the three operations that we are sending in this test.
-	m := c.NewMonitor(ctx, v.stableNodes())
+	m := c.NewDeprecatedMonitor(ctx, v.stableNodes())
 
 	// Start the stable nodes and let the perturbation start the target node(s).
 	v.startNoBackup(ctx, t, v.stableNodes())

@@ -44,7 +44,7 @@ func registerAllocator(r registry.Registry) {
 		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
 
-		m := c.NewMonitor(ctx, c.Range(1, start))
+		m := c.NewDeprecatedMonitor(ctx, c.Range(1, start))
 		m.Go(func(ctx context.Context) error {
 			t.Status("loading fixture")
 			if err := c.RunE(
@@ -91,7 +91,7 @@ func registerAllocator(r registry.Registry) {
 		// Wait for 3x replication, we record the time taken to achieve this.
 		var replicateTime time.Time
 		startTime := timeutil.Now()
-		m = c.NewMonitor(ctx, c.CRDBNodes())
+		m = c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
 			err := roachtestutil.WaitFor3XReplication(ctx, t.L(), db)
 			replicateTime = timeutil.Now()
@@ -101,7 +101,7 @@ func registerAllocator(r registry.Registry) {
 
 		// Wait for replica count balance, this occurs only following
 		// up-replication finishing.
-		m = c.NewMonitor(ctx, c.CRDBNodes())
+		m = c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
 			t.Status("waiting for reblance")
 			err := waitForRebalance(ctx, t.L(), db, maxStdDev, allocatorStableSeconds)

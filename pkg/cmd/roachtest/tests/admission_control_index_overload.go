@@ -88,7 +88,7 @@ func registerIndexOverload(r registry.Registry) {
 			}
 
 			t.Status("starting kv workload thread to run for ", testDuration)
-			m := c.NewMonitor(ctx, c.CRDBNodes())
+			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				testDurationStr := " --duration=" + testDuration.String()
 				concurrency := roachtestutil.IfLocal(c, "  --concurrency=8", " --concurrency=2048")

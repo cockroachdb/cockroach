@@ -191,7 +191,7 @@ type TestSpec struct {
 	Randomized bool
 
 	// Monitor specifies whether the test initiates a process monitor. Eventually,
-	// this should replace all instances of `cluster.NewMonitor`. To make this
+	// this should replace all instances of `cluster.NewDeprecatedMonitor`. To make this
 	// transition, tests should be modified to utilize the `test.Monitor` and
 	// `roachtestutil.Task` interfaces provided with each test.
 	Monitor bool

@@ -56,7 +56,7 @@ func (s tpccOLAPSpec) run(ctx context.Context, t test.Test, c cluster.Cluster) {
 	queryLine := `"` + strings.Replace(tpccOlapQuery, "\n", " ", -1) + `"`
 	c.Run(ctx, option.WithNodes(c.WorkloadNode()), "echo", queryLine, "> "+queryFileName)
 	t.Status("waiting")
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 	rampDuration := 2 * time.Minute
 	duration := 3 * time.Minute
 	labels := getTpccLabels(s.Warehouses, rampDuration, duration, map[string]string{"concurrency": strconv.Itoa(s.Concurrency)})
