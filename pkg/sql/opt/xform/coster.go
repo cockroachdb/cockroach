@@ -540,6 +540,9 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	case opt.ScanOp:
 		cost = c.computeScanCost(candidate.(*memo.ScanExpr), required)
 
+	case opt.PlaceholderScanOp:
+		cost = c.computePlaceholderScanCost(candidate.(*memo.PlaceholderScanExpr), required)
+
 	case opt.SelectOp:
 		cost = c.computeSelectCost(candidate.(*memo.SelectExpr), required)
 
@@ -898,6 +901,50 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 		}
 	}
 
+	return cost
+}
+
+// computePlaceholderScanCost computes the cost of a placeholder scan. It mimics
+// the logic in computeScanCost that is relevant for placeholder scans.
+func (c *coster) computePlaceholderScanCost(
+	scan *memo.PlaceholderScanExpr, required *physical.Required,
+) memo.Cost {
+	if !scan.Flags.Empty() {
+		panic(errors.AssertionFailedf("expected empty flags for placeholder scan"))
+	}
+
+	stats := scan.Relational().Statistics()
+	rowCount := stats.RowCount
+	const numSpans = 1 // A placeholder scan always has a single span.
+	baseCost := memo.Cost{C: numSpans * randIOCostFactor}
+
+	// Add the IO cost of retrieving and the CPU cost of emitting the rows. The
+	// row cost depends on the size of the columns scanned.
+	perRowCost := c.rowScanCost(scan.Table, scan.Index, scan.Cols)
+
+	// If this is a virtual scan, add the cost of fetching table descriptors.
+	if c.mem.Metadata().Table(scan.Table).IsVirtualTable() {
+		baseCost.C += virtualScanTableDescriptorFetchCost
+	}
+
+	// Add a penalty if the cardinality exceeds the row count estimate. Adding a
+	// few rows worth of cost helps prevent surprising plans for very small tables
+	// or for when stats are stale.
+	//
+	// Note: we add this to the baseCost rather than the rowCount, so that the
+	// number of index columns does not have an outsized effect on the cost of
+	// the scan. See issue #68556.
+	baseCost.Add(c.largeCardinalityCostPenalty(scan.Relational().Cardinality, rowCount))
+
+	if required.LimitHint != 0 {
+		rowCount = math.Min(rowCount, required.LimitHint)
+	}
+
+	cost := baseCost
+	cost.C += rowCount * (seqIOCostFactor + perRowCost.C)
+
+	// TODO(#148315): Consider adding distribution cost for RBR tables.
+	cost.Add(SmallDistributeCost)
 	return cost
 }
 

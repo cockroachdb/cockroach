@@ -56,3 +56,45 @@
     []
     (OutputCols (Root))
 )
+
+# ConvertParameterizedLookupJoinToPlaceholderScan converts some LookupJoins that
+# ultimately result from GenerateParameterizedJoin into PlaceholderScans. The
+# execution of PlaceholderScans are more efficient than more general-purpose
+# LookupJoins. They also natively support vectorized execution, helping to avoid
+# materialization and columnarization overhead.
+#
+# The rule only applies to inner LookupJoins where all of the following are
+# true:
+#
+#   1. Only key columns are used; no lookup expressions.
+#   2. There is no ON filter.
+#   3. The LookupJoin is not part of a paired join.
+#   4. The lookup index can produce all of the needed output columns.
+#
+[ConvertParameterizedLookupJoinToPlaceholderScan, Explore]
+(Project
+    (LookupJoin
+        $values:(Values [ (Tuple $row:[ ... ]) ])
+        []
+        $lookupPrivate:*
+    )
+    []
+    $outputCols:* &
+        (GenericRulesEnabled) &
+        (HasPlaceholdersOrStableExprs $values) &
+        (Let
+            (
+                $span
+                $scanPrivate
+                $ok
+            ):(PlaceholderScanSpanAndPrivate
+                $lookupPrivate
+                $values
+                $row
+                $outputCols
+            )
+            $ok
+        )
+)
+=>
+(PlaceholderScan $span $scanPrivate)

@@ -500,28 +500,20 @@ quality of service: regular
 │ from: t137352
 │ auto commit
 │
-└── • lookup join
-    │ sql nodes: <hidden>
-    │ kv nodes: <hidden>
-    │ regions: <hidden>
-    │ actual row count: 0
-    │ KV time: 0µs
-    │ KV rows decoded: 0
-    │ KV bytes read: 0 B
-    │ KV gRPC calls: 0
-    │ execution time: 0µs
-    │ estimated max memory allocated: 0 B
-    │ table: t137352@t137352_pkey
-    │ equality: ($1) = (k)
-    │ equality cols are key
-    │ locking strength: for update
-    │
-    └── • values
-          sql nodes: <hidden>
-          regions: <hidden>
-          actual row count: 1
-          execution time: 0µs
-          size: 1 column, 1 row
+└── • scan
+      sql nodes: <hidden>
+      kv nodes: <hidden>
+      regions: <hidden>
+      actual row count: 0
+      KV time: 0µs
+      KV rows decoded: 0
+      KV bytes read: 0 B
+      KV gRPC calls: 0
+      estimated max memory allocated: 0 B
+      missing stats
+      table: t137352@t137352_pkey
+      spans: [/1 - /1]
+      locking strength: for update
 
 statement ok
 INSERT INTO t137352 VALUES (1, 10, 100);

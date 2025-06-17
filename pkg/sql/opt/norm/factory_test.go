@@ -87,9 +87,8 @@ func TestCopyAndReplace(t *testing.T) {
 
 	if e, err := o.Optimize(); err != nil {
 		t.Fatal(err)
-	} else if e.Op() != opt.ProjectOp || e.Child(0).Op() != opt.LookupJoinOp {
-		t.Errorf("expected optimizer to choose a (project (lookup-join)), not (%v (%v))",
-			e.Op(), e.Child(0).Op())
+	} else if e.Op() != opt.PlaceholderScanOp {
+		t.Errorf("expected optimizer to choose a placeholder scan, not %v", e.Op())
 	}
 
 	m := o.Factory().DetachMemo()
