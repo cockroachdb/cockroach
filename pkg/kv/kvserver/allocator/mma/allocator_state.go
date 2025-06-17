@@ -534,11 +534,18 @@ func (a *allocatorState) AdjustPendingChangesDisposition(changeIDs []ChangeID, s
 	}
 }
 
-// RegisterExternalChanges implements the Allocator interface.
+// RegisterExternalChanges implements the Allocator interface. All changes should
+// correspond to the same range, panic otherwise.
 func (a *allocatorState) RegisterExternalChanges(changes []ReplicaChange) []ChangeID {
+	rangeID := roachpb.RangeID(-1)
 	for _, change := range changes {
-		// TODO(wenyihu6): or has no pending ranges
-		if !a.cs.hasRange(change.rangeID) {
+		if rangeID == -1 {
+			rangeID = change.rangeID
+		} else if change.rangeID != rangeID {
+			panic(fmt.Sprintf("unexpected change rangeID %d != %d", change.rangeID, rangeID))
+		}
+		// Skip if range already has pending changes or the range does not exist.
+		if a.cs.hasNoRangeIDOrHasPendingChanges(change.rangeID) {
 			return nil
 		}
 	}
