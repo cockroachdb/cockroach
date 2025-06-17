@@ -23,6 +23,9 @@ type Timers struct {
 	KVFeedBuffer              *aggmetric.AggHistogram
 	RangefeedBufferValue      *aggmetric.AggHistogram
 	RangefeedBufferCheckpoint *aggmetric.AggHistogram
+	PTSManage                 *aggmetric.AggHistogram
+	PTSManageError            *aggmetric.AggHistogram
+	PTSCreate                 *aggmetric.AggHistogram
 }
 
 func (*Timers) MetricStruct() {}
@@ -54,6 +57,9 @@ func New(histogramWindow time.Duration) *Timers {
 		KVFeedBuffer:              b.Histogram(histogramOptsFor("changefeed.stage.kv_feed_buffer.latency", "Latency of the changefeed stage: waiting to buffer kv events")),
 		RangefeedBufferValue:      b.Histogram(histogramOptsFor("changefeed.stage.rangefeed_buffer_value.latency", "Latency of the changefeed stage: buffering rangefeed value events")),
 		RangefeedBufferCheckpoint: b.Histogram(histogramOptsFor("changefeed.stage.rangefeed_buffer_checkpoint.latency", "Latency of the changefeed stage: buffering rangefeed checkpoint events")),
+		PTSManage:                 b.Histogram(histogramOptsFor("changefeed.stage.pts.manage.latency", "Latency of the changefeed stage: Time spent successfully managing protected timestamp records on highwater advance, including time spent creating new protected timestamps when needed")),
+		PTSManageError:            b.Histogram(histogramOptsFor("changefeed.stage.pts.manage_error.latency", "Latency of the changefeed stage: Time spent managing protected timestamp when we eventually error")),
+		PTSCreate:                 b.Histogram(histogramOptsFor("changefeed.stage.pts.create.latency", "Latency of the changefeed stage: Time spent creating protected timestamp records on changefeed creation")),
 	}
 }
 
@@ -67,6 +73,9 @@ func (ts *Timers) GetOrCreateScopedTimers(scope string) *ScopedTimers {
 		KVFeedBuffer:              &timer{ts.KVFeedBuffer.AddChild(scope)},
 		RangefeedBufferValue:      &timer{ts.RangefeedBufferValue.AddChild(scope)},
 		RangefeedBufferCheckpoint: &timer{ts.RangefeedBufferCheckpoint.AddChild(scope)},
+		PTSManage:                 &timer{ts.PTSManage.AddChild(scope)},
+		PTSManageError:            &timer{ts.PTSManageError.AddChild(scope)},
+		PTSCreate:                 &timer{ts.PTSCreate.AddChild(scope)},
 	}
 }
 
@@ -77,6 +86,9 @@ type ScopedTimers struct {
 	DownstreamClientSend      *timer
 	KVFeedWaitForTableEvent   *timer
 	KVFeedBuffer              *timer
+	PTSCreate                 *timer
+	PTSManage                 *timer
+	PTSManageError            *timer
 	RangefeedBufferValue      *timer
 	RangefeedBufferCheckpoint *timer
 }

@@ -1211,7 +1211,7 @@ layers:
     - name: changefeed.checkpoint_hist_nanos
       exported_name: changefeed_checkpoint_hist_nanos
       description: Time spent checkpointing changefeed progress
-      y_axis_label: Changefeeds
+      y_axis_label: Nanoseconds
       type: HISTOGRAM
       unit: NANOSECONDS
       aggregation: AVG
@@ -1531,6 +1531,30 @@ layers:
     - name: changefeed.stage.kv_feed_wait_for_table_event.latency
       exported_name: changefeed_stage_kv_feed_wait_for_table_event_latency
       description: 'Latency of the changefeed stage: waiting for a table schema event to join to the kv event'
+      y_axis_label: Latency
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.stage.pts.create.latency
+      exported_name: changefeed_stage_pts_create_latency
+      description: 'Latency of the changefeed stage: Time spent creating protected timestamp records on changefeed creation'
+      y_axis_label: Latency
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.stage.pts.manage.latency
+      exported_name: changefeed_stage_pts_manage_latency
+      description: 'Latency of the changefeed stage: Time spent successfully managing protected timestamp records on highwater advance, including time spent creating new protected timestamps when needed'
+      y_axis_label: Latency
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.stage.pts.manage_error.latency
+      exported_name: changefeed_stage_pts_manage_error_latency
+      description: 'Latency of the changefeed stage: Time spent managing protected timestamp when we eventually error'
       y_axis_label: Latency
       type: HISTOGRAM
       unit: NANOSECONDS
