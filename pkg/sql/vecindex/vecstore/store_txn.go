@@ -128,14 +128,6 @@ func (tx *Txn) GetPartitionMetadata(
 			errors.Wrapf(err, "getting partition metadata for %d", partitionKey)
 	}
 
-	// Do not allow updates to the partition if the state doesn't allow it.
-	if forUpdate && !metadata.StateDetails.State.AllowAddOrRemove() {
-		err = cspann.NewConditionFailedError(metadata)
-		return cspann.PartitionMetadata{}, errors.Wrapf(err,
-			"getting partition metadata %d (state=%s)",
-			partitionKey, metadata.StateDetails.State.String())
-	}
-
 	return metadata, nil
 }
 
@@ -179,7 +171,7 @@ func (tx *Txn) AddToPartition(
 
 	// Do not allow vectors to be added to the partition if the state doesn't
 	// allow it.
-	if !metadata.StateDetails.State.AllowAddOrRemove() {
+	if !metadata.StateDetails.State.AllowAdd() {
 		return errors.Wrapf(cspann.NewConditionFailedError(metadata),
 			"adding to partition %d (state=%s)", partitionKey, metadata.StateDetails.State.String())
 	}
@@ -227,16 +219,9 @@ func (tx *Txn) RemoveFromPartition(
 		return errors.Wrapf(err, "locking partition %d for add", partitionKey)
 	}
 
-	metadata, err := tx.store.getMetadataFromKVResult(partitionKey, &b.Results[0])
+	_, err := tx.store.getMetadataFromKVResult(partitionKey, &b.Results[0])
 	if err != nil {
 		return err
-	}
-
-	// Do not allow vectors to be removed from the partition if the state doesn't
-	// allow it.
-	if !metadata.StateDetails.State.AllowAddOrRemove() {
-		return errors.Wrapf(cspann.NewConditionFailedError(metadata),
-			"removing from partition %d (state=%s)", partitionKey, metadata.StateDetails.State.String())
 	}
 
 	b = tx.kv.NewBatch()

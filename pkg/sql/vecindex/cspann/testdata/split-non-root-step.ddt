@@ -425,7 +425,7 @@ force-split partition-key=7 parent-partition-key=1 steps=8
         └───• vec2 (3, 5)
 
 # Continue split of child #4. This should only progress to DeletingForSplit,
-# since it cannot be removed from its parent #7, which is still in the
+# since it will not be removed from its parent #7, which is still in the
 # DrainingForSplit state.
 force-split partition-key=4 parent-partition-key=7
 ----

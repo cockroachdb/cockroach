@@ -422,16 +422,16 @@ func (s *levelSearcher) searchChildPartitions(
 		}
 		s.stats.SearchedPartition(level, count)
 
-		// If searching for vector to delete, skip partitions that are in a state
-		// that does not allow add and remove operations. This is not possible to
-		// do here for the insert case, because we do not actually search the
-		// partition in which to insert; we only search its parent and never get
-		// the metadata for the insert partition itself.
+		// If searching for vector to delete, skip partitions that don't need
+		// vectors deleted from them (because they are draining or deleting). This
+		// is not possible to do here for the insert case, because we do not
+		// actually search the partition in which to insert; we only search its
+		// parent and never get the metadata for the insert partition itself.
 		// TODO(andyk): This should probably be checked in the Store, perhaps by
 		// passing a "forUpdate" parameter to SearchPartitions, so that the Store
 		// doesn't even add vectors from partitions that do not allow updates.
 		if s.idxCtx.forDelete && s.idxCtx.level == level {
-			if !s.idxCtx.tempToSearch[i].StateDetails.State.AllowAddOrRemove() {
+			if s.idxCtx.tempToSearch[i].StateDetails.State.CanSkipRemove() {
 				s.searchSet.RemoveByParent(partitionKey)
 			}
 		}
