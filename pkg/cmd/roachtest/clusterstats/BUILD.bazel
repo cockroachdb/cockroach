@@ -21,6 +21,7 @@ go_library(
         # Required for generated mocks
         "//pkg/roachprod",  #keep
         # Required for generated mocks
+        "//pkg/roachprod/failureinjection/failures",  #keep
         "//pkg/roachprod/install",  #keep
         "//pkg/roachprod/logger",
         "//pkg/roachprod/prometheus",
