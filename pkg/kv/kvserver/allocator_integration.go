@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 type SyncChangeID uint64
@@ -38,18 +39,22 @@ func (id SyncChangeID) IsValid() bool {
 // applies changes without blocking the goroutine, while in production code we
 // apply the changes synchronously on the same goroutine.
 type AllocatorSync struct {
-	sp             *storepool.StorePool
-	mmAllocator    mma.Allocator
-	changeSeqGen   SyncChangeID
-	trackedChanges map[SyncChangeID]trackedAllocatorChange
+	sp          *storepool.StorePool
+	mmAllocator mma.Allocator
+	mu          struct {
+		syncutil.Mutex
+		changeSeqGen   SyncChangeID
+		trackedChanges map[SyncChangeID]trackedAllocatorChange
+	}
 }
 
 func NewAllocatorSync(sp *storepool.StorePool, mmAllocator mma.Allocator) *AllocatorSync {
-	return &AllocatorSync{
-		sp:             sp,
-		mmAllocator:    mmAllocator,
-		trackedChanges: make(map[SyncChangeID]trackedAllocatorChange),
+	as := &AllocatorSync{
+		sp:          sp,
+		mmAllocator: mmAllocator,
 	}
+	as.mu.trackedChanges = make(map[SyncChangeID]trackedAllocatorChange)
+	return as
 }
 
 // AllocatorChangeType is used to identify the type of change that is being
@@ -106,8 +111,10 @@ func (as *AllocatorSync) NonMMAPreTransferLease(
 	}
 	// We only track one of the changeIDs, since they are the same for both
 	// lease transfer.
-	syncChangeID := as.newSyncChangeID()
-	as.trackedChanges[syncChangeID] = trackedChange
+	as.mu.Lock()
+	defer as.mu.Unlock()
+	syncChangeID := as.newSyncChangeIDLocked()
+	as.mu.trackedChanges[syncChangeID] = trackedChange
 	return syncChangeID
 }
 
@@ -190,14 +197,16 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 	log.Infof(context.Background(), "registered external replica change: chgs=%v change_ids=%v",
 		changes, changeIDs)
 
-	syncChangeID := as.newSyncChangeID()
-	as.trackedChanges[syncChangeID] = trackedChange
+	as.mu.Lock()
+	defer as.mu.Unlock()
+	syncChangeID := as.newSyncChangeIDLocked()
+	as.mu.trackedChanges[syncChangeID] = trackedChange
 	return syncChangeID
 }
 
-func (as *AllocatorSync) newSyncChangeID() SyncChangeID {
-	as.changeSeqGen += 1
-	return as.changeSeqGen
+func (as *AllocatorSync) newSyncChangeIDLocked() SyncChangeID {
+	as.mu.changeSeqGen += 1
+	return as.mu.changeSeqGen
 }
 
 func (as *AllocatorSync) NonMMAPreRelocateRange(
@@ -205,6 +214,8 @@ func (as *AllocatorSync) NonMMAPreRelocateRange(
 	usage allocator.RangeUsageInfo,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
 ) []mma.ChangeID {
+	// TODO(sumeer): implement this, since it is needed for the old store
+	// rebalancer to work.
 	panic("unimplemented")
 }
 
@@ -225,8 +236,10 @@ func (as *AllocatorSync) MMAPreApply(
 	} else {
 		panic("unexpected change type")
 	}
-	syncChangeID := as.newSyncChangeID()
-	as.trackedChanges[syncChangeID] = trackedChange
+	as.mu.Lock()
+	defer as.mu.Unlock()
+	syncChangeID := as.newSyncChangeIDLocked()
+	as.mu.trackedChanges[syncChangeID] = trackedChange
 	return syncChangeID
 }
 
@@ -234,15 +247,20 @@ func (as *AllocatorSync) MMAPreApply(
 // the old allocator components (lease queue, replicate queue and store
 // rebalancer), as well as the new mma.Allocator.
 func (as *AllocatorSync) PostApply(syncChangeID SyncChangeID, success bool) {
-	tracked, ok := as.trackedChanges[syncChangeID]
-	if !ok {
-		panic("PostApply called with unknown SyncChangeID")
-	}
+	var tracked trackedAllocatorChange
+	func() {
+		as.mu.Lock()
+		defer as.mu.Unlock()
+		var ok bool
+		tracked, ok = as.mu.trackedChanges[syncChangeID]
+		if !ok {
+			panic("PostApply called with unknown SyncChangeID")
+		}
+		delete(as.mu.trackedChanges, syncChangeID)
+	}()
 	if changeIDs := tracked.changeIDs; changeIDs != nil {
 		as.mmAllocator.AdjustPendingChangesDisposition(changeIDs, success)
 	}
-	delete(as.trackedChanges, syncChangeID)
-
 	switch tracked.typ {
 	case AllocatorChangeTypeLeaseTransfer:
 		as.sp.UpdateLocalStoresAfterLeaseTransfer(tracked.transferFrom,
@@ -256,6 +274,10 @@ func (as *AllocatorSync) PostApply(syncChangeID SyncChangeID, success bool) {
 		// TODO(kvoli): We don't need to implement this until later, as only one
 		// store rebalancer will run at a time and only the old store rebalancer
 		// issues relocate range commands.
+		//
+		// TODO(sumeer): We should implement it, and make all changes flow through
+		// AllocatorSync, even when the mma.Allocator is not used, since that
+		// simplifies the code.
 		panic("unimplemented")
 	}
 }
