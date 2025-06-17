@@ -114,11 +114,11 @@ type monitorImpl struct {
 func newMonitor(
 	ctx context.Context,
 	t interface {
-	Fatal(...interface{})
-	Failed() bool
-	WorkerStatus(...interface{})
-	L() *logger.Logger
-},
+		Fatal(...interface{})
+		Failed() bool
+		WorkerStatus(...interface{})
+		L() *logger.Logger
+	},
 	c cluster.Cluster,
 	expectExactProcessDeath bool,
 	opts ...option.Option,

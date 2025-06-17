@@ -333,7 +333,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 			t.Fatal(err)
 		}
 	} else {
-		m := c.NewMonitor(ctx, c.CRDBNodes())
+		m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 		m.Go(runWorkload)
 		m.Wait()
 	}

@@ -106,7 +106,7 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 		rootRng: rng,
 		seed:    seed,
 	}
-	m := c.NewMonitor(ctx)
+	m := c.NewDeprecatedMonitor(ctx)
 	t.Status("running imports with seed ", seed)
 	var wg sync.WaitGroup
 	wg.Add(len(tablesToNumFiles))

@@ -108,7 +108,7 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 
 	// Drain the last 5 nodes from the cluster, resulting in immovable leases on
 	// at least one of the nodes.
-	m := c.NewMonitor(ctx)
+	m := c.NewDeprecatedMonitor(ctx)
 	for nodeID := 2; nodeID <= numNodes; nodeID++ {
 		id := nodeID
 		m.Go(func(ctx context.Context) error {

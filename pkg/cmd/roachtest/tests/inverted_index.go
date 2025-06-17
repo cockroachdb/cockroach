@@ -52,7 +52,7 @@ func runSchemaChangeInvertedIndex(ctx context.Context, t test.Test, c cluster.Cl
 
 	// First generate random JSON data using the JSON workload.
 	// TODO (lucy): Using a pre-generated test fixture would be much faster
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
 	cmdWrite := fmt.Sprintf(
 		"./workload run json --read-percent=0 --duration %s {pgurl%s} --batch 200 --sequential",
@@ -76,7 +76,7 @@ func runSchemaChangeInvertedIndex(ctx context.Context, t test.Test, c cluster.Cl
 	m.Wait()
 
 	// Run the workload (with both reads and writes), and create the index at the same time.
-	m = c.NewMonitor(ctx, c.CRDBNodes())
+	m = c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
 	cmdWriteAndRead := fmt.Sprintf(
 		"./workload run json --read-percent=50 --duration %s {pgurl%s} --sequential",
