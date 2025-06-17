@@ -2316,24 +2316,39 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 	return d.saveContents(ctx, l, rng, &collection, fingerprintAOST)
 }
 
-// deleteRandomSSTs deletes an SST from the full backup in a collection. This is
-// used to test online restore recovery. We delete from the full backup
-// specifically to avoid deleting an SST from an incremental that is skipped due
-// to a compacted backup. This ensures that deleting an SST will cause the
-// download job to fail (assuming it hasn't already been downloaded).
-func (d *BackupRestoreTestDriver) deleteRandomSST(
+// deleteUserTableSST deletes an SST that covers a user table from the full
+// backup in a collection. This is used to test online restore recovery. We
+// delete from the full backup specifically to avoid deleting an SST from an
+// incremental that is skipped due to a compacted backup. This ensures that
+// deleting an SST will cause the download job to fail (assuming it hasn't
+// already been downloaded).
+// Note: We delete specifically a user-table SST as opposed to choosing a random
+// SST because the temporary system table SSTs may be GC'd before the download
+// phase attempts to download the SST. This would cause the download job to
+// succeed instead of failing as expected. See
+// https://github.com/cockroachdb/cockroach/issues/148408 for more details.
+// TODO (kev-cao): Investigate if blocking storage level compaction would
+// prevent GC of temporary system tables and allow us to delete a random SST
+// instead. Technically, it is still possible, but unlikely, for storage to
+// compact away a user-table SST before the download job attempts to download
+// it, which would result in false positives in the test.
+func (d *BackupRestoreTestDriver) deleteUserTableSST(
 	ctx context.Context, l *logger.Logger, db *gosql.DB, collection *backupCollection,
 ) error {
 	var sstPath string
 	if err := db.QueryRowContext(
 		ctx,
 		`SELECT path FROM
-		[SHOW BACKUP FILES FROM LATEST IN $1]
+		(
+			SELECT row_number() OVER (), * FROM
+			[SHOW BACKUP FILES FROM LATEST IN $1]
+		)
 		WHERE backup_type = 'full'
-		ORDER BY random() LIMIT 1 `,
+		ORDER BY row_number DESC
+		LIMIT 1`,
 		collection.uri(),
 	).Scan(&sstPath); err != nil {
-		return errors.Wrapf(err, "failed to get random SST path from %s", collection.uri())
+		return errors.Wrapf(err, "failed to get SST path from %s", collection.uri())
 	}
 	uri, err := url.Parse(collection.uri())
 	if err != nil {
