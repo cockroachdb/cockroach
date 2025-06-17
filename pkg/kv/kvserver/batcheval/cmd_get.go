@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 func init() {
@@ -42,24 +43,23 @@ func Get(
 	}
 
 	readTimestamp := h.Timestamp
-	moreRecentPolicy := storage.IgnoreMoreRecent
+	failOnMoreRecent := args.KeyLockingStrength != lock.None
+	expectExclusionSince := !args.ExpectExclusionSince.IsEmpty()
 
 	// If ExpectExclusionSince is set, use it as the read timestamp and set the
 	// MoreRecentPolicy to ExclusionViolationErrorOnMoreRecent to ensure that an
 	// exclusion violation error is returned if a write has occurred since the
 	// exclusion timestamp.
-	if !args.ExpectExclusionSince.IsEmpty() {
+	if expectExclusionSince {
 		readTimestamp = args.ExpectExclusionSince
-		moreRecentPolicy = storage.ExclusionViolationErrorOnMoreRecent
-	} else if args.KeyLockingStrength != lock.None {
-		moreRecentPolicy = storage.WriteTooOldErrorOnMoreRecent
+		failOnMoreRecent = true
 	}
 
 	getRes, err := storage.MVCCGet(ctx, readWriter, args.Key, readTimestamp, storage.MVCCGetOptions{
 		Inconsistent:          h.ReadConsistency != kvpb.CONSISTENT,
 		SkipLocked:            h.WaitPolicy == lock.WaitPolicy_SkipLocked,
 		Txn:                   h.Txn,
-		MoreRecentPolicy:      moreRecentPolicy,
+		FailOnMoreRecent:      failOnMoreRecent,
 		ScanStats:             cArgs.ScanStats,
 		Uncertainty:           cArgs.Uncertainty,
 		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),
@@ -72,6 +72,17 @@ func Get(
 		ReturnRawMVCCValues:   args.ReturnRawMVCCValues,
 	})
 	if err != nil {
+		// If the user has set ExpectExclusionSince, transform any WriteTooOld error
+		// into an ExclusionViolationError.
+		if expectExclusionSince {
+			if wtoErr := (*kvpb.WriteTooOldError)(nil); errors.As(err, &wtoErr) {
+				err = kvpb.NewExclusionViolationError(
+					readTimestamp,
+					wtoErr.ActualTimestamp.Prev(),
+					args.Key,
+				)
+			}
+		}
 		return result.Result{}, err
 	}
 	reply.ResumeSpan = getRes.ResumeSpan
