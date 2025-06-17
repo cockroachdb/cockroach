@@ -68,15 +68,14 @@ func ConvertToMappedSpecOrdering(
 }
 
 // Expression is the representation of a SQL expression.
+//
 // See data.proto for the corresponding proto definition. Its automatic type
 // declaration is suppressed in the proto via the typedecl=false option, so that
 // we can add the LocalExpr field which is not serialized. It never needs to be
-// serialized because we only use it in the case where we know we won't need to
-// send it, as a proto, to another machine.
+// serialized because it's just an optimization on the gateway to avoid
+// redundant deserialization (Expr will be set when protos are sent to remote
+// nodes).
 type Expression struct {
-	// Version is unused.
-	Version string
-
 	// Expr, if present, is the string representation of this expression.
 	// SQL expressions are passed as a string, with ordinal references
 	// (@1, @2, @3 ..) used for "input" variables.
