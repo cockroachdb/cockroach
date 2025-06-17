@@ -95,7 +95,7 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 		ts:               ts,
 		inconsistent:     false,
 		tombstones:       false,
-		moreRecentPolicy: IgnoreMoreRecent,
+		failOnMoreRecent: false,
 	}
 	var results pebbleResults
 	mvccScanner.init(nil /* txn */, uncertainty.Interval{}, &results)
