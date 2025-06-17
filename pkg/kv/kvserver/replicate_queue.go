@@ -912,10 +912,6 @@ func (rq *replicateQueue) processOneChange(
 		return false, maybeAnnotateDecommissionErr(err, change.Action)
 	}
 
-	// Update the local storepool state to reflect the successful application
-	// of the change.
-	change.Op.ApplyImpact(rq.storePool)
-
 	// Requeue the replica if it meets the criteria in ShouldRequeue.
 	return ShouldRequeue(ctx, change, conf), nil
 }

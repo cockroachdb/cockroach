@@ -148,7 +148,6 @@ func (lq *leaseQueue) process(
 			lq.as.PostApply(changeID, false /* success */)
 			return false, errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, transferOp.Target)
 		}
-		//change.Op.ApplyImpact(lq.storePool)
 		lq.as.PostApply(changeID, true /* success */)
 	}
 	return true, nil
