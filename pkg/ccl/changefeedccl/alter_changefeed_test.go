@@ -1242,7 +1242,17 @@ func TestAlterChangefeedAlterTableName(t *testing.T) {
 		sqlDB.Exec(t,
 			`INSERT INTO movr.users VALUES (1, 'Alice')`,
 		)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.users WITH diff, resolved = '100ms'`)
+
+		// TODO(#145927): currently the metamorphic enriched envelope system for
+		// webhook uses source.table_name as the topic. This test expects the
+		// topic name to be durable across table renames, which is not expected
+		// to be true for source.table_name.
+		var args []any
+		if _, ok := f.(*webhookFeedFactory); ok {
+			args = append(args, optOutOfMetamorphicEnrichedEnvelope{reason: "see comment"})
+		}
+
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.users WITH diff, resolved = '100ms'`, args...)
 		defer closeFeed(t, testFeed)
 
 		assertPayloads(t, testFeed, []string{
