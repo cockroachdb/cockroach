@@ -83,7 +83,6 @@ func (m *multiMetricStoreRebalancer) rebalance(ctx context.Context) (attemptedCh
 	changes := m.allocator.ComputeChanges(ctx, mma.ChangeOptions{
 		LocalStoreID: m.store.StoreID(),
 	})
-	// TODO: feed these changes to allocatorSync.
 
 	var success bool
 	for _, change := range changes {
@@ -94,6 +93,7 @@ func (m *multiMetricStoreRebalancer) rebalance(ctx context.Context) (attemptedCh
 			log.VInfof(ctx, 1, "skipping pending change for r%d, replica not found", change.RangeID)
 			success = false
 		} else {
+			changeID := m.as.MMAPreApply(repl.RangeUsageInfo(), change)
 			if change.IsTransferLease() {
 				if err := repl.AdminTransferLease(
 					ctx,
@@ -120,9 +120,8 @@ func (m *multiMetricStoreRebalancer) rebalance(ctx context.Context) (attemptedCh
 					success = false
 				}
 			}
+			m.as.PostApply(changeID, success)
 		}
-		// TODO: call into allocatorSync instead.
-		m.allocator.AdjustPendingChangesDisposition(change.ChangeIDs(), success)
 	}
 	return len(changes) > 0
 }
