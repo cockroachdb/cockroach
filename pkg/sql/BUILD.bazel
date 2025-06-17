@@ -973,7 +973,6 @@ go_test(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//proto",
         "@com_github_gogo_protobuf//types",
-        "@com_github_jackc_pgtype//:pgtype",
         "@com_github_jackc_pgx_v5//:pgx",
         "@com_github_jackc_pgx_v5//pgconn",
         "@com_github_klauspost_compress//zip",
