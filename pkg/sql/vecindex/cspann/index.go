@@ -270,7 +270,9 @@ func NewIndex(
 		vi.options.MaxInsertAttempts = 32
 	}
 	if vi.options.MaxDeleteAttempts == 0 {
-		vi.options.MaxDeleteAttempts = 3
+		// Note that fetching the batch and getting the first result from the
+		// batch are both counted as "attempts", so this needs to be at least 2.
+		vi.options.MaxDeleteAttempts = 2
 	}
 
 	if vi.options.MaxPartitionSize < 2 {

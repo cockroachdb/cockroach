@@ -94,8 +94,7 @@ vec7: (2, 8)
     │
     └───• vec4 (-4, 5)
 
-# Test case where initial search fails to find vector to delete and it must be
-# retried.
+# Test case where search fails to find vector to delete.
 delete
 vec1: (2, 4)
 ----
@@ -116,6 +115,7 @@ vec1: (2, 4)
     │
     ├───• 4 (1, -2)
     │   │
+    │   ├───• vec1 (MISSING)
     │   └───• vec6 (1, -6)
     │
     └───• 2 (5.5, 3.5)
@@ -141,6 +141,9 @@ vec6
 └───• 9 (3.25, 0.75)
     │
     ├───• 4 (1, -2)
+    │   │
+    │   └───• vec1 (MISSING)
+    │
     └───• 2 (5.5, 3.5)
         │
         ├───• vec3 (4, 3)
