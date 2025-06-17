@@ -2275,6 +2275,7 @@ func logTestParameters(l *logger.Logger, params map[string]string) {
 
 func getTestParameters(t *testImpl, c *clusterImpl, createOpts *vm.CreateOpts) map[string]string {
 	spec := t.spec
+
 	clusterParams := map[string]string{
 		"cloud":                  roachtestflags.Cloud.String(),
 		"cpu":                    fmt.Sprintf("%d", spec.Cluster.CPUs),
@@ -2282,6 +2283,7 @@ func getTestParameters(t *testImpl, c *clusterImpl, createOpts *vm.CreateOpts) m
 		"runtimeAssertionsBuild": fmt.Sprintf("%t", roachtestutil.UsingRuntimeAssertions(t)),
 		"coverageBuild":          fmt.Sprintf("%t", t.goCoverEnabled),
 	}
+
 	// Emit CPU architecture only if it was specified; otherwise, it's captured below, assuming cluster was created.
 	if spec.Cluster.Arch != "" {
 		clusterParams["arch"] = string(spec.Cluster.Arch)
@@ -2299,6 +2301,13 @@ func getTestParameters(t *testImpl, c *clusterImpl, createOpts *vm.CreateOpts) m
 			// N.B. when Arch is specified, it cannot differ from cluster's arch.
 			// Hence, we only emit when arch was unspecified.
 			clusterParams["arch"] = string(c.arch)
+		}
+
+		c.destroyState.mu.Lock()
+		saved, savedMsg := c.destroyState.mu.saved, c.destroyState.mu.savedMsg
+		c.destroyState.mu.Unlock()
+		if saved {
+			clusterParams["saved"] = savedMsg
 		}
 	}
 
