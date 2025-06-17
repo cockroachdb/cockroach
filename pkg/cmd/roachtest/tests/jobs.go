@@ -83,7 +83,7 @@ func runJobsStress(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	done := make(chan struct{})
 	earlyExit := make(chan struct{}, 1)
-	m := c.NewMonitor(ctx)
+	m := c.NewDeprecatedMonitor(ctx)
 
 	m.Go(func(ctx context.Context) error {
 		defer close(done)

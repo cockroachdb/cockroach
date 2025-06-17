@@ -590,7 +590,7 @@ func runRestore(
 	statsCollector, err := createStatCollector(ctx, rd)
 	require.NoError(t, err)
 
-	m := c.NewMonitor(ctx, sp.hardware.getCRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, sp.hardware.getCRDBNodes())
 	var restoreStartTime, restoreEndTime time.Time
 	m.Go(func(ctx context.Context) error {
 		db, err := rd.c.ConnE(ctx, rd.t.L(), rd.c.Node(1)[0])
@@ -652,7 +652,7 @@ func runRestore(
 	restoreEndTime = timeutil.Now()
 
 	workloadCtx, workloadCancel := context.WithCancel(ctx)
-	mDownload := c.NewMonitor(workloadCtx, sp.hardware.getCRDBNodes())
+	mDownload := c.NewDeprecatedMonitor(workloadCtx, sp.hardware.getCRDBNodes())
 
 	var workloadStartTime, workloadEndTime time.Time
 	mDownload.Go(func(ctx context.Context) error {

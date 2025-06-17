@@ -166,7 +166,7 @@ func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int
 	}
 	urls, err := c.InternalPGUrl(ctx, t.L(), c.Node(1), roachprod.PGURLOptions{Auth: install.AuthUserPassword})
 	require.NoError(t, err)
-	m := c.NewMonitor(ctx, c.All())
+	m := c.NewDeprecatedMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
 		// psql w/ url first doesn't support --db arg so have to do this.
 		urlstr := strings.Replace(urls[0], "?", "/defaultdb?", 1)
