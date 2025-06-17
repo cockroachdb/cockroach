@@ -215,7 +215,7 @@ type txnKVFetcher struct {
 
 	// For request and response admission control.
 	requestAdmissionHeader kvpb.AdmissionHeader
-	responseAdmissionQ     *admission.WorkQueue
+	responseAdmissionQ     admission.SlotsOrNoopQueueForOldSQL
 	admissionPacer         *admission.Pacer
 }
 
@@ -356,7 +356,7 @@ type newTxnKVFetcherArgs struct {
 
 	admission struct { // groups AC-related fields
 		requestHeader  kvpb.AdmissionHeader
-		responseQ      *admission.WorkQueue
+		responseQ      admission.SlotsOrNoopQueueForOldSQL
 		pacerFactory   admission.PacerFactory
 		settingsValues *settings.Values
 	}
@@ -760,7 +760,7 @@ func (f *txnKVFetcher) maybeAdmitBatchResponse(ctx context.Context, br *kvpb.Bat
 				log.Errorf(ctx, "automatic pacing: %v", err)
 			}
 		}
-	} else if f.responseAdmissionQ != nil {
+	} else {
 		responseAdmission := admission.WorkInfo{
 			TenantID:   roachpb.SystemTenantID,
 			Priority:   admissionpb.WorkPriority(f.requestAdmissionHeader.Priority),

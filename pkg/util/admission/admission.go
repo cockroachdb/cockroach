@@ -158,7 +158,8 @@ const (
 	// TODO: why is this called getterKindOne when the value is 0?
 	getterKindOne getterKind = iota
 	getterKindTwo
-	getterKindNone getterKind = math.MaxUint8
+	getterKindNone  getterKind = math.MaxUint8
+	getterKindCount            = 2
 )
 
 // granter is paired with a requester in that a requester for a particular
@@ -185,6 +186,17 @@ type granter interface {
 	//
 	// Do not use this for doing store IO-related token adjustments when work is
 	// done -- that should be done via granterWithStoreReplicatedWorkAdmitted.storeWriteDone.
+	//
+	// TODO: the following invariant comment is no longer true. For slots, due
+	// to the use of slotAndCPUTimeTokenGranter, the value can be negative to
+	// represent the return of 1 slot, while subtracting more tokens. When we
+	// clean this up, we will no longer have the slotAndCPUTimeTokenGranter. We
+	// will have slotGranter, for which we will be returning 1, and
+	// cpuTimeTokenChildGranter. WorkQueue.AdmittedWorkDone will only be used
+	// for CPU admission, and will use slots in the former case and tokens in
+	// the latter case. We wil restore this invariant and WorkQueue will call
+	// either returnGrant or tookWithoutPermission in the latter case depending
+	// on whether it is returning tokens or taking tokens.
 	//
 	// REQUIRES: count > 0. count == 1 for slots.
 	returnGrant(count int64)

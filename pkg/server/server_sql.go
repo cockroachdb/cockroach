@@ -244,7 +244,9 @@ type sqlServerOptionalKVArgs struct {
 	externalStorageFromURI cloud.ExternalStorageFromURIFactory
 
 	// The admission queue to use for SQLSQLResponseWork.
-	sqlSQLResponseAdmissionQ *admission.WorkQueue
+	sqlSQLResponseAdmissionQ admission.SlotsOrNoopQueueForOldSQL
+
+	sqlCPUAdmissionQ admission.SQLCPUAdmissionQueue
 
 	// Used when creating and deleting tenant records.
 	spanConfigKVAccessor spanconfig.KVAccessor
@@ -863,6 +865,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		DistSender:               cfg.distSender,
 		RangeCache:               cfg.distSender.RangeDescriptorCache(),
 		SQLSQLResponseAdmissionQ: cfg.sqlSQLResponseAdmissionQ,
+		SQLCPUAdmissionQ:         cfg.sqlCPUAdmissionQ,
 		CollectionFactory:        collectionFactory,
 		ExternalIORecorder:       cfg.costController,
 		TenantCostController:     cfg.costController,

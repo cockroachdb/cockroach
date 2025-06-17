@@ -98,10 +98,11 @@ func TestGranterBasic(t *testing.T) {
 				requesters[workKind] = req
 				return req
 			}
+			opts.testingNoCallsToCPUMetricsProvider = true
 			delayForGrantChainTermination = 0
 			coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, nil)
 			defer coords.Close()
-			coord = coords.Regular
+			coord = coords.Regular.slotsCoord
 			return flushAndReset()
 
 		case "init-store-grant-coordinator":
@@ -375,6 +376,7 @@ func TestStoreCoordinators(t *testing.T) {
 			str.requesters[admissionpb.ElasticWorkClass].additionalID = "-elastic"
 			return str
 		},
+		testingNoCallsToCPUMetricsProvider: true,
 	}
 	coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, nil)
 	// There is only 1 KVWork requester at this point in initialization, for the
@@ -414,7 +416,7 @@ func TestStoreCoordinators(t *testing.T) {
 	coords.Close()
 }
 
-func TestGrantCoordinatorCPUTimeToken(t *testing.T) {
+func TestGrantCoordinatorCPUTimeTokenOld(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -463,10 +465,11 @@ func TestGrantCoordinatorCPUTimeToken(t *testing.T) {
 				return req
 			}
 			delayForGrantChainTermination = 0
+			opts.OldSlotsPlusCPUTimeTokenGranter = true
 			opts.testingNoCallsToCPUMetricsProvider = true
 			coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, nil)
 			defer coords.Close()
-			coord = coords.Regular
+			coord = coords.Regular.slotsCoord
 			coord.mu.Lock()
 			coord.mu.ctta.granter.tokensEnabled = true
 			coord.mu.Unlock()

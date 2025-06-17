@@ -94,7 +94,7 @@ type Inbox struct {
 	// only the Next/DrainMeta goroutine may access it.
 	stream flowStreamServer
 
-	admissionQ    *admission.WorkQueue
+	admissionQ    admission.SlotsOrNoopQueueForOldSQL
 	admissionInfo admission.WorkInfo
 
 	// statsAtomics are the execution statistics that need to be atomically
@@ -158,7 +158,7 @@ func NewInboxWithAdmissionControl(
 	typs []*types.T,
 	streamID execinfrapb.StreamID,
 	flowCtxDone <-chan struct{},
-	admissionQ *admission.WorkQueue,
+	admissionQ admission.SlotsOrNoopQueueForOldSQL,
 	admissionInfo admission.WorkInfo,
 ) (*Inbox, error) {
 	i, err := NewInboxWithFlowCtxDone(allocator, typs, streamID, flowCtxDone)
@@ -394,13 +394,12 @@ func (i *Inbox) Next() coldata.Batch {
 		i.allocator.AdjustMemoryUsageAfterAllocation(numSerializedBytes)
 		// Do admission control after memory accounting for the serialized bytes
 		// and before deserialization.
-		if i.admissionQ != nil {
-			if resp := i.admissionQ.Admit(i.Ctx, i.admissionInfo); resp.Err != nil {
-				// err includes the case of context cancellation while waiting for
-				// admission.
-				colexecerror.ExpectedError(resp.Err)
-			}
+		if resp := i.admissionQ.Admit(i.Ctx, i.admissionInfo); resp.Err != nil {
+			// err includes the case of context cancellation while waiting for
+			// admission.
+			colexecerror.ExpectedError(resp.Err)
 		}
+
 		batch := i.deserializer.Deserialize(m.Data.RawBytes)
 		// Eagerly throw away the RawBytes memory.
 		m.Data.RawBytes = nil

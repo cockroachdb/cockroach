@@ -900,7 +900,7 @@ type workerCoordinator struct {
 
 	// For request and response admission control.
 	requestAdmissionHeader kvpb.AdmissionHeader
-	responseAdmissionQ     *admission.WorkQueue
+	responseAdmissionQ     admission.SlotsOrNoopQueueForOldSQL
 }
 
 // mainLoop runs throughout the lifetime of the Streamer (from the first Enqueue
@@ -1540,7 +1540,7 @@ func (w *workerCoordinator) performRequestAsync(
 			}
 
 			// Do admission control after we've finalized the memory accounting.
-			if br != nil && w.responseAdmissionQ != nil {
+			if br != nil {
 				responseAdmission := admission.WorkInfo{
 					TenantID:   roachpb.SystemTenantID,
 					Priority:   admissionpb.WorkPriority(w.requestAdmissionHeader.Priority),

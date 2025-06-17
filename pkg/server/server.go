@@ -590,11 +590,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		admittedEntryAdaptor,
 		admissionKnobs,
 	)
-	db.SQLKVResponseAdmissionQ = gcoords.Regular.GetWorkQueue(admission.SQLKVResponseWork)
+	db.SQLKVResponseAdmissionQ = gcoords.Regular.GetSlotsSQLKVResponseWorkQueue()
 	db.AdmissionPacerFactory = gcoords.Elastic
 	goschedstats.RegisterSettings(st)
 	if goschedstats.Supported {
-		cbID := goschedstats.RegisterRunnableCountCallback(gcoords.Regular.CPULoad)
+		cbID := goschedstats.RegisterRunnableCountCallback(gcoords.Regular.GetRunnableCountCallback())
 		stopper.AddCloser(stop.CloserFn(func() {
 			goschedstats.UnregisterRunnableCountCallback(cbID)
 		}))
@@ -617,7 +617,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	admissionControl.storesFlowControl = storesForFlowControl
 	admissionControl.kvAdmissionController = kvadmission.MakeController(
 		nodeIDContainer,
-		gcoords.Regular.GetWorkQueue(admission.KVWork),
+		gcoords.Regular,
 		gcoords.Elastic,
 		gcoords.Stores,
 		admissionControl.kvflowController,
@@ -964,9 +964,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		txnMetrics,
 		stores,
 		cfg.ClusterIDContainer,
-		gcoords.Regular.GetWorkQueue(admission.KVWork),
-		gcoords.Elastic,
-		gcoords.Stores,
 		tenantUsage,
 		tenantSettingsWatcher,
 		tenantCapabilitiesWatcher,
@@ -1127,7 +1124,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			externalStorage:          externalStorage,
 			externalStorageFromURI:   externalStorageFromURI,
 			isMeta1Leaseholder:       node.stores.IsMeta1Leaseholder,
-			sqlSQLResponseAdmissionQ: gcoords.Regular.GetWorkQueue(admission.SQLSQLResponseWork),
+			sqlSQLResponseAdmissionQ: gcoords.Regular.GetSlotsSQLSQLResponseWorkQueue(),
+			sqlCPUAdmissionQ:         gcoords.Regular,
 			spanConfigKVAccessor:     spanConfig.kvAccessorForTenantRecords,
 			kvStoresIterator:         kvserver.MakeStoresIterator(node.stores),
 			inspectzServer:           inspectzServer,

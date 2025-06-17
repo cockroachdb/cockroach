@@ -189,16 +189,14 @@ func (tb *tableWriterBase) tryDoResponseAdmission(ctx context.Context) error {
 	// Do admission control for response processing. This is the shared write
 	// path for most SQL mutations.
 	responseAdmissionQ := tb.txn.DB().SQLKVResponseAdmissionQ
-	if responseAdmissionQ != nil {
-		requestAdmissionHeader := tb.txn.AdmissionHeader()
-		responseAdmission := admission.WorkInfo{
-			TenantID:   roachpb.SystemTenantID,
-			Priority:   admissionpb.WorkPriority(requestAdmissionHeader.Priority),
-			CreateTime: requestAdmissionHeader.CreateTime,
-		}
-		if resp := responseAdmissionQ.Admit(ctx, responseAdmission); resp.Err != nil {
-			return resp.Err
-		}
+	requestAdmissionHeader := tb.txn.AdmissionHeader()
+	responseAdmission := admission.WorkInfo{
+		TenantID:   roachpb.SystemTenantID,
+		Priority:   admissionpb.WorkPriority(requestAdmissionHeader.Priority),
+		CreateTime: requestAdmissionHeader.CreateTime,
+	}
+	if resp := responseAdmissionQ.Admit(ctx, responseAdmission); resp.Err != nil {
+		return resp.Err
 	}
 	return nil
 }

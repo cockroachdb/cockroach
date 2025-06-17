@@ -30,10 +30,17 @@ type SQLWorkInfo struct {
 	CreateTime int64
 }
 
+type SQLAdmitResponse struct {
+	AdmitResponse
+	q *WorkQueue
+}
+
 // SQLCPUAdmissionQueue is used to admit SQL work that consumes CPU.
 type SQLCPUAdmissionQueue interface {
-	GetHandle(work WorkInfo) *SQLCPUAdmissionHandle
-	admitCPU(ctx context.Context, work SQLWorkInfo, cpuTime time.Duration) error
+	// TODO: change SQLCPUAdmissionHandle to return unused CPU time.
+	AdmitSQLCPU(
+		ctx context.Context, work SQLWorkInfo, minCPUTime time.Duration) SQLAdmitResponse
+	AdmittedSQLWorkDone(resp SQLAdmitResponse, cpuTime time.Duration)
 }
 
 type sqlCPUAdmissionHandleKey struct{}
@@ -63,28 +70,24 @@ func SQLCPUAdmissionHandleFromContext(ctx context.Context) *SQLCPUAdmissionHandl
 // SQLCPUAdmissionHandle manages CPU admission for SQL work across multiple
 // goroutines.
 type SQLCPUAdmissionHandle struct {
-	workInfo              SQLWorkInfo
-	allocationGranularity time.Duration
-	q                     SQLCPUAdmissionQueue
-
-	mu struct {
+	workInfo SQLWorkInfo
+	q        SQLCPUAdmissionQueue
+	mu       struct {
 		syncutil.Mutex
-		closed    bool
-		remaining time.Duration
-		gHandles  []*GoroutineCPUHandle
+		closed        bool
+		admitResponse SQLAdmitResponse
+		remaining     time.Duration
+		gHandles      []*GoroutineCPUHandle
 	}
 	// acquiringCh is a buffered channel with a capacity of 1.
 	acquiringCh chan struct{}
 }
 
-func newSQLCPUAdmissionHandle(
-	workInfo SQLWorkInfo, allocationGranularity time.Duration, q SQLCPUAdmissionQueue,
-) *SQLCPUAdmissionHandle {
+func NewSQLCPUAdmissionHandle(workInfo SQLWorkInfo, q SQLCPUAdmissionQueue) *SQLCPUAdmissionHandle {
 	h := &SQLCPUAdmissionHandle{
-		workInfo:              workInfo,
-		allocationGranularity: allocationGranularity,
-		q:                     q,
-		acquiringCh:           make(chan struct{}, 1),
+		workInfo:    workInfo,
+		q:           q,
+		acquiringCh: make(chan struct{}, 1),
 	}
 	return h
 }
@@ -113,6 +116,13 @@ func (h *SQLCPUAdmissionHandle) Close() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.mu.closed = true
+	if h.mu.admitResponse.Enabled {
+		additionalCPU := -h.mu.remaining
+		h.q.AdmittedSQLWorkDone(h.mu.admitResponse, additionalCPU+
+			time.Duration(h.mu.admitResponse.CPUTokensDeducted))
+		h.mu.admitResponse = SQLAdmitResponse{}
+		h.mu.remaining = 0
+	}
 }
 
 func (h *SQLCPUAdmissionHandle) getCPU(ctx context.Context, d time.Duration) error {
@@ -123,6 +133,16 @@ func (h *SQLCPUAdmissionHandle) getCPU(ctx context.Context, d time.Duration) err
 			defer h.mu.Unlock()
 			if h.mu.closed || h.mu.remaining >= d {
 				h.mu.remaining -= d
+				if haveTurn {
+					<-h.acquiringCh // Release the acquiring channel.
+				}
+				return true
+			} else if h.mu.admitResponse.Enabled {
+				additionalCPU := d - h.mu.remaining
+				h.q.AdmittedSQLWorkDone(h.mu.admitResponse, additionalCPU+
+					time.Duration(h.mu.admitResponse.CPUTokensDeducted))
+				h.mu.admitResponse = SQLAdmitResponse{}
+				h.mu.remaining = 0
 				if haveTurn {
 					<-h.acquiringCh // Release the acquiring channel.
 				}
@@ -145,16 +165,23 @@ func (h *SQLCPUAdmissionHandle) getCPU(ctx context.Context, d time.Duration) err
 		// haveTurn was true before we release the mutex.
 		if haveTurn {
 			// Try to acquire CPU.
-			toAcquire := max(d, h.allocationGranularity)
-			err := h.q.admitCPU(ctx, h.workInfo, toAcquire)
-			if err != nil {
+			toAcquire := d
+			resp := h.q.AdmitSQLCPU(ctx, h.workInfo, toAcquire)
+			if resp.Err != nil {
 				<-h.acquiringCh // Release the acquiring channel.
-				return err
+				return resp.Err
 			}
 			func() {
 				h.mu.Lock()
 				defer h.mu.Unlock()
-				h.mu.remaining += toAcquire - d
+				h.mu.admitResponse = resp
+				if resp.Enabled {
+					h.mu.remaining = time.Duration(resp.CPUTokensDeducted)
+				} else {
+					// Effectively infinite.
+					h.mu.remaining = 1000 * time.Hour
+				}
+				h.mu.remaining -= d
 				if h.mu.remaining < 0 {
 					panic("todo")
 				}
@@ -206,8 +233,9 @@ func (h *GoroutineCPUHandle) TryAdmit(ctx context.Context) error {
 	if h.paused > 0 {
 		return nil
 	}
-	cpuNeeded := grunning.Elapsed(grunning.Time(), h.cpuStart) - h.pauseDur
+	cpuNeeded := grunning.Elapsed(h.cpuStart, grunning.Time()) - h.pauseDur
 	diff := cpuNeeded - h.cpuAllocated
+	// log.Infof(ctx, "TryAdmit: diff=%s", diff)
 	if diff <= 0 {
 		return nil
 	}
@@ -238,7 +266,7 @@ func (h *GoroutineCPUHandle) PauseMeasuring() {
 func (h *GoroutineCPUHandle) UnpauseMeasuring() {
 	h.paused--
 	if h.paused == 0 {
-		h.pauseDur += grunning.Elapsed(grunning.Time(), h.pauseStart)
+		h.pauseDur += grunning.Elapsed(h.pauseStart, grunning.Time())
 	}
 }
 

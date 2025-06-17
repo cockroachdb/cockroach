@@ -114,7 +114,7 @@ var KVStoresTenantWeightsEnabled = settings.RegisterBoolSetting(
 
 var SystemTenantBypassesCPUAdmission = settings.RegisterBoolSetting(
 	settings.SystemOnly, "admission.kv.system_tenant_bypass_cpu_admission.enabled",
-	"", true)
+	"", false)
 
 // EpochLIFOEnabled controls whether the adaptive epoch-LIFO scheme is enabled
 // for admission control. Is only relevant when the above admission control
@@ -205,6 +205,8 @@ type WorkInfo struct {
 	// ReplicatedWorkInfo groups everything needed to admit replicated writes, done
 	// so asynchronously below-raft as part of replication admission control.
 	ReplicatedWorkInfo ReplicatedWorkInfo
+
+	isSQLCPU bool
 }
 
 // ReplicatedWorkInfo groups everything needed to admit replicated writes, done
@@ -604,6 +606,7 @@ type AdmitResponse struct {
 	CPUTokensDeducted int64
 
 	tenantID roachpb.TenantID
+	isSQLCPU bool
 }
 
 // Admit is called when requesting admission for some work. If err!=nil, the
@@ -634,9 +637,9 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) AdmitResponse {
 		// For isCPUTimeTokenQueue, we will override this again below.
 		info.RequestedCount = 1
 	}
-	if !q.usesTokens && info.RequestedCount != 1 {
-		panic(errors.AssertionFailedf("unexpected RequestedCount: %d", info.RequestedCount))
-	}
+	// if !q.usesTokens && info.RequestedCount != 1 {
+	// 	panic(errors.AssertionFailedf("unexpected RequestedCount: %d", info.RequestedCount))
+	// }
 	q.metrics.incRequested(info.Priority)
 	tenantID := info.TenantID.ToUint64()
 
@@ -654,7 +657,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) AdmitResponse {
 	}
 	admitResponse := AdmitResponse{tenantID: info.TenantID}
 	if q.isCPUTimeTokenQueue {
-		admitResponse.CPUTokensDeducted = max(1, tenant.cpuTokenEstimator.meanCPUTokens())
+		admitResponse.CPUTokensDeducted = max(info.RequestedCount, tenant.cpuTokenEstimator.meanCPUTokens())
 		info.RequestedCount = admitResponse.CPUTokensDeducted
 	}
 
@@ -690,6 +693,10 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) AdmitResponse {
 				tenant.intervalStats.getterOneCount++
 			}
 			tenant.intervalStats.cpuTokens += info.RequestedCount
+			if info.isSQLCPU {
+				tenant.intervalStats.sqlCPUTokens += info.RequestedCount
+				tenant.intervalStats.sqlAdmittedCount++
+			}
 		}
 		if isInTenantHeap(tenant) {
 			q.mu.tenantHeap.fix(tenant)
@@ -725,6 +732,10 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) AdmitResponse {
 			tenant.intervalStats.getterOneCount++
 		}
 		tenant.intervalStats.cpuTokens += info.RequestedCount
+		if info.isSQLCPU {
+			tenant.intervalStats.sqlCPUTokens += info.RequestedCount
+			tenant.intervalStats.sqlAdmittedCount++
+		}
 		sll.unlock()
 		// We have unlocked q.mu, so another concurrent request can also do tryGet
 		// and get ahead of this request. We don't need to be fair for such
@@ -804,6 +815,10 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) AdmitResponse {
 			tenant.intervalStats.getterOneCount--
 		}
 		tenant.intervalStats.cpuTokens -= info.RequestedCount
+		if info.isSQLCPU {
+			tenant.intervalStats.sqlCPUTokens -= info.RequestedCount
+			tenant.intervalStats.sqlAdmittedCount--
+		}
 	}
 
 	// Need to wait.
@@ -830,7 +845,9 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) AdmitResponse {
 	if int(info.Priority) < tenant.fifoPriorityThreshold && !q.isCPUTimeTokenQueue {
 		ordering = lifoWorkOrdering
 	}
-	work := newWaitingWork(info.Priority, ordering, info.CreateTime, info.RequestedCount, startTime, q.mu.epochLengthNanos)
+	work := newWaitingWork(
+		info.Priority, ordering, info.CreateTime, info.RequestedCount, info.isSQLCPU, startTime,
+		q.mu.epochLengthNanos)
 	work.replicated = info.ReplicatedWorkInfo
 
 	inTenantHeap := isInTenantHeap(tenant)
@@ -964,7 +981,17 @@ func recordAdmissionWorkQueueStats(
 
 // AdmittedWorkDone is used to inform the WorkQueue that some admitted work is
 // finished. It must be called iff the WorkKind of this WorkQueue uses slots
-// (not tokens), i.e., KVWork.
+// (not tokens), i.e., KVWork and not for the store.
+//
+// TODO(sumeer): With isCPUTimeTokenQueue, we can integrate with either a
+// granter that uses both slots and CPU time tokens, or a granter that uses
+// only CPU time tokens. The former was used for the serverless isolation
+// prototype, but we will never productionize it. The latter is what we want
+// to productionize, but we will initially have the non-store KVWork queue
+// integrate with either a stot granter or a cpu time token granter (these
+// will be separate instances of WorkQueue). So we preserve the illusion that
+// both these cases may be using slots even though one isn't (this will be
+// cleaned up in production code).
 func (q *WorkQueue) AdmittedWorkDone(resp AdmitResponse, cpuTime time.Duration) {
 	if q.usesTokens {
 		panic(errors.AssertionFailedf("tokens should not be returned"))
@@ -979,28 +1006,33 @@ func (q *WorkQueue) AdmittedWorkDone(resp AdmitResponse, cpuTime time.Duration) 
 		additionalUsed = cpuTokens - 1
 	}
 
-	if additionalUsed != 0 {
-		func() {
-			tid := resp.tenantID.ToUint64()
-			sll := slowMutexWithLogging{name: "q.mu work-done", mu: &q.mu.Mutex}
-			sll.lock()
-			defer sll.unlock()
-			tenant, ok := q.mu.tenants[tid]
-			if !ok {
-				return
-			}
-			if q.isCPUTimeTokenQueue {
+	func() {
+		tid := resp.tenantID.ToUint64()
+		sll := slowMutexWithLogging{name: "q.mu work-done", mu: &q.mu.Mutex}
+		sll.lock()
+		defer sll.unlock()
+		tenant, ok := q.mu.tenants[tid]
+		if !ok {
+			return
+		}
+		if q.isCPUTimeTokenQueue {
+			if additionalUsed != 0 {
 				tenant.adjustTenantCPUTokens(-additionalUsed)
 				tenant.intervalStats.cpuTokens += additionalUsed
-				q.mu.cpuTokenEstimator.workDone(cpuTokens)
-				tenant.cpuTokenEstimator.workDone(cpuTokens)
+				if resp.isSQLCPU {
+					tenant.intervalStats.sqlCPUTokens += additionalUsed
+				}
 			}
+			q.mu.cpuTokenEstimator.workDone(cpuTokens)
+			tenant.cpuTokenEstimator.workDone(cpuTokens)
+		}
+		if additionalUsed != 0 {
 			q.adjustTenantUsedLocked(tenant, additionalUsed)
-		}()
-	}
+		}
+	}()
 	if q.isCPUTimeTokenQueue {
-		// NB: we are calling returnGrant even it -additionalUsed is negative,
-		// since a slot is always being returned. slotAndCPUTimeTokenGranter
+		// NB: we are calling returnGrant even it -additionalUsed is negative, or
+		// zero, since a slot is always being returned. slotAndCPUTimeTokenGranter
 		// allows the parameter to returnGrant to be negative.
 		q.granter.returnGrant(-additionalUsed)
 	} else {
@@ -1049,6 +1081,10 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 		tenant.intervalStats.getterOneCount++
 	}
 	tenant.intervalStats.cpuTokens += item.requestedCount
+	if item.isSQLCPU {
+		tenant.intervalStats.sqlCPUTokens += item.requestedCount
+		tenant.intervalStats.sqlAdmittedCount++
+	}
 	tenant.intervalStats.waitTimeSum += waitDur
 	if isInTenantHeap(tenant) {
 		q.mu.tenantHeap.fix(tenant)
@@ -1380,14 +1416,23 @@ func (q *WorkQueue) setTenantCPUTokensBurstLimit(tokens int64, enabled bool) {
 		return cmp.Compare(a.tenantInfo.id, b.tenantInfo.id)
 	})
 	for _, tenant := range tenants {
+		var sqlStr string
+		if tenant.intervalStats.sqlAdmittedCount > 0 {
+			sqlStr = fmt.Sprintf(" sql-tokens(per-work)=%s(%s)",
+				time.Duration(tenant.intervalStats.sqlCPUTokens),
+				time.Duration(tenant.intervalStats.sqlCPUTokens/tenant.intervalStats.sqlAdmittedCount))
+		}
 		log.Infof(q.ambientCtx,
-			"KV WorkQueue tenant %d(tb=%s): count=%d(one-frac=%.2f) mean-wait=%s tokens(per-work)=%s(%s)",
+			"KV WorkQueue tenant %d(tb=%s): count=%d(one-frac=%.2f) mean-wait=%s "+
+				"tokens(per-work)=%s(%s)%s",
 			tenant.id, time.Duration(tenant.lastTokens),
 			tenant.intervalStats.admittedCount,
 			float64(tenant.intervalStats.getterOneCount)/float64(tenant.intervalStats.admittedCount),
 			tenant.intervalStats.waitTimeSum/time.Duration(tenant.intervalStats.admittedCount),
 			time.Duration(tenant.intervalStats.cpuTokens),
-			time.Duration(tenant.intervalStats.cpuTokens/tenant.intervalStats.admittedCount))
+			time.Duration(tenant.intervalStats.cpuTokens/tenant.intervalStats.admittedCount),
+			sqlStr,
+		)
 		tenant.intervalStats = tenantIntervalStats{}
 	}
 }
@@ -1603,6 +1648,9 @@ type tenantIntervalStats struct {
 	getterOneCount int64
 	waitTimeSum    time.Duration
 	cpuTokens      int64
+
+	sqlAdmittedCount int64
+	sqlCPUTokens     int64
 }
 
 // tenantHeap is a heap of tenants with waiting work, ordered in increasing
@@ -1750,6 +1798,7 @@ type waitingWork struct {
 	arrivalTimeWorkOrdering workOrderingKind
 	createTime              int64
 	requestedCount          int64
+	isSQLCPU                bool
 	// epoch is a function of the createTime.
 	epoch int64
 
@@ -1835,6 +1884,7 @@ func newWaitingWork(
 	arrivalTimeWorkOrdering workOrderingKind,
 	createTime int64,
 	requestedCount int64,
+	isSQLCPU bool,
 	enqueueingTime time.Time,
 	epochLengthNanos int64,
 ) *waitingWork {
@@ -1848,6 +1898,7 @@ func newWaitingWork(
 		arrivalTimeWorkOrdering: arrivalTimeWorkOrdering,
 		createTime:              createTime,
 		requestedCount:          requestedCount,
+		isSQLCPU:                isSQLCPU,
 		epoch:                   epochForTimeNanos(createTime, epochLengthNanos),
 		ch:                      ch,
 		heapIndex:               -1,

@@ -92,9 +92,9 @@ closed epoch: 0 tenantHeap len: 3 top tenant: 13
  tenant-id: 33(g0) used: 0, w: 1, fifo: -128 cpu: 30 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
  tenant-id: 53(g1) used: 53, w: 1, fifo: -128 cpu: -7 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
 
-work-done id=1 cpu-time=1
+work-done id=1 cpu-time=210
 ----
-returnGrant 0
+returnGrant -209
 
 work-done id=21 cpu-time=500
 ----
@@ -109,7 +109,7 @@ print
 closed epoch: 0 tenantHeap len: 3 top tenant: 13
  tenant-id: 13(g0) used: 0, w: 1, fifo: -128 cpu: 30 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
  tenant-id: 33(g0) used: 0, w: 1, fifo: -128 cpu: 30 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
- tenant-id: 53(g1) used: 651, w: 1, fifo: -128 cpu: -605 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 53(g1) used: 860, w: 1, fifo: -128 cpu: -814 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
 
 cancel-work id=3
 ----
@@ -124,12 +124,12 @@ print
 closed epoch: 0 tenantHeap len: 1 top tenant: 53
  tenant-id: 13(g0) used: 0, w: 1, fifo: -128 cpu: 30 (burst 30) (work 25)
  tenant-id: 33(g0) used: 0, w: 1, fifo: -128 cpu: 30 (burst 30) (work 25)
- tenant-id: 53(g1) used: 651, w: 1, fifo: -128 cpu: -605 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 53(g1) used: 860, w: 1, fifo: -128 cpu: -814 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
 
 gc-tenants-and-reset-used
 ----
 closed epoch: 0 tenantHeap len: 1 top tenant: 53
- tenant-id: 53(g1) used: 0, w: 1, fifo: -128 cpu: -605 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 53(g1) used: 0, w: 1, fifo: -128 cpu: -814 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
 
 admit id=24 tenant=53 priority=0 create-time-millis=1 bypass=false
 ----
@@ -137,7 +137,7 @@ admit id=24 tenant=53 priority=0 create-time-millis=1 bypass=false
 print
 ----
 closed epoch: 0 tenantHeap len: 1 top tenant: 53
- tenant-id: 53(g1) used: 0, w: 1, fifo: -128 cpu: -605 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100] [1: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 53(g1) used: 0, w: 1, fifo: -128 cpu: -814 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100] [1: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
 
 set-tenant-cpu-burst-limit tokens=30
 ----

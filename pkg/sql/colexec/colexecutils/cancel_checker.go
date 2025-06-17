@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // CancelChecker is a colexecop.Operator that checks whether query cancellation
@@ -47,6 +48,8 @@ func (c *CancelChecker) Init(ctx context.Context) {
 	caHandle := admission.SQLCPUAdmissionHandleFromContext(ctx)
 	if caHandle != nil {
 		c.admissionHandle = caHandle.TryRegisterGoroutine()
+	} else {
+		log.Warningf(ctx, "no caHandle")
 	}
 	if c.Input != nil {
 		// In some cases, the cancel checker is used as a utility to provide

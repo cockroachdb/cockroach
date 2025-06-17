@@ -129,7 +129,7 @@ func registerKV(r registry.Registry) {
 		t.Status("running workload")
 		m := c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
-			concurrency := roachtestutil.IfLocal(c, "", " --concurrency="+fmt.Sprint(computeConcurrency(opts)))
+			concurrency := roachtestutil.IfLocal(c, " --concurrency=4", " --concurrency="+fmt.Sprint(computeConcurrency(opts)))
 			splits := ""
 			if opts.splits > 0 {
 				splits = " --splits=" + strconv.Itoa(opts.splits)
@@ -166,7 +166,7 @@ func registerKV(r registry.Registry) {
 				sequential = " --sequential"
 			}
 
-			defaultDuration := roachtestutil.IfLocal(c, "10s", opts.duration.String())
+			defaultDuration := roachtestutil.IfLocal(c, "10m", opts.duration.String())
 			duration := roachtestutil.GetEnvWorkloadDurationValueOrDefault(defaultDuration)
 			url := fmt.Sprintf(" {pgurl:1-%d}", nodes)
 			if opts.sharedProcessMT {

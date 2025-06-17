@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
@@ -38,6 +39,20 @@ var KVCPUTimeUtilGoal = settings.RegisterFloatSetting(
 	settings.SystemOnly,
 	"admission.kv_cpu_time_util_goal",
 	"the target CPU utilization for the KV CPU time token system", 0.8)
+
+// TODO(sumeer): we need to raise this to 1.0.
+var kvCPUTimeGoalRegular = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"admission.kv_cpu_time_util_goal.regular",
+	"the target CPU utilization for the KV CPU time token system", 0.8)
+
+const burstableIncreaseRegular = 0.1
+const burstableIncreaseElastic = 0.1
+
+var kvCPUTimeGoalElastic = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"admission.kv_cpu_time_util_goal.elastic",
+	"the target CPU utilization for the KV CPU time token system", 0.6)
 
 // kvSlotAdjuster is an implementer of CPULoadListener and
 // cpuOverloadIndicator.
@@ -331,4 +346,218 @@ func (ctta *cpuTimeTokenAdjuster) allocateTokensTick(remainingTicks int64) {
 type tenantTokensRequester interface {
 	tenantCPUTokensTick(tokensToAdd int64)
 	setTenantCPUTokensBurstLimit(tokens int64, enabled bool)
+}
+
+type cpuTimeTokenAdjusterNew struct {
+	settings              *cluster.Settings
+	granter               *cpuTimeTokenGranter
+	tenantTokensRequester [admissionpb.NumWorkClasses]tenantTokensRequester
+
+	kvCPUTimeTokens         [admissionpb.NumWorkClasses][getterKindCount]*metric.Gauge
+	kvCPUTimeTokensRateOne  [admissionpb.NumWorkClasses]*metric.Gauge
+	kvTokensToCPUMultiplier *metric.Gauge
+
+	// Mutable fields:
+
+	lastSampleTime           time.Time
+	totalCPUTimeMillis       int64
+	lastCPUTimeTokensEnabled bool
+
+	ticks int64
+
+	tokenToCPUTimeMultiplier float64
+
+	tokenBucket       [admissionpb.NumWorkClasses][getterKindCount]rateAndAllocated
+	tenantTokenBucket [admissionpb.NumWorkClasses]rateAndAllocated
+	init              bool
+}
+
+type rateAndAllocated struct {
+	// rate is also the burst budget. And since adjust is called every 1s, this
+	// is also the total tokens to give out until the next call to adjust.
+	rate      int64
+	allocated int64
+}
+
+func (ctta *cpuTimeTokenAdjusterNew) setGaugeMetricsLocked() {
+	for wc := range ctta.kvCPUTimeTokens {
+		for kind := range ctta.kvCPUTimeTokens[wc] {
+			if ctta.kvCPUTimeTokens[wc][kind] != nil {
+				ctta.kvCPUTimeTokens[wc][kind].Update(ctta.granter.tokens[wc][kind].tokens)
+			}
+		}
+		if ctta.kvCPUTimeTokensRateOne[wc] != nil {
+			ctta.kvCPUTimeTokensRateOne[wc].Update(ctta.tokenBucket[wc][getterKindOne].rate)
+		}
+	}
+	if ctta.kvTokensToCPUMultiplier != nil {
+		ctta.kvTokensToCPUMultiplier.Update(int64(ctta.tokenToCPUTimeMultiplier * 100))
+	}
+}
+
+// adjust is called every 1s.
+func (ctta *cpuTimeTokenAdjusterNew) adjustLocked(
+	now time.Time, totalCPUTimeMillis int64, cpuCapacity float64,
+) {
+	var goalUtil [admissionpb.NumWorkClasses][getterKindCount]float64
+	goalUtil[admissionpb.RegularWorkClass][getterKindTwo] = kvCPUTimeGoalRegular.Get(&ctta.settings.SV)
+	goalUtil[admissionpb.RegularWorkClass][getterKindOne] =
+		goalUtil[admissionpb.RegularWorkClass][getterKindTwo] + burstableIncreaseRegular
+	goalUtil[admissionpb.ElasticWorkClass][getterKindTwo] = kvCPUTimeGoalElastic.Get(&ctta.settings.SV)
+	goalUtil[admissionpb.ElasticWorkClass][getterKindOne] =
+		goalUtil[admissionpb.ElasticWorkClass][getterKindTwo] + burstableIncreaseElastic
+	cpuTimeTokensEnabled := KVCPUTimeTokensEnabled.Get(&ctta.settings.SV)
+	if !ctta.init {
+		ctta.init = true
+		ctta.lastSampleTime = now
+		ctta.totalCPUTimeMillis = totalCPUTimeMillis
+		ctta.tokenToCPUTimeMultiplier = 1.0
+		for wc := range ctta.tokenBucket {
+			for kind := range ctta.tokenBucket[wc] {
+				ctta.tokenBucket[wc][kind].rate = int64(cpuCapacity * float64(time.Second) * goalUtil[wc][kind])
+				ctta.tokenBucket[wc][kind].allocated = 0
+				ctta.granter.addToLocked(
+					&ctta.granter.tokens[wc][kind], ctta.tokenBucket[wc][kind].rate, true)
+			}
+			ctta.tenantTokenBucket[wc].rate = ctta.tokenBucket[wc][getterKindTwo].rate / 4
+			ctta.tenantTokensRequester[wc].setTenantCPUTokensBurstLimit(
+				ctta.tenantTokenBucket[wc].rate, cpuTimeTokensEnabled)
+			ctta.tenantTokenBucket[wc].allocated = 0
+		}
+		ctta.lastCPUTimeTokensEnabled = cpuTimeTokensEnabled
+		ctta.setGaugeMetricsLocked()
+		return
+	}
+	dur := now.Sub(ctta.lastSampleTime)
+	ctta.lastSampleTime = now
+	intCPUTimeMillis := totalCPUTimeMillis - ctta.totalCPUTimeMillis
+	if intCPUTimeMillis < 0 {
+		intCPUTimeMillis = 0
+	}
+	ctta.totalCPUTimeMillis = totalCPUTimeMillis
+	intCPUTimeNanos := intCPUTimeMillis * 1e6
+	const lowCPUUtilFrac = 0.25
+	isLowCPUUtil := intCPUTimeNanos < int64(float64(dur)*cpuCapacity*lowCPUUtilFrac)
+	intRegularTokensUsed, intUncontrolledTokensUsed := ctta.granter.getAndResetIntervalTokensUsed()
+	if intRegularTokensUsed <= 0 {
+		intRegularTokensUsed = 1
+	}
+	// NB: this is the measurement from the elasticCPUGranter, not the elastic
+	// work that is being managed by our granter.
+	intElasticTokensUsed := int64(0) /* TODO(sumeer): get elastic tokens used and reset */
+	if isLowCPUUtil {
+		// Ensure that low CPU utilization is not due to a flawed tokenToCPUTimeMultiplier
+		// by multiplicatively lowering it until we are below the upperBound.
+		const upperBound = (1 / lowCPUUtilFrac) * 0.9
+		if ctta.tokenToCPUTimeMultiplier > upperBound {
+			ctta.tokenToCPUTimeMultiplier /= 1.5
+			if ctta.tokenToCPUTimeMultiplier < upperBound {
+				ctta.tokenToCPUTimeMultiplier = upperBound
+			}
+		}
+	} else {
+		tokenToCPUTimeMultiplier :=
+			float64(intCPUTimeNanos) / float64(intRegularTokensUsed+intElasticTokensUsed)
+		if tokenToCPUTimeMultiplier > 20 {
+			// Cap the multiplier.
+			tokenToCPUTimeMultiplier = 20
+		} else if tokenToCPUTimeMultiplier < 1 {
+			// Likely because work is queued up in the goroutine scheduler.
+			tokenToCPUTimeMultiplier = 1
+		}
+		// Decrease faster than increase.
+		alpha := 0.5
+		if tokenToCPUTimeMultiplier < ctta.tokenToCPUTimeMultiplier {
+			alpha = 0.8
+		}
+		ctta.tokenToCPUTimeMultiplier =
+			alpha*tokenToCPUTimeMultiplier + (1-alpha)*ctta.tokenToCPUTimeMultiplier
+	}
+	for wc := range goalUtil {
+		for kind := range goalUtil[wc] {
+			rate :=
+				int64(cpuCapacity * float64(time.Second) * goalUtil[wc][kind] / ctta.tokenToCPUTimeMultiplier)
+			minTokens := int64(0)
+			if getterKind(kind) == getterKindTwo {
+				minTokens = rate - ctta.tokenBucket[wc][getterKindOne].rate
+				if minTokens > 0 {
+					panic("minTokens must be <= 0")
+				}
+			}
+			rateDelta := rate - ctta.tokenBucket[wc][kind].rate
+			ctta.tokenBucket[wc][kind] = rateAndAllocated{
+				rate: rate,
+			}
+			tokens := ctta.granter.tokens[wc][kind].tokens + rateDelta
+			if tokens > ctta.tokenBucket[wc][kind].rate ||
+				(cpuTimeTokensEnabled && !ctta.lastCPUTimeTokensEnabled) {
+				tokens = ctta.tokenBucket[wc][kind].rate
+			} else if tokens < minTokens {
+				tokens = minTokens
+			}
+			ctta.granter.addToLocked(
+				&ctta.granter.tokens[wc][kind], tokens-ctta.granter.tokens[wc][kind].tokens, true)
+			if getterKind(kind) == getterKindTwo {
+				tenantRate := rate / 4
+				ctta.tenantTokenBucket[wc] = rateAndAllocated{
+					rate: tenantRate,
+				}
+				ctta.tenantTokensRequester[wc].setTenantCPUTokensBurstLimit(
+					ctta.tenantTokenBucket[wc].rate, cpuTimeTokensEnabled)
+			}
+		}
+	}
+	ctta.ticks = 0
+	ctta.lastCPUTimeTokensEnabled = cpuTimeTokensEnabled
+	log.Infof(context.Background(),
+		"rates=R(%s,%s(%s)),E(%s,%s(%s)) allocated=R(%s,%s(%s)),E(%s,%s(%s)) used=%s, uncontrolled=%s mutiplier=%.1f ticks=%d",
+		time.Duration(ctta.tokenBucket[admissionpb.RegularWorkClass][getterKindOne].rate),
+		time.Duration(ctta.tokenBucket[admissionpb.RegularWorkClass][getterKindTwo].rate),
+		time.Duration(ctta.tenantTokenBucket[admissionpb.RegularWorkClass].rate),
+		time.Duration(ctta.tokenBucket[admissionpb.ElasticWorkClass][getterKindOne].rate),
+		time.Duration(ctta.tokenBucket[admissionpb.ElasticWorkClass][getterKindTwo].rate),
+		time.Duration(ctta.tenantTokenBucket[admissionpb.ElasticWorkClass].rate),
+		time.Duration(ctta.tokenBucket[admissionpb.RegularWorkClass][getterKindOne].allocated),
+		time.Duration(ctta.tokenBucket[admissionpb.RegularWorkClass][getterKindTwo].allocated),
+		time.Duration(ctta.tenantTokenBucket[admissionpb.RegularWorkClass].allocated),
+		time.Duration(ctta.tokenBucket[admissionpb.ElasticWorkClass][getterKindOne].allocated),
+		time.Duration(ctta.tokenBucket[admissionpb.ElasticWorkClass][getterKindTwo].allocated),
+		time.Duration(ctta.tenantTokenBucket[admissionpb.ElasticWorkClass].allocated),
+		time.Duration(intRegularTokensUsed), time.Duration(intUncontrolledTokensUsed),
+		ctta.tokenToCPUTimeMultiplier, ctta.ticks)
+}
+
+func (ctta *cpuTimeTokenAdjusterNew) allocateTokensTickLocked(remainingTicks int64) {
+	ctta.ticks++
+	allocateFunc := func(total int64, allocated int64, remainingTicks int64) (toAllocate int64) {
+		remainingTokens := total - allocated
+		// Round up so that we don't accumulate tokens to give in a burst on the
+		// last tick.
+		toAllocate = (remainingTokens + remainingTicks - 1) / remainingTicks
+		if toAllocate < 0 {
+			panic(errors.AssertionFailedf("toAllocate is negative %d", toAllocate))
+		}
+		if toAllocate+allocated > total {
+			toAllocate = total - allocated
+		}
+		return toAllocate
+	}
+	for wc := range ctta.tokenBucket {
+		for kind := range ctta.tokenBucket[wc] {
+			toAllocateTokens := allocateFunc(
+				ctta.tokenBucket[wc][kind].rate, ctta.tokenBucket[wc][kind].allocated, remainingTicks)
+			ctta.tokenBucket[wc][kind].allocated += toAllocateTokens
+			cpuTimeTokens := ctta.granter.tokens[wc][kind].tokens + toAllocateTokens
+			if cpuTimeTokens > ctta.tokenBucket[wc][kind].rate {
+				cpuTimeTokens = ctta.tokenBucket[wc][kind].rate
+			}
+			ctta.granter.addToLocked(
+				&ctta.granter.tokens[wc][kind], cpuTimeTokens-ctta.granter.tokens[wc][kind].tokens, false)
+		}
+		toAllocateTenantTokens := allocateFunc(
+			ctta.tenantTokenBucket[wc].rate, ctta.tenantTokenBucket[wc].allocated, remainingTicks)
+		ctta.tenantTokenBucket[wc].allocated += toAllocateTenantTokens
+		ctta.tenantTokensRequester[wc].tenantCPUTokensTick(toAllocateTenantTokens)
+	}
+	ctta.setGaugeMetricsLocked()
 }

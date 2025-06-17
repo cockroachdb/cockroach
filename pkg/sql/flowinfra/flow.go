@@ -457,6 +457,11 @@ func (f *FlowBase) GetAdmissionInfo() admission.WorkInfo {
 	return f.admissionInfo
 }
 
+// HACK. Must only be called after StartInternal() has been called.
+func (f *FlowBase) GetContextWithSQLCPUAdmissionHandle() context.Context {
+	return f.resumeCtx
+}
+
 // StartInternal starts the flow. All processors are started, each in their own
 // goroutine. The caller must forward any returned error to rowSyncFlowConsumer if
 // set.
@@ -467,8 +472,14 @@ func (f *FlowBase) StartInternal(
 		ctx, 1, "starting (%d processors, %d startables) asynchronously", len(processors), len(f.startables),
 	)
 
-	// TODO: Construct ah using f.admissionInfo
 	var ah *admission.SQLCPUAdmissionHandle
+	if f.Cfg.SQLCPUAdmissionQ != nil {
+		ah = admission.NewSQLCPUAdmissionHandle(admission.SQLWorkInfo{
+			TenantID:   f.admissionInfo.TenantID,
+			Priority:   f.admissionInfo.Priority,
+			CreateTime: f.admissionInfo.CreateTime,
+		}, f.Cfg.SQLCPUAdmissionQ)
+	}
 	func() {
 		f.mu.Lock()
 		defer f.mu.Unlock()

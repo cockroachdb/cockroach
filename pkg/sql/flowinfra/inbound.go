@@ -204,14 +204,12 @@ func processProducerMessage(
 			consumerClosed: false,
 		}
 	}
-	var admissionQ *admission.WorkQueue
+	var admissionQ admission.SlotsOrNoopQueueForOldSQL
 	if flowBase.Cfg != nil {
 		admissionQ = flowBase.Cfg.SQLSQLResponseAdmissionQ
 	}
-	if admissionQ != nil {
-		if resp := admissionQ.Admit(ctx, flowBase.admissionInfo); resp.Err != nil {
-			return processMessageResult{err: resp.Err, consumerClosed: false}
-		}
+	if resp := admissionQ.Admit(ctx, flowBase.admissionInfo); resp.Err != nil {
+		return processMessageResult{err: resp.Err, consumerClosed: false}
 	}
 	for {
 		row, meta, err := sd.GetRow(nil /* rowBuf */)

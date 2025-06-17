@@ -267,7 +267,7 @@ type DB struct {
 	//
 	// TODO(sumeer,irfansharif): Find a home for these in the SQL layer.
 	// Especially SettingsValue.
-	SQLKVResponseAdmissionQ *admission.WorkQueue
+	SQLKVResponseAdmissionQ admission.SlotsOrNoopQueueForOldSQL
 	AdmissionPacerFactory   admission.PacerFactory
 }
 

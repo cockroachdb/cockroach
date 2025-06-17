@@ -213,7 +213,7 @@ type controllerImpl struct {
 
 	// Admission control queues and coordinators. All three should be nil or
 	// non-nil.
-	kvAdmissionQ               *admission.WorkQueue
+	cpuGrantCoord              *admission.CPUGrantCoordinator
 	storeGrantCoords           *admission.StoreGrantCoordinators
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator
 	kvflowController           kvflowcontrol.Controller
@@ -238,8 +238,10 @@ type Handle struct {
 	raftAdmissionMeta    *kvflowcontrolpb.RaftAdmissionMeta
 	ghToUnpause          *admission.GoroutineCPUHandle
 
-	regularKVAdmissionQResp admission.AdmitResponse
-	cpuStart                time.Duration
+	cpuKVAdmissionQResp admission.AdmitResponse
+	cpuAdmissionQueue   *admission.WorkQueue
+
+	cpuStart time.Duration
 }
 
 // AnnotateCtx annotates the given context with request-scoped admission
@@ -258,7 +260,7 @@ func (h *Handle) AnnotateCtx(ctx context.Context) context.Context {
 // nil or non-nil.
 func MakeController(
 	nodeID *base.NodeIDContainer,
-	kvAdmissionQ *admission.WorkQueue,
+	cpuGrantCoord *admission.CPUGrantCoordinator,
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator,
 	storeGrantCoords *admission.StoreGrantCoordinators,
 	kvflowController kvflowcontrol.Controller,
@@ -267,7 +269,7 @@ func MakeController(
 ) Controller {
 	return &controllerImpl{
 		nodeID:                     nodeID,
-		kvAdmissionQ:               kvAdmissionQ,
+		cpuGrantCoord:              cpuGrantCoord,
 		storeGrantCoords:           storeGrantCoords,
 		elasticCPUGrantCoordinator: elasticCPUGrantCoordinator,
 		kvflowController:           kvflowController,
@@ -285,7 +287,7 @@ func (n *controllerImpl) AdmitKVWork(
 	ctx context.Context, tenantID roachpb.TenantID, ba *kvpb.BatchRequest,
 ) (handle Handle, retErr error) {
 	ah := Handle{tenantID: tenantID}
-	if n.kvAdmissionQ == nil {
+	if n.cpuGrantCoord == nil {
 		return ah, nil
 	}
 
@@ -325,6 +327,7 @@ func (n *controllerImpl) AdmitKVWork(
 		CreateTime:      createTime,
 		BypassAdmission: bypassAdmission,
 	}
+	cpuAdmissionQ := n.cpuGrantCoord.GetKVWorkQueue(admissionInfo.Priority)
 
 	admissionEnabled := true
 	// Don't subject HeartbeatTxnRequest to the storeAdmissionQ. Even though
@@ -438,7 +441,7 @@ func (n *controllerImpl) AdmitKVWork(
 			}()
 		} else {
 			// Use the slots-based mechanism for everything else.
-			resp := n.kvAdmissionQ.Admit(ctx, admissionInfo)
+			resp := cpuAdmissionQ.Admit(ctx, admissionInfo)
 			if resp.Err != nil {
 				return Handle{}, resp.Err
 			}
@@ -447,7 +450,8 @@ func (n *controllerImpl) AdmitKVWork(
 				// since it is acceptable to charge them to the tenant.
 				ah.cpuStart = grunning.Time()
 			}
-			ah.regularKVAdmissionQResp = resp
+			ah.cpuAdmissionQueue = cpuAdmissionQ
+			ah.cpuKVAdmissionQResp = resp
 		}
 	}
 	// Pause CPU measurement for SQL work if it is happening locally on this
@@ -466,7 +470,7 @@ func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteByt
 		ah.ghToUnpause.UnpauseMeasuring()
 	}
 	n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.AdmittedWorkDone(ah.elasticCPUWorkHandle)
-	if ah.regularKVAdmissionQResp.Enabled {
+	if ah.cpuKVAdmissionQResp.Enabled {
 		cpuTime := grunning.Time() - ah.cpuStart
 		if cpuTime < 0 {
 			// We sometimes see cpuTime to be negative. We use 1ns here, arbitrarily.
@@ -477,7 +481,7 @@ func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteByt
 			}
 			cpuTime = 1
 		}
-		n.kvAdmissionQ.AdmittedWorkDone(ah.regularKVAdmissionQResp, cpuTime)
+		ah.cpuAdmissionQueue.AdmittedWorkDone(ah.cpuKVAdmissionQResp, cpuTime)
 	}
 	if ah.storeAdmissionQ != nil {
 		var doneInfo admission.StoreWorkDoneInfo
@@ -539,7 +543,8 @@ func (n *controllerImpl) SetTenantWeightProvider(
 				if kvDisabled {
 					weights.Node = nil
 				}
-				n.kvAdmissionQ.SetTenantWeights(weights.Node)
+				// TODO: uncomment
+				// n.kvAdmissionQ.SetTenantWeights(weights.Node)
 				n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.SetTenantWeights(weights.Node)
 
 				for _, storeWeights := range weights.Stores {

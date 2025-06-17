@@ -311,6 +311,8 @@ func (f *vectorizedFlow) Run(ctx context.Context, noWait bool) {
 		f.GetRowSyncFlowConsumer().ProducerDone()
 		return
 	}
+	// HACK
+	ctx = f.FlowBase.GetContextWithSQLCPUAdmissionHandle()
 
 	log.VEvent(ctx, 1, "running the batch flow coordinator in the flow's goroutine")
 	f.batchFlowCoordinator.Run(ctx)
@@ -506,7 +508,7 @@ func (s *vectorizedFlowCreator) makeGetStatsFnForOutbox(
 type runFn func(_ context.Context, flowCtxCancel context.CancelFunc)
 
 type admissionOptions struct {
-	admissionQ    *admission.WorkQueue
+	admissionQ    admission.SlotsOrNoopQueueForOldSQL
 	admissionInfo admission.WorkInfo
 }
 

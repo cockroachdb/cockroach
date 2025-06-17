@@ -326,6 +326,164 @@ func (stg *slotAndCPUTimeTokenGranter) getAndResetIntervalTokensUsed() (
 	return intTokensUsed, intUncontrolledTokens
 }
 
+type cpuTimeTokenChildGranter struct {
+	// NB: The ElasticWorkClass here is not the same as the one that uses the
+	// ElasticCPUGrantCoordinator. The one here falls below the RegularWorkClass
+	// in priority, but above the ones that use the ElasticCPUGrantCoordinator.
+	wc     admissionpb.WorkClass
+	parent *cpuTimeTokenGranter
+}
+
+var _ granter = &cpuTimeTokenChildGranter{}
+
+// grantKind implements granter.
+func (cg *cpuTimeTokenChildGranter) grantKind() grantKind {
+	// NB: this is a lie.
+	return slot
+}
+
+// tryGet implements granter.
+func (cg *cpuTimeTokenChildGranter) tryGet(gk getterKind, count int64) bool {
+	return cg.parent.tryGet(cg.wc, gk, count)
+}
+
+// returnGrant implements granter.
+func (cg *cpuTimeTokenChildGranter) returnGrant(count int64) {
+	cg.parent.returnGrant(count)
+}
+
+// tookWithoutPermission implements granter.
+func (cg *cpuTimeTokenChildGranter) tookWithoutPermission(count int64) {
+	cg.parent.tookWithoutPermission(count)
+}
+
+// continueGrantChain implements granter.
+func (cg *cpuTimeTokenChildGranter) continueGrantChain(grantChainID grantChainID) {
+	// Ignore since grant chains are not used.
+}
+
+type tokensEtc struct {
+	tokens            int64
+	exhaustedStart    time.Time
+	exhaustedDuration *metric.Counter
+}
+
+type cpuTimeTokenGranter struct {
+	coord                 *CPUTimeTokenGrantCoordinator
+	requester             [admissionpb.NumWorkClasses]requester
+	tokens                [admissionpb.NumWorkClasses][getterKindCount]tokensEtc
+	intTokensUsed         int64
+	intUncontrolledTokens int64
+}
+
+func newCPUTimeTokenGranter(
+	coord *CPUTimeTokenGrantCoordinator,
+	exhaustedDuration [admissionpb.NumWorkClasses][getterKindCount]*metric.Counter,
+) *cpuTimeTokenGranter {
+	stg := &cpuTimeTokenGranter{
+		coord: coord,
+	}
+	for wc := admissionpb.RegularWorkClass; wc < admissionpb.NumWorkClasses; wc++ {
+		for gk := getterKindOne; gk < getterKindCount; gk++ {
+			stg.tokens[wc][gk] = tokensEtc{
+				tokens:            0,
+				exhaustedStart:    timeutil.Now(),
+				exhaustedDuration: exhaustedDuration[wc][gk],
+			}
+		}
+	}
+	return stg
+}
+
+func (stg *cpuTimeTokenGranter) setRequester(requester [admissionpb.NumWorkClasses]requester) {
+	stg.requester = requester
+}
+
+func (stg *cpuTimeTokenGranter) tryGet(
+	wc admissionpb.WorkClass, getter getterKind, count int64,
+) bool {
+	stg.coord.mu.Lock()
+	defer stg.coord.mu.Unlock()
+	if stg.tokens[wc][getter].tokens <= 0 {
+		return false
+	}
+	stg.tookWithoutPermissionLocked(count)
+	return true
+}
+
+// Reminder: this method tolerates count being negative. See the comment where
+// the granter interface is declared.
+func (stg *cpuTimeTokenGranter) returnGrant(count int64) {
+	stg.coord.mu.Lock()
+	defer stg.coord.mu.Unlock()
+	stg.tookWithoutPermissionLocked(-count)
+	stg.coord.tryGrantLocked()
+}
+
+func (stg *cpuTimeTokenGranter) addToLocked(tokens *tokensEtc, delta int64, progress bool) {
+	wasExhausted := tokens.tokens <= 0
+	tokens.tokens += delta
+	isExhausted := tokens.tokens <= 0
+	if wasExhausted && !isExhausted {
+		now := timeutil.Now()
+		if tokens.exhaustedDuration != nil {
+			tokens.exhaustedDuration.Inc(now.Sub(tokens.exhaustedStart).Nanoseconds())
+		}
+	} else if !wasExhausted && isExhausted {
+		tokens.exhaustedStart = timeutil.Now()
+	} else if isExhausted && progress && tokens.exhaustedDuration != nil {
+		now := timeutil.Now()
+		tokens.exhaustedDuration.Inc(now.Sub(tokens.exhaustedStart).Nanoseconds())
+		tokens.exhaustedStart = now
+	}
+}
+
+func (stg *cpuTimeTokenGranter) tookWithoutPermission(count int64) {
+	stg.coord.mu.Lock()
+	defer stg.coord.mu.Unlock()
+	stg.tookWithoutPermissionLocked(count)
+}
+
+func (stg *cpuTimeTokenGranter) tookWithoutPermissionLocked(count int64) {
+	if count > 0 && stg.tokens[admissionpb.RegularWorkClass][getterKindTwo].tokens <= 0 {
+		stg.intUncontrolledTokens += count
+	}
+	stg.intTokensUsed += count
+	for i := range stg.tokens {
+		for j := range stg.tokens[i] {
+			stg.addToLocked(&stg.tokens[i][j], -count, false)
+		}
+	}
+}
+
+func (stg *cpuTimeTokenGranter) tryGrantLocked() bool {
+	for i := range stg.requester {
+		gk := stg.requester[i].hasWaitingRequests()
+		if gk == getterKindNone {
+			continue
+		}
+		if stg.tokens[i][gk].tokens <= 0 {
+			return false
+		}
+		tokens := stg.requester[i].granted(0)
+		if tokens == 0 {
+			// Did not accept grant.
+			continue
+		}
+		stg.tookWithoutPermissionLocked(tokens)
+		return true
+	}
+	return false
+}
+
+func (stg *cpuTimeTokenGranter) getAndResetIntervalTokensUsed() (tokens int64, uncontrolled int64) {
+	intTokensUsed := stg.intTokensUsed
+	stg.intTokensUsed = 0
+	intUncontrolledTokens := stg.intUncontrolledTokens
+	stg.intUncontrolledTokens = 0
+	return intTokensUsed, intUncontrolledTokens
+}
+
 // tokenGranter implements granterWithLockedCalls.
 type tokenGranter struct {
 	coord                *GrantCoordinator
@@ -1137,6 +1295,73 @@ var (
 		Name:        "admission.l0_tokens_produced.kv",
 		Help:        "Total bytes produced for L0 writes",
 		Measurement: "Tokens",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	kvCPUTimeTokensRegularOne = metric.Metadata{
+		Name:        "admission.granter.cpu_time_tokens.regular1.kv",
+		Help:        "Total CPU time tokens (gauge)",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	kvCPUTimeTokensRegularTwo = metric.Metadata{
+		Name:        "admission.granter.cpu_time_tokens.regular2.kv",
+		Help:        "Total CPU time tokens (gauge)",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	kvCPUTimeTokensElasticOne = metric.Metadata{
+		Name:        "admission.granter.cpu_time_tokens.elastic1.kv",
+		Help:        "Total CPU time tokens (gauge)",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	kvCPUTimeTokensElasticTwo = metric.Metadata{
+		Name:        "admission.granter.cpu_time_tokens.elastic2.kv",
+		Help:        "Total CPU time tokens (gauge)",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	kvCPUTimeTokensRateRegularOne = metric.Metadata{
+		Name:        "admission.granter.cpu_time_tokens_rate.regular1.kv",
+		Help:        "Rate of CPU time tokens (gauge)",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	kvCPUTimeTokensRateElasticOne = metric.Metadata{
+		Name:        "admission.granter.cpu_time_tokens_rate.elastic1.kv",
+		Help:        "Rate of CPU time tokens (gauge)",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	kvCPUTimeTokensExhaustedDurationRegularOne = metric.Metadata{
+		Name:        "admission.granter.cpu_time_tokens.exhausted_duration.regular1.kv",
+		Help:        "Total duration when KV CPU time tokens were exhausted, in nanos",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_COUNT,
+	}
+	kvCPUTimeTokensExhaustedDurationRegularTwo = metric.Metadata{
+		Name:        "admission.granter.cpu_time_tokens.exhausted_duration.regular2.kv",
+		Help:        "Total duration when KV CPU time tokens were exhausted, in nanos",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_COUNT,
+	}
+	kvCPUTimeTokensExhaustedDurationElasticOne = metric.Metadata{
+		Name:        "admission.granter.cpu_time_tokens.exhausted_duration.elastic1.kv",
+		Help:        "Total duration when KV CPU time tokens were exhausted, in nanos",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_COUNT,
+	}
+	kvCPUTimeTokensExhaustedDurationElasticTwo = metric.Metadata{
+		Name:        "admission.granter.cpu_time_tokens.exhausted_duration.elastic2.kv",
+		Help:        "Total duration when KV CPU time tokens were exhausted, in nanos",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_COUNT,
+	}
+	kvTokensToCPUMultiplierNew = metric.Metadata{
+		Name:        "admission.granter.tokens_to_cpu_multiplier.new.kv",
+		Help:        "Multiplier for CPU time tokens to convert to CPU nanos (percentage)",
+		Measurement: "Ratio",
 		Unit:        metric.Unit_COUNT,
 	}
 )
