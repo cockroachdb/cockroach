@@ -34,7 +34,7 @@ func registerDrop(r registry.Registry) {
 		settings.Env = append(settings.Env, "COCKROACH_MEMPROF_INTERVAL=15s")
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
 
-		m := c.NewMonitor(ctx, c.All())
+		m := c.NewDeprecatedMonitor(ctx, c.All())
 		m.Go(func(ctx context.Context) error {
 			t.WorkerStatus("importing TPCC fixture")
 			c.Run(ctx, option.WithNodes(c.Node(1)), tpccImportCmd("", warehouses, "{pgurl:1}"))

@@ -86,7 +86,7 @@ func runMultiTenantDistSQL(
 	_, err := storConn.Exec(`ALTER TENANT $1 SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true`, tenantName)
 	require.NoError(t, err)
 
-	m := c.NewMonitor(ctx, c.Nodes(1, 2, 3))
+	m := c.NewDeprecatedMonitor(ctx, c.Nodes(1, 2, 3))
 
 	inst1Conn, err := c.ConnE(ctx, t.L(), 1, option.VirtualClusterName(tenantName))
 	require.NoError(t, err)

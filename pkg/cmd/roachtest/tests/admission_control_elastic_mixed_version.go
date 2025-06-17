@@ -110,7 +110,7 @@ func registerElasticWorkloadMixedVersion(r registry.Registry) {
 			}
 			runWorkloads := func(ctx2 context.Context) error {
 				const duration = 5 * time.Minute
-				m := c.NewMonitor(ctx, c.CRDBNodes())
+				m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 				m.Go(func(ctx context.Context) error { return runForeground(ctx, duration) })
 				m.Go(func(ctx context.Context) error { return runBackground(ctx, duration) })
 				return m.WaitE()

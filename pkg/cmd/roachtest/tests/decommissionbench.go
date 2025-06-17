@@ -627,7 +627,7 @@ func runDecommissionBench(
 	setupDecommissionBench(ctx, t, c, benchSpec, pinnedNode, importCmd)
 
 	workloadCtx, workloadCancel := context.WithCancel(ctx)
-	m := c.NewMonitor(workloadCtx, crdbNodes)
+	m := c.NewDeprecatedMonitor(workloadCtx, crdbNodes)
 
 	if !benchSpec.noLoad {
 		m.Go(
@@ -770,7 +770,7 @@ func runDecommissionBenchLong(
 	setupDecommissionBench(ctx, t, c, benchSpec, pinnedNode, importCmd)
 
 	workloadCtx, workloadCancel := context.WithCancel(ctx)
-	m := c.NewMonitor(workloadCtx, crdbNodes)
+	m := c.NewDeprecatedMonitor(workloadCtx, crdbNodes)
 
 	if !benchSpec.noLoad {
 		m.Go(

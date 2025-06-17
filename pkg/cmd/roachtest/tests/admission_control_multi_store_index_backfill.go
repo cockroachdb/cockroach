@@ -51,7 +51,7 @@ func registerMultiStoreIndexBackfill(r registry.Registry) {
 					"--b 2000 --c 1000 --index-b-c-a=false --files-per-node=10 "+
 					"--batches-by-b=false {pgurl:1}")
 
-			m := c.NewMonitor(ctx, c.CRDBNodes())
+			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 			cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 				// This should use approx. 20% of the cluster's resources (disk/cpu).
 				if err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf(

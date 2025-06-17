@@ -388,7 +388,7 @@ func runAllocationBenchSample(
 	// workloads have completed, or one has errored, the monitor will stop
 	// blocking.
 	specLoad := &spec.load
-	m := c.NewMonitor(ctx, c.Nodes(1, spec.nodes))
+	m := c.NewDeprecatedMonitor(ctx, c.Nodes(1, spec.nodes))
 	for i := range spec.load.events {
 		m.Go(func(ctx context.Context) error {
 			return runAllocationBenchEvent(ctx, t, c, specLoad, i)

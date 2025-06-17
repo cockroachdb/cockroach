@@ -153,7 +153,7 @@ func registerRestore(r registry.Registry) {
 
 			// Run the disk usage logger in the monitor to guarantee its
 			// having terminated when the test ends.
-			m := c.NewMonitor(ctx)
+			m := c.NewDeprecatedMonitor(ctx)
 			dul := roachtestutil.NewDiskUsageLogger(t, c)
 			m.Go(dul.Runner)
 
@@ -406,7 +406,7 @@ func registerRestore(r registry.Registry) {
 
 				// Run the disk usage logger in the monitor to guarantee its
 				// having terminated when the test ends.
-				m := c.NewMonitor(ctx)
+				m := c.NewDeprecatedMonitor(ctx)
 				dul := roachtestutil.NewDiskUsageLogger(t, c)
 				m.Go(dul.Runner)
 				m.Go(func(ctx context.Context) error {

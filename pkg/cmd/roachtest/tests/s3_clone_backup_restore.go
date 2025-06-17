@@ -235,7 +235,7 @@ func (v *s3BackupRestoreValidator) validateBackupRestore(ctx context.Context, s 
 	}
 
 	// Run a full backup while running the workload
-	m := v.c.NewMonitor(ctx, v.c.CRDBNodes())
+	m := v.c.NewDeprecatedMonitor(ctx, v.c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
 		v.t.Status(`running backup `)
 		_, err := conn.ExecContext(ctx,

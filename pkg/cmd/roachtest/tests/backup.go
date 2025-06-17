@@ -332,7 +332,7 @@ func registerBackup(r registry.Registry) {
 			tick, perfBuf := initBulkJobPerfArtifacts(2*time.Hour, t, exporter)
 			defer roachtestutil.CloseExporter(ctx, exporter, t, c, perfBuf, c.Node(1), "")
 
-			m := c.NewMonitor(ctx)
+			m := c.NewDeprecatedMonitor(ctx)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`running backup`)
 				// Tick once before starting the backup, and once after to capture the
@@ -393,7 +393,7 @@ func registerBackup(r registry.Registry) {
 				}
 
 				conn := c.Conn(ctx, t.L(), 1)
-				m := c.NewMonitor(ctx)
+				m := c.NewDeprecatedMonitor(ctx)
 				m.Go(func(ctx context.Context) error {
 					t.Status(`running backup`)
 					_, err := conn.ExecContext(ctx, "BACKUP bank.bank INTO $1 WITH KMS=$2",
@@ -402,7 +402,7 @@ func registerBackup(r registry.Registry) {
 				})
 				m.Wait()
 
-				m = c.NewMonitor(ctx)
+				m = c.NewDeprecatedMonitor(ctx)
 				m.Go(func(ctx context.Context) error {
 					t.Status(`restoring from backup`)
 					if _, err := conn.ExecContext(ctx, "CREATE DATABASE restoreDB"); err != nil {
@@ -456,7 +456,7 @@ func registerBackup(r registry.Registry) {
 				dest := importBankData(ctx, rows, t, c)
 
 				conn := c.Conn(ctx, t.L(), 1)
-				m := c.NewMonitor(ctx)
+				m := c.NewDeprecatedMonitor(ctx)
 				m.Go(func(ctx context.Context) error {
 					_, err := conn.ExecContext(ctx, `
 					CREATE DATABASE restoreA;
@@ -469,7 +469,7 @@ func registerBackup(r registry.Registry) {
 				var err error
 				backupPath := fmt.Sprintf("nodelocal://1/kmsbackup/%s/%s", cloudProvider, dest)
 
-				m = c.NewMonitor(ctx)
+				m = c.NewDeprecatedMonitor(ctx)
 				m.Go(func(ctx context.Context) error {
 					switch cloudProvider {
 					case spec.AWS:
@@ -503,7 +503,7 @@ func registerBackup(r registry.Registry) {
 				m.Wait()
 
 				// Restore the encrypted BACKUP using each of KMS URI A and B separately.
-				m = c.NewMonitor(ctx)
+				m = c.NewDeprecatedMonitor(ctx)
 				m.Go(func(ctx context.Context) error {
 					t.Status(`restore using KMSURIA`)
 					if _, err := conn.ExecContext(ctx,
