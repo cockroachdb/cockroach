@@ -541,7 +541,7 @@ func (fr *FlowRegistry) ConnectInboundStream(
 	ctx context.Context,
 	flowID execinfrapb.FlowID,
 	streamID execinfrapb.StreamID,
-	stream execinfrapb.DistSQL_FlowStreamServer,
+	stream execinfrapb.RPCDistSQL_FlowStreamStream,
 	timeout time.Duration,
 ) (_ *FlowBase, _ InboundStreamHandler, cleanup func(), retErr error) {
 	fr.Lock()

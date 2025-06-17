@@ -1274,7 +1274,7 @@ var _ flowinfra.InboundStreamHandler = vectorizedInboundStreamHandler{}
 // Run is part of the flowinfra.InboundStreamHandler interface.
 func (s vectorizedInboundStreamHandler) Run(
 	ctx context.Context,
-	stream execinfrapb.DistSQL_FlowStreamServer,
+	stream execinfrapb.RPCDistSQL_FlowStreamStream,
 	_ *execinfrapb.ProducerMessage,
 	_ *flowinfra.FlowBase,
 ) error {
