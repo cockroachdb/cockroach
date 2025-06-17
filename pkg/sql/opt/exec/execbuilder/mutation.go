@@ -1247,6 +1247,9 @@ func shouldApplyImplicitLockingToUpdateOrDeleteInput(
 	case *memo.ScanExpr:
 		toLockIndexes.Add(t.Index)
 		return t.Table, toLockIndexes
+	case *memo.PlaceholderScanExpr:
+		toLockIndexes.Add(t.Index)
+		return t.Table, toLockIndexes
 	case *memo.LookupJoinExpr:
 		toLockIndexes.Add(t.Index)
 		if innerJoin, ok := t.Input.(*memo.LookupJoinExpr); ok && innerJoin.Table == t.Table {

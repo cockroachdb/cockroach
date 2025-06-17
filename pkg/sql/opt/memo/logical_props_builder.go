@@ -203,6 +203,15 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 	}
 }
 
+// buildPlaceholderScanProps is unimplemented. Placeholder expressions are only created
+// in two places:
+//
+//  1. The placeholder fast-path which entirely skips optimization.
+//  2. The ConvertParameterizedLookupJoinToPlaceholderScan exploration rule
+//     which always adds the placeholder scan to an existing memo group, for
+//     which logical properties have already been built.
+//
+// In both cases this function is never called.
 func (b *logicalPropsBuilder) buildPlaceholderScanProps(
 	scan *PlaceholderScanExpr, rel *props.Relational,
 ) {

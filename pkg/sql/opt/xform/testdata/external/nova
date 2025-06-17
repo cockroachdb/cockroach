@@ -2459,29 +2459,14 @@ project
       │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    ├── key: ()
       │    │    │    │    │    ├── fd: ()-->(1-12,14,15,19,20)
-      │    │    │    │    │    ├── project
+      │    │    │    │    │    ├── placeholder-scan flavors
       │    │    │    │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15
       │    │    │    │    │    │    ├── cardinality: [0 - 1]
       │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    ├── fd: ()-->(1-12,14,15)
-      │    │    │    │    │    │    └── inner-join (lookup flavors)
-      │    │    │    │    │    │         ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 "$2":37!null
-      │    │    │    │    │    │         ├── flags: disallow merge join
-      │    │    │    │    │    │         ├── key columns: [37] = [1]
-      │    │    │    │    │    │         ├── lookup columns are key
-      │    │    │    │    │    │         ├── cardinality: [0 - 1]
-      │    │    │    │    │    │         ├── has-placeholder
-      │    │    │    │    │    │         ├── key: ()
-      │    │    │    │    │    │         ├── fd: ()-->(1-12,14,15,37), (1)==(37), (37)==(1)
-      │    │    │    │    │    │         ├── values
-      │    │    │    │    │    │         │    ├── columns: "$2":37
-      │    │    │    │    │    │         │    ├── cardinality: [1 - 1]
-      │    │    │    │    │    │         │    ├── has-placeholder
-      │    │    │    │    │    │         │    ├── key: ()
-      │    │    │    │    │    │         │    ├── fd: ()-->(37)
-      │    │    │    │    │    │         │    └── ($2,)
-      │    │    │    │    │    │         └── filters (true)
+      │    │    │    │    │    │    └── span
+      │    │    │    │    │    │         └── $2
       │    │    │    │    │    ├── project
       │    │    │    │    │    │    ├── columns: flavor_projects.flavor_id:19!null project_id:20!null
       │    │    │    │    │    │    ├── cardinality: [0 - 1]
