@@ -483,7 +483,7 @@ func batchJobInsertStmt(
 		return "", nil, nil, errors.NewAssertionErrorWithWrappedErrf(err, "failed to make timestamp for creation of job")
 	}
 	instanceID := r.ID()
-	columns := []string{`id`, `created`, `status`, `claim_session_id`, `claim_instance_id`, `job_type`}
+	columns := []string{`id`, `created`, `status`, `claim_session_id`, `claim_instance_id`, `job_type`, `owner`, `description`}
 	valueFns := map[string]func(*Job) (interface{}, error){
 		`id`:                func(job *Job) (interface{}, error) { return job.ID(), nil },
 		`created`:           func(job *Job) (interface{}, error) { return created, nil },
@@ -494,12 +494,8 @@ func batchJobInsertStmt(
 			payload := job.Payload()
 			return payload.Type().String(), nil
 		},
-	}
-
-	if schemaVersion.AtLeast(clusterversion.TODO_Delete_V25_1_AddJobsColumns.Version()) {
-		columns = append(columns, `owner`, `description`)
-		valueFns[`owner`] = func(job *Job) (interface{}, error) { return job.Payload().UsernameProto.Decode().Normalized(), nil }
-		valueFns[`description`] = func(job *Job) (interface{}, error) { return job.Payload().Description, nil }
+		`owner`:       func(job *Job) (interface{}, error) { return job.Payload().UsernameProto.Decode().Normalized(), nil },
+		`description`: func(job *Job) (interface{}, error) { return job.Payload().Description, nil },
 	}
 
 	appendValues := func(job *Job, vals *[]interface{}) (err error) {
@@ -590,15 +586,9 @@ func (r *Registry) CreateJobWithTxn(
 			return errors.NewAssertionErrorWithWrappedErrf(err, "failed to construct job created timestamp")
 		}
 
-		cols := []string{"id", "created", "status", "claim_session_id", "claim_instance_id", "job_type"}
-		vals := []interface{}{jobID, created, StateRunning, s.ID().UnsafeBytes(), r.ID(), jobType.String()}
-		v, err := txn.GetSystemSchemaVersion(ctx)
-		if err != nil {
-			return err
-		}
-		if v.AtLeast(clusterversion.TODO_Delete_V25_1_AddJobsColumns.Version()) {
-			cols = append(cols, "owner", "description")
-			vals = append(vals, j.mu.payload.UsernameProto.Decode().Normalized(), j.mu.payload.Description)
+		cols := []string{"id", "created", "status", "claim_session_id", "claim_instance_id", "job_type", "owner", "description"}
+		vals := []interface{}{
+			jobID, created, StateRunning, s.ID().UnsafeBytes(), r.ID(), jobType.String(), j.mu.payload.UsernameProto.Decode().Normalized(), j.mu.payload.Description,
 		}
 
 		totalNumCols := len(cols)
@@ -730,18 +720,9 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 		}
 		typ := j.mu.payload.Type().String()
 
-		cols := []string{"id", "created", "status", "created_by_type", "created_by_id", "job_type"}
-		placeholders := []string{"$1", "now() at time zone 'utc'", "$2", "$3", "$4", "$5"}
-		vals := []interface{}{jobID, StateRunning, createdByType, createdByID, typ}
-		v, err := txn.GetSystemSchemaVersion(ctx)
-		if err != nil {
-			return err
-		}
-		if v.AtLeast(clusterversion.TODO_Delete_V25_1_AddJobsColumns.Version()) {
-			cols = append(cols, "owner", "description")
-			placeholders = append(placeholders, "$6", "$7")
-			vals = append(vals, j.mu.payload.UsernameProto.Decode().Normalized(), j.mu.payload.Description)
-		}
+		cols := []string{"id", "created", "status", "created_by_type", "created_by_id", "job_type", "owner", "description"}
+		placeholders := []string{"$1", "now() at time zone 'utc'", "$2", "$3", "$4", "$5", "$6", "$7"}
+		vals := []interface{}{jobID, StateRunning, createdByType, createdByID, typ, j.mu.payload.UsernameProto.Decode().Normalized(), j.mu.payload.Description}
 
 		// Insert the job row, but do not set a `claim_session_id`. By not
 		// setting the claim, the job can be adopted by any node and will
@@ -1275,20 +1256,11 @@ func (r *Registry) cleanupOldJobsPage(
 		}
 
 		counts := make(map[string]int)
-		for i, tbl := range jobMetadataTables {
+		for _, tbl := range jobMetadataTables {
 			var deleted int
 			if err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				// Tables other than job_info -- the 0th -- are only present if the txn is
 				// running at a version that includes them.
-				if i > 0 {
-					v, err := txn.GetSystemSchemaVersion(ctx)
-					if err != nil {
-						return err
-					}
-					if v.Less(clusterversion.TODO_Delete_V25_1_AddJobsTables.Version()) {
-						return nil
-					}
-				}
 				deleted, err = txn.Exec(ctx, redact.RedactableString("gc-job-"+tbl), txn.KV(),
 					"DELETE FROM system."+tbl+" WHERE job_id = ANY($1)", toDelete,
 				)
@@ -1337,17 +1309,7 @@ func (r *Registry) DeleteTerminalJobByID(ctx context.Context, id jobspb.JobID) e
 			if err != nil {
 				return err
 			}
-			for i, tbl := range jobMetadataTables {
-				if i > 0 {
-					v, err := txn.GetSystemSchemaVersion(ctx)
-					if err != nil {
-						return err
-					}
-					if v.Less(clusterversion.TODO_Delete_V25_1_AddJobsTables.Version()) {
-						break
-					}
-				}
-
+			for _, tbl := range jobMetadataTables {
 				_, err = txn.Exec(
 					ctx, redact.RedactableString("delete-job-"+tbl), txn.KV(),
 					"DELETE FROM system."+tbl+" WHERE job_id = $1", id,
