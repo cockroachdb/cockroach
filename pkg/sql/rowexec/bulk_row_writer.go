@@ -132,7 +132,7 @@ func (sp *bulkRowWriter) maybeWrapAsPGError(ctx context.Context, orig error) err
 	return orig
 }
 
-func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) error {
+func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) (retErr error) {
 	writeTS := sp.spec.Table.CreateAsOfTime
 	const bufferSize = 64 << 20
 	adder, err := sp.FlowCtx.Cfg.BulkAdder(
@@ -152,7 +152,9 @@ func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) 
 	if err != nil {
 		return err
 	}
-	defer adder.Close(ctx)
+	defer func() {
+		retErr = errors.CombineErrors(retErr, adder.Close(ctx))
+	}()
 
 	// ingestKvs drains kvs from the channel until it closes, ingesting them using
 	// the BulkAdder. It handles the required buffering/sorting/etc.

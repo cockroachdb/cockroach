@@ -168,7 +168,7 @@ func (b *BufferingAdder) SetOnFlush(fn func(summary kvpb.BulkOpSummary)) {
 }
 
 // Close closes the underlying SST builder.
-func (b *BufferingAdder) Close(ctx context.Context) {
+func (b *BufferingAdder) Close(ctx context.Context) error {
 	if log.V(1) {
 		b.sink.mu.Lock()
 		if b.sink.mu.totalStats.BufferFlushes > 0 {
@@ -182,9 +182,12 @@ func (b *BufferingAdder) Close(ctx context.Context) {
 		}
 		b.sink.mu.Unlock()
 	}
-	b.sink.Close(ctx)
+	if err := b.sink.Close(ctx); err != nil {
+		return err
+	}
 	b.memAcc.Close(ctx)
 	b.bulkMon.Stop(ctx)
+	return nil
 }
 
 // Add adds a key to the buffer and checks if it needs to flush.
@@ -274,7 +277,9 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 		b.curBufSummary.Reset()
 		return nil
 	}
-	b.sink.Reset(ctx)
+	if err := b.sink.Reset(ctx); err != nil {
+		return err
+	}
 	b.sink.currentStats.BufferFlushes++
 
 	var before *bulkpb.IngestionPerformanceStats

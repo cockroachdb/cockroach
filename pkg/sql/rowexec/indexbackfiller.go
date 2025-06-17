@@ -254,7 +254,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 	ctx context.Context,
 	indexEntryCh <-chan indexEntryBatch,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
-) error {
+) (retErr error) {
 	ctx, span := tracing.ChildSpan(ctx, "ingestIndexEntries")
 	defer span.Finish()
 
@@ -273,7 +273,9 @@ func (ib *indexBackfiller) ingestIndexEntries(
 	if err != nil {
 		return err
 	}
-	defer adder.Close(ctx)
+	defer func() {
+		retErr = errors.CombineErrors(retErr, adder.Close(ctx))
+	}()
 
 	// Synchronizes read and write access on completedSpans which is updated on a
 	// BulkAdder flush, but is read when progress is being sent back to the

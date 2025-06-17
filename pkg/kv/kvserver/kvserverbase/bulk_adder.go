@@ -91,7 +91,7 @@ type BulkAdder interface {
 	// GetSummary returns a summary of rows/bytes/etc written by this batcher.
 	GetSummary() kvpb.BulkOpSummary
 	// Close closes the underlying buffers/writers.
-	Close(ctx context.Context)
+	Close(ctx context.Context) error
 	// SetOnFlush sets a callback function called after flushing the buffer.
 	SetOnFlush(func(summary kvpb.BulkOpSummary))
 }

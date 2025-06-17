@@ -589,11 +589,13 @@ func (sip *streamIngestionProcessor) close() {
 		sip.subscriptionCancel()
 	}
 	if err := sip.subscriptionGroup.Wait(); err != nil {
-		log.Errorf(sip.Ctx(), "error on close(): %s", err)
+		log.Errorf(sip.Ctx(), "error on close(): %v", err)
 	}
 
 	if sip.batcher != nil {
-		sip.batcher.Close(sip.Ctx())
+		if err := sip.batcher.Close(sip.Ctx()); err != nil {
+			log.Errorf(sip.Ctx(), "error on close(): %v", err)
+		}
 	}
 	sip.maxFlushRateTimer.Stop()
 	sip.aggTimer.Stop()
@@ -1273,11 +1275,15 @@ type flushableBuffer struct {
 
 // flushBuffer flushes the given streamIngestionBuffer via the SST
 // batchers and returns the underlying streamIngestionBuffer to the pool.
-func (sip *streamIngestionProcessor) flushBuffer(b flushableBuffer) (*jobspb.ResolvedSpans, error) {
+func (sip *streamIngestionProcessor) flushBuffer(
+	b flushableBuffer,
+) (_ *jobspb.ResolvedSpans, retErr error) {
 	ctx, sp := tracing.ChildSpan(sip.Ctx(), "stream-ingestion-flush")
 	defer sp.Finish()
 	// Ensure the batcher is always reset, even on early error returns.
-	defer sip.batcher.Reset(ctx)
+	defer func() {
+		retErr = errors.CombineErrors(retErr, sip.batcher.Reset(ctx))
+	}()
 
 	// First process the point KVs.
 	//

@@ -206,7 +206,7 @@ func TestDuplicateHandling(t *testing.T) {
 			b, err := bulk.MakeTestingSSTBatcher(ctx, kvDB, s.ClusterSettings(),
 				tc.skipDuplicates, tc.ingestAll, mem.MakeConcurrentBoundAccount(), reqs)
 			require.NoError(t, err)
-			defer b.Close(ctx)
+			defer func() { require.NoError(t, b.Close(ctx)) }()
 			k := func(i int, ts int64) storage.MVCCKey {
 				return storageutils.PointKey(fmt.Sprintf("bulk-test-%s-%04d", tc.name, i+1), int(ts))
 			}
@@ -318,7 +318,7 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			)
 			require.NoError(t, err)
 
-			defer b.Close(ctx)
+			defer func() { require.NoError(t, b.Close(ctx)) }()
 
 			var expected []kv.KeyValue
 
@@ -384,8 +384,7 @@ func TestImportEpochIngestion(t *testing.T) {
 	b, err := bulk.MakeTestingSSTBatcher(ctx, kvDB, s.ClusterSettings(),
 		false, true, mem.MakeConcurrentBoundAccount(), reqs)
 	require.NoError(t, err)
-	defer b.Close(ctx)
-
+	defer func() { require.NoError(t, b.Close(ctx)) }()
 	startKey := storageutils.PointKey("a", 1)
 	endKey := storageutils.PointKey("b", 1)
 	value := storageutils.StringValueRaw("myHumbleValue")
