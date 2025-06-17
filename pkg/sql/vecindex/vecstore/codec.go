@@ -10,7 +10,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
@@ -34,7 +33,7 @@ func makeStoreCodec(quantizer quantize.Quantizer) storeCodec {
 // possible.
 func (sc *storeCodec) Init(centroid vector.T, minCapacity int) {
 	if sc.tmpVectorSet == nil {
-		sc.tmpVectorSet = sc.quantizer.NewQuantizedVectorSet(minCapacity, centroid)
+		sc.tmpVectorSet = sc.quantizer.NewSet(minCapacity, centroid)
 	} else {
 		sc.tmpVectorSet.Clear(centroid)
 	}
@@ -56,9 +55,7 @@ func (sc *storeCodec) DecodeVector(encodedVector []byte) ([]byte, error) {
 			encodedVector, sc.tmpVectorSet.(*quantize.UnQuantizedVectorSet))
 	case *quantize.RaBitQuantizer:
 		return vecencoding.DecodeRaBitQVectorToSet(
-			encodedVector,
-			sc.tmpVectorSet.(*quantize.RaBitQuantizedVectorSet),
-			sc.quantizer.GetDistanceMetric(),
+			encodedVector, sc.tmpVectorSet.(*quantize.RaBitQuantizedVectorSet),
 		)
 	}
 	return nil, errors.Errorf("unknown quantizer type %T", sc.quantizer)
@@ -75,21 +72,7 @@ func (sc *storeCodec) EncodeVector(w *workspace.T, v vector.T, centroid vector.T
 	case *quantize.UnQuantizedVectorSet:
 		return vecencoding.EncodeUnquantizerVector([]byte{}, t.Vectors.At(0))
 	case *quantize.RaBitQuantizedVectorSet:
-		metric := sc.quantizer.GetDistanceMetric()
-		var centroidDotProduct float32
-		if metric != vecpb.L2SquaredDistance {
-			// CentroidDotProducts is only defined for non-L2 distance metrics.
-			centroidDotProduct = t.CentroidDotProducts[0]
-		}
-		return vecencoding.EncodeRaBitQVector(
-			[]byte{},
-			t.CodeCounts[0],
-			t.CentroidDistances[0],
-			t.QuantizedDotProducts[0],
-			centroidDotProduct,
-			t.Codes.At(0),
-			metric,
-		), nil
+		return vecencoding.EncodeRaBitQVectorFromSet([]byte{}, t, 0), nil
 	default:
 		return nil, errors.Errorf("unknown quantizer type %T", t)
 	}

@@ -62,10 +62,11 @@ func TestRaBitCodeSet(t *testing.T) {
 
 func TestRaBitQuantizedVectorSet(t *testing.T) {
 	var quantizedSet RaBitQuantizedVectorSet
+	quantizedSet.Metric = vecpb.L2SquaredDistance
 	quantizedSet.Centroid = []float32{1, 2, 3}
 	quantizedSet.Codes.Width = 3
 
-	quantizedSet.AddUndefined(5, vecpb.L2SquaredDistance)
+	quantizedSet.AddUndefined(5)
 	copy(quantizedSet.Codes.At(4), []uint64{1, 2, 3})
 	quantizedSet.CodeCounts[4] = 15
 	quantizedSet.CentroidDistances[4] = 1.23
@@ -107,7 +108,8 @@ func TestRaBitQuantizedVectorSet(t *testing.T) {
 	// Test InnerProduct distance metric, which uses the CentroidDotProducts
 	// field (L2Squared does not use it).
 	quantizedSet.Clear(quantizedSet.Centroid)
-	quantizedSet.AddUndefined(2, vecpb.InnerProductDistance)
+	quantizedSet.Metric = vecpb.InnerProductDistance
+	quantizedSet.AddUndefined(2)
 	copy(quantizedSet.Codes.At(1), []uint64{1, 2, 3})
 	quantizedSet.CodeCounts[1] = 15
 	quantizedSet.CentroidDistances[1] = 1.23
