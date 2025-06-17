@@ -22,6 +22,7 @@ type multiMetricStoreRebalancer struct {
 	// be using the Store directly.
 	store *Store
 
+	as        *AllocatorSync
 	allocator mma.Allocator
 	st        *cluster.Settings
 }
