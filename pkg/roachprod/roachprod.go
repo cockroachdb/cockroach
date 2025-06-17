@@ -626,24 +626,14 @@ func Stage(
 	return install.StageApplication(ctx, l, c, applicationName, version, os, vm.CPUArch(arch), dir)
 }
 
-// Reset resets all VMs in a cluster.
+// Reset resets VMs in a cluster.
 func Reset(l *logger.Logger, clusterName string) error {
-	if err := LoadClusters(); err != nil {
-		return err
-	}
-
-	if config.IsLocalClusterName(clusterName) {
-		return nil
-	}
-
-	c, err := getClusterFromCloud(l, clusterName)
+	c, err := GetClusterFromCache(l, clusterName)
 	if err != nil {
 		return err
 	}
 
-	return vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
-		return p.Reset(l, vms)
-	})
+	return c.Reset(l)
 }
 
 // SetupSSH sets up the keys and host keys for the vms in the cluster.
