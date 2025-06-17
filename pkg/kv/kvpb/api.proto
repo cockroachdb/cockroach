@@ -3712,6 +3712,14 @@ service TenantSpanConfig {
   rpc SpanConfigConformance(SpanConfigConformanceRequest) returns (SpanConfigConformanceResponse) {}
 }
 
+// Cluster service offers RPCs for inter-node communication essential for
+// cluster bootstrapping and operation.
+service Cluster {
+  // Join a bootstrapped cluster. If the target node is itself not part of a
+  // bootstrapped cluster, an appropriate error is returned.
+  rpc Join (JoinNodeRequest) returns (JoinNodeResponse) {}
+}
+
 // Batch and RangeFeed service implemented by nodes for KV API requests.
 service Internal {
   rpc Batch (BatchRequest) returns (BatchResponse) {}
