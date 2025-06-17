@@ -2441,6 +2441,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			allocator: s.cfg.MMAllocator,
 			store:     s,
 			st:        s.cfg.Settings,
+			as:        s.cfg.AllocatorSync,
 		}
 		s.mmStoreRebalancer.start(ctx, s.stopper)
 	}
