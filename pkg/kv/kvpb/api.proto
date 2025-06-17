@@ -226,9 +226,11 @@ message GetRequest {
 
   // ExpectExclusionSince, if set, indicates that the request should return an
   // error if this key has been written to at a timestamp at or after the given
-  // timestamp. This is different from the ReadTimestamp of the transaction in
-  // that it allows a writer to verify an unreplicated lock acquired at an
-  // earlier timestamp has provided the required protection.
+  // timestamp. This allows the request to verify that a previously acquired
+  // unreplicated lock has provided the required protection. Note that it does
+  // not check for the existence of the lock. It checks for a write that the
+  // lock should have prevented. If such a write is found an
+  // ExclusionViolationError is returned.
   util.hlc.Timestamp expect_exclusion_since = 6 [(gogoproto.nullable) = false];
 }
 
