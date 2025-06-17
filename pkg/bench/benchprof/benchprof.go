@@ -44,13 +44,16 @@ func (f StopFn) Stop(tb testing.TB) {
 //	    })
 //	}
 func StartAllProfiles(tb testing.TB) StopFn {
-	cpuStop := StartCPUProfile(tb)
-	memStop := StartMemProfile(tb)
-	mutexStop := StartMutexProfile(tb)
+	cpuStopper := StartCPUProfile(tb)
+	memStopper := StartMemProfile(tb)
+	mutexStopper := StartMutexProfile(tb)
+	if cpuStopper == nil && memStopper == nil && mutexStopper == nil {
+		return nil
+	}
 	return func(b testing.TB) {
-		cpuStop(b)
-		memStop(b)
-		mutexStop(b)
+		cpuStopper.Stop(b)
+		memStopper.Stop(b)
+		mutexStopper.Stop(b)
 	}
 }
 
