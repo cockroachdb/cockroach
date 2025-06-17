@@ -40,12 +40,11 @@ message Expression {
   option (gogoproto.typedecl) = false;
   option (gogoproto.goproto_stringer) = false;
 
-  // TODO(radu): TBD how this will be used
-  optional string version = 1 [(gogoproto.nullable) = false];
-
   // SQL expressions are passed as a string, with ordinal references
   // (@1, @2, @3 ..) used for "input" variables.
   optional string expr = 2 [(gogoproto.nullable) = false];
+
+  reserved 1;
 }
 
 // Ordering defines an order - specifically a list of column indices and
