@@ -12,6 +12,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -26,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -241,6 +245,128 @@ func TestRunGenerativeSplitAndScatterRandomizedDestOnFailScatter(t *testing.T) {
 		make(chan entryNode, 1000),
 		&cache,
 	))
+}
+
+func TestGenerativeSplitAndScatterWithAdminSplitFailures(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1000
+	rng, seed := randutil.NewPseudoRand()
+	t.Logf("random seed: %d", seed)
+
+	ctx := context.Background()
+
+	var mu syncutil.Mutex
+	allowAdminSplitFailures := false
+	keySplitFailures := make(map[string]int)
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+						mu.Lock()
+						defer mu.Unlock()
+						if !allowAdminSplitFailures {
+							return nil
+						}
+						for _, req := range ba.Requests {
+							kvReq := req.GetInner()
+							if kvReq.Method() == kvpb.AdminSplit {
+								splitKey := kvReq.Header().Key.String()
+								nFails := keySplitFailures[splitKey]
+								if nFails < maxAdminSplitAttempts-1 && rng.Intn(2) == 0 {
+									keySplitFailures[splitKey]++
+									return kvpb.NewErrorf("injected admin split failure for testing")
+								}
+							}
+						}
+						return nil
+					},
+				},
+			},
+		},
+	}
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
+		t, singleNode, numAccounts, InitManualReplication, clusterArgs,
+	)
+	defer cleanupFn()
+
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := eval.MakeTestingEvalContext(st)
+	testDiskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	defer testDiskMonitor.Stop(ctx)
+
+	s0 := tc.ApplicationLayer(0)
+	registry := s0.JobRegistry().(*jobs.Registry)
+	execCfg := s0.ExecutorConfig().(sql.ExecutorConfig)
+	flowCtx := execinfra.FlowCtx{
+		Cfg: &execinfra.ServerConfig{
+			Settings:       st,
+			DB:             s0.InternalDB().(descs.DB),
+			JobRegistry:    registry,
+			ExecutorConfig: &execCfg,
+		},
+		EvalCtx:     &evalCtx,
+		Mon:         evalCtx.TestingMon,
+		DiskMonitor: testDiskMonitor,
+		NodeID:      evalCtx.NodeID,
+	}
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.file_size = '1'`)
+	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
+
+	backups := sqlDB.QueryStr(t, `SHOW BACKUPS IN $1`, localFoo)
+	require.Equal(t, 1, len(backups))
+	uri := localFoo + "/" + backups[0][0]
+
+	codec := keys.MakeSQLCodec(s0.RPCContext().TenantID)
+	backupTableDesc := desctestutils.TestingGetPublicTableDescriptor(s0.DB(), codec, "data", "bank")
+	backupStartKey := backupTableDesc.PrimaryIndexSpan(codec).Key
+
+	spec := makeTestingGenerativeSplitAndScatterSpec(
+		[]string{uri},
+		[]roachpb.Span{{
+			Key:    backupStartKey,
+			EndKey: backupStartKey.PrefixEnd(),
+		}},
+	)
+
+	oldID := backupTableDesc.GetID()
+	newID := backupTableDesc.GetID() + 1
+	newDesc := protoutil.Clone(backupTableDesc.TableDesc()).(*descpb.TableDescriptor)
+	newDesc.ID = newID
+	tableRekeys := []execinfrapb.TableRekey{
+		{
+			OldID:   uint32(oldID),
+			NewDesc: mustMarshalDesc(t, newDesc),
+		},
+	}
+
+	kr, err := MakeKeyRewriterFromRekeys(keys.SystemSQLCodec, tableRekeys, nil, false)
+	require.NoError(t, err)
+
+	baseSplitScatter := makeSplitAndScatterer(flowCtx.Cfg.DB.KV(), kr)
+	chunkSplitScatterers := []splitAndScatterer{makeSplitAndScatterer(flowCtx.Cfg.DB.KV(), kr)}
+	chunkEntrySpliterScatterers := []splitAndScatterer{makeSplitAndScatterer(flowCtx.Cfg.DB.KV(), kr)}
+
+	cache := routingDatumCache{
+		cache: make(map[roachpb.NodeID]rowenc.EncDatum),
+	}
+
+	// Large enough so doneScatterCh never blocks.
+	doneScatterCh := make(chan entryNode, 1000)
+	mu.Lock()
+	allowAdminSplitFailures = true
+	mu.Unlock()
+	err = runGenerativeSplitAndScatter(
+		ctx, &flowCtx, &spec, baseSplitScatter, chunkSplitScatterers,
+		chunkEntrySpliterScatterers, doneScatterCh, &cache,
+	)
+
+	require.NoError(t, err)
 }
 
 // scatterAlwaysFailsSplitScatterer always fails the scatter and returns 0 as
