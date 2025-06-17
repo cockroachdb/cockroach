@@ -530,6 +530,11 @@ type SessionAccessor interface {
 	// HasViewActivityOrViewActivityRedactedRole returns true iff the current session user has the
 	// VIEWACTIVITY or VIEWACTIVITYREDACTED permission.
 	HasViewActivityOrViewActivityRedactedRole(ctx context.Context) (bool, bool, error)
+
+	// ForEachSessionPendingJob calls the provided function for each pending job
+	// created in the session (hidden behind the generic interface{} to avoid
+	// circular dependencies, but the caller can cast it to jobs.Record).
+	ForEachSessionPendingJob(fn func(record jobspb.PendingJob) error) error
 }
 
 // PreparedStatementState is a limited interface that exposes metadata about
