@@ -82,3 +82,12 @@ func (j *txnJobsCollection) forEachToCreate(fn func(jobRecord *jobs.Record) erro
 	}
 	return nil
 }
+
+func (p *planner) ForEachSessionPendingJob(fn func(job interface{}) error) error {
+	if p.extendedEvalCtx.jobs == nil {
+		return nil
+	}
+	return p.extendedEvalCtx.jobs.forEachToCreate(func(jobRecord *jobs.Record) error {
+		return fn(jobRecord)
+	})
+}
