@@ -1,5 +1,7 @@
 # LogicTest: !local-mixed-25.2
 
+skip under race #148278
+
 # Set up functions that inspect function dependencies.
 statement ok
 CREATE VIEW v_col_fn_ids AS
