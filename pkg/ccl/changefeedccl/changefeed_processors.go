@@ -1919,6 +1919,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		return false, nil
 	}
 
+	ptsStart := timeutil.Now()
 	pts := cf.FlowCtx.Cfg.ProtectedTimestampProvider.WithTxn(txn)
 
 	// Create / advance the protected timestamp record to the highwater mark
@@ -1975,7 +1976,15 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	}
 
 	log.VEventf(ctx, 2, "updating protected timestamp %v at %v", progress.ProtectedTimestampRecord, highWater)
-	return true, pts.UpdateTimestamp(ctx, progress.ProtectedTimestampRecord, highWater)
+	if err := pts.UpdateTimestamp(ctx, progress.ProtectedTimestampRecord, highWater); err != nil {
+		return true, err
+	}
+
+	if sli, err := cf.js.metrics.getSLIMetrics(cf.spec.Feed.Opts[changefeedbase.OptMetricsScope]); err == nil {
+		sli.ManagePTSHistNanos.RecordValue(timeutil.Since(ptsStart).Nanoseconds())
+	}
+
+	return true, nil
 }
 
 func (cf *changeFrontier) remakePTSRecord(

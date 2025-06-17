@@ -1211,7 +1211,7 @@ layers:
     - name: changefeed.checkpoint_hist_nanos
       exported_name: changefeed_checkpoint_hist_nanos
       description: Time spent checkpointing changefeed progress
-      y_axis_label: Changefeeds
+      y_axis_label: Nanoseconds
       type: HISTOGRAM
       unit: NANOSECONDS
       aggregation: AVG
@@ -1230,6 +1230,14 @@ layers:
       y_axis_label: Bytes
       type: GAUGE
       unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.create_pts_hist_nanos
+      exported_name: changefeed_create_pts_hist_nanos
+      description: Time spent creating protected timestamps
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
     - name: changefeed.emitted_batch_sizes
@@ -1318,6 +1326,14 @@ layers:
       y_axis_label: Ranges
       type: GAUGE
       unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.manage_pts_hist_nanos
+      exported_name: changefeed_manage_pts_hist_nanos
+      description: Time spent updating protected timestamps
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
     - name: changefeed.max_behind_nanos
