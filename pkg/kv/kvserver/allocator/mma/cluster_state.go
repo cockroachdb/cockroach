@@ -1297,9 +1297,9 @@ func (cs *clusterState) createPendingChanges(changes ...ReplicaChange) []*pendin
 	return pendingChanges
 }
 
-func (cs *clusterState) hasRange(rangeID roachpb.RangeID) bool {
-	_, ok := cs.ranges[rangeID]
-	return ok
+func (cs *clusterState) hasNoRangeIDOrHasPendingChanges(rangeID roachpb.RangeID) bool {
+	rstate, ok := cs.ranges[rangeID]
+	return !ok || len(rstate.pendingChanges) > 0
 }
 
 func (cs *clusterState) applyReplicaChange(change ReplicaChange, applyLoadChange bool) {
