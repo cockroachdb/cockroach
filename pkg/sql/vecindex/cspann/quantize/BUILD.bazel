@@ -8,6 +8,7 @@ proto_library(
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/vecindex/vecpb:vecpb_proto",
         "//pkg/util/vector:vector_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
@@ -20,6 +21,7 @@ go_proto_library(
     proto = ":quantize_proto",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/vecindex/vecpb",
         "//pkg/util/vector",
         "@com_github_gogo_protobuf//gogoproto",
     ],
@@ -71,5 +73,6 @@ go_test(
         "//pkg/util/vector",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
+        "@org_gonum_v1_gonum//floats/scalar",
     ],
 )

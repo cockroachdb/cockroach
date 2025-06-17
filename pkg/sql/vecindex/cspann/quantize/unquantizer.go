@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
+	"github.com/cockroachdb/errors"
 )
 
 // UnQuantizer trivially implements the Quantizer interface, storing the
@@ -68,8 +69,8 @@ func (q *UnQuantizer) QuantizeInSet(
 	unquantizedSet.AddSet(vectors)
 }
 
-// NewQuantizedVectorSet implements the Quantizer interface
-func (q *UnQuantizer) NewQuantizedVectorSet(capacity int, centroid vector.T) QuantizedVectorSet {
+// NewSet implements the Quantizer interface
+func (q *UnQuantizer) NewSet(capacity int, centroid vector.T) QuantizedVectorSet {
 	dataBuffer := make([]float32, 0, capacity*q.GetDims())
 	unquantizedSet := &UnQuantizedVectorSet{
 		Vectors: vector.MakeSetFromRawData(dataBuffer, q.GetDims()),
@@ -98,4 +99,12 @@ func (q *UnQuantizer) EstimateDistances(
 
 	// Distances are exact, so error bounds are always zero.
 	num32.Zero(errorBounds)
+}
+
+// GetCentroidDistances implements the Quantizer interface.
+func (q *UnQuantizer) GetCentroidDistances(
+	quantizedSet QuantizedVectorSet, distances []float32, spherical bool,
+) {
+	// This method is never called by the vector index.
+	panic(errors.AssertionFailedf("GetCentroidDistances is not implemented by the Unquantizer"))
 }

@@ -282,6 +282,6 @@ func (p *Partition) Clear() int {
 // CreateEmptyPartition returns an empty partition for the given quantizer and
 // level.
 func CreateEmptyPartition(quantizer quantize.Quantizer, metadata PartitionMetadata) *Partition {
-	quantizedSet := quantizer.NewQuantizedVectorSet(0, metadata.Centroid)
+	quantizedSet := quantizer.NewSet(0, metadata.Centroid)
 	return NewPartition(metadata, quantizer, quantizedSet, []ChildKey(nil), []ValueBytes(nil))
 }

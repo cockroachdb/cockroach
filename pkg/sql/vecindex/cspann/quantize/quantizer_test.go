@@ -41,6 +41,9 @@ func TestQuantizers(t *testing.T) {
 			case "estimate-distances":
 				return state.estimateDistances(t, d)
 
+			case "get-centroid-distances":
+				return state.getCentroidDistances(t, d)
+
 			case "calculate-recall":
 				return state.calculateRecall(t, d)
 
@@ -100,7 +103,7 @@ func (s *testState) estimateDistances(t *testing.T, d *datadriven.TestData) stri
 
 		// Now add the vectors one-by-one and ensure that distances and error
 		// bounds stay the same.
-		quantizedSet = quantizer.NewQuantizedVectorSet(vectors.Count, centroid)
+		quantizedSet = quantizer.NewSet(vectors.Count, centroid)
 		for i := range vectors.Count {
 			quantizer.QuantizeInSet(&s.Workspace, quantizedSet, vectors.Slice(i, 1))
 		}
@@ -168,6 +171,73 @@ func (s *testState) estimateDistances(t *testing.T, d *datadriven.TestData) stri
 
 	buf.WriteString("Cosine\n")
 	doTest(vecpb.CosineDistance, 4)
+
+	return buf.String()
+}
+
+func (s *testState) getCentroidDistances(t *testing.T, d *datadriven.TestData) string {
+	var dims int
+	var err error
+	var vectors vector.Set
+	for _, arg := range d.CmdArgs {
+		switch arg.Key {
+		case "dims":
+			require.Len(t, arg.Vals, 1)
+			dims, err = strconv.Atoi(arg.Vals[0])
+			require.NoError(t, err)
+
+			// Parse the input vectors.
+			vectors = vector.MakeSet(dims)
+			for _, line := range strings.Split(d.Input, "\n") {
+				line = strings.TrimSpace(line)
+				if len(line) == 0 {
+					continue
+				}
+
+				vec, err := vector.ParseVector(line)
+				require.NoError(t, err)
+				vectors.Add(vec)
+			}
+
+		default:
+			t.Fatalf("unknown arg: %s", arg.Key)
+		}
+	}
+
+	var buf bytes.Buffer
+	doTest := func(metric vecpb.DistanceMetric) {
+		rabitQ := quantize.NewRaBitQuantizer(dims, 42, metric)
+		quantizedSet := rabitQ.Quantize(&s.Workspace, vectors).(*quantize.RaBitQuantizedVectorSet)
+
+		buf.WriteString("  Centroid = ")
+		utils.WriteVector(&buf, quantizedSet.Centroid, 4)
+		buf.WriteByte('\n')
+
+		buf.WriteString("  Mean Centroid Distances = ")
+		distances := make([]float32, quantizedSet.GetCount())
+		rabitQ.GetCentroidDistances(quantizedSet, distances, false /* spherical */)
+		utils.WriteVector(&buf, distances, 4)
+		buf.WriteByte('\n')
+
+		buf.WriteString("  Spherical Centroid Distances = ")
+		rabitQ.GetCentroidDistances(quantizedSet, distances, true /* spherical */)
+		utils.WriteVector(&buf, distances, 4)
+		buf.WriteByte('\n')
+	}
+
+	buf.WriteString("L2Squared\n")
+	doTest(vecpb.L2SquaredDistance)
+
+	buf.WriteString("InnerProduct\n")
+	doTest(vecpb.InnerProductDistance)
+
+	// For cosine distance, normalize the input vectors.
+	for i := range vectors.Count {
+		num32.Normalize(vectors.At(i))
+	}
+
+	buf.WriteString("Cosine\n")
+	doTest(vecpb.CosineDistance)
 
 	return buf.String()
 }

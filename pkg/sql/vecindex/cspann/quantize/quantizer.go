@@ -41,9 +41,9 @@ type Quantizer interface {
 	//       vectors.
 	QuantizeInSet(w *workspace.T, quantizedSet QuantizedVectorSet, vectors vector.Set)
 
-	// NewQuantizedVectorSet returns a new empty vector set preallocated to the
-	// number of vectors specified.
-	NewQuantizedVectorSet(capacity int, centroid vector.T) QuantizedVectorSet
+	// NewSet returns a new empty vector set preallocated to the number of vectors
+	// specified.
+	NewSet(capacity int, centroid vector.T) QuantizedVectorSet
 
 	// EstimateDistances returns the estimated distances of the query vector from
 	// each data vector represented in the given quantized vector set, as well as
@@ -61,6 +61,18 @@ type Quantizer interface {
 		distances []float32,
 		errorBounds []float32,
 	)
+
+	// GetCentroidDistances returns the exact distance of each vector in
+	// "quantizedSet" from that set's centroid, according to the quantizer's
+	// distance metric (e.g. L2Squared or Cosine). By default, it returns
+	// distances to the mean centroid. However, if "spherical" is true and the
+	// distance metric is Cosine or InnerProduct, then it returns distances to
+	// the spherical centroid instead.
+	//
+	// The caller is responsible for allocating the "distances" slice with length
+	// equal to the number of quantized vectors in "quantizedSet". The centroid
+	// distances will be copied into that slice.
+	GetCentroidDistances(quantizedSet QuantizedVectorSet, distances []float32, spherical bool)
 }
 
 // QuantizedVectorSet is the compressed form of an original set of full-size

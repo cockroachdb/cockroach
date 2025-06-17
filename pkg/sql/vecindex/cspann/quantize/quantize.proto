@@ -7,6 +7,7 @@ syntax = "proto3";
 package cockroach.sql.vecindex.quantize;
 option go_package = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize";
 
+import "sql/vecindex/vecpb/vec.proto";
 import "util/vector/vector.proto";
 import "gogoproto/gogo.proto";
 
@@ -32,30 +33,37 @@ message RaBitQCodeSet {
 message RaBitQuantizedVectorSet {
   option (gogoproto.equal) = true;
 
+  // Metric specifies the metric used to compute similarity between vectors in
+  // the set.
+  cockroach.sql.vecindex.vecpb.DistanceMetric metric = 1;
   // Centroid is the average of vectors in the set, representing its "center of
   // mass". Note that the centroid is computed when a vector set is created and
   // is not updated when vectors are added or removed.
-  // NOTE: By default, this is the mean centroid for the L2Squared distance
-  // metric, but is the spherical centroid for InnerProduct and Cosine metrics.
-  // The spherical centroid is simply the mean centroid, but normalized.
+  // NOTE: This is always the mean centroid, regardless of the distance metric.
+  // The caller is responsible for converting this to a spherical centroid when
+  // that's needed.
   // NOTE: The centroid should be treated as immutable.
-  repeated float centroid = 1;
+  repeated float centroid = 2;
   // Codes is a set of RaBitQ quantization codes, with one code per quantized
   // vector in the set.
-  RaBitQCodeSet codes = 2 [(gogoproto.nullable) = false];
+  RaBitQCodeSet codes = 3 [(gogoproto.nullable) = false];
   // CodeCounts records the count of "1" bits in each of the quantization codes.
-  repeated uint32 code_counts = 3;
+  repeated uint32 code_counts = 4;
   // CentroidDistances is a slice of the exact Euclidean distances (non-squared)
   // of the original full-size vectors from the centroid.
-  repeated float centroid_distances = 4;
+  repeated float centroid_distances = 5;
   // QuantizedDotProducts is a slice of the exact inner products between the
   // original full-size vectors and their corresponding quantized vectors.
   // NOTE: These values have been inverted (1/inner_product) to avoid expensive
   // division during distance estimation.
-  repeated float quantized_dot_products = 5;
+  repeated float quantized_dot_products = 6;
   // CentroidDotProducts is a slice of the exact inner products between the
   // original full-size vectors and the centroid.
-  repeated float centroid_dot_products = 6;
+  // NOTE: This is always nil when using the L2Squared distance metric.
+  repeated float centroid_dot_products = 7;
+  // CentroidNorm is the L2 norm of the mean centroid.
+  // NOTE: This is always nil when using the L2Squared distance metric.
+  float centroid_norm = 8;
 }
 
 // UnQuantizedVectorSet trivially implements the QuantizedVectorSet interface,
