@@ -1376,6 +1376,10 @@ func (ts *testServer) StartSharedProcessTenant(
 	if err := args.TenantName.IsValid(); err != nil {
 		return nil, nil, err
 	}
+	var tenantID roachpb.TenantID
+	//if tenantID == roachpb.MustMakeTenantID(2) {
+	//	return nil, nil, errors.New("creation of application tenant ID 2 is disabled in tests; use another ID")
+	//}
 	// Helper function to execute SQL statements.
 	ie := ts.InternalExecutor().(*sql.InternalExecutor)
 	execSQL := func(opName redact.RedactableString, stmt string, qargs ...interface{}) error {
@@ -1399,7 +1403,6 @@ func (ts *testServer) StartSharedProcessTenant(
 	}
 	tenantExists := tenantRow != nil
 
-	var tenantID roachpb.TenantID
 	if tenantExists {
 		// A tenant with the given name already exists; let's check that
 		// it matches the ID that this call wants (if any).
@@ -1627,7 +1630,9 @@ func (ts *testServer) StartTenant(
 		return nil, ts.disableStartTenantError
 	}
 	// Determine if we need to create the tenant before starting it.
-
+	//if params.TenantID == roachpb.MustMakeTenantID(2) {
+	//	return nil, errors.New("creation of application tenant ID 2 is disabled in tests; use another ID")
+	//}
 	ie := ts.InternalExecutor().(*sql.InternalExecutor)
 	if !params.DisableCreateTenant {
 		row, err := ie.QueryRow(

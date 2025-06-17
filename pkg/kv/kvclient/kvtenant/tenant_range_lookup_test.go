@@ -52,12 +52,12 @@ func TestRangeLookupPrefetchFiltering(t *testing.T) {
 		tc.SplitRangeOrFatal(t, ten2Split2)
 	}
 
-	// Split some ranges for the tenant which comes after tenant2.
+	// Split some ranges for the tenant which comes after tenant3.
 	{
-		ten3Codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(3))
-		tc.SplitRangeOrFatal(t, ten3Codec.TenantPrefix())
-		tc.SplitRangeOrFatal(t, append(ten3Codec.TenantPrefix(), 'b'))
-		tc.SplitRangeOrFatal(t, append(ten3Codec.TenantPrefix(), 'c'))
+		ten4Codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(4))
+		tc.SplitRangeOrFatal(t, ten4Codec.TenantPrefix())
+		tc.SplitRangeOrFatal(t, append(ten4Codec.TenantPrefix(), 'b'))
+		tc.SplitRangeOrFatal(t, append(ten4Codec.TenantPrefix(), 'c'))
 	}
 
 	// Do the fetch and make sure we prefetch all the ranges we should see,
