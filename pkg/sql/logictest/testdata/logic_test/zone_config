@@ -301,6 +301,10 @@ CREATE TABLE zc (
   b INT
 )
 
+# Prevent fast GC with data.
+statement ok
+INSERT INTO zc VALUES (1,2)
+
 statement ok
 ALTER TABLE zc CONFIGURE ZONE USING gc.ttlseconds = 100000
 
@@ -410,11 +414,19 @@ ALTER DATABASE foo CONFIGURE ZONE USING gc.ttlseconds = 12345
 statement ok
 CREATE TABLE foo.public.bar (x INT PRIMARY KEY)
 
+# Prevent fast GC with data.
+statement ok
+INSERT INTO foo.public.bar VALUES (1)
+
 statement ok
 DROP DATABASE foo CASCADE
 
 statement ok
 CREATE TABLE baz (x INT PRIMARY KEY)
+
+# Prevent fast GC with data.
+statement ok
+INSERT INTO baz VALUES (1)
 
 statement ok
 DROP TABLE baz
