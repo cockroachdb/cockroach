@@ -45,15 +45,26 @@ func ParsePartitionState(s string) PartitionState {
 	return MissingState
 }
 
-// AllowAddOrRemove returns true if vectors can be added or removed to/from the
-// partition in this state.
-func (s PartitionState) AllowAddOrRemove() bool {
+// AllowAdd returns true if vectors can be added to the partition in this state.
+func (s PartitionState) AllowAdd() bool {
 	switch s {
 	case ReadyState, SplittingState, MergingState, UpdatingState,
 		AddingLevelState, RemovingLevelState:
 		return true
 	}
 	return false
+}
+
+// CanSkipRemove returns true if there's no need to remove vectors from the
+// partition because the partition is being drained or is about to be deleted.
+func (s PartitionState) CanSkipRemove() bool {
+	return !s.AllowAdd()
+}
+
+// AllowRemove returns true if vectors can be removed from the partition in this
+// state.
+func (s PartitionState) AllowRemove() bool {
+	return s != MissingState
 }
 
 // String returns the state formatted as a string.
@@ -104,12 +115,12 @@ const (
 	UpdatingState
 	// DrainingForSplitState indicates that the partition is actively moving
 	// vectors to target split sub-partitions. Searches are allowed, but not
-	// inserts, deletes, splits, or merges.
+	// inserts, splits, or merges.
 	DrainingForSplitState
 	// DrainingForMergeState indicates that the partition is actively moving
 	// vectors into other partitions at the same level (or deleting vectors if
-	// this is the root partition). Searches are allowed, but not inserts,
-	// deletes, splits, or merges.
+	// this is the root partition). Searches are allowed, but not inserts, splits,
+	// or merges.
 	DrainingForMergeState
 	// AddingLevelState indicates that a root partition has been drained after a
 	// split and has had its level increased by one. What remains is to add the
@@ -123,7 +134,7 @@ const (
 	RemovingLevelState
 	// DeletingForSplitState indicates that a non-root splitting partition is
 	// about to be removed from its tree and deleted. Searches are allowed, but
-	// not inserts, deletes, splits, or merges.
+	// not inserts, splits, or merges.
 	DeletingForSplitState
 )
 

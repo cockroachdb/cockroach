@@ -376,6 +376,10 @@ func (s *Store) TryAddToPartition(
 		if !metadata.Equal(&expected) {
 			return cspann.NewConditionFailedError(metadata)
 		}
+		if !metadata.StateDetails.State.AllowAdd() {
+			return errors.AssertionFailedf(
+				"cannot add to partition in state %s that disallows adds", metadata.StateDetails.State)
+		}
 
 		// Do not add vectors that are found to already exist.
 		var exclude cspann.ChildKeyDeDup
@@ -533,6 +537,10 @@ func (s *Store) TryClearPartition(
 		}
 		if !metadata.Equal(&expected) {
 			return cspann.NewConditionFailedError(metadata)
+		}
+		if metadata.StateDetails.State.AllowAdd() {
+			return errors.AssertionFailedf(
+				"cannot clear partition in state %s that allows adds", metadata.StateDetails.State)
 		}
 
 		// Clear all vectors in the partition using DelRange.
