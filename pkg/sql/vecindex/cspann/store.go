@@ -144,7 +144,7 @@ type Store interface {
 
 	// TryRemoveFromPartition removes vectors from the given partition by their
 	// child keys and returns true if any vector is removed. If a key is not
-	// present in the partition, it is a no-op.
+	// present in the partition, it is skipped.
 	//
 	// Before performing any action, TryRemoveFromPartition checks the partition's
 	// metadata and returns a ConditionFailedError if it is not the same as the
@@ -187,11 +187,9 @@ type Txn interface {
 	// is true, fetching the metadata is part of a mutation operation; the store
 	// can perform any needed locking in this case.
 	//
-	// GetPartitionMetadata returns ConditionFailedError if "forUpdate" is true
-	// and the partition is in a state that does not allow updates. It returns
-	// ErrPartitionNotFound if the partition cannot be found, or
-	// ErrRestartOperation if the caller should retry the operation that triggered
-	// this call.
+	// If the partition does not exist, GetPartitionMetadata returns empty
+	// metadata with a Missing state. It returns ErrRestartOperation if the caller
+	// should retry the operation that triggered this call.
 	GetPartitionMetadata(
 		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey, forUpdate bool,
 	) (PartitionMetadata, error)

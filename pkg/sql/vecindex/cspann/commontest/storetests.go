@@ -137,10 +137,10 @@ func (suite *StoreTestSuite) TestGetPartitionMetadata() {
 			CheckPartitionMetadata(suite.T(), metadata, cspann.LeafLevel, vector.T{0, 0},
 				cspann.PartitionStateDetails{State: cspann.ReadyState})
 
-			// Non-root partition does not yet exist, expect error.
-			_, err = txn.GetPartitionMetadata(
+			// Non-root partition does not yet exist, expect Missing metadata.
+			metadata, err = txn.GetPartitionMetadata(
 				suite.ctx, treeKey, cspann.PartitionKey(99), false /* forUpdate */)
-			suite.ErrorIs(err, cspann.ErrPartitionNotFound)
+			suite.Equal(cspann.PartitionMetadata{}, metadata)
 		})
 
 		// Create non-root partition with some vectors in it.
@@ -160,8 +160,8 @@ func (suite *StoreTestSuite) TestGetPartitionMetadata() {
 		suite.NoError(store.TryUpdatePartitionMetadata(
 			suite.ctx, treeKey, partitionKey, metadata, expected))
 
+		// Ensure latest metadata gets returned.
 		RunTransaction(suite.ctx, suite.T(), store, func(txn cspann.Txn) {
-			// If forUpdate = false, GetPartitionMetadata should not error.
 			metadata, err := txn.GetPartitionMetadata(
 				suite.ctx, treeKey, partitionKey, false /* forUpdate */)
 			suite.NoError(err)
@@ -169,12 +169,10 @@ func (suite *StoreTestSuite) TestGetPartitionMetadata() {
 				State: cspann.DrainingForSplitState, Target1: 20, Target2: 30}
 			CheckPartitionMetadata(suite.T(), metadata, cspann.SecondLevel, vector.T{4, 3}, details)
 
-			// If forUpdate = true, GetPartitionMetadata should error.
-			var errConditionFailed *cspann.ConditionFailedError
-			_, err = txn.GetPartitionMetadata(suite.ctx, treeKey, partitionKey, true /* forUpdate */)
-			suite.ErrorAs(err, &errConditionFailed)
-			CheckPartitionMetadata(suite.T(), errConditionFailed.Actual, cspann.SecondLevel,
-				vector.T{4, 3}, details)
+			metadata, err = txn.GetPartitionMetadata(
+				suite.ctx, treeKey, partitionKey, true /* forUpdate */)
+			suite.NoError(err)
+			CheckPartitionMetadata(suite.T(), metadata, cspann.SecondLevel, vector.T{4, 3}, details)
 		})
 		suite.NoError(err)
 	}
@@ -329,16 +327,12 @@ func (suite *StoreTestSuite) TestRemoveFromPartition() {
 			suite.ctx, treeKey, partitionKey, metadata, expected))
 
 		RunTransaction(suite.ctx, suite.T(), store, func(txn cspann.Txn) {
-			// Try to remove from partition, expect error due to its state.
-			var errConditionFailed *cspann.ConditionFailedError
+			// Try to remove from draining partition, expect success.
 			err := txn.RemoveFromPartition(suite.ctx, treeKey, partitionKey, cspann.SecondLevel,
 				partitionKey3)
-			suite.ErrorAs(err, &errConditionFailed)
-			details := cspann.PartitionStateDetails{
-				State: cspann.DrainingForSplitState, Target1: 20, Target2: 30}
-			CheckPartitionMetadata(suite.T(), errConditionFailed.Actual, cspann.SecondLevel,
-				vector.T{4, 3}, details)
+			suite.NoError(err)
 		})
+		CheckPartitionCount(suite.ctx, suite.T(), store, treeKey, partitionKey, 1)
 	}
 
 	suite.Run("default tree", func() {
@@ -1004,9 +998,27 @@ func (suite *StoreTestSuite) TestTryClearPartition() {
 		// Create partition with some vectors.
 		partitionKey, partition := suite.createTestPartition(store, treeKey)
 
-		// Now clear should work.
+		// Clear should fail in Ready state.
 		expected := *partition.Metadata()
 		count, err := store.TryClearPartition(suite.ctx, treeKey, partitionKey, expected)
+		suite.Error(err)
+		suite.Equal(0, count)
+
+		// Move to draining state.
+		metadata := *partition.Metadata()
+		metadata.StateDetails.MakeDrainingForSplit(20, 30)
+		suite.NoError(store.TryUpdatePartitionMetadata(
+			suite.ctx, treeKey, partitionKey, metadata, expected))
+
+		// Try to clear with mismatched expected metadata.
+		var errConditionFailed *cspann.ConditionFailedError
+		_, err = store.TryClearPartition(suite.ctx, treeKey, partitionKey, expected)
+		suite.ErrorAs(err, &errConditionFailed)
+		suite.True(errConditionFailed.Actual.Equal(&metadata))
+
+		// Try again, this time with correct expected metadata.
+		expected = metadata
+		count, err = store.TryClearPartition(suite.ctx, treeKey, partitionKey, expected)
 		suite.NoError(err)
 		suite.Equal(3, count)
 
@@ -1019,15 +1031,7 @@ func (suite *StoreTestSuite) TestTryClearPartition() {
 		suite.Len(partition.ChildKeys(), 0)
 		suite.Len(partition.ValueBytes(), 0)
 
-		// Try to clear with mismatched expected metadata.
-		var errConditionFailed *cspann.ConditionFailedError
-		metadata := expected
-		metadata.StateDetails.State = cspann.DrainingForMergeState
-		_, err = store.TryClearPartition(suite.ctx, treeKey, partitionKey, metadata)
-		suite.ErrorAs(err, &errConditionFailed)
-		suite.True(errConditionFailed.Actual.Equal(&expected))
-
-		// Try again, this time with correct expected metadata.
+		// Clear partition with zero vectors.
 		count, err = store.TryClearPartition(suite.ctx, treeKey, partitionKey, expected)
 		suite.NoError(err)
 		suite.Equal(0, count)
