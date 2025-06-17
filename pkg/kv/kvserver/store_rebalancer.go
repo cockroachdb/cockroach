@@ -155,6 +155,7 @@ type StoreRebalancer struct {
 	objectiveProvider       RebalanceObjectiveProvider
 	subscribedToSpanConfigs func() bool
 	disabled                func() bool
+	as                      *AllocatorSync
 }
 
 // NewStoreRebalancer creates a StoreRebalancer to work in tandem with the
@@ -165,6 +166,7 @@ func NewStoreRebalancer(
 	rq *replicateQueue,
 	rr *ReplicaRankings,
 	objectiveProvider RebalanceObjectiveProvider,
+	as *AllocatorSync,
 ) *StoreRebalancer {
 	var storePool storepool.AllocatorStorePool
 	if rq.store.cfg.StorePool != nil {
@@ -179,6 +181,7 @@ func NewStoreRebalancer(
 		allocator:       rq.allocator,
 		storePool:       storePool,
 		replicaRankings: rr,
+		as:              as,
 		getRaftStatusFn: func(replica CandidateReplica) *raft.Status {
 			return replica.RaftStatus()
 		},
@@ -561,11 +564,22 @@ func (sr *StoreRebalancer) applyLeaseRebalance(
 
 	timeout := sr.processTimeoutFn(candidateReplica)
 	if err := timeutil.RunWithTimeout(ctx, "transfer lease", timeout, func(ctx context.Context) error {
+		source := roachpb.ReplicationTarget{
+			// TODO(wenyihu6): making NodeID 0 here is a hack since state replica does
+			// not have the field node id - fix this either by 1. deciding node id is
+			// not needed here or 2. adding node id to state replica.
+			NodeID:  0,
+			StoreID: candidateReplica.StoreID(),
+		}
+		target := roachpb.ReplicationTarget{
+			NodeID:  target.NodeID,
+			StoreID: target.StoreID,
+		}
 		return sr.rr.TransferLease(
 			ctx,
 			candidateReplica,
-			candidateReplica.StoreID(),
-			target.StoreID,
+			source,
+			target,
 			candidateReplica.RangeUsageInfo(),
 		)
 	}); err != nil {
