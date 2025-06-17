@@ -302,6 +302,15 @@ func changefeedPlanHook(
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		jr.JobID = jobID
 		{
+			metrics := p.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics)
+			scope, _ := opts.GetMetricScope()
+			sliMetrics, err := metrics.getSLIMetrics(scope)
+			if err != nil {
+				return err
+			}
+
+			recordPTSMetricsTime := sliMetrics.Timers.PTSCreate.Start()
+
 			var ptr *ptpb.Record
 			codec := p.ExecCfg().Codec
 			ptr = createProtectedTimestampRecord(
@@ -358,6 +367,7 @@ func changefeedPlanHook(
 				}
 				return err
 			}
+			recordPTSMetricsTime()
 		}
 
 		// Start the job.
