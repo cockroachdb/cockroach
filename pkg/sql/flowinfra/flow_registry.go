@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -541,6 +542,7 @@ func (fr *FlowRegistry) ConnectInboundStream(
 	ctx context.Context,
 	flowID execinfrapb.FlowID,
 	streamID execinfrapb.StreamID,
+	producer base.SQLInstanceID,
 	stream execinfrapb.DistSQL_FlowStreamServer,
 	timeout time.Duration,
 ) (_ *FlowBase, _ InboundStreamHandler, cleanup func(), retErr error) {
@@ -592,7 +594,9 @@ func (fr *FlowRegistry) ConnectInboundStream(
 	// the map is not modified after Flow.Setup.
 	s, ok := entry.inboundStreams[streamID]
 	if !ok {
-		return nil, nil, nil, errors.Errorf("flow %s: no inbound stream %d", flowID, streamID)
+		return nil, nil, nil, errors.Errorf(
+			"flow %s: no inbound stream %d from %d", flowID, streamID, producer,
+		)
 	}
 
 	// Don't mark s as connected until after the handshake succeeds.
@@ -607,7 +611,9 @@ func (fr *FlowRegistry) ConnectInboundStream(
 	if s.mu.canceled {
 		// Regardless of whether the handshake succeeded or not, this inbound
 		// stream has already been canceled and properly finished.
-		return nil, nil, nil, errors.Errorf("flow %s: inbound stream %d came too late", flowID, streamID)
+		return nil, nil, nil, errors.Errorf(
+			"flow %s: inbound stream %d from %d came too late", flowID, streamID, producer,
+		)
 	}
 	if handshakeErr != nil {
 		// The handshake failed, so we're canceling this stream.
@@ -619,7 +625,9 @@ func (fr *FlowRegistry) ConnectInboundStream(
 		// outboxes for the same stream. We are processing the second RPC call
 		// right now, so there is another goroutine that will handle the
 		// cleanup, so we defer the cleanup to that goroutine.
-		return nil, nil, nil, errors.AssertionFailedf("flow %s: inbound stream %d already connected", flowID, streamID)
+		return nil, nil, nil, errors.AssertionFailedf(
+			"flow %s: inbound stream %d from %d already connected", flowID, streamID, producer,
+		)
 	}
 	s.mu.connected = true
 	return flow, s.receiver, s.finish, nil

@@ -703,17 +703,19 @@ func (ds *ServerImpl) flowStreamInt(
 	log.VEvent(ctx, 2, "FlowStream (server) received header")
 	flowID := msg.Header.FlowID
 	streamID := msg.Header.StreamID
+	producer := msg.Header.Producer
 	if log.V(1) {
-		log.Infof(ctx, "connecting inbound stream %s/%d", flowID.Short(), streamID)
+		log.Infof(ctx, "connecting inbound stream %s/%d from %d", flowID.Short(), streamID, producer)
 	}
 	f, streamStrategy, cleanup, err := ds.flowRegistry.ConnectInboundStream(
-		ctx, flowID, streamID, stream, flowinfra.SettingFlowStreamTimeout.Get(&ds.Settings.SV),
+		ctx, flowID, streamID, producer, stream,
+		flowinfra.SettingFlowStreamTimeout.Get(&ds.Settings.SV),
 	)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
-	log.VEventf(ctx, 1, "connected inbound stream %s/%d", flowID.Short(), streamID)
+	log.VEventf(ctx, 1, "connected inbound stream %s/%d from %d", flowID.Short(), streamID, producer)
 	ctx = f.AmbientContext.AnnotateCtx(ctx)
 	ctx, undo := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
 	defer undo()

@@ -100,7 +100,7 @@ func NewOutbox(
 	isGatewayNode bool,
 ) *Outbox {
 	m := &Outbox{flowCtx: flowCtx, processorID: processorID, sqlInstanceID: sqlInstanceID}
-	m.encoder.SetHeaderFields(flowCtx.ID, streamID)
+	m.encoder.SetHeaderFields(flowCtx.ID, streamID, flowCtx.NodeID.SQLInstanceID())
 	m.streamID = streamID
 	m.numOutboxes = numOutboxes
 	m.isGatewayNode = isGatewayNode
@@ -184,7 +184,6 @@ func (m *Outbox) flush(ctx context.Context) error {
 		HandleStreamErr(ctx, "flushing", sendErr, m.flowCtxCancel, m.outboxCtxCancel)
 		// Make sure the stream is not used any more.
 		m.stream = nil
-		log.VWarningf(ctx, 1, "Outbox flush error: %s", sendErr)
 	} else {
 		log.VEvent(ctx, 2, "Outbox flushed")
 	}
@@ -448,7 +447,9 @@ func HandleStreamErr(
 		log.VEventf(ctx, 2, "Outbox calling outboxCtxCancel after %s EOF", opName)
 		outboxCtxCancel()
 	} else {
-		log.VEventf(ctx, 1, "Outbox calling flowCtxCancel after %s connection error: %+v", opName, err)
+		// We cannot send the error back via the broken stream, so we resort to
+		// logging it.
+		log.Warningf(ctx, "Outbox calling flowCtxCancel after %s connection error: %+v", opName, err)
 		flowCtxCancel()
 	}
 }

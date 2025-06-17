@@ -65,7 +65,7 @@ func TestInboxCancellation(t *testing.T) {
 		err = colexecerror.CatchVectorizedRuntimeError(func() { inbox.Init(ctx) })
 		require.True(t, testutils.IsError(err, "context canceled"), err)
 		// Now, the remote stream arrives.
-		err = inbox.RunWithStream(context.Background(), mockFlowStreamServer{})
+		err = inbox.RunWithStream(context.Background(), mockFlowStreamServer{}, nil /* header */)
 		// We expect no error from the stream handler since we canceled it
 		// ourselves (a graceful termination).
 		require.Nil(t, err)
