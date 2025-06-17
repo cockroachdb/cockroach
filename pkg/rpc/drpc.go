@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"storj.io/drpc"
+	"storj.io/drpc/drpcclient" // Added import
 	"storj.io/drpc/drpcconn"
 	"storj.io/drpc/drpcmanager"
 	"storj.io/drpc/drpcmigrate"
@@ -33,55 +34,76 @@ func dialDRPC(
 	rpcCtx *Context,
 ) func(ctx context.Context, target string, _ rpcbase.ConnectionClass) (drpc.Conn, error) {
 	return func(ctx context.Context, target string, _ rpcbase.ConnectionClass) (drpc.Conn, error) {
-		// TODO(server): could use connection class instead of empty key here.
 		pool := drpcpool.New[struct{}, drpcpool.Conn](drpcpool.Options{
 			Expiration: defaultDRPCConnIdleTimeout,
 		})
-		pooledConn := pool.Get(ctx /* unused */, struct{}{}, func(ctx context.Context,
-			_ struct{}) (drpcpool.Conn, error) {
 
-			netConn, err := drpcmigrate.DialWithHeader(ctx, "tcp", target, drpcmigrate.DRPCHeader)
-			if err != nil {
-				return nil, err
-			}
-
-			opts := drpcconn.Options{
-				Manager: drpcmanager.Options{
-					Reader: drpcwire.ReaderOptions{
-						MaximumBufferSize: math.MaxInt,
-					},
-					Stream: drpcstream.Options{
-						MaximumBufferSize: 0, // unlimited
-					},
-					SoftCancel: true, // don't close the transport when stream context is canceled
-				},
-			}
-			var conn *drpcconn.Conn
-			if rpcCtx.ContextOptions.Insecure {
-				conn = drpcconn.NewWithOptions(netConn, opts)
-			} else {
-				tlsConfig, err := rpcCtx.GetClientTLSConfig()
+		// dialer is the function that NewClientConnWithOptions will call to get a connection.
+		// This dialer will use the pool.
+		dialer := func(dialerCtx context.Context) (drpc.Conn, error) {
+			// The supplier function is called by the pool when a new connection is needed.
+			supplier := func(supplierCtx context.Context, _ struct{}) (drpcpool.Conn, error) {
+				netConn, err := drpcmigrate.DialWithHeader(supplierCtx, "tcp", target, drpcmigrate.DRPCHeader)
 				if err != nil {
 					return nil, err
 				}
-				// Clone TLS config to avoid modifying a cached TLS config.
-				tlsConfig = tlsConfig.Clone()
-				// TODO(server): remove this hack which is necessary at least in
-				// testing to get TestDRPCSelectQuery to pass.
-				tlsConfig.InsecureSkipVerify = true
-				tlsConn := tls.Client(netConn, tlsConfig)
-				conn = drpcconn.NewWithOptions(tlsConn, opts)
-			}
 
-			return conn, nil
-		})
-		// `pooledConn.Close` doesn't tear down any of the underlying TCP
-		// connections but simply marks the pooledConn handle as returning
-		// errors. When we "close" this conn, we want to tear down all of
-		// the connections in the pool (in effect mirroring the behavior of
-		// gRPC where a single conn is shared).
+				opts := drpcconn.Options{
+					Manager: drpcmanager.Options{
+						Reader: drpcwire.ReaderOptions{
+							MaximumBufferSize: math.MaxInt,
+						},
+						Stream: drpcstream.Options{
+							MaximumBufferSize: 0, // unlimited
+						},
+						SoftCancel: true, // don't close the transport when stream context is canceled
+					},
+				}
+				var conn *drpcconn.Conn
+				if rpcCtx.ContextOptions.Insecure {
+					conn = drpcconn.NewWithOptions(netConn, opts)
+				} else {
+					tlsConfig, err := rpcCtx.GetClientTLSConfig()
+					if err != nil {
+						_ = netConn.Close() // Close netConn if TLS config fails
+						return nil, err
+					}
+					// Clone TLS config to avoid modifying a cached TLS config.
+					tlsConfig = tlsConfig.Clone()
+					// TODO(server): remove this hack which is necessary at least in
+					// testing to get TestDRPCSelectQuery to pass.
+					tlsConfig.InsecureSkipVerify = true
+					tlsConn := tls.Client(netConn, tlsConfig)
+					conn = drpcconn.NewWithOptions(tlsConn, opts)
+				}
+				return conn, nil
+			}
+			// Get a connection from the pool. The context passed to Get (dialerCtx)
+			// will be passed to the supplier if a new connection is created.
+			pooledConn := pool.Get(dialerCtx, struct{}{}, supplier)
+			return pooledConn, nil
+		}
+
+		// Create the ClientConn using the dialer.
+		// The 'ctx' for NewClientConnWithOptions is the primary context for this dial operation.
+		// No DialOptions are passed here, but they could be added if specific interceptors
+		// or other client-side configurations are needed at this stage.
+		clientConn, err := drpcclient.NewClientConnWithOptions(
+			ctx,
+			dialer,
+			drpcclient.WithChainUnaryInterceptor(rpcCtx.clientUnaryInterceptorsDrpc...),
+			drpcclient.WithChainStreamInterceptor(rpcCtx.clientStreamInterceptorsDrpc...),
+		)
+		if err != nil {
+			// If NewClientConnWithOptions fails (e.g., dialer returns an error),
+			// close the pool to release any resources it might hold or manage.
+			_ = pool.Close()
+			return nil, err
+		}
+
+		// Wrap the clientConn to ensure the entire pool is closed when this connection handle is closed.
 		return &closeEntirePoolConn{
-			Conn: pooledConn,
+			Conn: clientConn, // clientConn is *drpcclient.ClientConn which implements drpc.Conn
 			pool: pool,
 		}, nil
 	}
@@ -118,7 +140,7 @@ type drpcServer struct {
 }
 
 // NewDRPCServer creates a new DRPCServer with the provided rpc context.
-func NewDRPCServer(_ context.Context, rpcCtx *Context) (DRPCServer, error) {
+func NewDRPCServer(_ context.Context, _ *Context) (DRPCServer, error) {
 	d := &drpcServer{}
 	mux := drpcmux.New()
 	d.Server = drpcserver.NewWithOptions(mux, drpcserver.Options{
