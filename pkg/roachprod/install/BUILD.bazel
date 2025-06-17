@@ -71,6 +71,7 @@ go_test(
     embed = [":install"],
     deps = [
         "//pkg/roachprod/cloud",
+        "//pkg/roachprod/config",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/gce/testutils",
@@ -79,6 +80,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
         "//pkg/util/retry",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",

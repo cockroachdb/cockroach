@@ -15,7 +15,6 @@ import (
 	"text/template"
 
 	"github.com/alessio/shellescape"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -39,12 +38,22 @@ const (
 // system interface. (a.k.a. "system tenant")
 const SystemInterfaceName = "system"
 
+func IsSystemInterface(virtualClusterName string) bool {
+	return virtualClusterName == "" || virtualClusterName == SystemInterfaceName
+}
+
+// ServiceMode describes the deployment mode of a virtual cluster. This is based off
+// of cockroachdb's TenantServiceMode which describes how tenants can be served to clients.
 type ServiceMode string
 
 const (
-	// ServiceModeShared is the service mode for services that are shared on a host process.
+	// ServiceModeShared is the service mode for processes that contain both a SQL
+	// and KV server, i.e the SQL and KV server "share". The system interface and
+	// all shared process virtual clusters are always in this mode.
 	ServiceModeShared ServiceMode = "shared"
-	// ServiceModeExternal is the service mode for services that are run in a separate process.
+	// ServiceModeExternal is the service mode for processes that contain only a SQL
+	// server, i.e. run "externally" from the KV server. All separate process virtual
+	// clusters are always in this mode.
 	ServiceModeExternal ServiceMode = "external"
 )
 
@@ -126,13 +135,13 @@ func serviceNameComponents(name string) (string, ServiceType, error) {
 	return serviceName[:splitIndex], serviceType, nil
 }
 
-// DiscoverServices discovers services running on the given nodes.
+// discoverServices discovers services running on the given nodes.
 // Services matching the virtual cluster name and service type are
 // returned and can be filtered by passing predicates. It's possible
 // that multiple services can be returned for the given parameters if
 // instances of the same virtual cluster and type are running on any of the
 // nodes.
-func (c *SyncedCluster) DiscoverServices(
+func (c *SyncedCluster) discoverServices(
 	ctx context.Context,
 	virtualClusterName string,
 	serviceType ServiceType,
@@ -164,91 +173,6 @@ func (c *SyncedCluster) DiscoverServices(
 	return descriptors.Filter(predicates...), nil
 }
 
-// DiscoverService is a convenience method for discovering a single service. If
-// no services are found, it returns a service descriptor with the default port
-// for the service type.
-func (c *SyncedCluster) DiscoverService(
-	ctx context.Context,
-	node Node,
-	virtualClusterName string,
-	serviceType ServiceType,
-	sqlInstance int,
-) (ServiceDesc, error) {
-	// We first try to discover an external service for the virtual
-	// cluster name provided on the requested node. Note that we filter
-	// by `ServiceModeExternal` for explicitness: shared-process virtual
-	// clusters have a fixed, sentinel node	(`sharedProcessVirtualClusterNode`).
-	// They are handled in the logic below, when this call to
-	// `DiscoverServices` returns an empty collection.
-	//
-	// This call should return service descriptors for the storage
-	// service and for external-process virtual clusters.
-	services, err := c.DiscoverServices(
-		ctx, virtualClusterName, serviceType,
-		ServiceNodePredicate(node), ServiceModePredicate(ServiceModeExternal), ServiceInstancePredicate(sqlInstance),
-	)
-	if err != nil {
-		return ServiceDesc{}, err
-	}
-
-	isSystemInterface := virtualClusterName == "" || virtualClusterName == SystemInterfaceName
-	// If no external services are found matching the criteria, attempt
-	// to discover a a shared service.
-	if len(services) == 0 && !isSystemInterface {
-		// At this point, we know that we are searching for a
-		// shared-process virtual cluster. Find the corresponding system
-		// service, if any.
-		services, err = c.DiscoverServices(
-			ctx, SystemInterfaceName, serviceType, ServiceNodePredicate(node),
-		)
-		if err != nil {
-			return ServiceDesc{}, err
-		}
-
-		// Update the system service to point to the virtual cluster
-		// requested.
-		for j := range services {
-			services[j].VirtualClusterName = virtualClusterName
-			services[j].ServiceMode = ServiceModeShared
-		}
-	}
-
-	// Finally, fall back to the default ports if no services are found. This is
-	// required for scenarios where the services were not registered with a DNS
-	// provider (Google DNS). Currently, services will not be registered in the
-	// following scenarios:
-	//
-	// 1. A system interface started with default ports. This is an optimisation
-	// to avoid the overhead of registering services when starting a storage
-	// cluster with default ports.
-	// 2. Clusters not on GCP
-	// 3. Clusters that specify a custom project.
-	//
-	// The fall back is also useful for
-	// backwards compatibility with clusters that were created before the
-	// introduction of service discovery, or without a DNS provider.
-	if len(services) == 0 {
-		var port int
-		switch serviceType {
-		case ServiceTypeSQL:
-			port = config.DefaultSQLPort
-		case ServiceTypeUI:
-			port = config.DefaultAdminUIPort
-		default:
-			return ServiceDesc{}, errors.Newf("invalid service type: %s", serviceType)
-		}
-		return ServiceDesc{
-			ServiceType:        serviceType,
-			ServiceMode:        ServiceModeShared,
-			VirtualClusterName: virtualClusterName,
-			Node:               node,
-			Port:               port,
-			Instance:           0,
-		}, nil
-	}
-	return services[0], err
-}
-
 // ListLoadBalancers returns a list of load balancers from all providers, for
 // the cluster.
 func (c *SyncedCluster) ListLoadBalancers(l *logger.Logger) ([]vm.ServiceAddress, error) {
@@ -274,11 +198,11 @@ func (c *SyncedCluster) MapServices(
 ) (NodeServiceMap, error) {
 	nodeFilter := ServiceNodePredicate(c.Nodes...)
 	instanceFilter := ServiceInstancePredicate(instance)
-	sqlServices, err := c.DiscoverServices(ctx, virtualClusterName, ServiceTypeSQL, nodeFilter, instanceFilter)
+	sqlServices, err := c.discoverServices(ctx, virtualClusterName, ServiceTypeSQL, nodeFilter, instanceFilter)
 	if err != nil {
 		return nil, err
 	}
-	uiServices, err := c.DiscoverServices(ctx, virtualClusterName, ServiceTypeUI, nodeFilter, instanceFilter)
+	uiServices, err := c.discoverServices(ctx, virtualClusterName, ServiceTypeUI, nodeFilter, instanceFilter)
 	if err != nil {
 		return nil, err
 	}
@@ -365,14 +289,6 @@ func ServiceNodePredicate(nodes ...Node) ServicePredicate {
 func ServiceInstancePredicate(instance int) ServicePredicate {
 	return func(descriptor ServiceDesc) bool {
 		return descriptor.Instance == instance
-	}
-}
-
-// ServiceModePredicate returns a ServicePredicate that matches on the
-// provided service mode.
-func ServiceModePredicate(serviceMode ServiceMode) ServicePredicate {
-	return func(descriptor ServiceDesc) bool {
-		return descriptor.ServiceMode == serviceMode
 	}
 }
 
