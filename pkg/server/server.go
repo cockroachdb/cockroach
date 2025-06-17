@@ -597,6 +597,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	mmAllocator := mma.NewAllocatorState(timeutil.DefaultTimeSource{},
 		rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+	allocatorSync := kvserver.NewAllocatorSync(storePool, mmAllocator)
 	// TODO: Move this into a dedicated integration struct (per node, not
 	// per-store) for mma.Allocator.
 	g.RegisterCallbackWithOrigTimestamp(
@@ -928,6 +929,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		ScanMaxIdleTime:              cfg.ScanMaxIdleTime,
 		HistogramWindowInterval:      cfg.HistogramWindowInterval(),
 		MMAllocator:                  mmAllocator,
+		AllocatorSync:                allocatorSync,
 		LogRangeAndNodeEvents:        cfg.EventLogEnabled,
 		RangeDescriptorCache:         distSender.RangeDescriptorCache(),
 		TimeSeriesDataStore:          tsDB,

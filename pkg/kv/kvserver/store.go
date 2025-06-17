@@ -1180,6 +1180,7 @@ type StoreConfig struct {
 	StorePool              *storepool.StorePool
 	StoreLiveness          *storeliveness.NodeContainer
 	MMAllocator            mma.Allocator
+	AllocatorSync          *AllocatorSync
 	Transport              *RaftTransport
 	StoreLivenessTransport *storeliveness.Transport
 	NodeDialer             *nodedialer.Dialer
@@ -1741,11 +1742,11 @@ func NewStore(
 			s.cfg.AmbientCtx, s.cfg.Clock, cfg.ScanInterval,
 			cfg.ScanMinIdleTime, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
 		)
-		s.leaseQueue = newLeaseQueue(s, s.allocator)
+		s.leaseQueue = newLeaseQueue(s, s.allocator, s.cfg.AllocatorSync)
 		s.mvccGCQueue = newMVCCGCQueue(s)
 		s.mergeQueue = newMergeQueue(s, s.db)
 		s.splitQueue = newSplitQueue(s, s.db)
-		s.replicateQueue = newReplicateQueue(s, s.allocator)
+		s.replicateQueue = newReplicateQueue(s, s.allocator, s.cfg.AllocatorSync)
 		s.replicaGCQueue = newReplicaGCQueue(s, s.db)
 		s.raftLogQueue = newRaftLogQueue(s, s.db)
 		s.raftSnapshotQueue = newRaftSnapshotQueue(s)
@@ -2432,7 +2433,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	if s.replicateQueue != nil {
 		s.storeRebalancer = NewStoreRebalancer(
-			s.cfg.AmbientCtx, s.cfg.Settings, s.replicateQueue, s.replRankings, s.rebalanceObjManager)
+			s.cfg.AmbientCtx, s.cfg.Settings, s.replicateQueue, s.replRankings, s.rebalanceObjManager,
+			s.cfg.AllocatorSync)
 		s.storeRebalancer.Start(ctx, s.stopper)
 
 		s.mmStoreRebalancer = &multiMetricStoreRebalancer{
