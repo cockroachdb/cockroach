@@ -76,7 +76,8 @@ type Allocator interface {
 	// caller is returned a list of ChangeIDs, corresponding 1:1 to each  replica
 	// change provided as an argument. The returned list of ChangeIDs should then
 	// be used to call AdjustPendingChangesDisposition when the changes are
-	// completed, either successfully or not.
+	// completed, either successfully or not. All changes should correspond to the
+	// same range.
 	RegisterExternalChanges(changes []ReplicaChange) []ChangeID
 
 	// ComputeChanges is called periodically and frequently, say every 10s.
