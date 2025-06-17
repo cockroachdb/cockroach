@@ -72,15 +72,6 @@ tc_end_block "Variable Setup"
 configure_git_ssh_key
 
 if [[ -z "${is_customized_build}" ]] ; then
-  tc_start_block "Tag the release"
-  git tag "${build_name}"
-  tc_end_block "Tag the release"
-
-  tc_start_block "Push release tag to github.com/cockroachlabs/release-staging"
-  git_wrapped push ssh://git@github.com/cockroachlabs/release-staging.git "${build_name}"
-  tc_end_block "Push release tag to github.com/cockroachlabs/release-staging"
-
-
   tc_start_block "Tag docker image as latest-build"
   # Only tag the image as "latest-vX.Y-build" if the tag is on a release branch
   # (or master for the alphas for the next major release).
@@ -120,22 +111,3 @@ if [[ -n "${is_customized_build}" ]] ; then
   git_wrapped push ssh://git@github.com/cockroachdb/cockroach.git --delete "${TC_BUILD_BRANCH}"
   tc_end_block "Delete custombuild tag"
 fi
-
-# Publish build metadata to a stable location.
-tc_start_block "Metadata"
-timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-metadata_file="artifacts/metadata.json"
-mkdir -p artifacts
-cat > "$metadata_file" << EOF
-{
-  "sha": "$BUILD_VCS_NUMBER",
-  "timestamp": "$timestamp",
-  "tag": "$build_name"
-}
-EOF
-# Run jq to pretty print and validate JSON
-jq . "$metadata_file"
-google_credentials=$metadata_google_credentials log_into_gcloud
-gsutil cp "$metadata_file" "gs://$metadata_gcs_bucket/builds/$BUILD_VCS_NUMBER.json"
-echo "Published to https://storage.googleapis.com/$metadata_gcs_bucket/builds/$BUILD_VCS_NUMBER.json"
-tc_end_block "Metadata"
