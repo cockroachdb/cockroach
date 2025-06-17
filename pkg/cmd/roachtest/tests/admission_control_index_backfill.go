@@ -182,7 +182,7 @@ func registerIndexBackfill(r registry.Registry) {
 					// TODO(irfansharif): These now take closer to an hour after
 					// https://github.com/cockroachdb/cockroach/pull/109085. Do
 					// something about it if customers complain.
-					m := c.NewMonitor(ctx, c.CRDBNodes())
+					m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 					m.Go(func(ctx context.Context) error {
 						t.Status(fmt.Sprintf("starting index creation (<%s)", 30*time.Minute))
 						_, err := db.ExecContext(ctx,

@@ -131,7 +131,7 @@ func runEarlyExitInConnectionWait(ctx context.Context, t test.Test, c cluster.Cl
 	}
 
 	// Start draining the node.
-	m := c.NewMonitor(ctx, c.Node(nodeToDrain))
+	m := c.NewDeprecatedMonitor(ctx, c.Node(nodeToDrain))
 
 	m.Go(func(ctx context.Context) error {
 		t.Status(fmt.Sprintf("start draining node %d", nodeToDrain))
@@ -262,7 +262,7 @@ func runWarningForConnWait(ctx context.Context, t test.Test, c cluster.Cluster) 
 	connWithSleep, err := pgx.Connect(ctx, pgURL[0])
 	require.NoError(t, err)
 
-	m := c.NewMonitor(ctx, c.Node(nodeToDrain))
+	m := c.NewDeprecatedMonitor(ctx, c.Node(nodeToDrain))
 	m.Go(func(ctx context.Context) error {
 		t.Status(fmt.Sprintf("draining node %d", nodeToDrain))
 		return c.RunE(ctx,
