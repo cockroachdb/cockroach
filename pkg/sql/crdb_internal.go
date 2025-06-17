@@ -1152,20 +1152,15 @@ CREATE TABLE crdb_internal.jobs (
   description           STRING,
   statement             STRING,
   user_name             STRING,
-  descriptor_ids        INT[],
   status                STRING,
   running_status        STRING,
   created               TIMESTAMPTZ,
-  started               TIMESTAMPTZ,
   finished              TIMESTAMPTZ,
   modified              TIMESTAMPTZ,
   fraction_completed    FLOAT,
   high_water_timestamp  DECIMAL,
   error                 STRING,
   coordinator_id        INT,
-  trace_id              INT,
-  execution_errors      STRING[],
-  execution_events      JSONB,
   INDEX(job_id),
   INDEX(status),
   INDEX(job_type)
@@ -1347,20 +1342,15 @@ LEFT OUTER JOIN system.public.job_status AS s ON j.id = s.job_id
 			desc,
 			desc,
 			ownerStr,
-			tree.DNull, // deperecated "descriptor_ids"
 			state,
 			status,
 			created,
-			created, // deprecated "started" field.
 			finished,
 			modified,
 			fraction,
 			resolved,
 			errorMsg,
 			instanceID,
-			tree.DNull, // deprecated "trace_id" field.
-			tree.DNull, // deprecated "executionErrors" field.
-			tree.DNull, // deprecated "executionEvents" field.
 		); err != nil {
 			return emitted, err
 		}
