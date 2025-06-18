@@ -45,6 +45,11 @@ type vectorInserter struct {
 	mutationQuota int
 	// If auto commit is true we'll commit the last batch.
 	autoCommit bool
+	// rowsWritten tracks the number of rows written by the vectorInserter so
+	// far.
+	rowsWritten int
+	// statsRefresherNotified is set once we notify the stats refresher.
+	statsRefresherNotified bool
 }
 
 var _ colexecop.Operator = &vectorInserter{}
@@ -123,6 +128,15 @@ func (v *vectorInserter) Next() coldata.Batch {
 	ctx := v.Ctx
 	b := v.Input.Next()
 	if b.Length() == 0 {
+		if !v.statsRefresherNotified {
+			// We've just exhausted the input, so let's notify the stats
+			// refresher.
+			// TODO(yuzefovich): when auto-commit enabled, the inserted rows
+			// will be visible sooner than at the end. Is it worth notifying the
+			// stats refresher earlier in that case?
+			v.flowCtx.Cfg.StatsRefresher.NotifyMutation(v.desc, v.rowsWritten)
+			v.statsRefresherNotified = true
+		}
 		return coldata.ZeroBatch
 	}
 
@@ -200,7 +214,7 @@ func (v *vectorInserter) Next() coldata.Batch {
 	v.retBatch.ColVec(0).Int64()[0] = int64(b.Length())
 	v.retBatch.SetLength(1)
 
-	v.flowCtx.Cfg.StatsRefresher.NotifyMutation(v.desc, b.Length())
+	v.rowsWritten += b.Length()
 
 	return v.retBatch
 }

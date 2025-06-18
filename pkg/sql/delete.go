@@ -159,10 +159,9 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 		}
 		// Remember we're done for the next call to BatchedNext().
 		d.run.done = true
+		// Possibly initiate a run of CREATE STATISTICS.
+		params.ExecCfg().StatsRefresher.NotifyMutation(d.run.td.tableDesc(), int(d.run.td.rowsWritten))
 	}
-
-	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(d.run.td.tableDesc(), d.run.td.lastBatchSize)
 
 	return d.run.td.lastBatchSize > 0, nil
 }

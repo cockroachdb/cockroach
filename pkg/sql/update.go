@@ -168,10 +168,9 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 		}
 		// Remember we're done for the next call to BatchedNext().
 		u.run.done = true
+		// Possibly initiate a run of CREATE STATISTICS.
+		params.ExecCfg().StatsRefresher.NotifyMutation(u.run.tu.tableDesc(), int(u.run.tu.rowsWritten))
 	}
-
-	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(u.run.tu.tableDesc(), u.run.tu.lastBatchSize)
 
 	return u.run.tu.lastBatchSize > 0, nil
 }
