@@ -147,6 +147,8 @@ var validationMap = []struct {
 			"NextPolicyID":            {status: iSolemnlySwearThisFieldIsValidated},
 			"RowLevelSecurityEnabled": {status: thisFieldReferencesNoObjects},
 			"RowLevelSecurityForced":  {status: thisFieldReferencesNoObjects},
+			"RBRUsingConstraint": {status: todoIAmKnowinglyAddingTechDebt,
+				reason: "TODO(drewk): remove this after adding validation in the next commit"},
 		},
 	},
 	{
