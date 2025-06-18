@@ -752,8 +752,15 @@ func uploadZipTables(ctx context.Context, uploadID string, debugDirPath string) 
 	uploadWG.Wait()
 	close(uploadChan)
 
-	fmt.Printf("\nView as tables here: https://us5.datadoghq.com/dashboard/ipq-44t-ez8/table-dumps-from-debug-zip?tpl_var_upload_id%%5B0%%5D=%s\n", uploadID)
-	fmt.Printf("View as logs here: https://us5.datadoghq.com/logs?query=source:debug-zip&upload_id:%s\n", uploadID)
+	toUnixTimestamp := getCurrentTime().UnixMilli()
+	//create timestamp for T-30 days.
+	fromUnixTimestamp := toUnixTimestamp - (30 * 24 * 60 * 60 * 1000)
+
+	fmt.Printf("\nView as tables here:"+
+		"https://us5.datadoghq.com/dashboard/jrz-h9w-5em/table-dumps-from-debug-zip?tpl_var_upload_id=%s&from_ts=%d&to_ts=%d\n",
+		uploadID, fromUnixTimestamp, toUnixTimestamp)
+	fmt.Printf("View as logs here: https://us5.datadoghq.com/logs?query=source:debug-zip upload_id:%s&from_ts=%d&to_ts=%d\n",
+		uploadID, fromUnixTimestamp, toUnixTimestamp)
 	return nil
 }
 
