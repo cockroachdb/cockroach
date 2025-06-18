@@ -73,7 +73,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/interceptorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -1991,7 +1991,7 @@ func setupSpanForIncomingRPC(
 		// request that didn't specify tracing information. We make a child span
 		// if the incoming request would like to be traced.
 		ctx, newSpan = tracing.ChildSpan(ctx,
-			grpcinterceptor.BatchMethodName, tracing.WithServerSpanKind)
+			interceptorutil.BatchMethodName, tracing.WithServerSpanKind)
 	} else {
 		// Non-local call. Tracing information comes from the request proto.
 
@@ -2003,7 +2003,7 @@ func setupSpanForIncomingRPC(
 		}
 
 		ctx, newSpan = tr.StartSpanCtx(
-			ctx, grpcinterceptor.BatchMethodName,
+			ctx, interceptorutil.BatchMethodName,
 			tracing.WithRemoteParentFromTraceInfo(ba.TraceInfo),
 			tracing.WithServerSpanKind)
 	}
