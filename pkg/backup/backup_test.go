@@ -8777,8 +8777,15 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 	// appear in the backup once it is PUBLIC.
 	var g errgroup.Group
 	g.Go(func() error {
+		// This test intentionally uses hooks that require the legacy schema changer. Because
+		// the legacy schema changer cannot toggle schema_locked for backfilling schema changes,
+		// we will manually do that here.
+		_, err := sqlDB.DB.ExecContext(ctx, `ALTER TABLE data.bank SET (schema_locked=false)`)
+		if err != nil {
+			return errors.Wrap(err, "unsetting schema_locked")
+		}
 		// We use the underlying DB since the goroutine should not call t.Fatal.
-		_, err := sqlDB.DB.ExecContext(ctx,
+		_, err = sqlDB.DB.ExecContext(ctx,
 			`CREATE INDEX new_balance_idx ON data.bank(balance)`)
 		return errors.Wrap(err, "creating index")
 	})
@@ -11158,7 +11165,7 @@ CREATE TABLE child_pk (k INT8 PRIMARY KEY REFERENCES parent);
 		sqlDB.Exec(t, `CREATE DATABASE test`)
 		sqlDB.Exec(t, fmt.Sprintf(`RESTORE TABLE test.circular FROM LATEST IN $1 AS OF SYSTEM TIME %s`, ts[0]), localFoo)
 		require.Equal(t, [][]string{
-			{"test.public.circular", "CREATE TABLE public.circular (\n\tk INT8 NOT NULL,\n\tselfid INT8 NULL,\n\tCONSTRAINT circular_pkey PRIMARY KEY (k ASC),\n\tCONSTRAINT self_fk FOREIGN KEY (selfid) REFERENCES public.circular(selfid) NOT VALID,\n\tUNIQUE INDEX circular_selfid_key (selfid ASC)\n);"},
+			{"test.public.circular", "CREATE TABLE public.circular (\n\tk INT8 NOT NULL,\n\tselfid INT8 NULL,\n\tCONSTRAINT circular_pkey PRIMARY KEY (k ASC),\n\tCONSTRAINT self_fk FOREIGN KEY (selfid) REFERENCES public.circular(selfid) NOT VALID,\n\tUNIQUE INDEX circular_selfid_key (selfid ASC)\n) WITH (schema_locked = true);"},
 		}, sqlDB.QueryStr(t, `SHOW CREATE TABLE test.circular`))
 		sqlDB.Exec(t, fmt.Sprintf(`RESTORE TABLE test.parent, test.child FROM LATEST IN $1 AS OF SYSTEM TIME %s `, ts[0]), localFoo)
 		sqlDB.Exec(t, `SELECT * FROM pg_catalog.pg_constraint`)
