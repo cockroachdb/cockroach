@@ -2563,6 +2563,43 @@ func (c *ElementCollection[E]) FilterTableLocalityRegionalByRow() *ElementCollec
 	return (*ElementCollection[*TableLocalityRegionalByRow])(ret)
 }
 
+func (e TableLocalityRegionalByRowUsingConstraint) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_TableLocalityRegionalByRowUsingConstraint) Element() Element {
+	return e.TableLocalityRegionalByRowUsingConstraint
+}
+
+// ForEachTableLocalityRegionalByRowUsingConstraint iterates over elements of type TableLocalityRegionalByRowUsingConstraint.
+// Deprecated
+func ForEachTableLocalityRegionalByRowUsingConstraint(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TableLocalityRegionalByRowUsingConstraint),
+) {
+  c.FilterTableLocalityRegionalByRowUsingConstraint().ForEach(fn)
+}
+
+// FindTableLocalityRegionalByRowUsingConstraint finds the first element of type TableLocalityRegionalByRowUsingConstraint.
+// Deprecated
+func FindTableLocalityRegionalByRowUsingConstraint(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *TableLocalityRegionalByRowUsingConstraint) {
+	if tc := c.FilterTableLocalityRegionalByRowUsingConstraint(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*TableLocalityRegionalByRowUsingConstraint)
+	}
+	return current, target, element
+}
+
+// TableLocalityRegionalByRowUsingConstraintElements filters elements of type TableLocalityRegionalByRowUsingConstraint.
+func (c *ElementCollection[E]) FilterTableLocalityRegionalByRowUsingConstraint() *ElementCollection[*TableLocalityRegionalByRowUsingConstraint] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*TableLocalityRegionalByRowUsingConstraint)
+		return ok
+	})
+	return (*ElementCollection[*TableLocalityRegionalByRowUsingConstraint])(ret)
+}
+
 func (e TableLocalitySecondaryRegion) element() {}
 
 // Element implements ElementGetter.
@@ -3409,6 +3446,8 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_TableLocalityPrimaryRegion{ TableLocalityPrimaryRegion: t}
 		case *TableLocalityRegionalByRow:
 			e.ElementOneOf = &ElementProto_TableLocalityRegionalByRow{ TableLocalityRegionalByRow: t}
+		case *TableLocalityRegionalByRowUsingConstraint:
+			e.ElementOneOf = &ElementProto_TableLocalityRegionalByRowUsingConstraint{ TableLocalityRegionalByRowUsingConstraint: t}
 		case *TableLocalitySecondaryRegion:
 			e.ElementOneOf = &ElementProto_TableLocalitySecondaryRegion{ TableLocalitySecondaryRegion: t}
 		case *TablePartitioning:
@@ -3522,6 +3561,7 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_TableLocalityGlobal)(nil)),
 	((*ElementProto_TableLocalityPrimaryRegion)(nil)),
 	((*ElementProto_TableLocalityRegionalByRow)(nil)),
+	((*ElementProto_TableLocalityRegionalByRowUsingConstraint)(nil)),
 	((*ElementProto_TableLocalitySecondaryRegion)(nil)),
 	((*ElementProto_TablePartitioning)(nil)),
 	((*ElementProto_TableSchemaLocked)(nil)),
@@ -3617,6 +3657,7 @@ func GetElementTypes() []interface{} {
 	((*TableLocalityGlobal)(nil)),
 	((*TableLocalityPrimaryRegion)(nil)),
 	((*TableLocalityRegionalByRow)(nil)),
+	((*TableLocalityRegionalByRowUsingConstraint)(nil)),
 	((*TableLocalitySecondaryRegion)(nil)),
 	((*TablePartitioning)(nil)),
 	((*TableSchemaLocked)(nil)),
