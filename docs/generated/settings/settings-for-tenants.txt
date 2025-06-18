@@ -73,6 +73,7 @@ feature.backup.enabled	boolean	true	set to true to enable backups, false to disa
 feature.changefeed.enabled	boolean	true	set to true to enable changefeeds, false to disable; default is true	application
 feature.export.enabled	boolean	true	set to true to enable exports, false to disable; default is true	application
 feature.import.enabled	boolean	true	set to true to enable imports, false to disable; default is true	application
+feature.infer_rbr_region_col_using_constraint.enabled	boolean	false	set to true to enable looking up the region column via a foreign key constraint in a REGIONAL BY ROW table, false to disable; default is false	application
 feature.restore.enabled	boolean	true	set to true to enable restore, false to disable; default is true	application
 feature.schema_change.enabled	boolean	true	set to true to enable schema changes, false to disable; default is true	application
 feature.stats.enabled	boolean	true	set to true to enable CREATE STATISTICS/ANALYZE, false to disable; default is true	application

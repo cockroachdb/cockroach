@@ -559,6 +559,18 @@ func NewColumnOnlyIndexableError(colDesc string, colType string, indexType idxty
 	return err
 }
 
+// NewComputedColReferencesRegionColError returns an error for a computed column
+// that references the region column in a REGIONAL BY ROW table that is using a
+// foreign key to populate the region column.
+func NewComputedColReferencesRegionColError(computedColName, regionColName tree.Name) error {
+	return pgerror.Newf(
+		pgcode.InvalidTableDefinition,
+		`computed column %q cannot reference the region column %q in a REGIONAL BY ROW table`+
+			` with "%s" specified`,
+		computedColName, regionColName, catpb.RBRUsingConstraintTableSettingName,
+	)
+}
+
 // QueryTimeoutError is an error representing a query timeout.
 var QueryTimeoutError = pgerror.New(
 	pgcode.QueryCanceled, "query execution canceled due to statement timeout")

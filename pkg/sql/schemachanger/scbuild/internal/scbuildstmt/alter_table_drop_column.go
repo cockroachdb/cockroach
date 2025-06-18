@@ -84,7 +84,7 @@ func checkRegionalByRowColumnConflict(b BuildCtx, tbl *scpb.Table, n *tree.Alter
 				"cannot drop column %s as it is used to store the region in a REGIONAL BY ROW table",
 				n.Column,
 			),
-			"You must change the table locality before dropping this table or alter the table to use a different column to use for the region.",
+			"You must change the table locality before dropping this column or alter the table to use a different column for the region.",
 		))
 	}
 }
