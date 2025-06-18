@@ -8,6 +8,7 @@ package kvserver_test
 import (
 	"context"
 	"fmt"
+	"io"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -896,6 +897,13 @@ func TestFlowControlRaftMembershipV2(t *testing.T) {
 		kvflowcontrol.ApplyToElastic,
 		kvflowcontrol.ApplyToAll,
 	}, func(t *testing.T, mode kvflowcontrol.ModeT) {
+		f := rac2.TokenCounterLogOverride
+		defer func() {
+			rac2.TokenCounterLogOverride = f
+		}()
+		rac2.TokenCounterLogOverride = func(ctx context.Context, format string, args ...interface{}) {
+			log.InfofDepth(ctx, 1, format, args...)
+		}
 		ctx := context.Background()
 		settings := cluster.MakeTestingClusterSettings()
 		var disableWorkQueueGranting atomic.Bool
@@ -3890,7 +3898,8 @@ func (h *flowControlTestHelper) query(runner *sqlutils.SQLRunner, sql string, he
 	h.buf.WriteString(fmt.Sprintf("%s\n\n", sql))
 
 	rows := runner.Query(h.t, sql)
-	tbl := tablewriter.NewWriter(h.buf)
+	var tmp strings.Builder
+	tbl := tablewriter.NewWriter(&tmp)
 	output, err := sqlutils.RowsToStrMatrix(rows)
 	require.NoError(h.t, err)
 	tbl.SetAlignment(tablewriter.ALIGN_LEFT)
@@ -3899,6 +3908,10 @@ func (h *flowControlTestHelper) query(runner *sqlutils.SQLRunner, sql string, he
 	tbl.SetHeader(headers)
 	tbl.SetAutoFormatHeaders(false)
 	tbl.Render()
+	s := tmp.String()
+	_, err = io.Copy(h.buf, strings.NewReader(s))
+	require.NoError(h.t, err)
+	h.log(s)
 }
 
 type testingSendResult struct {
