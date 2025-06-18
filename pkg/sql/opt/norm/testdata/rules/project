@@ -31,6 +31,30 @@ CREATE TABLE assn_cast (
 )
 ----
 
+exec-ddl
+CREATE TABLE rls (x INT PRIMARY KEY, y INT, alice_has_access BOOL);
+----
+
+exec-ddl
+CREATE INDEX ON rls(y);
+----
+
+exec-ddl
+ALTER TABLE rls ENABLE ROW LEVEL SECURITY;
+----
+
+exec-ddl
+CREATE POLICY select_policy_alice
+ON rls
+FOR SELECT
+TO alice
+USING (alice_has_access);
+----
+
+exec-ddl
+CREATE ROLE alice;
+----
+
 # --------------------------------------------------
 # EliminateJoinUnderProjectLeft
 # --------------------------------------------------
@@ -2018,3 +2042,103 @@ sort
       │    └── fd: (1)-->(2)
       └── projections
            └── y:2 IS NULL [as=nulls_ordering_y:7, outer=(2)]
+
+# --------------------------------------------------
+# PushLeakproofProjectionsIntoPermeableBarrier
+# --------------------------------------------------
+
+exec-ddl
+SET ROLE alice;
+----
+
+# All expressions in projection are leakproof
+norm expect=PushLeakproofProjectionsIntoPermeableBarrier
+SELECT CASE WHEN y = 20 THEN 10 ELSE 0 END FROM rls
+----
+barrier
+ ├── columns: case:6
+ └── project
+      ├── columns: case:6
+      ├── select
+      │    ├── columns: y:2 alice_has_access:3!null
+      │    ├── fd: ()-->(3)
+      │    ├── scan rls
+      │    │    └── columns: y:2 alice_has_access:3
+      │    └── filters
+      │         └── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+      └── projections
+           └── CASE WHEN y:2 = 20 THEN 10 ELSE 0 END [as=case:6, outer=(2)]
+
+# Only some expressions in projection are leakproof
+norm expect-not=PushLeakproofProjectionsIntoPermeableBarrier
+SELECT CASE WHEN y = 20 THEN 10 ELSE 0 END, y/0 FROM rls
+----
+project
+ ├── columns: case:6 "?column?":7
+ ├── immutable
+ ├── barrier
+ │    ├── columns: x:1!null y:2 alice_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │    ├── key: (1)
+ │    ├── fd: ()-->(3), (1)-->(2,4,5)
+ │    └── select
+ │         ├── columns: x:1!null y:2 alice_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         ├── key: (1)
+ │         ├── fd: ()-->(3), (1)-->(2,4,5)
+ │         ├── scan rls
+ │         │    ├── columns: x:1!null y:2 alice_has_access:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2-5)
+ │         └── filters
+ │              └── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+ └── projections
+      ├── CASE WHEN y:2 = 20 THEN 10 ELSE 0 END [as=case:6, outer=(2)]
+      └── y:2 / 0 [as="?column?":7, outer=(2), immutable]
+
+# All expressions in projection are not leakproof
+norm expect-not=PushLeakproofProjectionsIntoPermeableBarrier
+SELECT y/0 FROM rls
+----
+project
+ ├── columns: "?column?":6
+ ├── immutable
+ ├── barrier
+ │    ├── columns: x:1!null y:2 alice_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │    ├── key: (1)
+ │    ├── fd: ()-->(3), (1)-->(2,4,5)
+ │    └── select
+ │         ├── columns: x:1!null y:2 alice_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         ├── key: (1)
+ │         ├── fd: ()-->(3), (1)-->(2,4,5)
+ │         ├── scan rls
+ │         │    ├── columns: x:1!null y:2 alice_has_access:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2-5)
+ │         └── filters
+ │              └── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+ └── projections
+      └── y:2 / 0 [as="?column?":6, outer=(2), immutable]
+
+# All expressions in projection are leakproof and we have passthrough columns
+norm expect=PushLeakproofProjectionsIntoPermeableBarrier
+SELECT x, y, CASE WHEN y = 20 THEN 10 ELSE 0 END FROM rls
+----
+barrier
+ ├── columns: x:1!null y:2 case:6
+ ├── key: (1)
+ ├── fd: (1)-->(2), (2)-->(6)
+ └── project
+      ├── columns: case:6 x:1!null y:2
+      ├── key: (1)
+      ├── fd: (1)-->(2), (2)-->(6)
+      ├── select
+      │    ├── columns: x:1!null y:2 alice_has_access:3!null
+      │    ├── key: (1)
+      │    ├── fd: ()-->(3), (1)-->(2)
+      │    ├── scan rls
+      │    │    ├── columns: x:1!null y:2 alice_has_access:3
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2,3)
+      │    └── filters
+      │         └── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+      └── projections
+           └── CASE WHEN y:2 = 20 THEN 10 ELSE 0 END [as=case:6, outer=(2)]
