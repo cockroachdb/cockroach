@@ -1224,7 +1224,7 @@ func (ef *execFactory) ConstructPlan(
 	if spool, ok := root.(*spoolNode); ok {
 		root = spool.input
 	}
-	return constructPlan(ef.planner, root, subqueries, cascades, triggers, checks, rootRowCount, flags)
+	return constructPlan(root, subqueries, cascades, triggers, checks, rootRowCount, flags)
 }
 
 // urlOutputter handles writing strings into an encoded URL for EXPLAIN (OPT,
