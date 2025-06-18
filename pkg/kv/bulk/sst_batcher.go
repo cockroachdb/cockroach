@@ -219,7 +219,7 @@ func MakeSSTBatcher(
 	b := &SSTBatcher{
 		name:                   name,
 		db:                     db,
-		adder:                  newSSTAdder(db, settings, writeAtBatchTs, disallowShadowingBelow, admissionpb.BulkNormalPri),
+		adder:                  newSSTAdder(db, settings, writeAtBatchTs, disallowShadowingBelow, admissionpb.BulkNormalPri, false),
 		settings:               settings,
 		disallowShadowingBelow: disallowShadowingBelow,
 		writeAtBatchTS:         writeAtBatchTs,
@@ -251,7 +251,7 @@ func MakeStreamSSTBatcher(
 		// be able to handle reduced throughput. We are OK with his for now since
 		// the consuming cluster of a replication stream does not have a latency
 		// sensitive workload running against it.
-		adder:     newSSTAdder(db, settings, false /*writeAtBatchTS*/, hlc.Timestamp{}, admissionpb.BulkNormalPri),
+		adder:     newSSTAdder(db, settings, false /*writeAtBatchTS*/, hlc.Timestamp{}, admissionpb.BulkNormalPri, true),
 		settings:  settings,
 		ingestAll: true,
 		mem:       mem,
@@ -286,7 +286,7 @@ func MakeTestingSSTBatcher(
 ) (*SSTBatcher, error) {
 	b := &SSTBatcher{
 		db:             db,
-		adder:          newSSTAdder(db, settings, false, hlc.Timestamp{}, admissionpb.BulkNormalPri),
+		adder:          newSSTAdder(db, settings, false, hlc.Timestamp{}, admissionpb.BulkNormalPri, false),
 		settings:       settings,
 		skipDuplicates: skipDuplicates,
 		ingestAll:      ingestAll,

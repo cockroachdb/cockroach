@@ -42,6 +42,8 @@ type sstAdder struct {
 	// the batch timestamp.
 	// TODO(jeffswenson): remove this from `sstAdder` in a stand alone PR.
 	writeAtBatchTS bool
+
+	ingestAll bool
 }
 
 func newSSTAdder(
@@ -50,6 +52,7 @@ func newSSTAdder(
 	writeAtBatchTS bool,
 	disallowShadowingBelow hlc.Timestamp,
 	priority admissionpb.WorkPriority,
+	ingestAll bool,
 ) *sstAdder {
 	return &sstAdder{
 		db:                     db,
@@ -57,6 +60,7 @@ func newSSTAdder(
 		priority:               priority,
 		settings:               settings,
 		writeAtBatchTS:         writeAtBatchTS,
+		ingestAll:              ingestAll,
 	}
 }
 
@@ -105,7 +109,7 @@ func (a *sstAdder) AddSSTable(
 	}
 	defer iter.Close()
 
-	if stats == (enginepb.MVCCStats{}) {
+	if stats != (enginepb.MVCCStats{}) {
 		// TODO(jeffswenson): Audit AddSST callers to see if they generate
 		// server side stats now. Accurately computing stats in the face of replays
 		// requires the server to do it.
@@ -154,12 +158,16 @@ func (a *sstAdder) AddSSTable(
 					RequestHeader:                          kvpb.RequestHeader{Key: item.start, EndKey: item.end},
 					Data:                                   item.sstBytes,
 					DisallowShadowingBelow:                 a.disallowShadowingBelow,
-					MVCCStats:                              &item.stats,
 					IngestAsWrites:                         ingestAsWriteBatch,
 					ReturnFollowingLikelyNonEmptySpanStart: true,
+					ComputeStatsDiff:                       a.ingestAll,
 				}
 				if a.writeAtBatchTS {
 					req.SSTTimestampToRequestTimestamp = batchTS
+				}
+
+				if item.stats != (enginepb.MVCCStats{}) {
+					req.MVCCStats = &item.stats
 				}
 
 				ba := &kvpb.BatchRequest{
@@ -226,8 +234,10 @@ func (a *sstAdder) AddSSTable(
 					if err != nil {
 						return err
 					}
-					if err := addStatsToSplitTables(left, right, item, sendStart); err != nil {
-						return err
+					if item.stats != (enginepb.MVCCStats{}) {
+						if err := addStatsToSplitTables(left, right, item, sendStart); err != nil {
+							return err
+						}
 					}
 					// Add more work.
 					work = append([]*sstSpan{left, right}, work...)

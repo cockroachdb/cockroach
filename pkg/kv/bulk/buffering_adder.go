@@ -120,6 +120,7 @@ func MakeBulkAdder(
 				opts.WriteAtBatchTimestamp,
 				opts.DisallowShadowingBelow,
 				admissionpb.BulkNormalPri,
+				false,
 			),
 			settings:               settings,
 			skipDuplicates:         opts.SkipDuplicates,
