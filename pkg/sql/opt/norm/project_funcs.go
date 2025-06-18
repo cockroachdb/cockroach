@@ -962,3 +962,14 @@ func (c *CustomFuncs) UnbindFiltersFromProjections(
 	newFilters := c.f.RemapCols(&filters, colMap).(*memo.FiltersExpr)
 	return *newFilters
 }
+
+// HasAllLeakProofProjections returns true if every projection given uses
+// leakproof expressions.
+func (c *CustomFuncs) HasAllLeakProofProjections(projections memo.ProjectionsExpr) bool {
+	for i := range projections {
+		if !projections[i].ScalarProps().VolatilitySet.IsLeakproof() {
+			return false
+		}
+	}
+	return true
+}
