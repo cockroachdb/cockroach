@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -728,7 +729,7 @@ func makeInternalClientAdapter(
 	batchServerHandler := chainUnaryServerInterceptors(
 		&grpc.UnaryServerInfo{
 			Server:     server,
-			FullMethod: grpcinterceptor.BatchMethodName,
+			FullMethod: tracingutil.BatchMethodName,
 		},
 		serverUnaryInterceptors,
 		func(ctx context.Context, req interface{}) (interface{}, error) {
@@ -812,7 +813,7 @@ func makeInternalClientAdapter(
 				ctx = tracing.ContextWithSpan(ctx, nil)
 			}
 
-			err := batchClientHandler(ctx, grpcinterceptor.BatchMethodName, ba, reply, nil /* ClientConn */)
+			err := batchClientHandler(ctx, tracingutil.BatchMethodName, ba, reply, nil /* ClientConn */)
 			return reply, err
 		},
 	}
