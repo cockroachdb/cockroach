@@ -921,7 +921,7 @@ func (vi *Index) findExactDistances(
 	}
 
 	// Prepare vector references.
-	idxCtx.tempVectorsWithKeys = ensureSliceLen(idxCtx.tempVectorsWithKeys, len(candidates))
+	idxCtx.tempVectorsWithKeys = utils.EnsureSliceLen(idxCtx.tempVectorsWithKeys, len(candidates))
 	for i := range candidates {
 		idxCtx.tempVectorsWithKeys[i].Key = candidates[i].ChildKey
 	}
@@ -950,9 +950,7 @@ func (vi *Index) findExactDistances(
 			// Move the last candidate to the current position and reduce size
 			// of slice by one.
 			idxCtx.tempVectorsWithKeys[i] = idxCtx.tempVectorsWithKeys[len(candidates)-1]
-			candidates[i] = candidates[len(candidates)-1]
-			candidates[len(candidates)-1] = SearchResult{} // for GC
-			candidates = candidates[:len(candidates)-1]
+			candidates = utils.ReplaceWithLast(candidates, i)
 		} else {
 			i++
 		}
@@ -1143,18 +1141,4 @@ func (vi *Index) Format(
 		return "", err
 	}
 	return buf.String(), nil
-}
-
-// ensureSliceLen returns a slice of the given length and generic type. If the
-// existing slice has enough capacity, that slice is returned after adjusting
-// its length. Otherwise, a new, larger slice is allocated.
-// NOTE: Every element of the new slice is uninitialized; callers are
-// responsible for initializing the memory.
-func ensureSliceLen[T any](s []T, l int) []T {
-	// In test builds, always allocate new memory, to catch bugs where callers
-	// assume existing slice elements will be copied.
-	if cap(s) < l || buildutil.CrdbTestBuild {
-		return make([]T, l)
-	}
-	return s[:l]
 }

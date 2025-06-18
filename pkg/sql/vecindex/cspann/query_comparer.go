@@ -6,6 +6,7 @@
 package cspann
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -35,7 +36,7 @@ func (c *queryComparer) Init(
 	c.original = queryVector
 
 	// Randomize the original query vector.
-	c.randomized = ensureSliceLen(c.randomized, len(queryVector))
+	c.randomized = utils.EnsureSliceLen(c.randomized, len(queryVector))
 	c.randomized = rot.RandomizeVector(queryVector, c.randomized)
 
 	// If using cosine distance, also normalize the query vector.
