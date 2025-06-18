@@ -141,9 +141,9 @@ done
 
 # Post issues to github for triggered builds (triggered builds are always on master)
 if [ -n "${TRIGGERED_BUILD:-}" ]; then
-  GITHUB_BRANCH="master"
-  GITHUB_SHA="${build_sha_arr[0]}"
-  GITHUB_BINARY="experiment"
+  export GITHUB_BRANCH="master"
+  export GITHUB_SHA="${build_sha_arr[0]}"
+  export GITHUB_BINARY="experiment"
 fi
 
 # Execute microbenchmarks
