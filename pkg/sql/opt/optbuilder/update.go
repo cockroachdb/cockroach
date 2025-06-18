@@ -295,6 +295,10 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs, colRefs *opt.Co
 	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 	mb.outScope = projectionsScope
 
+	// Track whether the region column is being explicitly updated. This is a
+	// no-op if the table isn't regional-by-row.
+	mb.setRegionColExplicitlyMutated(mb.updateColIDs)
+
 	// Add assignment casts for update columns.
 	mb.addAssignmentCasts(mb.updateColIDs)
 
@@ -348,6 +352,8 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 func (mb *mutationBuilder) buildUpdate(
 	returning *tree.ReturningExprs, policyScopeCmd cat.PolicyCommandScope, colRefs *opt.ColSet,
 ) {
+	mb.maybeAddRegionColLookup(opt.UpdateOp)
+
 	// Disambiguate names so that references in any expressions, such as a
 	// check constraint, refer to the correct columns.
 	mb.disambiguateColumns()
