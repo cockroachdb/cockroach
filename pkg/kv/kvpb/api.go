@@ -2555,10 +2555,14 @@ func validateExclusionTimestampForBatch(ts hlc.Timestamp, h Header) error {
 		return nil
 	}
 
+	// Unless the IsoLevel allows per-statement read snapshots,
 	// CanForwardReadTimestamp implies we haven't served a read, so it makes no
 	// sense that ExpectExclusionSince would be set since it is the result of a
 	// locking read.
-	if h.CanForwardReadTimestamp {
+	//
+	// If the IsoLevel permits per-statement read snapshots, then the read
+	// footprint may have been reset since the locking read was issued.
+	if h.CanForwardReadTimestamp && !h.Txn.IsoLevel.PerStatementReadSnapshot() {
 		return errors.New("unexpected ExpectExclusionSince in batch with CanForwardReadTimestamp set")
 	}
 	return nil

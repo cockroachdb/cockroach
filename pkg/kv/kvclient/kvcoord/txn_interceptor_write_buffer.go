@@ -740,34 +740,35 @@ func (twb *txnWriteBuffer) applyTransformations(
 		}
 		switch t := req.(type) {
 		case *kvpb.ConditionalPutRequest:
-			record.transformed = true
-			// NB: Regardless of whether there is already a buffered write on
-			// this key or not, we need to send a locking Get to the KV layer to
-			// acquire a lock. However, if we had knowledge of what locks the
-			// transaction already holds, we could avoid the locking Get in some
-			// cases.
-			getReq := &kvpb.GetRequest{
-				RequestHeader: kvpb.RequestHeader{
-					Key:      t.Key,
-					Sequence: t.Sequence,
-				},
-				LockNonExisting:    len(t.ExpBytes) == 0 || t.AllowIfDoesNotExist,
-				KeyLockingStrength: lock.Exclusive,
+			_, lockStr, isServed := twb.maybeServeRead(t.Key, t.Sequence)
+			// To elide the locking request, we must have both a value (to evaluate
+			// the condition) and a lock.
+			if isServed && lockExcludesWrites(lockStr) {
+				record.stripped = true
+			} else {
+				record.transformed = true
+				getReq := &kvpb.GetRequest{
+					RequestHeader: kvpb.RequestHeader{
+						Key:      t.Key,
+						Sequence: t.Sequence,
+					},
+					LockNonExisting:    len(t.ExpBytes) == 0 || t.AllowIfDoesNotExist,
+					KeyLockingStrength: lock.Exclusive,
+				}
+				var getReqU kvpb.RequestUnion
+				getReqU.MustSetInner(getReq)
+				// Send a locking Get request to the KV layer; we'll evaluate the
+				// condition locally based on the response.
+				baRemote.Requests = append(baRemote.Requests, getReqU)
 			}
-			var getReqU kvpb.RequestUnion
-			getReqU.MustSetInner(getReq)
-			// Send a locking Get request to the KV layer; we'll evaluate the
-			// condition locally based on the response.
-			baRemote.Requests = append(baRemote.Requests, getReqU)
 
 		case *kvpb.PutRequest:
-			// If the MustAcquireExclusiveLock flag is set on the Put, then we
-			// need to add a locking Get to the BatchRequest, including if the
-			// key doesn't exist.
-			if t.MustAcquireExclusiveLock {
-				// TODO(yuzefovich,ssd): ensure that we elide the lock
-				// acquisition whenever possible (e.g. blind UPSERT in an
-				// implicit txn).
+			_, lockStr, _ := twb.maybeServeRead(t.Key, t.Sequence)
+			// If the MustAcquireExclusiveLock flag is set then we need to add a
+			// locking Get to the BatchRequest, including if the key doesn't exist. We
+			// can elide this locking request when we already have an existing lock.
+			lockRequired := t.MustAcquireExclusiveLock && !lockExcludesWrites(lockStr)
+			if lockRequired {
 				var getReqU kvpb.RequestUnion
 				getReqU.MustSetInner(&kvpb.GetRequest{
 					RequestHeader: kvpb.RequestHeader{
@@ -779,16 +780,17 @@ func (twb *txnWriteBuffer) applyTransformations(
 				})
 				baRemote.Requests = append(baRemote.Requests, getReqU)
 			}
-			record.stripped = !t.MustAcquireExclusiveLock
-			record.transformed = t.MustAcquireExclusiveLock
+			record.stripped = !lockRequired
+			record.transformed = lockRequired
 
 		case *kvpb.DeleteRequest:
-			// If MustAcquireExclusiveLock flag is set on the DeleteRequest,
-			// then we need to add a locking Get to the BatchRequest, including
-			// if the key doesn't exist.
-			if t.MustAcquireExclusiveLock {
-				// TODO(ssd): ensure that we elide the lock acquisition
-				// whenever possible.
+			_, lockStr, served := twb.maybeServeRead(t.Key, t.Sequence)
+			// If MustAcquireExclusiveLock flag is set on the DeleteRequest, then we
+			// need to add a locking Get to the BatchRequest, including if the key
+			// doesn't exist. We can elide this locking request when we have both a
+			// value (to populate the FoundKey field in the response) and a lock.
+			lockRequired := t.MustAcquireExclusiveLock && !(served && lockExcludesWrites(lockStr))
+			if lockRequired {
 				var getReqU kvpb.RequestUnion
 				getReqU.MustSetInner(&kvpb.GetRequest{
 					RequestHeader: kvpb.RequestHeader{
@@ -800,32 +802,32 @@ func (twb *txnWriteBuffer) applyTransformations(
 				})
 				baRemote.Requests = append(baRemote.Requests, getReqU)
 			}
-			record.stripped = !t.MustAcquireExclusiveLock
-			record.transformed = t.MustAcquireExclusiveLock
+			record.stripped = !lockRequired
+			record.transformed = lockRequired
 
 		case *kvpb.GetRequest:
 			// If the key is in the buffer, we must serve the read from the buffer.
 			// The actual serving of the read will happen on the response path though.
 			stripped := false
-			_, served := twb.maybeServeRead(t.Key, t.Sequence)
+			_, lockStr, served := twb.maybeServeRead(t.Key, t.Sequence)
 			if served {
-				if t.KeyLockingStrength != lock.None {
+				if t.KeyLockingStrength > lockStr {
 					// Even though the Get request must be served from the buffer, as the
 					// transaction performed a previous write to the key, we still need to
-					// acquire a lock at the leaseholder. As a result, we can't strip the
-					// request from the remote batch.
-					//
-					// TODO(arul): we could eschew sending this request if we knew there
-					// was a sufficiently strong lock already present on the key.
-					log.VEventf(ctx, 2, "locking %s on key %s must be sent to the server", t.Method(), t.Key)
+					// acquire a lock at the leaseholder because we don't have a known
+					// lock of a sufficient strength on this key. As a result, we can't
+					// strip the request from the remote batch.
+					log.VEventf(ctx, 2, "%s(Locking=%s) on key %s must be sent to the server",
+						t.Method(), t.KeyLockingStrength, t.Key)
 					baRemote.Requests = append(baRemote.Requests, ru)
 				} else {
 					// We'll synthesize the response from the buffer on the response path;
-					// eschew sending the request to the KV layer as we don't need to
-					// acquire a lock.
+					// eschew sending the request to the KV layer since we already have a
+					// lock of a sufficient strength on this key.
 					stripped = true
 					log.VEventf(
-						ctx, 2, "non-locking %s on key %s can be fully served by the client; not sending to KV", t.Method(), t.Key,
+						ctx, 2, "%s(Locking=%s) on key %s can be fully served by the client; not sending to KV",
+						t.Method(), t.KeyLockingStrength, t.Key,
 					)
 				}
 			} else {
@@ -866,14 +868,18 @@ func (twb *txnWriteBuffer) seekItemForSpan(key, endKey roachpb.Key) *bufferedWri
 // deletion tombstone on the key is present in the buffer. Additionally, a
 // boolean indicating whether the read request was served or not is also
 // returned.
+//
+// The returned locked strength is the highest lock strength known to be held at
+// the given sequence number.
 func (twb *txnWriteBuffer) maybeServeRead(
 	key roachpb.Key, seq enginepb.TxnSeq,
-) (*roachpb.Value, bool) {
+) (*roachpb.Value, lock.Strength, bool) {
 	it := twb.buffer.MakeIter()
 	seek := twb.seekItemForSpan(key, nil)
 	it.FirstOverlap(seek)
 	if it.Valid() {
 		bufferedVals := it.Cur().vals
+		lockStr := it.Cur().heldStr(seq)
 		// In the common case, we're reading the most recently buffered write. That
 		// is, the sequence number we're reading at is greater than or equal to the
 		// sequence number of the last write that was buffered. The list of buffered
@@ -885,15 +891,15 @@ func (twb *txnWriteBuffer) maybeServeRead(
 		// using a binary search here instead.
 		for i := len(bufferedVals) - 1; i >= 0; i-- {
 			if seq >= bufferedVals[i].seq {
-				return bufferedVals[i].valPtr(), true
+				return bufferedVals[i].valPtr(), lockStr, true
 			}
 		}
 		// We've iterated through the buffer, but it seems like our sequence number
 		// is smaller than any buffered write performed by our transaction. We can't
 		// serve the read locally.
-		return nil, false
+		return nil, lockStr, false
 	}
-	return nil, false
+	return nil, lock.None, false
 }
 
 // mergeWithScanResp takes a ScanRequest, that was sent to the KV layer, and the
@@ -994,7 +1000,7 @@ func (twb *txnWriteBuffer) mergeBufferAndResp(
 		case -1:
 			// The key in the buffer is less than the next key in the server's
 			// response, so we prefer it.
-			val, served := twb.maybeServeRead(it.Cur().key, respIter.seq())
+			val, _, served := twb.maybeServeRead(it.Cur().key, respIter.seq())
 			if served && val.IsPresent() {
 				// NB: Only include a buffered value in the response if it hasn't been
 				// deleted by the transaction previously. This matches the behaviour
@@ -1007,7 +1013,7 @@ func (twb *txnWriteBuffer) mergeBufferAndResp(
 		case 0:
 			// The key exists in the buffer. We must serve the read from the buffer,
 			// assuming it is visible to the sequence number of the request.
-			val, served := twb.maybeServeRead(it.Cur().key, respIter.seq())
+			val, _, served := twb.maybeServeRead(it.Cur().key, respIter.seq())
 			if served {
 				if val.IsPresent() {
 					// NB: Only include a buffered value in the response if it hasn't been
@@ -1039,7 +1045,7 @@ func (twb *txnWriteBuffer) mergeBufferAndResp(
 		respIter.next()
 	}
 	for it.Valid() {
-		val, served := twb.maybeServeRead(it.Cur().key, respIter.seq())
+		val, _, served := twb.maybeServeRead(it.Cur().key, respIter.seq())
 		if served && val.IsPresent() {
 			// Like above, we'll only include the value in the response if the Scan's
 			// sequence number requires us to see it and it isn't a deletion
@@ -1130,7 +1136,7 @@ func (rr requestRecord) toResp(
 
 		var val *roachpb.Value
 		var served bool
-		val, served = twb.maybeServeRead(req.Key, req.Sequence)
+		val, _, served = twb.maybeServeRead(req.Key, req.Sequence)
 		if !served {
 			// We only use the response from KV if there wasn't already a
 			// buffered value for this key that our transaction wrote
@@ -1151,7 +1157,7 @@ func (rr requestRecord) toResp(
 		}
 
 		var lei *lockAcquisition
-		if exclusionTimestampRequired {
+		if rr.transformed && exclusionTimestampRequired {
 			lei = &lockAcquisition{
 				str: lock.Exclusive,
 				seq: req.Sequence,
@@ -1166,7 +1172,7 @@ func (rr requestRecord) toResp(
 
 	case *kvpb.PutRequest:
 		var lei *lockAcquisition
-		if req.MustAcquireExclusiveLock && exclusionTimestampRequired {
+		if rr.transformed && exclusionTimestampRequired {
 			lei = &lockAcquisition{
 				str: lock.Exclusive,
 				seq: req.Sequence,
@@ -1180,14 +1186,13 @@ func (rr requestRecord) toResp(
 		// To correctly populate FoundKey in the response, we must prefer any
 		// buffered values (if they exist).
 		var foundKey bool
-		val, served := twb.maybeServeRead(req.Key, req.Sequence)
+		val, _, served := twb.maybeServeRead(req.Key, req.Sequence)
 		if served {
 			log.VEventf(ctx, 2, "serving read portion of %s on key %s from the buffer", req.Method(), req.Key)
 			foundKey = val.IsPresent()
-		} else if req.MustAcquireExclusiveLock {
+		} else if rr.transformed {
 			// We sent a GetRequest to the KV layer to acquire an exclusive lock
-			// on the key, regardless of whether the key already exists or not.
-			// Populate FoundKey using the response.
+			// on the key, populate FoundKey using the response.
 			getResp := br.GetInner().(*kvpb.GetResponse)
 			if log.ExpensiveLogEnabled(ctx, 2) {
 				log.Eventf(ctx, "synthesizing DeleteResponse from GetResponse: %#v", getResp)
@@ -1208,7 +1213,7 @@ func (rr requestRecord) toResp(
 		}
 
 		var lei *lockAcquisition
-		if req.MustAcquireExclusiveLock && exclusionTimestampRequired {
+		if rr.transformed && exclusionTimestampRequired {
 			lei = &lockAcquisition{
 				str: lock.Exclusive,
 				seq: req.Sequence,
@@ -1222,7 +1227,7 @@ func (rr requestRecord) toResp(
 		twb.addToBuffer(req.Key, roachpb.Value{}, req.Sequence, req.KVNemesisSeq, lei)
 
 	case *kvpb.GetRequest:
-		val, served := twb.maybeServeRead(req.Key, req.Sequence)
+		val, _, served := twb.maybeServeRead(req.Key, req.Sequence)
 		if served {
 			getResp := &kvpb.GetResponse{}
 			if val.IsPresent() {
@@ -1527,6 +1532,13 @@ func (bw *bufferedWrite) exclusionExpectedSinceTimestamp() hlc.Timestamp {
 	return hlc.Timestamp{}
 }
 
+func (bw *bufferedWrite) heldStr(seq enginepb.TxnSeq) lock.Strength {
+	if bw.lki == nil {
+		return lock.None
+	}
+	return bw.lki.heldStr(seq)
+}
+
 func (bw *bufferedWrite) rollbackLockInfo(seq enginepb.TxnSeq) {
 	if bw.lki == nil {
 		return
@@ -1754,6 +1766,19 @@ func (li *lockedKeyInfo) heldGE(str lock.Strength) bool {
 	return false
 }
 
+// heldStr returns the strongest lock held at the given sequence number.
+func (li *lockedKeyInfo) heldStr(seq enginepb.TxnSeq) lock.Strength {
+	for _, str := range unreplicatedHolderStrengths {
+		minSeq := li.heldStrengths[heldStrengthToIndexMap[str]]
+		if minSeq != notHeldSentinel {
+			if minSeq <= seq {
+				return str
+			}
+		}
+	}
+	return lock.None
+}
+
 // rollbackSequence rolls back the given sequence number. It returns false if
 // the lock is no longer held at any sequence number.
 func (li *lockedKeyInfo) rollbackSequence(seq enginepb.TxnSeq) bool {
@@ -1772,6 +1797,10 @@ func (li *lockedKeyInfo) rollbackSequence(seq enginepb.TxnSeq) bool {
 		li.ts = hlc.Timestamp{}
 	}
 	return stillHeld
+}
+
+func lockExcludesWrites(str lock.Strength) bool {
+	return str >= lock.Shared
 }
 
 // getKey reads the key for the next KV from a slice of BatchResponses field of
