@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"storj.io/drpc"
+	"storj.io/drpc/drpcclient"
 	"storj.io/drpc/drpcconn"
 	"storj.io/drpc/drpcmanager"
 	"storj.io/drpc/drpcmigrate"
@@ -40,7 +41,8 @@ func (d *drpcCloseNotifier) CloseNotify(ctx context.Context) <-chan struct{} {
 	return d.conn.Closed()
 }
 
-func dialDRPC(
+// TODO DB Server: unexport this once dial methods are added in rpccontext.
+func DialDRPC(
 	rpcCtx *Context,
 ) func(ctx context.Context, target string, _ rpcbase.ConnectionClass) (drpc.Conn, error) {
 	return func(ctx context.Context, target string, _ rpcbase.ConnectionClass) (drpc.Conn, error) {
@@ -86,13 +88,27 @@ func dialDRPC(
 
 			return conn, nil
 		})
-		// `pooledConn.Close` doesn't tear down any of the underlying TCP
-		// connections but simply marks the pooledConn handle as returning
-		// errors. When we "close" this conn, we want to tear down all of
-		// the connections in the pool (in effect mirroring the behavior of
-		// gRPC where a single conn is shared).
+
+		if rpcCtx.Knobs.UnaryClientInterceptorDRPC != nil {
+			if interceptor := rpcCtx.Knobs.UnaryClientInterceptorDRPC(target, rpcbase.DefaultClass); interceptor != nil {
+				rpcCtx.clientUnaryInterceptorsDRPC = append(rpcCtx.clientUnaryInterceptorsDRPC, interceptor)
+			}
+		}
+		if rpcCtx.Knobs.StreamClientInterceptorDRPC != nil {
+			if interceptor := rpcCtx.Knobs.StreamClientInterceptorDRPC(target, rpcbase.DefaultClass); interceptor != nil {
+				rpcCtx.clientStreamInterceptorsDRPC = append(rpcCtx.clientStreamInterceptorsDRPC, interceptor)
+			}
+		}
+		clientConn, _ := drpcclient.NewClientConnWithOptions(
+			ctx,
+			pooledConn,
+			drpcclient.WithChainUnaryInterceptor(rpcCtx.clientUnaryInterceptorsDRPC...),
+			drpcclient.WithChainStreamInterceptor(rpcCtx.clientStreamInterceptorsDRPC...),
+		)
+
+		// Wrap the clientConn to ensure the entire pool is closed when this connection handle is closed.
 		return &closeEntirePoolConn{
-			Conn: pooledConn,
+			Conn: clientConn,
 			pool: pool,
 		}, nil
 	}
@@ -129,7 +145,7 @@ type drpcServer struct {
 }
 
 // NewDRPCServer creates a new DRPCServer with the provided rpc context.
-func NewDRPCServer(_ context.Context, rpcCtx *Context) (DRPCServer, error) {
+func NewDRPCServer(_ context.Context, _ *Context) (DRPCServer, error) {
 	d := &drpcServer{}
 	mux := drpcmux.New()
 	d.Server = drpcserver.NewWithOptions(mux, drpcserver.Options{
