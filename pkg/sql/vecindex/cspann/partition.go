@@ -9,6 +9,7 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
@@ -235,13 +236,8 @@ func (p *Partition) AddSet(
 // position changes.
 func (p *Partition) ReplaceWithLast(offset int) {
 	p.quantizedSet.ReplaceWithLast(offset)
-	newCount := len(p.childKeys) - 1
-	p.childKeys[offset] = p.childKeys[newCount]
-	p.childKeys[newCount] = ChildKey{} // for GC
-	p.childKeys = p.childKeys[:newCount]
-	p.valueBytes[offset] = p.valueBytes[newCount]
-	p.valueBytes[newCount] = nil // for GC
-	p.valueBytes = p.valueBytes[:newCount]
+	p.childKeys = utils.ReplaceWithLast(p.childKeys, offset)
+	p.valueBytes = utils.ReplaceWithLast(p.valueBytes, offset)
 }
 
 // ReplaceWithLastByKey calls ReplaceWithLast with the offset of the given child

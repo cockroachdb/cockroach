@@ -10,6 +10,7 @@ import (
 	"math"
 	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -403,7 +404,7 @@ func (fw *fixupWorker) reassignToSiblings(
 	fw.tempMetadataToGet = fw.tempMetadataToGet[:0]
 	getSiblingMetadata := func() ([]PartitionMetadataToGet, error) {
 		if len(fw.tempMetadataToGet) == 0 {
-			fw.tempMetadataToGet = ensureSliceLen(fw.tempMetadataToGet, parentPartition.Count())
+			fw.tempMetadataToGet = utils.EnsureSliceLen(fw.tempMetadataToGet, parentPartition.Count())
 			for i := range len(fw.tempMetadataToGet) {
 				fw.tempMetadataToGet[i].Key = parentPartition.ChildKeys()[i].PartitionKey
 			}
@@ -519,7 +520,7 @@ func (fw *fixupWorker) getPartition(
 func (fw *fixupWorker) getPartitionMetadata(
 	ctx context.Context, partitionKey PartitionKey,
 ) (PartitionMetadata, error) {
-	fw.tempMetadataToGet = ensureSliceLen(fw.tempMetadataToGet, 1)
+	fw.tempMetadataToGet = utils.EnsureSliceLen(fw.tempMetadataToGet, 1)
 	fw.tempMetadataToGet[0].Key = partitionKey
 	err := fw.index.store.TryGetPartitionMetadata(ctx, fw.treeKey, fw.tempMetadataToGet)
 	if err != nil {

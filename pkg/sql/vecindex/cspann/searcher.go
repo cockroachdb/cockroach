@@ -9,6 +9,7 @@ import (
 	"context"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
 	"github.com/cockroachdb/errors"
 )
 
@@ -99,14 +100,14 @@ func (s *searcher) Next(ctx context.Context) (ok bool, err error) {
 				ChildKey: ChildKey{PartitionKey: RootKey},
 			})
 			// Ensure that if Next() is called again, it will return false.
-			s.levels = ensureSliceLen(s.levels, 1)
+			s.levels = utils.EnsureSliceLen(s.levels, 1)
 			s.levels[0] = *root
 			return root.NextBatch(ctx)
 		}
 
 		// Set up remainder of searchers now that we know the root's level.
 		n := int(root.Level()-s.idxCtx.level) + 1
-		s.levels = ensureSliceLen(s.levels, n)
+		s.levels = utils.EnsureSliceLen(s.levels, n)
 		s.levels[0] = *root
 		for i := 1; i < n; i++ {
 			var maxResults, maxExtraResults int
@@ -381,7 +382,7 @@ func (s *levelSearcher) searchChildPartitions(
 		return InvalidLevel, nil
 	}
 
-	s.idxCtx.tempToSearch = ensureSliceLen(s.idxCtx.tempToSearch, len(parentResults))
+	s.idxCtx.tempToSearch = utils.EnsureSliceLen(s.idxCtx.tempToSearch, len(parentResults))
 	for i := range parentResults {
 		// If this is an Insert or SearchForInsert operation, then do not scan
 		// leaf vectors. Insert operations never need leaf vectors and scanning

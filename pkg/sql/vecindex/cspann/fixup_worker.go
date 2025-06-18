@@ -9,6 +9,7 @@ import (
 	"context"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -169,7 +170,7 @@ func (fw *fixupWorker) deleteVector(
 		// against a race condition where a row is created and deleted repeatedly with
 		// the same primary key.
 		childKey := ChildKey{KeyBytes: vectorKey}
-		fw.tempVectorsWithKeys = ensureSliceLen(fw.tempVectorsWithKeys, 1)
+		fw.tempVectorsWithKeys = utils.EnsureSliceLen(fw.tempVectorsWithKeys, 1)
 		fw.tempVectorsWithKeys[0] = VectorWithKey{Key: childKey}
 		if err = txn.GetFullVectors(ctx, fw.treeKey, fw.tempVectorsWithKeys); err != nil {
 			return errors.Wrap(err, "getting full vector")
@@ -213,7 +214,7 @@ func (fw *fixupWorker) getFullVectorsForPartition(
 
 	err = fw.index.store.RunTransaction(ctx, func(txn Txn) error {
 		childKeys := partition.ChildKeys()
-		fw.tempVectorsWithKeys = ensureSliceLen(fw.tempVectorsWithKeys, len(childKeys))
+		fw.tempVectorsWithKeys = utils.EnsureSliceLen(fw.tempVectorsWithKeys, len(childKeys))
 		for i := range childKeys {
 			fw.tempVectorsWithKeys[i] = VectorWithKey{Key: childKeys[i]}
 		}
