@@ -98,6 +98,7 @@ message ElementProto {
     TableLocalityPrimaryRegion table_locality_primary_region = 111 [(gogoproto.moretags) = "parent:\"Table\""];
     TableLocalitySecondaryRegion table_locality_secondary_region = 112 [(gogoproto.moretags) = "parent:\"Table\""];
     TableLocalityRegionalByRow table_locality_regional_by_row = 113 [(gogoproto.moretags) = "parent:\"Table\""];
+    TableLocalityRegionalByRowUsingConstraint table_locality_regional_by_row_using_constraint = 114 [(gogoproto.moretags) = "parent:\"Table\""];
 
     // Column elements.
     ColumnName column_name = 30 [(gogoproto.moretags) = "parent:\"Column\""];
@@ -721,6 +722,11 @@ message TableLocalitySecondaryRegion {
 message TableLocalityRegionalByRow {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   string as = 2;
+}
+
+message TableLocalityRegionalByRowUsingConstraint {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 constraint_id = 2 [(gogoproto.customname) = "ConstraintID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ConstraintID"];
 }
 
 message IndexPartitioning {
