@@ -13,7 +13,6 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
         "//pkg/sql/roleoption",
-        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

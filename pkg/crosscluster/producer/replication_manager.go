@@ -442,7 +442,7 @@ func (r *replicationStreamManagerImpl) AuthorizeViaJob(
 	}
 
 	if err := jobsauth.Authorize(
-		ctx, planHook, jobspb.JobID(streamID), planHook.User(), jobspb.TypeReplicationStreamProducer, jobsauth.ControlAccess, globalPrivileges,
+		ctx, planHook, jobspb.JobID(streamID), planHook.User(), jobsauth.ControlAccess, globalPrivileges,
 	); err != nil {
 		return err
 	}

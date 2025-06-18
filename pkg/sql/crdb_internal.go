@@ -1111,11 +1111,8 @@ func populateSystemJobsTableRows(
 		if err != nil {
 			return matched, wrapPayloadUnMarshalError(err, currentRow[jobIdIdx])
 		}
-		getLegacyPayload := func(ctx context.Context) (*jobspb.Payload, error) {
-			return payload, nil
-		}
-		err = jobsauth.AuthorizeAllowLegacyAuth(
-			ctx, p, jobspb.JobID(jobID), getLegacyPayload, payload.UsernameProto.Decode(), payload.Type(), jobsauth.ViewAccess, globalPrivileges,
+		err = jobsauth.Authorize(
+			ctx, p, jobspb.JobID(jobID), payload.UsernameProto.Decode(), jobsauth.ViewAccess, globalPrivileges,
 		)
 		if err != nil {
 			// Filter out jobs which the user is not allowed to see.
@@ -1188,15 +1185,6 @@ CREATE TABLE crdb_internal.jobs (
 	},
 }
 
-var enablePerJobDetailedAuthLookups = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.jobs.legacy_per_job_access_via_details.enabled",
-	"enables granting additional access to jobs beyond owners and roles based on the specific details (tables being watched/backed up/etc) of the individual jobs (may make SHOW JOBS less performant)",
-	true,
-)
-
-var errLegacyPerJobAuthDisabledSentinel = pgerror.Newf(pgcode.InsufficientPrivilege, "legacy job access based on details is disabled")
-
 func makeJobsTableRows(
 	ctx context.Context,
 	p *planner,
@@ -1247,42 +1235,13 @@ LEFT OUTER JOIN system.public.job_status AS s ON j.id = s.job_id
 
 		owner := username.MakeSQLUsernameFromPreNormalizedString(string(tree.MustBeDString(ownerStr)))
 		jobID := jobspb.JobID(tree.MustBeDInt(id))
-		typ, err := jobspb.TypeFromString(string(tree.MustBeDString(typStr)))
-		if err != nil {
-			return emitted, err
-		}
 
-		getLegacyPayloadForAuth := func(ctx context.Context) (*jobspb.Payload, error) {
-			if !enablePerJobDetailedAuthLookups.Get(&p.EvalContext().Settings.SV) {
-				return nil, errLegacyPerJobAuthDisabledSentinel
-			}
-			if p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.V25_1) {
-				log.Warningf(ctx, "extended job access control based on job-specific details is deprecated and can make SHOW JOBS less performant; consider disabling %s",
-					enablePerJobDetailedAuthLookups.Name())
-				p.BufferClientNotice(ctx,
-					pgnotice.Newf("extended job access control based on job-specific details has been deprecated and can make SHOW JOBS less performant; consider disabling %s",
-						enablePerJobDetailedAuthLookups.Name()))
-			}
-			payload := &jobspb.Payload{}
-			infoStorage := jobs.InfoStorageForJob(p.InternalSQLTxn(), jobID)
-			payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx, "getLegacyPayload-for-custom-auth")
-			if err != nil {
-				return nil, err
-			}
-			if !exists {
-				return nil, errors.New("job payload not found in system.job_info")
-			}
-			if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
-				return nil, err
-			}
-			return payload, nil
-		}
 		if errorMsg == tree.DNull {
 			errorMsg = emptyString
 		}
 
-		if err := jobsauth.AuthorizeAllowLegacyAuth(
-			ctx, p, jobID, getLegacyPayloadForAuth, owner, typ, jobsauth.ViewAccess, globalPrivileges,
+		if err := jobsauth.Authorize(
+			ctx, p, jobID, owner, jobsauth.ViewAccess, globalPrivileges,
 		); err != nil {
 			// Filter out jobs which the user is not allowed to see.
 			if IsInsufficientPrivilegeError(err) {
