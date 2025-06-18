@@ -79,9 +79,7 @@ func DefaultFormatter(ctx context.Context, f Failure) (issues.IssueFormatter, is
 					mentions = append(mentions, "@"+string(tm.Name()))
 				}
 			}
-			if tm.Label != "" {
-				labels = append(labels, tm.Label)
-			}
+			labels = append(labels, tm.Labels()...)
 		}
 	}
 	return issues.UnitTestFormatter, issues.PostRequest{

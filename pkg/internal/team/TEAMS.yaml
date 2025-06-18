@@ -29,6 +29,8 @@ cockroachdb/kv:
     'cockroachdb/kv-triage ': unittest
     cockroachdb/kv-prs: other
   label: T-kv
+cockroachdb/admission-control:
+  label: T-kv,A-admission-control
 cockroachdb/spatial:
   label: T-spatial
 cockroachdb/dev-inf:
@@ -38,8 +40,6 @@ cockroachdb/drp-eng:
 cockroachdb/multiregion:
   label: T-multiregion
 cockroachdb/storage:
-  aliases:
-    cockroachdb/admission-control: other
   label: T-storage
 cockroachdb/test-eng:
   label: T-testeng
