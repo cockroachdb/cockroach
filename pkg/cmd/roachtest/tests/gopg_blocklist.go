@@ -52,4 +52,6 @@ var gopgIgnoreList = blocklist{
 	`pg | ORM | relation with no results does not panic`:            "unknown",
 	// This test flakes sometimes because of connection reuse.
 	`v10.TestColumnReuse`: "unknown",
+	// This test is flaky sometimes due to the use of temp tables.
+	`pg | soft delete with int column nil model ForceDelete | deletes the model`: "unknown",
 }

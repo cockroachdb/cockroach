@@ -15,7 +15,7 @@ go_test(
     ],
     exec_properties = {"test.Pool": "heavy"},
     shard_count = 48,
-    tags = ["cpu:3"],
+    tags = ["cpu:4"],
     deps = [
         "//pkg/ccl",
         "//pkg/ccl/schemachangerccl",
