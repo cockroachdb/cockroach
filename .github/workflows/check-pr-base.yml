@@ -1,0 +1,19 @@
+name: Bors
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches: [master]
+
+jobs:
+  check_base_branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if PR targets master branch
+        run: |
+          if [ "${{ github.base_ref }}" != "master" ]; then
+            echo "::error::Bors cannot be used for this pull request. Pull request must target the 'master' branch. Current target: ${{ github.base_ref }}. You can ignore this check if the pull request is not a backport."
+            exit 1
+          else
+            echo "✅ Pull request correctly targets 'master' branch"
+          fi
