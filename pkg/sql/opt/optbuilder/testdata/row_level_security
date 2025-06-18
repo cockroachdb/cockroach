@@ -2110,17 +2110,15 @@ CREATE POLICY p1 ON ob USING (user_has_access);
 norm
 SELECT * FROM ob WHERE y = 20;
 ----
-project
+barrier
  ├── columns: x:1!null y:2!null user_has_access:3!null
- └── barrier
-      ├── columns: x:1!null y:2!null user_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
-      └── select
-           ├── columns: x:1!null y:2!null user_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
-           ├── scan ob
-           │    └── columns: x:1!null y:2 user_has_access:3 crdb_internal_mvcc_timestamp:4 tableoid:5
-           └── filters
-                ├── user_has_access:3
-                └── y:2 = 20
+ └── select
+      ├── columns: x:1!null y:2!null user_has_access:3!null
+      ├── scan ob
+      │    └── columns: x:1!null y:2 user_has_access:3
+      └── filters
+           ├── user_has_access:3
+           └── y:2 = 20
 
 # Barrier needed. Try to expose with a division by zero error.
 norm
