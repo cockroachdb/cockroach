@@ -1117,12 +1117,12 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 		storeMsg.Load, storeMsg.Capacity, ss.adjusted.load)
 }
 
-func (cs *clusterState) processStoreLeaseholderMsg(ctx context.Context, msg *StoreLeaseholderMsg) {
-	cs.processStoreLeaseholderMsgInternal(ctx, msg, numTopKReplicas)
+func (cs *clusterState) processStoreLeaseholderMsg(ctx context.Context, msg *StoreLeaseholderMsg, metrics *MMAMetrics) {
+	cs.processStoreLeaseholderMsgInternal(ctx, msg, numTopKReplicas, metrics)
 }
 
 func (cs *clusterState) processStoreLeaseholderMsgInternal(
-	ctx context.Context, msg *StoreLeaseholderMsg, numTopKReplicas int,
+	ctx context.Context, msg *StoreLeaseholderMsg, numTopKReplicas int, metrics *MMAMetrics,
 ) {
 	log.Infof(ctx, "start processing processStoreLeaseholderMsgInternal %v", msg)
 	now := cs.ts.Now()
@@ -1259,6 +1259,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 				// of.
 				log.Infof(ctx, "remainingChanges %v are no longer valid due to %v",
 					remainingChanges, reason)
+				metrics.DroppedDueToStateInconsistency.Inc(1)
 				// We did not undo the load change above, or remove it from the various
 				// pendingChanges data-structures. We do those things now.
 				for _, change := range remainingChanges {

@@ -1038,11 +1038,11 @@ func (rq *replicateQueue) TransferLease(
 		)
 	}
 	if err := rlm.AdminTransferLease(ctx, target.StoreID, false /* bypassSafetyChecks */); err != nil {
-		rq.as.PostApply(ctx, changeID, false)
+		rq.as.PostApply(ctx, changeID, false, ReplicateQueue)
 		return errors.Wrapf(err, "%s: unable to transfer lease to s%d", rlm, target)
 	}
 
-	rq.as.PostApply(ctx, changeID, true)
+	rq.as.PostApply(ctx, changeID, true, ReplicateQueue)
 	return nil
 }
 
@@ -1087,7 +1087,7 @@ func (rq *replicateQueue) changeReplicas(
 		ctx, desc, kvserverpb.SnapshotRequest_REPLICATE_QUEUE, allocatorPriority, reason,
 		details, chgs,
 	)
-	rq.as.PostApply(ctx, changeID, err == nil)
+	rq.as.PostApply(ctx, changeID, err == nil, ReplicateQueue)
 	return err
 }
 

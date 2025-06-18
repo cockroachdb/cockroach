@@ -29,6 +29,7 @@ type ChangeOptions struct {
 //   - changes to this interface to make the integration for the new allocator
 //     be less different than integration with the old allocator.
 type Allocator interface {
+	Metrics() *MMAMetrics
 	// Methods to update the state of the external world. The allocator starts
 	// with no knowledge.
 
