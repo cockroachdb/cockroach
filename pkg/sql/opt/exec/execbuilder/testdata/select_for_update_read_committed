@@ -226,6 +226,7 @@ vectorized: true
 │       │ equality cols are key
 │       │ locking strength: for update
 │       │ locking durability: guaranteed
+│       │ parallel
 │       │
 │       └── • project
 │           │ columns: (person, aisle)
@@ -236,6 +237,7 @@ vectorized: true
 │               │ table: supermarket@supermarket_pkey
 │               │ equality: (person) = (person)
 │               │ equality cols are key
+│               │ parallel
 │               │
 │               └── • scan buffer
 │                     columns: (person)
@@ -294,6 +296,7 @@ vectorized: true
     │ equality cols are key
     │ locking strength: for update
     │ locking durability: guaranteed
+    │ parallel
     │
     └── • project
         │ columns: (person, aisle)
@@ -303,6 +306,7 @@ vectorized: true
             │ estimated row count: 10 (missing stats)
             │ table: supermarket@supermarket_pkey
             │ key columns: person
+            │ parallel
             │
             └── • scan
                   columns: (person, starts_with)
@@ -354,6 +358,7 @@ vectorized: true
     │ equality cols are key
     │ locking strength: for update
     │ locking durability: guaranteed
+    │ parallel
     │
     └── • project
         │ columns: (person, aisle)
@@ -364,6 +369,7 @@ vectorized: true
             │ table: supermarket@supermarket_pkey
             │ equality: (person) = (person)
             │ equality cols are key
+            │ parallel
             │
             └── • project
                 │ columns: (person, starts_with, ends_with)

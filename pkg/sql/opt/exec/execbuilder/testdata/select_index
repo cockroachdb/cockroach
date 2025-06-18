@@ -212,6 +212,7 @@ vectorized: true
     │   │ estimated row count: 10 (missing stats)
     │   │ table: t@t_pkey
     │   │ key columns: a, b
+    │   │ parallel
     │   │
     │   └── • scan
     │         columns: (a, b, c)
@@ -224,6 +225,7 @@ vectorized: true
         │ estimated row count: 10 (missing stats)
         │ table: t@t_pkey
         │ key columns: a, b
+        │ parallel
         │
         └── • scan
               columns: (a, b, c)
@@ -845,6 +847,7 @@ vectorized: true
 │ estimated row count: 20 (missing stats)
 │ table: test2@test2_pkey
 │ key columns: id
+│ parallel
 │
 └── • revscan
       columns: (id, k)
@@ -1148,6 +1151,7 @@ vectorized: true
 │ estimated row count: 10 (missing stats)
 │ table: xy@xy_pkey
 │ key columns: rowid
+│ parallel
 │
 └── • scan
       columns: (y, rowid)
@@ -1166,6 +1170,7 @@ vectorized: true
 │ estimated row count: 10 (missing stats)
 │ table: xy@xy_pkey
 │ key columns: rowid
+│ parallel
 │
 └── • scan
       columns: (y, rowid)
@@ -1187,6 +1192,7 @@ vectorized: true
     │ estimated row count: 10 (missing stats)
     │ table: xy@xy_pkey
     │ key columns: rowid
+    │ parallel
     │
     └── • scan
           columns: (y, rowid)
@@ -1472,6 +1478,7 @@ vectorized: true
 │ estimated row count: 5 (missing stats)
 │ table: noncover@noncover_pkey
 │ key columns: a
+│ parallel
 │
 └── • limit
     │ columns: (a, c)
@@ -1555,6 +1562,7 @@ vectorized: true
 │ estimated row count: 1
 │ table: t2@t2_pkey
 │ key columns: a
+│ parallel
 │
 └── • filter
     │ columns: (a, b, c)
@@ -1596,6 +1604,7 @@ vectorized: true
 │ estimated row count: 1
 │ table: t2@t2_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
@@ -1731,6 +1740,7 @@ vectorized: true
     │ estimated row count: 90 (missing stats)
     │ table: t3@t3_pkey
     │ key columns: k
+    │ parallel
     │
     └── • scan
           columns: (k, v)

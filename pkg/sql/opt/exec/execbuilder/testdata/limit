@@ -26,6 +26,7 @@ vectorized: true
         │ estimated row count: 30 (missing stats)
         │ table: t@t_pkey
         │ key columns: k
+        │ parallel
         │
         └── • scan
               columns: (k, v)
@@ -256,6 +257,7 @@ vectorized: true
     │ estimated row count: 10 (missing stats)
     │ table: t@t_pkey
     │ key columns: k
+    │ parallel
     │
     └── • scan
           columns: (k, v)
