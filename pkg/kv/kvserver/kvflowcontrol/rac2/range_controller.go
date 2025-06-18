@@ -2882,6 +2882,7 @@ func (rss *replicaSendStream) handleReadyEntriesRaftMuAndStreamLocked(
 					pri = entry.pri
 				} else {
 					pri = raftpb.LowPri
+					log.Info(ctx, "using low priority for send queue entry in pull mode")
 				}
 				rss.applySendQueuePreciseSizeDeltaRaftMuAndStreamLocked(ctx, +tokens)
 			} else {
