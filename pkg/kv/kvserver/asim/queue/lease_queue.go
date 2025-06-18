@@ -159,7 +159,7 @@ func (lq *leaseQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 		}
 
 		lq.next, lq.lastSyncChangeID = pushReplicateChange(
-			ctx, change, repl, tick, lq.settings.ReplicaChangeDelayFn(), lq.baseQueue.stateChanger, lq.as)
+			ctx, change, repl, tick, lq.settings.ReplicaChangeDelayFn(), lq.baseQueue.stateChanger, lq.as, "lease queue")
 	}
 
 	lq.lastTick = tick
