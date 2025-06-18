@@ -18,11 +18,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
 type allocatorState struct {
+	// mu is a crude stopgap to make everything in the MMA thread-safe. Every
+	// method that implements the Allocator interface must acquire this mutex.
+	mu syncutil.Mutex
 	cs *clusterState
 
 	// Ranges that are under-replicated, over-replicated, don't satisfy
@@ -498,11 +502,15 @@ func (a *allocatorState) rebalanceStores(
 
 // SetStore implements the Allocator interface.
 func (a *allocatorState) SetStore(store roachpb.StoreDescriptor) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.cs.setStore(store)
 }
 
 // RemoveNodeAndStores implements the Allocator interface.
 func (a *allocatorState) RemoveNodeAndStores(nodeID roachpb.NodeID) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	panic("unimplemented")
 }
 
@@ -510,21 +518,29 @@ func (a *allocatorState) RemoveNodeAndStores(nodeID roachpb.NodeID) error {
 func (a *allocatorState) UpdateFailureDetectionSummary(
 	nodeID roachpb.NodeID, fd failureDetectionSummary,
 ) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	panic("unimplemented")
 }
 
 // ProcessStoreLeaseholderMsg implements the Allocator interface.
 func (a *allocatorState) ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoadMsg) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.cs.processStoreLoadMsg(ctx, msg)
 }
 
 // ProcessStoreLeaseholderMsg implements the Allocator interface.
 func (a *allocatorState) ProcessStoreLeaseholderMsg(msg *StoreLeaseholderMsg) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.cs.processStoreLeaseholderMsg(msg)
 }
 
 // AdjustPendingChangesDisposition implements the Allocator interface.
 func (a *allocatorState) AdjustPendingChangesDisposition(changeIDs []ChangeID, success bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	for _, changeID := range changeIDs {
 		if success {
 			a.cs.pendingChangeEnacted(changeID, a.cs.ts.Now())
@@ -537,6 +553,8 @@ func (a *allocatorState) AdjustPendingChangesDisposition(changeIDs []ChangeID, s
 // RegisterExternalChanges implements the Allocator interface. All changes should
 // correspond to the same range, panic otherwise.
 func (a *allocatorState) RegisterExternalChanges(changes []ReplicaChange) []ChangeID {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	rangeID := roachpb.RangeID(-1)
 	for _, change := range changes {
 		if rangeID == -1 {
@@ -561,6 +579,8 @@ func (a *allocatorState) RegisterExternalChanges(changes []ReplicaChange) []Chan
 func (a *allocatorState) ComputeChanges(
 	ctx context.Context, opts ChangeOptions,
 ) []PendingRangeChange {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	return a.rebalanceStores(ctx, opts.LocalStoreID)
 }
 
@@ -572,6 +592,8 @@ func (a *allocatorState) AdminRelocateOne(
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
 	transferLeaseToFirstVoter bool,
 ) ([]pendingReplicaChange, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	panic("unimplemented")
 }
 
@@ -579,7 +601,23 @@ func (a *allocatorState) AdminRelocateOne(
 func (a *allocatorState) AdminScatterOne(
 	rangeID roachpb.RangeID, canTransferLease bool, opts ChangeOptions,
 ) ([]pendingReplicaChange, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	panic("unimplemented")
+}
+
+// KnowsStores implements the Allocator interface.
+func (a *allocatorState) KnowsStores(stores map[roachpb.StoreID]struct{}) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	// The allocatorState is a wrapper around the clusterState, which contains
+	// all the stores.
+	for storeID := range stores {
+		if _, ok := a.cs.stores[storeID]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 type candidateInfo struct {
@@ -955,18 +993,6 @@ func (a *allocatorState) computeCandidatesForRange(
 	}
 	cset.means = means
 	return cset, sheddingSLS
-}
-
-// KnowsStores implements the Allocator interface.
-func (a *allocatorState) KnowsStores(stores map[roachpb.StoreID]struct{}) bool {
-	// The allocatorState is a wrapper around the clusterState, which contains
-	// all the stores.
-	for storeID := range stores {
-		if _, ok := a.cs.stores[storeID]; !ok {
-			return false
-		}
-	}
-	return true
 }
 
 // Diversity scoring is very amenable to caching, since the set of unique
