@@ -348,6 +348,8 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 func (mb *mutationBuilder) buildUpdate(
 	returning *tree.ReturningExprs, policyScopeCmd cat.PolicyCommandScope, colRefs *opt.ColSet,
 ) {
+	mb.maybeAddRegionColLookup(opt.UpdateOp)
+
 	// Disambiguate names so that references in any expressions, such as a
 	// check constraint, refer to the correct columns.
 	mb.disambiguateColumns()

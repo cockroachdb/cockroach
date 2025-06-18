@@ -756,6 +756,8 @@ func (mb *mutationBuilder) addSynthesizedColsForInsert() {
 func (mb *mutationBuilder) buildInsert(
 	returning *tree.ReturningExprs, vectorInsert bool, hasOnConflict bool,
 ) {
+	mb.maybeAddRegionColLookup(opt.InsertOp)
+
 	// Disambiguate names so that references in any expressions, such as a
 	// check constraint, refer to the correct columns.
 	mb.disambiguateColumns()
@@ -995,6 +997,8 @@ func (mb *mutationBuilder) setUpsertCols(insertCols tree.NameList) {
 // buildUpsert constructs an Upsert operator, possibly wrapped by a Project
 // operator that corresponds to the given RETURNING clause.
 func (mb *mutationBuilder) buildUpsert(returning *tree.ReturningExprs) {
+	mb.maybeAddRegionColLookup(opt.UpsertOp)
+
 	// Merge input insert and update columns using CASE expressions.
 	mb.projectUpsertColumns()
 
