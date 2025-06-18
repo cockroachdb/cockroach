@@ -218,6 +218,7 @@ vectorized: true
             │ equality: (column1) = (a)
             │ equality cols are key
             │ locking strength: for update
+            │ parallel
             │
             └── • render
                 │ columns: (d_comp, b_default, c_default, column1)
@@ -353,6 +354,7 @@ vectorized: true
                     │ estimated row count: 1,000 (missing stats)
                     │ table: indexed@indexed_pkey
                     │ key columns: a
+                    │ parallel
                     │
                     └── • scan
                           columns: (a, b, d)
@@ -512,6 +514,7 @@ vectorized: true
                     │ estimated row count: 1,000 (missing stats)
                     │ table: indexed@indexed_pkey
                     │ key columns: a
+                    │ parallel
                     │
                     └── • scan
                           columns: (a, b, d)
@@ -672,6 +675,7 @@ vectorized: true
         │ table: indexed@secondary
         │ equality: (d_comp, column2) = (d, b)
         │ equality cols are key
+        │ parallel
         │
         └── • cross join (anti)
             │ columns: (column1, column2, column3, d_comp)
@@ -893,6 +897,7 @@ vectorized: true
         │ table: table38627@table38627_pkey
         │ equality: (a) = (a)
         │ equality cols are key
+        │ parallel
         │
         └── • scan
               columns: (a, b)
@@ -945,6 +950,7 @@ vectorized: true
             │ table: tdup@tdup_y_z_key
             │ equality: (column2, column3) = (y, z)
             │ equality cols are key
+            │ parallel
             │
             └── • distinct
                 │ columns: (column1, column2, column3)
@@ -1005,6 +1011,7 @@ vectorized: true
             │ table: target@target_b_c_key
             │ equality: (y, z) = (b, c)
             │ equality cols are key
+            │ parallel
             │
             └── • distinct
                 │ columns: (x, y, z)

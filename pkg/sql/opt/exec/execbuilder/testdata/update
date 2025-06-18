@@ -263,6 +263,7 @@ vectorized: true
         │ table: xyz@xyz_pkey
         │ key columns: x
         │ locking strength: for update
+        │ parallel
         │
         └── • scan
               columns: (x, y)
@@ -298,6 +299,7 @@ vectorized: true
         │ table: xyz@xyz_pkey
         │ key columns: x
         │ locking strength: for update
+        │ parallel
         │
         └── • scan
               columns: (x, y)
@@ -337,6 +339,7 @@ vectorized: true
         │ table: xyz@xyz_pkey
         │ key columns: x
         │ locking strength: for update
+        │ parallel
         │
         └── • scan
               columns: (x, y)
@@ -542,6 +545,7 @@ vectorized: true
             │ estimated row count: 1,000 (missing stats)
             │ table: t38799@t38799_pkey
             │ key columns: a
+            │ parallel
             │
             └── • scan
                   columns: (a, b)
