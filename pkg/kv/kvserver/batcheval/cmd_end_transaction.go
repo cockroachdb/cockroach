@@ -560,9 +560,7 @@ func EndTxn(
 			// transaction's commit timestamp to the key spans previously protected by
 			// the locks. We return the spans on the response and update the timestamp
 			// cache a few layers above to ensure this.
-			//
-			// TODO(arul): rename this to include the word local in it.
-			reply.ReplicatedLocksReleasedOnCommit = releasedReplLocks
+			reply.ReplicatedLocalLocksReleasedOnCommit = releasedReplLocks
 			log.VEventf(
 				ctx, 2, "committed transaction released local replicated shared/exclusive locks",
 			)
