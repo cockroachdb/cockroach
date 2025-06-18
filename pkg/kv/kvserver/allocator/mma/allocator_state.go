@@ -556,14 +556,14 @@ func (a *allocatorState) RegisterExternalChanges(changes []ReplicaChange) []Chan
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	rangeID := roachpb.RangeID(-1)
+	// 1. Check that all changes correspond to the same range. Panic otherwise.
+	// 2. Return early if range already has some pending changes or the range does not exist.
 	for _, change := range changes {
 		if rangeID == -1 {
 			rangeID = change.rangeID
 		} else if change.rangeID != rangeID {
 			panic(fmt.Sprintf("unexpected change rangeID %d != %d", change.rangeID, rangeID))
-		}
-		// Skip if range already has pending changes or the range does not exist.
-		if a.cs.hasNoRangeIDOrHasPendingChanges(change.rangeID) {
+		} else if a.cs.hasNoRangeIDOrHasPendingChanges(change.rangeID) {
 			return nil
 		}
 	}
