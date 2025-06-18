@@ -233,6 +233,7 @@ func (as *AllocatorSync) MMAPreApply(
 		trackedChange.transferFrom = pendingChange.LeaseTransferFrom()
 	} else if pendingChange.IsChangeReplicas() {
 		trackedChange.typ = AllocatorChangeTypeChangeReplicas
+		trackedChange.chgs = pendingChange.ReplicationChanges()
 	} else {
 		panic("unexpected change type")
 	}

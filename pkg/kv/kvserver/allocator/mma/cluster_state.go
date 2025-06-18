@@ -428,8 +428,6 @@ func (prc PendingRangeChange) IsTransferLease() bool {
 // ReplicationChanges returns the replication changes for the pending range
 // change. It panics if the pending range change is not a change replicas
 // operation.
-//
-// TODO: Support for promotion/demotion changes.
 func (prc PendingRangeChange) ReplicationChanges() kvpb.ReplicationChanges {
 	if !prc.IsChangeReplicas() {
 		panic("RangeChange is not a change replicas")
@@ -438,9 +436,25 @@ func (prc PendingRangeChange) ReplicationChanges() kvpb.ReplicationChanges {
 	for i, c := range prc.pendingReplicaChanges {
 		chgs[i].Target = c.target
 		if c.prev.ReplicaID == noReplicaID {
-			chgs[i].ChangeType = roachpb.ADD_VOTER
+			switch c.next.ReplicaType.ReplicaType {
+			case roachpb.VOTER_FULL:
+				chgs[i].ChangeType = roachpb.ADD_VOTER
+			case roachpb.NON_VOTER:
+				chgs[i].ChangeType = roachpb.ADD_NON_VOTER
+			default:
+				panic(errors.AssertionFailedf("unexpected replica type %s", c.next.ReplicaType.ReplicaType))
+			}
 		} else if c.next.ReplicaID == noReplicaID {
-			chgs[i].ChangeType = roachpb.REMOVE_VOTER
+			switch c.prev.ReplicaType.ReplicaType {
+			case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING, roachpb.VOTER_DEMOTING_LEARNER:
+				chgs[i].ChangeType = roachpb.REMOVE_VOTER
+			case roachpb.NON_VOTER, roachpb.LEARNER:
+				chgs[i].ChangeType = roachpb.REMOVE_NON_VOTER
+			default:
+				panic(errors.AssertionFailedf("unexpected replica type %s", c.prev.ReplicaType.ReplicaType))
+			}
+		} else {
+			panic("todo: support for promotion/demotion changes")
 		}
 	}
 	return chgs
