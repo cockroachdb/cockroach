@@ -111,6 +111,13 @@ func TestCCLLogic_regional_by_row(
 	runCCLLogicTest(t, "regional_by_row")
 }
 
+func TestCCLLogic_regional_by_row_foreign_key(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "regional_by_row_foreign_key")
+}
+
 func TestCCLLogic_regional_by_row_placement_restricted(
 	t *testing.T,
 ) {
