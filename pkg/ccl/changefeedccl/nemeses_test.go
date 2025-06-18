@@ -38,6 +38,7 @@ func TestChangefeedNemeses(t *testing.T) {
 			withLegacySchemaChanger := nop.EnableSQLSmith || rng.Float32() < 0.1
 			if withLegacySchemaChanger {
 				t.Log("using legacy schema changer")
+				sqlDB.Exec(t, "SET create_table_with_schema_locked=false")
 				sqlDB.Exec(t, "SET use_declarative_schema_changer='off'")
 				sqlDB.Exec(t, "SET CLUSTER SETTING  sql.defaults.use_declarative_schema_changer='off'")
 			}
