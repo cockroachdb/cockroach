@@ -24,6 +24,11 @@ func DialStoreLivenessClient(
 			return nil, err
 		}
 		return NewGRPCStoreLivenessClientAdapter(conn), nil
+	} else {
+		drpcConn, err := nd.DRPCDial(ctx, nodeID, class)
+		if err != nil {
+			return nil, err
+		}
+		return NewDRPCStoreLivenessClientAdapter(drpcConn), nil
 	}
-	return nil, nil
 }

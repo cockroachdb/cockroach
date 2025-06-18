@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 // ClientConnConfig contains the configuration for a ClientConn.
@@ -140,10 +141,10 @@ func NewClientContext(ctx context.Context, cfg ClientConnConfig) (*Context, *sto
 	return NewContext(ctx, opts), stopper
 }
 
-// NewClientConn creates a new client connection.
+// NewGRPCClientConn creates a new gRPC client connection.
 // The caller is responsible for calling the returned function
 // to release associated resources.
-func NewClientConn(
+func NewGRPCClientConn(
 	ctx context.Context, cfg ClientConnConfig,
 ) (conn *grpc.ClientConn, cleanup func(), err error) {
 	if ctx.Done() == nil {
@@ -170,6 +171,46 @@ func NewClientConn(
 	// We use GRPCUnvalidatedDial() here because it does not matter
 	// to which node we're talking to.
 	conn, err = rpcContext.GRPCUnvalidatedDial(addr, roachpb.Locality{}).Connect(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	stopper.AddCloser(stop.CloserFn(func() {
+		_ = conn.Close() // nolint:grpcconnclose
+	}))
+
+	return conn, closer, nil
+}
+
+// NewDRPCClientConn creates a new DRPC client connection.
+// The caller is responsible for calling the returned function
+// to release associated resources.
+func NewDRPCClientConn(
+	ctx context.Context, cfg ClientConnConfig,
+) (conn drpc.Conn, cleanup func(), err error) {
+	if ctx.Done() == nil {
+		return nil, nil, errors.New("context must be cancellable")
+	}
+	rpcContext, stopper := NewClientContext(ctx, cfg)
+	closer := func() {
+		// We use context.Background() here and not ctx because we
+		// want to ensure that the closers always run to completion
+		// even if the context used to create the client conn is
+		// canceled.
+		stopper.Stop(context.Background())
+	}
+	defer func() {
+		if err != nil {
+			closer()
+		}
+	}()
+
+	addr, err := addr.AddrWithDefaultLocalhost(cfg.ServerAddr)
+	if err != nil {
+		return nil, nil, err
+	}
+	// We use DRPCUnvalidatedDial() here because it does not matter
+	// to which node we're talking to.
+	conn, err = rpcContext.DRPCUnvalidatedDial(addr, roachpb.Locality{}).Connect(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
