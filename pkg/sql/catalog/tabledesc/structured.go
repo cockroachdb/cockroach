@@ -2461,6 +2461,11 @@ func (desc *wrapper) GetRegionalByRowTableRegionColumnName() (tree.Name, error) 
 	return tree.Name(*colName), nil
 }
 
+// GetRegionalByRowUsingConstraint implements the TableDescriptor interface.
+func (desc *wrapper) GetRegionalByRowUsingConstraint() descpb.ConstraintID {
+	return desc.RBRUsingConstraint
+}
+
 // GetRowLevelTTL implements the TableDescriptor interface.
 func (desc *wrapper) GetRowLevelTTL() *catpb.RowLevelTTL {
 	return desc.RowLevelTTL
@@ -2477,7 +2482,7 @@ func (desc *wrapper) GetExcludeDataFromBackup() bool {
 }
 
 // GetStorageParams implements the TableDescriptor interface.
-func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) []string {
+func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) ([]string, error) {
 	var storageParams []string
 	var spacing string
 	if spaceBetweenEqual {
@@ -2576,7 +2581,17 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) []string {
 	if desc.IsSchemaLocked() {
 		appendStorageParam(`schema_locked`, `true`)
 	}
-	return storageParams
+	if usingFK := desc.GetRegionalByRowUsingConstraint(); usingFK != descpb.ConstraintID(0) {
+		// NOTE: when validating the descriptor, we check that the referenced
+		// constraint exists, so this should never fail.
+		constraint, err := catalog.MustFindConstraintByID(desc, usingFK)
+		if err != nil {
+			return nil, err
+		}
+		appendStorageParam(catpb.RBRUsingConstraintTableSettingName,
+			fmt.Sprintf("%q", tree.Name(constraint.GetName())))
+	}
+	return storageParams, nil
 }
 
 // GetMultiRegionEnumDependency returns true if the given table has an "implicit"

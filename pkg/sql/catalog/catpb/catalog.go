@@ -100,6 +100,10 @@ const (
 	// AutoFullStatsEnabledTableSettingName is the name of the automatic
 	// full stats collection enabled table setting.
 	AutoFullStatsEnabledTableSettingName = "sql_stats_automatic_full_collection_enabled"
+
+	// RBRUsingConstraintTableSettingName is the name of the REGIONAL BY ROW region
+	// column inference setting.
+	RBRUsingConstraintTableSettingName = "infer_rbr_region_col_using_constraint"
 )
 
 // AutoStatsCollectionEnabled indicates if automatic statistics collection is

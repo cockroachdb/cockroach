@@ -304,6 +304,8 @@ func isConstraintDependent(e scpb.Element) bool {
 		return true
 	case *scpb.ConstraintComment:
 		return true
+	case *scpb.TableLocalityRegionalByRowUsingConstraint:
+		return true
 	}
 	return false
 }
