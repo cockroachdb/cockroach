@@ -171,6 +171,13 @@ type Table interface {
 	// different name in a `REGIONAL BY ROW AS` DDL clause.
 	HomeRegionColName() (colName string, ok bool)
 
+	// RegionalByRowUsingConstraint returns the foreign-key constraint that is
+	// used to look up the region for each row in a REGIONAL BY ROW table.
+	// This is only set if the table is defined with LOCALITY REGIONAL BY ROW
+	// USING CONSTRAINT <constraint_name>. If the table is not defined with a
+	// USING CONSTRAINT, or if the table is not REGIONAL BY ROW, it returns nil.
+	RegionalByRowUsingConstraint() ForeignKeyConstraint
+
 	// GetDatabaseID returns the owning database id of the table, or zero, if the
 	// owning database could not be determined.
 	GetDatabaseID() descpb.ID
