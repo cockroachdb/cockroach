@@ -203,6 +203,18 @@ type SearchSet struct {
 	tempResult SearchResult
 }
 
+// Init sets up the search set for use. While it's not necessary to call this
+// when the search set has been newly allocated (i.e. with zero'd memory), this
+// method is useful for re-initializing it after previous usage has left it in
+// an undefined state.
+func (ss *SearchSet) Init() {
+	ss.deDuper.Clear()
+	*ss = SearchSet{
+		deDuper: ss.deDuper,
+		candidates: ss.candidates[:0],
+	}
+}
+
 // Count returns the number of search candidates in the set.
 // NOTE: This can be greater than MaxResults + MaxExtraResults in the case where
 // pruning has not yet taken place.
