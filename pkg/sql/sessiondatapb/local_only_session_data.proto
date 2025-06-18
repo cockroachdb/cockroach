@@ -678,6 +678,9 @@ message LocalOnlySessionData {
   // routines to only consider user-specified target columns when determining the
   // dependencies of an INSERT statement in a routine.
   bool use_improved_routine_dependency_tracking = 172;
+  // TODO: think about better name.
+  // TODO: comment.
+  double parallelize_lookup_ratio = 173;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

@@ -2487,9 +2487,13 @@ func (b *Builder) buildIndexJoin(
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
+	// We know that there's exactly one lookup row for each input row, so we
+	// assume it's always safe to get the DistSender-level parallelism.
+	const parallelize = true
 	var res execPlan
 	res.root, err = b.factory.ConstructIndexJoin(
-		input.root, tab, keyCols, needed, reqOrdering, locking, join.RequiredPhysical().LimitHintInt64(),
+		input.root, tab, keyCols, needed, reqOrdering, locking,
+		join.RequiredPhysical().LimitHintInt64(), parallelize,
 	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
@@ -2869,6 +2873,42 @@ func (b *Builder) buildLookupJoin(
 		return execPlan{}, colOrdMap{}, errors.AssertionFailedf("lookup join can't provide required ordering")
 	}
 	reverse := requiredDirection == ordering.ReverseDirection
+	// The joiner has a choice to make between getting DistSender-level
+	// parallelism for its lookup batches and setting row and memory limits (due
+	// to implementation limitations, you can't have both at the same time).
+	var parallelize bool
+	if join.LookupColsAreTableKey {
+		// We choose parallelism when we know that each lookup returns at most
+		// one row.
+		parallelize = true
+	} else if sd := b.evalCtx.SessionData(); sd.ParallelizeMultiKeyLookupJoinsEnabled {
+		parallelize = true
+	} else {
+		// TODO: think about the case when LookupExpr is set.
+		if len(keyCols) > 0 {
+			if tableStats, ok := memo.GetTableStats(md, join.Table); ok && tableStats.Available {
+				var indexLookupCols opt.ColSet
+				for i := range keyCols {
+					ord := idx.Column(i).Ordinal()
+					indexLookupCols.Add(join.Table.ColumnID(ord))
+				}
+				if colStat, ok := tableStats.ColStats.Lookup(indexLookupCols); ok {
+					allowedRatio := sd.ParallelizeLookupRatio
+					estimatedRatio := tableStats.RowCount / colStat.DistinctCount
+					parallelize = allowedRatio != 0 && estimatedRatio != 0 && estimatedRatio <= allowedRatio
+					log.VEventf(b.ctx, 2, "estimated lookup join ratio %.2f, parallelize=%t", estimatedRatio, parallelize)
+				}
+			}
+		}
+	}
+	for _, c := range reqOrdering {
+		if c.ColIdx >= numInputCols {
+			// We need to maintain lookup ordering, in which case we cannot use
+			// the DistSender-level parallelism.
+			parallelize = false
+			break
+		}
+	}
 	var res execPlan
 	res.root, err = b.factory.ConstructLookupJoin(
 		joinType,
@@ -2888,6 +2928,7 @@ func (b *Builder) buildLookupJoin(
 		join.RequiredPhysical().LimitHintInt64(),
 		join.RemoteOnlyLookups,
 		reverse,
+		parallelize,
 	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err

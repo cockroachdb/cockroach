@@ -340,6 +340,7 @@ vectorized: true
         │ table: xyz@xyz_pkey
         │ key columns: x
         │ locking strength: for update
+        │ parallel
         │
         └── • scan
               columns: (x, y)
@@ -370,6 +371,7 @@ vectorized: true
         │ table: xyz@xyz_pkey
         │ key columns: x
         │ locking strength: for update
+        │ parallel
         │
         └── • scan
               columns: (x, y)
@@ -404,6 +406,7 @@ vectorized: true
         │ table: xyz@xyz_pkey
         │ key columns: x
         │ locking strength: for update
+        │ parallel
         │
         └── • scan
               columns: (x, y)
