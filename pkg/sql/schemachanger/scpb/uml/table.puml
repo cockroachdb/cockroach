@@ -432,6 +432,11 @@ object TableLocalityRegionalByRow
 TableLocalityRegionalByRow :  TableID
 TableLocalityRegionalByRow :  As
 
+object TableLocalityRegionalByRowUsingConstraint
+
+TableLocalityRegionalByRowUsingConstraint :  TableID
+TableLocalityRegionalByRowUsingConstraint :  ConstraintID
+
 object TableLocalitySecondaryRegion
 
 TableLocalitySecondaryRegion :  TableID
@@ -652,6 +657,7 @@ Sequence <|-- TableData
 Table <|-- TableLocalityGlobal
 Table <|-- TableLocalityPrimaryRegion
 Table <|-- TableLocalityRegionalByRow
+Table <|-- TableLocalityRegionalByRowUsingConstraint
 Table <|-- TableLocalitySecondaryRegion
 Table <|-- TablePartitioning
 Table <|-- TableSchemaLocked
