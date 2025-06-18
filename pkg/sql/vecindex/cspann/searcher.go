@@ -73,16 +73,7 @@ func (s *searcher) Init(idx *Index, idxCtx *Context, searchSet *SearchSet) {
 func (s *searcher) Next(ctx context.Context) (ok bool, err error) {
 	if len(s.levels) == 0 {
 		root := &s.levelStorage[0]
-		root.Init(s.idx, s.idxCtx, nil /* parent */, &s.searchSet.Stats)
-
-		// Return enough search results to ensure that:
-		// 1. The number of results requested by the caller is respected.
-		// 2. There are enough samples for calculating stats.
-		// 3. There are enough results for adaptive querying to dynamically expand
-		//    the beam size (up to 2x the base beam size).
-		root.SearchSet().MaxResults = max(
-			s.searchSet.MaxResults, s.idx.options.QualitySamples, s.idxCtx.options.BaseBeamSize*2)
-		root.SearchSet().MaxExtraResults = s.searchSet.MaxExtraResults
+		root.Init(s.idx, s.idxCtx, nil /* parent */, s.searchSet)
 
 		// Search the root patition in order to discover its level.
 		err = root.SearchRoot(ctx)
@@ -110,39 +101,7 @@ func (s *searcher) Next(ctx context.Context) (ok bool, err error) {
 		s.levels = utils.EnsureSliceLen(s.levels, n)
 		s.levels[0] = *root
 		for i := 1; i < n; i++ {
-			var maxResults, maxExtraResults int
-			var matchKey KeyBytes
-			if i == n-1 {
-				// This is the last level to be searched, so ensure that:
-				// 1. The number of results requested by the caller is respected.
-				// 2. There are enough samples for re-ranking to work well, even if
-				//    there are deleted vectors.
-				// 3. There are enough samples for calculating stats.
-				maxResults = s.searchSet.MaxResults
-				maxExtraResults = s.searchSet.MaxExtraResults
-				if !s.idxCtx.options.SkipRerank {
-					maxResults, maxExtraResults = IncreaseRerankResults(maxResults)
-					if s.searchSet.MaxExtraResults > maxExtraResults {
-						maxExtraResults = s.searchSet.MaxExtraResults
-					}
-				}
-				if s.idxCtx.level != LeafLevel && s.idxCtx.options.UpdateStats {
-					maxResults = max(maxResults, s.idx.options.QualitySamples)
-				}
-				matchKey = s.searchSet.MatchKey
-			} else {
-				// This is an interior level, so ensure that:
-				// 1. There are enough samples for calculating stats.
-				// 2. There are enough results for adaptive querying to dynamically
-				//    expand the beam size (up to 2x the base beam size).
-				maxResults = max(s.idx.options.QualitySamples, s.idxCtx.options.BaseBeamSize*2)
-			}
-
-			s.levels[i].Init(s.idx, s.idxCtx, &s.levels[i-1], &s.searchSet.Stats)
-			searchSet := s.levels[i].SearchSet()
-			searchSet.MaxResults = maxResults
-			searchSet.MaxExtraResults = maxExtraResults
-			searchSet.MatchKey = matchKey
+			s.levels[i].Init(s.idx, s.idxCtx, &s.levels[i-1], s.searchSet)
 		}
 	}
 
@@ -234,23 +193,60 @@ type levelSearcher struct {
 // Init sets up the level searcher for iteration. It reuses memory where
 // possible.
 func (s *levelSearcher) Init(
-	idx *Index, idxCtx *Context, parent *levelSearcher, stats *SearchStats,
+	idx *Index, idxCtx *Context, parent *levelSearcher, searchSet *SearchSet,
 ) {
 	*s = levelSearcher{
-		idx:       idx,
-		idxCtx:    idxCtx,
-		parent:    parent,
-		stats:     stats,
-		searchSet: s.searchSet, // Preserve existing searchSet memory.
+		idx:    idx,
+		idxCtx: idxCtx,
+		parent: parent,
+		stats:  &searchSet.Stats,
 	}
-	if parent != nil {
+
+	s.searchSet.Init()
+	if parent == nil {
+		// This is the root, so its level is not yet known. Return enough search
+		// results to ensure that:
+		// 1. The number of results requested by the caller is respected.
+		// 2. There are enough samples for calculating stats.
+		// 3. There are enough results for adaptive querying to dynamically expand
+		//    the beam size (up to 2x the base beam size).
+		s.searchSet.MaxResults = max(
+			s.searchSet.MaxResults, idx.options.QualitySamples, idxCtx.options.BaseBeamSize*2)
+		s.searchSet.MaxExtraResults = searchSet.MaxExtraResults
+	} else {
 		if parent.Level() == InvalidLevel {
 			panic(errors.AssertionFailedf("parent level cannot be InvalidLevel"))
 		}
 		s.level = parent.Level() - 1
+		if s.level > idxCtx.level {
+			// This is an interior level, so ensure that:
+			// 1. There are enough samples for calculating stats.
+			// 2. There are enough results for adaptive querying to dynamically
+			//    expand the beam size (up to 2x the base beam size).
+			s.searchSet.MaxResults =
+				max(idx.options.QualitySamples, idxCtx.options.BaseBeamSize*2)
+		} else {
+			// This is the last level to be searched, so ensure that:
+			// 1. The number of results requested by the caller is respected.
+			// 2. There are enough samples for re-ranking to work well, even if
+			//    there are deleted vectors.
+			// 3. There are enough samples for calculating stats.
+			maxResults := searchSet.MaxResults
+			maxExtraResults := searchSet.MaxExtraResults
+			if !idxCtx.options.SkipRerank {
+				maxResults, maxExtraResults = IncreaseRerankResults(maxResults)
+				if searchSet.MaxExtraResults > maxExtraResults {
+					maxExtraResults = searchSet.MaxExtraResults
+				}
+			}
+			if idxCtx.level != LeafLevel && idxCtx.options.UpdateStats {
+				maxResults = max(maxResults, idx.options.QualitySamples)
+			}
+			s.searchSet.MaxResults = maxResults
+			s.searchSet.MaxExtraResults = maxExtraResults
+			s.searchSet.MatchKey = searchSet.MatchKey
+		}
 	}
-
-	s.searchSet.Clear()
 }
 
 // SearchSet returns the target search set to which results are copied for each
