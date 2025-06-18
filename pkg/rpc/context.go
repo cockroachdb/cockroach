@@ -51,6 +51,7 @@ import (
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/stats"
+	"storj.io/drpc"
 )
 
 // NewServer sets up an RPC server. Depending on the ServerOptions, the Server
@@ -226,7 +227,10 @@ type Context struct {
 
 	localInternalClient RestrictedInternalClient
 
+	// peers is a map of gRPC connections to other nodes.
 	peers peerMap[*grpc.ClientConn]
+	// drpcPeers is a map of DRPC connections to other nodes.
+	drpcPeers peerMap[drpc.Conn]
 
 	// dialbackMap is a map of currently executing dialback connections. This map
 	// is typically empty or close to empty. It only holds entries that are being
@@ -1998,6 +2002,16 @@ func (rpcCtx *Context) GRPCUnvalidatedDial(
 	return rpcCtx.grpcDialNodeInternal(target, 0, locality, rpcbase.SystemClass)
 }
 
+// DRPCUnvalidatedDial uses DRPCDialNode and disables validation of the
+// node ID between client and server. This function should only be
+// used with the gossip client and CLI commands which can talk to any
+// node. This method implies a SystemClass.
+func (rpcCtx *Context) DRPCUnvalidatedDial(
+	target string, locality roachpb.Locality,
+) *DRPCConnection {
+	return rpcCtx.drpcDialNodeInternal(target, 0, locality, rpcbase.SystemClass)
+}
+
 // GRPCDialNode calls grpc.Dial with options appropriate for the
 // context and class (see the comment on ConnectionClass).
 //
@@ -2019,6 +2033,27 @@ func (rpcCtx *Context) GRPCDialNode(
 	return rpcCtx.grpcDialNodeInternal(target, remoteNodeID, remoteLocality, class)
 }
 
+// DRPCDialNode dials a DRPC connection with options appropriate for the
+// context and class (see the comment on ConnectionClass).
+//
+// The remoteNodeID becomes a constraint on the expected node ID of
+// the remote node; this is checked during heartbeats. The caller is
+// responsible for ensuring the remote node ID is known prior to using
+// this function.
+func (rpcCtx *Context) DRPCDialNode(
+	target string,
+	remoteNodeID roachpb.NodeID,
+	remoteLocality roachpb.Locality,
+	class rpcbase.ConnectionClass,
+) *DRPCConnection {
+	if remoteNodeID == 0 && !rpcCtx.TestingAllowNamedRPCToAnonymousServer {
+		log.Fatalf(
+			rpcCtx.makeDialCtx(target, remoteNodeID, class),
+			"%v", errors.AssertionFailedf("invalid node ID 0 in DRPCDialNode()"))
+	}
+	return rpcCtx.drpcDialNodeInternal(target, remoteNodeID, remoteLocality, class)
+}
+
 // GRPCDialPod wraps GRPCDialNode and treats the `remoteInstanceID`
 // argument as a `NodeID` which it converts. This works because the
 // tenant gRPC server is initialized using the `InstanceID` so it
@@ -2033,6 +2068,22 @@ func (rpcCtx *Context) GRPCDialPod(
 	class rpcbase.ConnectionClass,
 ) *GRPCConnection {
 	return rpcCtx.GRPCDialNode(target, roachpb.NodeID(remoteInstanceID), remoteLocality, class)
+}
+
+// DRPCDialPod wraps DRPCDialNode and treats the `remoteInstanceID`
+// argument as a `NodeID` which it converts. This works because the
+// tenant DRPC server is initialized using the `InstanceID` so it
+// accepts our connection as matching the ID we're dialing.
+//
+// Since DRPCDialNode accepts a separate `target` and `NodeID` it
+// requires no further modification to work between pods.
+func (rpcCtx *Context) DRPCDialPod(
+	target string,
+	remoteInstanceID base.SQLInstanceID,
+	remoteLocality roachpb.Locality,
+	class rpcbase.ConnectionClass,
+) *DRPCConnection {
+	return rpcCtx.DRPCDialNode(target, roachpb.NodeID(remoteInstanceID), remoteLocality, class)
 }
 
 // grpcDialNodeInternal connects to the remote node and sets up the async heartbeater.
@@ -2050,8 +2101,37 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 	}
 
 	// Slow path. Race to create a peer.
-	conns := &rpcCtx.peers
+	return rpcDialNodeInternal(
+		rpcCtx, k, newGRPCPeerOptions(rpcCtx, k, remoteLocality),
+	)
+}
 
+// drpcDialNodeInternal connects to the remote node and sets up the async heartbeater.
+// This intentionally takes no `context.Context`; it uses one derived from rpcCtx.masterCtx.
+func (rpcCtx *Context) drpcDialNodeInternal(
+	target string,
+	remoteNodeID roachpb.NodeID,
+	remoteLocality roachpb.Locality,
+	class rpcbase.ConnectionClass,
+) *DRPCConnection {
+	k := peerKey{TargetAddr: target, NodeID: remoteNodeID, Class: class}
+	if p, ok := rpcCtx.drpcPeers.get(k); ok {
+		// There's a cached peer, so we have a cached connection, use it.
+		return p.c
+	}
+
+	// Slow path. Race to create a peer.
+	return rpcDialNodeInternal(
+		rpcCtx, k, newDRPCPeerOptions(rpcCtx, k, remoteLocality),
+	)
+}
+
+// rpcDialNodeInternal is used to dial a new connection to the peer if one
+// doesn't already exist.
+func rpcDialNodeInternal[Conn rpcConn](
+	rpcCtx *Context, k peerKey, peerOpts *peerOptions[Conn],
+) *Connection[Conn] {
+	conns := peerOpts.peers
 	conns.mu.Lock()
 	defer conns.mu.Unlock()
 
@@ -2060,12 +2140,11 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 	}
 
 	// Won race. Actually create a peer.
-
 	if conns.mu.m == nil {
-		conns.mu.m = map[peerKey]*peer[*grpc.ClientConn]{}
+		conns.mu.m = map[peerKey]*peer[Conn]{}
 	}
 
-	p := rpcCtx.newPeer(k, remoteLocality)
+	p := newPeer(rpcCtx, k, peerOpts)
 	// (Asynchronously) Start the probe (= heartbeat loop). The breaker is healthy
 	// right now (it was just created) but the call to `.Probe` will launch the
 	// probe[1] regardless.
