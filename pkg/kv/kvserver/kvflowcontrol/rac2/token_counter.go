@@ -352,10 +352,7 @@ func (t *tokenCounter) TryDeduct(
 	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens, flag TokenAdjustFlag,
 ) kvflowcontrol.Tokens {
 	now := t.clock.PhysicalTime()
-	var expensiveLog bool
-	if log.V(2) {
-		expensiveLog = true
-	}
+	logger := t.maybeLogger()
 	t.mu.Lock()
 
 	tokensAvailable := t.tokensLocked(wc) // nolint:deferunlockcheck
@@ -365,7 +362,7 @@ func (t *tokenCounter) TryDeduct(
 	}
 
 	adjust := min(tokensAvailable, tokens)
-	t.adjustLockedAndUnlock(ctx, wc, -adjust, now, flag, expensiveLog)
+	t.adjustLockedAndUnlock(ctx, wc, -adjust, now, flag, logger)
 	return adjust
 }
 
@@ -632,12 +629,9 @@ func (t *tokenCounter) adjust(
 	flag TokenAdjustFlag,
 ) {
 	now := t.clock.PhysicalTime()
-	var expensiveLog bool
-	if log.V(2) {
-		expensiveLog = true
-	}
+	logger := t.maybeLogger()
 	t.mu.Lock()
-	t.adjustLockedAndUnlock(ctx, class, delta, now, flag, expensiveLog) // nolint:deferunlockcheck
+	t.adjustLockedAndUnlock(ctx, class, delta, now, flag, logger) // nolint:deferunlockcheck
 }
 
 func (t *tokenCounter) adjustLockedAndUnlock(
@@ -646,11 +640,11 @@ func (t *tokenCounter) adjustLockedAndUnlock(
 	delta kvflowcontrol.Tokens,
 	now time.Time,
 	flag TokenAdjustFlag,
-	expensiveLog bool,
+	logger tokenCounterLogger,
 ) {
 	t.mu.AssertHeld()
 	var adjustment, unaccounted tokensPerWorkClass
-	// Only populated when expensiveLog is true.
+	// Only populated when logger is set.
 	var regularTokens, elasticTokens kvflowcontrol.Tokens
 	func() {
 		defer t.mu.Unlock()
@@ -670,7 +664,7 @@ func (t *tokenCounter) adjustLockedAndUnlock(
 				t.mu.counters[elastic].adjustTokensLocked(
 					ctx, delta, now, false /* isReset */, flag)
 		}
-		if expensiveLog {
+		if logger != nil {
 			regularTokens = t.tokensLocked(regular)
 			elasticTokens = t.tokensLocked(elastic)
 		}
@@ -684,8 +678,8 @@ func (t *tokenCounter) adjustLockedAndUnlock(
 	if unaccounted.regular != 0 || unaccounted.elastic != 0 {
 		t.metrics.onUnaccounted(unaccounted)
 	}
-	if expensiveLog {
-		log.Infof(ctx, "adjusted %v flow tokens (wc=%v stream=%v delta=%v flag=%v): regular=%v elastic=%v",
+	if logger != nil {
+		logger(ctx, "adjusted %v flow tokens (wc=%v stream=%v delta=%v flag=%v): regular=%v elastic=%v",
 			t.tokenType, class, t.stream, delta, flag, regularTokens, elasticTokens)
 	}
 }
@@ -709,4 +703,18 @@ func (t *tokenCounter) GetAndResetStats(now time.Time) (regularStats, elasticSta
 	regularStats = t.mu.counters[admissionpb.RegularWorkClass].getAndResetStats(now)
 	elasticStats = t.mu.counters[admissionpb.ElasticWorkClass].getAndResetStats(now)
 	return regularStats, elasticStats
+}
+
+type tokenCounterLogger func(ctx context.Context, format string, args ...interface{})
+
+var TokenCounterLogOverride tokenCounterLogger
+
+func (t *tokenCounter) maybeLogger() tokenCounterLogger {
+	if logger := TokenCounterLogOverride; logger != nil {
+		return logger
+	}
+	if log.V(2) {
+		return log.Infof
+	}
+	return nil
 }
