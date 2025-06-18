@@ -1174,6 +1174,7 @@ func (b *Builder) shouldApplyImplicitLockingToMutationInput(
 		}()
 	}
 
+	md := b.mem.Metadata()
 	switch t := mutExpr.(type) {
 	case *memo.InsertExpr:
 		// Unlike with the other three mutation expressions, it never makes
@@ -1183,16 +1184,14 @@ func (b *Builder) shouldApplyImplicitLockingToMutationInput(
 		return 0, nil, nil
 
 	case *memo.UpdateExpr:
-		md := b.mem.Metadata()
 		tableID, toLockIndexes := shouldApplyImplicitLockingToUpdateOrDeleteInput(md, t.Input, t.Table)
 		return tableID, toLockIndexes.Ordered(), nil
 
 	case *memo.UpsertExpr:
-		tableID, toLockIndexes := shouldApplyImplicitLockingToUpsertInput(t)
+		tableID, toLockIndexes := shouldApplyImplicitLockingToUpsertInput(md, t)
 		return tableID, toLockIndexes.Ordered(), nil
 
 	case *memo.DeleteExpr:
-		md := b.mem.Metadata()
 		tableID, toLockIndexes := shouldApplyImplicitLockingToUpdateOrDeleteInput(md, t.Input, t.Table)
 		return tableID, toLockIndexes.Ordered(), nil
 
@@ -1243,10 +1242,11 @@ func shouldApplyImplicitLockingToUpdateOrDeleteInput(
 		input = idxJoin.Input
 		toLockIndexes.Add(cat.PrimaryIndex)
 	}
+	var toLock opt.TableID
 	switch t := input.(type) {
 	case *memo.ScanExpr:
 		toLockIndexes.Add(t.Index)
-		return t.Table, toLockIndexes
+		toLock = t.Table
 	case *memo.LookupJoinExpr:
 		toLockIndexes.Add(t.Index)
 		if innerJoin, ok := t.Input.(*memo.LookupJoinExpr); ok && innerJoin.Table == t.Table {
@@ -1257,16 +1257,20 @@ func shouldApplyImplicitLockingToUpdateOrDeleteInput(
 			t = innerJoin
 			toLockIndexes.Add(t.Index)
 		}
-		mutStableID := md.Table(tabID).ID()
-		lookupStableID := md.Table(t.Table).ID()
-		// Only lock rows read in the lookup join if the lookup table is the
-		// same as the table being updated. Also, don't lock rows if there is an
-		// ON condition so that we don't lock rows that won't be updated.
-		if mutStableID == lookupStableID && t.On.IsTrue() && t.Input.Op() == opt.ValuesOp {
-			return t.Table, toLockIndexes
+		// Don't lock rows if there is an ON condition so that we don't lock rows
+		// that won't be updated.
+		if !t.On.IsTrue() || t.Input.Op() != opt.ValuesOp {
+			return 0, intsets.Fast{}
 		}
+		toLock = t.Table
+	default:
+		return 0, intsets.Fast{}
 	}
-	return 0, intsets.Fast{}
+	if md.Table(tabID).ID() != md.Table(toLock).ID() {
+		// Make sure that this is the table being updated.
+		return 0, intsets.Fast{}
+	}
+	return toLock, toLockIndexes
 }
 
 // tryApplyImplicitLockingToUpsertInput determines whether or not the builder
@@ -1274,7 +1278,9 @@ func shouldApplyImplicitLockingToUpdateOrDeleteInput(
 // an UPSERT statement. If the builder should lock the initial row scan, it
 // returns the TableID of the scan (as well as ordinals of indexes to lock),
 // otherwise it returns 0.
-func shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) (opt.TableID, intsets.Fast) {
+func shouldApplyImplicitLockingToUpsertInput(
+	md *opt.Metadata, ups *memo.UpsertExpr,
+) (opt.TableID, intsets.Fast) {
 	var toLockIndexes intsets.Fast
 	// Try to match the Upsert's input expression against the pattern:
 	//
@@ -1307,6 +1313,10 @@ func shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) (opt.TableID,
 		toLock = join.Table
 
 	default:
+		return 0, intsets.Fast{}
+	}
+	if md.Table(ups.Table).ID() != md.Table(toLock).ID() {
+		// Make sure that this is the table being updated.
 		return 0, intsets.Fast{}
 	}
 	input = unwrapProjectExprs(input)
