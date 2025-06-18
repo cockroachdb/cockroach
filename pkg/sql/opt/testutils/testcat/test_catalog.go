@@ -898,7 +898,8 @@ type Table struct {
 
 	multiRegion bool
 
-	implicitRBRIndexElem *tree.IndexElem
+	implicitRBRIndexElem         *tree.IndexElem
+	regionalByRowUsingConstraint cat.ForeignKeyConstraint
 
 	homeRegion string
 
@@ -1102,6 +1103,14 @@ func (tt *Table) HomeRegionColName() (colName string, ok bool) {
 		return "", false
 	}
 	return string(tree.RegionalByRowRegionDefaultColName), true
+}
+
+// RegionalByRowUsingConstraint is part of the cat.Table interface.
+func (tt *Table) RegionalByRowUsingConstraint() cat.ForeignKeyConstraint {
+	if !tt.IsRegionalByRow() {
+		return nil
+	}
+	return tt.regionalByRowUsingConstraint
 }
 
 // GetDatabaseID is part of the cat.Table interface.
