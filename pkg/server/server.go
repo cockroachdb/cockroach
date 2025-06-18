@@ -597,6 +597,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	mmAllocator := mma.NewAllocatorState(timeutil.DefaultTimeSource{},
 		rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+	nodeRegistry.AddMetricStruct(mmAllocator.Metrics())
+
 	allocatorSync := kvserver.NewAllocatorSync(storePool, mmAllocator)
 	// TODO: Move this into a dedicated integration struct (per node, not
 	// per-store) for mma.Allocator.

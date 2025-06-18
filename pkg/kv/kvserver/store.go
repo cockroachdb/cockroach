@@ -2438,6 +2438,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.storeRebalancer.Start(ctx, s.stopper)
 
 		s.mmStoreRebalancer = &multiMetricStoreRebalancer{
+			metrics:   makeStoreRebalancerMetrics(),
 			allocator: s.cfg.MMAllocator,
 			store:     s,
 			st:        s.cfg.Settings,

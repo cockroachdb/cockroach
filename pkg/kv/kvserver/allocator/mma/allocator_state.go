@@ -18,9 +18,109 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+)
+
+type MMAMetrics struct {
+	DroppedDueToStateInconsistency  *metric.Counter
+	ExternalFailedToRegister        *metric.Counter
+	ExternalReplicaRebalanceSuccess *metric.Counter
+	ExternalReplicaRebalanceFailure *metric.Counter
+	ExternalLeaseTransferSuccess    *metric.Counter
+	ExternalLeaseTransferFailure    *metric.Counter
+	MMAReplicaRebalanceSuccess      *metric.Counter
+	MMAReplicaRebalanceFailure      *metric.Counter
+	MMALeaseTransferSuccess         *metric.Counter
+	MMALeaseTransferFailure         *metric.Counter
+}
+
+func makeMMAMetrics() *MMAMetrics {
+	return &MMAMetrics{
+		DroppedDueToStateInconsistency:  metric.NewCounter(metaDroppedDueToStateInconsistency),
+		ExternalFailedToRegister:        metric.NewCounter(metaExternalFailedToRegister),
+		ExternalReplicaRebalanceSuccess: metric.NewCounter(metaExternalReplicaRebalanceSuccess),
+		ExternalReplicaRebalanceFailure: metric.NewCounter(metaExternalReplicaRebalanceFailure),
+		ExternalLeaseTransferSuccess:    metric.NewCounter(metaExternalLeaseTransferSuccess),
+		ExternalLeaseTransferFailure:    metric.NewCounter(metaExternalLeaseTransferFailure),
+		MMAReplicaRebalanceSuccess:      metric.NewCounter(metaMMAReplicaRebalanceSuccess),
+		MMAReplicaRebalanceFailure:      metric.NewCounter(metaMMAReplicaRebalanceFailure),
+		MMALeaseTransferSuccess:         metric.NewCounter(metaMMALeaseTransferSuccess),
+		MMALeaseTransferFailure:         metric.NewCounter(metaMMALeaseTransferFailure),
+	}
+}
+
+var (
+	metaDroppedDueToStateInconsistency = metric.Metadata{
+		Name:        "mma.dropped",
+		Help:        "",
+		Measurement: "Range Rebalances",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaExternalFailedToRegister = metric.Metadata{
+		Name:        "mma.external.dropped",
+		Help:        "",
+		Measurement: "Range Rebalances",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaExternalReplicaRebalanceSuccess = metric.Metadata{
+		Name:        "mma.rebalances.external.success",
+		Help:        "",
+		Measurement: "Range Rebalances",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaExternalLeaseTransferSuccess = metric.Metadata{
+		Name:        "mma.lease.external.success",
+		Help:        "",
+		Measurement: "Lease Transfers",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaExternalReplicaRebalanceFailure = metric.Metadata{
+		Name:        "mma.rebalances.external.failure",
+		Help:        "",
+		Measurement: "Range Rebalances",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaExternalLeaseTransferFailure = metric.Metadata{
+		Name:        "mma.lease.external.failure",
+		Help:        "",
+		Measurement: "Lease Transfers",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaMMAReplicaRebalanceSuccess = metric.Metadata{
+		Name:        "mma.rebalance.success",
+		Help:        "",
+		Measurement: "Range Rebalances",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaMMAReplicaRebalanceFailure = metric.Metadata{
+		Name:        "mma.rebalance.failure",
+		Help:        "",
+		Measurement: "Range Rebalances",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaMMALeaseTransferSuccess = metric.Metadata{
+		Name:        "mma.lease.success",
+		Help:        "",
+		Measurement: "Lease Transfers",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaMMALeaseTransferFailure = metric.Metadata{
+		Name:        "mma.lease.failure",
+		Help:        "",
+		Measurement: "Lease Transfers",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 type allocatorState struct {
@@ -70,9 +170,9 @@ type allocatorState struct {
 	// try-write-lock that could quickly return with failure then we could avoid
 	// this. We could of course build our own queueing mechanism instead of
 	// relying on the queueing in mutex.
-
-	mu syncutil.Mutex
-	cs *clusterState
+	mmaMetrics *MMAMetrics
+	mu         syncutil.Mutex
+	cs         *clusterState
 
 	// Ranges that are under-replicated, over-replicated, don't satisfy
 	// constraints, have low diversity etc. Avoids iterating through all ranges.
@@ -102,6 +202,7 @@ func NewAllocatorState(ts timeutil.TimeSource, rand *rand.Rand) *allocatorState 
 		rangesNeedingAttention: map[roachpb.RangeID]struct{}{},
 		diversityScoringMemo:   newDiversityScoringMemo(),
 		rand:                   rand,
+		mmaMetrics:             makeMMAMetrics(),
 	}
 }
 
@@ -114,6 +215,10 @@ const ignoreLoadThresholdAndHigherGraceDuration = 5 * time.Minute
 const ignoreHigherThanLoadThresholdGraceDuration = 8 * time.Minute
 
 const overloadGracePeriod = time.Minute
+
+func (a *allocatorState) Metrics() *MMAMetrics {
+	return a.mmaMetrics
+}
 
 // Called periodically, say every 10s.
 //
@@ -622,6 +727,7 @@ func (a *allocatorState) RegisterExternalChanges(changes []ReplicaChange) []Chan
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if valid, reason := a.cs.preCheckOnApplyReplicaChanges(changes); !valid {
+		a.mmaMetrics.ExternalFailedToRegister.Inc(1)
 		log.Infof(context.Background(),
 			"did not register external changes: due to %v", reason)
 		return nil
@@ -643,7 +749,7 @@ func (a *allocatorState) ComputeChanges(
 	if msg.StoreID != opts.LocalStoreID {
 		panic(fmt.Sprintf("ComputeChanges: expected StoreID %d, got %d", opts.LocalStoreID, msg.StoreID))
 	}
-	a.cs.processStoreLeaseholderMsg(ctx, msg)
+	a.cs.processStoreLeaseholderMsg(ctx, msg, a.mmaMetrics)
 	return a.rebalanceStores(ctx, opts.LocalStoreID)
 }
 

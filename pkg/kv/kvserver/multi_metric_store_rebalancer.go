@@ -20,8 +20,8 @@ import (
 type multiMetricStoreRebalancer struct {
 	// TODO: Spec out a minimal interface required from the Store, we should not
 	// be using the Store directly.
-	store *Store
-
+	store     *Store
+	metrics   StoreRebalancerMetrics
 	as        *AllocatorSync
 	allocator mma.Allocator
 	st        *cluster.Settings
@@ -107,6 +107,9 @@ func (m *multiMetricStoreRebalancer) rebalance(ctx context.Context) (attemptedCh
 					log.VInfof(ctx, 1, "failed to transfer lease for range %d: %v", change.RangeID, err)
 					success = false
 				}
+				if success {
+					m.metrics.LeaseTransferCount.Inc(1)
+				}
 			} else if change.IsChangeReplicas() {
 				// TODO(kvoli): We should be setting a timeout on the ctx here, in
 				// the case where rebalancing takes  a long time (stuck behind
@@ -123,8 +126,11 @@ func (m *multiMetricStoreRebalancer) rebalance(ctx context.Context) (attemptedCh
 					log.VInfof(ctx, 1, "failed to change replicas for r%d: %v", change.RangeID, err)
 					success = false
 				}
+				if success {
+					m.metrics.RangeRebalanceCount.Inc(1)
+				}
 			}
-			m.as.PostApply(ctx, changeID, success)
+			m.as.PostApply(ctx, changeID, success, MMA)
 		}
 	}
 	return len(changes) > 0
