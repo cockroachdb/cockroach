@@ -262,6 +262,10 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.TableLocalityRegionalByRow)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 	),
+	rel.EntityMapping(t((*scpb.TableLocalityRegionalByRowUsingConstraint)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(ConstraintID, "ConstraintID"),
+	),
 	// Column elements.
 	rel.EntityMapping(t((*scpb.ColumnName)(nil)),
 		rel.EntityAttr(DescID, "TableID"),

@@ -2461,6 +2461,11 @@ func (desc *wrapper) GetRegionalByRowTableRegionColumnName() (tree.Name, error) 
 	return tree.Name(*colName), nil
 }
 
+// GetRegionalByRowUsingConstraint implements the TableDescriptor interface.
+func (desc *wrapper) GetRegionalByRowUsingConstraint() descpb.ConstraintID {
+	return desc.RBRUsingConstraint
+}
+
 // GetRowLevelTTL implements the TableDescriptor interface.
 func (desc *wrapper) GetRowLevelTTL() *catpb.RowLevelTTL {
 	return desc.RowLevelTTL
@@ -2575,6 +2580,12 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) []string {
 	}
 	if desc.IsSchemaLocked() {
 		appendStorageParam(`schema_locked`, `true`)
+	}
+	if usingFK := desc.GetRegionalByRowUsingConstraint(); usingFK != descpb.ConstraintID(0) {
+		if constraint := catalog.FindConstraintByID(desc, usingFK); constraint != nil {
+			appendStorageParam(catpb.RBRUsingConstraintSettingName,
+				fmt.Sprint(tree.Name(constraint.GetName())))
+		}
 	}
 	return storageParams
 }
