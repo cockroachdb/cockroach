@@ -146,8 +146,9 @@ type ReplicaChange struct {
 	// - prev.replicaID >= 0 && next.replicaID >= 0: can be a change to
 	//   IsLeaseholder, or ReplicaType. next.ReplicaType must be VOTER_FULL or
 	//   NON_VOTER.
-	prev ReplicaState
-	next ReplicaIDAndType
+	prev              ReplicaState
+	next              ReplicaIDAndType
+	replicaChangeType string
 }
 
 func (rc ReplicaChange) String() string {
@@ -156,7 +157,7 @@ func (rc ReplicaChange) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (rc ReplicaChange) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("r%v %v (%v)->(%v)", rc.rangeID, rc.target, rc.prev, rc.next)
+	w.Printf("r%v type: %v target store %v (%v)->(%v)", rc.rangeID, rc.replicaChangeType, rc.target, rc.prev, rc.next)
 }
 
 // isRemoval returns true if the change is a removal of a replica.
@@ -223,16 +224,18 @@ func MakeLeaseTransferChanges(
 	}
 
 	removeLease := ReplicaChange{
-		target:  removeTarget,
-		rangeID: rangeID,
-		prev:    remove.ReplicaState,
-		next:    remove.ReplicaIDAndType,
+		target:            removeTarget,
+		rangeID:           rangeID,
+		prev:              remove.ReplicaState,
+		next:              remove.ReplicaIDAndType,
+		replicaChangeType: "remove lease",
 	}
 	addLease := ReplicaChange{
-		target:  addTarget,
-		rangeID: rangeID,
-		prev:    add.ReplicaState,
-		next:    add.ReplicaIDAndType,
+		target:            addTarget,
+		rangeID:           rangeID,
+		prev:              add.ReplicaState,
+		next:              add.ReplicaIDAndType,
+		replicaChangeType: "add lease",
 	}
 	removeLease.next.IsLeaseholder = false
 	addLease.next.IsLeaseholder = true
@@ -266,7 +269,8 @@ func MakeAddReplicaChange(
 				ReplicaID: noReplicaID,
 			},
 		},
-		next: replicaState.ReplicaIDAndType,
+		next:              replicaState.ReplicaIDAndType,
+		replicaChangeType: "add replica",
 	}
 	addReplica.next.ReplicaID = unknownReplicaID
 	addReplica.loadDelta.add(loadVectorToAdd(rLoad.Load))
@@ -296,6 +300,7 @@ func MakeRemoveReplicaChange(
 		next: ReplicaIDAndType{
 			ReplicaID: noReplicaID,
 		},
+		replicaChangeType: "remove replica",
 	}
 	removeReplica.loadDelta.subtract(rLoad.Load)
 	if replicaState.IsLeaseholder {
@@ -1313,6 +1318,9 @@ func (cs *clusterState) createPendingChanges(changes ...ReplicaChange) []*pendin
 
 func (cs *clusterState) hasNoRangeIDOrHasPendingChanges(rangeID roachpb.RangeID) bool {
 	rstate, ok := cs.ranges[rangeID]
+	if ok && len(rstate.pendingChanges) > 0 {
+		log.VInfof(context.Background(), 2, "range %d has pending changes: %v", rangeID, rstate.pendingChanges)
+	}
 	return !ok || len(rstate.pendingChanges) > 0
 }
 
