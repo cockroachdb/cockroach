@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
+	"storj.io/drpc/drpcclient"
 )
 
 // ContextTestingKnobs provides hooks to aid in testing the system. The testing
@@ -37,6 +38,10 @@ type ContextTestingKnobs struct {
 	// UnaryClientInterceptor, if non-nil, will be called when invoking any
 	// unary RPC.
 	UnaryClientInterceptor func(target string, class rpcbase.ConnectionClass) grpc.UnaryClientInterceptor
+
+	UnaryClientInterceptorDRPC func(target string, class rpcbase.ConnectionClass) drpcclient.UnaryClientInterceptor
+
+	StreamClientInterceptorDRPC func(target string, class rpcbase.ConnectionClass) drpcclient.StreamClientInterceptor
 
 	// InjectedLatencyOracle if non-nil contains a map from target address
 	// (server.RPCServingAddr() of a remote node) to artificial latency in
