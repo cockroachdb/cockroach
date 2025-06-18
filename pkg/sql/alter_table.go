@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging/auditevents"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -743,12 +744,20 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			var err error
-			descriptorChanged, err = handleTTLStorageParamChange(
+			descriptorChanged, err = handleRBRUsingConstraintStorageParamChange(
+				params, n.tableDesc, t.StorageParams,
+			)
+			if err != nil {
+				return err
+			}
+
+			descriptorChangedByTTL, err := handleTTLStorageParamChange(
 				params,
 				tn,
 				setter.TableDesc,
 				setter.UpdatedRowLevelTTL,
 			)
+			descriptorChanged = descriptorChanged || descriptorChangedByTTL
 			if err != nil {
 				return err
 			}
@@ -1866,7 +1875,7 @@ func dropColumnImpl(
 					"cannot drop column %s as it is used to store the region in a REGIONAL BY ROW table",
 					t.Column,
 				),
-				"You must change the table locality before dropping this table or alter the table to use a different column to use for the region.",
+				"You must change the table locality before dropping this column or alter the table to use a different column for the region.",
 			)
 		}
 	}
@@ -2351,6 +2360,186 @@ func (p *planner) tryRemoveFKBackReferences(
 	}
 	tableDesc.InboundFKs = tableDesc.InboundFKs[:sliceIdx]
 	return nil
+}
+
+func handleRBRUsingConstraintStorageParamChange(
+	params runParams, tableDesc *tabledesc.Mutable, storageParams tree.StorageParams,
+) (descriptorChanged bool, err error) {
+	if storageParams.GetVal(catpb.RBRUsingConstraintSettingName) == nil {
+		return false, nil
+	}
+	if !tableDesc.IsLocalityRegionalByRow() {
+		return false, pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			`storage parameter "%s" can only be set on RBR tables`,
+			catpb.RBRUsingConstraintSettingName,
+		)
+	}
+	regionColName, err := tableDesc.GetRegionalByRowTableRegionColumnName()
+	if err != nil {
+		return false, err
+	}
+	constraintID, err := maybeGetRBRTableUsingConstraint(
+		params.ctx, params.p.SemaCtx(), params.p.EvalContext(), tableDesc, storageParams, regionColName,
+	)
+	if err != nil {
+		return false, err
+	}
+	tableDesc.RBRUsingConstraint = constraintID
+	return true, nil
+}
+
+// maybeGetRBRTableUsingConstraint resolves the foreign-key constraint that will
+// be used to determine the region column for a REGIONAL BY ROW table, if
+// specified in the table's storage params. It also validates that the
+// referenced constraint exists, is a foreign key, and contains the required
+// columns. In addition, computed columns may not reference the region column.
+// It returns the ID of the resolved constraint.
+func maybeGetRBRTableUsingConstraint(
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
+	tableDesc *tabledesc.Mutable,
+	storageParams tree.StorageParams,
+	regionColName tree.Name,
+) (descpb.ConstraintID, error) {
+	constraintName, err := extractRBRTableUsingConstraint(
+		ctx, semaCtx, evalCtx, storageParams,
+	)
+	if constraintName == "" || err != nil {
+		return 0, err
+	}
+	constraint, err := catalog.MustFindConstraintWithName(tableDesc, string(constraintName))
+	if err != nil {
+		return 0, err
+	}
+	fk := constraint.AsForeignKey()
+	if fk == nil {
+		return 0, pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"constraint %q is not a foreign key constraint",
+			constraint.GetName(),
+		)
+	}
+	if regionColName == tree.RegionalByRowRegionNotSpecifiedName {
+		regionColName = tree.RegionalByRowRegionDefaultColName
+	}
+	regionCol, err := catalog.MustFindColumnByName(tableDesc, string(regionColName))
+	if err != nil {
+		return 0, err
+	}
+	regionColID := regionCol.GetID()
+	fkHasRegionCol := false
+	for i := 0; i < fk.NumOriginColumns(); i++ {
+		colID := fk.GetOriginColumnID(i)
+		if colID == regionColID {
+			fkHasRegionCol = true
+			break
+		}
+	}
+	if !fkHasRegionCol {
+		return 0, pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"cannot use constraint %q to determine the region column for REGIONAL BY ROW "+
+				"as it does not include the region column %q",
+			constraint.GetName(), regionColName,
+		)
+	}
+	if fk.NumOriginColumns() == 1 {
+		return 0, pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"cannot use constraint %q to determine the region column for REGIONAL BY ROW "+
+				"as it only includes the region column",
+			constraint.GetName(),
+		)
+	}
+	for _, col := range tableDesc.NonDropColumns() {
+		if !col.IsComputed() {
+			continue
+		}
+		expr, err := parser.ParseExpr(col.GetComputeExpr())
+		if err != nil {
+			// At this point, we should be able to parse the computed expression.
+			return 0, errors.WithAssertionFailure(err)
+		}
+		colIDs, err := schemaexpr.ExtractColumnIDs(tableDesc, expr)
+		if err != nil {
+			return 0, errors.WithAssertionFailure(err)
+		}
+		if colIDs.Contains(regionColID) {
+			return 0, pgerror.Newf(
+				pgcode.InvalidTableDefinition,
+				`computed column %q cannot reference the region column %q in a REGIONAL BY ROW table`+
+					` with "%s" specified`,
+				col.GetName(), regionColName, catpb.RBRUsingConstraintSettingName,
+			)
+		}
+	}
+	return constraint.GetConstraintID(), nil
+}
+
+// inferRegionUsingConstraintEnabled is used to enable and disable setting a
+// foreign key constraint for looking up the region column in a REGIONAL BY ROW
+// table.
+var inferRegionUsingConstraintEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"feature.rbr_using_constraint.enabled",
+	"set to true to enable vector indexes, false to disable; default is false",
+	false,
+	settings.WithPublic,
+)
+
+func extractRBRTableUsingConstraint(
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
+	storageParams tree.StorageParams,
+) (tree.Name, error) {
+	paramVal := storageParams.GetVal(catpb.RBRUsingConstraintSettingName)
+	if paramVal == nil {
+		return "", nil
+	}
+	if !evalCtx.Settings.Version.ActiveVersion(ctx).AtLeast(clusterversion.V25_3.Version()) {
+		return "", pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			`storage parameter "%s" is not supported in this version; `+
+				`finalize the upgrade to v25.3 or later to use it`,
+			catpb.RBRUsingConstraintSettingName,
+		)
+	}
+	if !inferRegionUsingConstraintEnabled.Get(&evalCtx.Settings.SV) {
+		return "", pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			`storage parameter "%s" is not enabled; set the cluster setting`+
+				` "feature.rbr_using_constraint.enabled" to true to enable it`,
+			catpb.RBRUsingConstraintSettingName,
+		)
+	}
+	if paramVal == tree.DNull {
+		return "", pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			`storage parameter "%s" cannot be NULL`, catpb.RBRUsingConstraintSettingName,
+		)
+	}
+	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
+		ctx, paramVal, types.String, "RBR_USING_CONSTRAINT_NAME", semaCtx,
+		volatility.Volatile, false, /*allowAssignmentCast*/
+	)
+	if err != nil {
+		return "", err
+	}
+	d, err := eval.Expr(ctx, evalCtx, typedExpr)
+	if err != nil {
+		return "", err
+	}
+	constraintName, isStringVal := tree.AsDString(d)
+	if !isStringVal {
+		return "", pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			`storage parameter "%s" must be a string`, catpb.RBRUsingConstraintSettingName,
+		)
+	}
+	return tree.Name(constraintName), nil
 }
 
 // checkSchemaChangeIsAllowed checks if a schema change is allowed on
