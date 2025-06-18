@@ -421,13 +421,23 @@ OuterLoop:
 			cat.FamilyColumn{Column: col, Ordinal: colOrd})
 	}
 
+	// Allow specifying the name of a FK constraint to use for lookup of region
+	// column values for a REGIONAL BY ROW table.
+	var rbrUsingConstraintName string
+	if param := stmt.StorageParams.GetVal(catpb.RBRUsingConstraintTableSettingName); param != nil {
+		rbrUsingConstraintName = param.(*tree.StrVal).RawString()
+	}
+
 	// Search for foreign key constraints. We want to process them after first
 	// processing all the indexes (otherwise the foreign keys could add
 	// unnecessary indexes).
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
 		case *tree.ForeignKeyConstraintTableDef:
-			tc.resolveFK(tab, def)
+			fk := tc.resolveFK(tab, def)
+			if rbrUsingConstraintName != "" && string(def.Name) == rbrUsingConstraintName {
+				tab.regionalByRowUsingConstraint = fk
+			}
 		}
 	}
 
@@ -539,7 +549,9 @@ func (tc *Catalog) CreateTableAs(name tree.TableName, columns []cat.Column) *Tab
 }
 
 // resolveFK processes a foreign key constraint.
-func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
+func (tc *Catalog) resolveFK(
+	tab *Table, d *tree.ForeignKeyConstraintTableDef,
+) cat.ForeignKeyConstraint {
 	fromCols := make([]int, len(d.FromCols))
 	for i, c := range d.FromCols {
 		fromCols[i] = tab.FindOrdinal(string(c))
@@ -709,6 +721,7 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 	}
 	tab.outboundFKs = append(tab.outboundFKs, fk)
 	targetTable.inboundFKs = append(targetTable.inboundFKs, fk)
+	return &fk
 }
 
 func (tt *Table) addCheckConstraint(check *tree.CheckConstraintTableDef) {
