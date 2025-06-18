@@ -31,14 +31,23 @@ type Team struct {
 	// does not contain TeamName.
 	Aliases map[Alias]Purpose `yaml:"aliases"`
 	// GitHub label will be added to issues posted for this team.
+	// Multiple labels can be specified, separated by commas.
 	Label string `yaml:"label"`
-	// SilenceMentions is true if @-mentions should be supressed for this team.
+	// SilenceMentions is true if @-mentions should be suppressed for this team.
 	SilenceMentions bool `yaml:"silence_mentions"`
 }
 
 // Name returns the main Alias of the team.
 func (t Team) Name() Alias {
 	return t.TeamName
+}
+
+// Labels returns the list of labels (possibly empty).
+func (t Team) Labels() []string {
+	if t.Label == "" {
+		return nil
+	}
+	return strings.Split(t.Label, ",")
 }
 
 // Map contains the in-memory representation of TEAMS.yaml.

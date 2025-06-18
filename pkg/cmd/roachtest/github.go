@@ -248,9 +248,7 @@ func (g *githubIssues) createPostRequest(
 			if mentionTeam {
 				mention = append(mention, "@"+string(alias))
 			}
-			if label := teams[alias].Label; label != "" {
-				labels = append(labels, label)
-			}
+			labels = append(labels, teams[alias].Labels()...)
 		}
 	}
 
