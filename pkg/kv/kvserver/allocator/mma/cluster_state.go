@@ -120,6 +120,30 @@ type ReplicaState struct {
 // (by the component responsible for change enactment).
 type ChangeID uint64
 
+type ReplicaChangeType int
+
+const (
+	AddLease ReplicaChangeType = iota
+	RemoveLease
+	AddReplica
+	RemoveReplica
+)
+
+func (s ReplicaChangeType) String() string {
+	switch s {
+	case AddLease:
+		return "AddLease"
+	case RemoveLease:
+		return "RemoveLease"
+	case AddReplica:
+		return "AddReplica"
+	case RemoveReplica:
+		return "RemoveReplica"
+	default:
+		panic("unknown ReplicaChangeType")
+	}
+}
+
 type ReplicaChange struct {
 	// The load this change adds to a store. The values will be negative if the
 	// load is being removed.
@@ -148,7 +172,7 @@ type ReplicaChange struct {
 	//   NON_VOTER.
 	prev              ReplicaState
 	next              ReplicaIDAndType
-	replicaChangeType string
+	replicaChangeType ReplicaChangeType
 }
 
 func (rc ReplicaChange) String() string {
@@ -228,14 +252,14 @@ func MakeLeaseTransferChanges(
 		rangeID:           rangeID,
 		prev:              remove.ReplicaState,
 		next:              remove.ReplicaIDAndType,
-		replicaChangeType: "remove lease",
+		replicaChangeType: RemoveLease,
 	}
 	addLease := ReplicaChange{
 		target:            addTarget,
 		rangeID:           rangeID,
 		prev:              add.ReplicaState,
 		next:              add.ReplicaIDAndType,
-		replicaChangeType: "add lease",
+		replicaChangeType: AddLease,
 	}
 	removeLease.next.IsLeaseholder = false
 	addLease.next.IsLeaseholder = true
@@ -270,7 +294,7 @@ func MakeAddReplicaChange(
 			},
 		},
 		next:              replicaState.ReplicaIDAndType,
-		replicaChangeType: "add replica",
+		replicaChangeType: AddReplica,
 	}
 	addReplica.next.ReplicaID = unknownReplicaID
 	addReplica.loadDelta.add(loadVectorToAdd(rLoad.Load))
@@ -300,7 +324,7 @@ func MakeRemoveReplicaChange(
 		next: ReplicaIDAndType{
 			ReplicaID: noReplicaID,
 		},
-		replicaChangeType: "remove replica",
+		replicaChangeType: RemoveReplica,
 	}
 	removeReplica.loadDelta.subtract(rLoad.Load)
 	if replicaState.IsLeaseholder {
