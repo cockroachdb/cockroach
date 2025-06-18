@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
+	"storj.io/drpc/drpcclient"
 )
 
 // grpcGatewayServer represents a grpc service with HTTP endpoints through GRPC
@@ -82,20 +84,9 @@ func configureGRPCGateway(
 		return nil, nil, nil, err
 	}
 
-	callCountInterceptor := func(
-		ctx context.Context,
-		method string,
-		req, reply interface{},
-		cc *grpc.ClientConn,
-		invoker grpc.UnaryInvoker,
-		opts ...grpc.CallOption,
-	) error {
-		telemetry.Inc(getServerEndpointCounter(method))
-		return invoker(ctx, method, req, reply, cc, opts...)
-	}
 	conn, err := grpc.DialContext(ctx, GRPCAddr, append(
 		dialOpts,
-		grpc.WithUnaryInterceptor(callCountInterceptor),
+		grpc.WithUnaryInterceptor(getGRPCCallCountInterceptor()),
 	)...)
 	if err != nil {
 		return nil, nil, nil, err
@@ -124,4 +115,36 @@ func configureGRPCGateway(
 func getServerEndpointCounter(method string) telemetry.Counter {
 	const counterPrefix = "http.grpc-gateway"
 	return telemetry.GetCounter(fmt.Sprintf("%s.%s", counterPrefix, method))
+}
+
+// getGRPCCallCountInterceptor returns a gRPC interceptor that increments a counter for each
+// gRPC method call.
+func getGRPCCallCountInterceptor() grpc.UnaryClientInterceptor {
+	return func(
+		ctx context.Context,
+		method string,
+		req, reply interface{},
+		cc *grpc.ClientConn,
+		invoker grpc.UnaryInvoker,
+		opts ...grpc.CallOption,
+	) error {
+		telemetry.Inc(getServerEndpointCounter(method))
+		return invoker(ctx, method, req, reply, cc, opts...)
+	}
+}
+
+// getDRPCCallCountInterceptor returns a dRPC interceptor that increments a counter for each
+// dRPC method call.
+func getDRPCCallCountInterceptor() drpcclient.UnaryClientInterceptor {
+	return func(
+		ctx context.Context,
+		rpc string,
+		enc drpc.Encoding,
+		in, out drpc.Message,
+		cc *drpcclient.ClientConn,
+		next drpcclient.UnaryInvoker,
+	) error {
+		telemetry.Inc(getServerEndpointCounter(rpc))
+		return next(ctx, rpc, enc, in, out, cc)
+	}
 }

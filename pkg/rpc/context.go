@@ -51,6 +51,7 @@ import (
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/stats"
+	"storj.io/drpc/drpcclient"
 )
 
 // NewServer sets up an RPC server. Depending on the ServerOptions, the Server
@@ -246,6 +247,9 @@ type Context struct {
 
 	clientUnaryInterceptors  []grpc.UnaryClientInterceptor
 	clientStreamInterceptors []grpc.StreamClientInterceptor
+
+	clientUnaryInterceptorsDrpc  []drpcclient.UnaryClientInterceptor
+	clientStreamInterceptorsDrpc []drpcclient.StreamClientInterceptor
 
 	// loopbackDialFn, when non-nil, is used when the target of the dial
 	// is ourselves (== AdvertiseAddr).

@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
+	"storj.io/drpc"
+	"storj.io/drpc/drpcclient"
 )
 
 // TestEndpointTelemetryBasic tests that the telemetry collection on the usage of
@@ -49,4 +51,51 @@ func TestEndpointTelemetryBasic(t *testing.T) {
 	require.Equal(t, int32(1), telemetry.Read(getServerEndpointCounter(
 		"/cockroach.server.serverpb.Status/Statements",
 	)))
+}
+
+func TestGetDRPCCallCountInterceptor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	interceptor := getDRPCCallCountInterceptor()
+
+	calledNext := false
+	expectedRPCName := "TestService.SimpleMethod"
+	mockNextInvoker := func(
+		_ context.Context, rpcName string, _ drpc.Encoding,
+		_, _ drpc.Message, _ *drpcclient.ClientConn,
+	) error {
+		require.Equal(t, expectedRPCName, rpcName)
+		calledNext = true
+		return nil
+	}
+
+	counter := getServerEndpointCounter(expectedRPCName)
+	initialCount := telemetry.Read(counter)
+
+	err := interceptor(
+		context.Background(),
+		expectedRPCName,
+		testEncoding{},
+		"",
+		"",
+		nil,
+		mockNextInvoker,
+	)
+
+	require.NoError(t, err, "interceptor should not return an error from mockNextInvoker")
+	require.True(t, calledNext, "next invoker should have been called")
+
+	finalCount := telemetry.Read(counter)
+	require.Equal(t, initialCount+1, finalCount, "telemetry counter should have been incremented")
+}
+
+type testEncoding struct{}
+
+func (testEncoding) Marshal(msg drpc.Message) ([]byte, error) {
+	return []byte(*msg.(*string)), nil
+}
+
+func (testEncoding) Unmarshal(buf []byte, msg drpc.Message) error {
+	*msg.(*string) = string(buf)
+	return nil
 }
