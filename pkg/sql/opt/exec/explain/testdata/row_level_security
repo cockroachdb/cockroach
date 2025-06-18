@@ -174,13 +174,10 @@ select t1.c1 from t1, t2 where t1.c1 = t2.c1 and t1.c1 = 1;
 ----
 • cross join
 │
-├── • index join
-│   │ table: t1@t1_pkey
-│   │
-│   └── • scan
-│         table: t1@t1_idx
-│         spans: 1+ spans
-│         policies: policy 1, p2, p3, r1, r2
+├── • scan
+│     table: t1@t1_idx
+│     spans: 1+ spans
+│     policies: policy 1, p2, p3, r1, r2
 │
 └── • filter
     │ filter: c1 = _
