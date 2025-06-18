@@ -115,15 +115,27 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		// so use type STRING instead.
 		oid := types.String.Oid()
 
-		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-		crdbRegionDef :=
-			multiregion.RegionalByRowDefaultColDef(
-				oid,
-				multiregion.RegionalByRowGatewayRegionDefaultExpr(oid),
-				multiregion.MaybeRegionalByRowOnUpdateExpr(&evalCtx, oid),
-			)
-		crdbRegionDef.Type = types.String
-		stmt.Defs = append(stmt.Defs, crdbRegionDef)
+		// Add a region column only if one doesn't already exist.
+		hasRegionCol := false
+		for _, def := range stmt.Defs {
+			if colDef, ok := def.(*tree.ColumnTableDef); ok {
+				if colDef.Name == tree.RegionalByRowRegionDefaultColName {
+					hasRegionCol = true
+					break
+				}
+			}
+		}
+		if !hasRegionCol {
+			evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+			crdbRegionDef :=
+				multiregion.RegionalByRowDefaultColDef(
+					oid,
+					multiregion.RegionalByRowGatewayRegionDefaultExpr(oid),
+					multiregion.MaybeRegionalByRowOnUpdateExpr(&evalCtx, oid),
+				)
+			crdbRegionDef.Type = types.String
+			stmt.Defs = append(stmt.Defs, crdbRegionDef)
+		}
 		tab.implicitRBRIndexElem =
 			&tree.IndexElem{
 				Column: tree.RegionalByRowRegionDefaultColName,
