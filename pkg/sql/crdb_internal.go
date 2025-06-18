@@ -1152,20 +1152,15 @@ CREATE TABLE crdb_internal.jobs (
   description           STRING,
   statement             STRING,
   user_name             STRING,
-  descriptor_ids        INT[],
   status                STRING,
   running_status        STRING,
   created               TIMESTAMPTZ,
-  started               TIMESTAMPTZ,
   finished              TIMESTAMPTZ,
   modified              TIMESTAMPTZ,
   fraction_completed    FLOAT,
   high_water_timestamp  DECIMAL,
   error                 STRING,
   coordinator_id        INT,
-  trace_id              INT,
-  execution_errors      STRING[],
-  execution_events      JSONB,
   INDEX(job_id),
   INDEX(status),
   INDEX(job_type)
@@ -1223,8 +1218,11 @@ j.error_msg,
 j.claim_instance_id
 FROM system.public.jobs AS j
 LEFT OUTER JOIN system.public.job_progress AS p ON j.id = p.job_id
-LEFT OUTER JOIN system.public.job_status AS s ON j.id = s.job_id  
-	` + whereClause
+LEFT OUTER JOIN system.public.job_status AS s ON j.id = s.job_id
+	` + whereClause + `UNION
+	(SELECT job_id, job_type, description, user_name, 'pending',
+					NULL, now(), NULL, now(), NULL, NULL, NULL, NULL
+	FROM crdb_internal.session_pending_jobs())`
 
 	it, err := p.InternalSQLTxn().QueryIteratorEx(
 		ctx, "system-jobs-join", p.txn, sessiondata.NodeUserSessionDataOverride, query, params...)
@@ -1237,108 +1235,60 @@ LEFT OUTER JOIN system.public.job_status AS s ON j.id = s.job_id
 		}
 	}()
 
-	sessionJobs := make([]*jobs.Record, 0, p.extendedEvalCtx.jobs.numToCreate())
-	uniqueJobs := make(map[*jobs.Record]struct{})
-	if err := p.extendedEvalCtx.jobs.forEachToCreate(func(job *jobs.Record) error {
-		if _, ok := uniqueJobs[job]; ok {
-			return nil
-		}
-		sessionJobs = append(sessionJobs, job)
-		uniqueJobs[job] = struct{}{}
-		return nil
-	}); err != nil {
-		return emitted, err
-	}
-
 	// Loop while we need to skip a row.
 	for {
 		ok, err := it.Next(ctx)
+		if err != nil || !ok {
+			return emitted, err
+		}
+		r := it.Cur()
+		id, typStr, desc, ownerStr, state, status, created, finished, modified, fraction, resolved, errorMsg, instanceID :=
+			r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12]
+
+		owner := username.MakeSQLUsernameFromPreNormalizedString(string(tree.MustBeDString(ownerStr)))
+		jobID := jobspb.JobID(tree.MustBeDInt(id))
+		typ, err := jobspb.TypeFromString(string(tree.MustBeDString(typStr)))
 		if err != nil {
 			return emitted, err
 		}
-		// We will read the columns from the query on joined jobs tables into a wide
-		// row, and then copy the values from read rows into named variables to then
-		// use when emitting our output row. If we need to synthesize rows for jobs
-		// pending creation in the session, we'll do so in those same named vars to
-		// keep things organized.
-		//   0,      1,    2,        3,     4,      5,       6,        7,        8,        9,       10,       11,         12
-		var id, typStr, desc, ownerStr, state, status, created, finished, modified, fraction, resolved, errorMsg, instanceID tree.Datum
 
-		if ok {
-			r := it.Cur()
-			id, typStr, desc, ownerStr, state, status, created, finished, modified, fraction, resolved, errorMsg, instanceID =
-				r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12]
-
-			owner := username.MakeSQLUsernameFromPreNormalizedString(string(tree.MustBeDString(ownerStr)))
-			jobID := jobspb.JobID(tree.MustBeDInt(id))
-			typ, err := jobspb.TypeFromString(string(tree.MustBeDString(typStr)))
+		getLegacyPayloadForAuth := func(ctx context.Context) (*jobspb.Payload, error) {
+			if !enablePerJobDetailedAuthLookups.Get(&p.EvalContext().Settings.SV) {
+				return nil, errLegacyPerJobAuthDisabledSentinel
+			}
+			if p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.V25_1) {
+				log.Warningf(ctx, "extended job access control based on job-specific details is deprecated and can make SHOW JOBS less performant; consider disabling %s",
+					enablePerJobDetailedAuthLookups.Name())
+				p.BufferClientNotice(ctx,
+					pgnotice.Newf("extended job access control based on job-specific details has been deprecated and can make SHOW JOBS less performant; consider disabling %s",
+						enablePerJobDetailedAuthLookups.Name()))
+			}
+			payload := &jobspb.Payload{}
+			infoStorage := jobs.InfoStorageForJob(p.InternalSQLTxn(), jobID)
+			payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx, "getLegacyPayload-for-custom-auth")
 			if err != nil {
-				return emitted, err
+				return nil, err
 			}
+			if !exists {
+				return nil, errors.New("job payload not found in system.job_info")
+			}
+			if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
+				return nil, err
+			}
+			return payload, nil
+		}
+		if errorMsg == tree.DNull {
+			errorMsg = emptyString
+		}
 
-			getLegacyPayloadForAuth := func(ctx context.Context) (*jobspb.Payload, error) {
-				if !enablePerJobDetailedAuthLookups.Get(&p.EvalContext().Settings.SV) {
-					return nil, errLegacyPerJobAuthDisabledSentinel
-				}
-				if p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.V25_1) {
-					log.Warningf(ctx, "extended job access control based on job-specific details is deprecated and can make SHOW JOBS less performant; consider disabling %s",
-						enablePerJobDetailedAuthLookups.Name())
-					p.BufferClientNotice(ctx,
-						pgnotice.Newf("extended job access control based on job-specific details has been deprecated and can make SHOW JOBS less performant; consider disabling %s",
-							enablePerJobDetailedAuthLookups.Name()))
-				}
-				payload := &jobspb.Payload{}
-				infoStorage := jobs.InfoStorageForJob(p.InternalSQLTxn(), jobID)
-				payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx, "getLegacyPayload-for-custom-auth")
-				if err != nil {
-					return nil, err
-				}
-				if !exists {
-					return nil, errors.New("job payload not found in system.job_info")
-				}
-				if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
-					return nil, err
-				}
-				return payload, nil
+		if err := jobsauth.AuthorizeAllowLegacyAuth(
+			ctx, p, jobID, getLegacyPayloadForAuth, owner, typ, jobsauth.ViewAccess, globalPrivileges,
+		); err != nil {
+			// Filter out jobs which the user is not allowed to see.
+			if IsInsufficientPrivilegeError(err) {
+				continue
 			}
-			if errorMsg == tree.DNull {
-				errorMsg = emptyString
-			}
-
-			if err := jobsauth.AuthorizeAllowLegacyAuth(
-				ctx, p, jobID, getLegacyPayloadForAuth, owner, typ, jobsauth.ViewAccess, globalPrivileges,
-			); err != nil {
-				// Filter out jobs which the user is not allowed to see.
-				if IsInsufficientPrivilegeError(err) {
-					continue
-				}
-				return emitted, err
-			}
-		} else if !ok {
-			if len(sessionJobs) == 0 {
-				return emitted, nil
-			}
-			job := sessionJobs[len(sessionJobs)-1]
-			sessionJobs = sessionJobs[:len(sessionJobs)-1]
-			payloadType, err := jobspb.DetailsType(jobspb.WrapPayloadDetails(job.Details))
-			if err != nil {
-				return emitted, err
-			}
-			// synthesize the fields we'd read from the jobs table if this job were in it.
-			id, typStr, desc, ownerStr, state, status, created, finished, modified, fraction, resolved, errorMsg, instanceID =
-				tree.NewDInt(tree.DInt(job.JobID)),
-				tree.NewDString(payloadType.String()),
-				tree.NewDString(job.Description),
-				tree.NewDString(job.Username.Normalized()),
-				tree.NewDString(string(jobs.StatePending)),
-				tree.DNull,
-				tree.MustMakeDTimestampTZ(p.txn.ReadTimestamp().GoTime(), time.Microsecond),
-				tree.DNull,
-				tree.MustMakeDTimestampTZ(p.txn.ReadTimestamp().GoTime(), time.Microsecond),
-				tree.NewDFloat(tree.DFloat(0)),
-				tree.DZeroDecimal,
-				tree.DNull,
-				tree.NewDInt(tree.DInt(p.extendedEvalCtx.ExecCfg.JobRegistry.ID()))
+			return emitted, err
 		}
 
 		if err = addRow(
@@ -1347,20 +1297,15 @@ LEFT OUTER JOIN system.public.job_status AS s ON j.id = s.job_id
 			desc,
 			desc,
 			ownerStr,
-			tree.DNull, // deperecated "descriptor_ids"
 			state,
 			status,
 			created,
-			created, // deprecated "started" field.
 			finished,
 			modified,
 			fraction,
 			resolved,
 			errorMsg,
 			instanceID,
-			tree.DNull, // deprecated "trace_id" field.
-			tree.DNull, // deprecated "executionErrors" field.
-			tree.DNull, // deprecated "executionEvents" field.
 		); err != nil {
 			return emitted, err
 		}

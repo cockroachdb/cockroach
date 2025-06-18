@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -630,6 +631,19 @@ The output can be used to recreate a database.'
 			showCreateAllRoutinesGeneratorType,
 			makeShowCreateAllRoutinesGenerator,
 			"Returns rows of CREATE FUNCTION and CREATE PROCEDURE statements for all functions in the specified database.",
+			volatility.Volatile,
+		),
+	),
+	"crdb_internal.session_pending_jobs": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
+		makeGeneratorOverload(
+			tree.ParamTypes{},
+			sessionPendingJobsType,
+			makeSessionPendingJobsGenerator,
+			`Returns rows of information about all pending jobs created in the session txn.`,
 			volatility.Volatile,
 		),
 	),
@@ -2875,6 +2889,10 @@ var showCreateAllTriggersGeneratorType = types.String
 var showCreateAllTypesGeneratorType = types.String
 var showCreateAllTablesGeneratorType = types.String
 var showCreateAllRoutinesGeneratorType = types.String
+var sessionPendingJobsType = types.MakeLabeledTuple(
+	[]*types.T{types.Int, types.String, types.String, types.String},
+	[]string{"job_id", "job_type", "description", "user_name"},
+)
 
 // Phase is used to determine if CREATE statements or ALTER statements
 // are being generated for showCreateAllTables.
@@ -3370,6 +3388,53 @@ func makeShowCreateAllRoutinesGenerator(
 		dbName:      dbName,
 		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),
 	}, nil
+}
+
+func makeSessionPendingJobsGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	records := []jobspb.PendingJob{{}} // Next() always pops first, so pad a zero.
+	if err := evalCtx.SessionAccessor.ForEachSessionPendingJob(func(r jobspb.PendingJob) error {
+		records = append(records, r)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return &sessionPendingJobsGenerator{
+		jobs: records,
+	}, nil
+}
+
+type sessionPendingJobsGenerator struct {
+	jobs []jobspb.PendingJob
+}
+
+// ResolvedType implements the eval.ValueGenerator interface.
+func (s *sessionPendingJobsGenerator) ResolvedType() *types.T {
+	return sessionPendingJobsType
+}
+
+// Start implements the eval.ValueGenerator interface.
+func (s *sessionPendingJobsGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+	return nil
+}
+
+func (s *sessionPendingJobsGenerator) Next(ctx context.Context) (bool, error) {
+	s.jobs = s.jobs[1:]
+	return len(s.jobs) > 0, nil
+}
+
+// Values implements the eval.ValueGenerator interface.
+func (s *sessionPendingJobsGenerator) Values() (tree.Datums, error) {
+	return tree.Datums{tree.NewDInt(tree.DInt(s.jobs[0].JobID)),
+		tree.NewDString(s.jobs[0].Type.String()),
+		tree.NewDString(s.jobs[0].Description),
+		tree.NewDString(s.jobs[0].Username.Normalized()),
+	}, nil
+}
+
+// Close implements the eval.ValueGenerator interface.
+func (s *sessionPendingJobsGenerator) Close(ctx context.Context) {
 }
 
 // identGenerator supports the execution of

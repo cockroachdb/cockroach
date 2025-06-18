@@ -2271,7 +2271,6 @@ SELECT
   fraction_completed,
   high_water_timestamp,
   error,
-  execution_events::string,
   coordinator_id
 FROM crdb_internal.jobs
 WHERE true`) // Simplifies filter construction below.
@@ -2368,7 +2367,6 @@ func scanRowIntoJob(scanner resultScanner, row tree.Datums, job *serverpb.JobRes
 	var fractionCompletedOrNil *float32
 	var highwaterOrNil *apd.Decimal
 	var runningStatusOrNil *string
-	var executionFailuresOrNil *string
 	var coordinatorOrNil *int64
 	if err := scanner.ScanAll(
 		row,
@@ -2385,7 +2383,6 @@ func scanRowIntoJob(scanner resultScanner, row tree.Datums, job *serverpb.JobRes
 		&fractionCompletedOrNil,
 		&highwaterOrNil,
 		&job.Error,
-		&executionFailuresOrNil,
 		&coordinatorOrNil,
 	); err != nil {
 		return errors.Wrap(err, "scan")
@@ -2438,7 +2435,7 @@ func jobHelper(
 	const query = `
 	        SELECT job_id, job_type, description, statement, user_name, status,
 	  						 running_status, created, finished, modified,
-	  						 fraction_completed, high_water_timestamp, error, execution_events::string, coordinator_id
+	  						 fraction_completed, high_water_timestamp, error, coordinator_id
 	          FROM crdb_internal.jobs
 	         WHERE job_id = $1`
 	row, cols, err := sqlServer.internalExecutor.QueryRowExWithCols(
