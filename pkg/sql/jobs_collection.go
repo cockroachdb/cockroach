@@ -82,3 +82,21 @@ func (j *txnJobsCollection) forEachToCreate(fn func(jobRecord *jobs.Record) erro
 	}
 	return nil
 }
+
+func (p *planner) ForEachSessionPendingJob(fn func(job jobspb.PendingJob) error) error {
+	if p.extendedEvalCtx.jobs == nil {
+		return nil
+	}
+	return p.extendedEvalCtx.jobs.forEachToCreate(func(r *jobs.Record) error {
+		payloadType, err := jobspb.DetailsType(jobspb.WrapPayloadDetails(r.Details))
+		if err != nil {
+			return err
+		}
+		return fn(jobspb.PendingJob{
+			JobID:       r.JobID,
+			Description: r.Description,
+			Username:    r.Username,
+			Type:        payloadType,
+		})
+	})
+}
