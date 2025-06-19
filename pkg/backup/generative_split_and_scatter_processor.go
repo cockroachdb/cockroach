@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -40,6 +41,7 @@ import (
 )
 
 const generativeSplitAndScatterProcessorName = "generativeSplitAndScatter"
+const maxAdminSplitAttempts = 5
 
 var generativeSplitAndScatterOutputTypes = []*types.T{
 	types.Bytes, // Span key for the range router
@@ -158,11 +160,23 @@ func (s dbSplitAndScatterer) split(
 		newSplitKey = splitAt
 	}
 	log.VEventf(ctx, 1, "presplitting new key %+v", newSplitKey)
-	if err := s.db.AdminSplit(ctx, newSplitKey, expirationTime); err != nil {
-		return errors.Wrapf(err, "splitting key %s", newSplitKey)
+	retryOpts := retry.Options{
+		InitialBackoff: 100 * time.Millisecond,
+		MaxBackoff:     5 * time.Second,
+		Multiplier:     2,
+		MaxRetries:     maxAdminSplitAttempts,
+	}
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		if err = s.db.AdminSplit(ctx, newSplitKey, expirationTime); err != nil {
+			log.VInfof(
+				ctx, 1, "attempt %d failed to split at key %s: %v", r.CurrentAttempt(), newSplitKey, err,
+			)
+			continue
+		}
+		return nil
 	}
 
-	return nil
+	return errors.Wrapf(err, "retries exhausted for splitting at key %s", newSplitKey)
 }
 
 // scatter implements splitAndScatterer.
