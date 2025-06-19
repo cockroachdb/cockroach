@@ -254,6 +254,11 @@ type LockManager interface {
 	// acquired a new lock or re-acquired an existing lock that it already held.
 	OnLockAcquired(context.Context, *roachpb.LockAcquisition)
 
+	// OnLockMissing informs the concurrency manager that a lock has been reported
+	// missing to a client via QueryIntent. Such locks cannot later be
+	// materialized via a lock table flush.
+	OnLockMissing(context.Context, *roachpb.LockAcquisition)
+
 	// OnLockUpdated informs the concurrency manager that a transaction has
 	// updated or released a lock or range of locks that it previously held.
 	// The Durability field of the lock update struct is ignored.
@@ -696,6 +701,11 @@ type lockTable interface {
 	// For replicated locks, this must be called after the corresponding write
 	// intent has been applied to the replicated state machine.
 	AcquireLock(*roachpb.LockAcquisition) error
+
+	// MarkIneligibleForExport marks any locks held by this transaction on the
+	// same key as ineligible for export from the lock table for replication since
+	// doing so could result in a transaction being erroneously committed.
+	MarkIneligibleForExport(*roachpb.LockAcquisition) error
 
 	// UpdateLocks informs the lockTable that an existing lock or range of locks
 	// was either updated or released.

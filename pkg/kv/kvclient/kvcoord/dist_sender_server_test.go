@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -25,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -4642,4 +4645,174 @@ func TestProxyTracing(t *testing.T) {
 		}
 		t.Logf("found trace event; msg=%s, tag=%s, loc=%s", msg, tag, loc)
 	})
+}
+
+// TestUnexpectedCommitOnTxnRecovery constructs a scenario where transaction
+// recovery could incorrectly determine that a transaction is committed. The
+// scenario is as follows:
+//
+// Txn1:
+// - Writes to keyA.
+// - Acquires an unreplicated exclusive lock on keyB.
+// - Acquires a replicated shared lock on keyB. This lock is pipelined, and
+// replication for it fails.
+// - Attempts to commit, but fails because of the lost replicated Shared lock.
+//
+// Lease is then transferred to n3. This causes the unreplicated exclusive lock
+// on keyB to be replicated.
+//
+// Txn2:
+// - Attempts to read keyA, which kicks off transaction recovery for Txn1.
+// - Txn2 (incorrectly) concludes that Txn1 is committed at epoch=1 because it
+// finds a (stronger than Shared) replicated lock on keyB.
+//
+// Txn1:
+// - Back here, we do a stateful retry. We should learn that someone (Txn2)
+// aborted us when we go and try to commit. At the time of writing, we
+// incorrectly learn that we've been (unexpectedly) committed.
+func TestUnexpectedCommitOnTxnRecovery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+
+	var (
+		targetTxnIDString atomic.Value
+		cmdID             atomic.Value
+	)
+	cmdID.Store(kvserverbase.CmdIDKey(""))
+	targetTxnIDString.Store("")
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	// This test relies on unreplicated locks to be replicated on lease transfers.
+	concurrency.UnreplicatedLockReliabilityLeaseTransfer.Override(ctx, &st.SV, true)
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Settings: st,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					TestingProposalFilter: func(fArgs kvserverbase.ProposalFilterArgs) *kvpb.Error {
+						if fArgs.Req.Header.Txn == nil ||
+							fArgs.Req.Header.Txn.ID.String() != targetTxnIDString.Load().(string) {
+							return nil // not our txn
+						}
+						if !fArgs.Req.IsSingleRequest() {
+							// Not the request we care about.
+							return nil
+						}
+						getReq, ok := fArgs.Req.Requests[0].GetInner().(*kvpb.GetRequest)
+						// Only fail replication on the first retry.
+						epoch := fArgs.Req.Header.Txn.Epoch
+						if ok && getReq.KeyLockingDurability == lock.Replicated && epoch == 0 {
+							t.Logf("will fail application for txn %s@epoch=%d; req: %+v; raft cmdID: %s",
+								fArgs.Req.Header.Txn.ID.String(), epoch, getReq, fArgs.CmdID)
+							cmdID.Store(fArgs.CmdID)
+						}
+						return nil
+					},
+					TestingApplyCalledTwiceFilter: func(fArgs kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
+						if fArgs.CmdID == cmdID.Load().(kvserverbase.CmdIDKey) {
+							t.Logf("failing application for raft cmdID: %s", cmdID)
+
+							return 0, kvpb.NewErrorf("test injected error")
+						}
+						return 0, nil
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	transferLease := func(idx int) {
+		desc := tc.LookupRangeOrFatal(t, keyB)
+		tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(idx))
+	}
+	// Make a db with transaction heartbeating disabled. This ensures that we
+	// don't mark Txn1 as PENDING after its first failed parallel commit attempt,
+	// which would otherwise prevent Txn2 from recovering Txn1.
+	s := tc.Server(0)
+	ambient := s.AmbientCtx()
+	tsf := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
+			AmbientCtx:        ambient,
+			HeartbeatInterval: -1, // disabled
+			Settings:          s.ClusterSettings(),
+			Clock:             s.Clock(),
+			Stopper:           s.Stopper(),
+		},
+		s.DistSenderI().(*kvcoord.DistSender),
+	)
+	db := kv.NewDB(ambient, tsf, s.Clock(), s.Stopper())
+
+	startTxn2 := make(chan struct{})
+	blockCh := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	// Write to keyB so that we can later get a lock on it.
+	txn := db.NewTxn(ctx, "txn")
+	err := txn.Put(ctx, keyB, "valueB")
+	require.NoError(t, err)
+	require.NoError(t, txn.Commit(ctx))
+
+	go func() {
+		defer wg.Done()
+
+		err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if txnID := targetTxnIDString.Load(); txnID == "" {
+				// Store the txnID for the testing knobs.
+				targetTxnIDString.Store(txn.ID().String())
+				t.Logf("txn1 ID is: %s", txn.ID())
+			} else if txnID != txn.ID() {
+				// Since txn recovery aborted us, we get retried again but with an
+				// entirely new txnID. This time we just return. Writing nothing.
+				return nil
+			}
+
+			switch txn.Epoch() {
+			case 0:
+				err := txn.Put(ctx, keyA, "value")
+				require.NoError(t, err)
+				res, err := txn.GetForUpdate(ctx, keyB, kvpb.BestEffort)
+				require.NoError(t, err)
+				require.Equal(t, res.ValueBytes(), []byte("valueB"))
+				res, err = txn.GetForShare(ctx, keyB, kvpb.GuaranteedDurability)
+				require.NoError(t, err)
+				require.Equal(t, res.ValueBytes(), []byte("valueB"))
+				err = txn.Commit(ctx)
+				require.Error(t, err)
+				require.ErrorContains(t, err, "RETRY_ASYNC_WRITE_FAILURE")
+				// Transfer the lease to n3.
+				transferLease(2)
+				close(startTxn2)
+				// Block until Txn2 recovers us.
+				<-blockCh
+				return err
+			case 1:
+				// When retrying the write failure we should discover that txn recovery
+				// has aborted this transaction.
+				err := txn.Put(ctx, keyA, "value")
+				require.Error(t, err)
+				require.ErrorContains(t, err, "ABORT_REASON_ABORT_SPAN")
+				return err
+			default:
+				t.Errorf("unexpected epoch: %d", txn.Epoch())
+			}
+			return nil
+		})
+		require.NoError(t, err)
+	}()
+	<-startTxn2
+
+	txn2 := db.NewTxn(ctx, "txn2")
+	res, err := txn2.Get(ctx, keyA)
+	require.NoError(t, err)
+	// NB: Nothing should exist on keyA, because txn1 didn't commit at epoch 1 (or
+	// any epoch, for that matter).
+	require.False(t, res.Exists())
+
+	close(blockCh)
+	wg.Wait()
 }
