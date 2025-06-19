@@ -587,7 +587,7 @@ func (a *allocatorState) ComputeChanges(
 	if msg.StoreID != opts.LocalStoreID {
 		panic(fmt.Sprintf("ComputeChanges: expected StoreID %d, got %d", opts.LocalStoreID, msg.StoreID))
 	}
-	a.cs.processStoreLeaseholderMsg(msg)
+	a.cs.processStoreLeaseholderMsg(ctx, msg)
 	return a.rebalanceStores(ctx, opts.LocalStoreID)
 }
 
