@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 // Sender represents the sending-side of the closed timestamps "side-transport".
@@ -705,6 +706,7 @@ func (f *rpcConnFactory) new(s *Sender, nodeID roachpb.NodeID) conn {
 // nodeDialer abstracts *nodedialer.Dialer.
 type nodeDialer interface {
 	Dial(ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass) (_ *grpc.ClientConn, err error)
+	DRPCDial(ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass) (_ drpc.Conn, err error)
 }
 
 // On sending errors, we sleep a bit as to not spin on a tripped

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 // mockReplica is a mock implementation of the Replica interface.
@@ -661,6 +662,12 @@ func (m *mockDialer) Dial(
 	return c, err
 }
 
+func (m *mockDialer) DRPCDial(
+	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+) (_ drpc.Conn, _ error) {
+	return nil, errors.New("DRPCDial unimplemented")
+}
+
 func (m *mockDialer) Close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -825,6 +832,12 @@ func (f *failingDialer) Dial(
 ) (_ *grpc.ClientConn, err error) {
 	atomic.AddInt32(&f.dialCount, 1)
 	return nil, errors.New("failingDialer")
+}
+
+func (f *failingDialer) DRPCDial(
+	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+) (_ drpc.Conn, err error) {
+	return nil, errors.New("DRPCDial unimplemented")
 }
 
 func (f *failingDialer) callCount() int32 {
