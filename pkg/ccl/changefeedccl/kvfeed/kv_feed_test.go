@@ -66,10 +66,7 @@ func TestKVFeed(t *testing.T) {
 	kv := func(codec keys.SQLCodec, tableID uint32, k, v string, ts hlc.Timestamp) roachpb.KeyValue {
 		return roachpb.KeyValue{
 			Key: mkKey(codec, tableID, k),
-			Value: roachpb.Value{
-				RawBytes:  []byte(v),
-				Timestamp: ts,
-			},
+			Value: roachpb.MakeValueFromBytesAndTimestamp([]byte(v), ts),
 		}
 	}
 

@@ -134,7 +134,7 @@ func TestLockAgeThresholdSetting(t *testing.T) {
 		}
 		return strKey
 	}
-	value := roachpb.Value{RawBytes: []byte("0123456789")}
+	value := roachpb.MakeValueFromBytes([]byte("0123456789"))
 	intentHlc := hlc.Timestamp{
 		WallTime: lockTs.Nanoseconds(),
 	}
@@ -205,7 +205,7 @@ func TestIntentCleanupBatching(t *testing.T) {
 	// Prepare test locks using various transactions, keys, and lock strengths.
 	txnPrefixes := []byte{'a', 'b', 'c'}
 	objectKeys := []byte{'a', 'b', 'c', 'd', 'e'}
-	value := roachpb.Value{RawBytes: []byte("0123456789")}
+	value := roachpb.MakeValueFromBytes([]byte("0123456789"))
 	intentHlc := hlc.Timestamp{
 		WallTime: lockTs.Nanoseconds(),
 	}

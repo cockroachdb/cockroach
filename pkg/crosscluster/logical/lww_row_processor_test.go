@@ -207,7 +207,7 @@ func BenchmarkLWWInsertBatch(b *testing.B) {
 		return keyValue
 	}
 	// The contents of prevValue don't matter as long as RawBytes is non-nil.
-	prevValue := roachpb.Value{RawBytes: make([]byte, 1)}
+	prevValue := roachpb.MakeValueFromBytes(make([]byte, 1))
 	for _, tc := range []struct {
 		name        string
 		implicitTxn bool

@@ -50,18 +50,18 @@ func makeRangeFeedEvent(rnd *rand.Rand, valSize int, prevValSize int) *kvpb.Rang
 	e := kvpb.RangeFeedEvent{
 		Val: &kvpb.RangeFeedValue{
 			Key: key,
-			Value: roachpb.Value{
-				RawBytes:  randutil.RandBytes(rnd, valSize),
-				Timestamp: hlc.Timestamp{WallTime: 1},
-			},
+			Value: roachpb.MakeValueFromBytesAndTimestamp(
+				randutil.RandBytes(rnd, valSize),
+				 hlc.Timestamp{WallTime: 1},
+			),
 		},
 	}
 
 	if prevValSize > 0 {
-		e.Val.PrevValue = roachpb.Value{
-			RawBytes:  randutil.RandBytes(rnd, prevValSize),
-			Timestamp: hlc.Timestamp{WallTime: 1},
-		}
+		e.Val.PrevValue = roachpb.MakeValueFromBytesAndTimestamp(
+			randutil.RandBytes(rnd, prevValSize),
+			hlc.Timestamp{WallTime: 1},
+		)
 	}
 	return &e
 }

@@ -24,7 +24,7 @@ func TestRegistrationBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	val := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
+	val := roachpb.MakeValueFromBytesAndTimestamp([]byte("val"), hlc.Timestamp{WallTime: 1})
 	ev1, ev2 := new(kvpb.RangeFeedEvent), new(kvpb.RangeFeedEvent)
 	ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val})
 	ev2.MustSetValue(&kvpb.RangeFeedValue{Key: keyB, Value: val})
@@ -197,7 +197,7 @@ func TestRegistryWithOmitOrigin(t *testing.T) {
 			return ev
 		}
 
-		val := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		val := roachpb.MakeValueFromBytesAndTimestamp([]byte("val"), hlc.Timestamp{WallTime: 1})
 		ev1, ev2 := new(kvpb.RangeFeedEvent), new(kvpb.RangeFeedEvent)
 		ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val, PrevValue: val})
 		ev2.MustSetValue(&kvpb.RangeFeedValue{Key: keyB, Value: val, PrevValue: val})
@@ -236,7 +236,7 @@ func TestRegistryBasic(t *testing.T) {
 	ctx := context.Background()
 
 	testutils.RunValues(t, "registration type=", registrationTestTypes, func(t *testing.T, rt registrationType) {
-		val := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		val := roachpb.MakeValueFromBytesAndTimestamp([]byte("val"), hlc.Timestamp{WallTime: 1})
 		ev1, ev2 := new(kvpb.RangeFeedEvent), new(kvpb.RangeFeedEvent)
 		ev3, ev4, ev5 := new(kvpb.RangeFeedEvent), new(kvpb.RangeFeedEvent), new(kvpb.RangeFeedEvent)
 		ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val, PrevValue: val})
@@ -510,8 +510,8 @@ func TestPublishStrippedEvents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	val := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
-	prevVal := roachpb.Value{RawBytes: []byte("prevVal"), Timestamp: hlc.Timestamp{WallTime: 1}}
+	val := roachpb.MakeValueFromBytesAndTimestamp([]byte("val"), hlc.Timestamp{WallTime: 1})
+	prevVal := roachpb.MakeValueFromBytesAndTimestamp([]byte("prevVal"), hlc.Timestamp{WallTime: 1})
 	ev1 := new(kvpb.RangeFeedEvent)
 	ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val, PrevValue: prevVal})
 	expectedEv := new(kvpb.RangeFeedEvent)

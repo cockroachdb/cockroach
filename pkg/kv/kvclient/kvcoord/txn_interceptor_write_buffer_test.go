@@ -2483,11 +2483,12 @@ func BenchmarkTxnWriteBuffer(b *testing.B) {
 			resp := kvpb.ResponseUnion{}
 			// All requests get responses. Gets also have a return value.
 			for _, req := range ba.Requests {
+				value := roachpb.MakeValueFromBytes([]byte(makeValue(kvSize)))
 				switch req.GetInner().(type) {
 				case *kvpb.GetRequest:
 					resp.Value = &kvpb.ResponseUnion_Get{
 						Get: &kvpb.GetResponse{
-							Value: &roachpb.Value{RawBytes: []byte(makeValue(kvSize))},
+							Value: &value,
 						},
 					}
 				}

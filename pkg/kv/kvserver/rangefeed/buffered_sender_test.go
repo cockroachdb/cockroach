@@ -156,7 +156,7 @@ func TestBufferedSenderChaosWithStop(t *testing.T) {
 
 	t.Run("stream manager after stop", func(t *testing.T) {
 		// No events should be buffered after stopped.
-		val1 := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		val1 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val"), hlc.Timestamp{WallTime: 1})
 		ev1 := new(kvpb.RangeFeedEvent)
 		ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val1})
 		muxEv := &kvpb.MuxRangeFeedEvent{RangeFeedEvent: *ev1, RangeID: 0, StreamID: 1}

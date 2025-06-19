@@ -227,7 +227,7 @@ func TestUnbufferedSenderWithConcurrentSend(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			val := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
+			val := roachpb.MakeValueFromBytesAndTimestamp([]byte("val"), hlc.Timestamp{WallTime: 1})
 			ev1 := new(kvpb.RangeFeedEvent)
 			ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val, PrevValue: val})
 			require.NoError(t, sm.sender.sendUnbuffered(&kvpb.MuxRangeFeedEvent{

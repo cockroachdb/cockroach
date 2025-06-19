@@ -55,12 +55,10 @@ func TestCombineResponses(t *testing.T) {
 	})
 
 	t.Run("neither combinable", func(t *testing.T) {
-		left := &GetResponse{
-			Value: &roachpb.Value{RawBytes: []byte("V")},
-		}
-		right := &GetResponse{
-			Value: &roachpb.Value{RawBytes: []byte("W")},
-		}
+		leftValue := roachpb.MakeValueFromBytes([]byte("V"))
+		left := &GetResponse{Value: &leftValue}
+		rightValue := roachpb.MakeValueFromBytes([]byte("W"))
+		right := &GetResponse{Value: &rightValue}
 		expCombined := &GetResponse{
 			Value: left.Value.ShallowClone(),
 		}
@@ -79,9 +77,8 @@ func TestCombineResponses(t *testing.T) {
 				{Key: roachpb.Key("Ai"), Value: roachpb.MakeValueFromString("X")},
 			},
 		}
-		right := &GetResponse{
-			Value: &roachpb.Value{RawBytes: []byte("W")},
-		}
+		rightValue := roachpb.MakeValueFromBytes([]byte("W"))
+		right := &GetResponse{Value: &rightValue}
 
 		err := CombineResponses(context.Background(), left, right, &BatchRequest{})
 		require.Error(t, err)
@@ -89,9 +86,8 @@ func TestCombineResponses(t *testing.T) {
 	})
 
 	t.Run("right combinable", func(t *testing.T) {
-		left := &GetResponse{
-			Value: &roachpb.Value{RawBytes: []byte("V")},
-		}
+		leftValue := roachpb.MakeValueFromBytes([]byte("V"))
+		left := &GetResponse{Value: &leftValue}
 		right := &ScanResponse{
 			Rows: []roachpb.KeyValue{
 				{Key: roachpb.Key("B"), Value: roachpb.MakeValueFromString("W")},

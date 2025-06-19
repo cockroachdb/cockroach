@@ -68,12 +68,12 @@ func TestEstimatedCPUBatchInfo(t *testing.T) {
 					{Value: &kvpb.RequestUnion_Put{
 						Put: &kvpb.PutRequest{
 							RequestHeader: kvpb.RequestHeader{Key: make([]byte, 10)},
-							Value:         roachpb.Value{RawBytes: make([]byte, 100)}},
+							Value:         roachpb.MakeValueFromBytes(make([]byte, 100))},
 					}},
 					{Value: &kvpb.RequestUnion_Put{
 						Put: &kvpb.PutRequest{
 							RequestHeader: kvpb.RequestHeader{Key: make([]byte, 20)},
-							Value:         roachpb.Value{RawBytes: make([]byte, 200)}},
+							Value:         roachpb.MakeValueFromBytes(make([]byte, 200))},
 					}},
 					{Value: &kvpb.RequestUnion_EndTxn{
 						EndTxn: &kvpb.EndTxnRequest{
@@ -100,7 +100,7 @@ func TestEstimatedCPUBatchInfo(t *testing.T) {
 					{Value: &kvpb.RequestUnion_Put{
 						Put: &kvpb.PutRequest{
 							RequestHeader: kvpb.RequestHeader{Key: make([]byte, 10)},
-							Value:         roachpb.Value{RawBytes: make([]byte, 100)}},
+							Value:         roachpb.MakeValueFromBytes(make([]byte, 100))},
 					}},
 					{Value: &kvpb.RequestUnion_Get{
 						Get: &kvpb.GetRequest{

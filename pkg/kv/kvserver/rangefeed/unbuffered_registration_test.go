@@ -118,8 +118,8 @@ func TestUnbufferedRegCorrectnessOnDisconnect(t *testing.T) {
 	const s1 = 1
 
 	key := roachpb.Key("d")
-	val1 := roachpb.Value{RawBytes: []byte("val1"), Timestamp: hlc.Timestamp{WallTime: 5}}
-	val2 := roachpb.Value{RawBytes: []byte("val2"), Timestamp: hlc.Timestamp{WallTime: 6}}
+	val1 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val1"), hlc.Timestamp{WallTime: 5})
+	val2 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val2"), hlc.Timestamp{WallTime: 6})
 	op1 := writeValueOpWithKV(key, val1.Timestamp, val1.RawBytes)
 	op2 := writeValueOpWithKV(key, val2.Timestamp, val2.RawBytes)
 	ev1, ev2 := new(kvpb.RangeFeedEvent), new(kvpb.RangeFeedEvent)
@@ -181,7 +181,7 @@ func TestUnbufferedRegWithCatchUpBufCleanUpAfterRunOutputLoop(t *testing.T) {
 
 	rng, _ := randutil.NewTestRand()
 	ev1 := new(kvpb.RangeFeedEvent)
-	val := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
+	val := roachpb.MakeValueFromBytesAndTimestamp([]byte("val"), hlc.Timestamp{WallTime: 1})
 	ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val})
 	numReg := rng.Intn(1000)
 	regs := make([]*unbufferedRegistration, numReg)
@@ -225,8 +225,8 @@ func TestUnbufferedRegOnCatchUpSwitchOver(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	val1 := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
-	val2 := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 5}}
+	val1 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val"), hlc.Timestamp{WallTime: 1})
+	val2 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val"), hlc.Timestamp{WallTime: 5})
 	ev1, ev2, ev3, ev4, ev5 := new(kvpb.RangeFeedEvent), new(kvpb.RangeFeedEvent),
 		new(kvpb.RangeFeedEvent), new(kvpb.RangeFeedEvent), new(kvpb.RangeFeedEvent)
 	ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val1})

@@ -173,13 +173,11 @@ func makeResultWithGetResp(rng *rand.Rand, empty bool) Result {
 	if !empty {
 		rawBytes := make([]byte, rng.Intn(20)+1)
 		rng.Read(rawBytes)
-		r.GetResp.Value = &roachpb.Value{
-			RawBytes: rawBytes,
-			Timestamp: hlc.Timestamp{
-				WallTime: rng.Int63(),
-				Logical:  rng.Int31(),
-			},
-		}
+		value := roachpb.MakeValueFromBytesAndTimestamp(rawBytes, hlc.Timestamp{
+			WallTime: rng.Int63(),
+			Logical:  rng.Int31(),
+		})
+		r.GetResp.Value = &value
 	}
 	return r
 }

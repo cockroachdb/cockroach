@@ -114,10 +114,7 @@ func TestProcessorBasic(t *testing.T) {
 			[]*kvpb.RangeFeedEvent{
 				rangeFeedValue(
 					roachpb.Key("c"),
-					roachpb.Value{
-						RawBytes:  []byte("val"),
-						Timestamp: hlc.Timestamp{WallTime: 6},
-					},
+					roachpb.MakeValueFromBytesAndTimestamp([]byte("val"), hlc.Timestamp{WallTime: 6}),
 				),
 			},
 			r1Stream.GetAndClearEvents(),
@@ -180,10 +177,7 @@ func TestProcessorBasic(t *testing.T) {
 			[]*kvpb.RangeFeedEvent{
 				rangeFeedValue(
 					roachpb.Key("e"),
-					roachpb.Value{
-						RawBytes:  []byte("ival"),
-						Timestamp: hlc.Timestamp{WallTime: 13},
-					},
+					roachpb.MakeValueFromBytesAndTimestamp([]byte("ival"), hlc.Timestamp{WallTime: 13}),
 				),
 				rangeFeedCheckpoint(
 					roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
@@ -255,10 +249,7 @@ func TestProcessorBasic(t *testing.T) {
 		valEvent := []*kvpb.RangeFeedEvent{
 			rangeFeedValue(
 				roachpb.Key("k"),
-				roachpb.Value{
-					RawBytes:  []byte("val2"),
-					Timestamp: hlc.Timestamp{WallTime: 22},
-				},
+				roachpb.MakeValueFromBytesAndTimestamp([]byte("val2"), hlc.Timestamp{WallTime: 22}),
 			),
 		}
 		require.Equal(t, valEvent, r1Stream.GetAndClearEvents())
@@ -271,10 +262,7 @@ func TestProcessorBasic(t *testing.T) {
 		valEvent2 := []*kvpb.RangeFeedEvent{
 			rangeFeedValue(
 				roachpb.Key("v"),
-				roachpb.Value{
-					RawBytes:  []byte("val3"),
-					Timestamp: hlc.Timestamp{WallTime: 23},
-				},
+				roachpb.MakeValueFromBytesAndTimestamp([]byte("val3"), hlc.Timestamp{WallTime: 23}),
 			),
 		}
 		require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.GetAndClearEvents())
@@ -289,10 +277,7 @@ func TestProcessorBasic(t *testing.T) {
 		valEvent3 := []*kvpb.RangeFeedEvent{
 			rangeFeedValue(
 				roachpb.Key("k"),
-				roachpb.Value{
-					RawBytes:  []byte("val3"),
-					Timestamp: hlc.Timestamp{WallTime: 22},
-				},
+				roachpb.MakeValueFromBytesAndTimestamp([]byte("val3"), hlc.Timestamp{WallTime: 22}),
 			),
 		}
 		require.Equal(t, valEvent3, r1Stream.GetAndClearEvents())
@@ -410,10 +395,7 @@ func TestProcessorOmitRemote(t *testing.T) {
 		valEvent3 := []*kvpb.RangeFeedEvent{
 			rangeFeedValue(
 				roachpb.Key("k"),
-				roachpb.Value{
-					RawBytes:  []byte("val3"),
-					Timestamp: hlc.Timestamp{WallTime: 22},
-				},
+				roachpb.MakeValueFromBytesAndTimestamp([]byte("val3"), hlc.Timestamp{WallTime: 22}),
 			),
 		}
 

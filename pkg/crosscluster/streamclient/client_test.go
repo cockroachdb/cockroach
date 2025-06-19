@@ -106,10 +106,10 @@ func (sc testStreamClient) Subscribe(
 ) (Subscription, error) {
 	sampleKV := roachpb.KeyValue{
 		Key: []byte("key_1"),
-		Value: roachpb.Value{
-			RawBytes:  []byte("value_1"),
-			Timestamp: hlc.Timestamp{WallTime: 1},
-		},
+		Value: roachpb.MakeValueFromBytesAndTimestamp(
+			[]byte("value_1"),
+			hlc.Timestamp{WallTime: 1},
+		),
 	}
 
 	sampleResolvedSpan := jobspb.ResolvedSpan{

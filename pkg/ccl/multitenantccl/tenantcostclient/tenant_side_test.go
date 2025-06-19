@@ -957,7 +957,8 @@ func makeTestBatch(
 			byteCount += bi.WriteBytes % bi.WriteCount
 		}
 
-		putReq := &kvpb.PutRequest{Value: roachpb.Value{RawBytes: make([]byte, byteCount)}}
+		value := roachpb.MakeValueFromBytes(make([]byte, byteCount))
+		putReq := &kvpb.PutRequest{Value: value}
 		req.Requests = append(req.Requests,
 			kvpb.RequestUnion{Value: &kvpb.RequestUnion_Put{Put: putReq}})
 
