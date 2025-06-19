@@ -557,6 +557,7 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator, as *Allo
 		logTracesThresholdFunc: makeRateLimitedTimeoutFuncByPermittedSlowdown(
 			permittedRangeScanSlowdown/2, rebalanceSnapshotRate,
 		),
+		as: as,
 	}
 	store.metrics.registry.AddMetricStruct(&rq.metrics)
 	rq.baseQueue = newBaseQueue(
