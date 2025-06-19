@@ -1027,18 +1027,24 @@ message EndTxnResponse {
   // The commit timestamp of the STAGING transaction record written
   // by the request. Only set if the transaction record was staged.
   util.hlc.Timestamp staging_timestamp = 5 [(gogoproto.nullable) = false];
-  // ReplicatedLocksReleasedOnCommit, if non-empty, indicate that replicated
-  // locks with strength Shared or Exclusive were released in the referenced key
-  // spans when committing this transaction. Notably, this field is left unset
-  // if only write intents were resolved. The field is also left unset for
-  // transactions that aborted.
+  // ReplicatedLocalLocksReleasedOnCommit, if non-empty, indicate that
+  // replicated locks with strength Shared or Exclusive were released in the
+  // referenced key spans when committing this transaction. These locks are
+  // local to the range on which the EndTxn request evaluated. Notably, this
+  // field is left unset if only write intents were resolved. The field is only
+  // set when transactions are explicitly marked as committed.
   //
   // The caller must bump the timestamp cache across these spans to the
-  // transaction's commit timestamp. Doing so ensures that the released locks
-  // (acquired by the now committed transaction) continue to provide protection
-  // against other writers up to the commit timestamp, even after the locks have
-  // been released.
-  repeated Span replicated_locks_released_on_commit = 6 [(gogoproto.nullable) = false];
+  // transaction's commit timestamp. Doing so ensures that the released local[1]
+  // locks (acquired by the now committed transaction) continue to provide
+  // protection against other writers up to the commit timestamp, even after the
+  // locks have been released.
+  //
+  // [1] Non-local replicated locks provide the same protection, however, the
+  // mechanism of bumping the timestamp cache is different there. See the
+  // ReplicatedLocksReleasedCommitTimestamp field on
+  // ResolveIntent{,Range}Response.
+  repeated Span replicated_local_locks_released_on_commit = 6 [(gogoproto.nullable) = false];
 }
 
 // An AdminSplitRequest is the argument to the AdminSplit() method. The

@@ -195,6 +195,7 @@ func (tc *txnCommitter) SendLocked(
 		// so interceptors above the txnCommitter in the stack don't need to be
 		// made aware that the record is staging.
 		pErr = maybeRemoveStagingStatusInErr(pErr)
+		log.VEventf(ctx, 2, "batch with EndTxn(commit=true) failed: %v", pErr)
 		return nil, pErr
 	}
 
@@ -216,6 +217,7 @@ func (tc *txnCommitter) SendLocked(
 		// the EndTxn request, either because canCommitInParallel returned false
 		// or because there were no unproven in-flight writes (see txnPipeliner)
 		// and there were no writes in the batch request.
+		log.VEventf(ctx, 2, "parallel commit attempt for transaction %s resulted in explicit commit", br.Txn)
 		return br, nil
 	default:
 		return nil, kvpb.NewErrorf("unexpected response status without error: %v", br.Txn)
@@ -296,6 +298,8 @@ func (tc *txnCommitter) validateEndTxnBatch(ba *kvpb.BatchRequest) error {
 func (tc *txnCommitter) sendLockedWithElidedEndTxn(
 	ctx context.Context, ba *kvpb.BatchRequest, et *kvpb.EndTxnRequest,
 ) (br *kvpb.BatchResponse, pErr *kvpb.Error) {
+	log.VEventf(ctx, 2, "eliding EndTxn request for read-only, non-locking transaction")
+
 	// Send the batch without its final request, which we know to be the EndTxn
 	// request that we're eliding. If this would result in us sending an empty
 	// batch, mock out a reply instead of sending anything.
