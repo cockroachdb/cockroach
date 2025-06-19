@@ -1105,7 +1105,7 @@ func TestCreateCheckpoint_SpanConstrained(t *testing.T) {
 	for i := 1; i <= maxTableID; i++ {
 		require.NoError(t, b.PutMVCC(
 			MVCCKey{Key: key(i), Timestamp: hlc.Timestamp{WallTime: int64(i)}},
-			MVCCValue{Value: roachpb.Value{RawBytes: randutil.RandBytes(rng, 100)}},
+			MVCCValue{Value: roachpb.MakeValueFromBytes(randutil.RandBytes(rng, 100))},
 		))
 	}
 	require.NoError(t, b.Commit(true /* sync */))
@@ -1640,7 +1640,7 @@ func TestScanLocks(t *testing.T) {
 	for k, str := range locks {
 		var err error
 		if str == lock.Intent {
-			_, err = MVCCPut(ctx, eng, roachpb.Key(k), txn1.ReadTimestamp, roachpb.Value{RawBytes: roachpb.Key(k)}, MVCCWriteOptions{Txn: txn1})
+			_, err = MVCCPut(ctx, eng, roachpb.Key(k), txn1.ReadTimestamp, roachpb.MakeValueFromBytes(roachpb.Key(k)), MVCCWriteOptions{Txn: txn1})
 		} else {
 			err = MVCCAcquireLock(ctx, eng, &txn1.TxnMeta, txn1.IgnoredSeqNums, str, roachpb.Key(k), nil, 0, 0)
 		}
@@ -2135,7 +2135,7 @@ func TestScanConflictingIntentsForDroppingLatchesEarly(t *testing.T) {
 	keyB := roachpb.Key("b")
 	keyC := roachpb.Key("c")
 	keyD := roachpb.Key("d")
-	val := roachpb.Value{RawBytes: []byte{'v'}}
+	val := roachpb.MakeValueFromString("v")
 
 	testCases := []struct {
 		name                  string
@@ -2356,7 +2356,7 @@ func TestScanConflictingIntentsForDroppingLatchesEarlyReadYourOwnWrites(t *testi
 	aboveReadSeqNumber := enginepb.TxnSeq(3)
 
 	keyA := roachpb.Key("a")
-	val := roachpb.Value{RawBytes: []byte{'v'}}
+	val := roachpb.MakeValueFromString("v")
 
 	testCases := []struct {
 		name                  string
