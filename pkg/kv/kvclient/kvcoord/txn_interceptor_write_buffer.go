@@ -743,7 +743,7 @@ func (twb *txnWriteBuffer) applyTransformations(
 			_, lockStr, isServed := twb.maybeServeRead(t.Key, t.Sequence)
 			// To elide the locking request, we must have both a value (to evaluate
 			// the condition) and a lock.
-			if isServed && lockExcludesWrites(lockStr) {
+			if isServed && lockStr == lock.Exclusive {
 				record.stripped = true
 			} else {
 				record.transformed = true
@@ -767,7 +767,7 @@ func (twb *txnWriteBuffer) applyTransformations(
 			// If the MustAcquireExclusiveLock flag is set then we need to add a
 			// locking Get to the BatchRequest, including if the key doesn't exist. We
 			// can elide this locking request when we already have an existing lock.
-			lockRequired := t.MustAcquireExclusiveLock && !lockExcludesWrites(lockStr)
+			lockRequired := t.MustAcquireExclusiveLock && lockStr != lock.Exclusive
 			if lockRequired {
 				var getReqU kvpb.RequestUnion
 				getReqU.MustSetInner(&kvpb.GetRequest{
@@ -787,9 +787,9 @@ func (twb *txnWriteBuffer) applyTransformations(
 			_, lockStr, served := twb.maybeServeRead(t.Key, t.Sequence)
 			// If MustAcquireExclusiveLock flag is set on the DeleteRequest, then we
 			// need to add a locking Get to the BatchRequest, including if the key
-			// doesn't exist. We can elide this locking request when we have both a
-			// value (to populate the FoundKey field in the response) and a lock.
-			lockRequired := t.MustAcquireExclusiveLock && !(served && lockExcludesWrites(lockStr))
+			// doesn't exist. We can only elide this locking request when we have both
+			// a value (to populate the FoundKey field in the response) and a lock.
+			lockRequired := t.MustAcquireExclusiveLock && !(served && lockStr == lock.Exclusive)
 			if lockRequired {
 				var getReqU kvpb.RequestUnion
 				getReqU.MustSetInner(&kvpb.GetRequest{
@@ -1797,10 +1797,6 @@ func (li *lockedKeyInfo) rollbackSequence(seq enginepb.TxnSeq) bool {
 		li.ts = hlc.Timestamp{}
 	}
 	return stillHeld
-}
-
-func lockExcludesWrites(str lock.Strength) bool {
-	return str >= lock.Shared
 }
 
 // getKey reads the key for the next KV from a slice of BatchResponses field of
