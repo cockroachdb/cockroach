@@ -486,8 +486,10 @@ func (d *datadogWriter) upload(fileName string) error {
 		}()
 	}
 
+	seriesUploaded := 0
 	for {
 		data, err := decodeOne()
+		seriesUploaded += len(data)
 		if err == io.EOF {
 			if len(data) != 0 {
 				wg.Add(1)
@@ -513,6 +515,16 @@ func (d *datadogWriter) upload(fileName string) error {
 		uploadStatus = UploadStatusFailure
 	}
 	fmt.Printf("\nUpload status: %s!\n", uploadStatus)
+	fmt.Printf("Uploaded %d series overall\n", seriesUploaded)
+	// Estimate cost. The cost of historical metrics ingest is based on how many
+	// metrics were active during the upload window. Assuming the entire upload
+	// happens during a given hour, that means the cost will be equal to the count
+	// of uploaded series times $4.55/100 custom metrics (our rate) divided by
+	// 730 hours per month.
+	// For a single node upload that has 6500 unique series, that's about $.40
+	// per upload.
+	estimatedCost := float64(seriesUploaded) * 4.55 / 100 / 730
+	fmt.Printf("Estimated cost of this upload: $%.2f\n", estimatedCost)
 
 	if metricsUploadState.isSingleUploadSucceeded {
 		var isDatadogUploadFailed = false
