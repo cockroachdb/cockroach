@@ -51,6 +51,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"storj.io/drpc"
 )
 
 func init() {
@@ -992,6 +993,20 @@ func (c *connector) dialAddrs(ctx context.Context) (*client, error) {
 					RPCAdminClient:            serverpb.NewGRPCAdminClientAdapter(conn),
 					RPCTimeSeriesClient:       tspb.NewGRPCTimeSeriesClientAdapter(conn),
 				}, nil
+			} else {
+				conn, err := c.drpcDialAddr(ctx, addr)
+				if err != nil {
+					log.Warningf(ctx, "error dialing tenant KV address %s: %v", addr, err)
+					continue
+				}
+				return &client{
+					RPCTenantServiceClient:    kvpb.NewDRPCTenantServiceClientAdapter(conn),
+					RPCTenantSpanConfigClient: kvpb.NewDRPCTenantSpanConfigClientAdapter(conn),
+					RPCTenantUsageClient:      kvpb.NewDRPCTenantUsageClientAdapter(conn),
+					RPCStatusClient:           serverpb.NewDRPCStatusClientAdapter(conn),
+					RPCAdminClient:            serverpb.NewDRPCAdminClientAdapter(conn),
+					RPCTimeSeriesClient:       tspb.NewDRPCTimeSeriesClientAdapter(conn),
+				}, nil
 			}
 		}
 	}
@@ -1004,6 +1019,17 @@ func (c *connector) dialAddr(ctx context.Context, addr string) (conn *grpc.Clien
 	}
 	err = timeutil.RunWithTimeout(ctx, "dial addr", c.rpcDialTimeout, func(ctx context.Context) error {
 		conn, err = c.rpcContext.GRPCUnvalidatedDial(addr, roachpb.Locality{}).Connect(ctx)
+		return err
+	})
+	return conn, err
+}
+
+func (c *connector) drpcDialAddr(ctx context.Context, addr string) (conn drpc.Conn, err error) {
+	if c.rpcDialTimeout == 0 {
+		return c.rpcContext.DRPCUnvalidatedDial(addr, roachpb.Locality{}).Connect(ctx)
+	}
+	err = timeutil.RunWithTimeout(ctx, "dial addr", c.rpcDialTimeout, func(ctx context.Context) error {
+		conn, err = c.rpcContext.DRPCUnvalidatedDial(addr, roachpb.Locality{}).Connect(ctx)
 		return err
 	})
 	return conn, err

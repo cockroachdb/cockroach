@@ -484,8 +484,13 @@ func (n *Node) StatusClient(ctx context.Context) serverpb.RPCStatusClient {
 			log.Fatalf(context.Background(), "failed to initialize status client: %s", err)
 		}
 		return serverpb.NewGRPCStatusClientAdapter(conn)
+	} else {
+		conn, err := n.rpcCtx.DRPCUnvalidatedDial(n.RPCAddr(), roachpb.Locality{}).Connect(ctx)
+		if err != nil {
+			log.Fatalf(context.Background(), "failed to initialize status client: %s", err)
+		}
+		return serverpb.NewDRPCStatusClientAdapter(conn)
 	}
-	return nil // This should never happen
 }
 
 func (n *Node) logDir() string {

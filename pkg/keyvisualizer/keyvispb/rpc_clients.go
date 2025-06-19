@@ -24,6 +24,11 @@ func DialKeyVisualizerClient(
 			return nil, err
 		}
 		return NewGRPCKeyVisualizerClientAdapter(conn), nil
+	} else {
+		conn, err := nd.DRPCDial(ctx, nodeID, class)
+		if err != nil {
+			return nil, err
+		}
+		return NewDRPCKeyVisualizerClientAdapter(conn), nil
 	}
-	return nil, nil
 }
