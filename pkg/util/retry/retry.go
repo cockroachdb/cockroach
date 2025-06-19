@@ -18,13 +18,18 @@ import (
 
 // Options provides reusable configuration of Retry objects.
 type Options struct {
-	InitialBackoff time.Duration // Default retry backoff interval
-	MaxBackoff     time.Duration // Maximum retry backoff interval
-	Multiplier     float64       // Default backoff constant
-	// Maximum number of retries; attempts = MaxRetries + 1. (0 for infinite)
-	MaxRetries          int
+	InitialBackoff      time.Duration   // Default retry backoff interval
+	MaxBackoff          time.Duration   // Maximum retry backoff interval
+	Multiplier          float64         // Default backoff constant
 	RandomizationFactor float64         // Randomize the backoff interval by constant
 	Closer              <-chan struct{} // Optionally end retry loop channel close
+	// Maximum number of retries; attempts = MaxRetries + 1. (0 for infinite)
+	MaxRetries int
+	// MaxDuration is the maximum duration for which the retry loop will make
+	// attempts. Once the deadline has elapsed, the loop will stop attempting
+	// retries.
+	// The loop will run for at least one iteration. (0 for infinite)
+	MaxDuration time.Duration
 }
 
 // Retry implements the public methods necessary to control an exponential-
@@ -34,6 +39,7 @@ type Retry struct {
 	ctx            context.Context
 	currentAttempt int
 	isReset        bool
+	deadline       time.Time // Deadline for the retry loop if MaxDuration is set.
 }
 
 // Start returns a new Retry initialized to some default values. The Retry can
@@ -87,8 +93,14 @@ func (r *Retry) Reset() {
 func (r *Retry) mustReset() {
 	r.currentAttempt = 0
 	r.isReset = true
+	if r.opts.MaxDuration != 0 {
+		r.deadline = time.Now().Add(r.opts.MaxDuration)
+	} else {
+		r.deadline = time.Time{}
+	}
 }
 
+// retryIn returns the duration to wait before the next retry attempt.
 func (r Retry) retryIn() time.Duration {
 	backoff := float64(r.opts.InitialBackoff) * math.Pow(r.opts.Multiplier, float64(r.currentAttempt))
 	if maxBackoff := float64(r.opts.MaxBackoff); backoff > maxBackoff {
@@ -116,8 +128,15 @@ func (r *Retry) Next() bool {
 		return true
 	}
 
-	if r.opts.MaxRetries > 0 && r.currentAttempt >= r.opts.MaxRetries {
+	if r.retryLimitReached() {
 		return false
+	}
+
+	// Expiration for if MaxDuration is set.
+	var expChan <-chan time.Time
+	if r.opts.MaxDuration > 0 {
+		expDuration := timeutil.Until(r.deadline)
+		expChan = time.After(expDuration)
 	}
 
 	// Wait before retry.
@@ -125,10 +144,13 @@ func (r *Retry) Next() bool {
 	if d > 0 {
 		log.VEventfDepth(r.ctx, 1 /* depth */, 2 /* level */, "will retry after %s", d)
 	}
+
 	select {
 	case <-time.After(d):
 		r.currentAttempt++
 		return true
+	case <-expChan:
+		return false
 	case <-r.opts.Closer:
 		return false
 	case <-r.ctx.Done():
@@ -136,29 +158,49 @@ func (r *Retry) Next() bool {
 	}
 }
 
-// closedC is returned from Retry.NextCh whenever a retry
-// can begin immediately.
-var closedC = func() chan time.Time {
-	c := make(chan time.Time)
-	close(c)
-	return c
-}()
-
-// NextCh returns a channel which will receive when the next retry
-// interval has expired.
-func (r *Retry) NextCh() <-chan time.Time {
-	if r.isReset {
-		r.isReset = false
-		return closedC
-	}
-	r.currentAttempt++
-	if r.opts.MaxRetries > 0 && r.currentAttempt > r.opts.MaxRetries {
-		return nil
-	}
-	return time.After(r.retryIn())
+func (r *Retry) retryLimitReached() bool {
+	return (r.opts.MaxRetries > 0 && r.currentAttempt >= r.opts.MaxRetries) ||
+		(r.opts.MaxDuration > 0 && !time.Now().Before(r.deadline))
 }
 
-// CurrentAttempt returns the current attempt
+// immediateCh creates a channel that is immediately written to with the
+// provided value and then closed.
+// If the value is true, it indicates that an immediate retry should be made.
+// If the value is false, it indicates that no retry should be made.
+func immediateCh(v bool) chan bool {
+	c := make(chan bool, 1)
+	c <- v
+	close(c)
+	return c
+}
+
+// NextCh returns a channel which will receive when the next retry
+// interval has expired. If the received value is true, it indicates a retry
+// should be made. If the received value is false, it indicates that no retry
+// should be made.
+func (r *Retry) NextCh() <-chan bool {
+	if r.isReset {
+		r.isReset = false
+		return immediateCh(true)
+	}
+	if r.retryLimitReached() {
+		return immediateCh(false)
+	}
+	ch := make(chan bool, 1)
+	time.AfterFunc(r.retryIn(), func() {
+		defer close(ch)
+		// Possible retry limit reached during backoff if MaxDuration is set.
+		if r.retryLimitReached() {
+			ch <- false
+		} else {
+			r.currentAttempt++
+			ch <- true
+		}
+	})
+	return ch
+}
+
+// CurrentAttempt returns the current attempt (0-based index)
 func (r *Retry) CurrentAttempt() int {
 	return r.currentAttempt
 }
