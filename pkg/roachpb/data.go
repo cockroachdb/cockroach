@@ -15,6 +15,7 @@ import (
 	"hash/crc32"
 	"math"
 	"math/rand"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"sync"
@@ -378,6 +379,7 @@ func (v Value) Verify(key []byte) error {
 // VerifyHeader checks that, if the Value is not empty, it includes a header.
 func (v Value) VerifyHeader() error {
 	if n := len(v.RawBytes); n > 0 && n < headerSize {
+		debug.PrintStack()
 		return errors.Errorf("invalid header size: %d", n)
 	}
 	return nil

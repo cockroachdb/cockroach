@@ -80,6 +80,13 @@ func (b *BatchEncoder) encodeInvertedSecondaryIndex(
 	return nil
 }
 
+func (b *BatchEncoder) useCPutForSecondary(ind catalog.Index) bool {
+	if ind.ForcePut() {
+		return false
+	}
+	return ind.IsUnique() || b.useCPutsOnNonUniqueIndexes
+}
+
 func (b *BatchEncoder) encodeInvertedSecondaryIndexNoFamiliesOneRow(
 	ind catalog.Index, key roachpb.Key, row int,
 ) error {
@@ -94,7 +101,7 @@ func (b *BatchEncoder) encodeInvertedSecondaryIndexNoFamiliesOneRow(
 	}
 	var kvValue roachpb.Value
 	kvValue.SetBytes(value)
-	if ind.IsUnique() || b.useCPutsOnNonUniqueIndexes {
+	if b.useCPutForSecondary(ind) {
 		b.p.CPut(&key, &kvValue, nil /* expValue */)
 	} else {
 		b.p.Put(&key, &kvValue)
