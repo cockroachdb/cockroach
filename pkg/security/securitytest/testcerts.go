@@ -16,7 +16,7 @@ import (
 
 // EmbeddedTenantIDs lists the tenants we embed certs for.
 // See 'test_certs/regenerate.sh'.
-func EmbeddedTenantIDs() []uint64 { return []uint64{10, 11, 20, 2} }
+func EmbeddedTenantIDs() []uint64 { return []uint64{10, 11, 20, 3} }
 
 // CreateTestCerts populates the test certificates in the given directory.
 func CreateTestCerts(certsDir string) (cleanup func() error) {

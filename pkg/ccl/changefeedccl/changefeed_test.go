@@ -1029,62 +1029,70 @@ func TestChangefeedCursor(t *testing.T) {
 		require.True(t, beforeInsert.Less(insertTimestamp) && insertTimestamp.Less(tsLogical) && tsLogical.Less(s.Server.Clock().Now()),
 			fmt.Sprintf("beforeInsert: %s, insertTimestamp: %s, tsLogical: %s", beforeInsert, insertTimestamp, tsLogical))
 
-		// The below function is currently used to test negative timestamp in cursor i.e of the form
-		// "-3us".
-		// Using this function we can calculate the difference with the time that was before
-		// the insert statement, which is set as the new cursor value inside createChangefeedJobRecord
-		calculateCursor := func(currentTime *hlc.Timestamp) string {
-			//  Should convert to microseconds as that is the maximum precision we support
-			diff := (beforeInsert.WallTime - currentTime.WallTime) / 1000
-			diffStr := strconv.FormatInt(diff, 10) + "us"
-			return diffStr
-		}
+		t.Run("negative cursor", func(t *testing.T) {
+			// The below function is currently used to test negative timestamp in cursor i.e of the form
+			// "-3us".
+			// Using this function we can calculate the difference with the time that was before
+			// the insert statement, which is set as the new cursor value inside createChangefeedJobRecord
+			calculateCursor := func(currentTime *hlc.Timestamp) string {
+				//  Should convert to microseconds as that is the maximum precision we support
+				diff := (beforeInsert.WallTime - currentTime.WallTime) / 1000
+				diffStr := strconv.FormatInt(diff, 10) + "us"
+				return diffStr
+			}
 
-		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
-		knobs.OverrideCursor = calculateCursor
+			knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+			knobs.OverrideCursor = calculateCursor
 
-		// The "-3 days" is a placeholder here - it will be replaced with actual difference
-		// in createChangefeedJobRecord
-		fooInterval := feed(t, f, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, "-3 days")
-		defer closeFeed(t, fooInterval)
-		assertPayloads(t, fooInterval, []string{
-			`foo: [1]->{"after": {"a": 1, "b": "before"}}`,
-			`foo: [2]->{"after": {"a": 2, "b": "after"}}`,
+			// The "-3 days" is a placeholder here - it will be replaced with actual difference
+			// in createChangefeedJobRecord
+			fooInterval := feed(t, f, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, "-3 days")
+			defer closeFeed(t, fooInterval)
+			assertPayloads(t, fooInterval, []string{
+				`foo: [1]->{"after": {"a": 1, "b": "before"}}`,
+				`foo: [2]->{"after": {"a": 2, "b": "after"}}`,
+			})
+
+			// We do not need to override for the remaining cases
+			knobs.OverrideCursor = nil
 		})
 
-		// We do not need to override for the remaining cases
-		knobs.OverrideCursor = nil
+		t.Run("decimal cursor", func(t *testing.T) {
+			fooLogical := feed(t, f, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, eval.TimestampToDecimalDatum(tsLogical).String())
+			defer closeFeed(t, fooLogical)
+			assertPayloads(t, fooLogical, []string{
+				`foo: [2]->{"after": {"a": 2, "b": "after"}}`,
+			})
 
-		fooLogical := feed(t, f, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, eval.TimestampToDecimalDatum(tsLogical).String())
-		defer closeFeed(t, fooLogical)
-		assertPayloads(t, fooLogical, []string{
-			`foo: [2]->{"after": {"a": 2, "b": "after"}}`,
+			// Check that the cursor is properly hooked up to the job statement
+			// time. The sinkless tests currently don't have a way to get the
+			// statement timestamp, so only verify this for enterprise.
+			if e, ok := fooLogical.(cdctest.EnterpriseTestFeed); ok {
+				var bytes []byte
+				sqlDB.QueryRow(t, jobutils.JobPayloadByIDQuery, e.JobID()).Scan(&bytes)
+				var payload jobspb.Payload
+				require.NoError(t, protoutil.Unmarshal(bytes, &payload))
+				require.Equal(t, tsLogical, payload.GetChangefeed().StatementTime)
+			}
 		})
 
-		nanosStr := strconv.FormatInt(tsClock.UnixNano(), 10)
-		fooNanosStr := feed(t, f, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, nanosStr)
-		defer closeFeed(t, fooNanosStr)
-		assertPayloads(t, fooNanosStr, []string{
-			`foo: [2]->{"after": {"a": 2, "b": "after"}}`,
+		t.Run("nanos cursor", func(t *testing.T) {
+			nanosStr := strconv.FormatInt(tsClock.UnixNano(), 10)
+			fooNanosStr := feed(t, f, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, nanosStr)
+			defer closeFeed(t, fooNanosStr)
+			assertPayloads(t, fooNanosStr, []string{
+				`foo: [2]->{"after": {"a": 2, "b": "after"}}`,
+			})
 		})
 
-		timeStr := tsClock.Format(`2006-01-02 15:04:05.999999`)
-		fooString := feed(t, f, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, timeStr)
-		defer closeFeed(t, fooString)
-		assertPayloads(t, fooString, []string{
-			`foo: [2]->{"after": {"a": 2, "b": "after"}}`,
+		t.Run("datetime cursor", func(t *testing.T) {
+			timeStr := tsClock.Format(`2006-01-02 15:04:05.999999`)
+			fooString := feed(t, f, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, timeStr)
+			defer closeFeed(t, fooString)
+			assertPayloads(t, fooString, []string{
+				`foo: [2]->{"after": {"a": 2, "b": "after"}}`,
+			})
 		})
-
-		// Check that the cursor is properly hooked up to the job statement
-		// time. The sinkless tests currently don't have a way to get the
-		// statement timestamp, so only verify this for enterprise.
-		if e, ok := fooLogical.(cdctest.EnterpriseTestFeed); ok {
-			var bytes []byte
-			sqlDB.QueryRow(t, jobutils.JobPayloadByIDQuery, e.JobID()).Scan(&bytes)
-			var payload jobspb.Payload
-			require.NoError(t, protoutil.Unmarshal(bytes, &payload))
-			require.Equal(t, tsLogical, payload.GetChangefeed().StatementTime)
-		}
 	}
 
 	cdcTest(t, testFn)

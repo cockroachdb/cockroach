@@ -3684,6 +3684,34 @@ service TenantService {
   rpc GetRangeDescriptors(GetRangeDescriptorsRequest) returns (stream GetRangeDescriptorsResponse) {}
 }
 
+// TenantUsage provides RPCs for secondary tenants to report resource
+// consumption and get Request Units available.
+service TenantUsage {
+  // TokenBucket is used by tenants to obtain Request Units and report
+  // consumption.
+  rpc TokenBucket (TokenBucketRequest) returns (TokenBucketResponse) {}
+}
+
+// TenantSpanConfig provides RPCs for secondary tenants to operate on span
+// configs, such as reading and updating them.
+service TenantSpanConfig {
+  // GetSpanConfigs is used to fetch the span configurations over a given
+  // keyspan.
+  rpc GetSpanConfigs(GetSpanConfigsRequest) returns (GetSpanConfigsResponse) {}
+
+  // GetAllSystemSpanConfigsThatApply is used to fetch all system span
+  // configurations that apply over a tenant's ranges.
+  rpc GetAllSystemSpanConfigsThatApply(GetAllSystemSpanConfigsThatApplyRequest) returns (GetAllSystemSpanConfigsThatApplyResponse) {}
+
+  // UpdateSpanConfigs is used to update the span configurations over given
+  // keyspans.
+  rpc UpdateSpanConfigs(UpdateSpanConfigsRequest) returns (UpdateSpanConfigsResponse) {}
+
+  // SpanConfigConformance is used to determine whether ranges backing the given
+  // keyspans conform to span configs that apply over them.
+  rpc SpanConfigConformance(SpanConfigConformanceRequest) returns (SpanConfigConformanceResponse) {}
+}
+
 // Batch and RangeFeed service implemented by nodes for KV API requests.
 service Internal {
   rpc Batch (BatchRequest) returns (BatchResponse) {}
