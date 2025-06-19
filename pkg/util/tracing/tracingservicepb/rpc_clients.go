@@ -24,6 +24,11 @@ func DialTracingClient(
 			return nil, err
 		}
 		return NewGRPCTracingClientAdapter(conn), nil
+	} else {
+		conn, err := nd.DRPCDial(ctx, nodeID, class)
+		if err != nil {
+			return nil, err
+		}
+		return NewDRPCTracingClientAdapter(conn), nil
 	}
-	return nil, nil
 }

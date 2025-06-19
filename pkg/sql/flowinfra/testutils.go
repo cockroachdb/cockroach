@@ -21,8 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 func newInsecureRPCContext(ctx context.Context, stopper *stop.Stopper) *rpc.Context {
@@ -125,6 +127,13 @@ func (d *MockDialer) DialNoBreaker(
 	//lint:ignore SA1019 grpc.WithInsecure is deprecated
 	d.mu.conn, err = grpc.Dial(d.Addr.String(), grpc.WithInsecure(), grpc.WithBlock())
 	return d.mu.conn, err
+}
+
+// DRPCDialNoBreaker establishes a grpc connection once.
+func (d *MockDialer) DRPCDialNoBreaker(
+	context.Context, roachpb.NodeID, rpcbase.ConnectionClass,
+) (drpc.Conn, error) {
+	return nil, errors.New("DRPC unimplemented")
 }
 
 // Close must be called after the test is done.

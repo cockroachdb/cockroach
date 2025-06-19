@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
+	drpc "storj.io/drpc"
 )
 
 // client is a client-side RPC connection to a gossip peer node.
@@ -415,6 +416,21 @@ func (c *client) dial(ctx context.Context, rpcCtx *rpc.Context) (*grpc.ClientCon
 	return conn.Connect(ctx)
 }
 
+// dials the peer node and returns a DRPC connection to the peer node.
+func (c *client) drpcDial(ctx context.Context, rpcCtx *rpc.Context) (drpc.Conn, error) {
+	var conn *rpc.DRPCConnection
+	if c.peerID != 0 {
+		conn = rpcCtx.DRPCDialNode(c.addr.String(), c.peerID, c.locality, rpcbase.SystemClass)
+	} else {
+		// TODO(baptist): Use this as a temporary connection for getting
+		// onto gossip and then replace with a validated connection.
+		log.Infof(ctx, "unvalidated bootstrap gossip dial to %s", c.addr)
+		conn = rpcCtx.DRPCUnvalidatedDial(c.addr.String(), c.locality)
+	}
+
+	return conn.Connect(ctx)
+}
+
 // dialGossipClient establishes a DRPC connection if enabled; otherwise,
 // it falls back to gRPC. The established connection is used to create a
 // RPCGossipClient.
@@ -427,6 +443,11 @@ func (c *client) dialGossipClient(
 			return nil, err
 		}
 		return NewGRPCGossipClientAdapter(conn), nil
+	} else {
+		conn, err := c.drpcDial(ctx, rpcCtx)
+		if err != nil {
+			return nil, err
+		}
+		return NewDRPCGossipClientAdapter(conn), nil
 	}
-	return nil, nil
 }
