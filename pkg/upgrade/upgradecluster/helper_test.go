@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 type NoopDialer struct{}
@@ -26,6 +27,12 @@ type NoopDialer struct{}
 func (n NoopDialer) Dial(
 	ctx context.Context, id roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (*grpc.ClientConn, error) {
+	return nil, nil
+}
+
+func (n NoopDialer) DRPCDial(
+	ctx context.Context, id roachpb.NodeID, class rpcbase.ConnectionClass,
+) (drpc.Conn, error) {
 	return nil, nil
 }
 
