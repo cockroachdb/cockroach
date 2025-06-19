@@ -56,8 +56,8 @@ func TestDialDRPC_InterceptorsAreSet(t *testing.T) {
 	// Setup a minimal rpcCtx with interceptors
 	rpcCtx := &Context{
 		ContextOptions:               ContextOptions{Insecure: true},
-		clientUnaryInterceptorsDrpc:  []drpcclient.UnaryClientInterceptor{mockUnaryInterceptor},
-		clientStreamInterceptorsDrpc: []drpcclient.StreamClientInterceptor{mockStreamInterceptor},
+		clientUnaryInterceptorsDRPC:  []drpcclient.UnaryClientInterceptor{mockUnaryInterceptor},
+		clientStreamInterceptorsDRPC: []drpcclient.StreamClientInterceptor{mockStreamInterceptor},
 	}
 
 	// Call dialDRPC to get the connection function

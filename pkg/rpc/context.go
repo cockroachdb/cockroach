@@ -248,8 +248,8 @@ type Context struct {
 	clientUnaryInterceptors  []grpc.UnaryClientInterceptor
 	clientStreamInterceptors []grpc.StreamClientInterceptor
 
-	clientUnaryInterceptorsDrpc  []drpcclient.UnaryClientInterceptor
-	clientStreamInterceptorsDrpc []drpcclient.StreamClientInterceptor
+	clientUnaryInterceptorsDRPC  []drpcclient.UnaryClientInterceptor
+	clientStreamInterceptorsDRPC []drpcclient.StreamClientInterceptor
 
 	// loopbackDialFn, when non-nil, is used when the target of the dial
 	// is ourselves (== AdvertiseAddr).

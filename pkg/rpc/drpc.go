@@ -77,14 +77,11 @@ func dialDRPC(
 			return conn, nil
 		})
 
-		// Create the ClientConn using the pooled connection.
-		// The 'ctx' for NewClientConnWithOptions is the primary context for this dial operation.
-		// clientConn is created with unary and stream interceptors from rpcCtx.
 		clientConn, err := drpcclient.NewClientConnWithOptions(
 			ctx,
 			pooledConn,
-			drpcclient.WithChainUnaryInterceptor(rpcCtx.clientUnaryInterceptorsDrpc...),
-			drpcclient.WithChainStreamInterceptor(rpcCtx.clientStreamInterceptorsDrpc...),
+			drpcclient.WithChainUnaryInterceptor(rpcCtx.clientUnaryInterceptorsDRPC...),
+			drpcclient.WithChainStreamInterceptor(rpcCtx.clientStreamInterceptorsDRPC...),
 		)
 		if err != nil {
 			// If creation of the clientConn fails, cleanup the
