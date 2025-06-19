@@ -25,7 +25,11 @@ func DialMigrationClient(
 		}
 		return NewGRPCMigrationClientAdapter(conn), nil
 	}
-	return nil, nil
+	conn, err := nd.DRPCDial(ctx, nodeID, class)
+	if err != nil {
+		return nil, err
+	}
+	return NewDRPCMigrationClientAdapter(conn), nil
 }
 
 // DialStatusClientNoBreaker establishes a DRPC connection if enabled;
@@ -45,7 +49,11 @@ func DialStatusClientNoBreaker(
 		}
 		return NewGRPCStatusClientAdapter(conn), nil
 	}
-	return nil, nil
+	conn, err := nd.DRPCDialNoBreaker(ctx, nodeID, class)
+	if err != nil {
+		return nil, err
+	}
+	return NewDRPCStatusClientAdapter(conn), nil
 }
 
 // DialStatusClient establishes a DRPC connection if enabled; otherwise, it
@@ -61,7 +69,11 @@ func DialStatusClient(
 		}
 		return NewGRPCStatusClientAdapter(conn), nil
 	}
-	return nil, nil
+	conn, err := nd.DRPCDial(ctx, nodeID, rpcbase.DefaultClass)
+	if err != nil {
+		return nil, err
+	}
+	return NewDRPCStatusClientAdapter(conn), nil
 }
 
 // DialAdminClient establishes a DRPC connection if enabled; otherwise, it
@@ -77,7 +89,11 @@ func DialAdminClient(
 		}
 		return NewGRPCAdminClientAdapter(conn), nil
 	}
-	return nil, nil
+	conn, err := nd.DRPCDial(ctx, nodeID, rpcbase.DefaultClass)
+	if err != nil {
+		return nil, err
+	}
+	return NewDRPCAdminClientAdapter(conn), nil
 }
 
 // DialAdminClientNoBreaker establishes a DRPC connection if enabled;
@@ -94,5 +110,9 @@ func DialAdminClientNoBreaker(
 		}
 		return NewGRPCAdminClientAdapter(conn), nil
 	}
-	return nil, nil
+	conn, err := nd.DRPCDialNoBreaker(ctx, nodeID, rpcbase.DefaultClass)
+	if err != nil {
+		return nil, err
+	}
+	return NewDRPCAdminClientAdapter(conn), nil
 }
