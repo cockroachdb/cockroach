@@ -273,6 +273,9 @@ func EndTxn(
 
 	// Fetch existing transaction.
 	var existingTxn roachpb.Transaction
+	log.VEventf(
+		ctx, 2, "checking to see if transaction record already exists for txn: %s", h.Txn,
+	)
 	recordAlreadyExisted, err := storage.MVCCGetProto(
 		ctx, readWriter, key, hlc.Timestamp{}, &existingTxn, storage.MVCCGetOptions{
 			ReadCategory: fs.BatchEvalReadCategory,
@@ -281,6 +284,7 @@ func EndTxn(
 	if err != nil {
 		return result.Result{}, err
 	} else if !recordAlreadyExisted {
+		log.VEvent(ctx, 2, "no existing txn record found")
 		// No existing transaction record was found - create one by writing it
 		// below in updateFinalizedTxn.
 		reply.Txn = h.Txn.Clone()
@@ -290,10 +294,12 @@ func EndTxn(
 		// an aborted txn record.
 		if args.Commit {
 			if err := CanCreateTxnRecord(ctx, cArgs.EvalCtx, reply.Txn); err != nil {
+				log.VEventf(ctx, 2, "cannot create transaction record: %v", err)
 				return result.Result{}, err
 			}
 		}
 	} else {
+		log.VEventf(ctx, 2, "existing transaction record found: %s", existingTxn)
 		// We're using existingTxn on the reply, although it can be stale
 		// compared to the Transaction in the request (e.g. the Sequence,
 		// and various timestamps). We must be careful to update it with the
@@ -317,8 +323,11 @@ func EndTxn(
 				"already committed")
 
 		case roachpb.ABORTED:
+			// The transaction has already been aborted by someone else.
+			log.VEventf(
+				ctx, 2, "transaction %s found to have be already aborted (by someone else)", reply.Txn,
+			)
 			if !args.Commit {
-				// The transaction has already been aborted by other.
 				// Do not return TransactionAbortedError since the client anyway
 				// wanted to abort the transaction.
 				resolvedLocks, _, externalLocks, err := resolveLocalLocks(ctx, readWriter, cArgs.EvalCtx, ms, args, reply.Txn)
@@ -379,6 +388,7 @@ func EndTxn(
 				// not consider the transaction to be performing a parallel commit and
 				// potentially already implicitly committed because we know that the
 				// transaction restarted since entering the STAGING state.
+				log.VEventf(ctx, 2, "request with newer epoch %d than STAGING txn record; parallel commit must have failed", h.Txn.Epoch)
 				reply.Txn.Status = roachpb.PENDING
 			default:
 				panic("unreachable")
@@ -543,13 +553,18 @@ func EndTxn(
 	txnResult.Local.ResolvedLocks = resolvedLocks
 
 	if reply.Txn.Status == roachpb.COMMITTED {
-		// Return whether replicated {shared, exclusive} locks were released by
-		// the committing transaction. If such locks were released, we still
-		// need to make sure other transactions can't write underneath the
-		// transaction's commit timestamp to the key spans previously protected
-		// by the locks. We return the spans on the response and update the
-		// timestamp cache a few layers above to ensure this.
-		reply.ReplicatedLocksReleasedOnCommit = releasedReplLocks
+		if len(releasedReplLocks) != 0 {
+			// Return that local replicated {shared, exclusive} locks were released by
+			// the committing transaction. If such locks were released, we still need
+			// to make sure other transactions can't write underneath the
+			// transaction's commit timestamp to the key spans previously protected by
+			// the locks. We return the spans on the response and update the timestamp
+			// cache a few layers above to ensure this.
+			reply.ReplicatedLocalLocksReleasedOnCommit = releasedReplLocks
+			log.VEventf(
+				ctx, 2, "committed transaction released local replicated shared/exclusive locks",
+			)
+		}
 
 		// Run the commit triggers if successfully committed.
 		triggerResult, err := RunCommitTrigger(
