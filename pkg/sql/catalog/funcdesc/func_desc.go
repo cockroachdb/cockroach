@@ -608,11 +608,6 @@ func (desc *Mutable) SetDeclarativeSchemaChangerState(state *scpb.DescriptorStat
 	desc.DeclarativeSchemaChangerState = state
 }
 
-// AddParams adds function parameters to the parameter list.
-func (desc *Mutable) AddParams(params ...descpb.FunctionDescriptor_Parameter) {
-	desc.Params = append(desc.Params, params...)
-}
-
 // SetVolatility sets the volatility attribute.
 func (desc *Mutable) SetVolatility(v catpb.Function_Volatility) {
 	desc.Volatility = v
