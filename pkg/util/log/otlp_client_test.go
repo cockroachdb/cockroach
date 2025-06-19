@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/stretchr/testify/require"
 	collpb "go.opentelemetry.io/proto/otlp/collector/logs/v1"
-
 	"google.golang.org/grpc"
 )
 
@@ -26,7 +25,9 @@ type mockLogsServiceServer struct {
 	request chan *collpb.ExportLogsServiceRequest
 }
 
-func (s *mockLogsServiceServer) Export(ctx context.Context, req *collpb.ExportLogsServiceRequest) (*collpb.ExportLogsServiceResponse, error) {
+func (s *mockLogsServiceServer) Export(
+	ctx context.Context, req *collpb.ExportLogsServiceRequest,
+) (*collpb.ExportLogsServiceResponse, error) {
 	s.request <- req
 	return &collpb.ExportLogsServiceResponse{}, nil
 }
