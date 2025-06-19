@@ -668,6 +668,10 @@ user testuser
 statement ok
 SET enable_durable_locking_for_serializable = true;
 
+# Turn off buffered writes since we want to ensure a durable lock is actually acquired.
+statement ok
+SET kv_transaction_buffered_writes_enabled=false;
+
 query I
 BEGIN;
 SELECT * FROM t WHERE a = 1 FOR UPDATE;
