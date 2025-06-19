@@ -1395,6 +1395,8 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 	txn := makeTxnProto()
 	txn.Sequence = 10
 	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+
 	valAStr := "valA"
 	valA := roachpb.MakeValueFromString(valAStr)
 	keyLarge := roachpb.Key("a" + strings.Repeat("A", 1000))
@@ -1407,7 +1409,7 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 	ba.Add(putA)
 
 	expectedUnlockedPutSize := int64(len(keyA)+len(valA.RawBytes)) + bufferedWriteStructOverhead + bufferedValueStructOverhead
-	require.Equal(t, expectedUnlockedPutSize, twb.estimateSize(ba))
+	require.Equal(t, expectedUnlockedPutSize, twb.estimateSize(ba, true))
 
 	ba = &kvpb.BatchRequest{}
 	ba.Header = kvpb.Header{Txn: &txn}
@@ -1415,7 +1417,7 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 	putA.MustAcquireExclusiveLock = true
 	ba.Add(putA)
 
-	require.Equal(t, expectedUnlockedPutSize+lockKeyInfoSize, twb.estimateSize(ba))
+	require.Equal(t, expectedUnlockedPutSize+lockKeyInfoSize, twb.estimateSize(ba, true))
 
 	ba = &kvpb.BatchRequest{}
 	cputLarge := cputArgs(keyLarge, valLargeStr, "", txn.Sequence)
@@ -1423,7 +1425,7 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 
 	require.Equal(t,
 		int64(len(keyLarge)+len(valLarge.RawBytes))+bufferedWriteStructOverhead+bufferedValueStructOverhead+lockKeyInfoSize,
-		twb.estimateSize(ba),
+		twb.estimateSize(ba, true),
 	)
 
 	ba = &kvpb.BatchRequest{}
@@ -1433,14 +1435,52 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 	// NB: note that we're overcounting here, as we're deleting a key that's
 	// already present in the buffer. But that's what estimating is about.
 	expectedUnlockedDelSize := int64(len(keyA)) + bufferedWriteStructOverhead + bufferedValueStructOverhead
-	require.Equal(t, expectedUnlockedDelSize, twb.estimateSize(ba))
+	require.Equal(t, expectedUnlockedDelSize, twb.estimateSize(ba, true))
 
 	ba = &kvpb.BatchRequest{}
 	delA = delArgs(keyA, txn.Sequence)
 	delA.MustAcquireExclusiveLock = true
 	ba.Add(delA)
 
-	require.Equal(t, expectedUnlockedDelSize+lockKeyInfoSize, twb.estimateSize(ba))
+	require.Equal(t, expectedUnlockedDelSize+lockKeyInfoSize, twb.estimateSize(ba, true))
+
+	ba = &kvpb.BatchRequest{}
+	ba.Add(&kvpb.ScanRequest{
+		KeyLockingStrength:   lock.Exclusive,
+		KeyLockingDurability: lock.Replicated,
+		RequestHeader:        kvpb.RequestHeader{Key: keyA, EndKey: keyB, Sequence: txn.Sequence},
+	})
+
+	expectedLockedScanSize := int64(len(keyA)) + bufferedWriteStructOverhead + bufferedValueStructOverhead + lockKeyInfoSize
+	require.Equal(t, expectedLockedScanSize, twb.estimateSize(ba, true))
+	require.Equal(t, int64(0), twb.estimateSize(ba, false))
+
+	ba = &kvpb.BatchRequest{}
+	ba.Add(&kvpb.ReverseScanRequest{
+		KeyLockingStrength:   lock.Exclusive,
+		KeyLockingDurability: lock.Replicated,
+		RequestHeader:        kvpb.RequestHeader{Key: keyA, EndKey: keyB, Sequence: txn.Sequence},
+	})
+
+	expectedLockedRScanSize := int64(len(keyA)) + bufferedWriteStructOverhead + bufferedValueStructOverhead + lockKeyInfoSize
+	require.Equal(t, expectedLockedRScanSize, twb.estimateSize(ba, true))
+	require.Equal(t, int64(0), twb.estimateSize(ba, false))
+
+	ba = &kvpb.BatchRequest{}
+	ba.Add(&kvpb.ScanRequest{
+		KeyLockingStrength:   lock.Exclusive,
+		KeyLockingDurability: lock.Unreplicated,
+		RequestHeader:        kvpb.RequestHeader{Key: keyA, EndKey: keyB, Sequence: txn.Sequence},
+	})
+	require.Equal(t, int64(0), twb.estimateSize(ba, true))
+
+	ba = &kvpb.BatchRequest{}
+	ba.Add(&kvpb.ReverseScanRequest{
+		KeyLockingStrength:   lock.Exclusive,
+		KeyLockingDurability: lock.Unreplicated,
+		RequestHeader:        kvpb.RequestHeader{Key: keyA, EndKey: keyB, Sequence: txn.Sequence},
+	})
+	require.Equal(t, int64(0), twb.estimateSize(ba, true))
 }
 
 // TestTxnWriteBufferFlushesWhenOverBudget verifies that the txnWriteBuffer
@@ -1559,6 +1599,122 @@ func TestTxnWriteBufferFlushesWhenOverBudget(t *testing.T) {
 	// Sanity check the metrics remain the same (and don't increase).
 	require.Equal(t, int64(1), twb.txnMetrics.TxnWriteBufferDisabledAfterBuffering.Count())
 	require.Equal(t, int64(1), twb.txnMetrics.TxnWriteBufferMemoryLimitExceeded.Count())
+}
+
+// TestTxnWriteBufferLimitsSizeOfScans verifies that the txnWriteBuffer
+// limits the size of scans when appropriate.
+func TestTxnWriteBufferLimitsSizeOfScans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+
+	type testCase struct {
+		name                string
+		originalMaxKeys     int64
+		originalTargetBytes int64
+		bufferSize          int64
+		expectedMaxKeys     int64
+	}
+	testCases := []testCase{
+		{
+			name:                "no mutation when TargetBytes and MaxSpanRequestsKeys are zero",
+			originalMaxKeys:     0,
+			originalTargetBytes: 0,
+			bufferSize:          10 * (lockKeyInfoSize + 1),
+		},
+		{
+			name:                "no mutation when buffer size is unlimited",
+			originalMaxKeys:     0,
+			originalTargetBytes: 10,
+			bufferSize:          0,
+			expectedMaxKeys:     0,
+		},
+		{
+			name:                "limits to remaining buffer based on key estimate",
+			originalMaxKeys:     0,
+			originalTargetBytes: 10,
+			bufferSize:          10 * (lockKeyInfoSize + int64(len(keyA))),
+			expectedMaxKeys:     10,
+		},
+	}
+
+	for _, isReverse := range []bool{true, false} {
+		for _, tc := range testCases {
+			req := "Scan"
+			if isReverse {
+				req = "ReverseScan"
+			}
+			name := fmt.Sprintf("%s/%s", req, tc.name)
+			t.Run(name, func(t *testing.T) {
+				twb, mockSender := makeMockTxnWriteBuffer(st)
+				txn := makeTxnProto()
+				txn.Sequence = 10
+
+				bufferedWritesMaxBufferSize.Override(ctx, &st.SV, tc.bufferSize)
+
+				ba := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+				if isReverse {
+					ba.Add(&kvpb.ReverseScanRequest{
+						KeyLockingStrength:   lock.Exclusive,
+						KeyLockingDurability: lock.Replicated,
+						RequestHeader:        kvpb.RequestHeader{Key: keyA, EndKey: keyB, Sequence: txn.Sequence},
+					})
+				} else {
+					ba.Add(&kvpb.ScanRequest{
+						KeyLockingStrength:   lock.Exclusive,
+						KeyLockingDurability: lock.Replicated,
+						RequestHeader:        kvpb.RequestHeader{Key: keyA, EndKey: keyB, Sequence: txn.Sequence},
+					})
+				}
+				ba.Header.TargetBytes = tc.originalTargetBytes
+				ba.Header.MaxSpanRequestKeys = tc.originalMaxKeys
+
+				mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+					require.Len(t, ba.Requests, 1)
+					require.Equal(t, tc.expectedMaxKeys, ba.MaxSpanRequestKeys)
+					br := ba.CreateReply()
+					br.Txn = ba.Txn
+					return br, nil
+				})
+
+				br, pErr := twb.SendLocked(ctx, ba)
+				require.NotNil(t, br)
+				require.Nil(t, pErr)
+			})
+		}
+	}
+	t.Run("no mutation when an unsupported request is in batch", func(t *testing.T) {
+		twb, mockSender := makeMockTxnWriteBuffer(st)
+		txn := makeTxnProto()
+		txn.Sequence = 10
+
+		bufferedWritesMaxBufferSize.Override(ctx, &st.SV, 10*(lockKeyInfoSize+int64(len(keyA))))
+
+		ba := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+		ba.Add(&kvpb.ScanRequest{
+			KeyLockingStrength:   lock.Exclusive,
+			KeyLockingDurability: lock.Replicated,
+			RequestHeader:        kvpb.RequestHeader{Key: keyA, EndKey: keyB, Sequence: txn.Sequence},
+		})
+
+		ba.Add(&kvpb.LeaseInfoRequest{})
+
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			require.Len(t, ba.Requests, 2)
+			require.Equal(t, int64(0), ba.MaxSpanRequestKeys)
+			br := ba.CreateReply()
+			br.Txn = ba.Txn
+			return br, nil
+		})
+
+		br, pErr := twb.SendLocked(ctx, ba)
+		require.NotNil(t, br)
+		require.Nil(t, pErr)
+	})
 }
 
 // TestTxnWriteBufferFlushesIfBatchRequiresFlushing ensures that the
@@ -2968,7 +3124,8 @@ func TestTxnWriteBufferElidesUnnecessaryLockingRequests(t *testing.T) {
 	reqs := []lockingRequests{
 		{
 			name:                         "ReplicatedLockingScanScanFormat=KEY_VALUES",
-			buffersLock:                  false,
+			buffersLock:                  true,
+			bufferedLockStr:              lock.Exclusive,
 			buffersValue:                 false,
 			requiresValue:                true,
 			isFullyCoveredByLockStrength: lock.None, // Scans are never covered
@@ -2994,7 +3151,8 @@ func TestTxnWriteBufferElidesUnnecessaryLockingRequests(t *testing.T) {
 		},
 		{
 			name:                         "ReplicatedLockingScanScanFormat=BATCH_RESPONSE",
-			buffersLock:                  false,
+			buffersLock:                  true,
+			bufferedLockStr:              lock.Exclusive,
 			buffersValue:                 false,
 			requiresValue:                true,
 			isFullyCoveredByLockStrength: lock.None, // Scans are never covered
@@ -3024,7 +3182,8 @@ func TestTxnWriteBufferElidesUnnecessaryLockingRequests(t *testing.T) {
 		},
 		{
 			name:                         "ReplicatedLockingReverseScan",
-			buffersLock:                  false,
+			buffersLock:                  true,
+			bufferedLockStr:              lock.Exclusive,
 			buffersValue:                 false,
 			requiresValue:                true,
 			isFullyCoveredByLockStrength: lock.None, // ReverseScans are never covered
@@ -3158,6 +3317,12 @@ func TestTxnWriteBufferElidesUnnecessaryLockingRequests(t *testing.T) {
 
 	for _, firstReq := range reqs {
 		for _, secondReq := range reqs {
+			// If the second request is never fully covered, don't generate skipped
+			// tests.
+			if secondReq.isFullyCoveredByLockStrength == lock.None {
+				continue
+			}
+
 			t.Run(fmt.Sprintf("%s followed by %s", firstReq.name, secondReq.name), func(t *testing.T) {
 				lockConfigIsValid(t, firstReq)
 				lockConfigIsValid(t, secondReq)
@@ -3225,9 +3390,10 @@ func TestTxnWriteBufferElidesUnnecessaryLockingRequests(t *testing.T) {
 	}
 }
 
-// TestTxnWriteBufferLockingGetTransformations tests the basic locking
-// transformations that we do for GetRequest, assuming an empty buffer.
-func TestTxnWriteBufferLockingGetTransformations(t *testing.T) {
+// TestTxnWriteBufferLockingReadsTransformations tests the basic locking
+// transformations that we do for GetRequest and ScanRequest assuming an empty
+// buffer.
+func TestTxnWriteBufferLockingReadsTransformations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -3245,7 +3411,9 @@ func TestTxnWriteBufferLockingGetTransformations(t *testing.T) {
 		validateFlushedRequest func(t *testing.T, ba *kvpb.BatchRequest)
 	}
 
+	// Point requests all use keyA. Range requests use [keyA, keyC).
 	keyA := roachpb.Key("a")
+	keyC := roachpb.Key("c")
 	valueA := roachpb.MakeValueFromString("valueA")
 
 	lockingGet := func(str lock.Strength, dur lock.Durability, lockNonExisting bool) func(ba *kvpb.BatchRequest) {
@@ -3256,6 +3424,20 @@ func TestTxnWriteBufferLockingGetTransformations(t *testing.T) {
 				LockNonExisting:      lockNonExisting,
 				RequestHeader: kvpb.RequestHeader{
 					Key: keyA,
+				},
+			})
+		}
+	}
+
+	lockingScan := func(str lock.Strength, dur lock.Durability) func(ba *kvpb.BatchRequest) {
+		return func(ba *kvpb.BatchRequest) {
+			ba.Add(&kvpb.ScanRequest{
+				KeyLockingStrength:   str,
+				KeyLockingDurability: dur,
+				ScanFormat:           kvpb.KEY_VALUES,
+				RequestHeader: kvpb.RequestHeader{
+					Key:    keyA,
+					EndKey: keyC,
 				},
 			})
 		}
@@ -3272,9 +3454,28 @@ func TestTxnWriteBufferLockingGetTransformations(t *testing.T) {
 
 			resp := ba.CreateReply()
 			resp.Txn = ba.Txn
-			resp.Responses[0].MustSetInner(&kvpb.GetResponse{
-				Value: value,
-			})
+			resp.Responses[0].MustSetInner(&kvpb.GetResponse{Value: value})
+			return resp
+		}
+	}
+
+	validateScan := func(str lock.Strength, dur lock.Durability, rowCount int) func(t *testing.T, ba *kvpb.BatchRequest) *kvpb.BatchResponse {
+		return func(t *testing.T, ba *kvpb.BatchRequest) *kvpb.BatchResponse {
+			require.Len(t, ba.Requests, 1)
+			scanReq := ba.Requests[0].GetScan()
+			require.NotNil(t, scanReq)
+			require.Equal(t, str, scanReq.KeyLockingStrength)
+			require.Equal(t, dur, scanReq.KeyLockingDurability)
+
+			resp := ba.CreateReply()
+			resp.Txn = ba.Txn
+			rows := []roachpb.KeyValue{}
+			key := keyA
+			for range rowCount {
+				key = key.Next()
+				rows = append(rows, roachpb.KeyValue{Key: key, Value: valueA})
+			}
+			resp.Responses[0].MustSetInner(&kvpb.ScanResponse{Rows: rows})
 			return resp
 		}
 	}
@@ -3284,17 +3485,23 @@ func TestTxnWriteBufferLockingGetTransformations(t *testing.T) {
 		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
 	}
 
-	expectGetWithEndTxn := func(str lock.Strength, dur lock.Durability) func(t *testing.T, ba *kvpb.BatchRequest) {
+	expectGetsWithEndTxn := func(str lock.Strength, dur lock.Durability, getCount int) func(t *testing.T, ba *kvpb.BatchRequest) {
 		return func(t *testing.T, ba *kvpb.BatchRequest) {
-			require.Len(t, ba.Requests, 2)
-			getReq := ba.Requests[0].GetGet()
-			require.NotNil(t, getReq)
-			require.Equal(t, str, getReq.KeyLockingStrength)
-			require.Equal(t, dur, getReq.KeyLockingDurability)
-			require.Equal(t, true, getReq.LockNonExisting)
-			require.True(t, getReq.ExpectExclusionSince.IsSet(), "ExpectExclusionSince should be set")
-			require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[1].GetInner())
+			require.Len(t, ba.Requests, getCount+1)
+			for reqIdx := range getCount {
+				getReq := ba.Requests[reqIdx].GetGet()
+				require.NotNil(t, getReq)
+				require.Equal(t, str, getReq.KeyLockingStrength)
+				require.Equal(t, dur, getReq.KeyLockingDurability)
+				require.Equal(t, true, getReq.LockNonExisting)
+				require.True(t, getReq.ExpectExclusionSince.IsSet(), "ExpectExclusionSince should be set")
+			}
+			require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[getCount].GetInner())
 		}
+	}
+
+	expectGetWithEndTxn := func(str lock.Strength, dur lock.Durability) func(t *testing.T, ba *kvpb.BatchRequest) {
+		return expectGetsWithEndTxn(str, dur, 1)
 	}
 
 	testCases := []testCase{
@@ -3344,6 +3551,30 @@ func TestTxnWriteBufferLockingGetTransformations(t *testing.T) {
 			name:            "GetUnreplicatedSharedLock is not transformed",
 			originalRequest: lockingGet(lock.Shared, lock.Unreplicated, false),
 			validateTransformedRequestAndGenerateResponse: validateGet(lock.Shared, lock.Unreplicated, false, &valueA),
+			validateFlushedRequest:                        expectEndTxnOnly,
+		},
+		{
+			name:            "ScanReplicatedExclusiveLock is transformed to ScanUnreplicatedExclusiveLock",
+			originalRequest: lockingScan(lock.Exclusive, lock.Replicated),
+			validateTransformedRequestAndGenerateResponse: validateScan(lock.Exclusive, lock.Unreplicated, 10),
+			validateFlushedRequest:                        expectGetsWithEndTxn(lock.Exclusive, lock.Replicated, 10),
+		},
+		{
+			name:            "ScanReplicatedSharedLock is transformed to ScanUnreplicatedSharedLock",
+			originalRequest: lockingScan(lock.Shared, lock.Replicated),
+			validateTransformedRequestAndGenerateResponse: validateScan(lock.Shared, lock.Unreplicated, 10),
+			validateFlushedRequest:                        expectGetsWithEndTxn(lock.Shared, lock.Replicated, 10),
+		},
+		{
+			name:            "ScanUnreplicatedExclusiveLock is not transformed",
+			originalRequest: lockingScan(lock.Exclusive, lock.Unreplicated),
+			validateTransformedRequestAndGenerateResponse: validateScan(lock.Exclusive, lock.Unreplicated, 10),
+			validateFlushedRequest:                        expectEndTxnOnly,
+		},
+		{
+			name:            "ScanUnreplicatedSharedLock is not transformed",
+			originalRequest: lockingScan(lock.Shared, lock.Unreplicated),
+			validateTransformedRequestAndGenerateResponse: validateScan(lock.Shared, lock.Unreplicated, 10),
 			validateFlushedRequest:                        expectEndTxnOnly,
 		},
 	}
