@@ -223,6 +223,15 @@ message GetRequest {
   // LockNonExisting indicates whether the Get request should acquire a lock
   // on keys that don't exist.
   bool lock_non_existing = 5;
+
+  // ExpectExclusionSince, if set, indicates that the request should return an
+  // error if this key has been written to at a timestamp at or after the given
+  // timestamp. This allows the request to verify that a previously acquired
+  // unreplicated lock has provided the required protection. Note that it does
+  // not check for the existence of the lock. It checks for a write that the
+  // lock should have prevented. If such a write is found an
+  // ExclusionViolationError is returned.
+  util.hlc.Timestamp expect_exclusion_since = 6 [(gogoproto.nullable) = false];
 }
 
 // A GetResponse is the return value from the Get() method.
@@ -2965,7 +2974,7 @@ message Header {
 
   // HasBufferedAllPrecedingWrites, if set, indicates that the batch belongs to
   // a transaction that has buffered all of its writes (from preceding batches)
-  // on the client. 
+  // on the client.
   //
   // The server may use this field to omit checking the AbortSpan. Transactions
   // use the AbortSpan to check whether they've been aborted or not. If they
@@ -2980,7 +2989,7 @@ message Header {
   // read-your-own-writes. As such, they can eschew checking the AbortSpan on
   // the server.
   bool has_buffered_all_preceding_writes = 37;
-  
+
   reserved 7, 10, 12, 14, 20;
 
   // Next ID: 38

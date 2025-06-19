@@ -2530,6 +2530,13 @@ func (r *ConditionalPutRequest) Validate(_ Header) error {
 	return nil
 }
 
+func (r *GetRequest) Validate(_ Header) error {
+	if !r.ExpectExclusionSince.IsEmpty() && r.KeyLockingStrength == lock.None {
+		return errors.AssertionFailedf("invalid GetRequest: ExpectExclusionSince is non-empty for non-locking request")
+	}
+	return nil
+}
+
 func (r *PutRequest) Validate(bh Header) error {
 	if err := validateExclusionTimestampForBatch(r.ExpectExclusionSince, bh); err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid PutRequest")
