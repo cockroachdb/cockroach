@@ -1416,7 +1416,7 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 	ba.Add(cputLarge)
 
 	require.Equal(t,
-		int64(len(keyLarge)+len(valLarge.RawBytes))+bufferedWriteStructOverhead+bufferedValueStructOverhead,
+		int64(len(keyLarge)+len(valLarge.RawBytes))+bufferedWriteStructOverhead+bufferedValueStructOverhead+lockKeyInfoSize,
 		twb.estimateSize(ba),
 	)
 
