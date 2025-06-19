@@ -44,7 +44,9 @@ func TestOtlpClient(t *testing.T) {
 
 	lis, err := net.ListenTCP("tcp", nil)
 	require.NoError(t, err)
-	go server.Serve(lis)
+	go func() {
+		require.NoError(t, server.Serve(lis))
+	}()
 	defer server.Stop()
 
 	cfg := logconfig.DefaultConfig()

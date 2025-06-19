@@ -120,13 +120,13 @@ func ApplyConfig(
 
 	closer := newBufferedSinkCloser()
 
-	// closes the underlying gRPC connection of the OTLP sink.
+	// closes the underlying gRPC connection of OTLP sinks.
 	closeOtlpSinks := func() {
 		for _, fc := range sinkInfos {
 			if sink, ok := fc.sink.(*otlpSink); ok && sink.isNotShutdown() {
 				// The reason for nolint:grpcconnclose is that we are not using *rpc.Context
 				// as it is primarily used for communication between crdb nodes, and doesn't
-				// fit this usecase
+				// fit this usecase.
 				if err := sink.conn.Close(); err != nil { // nolint:grpcconnclose
 					fmt.Printf("# OTLP Sink Cleanup Warning: %s\n", err.Error())
 				}
