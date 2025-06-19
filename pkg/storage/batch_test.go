@@ -95,7 +95,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Write
 	// Write a MVCC value to be deleted with a known value size.
 	keyF := mvccKey("f")
 	keyF.Timestamp.WallTime = 1
-	valueF := MVCCValue{Value: roachpb.Value{RawBytes: []byte("fvalue")}}
+	valueF := MVCCValue{Value: roachpb.MakeValueFromString("fvalue")}
 	encodedValueF, err := EncodeMVCCValue(valueF)
 	require.NoError(t, err)
 	require.NoError(t, e.PutMVCC(keyF, valueF))
@@ -313,7 +313,7 @@ func TestBatchRepr(t *testing.T) {
 			"merge(c\x00)",
 			"put(e\x00,)",
 			"single_delete(d\x00)",
-			"delete-sized(f\x00\x00\x00\x00\x00\x00\x00\x00\x01\t,17)",
+			"delete-sized(f\x00\x00\x00\x00\x00\x00\x00\x00\x01\t,22)",
 		}
 		require.Equal(t, expOps, ops)
 
