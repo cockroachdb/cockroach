@@ -13,10 +13,6 @@ CREATE TABLE defaultdb.foo (
 ----
 
 unimplemented
-ALTER TABLE defaultdb.foo ALTER COLUMN i DROP NOT NULL
-----
-
-unimplemented
 ALTER TABLE defaultdb.foo ALTER COLUMN i DROP STORED
 ----
 

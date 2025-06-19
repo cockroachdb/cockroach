@@ -47,6 +47,7 @@ CREATE VIEW redacted_descriptors AS
 # descriptor. We will skip the config that uses legacy schema changer.
 skipif config local-schema-locked
 skipif config local-legacy-schema-changer
+skipif config local-mixed-25.2
 query T
 SELECT descriptor from redacted_descriptors where id = 'collate_partition'::REGCLASS;
 ----
