@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -50,28 +52,79 @@ func TestRetryExceedsMaxAttempts(t *testing.T) {
 	}
 }
 
-func TestRetryReset(t *testing.T) {
+func TestRetryExceedsMaxDuration(t *testing.T) {
+	timeSource := timeutil.NewManualTime(time.Now())
 	opts := Options{
-		InitialBackoff: time.Microsecond * 10,
-		MaxBackoff:     time.Second,
-		Multiplier:     2,
-		MaxRetries:     1,
+		InitialBackoff:      time.Millisecond * 10,
+		MaxBackoff:          time.Millisecond * 10,
+		Multiplier:          1,
+		RandomizationFactor: -1,
+		MaxDuration:         time.Millisecond * 100,
+		PreemptivelyCancel:  true,
+		Clock:               timeSource,
 	}
+	const expectedRetries = 10
+	r := Start(opts)
+	r.backingOffHook = func(backoff time.Duration) {
+		timeSource.Advance(backoff)
+	}
+	var retries int
+	for r.Reset(); r.Next(); retries++ {
+	}
+	require.Equal(t, expectedRetries, retries, "expected %d retries, got %d", expectedRetries, retries)
+}
 
-	expAttempts := opts.MaxRetries + 1
-
-	attempts := 0
-	// Backoff loop has 1 allowed retry; we always call Reset, so
-	// just make sure we get to 2 attempts and then break.
-	for r := Start(opts); r.Next(); attempts++ {
-		if attempts == expAttempts {
-			break
+func TestRetryReset(t *testing.T) {
+	t.Run("attempt-based retry", func(t *testing.T) {
+		opts := Options{
+			InitialBackoff: time.Microsecond * 10,
+			MaxBackoff:     time.Second,
+			Multiplier:     2,
+			MaxRetries:     1,
 		}
-		r.Reset()
-	}
-	if attempts != expAttempts {
-		t.Errorf("expected %d attempts, got %d", expAttempts, attempts)
-	}
+
+		expAttempts := opts.MaxRetries + 1
+
+		attempts := 0
+		// Backoff loop has 1 allowed retry; we always call Reset, so
+		// just make sure we get to 2 attempts and then break.
+		for r := Start(opts); r.Next(); attempts++ {
+			if attempts == expAttempts {
+				break
+			}
+			r.Reset()
+		}
+		if attempts != expAttempts {
+			t.Errorf("expected %d attempts, got %d", expAttempts, attempts)
+		}
+	})
+
+	t.Run("duration-based retry", func(t *testing.T) {
+		timeSource := timeutil.NewManualTime(time.Now())
+		maxDuration := time.Microsecond * 100
+		opts := Options{
+			InitialBackoff: time.Microsecond * 10,
+			MaxBackoff:     time.Second,
+			Multiplier:     2,
+			MaxDuration:    maxDuration,
+			Clock:          timeSource,
+		}
+
+		var attempts int
+		expAttempts := 3
+		for r := Start(opts); r.Next(); attempts++ {
+			if attempts == expAttempts {
+				break
+			}
+			// Each attempt takes the entire max duration, so without reset, we would
+			// expect only 1 attempt.
+			timeSource.Advance(maxDuration)
+			r.Reset()
+		}
+		if attempts != expAttempts {
+			t.Errorf("expected %d attempts, got %d", expAttempts, attempts)
+		}
+	})
 }
 
 func TestRetryStop(t *testing.T) {
@@ -99,41 +152,60 @@ func TestRetryStop(t *testing.T) {
 }
 
 func TestRetryNextCh(t *testing.T) {
-	var attempts int
+	runTest := func(t *testing.T, opts Options, expectedAttempts int) {
+		t.Helper()
+		var attempt int
+		timeSource := timeutil.NewManualTime(time.Now())
+		opts.Clock = timeSource
+		opts.RandomizationFactor = -1 // Disable randomization for deterministic tests.
 
-	opts := Options{
-		InitialBackoff: time.Millisecond,
-		Multiplier:     2,
-		MaxRetries:     1,
-	}
-	for r := Start(opts); attempts < 3; attempts++ {
-		c := r.NextCh()
-		if r.currentAttempt != attempts {
-			t.Errorf("expected attempt=%d; got %d", attempts, r.currentAttempt)
+		r := Start(opts)
+		r.backingOffHook = func(backoff time.Duration) {
+			timeSource.Advance(backoff)
 		}
-		switch attempts {
-		case 0:
-			if c == nil {
-				t.Errorf("expected non-nil NextCh() on first attempt")
+		for r.Reset(); attempt < expectedAttempts+1; attempt++ {
+			start := timeSource.Now()
+			ch := r.NextCh()
+			ok := <-ch
+			measuredBackoff := timeSource.Since(start)
+
+			if attempt == 0 {
+				require.True(t, ok, "expected permitted attempt on first attempt")
+				require.Zero(t, measuredBackoff, "expected first attempt to start instantly")
+			} else if attempt < expectedAttempts {
+				require.True(t, ok, "expected permitted attempt on attempt #%d", attempt+1)
+				require.GreaterOrEqual(
+					t, measuredBackoff, opts.InitialBackoff,
+					"expected non-zero backoff at least greater than initial backoff",
+				)
+			} else {
+				require.False(t, ok, "expected blocked attempt on attempts exceeding the limit")
 			}
-			if _, ok := <-c; ok {
-				t.Errorf("expected closed (immediate) NextCh() on first attempt")
-			}
-		case 1:
-			if c == nil {
-				t.Errorf("expected non-nil NextCh() on second attempt")
-			}
-			if _, ok := <-c; !ok {
-				t.Errorf("expected open (delayed) NextCh() on first attempt")
-			}
-		case 2:
-			if c != nil {
-				t.Errorf("expected nil NextCh() on third attempt")
-			}
-		default:
-			t.Fatalf("unexpected attempt %d", attempts)
 		}
 	}
+
+	t.Run("attempt-based retry", func(t *testing.T) {
+		opts := Options{
+			InitialBackoff: time.Millisecond,
+			Multiplier:     2,
+			MaxRetries:     1,
+		}
+		runTest(t, opts, opts.MaxRetries+1 /* expectedAttempts */)
+	})
+
+	t.Run("duration-based retry", func(t *testing.T) {
+		opts := Options{
+			InitialBackoff: time.Millisecond,
+			MaxBackoff:     time.Millisecond * 2,
+			Multiplier:     2,
+			// Requires to be set because the manual clock is always advanced based on
+			// the backoff duration, so the duration expiration timer can tie with the
+			// backoff timer.
+			PreemptivelyCancel: true,
+			MaxDuration:        time.Millisecond * 4,
+		}
+		runTest(t, opts, 3 /* expectedAttempts */)
+	})
 }
 
 func TestRetryWithMaxAttempts(t *testing.T) {
@@ -301,4 +373,239 @@ func TestRetryWithMaxAttempts(t *testing.T) {
 			require.LessOrEqual(t, attempts, tc.maxNumAttempts)
 		})
 	}
+}
+
+func TestRetryWithMaxDuration(t *testing.T) {
+	expectedErr := errors.New("placeholder")
+	noErrFunc := func(int) error {
+		return nil
+	}
+	errFunc := func(int) error {
+		return expectedErr
+	}
+	// 0-based attempts counter
+	errorUntilAttemptNumFunc := func(until int) func(int) error {
+		return func(attemptNum int) error {
+			if attemptNum == until {
+				return nil
+			}
+			return expectedErr
+		}
+	}
+	cancelCtx, cancelCtxFunc := context.WithCancel(context.Background())
+	closeCh := make(chan struct{})
+
+	type testcase struct {
+		name              string
+		ctx               context.Context
+		opts              Options
+		retryFunc         func(attemptNum int) error
+		preRetryFunc      func()
+		expectedTimeSpent time.Duration
+		// For cases where the amount of time spent is not deterministic, we can set
+		// an upper bound instead (e.g. for context or closer).
+		maxExpectedTimeSpent time.Duration
+		expectedErr          bool
+		skipUnderDuress      bool
+	}
+
+	testCases := []testcase{
+		{
+			name: "succeeds when no errors are ever given",
+			ctx:  context.Background(),
+			opts: Options{
+				InitialBackoff: time.Millisecond,
+				MaxBackoff:     time.Millisecond * 20,
+				Multiplier:     2,
+				MaxDuration:    time.Millisecond * 50,
+			},
+			retryFunc:         noErrFunc,
+			expectedTimeSpent: 0,
+		},
+		{
+			name: "succeeds after one faked error",
+			ctx:  context.Background(),
+			opts: Options{
+				InitialBackoff: time.Millisecond,
+				MaxBackoff:     time.Millisecond * 20,
+				Multiplier:     2,
+				MaxDuration:    time.Millisecond * 50,
+			},
+			retryFunc:         errorUntilAttemptNumFunc(1),
+			expectedTimeSpent: time.Millisecond,
+		},
+		{
+			name: "errors when max duration is exhausted",
+			ctx:  context.Background(),
+			opts: Options{
+				InitialBackoff: time.Millisecond,
+				MaxBackoff:     time.Millisecond * 2,
+				Multiplier:     2,
+				MaxDuration:    time.Millisecond * 50,
+			},
+			retryFunc:         errFunc,
+			expectedTimeSpent: time.Millisecond * 50,
+			expectedErr:       true,
+		},
+		{
+			name: "preemptively ends loop if backoff exceeds max duration",
+			ctx:  context.Background(),
+			opts: Options{
+				InitialBackoff:     time.Millisecond,
+				MaxBackoff:         time.Millisecond * 100,
+				Multiplier:         100,
+				MaxDuration:        time.Millisecond * 50,
+				PreemptivelyCancel: true,
+			},
+			retryFunc:         errFunc,
+			expectedTimeSpent: time.Millisecond,
+			expectedErr:       true,
+		},
+		{
+			name: "errors with context that is canceled",
+			ctx:  cancelCtx,
+			opts: Options{
+				InitialBackoff: time.Millisecond,
+				MaxBackoff:     time.Millisecond * 2,
+				Multiplier:     2,
+				MaxDuration:    time.Millisecond * 50,
+			},
+			retryFunc: errFunc,
+			preRetryFunc: func() {
+				cancelCtxFunc()
+			},
+			maxExpectedTimeSpent: time.Millisecond * 20,
+			expectedErr:          true,
+			// Under duress, closing a context will not necessarily stop the retry
+			// loop immediately, so we skip this test under duress.
+			skipUnderDuress: true,
+		},
+		{
+			name: "errors with opt.Closer that is closed",
+			ctx:  context.Background(),
+			opts: Options{
+				InitialBackoff: time.Millisecond,
+				MaxBackoff:     time.Millisecond * 2,
+				Multiplier:     2,
+				MaxDuration:    time.Millisecond * 50,
+				Closer:         closeCh,
+			},
+			retryFunc: errFunc,
+			preRetryFunc: func() {
+				close(closeCh)
+			},
+			maxExpectedTimeSpent: time.Millisecond * 20,
+			expectedErr:          true,
+			// Under duress, closing a channel will not necessarily stop the retry
+			// loop immediately, so we skip this test under duress.
+			skipUnderDuress: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.skipUnderDuress && skip.Duress() {
+				skip.UnderDuress(t, "skipping test under duress: %s", tc.name)
+			}
+
+			timeSource := timeutil.NewManualTime(time.Now())
+			tc.opts.Clock = timeSource
+			// Disable randomization for deterministic tests.
+			tc.opts.RandomizationFactor = -1
+
+			if tc.preRetryFunc != nil {
+				tc.preRetryFunc()
+			}
+
+			start := timeSource.Now()
+			expectedMaxEndTime := start.Add(tc.opts.MaxDuration)
+
+			r := StartWithCtx(tc.ctx, tc.opts)
+			// Simulate advancing time by manually advancing by the backoff duration
+			// up to the expected maximum end time.
+			r.backingOffHook = func(backoff time.Duration) {
+				nextTime := timeSource.Now().Add(backoff)
+				if nextTime.After(expectedMaxEndTime) {
+					nextTime = expectedMaxEndTime
+				}
+				timeSource.AdvanceTo(nextTime)
+			}
+
+			var err error
+			for r.Reset(); r.Next(); {
+				if err = tc.retryFunc(r.CurrentAttempt()); err == nil {
+					break
+				}
+			}
+
+			if tc.expectedErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+
+			if tc.expectedTimeSpent != 0 {
+				require.Equal(
+					t, tc.expectedTimeSpent, timeSource.Since(start), "expected time does not match actual spent time",
+				)
+			}
+
+			if tc.maxExpectedTimeSpent != 0 {
+				require.LessOrEqual(
+					t, timeSource.Since(start), tc.maxExpectedTimeSpent,
+					"expected time spent to be less than or equal to max expected time spent",
+				)
+			}
+		})
+	}
+}
+
+func TestRetryWithMaxDurationAndMaxRetries(t *testing.T) {
+	t.Run("max retries hit before max duration", func(t *testing.T) {
+		opts := Options{
+			InitialBackoff: time.Millisecond,
+			MaxBackoff:     time.Millisecond * 20,
+			Multiplier:     2,
+			MaxDuration:    time.Millisecond * 50,
+			MaxRetries:     3,
+		}
+
+		var attempts int
+		start := time.Now()
+		for r := Start(opts); r.Next(); attempts++ {
+			if attempts == opts.MaxRetries+1 {
+				break
+			}
+		}
+		elapsed := time.Since(start)
+
+		require.Equal(
+			t, opts.MaxRetries+1, attempts, "expected %d attempts, got %d", opts.MaxRetries+1, attempts,
+		)
+		require.Less(
+			t, elapsed, opts.MaxDuration, "expected elapsed time to be less than max duration",
+		)
+	})
+
+	t.Run("max duration hit before max retries", func(t *testing.T) {
+		opts := Options{
+			InitialBackoff: time.Millisecond,
+			MaxBackoff:     time.Millisecond,
+			MaxDuration:    time.Millisecond * 20,
+			MaxRetries:     30,
+		}
+
+		var attempts int
+		start := time.Now()
+		for r := Start(opts); r.Next(); attempts++ {
+		}
+		elapsed := time.Since(start)
+
+		require.Less(
+			t, attempts, opts.MaxRetries+1, "expected attempts to not have exhausted max retries", attempts,
+		)
+		require.GreaterOrEqual(
+			t, elapsed, opts.MaxDuration-2*time.Millisecond, "expected elapsed time to have exhausted max duration",
+		)
+	})
 }
