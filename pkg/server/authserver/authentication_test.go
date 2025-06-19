@@ -842,7 +842,7 @@ func TestGRPCAuthentication(t *testing.T) {
 			return err
 		}, true},
 		{"internal", func(ctx context.Context, conn *grpc.ClientConn) error {
-			_, err := kvpb.NewInternalClient(conn).Batch(ctx, &kvpb.BatchRequest{})
+			_, err := kvpb.NewGRPCInternalClientAdapter(conn).Batch(ctx, &kvpb.BatchRequest{})
 			return err
 		}, true},
 		{"perReplica", func(ctx context.Context, conn *grpc.ClientConn) error {

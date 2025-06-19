@@ -24,6 +24,11 @@ func DialSideTransportClient(
 			return nil, err
 		}
 		return NewGRPCSideTransportClientAdapter(conn), nil
+	} else {
+		conn, err := nd.DRPCDial(ctx, nodeID, class)
+		if err != nil {
+			return nil, err
+		}
+		return NewDRPCSideTransportClientAdapter(conn), nil
 	}
-	return nil, nil
 }
