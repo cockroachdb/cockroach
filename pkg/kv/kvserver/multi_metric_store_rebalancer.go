@@ -46,6 +46,7 @@ func (m *multiMetricStoreRebalancer) start(ctx context.Context, stopper *stop.St
 		var timer timeutil.Timer
 		defer timer.Stop()
 		timer.Reset(jitteredInterval(allocator.LoadBasedRebalanceInterval.Get(&m.st.SV)))
+		log.Infof(ctx, "starting multi-metric store rebalancer with mode=%v", LoadBasedRebalancingMode.Get(&m.st.SV))
 		for {
 			// Wait out the first tick before doing anything since the store is still
 			// starting up and we might as well wait for some stats to accumulate.
