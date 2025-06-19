@@ -702,7 +702,7 @@ func TestEnsureSafeSplitKey(t *testing.T) {
 func TestDecodeTenantPrefix(t *testing.T) {
 	tIDs := []roachpb.TenantID{
 		roachpb.SystemTenantID,
-		roachpb.MustMakeTenantID(2),
+		roachpb.MustMakeTenantID(3),
 		roachpb.MustMakeTenantID(999),
 		roachpb.MustMakeTenantID(math.MaxUint64),
 	}

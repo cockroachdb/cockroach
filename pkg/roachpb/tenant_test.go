@@ -16,7 +16,7 @@ func TestTenantIDString(t *testing.T) {
 	for tID, expStr := range map[TenantID]string{
 		{}:                               "invalid",
 		SystemTenantID:                   "system",
-		MustMakeTenantID(2):              "2",
+		MustMakeTenantID(3):              "3",
 		MustMakeTenantID(999):            "999",
 		MustMakeTenantID(math.MaxUint64): "18446744073709551615",
 	} {

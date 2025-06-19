@@ -31,12 +31,12 @@ func setup(
 		},
 	})
 
-	ten2ID := roachpb.MustMakeTenantID(2)
-	tenant2, err := tc.Server(0).TenantController().StartTenant(ctx, base.TestTenantArgs{
-		TenantID: ten2ID,
+	ten3ID := roachpb.MustMakeTenantID(3)
+	tenant3, err := tc.Server(0).TenantController().StartTenant(ctx, base.TestTenantArgs{
+		TenantID: ten3ID,
 	})
 	require.NoError(t, err)
-	return tc, tenant2, tenant2.RangeDescIteratorFactory().(rangedesc.IteratorFactory)
+	return tc, tenant3, tenant3.RangeDescIteratorFactory().(rangedesc.IteratorFactory)
 }
 
 // TestScanRangeDescriptors is an integration test to ensure that tenants can

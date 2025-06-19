@@ -128,7 +128,7 @@ func TestHotRangeLoggerMultitenant(t *testing.T) {
 	skip.UnderRace(t)
 	ctx := context.Background()
 	s, spy, teardown := setupTestServer(t, ctx)
-	tenantID := roachpb.MustMakeTenantID(2)
+	tenantID := roachpb.MustMakeTenantID(3)
 	tt, err := s.TenantController().StartTenant(ctx, base.TestTenantArgs{
 		TenantID: tenantID,
 	})
