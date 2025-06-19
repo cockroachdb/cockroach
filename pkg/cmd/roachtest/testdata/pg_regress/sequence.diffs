@@ -1,7 +1,7 @@
 diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sequence.out --label=/mnt/data1/postgres/src/test/regress/results/sequence.out /mnt/data1/postgres/src/test/regress/expected/sequence.out /mnt/data1/postgres/src/test/regress/results/sequence.out
 --- /mnt/data1/postgres/src/test/regress/expected/sequence.out
 +++ /mnt/data1/postgres/src/test/regress/results/sequence.out
-@@ -5,9 +5,9 @@
+@@ -5,27 +5,26 @@
  CREATE SEQUENCE sequence_testx INCREMENT BY 0;
  ERROR:  INCREMENT must not be zero
  CREATE SEQUENCE sequence_testx INCREMENT BY -1 MINVALUE 20;
@@ -13,7 +13,12 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sequence.out --la
  CREATE SEQUENCE sequence_testx INCREMENT BY -1 START 10;
  ERROR:  START value (10) cannot be greater than MAXVALUE (-1)
  CREATE SEQUENCE sequence_testx INCREMENT BY 1 START -10;
-@@ -19,13 +19,12 @@
+ ERROR:  START value (-10) cannot be less than MINVALUE (1)
+ CREATE SEQUENCE sequence_testx CACHE 0;
+-ERROR:  CACHE (0) must be greater than zero
++ERROR:  PER NODE CACHE (0) must be greater than zero
+ -- OWNED BY errors
+ CREATE SEQUENCE sequence_testx OWNED BY nobody;  -- nonsense word
  ERROR:  invalid OWNED BY option
  HINT:  Specify OWNED BY table.column or OWNED BY NONE.
  CREATE SEQUENCE sequence_testx OWNED BY pg_class_oid_index.oid;  -- not a table
