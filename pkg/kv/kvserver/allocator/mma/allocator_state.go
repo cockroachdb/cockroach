@@ -278,8 +278,8 @@ func (a *allocatorState) rebalanceStores(
 				if addedLoad[CPURate] < 0 {
 					// TODO(sumeer): remove this panic once we are not in an
 					// experimental phase.
-					panic("raft cpu higher than total cpu")
 					addedLoad[CPURate] = 0
+					panic("raft cpu higher than total cpu")
 				}
 				if !a.cs.canShedAndAddLoad(ctx, ss, targetSS, addedLoad, &means, true, CPURate) {
 					continue
