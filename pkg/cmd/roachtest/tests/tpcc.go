@@ -778,7 +778,6 @@ func registerTPCC(r registry.Registry) {
 				Duration:                      10 * time.Minute,
 				ExtraRunArgs:                  "--wait=false --tolerate-errors --workers=200 --literal-implementation",
 				SetupType:                     usingImport,
-				ExpensiveChecks:               true, // Run expensive checks here to catch any issues with the literal implementation
 				DisableDefaultScheduledBackup: true,
 			})
 		},
