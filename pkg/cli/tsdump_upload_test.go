@@ -6,12 +6,12 @@
 package cli
 
 import (
-	"compress/gzip"
 	"encoding/csv"
 	"encoding/gob"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strconv"
 	"strings"
@@ -41,7 +41,14 @@ func TestTSDumpUploadE2E(t *testing.T) {
 
 	datadriven.RunTest(t, "testdata/tsdump_upload_e2e", func(t *testing.T, d *datadriven.TestData) string {
 		var buf strings.Builder
-		defer mockDoDDRequest(t, &buf)()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := io.ReadAll(r.Body)
+			require.NoError(t, err)
+			fmt.Fprintln(&buf, string(body))
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer testutils.TestingHook(&hostNameOverride, server.Listener.Addr().String())()
+		defer server.Close()
 
 		c := NewCLITest(TestCLIParams{})
 		defer c.Cleanup()
@@ -79,23 +86,6 @@ func TestTSDumpUploadE2E(t *testing.T) {
 			t.Fatalf("unknown command: %s", d.Cmd)
 			return ""
 		}
-	})
-}
-
-func mockDoDDRequest(t *testing.T, w io.Writer) func() {
-	t.Helper()
-
-	return testutils.TestingHook(&doDDRequest, func(req *http.Request) error {
-		defer req.Body.Close()
-
-		reader, err := gzip.NewReader(req.Body)
-		require.NoError(t, err)
-
-		raw, err := io.ReadAll(reader)
-		require.NoError(t, err)
-
-		fmt.Fprintln(w, string(raw))
-		return nil
 	})
 }
 
