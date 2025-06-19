@@ -107,13 +107,12 @@ func newClientConn(ctx context.Context, cfg server.Config) (rpcConn, func(), err
 			return nil, nil, errors.Wrap(err, "failed to connect to the node")
 		}
 		return &grpcConn{conn: cc}, finish, nil
-	} else {
-		dc, finish, err := rpc.NewDRPCClientConn(ctx, ccfg)
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "failed to connect to the node")
-		}
-		return &drpcConn{conn: dc}, finish, nil
 	}
+	dc, finish, err := rpc.NewDRPCClientConn(ctx, ccfg)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to connect to the node")
+	}
+	return &drpcConn{conn: dc}, finish, nil
 }
 
 // dialAdminClient dials a client connection and returns an AdminClient and a
