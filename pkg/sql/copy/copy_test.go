@@ -708,7 +708,7 @@ func TestLargeCopy(t *testing.T) {
 	skip.UnderRace(t)
 	ctx := context.Background()
 
-	srv, _, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, sqlDB, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
@@ -723,16 +723,38 @@ func TestLargeCopy(t *testing.T) {
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvdb, s.Codec(), "defaultdb", "lineitem")
 	require.NotNil(t, desc, "Failed to lookup descriptor")
 
-	err = conn.Exec(ctx, "SET copy_from_atomic_enabled = false")
+	// TODO: only do ALTER PK in some cases.
+	// TODO: always enable atomic COPY with ALTER PK, otherwise randomize this.
+	// TODO: maybe also disable vectorize randomly? Also check / think through
+	// whether non-vectorized path runs into duplicate key violations or not.
+	err = conn.Exec(ctx, "SET copy_from_atomic_enabled = true")
 	require.NoError(t, err)
 
-	rng := rand.New(rand.NewSource(0))
-	rows := 100
+	rng, _ := randutil.NewPseudoRand()
+	sleepMillis := rng.Intn(2000)
+	errCh := make(chan error)
+	go func() {
+		defer close(errCh)
+		time.Sleep(time.Duration(sleepMillis) * time.Millisecond)
+		// TODO: comment
+		_, err := sqlDB.Exec("ALTER TABLE lineitem ALTER PRIMARY KEY USING COLUMNS (l_orderkey, l_linenumber, l_suppkey);")
+		if err != nil && !strings.Contains(err.Error(), "duplicate key") {
+			errCh <- err
+		}
+	}()
+	time.Sleep(time.Duration(rng.Intn(2000)) * time.Millisecond)
+	rows := rng.Intn(2000) + 1
 	numrows, err := conn.GetDriverConn().CopyFrom(ctx,
 		&copyReader{rng: rng, cols: desc.PublicColumns(), rows: rows},
 		"COPY lineitem FROM STDIN WITH CSV;")
+	if err != nil && !strings.Contains(err.Error(), "duplicate key") {
+		<-errCh
+		t.Fatal(err)
+	} else if err == nil {
+		require.Equal(t, int(numrows), rows)
+	}
+	err = <-errCh
 	require.NoError(t, err)
-	require.Equal(t, int(numrows), rows)
 }
 
 type copyReader struct {
