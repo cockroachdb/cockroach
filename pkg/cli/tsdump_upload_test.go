@@ -39,6 +39,9 @@ func TestTSDumpUploadE2E(t *testing.T) {
 	defer testutils.TestingHook(&getCurrentTime, func() time.Time {
 		return time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC)
 	})()
+	defer testutils.TestingHook(&getHostname, func() string {
+		return "hostname"
+	})()
 
 	datadriven.RunTest(t, "testdata/tsdump_upload_e2e", func(t *testing.T, d *datadriven.TestData) string {
 		var buf strings.Builder

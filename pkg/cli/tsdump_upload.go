@@ -156,6 +156,14 @@ var getCurrentTime = func() time.Time {
 	return timeutil.Now()
 }
 
+var getHostname = func() string {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "unknown"
+	}
+	return hostname
+}
+
 // appendTag appends a formatted tag to the series tags.
 func appendTag(series *datadogV2.MetricSeries, tagKey, tagValue string) {
 	series.Tags = append(series.Tags, fmt.Sprintf("%s:%s", tagKey, tagValue))
@@ -472,12 +480,15 @@ func (d *datadogWriter) upload(fileName string) error {
 	estimatedCost := float64(seriesUploaded) * 4.55 / 100 / 730
 	fmt.Printf("Estimated cost of this upload: $%.2f\n", estimatedCost)
 
+	tags := getUploadTags(d)
+	success := metricsUploadState.isSingleUploadSucceeded
 	if metricsUploadState.isSingleUploadSucceeded {
 		var isDatadogUploadFailed = false
 		markDatadogUploadFailedOnce := sync.OnceFunc(func() {
 			isDatadogUploadFailed = true
 		})
 		if len(metricsUploadState.uploadFailedMetrics) != 0 {
+			success = false
 			fmt.Printf(partialFailureMessageFormat, len(metricsUploadState.uploadFailedMetrics), strings.Join(func() []string {
 				var failedMetricsList []string
 				index := 1
@@ -489,7 +500,7 @@ func (d *datadogWriter) upload(fileName string) error {
 				return failedMetricsList
 			}(), "\n"))
 
-			tags := strings.Join(getUploadTags(d), ",")
+			tags := strings.Join(tags, ",")
 			fmt.Println("\nPushing logs of metric upload failures to datadog...")
 			for metric := range metricsUploadState.uploadFailedMetrics {
 				wg.Add(1)
@@ -526,6 +537,40 @@ func (d *datadogWriter) upload(fileName string) error {
 		fmt.Printf("datadog dashboard link: %s\n", dashboardLink)
 	} else {
 		fmt.Println("All metric upload is failed. Please re-upload the Tsdump.")
+	}
+
+	eventTags := append(tags, makeDDTag("series_uploaded", strconv.Itoa(seriesUploaded)))
+
+	api := datadogV2.NewLogsApi(d.apiClient)
+	hostName := getHostname()
+	msgJson, _ := json.Marshal(struct {
+		Message        string  `json:"message"`
+		SeriesUploaded int     `json:"series_uploaded"`
+		EstimatedCost  float64 `json:"estimated_cost"`
+		Duration       int     `json:"duration"`
+		DryRun         bool    `json:"dry_run"`
+		Success        bool    `json:"success"`
+	}{
+		Message:        fmt.Sprintf("tsdump upload completed: uploaded %d series overall", seriesUploaded),
+		SeriesUploaded: seriesUploaded,
+		Duration:       int(getCurrentTime().Sub(d.uploadTime).Nanoseconds()),
+		DryRun:         debugTimeSeriesDumpOpts.dryRun,
+		EstimatedCost:  estimatedCost,
+		Success:        success,
+	})
+	_, _, err = api.SubmitLog(d.datadogContext, []datadogV2.HTTPLogItem{
+		{
+			Ddsource: datadog.PtrString("tsdump_upload"),
+			Ddtags:   datadog.PtrString(strings.Join(eventTags, ",")),
+			Message:  string(msgJson),
+			Service:  datadog.PtrString("tsdump_upload"),
+			Hostname: datadog.PtrString(hostName),
+		},
+	}, datadogV2.SubmitLogOptionalParameters{
+		ContentEncoding: datadogV2.CONTENTENCODING_GZIP.Ptr(),
+	})
+	if err != nil {
+		fmt.Printf("error submitting log to datadog: %v\n", err)
 	}
 
 	close(ch)
