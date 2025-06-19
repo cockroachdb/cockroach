@@ -307,6 +307,9 @@ var mathBuiltins = map[string]builtinDefinition{
 			case 0:
 				return nil, errLogOfZero
 			}
+			if isInf(b) {
+				return &tree.DDecimal{Decimal: *decimalZero}, nil
+			}
 
 			top := new(apd.Decimal)
 			if _, err := tree.IntermediateCtx.Ln(top, x); err != nil {
