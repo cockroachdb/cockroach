@@ -16,7 +16,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
  HINT:  To call a function, use SELECT.
  CREATE FUNCTION cp_testfunc1(a int) RETURNS int LANGUAGE SQL AS $$ SELECT a $$;
  CREATE TABLE cp_test (a int, b text);
-@@ -16,47 +12,86 @@
+@@ -16,47 +12,91 @@
  INSERT INTO cp_test VALUES (1, x);
  $$;
  \df ptest1
@@ -51,9 +51,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
 - INSERT INTO cp_test VALUES (1, x);                  +
 - $procedure$                                         +
 - 
-+               pg_get_functiondef               
-+------------------------------------------------
-+ INSERT INTO root.public.cp_test VALUES (1, x);
++                   pg_get_functiondef                   
++--------------------------------------------------------
++ CREATE PROCEDURE public.ptest1(x STRING)              +
++         LANGUAGE SQL                                  +
++         SECURITY INVOKER                              +
++         AS $$                                         +
++         INSERT INTO root.public.cp_test VALUES (1, x);+
++ $$
  (1 row)
  
  -- show only normal functions
@@ -132,7 +137,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
  SELECT * FROM cp_test ORDER BY b COLLATE "C";
   a |   b   
  ---+-------
-@@ -71,34 +106,47 @@
+@@ -71,34 +111,47 @@
  BEGIN ATOMIC
    INSERT INTO cp_test VALUES (1, x);
  END;
@@ -199,7 +204,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
  
  -- utility functions currently not supported here
  CREATE PROCEDURE ptestx()
-@@ -106,13 +154,27 @@
+@@ -106,13 +159,27 @@
  BEGIN ATOMIC
    CREATE TABLE x (a int);
  END;
@@ -228,7 +233,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
  -- nested CALL
  TRUNCATE cp_test;
  CREATE PROCEDURE ptest3(y text)
-@@ -122,6 +184,9 @@
+@@ -122,6 +189,9 @@
  CALL ptest1($1);
  $$;
  CALL ptest3('b');
@@ -238,7 +243,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
  SELECT * FROM cp_test;
   a | b 
  ---+---
-@@ -147,7 +212,6 @@
+@@ -147,7 +217,6 @@
  CALL ptest4a(a, b);  -- error, not supported
  $$;
  ERROR:  calling procedures with output arguments is not supported in SQL functions
@@ -246,7 +251,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
  DROP PROCEDURE ptest4a;
  -- named and default parameters
  CREATE OR REPLACE PROCEDURE ptest5(a int, b text, c int default 100)
-@@ -158,9 +222,23 @@
+@@ -158,9 +227,23 @@
  $$;
  TRUNCATE cp_test;
  CALL ptest5(10, 'Hello', 20);
@@ -270,7 +275,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
  SELECT * FROM cp_test;
    a  |   b   
  -----+-------
-@@ -168,11 +246,7 @@
+@@ -168,11 +251,7 @@
    20 | Hello
    10 | Hello
   100 | Hello
@@ -283,7 +288,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
  
  -- polymorphic types
  CREATE PROCEDURE ptest6(a int, b anyelement)
-@@ -181,6 +255,9 @@
+@@ -181,6 +260,9 @@
  SELECT NULL::int;
  $$;
  CALL ptest6(1, 2);
@@ -293,7 +298,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
  -- collation assignment
  CREATE PROCEDURE ptest7(a text, b text)
  LANGUAGE SQL
-@@ -188,28 +265,47 @@
+@@ -188,28 +270,47 @@
  SELECT a = b;
  $$;
  CALL ptest7(least('a', 'b'), 'a');
@@ -356,7 +361,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
  -- OUT parameters
  CREATE PROCEDURE ptest9(OUT a int)
  LANGUAGE SQL
-@@ -226,17 +322,10 @@
+@@ -226,17 +327,10 @@
  
  -- you can write an expression, but it's not evaluated
  CALL ptest9(1/0);  -- no error
@@ -376,7 +381,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
  -- check named-parameter matching
  CREATE PROCEDURE ptest10(OUT a int, IN b int, IN c int)
  LANGUAGE SQL AS $$ SELECT b - c $$;
-@@ -247,137 +336,222 @@
+@@ -247,137 +341,222 @@
  (1 row)
  
  CALL ptest10(a => null, b => 8, c => 2);

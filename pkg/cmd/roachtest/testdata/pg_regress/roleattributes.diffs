@@ -130,7 +130,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/roleattributes.ou
           rolname         | rolsuper | rolinherit | rolcreaterole | rolcreatedb | rolcanlogin | rolreplication | rolbypassrls | rolconnlimit | rolpassword | rolvaliduntil 
  -------------------------+----------+------------+---------------+-------------+-------------+----------------+--------------+--------------+-------------+---------------
 - regress_test_createrole | f        | t          | f             | f           | f           | f              | f            |           -1 |             | 
-+ regress_test_createrole | f        | t          | t             | f           | f           | f              | f            |           -1 | ********    | 
++ regress_test_createrole | f        | t          | f             | f           | f           | f              | f            |           -1 | ********    | 
  (1 row)
  
  ALTER ROLE regress_test_createrole WITH CREATEROLE;
@@ -163,7 +163,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/roleattributes.ou
          rolname        | rolsuper | rolinherit | rolcreaterole | rolcreatedb | rolcanlogin | rolreplication | rolbypassrls | rolconnlimit | rolpassword | rolvaliduntil 
  -----------------------+----------+------------+---------------+-------------+-------------+----------------+--------------+--------------+-------------+---------------
 - regress_test_createdb | f        | t          | f             | f           | f           | f              | f            |           -1 |             | 
-+ regress_test_createdb | f        | t          | f             | t           | f           | f              | f            |           -1 | ********    | 
++ regress_test_createdb | f        | t          | f             | f           | f           | f              | f            |           -1 | ********    | 
  (1 row)
  
  ALTER ROLE regress_test_createdb WITH CREATEDB;
@@ -295,7 +295,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/roleattributes.ou
          rolname         | rolsuper | rolinherit | rolcreaterole | rolcreatedb | rolcanlogin | rolreplication | rolbypassrls | rolconnlimit | rolpassword | rolvaliduntil 
  ------------------------+----------+------------+---------------+-------------+-------------+----------------+--------------+--------------+-------------+---------------
 - regress_test_bypassrls | f        | t          | f             | f           | f           | f              | f            |           -1 |             | 
-+ regress_test_bypassrls | f        | t          | f             | f           | f           | f              | t            |           -1 | ********    | 
++ regress_test_bypassrls | f        | t          | f             | f           | f           | f              | f            |           -1 | ********    | 
  (1 row)
  
  ALTER ROLE regress_test_bypassrls WITH BYPASSRLS;

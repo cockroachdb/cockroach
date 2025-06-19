@@ -572,17 +572,18 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  SELECT * FROM target ORDER BY tid;
  ERROR:  current transaction is aborted, commands ignored until end of transaction block
  ROLLBACK;
-@@ -495,6 +542,9 @@
+@@ -495,6 +542,10 @@
  
  -- remove constraints
  alter table target drop CONSTRAINT target_pkey;
-+ERROR:  relation "target": unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/48026/_version_
++ERROR:  this schema change is disallowed because table "target" is locked and this operation cannot automatically unlock the table
++DETAIL:  To unlock the table, execute `ALTER TABLE target SET (schema_locked = false);`
++After the schema change completes, we recommend setting it back to true with `ALTER TABLE target SET (schema_locked = true);`.
++HINT:  Locking the table improves changefeed performance; see https://www.cockroachlabs.com/docs/_version_/changefeed-best-practices.html#lock-the-schema-on-changefeed-watched-tables
  alter table target alter column tid drop not null;
  -- multiple actions
  BEGIN;
-@@ -505,15 +555,12 @@
+@@ -505,15 +556,12 @@
  	INSERT VALUES (4, 4)
  WHEN MATCHED THEN
  	UPDATE SET balance = 0;
@@ -603,7 +604,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  -- should be equivalent
  BEGIN;
-@@ -524,15 +571,12 @@
+@@ -524,15 +572,12 @@
  	UPDATE SET balance = 0
  WHEN NOT MATCHED THEN
  	INSERT VALUES (4, 4);
@@ -624,7 +625,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  -- column references
  -- do a simple equivalent of an UPDATE join
-@@ -542,14 +586,12 @@
+@@ -542,14 +587,12 @@
  ON t.tid = s.sid
  WHEN MATCHED THEN
  	UPDATE SET balance = t.balance + s.delta;
@@ -644,7 +645,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  -- do a simple equivalent of an INSERT SELECT
  BEGIN;
-@@ -558,15 +600,12 @@
+@@ -558,15 +601,12 @@
  ON t.tid = s.sid
  WHEN NOT MATCHED THEN
  	INSERT VALUES (s.sid, s.delta);
@@ -665,7 +666,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  -- and again with duplicate source rows
  INSERT INTO source VALUES (5, 50);
-@@ -578,17 +617,12 @@
+@@ -578,17 +618,12 @@
  ON t.tid = s.sid
  WHEN NOT MATCHED THEN
    INSERT VALUES (s.sid, s.delta);
@@ -688,7 +689,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  -- removing duplicate source rows
  DELETE FROM source WHERE sid = 5;
-@@ -599,15 +633,12 @@
+@@ -599,15 +634,12 @@
  ON t.tid = s.sid
  WHEN NOT MATCHED THEN
  	INSERT (tid, balance) VALUES (s.sid, s.delta);
@@ -709,7 +710,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  -- and again with a subtle error: referring to non-existent target row for NOT MATCHED
  MERGE INTO target t
-@@ -615,10 +646,10 @@
+@@ -615,10 +647,10 @@
  ON t.tid = s.sid
  WHEN NOT MATCHED THEN
  	INSERT (tid, balance) VALUES (t.tid, s.delta);
@@ -724,7 +725,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  -- and again with a constant ON clause
  BEGIN;
  MERGE INTO target t
-@@ -626,10 +657,10 @@
+@@ -626,10 +658,10 @@
  ON (SELECT true)
  WHEN NOT MATCHED THEN
  	INSERT (tid, balance) VALUES (t.tid, s.delta);
@@ -739,7 +740,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  SELECT * FROM target ORDER BY tid;
  ERROR:  current transaction is aborted, commands ignored until end of transaction block
  ROLLBACK;
-@@ -642,15 +673,12 @@
+@@ -642,15 +674,12 @@
  	UPDATE SET balance = t.balance + s.delta
  WHEN NOT MATCHED THEN
  	INSERT VALUES (s.sid, s.delta);
@@ -760,7 +761,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  -- unreachable WHEN clause should ERROR
  BEGIN;
-@@ -661,13 +689,18 @@
+@@ -661,13 +690,18 @@
  	DELETE
  WHEN MATCHED THEN
  	UPDATE SET balance = t.balance - s.delta;
@@ -780,7 +781,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  INSERT INTO wq_source (sid, balance) VALUES (1, 100);
  BEGIN;
  -- try a simple INSERT with default values first
-@@ -675,18 +708,22 @@
+@@ -675,18 +709,22 @@
  USING wq_source s ON t.tid = s.sid
  WHEN NOT MATCHED THEN
  	INSERT (tid) VALUES (s.sid);
@@ -808,7 +809,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  SELECT * FROM wq_target;
   tid | balance 
  -----+---------
-@@ -697,6 +734,10 @@
+@@ -697,6 +735,10 @@
  USING wq_source s ON t.tid = s.sid
  WHEN NOT MATCHED AND s.balance <> 100 THEN
  	INSERT (tid) VALUES (s.sid);
@@ -819,7 +820,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  SELECT * FROM wq_target;
   tid | balance 
  -----+---------
-@@ -708,12 +749,12 @@
+@@ -708,12 +750,12 @@
  USING wq_source s ON t.tid = s.sid
  WHEN NOT MATCHED AND s.balance = 100 THEN
  	INSERT (tid) VALUES (s.sid);
@@ -837,7 +838,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  -- conditions in the NOT MATCHED clause can only refer to source columns
  BEGIN;
-@@ -721,10 +762,10 @@
+@@ -721,10 +763,10 @@
  USING wq_source s ON t.tid = s.sid
  WHEN NOT MATCHED AND t.balance = 100 THEN
  	INSERT (tid) VALUES (s.sid);
@@ -852,7 +853,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  SELECT * FROM wq_target;
  ERROR:  current transaction is aborted, commands ignored until end of transaction block
  ROLLBACK;
-@@ -732,11 +773,14 @@
+@@ -732,11 +774,14 @@
  USING wq_source s ON t.tid = s.sid
  WHEN NOT MATCHED AND s.balance = 100 THEN
  	INSERT (tid) VALUES (s.sid);
@@ -869,7 +870,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  
  -- conditions in MATCHED clause can refer to both source and target
  SELECT * FROM wq_source;
-@@ -749,63 +793,81 @@
+@@ -749,63 +794,81 @@
  USING wq_source s ON t.tid = s.sid
  WHEN MATCHED AND s.balance = 100 THEN
  	UPDATE SET balance = t.balance + s.balance;
@@ -963,7 +964,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  
  -- check source-side whole-row references
  BEGIN;
-@@ -813,35 +875,43 @@
+@@ -813,35 +876,43 @@
  USING wq_source s ON (t.tid = s.sid)
  WHEN matched and t = s or t.tid = s.sid THEN
  	UPDATE SET balance = t.balance + s.balance;
@@ -1017,7 +1018,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  
  DROP TABLE wq_target, wq_source;
  -- test triggers
-@@ -874,11 +944,29 @@
+@@ -874,11 +945,29 @@
  END;
  $$;
  CREATE TRIGGER merge_bsi BEFORE INSERT ON target FOR EACH STATEMENT EXECUTE PROCEDURE merge_trigfunc ();
@@ -1047,7 +1048,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  CREATE TRIGGER merge_bri BEFORE INSERT ON target FOR EACH ROW EXECUTE PROCEDURE merge_trigfunc ();
  CREATE TRIGGER merge_bru BEFORE UPDATE ON target FOR EACH ROW EXECUTE PROCEDURE merge_trigfunc ();
  CREATE TRIGGER merge_brd BEFORE DELETE ON target FOR EACH ROW EXECUTE PROCEDURE merge_trigfunc ();
-@@ -888,10 +976,8 @@
+@@ -888,10 +977,8 @@
  -- now the classic UPSERT, with a DELETE
  BEGIN;
  UPDATE target SET balance = 0 WHERE tid = 3;
@@ -1060,7 +1061,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  --EXPLAIN (ANALYZE ON, COSTS OFF, SUMMARY OFF, TIMING OFF)
  MERGE INTO target t
  USING source AS s
-@@ -902,26 +988,12 @@
+@@ -902,26 +989,12 @@
  	DELETE
  WHEN NOT MATCHED THEN
  	INSERT VALUES (s.sid, s.delta);
@@ -1092,7 +1093,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  -- Test behavior of triggers that turn UPDATE/DELETE into no-ops
  create or replace function skip_merge_op() returns trigger
-@@ -961,17 +1033,22 @@
+@@ -961,17 +1034,22 @@
  RAISE NOTICE 'ROW_COUNT = %', result;
  END;
  $$;
@@ -1126,7 +1127,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  SELECT * FROM target FULL OUTER JOIN source ON (sid = tid);
   tid | balance | sid | delta 
  -----+---------+-----+-------
-@@ -995,12 +1072,19 @@
+@@ -995,12 +1073,19 @@
  	UPDATE SET balance = t.balance - s.delta;
  END;
  $$;
@@ -1152,7 +1153,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  --source constants
  BEGIN;
-@@ -1009,19 +1093,12 @@
+@@ -1009,19 +1094,12 @@
  ON t.tid = s.sid
  WHEN NOT MATCHED THEN
  	INSERT (tid, balance) VALUES (s.sid, s.delta);
@@ -1177,7 +1178,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  --source query
  BEGIN;
-@@ -1030,19 +1107,12 @@
+@@ -1030,19 +1108,12 @@
  ON t.tid = s.sid
  WHEN NOT MATCHED THEN
  	INSERT (tid, balance) VALUES (s.sid, s.delta);
@@ -1202,7 +1203,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  BEGIN;
  MERGE INTO target t
-@@ -1050,19 +1120,12 @@
+@@ -1050,19 +1121,12 @@
  ON t.tid = s.sid
  WHEN NOT MATCHED THEN
  	INSERT (tid, balance) VALUES (s.sid, s.newname);
@@ -1227,7 +1228,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  --self-merge
  BEGIN;
-@@ -1073,24 +1136,12 @@
+@@ -1073,24 +1137,12 @@
  	UPDATE SET balance = t1.balance + t2.balance
  WHEN NOT MATCHED THEN
  	INSERT VALUES (t2.tid, t2.balance);
@@ -1257,7 +1258,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  BEGIN;
  MERGE INTO target t
-@@ -1098,16 +1149,12 @@
+@@ -1098,16 +1150,12 @@
  ON t.tid = s.sid
  WHEN NOT MATCHED THEN
  	INSERT (tid, balance) VALUES (s.sid, s.delta);
@@ -1279,7 +1280,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  BEGIN;
  MERGE INTO target t
-@@ -1120,19 +1167,12 @@
+@@ -1120,19 +1168,12 @@
  ON t.tid = s.sid
  WHEN NOT MATCHED THEN
  	INSERT (tid, balance) VALUES (s.sid, s.delta);
@@ -1304,7 +1305,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  -- plpgsql parameters and results
  BEGIN;
-@@ -1154,41 +1194,46 @@
+@@ -1154,41 +1195,46 @@
  RETURN result;
  END;
  $$;
@@ -1372,7 +1373,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  BEGIN;
  PREPARE foom2 (integer, integer) AS
-@@ -1197,26 +1242,25 @@
+@@ -1197,26 +1243,25 @@
  ON t.tid = $1
  WHEN MATCHED THEN
  UPDATE SET balance = $2;
@@ -1409,7 +1410,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  INSERT INTO sq_target(tid, balance) VALUES (1,100), (2,200), (3,300);
  INSERT INTO sq_source(sid, delta) VALUES (1,10), (2,20), (4,40);
  BEGIN;
-@@ -1225,14 +1269,12 @@
+@@ -1225,14 +1270,12 @@
  ON tid = sid
  WHEN MATCHED AND t.balance > delta THEN
  	UPDATE SET balance = t.balance + delta;
@@ -1429,7 +1430,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  -- try a view
  CREATE VIEW v AS SELECT * FROM sq_source WHERE sid < 2;
-@@ -1242,14 +1284,12 @@
+@@ -1242,14 +1285,12 @@
  ON tid = sid
  WHEN MATCHED THEN
      UPDATE SET balance = v.balance + delta;
@@ -1449,7 +1450,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  -- ambiguous reference to a column
  BEGIN;
-@@ -1262,9 +1302,10 @@
+@@ -1262,9 +1303,10 @@
  	INSERT (balance, tid) VALUES (balance + delta, sid)
  WHEN MATCHED AND tid < 2 THEN
  	DELETE;
@@ -1463,7 +1464,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  BEGIN;
  INSERT INTO sq_source (sid, balance, delta) VALUES (-1, -1, -10);
-@@ -1277,14 +1318,12 @@
+@@ -1277,14 +1319,12 @@
  	INSERT (balance, tid) VALUES (balance + delta, sid)
  WHEN MATCHED AND tid < 2 THEN
  	DELETE;
@@ -1483,7 +1484,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  -- CTEs
  BEGIN;
-@@ -1301,6 +1340,13 @@
+@@ -1301,6 +1341,13 @@
  	INSERT (balance, tid) VALUES (balance + delta, sid)
  WHEN MATCHED AND tid < 2 THEN
  	DELETE;
@@ -1497,7 +1498,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  -- RETURNING
  BEGIN;
-@@ -1315,15 +1361,18 @@
+@@ -1315,15 +1362,18 @@
  WHEN MATCHED AND tid < 2 THEN
  	DELETE
  RETURNING *;
@@ -1519,7 +1520,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  INSERT INTO ex_mtarget SELECT i, i*10 FROM generate_series(1,100,2) i;
  INSERT INTO ex_msource SELECT i, i*10 FROM generate_series(1,100,1) i;
  CREATE FUNCTION explain_merge(query text) RETURNS SETOF text
-@@ -1340,48 +1389,35 @@
+@@ -1340,48 +1390,35 @@
      END LOOP;
  END;
  $$;
@@ -1587,7 +1588,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  -- updates + deletes
  SELECT explain_merge('
  MERGE INTO ex_mtarget t USING ex_msource s ON t.a = s.a
-@@ -1389,43 +1425,13 @@
+@@ -1389,43 +1426,13 @@
  	UPDATE SET b = t.b + 1
  WHEN MATCHED AND t.a >= 10 AND t.a <= 20 THEN
  	DELETE');
@@ -1633,7 +1634,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  -- all three
  SELECT explain_merge('
  MERGE INTO ex_mtarget t USING ex_msource s ON t.a = s.a
-@@ -1435,45 +1441,16 @@
+@@ -1435,45 +1442,16 @@
  	DELETE
  WHEN NOT MATCHED AND s.a < 20 THEN
  	INSERT VALUES (a, b)');
@@ -1682,7 +1683,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  -- Subqueries
  BEGIN;
  MERGE INTO sq_target t
-@@ -1481,12 +1458,12 @@
+@@ -1481,12 +1459,12 @@
  ON tid = sid
  WHEN MATCHED THEN
      UPDATE SET balance = (SELECT count(*) FROM sq_target);
@@ -1700,7 +1701,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  BEGIN;
  MERGE INTO sq_target t
-@@ -1494,12 +1471,12 @@
+@@ -1494,12 +1472,12 @@
  ON tid = sid
  WHEN MATCHED AND (SELECT count(*) > 0 FROM sq_target) THEN
      UPDATE SET balance = 42;
@@ -1718,7 +1719,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  BEGIN;
  MERGE INTO sq_target t
-@@ -1507,30 +1484,57 @@
+@@ -1507,30 +1485,57 @@
  ON tid = sid AND (SELECT count(*) > 0 FROM sq_target)
  WHEN MATCHED THEN
      UPDATE SET balance = 42;
@@ -1782,7 +1783,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  -- try simple MERGE
  BEGIN;
  MERGE INTO pa_target t
-@@ -1540,25 +1544,12 @@
+@@ -1540,25 +1545,12 @@
      UPDATE SET balance = balance + delta, val = val || ' updated by merge'
    WHEN NOT MATCHED THEN
      INSERT VALUES (sid, delta, 'inserted by merge');
@@ -1813,7 +1814,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  -- same with a constant qual
  BEGIN;
-@@ -1569,31 +1560,12 @@
+@@ -1569,31 +1561,12 @@
      UPDATE SET balance = balance + delta, val = val || ' updated by merge'
    WHEN NOT MATCHED THEN
      INSERT VALUES (sid, delta, 'inserted by merge');
@@ -1850,7 +1851,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  -- try updating the partition key column
  BEGIN;
-@@ -1614,52 +1586,82 @@
+@@ -1614,52 +1587,82 @@
  RETURN result;
  END;
  $$;
@@ -1956,7 +1957,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  -- try simple MERGE
  BEGIN;
  MERGE INTO pa_target t
-@@ -1669,25 +1671,12 @@
+@@ -1669,25 +1672,12 @@
      UPDATE SET balance = balance + delta, val = val || ' updated by merge'
    WHEN NOT MATCHED THEN
      INSERT VALUES (sid, delta, 'inserted by merge');
@@ -1987,7 +1988,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  -- same with a constant qual
  BEGIN;
-@@ -1699,29 +1688,12 @@
+@@ -1699,29 +1689,12 @@
      UPDATE SET balance = balance + delta, val = val || ' updated by merge'
    WHEN NOT MATCHED THEN
      INSERT VALUES (sid, delta, 'inserted by merge');
@@ -2022,7 +2023,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  -- try updating the partition key column
  BEGIN;
-@@ -1732,64 +1704,100 @@
+@@ -1732,64 +1705,100 @@
      UPDATE SET tid = tid + 1, balance = balance + delta, val = val || ' updated by merge'
    WHEN NOT MATCHED THEN
      INSERT VALUES (sid, delta, 'inserted by merge');
@@ -2142,7 +2143,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  -- try simple MERGE
  BEGIN;
  MERGE INTO pa_target t
-@@ -1799,91 +1807,78 @@
+@@ -1799,91 +1808,78 @@
      UPDATE SET balance = balance + delta, val = val || ' updated by merge'
    WHEN NOT MATCHED THEN
      INSERT VALUES (slogts::timestamp, sid, delta, 'inserted by merge');
@@ -2274,7 +2275,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  INSERT INTO cj_source1 VALUES (1, 10, 100);
  INSERT INTO cj_source1 VALUES (1, 20, 200);
  INSERT INTO cj_source1 VALUES (2, 20, 300);
-@@ -1898,6 +1893,10 @@
+@@ -1898,6 +1894,10 @@
  ON t.tid = sid1
  WHEN NOT MATCHED THEN
  	INSERT VALUES (sid1, delta, sval);
@@ -2285,7 +2286,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  -- try accessing columns from either side of the source join
  MERGE INTO cj_target t
  USING cj_source2 s2
-@@ -1907,6 +1906,10 @@
+@@ -1907,6 +1907,10 @@
  	INSERT VALUES (sid2, delta, sval)
  WHEN MATCHED THEN
  	DELETE;
@@ -2296,7 +2297,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  -- some simple expressions in INSERT targetlist
  MERGE INTO cj_target t
  USING cj_source2 s2
-@@ -1916,20 +1919,24 @@
+@@ -1916,20 +1920,24 @@
  	INSERT VALUES (sid2, delta + scat, sval)
  WHEN MATCHED THEN
  	UPDATE SET val = val || ' updated by merge';
@@ -2328,7 +2329,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  
  -- try it with an outer join and PlaceHolderVar
  MERGE INTO cj_target t
-@@ -1938,19 +1945,14 @@
+@@ -1938,19 +1946,14 @@
  ON t.tid = fj.scat
  WHEN NOT MATCHED THEN
  	INSERT (tid, balance, val) VALUES (fj.scat, fj.delta, fj.phv);
@@ -2355,7 +2356,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  
  ALTER TABLE cj_source1 RENAME COLUMN sid1 TO sid;
  ALTER TABLE cj_source2 RENAME COLUMN sid2 TO sid;
-@@ -1961,10 +1963,15 @@
+@@ -1961,10 +1964,15 @@
  ON t.tid = s1.sid
  WHEN NOT MATCHED THEN
  	INSERT VALUES (s2.sid, delta, sval);
@@ -2371,7 +2372,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  MERGE INTO fs_target t
  USING generate_series(1,100,1) AS id
  ON t.a = id
-@@ -1972,6 +1979,10 @@
+@@ -1972,6 +1980,10 @@
  	UPDATE SET b = b + id
  WHEN NOT MATCHED THEN
  	INSERT VALUES (id, -1);
@@ -2382,7 +2383,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  MERGE INTO fs_target t
  USING generate_series(1,100,2) AS id
  ON t.a = id
-@@ -1979,10 +1990,14 @@
+@@ -1979,10 +1991,14 @@
  	UPDATE SET b = b + id, c = 'updated '|| id.*::text
  WHEN NOT MATCHED THEN
  	INSERT VALUES (id, -1, 'inserted ' || id.*::text);
@@ -2398,7 +2399,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  (1 row)
  
  DROP TABLE fs_target;
-@@ -1995,12 +2010,29 @@
+@@ -1995,12 +2011,29 @@
      peaktemp        int,
      unitsales       int
  ) WITH (autovacuum_enabled=off);
@@ -2428,7 +2429,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  CREATE TABLE measurement_y2007m01 (
      filler          text,
      peaktemp        int,
-@@ -2009,8 +2041,14 @@
+@@ -2009,8 +2042,14 @@
      unitsales       int
      CHECK ( logdate >= DATE '2007-01-01' AND logdate < DATE '2007-02-01')
  ) WITH (autovacuum_enabled=off);
@@ -2443,7 +2444,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  INSERT INTO measurement VALUES (0, '2005-07-21', 5, 15);
  CREATE OR REPLACE FUNCTION measurement_insert_trigger()
  RETURNS TRIGGER AS $$
-@@ -2034,6 +2072,7 @@
+@@ -2034,6 +2073,7 @@
  CREATE TRIGGER insert_measurement_trigger
      BEFORE INSERT ON measurement
      FOR EACH ROW EXECUTE PROCEDURE measurement_insert_trigger();
@@ -2451,7 +2452,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  INSERT INTO measurement VALUES (1, '2006-02-10', 35, 10);
  INSERT INTO measurement VALUES (1, '2006-02-16', 45, 20);
  INSERT INTO measurement VALUES (1, '2006-03-17', 25, 10);
-@@ -2041,18 +2080,19 @@
+@@ -2041,18 +2081,19 @@
  INSERT INTO measurement VALUES (1, '2007-01-15', 10, 10);
  INSERT INTO measurement VALUES (1, '2007-01-17', 10, 10);
  SELECT tableoid::regclass, * FROM measurement ORDER BY city_id, logdate;
@@ -2480,7 +2481,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  INSERT INTO new_measurement VALUES (0, '2005-07-21', 25, 20);
  INSERT INTO new_measurement VALUES (1, '2006-03-01', 20, 10);
  INSERT INTO new_measurement VALUES (1, '2006-02-16', 50, 10);
-@@ -2072,25 +2112,12 @@
+@@ -2072,25 +2113,12 @@
  WHEN NOT MATCHED THEN INSERT
       (city_id, logdate, peaktemp, unitsales)
     VALUES (city_id, logdate, peaktemp, unitsales);
@@ -2511,7 +2512,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  MERGE into measurement m
   USING new_measurement nm ON
-@@ -2102,56 +2129,64 @@
+@@ -2102,56 +2130,64 @@
  WHEN NOT MATCHED THEN INSERT
       (city_id, logdate, peaktemp, unitsales)
     VALUES (city_id, logdate, peaktemp, unitsales);

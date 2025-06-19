@@ -1,7 +1,7 @@
 diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out --label=/mnt/data1/postgres/src/test/regress/results/create_view.out /mnt/data1/postgres/src/test/regress/expected/create_view.out /mnt/data1/postgres/src/test/regress/results/create_view.out
 --- /mnt/data1/postgres/src/test/regress/expected/create_view.out
 +++ /mnt/data1/postgres/src/test/regress/results/create_view.out
-@@ -5,127 +5,218 @@
+@@ -5,127 +5,219 @@
  --
  -- directory paths and dlsuffix are passed to us in environment variables
  \getenv abs_srcdir PG_ABS_SRCDIR
@@ -119,9 +119,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
 -ERROR:  cannot drop constraint view_base_table_pkey on table view_base_table because other objects depend on it
 -DETAIL:  view key_dependent_view depends on constraint view_base_table_pkey on table view_base_table
 -HINT:  Use DROP ... CASCADE to drop the dependent objects too.
-+ERROR:  relation "view_base_table": unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/48026/_version_
++ERROR:  this schema change is disallowed because table "view_base_table" is locked and this operation cannot automatically unlock the table
++DETAIL:  To unlock the table, execute `ALTER TABLE view_base_table SET (schema_locked = false);`
++After the schema change completes, we recommend setting it back to true with `ALTER TABLE view_base_table SET (schema_locked = true);`.
++HINT:  Locking the table improves changefeed performance; see https://www.cockroachlabs.com/docs/_version_/changefeed-best-practices.html#lock-the-schema-on-changefeed-watched-tables
  CREATE VIEW key_dependent_view_no_cols AS
     SELECT FROM view_base_table GROUP BY key HAVING length(data) > 0;
 +ERROR:  relation "key_dependent_view_no_cols": table must contain at least 1 column
@@ -246,7 +247,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- joins: if any of the join relations are temporary, the view
  -- should also be temporary
  -- should be non-temp
-@@ -133,39 +224,45 @@
+@@ -133,39 +225,45 @@
      SELECT t1.a AS t1_a, t2.a AS t2_a
      FROM base_table t1, base_table2 t2
      WHERE t1.id = t2.id;
@@ -301,7 +302,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- a view should also be temporary if it references a temporary sequence
  CREATE SEQUENCE seq1;
  CREATE TEMPORARY SEQUENCE seq1_temp;
-@@ -178,16 +275,7 @@
+@@ -178,16 +276,7 @@
      ORDER BY relname;
   relname 
  ---------
@@ -319,7 +320,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  
  SELECT relname FROM pg_class
      WHERE relname LIKE 'v%'
-@@ -195,19 +283,9 @@
+@@ -195,19 +284,9 @@
      ORDER BY relname;
   relname  
  ----------
@@ -340,7 +341,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  
  CREATE SCHEMA testviewschm2;
  SET search_path TO testviewschm2, public;
-@@ -286,99 +364,132 @@
+@@ -286,99 +365,132 @@
         AS SELECT * FROM tbl1 WHERE a = 0;
  CREATE VIEW mysecview2 WITH (security_barrier=true)
         AS SELECT * FROM tbl1 WHERE a > 0;
@@ -518,7 +519,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- This test checks that proper typmods are assigned in a multi-row VALUES
  CREATE VIEW tt1 AS
    SELECT * FROM (
-@@ -386,40 +497,29 @@
+@@ -386,40 +498,29 @@
         ('abc'::varchar(3), '0123456789', 42, 'abcd'::varchar(4)),
         ('0123456789', 'abc'::varchar(3), 42.12, 'abc'::varchar(4))
    ) vv(a,b,c,d);
@@ -574,7 +575,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  CREATE VIEW aliased_view_1 AS
    select * from tt1
      where exists (select 1 from tx1 where tt1.f1 = tx1.x1);
-@@ -432,478 +532,307 @@
+@@ -432,478 +533,307 @@
  CREATE VIEW aliased_view_4 AS
    select * from temp_view_test.tt1
      where exists (select 1 from tt1 where temp_view_test.tt1.y1 = tt1.f1);
@@ -1307,7 +1308,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- Test view decompilation in the face of column addition/deletion/renaming
  create table tt2 (a int, b int, c int);
  create table tt3 (ax int8, b int2, c numeric);
-@@ -914,404 +843,120 @@
+@@ -914,404 +844,120 @@
  create view v2a as select * from (tt2 join tt3 using (b,c) join tt4 using (b)) j;
  create view v3 as select * from tt2 join tt3 using (b,c) full join tt4 using (b);
  select pg_get_viewdef('v1', true);
@@ -1782,7 +1783,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- Unnamed FULL JOIN USING is lots of fun too
  create table tt7 (x int, xx int, y int);
  alter table tt7 drop column xx;
-@@ -1321,25 +966,8 @@
+@@ -1321,25 +967,8 @@
  union all
  select * from tt7 full join tt8 using (x), tt8 tt8x;
  select pg_get_viewdef('vv2', true);
@@ -1810,7 +1811,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  create view vv3 as
  select * from (values(1,2,3,4,5,6)) v(a,b,c,x,e,f)
  union all
-@@ -1347,28 +975,8 @@
+@@ -1347,28 +976,8 @@
    tt7 full join tt8 using (x),
    tt7 tt7x full join tt8 tt8x using (x);
  select pg_get_viewdef('vv3', true);
@@ -1841,7 +1842,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  create view vv4 as
  select * from (values(1,2,3,4,5,6,7)) v(a,b,c,x,e,f,g)
  union all
-@@ -1376,104 +984,21 @@
+@@ -1376,104 +985,21 @@
    tt7 full join tt8 using (x),
    tt7 tt7x full join tt8 tt8x using (x) full join tt8 tt8y using (x);
  select pg_get_viewdef('vv4', true);
@@ -1954,7 +1955,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- Implicit coercions in a JOIN USING create issues similar to FULL JOIN
  create table tt7a (x date, xx int, y int);
  alter table tt7a drop column xx;
-@@ -1482,26 +1007,10 @@
+@@ -1482,26 +1008,10 @@
  select * from (values(now(),2,3,now(),5)) v(a,b,c,d,e)
  union all
  select * from tt7a left join tt8a using (x), tt8a tt8ax;
@@ -1984,7 +1985,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  --
  -- Also check dropping a column that existed when the view was made
  --
-@@ -1509,26 +1018,12 @@
+@@ -1509,26 +1019,12 @@
  create table tt10 (x int, z int);
  create view vv5 as select x,y,z from tt9 join tt10 using(x);
  select pg_get_viewdef('vv5', true);
@@ -2015,7 +2016,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  --
  -- Another corner case is that we might add a column to a table below a
  -- JOIN USING, and thereby make the USING column name ambiguous
-@@ -1539,30 +1034,12 @@
+@@ -1539,30 +1035,12 @@
  create view vv6 as select x,y,z,q from
    (tt11 join tt12 using(x)) join tt13 using(z);
  select pg_get_viewdef('vv6', true);
@@ -2050,7 +2051,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  --
  -- Check cases involving dropped/altered columns in a function's rowtype result
  --
-@@ -1581,26 +1058,33 @@
+@@ -1581,26 +1059,33 @@
  end;
  $$
  language plpgsql;
@@ -2100,7 +2101,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- We used to have a bug that would allow the above to succeed, posing
  -- hazards for later execution of the view.  Check that the internal
  -- defenses for those hazards haven't bit-rotted, in case some other
-@@ -1614,46 +1098,28 @@
+@@ -1614,46 +1099,28 @@
  returning pg_describe_object(classid, objid, objsubid) as obj,
            pg_describe_object(refclassid, refobjid, refobjsubid) as ref,
            deptype;
@@ -2157,7 +2158,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- ... but some bug might let it happen, so check defenses
  begin;
  -- destroy the dependency entry that prevents the ALTER:
-@@ -1664,124 +1130,63 @@
+@@ -1664,124 +1131,63 @@
  returning pg_describe_object(classid, objid, objsubid) as obj,
            pg_describe_object(refclassid, refobjid, refobjsubid) as ref,
            deptype;
@@ -2314,7 +2315,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  select * from int8_tbl i, lateral(values(i.*::int8_tbl)) ss;
          q1        |        q2         |               column1                
  ------------------+-------------------+--------------------------------------
-@@ -1804,14 +1209,8 @@
+@@ -1804,14 +1210,8 @@
  (5 rows)
  
  select pg_get_viewdef('tt17v', true);
@@ -2331,7 +2332,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  select * from int8_tbl i where i.* in (values(i.*::int8_tbl));
          q1        |        q2         
  ------------------+-------------------
-@@ -1823,48 +1222,48 @@
+@@ -1823,48 +1223,48 @@
  (5 rows)
  
  create table tt15v_log(o tt15v, n tt15v, incr bool);
@@ -2412,7 +2413,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- check display of ScalarArrayOp with a sub-select
  select 'foo'::text = any(array['abc','def','foo']::text[]);
   ?column? 
-@@ -1873,10 +1272,7 @@
+@@ -1873,10 +1273,7 @@
  (1 row)
  
  select 'foo'::text = any((select array['abc','def','foo']::text[]));  -- fail
@@ -2424,7 +2425,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  select 'foo'::text = any((select array['abc','def','foo']::text[])::text[]);
   ?column? 
  ----------
-@@ -1887,12 +1283,8 @@
+@@ -1887,12 +1284,8 @@
  select 'foo'::text = any(array['abc','def','foo']::text[]) c1,
         'foo'::text = any((select array['abc','def','foo']::text[])::text[]) c2;
  select pg_get_viewdef('tt19v', true);
@@ -2439,7 +2440,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- check display of assorted RTE_FUNCTION expressions
  create view tt20v as
  select * from
-@@ -1902,23 +1294,14 @@
+@@ -1902,23 +1295,14 @@
    localtimestamp(3) as t,
    cast(1+2 as int4) as i4,
    cast(1+2 as int8) as i8;
@@ -2470,7 +2471,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- reverse-listing of various special function syntaxes required by SQL
  create view tt201v as
  select
-@@ -1974,136 +1357,41 @@
+@@ -1974,136 +1358,41 @@
    (select * from SESSION_USER) as seu2,
    SYSTEM_USER as su,
    (select * from SYSTEM_USER) as su2;
@@ -2626,7 +2627,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- test extraction of FieldSelect field names (get_name_for_var_field)
  create view tt24v as
  with cte as materialized (select r from (values(1,2),(3,4)) r)
-@@ -2111,66 +1399,29 @@
+@@ -2111,66 +1400,29 @@
    cte join (select rr from (values(1,7),(3,8)) rr limit 2) ss
    on (r).column1 = (rr).column1;
  select pg_get_viewdef('tt24v', true);
@@ -2707,7 +2708,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- test pretty-print parenthesization rules, and SubLink deparsing
  create view tt26v as
  select x + y + z as c1,
-@@ -2186,128 +1437,9 @@
+@@ -2186,128 +1438,9 @@
         (x,y) <= ANY (values(1,2),(3,4)) as c11
  from (values(1,2,3)) v(x,y,z);
  select pg_get_viewdef('tt26v', true);

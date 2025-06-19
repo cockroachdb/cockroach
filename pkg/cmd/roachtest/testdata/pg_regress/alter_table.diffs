@@ -1623,16 +1623,17 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- try altering non-existent table, should fail
  alter table non_existent alter column bar set not null;
  ERROR:  relation "non_existent" does not exist
-@@ -1119,27 +1391,29 @@
+@@ -1119,27 +1391,30 @@
  create table atacc1 (test int not null);
  alter table atacc1 add constraint "atacc1_pkey" primary key (test);
  alter table atacc1 alter column test drop not null;
 -ERROR:  column "test" is in a primary key
 +ERROR:  column "test" is in a primary index
  alter table atacc1 drop constraint "atacc1_pkey";
-+ERROR:  relation "atacc1": unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/48026/_version_
++ERROR:  this schema change is disallowed because table "atacc1" is locked and this operation cannot automatically unlock the table
++DETAIL:  To unlock the table, execute `ALTER TABLE atacc1 SET (schema_locked = false);`
++After the schema change completes, we recommend setting it back to true with `ALTER TABLE atacc1 SET (schema_locked = true);`.
++HINT:  Locking the table improves changefeed performance; see https://www.cockroachlabs.com/docs/_version_/changefeed-best-practices.html#lock-the-schema-on-changefeed-watched-tables
  alter table atacc1 alter column test drop not null;
 +ERROR:  column "test" is in a primary index
  insert into atacc1 values (null);
@@ -1661,7 +1662,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  drop view myview;
  drop table atacc1;
  -- set not null verified by constraints
-@@ -1147,13 +1421,11 @@
+@@ -1147,13 +1422,11 @@
  insert into atacc1 values (null, 1);
  -- constraint not cover all values, should fail
  alter table atacc1 add constraint atacc1_constr_or check(test_a is not null or test_b < 10);
@@ -1677,7 +1678,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  alter table atacc1 drop constraint atacc1_constr_invalid;
  -- with valid constraint
  update atacc1 set test_a = 1;
-@@ -1164,11 +1436,9 @@
+@@ -1164,11 +1437,9 @@
  alter table atacc1 alter test_a drop not null;
  -- test multiple set not null at same time
  -- test_a checked by atacc1_constr_a_valid, test_b should fail by table scan
@@ -1691,7 +1692,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- valid one by table scan, one by check constraints
  update atacc1 set test_b = 1;
  alter table atacc1 alter test_b set not null, alter test_a set not null;
-@@ -1179,36 +1449,41 @@
+@@ -1179,36 +1450,41 @@
  drop table atacc1;
  -- test inheritance
  create table parent (a int);
@@ -1747,7 +1748,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  drop table parent;
  -- test setting and removing default values
  create table def_test (
-@@ -1234,11 +1509,12 @@
+@@ -1234,11 +1510,12 @@
  
  -- set defaults to an incorrect type: this should fail
  alter table def_test alter column c1 set default 'wrong_datatype';
@@ -1762,7 +1763,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- set defaults on views: we need to create a view, add a rule
  -- to allow insertions into it, and then alter the view to add
  -- a default
-@@ -1246,11 +1522,31 @@
+@@ -1246,11 +1523,31 @@
  create rule def_view_test_ins as
  	on insert to def_view_test
  	do instead insert into def_test select new.*;
@@ -1794,7 +1795,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  select * from def_view_test;
   c1 |       c2        
  ----+-----------------
-@@ -1258,18 +1554,30 @@
+@@ -1258,18 +1555,30 @@
      | initial_default
      | 
   10 | new_default
@@ -1830,7 +1831,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- try altering non-existent table, should fail
  alter table nosuchtable drop column bar;
  ERROR:  relation "nosuchtable" does not exist
-@@ -1278,7 +1586,7 @@
+@@ -1278,7 +1587,7 @@
  insert into atacc1 values (1, 2, 3, 4);
  alter table atacc1 drop a;
  alter table atacc1 drop a;
@@ -1839,7 +1840,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- SELECTs
  select * from atacc1;
   b | c | d 
-@@ -1288,20 +1596,12 @@
+@@ -1288,20 +1597,12 @@
  
  select * from atacc1 order by a;
  ERROR:  column "a" does not exist
@@ -1860,7 +1861,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  select atacc1.* from atacc1;
   b | c | d 
  ---+---+---
-@@ -1310,12 +1610,8 @@
+@@ -1310,12 +1611,8 @@
  
  select a from atacc1;
  ERROR:  column "a" does not exist
@@ -1874,7 +1875,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  select b,c,d from atacc1;
   b | c | d 
  ---+---+---
-@@ -1324,111 +1620,74 @@
+@@ -1324,111 +1621,74 @@
  
  select a,b,c,d from atacc1;
  ERROR:  column "a" does not exist
@@ -2011,7 +2012,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- try creating a view and altering that, should fail
  create view myview as select * from atacc1;
  select * from myview;
-@@ -1437,71 +1696,98 @@
+@@ -1437,71 +1697,98 @@
  (0 rows)
  
  alter table myview drop d;
@@ -2138,7 +2139,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  drop table atacc2;
  create index "testing_idx" on atacc1(a);
  ERROR:  column "a" does not exist
-@@ -1510,6 +1796,7 @@
+@@ -1510,6 +1797,7 @@
  -- test create as and select into
  insert into atacc1 values (21, 22, 23);
  create table attest1 as select * from atacc1;
@@ -2146,7 +2147,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  select * from attest1;
   b  | c  | d  
  ----+----+----
-@@ -1518,13 +1805,14 @@
+@@ -1518,13 +1806,14 @@
  
  drop table attest1;
  select * into attest2 from atacc1;
@@ -2166,7 +2167,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- try dropping all columns
  alter table atacc1 drop c;
  alter table atacc1 drop d;
-@@ -1536,74 +1824,85 @@
+@@ -1536,74 +1825,85 @@
  drop table atacc1;
  -- test constraint error reporting in presence of dropped columns
  create table atacc1 (id serial primary key, value int check (value < 10));
@@ -2291,7 +2292,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- test copy in/out
  create table attest (a int4, b int4, c int4);
  insert into attest values (1,2,3);
-@@ -1611,12 +1910,11 @@
+@@ -1611,12 +1911,11 @@
  copy attest to stdout;
  2	3
  copy attest(a) to stdout;
@@ -2307,7 +2308,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  select * from attest;
   b | c 
  ---+---
-@@ -1632,9 +1930,9 @@
+@@ -1632,9 +1931,9 @@
  (2 rows)
  
  copy attest(a) from stdin;
@@ -2319,7 +2320,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  copy attest(b,c) from stdin;
  select * from attest;
   b  | c  
-@@ -1648,124 +1946,162 @@
+@@ -1648,124 +1947,162 @@
  -- test inheritance
  create table dropColumn (a int, b int, e int);
  create table dropColumnChild (c int) inherits (dropColumn);
@@ -2524,7 +2525,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  
  -- should work
  alter table only p1 drop column name;
-@@ -1773,188 +2109,175 @@
+@@ -1773,188 +2110,175 @@
  alter table p2 drop column name;
  -- should be rejected since its inherited
  alter table gc1 drop column name;
@@ -2785,7 +2786,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  alter table anothertab drop constraint anothertab_chk;
  alter table anothertab drop constraint anothertab_chk; -- fails
  ERROR:  constraint "anothertab_chk" of relation "anothertab" does not exist
-@@ -1963,12 +2286,9 @@
+@@ -1963,12 +2287,9 @@
  alter table anothertab alter column atcol1 type boolean
          using case when atcol1 % 2 = 0 then true else false end;
  select * from anothertab;
@@ -2801,7 +2802,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  
  drop table anothertab;
  -- Test index handling in alter table column type (cf. bugs #15835, #15865)
-@@ -1976,33 +2296,45 @@
+@@ -1976,33 +2297,45 @@
                          f3 int, f4 int, f5 int);
  alter table anothertab
    add exclude using btree (f3 with =);
@@ -2865,7 +2866,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  alter table anothertab alter column f1 type bigint;
  alter table anothertab
    alter column f2 type bigint,
-@@ -2010,24 +2342,15 @@
+@@ -2010,24 +2343,15 @@
    alter column f4 type bigint;
  alter table anothertab alter column f5 type bigint;
  \d anothertab
@@ -2899,7 +2900,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  drop table anothertab;
  -- test that USING expressions are parsed before column alter type / drop steps
  create table another (f1 int, f2 text, f3 text);
-@@ -2046,12 +2369,15 @@
+@@ -2046,12 +2370,15 @@
    alter f1 type text using f2 || ' and ' || f3 || ' more',
    alter f2 type bigint using f1 * 10,
    drop column f3;
@@ -2920,7 +2921,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  (3 rows)
  
  drop table another;
-@@ -2059,107 +2385,166 @@
+@@ -2059,107 +2386,166 @@
  -- rewriting the index.
  begin;
  create table skip_wal_skip_rewrite_index (c varchar(10) primary key);
@@ -3136,7 +3137,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  select relname,
    c.oid = oldoid as orig_oid,
    case relfilenode
-@@ -2172,27 +2557,19 @@
+@@ -2172,27 +2558,19 @@
    from pg_class c left join old_oids using (relname)
    where relname like 'at_partitioned%'
    order by relname;
@@ -3171,7 +3172,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- Note: these tests currently show the wrong behavior for comments :-(
  select relname,
    c.oid = oldoid as orig_oid,
-@@ -2206,280 +2583,331 @@
+@@ -2206,280 +2584,331 @@
    from pg_class c left join old_oids using (relname)
    where relname like 'at_partitioned%'
    order by relname;
@@ -3673,7 +3674,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  DROP TABLE check_fk_presence_1, check_fk_presence_2;
  -- check column addition within a view (bug #14876)
  create table at_base_table(id int, stuff text);
-@@ -2487,80 +2915,68 @@
+@@ -2487,80 +2916,68 @@
  create view at_view_1 as select * from at_base_table bt;
  create view at_view_2 as select *, to_json(v1) as j from at_view_1 v1;
  \d+ at_view_1
@@ -3806,7 +3807,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  (1 row)
  
  drop view at_view_2;
-@@ -2569,32 +2985,54 @@
+@@ -2569,32 +2986,54 @@
  -- related case (bug #17811)
  begin;
  create temp table t1 as select * from int8_tbl;
@@ -3868,7 +3869,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- check adding a column not itself requiring a rewrite, together with
  -- a column requiring a default (bug #16038)
  -- ensure that rewrites aren't silently optimized away, removing the
-@@ -2612,6 +3050,18 @@
+@@ -2612,6 +3051,18 @@
      RETURN v_relfilenode <> (SELECT relfilenode FROM pg_class WHERE oid = p_tablename);
  END;
  $$;
@@ -3887,7 +3888,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  CREATE TABLE rewrite_test(col text);
  INSERT INTO rewrite_test VALUES ('something');
  INSERT INTO rewrite_test VALUES (NULL);
-@@ -2621,42 +3071,26 @@
+@@ -2621,42 +3072,26 @@
        ADD COLUMN empty1 text,
        ADD COLUMN notempty1_rewrite serial;
  $$);
@@ -3934,7 +3935,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- then with rewrite
  SELECT check_ddl_rewrite('rewrite_test', $$
      ALTER TABLE rewrite_test
-@@ -2664,24 +3098,17 @@
+@@ -2664,24 +3099,17 @@
          ADD COLUMN notempty5_norewrite int default 42,
          ADD COLUMN notempty5_rewrite serial;
  $$);
@@ -3962,7 +3963,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  DROP TABLE rewrite_test;
  --
  -- lock levels
-@@ -2700,7 +3127,7 @@
+@@ -2700,7 +3128,7 @@
  ,'AccessExclusiveLock'
  );
  drop view my_locks;
@@ -3971,7 +3972,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  create or replace view my_locks as
  select case when c.relname like 'pg_toast%' then 'pg_toast' else c.relname end, max(mode::lockmodes) as max_lockmode
  from pg_locks l join pg_class c on l.relation = c.oid
-@@ -2712,158 +3139,136 @@
+@@ -2712,158 +3140,136 @@
  and relnamespace != (select oid from pg_namespace where nspname = 'pg_catalog')
  and c.relname != 'my_locks'
  group by c.relname;
@@ -4200,7 +4201,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  create or replace view my_locks as
  select case when c.relname like 'pg_toast%' then 'pg_toast' else c.relname end, max(mode::lockmodes) as max_lockmode
  from pg_locks l join pg_class c on l.relation = c.oid
-@@ -2875,40 +3280,59 @@
+@@ -2875,40 +3281,59 @@
  and relnamespace != (select oid from pg_namespace where nspname = 'pg_catalog')
  and c.relname = 'my_locks'
  group by c.relname;
@@ -4272,7 +4273,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  drop type lockmodes;
  --
  -- alter function
-@@ -2950,60 +3374,178 @@
+@@ -2950,60 +3375,178 @@
  --
  create schema alter1;
  create schema alter2;
@@ -4465,7 +4466,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  
  select alter2.plus1(41);
   plus1 
-@@ -3013,225 +3555,391 @@
+@@ -3013,225 +3556,391 @@
  
  -- clean up
  drop schema alter2 cascade;
@@ -5015,7 +5016,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  DROP TABLE test_tblx;
  DROP TYPE test_typex;
  -- This test isn't that interesting on its own, but the purpose is to leave
-@@ -3239,7 +3947,14 @@
+@@ -3239,7 +3948,14 @@
  -- column in it, and the composite type has a dropped attribute.
  CREATE TYPE test_type3 AS (a int);
  CREATE TABLE test_tbl3 (c) AS SELECT '(1)'::test_type3;
@@ -5030,7 +5031,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  CREATE TYPE test_type_empty AS ();
  DROP TYPE test_type_empty;
  --
-@@ -3247,6 +3962,12 @@
+@@ -3247,6 +3963,12 @@
  --
  CREATE TYPE tt_t0 AS (z inet, x int, y numeric(8,2));
  ALTER TYPE tt_t0 DROP ATTRIBUTE z;
@@ -5043,7 +5044,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  CREATE TABLE tt0 (x int NOT NULL, y numeric(8,2));	-- OK
  CREATE TABLE tt1 (x int, y bigint);					-- wrong base type
  CREATE TABLE tt2 (x int, y numeric(9,2));			-- wrong typmod
-@@ -3254,76 +3975,128 @@
+@@ -3254,76 +3976,128 @@
  CREATE TABLE tt4 (x int);							-- too few columns
  CREATE TABLE tt5 (x int, y numeric(8,2), z int);	-- too few columns
  CREATE TABLE tt6 () INHERITS (tt0);					-- can't have a parent
@@ -5203,7 +5204,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  DROP TABLE alter2.tt8;
  DROP SCHEMA alter2;
  --
-@@ -3334,32 +4107,28 @@
+@@ -3334,32 +4108,28 @@
  ALTER TABLE tt9 ADD CHECK(c > 2);  -- picks nonconflicting name
  ALTER TABLE tt9 ADD CONSTRAINT foo CHECK(c > 3);
  ALTER TABLE tt9 ADD CONSTRAINT foo CHECK(c > 4);  -- fail, dup name
@@ -5216,13 +5217,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
 +ERROR:  index with name "tt9_c_key" already exists
  ALTER TABLE tt9 ADD CONSTRAINT foo UNIQUE(c);  -- fail, dup name
 -ERROR:  constraint "foo" for relation "tt9" already exists
-+ERROR:  error executing StatementPhase stage 1 of 1 with 7 MutationType ops: relation "tt9": duplicate constraint name: "foo"
++ERROR:  error executing StatementPhase stage 1 of 1 with 8 MutationType ops: relation "tt9": duplicate constraint name: "foo"
  ALTER TABLE tt9 ADD CONSTRAINT tt9_c_key CHECK(c > 5);  -- fail, dup name
 -ERROR:  constraint "tt9_c_key" for relation "tt9" already exists
-+ERROR:  error executing StatementPhase stage 1 of 1 with 2 MutationType ops: relation "tt9": duplicate constraint name: "tt9_c_key"
++ERROR:  error executing StatementPhase stage 1 of 1 with 3 MutationType ops: relation "tt9": duplicate constraint name: "tt9_c_key"
  ALTER TABLE tt9 ADD CONSTRAINT tt9_c_key2 CHECK(c > 6);
  ALTER TABLE tt9 ADD UNIQUE(c);  -- picks nonconflicting name
-+ERROR:  error executing StatementPhase stage 1 of 1 with 7 MutationType ops: relation "tt9": duplicate constraint name: "tt9_c_key2"
++ERROR:  error executing StatementPhase stage 1 of 1 with 8 MutationType ops: relation "tt9": duplicate constraint name: "tt9_c_key2"
  \d tt9
 -                Table "public.tt9"
 - Column |  Type   | Collation | Nullable | Default 
@@ -5250,7 +5251,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  DROP TABLE tt9;
  -- Check that comments on constraints and indexes are not lost at ALTER TABLE.
  CREATE TABLE comment_test (
-@@ -3371,6 +4140,7 @@
+@@ -3371,6 +4141,7 @@
  COMMENT ON COLUMN comment_test.id IS 'Column ''id'' on comment_test';
  COMMENT ON INDEX comment_test_index IS 'Simple index on comment_test';
  COMMENT ON CONSTRAINT comment_test_positive_col_check ON comment_test IS 'CHECK constraint on comment_test.positive_col';
@@ -5258,7 +5259,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  COMMENT ON CONSTRAINT comment_test_pk ON comment_test IS 'PRIMARY KEY constraint of comment_test';
  COMMENT ON INDEX comment_test_pk IS 'Index backing the PRIMARY KEY of comment_test';
  SELECT col_description('comment_test'::regclass, 1) as comment;
-@@ -3387,10 +4157,10 @@
+@@ -3387,10 +4158,10 @@
  (2 rows)
  
  SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test'::regclass ORDER BY 1, 2;
@@ -5273,7 +5274,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  (2 rows)
  
  -- Change the datatype of all the columns. ALTER TABLE is optimized to not
-@@ -3399,8 +4169,18 @@
+@@ -3399,8 +4170,18 @@
  -- first, to test that no-op codepath, and another one that does.
  ALTER TABLE comment_test ALTER COLUMN indexed_col SET DATA TYPE int;
  ALTER TABLE comment_test ALTER COLUMN indexed_col SET DATA TYPE text;
@@ -5292,7 +5293,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  ALTER TABLE comment_test ALTER COLUMN positive_col SET DATA TYPE int;
  ALTER TABLE comment_test ALTER COLUMN positive_col SET DATA TYPE bigint;
  -- Check that the comments are intact.
-@@ -3418,10 +4198,10 @@
+@@ -3418,10 +4199,10 @@
  (2 rows)
  
  SELECT conname as constraint, obj_description(oid, 'pg_constraint') as comment FROM pg_constraint where conrelid = 'comment_test'::regclass ORDER BY 1, 2;
@@ -5307,7 +5308,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  (2 rows)
  
  -- Check compatibility for foreign keys and comments. This is done
-@@ -3429,34 +4209,35 @@
+@@ -3429,34 +4210,35 @@
  -- to an error and would reduce the test scope.
  CREATE TABLE comment_test_child (
    id text CONSTRAINT comment_test_child_fk REFERENCES comment_test);
@@ -5360,7 +5361,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- Check that we map relation oids to filenodes and back correctly.  Only
  -- display bad mappings so the test output doesn't change all the time.  A
  -- filenode function call can return NULL for a relation dropped concurrently
-@@ -3468,31 +4249,28 @@
+@@ -3468,31 +4250,28 @@
  FROM pg_class,
      pg_filenode_relation(reltablespace, pg_relation_filenode(oid)) AS mapped_oid
  WHERE relkind IN ('r', 'i', 'S', 't', 'm') AND mapped_oid IS DISTINCT FROM oid;
@@ -5400,13 +5401,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  ALTER TABLE new_system_table RENAME TO old_system_table;
  CREATE INDEX old_system_table__othercol ON old_system_table (othercol);
  INSERT INTO old_system_table(othercol) VALUES ('somedata'), ('otherdata');
-@@ -3500,10 +4278,16 @@
+@@ -3500,10 +4279,17 @@
  DELETE FROM old_system_table WHERE othercol = 'somedata';
  TRUNCATE old_system_table;
  ALTER TABLE old_system_table DROP CONSTRAINT new_system_table_pkey;
-+ERROR:  relation "old_system_table": unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/48026/_version_
++ERROR:  this schema change is disallowed because table "old_system_table" is locked and this operation cannot automatically unlock the table
++DETAIL:  To unlock the table, execute `ALTER TABLE old_system_table SET (schema_locked = false);`
++After the schema change completes, we recommend setting it back to true with `ALTER TABLE old_system_table SET (schema_locked = true);`.
++HINT:  Locking the table improves changefeed performance; see https://www.cockroachlabs.com/docs/_version_/changefeed-best-practices.html#lock-the-schema-on-changefeed-watched-tables
  ALTER TABLE old_system_table DROP COLUMN othercol;
 +NOTICE:  dropping index "old_system_table__othercol" which depends on column "othercol"
  DROP TABLE old_system_table;
@@ -5417,7 +5419,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- check relpersistence of an unlogged table
  SELECT relname, relkind, relpersistence FROM pg_class WHERE relname ~ '^unlogged1'
  UNION ALL
-@@ -3511,21 +4295,24 @@
+@@ -3511,21 +4297,24 @@
  UNION ALL
  SELECT r.relname || ' toast index', ri.relkind, ri.relpersistence FROM pg_class r join pg_class t ON t.oid = r.reltoastrelid JOIN pg_index i ON i.indrelid = t.oid JOIN pg_class ri ON ri.oid = i.indexrelid WHERE r.relname ~ '^unlogged1'
  ORDER BY relname;
@@ -5451,7 +5453,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- check relpersistence of an unlogged table after changing to permanent
  SELECT relname, relkind, relpersistence FROM pg_class WHERE relname ~ '^unlogged1'
  UNION ALL
-@@ -3533,21 +4320,20 @@
+@@ -3533,21 +4322,20 @@
  UNION ALL
  SELECT r.relname || ' toast index', ri.relkind, ri.relpersistence FROM pg_class r join pg_class t ON t.oid = r.reltoastrelid JOIN pg_index i ON i.indrelid = t.oid JOIN pg_class ri ON ri.oid = i.indexrelid WHERE r.relname ~ '^unlogged1'
  ORDER BY relname;
@@ -5480,7 +5482,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- check relpersistence of a permanent table
  SELECT relname, relkind, relpersistence FROM pg_class WHERE relname ~ '^logged1'
  UNION ALL
-@@ -3555,22 +4341,24 @@
+@@ -3555,22 +4343,24 @@
  UNION ALL
  SELECT r.relname ||' toast index', ri.relkind, ri.relpersistence FROM pg_class r join pg_class t ON t.oid = r.reltoastrelid JOIN pg_index i ON i.indrelid = t.oid JOIN pg_class ri ON ri.oid = i.indexrelid WHERE r.relname ~ '^logged1'
  ORDER BY relname;
@@ -5514,7 +5516,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- check relpersistence of a permanent table after changing to unlogged
  SELECT relname, relkind, relpersistence FROM pg_class WHERE relname ~ '^logged1'
  UNION ALL
-@@ -3578,36 +4366,41 @@
+@@ -3578,36 +4368,41 @@
  UNION ALL
  SELECT r.relname || ' toast index', ri.relkind, ri.relpersistence FROM pg_class r join pg_class t ON t.oid = r.reltoastrelid JOIN pg_index i ON i.indrelid = t.oid JOIN pg_class ri ON ri.oid = i.indexrelid WHERE r.relname ~ '^logged1'
  ORDER BY relname;
@@ -5575,7 +5577,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  ALTER TABLE test_add_column
  	ADD COLUMN c2 integer; -- fail because c2 already exists
  ERROR:  column "c2" of relation "test_add_column" already exists
-@@ -3615,159 +4408,132 @@
+@@ -3615,159 +4410,132 @@
  	ADD COLUMN c2 integer; -- fail because c2 already exists
  ERROR:  column "c2" of relation "test_add_column" already exists
  \d test_add_column
@@ -5827,7 +5829,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- assorted cases with multiple ALTER TABLE steps
  CREATE TABLE ataddindex(f1 INT);
  INSERT INTO ataddindex VALUES (42), (43);
-@@ -3775,100 +4541,134 @@
+@@ -3775,100 +4543,134 @@
  ALTER TABLE ataddindex
    ADD PRIMARY KEY USING INDEX ataddindexi0,
    ALTER f1 TYPE BIGINT;
@@ -6012,7 +6014,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  --
  -- ATTACH PARTITION
  --
-@@ -3878,7 +4678,11 @@
+@@ -3878,7 +4680,11 @@
  );
  CREATE TABLE fail_part (like unparted);
  ALTER TABLE unparted ATTACH PARTITION fail_part FOR VALUES IN ('a');
@@ -6025,7 +6027,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  DROP TABLE unparted, fail_part;
  -- check that partition bound is compatible
  CREATE TABLE list_parted (
-@@ -3886,62 +4690,146 @@
+@@ -3886,62 +4692,146 @@
  	b char(2) COLLATE "C",
  	CONSTRAINT check_a CHECK (a > 0)
  ) PARTITION BY LIST (a);
@@ -6186,7 +6188,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  DROP TABLE fail_part;
  -- check that columns match in type, collation and NOT NULL status
  CREATE TABLE fail_part (
-@@ -3949,158 +4837,335 @@
+@@ -3949,158 +4839,335 @@
  	a int NOT NULL
  );
  ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
@@ -6551,7 +6553,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- Check the case where attnos of the partitioning columns in the table being
  -- attached differs from the parent.  It should not affect the constraint-
  -- checking logic that allows to skip the scan.
-@@ -4109,8 +5174,15 @@
+@@ -4109,8 +5176,15 @@
  	LIKE list_parted2,
  	CONSTRAINT check_a CHECK (a IS NOT NULL AND a = 6)
  );
@@ -6567,7 +6569,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- Similar to above, but the table being attached is a partitioned table
  -- whose partition has still different attnos for the root partitioning
  -- columns.
-@@ -4118,6 +5190,14 @@
+@@ -4118,6 +5192,14 @@
  	LIKE list_parted2,
  	CONSTRAINT check_a CHECK (a IS NOT NULL AND a = 7)
  ) PARTITION BY LIST (b);
@@ -6582,7 +6584,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  CREATE TABLE part_7_a_null (
  	c int,
  	d int,
-@@ -4126,63 +5206,150 @@
+@@ -4126,63 +5208,150 @@
  	CONSTRAINT check_b CHECK (b IS NULL OR b = 'a'),
  	CONSTRAINT check_a CHECK (a IS NOT NULL AND a = 7)
  );
@@ -6746,7 +6748,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- check validation when attaching hash partitions
  -- Use hand-rolled hash functions and operator class to get predictable result
  -- on different machines. part_test_int4_ops is defined in insert.sql.
-@@ -4191,233 +5358,430 @@
+@@ -4191,233 +5360,430 @@
  	a int,
  	b int
  ) PARTITION BY HASH (a part_test_int4_ops);
@@ -7261,7 +7263,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- attnum for key attribute 'a' is different in p, p1, and p11
  select attrelid::regclass, attname, attnum
  from pg_attribute
-@@ -4426,73 +5790,156 @@
+@@ -4426,73 +5792,156 @@
     or attrelid = 'p1'::regclass
     or attrelid = 'p11'::regclass)
  order by attrelid::regclass::text;
@@ -7430,7 +7432,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  create or replace function func_part_attach() returns trigger
    language plpgsql as $$
    begin
-@@ -4500,14 +5947,28 @@
+@@ -4500,14 +5949,28 @@
      execute 'alter table tab_part_attach attach partition tab_part_attach_1 for values in (1)';
      return null;
    end $$;
@@ -7462,7 +7464,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- test case where the partitioning operator is a SQL function whose
  -- evaluation results in the table's relcache being rebuilt partway through
  -- the execution of an ATTACH PARTITION command
-@@ -4517,11 +5978,43 @@
+@@ -4517,11 +5980,43 @@
      operator 1 < (int4, int4), operator 2 <= (int4, int4),
      operator 3 = (int4, int4), operator 4 >= (int4, int4),
      operator 5 > (int4, int4), function 1 at_test_sql_partop(int4, int4);
@@ -7506,7 +7508,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  drop function at_test_sql_partop;
  /* Test case for bug #16242 */
  -- We create a parent and child where the child has missing
-@@ -4529,18 +6022,25 @@
+@@ -4529,18 +6024,25 @@
  -- tuple conversion from the child to the parent tupdesc
  create table bar1 (a integer, b integer not null default 1)
    partition by range (a);
@@ -7537,7 +7539,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- this exercises tuple conversion:
  create function xtrig()
    returns trigger language plpgsql
-@@ -4554,22 +6054,50 @@
+@@ -4554,22 +6056,50 @@
      return NULL;
    end;
  $$;
@@ -7589,7 +7591,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  create table atref (c1 int references attbl(p1));
  alter table attbl alter column p1 set data type bigint;
  alter table atref alter column c1 set data type bigint;
-@@ -4579,15 +6107,21 @@
+@@ -4579,15 +6109,21 @@
  -- for normal indexes and indexes on constraints.
  create table alttype_cluster (a int);
  alter table alttype_cluster add primary key (a);
@@ -7612,7 +7614,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
   alttype_cluster_pkey | f
  (2 rows)
  
-@@ -4597,19 +6131,24 @@
+@@ -4597,19 +6133,24 @@
    order by indexrelid::regclass::text;
        indexrelid      | indisclustered 
  ----------------------+----------------
@@ -7639,7 +7641,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  (2 rows)
  
  alter table alttype_cluster alter a type int;
-@@ -4619,7 +6158,7 @@
+@@ -4619,7 +6160,7 @@
        indexrelid      | indisclustered 
  ----------------------+----------------
   alttype_cluster_ind  | f
@@ -7648,7 +7650,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  (2 rows)
  
  drop table alttype_cluster;
-@@ -4628,38 +6167,97 @@
+@@ -4628,38 +6169,97 @@
  -- to its partitions' constraint being updated to reflect the parent's
  -- newly added/removed constraint
  create table target_parted (a int, b int) partition by list (a);

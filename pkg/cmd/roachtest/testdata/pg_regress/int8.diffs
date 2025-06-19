@@ -523,7 +523,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=
 - 1259
 +    oid     
 +------------
-+ 4294967083
++ 4294967082
  (1 row)
  
  -- bit operations

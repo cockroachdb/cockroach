@@ -2569,12 +2569,15 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  DROP TABLE cwi_test;
  --
  -- Check handling of indexes on system columns
-@@ -1610,20 +1541,46 @@
+@@ -1610,20 +1541,49 @@
  ERROR:  relation "syscolcol_table" does not exist
  -- nor used in expressions
  CREATE INDEX ON syscol_table ((ctid >= '(1000,0)'));
 -ERROR:  index creation on system columns is not supported
-+ERROR:  column "ctid" does not exist, referenced in "ctid >= '(1000,0)'"
++ERROR:  this schema change is disallowed because table "syscol_table" is locked and this operation cannot automatically unlock the table
++DETAIL:  To unlock the table, execute `ALTER TABLE syscol_table SET (schema_locked = false);`
++After the schema change completes, we recommend setting it back to true with `ALTER TABLE syscol_table SET (schema_locked = true);`.
++HINT:  Locking the table improves changefeed performance; see https://www.cockroachlabs.com/docs/_version_/changefeed-best-practices.html#lock-the-schema-on-changefeed-watched-tables
  -- nor used in predicates
  CREATE INDEX ON syscol_table (a) WHERE ctid >= '(1000,0)';
 -ERROR:  index creation on system columns is not supported
@@ -2618,7 +2621,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  SELECT count(*) FROM onek_with_null WHERE unique1 IS NULL;
   count 
  -------
-@@ -1661,6 +1618,8 @@
+@@ -1661,6 +1621,8 @@
  (1 row)
  
  DROP INDEX onek_nulltest;
@@ -2627,7 +2630,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  CREATE UNIQUE INDEX onek_nulltest ON onek_with_null (unique2 desc,unique1);
  SELECT count(*) FROM onek_with_null WHERE unique1 IS NULL;
   count 
-@@ -1699,6 +1658,8 @@
+@@ -1699,6 +1661,8 @@
  (1 row)
  
  DROP INDEX onek_nulltest;
@@ -2636,7 +2639,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  CREATE UNIQUE INDEX onek_nulltest ON onek_with_null (unique2 desc nulls last,unique1);
  SELECT count(*) FROM onek_with_null WHERE unique1 IS NULL;
   count 
-@@ -1737,6 +1698,8 @@
+@@ -1737,6 +1701,8 @@
  (1 row)
  
  DROP INDEX onek_nulltest;
@@ -2645,7 +2648,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  CREATE UNIQUE INDEX onek_nulltest ON onek_with_null (unique2  nulls first,unique1);
  SELECT count(*) FROM onek_with_null WHERE unique1 IS NULL;
   count 
-@@ -1775,17 +1738,44 @@
+@@ -1775,17 +1741,44 @@
  (1 row)
  
  DROP INDEX onek_nulltest;
@@ -2691,7 +2694,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  (2 rows)
  
  SELECT unique1, unique2 FROM onek_with_null WHERE unique2 >= -1
-@@ -1808,8 +1798,8 @@
+@@ -1808,8 +1801,8 @@
    ORDER BY unique2 DESC LIMIT 2;
   unique1 | unique2 
  ---------+---------
@@ -2701,7 +2704,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  (2 rows)
  
  SELECT unique1, unique2 FROM onek_with_null WHERE unique2 >= -1
-@@ -1829,8 +1819,33 @@
+@@ -1829,8 +1822,33 @@
  (2 rows)
  
  RESET enable_seqscan;
@@ -2735,7 +2738,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  DROP TABLE onek_with_null;
  --
  -- Check bitmap index path planning
-@@ -1838,19 +1853,11 @@
+@@ -1838,19 +1856,11 @@
  EXPLAIN (COSTS OFF)
  SELECT * FROM tenk1
    WHERE thousand = 42 AND (tenthous = 1 OR tenthous = 3 OR tenthous = 42);
@@ -2760,7 +2763,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  SELECT * FROM tenk1
    WHERE thousand = 42 AND (tenthous = 1 OR tenthous = 3 OR tenthous = 42);
   unique1 | unique2 | two | four | ten | twenty | hundred | thousand | twothousand | fivethous | tenthous | odd | even | stringu1 | stringu2 | string4 
-@@ -1861,21 +1868,11 @@
+@@ -1861,21 +1871,11 @@
  EXPLAIN (COSTS OFF)
  SELECT count(*) FROM tenk1
    WHERE hundred = 42 AND (thousand = 42 OR thousand = 99);
@@ -2787,7 +2790,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  SELECT count(*) FROM tenk1
    WHERE hundred = 42 AND (thousand = 42 OR thousand = 99);
   count 
-@@ -1888,27 +1885,25 @@
+@@ -1888,27 +1888,25 @@
  --
  CREATE TABLE dupindexcols AS
    SELECT unique1 as id, stringu2::text as f1 FROM tenk1;
@@ -2827,7 +2830,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  --
  -- Check ordering of =ANY indexqual results (bug in 9.2.0)
  --
-@@ -1916,12 +1911,11 @@
+@@ -1916,12 +1914,11 @@
  SELECT unique1 FROM tenk1
  WHERE unique1 IN (1,42,7)
  ORDER BY unique1;
@@ -2845,7 +2848,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  SELECT unique1 FROM tenk1
  WHERE unique1 IN (1,42,7)
  ORDER BY unique1;
-@@ -1936,13 +1930,11 @@
+@@ -1936,13 +1933,11 @@
  SELECT thousand, tenthous FROM tenk1
  WHERE thousand < 2 AND tenthous IN (1001,3000)
  ORDER BY thousand;
@@ -2864,7 +2867,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  SELECT thousand, tenthous FROM tenk1
  WHERE thousand < 2 AND tenthous IN (1001,3000)
  ORDER BY thousand;
-@@ -1953,18 +1945,27 @@
+@@ -1953,18 +1948,27 @@
  (2 rows)
  
  SET enable_indexonlyscan = OFF;
@@ -2900,7 +2903,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  SELECT thousand, tenthous FROM tenk1
  WHERE thousand < 2 AND tenthous IN (1001,3000)
  ORDER BY thousand;
-@@ -1975,81 +1976,81 @@
+@@ -1975,81 +1979,81 @@
  (2 rows)
  
  RESET enable_indexonlyscan;
@@ -3030,7 +3033,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  \set VERBOSITY default
  DROP TABLE reindex_verbose;
  --
-@@ -2058,9 +2059,16 @@
+@@ -2058,9 +2062,16 @@
  CREATE TABLE concur_reindex_tab (c1 int);
  -- REINDEX
  REINDEX TABLE concur_reindex_tab; -- notice
@@ -3049,7 +3052,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  ALTER TABLE concur_reindex_tab ADD COLUMN c2 text; -- add toast index
  -- Normal index with integer column
  CREATE UNIQUE INDEX concur_reindex_ind1 ON concur_reindex_tab(c1);
-@@ -2070,21 +2078,41 @@
+@@ -2070,21 +2081,41 @@
  CREATE UNIQUE INDEX concur_reindex_ind3 ON concur_reindex_tab(abs(c1));
  -- Duplicate column names
  CREATE INDEX concur_reindex_ind4 ON concur_reindex_tab(c1, c1, c2);
@@ -3095,7 +3098,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  -- Check materialized views
  CREATE MATERIALIZED VIEW concur_reindex_matview AS SELECT * FROM concur_reindex_tab;
  -- Dependency lookup before and after the follow-up REINDEX commands.
-@@ -2101,21 +2129,25 @@
+@@ -2101,21 +2132,25 @@
  	    'concur_reindex_ind4'::regclass,
  	    'concur_reindex_matview'::regclass)
    ORDER BY 1, 2;
@@ -3133,7 +3136,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  SELECT pg_describe_object(classid, objid, objsubid) as obj,
         pg_describe_object(refclassid,refobjid,refobjsubid) as objref,
         deptype
-@@ -2128,18 +2160,7 @@
+@@ -2128,18 +2163,7 @@
  	    'concur_reindex_ind4'::regclass,
  	    'concur_reindex_matview'::regclass)
    ORDER BY 1, 2;
@@ -3153,7 +3156,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  -- Check that comments are preserved
  CREATE TABLE testcomment (i int);
  CREATE INDEX testcomment_idx1 ON testcomment (i);
-@@ -2151,6 +2172,11 @@
+@@ -2151,6 +2175,11 @@
  (1 row)
  
  REINDEX TABLE testcomment;
@@ -3165,7 +3168,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  SELECT obj_description('testcomment_idx1'::regclass, 'pg_class');
   obj_description 
  -----------------
-@@ -2158,6 +2184,11 @@
+@@ -2158,6 +2187,11 @@
  (1 row)
  
  REINDEX TABLE CONCURRENTLY testcomment ;
@@ -3177,7 +3180,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  SELECT obj_description('testcomment_idx1'::regclass, 'pg_class');
   obj_description 
  -----------------
-@@ -2169,13 +2200,24 @@
+@@ -2169,13 +2203,24 @@
  CREATE TABLE concur_clustered(i int);
  CREATE INDEX concur_clustered_i_idx ON concur_clustered(i);
  ALTER TABLE concur_clustered CLUSTER ON concur_clustered_i_idx;
@@ -3204,7 +3207,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  
  DROP TABLE concur_clustered;
  -- Check that indisreplident updates are preserved.
-@@ -2183,86 +2225,168 @@
+@@ -2183,86 +2228,168 @@
  CREATE UNIQUE INDEX concur_replident_i_idx ON concur_replident(i);
  ALTER TABLE concur_replident REPLICA IDENTITY
    USING INDEX concur_replident_i_idx;
@@ -3405,7 +3408,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  -- REINDEX should preserve dependencies of partition tree.
  SELECT pg_describe_object(classid, objid, objsubid) as obj,
         pg_describe_object(refclassid,refobjid,refobjsubid) as objref,
-@@ -2278,44 +2402,34 @@
+@@ -2278,44 +2405,34 @@
              'concur_reindex_part_index_0_1'::regclass,
              'concur_reindex_part_index_0_2'::regclass)
    ORDER BY 1, 2;
@@ -3472,7 +3475,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  SELECT pg_describe_object(classid, objid, objsubid) as obj,
         pg_describe_object(refclassid,refobjid,refobjsubid) as objref,
         deptype
-@@ -2330,57 +2444,46 @@
+@@ -2330,57 +2447,46 @@
              'concur_reindex_part_index_0_1'::regclass,
              'concur_reindex_part_index_0_2'::regclass)
    ORDER BY 1, 2;
@@ -3557,7 +3560,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  ROLLBACK;
  -- Helper functions to track changes of relfilenodes in a partition tree.
  -- Create a table tracking the relfilenode state.
-@@ -2397,6 +2500,19 @@
+@@ -2397,6 +2503,19 @@
  	 relname, indname);
    END
    $func$ LANGUAGE plpgsql;
@@ -3577,7 +3580,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  CREATE OR REPLACE FUNCTION compare_relfilenode_part(tabname text)
    RETURNS TABLE (relname name, relkind "char", state text) AS
    $func$
-@@ -2412,195 +2528,261 @@
+@@ -2412,195 +2531,261 @@
             ORDER BY 1;', tabname);
    END
    $func$ LANGUAGE plpgsql;
@@ -3952,7 +3955,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  DROP TABLE concur_reindex_tab4;
  -- Check handling of indexes with expressions and predicates.  The
  -- definitions of the rebuilt indexes should match the original
-@@ -2617,72 +2799,85 @@
+@@ -2617,72 +2802,85 @@
    ON concur_exprs_tab ((1 / c1))
    WHERE ('-H') >= (c2::TEXT) COLLATE "C";
  ALTER INDEX concur_exprs_index_expr ALTER COLUMN 1 SET STATISTICS 100;
@@ -4069,7 +4072,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  (1 row)
  
  -- Statistics should remain intact.
-@@ -2691,10 +2886,9 @@
+@@ -2691,10 +2889,9 @@
    'concur_exprs_index_pred'::regclass,
    'concur_exprs_index_pred_2'::regclass)
    GROUP BY starelid ORDER BY starelid::regclass::text;
@@ -4083,7 +4086,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  
  -- attstattarget should remain intact
  SELECT attrelid::regclass, attnum, attstattarget
-@@ -2705,9 +2899,9 @@
+@@ -2705,9 +2902,9 @@
    ORDER BY attrelid::regclass::text, attnum;
           attrelid          | attnum | attstattarget 
  ---------------------------+--------+---------------
@@ -4096,7 +4099,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  (3 rows)
  
  DROP TABLE concur_exprs_tab;
-@@ -2718,58 +2912,103 @@
+@@ -2718,58 +2915,103 @@
  INSERT INTO concur_temp_tab_1 VALUES (1, 'foo'), (2, 'bar');
  CREATE INDEX concur_temp_ind_1 ON concur_temp_tab_1(c2);
  REINDEX TABLE CONCURRENTLY concur_temp_tab_1;
@@ -4209,7 +4212,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  INSERT INTO table2 SELECT generate_series(1,400), 'abc';
  CREATE INDEX ON table2(col2);
  CREATE MATERIALIZED VIEW matview AS SELECT col1 FROM table2;
-@@ -2779,6 +3018,7 @@
+@@ -2779,6 +3021,7 @@
  SELECT oid, relname, relfilenode, relkind, reltoastrelid
  	FROM pg_class
  	where relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'schema_to_reindex');
@@ -4217,7 +4220,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  INSERT INTO reindex_before
  SELECT oid, 'pg_toast_TABLE', relfilenode, relkind, reltoastrelid
  FROM pg_class WHERE oid IN
-@@ -2789,60 +3029,84 @@
+@@ -2789,60 +3032,84 @@
  	(select indexrelid from pg_index where indrelid in
  		(select reltoastrelid from reindex_before where reltoastrelid > 0));
  REINDEX SCHEMA schema_to_reindex;
