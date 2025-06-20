@@ -299,12 +299,12 @@ func (n *createViewNode) startExec(params runParams) error {
 				}
 				desc.DependsOnTypes = append(desc.DependsOnTypes, orderedTypeDeps.Ordered()...)
 
-				// Collect all functions this view depends on.
-				orderedFuncDeps := catalog.DescriptorIDSet{}
+				// Collect all routines this view depends on.
+				orderedRoutineDeps := catalog.DescriptorIDSet{}
 				for backrefID := range n.funcDeps {
-					orderedFuncDeps.Add(backrefID)
+					orderedRoutineDeps.Add(backrefID)
 				}
-				desc.DependsOnFunctions = append(desc.DependsOnFunctions, orderedFuncDeps.Ordered()...)
+				desc.DependsOnFunctions = append(desc.DependsOnFunctions, orderedRoutineDeps.Ordered()...)
 
 				newDesc = &desc
 
@@ -353,6 +353,13 @@ func (n *createViewNode) startExec(params runParams) error {
 			for id := range n.typeDeps {
 				jobDesc := fmt.Sprintf("updating type back reference %d for table %d", id, newDesc.ID)
 				if err := params.p.addTypeBackReference(params.ctx, id, newDesc.ID, jobDesc); err != nil {
+					return err
+				}
+			}
+
+			// Add back references for the routine dependencies.
+			for id := range n.funcDeps {
+				if err := params.p.addRoutineViewBackReference(params.ctx, id, newDesc.ID); err != nil {
 					return err
 				}
 			}
@@ -796,6 +803,18 @@ func (p *planner) replaceViewDesc(
 		return nil, err
 	}
 
+	// For each old function dependency (i.e. before replacing the view),
+	// see if we still depend on it. If not, then remove the back reference.
+	var outdatedRoutineRefs []descpb.ID
+	for _, id := range toReplace.DependsOnFunctions {
+		if _, ok := n.funcDeps[id]; !ok {
+			outdatedRoutineRefs = append(outdatedRoutineRefs, id)
+		}
+	}
+	if err := p.removeRoutineViewBackReferences(ctx, outdatedRoutineRefs, toReplace.ID); err != nil {
+		return nil, err
+	}
+
 	// Since the view query has been replaced, the dependencies that this
 	// table descriptor had are gone.
 	toReplace.DependsOn = make([]descpb.ID, 0, len(n.planDeps))
@@ -805,6 +824,10 @@ func (p *planner) replaceViewDesc(
 	toReplace.DependsOnTypes = make([]descpb.ID, 0, len(n.typeDeps))
 	for backrefID := range n.typeDeps {
 		toReplace.DependsOnTypes = append(toReplace.DependsOnTypes, backrefID)
+	}
+	toReplace.DependsOnFunctions = make([]descpb.ID, 0, len(n.funcDeps))
+	for backrefID := range n.funcDeps {
+		toReplace.DependsOnFunctions = append(toReplace.DependsOnFunctions, backrefID)
 	}
 
 	// Since we are replacing an existing view here, we need to write the new
@@ -906,4 +929,37 @@ func overrideColumnNames(cols colinfo.ResultColumns, newNames tree.NameList) col
 func crossDBReferenceDeprecationHint() string {
 	return fmt.Sprintf("Note that cross-database references will be removed in future releases. See: %s",
 		docs.ReleaseNotesURL(`#deprecations`))
+}
+
+func (p *planner) addRoutineViewBackReference(
+	ctx context.Context, routineID descpb.ID, ref descpb.ID,
+) error {
+	mutDesc, err := p.Descriptors().MutableByID(p.txn).Function(ctx, routineID)
+	if err != nil {
+		return err
+	}
+
+	if err := mutDesc.AddViewReference(ref); err != nil {
+		return err
+	}
+	if err := p.writeFuncSchemaChange(ctx, mutDesc); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *planner) removeRoutineViewBackReferences(
+	ctx context.Context, routineIDs []descpb.ID, ref descpb.ID,
+) error {
+	for _, routineID := range routineIDs {
+		mutDesc, err := p.Descriptors().MutableByID(p.txn).Function(ctx, routineID)
+		if err != nil {
+			return err
+		}
+		mutDesc.RemoveViewReference(ref)
+		if err := p.writeFuncSchemaChange(ctx, mutDesc); err != nil {
+			return err
+		}
+	}
+	return nil
 }
