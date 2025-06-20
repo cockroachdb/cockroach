@@ -82,6 +82,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
+	"storj.io/drpc"
+	"storj.io/drpc/drpcerr"
 )
 
 // Number of empty ranges for table descriptors that aren't actually tables. These
@@ -251,6 +253,32 @@ func (s *systemAdminServer) RegisterService(g *grpc.Server) {
 // RegisterService registers the GRPC service.
 func (s *adminServer) RegisterService(g *grpc.Server) {
 	serverpb.RegisterAdminServer(g, s)
+}
+
+type drpcSystemAdminServer struct {
+	*systemAdminServer
+}
+
+func (s *systemAdminServer) AsDRPCServer() serverpb.DRPCAdminServer {
+	return &drpcSystemAdminServer{systemAdminServer: s}
+}
+
+// RegisterService registers the DRPC service.
+func (s *systemAdminServer) RegisterDRPCService(d drpc.Mux) error {
+	return serverpb.DRPCRegisterAdmin(d, s.AsDRPCServer())
+}
+
+type drpcAdminServer struct {
+	*adminServer
+}
+
+func (s *adminServer) AsDRPCServer() serverpb.DRPCAdminServer {
+	return &drpcAdminServer{adminServer: s}
+}
+
+// RegisterService registers the DRPC service.
+func (s *adminServer) RegisterDRPCService(d drpc.Mux) error {
+	return serverpb.DRPCRegisterAdmin(d, s.AsDRPCServer())
 }
 
 // RegisterGateway starts the gateway (i.e. reverse proxy) that proxies HTTP requests
@@ -3312,9 +3340,23 @@ func (s *systemAdminServer) SendKVBatch(
 	return br, nil
 }
 
+func (s *drpcSystemAdminServer) RecoveryCollectReplicaInfo(
+	request *serverpb.RecoveryCollectReplicaInfoRequest,
+	stream serverpb.DRPCAdmin_RecoveryCollectReplicaInfoStream,
+) error {
+	return s.recoveryCollectReplicaInfo(request, stream)
+}
+
 func (s *systemAdminServer) RecoveryCollectReplicaInfo(
 	request *serverpb.RecoveryCollectReplicaInfoRequest,
 	stream serverpb.Admin_RecoveryCollectReplicaInfoServer,
+) error {
+	return s.recoveryCollectReplicaInfo(request, stream)
+}
+
+func (s *systemAdminServer) recoveryCollectReplicaInfo(
+	request *serverpb.RecoveryCollectReplicaInfoRequest,
+	stream serverpb.RPCAdmin_RecoveryCollectReplicaInfoStream,
 ) error {
 	ctx := stream.Context()
 	ctx = s.server.AnnotateCtx(ctx)
@@ -3327,9 +3369,23 @@ func (s *systemAdminServer) RecoveryCollectReplicaInfo(
 	return s.server.recoveryServer.ServeClusterReplicas(ctx, request, stream, s.server.db)
 }
 
+func (s *drpcSystemAdminServer) RecoveryCollectLocalReplicaInfo(
+	request *serverpb.RecoveryCollectLocalReplicaInfoRequest,
+	stream serverpb.DRPCAdmin_RecoveryCollectLocalReplicaInfoStream,
+) error {
+	return s.recoveryCollectLocalReplicaInfo(request, stream)
+}
+
 func (s *systemAdminServer) RecoveryCollectLocalReplicaInfo(
 	request *serverpb.RecoveryCollectLocalReplicaInfoRequest,
 	stream serverpb.Admin_RecoveryCollectLocalReplicaInfoServer,
+) error {
+	return s.recoveryCollectLocalReplicaInfo(request, stream)
+}
+
+func (s *systemAdminServer) recoveryCollectLocalReplicaInfo(
+	request *serverpb.RecoveryCollectLocalReplicaInfoRequest,
+	stream serverpb.RPCAdmin_RecoveryCollectLocalReplicaInfoStream,
 ) error {
 	ctx := stream.Context()
 	ctx = s.server.AnnotateCtx(ctx)
@@ -4042,4 +4098,18 @@ func (s *systemAdminServer) ReadFromTenantInfo(
 	}
 
 	return &serverpb.ReadFromTenantInfoResponse{ReadFrom: dstID, ReadAt: progress.GetStreamIngest().ReplicatedTime}, nil
+}
+
+func (s *drpcAdminServer) RecoveryCollectReplicaInfo(
+	request *serverpb.RecoveryCollectReplicaInfoRequest,
+	stream serverpb.DRPCAdmin_RecoveryCollectReplicaInfoStream,
+) error {
+	return drpcerr.WithCode(errors.New("Unimplemented"), drpcerr.Unimplemented)
+}
+
+func (s *drpcAdminServer) RecoveryCollectLocalReplicaInfo(
+	request *serverpb.RecoveryCollectLocalReplicaInfoRequest,
+	stream serverpb.DRPCAdmin_RecoveryCollectLocalReplicaInfoStream,
+) error {
+	return drpcerr.WithCode(errors.New("Unimplemented"), drpcerr.Unimplemented)
 }
