@@ -535,10 +535,14 @@ func (a *allocatorState) AdjustPendingChangesDisposition(changeIDs []ChangeID, s
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	for _, changeID := range changeIDs {
+		// We set !requireFound, since a StoreLeaseholderMsg that happened after
+		// the pending change was created and before this call to
+		// AdjustPendingChangesDisposition may have already removed the pending
+		// change.
 		if success {
-			a.cs.pendingChangeEnacted(changeID, a.cs.ts.Now())
+			a.cs.pendingChangeEnacted(changeID, a.cs.ts.Now(), false)
 		} else {
-			a.cs.undoPendingChange(changeID)
+			a.cs.undoPendingChange(changeID, false)
 		}
 	}
 }
