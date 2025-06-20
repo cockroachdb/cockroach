@@ -51,7 +51,7 @@ type Allocator interface {
 
 	// ProcessStoreLeaseholderMsg provides updates for each local store and the
 	// ranges for which it is the leaseholder.
-	ProcessStoreLeaseholderMsg(msg *StoreLeaseholderMsg)
+	ProcessStoreLeaseholderMsg(ctx context.Context, msg *StoreLeaseholderMsg)
 
 	// TODO(sumeer): only a subset of the fields in
 	// pendingReplicaChange/PendingRangeChange are relevant to the caller. Hide

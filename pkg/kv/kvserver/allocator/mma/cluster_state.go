@@ -961,6 +961,7 @@ func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterS
 }
 
 func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *StoreLoadMsg) {
+	log.Infof(ctx, "start processing processStoreLoadMsg %v", storeMsg)
 	now := cs.ts.Now()
 	cs.gcPendingChanges(now)
 
@@ -1013,13 +1014,14 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 		storeMsg.Load, storeMsg.Capacity, ss.adjusted.load)
 }
 
-func (cs *clusterState) processStoreLeaseholderMsg(msg *StoreLeaseholderMsg) {
-	cs.processStoreLeaseholderMsgInternal(msg, numTopKReplicas)
+func (cs *clusterState) processStoreLeaseholderMsg(ctx context.Context, msg *StoreLeaseholderMsg) {
+	cs.processStoreLeaseholderMsgInternal(ctx, msg, numTopKReplicas)
 }
 
 func (cs *clusterState) processStoreLeaseholderMsgInternal(
-	msg *StoreLeaseholderMsg, numTopKReplicas int,
+	ctx context.Context, msg *StoreLeaseholderMsg, numTopKReplicas int,
 ) {
+	log.Infof(ctx, "start processing processStoreLeaseholderMsgInternal %v", msg)
 	now := cs.ts.Now()
 	cs.gcPendingChanges(now)
 
@@ -1071,6 +1073,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			}
 		}
 
+		log.Infof(ctx, "enactedChanges %v", enactedChanges)
 		for _, change := range enactedChanges {
 			// Mark the change as enacted. Enacting a change does not remove the
 			// corresponding load adjustments. The store load message will do that,
@@ -1135,6 +1138,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// Since this range is going away, mark all the pending changes as
 		// enacted. This will allow the load adjustments to also be garbage
 		// collected in the future.
+		log.Infof(ctx, "rs.pendingChanges %v, cs.pendingChanges %v", rs.pendingChanges, cs.pendingChanges)
 		for _, change := range rs.pendingChanges {
 			cs.pendingChangeEnacted(change.ChangeID, now)
 		}
@@ -1281,8 +1285,11 @@ func (cs *clusterState) pendingChangeEnacted(cid ChangeID, enactedAt time.Time) 
 		panic(fmt.Sprintf("range %v not found in cluster state", change.rangeID))
 	}
 
+	log.Infof(context.Background(), "start removing change_id=%v, range_id=%v, change=%v", change.ChangeID, change.rangeID, change)
 	rs.removePendingChangeTracking(change.ChangeID)
 	delete(cs.pendingChanges, change.ChangeID)
+	log.Infof(context.Background(), "cs.pendingChanges has: %v, range state has: %v",
+		cs.pendingChanges, rs.pendingChanges)
 }
 
 func (cs *clusterState) markPendingChangeEnacted(cid ChangeID, enactedAt time.Time) {
@@ -1308,9 +1315,11 @@ func (cs *clusterState) undoPendingChange(cid ChangeID) {
 	// Undo the change delta as well as the replica change and remove the pending
 	// change from all tracking (range, store, cluster).
 	cs.undoReplicaChange(change.ReplicaChange)
+	log.Infof(context.Background(), "start removing from undoPending change_id=%v, range_id=%v, change=%v", change.ChangeID, change.rangeID, change)
 	rs.removePendingChangeTracking(cid)
 	delete(cs.stores[change.target.StoreID].adjusted.loadPendingChanges, change.ChangeID)
 	delete(cs.pendingChanges, change.ChangeID)
+	log.Infof(context.Background(), "cs.pendingChanges has: %v, range state has: %v", cs.pendingChanges, rs.pendingChanges)
 }
 
 // createPendingChanges takes a set of changes applies the changes as pending.
@@ -1335,6 +1344,8 @@ func (cs *clusterState) createPendingChanges(changes ...ReplicaChange) []*pendin
 		cs.pendingChanges[cid] = pendingChange
 		storeState.adjusted.loadPendingChanges[cid] = pendingChange
 		rangeState.pendingChanges = append(rangeState.pendingChanges, pendingChange)
+		log.Infof(context.Background(), "createPendingChanges: change_id=%v, range_id=%v, change=%v", cid, change.rangeID, change)
+		log.Infof(context.Background(), "rangeState.pendingChanges  has: %v, cs.pendingChanges[cid] has: %v", rangeState.pendingChanges, cs.pendingChanges[cid])
 		pendingChanges = append(pendingChanges, pendingChange)
 	}
 	return pendingChanges

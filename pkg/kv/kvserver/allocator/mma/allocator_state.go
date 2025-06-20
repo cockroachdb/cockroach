@@ -531,10 +531,10 @@ func (a *allocatorState) ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoad
 }
 
 // ProcessStoreLeaseholderMsg implements the Allocator interface.
-func (a *allocatorState) ProcessStoreLeaseholderMsg(msg *StoreLeaseholderMsg) {
+func (a *allocatorState) ProcessStoreLeaseholderMsg(ctx context.Context, msg *StoreLeaseholderMsg) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.cs.processStoreLeaseholderMsg(msg)
+	a.cs.processStoreLeaseholderMsg(ctx, msg)
 }
 
 // AdjustPendingChangesDisposition implements the Allocator interface.

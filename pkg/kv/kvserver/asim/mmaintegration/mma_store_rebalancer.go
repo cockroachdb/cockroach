@@ -55,8 +55,8 @@ type MMAStoreRebalancer struct {
 }
 
 type pendingChangeAndRangeUsageInfo struct {
-	change mma.PendingRangeChange
-	usage  allocator.RangeUsageInfo
+	change       mma.PendingRangeChange
+	usage        allocator.RangeUsageInfo
 	syncChangeID kvserver.SyncChangeID
 }
 
@@ -136,7 +136,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 				} else {
 					log.VInfof(ctx, 1, "operation for pendingChange=%v completed successfully", curChange)
 				}
-				msr.as.PostApply(curChange.syncChangeID, success)
+				msr.as.PostApply(ctx, curChange.syncChangeID, success)
 				msr.pendingChangeIdx++
 			} else {
 				log.VInfof(ctx, 1, "operation for pendingChange=%v is still in progress", curChange)
@@ -152,7 +152,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 			msr.lastRebalanceTime = tick
 			log.VInfof(ctx, 1, "no more pending changes to process, will call compute changes again")
 			storeLeaseholderMsg := MakeStoreLeaseholderMsgFromState(s, msr.localStoreID)
-			msr.allocator.ProcessStoreLeaseholderMsg(&storeLeaseholderMsg)
+			msr.allocator.ProcessStoreLeaseholderMsg(ctx, &storeLeaseholderMsg)
 			pendingChanges := msr.allocator.ComputeChanges(ctx, mma.ChangeOptions{
 				LocalStoreID: roachpb.StoreID(msr.localStoreID),
 			})
