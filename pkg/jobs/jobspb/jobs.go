@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/errors"
 )
 
 // JobID is the ID of a job.
@@ -150,6 +151,20 @@ func (tsm *TimestampSpansMap) IsEmpty() bool {
 // IsEmpty returns whether the checkpoint is empty.
 func (m *ChangefeedProgress_Checkpoint) IsEmpty() bool {
 	return m == nil || (len(m.Spans) == 0 && m.Timestamp.IsEmpty())
+}
+
+// SetCheckpoint is a setter for the checkpoint fields in ChangefeedProgress.
+// It enforces the invariant that at most one of them can be non-nil.
+func (m *ChangefeedProgress) SetCheckpoint(
+	legacyCheckpoint *ChangefeedProgress_Checkpoint, spanLevelCheckpoint *TimestampSpansMap,
+) error {
+	if legacyCheckpoint != nil && spanLevelCheckpoint != nil {
+		return errors.AssertionFailedf(
+			"attempting to set both legacy and current checkpoint on changefeed job progress")
+	}
+	m.Checkpoint = legacyCheckpoint
+	m.SpanLevelCheckpoint = spanLevelCheckpoint
+	return nil
 }
 
 func (r RestoreDetails) OnlineImpl() bool {
