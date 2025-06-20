@@ -128,13 +128,15 @@ func (r *Reporter) SpanConfigConformance(
 		return roachpb.SpanConfigConformanceReport{}, err
 	}
 
-	report := roachpb.SpanConfigConformanceReport{}
+	ret := roachpb.SpanConfigConformanceReport{}
 	unavailableNodes := make(map[roachpb.NodeID]struct{})
 
 	isLiveMap := r.dep.NodeVitalityInterface.ScanNodeVitalityFromCache()
 	for _, span := range spans {
+		// Build a separate report per span, so that we can handle resets correctly.
+		spanReport := roachpb.SpanConfigConformanceReport{}
 		if err := r.dep.Scan(ctx, int(rangeDescPageSize.Get(&r.settings.SV)),
-			func() { report = roachpb.SpanConfigConformanceReport{} /* init */ },
+			func() { spanReport = roachpb.SpanConfigConformanceReport{} /* init */ },
 			span,
 			func(descriptors ...roachpb.RangeDescriptor) error {
 				for _, desc := range descriptors {
@@ -152,21 +154,21 @@ func (r *Reporter) SpanConfigConformance(
 							return isLive
 						}, int(conf.GetNumVoters()), int(conf.GetNumNonVoters()))
 					if !status.Available {
-						report.Unavailable = append(report.Unavailable,
+						spanReport.Unavailable = append(spanReport.Unavailable,
 							roachpb.ConformanceReportedRange{
 								RangeDescriptor: desc,
 								Config:          conf,
 							})
 					}
 					if status.UnderReplicated || status.UnderReplicatedNonVoters {
-						report.UnderReplicated = append(report.UnderReplicated,
+						spanReport.UnderReplicated = append(spanReport.UnderReplicated,
 							roachpb.ConformanceReportedRange{
 								RangeDescriptor: desc,
 								Config:          conf,
 							})
 					}
 					if status.OverReplicated || status.OverReplicatedNonVoters {
-						report.OverReplicated = append(report.OverReplicated,
+						spanReport.OverReplicated = append(spanReport.OverReplicated,
 							roachpb.ConformanceReportedRange{
 								RangeDescriptor: desc,
 								Config:          conf,
@@ -189,7 +191,7 @@ func (r *Reporter) SpanConfigConformance(
 							c.NumReplicas = conf.NumReplicas
 						}
 						if len(overall.SatisfiedBy[i]) < int(c.NumReplicas) {
-							report.ViolatingConstraints = append(report.ViolatingConstraints,
+							spanReport.ViolatingConstraints = append(spanReport.ViolatingConstraints,
 								roachpb.ConformanceReportedRange{
 									RangeDescriptor: desc,
 									Config:          conf,
@@ -206,7 +208,7 @@ func (r *Reporter) SpanConfigConformance(
 							c.NumReplicas = conf.GetNumVoters()
 						}
 						if len(voters.SatisfiedBy[i]) < int(c.NumReplicas) {
-							report.ViolatingConstraints = append(report.ViolatingConstraints,
+							spanReport.ViolatingConstraints = append(spanReport.ViolatingConstraints,
 								roachpb.ConformanceReportedRange{
 									RangeDescriptor: desc,
 									Config:          conf,
@@ -219,10 +221,16 @@ func (r *Reporter) SpanConfigConformance(
 			}); err != nil {
 			return roachpb.SpanConfigConformanceReport{}, err
 		}
+
+		// Merge the spanReport into the return value.
+		ret.Unavailable = append(ret.Unavailable, spanReport.Unavailable...)
+		ret.UnderReplicated = append(ret.UnderReplicated, spanReport.UnderReplicated...)
+		ret.OverReplicated = append(ret.OverReplicated, spanReport.OverReplicated...)
+		ret.ViolatingConstraints = append(ret.ViolatingConstraints, spanReport.ViolatingConstraints...)
 	}
 
 	for nid := range unavailableNodes {
-		report.UnavailableNodeIDs = append(report.UnavailableNodeIDs, int32(nid))
+		ret.UnavailableNodeIDs = append(ret.UnavailableNodeIDs, int32(nid))
 	}
-	return report, nil
+	return ret, nil
 }
