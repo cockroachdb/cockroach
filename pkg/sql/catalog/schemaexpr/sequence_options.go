@@ -111,7 +111,7 @@ func AssignSequenceOptions(
 			opts.MaxValue = -1
 			opts.Start = opts.MaxValue
 		}
-		opts.CacheSize = 1
+		opts.SessionCacheSize = 1
 	}
 
 	// Set Minvalue and Maxvalue to new types bounds if at current bounds.
@@ -148,19 +148,19 @@ func AssignSequenceOptions(
 				"CYCLE option is not supported")
 		case tree.SeqOptNoCycle:
 			// Do nothing; this is the default.
-		case tree.SeqOptCache:
-			if v := *option.IntVal; v >= 1 {
-				opts.CacheSize = v
-			} else {
-				return errors.Newf(
-					"CACHE (%d) must be greater than zero", v)
-			}
 		case tree.SeqOptCacheNode:
 			if v := *option.IntVal; v >= 1 {
 				opts.NodeCacheSize = v
 			} else {
 				return errors.Newf(
 					"PER NODE CACHE (%d) must be greater than zero", v)
+			}
+		case tree.SeqOptCacheSession:
+			if v := *option.IntVal; v >= 1 {
+				opts.SessionCacheSize = v
+			} else {
+				return errors.Newf(
+					"PER SESSION CACHE (%d) must be greater than zero", v)
 			}
 		case tree.SeqOptIncrement:
 			// Do nothing; this has already been set.

@@ -302,7 +302,7 @@ func (opts *TableDescriptor_SequenceOpts) HasOwner() bool {
 //
 // Note: An unset cache size is considered disabled.
 func (opts *TableDescriptor_SequenceOpts) EffectiveCacheSize() int64 {
-	switch sessionCacheSize := opts.CacheSize; sessionCacheSize {
+	switch sessionCacheSize := opts.SessionCacheSize; sessionCacheSize {
 	case 0, 1:
 	default:
 		return sessionCacheSize

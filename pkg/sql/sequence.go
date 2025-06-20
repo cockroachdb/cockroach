@@ -217,7 +217,7 @@ func (p *planner) incrementSequenceUsingCache(
 		}
 	} else {
 		// If cache size option is 1 (default -> not cached), and node cache size option is not 0 (not default -> node-cached), then use node-level cache
-		if seqOpts.CacheSize == 1 && seqOpts.NodeCacheSize != 0 {
+		if seqOpts.SessionCacheSize == 1 && seqOpts.NodeCacheSize != 0 {
 			val, err = p.GetSequenceCacheNode().NextValue(sequenceID, uint32(descriptor.GetVersion()), fetchNextValues)
 		} else {
 			val, err = p.GetOrInitSequenceCache().NextValue(uint32(sequenceID), uint32(descriptor.GetVersion()), fetchNextValues)
