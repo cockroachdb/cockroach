@@ -65,6 +65,7 @@ func (b *Builder) buildCreateView(
 		cols,
 		cv.Deps,
 		cv.TypeDeps,
+		cv.FuncDeps,
 	)
 	return execPlan{root: root}, colOrdMap{}, err
 }
