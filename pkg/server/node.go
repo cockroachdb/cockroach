@@ -260,7 +260,8 @@ type nodeMetrics struct {
 	StreamManagerMetrics *rangefeed.StreamManagerMetrics
 	// BufferedSenderMetrics is for monitoring of BufferedSenders for rangefeed.
 	// Note that there could be multiple buffered senders in a node.
-	BufferedSenderMetrics *rangefeed.BufferedSenderMetrics
+	BufferedSenderMetrics  *rangefeed.BufferedSenderMetrics
+	LockedMuxStreamMetrics *rangefeed.LockedMuxStreamMetrics
 }
 
 func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) *nodeMetrics {
@@ -282,6 +283,7 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) *nodeM
 		CrossZoneBatchResponseBytes:   metric.NewCounter(metaCrossZoneBatchResponse),
 		StreamManagerMetrics:          rangefeed.NewStreamManagerMetrics(),
 		BufferedSenderMetrics:         rangefeed.NewBufferedSenderMetrics(),
+		LockedMuxStreamMetrics:        rangefeed.NewLockedMuxStreamMetrics(histogramWindow),
 	}
 
 	for i := range nm.MethodCounts {
@@ -2091,6 +2093,7 @@ func (n *Node) RangeLookup(
 type lockedMuxStream struct {
 	wrapped kvpb.Internal_MuxRangeFeedServer
 	sendMu  syncutil.Mutex
+	metrics *rangefeed.LockedMuxStreamMetrics
 }
 
 func (s *lockedMuxStream) SendIsThreadSafe() {}
@@ -2109,10 +2112,11 @@ func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	// factors, e.g., the number of rangefeeds contending for the lockedMuxStream.
 	start := crtime.NowMono()
 	defer func() {
-		if dur := start.Elapsed(); dur > slowMuxStreamSendThreshold {
-			log.Infof(s.wrapped.Context(),
-				"slow send on stream %d for r%d took %s",
-				e.StreamID, e.RangeID, dur)
+		dur := start.Elapsed()
+		s.metrics.SendLatencyNanos.RecordValue(dur.Nanoseconds())
+		if dur > slowMuxStreamSendThreshold {
+			s.metrics.SlowSends.Inc(1)
+			log.Infof(s.wrapped.Context(), "slow send on stream %d for r%d took %s", e.StreamID, e.RangeID, dur)
 		}
 	}()
 
@@ -2183,7 +2187,10 @@ func (n *Node) defaultRangefeedConsumerID() int64 {
 
 // MuxRangeFeed implements the roachpb.InternalServer interface.
 func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
-	lockedMuxStream := &lockedMuxStream{wrapped: muxStream}
+	lockedMuxStream := &lockedMuxStream{
+		wrapped: muxStream,
+		metrics: n.metrics.LockedMuxStreamMetrics,
+	}
 
 	// All context created below should derive from this context, which is
 	// cancelled once MuxRangeFeed exits.
