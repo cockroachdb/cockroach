@@ -626,26 +626,10 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 					case <-ctx.Done():
 						t.Fatalf("context done while stall induced: %s", ctx.Err())
 					case <-time.After(stallInterval):
-						func() {
-							t.Status("short disk stall on n1")
-							s.Stall(ctx, c.Node(1))
-							defer func() {
-								// NB: We use a background context in the defer'ed unstall command,
-								// otherwise on test failure our Unstall calls will be ignored. Leaving
-								// the disk stalled will prevent artifact collection, making debugging
-								// difficult.
-								ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-								defer cancel()
-								s.Unstall(ctx, c.Node(1))
-								t.Status("unstalled disk on n1")
-							}()
-							select {
-							case <-ctx.Done():
-								t.Fatalf("context done while stall induced: %s", ctx.Err())
-							case <-time.After(shortStallDur):
-								return
-							}
-						}()
+						// Use a single call to StallForDuration to reduce SSH connections.
+						t.Status("short disk stall on n1 for " + shortStallDur.String())
+						s.StallForDuration(ctx, c.Node(1), shortStallDur)
+						t.Status("disk stall completed.")
 					}
 				}
 
