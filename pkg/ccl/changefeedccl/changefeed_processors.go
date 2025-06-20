@@ -1773,7 +1773,8 @@ func (cf *changeFrontier) checkpointJobProgress(
 	cf.metrics.FrontierUpdates.Inc(1)
 	if cf.js.job != nil {
 		var ptsUpdated bool
-		var checkpointStr string
+		//lint:ignore SA1019 deprecated usage
+		var legacyCheckpoint *jobspb.ChangefeedProgress_Checkpoint
 		if err := cf.js.job.DebugNameNoTxn(changefeedJobProgressTxnName).Update(cf.Ctx(), func(
 			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
@@ -1791,11 +1792,9 @@ func (cf *changeFrontier) checkpointJobProgress(
 			changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
 			if cv.IsActive(cf.Ctx(), clusterversion.V25_2) {
 				changefeedProgress.SpanLevelCheckpoint = spanLevelCheckpoint
-				checkpointStr = spanLevelCheckpoint.String()
 			} else {
-				legacyCheckpoint := checkpoint.ConvertToLegacyCheckpoint(spanLevelCheckpoint)
+				legacyCheckpoint = checkpoint.ConvertToLegacyCheckpoint(spanLevelCheckpoint)
 				changefeedProgress.Checkpoint = legacyCheckpoint
-				checkpointStr = legacyCheckpoint.String()
 			}
 
 			if ptsUpdated, err = cf.manageProtectedTimestamps(cf.Ctx(), txn, changefeedProgress); err != nil {
@@ -1817,8 +1816,13 @@ func (cf *changeFrontier) checkpointJobProgress(
 			cf.lastProtectedTimestampUpdate = timeutil.Now()
 		}
 		if log.V(2) {
-			log.Infof(cf.Ctx(), "change frontier persisted highwater=%s and checkpoint=%s",
-				frontier, checkpointStr)
+			if cv.IsActive(cf.Ctx(), clusterversion.V25_2) {
+				log.Infof(cf.Ctx(), "change frontier persisted highwater=%s and checkpoint=%s",
+					frontier, spanLevelCheckpoint)
+			} else {
+				log.Infof(cf.Ctx(), "change frontier persisted highwater=%s and checkpoint=%s",
+					frontier, legacyCheckpoint)
+			}
 		}
 	}
 
