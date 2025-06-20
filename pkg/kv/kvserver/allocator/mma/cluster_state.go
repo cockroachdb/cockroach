@@ -879,12 +879,17 @@ func (rs *rangeState) removeReplica(storeID roachpb.StoreID) {
 
 func (rs *rangeState) removePendingChangeTracking(changeID ChangeID) {
 	n := len(rs.pendingChanges)
+	found := false
 	for i := 0; i < n; i++ {
 		if rs.pendingChanges[i].ChangeID == changeID {
 			rs.pendingChanges[i], rs.pendingChanges[n-1] = rs.pendingChanges[n-1], rs.pendingChanges[i]
 			rs.pendingChanges = rs.pendingChanges[:n-1]
+			found = true
 			break
 		}
+	}
+	if !found {
+		panic(fmt.Sprintf("pending change %v not found in rangeState %v", changeID, rs.pendingChanges))
 	}
 }
 
