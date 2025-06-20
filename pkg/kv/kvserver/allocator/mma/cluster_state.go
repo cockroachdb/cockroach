@@ -1087,7 +1087,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			// example_skewed_cpu_even_ranges_mma_and_queues. I suspect the latter
 			// is because MMA is acting faster to undo the effects of the changes
 			// made by the replicate and lease queues.
-			cs.pendingChangeEnacted(change.ChangeID, now)
+			cs.pendingChangeEnacted(change.ChangeID, now, true)
 		}
 		// Re-apply the remaining changes. Note that the load change was not
 		// undone above, so we pass !applyLoadChange, to avoid applying it again.
@@ -1140,7 +1140,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// collected in the future.
 		log.Infof(ctx, "rs.pendingChanges %v, cs.pendingChanges %v", rs.pendingChanges, cs.pendingChanges)
 		for _, change := range rs.pendingChanges {
-			cs.pendingChangeEnacted(change.ChangeID, now)
+			cs.pendingChangeEnacted(change.ChangeID, now, true)
 		}
 		// Remove from the storeStates.
 		for _, replica := range rs.replicas {
@@ -1270,14 +1270,18 @@ func (cs *clusterState) gcPendingChanges(now time.Time) {
 		}
 	}
 	for _, rmChange := range removeChangeIds {
-		cs.undoPendingChange(rmChange)
+		cs.undoPendingChange(rmChange, true)
 	}
 }
 
-func (cs *clusterState) pendingChangeEnacted(cid ChangeID, enactedAt time.Time) {
+func (cs *clusterState) pendingChangeEnacted(cid ChangeID, enactedAt time.Time, requireFound bool) {
 	change, ok := cs.pendingChanges[cid]
 	if !ok {
-		panic(fmt.Sprintf("change %v not found", cid))
+		if requireFound {
+			panic(fmt.Sprintf("change %v not found", cid))
+		} else {
+			return
+		}
 	}
 	change.enactedAtTime = enactedAt
 	rs, ok := cs.ranges[change.rangeID]
@@ -1292,19 +1296,15 @@ func (cs *clusterState) pendingChangeEnacted(cid ChangeID, enactedAt time.Time) 
 		cs.pendingChanges, rs.pendingChanges)
 }
 
-func (cs *clusterState) markPendingChangeEnacted(cid ChangeID, enactedAt time.Time) {
-	change, ok := cs.pendingChanges[cid]
-	if !ok {
-		panic(fmt.Sprintf("change %v not found", cid))
-	}
-	change.enactedAtTime = enactedAt
-}
-
 // undoPendingChange reverses the change with ID cid.
-func (cs *clusterState) undoPendingChange(cid ChangeID) {
+func (cs *clusterState) undoPendingChange(cid ChangeID, requireFound bool) {
 	change, ok := cs.pendingChanges[cid]
 	if !ok {
-		panic(fmt.Sprintf("change %v not found", cid))
+		if requireFound {
+			panic(fmt.Sprintf("change %v not found", cid))
+		} else {
+			return
+		}
 	}
 	rs, ok := cs.ranges[change.rangeID]
 	if !ok {
