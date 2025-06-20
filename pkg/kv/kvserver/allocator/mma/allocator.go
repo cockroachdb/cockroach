@@ -49,10 +49,6 @@ type Allocator interface {
 	// associated node in the cluster.
 	ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoadMsg)
 
-	// ProcessStoreLeaseholderMsg provides updates for each local store and the
-	// ranges for which it is the leaseholder.
-	ProcessStoreLeaseholderMsg(msg *StoreLeaseholderMsg)
-
 	// TODO(sumeer): only a subset of the fields in
 	// pendingReplicaChange/PendingRangeChange are relevant to the caller. Hide
 	// the remaining.
@@ -82,6 +78,8 @@ type Allocator interface {
 
 	// ComputeChanges is called periodically and frequently, say every 10s.
 	//
+	// It accepts the latest StoreLeaseholderMsg for ChangeOptions.LocalStoreID.
+	//
 	// Currently, the only proposed changes are rebalancing (include lease
 	// transfers) of ranges for which this node is a leaseholder, to improve
 	// load balance across all stores in the cluster. Later we will add support
@@ -92,7 +90,8 @@ type Allocator interface {
 	// Unless ChangeOptions.DryRun is true, changes returned are remembered by
 	// the allocator, to avoid re-proposing the same change and to make
 	// adjustments to the load.
-	ComputeChanges(ctx context.Context, opts ChangeOptions) []PendingRangeChange
+	ComputeChanges(
+		ctx context.Context, msg *StoreLeaseholderMsg, opts ChangeOptions) []PendingRangeChange
 
 	// AdminRelocateOne is a helper for AdminRelocateRange.
 	//

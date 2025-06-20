@@ -79,8 +79,7 @@ func (m *multiMetricStoreRebalancer) rebalance(ctx context.Context) (attemptedCh
 		log.Info(ctx, "mma rebalancer: noop since the allocator does not know all stores")
 		return false
 	}
-	m.allocator.ProcessStoreLeaseholderMsg(&storeLeaseholderMsg)
-	changes := m.allocator.ComputeChanges(ctx, mma.ChangeOptions{
+	changes := m.allocator.ComputeChanges(ctx, &storeLeaseholderMsg, mma.ChangeOptions{
 		LocalStoreID: m.store.StoreID(),
 	})
 
