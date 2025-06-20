@@ -506,7 +506,60 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			errors.Wrap(err, "unable to retry backfill since fixed timestamp is before the GC timestamp"),
 		)
 	}
-	return err
+
+	// Get the expected entry count against the source query.
+	var entryCount int64
+	if err := sc.execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		countQuery := fmt.Sprintf("SELECT COUNT(*) FROM (%s)", query)
+		if err := txn.KV().SetFixedTimestamp(ctx, ts); err != nil {
+			return err
+		}
+		datums, err := txn.QueryRow(ctx, "backfill-query-src-count", txn.KV(), countQuery)
+		if err != nil {
+			return err
+		}
+		entryCount = int64(tree.MustBeDInt(datums[0]))
+		return nil
+	}); err != nil {
+		return err
+	}
+	// Next run validation on table that was populated using count queries.
+	// Get rid of the table ID prefix.
+	index := table.GetPrimaryIndex()
+	now := sc.db.KV().Clock().Now()
+	builder := table.NewBuilder()
+	// Make the table public so that we can validate our expected
+	// counts match.
+	mut := builder.BuildExistingMutable().(*tabledesc.Mutable)
+	mut.SetPublic()
+	count, err := countIndexRowsAndMaybeCheckUniqueness(ctx, mut, index, false,
+		descs.NewHistoricalInternalExecTxnRunner(now, func(ctx context.Context, fn descs.InternalExecFn) error {
+			return sc.execCfg.InternalDB.DescsTxn(ctx, func(
+				ctx context.Context, txn descs.Txn,
+			) error {
+				if err := txn.KV().SetFixedTimestamp(ctx, now); err != nil {
+					return err
+				}
+				return fn(ctx, txn)
+			}, isql.WithPriority(admissionpb.BulkNormalPri))
+		}),
+		sessiondata.NodeUserWithBulkLowPriSessionDataOverride)
+	if err != nil {
+		return err
+	}
+	// Testing knob that allows us to manipulate counts to fail
+	// the validation.
+	if sc.testingKnobs.RunDuringQueryBackfillValidation != nil {
+		count, err = sc.testingKnobs.RunDuringQueryBackfillValidation(entryCount, count)
+		if err != nil {
+			return err
+		}
+	}
+	if count != entryCount {
+		return errors.AssertionFailedf("backfill query did not populate index %q with expected number of rows (expected: %d, got :%d)", index.GetName(), entryCount, count)
+	}
+
+	return nil
 }
 
 // maybe backfill a created table by executing the AS query. Return nil if
@@ -2773,6 +2826,10 @@ type SchemaChangerTestingKnobs struct {
 
 	// RunBeforeModifyRowLevelTTL is called just before the modify row level TTL is committed.
 	RunBeforeModifyRowLevelTTL func() error
+
+	// RunAfterQueryBackfillValidation is called right after validation is executed
+	// for a query backfill.
+	RunDuringQueryBackfillValidation func(expectedCount int64, currentCount int64) (newCurrentCount int64, err error)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
