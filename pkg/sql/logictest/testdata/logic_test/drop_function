@@ -301,7 +301,7 @@ CREATE SCHEMA altSchema;
 CREATE FUNCTION altSchema.f_called_by_b() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 CREATE TABLE t1_with_b_2_ref(j int default altSchema.f_called_by_b() CHECK (altSchema.f_called_by_b() > 0));
 
-statement error pgcode 0A000 cannot set schema for function \"f_called_by_b\" because other functions \(\[test.public.f_called_by_b2\]\) still depend on it
+statement error pgcode 0A000 cannot set schema for function \"f_called_by_b\" because other functions or views \(\[test.public.f_called_by_b2\]\) still depend on it
 ALTER FUNCTION f_called_by_b SET SCHEMA altSchema;
 
 skipif config local-legacy-schema-changer
