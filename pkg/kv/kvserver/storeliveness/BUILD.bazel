@@ -78,6 +78,7 @@ go_test(
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/listenerutil",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/testutils/testcluster",
         "//pkg/util",
         "//pkg/util/hlc",
