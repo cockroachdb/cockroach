@@ -544,11 +544,11 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs("def"),
 			baseTest.SetArgs("waa"),
 		}},
-		{"SHOW USERS", []preparedQueryTest{
-			baseTest.Results("abc", "", "{}").
-				Results("admin", "", "{}").
-				Results("root", "", "{admin}").
-				Results("woo", "", "{}"),
+		{"SELECT username, options, member_of from [SHOW USERS] ORDER BY username", []preparedQueryTest{
+			baseTest.Results("abc", "{}", "{}").
+				Results("admin", "{}", "{}").
+				Results("root", "{}", "{admin}").
+				Results("woo", "{}", "{}"),
 		}},
 		{"DROP USER abc, woo", []preparedQueryTest{
 			baseTest.SetArgs(),
