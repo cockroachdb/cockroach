@@ -326,7 +326,7 @@ func TestTableReaderDrain(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 
 	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
-	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
+	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx, nil /* readsTree */)
 	if err != nil {
 		t.Fatal(err)
 	}
