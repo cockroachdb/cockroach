@@ -929,9 +929,9 @@ func getChainUnaryInvoker(
 
 // Batch implements the kvpb.InternalClient interface.
 func (a internalClientAdapter) Batch(
-	ctx context.Context, ba *kvpb.BatchRequest, opts ...grpc.CallOption,
+	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, error) {
-	return a.batchHandler(ctx, ba, opts...)
+	return a.batchHandler(ctx, ba)
 }
 
 var muxRangeFeedDesc = &grpc.StreamDesc{
@@ -953,8 +953,8 @@ var muxRangefeedStreamInfo = &grpc.StreamServerInfo{
 // This is a bi-directional streaming RPC, as opposed to RangeFeed which is
 // uni-directional. This is why this implementation is a bit different.
 func (a internalClientAdapter) MuxRangeFeed(
-	ctx context.Context, opts ...grpc.CallOption,
-) (kvpb.Internal_MuxRangeFeedClient, error) {
+	ctx context.Context,
+) (kvpb.RPCInternal_MuxRangeFeedClient, error) {
 	// MuxRangeFeed is a bi-directional RPC, so we have to deal with two streams:
 	// the client stream and the server stream. The client stream sends
 	// RangeFeedRequests and receives MuxRangeFeedEvents, whereas the server
@@ -1070,8 +1070,7 @@ func (a internalClientAdapter) MuxRangeFeed(
 			ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, opts ...grpc.CallOption,
 		) (grpc.ClientStream, error) {
 			return rawClientStream, nil
-		},
-		opts...)
+		})
 	if err != nil {
 		serverCancel()
 		return nil, errors.CombineErrors(err, wg.Wait())
