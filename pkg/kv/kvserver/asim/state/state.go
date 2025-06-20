@@ -291,6 +291,10 @@ func (m *ManualSimClock) Since(t time.Time) time.Duration {
 	return m.Now().Sub(t)
 }
 
+func (m *ManualSimClock) Until(t time.Time) time.Duration {
+	return t.Sub(m.Now())
+}
+
 func (m *ManualSimClock) NewTimer() timeutil.TimerI {
 	panic("unimplemented")
 }

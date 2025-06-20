@@ -7,10 +7,12 @@ package retry
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -399,18 +401,16 @@ func TestRetryWithMaxDuration(t *testing.T) {
 	closeCh := make(chan struct{})
 
 	testCases := []struct {
-		desc              string
+		name              string
 		ctx               context.Context
 		opts              Options
 		preRetryFunc      func()
 		retryFunc         func() error
 		expectedTimeSpent time.Duration
-		minTimeSpent      time.Duration
-		maxTimeSpent      time.Duration
 		expectedErr       bool
 	}{
 		{
-			desc: "succeeds when no errors are ever given",
+			name: "succeeds when no errors are ever given",
 			ctx:  context.Background(),
 			opts: Options{
 				InitialBackoff: time.Millisecond,
@@ -418,11 +418,11 @@ func TestRetryWithMaxDuration(t *testing.T) {
 				Multiplier:     2,
 				MaxDuration:    time.Millisecond * 50,
 			},
-			retryFunc:    noErrFunc,
-			maxTimeSpent: time.Microsecond,
+			retryFunc:         noErrFunc,
+			expectedTimeSpent: 0,
 		},
 		{
-			desc: "succeeds after one faked error",
+			name: "succeeds after one faked error",
 			ctx:  context.Background(),
 			opts: Options{
 				InitialBackoff: time.Millisecond,
@@ -434,11 +434,11 @@ func TestRetryWithMaxDuration(t *testing.T) {
 			expectedTimeSpent: time.Millisecond,
 		},
 		{
-			desc: "errors when max duration is exhausted",
+			name: "errors when max duration is exhausted",
 			ctx:  context.Background(),
 			opts: Options{
 				InitialBackoff: time.Millisecond,
-				MaxBackoff:     time.Millisecond * 20,
+				MaxBackoff:     time.Millisecond * 2,
 				Multiplier:     2,
 				MaxDuration:    time.Millisecond * 50,
 			},
@@ -447,7 +447,7 @@ func TestRetryWithMaxDuration(t *testing.T) {
 			expectedErr:       true,
 		},
 		{
-			desc: "max duration is not exceeded even if backoff would exceed it",
+			name: "preemptively ends loop if backoff exceeds max duration",
 			ctx:  context.Background(),
 			opts: Options{
 				InitialBackoff: time.Millisecond,
@@ -456,11 +456,11 @@ func TestRetryWithMaxDuration(t *testing.T) {
 				MaxDuration:    time.Millisecond * 50,
 			},
 			retryFunc:         errFunc,
-			expectedTimeSpent: time.Millisecond * 50,
+			expectedTimeSpent: time.Millisecond,
 			expectedErr:       true,
 		},
 		{
-			desc: "errors with context that is canceled",
+			name: "errors with context that is canceled",
 			ctx:  cancelCtx,
 			opts: Options{
 				InitialBackoff: time.Millisecond,
@@ -472,11 +472,11 @@ func TestRetryWithMaxDuration(t *testing.T) {
 			preRetryFunc: func() {
 				cancelCtxFunc()
 			},
-			expectedTimeSpent: time.Microsecond,
+			expectedTimeSpent: 0,
 			expectedErr:       true,
 		},
 		{
-			desc: "errors with opt.Closer that is closed",
+			name: "errors with opt.Closer that is closed",
 			ctx:  context.Background(),
 			opts: Options{
 				InitialBackoff:      time.Microsecond * 10,
@@ -487,7 +487,7 @@ func TestRetryWithMaxDuration(t *testing.T) {
 				Closer:              closeCh,
 			},
 			retryFunc:         errFunc,
-			expectedTimeSpent: time.Microsecond,
+			expectedTimeSpent: 0,
 			preRetryFunc: func() {
 				close(closeCh)
 			},
@@ -496,37 +496,36 @@ func TestRetryWithMaxDuration(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.desc, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			attempts = 0
 			if tc.preRetryFunc != nil {
 				tc.preRetryFunc()
 			}
-			startTime := time.Now()
+			timeSource := &trackingTimeSource{
+				start: timeutil.Now(),
+			}
+			tc.opts.Clock = timeSource
 			var err error
 			for r := StartWithCtx(tc.ctx, tc.opts); r.Next(); {
 				if err = tc.retryFunc(); err == nil {
 					break
 				}
 			}
-			actualEndTime := time.Now()
 			if tc.expectedErr {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 			}
-			if tc.expectedTimeSpent != 0 {
-				expectedEndTime := startTime.Add(tc.expectedTimeSpent)
-				// Allow for a 5% tolerance, with at least a 1ms tolerance.
-				tolerance := max(
-					time.Millisecond,
-					time.Duration(float64(tc.expectedTimeSpent)*0.05),
-				)
-				require.WithinDuration(
-					t, expectedEndTime, actualEndTime, tolerance,
-					"expected time spent to be roughly %s ± %s, got %s",
-					tc.expectedTimeSpent, tolerance, actualEndTime.Sub(startTime),
-				)
-			}
+			// Allow for a 5% tolerance, with at least a 1ms tolerance.
+			tolerance := max(
+				time.Millisecond,
+				time.Duration(float64(tc.expectedTimeSpent)*0.05),
+			)
+			require.LessOrEqualf(
+				t, (timeSource.Elapsed() - tc.expectedTimeSpent).Abs(), tolerance,
+				"expected time spent to be roughly %s ± %s, got %s",
+				tc.expectedTimeSpent, tolerance, timeSource.Elapsed(),
+			)
 		})
 	}
 }
@@ -561,18 +560,14 @@ func TestRetryWithMaxDurationAndMaxRetries(t *testing.T) {
 	t.Run("max duration hit before max retries", func(t *testing.T) {
 		opts := Options{
 			InitialBackoff: time.Millisecond,
-			MaxBackoff:     time.Millisecond * 20,
-			Multiplier:     2,
-			MaxDuration:    time.Millisecond * 50,
-			MaxRetries:     10,
+			MaxBackoff:     time.Millisecond,
+			MaxDuration:    time.Millisecond * 20,
+			MaxRetries:     30,
 		}
 
 		var attempts int
 		start := time.Now()
 		for r := Start(opts); r.Next(); attempts++ {
-			if time.Since(start) >= opts.MaxDuration {
-				break
-			}
 		}
 		elapsed := time.Since(start)
 
@@ -580,7 +575,63 @@ func TestRetryWithMaxDurationAndMaxRetries(t *testing.T) {
 			t, attempts, opts.MaxRetries+1, "expected attempts to not have exhausted max retries", attempts,
 		)
 		require.GreaterOrEqual(
-			t, elapsed, opts.MaxDuration, "expected elapsed time to have exhausted max duration",
+			t, elapsed, opts.MaxDuration-2*time.Millisecond, "expected elapsed time to have exhausted max duration",
 		)
 	})
+}
+
+type trackingTimeSource struct {
+	timeutil.DefaultTimeSource
+	start   time.Time
+	elapsed atomic.Int64
+}
+
+var _ timeutil.TimeSource = (*trackingTimeSource)(nil)
+
+func (t *trackingTimeSource) NewTimer() timeutil.TimerI {
+	return &trackingTimer{
+		timer: t.DefaultTimeSource.NewTimer(),
+		ts:    t,
+	}
+}
+
+func (t *trackingTimeSource) NewTicker(_ time.Duration) timeutil.TickerI {
+	panic("NewTicker not implemented for trackingTimeSource")
+}
+
+func (t *trackingTimeSource) Elapsed() time.Duration {
+	return time.Duration(t.elapsed.Load())
+}
+
+type trackingTimer struct {
+	timer timeutil.TimerI
+	ts    *trackingTimeSource
+	ch    chan time.Time
+}
+
+var _ timeutil.TimerI = (*trackingTimer)(nil)
+
+func (t *trackingTimer) Reset(d time.Duration) {
+	t.timer.Reset(d)
+	if t.ch == nil {
+		t.ch = make(chan time.Time)
+	}
+
+	timerCh := t.timer.Ch()
+	go func() {
+		val, ok := <-timerCh
+		if !ok {
+			return
+		}
+		t.ch <- val
+		t.ts.elapsed.Add(int64(d))
+	}()
+}
+
+func (t *trackingTimer) Ch() <-chan time.Time {
+	return t.ch
+}
+
+func (t *trackingTimer) Stop() bool {
+	return t.timer.Stop()
 }

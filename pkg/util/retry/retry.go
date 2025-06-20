@@ -7,6 +7,7 @@ package retry
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"math/rand"
 	"time"
@@ -30,6 +31,9 @@ type Options struct {
 	// retries.
 	// The loop will run for at least one iteration. (0 for infinite)
 	MaxDuration time.Duration
+	// Clock is used to control the time source for the retry loop. Intended for
+	// testing purposes.
+	Clock timeutil.TimeSource
 }
 
 // Retry implements the public methods necessary to control an exponential-
@@ -40,6 +44,7 @@ type Retry struct {
 	currentAttempt int
 	isReset        bool
 	deadline       time.Time // Deadline for the retry loop if MaxDuration is set.
+	clock          timeutil.TimeSource
 }
 
 // Start returns a new Retry initialized to some default values. The Retry can
@@ -65,10 +70,14 @@ func StartWithCtx(ctx context.Context, opts Options) Retry {
 	if opts.Multiplier == 0 {
 		opts.Multiplier = 2
 	}
+	if opts.Clock == nil {
+		opts.Clock = timeutil.DefaultTimeSource{}
+	}
 
 	var r Retry
 	r.opts = opts
 	r.ctx = ctx
+	r.clock = opts.Clock
 	r.mustReset()
 	return r
 }
@@ -94,7 +103,7 @@ func (r *Retry) mustReset() {
 	r.currentAttempt = 0
 	r.isReset = true
 	if r.opts.MaxDuration != 0 {
-		r.deadline = time.Now().Add(r.opts.MaxDuration)
+		r.deadline = r.clock.Now().Add(r.opts.MaxDuration)
 	} else {
 		r.deadline = time.Time{}
 	}
@@ -128,28 +137,24 @@ func (r *Retry) Next() bool {
 		return true
 	}
 
-	if r.retryLimitReached() {
+	backoff := r.retryIn()
+
+	if r.retryLimitReached() || r.shouldPreemptivelyCancel(backoff) {
 		return false
 	}
 
-	// Expiration for if MaxDuration is set.
-	var expChan <-chan time.Time
-	if r.opts.MaxDuration > 0 {
-		expDuration := timeutil.Until(r.deadline)
-		expChan = time.After(expDuration)
-	}
+	backoffCh, maxDurExpCh, cleanup := r.timerCh(backoff)
+	defer cleanup()
 
-	// Wait before retry.
-	d := r.retryIn()
-	if d > 0 {
-		log.VEventfDepth(r.ctx, 1 /* depth */, 2 /* level */, "will retry after %s", d)
-	}
+	log.VEventfDepth(
+		r.ctx, 1 /* depth */, 2 /* level */, "will retry after %s", backoff,
+	)
 
 	select {
-	case <-time.After(d):
+	case <-backoffCh:
 		r.currentAttempt++
 		return true
-	case <-expChan:
+	case <-maxDurExpCh:
 		return false
 	case <-r.opts.Closer:
 		return false
@@ -160,13 +165,11 @@ func (r *Retry) Next() bool {
 
 func (r *Retry) retryLimitReached() bool {
 	return (r.opts.MaxRetries > 0 && r.currentAttempt >= r.opts.MaxRetries) ||
-		(r.opts.MaxDuration > 0 && !time.Now().Before(r.deadline))
+		(r.opts.MaxDuration > 0 && !r.clock.Now().Before(r.deadline))
 }
 
 // immediateCh creates a channel that is immediately written to with the
 // provided value and then closed.
-// If the value is true, it indicates that an immediate retry should be made.
-// If the value is false, it indicates that no retry should be made.
 func immediateCh(v bool) chan bool {
 	c := make(chan bool, 1)
 	c <- v
@@ -174,35 +177,91 @@ func immediateCh(v bool) chan bool {
 	return c
 }
 
+// timerCh returns two channels: one for the backoff timer and one for the
+// maximum duration expiration timer. It also returns a cleanup function that
+// stops both timers. A time.Time value is sent on the channels when their
+// respective timers expire.
+func (r *Retry) timerCh(
+	backoff time.Duration,
+) (backoffCh, maxDurExpCh <-chan time.Time, cleanup func()) {
+	var maxDurTimer timeutil.TimerI
+	if r.opts.MaxDuration > 0 {
+		maxDurTimer := r.clock.NewTimer()
+		maxDurTimer.Reset(max(r.clock.Until(r.deadline), 0))
+		maxDurExpCh = maxDurTimer.Ch()
+	}
+
+	backoffTimer := r.clock.NewTimer()
+	backoffTimer.Reset(backoff)
+
+	cleanup = func() {
+		if maxDurTimer != nil {
+			maxDurTimer.Stop()
+		}
+		backoffTimer.Stop()
+	}
+	return backoffTimer.Ch(), maxDurExpCh, cleanup
+}
+
 // NextCh returns a channel which will receive when the next retry
 // interval has expired. If the received value is true, it indicates a retry
 // should be made. If the received value is false, it indicates that no retry
 // should be made.
+// Note: This does not respect the Closer or context cancellation and it is the
+// caller's responsibility to manage the lifecycle.
 func (r *Retry) NextCh() <-chan bool {
 	if r.isReset {
 		r.isReset = false
 		return immediateCh(true)
 	}
-	if r.retryLimitReached() {
+
+	backoff := r.retryIn()
+	if r.retryLimitReached() || r.shouldPreemptivelyCancel(backoff) {
 		return immediateCh(false)
 	}
+
+	backoffCh, maxDurExpCh, cleanup := r.timerCh(backoff)
+	defer cleanup()
+
+	log.VEventfDepth(
+		r.ctx, 1 /* depth */, 2 /* level */, "will retry after %s", backoff,
+	)
+
 	ch := make(chan bool, 1)
-	time.AfterFunc(r.retryIn(), func() {
+	go func() {
 		defer close(ch)
-		// Possible retry limit reached during backoff if MaxDuration is set.
-		if r.retryLimitReached() {
-			ch <- false
-		} else {
+		select {
+		case <-backoffCh:
 			r.currentAttempt++
 			ch <- true
+		case <-maxDurExpCh:
+			ch <- false
 		}
-	})
+	}()
+
 	return ch
 }
 
 // CurrentAttempt returns the current attempt (0-based index)
 func (r *Retry) CurrentAttempt() int {
 	return r.currentAttempt
+}
+
+// shouldPeemptivelyCancelchecks if the following backoff will cause the retry
+// loop to exceed the MaxDuration. If so, it returns true.
+func (r *Retry) shouldPreemptivelyCancel(backoff time.Duration) bool {
+	if r.opts.MaxDuration == 0 {
+		return false
+	}
+	delta := r.clock.Now().Add(backoff).Sub(r.deadline)
+	shouldPreempt := !r.clock.Now().Add(backoff).Before(r.deadline)
+	if shouldPreempt {
+		fmt.Println("preemptively canceling retry loop due to MaxDuration, would exceed by ", delta)
+		log.VEventf(
+			r.ctx, 2 /* level */, "preemptively canceling retry loop as backoff would exceed MaxDuration",
+		)
+	}
+	return shouldPreempt
 }
 
 // Do invokes the closure according to the retry options until it returns
