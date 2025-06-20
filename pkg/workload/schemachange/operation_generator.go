@@ -3083,7 +3083,8 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	hasUniqueConstraints := false
 	hasUniqueConstraintsMutations := false
 	hasForeignKeyMutations := false
-	fkViolation := false
+	expectedFkViolation := false
+	potentialFkViolation := false
 	if !anyInvalidInserts {
 		// Verify if the new row may violate unique constraints by checking the
 		// constraints in the database.
@@ -3100,7 +3101,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		}
 		// Verify if the new row will violate fk constraints by checking the constraints and rows
 		// in the database.
-		fkViolation, err = og.violatesFkConstraints(ctx, tx, tableName, nonGeneratedColNames, rows)
+		expectedFkViolation, potentialFkViolation, err = og.violatesFkConstraints(ctx, tx, tableName, nonGeneratedColNames, rows)
 		if err != nil {
 			return nil, err
 		}
@@ -3113,16 +3114,16 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 
 	stmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UniqueViolation, condition: hasUniqueConstraints || hasUniqueConstraintsMutations},
-		{code: pgcode.ForeignKeyViolation, condition: fkViolation || hasForeignKeyMutations},
+		{code: pgcode.ForeignKeyViolation, condition: expectedFkViolation || potentialFkViolation || hasForeignKeyMutations},
 		{code: pgcode.NotNullViolation, condition: true},
 		{code: pgcode.CheckViolation, condition: true},
 		{code: pgcode.InsufficientPrivilege, condition: true}, // For RLS violations
 	})
 	og.expectedCommitErrors.addAll(codesWithConditions{
-		{code: pgcode.ForeignKeyViolation, condition: fkViolation && !hasForeignKeyMutations},
+		{code: pgcode.ForeignKeyViolation, condition: expectedFkViolation && !hasForeignKeyMutations},
 	})
 	og.potentialCommitErrors.addAll(codesWithConditions{
-		{code: pgcode.ForeignKeyViolation, condition: hasForeignKeyMutations},
+		{code: pgcode.ForeignKeyViolation, condition: potentialFkViolation || hasForeignKeyMutations},
 	})
 
 	var formattedRows []string
