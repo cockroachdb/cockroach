@@ -1217,6 +1217,10 @@ message ChangefeedProgress {
   // changefeed. It consists of a list of spans and a single timestamp
   // representing the minimum resolved timestamp of the spans.
   // It is now deprecated in favor of SpanLevelCheckpoint.
+  //
+  // Invariant: At most one of Checkpoint and SpanLevelCheckpoint should be
+  // non-nil at any time.
+  //
   // TODO(#139734): Delete this field and mark field number as reserved.
   Checkpoint checkpoint = 4 [deprecated=true];
 
@@ -1243,6 +1247,9 @@ message ChangefeedProgress {
   // checkpoint to its corresponding resolved timestamp, which will be higher
   // than the overall resolved timestamp and thus allow us to do less work.
   // This is especially useful during backfills or if some spans are lagging.
+  //
+  // Invariant: At most one of Checkpoint and SpanLevelCheckpoint should be
+  // non-nil at any time.
   TimestampSpansMap span_level_checkpoint = 5;
 }
 
