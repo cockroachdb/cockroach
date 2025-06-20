@@ -87,34 +87,27 @@ func DialDRPC(
 				rpcCtx.clientStreamInterceptorsDRPC = []drpcclient.StreamClientInterceptor{interceptor}
 			}
 		}
-		clientConn, err := drpcclient.NewClientConnWithOptions(
+		clientConn, _ := drpcclient.NewClientConnWithOptions(
 			ctx,
 			pooledConn,
 			drpcclient.WithChainUnaryInterceptor(rpcCtx.clientUnaryInterceptorsDRPC...),
 			drpcclient.WithChainStreamInterceptor(rpcCtx.clientStreamInterceptorsDRPC...),
 		)
-		if err != nil {
-			// If creation of the clientConn fails, cleanup the
-			// underlying pooled connection
-			_ = pooledConn.Close()
-			return nil, err
-		}
 
 		// Wrap the clientConn to ensure the entire pool is closed when this connection handle is closed.
-		return &CloseEntirePoolConn{
+		return &closeEntirePoolConn{
 			Conn: clientConn,
 			pool: pool,
 		}, nil
 	}
 }
 
-// Exporting for testing purposes
-type CloseEntirePoolConn struct {
+type closeEntirePoolConn struct {
 	drpc.Conn
 	pool *drpcpool.Pool[struct{}, drpcpool.Conn]
 }
 
-func (c *CloseEntirePoolConn) Close() error {
+func (c *closeEntirePoolConn) Close() error {
 	_ = c.Conn.Close()
 	return c.pool.Close()
 }
