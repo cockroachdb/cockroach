@@ -530,13 +530,6 @@ func (a *allocatorState) ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoad
 	a.cs.processStoreLoadMsg(ctx, msg)
 }
 
-// ProcessStoreLeaseholderMsg implements the Allocator interface.
-func (a *allocatorState) ProcessStoreLeaseholderMsg(ctx context.Context, msg *StoreLeaseholderMsg) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.cs.processStoreLeaseholderMsg(ctx, msg)
-}
-
 // AdjustPendingChangesDisposition implements the Allocator interface.
 func (a *allocatorState) AdjustPendingChangesDisposition(changeIDs []ChangeID, success bool) {
 	a.mu.Lock()
@@ -587,10 +580,14 @@ func (a *allocatorState) RegisterExternalChanges(changes []ReplicaChange) []Chan
 
 // ComputeChanges implements the Allocator interface.
 func (a *allocatorState) ComputeChanges(
-	ctx context.Context, opts ChangeOptions,
+	ctx context.Context, msg *StoreLeaseholderMsg, opts ChangeOptions,
 ) []PendingRangeChange {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if msg.StoreID != opts.LocalStoreID {
+		panic(fmt.Sprintf("ComputeChanges: expected StoreID %d, got %d", opts.LocalStoreID, msg.StoreID))
+	}
+	a.cs.processStoreLeaseholderMsg(ctx, msg)
 	return a.rebalanceStores(ctx, opts.LocalStoreID)
 }
 
