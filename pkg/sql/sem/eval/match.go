@@ -126,6 +126,8 @@ func matchLike(ctx *Context, left, right tree.Datum, caseInsensitive bool) (tree
 
 func matchStringFromDatum(datum tree.Datum) (string, error) {
 	switch d := datum.(type) {
+	case *tree.DOidWrapper:
+		return matchStringFromDatum(d.Wrapped)
 	case *tree.DCollatedString:
 		if !d.Deterministic {
 			return "", pgerror.New(pgcode.FeatureNotSupported, "nondeterministic collations are not supported for LIKE")
