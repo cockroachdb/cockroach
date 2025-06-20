@@ -384,6 +384,13 @@ func TestRepeatableReadLogic_cast(
 	runLogicTest(t, "cast")
 }
 
+func TestRepeatableReadLogic_check(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "check")
+}
+
 func TestRepeatableReadLogic_check_constraints(
 	t *testing.T,
 ) {
