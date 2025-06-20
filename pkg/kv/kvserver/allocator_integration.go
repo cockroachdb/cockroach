@@ -247,7 +247,7 @@ func (as *AllocatorSync) MMAPreApply(
 // PostApply is called after changes have been applied to the cluster, by both
 // the old allocator components (lease queue, replicate queue and store
 // rebalancer), as well as the new mma.Allocator.
-func (as *AllocatorSync) PostApply(syncChangeID SyncChangeID, success bool) {
+func (as *AllocatorSync) PostApply(ctx context.Context, syncChangeID SyncChangeID, success bool) {
 	var tracked trackedAllocatorChange
 	func() {
 		as.mu.Lock()
@@ -259,6 +259,9 @@ func (as *AllocatorSync) PostApply(syncChangeID SyncChangeID, success bool) {
 		}
 		delete(as.mu.trackedChanges, syncChangeID)
 	}()
+	log.Infof(ctx, "PostApply: syncChangeID=%d success=%t tracked=%v",
+		syncChangeID, success, tracked)
+
 	if changeIDs := tracked.changeIDs; changeIDs != nil {
 		as.mmAllocator.AdjustPendingChangesDisposition(changeIDs, success)
 	}

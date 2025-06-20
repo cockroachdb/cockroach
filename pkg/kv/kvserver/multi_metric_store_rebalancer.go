@@ -119,7 +119,7 @@ func (m *multiMetricStoreRebalancer) rebalance(ctx context.Context) (attemptedCh
 					success = false
 				}
 			}
-			m.as.PostApply(changeID, success)
+			m.as.PostApply(ctx, changeID, success)
 		}
 	}
 	return len(changes) > 0
