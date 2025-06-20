@@ -475,6 +475,7 @@ message View {
   uint32 view_id = 1 [(gogoproto.customname) = "ViewID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 uses_type_ids = 2 [(gogoproto.customname) = "UsesTypeIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 uses_relation_ids = 3 [(gogoproto.customname) = "UsesRelationIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  repeated uint32 uses_routine_ids = 12 [(gogoproto.customname) = "UsesRoutineIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 
   // a reference from this view to another relation, tracked down to index/column level.
   message Reference {

@@ -210,32 +210,22 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 		}
 	}
 
-	// Disallow renaming if this rename operation will break other UDF's invoking
-	// this one.
-	var dependentFuncs []string
-	for _, dep := range fnDesc.GetDependedOnBy() {
-		desc, err := params.p.Descriptors().ByIDWithoutLeased(params.p.Txn()).Get().Desc(params.ctx, dep.ID)
-		if err != nil {
-			return err
-		}
-		_, ok := desc.(catalog.FunctionDescriptor)
-		if !ok {
-			continue
-		}
-		fullyResolvedName, err := params.p.GetQualifiedFunctionNameByID(params.ctx, int64(dep.ID))
-		if err != nil {
-			return err
-		}
-		dependentFuncs = append(dependentFuncs, fullyResolvedName.FQString())
+	// Disallow renaming if this rename operation will break other UDF's or views
+	// invoking this one.
+	dependentObjects, err := getFuncRefsDisallowingAlter(params, fnDesc)
+	if err != nil {
+		return err
 	}
-	if len(dependentFuncs) > 0 {
+	if len(dependentObjects) > 0 {
+		// TODO(#146475): once functions are rewritten to use ID references, we can
+		// allow renames for views.
 		return errors.UnimplementedErrorf(
 			errors.IssueLink{
 				IssueURL: build.MakeIssueURL(83233),
 				Detail:   "renames are disallowed because references are by name",
 			},
-			"cannot rename function %q because other functions ([%v]) still depend on it",
-			fnDesc.Name, strings.Join(dependentFuncs, ", "))
+			"cannot rename function %q because other functions or views ([%v]) still depend on it",
+			fnDesc.Name, strings.Join(dependentObjects, ", "))
 	}
 
 	scDesc.RemoveFunction(fnDesc.GetName(), fnDesc.GetID())
@@ -383,33 +373,21 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	// Disallow renaming if this rename operation will break other UDF's invoking
-	// this one.
-	var dependentFuncs []string
-	for _, dep := range fnDesc.GetDependedOnBy() {
-		desc, err := params.p.Descriptors().ByIDWithoutLeased(params.p.Txn()).Get().Desc(params.ctx, dep.ID)
-		if err != nil {
-			return err
-		}
-		_, ok := desc.(catalog.FunctionDescriptor)
-		if !ok {
-			continue
-		}
-		fullyResolvedName, err := params.p.GetQualifiedFunctionNameByID(params.ctx, int64(dep.ID))
-		if err != nil {
-			return err
-		}
-		dependentFuncs = append(dependentFuncs, fullyResolvedName.FQString())
+	// Disallow renaming if this rename operation will break other UDF's or views
+	// invoking this one.
+	dependentObjects, err := getFuncRefsDisallowingAlter(params, fnDesc)
+	if err != nil {
+		return err
 	}
-	if len(dependentFuncs) > 0 {
+	if len(dependentObjects) > 0 {
 		return errors.UnimplementedErrorf(
 			errors.IssueLink{
 				IssueURL: build.MakeIssueURL(83233),
 				Detail: "set schema is disallowed because there are references from " +
 					"other objects by name",
 			},
-			"cannot set schema for function %q because other functions ([%v]) still depend on it",
-			fnDesc.Name, strings.Join(dependentFuncs, ", "))
+			"cannot set schema for function %q because other functions or views ([%v]) still depend on it",
+			fnDesc.Name, strings.Join(dependentObjects, ", "))
 	}
 
 	switch sc.SchemaKind() {
@@ -547,4 +525,36 @@ func toSchemaOverloadSignature(fnDesc *funcdesc.Mutable) descpb.SchemaDescriptor
 		}
 	}
 	return ret
+}
+
+func getFuncRefsDisallowingAlter(
+	params runParams, fnDesc *funcdesc.Mutable,
+) (dependentObjects []string, err error) {
+	for _, dep := range fnDesc.GetDependedOnBy() {
+		desc, err := params.p.Descriptors().ByIDWithoutLeased(params.p.Txn()).Get().Desc(params.ctx, dep.ID)
+		if err != nil {
+			return nil, err
+		}
+		switch t := desc.(type) {
+		case catalog.TableDescriptor:
+			if !t.IsView() {
+				continue
+			}
+			fullyResolvedName, err := params.p.GetQualifiedTableNameByID(
+				params.ctx, int64(dep.ID), tree.ResolveAnyTableKind)
+			if err != nil {
+				return nil, err
+			}
+			dependentObjects = append(dependentObjects, fullyResolvedName.FQString())
+		case catalog.FunctionDescriptor:
+			fullyResolvedName, err := params.p.GetQualifiedFunctionNameByID(params.ctx, int64(dep.ID))
+			if err != nil {
+				return nil, err
+			}
+			dependentObjects = append(dependentObjects, fullyResolvedName.FQString())
+		default:
+			continue
+		}
+	}
+	return dependentObjects, nil
 }
