@@ -69,35 +69,6 @@ CREATE INDEX idx_b ON test_tbl_t (test_tbl_f());
 subtest end
 
 
-subtest disallow_udf_in_views
-
-statement ok
-CREATE FUNCTION test_vf_f() RETURNS STRING LANGUAGE SQL AS $$ SELECT lower('hello') $$;
-
-
-statement error pgcode 42883 pq: unknown function: test_vf_f\(\)\nHINT:.*intention was to use a user-defined function in the view query, which is currently not supported.
-CREATE VIEW v AS SELECT test_vf_f();
-
-statement ok
-CREATE VIEW v AS SELECT lower('hello');
-
-query T
-SELECT create_statement FROM [SHOW CREATE FUNCTION test_vf_f];
-----
-CREATE FUNCTION public.test_vf_f()
-  RETURNS STRING
-  VOLATILE
-  NOT LEAKPROOF
-  CALLED ON NULL INPUT
-  LANGUAGE SQL
-  SECURITY INVOKER
-  AS $$
-  SELECT lower('hello':::STRING);
-$$
-
-subtest end
-
-
 subtest cross_db
 
 statement ok
