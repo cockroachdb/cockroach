@@ -30,7 +30,7 @@ import (
 // Default idle connection timeout for DRPC connections in the pool.
 var defaultDRPCConnIdleTimeout = 5 * time.Minute
 
-func dialDRPC(
+func DialDRPC(
 	rpcCtx *Context,
 ) func(ctx context.Context, target string, _ rpcbase.ConnectionClass) (drpc.Conn, error) {
 	return func(ctx context.Context, target string, _ rpcbase.ConnectionClass) (drpc.Conn, error) {
@@ -77,6 +77,16 @@ func dialDRPC(
 			return conn, nil
 		})
 
+		if rpcCtx.Knobs.UnaryClientInterceptorDRPC != nil {
+			if interceptor := rpcCtx.Knobs.UnaryClientInterceptorDRPC(target); interceptor != nil {
+				rpcCtx.clientUnaryInterceptorsDRPC = []drpcclient.UnaryClientInterceptor{interceptor}
+			}
+		}
+		if rpcCtx.Knobs.StreamClientInterceptorDRPC != nil {
+			if interceptor := rpcCtx.Knobs.StreamClientInterceptorDRPC(target); interceptor != nil {
+				rpcCtx.clientStreamInterceptorsDRPC = []drpcclient.StreamClientInterceptor{interceptor}
+			}
+		}
 		clientConn, err := drpcclient.NewClientConnWithOptions(
 			ctx,
 			pooledConn,
@@ -91,19 +101,20 @@ func dialDRPC(
 		}
 
 		// Wrap the clientConn to ensure the entire pool is closed when this connection handle is closed.
-		return &closeEntirePoolConn{
+		return &CloseEntirePoolConn{
 			Conn: clientConn,
 			pool: pool,
 		}, nil
 	}
 }
 
-type closeEntirePoolConn struct {
+// Exporting for testing purposes
+type CloseEntirePoolConn struct {
 	drpc.Conn
 	pool *drpcpool.Pool[struct{}, drpcpool.Conn]
 }
 
-func (c *closeEntirePoolConn) Close() error {
+func (c *CloseEntirePoolConn) Close() error {
 	_ = c.Conn.Close()
 	return c.pool.Close()
 }

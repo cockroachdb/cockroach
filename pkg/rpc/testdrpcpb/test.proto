@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package cockroach.rpc.testdrpcpb;
+
+option go_package = "github.com/cockroachdb/cockroach/pkg/rpc/testdrpcpb";
+
+service TestDRPC {
+  rpc Unary(Request) returns (Response) {}
+}
+
+message Request {
+  string msg = 1;
+}
+
+message Response {
+  string msg = 1;
+}
+
