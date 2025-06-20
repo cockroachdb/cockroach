@@ -2146,3 +2146,11 @@ SELECT '$'::JSONPATH -- normalized!
 SELECT (('$')::JSONPATH) -- fully parenthesized
 SELECT '_'::JSONPATH -- literals removed
 SELECT '$'::JSONPATH -- identifiers removed
+
+parse
+SELECT '$'::CITEXT;
+----
+SELECT '$'::CITEXT -- normalized!
+SELECT (('$')::CITEXT) -- fully parenthesized
+SELECT '_'::CITEXT -- literals removed
+SELECT '$'::CITEXT -- identifiers removed

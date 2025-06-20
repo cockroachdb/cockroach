@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
@@ -526,6 +527,10 @@ func performCastWithoutPrecisionTruncation(
 			}
 			return tree.NewDString(s), nil
 		case types.CollatedStringFamily:
+			if t.Oid() == oidext.T_citext {
+				return tree.NewDCitext(s, t.Locale(), &evalCtx.CollationEnv)
+			}
+
 			// bpchar types truncate trailing whitespace.
 			if t.Oid() == oid.T_bpchar {
 				s = strings.TrimRight(s, " ")

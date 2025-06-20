@@ -2425,6 +2425,7 @@ bit varying,bit,NULL,yes
 bit varying,bit varying,NULL,yes
 boolean,character,NULL,in assignment
 boolean,character varying,NULL,in assignment
+boolean,citext,NULL,in assignment
 boolean,integer,NULL,no
 boolean,text,NULL,in assignment
 box2d,geometry,NULL,yes
@@ -2433,14 +2434,19 @@ bytea,geometry,NULL,yes
 character,"""char""",NULL,in assignment
 character,character,NULL,yes
 character,character varying,NULL,yes
+character,citext,NULL,in assignment
 character,name,NULL,yes
 character,text,NULL,yes
 character varying,"""char""",NULL,in assignment
 character varying,character,NULL,yes
 character varying,character varying,NULL,yes
+character varying,citext,NULL,in assignment
 character varying,name,NULL,yes
 character varying,regclass,NULL,yes
 character varying,text,NULL,yes
+citext,character,NULL,in assignment
+citext,character varying,NULL,yes
+citext,text,NULL,yes
 date,timestamp with time zone,NULL,yes
 date,timestamp without time zone,NULL,yes
 double precision,bigint,NULL,in assignment
@@ -2459,6 +2465,7 @@ geometry,jsonb,NULL,no
 geometry,text,NULL,yes
 inet,character,NULL,in assignment
 inet,character varying,NULL,in assignment
+inet,citext,NULL,in assignment
 inet,text,NULL,in assignment
 integer,"""char""",NULL,no
 integer,bigint,NULL,yes
@@ -2541,6 +2548,7 @@ smallint,regtype,NULL,yes
 text,"""char""",NULL,in assignment
 text,character,NULL,yes
 text,character varying,NULL,yes
+text,citext,NULL,in assignment
 text,geometry,NULL,yes
 text,name,NULL,yes
 text,regclass,NULL,yes
