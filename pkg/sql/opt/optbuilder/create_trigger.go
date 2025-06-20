@@ -7,6 +7,7 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -175,7 +176,7 @@ func (b *Builder) buildFunctionForTrigger(
 		panic(errors.AssertionFailedf("SQL language not supported for triggers"))
 	}
 	// The trigger always references the trigger function.
-	b.schemaFunctionDeps.Add(int(o.Oid))
+	b.schemaFunctionDeps.Add(int(funcdesc.UserDefinedFunctionOIDToID(o.Oid)))
 
 	// The trigger function can reference the NEW and OLD transition relations,
 	// aliased in the trigger definition.

@@ -1046,3 +1046,148 @@ select * from pg_catalog.pg_attrdef;
 3466299041  175  2  unique_rowid()                                         unique_rowid()
 
 subtest end
+
+subtest view
+
+statement ok
+CREATE TABLE xy (x INT, y INT);
+INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6);
+
+statement ok
+CREATE FUNCTION f_scalar() RETURNS INT LANGUAGE SQL AS $$ SELECT count(*) FROM xy $$;
+
+statement ok
+CREATE FUNCTION f_setof() RETURNS SETOF xy LANGUAGE SQL AS $$ SELECT * FROM xy $$;
+
+statement ok
+CREATE VIEW v AS SELECT x, y, f_scalar() FROM f_setof();
+
+statement ok
+CREATE MATERIALIZED VIEW mv AS SELECT x, y, f_scalar() FROM f_setof();
+
+query III
+SELECT * FROM v ORDER BY x, y;
+----
+1  2  3
+3  4  3
+5  6  3
+
+query III
+SELECT * FROM mv ORDER BY x, y;
+----
+1  2  3
+3  4  3
+5  6  3
+
+statement ok
+REFRESH MATERIALIZED VIEW mv;
+
+query III
+SELECT * FROM mv ORDER BY x, y;
+----
+1  2  3
+3  4  3
+5  6  3
+
+statement ok
+INSERT INTO xy VALUES (7, 8);
+
+query III
+SELECT * FROM v ORDER BY x, y;
+----
+1  2  4
+3  4  4
+5  6  4
+7  8  4
+
+query III
+SELECT * FROM mv ORDER BY x, y;
+----
+1  2  3
+3  4  3
+5  6  3
+
+statement ok
+REFRESH MATERIALIZED VIEW mv;
+
+query III
+SELECT * FROM mv ORDER BY x, y;
+----
+1  2  4
+3  4  4
+5  6  4
+7  8  4
+
+statement ok
+CREATE ROLE bob;
+
+statement ok
+GRANT ALL ON SCHEMA public TO bob;
+
+statement ok
+GRANT ALL ON v TO bob;
+
+statement ok
+GRANT ALL ON mv TO bob;
+
+statement ok
+REVOKE EXECUTE ON FUNCTION f_scalar() FROM PUBLIC;
+
+statement ok
+REVOKE EXECUTE ON FUNCTION f_scalar() FROM bob;
+
+statement ok
+SET ROLE bob;
+
+statement error pgcode 42501 pq: user bob does not have EXECUTE privilege on function f_scalar
+SELECT f_scalar();
+
+statement error pgcode 42501 pq: user bob does not have EXECUTE privilege on function f_scalar
+SELECT * FROM v;
+
+statement ok
+SELECT * FROM mv;
+
+statement ok
+SET ROLE root;
+
+statement error pgcode 0A000 cannot rename function "f_scalar" because other functions or views \(\[test.public.v, test.public.mv\]\) still depend on it
+ALTER FUNCTION f_scalar RENAME TO f_scalar_renamed;
+
+statement error pgcode 0A000 cannot rename function "f_setof" because other functions or views \(\[test.public.v, test.public.mv\]\) still depend on it
+ALTER FUNCTION f_setof RENAME TO f_setof_renamed;
+
+statement error pgcode 2BP01 pq: cannot drop function "f_scalar" because other objects \(\[test.public.v, test.public.mv\]\) still depend on it
+DROP FUNCTION f_scalar;
+
+statement error pgcode 2BP01 pq: cannot drop function "f_setof" because other objects \(\[test.public.v, test.public.mv\]\) still depend on it
+DROP FUNCTION f_setof;
+
+statement ok
+DROP VIEW v;
+
+statement ok
+DROP MATERIALIZED VIEW mv;
+
+statement ok
+DROP FUNCTION f_scalar;
+
+statement ok
+DROP FUNCTION f_setof;
+
+# Test a view referencing a builtin function.
+statement ok
+CREATE VIEW v_builtin AS SELECT * FROM generate_series(1, 4);
+
+query I
+SELECT * FROM v_builtin ORDER BY 1;
+----
+1
+2
+3
+4
+
+statement ok
+DROP VIEW v_builtin;
+
+subtest end
