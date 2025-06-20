@@ -40,8 +40,8 @@ func (c *grpcConn) NewTimeSeriesClient() tspb.RPCTimeSeriesClient {
 	return tspb.NewGRPCTimeSeriesClientAdapter(c.conn)
 }
 
-func (c *grpcConn) NewInternalClient() kvpb.InternalClient {
-	return kvpb.NewInternalClient(c.conn)
+func (c *grpcConn) NewInternalClient() kvpb.RPCInternalClient {
+	return kvpb.NewGRPCInternalClientAdapter(c.conn)
 }
 
 func (c *grpcConn) NewDistSQLClient() execinfrapb.RPCDistSQLClient {

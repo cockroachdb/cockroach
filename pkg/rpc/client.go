@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 // ClientConnConfig contains the configuration for a ClientConn.
@@ -140,16 +141,44 @@ func NewClientContext(ctx context.Context, cfg ClientConnConfig) (*Context, *sto
 	return NewContext(ctx, opts), stopper
 }
 
-// NewClientConn creates a new client connection.
+// NewClientConn creates a new gRPC client connection.
 // The caller is responsible for calling the returned function
 // to release associated resources.
 func NewClientConn(
 	ctx context.Context, cfg ClientConnConfig,
 ) (conn *grpc.ClientConn, cleanup func(), err error) {
-	if ctx.Done() == nil {
-		return nil, nil, errors.New("context must be cancellable")
+	dialFn := func(rpcCtx *Context, addr string, locality roachpb.Locality) (*grpc.ClientConn, error) {
+		// We use GRPCUnvalidatedDial here because it does not matter to which node
+		// we're talking to.
+		return rpcCtx.GRPCUnvalidatedDial(addr, roachpb.Locality{}).Connect(ctx)
 	}
-	rpcContext, stopper := NewClientContext(ctx, cfg)
+	return newClientConn(ctx, cfg, dialFn)
+}
+
+// NewDRPCClientConn creates a new DRPC client connection.
+// The caller is responsible for calling the returned function to release
+// associated resources.
+func NewDRPCClientConn(
+	ctx context.Context, cfg ClientConnConfig,
+) (conn drpc.Conn, cleanup func(), err error) {
+	dialFn := func(rpcCtx *Context, addr string, locality roachpb.Locality) (drpc.Conn, error) {
+		// We use DRPCUnvalidatedDial here because it does not matter to which node
+		// we're talking to.
+		return rpcCtx.DRPCUnvalidatedDial(addr, roachpb.Locality{}).Connect(ctx)
+	}
+	return newClientConn(ctx, cfg, dialFn)
+}
+
+func newClientConn[Conn rpcConn](
+	ctx context.Context,
+	cfg ClientConnConfig,
+	dialFn func(rpcCtx *Context, addr string, locality roachpb.Locality) (Conn, error),
+) (conn Conn, cleanup func(), err error) {
+	var nilConn Conn
+	if ctx.Done() == nil {
+		return nilConn, nil, errors.New("context must be cancellable")
+	}
+	rpcCtx, stopper := NewClientContext(ctx, cfg)
 	closer := func() {
 		// We use context.Background() here and not ctx because we
 		// want to ensure that the closers always run to completion
@@ -165,17 +194,14 @@ func NewClientConn(
 
 	addr, err := addr.AddrWithDefaultLocalhost(cfg.ServerAddr)
 	if err != nil {
-		return nil, nil, err
+		return nilConn, nil, err
 	}
-	// We use GRPCUnvalidatedDial() here because it does not matter
-	// to which node we're talking to.
-	conn, err = rpcContext.GRPCUnvalidatedDial(addr, roachpb.Locality{}).Connect(ctx)
+	conn, err = dialFn(rpcCtx, addr, roachpb.Locality{})
 	if err != nil {
-		return nil, nil, err
+		return nilConn, nil, err
 	}
 	stopper.AddCloser(stop.CloserFn(func() {
-		_ = conn.Close() // nolint:grpcconnclose
+		_ = conn.Close()
 	}))
-
 	return conn, closer, nil
 }
