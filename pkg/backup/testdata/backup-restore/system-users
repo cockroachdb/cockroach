@@ -10,14 +10,14 @@ GRANT developer TO abbey;
 ----
 
 query-sql
-SHOW ROLES
+select username, options, member_of from [SHOW ROLES]
 ----
-abbey  {developer}
-admin  {}
-developer CREATEDB, NOLOGIN {}
-root  {admin}
-testuser NOLOGIN {}
-testuser2 CONTROLJOB, CREATEDB, NOLOGIN {}
+admin {} {}
+developer {CREATEDB,NOLOGIN} {}
+testuser {NOLOGIN} {}
+testuser2 {CONTROLJOB,CREATEDB,NOLOGIN} {}
+root {} {admin}
+abbey {} {developer}
 
 query-sql
 SHOW GRANTS ON ROLE developer
@@ -38,14 +38,14 @@ RESTORE SYSTEM USERS FROM LATEST IN 'nodelocal://1/test/'
 ----
 
 query-sql cluster=s2
-SHOW ROLES
+select username, options, member_of from [SHOW ROLES]
 ----
-abbey  {developer}
-admin  {}
-developer CREATEDB, NOLOGIN {}
-root  {admin}
-testuser NOLOGIN {}
-testuser2 CONTROLJOB, CREATEDB, NOLOGIN {}
+admin {} {}
+developer {CREATEDB,NOLOGIN} {}
+testuser {NOLOGIN} {}
+testuser2 {CONTROLJOB,CREATEDB,NOLOGIN} {}
+root {} {admin}
+abbey {} {developer}
 
 query-sql cluster=s2
 SHOW GRANTS ON ROLE developer

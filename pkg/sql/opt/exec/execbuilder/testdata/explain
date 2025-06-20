@@ -791,17 +791,18 @@ vectorized: true
                     └── • sort
                         │ estimated row count: 3
                         │ order: +username,+option
+                        │ already ordered: +username
                         │
                         └── • render
                             │
-                            └── • hash join (left outer)
+                            └── • merge join (left outer)
                                 │ estimated row count: 3
                                 │ equality: (username) = (username)
                                 │ left cols are key
                                 │
                                 ├── • scan
                                 │     estimated row count: 3 (100% of the table; stats collected <hidden> ago)
-                                │     table: users@users_user_id_idx
+                                │     table: users@primary
                                 │     spans: FULL SCAN
                                 │
                                 └── • scan

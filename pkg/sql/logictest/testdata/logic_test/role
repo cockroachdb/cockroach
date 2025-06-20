@@ -24,14 +24,15 @@ DROP ROLE admin, root
 statement ok
 CREATE ROLE myrole
 
-query TTT colnames,rowsort
+skipif config local-mixed-25.2
+query TTTT colnames,rowsort
 SHOW ROLES
 ----
-username  options  member_of
-admin     ·        {}
-myrole    NOLOGIN  {}
-root      ·        {admin}
-testuser  ·        {}
+username  options   member_of estimated_last_login_time
+admin     {}        {}        NULL
+myrole    {NOLOGIN} {}        NULL
+root      {}        {admin}   NULL
+testuser  {}        {}        NULL
 
 statement error a role/user named myrole already exists
 CREATE ROLE myrole
@@ -54,25 +55,27 @@ CREATE USER IF NOT EXISTS myrole
 statement error pq: cannot drop roles/users admin, myrole: grants still exist on .*
 DROP ROLE admin, myrole
 
-query TTT colnames,rowsort
+skipif config local-mixed-25.2
+query TTTT colnames,rowsort
 SHOW ROLES
 ----
-username  options  member_of
-admin     ·        {}
-myrole    NOLOGIN  {}
-root      ·        {admin}
-testuser  ·        {}
+username  options   member_of estimated_last_login_time
+admin     {}        {}        NULL
+myrole    {NOLOGIN} {}        NULL
+root      {}        {admin}   NULL
+testuser  {}        {}        NULL
 
 statement ok
 DROP ROLE myrole
 
-query TTT colnames,rowsort
+skipif config local-mixed-25.2
+query TTTT colnames,rowsort
 SHOW ROLES
 ----
-username  options  member_of
-admin     ·        {}
-root      ·        {admin}
-testuser  ·        {}
+username  options  member_of estimated_last_login_time
+admin     {}       {}        NULL
+root      {}       {admin}   NULL
+testuser  {}       {}        NULL
 
 statement error pq: role/user "myrole" does not exist
 DROP ROLE myrole
@@ -101,13 +104,20 @@ DROP ROLE IF EXISTS rolec, roled, rolee
 statement ok
 DROP ROLE rolea, roleb
 
-query TTT colnames,rowsort
+skipif config local-mixed-25.2
+query TTTT colnames,rowsort
 SHOW ROLES
 ----
-username  options  member_of
-admin     ·        {}
-root      ·        {admin}
-testuser  ·        {}
+username  options  member_of estimated_last_login_time
+admin     {}       {}        NULL
+root      {}       {admin}   NULL
+testuser  {}       {}        NULL
+
+skipif config local-mixed-25.2
+query T noticetrace
+SHOW ROLES
+----
+NOTICE: estimated_last_login_time is computed on a best effort basis; it is not guaranteed to capture every login event
 
 statement ok
 CREATE USER testuser2
@@ -491,16 +501,17 @@ role   member    isAdmin
 admin  root      true
 roled  testuser  false
 
-query TTT rowsort
+skipif config local-mixed-25.2
+query TTTT rowsort
 SHOW ROLES
 ----
-admin      ·        {}
-roleb      NOLOGIN  {}
-roled      NOLOGIN  {}
-rolee      NOLOGIN  {}
-root       ·        {admin}
-testuser   ·        {roled}
-testuser2  ·        {}
+admin      {}         {}       NULL
+roleb      {NOLOGIN}  {}       NULL
+roled      {NOLOGIN}  {}       NULL
+rolee      {NOLOGIN}  {}       NULL
+root       {}         {admin}  NULL
+testuser   {}         {roled}  NULL
+testuser2  {}         {}       NULL
 
 statement ok
 DROP ROLE roleb
