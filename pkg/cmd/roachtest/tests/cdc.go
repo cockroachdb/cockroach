@@ -4433,9 +4433,12 @@ func runCDCMultiDBTPCCMinimal(ctx context.Context, t test.Test, c cluster.Cluste
 		t.Fatalf("failed to create changefeed: %v", err)
 	}
 
-	t.Status("Minimal multi-schema TPCC + changefeed test running")
+	t.Status("Minimal multi-schema TPCC + changefeed test running with jobId", jobID)
 	m.Wait()
 	var count int
-	db.QueryRow("SELECT count(*) from defaultdb.schema1.order").Scan(&count)
+	if err := db.QueryRow("SELECT count(*) from defaultdb.schema1.order").Scan(&count); err != nil {
+		t.Fatalf("failed to read count: %v", err)
+	}
+
 	t.Status("Minimal multi-schema TPCC + changefeed test finished", count)
 }
