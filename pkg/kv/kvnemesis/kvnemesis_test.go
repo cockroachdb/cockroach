@@ -337,21 +337,14 @@ func TestKVNemesisMultiNode_BufferedWrites(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testKVNemesisImpl(t, kvnemesisTestCfg{
-		numNodes:     3,
-		numSteps:     defaultNumSteps,
-		concurrency:  5,
-		seedOverride: 0,
-		// TODO(#145458): Until #145458 is fixed reduce the
-		// rate of lost writes by avoiding lease transfers and
-		// merges and also turning off error injection.
-		invalidLeaseAppliedIndexProb: 0.0,
-		injectReproposalErrorProb:    0.0,
+		numNodes:                     3,
+		numSteps:                     defaultNumSteps,
+		concurrency:                  5,
+		seedOverride:                 0,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
 		assertRaftApply:              true,
 		bufferedWriteProb:            0.70,
-		testGeneratorConfig: func(g *GeneratorConfig) {
-			g.Ops.ChangeLease = ChangeLeaseConfig{}
-			g.Ops.Merge = MergeConfig{}
-		},
 		testSettings: func(ctx context.Context, st *cluster.Settings) {
 			kvcoord.BufferedWritesEnabled.Override(ctx, &st.SV, true)
 			concurrency.UnreplicatedLockReliabilityLeaseTransfer.Override(ctx, &st.SV, true)
@@ -362,9 +355,7 @@ func TestKVNemesisMultiNode_BufferedWrites(t *testing.T) {
 }
 
 // TestKVNemesisMultiNode_BufferedWritesNoPipelining turns on buffered
-// writes and turns off write pipelining. Turning off write pipelining
-// allows us to test the lock reliability features even without a fix
-// for #145458.
+// writes and turns off write pipelining.
 func TestKVNemesisMultiNode_BufferedWritesNoPipelining(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
