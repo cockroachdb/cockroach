@@ -11,7 +11,6 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -19,9 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
@@ -435,6 +436,7 @@ func registerDiskStalledWALFailoverWithProgress(r registry.Registry) {
 		SkipPostValidations: registry.PostValidationNoDeadNodes,
 		EncryptionSupport:   registry.EncryptionMetamorphic,
 		Leases:              registry.MetamorphicLeases,
+		Monitor:             true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runDiskStalledWALFailoverWithProgress(ctx, t, c)
 		},
@@ -484,7 +486,7 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 
 	t.Status("starting oscillating workload and disk stall pattern")
 	testStartedAt := timeutil.Now()
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	g := t.NewGroup(task.WithContext(ctx))
 
 	// Setup stats collector.
 	promCfg := &prometheus.Config{}
@@ -511,7 +513,6 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 	for timeutil.Since(testStartedAt) < testDuration {
 		if t.Failed() {
 			t.Fatalf("test failed, stopping further iterations")
-			return
 		}
 
 		workloadWaitDur := operationWaitBase + time.Duration(rand.Int63n(int64(waitJitterMax)))
@@ -521,11 +522,7 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 		workloadStarted := make(chan struct{})
 		workloadFinished := make(chan struct{})
 
-		var wg sync.WaitGroup
-		wg.Add(1)
-		m.Go(func(ctx context.Context) error {
-			defer wg.Done()
-
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			select {
 			case <-ctx.Done():
 				t.Fatalf("context done before workload started: %s", ctx.Err())
@@ -540,14 +537,12 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 				return nil
 			}
 			return nil
-		})
+		}, task.Name("workload-run"))
 
 		// Collecting QPS samples while the workload is running and verify
 		// that the throughput is within errorTolerance of the mean.
 		var samples []float64
-		wg.Add(1)
-		m.Go(func(ctx context.Context) error {
-			defer wg.Done()
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 
 			// Wait for workload to start.
 			select {
@@ -602,7 +597,7 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 
 			t.Status(fmt.Sprintf("workload finished, %d samples collected", len(samples)))
 			return nil
-		})
+		}, task.Name("qps-sampling"))
 
 		// Every 4th iteration, we'll skip the disk stall phase.
 		if iteration%4 != 0 {
@@ -610,9 +605,7 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 			diskStallWaitDur := operationWaitBase + time.Duration(rand.Int63n(int64(waitJitterMax)))
 			t.Status("next stall phase in ", diskStallWaitDur)
 
-			wg.Add(1)
-			m.Go(func(ctx context.Context) error {
-				defer wg.Done()
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				select {
 				case <-ctx.Done():
 					t.Fatalf("context done before stall started: %s", ctx.Err())
@@ -650,13 +643,13 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 				}
 
 				return nil
-			})
+			}, task.Name("disk-stall-phase"))
 		} else {
 			t.Status("skipping disk stall phase for this iteration")
 		}
 
 		// Wait for all goroutines to complete.
-		wg.Wait()
+		g.Wait()
 
 		// Validate throughput samples are within tolerance.
 		meanThroughput := roachtestutil.GetMeanOverLastN(len(samples), samples)
@@ -698,12 +691,6 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 	if durInFailover < 10*time.Minute {
 		t.Errorf("expected s1 to spend at least 10m writing to secondary, but spent %s", durInFailover)
 	}
-
-	// Wait for the workload to finish (if it hasn't already).
-	m.Wait()
-
-	// Shut down the nodes, allowing any devices to be unmounted during cleanup.
-	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.CRDBNodes())
 }
 
 func getProcessStartMonotonic(
