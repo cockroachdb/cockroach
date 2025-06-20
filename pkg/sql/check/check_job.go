@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -24,6 +25,20 @@ var _ jobs.Resumer = &consistencyCheckResumer{}
 // Resume implements the Resumer interface
 func (c *consistencyCheckResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	log.Infof(ctx, "starting CONSISTENCY CHECK job")
+
+	jobExecCtx := execCtx.(sql.JobExecContext)
+	execCfg := jobExecCtx.ExecCfg()
+
+	var knobs sql.ConsistencyCheckTestingKnobs
+	if checkKnobs := execCfg.ConsistencyCheckTestingKnobs; checkKnobs != nil {
+		knobs = *checkKnobs
+	}
+
+	if knobs.OnCheckJobStart != nil {
+		if err := knobs.OnCheckJobStart(); err != nil {
+			return err
+		}
+	}
 
 	if err := c.job.NoTxn().Update(ctx,
 		func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
