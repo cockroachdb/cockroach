@@ -3179,11 +3179,17 @@ vectorized: true
 │   └── • delete
 │       │ from: user_settings_cascades
 │       │
-│       └── • scan
-│             missing stats
-│             table: user_settings_cascades@user_settings_cascades_user_id_idx
-│             spans: [/'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882'] [/'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882'] [/'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
-│             locking strength: for update
+│       └── • lookup join
+│           │ table: user_settings_cascades@user_settings_cascades_user_id_idx
+│           │ equality: (crdb_region, id) = (crdb_region, user_id)
+│           │
+│           └── • distinct
+│               │ estimated row count: 100
+│               │ distinct on: id, crdb_region
+│               │
+│               └── • scan buffer
+│                     estimated row count: 100
+│                     label: buffer 1000000
 │
 └── • constraint-check
     │
