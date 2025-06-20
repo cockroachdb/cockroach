@@ -611,6 +611,11 @@ func (c *CustomFuncs) PrimaryKeyCols(table opt.TableID) opt.ColSet {
 	return tabMeta.IndexKeyColumns(cat.PrimaryIndex)
 }
 
+func (c *CustomFuncs) IndexCols(table opt.TableID, index cat.Index) opt.ColSet {
+	tabMeta := c.mem.Metadata().TableMeta(table)
+	return tabMeta.IndexColumns(index.Ordinal())
+}
+
 // ----------------------------------------------------------------------
 //
 // Property functions
