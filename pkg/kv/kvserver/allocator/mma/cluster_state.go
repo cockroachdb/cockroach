@@ -966,6 +966,7 @@ func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterS
 }
 
 func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *StoreLoadMsg) {
+	log.Infof(ctx, "start processing processStoreLoadMsg %v", storeMsg)
 	now := cs.ts.Now()
 	cs.gcPendingChanges(now)
 
@@ -1018,13 +1019,16 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 		storeMsg.Load, storeMsg.Capacity, ss.adjusted.load)
 }
 
-func (cs *clusterState) processStoreLeaseholderMsg(msg *StoreLeaseholderMsg) {
-	cs.processStoreLeaseholderMsgInternal(msg, numTopKReplicas)
+func (cs *clusterState) processStoreLeaseholderMsg(ctx context.Context, msg *StoreLeaseholderMsg) {
+	cs.processStoreLeaseholderMsgInternal(ctx, msg, numTopKReplicas)
 }
 
 func (cs *clusterState) processStoreLeaseholderMsgInternal(
-	msg *StoreLeaseholderMsg, numTopKReplicas int,
+	ctx context.Context,
+	msg *StoreLeaseholderMsg,
+	numTopKReplicas int,
 ) {
+	log.Infof(ctx, "start processing processStoreLeaseholderMsgInternal %v", msg)
 	now := cs.ts.Now()
 	cs.gcPendingChanges(now)
 
@@ -1076,6 +1080,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			}
 		}
 
+		log.Infof(ctx, "enactedChanges %v", enactedChanges)
 		for _, change := range enactedChanges {
 			// Mark the change as enacted. Enacting a change does not remove the
 			// corresponding load adjustments. The store load message will do that,
@@ -1290,6 +1295,7 @@ func (cs *clusterState) pendingChangeEnacted(cid ChangeID, enactedAt time.Time, 
 		panic(fmt.Sprintf("range %v not found in cluster state", change.rangeID))
 	}
 
+	log.Infof(context.Background(), "start pendingChangeEnacted %v", change)
 	rs.removePendingChangeTracking(change.ChangeID)
 	delete(cs.pendingChanges, change.ChangeID)
 }
@@ -1313,6 +1319,7 @@ func (cs *clusterState) undoPendingChange(cid ChangeID, requireFound bool) {
 	// Undo the change delta as well as the replica change and remove the pending
 	// change from all tracking (range, store, cluster).
 	cs.undoReplicaChange(change.ReplicaChange)
+	log.Infof(context.Background(), "start undoPendingChange for %v", change)
 	rs.removePendingChangeTracking(cid)
 	delete(cs.stores[change.target.StoreID].adjusted.loadPendingChanges, change.ChangeID)
 	delete(cs.pendingChanges, change.ChangeID)
