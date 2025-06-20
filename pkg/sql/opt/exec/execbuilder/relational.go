@@ -1159,6 +1159,11 @@ func (b *Builder) buildProject(
 		return execPlan{}, colOrdMap{}, err
 	}
 
+	if b.forceForUpdateLocking {
+		b.forceForUpdateLocking = false
+		defer func() { b.forceForUpdateLocking = true }()
+	}
+
 	projections := prj.Projections
 	if len(projections) == 0 {
 		// We have only pass-through columns.
