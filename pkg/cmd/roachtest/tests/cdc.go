@@ -2657,6 +2657,16 @@ func registerCDC(r registry.Registry) {
 			ct.waitForWorkload()
 		},
 	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/multi-db-tpcc-minimal",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        false,
+		Cluster:          r.MakeClusterSpec(3, spec.CPU(16), spec.WorkloadNode()),
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Nightly),
+		Timeout:          1 * time.Hour,
+		Run:              runCDCMultiDBTPCCMinimal,
+	})
 }
 
 const (
@@ -4340,4 +4350,96 @@ func verifyMetricsNonZero(names ...string) func(metrics map[string]*prompb.Metri
 		}
 		return false
 	}
+}
+
+// Minimal test: multi-db tpcc workload and multi-table changefeed.
+func runCDCMultiDBTPCCMinimal(ctx context.Context, t test.Test, c cluster.Cluster) {
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
+		"--vmodule=changefeed=2",
+		"--vmodule=changefeed_processors=2",
+		"--vmodule=protected_timestamps=2",
+	)
+
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
+
+	dbName := "defaultdb"
+	schemaNames := []string{"schema1", "schema2", "schema3", "schema4", "schema5"}
+	db := c.Conn(ctx, t.L(), 3)
+	if _, err := db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbName)); err != nil {
+		t.Fatalf("failed to create db %s: %v", dbName, err)
+	}
+	for _, schema := range schemaNames {
+		if _, err := db.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s.%s", dbName, schema)); err != nil {
+			t.Fatalf("failed to create schema %s: %v", schema, err)
+		}
+	}
+
+	// Aggressive GC and PTS settings for fast test and visible log activity
+	// if _, err := db.Exec("ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 1"); err != nil {
+	// 	t.Fatalf("failed to set GC TTL: %v", err)
+	// }
+	// if _, err := db.Exec("SET CLUSTER SETTING changefeed.protect_timestamp_interval = '10s'"); err != nil {
+	// 	t.Fatalf("failed to set PTS interval: %v", err)
+	// }
+	// if _, err := db.Exec("SET CLUSTER SETTING changefeed.protect_timestamp.lag = '5s'"); err != nil {
+	// 	t.Fatalf("failed to set PTS lag: %v", err)
+	// }
+	// if _, err := db.Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'"); err != nil {
+	// 	t.Fatalf("failed to set closed timestamp: %v", err)
+	// }
+	// if _, err := db.Exec("SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'"); err != nil {
+	// 	t.Fatalf("failed to set PTS poll interval: %v", err)
+	// }
+
+	dbListFile := "/tmp/tpcc_db_list.txt"
+	dbList := []string{}
+	for _, schema := range schemaNames {
+		dbList = append(dbList, fmt.Sprintf("%s.%s", dbName, schema))
+	}
+	t.L().Printf("db list: %s", dbList)
+	err := c.PutString(ctx, strings.Join(dbList, "\n"), dbListFile, 0644, c.WorkloadNode())
+	if err != nil {
+		t.Fatalf("failed to write db list file: %v", err)
+	}
+
+	initCmd := fmt.Sprintf("./cockroach workload init tpccmultidb --warehouses=1 --db-list-file=%s {pgurl:1-3}", dbListFile)
+	if err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), initCmd); err != nil {
+		t.Fatalf("failed to init tpccmultidb: %v", err)
+	}
+
+	workloadCmd := fmt.Sprintf("./cockroach workload run tpccmultidb --warehouses=1 --duration=5m --db-list-file=%s {pgurl:1-3}", dbListFile)
+	m := c.NewMonitor(ctx, c.All())
+	m.Go(func(ctx context.Context) error {
+		return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), workloadCmd)
+	})
+
+	t.Status("Done setup, sleeping for 10 min")
+	time.Sleep(10 * time.Minute)
+	row := db.QueryRow("SELECT count(*) from defaultdb.schema1.orders")
+	t.Status("row", row)
+	t.Status("Finishing test")
+
+	// if _, err := db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
+	// 	t.Fatalf("failed to enable rangefeeds: %v", err)
+	// }
+
+	// orderTables := []string{}
+	// for _, schema := range schemaNames {
+	// 	orderTables = append(orderTables, fmt.Sprintf("%s.order", schema))
+	// }
+	// t.L().Printf("order tables: %s", orderTables)
+	// kafka, cleanup := setupKafka(ctx, t, c, c.Node(c.Spec().NodeCount))
+	// defer cleanup()
+
+	// changefeedStmt := fmt.Sprintf("CREATE CHANGEFEED FOR %s INTO '%s' WITH format='json', resolved='10s', full_table_name", strings.Join(orderTables, ", "), kafka.sinkURL(ctx))
+	// t.L().Printf("changefeed statement: %s", changefeedStmt)
+	// var jobID int
+	// if err := db.QueryRow(changefeedStmt).Scan(&jobID); err != nil {
+	// 	t.Fatalf("failed to create changefeed: %v", err)
+	// }
+
+	// t.Status("Minimal multi-schema TPCC + changefeed test running")
+	// m.Wait()
+	// t.Status("Minimal multi-schema TPCC + changefeed test finished")
 }
