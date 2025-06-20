@@ -22,5 +22,8 @@ go_test(
     name = "utils_test",
     srcs = ["slice_test.go"],
     embed = [":utils"],
-    deps = ["@com_github_stretchr_testify//require"],
+    deps = [
+        "//pkg/util/buildutil",
+        "@com_github_stretchr_testify//require",
+    ],
 )
