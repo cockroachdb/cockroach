@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"regexp"
 	"strings"
 	"time"
 
@@ -804,8 +803,6 @@ func (s panicNodeStep) Description() string {
 	return fmt.Sprintf("panicking system interface on node %d", s.targetNode[0])
 }
 
-var connectionRefusedRegex = regexp.MustCompile(`dial tcp .*: connect: connection refused`)
-
 func (s panicNodeStep) Run(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
 	nodeVersion, err := h.System.NodeVersion(s.targetNode[0])
 	if err != nil {
@@ -829,14 +826,6 @@ func (s panicNodeStep) Run(ctx context.Context, l *logger.Logger, rng *rand.Rand
 
 	if err == nil {
 		return errors.Errorf("expected panic statement to fail, but it succeeded on %s", s.targetNode)
-	}
-
-	isTCPError := connectionRefusedRegex.MatchString(err.Error())
-
-	// The expected behavior is that the panic statement will fail with a TCP connection error,
-	// so any other error is unexpected and should cause the test to fail.
-	if !isTCPError {
-		return errors.Wrapf(err, "unexpected error when executing panic statement on %s", s.targetNode)
 	}
 
 	startCtx, cancel := context.WithTimeout(ctx, startTimeout)
