@@ -1086,6 +1086,17 @@ type unreplicatedLockHolderInfo struct {
 	// based on the sequence of the held unreplicated lock.
 	ignoredSeqNums []enginepb.IgnoredSeqNumRange
 
+	// ineligibleForExport, if true, indicates that this lock must never be
+	// exported from the lock table for replication. It is set to true via the
+	// lock manager's OnLockMissing function when QueryIntent reports a lock as
+	// missing to a client.
+	//
+	// Writing out a lock that "covers" a lock that we previously reported as
+	// missing can result in transaction recovery erroneously committing an
+	// uncomitted transaction because it finds a lock that the original
+	// transaction failed to find during its attempt to commit.
+	ineligibleForExport bool
+
 	// The timestamp at which the unreplicated lock is held. Must not regress.
 	ts hlc.Timestamp
 }
@@ -3062,6 +3073,47 @@ func (kl *keyLocks) acquireLock(
 	return nil
 }
 
+// markLockIneligibleForExport marks any lock held by the same transaction on the
+// same key at an equal or greater strength as ineligible for export from the
+// in-memory lock table to storage because it would erroneously re-materialize a
+// lock that has been previously reported as missing.
+//
+// Acquires kl.mu.
+func (kl *keyLocks) markLockIneligibleForExport(acq *roachpb.LockAcquisition) {
+	assert(acq != nil, "unexpected nil LockAcquisition")
+
+	kl.mu.Lock()
+	defer kl.mu.Unlock()
+	if !kl.isLockedBy(acq.Txn.ID) {
+		return
+	}
+
+	for hl := kl.holders.Front(); hl != nil; hl = hl.Next() {
+		tl := hl.Value
+		if tl == nil || tl.unreplicatedInfo.isEmpty() {
+			continue
+		}
+		if tl.txn == nil {
+			continue
+		}
+		if tl.txn.ID != acq.Txn.ID {
+			continue
+		}
+
+		// NB: We might be able to be more conservative here with something like:
+		//
+		//     heldMode := tl.getLockMode()
+		//     if heldMode.Strength >= acq.Strength {
+		//         tl.unreplicatedInfo.ineligibleForExport = true
+		//     }
+		//
+		// But, we avoid that for now in case we are overlooking any cases where it
+		// would be possible for a transaction to acquire a new unreplicated lock
+		// on this key that would also be a problem to export.
+		tl.unreplicatedInfo.ineligibleForExport = true
+	}
+}
+
 // discoveredLock is called with a lock that is discovered by guard g when trying
 // to access this key with strength accessStrength.
 //
@@ -4388,6 +4440,36 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 	return nil
 }
 
+// MarkIneligibleForExport implements the lockTable interface.
+func (t *lockTableImpl) MarkIneligibleForExport(acq *roachpb.LockAcquisition) error {
+	if acq == nil {
+		return errors.AssertionFailedf("unexpected nil lock acquisition")
+	}
+	if acq.Empty() {
+		return errors.AssertionFailedf("unexpected empty lock acquisition %s", acq)
+	}
+	if acq.Durability != lock.Replicated {
+		return errors.AssertionFailedf("unexpected lock acquisition durability %s", acq.Durability)
+	}
+
+	t.enabledMu.RLock()
+	defer t.enabledMu.RUnlock()
+	if !t.enabled {
+		// If not enabled, don't track any locks.
+		return nil
+	}
+
+	t.locks.mu.Lock()
+	defer t.locks.mu.Unlock()
+
+	iter := t.locks.MakeIter()
+	iter.FirstOverlap(&keyLocks{key: acq.Key})
+	if iter.Valid() {
+		iter.Cur().markLockIneligibleForExport(acq)
+	}
+	return nil
+}
+
 // checkMaxKeysLockedAndTryClear checks if the request is tracking more lock
 // information on keys in its lock table snapshot than it should. If it is, this
 // method relieves memory pressure by clearing as much per-key tracking as it
@@ -4677,6 +4759,10 @@ func (t *lockTableImpl) ExportUnreplicatedLocks(
 		for hl := l.holders.Front(); hl != nil; hl = hl.Next() {
 			tl := hl.Value
 			if tl == nil || tl.unreplicatedInfo.isEmpty() {
+				continue
+			}
+
+			if tl.unreplicatedInfo.ineligibleForExport {
 				continue
 			}
 

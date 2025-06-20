@@ -131,9 +131,7 @@ var UnreplicatedLockReliabilityLeaseTransfer = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.lock_table.unreplicated_lock_reliability.lease_transfer.enabled",
 	"whether the replica should attempt to keep unreplicated locks during lease transfers",
-	// TODO(#145458): We've disabled this by default to avoid flakes until the underlying bug is fixed.
-	// metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.lease_transfer.enabled", true),
-	false,
+	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.lease_transfer.enabled", false),
 )
 
 // UnreplicatedLockReliabilityMerge controls whether the replica will
@@ -142,9 +140,7 @@ var UnreplicatedLockReliabilityMerge = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.lock_table.unreplicated_lock_reliability.merge.enabled",
 	"whether the replica should attempt to keep unreplicated locks during range merges",
-	// TODO(#145458): We've disabled this by default to avoid flakes until the underlying bug is fixed.
-	// metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.merge.enabled", true),
-	false,
+	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.merge.enabled", false),
 )
 
 var MaxLockFlushSize = settings.RegisterByteSizeSetting(
@@ -596,6 +592,15 @@ func (m *managerImpl) OnLockAcquired(ctx context.Context, acq *roachpb.LockAcqui
 		// when an unreplicated lock is being acquired by a transaction at an older
 		// epoch.
 		log.Errorf(ctx, "%v", err)
+	}
+}
+
+// OnLockMissing implements the Lockmanager interface.
+func (m *managerImpl) OnLockMissing(ctx context.Context, acq *roachpb.LockAcquisition) {
+	if err := m.lt.MarkIneligibleForExport(acq); err != nil {
+		// We don't currently expect any errors other than assertion failures that represent
+		// programming errors from this method.
+		log.Fatalf(ctx, "%v", err)
 	}
 }
 
