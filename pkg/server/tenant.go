@@ -480,6 +480,10 @@ func newTenantServer(
 		gw.RegisterService(args.grpc.Server)
 	}
 
+	if err := sAuth.RegisterDRPCService(args.drpc); err != nil {
+		return nil, err
+	}
+
 	// Tell the status/admin servers how to access SQL structures.
 	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
 	serverIterator.sqlServer = sqlServer
