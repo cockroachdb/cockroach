@@ -1367,6 +1367,7 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 					"invalid regular expression",
 					"invalid escape string",
 					"error parsing GeoJSON",
+					"error parsing EWKB",
 					"error parsing EWKT",
 					"geometry type is unsupported",
 					"should be of length",
