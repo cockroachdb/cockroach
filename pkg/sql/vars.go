@@ -4107,6 +4107,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	// CockroachDB extension.
+	`optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerDisableCrossRegionCascadeFastPathForRBRTables(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerDisableCrossRegionCascadeFastPathForRBRTables), nil
+		},
+		GlobalDefault: globalTrue,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
