@@ -465,7 +465,7 @@ func TestClusterState(t *testing.T) {
 					var changeIDsInt []int
 					d.ScanArgs(t, "change-ids", &changeIDsInt)
 					for _, id := range changeIDsInt {
-						cs.undoPendingChange(ChangeID(id))
+						cs.undoPendingChange(ChangeID(id), true)
 					}
 					return printPendingChanges(testingGetPendingChanges(t, cs))
 
