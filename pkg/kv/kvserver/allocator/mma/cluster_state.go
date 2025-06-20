@@ -1145,6 +1145,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// Since this range is going away, mark all the pending changes as
 		// enacted. This will allow the load adjustments to also be garbage
 		// collected in the future.
+		log.Infof(ctx, "rs.pendingChanges %v, cs.pendingChanges %v", rs.pendingChanges, cs.pendingChanges)
 		for _, change := range rs.pendingChanges {
 			cs.pendingChangeEnacted(change.ChangeID, now, true)
 		}
@@ -1282,22 +1283,27 @@ func (cs *clusterState) gcPendingChanges(now time.Time) {
 
 func (cs *clusterState) pendingChangeEnacted(cid ChangeID, enactedAt time.Time, requireFound bool) {
 	change, ok := cs.pendingChanges[cid]
+	rs, rOk := cs.ranges[change.rangeID]
+	if !rOk {
+		panic(fmt.Sprintf("range %v not found in cluster state", change.rangeID))
+	}
 	if !ok {
 		if requireFound {
-			panic(fmt.Sprintf("change %v not found", cid))
+			var msg string
+			msg += fmt.Sprintf("range state still exists for r%v and c%v with pending changes %v", change.rangeID, cid, rs.pendingChanges)
+			panic(fmt.Sprintf("change %v not found in cs.pendingChanges %v \n msg %s",
+				cid, cs.pendingChanges, msg))
 		} else {
 			return
 		}
 	}
 	change.enactedAtTime = enactedAt
-	rs, ok := cs.ranges[change.rangeID]
-	if !ok {
-		panic(fmt.Sprintf("range %v not found in cluster state", change.rangeID))
-	}
 
-	log.Infof(context.Background(), "start pendingChangeEnacted %v", change)
+	log.Infof(context.Background(), "start removing change_id=%v, range_id=%v, change=%v", change.ChangeID, change.rangeID, change)
 	rs.removePendingChangeTracking(change.ChangeID)
 	delete(cs.pendingChanges, change.ChangeID)
+	log.Infof(context.Background(), "cs.pendingChanges has: %v, range state has: %v",
+		cs.pendingChanges, rs.pendingChanges)
 }
 
 // undoPendingChange reverses the change with ID cid.
@@ -1305,7 +1311,13 @@ func (cs *clusterState) undoPendingChange(cid ChangeID, requireFound bool) {
 	change, ok := cs.pendingChanges[cid]
 	if !ok {
 		if requireFound {
-			panic(fmt.Sprintf("change %v not found", cid))
+			rs, rok := cs.ranges[change.rangeID]
+			var msg string
+			if rok {
+				msg += fmt.Sprintf("range state still exists for r%v and c%v with pending changes %v", change.rangeID, cid, rs.pendingChanges)
+			}
+			panic(fmt.Sprintf("change %v not found in cs.pendingChanges %v \n msg=%s",
+				cid, cs.pendingChanges, msg))
 		} else {
 			return
 		}
@@ -1319,10 +1331,11 @@ func (cs *clusterState) undoPendingChange(cid ChangeID, requireFound bool) {
 	// Undo the change delta as well as the replica change and remove the pending
 	// change from all tracking (range, store, cluster).
 	cs.undoReplicaChange(change.ReplicaChange)
-	log.Infof(context.Background(), "start undoPendingChange for %v", change)
+	log.Infof(context.Background(), "start removing from undoPending change_id=%v, range_id=%v, change=%v", change.ChangeID, change.rangeID, change)
 	rs.removePendingChangeTracking(cid)
 	delete(cs.stores[change.target.StoreID].adjusted.loadPendingChanges, change.ChangeID)
 	delete(cs.pendingChanges, change.ChangeID)
+	log.Infof(context.Background(), "cs.pendingChanges has: %v, range state has: %v", cs.pendingChanges, rs.pendingChanges)
 }
 
 // createPendingChanges takes a set of changes applies the changes as pending.
