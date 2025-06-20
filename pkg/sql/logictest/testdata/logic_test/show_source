@@ -486,13 +486,13 @@ v           CREATE VIEW public.v (
             ) AS SELECT id FROM system.public.descriptor;
 
 
-query TTT colnames
+query TTTT colnames
 SELECT * FROM [SHOW USERS] ORDER BY 1
 ----
-username  options  member_of
-admin     ·        {}
-root      ·        {admin}
-testuser  ·        {}
+username  options  member_of estimated_last_login_time
+admin     {}       {}        ·
+root      {}       {admin}   ·
+testuser  {}       {}        ·
 
 
 query TTTI colnames
