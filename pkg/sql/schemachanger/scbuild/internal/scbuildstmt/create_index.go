@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -44,15 +45,9 @@ import (
 
 // CreateIndex implements CREATE INDEX.
 func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
-	// Check if sql_safe_updates is enabled and this is a vector index
-	if n.Type == idxtype.VECTOR {
-		if !b.EvalCtx().Settings.Version.ActiveVersion(b).AtLeast(clusterversion.V25_2.Version()) {
-			panic(pgerror.Newf(pgcode.FeatureNotSupported, "cannot create a vector index until finalizing on 25.2"))
-		} else if b.EvalCtx().SessionData().SafeUpdates {
-			panic(pgerror.DangerousStatementf("CREATE VECTOR INDEX will disable writes to the table while the index is being built"))
-		} else {
-			b.EvalCtx().ClientNoticeSender.BufferClientNotice(b, pgnotice.Newf("CREATE VECTOR INDEX will disable writes to the table while the index is being built"))
-		}
+	// Ensure that the cluster is fully upgraded to 25.2 before creating a vector index.
+	if n.Type == idxtype.VECTOR && !b.EvalCtx().Settings.Version.ActiveVersion(b).AtLeast(clusterversion.V25_2.Version()) {
+		panic(pgerror.Newf(pgcode.FeatureNotSupported, "cannot create a vector index until finalizing on 25.2"))
 	}
 
 	b.IncrementSchemaChangeCreateCounter("index")
@@ -257,6 +252,15 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	// be transient.
 	tempIdxSpec := makeTempIndexSpec(idxSpec)
 	tempIdxSpec.apply(b.AddTransient)
+
+	// The temporary index for a vector index is a FORWARD index that stores
+	// modifications temporarily until they can be applied during merge.
+	if idxSpec.secondary.Type == idxtype.VECTOR {
+		tempIdxSpec.temporary.Type = idxtype.FORWARD
+		tempIdxSpec.temporary.VecConfig = &vecpb.Config{}
+		fixupColumnsForTempVectorIndex(n, &tempIdxSpec)
+	}
+
 	// If the concurrent option is added emit a warning.
 	if n.Concurrently {
 		b.EvalCtx().ClientNoticeSender.BufferClientNotice(b,
@@ -736,6 +740,29 @@ func addColumnsForSecondaryIndex(
 			}
 		}
 		idxSpec.columns = append([]*scpb.IndexColumn{indexColumn}, idxSpec.columns...)
+	}
+}
+
+func fixupColumnsForTempVectorIndex(n *tree.CreateIndex, tempIdxSpec *indexSpec) {
+	tempIdxSpec.columns[len(n.Columns)-1].Kind = scpb.IndexColumn_STORED
+	sort.Slice(tempIdxSpec.columns, func(i, j int) bool {
+		if tempIdxSpec.columns[i].Kind == tempIdxSpec.columns[j].Kind {
+			return tempIdxSpec.columns[i].OrdinalInKind < tempIdxSpec.columns[j].OrdinalInKind
+		}
+		return tempIdxSpec.columns[i].Kind < tempIdxSpec.columns[j].Kind
+	})
+
+	ordinalInKind := 0
+	kind := scpb.IndexColumn_KEY
+	for i, c := range tempIdxSpec.columns {
+		if c.Kind == scpb.IndexColumn_KEY_SUFFIX {
+			c.Kind = scpb.IndexColumn_KEY
+		}
+		if c.Kind != kind {
+			ordinalInKind = 0
+		}
+		tempIdxSpec.columns[i].OrdinalInKind = uint32(ordinalInKind)
+		ordinalInKind++
 	}
 }
 

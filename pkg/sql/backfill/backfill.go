@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -487,37 +488,79 @@ type VectorIndexHelper struct {
 	evalCtx *eval.Context
 }
 
-// ReEncodeVector takes a rowenc.indexEntry, extracts the key values, unquantized
-// vector and any suffix bytes added by rowenc and performs a lookup in the
-// context of the provided transaction. This lookup then gives the leaf partition
-// where the index entry is to be inserted and the unquantized vector can then be
-// re-encoded to get the properly quantized vector with the new partition's
-// centroid. The new key is then returned in the outputEntry. The inputEntry is
-// not overwritten in case the transaction has to be retried.
-func (vih *VectorIndexHelper) ReEncodeVector(
-	ctx context.Context, txn *kv.Txn, inputEntry rowenc.IndexEntry, outputEntry *rowenc.IndexEntry,
+func NewVectorIndexHelper(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	desc catalog.TableDescriptor,
+	idx catalog.Index,
+	sourceIndexID catid.IndexID,
+	vecIndexManager *vecindex.Manager,
+) (*VectorIndexHelper, error) {
+	vectorColID := idx.VectorColumnID()
+	vectorCol, err := catalog.MustFindColumnByID(desc, vectorColID)
+	if err != nil {
+		return nil, err
+	}
+
+	vecIndex, err := vecIndexManager.Get(ctx, desc.GetID(), idx.GetID())
+	if err != nil {
+		return nil, err
+	}
+
+	var sourceIndex catalog.Index
+	if sourceIndexID != 0 {
+		sourceIndex, err = catalog.MustFindIndexByID(desc, sourceIndexID)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		sourceIndex = desc.GetPrimaryIndex()
+	}
+
+	vih := &VectorIndexHelper{
+		vectorOrd:     vectorCol.Ordinal(),
+		centroid:      make(vector.T, idx.GetVecConfig().Dims),
+		numPrefixCols: idx.NumKeyColumns() - 1,
+		vecIndex:      vecIndex,
+		indexPrefix:   rowenc.MakeIndexKeyPrefix(evalCtx.Codec, desc.GetID(), idx.GetID()),
+		evalCtx:       evalCtx,
+	}
+	if err := vecstore.InitGetFullVectorsFetchSpec(
+		&vih.fullVecFetchSpec,
+		evalCtx,
+		desc,
+		idx,
+		sourceIndex,
+	); err != nil {
+		return nil, err
+	}
+
+	return vih, nil
+}
+
+func (vih *VectorIndexHelper) reencodeVectorImpl(
+	ctx context.Context,
+	txn *kv.Txn,
+	sourceIndexType idxtype.T,
+	inputEntry rowenc.IndexEntry,
+	outputEntry *rowenc.IndexEntry,
+	vectorExtract func(inputValue roachpb.Value) (vector.T, []byte, bool, error),
 ) (*rowenc.IndexEntry, error) {
 	keyBytes := inputEntry.Key[len(vih.indexPrefix):]
-	key, err := vecencoding.DecodeVectorKey(keyBytes, vih.numPrefixCols)
+	key, err := vecencoding.DecodeVectorKey(keyBytes, vih.numPrefixCols, sourceIndexType)
 	if err != nil {
 		return &rowenc.IndexEntry{}, err
 	}
 
-	// Decode vector and suffix bytes from the entry value.
-	valueBytes, err := inputEntry.Value.GetBytes()
-	if err != nil {
-		return &rowenc.IndexEntry{}, err
-	}
-	suffix, vec, err := vector.Decode(valueBytes)
-	if err != nil {
+	vector, suffix, deleted, err := vectorExtract(inputEntry.Value)
+	if err != nil || deleted {
 		return &rowenc.IndexEntry{}, err
 	}
 
-	// Locate a new partition for the key and re-encode the vector.
 	var searcher vecindex.MutationSearcher
 	searcher.Init(vih.evalCtx, vih.vecIndex, txn, &vih.fullVecFetchSpec)
 
-	if err := searcher.SearchForInsert(ctx, roachpb.Key(key.Prefix), vec); err != nil {
+	if err := searcher.SearchForInsert(ctx, roachpb.Key(key.Prefix), vector); err != nil {
 		return &rowenc.IndexEntry{}, err
 	}
 	key.PartitionKey = cspann.PartitionKey(tree.MustBeDInt(searcher.PartitionKey()))
@@ -537,6 +580,100 @@ func (vih *VectorIndexHelper) ReEncodeVector(
 	outputEntry.Family = inputEntry.Family
 
 	return outputEntry, nil
+}
+
+// ReEncodeVector takes a rowenc.indexEntry, extracts the key values, unquantized
+// vector and any suffix bytes added by rowenc and performs a lookup in the
+// context of the provided transaction. This lookup then gives the leaf partition
+// where the index entry is to be inserted and the unquantized vector can then be
+// re-encoded to get the properly quantized vector with the new partition's
+// centroid. The new key is then returned in the outputEntry. The inputEntry is
+// not overwritten in case the transaction has to be retried.
+func (vih *VectorIndexHelper) ReEncodeVector(
+	ctx context.Context, txn *kv.Txn, inputEntry rowenc.IndexEntry, outputEntry *rowenc.IndexEntry,
+) (*rowenc.IndexEntry, error) {
+	return vih.reencodeVectorImpl(
+		ctx,
+		txn,
+		idxtype.VECTOR,
+		inputEntry,
+		outputEntry,
+		func(inputValue roachpb.Value) (vector.T, []byte, bool, error) {
+			valueBytes, err := inputValue.GetBytes()
+			if err != nil {
+				return vector.T{}, nil, false, err
+			}
+			suffix, vec, err := vector.Decode(valueBytes)
+			if err != nil {
+				return vector.T{}, nil, false, err
+			}
+			return vec, suffix, false, nil
+		})
+}
+
+func (vih *VectorIndexHelper) MergeVector(
+	ctx context.Context, txn *kv.Txn, sourceKV *kv.KeyValue, destKey roachpb.Key,
+) (*kv.KeyValue, bool, error) {
+	vectorExtract := func(inputValue roachpb.Value) (vector.T, []byte, bool, error) {
+		tempWrapper, err := rowenc.DecodeWrapper(sourceKV.Value)
+		if err != nil {
+			return nil, nil, false, err
+		}
+
+		// We leak deleted entries because tombstones don't have a vector column so we can't search
+		// for the partition to delete the vector from.
+		if tempWrapper.Deleted {
+			return nil, nil, true, nil
+		}
+
+		// The fullVecFetchSpec is configured to fetch only the vector column, so tempWrapper.Value
+		// should contain the encoded vector column data. Since this is a single column value,
+		// we need to decode it properly as a value-side encoded datum.
+		var wrappedValue roachpb.Value
+		wrappedValue.SetTagAndData(tempWrapper.Value)
+
+		// Try to get the bytes from the value
+		valueBytes, err := wrappedValue.GetBytes()
+		if err != nil {
+			return nil, nil, false, err
+		}
+
+		// Decode the vector column value using valueside decoding
+		datum, remaining, err := valueside.Decode(&tree.DatumAlloc{}, types.PGVector, valueBytes)
+		if err != nil {
+			return nil, nil, false, err
+		}
+
+		// We don't store null vectors in the index, so we can just delete the entry.
+		if datum == tree.DNull {
+			return nil, nil, true, nil
+		}
+
+		// Extract the vector from the decoded datum
+		vectorDatum := tree.MustBeDPGVector(datum)
+		vec := vectorDatum.T
+		suffix := remaining
+
+		return vec, suffix, false, nil
+	}
+
+	inputEntry := rowenc.IndexEntry{
+		Key:   sourceKV.Key,
+		Value: *sourceKV.Value,
+	}
+
+	outputEntry, err := vih.reencodeVectorImpl(ctx, txn, idxtype.FORWARD, inputEntry, &rowenc.IndexEntry{}, vectorExtract)
+	if err != nil {
+		return nil, false, err
+	}
+	if outputEntry.Key == nil {
+		return nil, true, nil
+	}
+
+	return &kv.KeyValue{
+		Key:   outputEntry.Key,
+		Value: &outputEntry.Value,
+	}, false, nil
 }
 
 // IndexBackfiller is capable of backfilling all the added index.
@@ -571,7 +708,7 @@ type IndexBackfiller struct {
 
 	// map of index IDs to VectorIndexHelpers, so that writers can map from
 	// IndexEntry keys they see to the proper re-encoding logic.
-	VectorIndexes        map[descpb.IndexID]VectorIndexHelper
+	VectorIndexes        map[descpb.IndexID]*VectorIndexHelper
 	vectorEncodingHelper rowenc.VectorIndexEncodingHelper
 	VectorIndexManager   *vecindex.Manager
 	VectorOnly           bool
@@ -932,37 +1069,14 @@ func (ib *IndexBackfiller) initIndexes(
 		}
 
 		if ib.VectorIndexes == nil {
-			ib.VectorIndexes = make(map[descpb.IndexID]VectorIndexHelper)
+			ib.VectorIndexes = make(map[descpb.IndexID]*VectorIndexHelper)
 		}
 
-		vectorColID := idx.VectorColumnID()
-		vectorCol, err := catalog.MustFindColumnByID(desc, vectorColID)
+		helper, err := NewVectorIndexHelper(ctx, evalCtx, desc, idx, sourceIndexID, vecIndexManager)
 		if err != nil {
 			return err
 		}
 
-		vecIndex, err := vecIndexManager.Get(ctx, desc.GetID(), idx.GetID())
-		if err != nil {
-			return err
-		}
-
-		helper := VectorIndexHelper{
-			vectorOrd:     vectorCol.Ordinal(),
-			centroid:      make(vector.T, idx.GetVecConfig().Dims),
-			numPrefixCols: idx.NumKeyColumns() - 1,
-			vecIndex:      vecIndex,
-			indexPrefix:   rowenc.MakeIndexKeyPrefix(evalCtx.Codec, desc.GetID(), idx.GetID()),
-			evalCtx:       ib.evalCtx,
-		}
-		if err := vecstore.InitGetFullVectorsFetchSpec(
-			&helper.fullVecFetchSpec,
-			evalCtx,
-			desc,
-			idx,
-			ib.sourceIndex,
-		); err != nil {
-			return err
-		}
 		ib.VectorIndexes[idx.GetID()] = helper
 	}
 

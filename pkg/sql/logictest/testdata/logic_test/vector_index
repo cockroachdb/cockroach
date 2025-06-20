@@ -7,11 +7,6 @@
 
 subtest create_table_index
 
-# Test guardrail for vector index creation.
-# TODO(mw5h): remove these two statements once online modifications are supported.
-statement ok
-SET sql_safe_updates = true
-
 # Simple vector index.
 statement ok
 CREATE TABLE simple (
@@ -22,23 +17,14 @@ CREATE TABLE simple (
   FAMILY (a, vec1)
 )
 
-statement error pgcode 01000 pq: rejected \(sql_safe_updates = true\): CREATE VECTOR INDEX will disable writes to the table while the index is being built
+statement ok
 CREATE VECTOR INDEX ON simple (vec1)
-
-statement error pgcode 01000 pq: rejected \(sql_safe_updates = true\): ALTER PRIMARY KEY on a table with vector indexes will disable writes to the table while the index is being rebuilt
-ALTER TABLE simple ALTER PRIMARY KEY USING COLUMNS (b)
 
 statement ok
-SET sql_safe_updates = false
-
-statement notice CREATE VECTOR INDEX will disable writes to the table while the index is being built
-CREATE VECTOR INDEX ON simple (vec1)
-
-statement notice ALTER PRIMARY KEY on a table with vector indexes will disable writes to the table while the index is being rebuilt
 ALTER TABLE simple ALTER PRIMARY KEY USING COLUMNS (b)
 
 # Alternate syntax.
-statement notice CREATE VECTOR INDEX will disable writes to the table while the index is being built
+statement ok
 CREATE INDEX ON simple USING cspann (vec1);
 
 # We allow hnsw as an alias for cspann.
