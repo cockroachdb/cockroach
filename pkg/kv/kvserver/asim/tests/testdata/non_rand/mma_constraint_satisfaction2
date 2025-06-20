@@ -3,7 +3,7 @@
 gen_cluster nodes=9 stores_per_node=1
 ----
 
-setting rebalance_mode=0 replicate_queue_enabled=false lease_queue_enabled=false split_queue_enabled=false
+setting rebalance_mode=3
 ----
 
 # specify non-voters
