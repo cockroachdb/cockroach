@@ -665,7 +665,7 @@ type ChangefeedState interface {
 	SetHighwater(frontier hlc.Timestamp)
 
 	// SetCheckpoint sets the checkpoint for the changefeed.
-	SetCheckpoint(checkpoint *jobspb.TimestampSpansMap)
+	SetCheckpoint(checkpoint *jobspb.TimestampSpansMap) error
 }
 
 // TenantOperator is capable of interacting with tenant state, allowing SQL
