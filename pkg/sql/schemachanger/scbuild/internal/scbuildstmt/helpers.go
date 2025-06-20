@@ -26,10 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -861,7 +863,7 @@ func makeIndexSpec(b BuildCtx, tableID catid.DescID, indexID catid.IndexID) (s i
 
 // makeTempIndexSpec clones the primary/secondary index spec into one for a
 // temporary index, based on the populated information.
-func makeTempIndexSpec(src indexSpec) indexSpec {
+func makeTempIndexSpec(b BuildCtx, src indexSpec) indexSpec {
 	if src.secondary == nil && src.primary == nil {
 		panic(errors.AssertionFailedf("make temp index converts a primary/secondary index into a temporary one"))
 	}
@@ -886,6 +888,13 @@ func makeTempIndexSpec(src indexSpec) indexSpec {
 	newTempSpec.temporary.TemporaryIndexID = 0
 	newTempSpec.temporary.IndexID = tempID
 	newTempSpec.temporary.ConstraintID = srcIdx.ConstraintID + 1
+	// The temporary index for a vector index is a FORWARD index that stores
+	// modifications temporarily until they can be applied during merge.
+	if newTempSpec.secondary != nil && newTempSpec.secondary.Type == idxtype.VECTOR {
+		newTempSpec.temporary.Type = idxtype.FORWARD
+		newTempSpec.temporary.VecConfig = &vecpb.Config{}
+		fixupColumnsForTempVectorIndex(b, &newTempSpec)
+	}
 	newTempSpec.secondary = nil
 	newTempSpec.primary = nil
 
@@ -899,6 +908,7 @@ func makeTempIndexSpec(src indexSpec) indexSpec {
 	for _, ic := range newTempSpec.columns {
 		ic.IndexID = tempID
 	}
+
 	// Clear fields that temporary indexes should not have.
 	newTempSpec.name = nil
 	newTempSpec.constrComment = nil
@@ -1028,7 +1038,7 @@ func makeSwapIndexSpec(
 	}
 	// Setup temporary index.
 	{
-		temp = makeTempIndexSpec(in)
+		temp = makeTempIndexSpec(b, in)
 	}
 	return in, temp
 }

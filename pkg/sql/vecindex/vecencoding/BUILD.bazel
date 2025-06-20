@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",
+        "//pkg/sql/sem/idxtype",
         "//pkg/sql/vecindex/cspann",
         "//pkg/sql/vecindex/cspann/quantize",
         "//pkg/sql/vecindex/vecpb",
@@ -23,6 +24,7 @@ go_test(
         ":vecencoding",
         "//pkg/roachpb",
         "//pkg/sql/randgen",
+        "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/sql/vecindex/cspann",
