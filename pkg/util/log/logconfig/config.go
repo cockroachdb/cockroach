@@ -35,6 +35,10 @@ const DefaultFluentFormat = `json-fluent-compact`
 // when not specified in a configuration.
 const DefaultHTTPFormat = `json-compact`
 
+// DefaultOtlpFormat is the entry format for OpenTelemetry sinks
+// when not specified in a configuration.
+const DefaultOtlpFormat = `json`
+
 // DefaultFilePerms is the default permissions used in file-defaults. It
 // is applied literally via os.Chmod, without considering the umask.
 const DefaultFilePerms = FilePermissions(0o640)
@@ -69,7 +73,16 @@ http-defaults:
     exit-on-error: false
     timeout: 2s
     buffering:
-      max-staleness: 5s	
+      max-staleness: 5s
+      flush-trigger-size: 1mib
+      max-buffer-size: 50mib
+otlp-defaults:
+    filter: INFO
+    format: ` + DefaultOtlpFormat + `
+    redactable: true
+    exit-on-error: false
+    buffering:
+      max-staleness: 5s
       flush-trigger-size: 1mib
       max-buffer-size: 50mib
 sinks:
@@ -124,6 +137,11 @@ type Config struct {
 	// inherited when a specific HTTP sink config does not provide a
 	// configuration value.
 	HTTPDefaults HTTPDefaults `yaml:"http-defaults,omitempty"`
+
+	// OtlpDefaults represents the default configuration for OpenTelemetry sinks,
+	// inherited when a specific OpenTelemetry sink config does not provide a
+	// configuration value.
+	OtlpDefaults OtlpDefaults `yaml:"otlp-defaults,omitempty"`
 
 	// Sinks represents the sink configurations.
 	Sinks SinkConfig `yaml:",omitempty"`
@@ -249,6 +267,8 @@ type SinkConfig struct {
 	FluentServers map[string]*FluentSinkConfig `yaml:"fluent-servers,omitempty"`
 	// HTTPServers represents the list of configured http sinks.
 	HTTPServers map[string]*HTTPSinkConfig `yaml:"http-servers,omitempty"`
+	// OtlpServers represents the list of configured opentelemetry sinks.
+	OtlpServers map[string]*OtlpSinkConfig `yaml:"otlp-servers,omitempty"`
 	// Stderr represents the configuration for the stderr sink.
 	Stderr StderrSinkConfig `yaml:",omitempty"`
 }
@@ -567,6 +587,69 @@ type HTTPSinkConfig struct {
 
 	// sinkName is populated during validation.
 	sinkName string
+}
+
+type OtlpDefaults struct {
+	// Disables transport security for the underlying gRPC connection.
+	Insecure *bool `yaml:",omitempty"`
+
+	// Compression can be "none" or "gzip" to enable gzip compression.
+	// Set to "gzip" by default.
+	Compression *string `yaml:",omitempty"`
+
+	CommonSinkConfig `yaml:",inline"`
+}
+
+// OtlpSinkConfig represents the configuration for one OpenTelemetry sink.
+//
+// User-facing documentation follows.
+// TITLE: Output to OpenTelemetry compatible collectors.
+//
+// This sink type causes logging data to be sent over the network through gRPC to
+// a collector that can ingest log data in an [OTLP](https://opentelemetry.io) format.
+//
+// The configuration key under the `sinks` key in the YAML
+// configuration is `otlp-servers`. Example configuration:
+//
+//	sinks:
+//	   otlp-servers:
+//	      health:
+//	         channels: HEALTH
+//	         address: 127.0.0.1:4317
+//
+// Every new server sink configured automatically inherits the configuration set in the `otlp-defaults` section.
+//
+// For example:
+//
+//	otlp-defaults:
+//	    redactable: false # default: disable redaction markers
+//	sinks:
+//	  otlp-servers:
+//	    health:
+//	       channels: HEALTH
+//	       # This sink has redactable set to false,
+//	       # as the setting is inherited from fluent-defaults
+//	       # unless overridden here.
+//
+// The default output format for OTLP sinks is
+// `json`. [Other supported formats.](log-formats.html)
+//
+// {{site.data.alerts.callout_info}}
+// Run `cockroach debug check-log-config` to verify the effect of defaults inheritance.
+// {{site.data.alerts.end}}
+type OtlpSinkConfig struct {
+	// Channels is the list of logging channels that use this sink.
+	Channels ChannelFilters `yaml:",omitempty,flow"`
+
+	// Address is the network address of the gRPC endpoint for
+	// ingestion of logs on your OpenTelemetry Collector/Platform.
+	// The host/address and port parts are separated with a colon.
+	Address string `yaml:""`
+
+	OtlpDefaults `yaml:",inline"`
+
+	// SinkName is populated during validation.
+	SinkName string
 }
 
 // IterateDirectories calls the provided fn on every directory linked to

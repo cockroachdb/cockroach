@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"regexp"
 	"strings"
 	"time"
 
@@ -37,6 +38,17 @@ const systemTag = "mixedversion-system"
 // situations where the cluster is not recovering.
 var startTimeout = 30 * time.Minute
 
+// restartSystemSettings provides the custom start options
+// necessary for restarting the system interface on a node.
+func restartSystemSettings(waitForReplication bool, initTarget int) []option.StartStopOption {
+	customStartOpts := []option.StartStopOption{option.WithInitTarget(initTarget)}
+	if waitForReplication {
+		customStartOpts = append(customStartOpts, option.WaitForReplication())
+	}
+	customStartOpts = append(customStartOpts, option.SkipInit)
+	return customStartOpts
+}
+
 // installFixturesStep is the step that copies the fixtures from
 // `pkg/cmd/roachtest/fixtures` for a specific version into the nodes'
 // store dir.
@@ -56,6 +68,10 @@ func (s installFixturesStep) Run(
 	return clusterupgrade.InstallFixtures(
 		ctx, l, h.runner.cluster, h.System.Descriptor.Nodes, s.version,
 	)
+}
+
+func (s installFixturesStep) ConcurrencyDisabled() bool {
+	return false
 }
 
 // startStep is the step that starts the cluster from a specific
@@ -103,6 +119,9 @@ func (s startStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand, h *H
 		startCtx, l, h.runner.cluster, systemNodes, startOpts(customStartOpts...), clusterSettings...,
 	)
 }
+func (s startStep) ConcurrencyDisabled() bool {
+	return true
+}
 
 // startSharedProcessVirtualCluster step creates a new shared-process
 // virtual cluster with the given name, and starts it. At the end of
@@ -135,6 +154,10 @@ func (s startSharedProcessVirtualClusterStep) Run(
 	// until we are able to connect to the tenant on every node before
 	// moving on. The test runner infrastructure relies on that ability.
 	return waitForTenantProcess(ctx, l, h, h.Tenant.Descriptor.Nodes, h.DeploymentMode())
+}
+
+func (s startSharedProcessVirtualClusterStep) ConcurrencyDisabled() bool {
+	return true
 }
 
 // startSeparateProcessVirtualCluster step creates a new separate-process
@@ -174,6 +197,10 @@ func (s startSeparateProcessVirtualClusterStep) Run(
 	h.runner.cluster.SetDefaultVirtualCluster(s.name)
 
 	return waitForTenantProcess(ctx, l, h, h.Tenant.Descriptor.Nodes, h.DeploymentMode())
+}
+
+func (s startSeparateProcessVirtualClusterStep) ConcurrencyDisabled() bool {
+	return true
 }
 
 type restartVirtualClusterStep struct {
@@ -220,6 +247,10 @@ func (s restartVirtualClusterStep) Run(
 	return h.runner.cluster.StartServiceForVirtualClusterE(ctx, l, startOpts, settings)
 }
 
+func (s restartVirtualClusterStep) ConcurrencyDisabled() bool {
+	return true
+}
+
 // waitForStableClusterVersionStep implements the process of waiting
 // for the `version` cluster setting being the same on all nodes of
 // the cluster and equal to the binary version of the first node in
@@ -246,6 +277,10 @@ func (s waitForStableClusterVersionStep) Run(
 	return clusterupgrade.WaitForClusterUpgrade(
 		ctx, l, s.nodes, serviceByName(h, s.virtualClusterName).Connect, s.timeout,
 	)
+}
+
+func (s waitForStableClusterVersionStep) ConcurrencyDisabled() bool {
+	return false
 }
 
 // preserveDowngradeOptionStep sets the `preserve_downgrade_option`
@@ -276,6 +311,10 @@ func (s preserveDowngradeOptionStep) Run(
 	}
 
 	return service.Exec(rng, "SET CLUSTER SETTING cluster.preserve_downgrade_option = $1", bv.String())
+}
+
+func (s preserveDowngradeOptionStep) ConcurrencyDisabled() bool {
+	return false
 }
 
 // restartWithNewBinaryStep restarts a certain `node` with a new
@@ -312,10 +351,7 @@ func (s restartWithNewBinaryStep) Description() string {
 func (s restartWithNewBinaryStep) Run(
 	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
 ) error {
-	customStartOpts := []option.StartStopOption{option.WithInitTarget(s.initTarget)}
-	if s.waitForReplication {
-		customStartOpts = append(customStartOpts, option.WaitForReplication())
-	}
+	customStartOpts := restartSystemSettings(s.waitForReplication, s.initTarget)
 
 	startCtx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
@@ -348,6 +384,10 @@ func (s restartWithNewBinaryStep) Run(
 	return nil
 }
 
+func (s restartWithNewBinaryStep) ConcurrencyDisabled() bool {
+	return true
+}
+
 // allowUpgradeStep resets the `preserve_downgrade_option` cluster
 // setting, allowing the upgrade migrations to run and the cluster
 // version to eventually reach the binary version on the nodes.
@@ -370,6 +410,10 @@ func (s allowUpgradeStep) Run(
 	return serviceByName(h, s.virtualClusterName).Exec(
 		rng, "RESET CLUSTER SETTING cluster.preserve_downgrade_option",
 	)
+}
+
+func (s allowUpgradeStep) ConcurrencyDisabled() bool {
+	return false
 }
 
 // waitStep does nothing but sleep for the provided duration. Most
@@ -395,6 +439,10 @@ func (s waitStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand, h *He
 	return nil
 }
 
+func (s waitStep) ConcurrencyDisabled() bool {
+	return false
+}
+
 // runHookStep is a step used to run a user-provided hook (i.e.,
 // callbacks passed to `OnStartup`, `InMixedVersion`, or `AfterTest`).
 type runHookStep struct {
@@ -410,6 +458,10 @@ func (s runHookStep) Description() string {
 
 func (s runHookStep) Run(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
 	return s.hook.fn(ctx, l, rng, h)
+}
+
+func (s runHookStep) ConcurrencyDisabled() bool {
+	return false
 }
 
 // setClusterSettingStep sets the cluster setting `name` to `value`.
@@ -467,6 +519,10 @@ func (s setClusterSettingStep) Run(
 	)
 }
 
+func (s setClusterSettingStep) ConcurrencyDisabled() bool {
+	return false
+}
+
 // setClusterVersionStep sets the special `version` cluster setting to
 // the provided version.
 type setClusterVersionStep struct {
@@ -509,6 +565,10 @@ func (s setClusterVersionStep) Run(
 	return service.Exec(rng, "SET CLUSTER SETTING version = $1", binaryVersion)
 }
 
+func (s setClusterVersionStep) ConcurrencyDisabled() bool {
+	return false
+}
+
 // resetClusterSetting resets cluster setting `name`.
 type resetClusterSettingStep struct {
 	minVersion         *clusterupgrade.Version
@@ -531,6 +591,10 @@ func (s resetClusterSettingStep) Run(
 	)
 }
 
+func (s resetClusterSettingStep) ConcurrencyDisabled() bool {
+	return false
+}
+
 // deleteAllTenantsVersionOverrideStep is a hack that deletes bad data
 // from the `system.tenant_settings` table; specifically an
 // all-tenants (tenant_id = 0) override for the 'version' key. See
@@ -551,6 +615,10 @@ func (s deleteAllTenantsVersionOverrideStep) Run(
 ) error {
 	const stmt = "DELETE FROM system.tenant_settings WHERE tenant_id = $1 and name = $2"
 	return h.System.Exec(rng, stmt, 0, "version")
+}
+
+func (s deleteAllTenantsVersionOverrideStep) ConcurrencyDisabled() bool {
+	return false
 }
 
 // disableRateLimitersStep disables both the KV and the tenant(SQL) rate limiter
@@ -607,6 +675,10 @@ func (s disableRateLimitersStep) Run(
 	}
 
 	return h.System.Exec(rng, stmt)
+}
+
+func (s disableRateLimitersStep) ConcurrencyDisabled() bool {
+	return false
 }
 
 // nodesRunningAtLeast returns a list of nodes running a system or
@@ -714,4 +786,71 @@ func startStopOpts(opts ...option.StartStopOption) []option.StartStopOption {
 	return append([]option.StartStopOption{
 		option.NoBackupSchedule,
 	}, opts...)
+}
+
+// TODO(kyleli): This step currently only affects the system tenant, should support panicking secondary tenants as well.
+// TODO(kyleli): Current mixedversion cannot support separating this into two steps (panic and restart) because during
+// each step the framework checks each node to ensure they are all alive and healthy. Ideally there should be a state
+// that allows the framework to skip this check, so that we can panic a node and then restart it in a separate step.
+type panicNodeStep struct {
+	initTarget int
+	targetNode option.NodeListOption
+	rt         test.Test
+}
+
+func (s panicNodeStep) Background() shouldStop { return nil }
+
+func (s panicNodeStep) Description() string {
+	return fmt.Sprintf("panicking system interface on node %d", s.targetNode[0])
+}
+
+var connectionRefusedRegex = regexp.MustCompile(`dial tcp .*: connect: connection refused`)
+
+func (s panicNodeStep) Run(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
+	nodeVersion, err := h.System.NodeVersion(s.targetNode[0])
+	if err != nil {
+		return errors.Wrapf(err, "failed to get node version for %s", s.targetNode)
+	}
+	binary := clusterupgrade.CockroachPathForVersion(s.rt, nodeVersion)
+	settings := install.MakeClusterSettings(
+		install.BinaryOption(binary),
+		install.TagOption(systemTag),
+	)
+	customStartOpts := restartSystemSettings(true, s.initTarget)
+
+	h.ExpectDeath()
+
+	const stmt = "SELECT crdb_internal.force_panic('expected panic from panicNodeMutator')"
+	err = h.System.ExecWithGateway(
+		rng,
+		s.targetNode,
+		stmt,
+	)
+
+	if err == nil {
+		return errors.Errorf("expected panic statement to fail, but it succeeded on %s", s.targetNode)
+	}
+
+	isTCPError := connectionRefusedRegex.MatchString(err.Error())
+
+	// The expected behavior is that the panic statement will fail with a TCP connection error,
+	// so any other error is unexpected and should cause the test to fail.
+	if !isTCPError {
+		return errors.Wrapf(err, "unexpected error when executing panic statement on %s", s.targetNode)
+	}
+
+	startCtx, cancel := context.WithTimeout(ctx, startTimeout)
+	defer cancel()
+
+	return h.runner.cluster.StartE(
+		startCtx,
+		l,
+		startOpts(customStartOpts...),
+		settings,
+		s.targetNode,
+	)
+}
+
+func (s panicNodeStep) ConcurrencyDisabled() bool {
+	return true
 }

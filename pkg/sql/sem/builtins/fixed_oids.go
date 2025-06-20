@@ -2665,6 +2665,7 @@ var builtinOidsArray = []string{
 	2702: `crdb_internal.force_retry(val: int) -> int`,
 	2703: `crdb_internal.show_create_all_routines(database_name: string) -> string`,
 	2704: `crdb_internal.show_create_all_triggers(database_name: string) -> string`,
+	2705: `crdb_internal.session_pending_jobs() -> tuple{int AS job_id, string AS job_type, string AS description, string AS user_name}`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

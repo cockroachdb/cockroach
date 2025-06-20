@@ -370,6 +370,20 @@ func TestFlagCombinations(t *testing.T) {
 	}
 }
 
+func TestGetValidate(t *testing.T) {
+	t.Run("ExpectExclusionSinceOnNonLockingGet", func(t *testing.T) {
+		getReq := &GetRequest{ExpectExclusionSince: hlc.Timestamp{WallTime: 1}}
+		require.Error(t, getReq.Validate(Header{}))
+	})
+	t.Run("ExpectExclusionSinceOnLockingGet", func(t *testing.T) {
+		getReq := &GetRequest{
+			ExpectExclusionSince: hlc.Timestamp{WallTime: 1},
+			KeyLockingStrength:   lock.Exclusive,
+		}
+		require.NoError(t, getReq.Validate(Header{}))
+	})
+}
+
 func TestRequestHeaderRoundTrip(t *testing.T) {
 	var seq kvnemesisutil.Container
 	seq.Set(123)

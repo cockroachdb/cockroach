@@ -80,7 +80,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
@@ -958,14 +957,6 @@ CREATE TABLE crdb_internal.leases (
 	},
 }
 
-func tsOrNull(micros int64) (tree.Datum, error) {
-	if micros == 0 {
-		return tree.DNull, nil
-	}
-	ts := timeutil.Unix(0, micros*time.Microsecond.Nanoseconds())
-	return tree.MakeDTimestampTZ(ts, time.Microsecond)
-}
-
 const (
 	// systemJobsAndJobInfoBaseQuery consults both the `system.jobs` and
 	// `system.job_info` tables to return relevant information about a job.
@@ -1147,11 +1138,6 @@ func wrapPayloadUnMarshalError(err error, jobID tree.Datum) error {
 }
 
 const (
-	jobsQuery = `SELECT id, status, created::timestamptz, payload, progress, claim_session_id, claim_instance_id FROM crdb_internal.system_jobs j`
-	// Note that we are querying crdb_internal.system_jobs instead of system.jobs directly.
-	// The former has access control built in and will filter out jobs that the
-	// user is not allowed to see.
-	jobsQFrom        = ` `
 	jobIDFilter      = ` WHERE j.id = $1`
 	jobsStatusFilter = ` WHERE j.status = $1`
 	jobsTypeFilter   = ` WHERE j.job_type = $1`
@@ -1166,20 +1152,15 @@ CREATE TABLE crdb_internal.jobs (
   description           STRING,
   statement             STRING,
   user_name             STRING,
-  descriptor_ids        INT[],
   status                STRING,
   running_status        STRING,
   created               TIMESTAMPTZ,
-  started               TIMESTAMPTZ,
   finished              TIMESTAMPTZ,
   modified              TIMESTAMPTZ,
   fraction_completed    FLOAT,
   high_water_timestamp  DECIMAL,
   error                 STRING,
   coordinator_id        INT,
-  trace_id              INT,
-  execution_errors      STRING[],
-  execution_events      JSONB,
   INDEX(job_id),
   INDEX(status),
   INDEX(job_type)
@@ -1207,223 +1188,6 @@ CREATE TABLE crdb_internal.jobs (
 	},
 }
 
-var useOldJobsVTable = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.jobs.legacy_vtable.enabled",
-	"cause the crdb_internal.jobs vtable to be produced from the legacy payload info records",
-	false, // TODO(dt): flip this once we add permissive auth checks.
-)
-
-// makeJobsTableRows calls addRow for each job. It returns true if addRow was called
-// successfully at least once.
-func makeJobsTableRows(
-	ctx context.Context,
-	p *planner,
-	addRow func(...tree.Datum) error,
-	queryFilterSuffix string,
-	params ...interface{},
-) (matched bool, err error) {
-
-	v, err := p.InternalSQLTxn().GetSystemSchemaVersion(ctx)
-	if err != nil {
-		return false, err
-	}
-	if !v.AtLeast(clusterversion.V25_1.Version()) || useOldJobsVTable.Get(&p.EvalContext().Settings.SV) {
-		query := jobsQuery + queryFilterSuffix
-		return makeLegacyJobsTableRows(ctx, p, addRow, query, params...)
-	}
-	return makeJobBasedJobsTableRows(ctx, p, addRow, queryFilterSuffix, params...)
-}
-
-func makeLegacyJobsTableRows(
-	ctx context.Context,
-	p *planner,
-	addRow func(...tree.Datum) error,
-	query string,
-	params ...interface{},
-) (matched bool, err error) {
-	// We use QueryIteratorEx here and specify the current user
-	// instead of using InternalExecutor.QueryIterator because
-	// the latter is being deprecated for sometimes executing
-	// the query as the root user.
-	it, err := p.InternalSQLTxn().QueryIteratorEx(
-		ctx, "crdb-internal-jobs-table", p.txn,
-		sessiondata.InternalExecutorOverride{User: p.User()},
-		query, params...)
-	if err != nil {
-		return matched, err
-	}
-
-	cleanup := func(ctx context.Context) {
-		if err := it.Close(); err != nil {
-			// TODO(yuzefovich): this error should be propagated further up
-			// and not simply being logged. Fix it (#61123).
-			//
-			// Doing that as a return parameter would require changes to
-			// `planNode.Close` signature which is a bit annoying. One other
-			// possible solution is to panic here and catch the error
-			// somewhere.
-			log.Warningf(ctx, "error closing an iterator: %v", err)
-		}
-	}
-	defer cleanup(ctx)
-
-	sessionJobs := make([]*jobs.Record, 0, p.extendedEvalCtx.jobs.numToCreate())
-	uniqueJobs := make(map[*jobs.Record]struct{})
-	if err := p.extendedEvalCtx.jobs.forEachToCreate(func(job *jobs.Record) error {
-		if _, ok := uniqueJobs[job]; ok {
-			return nil
-		}
-		sessionJobs = append(sessionJobs, job)
-		uniqueJobs[job] = struct{}{}
-		return nil
-	}); err != nil {
-		return matched, err
-	}
-
-	// Loop while we need to skip a row.
-	for {
-		ok, err := it.Next(ctx)
-		if err != nil {
-			return matched, err
-		}
-		var id, status, created, payloadBytes, progressBytes, sessionIDBytes,
-			instanceID tree.Datum
-		if ok {
-			r := it.Cur()
-			id, status, created, payloadBytes, progressBytes, sessionIDBytes, instanceID =
-				r[0], r[1], r[2], r[3], r[4], r[5], r[6]
-		} else if !ok {
-			if len(sessionJobs) == 0 {
-				return matched, nil
-			}
-			job := sessionJobs[len(sessionJobs)-1]
-			sessionJobs = sessionJobs[:len(sessionJobs)-1]
-			// Convert the job into datums, where protobufs will be intentionally,
-			// marshalled.
-			id = tree.NewDInt(tree.DInt(job.JobID))
-			status = tree.NewDString(string(jobs.StatePending))
-			created = tree.MustMakeDTimestampTZ(timeutil.Unix(0, p.txn.ReadTimestamp().WallTime), time.Microsecond)
-			progressBytes, payloadBytes, err = getPayloadAndProgressFromJobsRecord(p, job)
-			if err != nil {
-				return matched, err
-			}
-			sessionIDBytes = tree.NewDBytes(tree.DBytes(p.extendedEvalCtx.SessionID.GetBytes()))
-			instanceID = tree.NewDInt(tree.DInt(p.extendedEvalCtx.ExecCfg.JobRegistry.ID()))
-		}
-
-		var jobType, description, statement, user, descriptorIDs, started, runningStatus,
-			finished, modified, fractionCompleted, highWaterTimestamp, errorStr, coordinatorID,
-			traceID, executionErrors, executionEvents = tree.DNull, tree.DNull, tree.DNull,
-			tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
-			tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull
-
-		// Extract data from the payload.
-		payload, err := jobs.UnmarshalPayload(payloadBytes)
-		if err != nil {
-			return matched, wrapPayloadUnMarshalError(err, id)
-		}
-
-		// We filter out masked rows before we allocate all the
-		// datums. Needless allocate when not necessary.
-		sqlUsername := payload.UsernameProto.Decode()
-		if sessionID, ok := sessionIDBytes.(*tree.DBytes); ok {
-			if isAlive, err := p.EvalContext().SQLLivenessReader.IsAlive(
-				ctx, sqlliveness.SessionID(*sessionID),
-			); err != nil {
-				// Silently swallow the error for checking for liveness.
-			} else if instanceID, ok := instanceID.(*tree.DInt); ok && isAlive {
-				coordinatorID = instanceID
-			}
-		}
-
-		// TODO(jayant): we can select the job_type as a column
-		// rather than decoding the payload. This would allow us
-		// to create a virtual index on it.
-		jobType = tree.NewDString(payload.Type().String())
-		description = tree.NewDString(payload.Description)
-		statement = tree.NewDString(strings.Join(payload.Statement, "; "))
-		user = tree.NewDString(sqlUsername.Normalized())
-		descriptorIDsArr := tree.NewDArray(types.Int)
-		for _, descID := range payload.DescriptorIDs {
-			if err := descriptorIDsArr.Append(tree.NewDInt(tree.DInt(int(descID)))); err != nil {
-				return matched, err
-			}
-		}
-		descriptorIDs = descriptorIDsArr
-		started, err = tsOrNull(payload.StartedMicros)
-		if err != nil {
-			return matched, err
-		}
-		finished, err = tsOrNull(payload.FinishedMicros)
-		if err != nil {
-			return matched, err
-		}
-		errorStr = tree.NewDString(payload.Error)
-
-		// Extract data from the progress field.
-		if progressBytes != tree.DNull {
-			progress, err := jobs.UnmarshalProgress(progressBytes)
-			if err != nil {
-				baseErr := ""
-				if s, ok := errorStr.(*tree.DString); ok {
-					baseErr = string(*s)
-					if baseErr != "" {
-						baseErr += "\n"
-					}
-				}
-				errorStr = tree.NewDString(fmt.Sprintf("%serror decoding progress: %v", baseErr, err))
-			} else {
-				// Progress contains either fractionCompleted for traditional jobs,
-				// or the highWaterTimestamp for change feeds.
-				if highwater := progress.GetHighWater(); highwater != nil {
-					highWaterTimestamp = eval.TimestampToDecimalDatum(*highwater)
-				} else {
-					fractionCompleted = tree.NewDFloat(tree.DFloat(progress.GetFractionCompleted()))
-				}
-				modified, err = tsOrNull(progress.ModifiedMicros)
-				if err != nil {
-					return matched, err
-				}
-
-				if s, ok := status.(*tree.DString); ok {
-					if jobs.State(*s) == jobs.StateRunning && len(progress.StatusMessage) > 0 {
-						runningStatus = tree.NewDString(progress.StatusMessage)
-					} else if jobs.State(*s) == jobs.StatePaused && payload != nil && payload.PauseReason != "" {
-						errorStr = tree.NewDString(fmt.Sprintf("%s: %s", jobs.PauseRequestExplained, payload.PauseReason))
-					}
-				}
-				traceID = tree.NewDInt(tree.DInt(progress.TraceID))
-			}
-		}
-
-		if err = addRow(
-			id,
-			jobType,
-			description,
-			statement,
-			user,
-			descriptorIDs,
-			status,
-			runningStatus,
-			created,
-			started,
-			finished,
-			modified,
-			fractionCompleted,
-			highWaterTimestamp,
-			errorStr,
-			coordinatorID,
-			traceID,
-			executionErrors,
-			executionEvents,
-		); err != nil {
-			return matched, err
-		}
-		matched = true
-	}
-}
-
 var enablePerJobDetailedAuthLookups = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.jobs.legacy_per_job_access_via_details.enabled",
@@ -1433,7 +1197,7 @@ var enablePerJobDetailedAuthLookups = settings.RegisterBoolSetting(
 
 var errLegacyPerJobAuthDisabledSentinel = pgerror.Newf(pgcode.InsufficientPrivilege, "legacy job access based on details is disabled")
 
-func makeJobBasedJobsTableRows(
+func makeJobsTableRows(
 	ctx context.Context,
 	p *planner,
 	addRow func(...tree.Datum) error,
@@ -1454,8 +1218,11 @@ j.error_msg,
 j.claim_instance_id
 FROM system.public.jobs AS j
 LEFT OUTER JOIN system.public.job_progress AS p ON j.id = p.job_id
-LEFT OUTER JOIN system.public.job_status AS s ON j.id = s.job_id  
-	` + whereClause
+LEFT OUTER JOIN system.public.job_status AS s ON j.id = s.job_id
+	` + whereClause + `UNION
+	(SELECT job_id, job_type, description, user_name, 'pending',
+					NULL, now(), NULL, now(), NULL, NULL, NULL, NULL
+	FROM crdb_internal.session_pending_jobs())`
 
 	it, err := p.InternalSQLTxn().QueryIteratorEx(
 		ctx, "system-jobs-join", p.txn, sessiondata.NodeUserSessionDataOverride, query, params...)
@@ -1468,108 +1235,60 @@ LEFT OUTER JOIN system.public.job_status AS s ON j.id = s.job_id
 		}
 	}()
 
-	sessionJobs := make([]*jobs.Record, 0, p.extendedEvalCtx.jobs.numToCreate())
-	uniqueJobs := make(map[*jobs.Record]struct{})
-	if err := p.extendedEvalCtx.jobs.forEachToCreate(func(job *jobs.Record) error {
-		if _, ok := uniqueJobs[job]; ok {
-			return nil
-		}
-		sessionJobs = append(sessionJobs, job)
-		uniqueJobs[job] = struct{}{}
-		return nil
-	}); err != nil {
-		return emitted, err
-	}
-
 	// Loop while we need to skip a row.
 	for {
 		ok, err := it.Next(ctx)
+		if err != nil || !ok {
+			return emitted, err
+		}
+		r := it.Cur()
+		id, typStr, desc, ownerStr, state, status, created, finished, modified, fraction, resolved, errorMsg, instanceID :=
+			r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12]
+
+		owner := username.MakeSQLUsernameFromPreNormalizedString(string(tree.MustBeDString(ownerStr)))
+		jobID := jobspb.JobID(tree.MustBeDInt(id))
+		typ, err := jobspb.TypeFromString(string(tree.MustBeDString(typStr)))
 		if err != nil {
 			return emitted, err
 		}
-		// We will read the columns from the query on joined jobs tables into a wide
-		// row, and then copy the values from read rows into named variables to then
-		// use when emitting our output row. If we need to synthesize rows for jobs
-		// pending creation in the session, we'll do so in those same named vars to
-		// keep things organized.
-		//   0,      1,    2,        3,     4,      5,       6,        7,        8,        9,       10,       11,         12
-		var id, typStr, desc, ownerStr, state, status, created, finished, modified, fraction, resolved, errorMsg, instanceID tree.Datum
 
-		if ok {
-			r := it.Cur()
-			id, typStr, desc, ownerStr, state, status, created, finished, modified, fraction, resolved, errorMsg, instanceID =
-				r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12]
-
-			owner := username.MakeSQLUsernameFromPreNormalizedString(string(tree.MustBeDString(ownerStr)))
-			jobID := jobspb.JobID(tree.MustBeDInt(id))
-			typ, err := jobspb.TypeFromString(string(tree.MustBeDString(typStr)))
+		getLegacyPayloadForAuth := func(ctx context.Context) (*jobspb.Payload, error) {
+			if !enablePerJobDetailedAuthLookups.Get(&p.EvalContext().Settings.SV) {
+				return nil, errLegacyPerJobAuthDisabledSentinel
+			}
+			if p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.V25_1) {
+				log.Warningf(ctx, "extended job access control based on job-specific details is deprecated and can make SHOW JOBS less performant; consider disabling %s",
+					enablePerJobDetailedAuthLookups.Name())
+				p.BufferClientNotice(ctx,
+					pgnotice.Newf("extended job access control based on job-specific details has been deprecated and can make SHOW JOBS less performant; consider disabling %s",
+						enablePerJobDetailedAuthLookups.Name()))
+			}
+			payload := &jobspb.Payload{}
+			infoStorage := jobs.InfoStorageForJob(p.InternalSQLTxn(), jobID)
+			payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx, "getLegacyPayload-for-custom-auth")
 			if err != nil {
-				return emitted, err
+				return nil, err
 			}
+			if !exists {
+				return nil, errors.New("job payload not found in system.job_info")
+			}
+			if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
+				return nil, err
+			}
+			return payload, nil
+		}
+		if errorMsg == tree.DNull {
+			errorMsg = emptyString
+		}
 
-			getLegacyPayloadForAuth := func(ctx context.Context) (*jobspb.Payload, error) {
-				if !enablePerJobDetailedAuthLookups.Get(&p.EvalContext().Settings.SV) {
-					return nil, errLegacyPerJobAuthDisabledSentinel
-				}
-				if p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.V25_1) {
-					log.Warningf(ctx, "extended job access control based on job-specific details is deprecated and can make SHOW JOBS less performant; consider disabling %s",
-						enablePerJobDetailedAuthLookups.Name())
-					p.BufferClientNotice(ctx,
-						pgnotice.Newf("extended job access control based on job-specific details has been deprecated and can make SHOW JOBS less performant; consider disabling %s",
-							enablePerJobDetailedAuthLookups.Name()))
-				}
-				payload := &jobspb.Payload{}
-				infoStorage := jobs.InfoStorageForJob(p.InternalSQLTxn(), jobID)
-				payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx, "getLegacyPayload-for-custom-auth")
-				if err != nil {
-					return nil, err
-				}
-				if !exists {
-					return nil, errors.New("job payload not found in system.job_info")
-				}
-				if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
-					return nil, err
-				}
-				return payload, nil
+		if err := jobsauth.AuthorizeAllowLegacyAuth(
+			ctx, p, jobID, getLegacyPayloadForAuth, owner, typ, jobsauth.ViewAccess, globalPrivileges,
+		); err != nil {
+			// Filter out jobs which the user is not allowed to see.
+			if IsInsufficientPrivilegeError(err) {
+				continue
 			}
-			if errorMsg == tree.DNull {
-				errorMsg = emptyString
-			}
-
-			if err := jobsauth.AuthorizeAllowLegacyAuth(
-				ctx, p, jobID, getLegacyPayloadForAuth, owner, typ, jobsauth.ViewAccess, globalPrivileges,
-			); err != nil {
-				// Filter out jobs which the user is not allowed to see.
-				if IsInsufficientPrivilegeError(err) {
-					continue
-				}
-				return emitted, err
-			}
-		} else if !ok {
-			if len(sessionJobs) == 0 {
-				return emitted, nil
-			}
-			job := sessionJobs[len(sessionJobs)-1]
-			sessionJobs = sessionJobs[:len(sessionJobs)-1]
-			payloadType, err := jobspb.DetailsType(jobspb.WrapPayloadDetails(job.Details))
-			if err != nil {
-				return emitted, err
-			}
-			// synthesize the fields we'd read from the jobs table if this job were in it.
-			id, typStr, desc, ownerStr, state, status, created, finished, modified, fraction, resolved, errorMsg, instanceID =
-				tree.NewDInt(tree.DInt(job.JobID)),
-				tree.NewDString(payloadType.String()),
-				tree.NewDString(job.Description),
-				tree.NewDString(job.Username.Normalized()),
-				tree.NewDString(string(jobs.StatePending)),
-				tree.DNull,
-				tree.MustMakeDTimestampTZ(p.txn.ReadTimestamp().GoTime(), time.Microsecond),
-				tree.DNull,
-				tree.MustMakeDTimestampTZ(p.txn.ReadTimestamp().GoTime(), time.Microsecond),
-				tree.NewDFloat(tree.DFloat(0)),
-				tree.DZeroDecimal,
-				tree.DNull,
-				tree.NewDInt(tree.DInt(p.extendedEvalCtx.ExecCfg.JobRegistry.ID()))
+			return emitted, err
 		}
 
 		if err = addRow(
@@ -1578,20 +1297,15 @@ LEFT OUTER JOIN system.public.job_status AS s ON j.id = s.job_id
 			desc,
 			desc,
 			ownerStr,
-			tree.DNull, // deperecated "descriptor_ids"
 			state,
 			status,
 			created,
-			created, // deprecated "started" field.
 			finished,
 			modified,
 			fraction,
 			resolved,
 			errorMsg,
 			instanceID,
-			tree.DNull, // deprecated "trace_id" field.
-			tree.DNull, // deprecated "executionErrors" field.
-			tree.DNull, // deprecated "executionEvents" field.
 		); err != nil {
 			return emitted, err
 		}

@@ -90,6 +90,7 @@ go_library(
         "import_cancellation.go",
         "inconsistency.go",
         "indexes.go",
+        "invariant_check_detection.go",
         "inverted_index.go",
         "jasyncsql.go",
         "jasyncsql_blocklist.go",

@@ -204,12 +204,73 @@ func TestOnlineRestoreRecovery(t *testing.T) {
 	})
 }
 
+// We run full cluster online restore recovery in a separate environment since
+// it requires dropping all databases and will impact other tests.
+func TestFullClusterOnlineRestoreRecovery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tmpDir := t.TempDir()
+
+	defer nodelocal.ReplaceNodeLocalForTesting(tmpDir)()
+
+	const numAccounts = 1000
+
+	externalStorage := "nodelocal://1/backup"
+
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, orParams)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_download'")
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
+
+	// Reset cluster for full cluster restore.
+	dbs := sqlDB.QueryStr(
+		t, "SELECT database_name FROM [SHOW DATABASES] WHERE database_name != 'system'",
+	)
+	sqlDB.Exec(t, "USE system")
+	for _, db := range dbs {
+		sqlDB.Exec(t, fmt.Sprintf("DROP DATABASE %s CASCADE", db[0]))
+	}
+
+	var linkJobID jobspb.JobID
+	sqlDB.QueryRow(
+		t,
+		fmt.Sprintf(
+			"RESTORE FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY, detached", externalStorage,
+		),
+	).Scan(&linkJobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, linkJobID)
+	var downloadJobID jobspb.JobID
+	sqlDB.QueryRow(t, latestDownloadJobIDQuery).Scan(&downloadJobID)
+	jobutils.WaitForJobToPause(t, sqlDB, downloadJobID)
+	corruptBackup(t, sqlDB, tmpDir, externalStorage)
+	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+	sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", downloadJobID))
+	jobutils.WaitForJobToFail(t, sqlDB, downloadJobID)
+}
+
 func corruptBackup(t *testing.T, sqlDB *sqlutils.SQLRunner, ioDir string, uri string) {
-	var filePath string
-	filePathQuery := fmt.Sprintf("SELECT path FROM [SHOW BACKUP FILES FROM LATEST IN '%s'] LIMIT 1", uri)
-	parsedURI, err := url.Parse(strings.Replace(uri, "'", "", -1))
-	sqlDB.QueryRow(t, filePathQuery).Scan(&filePath)
+	var filePath, spanStart, spanEnd string
+	// We delete the last SST file in SHOW BACKUP to ensure the deletion of an SST
+	// file that backs a user-table.
+	// https://github.com/cockroachdb/cockroach/issues/148408 illustrates how
+	// deleting the backing SST file of a system table will not necessarily cause
+	// a download job to fail.
+	filePathQuery := fmt.Sprintf(
+		`SELECT path, start_pretty, end_pretty FROM
+		(
+			SELECT row_number() OVER (), *
+			FROM [SHOW BACKUP FILES FROM LATEST IN '%s']
+		)
+		ORDER BY row_number DESC
+		LIMIT 1`,
+		uri,
+	)
+	parsedURI, err := url.Parse(strings.ReplaceAll(uri, "'", ""))
+	sqlDB.QueryRow(t, filePathQuery).Scan(&filePath, &spanStart, &spanEnd)
 	fullPath := filepath.Join(ioDir, parsedURI.Path, filePath)
+	t.Logf("deleting backup file %s covering span [%s, %s)", fullPath, spanStart, spanEnd)
 	require.NoError(t, err)
 	require.NoError(t, os.Remove(fullPath))
 }

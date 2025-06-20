@@ -295,6 +295,11 @@ type (
 		// Run implements the actual functionality of the step. This
 		// signature should remain in sync with `stepFunc`.
 		Run(context.Context, *logger.Logger, *rand.Rand, *Helper) error
+		// ConcurrencyDisabled returns true if the step should not be run
+		// concurrently with other steps. This is the case for any steps
+		// that involve restarting a node, as they may attempt to connect
+		// to an unavailable node.
+		ConcurrencyDisabled() bool
 	}
 
 	// singleStep represents steps that implement the pieces on top of

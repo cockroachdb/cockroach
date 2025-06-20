@@ -55,6 +55,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbackup"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -985,9 +987,8 @@ func createImportingDescriptors(
 	for _, desc := range sqlDescs {
 		// Decide which offline tables to include in the restore:
 		//
-		// - An offline table created by RESTORE or IMPORT PGDUMP is
-		//   fully discarded.  The table will not exist in the restoring
-		//   cluster.
+		// - An offline table created by RESTORE is fully discarded. The table
+		//   will not exist in the restoring cluster.
 		//
 		// - An offline table undergoing an IMPORT INTO in traditional
 		//   restore has all importing data elided in the restore
@@ -2081,6 +2082,12 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 	}
 
+	if err := p.ExecCfg().JobRegistry.CheckPausepoint(
+		"restore.after_cleanup_temp_system_tables",
+	); err != nil {
+		return err
+	}
+
 	if details.DescriptorCoverage != tree.RequestedDescriptors {
 		// Bump the version of the role membership table so that the cache is
 		// invalidated.
@@ -2767,24 +2774,20 @@ func (r *restoreResumer) dropDescriptors(
 	b := txn.KV().NewBatch()
 	const kvTrace = false
 	// Collect the tables into mutable versions.
-	mutableTables := make([]*tabledesc.Mutable, len(details.TableDescs))
-	for i := range details.TableDescs {
-		var err error
-		mutableTables[i], err = descsCol.MutableByID(txn.KV()).Table(ctx, details.TableDescs[i].ID)
-		if err != nil {
-			return err
+	mutableTables, err := getUndroppedTablesFromRestore(
+		ctx, txn.KV(), details, descsCol,
+	)
+	if err != nil {
+		return errors.Wrap(err, "getting mutable tables from restore")
+	}
+	// Ensure that the table versions matches what we expect. In the case that it
+	// doesn't, it's not really clear what to do. Just log and carry on. If the
+	// descriptors have already been published, then there's nothing to fuss
+	// about so we only do this check if they have not been published.
+	if !details.DescriptorsPublished {
+		if err := checkRestoredTableDescriptorVersions(details, mutableTables); err != nil {
+			log.Errorf(ctx, "table version mismatch during drop: %v", err)
 		}
-		// Ensure that the version matches what we expect. In the case that it
-		// doesn't, it's not really clear what to do. Just log and carry on. If the
-		// descriptors have already been published, then there's nothing to fuss
-		// about so we only do this check if they have not been published.
-		if !details.DescriptorsPublished {
-			if got, exp := mutableTables[i].Version, details.TableDescs[i].Version; got != exp {
-				log.Errorf(ctx, "version changed for restored descriptor %d before "+
-					"drop: got %d, expected %d", mutableTables[i].GetID(), got, exp)
-			}
-		}
-
 	}
 
 	// Remove any back references installed from existing types to tables being restored.
@@ -3360,6 +3363,58 @@ func (r *restoreResumer) cleanupTempSystemTables(ctx context.Context) error {
 	dropTableQuery := fmt.Sprintf("DROP DATABASE %s CASCADE", restoreTempSystemDB)
 	if _, err := executor.Exec(ctx, "drop-temp-system-db" /* opName */, nil /* txn */, dropTableQuery); err != nil {
 		return errors.Wrap(err, "dropping temporary system db")
+	}
+	return nil
+}
+
+// getUndroppedTablesFromRestore retrieves all table descriptors, offline or
+// online, as listed in the restore details, excluding any tables that have been
+// dropped or marked as dropped. This helps avoid situations where the temporary
+// system database tables have already been copied over to the real system
+// database and dropped but attempting to load those temporary tables again
+// would result in an error.
+func getUndroppedTablesFromRestore(
+	ctx context.Context, txn *kv.Txn, details jobspb.RestoreDetails, descCol *descs.Collection,
+) ([]*tabledesc.Mutable, error) {
+	var tables []*tabledesc.Mutable
+	for _, desc := range details.TableDescs {
+		mutableTable, err := descCol.MutableByID(txn).Table(ctx, desc.ID)
+		if err != nil {
+			if pgerror.GetPGCode(err) == pgcode.UndefinedTable {
+				continue
+			}
+			return nil, err
+		}
+		if mutableTable.Dropped() {
+			continue
+		}
+		tables = append(tables, mutableTable)
+	}
+	return tables, nil
+}
+
+// checkeRestoredTableDescriptorVersions compares the versions of descriptors at
+// the time of restore with the versions of the restored tables. It returns an
+// error if any of the restored tables have a version that does not match the
+// version that was recorded at the time of restore in the job details.
+func checkRestoredTableDescriptorVersions(
+	details jobspb.RestoreDetails, restoredTables []*tabledesc.Mutable,
+) error {
+	versionsAtRestoreTime := make(map[descpb.ID]descpb.DescriptorVersion)
+	for _, desc := range details.TableDescs {
+		versionsAtRestoreTime[desc.ID] = desc.Version
+	}
+	for _, table := range restoredTables {
+		if expVersion, ok := versionsAtRestoreTime[table.GetID()]; ok {
+			if table.Version != expVersion {
+				return errors.Errorf(
+					"version mismatch for restored descriptor %d, expected version %d, got %d",
+					table.GetID(), expVersion, table.Version,
+				)
+			}
+		} else {
+			return errors.Errorf("restored table %d not found in restore details", table.GetID())
+		}
 	}
 	return nil
 }

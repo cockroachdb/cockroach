@@ -58,6 +58,7 @@ func clearExpectedValues(c *Config) {
 	c.FileDefaults = FileDefaults{}
 	c.FluentDefaults = FluentDefaults{}
 	c.HTTPDefaults = HTTPDefaults{}
+	c.OtlpDefaults = OtlpDefaults{}
 
 	for _, f := range c.Sinks.FileGroups {
 		if *f.Dir == "/default-dir" {

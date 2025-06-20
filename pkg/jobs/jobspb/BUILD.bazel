@@ -15,6 +15,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/roachpb",
+        "//pkg/security/username",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/protoreflect",

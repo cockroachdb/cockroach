@@ -259,24 +259,22 @@ func makeInputConverter(
 		}
 	}
 
-	if format := spec.Format.Format; singleTable == nil && !isMultiTableFormat(format) {
-		return nil, errors.Errorf("%s only supports reading a single, pre-specified table", format.String())
+	if singleTable == nil {
+		return nil, errors.Errorf("%s only supports reading a single, pre-specified table", spec.Format.Format.String())
 	}
 
-	if singleTable != nil {
-		// If we're using a format like CSV where data columns are not "named", and
-		// therefore cannot be mapped to schema columns, then require the user to
-		// use IMPORT INTO.
-		//
-		// We could potentially do something smarter here and check that only a
-		// suffix of the columns are computed, and then expect the data file to have
-		// #(visible columns) - #(computed columns).
-		if len(singleTableTargetCols) == 0 && !formatHasNamedColumns(spec.Format.Format) {
-			for _, col := range singleTable.VisibleColumns() {
-				if col.IsComputed() {
-					return nil, unimplemented.NewWithIssueDetail(56002, "import.computed",
-						"to use computed columns, use IMPORT INTO")
-				}
+	// If we're using a format like CSV where data columns are not "named", and
+	// therefore cannot be mapped to schema columns, then require the user to
+	// use IMPORT INTO.
+	//
+	// We could potentially do something smarter here and check that only a
+	// suffix of the columns are computed, and then expect the data file to have
+	// #(visible columns) - #(computed columns).
+	if len(singleTableTargetCols) == 0 && !formatHasNamedColumns(spec.Format.Format) {
+		for _, col := range singleTable.VisibleColumns() {
+			if col.IsComputed() {
+				return nil, unimplemented.NewWithIssueDetail(56002, "import.computed",
+					"to use computed columns, use IMPORT INTO")
 			}
 		}
 	}
@@ -308,15 +306,9 @@ func makeInputConverter(
 		return newMysqloutfileReader(
 			semaCtx, spec.Format.MysqlOut, kvCh, spec.WalltimeNanos,
 			readerParallelism, singleTable, singleTableTargetCols, evalCtx, db)
-	case roachpb.IOFileFormat_Mysqldump:
-		return newMysqldumpReader(ctx, semaCtx, kvCh, spec.WalltimeNanos, spec.Tables, evalCtx,
-			spec.Format.MysqlDump, db)
 	case roachpb.IOFileFormat_PgCopy:
 		return newPgCopyReader(semaCtx, spec.Format.PgCopy, kvCh, spec.WalltimeNanos,
 			readerParallelism, singleTable, singleTableTargetCols, evalCtx, db)
-	case roachpb.IOFileFormat_PgDump:
-		return newPgDumpReader(ctx, semaCtx, int64(spec.Progress.JobID), kvCh, spec.Format.PgDump,
-			spec.WalltimeNanos, spec.Tables, evalCtx, db)
 	case roachpb.IOFileFormat_Avro:
 		return newAvroInputReader(
 			semaCtx, kvCh, singleTable, spec.Format.Avro, spec.WalltimeNanos,

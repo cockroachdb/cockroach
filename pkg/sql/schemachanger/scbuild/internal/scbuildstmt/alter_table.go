@@ -40,6 +40,7 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 	reflect.TypeOf((*tree.AlterTableSetDefault)(nil)):         {fn: alterTableSetDefault, on: true, checks: nil},
 	reflect.TypeOf((*tree.AlterTableAlterColumnType)(nil)):    {fn: alterTableAlterColumnType, on: true, checks: nil},
 	reflect.TypeOf((*tree.AlterTableSetRLSMode)(nil)):         {fn: alterTableSetRLSMode, on: true, checks: isV252Active},
+	reflect.TypeOf((*tree.AlterTableDropNotNull)(nil)):        {fn: alterTableDropNotNull, on: true, checks: isV253Active},
 }
 
 func init() {

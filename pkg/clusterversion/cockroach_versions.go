@@ -187,9 +187,6 @@ const (
 
 	TODO_Delete_V25_1_Start
 
-	// TODO_Delete_V25_1_AddJobsTables added new jobs tables.
-	TODO_Delete_V25_1_AddJobsTables
-
 	// TODO_Delete_V25_1_AddRangeForceFlushKey adds the RangeForceFlushKey, a replicated
 	// range-ID local key, which is written below raft.
 	TODO_Delete_V25_1_AddRangeForceFlushKey
@@ -202,19 +199,6 @@ const (
 	// table. The table is used to store information about prepared transaction
 	// that are part of the XA two-phase commit protocol.
 	TODO_Delete_V25_1_PreparedTransactionsTable
-
-	// TODO_Delete_V25_1_AddJobsColumns added new columns to system.jobs.
-	TODO_Delete_V25_1_AddJobsColumns
-
-	// TODO_Delete_V25_1_JobsWritesFence is an empty version that is used to add a "fence"
-	// between the column addition version and the backfill version. This allows
-	// the backfill version's upgrade step to make the assumption that all nodes
-	// will be writing to the new columns, since moving from fence to backfill can
-	// only start once no nodes are still on add-columnns.
-	TODO_Delete_V25_1_JobsWritesFence
-
-	// TODO_Delete_V25_1_JobsBackfill backfills the new jobs tables and columns.
-	TODO_Delete_V25_1_JobsBackfill
 
 	// V25_1 is CockroachDB v25.1. It's used for all v25.1.x patch releases.
 	V25_1
@@ -271,13 +255,9 @@ var versionTable = [numKeys]roachpb.Version{
 	// v25.1 versions. Internal versions must be even.
 	TODO_Delete_V25_1_Start: {Major: 24, Minor: 3, Internal: 2},
 
-	TODO_Delete_V25_1_AddJobsTables:             {Major: 24, Minor: 3, Internal: 4},
 	TODO_Delete_V25_1_AddRangeForceFlushKey:     {Major: 24, Minor: 3, Internal: 8},
 	TODO_Delete_V25_1_BatchStreamRPC:            {Major: 24, Minor: 3, Internal: 10},
 	TODO_Delete_V25_1_PreparedTransactionsTable: {Major: 24, Minor: 3, Internal: 12},
-	TODO_Delete_V25_1_AddJobsColumns:            {Major: 24, Minor: 3, Internal: 14},
-	TODO_Delete_V25_1_JobsWritesFence:           {Major: 24, Minor: 3, Internal: 16},
-	TODO_Delete_V25_1_JobsBackfill:              {Major: 24, Minor: 3, Internal: 18},
 
 	V25_1: {Major: 25, Minor: 1, Internal: 0},
 

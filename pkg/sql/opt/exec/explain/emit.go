@@ -271,14 +271,17 @@ func makeEmitter(ob *OutputBuilder, spanFormatFn SpanFormatFn) emitter {
 	return emitter{ob: ob, spanFormatFn: spanFormatFn}
 }
 
+func usedStreamer(n *Node) bool {
+	if stats, ok := n.annotations[exec.ExecutionStatsID]; ok && !omitStats(n) {
+		return stats.(*exec.ExecutionStats).UsedStreamer
+	}
+	return false
+}
+
 func (e *emitter) nodeName(n *Node) (name string, _ error) {
-	defer func() {
-		if stats, ok := n.annotations[exec.ExecutionStatsID]; ok && !omitStats(n) {
-			if stats.(*exec.ExecutionStats).UsedStreamer {
-				name += " (streamer)"
-			}
-		}
-	}()
+	if usedStreamer(n) {
+		defer func() { name += " (streamer)" }()
+	}
 
 	switch n.op {
 	case scanOp:
@@ -777,6 +780,9 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		}
 		ob.VAttr("key columns", strings.Join(cols, ", "))
 		e.emitLockingPolicy(a.Locking)
+		if a.Parallelize { // should always be true
+			ob.VAttr("parallel", "")
+		}
 
 	case groupByOp:
 		a := n.args.(*groupByArgs)
@@ -871,6 +877,9 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		ob.Expr("remote lookup condition", a.RemoteLookupExpr, appendColumns(inputCols, tableColumns(a.Table, a.LookupCols)...))
 		ob.Expr("pred", a.OnCond, appendColumns(inputCols, tableColumns(a.Table, a.LookupCols)...))
 		e.emitLockingPolicy(a.Locking)
+		if a.Parallelize || usedStreamer(n) {
+			ob.VAttr("parallel", "")
+		}
 
 	case zigzagJoinOp:
 		a := n.args.(*zigzagJoinArgs)

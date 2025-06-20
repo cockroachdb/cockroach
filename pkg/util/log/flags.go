@@ -366,6 +366,19 @@ func ApplyConfig(
 		attachSinkInfo(httpSinkInfo, &fc.Channels)
 	}
 
+	// Create the OpenTelemetry sinks.
+	for _, fc := range config.Sinks.OtlpServers {
+		if fc.Filter == severity.NONE {
+			continue
+		}
+		optlSinkInfo, err := newOtlpSinkInfo(*fc)
+		if err != nil {
+			return nil, err
+		}
+		attachBufferWrapper(optlSinkInfo, fc.CommonSinkConfig.Buffering, closer)
+		attachSinkInfo(optlSinkInfo, &fc.Channels)
+	}
+
 	// Prepend the interceptor sink to all channels.
 	// We prepend it because we want the interceptors
 	// to see every event before they make their way to disk/network.
@@ -431,6 +444,11 @@ func newHTTPSinkInfo(c logconfig.HTTPSinkConfig) (*sinkInfo, error) {
 	}
 	info.sink = httpSink
 	return info, nil
+}
+
+func newOtlpSinkInfo(_ logconfig.OtlpSinkConfig) (*sinkInfo, error) {
+	// TODO(mudit): Implement newOtlpSink
+	return nil, nil
 }
 
 // applyFilters applies the channel filters to a sinkInfo.

@@ -433,7 +433,7 @@ func Run(
 	}
 	// If no nodes were specified, run on nodes derived from the clusterName.
 	if len(options.Nodes) == 0 {
-		options.Nodes = c.TargetNodes()
+		options.Nodes = c.Nodes
 	}
 
 	cmd := strings.TrimSpace(strings.Join(cmdArray, " "))
@@ -461,7 +461,7 @@ func RunWithDetails(
 	}
 	// If no nodes were specified, run on nodes derived from the clusterName.
 	if len(options.Nodes) == 0 {
-		options.Nodes = c.TargetNodes()
+		options.Nodes = c.Nodes
 	}
 	cmd := strings.TrimSpace(strings.Join(cmdArray, " "))
 	return c.RunWithDetails(ctx, l, options, TruncateString(cmd, 30), cmd)
@@ -557,7 +557,7 @@ func IP(l *logger.Logger, clusterName string, external bool) ([]string, error) {
 		return nil, err
 	}
 
-	nodes := c.TargetNodes()
+	nodes := c.Nodes
 	ips := make([]string, len(nodes))
 
 	for i := 0; i < len(nodes); i++ {
@@ -831,7 +831,7 @@ func updatePrometheusTargets(
 		wg.Add(1)
 		go func(nodeID int, v vm.VM) {
 			defer wg.Done()
-			desc, err := c.DiscoverService(ctx, install.Node(nodeID), "", install.ServiceTypeUI, 0)
+			desc, err := c.ServiceDescriptor(ctx, install.Node(nodeID), "", install.ServiceTypeUI, 0)
 			if err != nil {
 				l.Errorf("error getting the port for node %d: %v", nodeID, err)
 				return
@@ -1126,7 +1126,7 @@ func PgURL(
 	if err != nil {
 		return nil, err
 	}
-	nodes := c.TargetNodes()
+	nodes := c.Nodes
 	ips := make([]string, len(nodes))
 	if opts.External {
 		for i := 0; i < len(nodes); i++ {
@@ -1143,7 +1143,7 @@ func PgURL(
 
 	var urls []string
 	for i, ip := range ips {
-		desc, err := c.DiscoverService(ctx, nodes[i], opts.VirtualClusterName, install.ServiceTypeSQL, opts.SQLInstance)
+		desc, err := c.ServiceDescriptor(ctx, nodes[i], opts.VirtualClusterName, install.ServiceTypeSQL, opts.SQLInstance)
 		if err != nil {
 			return nil, err
 		}
@@ -1197,7 +1197,7 @@ func urlGenerator(
 		}
 		port := uConfig.port
 		if port == 0 {
-			desc, err := c.DiscoverService(
+			desc, err := c.ServiceDescriptor(
 				ctx, node, uConfig.virtualClusterName, install.ServiceTypeUI, uConfig.sqlInstance,
 			)
 			if err != nil {
@@ -1262,7 +1262,7 @@ func AdminURL(
 		virtualClusterName: virtualClusterName,
 		sqlInstance:        sqlInstance,
 	}
-	return urlGenerator(ctx, c, l, c.TargetNodes(), uConfig)
+	return urlGenerator(ctx, c, l, c.Nodes, uConfig)
 }
 
 // SQLPorts finds the SQL ports for a cluster.
@@ -1350,7 +1350,7 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 
 	httpClient := httputil.NewClientWithTimeout(timeout)
 	startTime := timeutil.Now().Unix()
-	err = c.Parallel(ctx, l, install.WithNodes(c.TargetNodes()).WithDisplay(description),
+	err = c.Parallel(ctx, l, install.WithNodes(c.Nodes).WithDisplay(description),
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 			res := &install.RunResultDetails{Node: node}
 			host := c.Host(node)
@@ -2131,7 +2131,7 @@ func CreateSnapshot(
 		return nil, err
 	}
 
-	nodes := c.TargetNodes()
+	nodes := c.Nodes
 	nodesStatus, err := c.Status(ctx, l)
 
 	if err != nil {
@@ -2263,13 +2263,13 @@ func ApplySnapshots(
 		return err
 	}
 
-	if n := len(c.TargetNodes()); n != len(snapshots) {
+	if n := len(c.Nodes); n != len(snapshots) {
 		return fmt.Errorf("mismatched number of snapshots (%d) to node count (%d)", len(snapshots), n)
 		// TODO(irfansharif): Validate labels (version, instance types).
 	}
 
 	// Detach and delete existing volumes. This is destructive.
-	if err := c.Parallel(ctx, l, install.WithNodes(c.TargetNodes()),
+	if err := c.Parallel(ctx, l, install.WithNodes(c.Nodes),
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 			res := &install.RunResultDetails{Node: node}
 
@@ -2294,7 +2294,7 @@ func ApplySnapshots(
 		return err
 	}
 
-	return c.Parallel(ctx, l, install.WithNodes(c.TargetNodes()),
+	return c.Parallel(ctx, l, install.WithNodes(c.Nodes),
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 			res := &install.RunResultDetails{Node: node}
 
@@ -2406,7 +2406,7 @@ func StartJaeger(
 	// install from source or get linux binaries and start them
 	// with systemd. For now this just matches what we've been
 	// copy and pasting.
-	jaegerNode := c.TargetNodes()[len(c.TargetNodes())-1:]
+	jaegerNode := c.Nodes[len(c.Nodes)-1:]
 	err = install.InstallTool(ctx, l, c, jaegerNode, "docker", l.Stdout, l.Stderr)
 	if err != nil {
 		return err
@@ -2458,7 +2458,7 @@ func StopJaeger(ctx context.Context, l *logger.Logger, clusterName string) error
 	if err != nil {
 		return err
 	}
-	jaegerNode := c.TargetNodes()[len(c.TargetNodes())-1:]
+	jaegerNode := c.Nodes[len(c.Nodes)-1:]
 	stopCmd := fmt.Sprintf("docker stop %s", jaegerContainerName)
 	err = c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(jaegerNode), stopCmd, stopCmd)
 	if err != nil {
@@ -2477,7 +2477,7 @@ func JaegerURL(
 	if err != nil {
 		return "", err
 	}
-	jaegerNode := c.TargetNodes()[len(c.TargetNodes())-1:]
+	jaegerNode := c.Nodes[len(c.Nodes)-1:]
 	urls, err := urlGenerator(ctx, c, l, jaegerNode, urlConfig{
 		usePublicIP:   true,
 		openInBrowser: openInBrowser,
@@ -2619,7 +2619,7 @@ func StorageCollectionPerformAction(
 }
 
 func printNodeToVolumeMapping(c *install.SyncedCluster) {
-	nodes := c.TargetNodes()
+	nodes := c.Nodes
 	for _, n := range nodes {
 		cVM := c.VMs[n-1]
 		for _, volume := range cVM.NonBootAttachedVolumes {
@@ -2633,7 +2633,7 @@ func printNodeToVolumeMapping(c *install.SyncedCluster) {
 func sendCaptureCommand(
 	ctx context.Context, l *logger.Logger, c *install.SyncedCluster, action string, captureDir string,
 ) error {
-	nodes := c.TargetNodes()
+	nodes := c.Nodes
 	httpClient := httputil.NewClientWithTimeout(0 /* timeout: None */)
 	_, _, err := c.ParallelE(ctx, l, install.WithNodes(nodes).WithDisplay(fmt.Sprintf("Performing workload capture %s", action)),
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
@@ -2713,7 +2713,7 @@ func createAttachMountVolumes(
 	opts vm.VolumeCreateOpts,
 	mountDir string,
 ) error {
-	nodes := c.TargetNodes()
+	nodes := c.Nodes
 	for idx, n := range nodes {
 		curNode := nodes[idx : idx+1]
 
@@ -2778,9 +2778,8 @@ func CreateLoadBalancer(
 	}
 
 	// Find the SQL ports for the service on all nodes.
-	services, err := c.DiscoverServices(
-		ctx, virtualClusterName, install.ServiceTypeSQL,
-		install.ServiceNodePredicate(c.TargetNodes()...), install.ServiceInstancePredicate(sqlInstance),
+	services, err := c.ServiceDescriptors(
+		ctx, c.Nodes, virtualClusterName, install.ServiceTypeSQL, sqlInstance,
 	)
 	if err != nil {
 		return err
@@ -2841,8 +2840,7 @@ func LoadBalancerPgURL(
 		return "", err
 	}
 
-	services, err := c.DiscoverServices(ctx, opts.VirtualClusterName, install.ServiceTypeSQL,
-		install.ServiceInstancePredicate(opts.SQLInstance))
+	services, err := c.ServiceDescriptors(ctx, c.Nodes, opts.VirtualClusterName, install.ServiceTypeSQL, opts.SQLInstance)
 	if err != nil {
 		return "", err
 	}
@@ -2868,8 +2866,7 @@ func LoadBalancerIP(
 	if err != nil {
 		return "", err
 	}
-	services, err := c.DiscoverServices(ctx, virtualClusterName, install.ServiceTypeSQL,
-		install.ServiceInstancePredicate(sqlInstance))
+	services, err := c.ServiceDescriptors(ctx, c.Nodes, virtualClusterName, install.ServiceTypeSQL, sqlInstance)
 	if err != nil {
 		return "", err
 	}
@@ -2909,7 +2906,7 @@ func Deploy(
 	}
 
 	stageDir := "stage-cockroach"
-	err = c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(c.TargetNodes()), "creating staging dir",
+	err = c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(c.Nodes), "creating staging dir",
 		fmt.Sprintf("rm -rf %[1]s && mkdir -p %[1]s", stageDir))
 	if err != nil {
 		return err
@@ -2919,7 +2916,7 @@ func Deploy(
 		if pathToBinary == "" {
 			return errors.Errorf("%s application requires a path to the binary", applicationName)
 		}
-		err = c.Put(ctx, l, c.TargetNodes(), pathToBinary, filepath.Join(stageDir, "cockroach"))
+		err = c.Put(ctx, l, c.Nodes, pathToBinary, filepath.Join(stageDir, "cockroach"))
 	} else {
 		err = Stage(ctx, l, clusterName, "", "", stageDir, applicationName, version)
 	}
@@ -2929,7 +2926,7 @@ func Deploy(
 	}
 
 	l.Printf("Performing rolling restart of %d nodes on %s", len(c.VMs), clusterName)
-	for _, node := range c.TargetNodes() {
+	for _, node := range c.Nodes {
 		curNode := []install.Node{node}
 
 		err = c.WithNodes(curNode).Stop(ctx, l, sig, wait, gracePeriod, "")

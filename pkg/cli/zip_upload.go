@@ -729,7 +729,7 @@ func uploadZipTables(ctx context.Context, uploadID string, debugDirPath string) 
 					if _, err := uploadLogsToDatadog(
 						chunk.payload, debugZipUploadOpts.ddAPIKey, debugZipUploadOpts.ddSite,
 					); err != nil {
-						fmt.Fprintf(os.Stderr, "failed to upload a part of %s: %s\n", chunk.tableName, err)
+						uploadIndividualLogToDatadog(chunk)
 					}
 				}()
 			}
@@ -755,6 +755,25 @@ func uploadZipTables(ctx context.Context, uploadID string, debugDirPath string) 
 	fmt.Printf("\nView as tables here: https://us5.datadoghq.com/dashboard/ipq-44t-ez8/table-dumps-from-debug-zip?tpl_var_upload_id%%5B0%%5D=%s\n", uploadID)
 	fmt.Printf("View as logs here: https://us5.datadoghq.com/logs?query=source:debug-zip&upload_id:%s\n", uploadID)
 	return nil
+}
+
+// uploadIndividualLogToDatadog is a fallback function to upload the logs to datadog. We would receive cryptic "Decompression error"
+// errors from datadog. We are suspecting it is due to the logs being >5MB in size. So, we are uploading individual log
+// lines to datadog instead of the whole payload.
+func uploadIndividualLogToDatadog(chunk *tableDumpChunk) {
+	logs, _ := getLogLinesFromPayload(chunk.payload)
+	var stdErr error
+	for _, logMap := range logs {
+		logLine, _ := json.Marshal(logMap)
+		if _, err := uploadLogsToDatadog(
+			logLine, debugZipUploadOpts.ddAPIKey, debugZipUploadOpts.ddSite,
+		); err != nil && stdErr == nil {
+			stdErr = err
+		}
+	}
+	if stdErr != nil {
+		fmt.Fprintf(os.Stderr, "failed to upload a part of %s: %s\n", chunk.tableName, stdErr)
+	}
 }
 
 type ddArchivePayload struct {
@@ -838,6 +857,7 @@ type logUploadSig struct {
 // number of lines and the size of the payload. But in case of CRDB logs, the
 // average size of 1000 lines is well within the limit (5MB). So, we are only
 // splitting based on the number of lines.
+// TODO(obs-india): consider log size in sig calculation
 func (s logUploadSig) split() []logUploadSig {
 	var (
 		noOfNewSignals = len(s.logLines)/datadogMaxLogLinesPerReq + 1
@@ -1247,6 +1267,15 @@ func makeDDMultiLineLogPayload(logLines [][]byte) []byte {
 	buf.WriteByte(']')
 
 	return buf.Bytes()
+}
+
+func getLogLinesFromPayload(payload []byte) ([]map[string]any, error) {
+	var logs []map[string]any
+	err := json.Unmarshal(payload, &logs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to log lines: %w", err)
+	}
+	return logs, nil
 }
 
 // humanReadableSize converts the given number of bytes to a human readable

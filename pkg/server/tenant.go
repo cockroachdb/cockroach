@@ -994,7 +994,6 @@ func (s *SQLServerWrapper) AcceptClients(ctx context.Context) error {
 		ctx,
 		s.stopper,
 		s.sqlServer.tenantConnect,
-		*s.sqlServer.internalExecutor,
 		s.ClusterSettings(),
 		&ti,
 	); err != nil {

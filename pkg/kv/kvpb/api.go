@@ -2530,6 +2530,13 @@ func (r *ConditionalPutRequest) Validate(_ Header) error {
 	return nil
 }
 
+func (r *GetRequest) Validate(_ Header) error {
+	if !r.ExpectExclusionSince.IsEmpty() && r.KeyLockingStrength == lock.None {
+		return errors.AssertionFailedf("invalid GetRequest: ExpectExclusionSince is non-empty for non-locking request")
+	}
+	return nil
+}
+
 func (r *PutRequest) Validate(bh Header) error {
 	if err := validateExclusionTimestampForBatch(r.ExpectExclusionSince, bh); err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid PutRequest")
@@ -2555,10 +2562,14 @@ func validateExclusionTimestampForBatch(ts hlc.Timestamp, h Header) error {
 		return nil
 	}
 
+	// Unless the IsoLevel allows per-statement read snapshots,
 	// CanForwardReadTimestamp implies we haven't served a read, so it makes no
 	// sense that ExpectExclusionSince would be set since it is the result of a
 	// locking read.
-	if h.CanForwardReadTimestamp {
+	//
+	// If the IsoLevel permits per-statement read snapshots, then the read
+	// footprint may have been reset since the locking read was issued.
+	if h.CanForwardReadTimestamp && !h.Txn.IsoLevel.PerStatementReadSnapshot() {
 		return errors.New("unexpected ExpectExclusionSince in batch with CanForwardReadTimestamp set")
 	}
 	return nil
