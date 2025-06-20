@@ -1107,11 +1107,11 @@ func (cs *cachedState) SetHighwater(frontier hlc.Timestamp) {
 }
 
 // SetCheckpoint implements the eval.ChangefeedState interface.
-func (cs *cachedState) SetCheckpoint(checkpoint *jobspb.TimestampSpansMap) {
-	// NB: It's not necessary to set the legacy checkpoint field because this
+func (cs *cachedState) SetCheckpoint(checkpoint *jobspb.TimestampSpansMap) error {
+	// It's not necessary to do a version gate check here because this
 	// copy of the checkpoint is only used in-memory on a coordinator node that
 	// knows about the new field.
-	cs.progress.Details.(*jobspb.Progress_Changefeed).Changefeed.SpanLevelCheckpoint = checkpoint
+	return cs.progress.Details.(*jobspb.Progress_Changefeed).Changefeed.SetCheckpoint(nil, checkpoint)
 }
 
 // AggregatorFrontierSpans returns an iterator over the spans in the aggregator
@@ -1791,10 +1791,14 @@ func (cf *changeFrontier) checkpointJobProgress(
 
 			changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
 			if cv.IsActive(cf.Ctx(), clusterversion.V25_2) {
-				changefeedProgress.SpanLevelCheckpoint = spanLevelCheckpoint
+				if err := changefeedProgress.SetCheckpoint(nil, spanLevelCheckpoint); err != nil {
+					return err
+				}
 			} else {
 				legacyCheckpoint = checkpoint.ConvertToLegacyCheckpoint(spanLevelCheckpoint)
-				changefeedProgress.Checkpoint = legacyCheckpoint
+				if err := changefeedProgress.SetCheckpoint(legacyCheckpoint, nil); err != nil {
+					return err
+				}
 			}
 
 			if ptsUpdated, err = cf.manageProtectedTimestamps(cf.Ctx(), txn, changefeedProgress); err != nil {
@@ -1827,7 +1831,9 @@ func (cf *changeFrontier) checkpointJobProgress(
 	}
 
 	cf.localState.SetHighwater(frontier)
-	cf.localState.SetCheckpoint(spanLevelCheckpoint)
+	if err := cf.localState.SetCheckpoint(spanLevelCheckpoint); err != nil {
+		return false, err
+	}
 
 	return true, nil
 }
