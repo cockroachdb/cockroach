@@ -95,6 +95,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"storj.io/drpc"
 )
 
 const (
@@ -695,6 +696,11 @@ func (s *statusServer) RegisterService(g *grpc.Server) {
 	serverpb.RegisterStatusServer(g, s)
 }
 
+// RegisterService registers the DRPC service.
+func (s *statusServer) RegisterDRPCService(d drpc.Mux) error {
+	return serverpb.DRPCRegisterStatus(d, s)
+}
+
 // RegisterGateway starts the gateway (i.e. reverse
 // proxy) that proxies HTTP requests to the appropriate gRPC endpoints.
 func (s *statusServer) RegisterGateway(
@@ -707,6 +713,11 @@ func (s *statusServer) RegisterGateway(
 // RegisterService registers the GRPC service.
 func (s *systemStatusServer) RegisterService(g *grpc.Server) {
 	serverpb.RegisterStatusServer(g, s)
+}
+
+// RegisterService registers the DRPC service.
+func (s *systemStatusServer) RegisterDRPCService(d drpc.Mux) error {
+	return serverpb.DRPCRegisterStatus(d, s)
 }
 
 func (s *statusServer) parseNodeID(nodeIDParam string) (roachpb.NodeID, bool, error) {
