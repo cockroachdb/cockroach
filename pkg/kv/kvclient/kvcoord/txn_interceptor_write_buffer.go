@@ -443,6 +443,7 @@ func (twb *txnWriteBuffer) estimateSize(ba *kvpb.BatchRequest) int64 {
 				seq: t.Sequence,
 			}
 			estimate += scratch.size()
+			estimate += lockKeyInfoSize
 		case *kvpb.PutRequest:
 			// NB: when estimating, we're being conservative by assuming the Put is to
 			// a key that isn't already present in the buffer. If it were, we could
@@ -453,6 +454,9 @@ func (twb *txnWriteBuffer) estimateSize(ba *kvpb.BatchRequest) int64 {
 				seq: t.Sequence,
 			}
 			estimate += scratch.size()
+			if t.MustAcquireExclusiveLock {
+				estimate += lockKeyInfoSize
+			}
 		case *kvpb.DeleteRequest:
 			// NB: Similar to Put, we're assuming we're deleting a key that isn't
 			// already present in the buffer.
@@ -461,6 +465,9 @@ func (twb *txnWriteBuffer) estimateSize(ba *kvpb.BatchRequest) int64 {
 				seq: t.Sequence,
 			}
 			estimate += scratch.size()
+			if t.MustAcquireExclusiveLock {
+				estimate += lockKeyInfoSize
+			}
 		}
 		// No other request is buffered.
 	}
@@ -648,7 +655,10 @@ func (twb *txnWriteBuffer) rollbackToSavepointLocked(ctx context.Context, s save
 	toDelete := make([]*bufferedWrite, 0)
 	it := twb.buffer.MakeIter()
 	for it.First(); it.Valid(); it.Next() {
-		it.Cur().rollbackLockInfo(s.seqNum)
+		if held := it.Cur().rollbackLockInfo(s.seqNum); !held {
+			// If we aren't still held, update our buffer size.
+			twb.bufferSize -= lockKeyInfoSize
+		}
 		bufferedVals := it.Cur().vals
 		// NB: the savepoint is being rolled back to s.seqNum (inclusive). So,
 		// idx is the index of the first value that is considered rolled back.
@@ -1346,7 +1356,9 @@ func (twb *txnWriteBuffer) addToBuffer(
 		val := bufferedValue{val: val, seq: seq, kvNemesisSeq: kvNemSeq}
 		bw.vals = append(bw.vals, val)
 		if lockInfo != nil {
-			bw.acquireLock(lockInfo)
+			if firstAcquisition := bw.acquireLock(lockInfo); firstAcquisition {
+				twb.bufferSize += lockKeyInfoSize
+			}
 		}
 		twb.bufferSize += val.size()
 	} else {
@@ -1511,14 +1523,21 @@ func (bw *bufferedWrite) size() int64 {
 	for _, v := range bw.vals {
 		size += v.size()
 	}
+	if bw.lki != nil {
+		size += lockKeyInfoSize
+	}
 	return size
 }
 
-func (bw *bufferedWrite) acquireLock(li *lockAcquisition) {
+// acquireLock updates the lock information for this buffered write. It returns
+// true if this is the first lock acquisition.
+func (bw *bufferedWrite) acquireLock(li *lockAcquisition) bool {
 	if bw.lki == nil {
 		bw.lki = newLockedKeyInfo(li.str, li.seq, li.ts)
+		return true
 	} else {
 		bw.lki.acquireLock(li.str, li.seq, li.ts)
+		return false
 	}
 }
 
@@ -1539,14 +1558,18 @@ func (bw *bufferedWrite) heldStr(seq enginepb.TxnSeq) lock.Strength {
 	return bw.lki.heldStr(seq)
 }
 
-func (bw *bufferedWrite) rollbackLockInfo(seq enginepb.TxnSeq) {
+// rollbackLockInfo updates the lock information based on the rollback. It
+// returns true if the lock is still held.
+func (bw *bufferedWrite) rollbackLockInfo(seq enginepb.TxnSeq) bool {
 	if bw.lki == nil {
-		return
+		return false
 	}
 
-	if !bw.lki.rollbackSequence(seq) {
+	stillHeld := bw.lki.rollbackSequence(seq)
+	if !stillHeld {
 		bw.lki = nil
 	}
+	return stillHeld
 }
 
 const bufferedValueStructOverhead = int64(unsafe.Sizeof(bufferedValue{}))
@@ -1684,6 +1707,8 @@ type lockedKeyInfo struct {
 	// not advance.
 	ts hlc.Timestamp
 }
+
+var lockKeyInfoSize = int64(unsafe.Sizeof(lockedKeyInfo{}))
 
 func newLockedKeyInfo(str lock.Strength, seqNum enginepb.TxnSeq, ts hlc.Timestamp) *lockedKeyInfo {
 	lki := &lockedKeyInfo{
