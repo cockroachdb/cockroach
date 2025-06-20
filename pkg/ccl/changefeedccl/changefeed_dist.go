@@ -261,16 +261,19 @@ func startDistChangefeed(
 	dsp := execCtx.DistSQLPlanner()
 
 	//lint:ignore SA1019 deprecated usage
-	var checkpoint *jobspb.ChangefeedProgress_Checkpoint
+	var legacyCheckpoint *jobspb.ChangefeedProgress_Checkpoint
 	if progress := localState.progress.GetChangefeed(); progress != nil && progress.Checkpoint != nil {
-		checkpoint = progress.Checkpoint
+		legacyCheckpoint = progress.Checkpoint
 	}
 	var spanLevelCheckpoint *jobspb.TimestampSpansMap
 	if progress := localState.progress.GetChangefeed(); progress != nil && progress.SpanLevelCheckpoint != nil {
 		spanLevelCheckpoint = progress.SpanLevelCheckpoint
 	}
+	if legacyCheckpoint != nil && spanLevelCheckpoint != nil {
+		return errors.AssertionFailedf("both legacy and current checkpoint set on changefeed job progress")
+	}
 	p, planCtx, err := makePlan(execCtx, jobID, details, description, initialHighWater,
-		trackedSpans, checkpoint, spanLevelCheckpoint, localState.drainingNodes)(ctx, dsp)
+		trackedSpans, legacyCheckpoint, spanLevelCheckpoint, localState.drainingNodes)(ctx, dsp)
 	if err != nil {
 		return err
 	}

@@ -1642,7 +1642,9 @@ func reconcileJobStateWithLocalState(
 		if updateHW {
 			localState.SetHighwater(sf.Frontier())
 		}
-		localState.SetCheckpoint(checkpoint)
+		if err := localState.SetCheckpoint(checkpoint); err != nil {
+			return err
+		}
 		if log.V(1) {
 			log.Infof(ctx, "Applying checkpoint to job record:  hw=%v, cf=%v",
 				localState.progress.GetHighWater(), localState.progress.GetChangefeed())
