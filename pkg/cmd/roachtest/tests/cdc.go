@@ -4408,38 +4408,34 @@ func runCDCMultiDBTPCCMinimal(ctx context.Context, t test.Test, c cluster.Cluste
 		t.Fatalf("failed to init tpccmultidb: %v", err)
 	}
 
-	workloadCmd := fmt.Sprintf("./cockroach workload run tpccmultidb --warehouses=1 --duration=5m --db-list-file=%s {pgurl:1-3}", dbListFile)
+	workloadCmd := fmt.Sprintf("./cockroach workload run tpccmultidb --warehouses=100 --duration=15m --db-list-file=%s {pgurl:1-3}", dbListFile)
 	m := c.NewMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
 		return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), workloadCmd)
 	})
 
-	t.Status("Done setup, sleeping for 10 min")
-	time.Sleep(10 * time.Minute)
-	row := db.QueryRow("SELECT count(*) from defaultdb.schema1.orders")
-	t.Status("row", row)
-	t.Status("Finishing test")
+	if _, err := db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
+		t.Fatalf("failed to enable rangefeeds: %v", err)
+	}
 
-	// if _, err := db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
-	// 	t.Fatalf("failed to enable rangefeeds: %v", err)
-	// }
+	orderTables := []string{}
+	for _, schema := range schemaNames {
+		orderTables = append(orderTables, fmt.Sprintf("%s.order", schema))
+	}
+	t.L().Printf("order tables: %s", orderTables)
+	kafka, cleanup := setupKafka(ctx, t, c, c.Node(c.Spec().NodeCount))
+	defer cleanup()
 
-	// orderTables := []string{}
-	// for _, schema := range schemaNames {
-	// 	orderTables = append(orderTables, fmt.Sprintf("%s.order", schema))
-	// }
-	// t.L().Printf("order tables: %s", orderTables)
-	// kafka, cleanup := setupKafka(ctx, t, c, c.Node(c.Spec().NodeCount))
-	// defer cleanup()
+	changefeedStmt := fmt.Sprintf("CREATE CHANGEFEED FOR %s INTO '%s' WITH format='json', resolved='4s', full_table_name", strings.Join(orderTables, ", "), kafka.sinkURL(ctx))
+	t.L().Printf("changefeed statement: %s", changefeedStmt)
+	var jobID int
+	if err := db.QueryRow(changefeedStmt).Scan(&jobID); err != nil {
+		t.Fatalf("failed to create changefeed: %v", err)
+	}
 
-	// changefeedStmt := fmt.Sprintf("CREATE CHANGEFEED FOR %s INTO '%s' WITH format='json', resolved='10s', full_table_name", strings.Join(orderTables, ", "), kafka.sinkURL(ctx))
-	// t.L().Printf("changefeed statement: %s", changefeedStmt)
-	// var jobID int
-	// if err := db.QueryRow(changefeedStmt).Scan(&jobID); err != nil {
-	// 	t.Fatalf("failed to create changefeed: %v", err)
-	// }
-
-	// t.Status("Minimal multi-schema TPCC + changefeed test running")
-	// m.Wait()
-	// t.Status("Minimal multi-schema TPCC + changefeed test finished")
+	t.Status("Minimal multi-schema TPCC + changefeed test running")
+	m.Wait()
+	var count int
+	db.QueryRow("SELECT count(*) from defaultdb.schema1.orders").Scan(&count)
+	t.Status("Minimal multi-schema TPCC + changefeed test finished", count)
 }
