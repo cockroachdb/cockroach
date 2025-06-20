@@ -95,7 +95,6 @@ upsert descriptor #107
   +  replacementOf:
   +    time: {}
   +  sequenceOpts:
-  +    cacheSize: "1"
   +    increment: "1"
   +    maxValue: "9223372036854775807"
   +    minValue: "1"
@@ -103,6 +102,7 @@ upsert descriptor #107
   +    sequenceOwner:
   +      ownerColumnId: 2
   +      ownerTableId: 106
+  +    sessionCacheSize: "1"
   +    start: "1"
   +  unexposedParentSchemaId: 105
   +  version: "1"
@@ -295,7 +295,6 @@ upsert descriptor #107
   +  replacementOf:
   +    time: {}
   +  sequenceOpts:
-  +    cacheSize: "1"
   +    increment: "1"
   +    maxValue: "9223372036854775807"
   +    minValue: "1"
@@ -303,6 +302,7 @@ upsert descriptor #107
   +    sequenceOwner:
   +      ownerColumnId: 2
   +      ownerTableId: 106
+  +    sessionCacheSize: "1"
   +    start: "1"
   +  unexposedParentSchemaId: 105
   +  version: "1"

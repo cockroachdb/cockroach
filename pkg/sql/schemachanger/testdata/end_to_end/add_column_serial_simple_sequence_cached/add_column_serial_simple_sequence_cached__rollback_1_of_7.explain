@@ -14,7 +14,7 @@ Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN serial_
       │    │    ├── PUBLIC        → DROPPED Sequence:{DescID: 107 (tbl_serial_id_seq-)}
       │    │    ├── PUBLIC        → ABSENT  Namespace:{DescID: 107 (tbl_serial_id_seq-), Name: "tbl_serial_id_seq", ReferencedDescID: 104 (#104)}
       │    │    ├── PUBLIC        → ABSENT  SchemaChild:{DescID: 107 (tbl_serial_id_seq-), ReferencedDescID: 105 (#105)}
-      │    │    ├── PUBLIC        → ABSENT  SequenceOption:{DescID: 107 (tbl_serial_id_seq-), Name: "CACHE"}
+      │    │    ├── PUBLIC        → ABSENT  SequenceOption:{DescID: 107 (tbl_serial_id_seq-), Name: "PER SESSION CACHE"}
       │    │    ├── PUBLIC        → ABSENT  Column:{DescID: 107 (tbl_serial_id_seq-), ColumnID: 1 (value-)}
       │    │    ├── PUBLIC        → ABSENT  ColumnType:{DescID: 107 (tbl_serial_id_seq-), ColumnFamilyID: 0, ColumnID: 1 (value-), TypeName: "INT8"}
       │    │    ├── PUBLIC        → ABSENT  ColumnNotNull:{DescID: 107 (tbl_serial_id_seq-), ColumnID: 1 (value-), IndexID: 0}

@@ -74,11 +74,11 @@ upsert descriptor #105
   +  replacementOf:
   +    time: {}
   +  sequenceOpts:
-  +    cacheSize: "1"
   +    increment: "1"
   +    maxValue: "9223372036854775807"
   +    minValue: "1"
   +    sequenceOwner: {}
+  +    sessionCacheSize: "1"
   +    start: "32"
   +  temporary: true
   +  unexposedParentSchemaId: 104
@@ -146,11 +146,11 @@ upsert descriptor #105
   +  replacementOf:
   +    time: {}
   +  sequenceOpts:
-  +    cacheSize: "1"
   +    increment: "1"
   +    maxValue: "9223372036854775807"
   +    minValue: "1"
   +    sequenceOwner: {}
+  +    sessionCacheSize: "1"
   +    start: "32"
   +  temporary: true
   +  unexposedParentSchemaId: 104

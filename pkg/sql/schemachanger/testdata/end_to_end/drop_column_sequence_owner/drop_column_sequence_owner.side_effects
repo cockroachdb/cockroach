@@ -689,7 +689,7 @@ upsert descriptor #104
   +  version: "10"
 upsert descriptor #105
   ...
-         ownerTableId: 104
+       sessionCacheSize: "1"
        start: "1"
   +  state: DROP
      unexposedParentSchemaId: 101

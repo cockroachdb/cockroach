@@ -61,7 +61,7 @@ func SequenceOptionsFromNormalizationMode(
 	case sessiondatapb.SerialUsesCachedSQLSequences:
 		cacheValue := sqlclustersettings.CachedSequencesCacheSizeSetting.Get(&st.SV)
 		seqOpts = append(seqOpts, tree.SequenceOption{
-			Name:   tree.SeqOptCache,
+			Name:   tree.SeqOptCacheSession,
 			IntVal: &cacheValue,
 		})
 	case sessiondatapb.SerialUsesCachedNodeSQLSequences:

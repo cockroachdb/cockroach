@@ -1524,7 +1524,7 @@ CREATE SEQUENCE cache_test CACHE 10 INCREMENT 1
 query TT
 SHOW CREATE SEQUENCE cache_test
 ----
-cache_test  CREATE SEQUENCE public.cache_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 CACHE 10;
+cache_test  CREATE SEQUENCE public.cache_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 PER NODE CACHE 10;
 
 # Verify cache invalidation with schema changes.
 
@@ -1825,11 +1825,11 @@ CREATE TABLE tDb4Ref (i INT PRIMARY KEY DEFAULT (nextval('db4.s')));
 
 subtest cached_sequences_invalidate
 
-# Test for #71135 -- make sure that setval invalidates the cached sequence
+# Test for #71135 -- make sure that setval invalidates the session cached sequence
 # values.
 
 statement ok
-CREATE SEQUENCE seq71135 CACHE 100
+CREATE SEQUENCE seq71135 PER SESSION CACHE 100
 
 query I
 SELECT nextval('seq71135')
