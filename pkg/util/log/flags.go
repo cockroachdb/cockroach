@@ -128,7 +128,7 @@ func ApplyConfig(
 				// as it is primarily used for communication between crdb nodes, and doesn't
 				// fit this usecase.
 				if err := sink.conn.Close(); err != nil { // nolint:grpcconnclose
-					fmt.Printf("# OTLP Sink Cleanup Warning: %s\n", err.Error())
+					fmt.Fprintf(OrigStderr, "# OTLP Sink Cleanup Warning: %s\n", err.Error())
 				}
 			}
 		}
