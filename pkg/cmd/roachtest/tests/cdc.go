@@ -4436,6 +4436,6 @@ func runCDCMultiDBTPCCMinimal(ctx context.Context, t test.Test, c cluster.Cluste
 	t.Status("Minimal multi-schema TPCC + changefeed test running")
 	m.Wait()
 	var count int
-	db.QueryRow("SELECT count(*) from defaultdb.schema1.orders").Scan(&count)
+	db.QueryRow("SELECT count(*) from defaultdb.schema1.order").Scan(&count)
 	t.Status("Minimal multi-schema TPCC + changefeed test finished", count)
 }
