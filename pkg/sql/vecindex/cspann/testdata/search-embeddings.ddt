@@ -91,31 +91,65 @@ recall topk=20 use-dataset=2717 beam-size=8
 40.00% recall@20
 90 leaf vectors, 143 vectors, 42 full vectors, 13 partitions
 
+# Show the nearest partitions to the "easy" vector, ordered by estimated
+# distance to their centroids. Notice that there are several partitions that are
+# very near, and yet the "spread" between centroids is fairly large, which makes
+# finding results easier.
+best-centroids topk=10 use-dataset=8601
+----
+151: 0.1696 ± 0.0098 (exact=0.1569)
+113: 0.2114 ± 0.0091 (exact=0.2164)
+150: 0.2365 ± 0.0089 (exact=0.2380)
+155: 0.2836 ± 0.0091 (exact=0.2778)
+154: 0.2943 ± 0.0108 (exact=0.2954)
+68: 0.2953 ± 0.0146 (exact=0.3056)
+97: 0.2988 ± 0.0097 (exact=0.3037)
+147: 0.2994 ± 0.0156 (exact=0.2853)
+159: 0.3001 ± 0.0120 (exact=0.2995)
+139: 0.3274 ± 0.0133 (exact=0.3368)
+
+# Show the nearest partitions to the "hard" vector, ordered by estimated
+# distance to their centroids. Notice that the partitions are relatively far
+# away and are bunched together, with low "spread". This makes finding results
+# more difficult.
+best-centroids topk=10 use-dataset=2717
+----
+197: 0.5183 ± 0.0161 (exact=0.5179)
+166: 0.5361 ± 0.0223 (exact=0.5644)
+170: 0.5403 ± 0.0156 (exact=0.5453)
+30: 0.5524 ± 0.0197 (exact=0.5515)
+196: 0.5546 ± 0.0206 (exact=0.5621)
+187: 0.5646 ± 0.0171 (exact=0.5625)
+135: 0.5674 ± 0.0234 (exact=0.6034)
+177: 0.5708 ± 0.0254 (exact=0.5674)
+61: 0.5755 ± 0.0211 (exact=0.5581)
+183: 0.5777 ± 0.0159 (exact=0.5915)
+
 # Test recall at different beam sizes.
 recall topk=10 beam-size=2 samples=64
 ----
-34.22% recall@10
+29.84% recall@10
 21 leaf vectors, 42 vectors, 15 full vectors, 4 partitions
 
 recall topk=10 beam-size=4 samples=64
 ----
-50.31% recall@10
-42 leaf vectors, 73 vectors, 19 full vectors, 7 partitions
+47.97% recall@10
+42 leaf vectors, 74 vectors, 19 full vectors, 7 partitions
 
 recall topk=10 beam-size=8 samples=64
 ----
-73.75% recall@10
-84 leaf vectors, 137 vectors, 23 full vectors, 13 partitions
+69.06% recall@10
+85 leaf vectors, 138 vectors, 24 full vectors, 13 partitions
 
 recall topk=10 beam-size=16 samples=64
 ----
-87.81% recall@10
-168 leaf vectors, 262 vectors, 26 full vectors, 25 partitions
+87.66% recall@10
+168 leaf vectors, 263 vectors, 27 full vectors, 25 partitions
 
 recall topk=10 beam-size=32 samples=64
 ----
-97.50% recall@10
-335 leaf vectors, 441 vectors, 29 full vectors, 42 partitions
+95.62% recall@10
+336 leaf vectors, 442 vectors, 30 full vectors, 42 partitions
 
 # ----------------------------------------------------------------------
 # Compare orderings of same dataset with different distance metrics.
@@ -255,23 +289,23 @@ CV stats:
 
 recall topk=10 beam-size=4 samples=50
 ----
-62.40% recall@10
-42 leaf vectors, 72 vectors, 18 full vectors, 7 partitions
+61.20% recall@10
+42 leaf vectors, 72 vectors, 20 full vectors, 7 partitions
 
 recall topk=10 beam-size=8 samples=50
 ----
-83.40% recall@10
+79.80% recall@10
 83 leaf vectors, 133 vectors, 21 full vectors, 13 partitions
 
 recall topk=10 beam-size=16 samples=50
 ----
-92.60% recall@10
-166 leaf vectors, 257 vectors, 24 full vectors, 25 partitions
+91.00% recall@10
+165 leaf vectors, 256 vectors, 24 full vectors, 25 partitions
 
 recall topk=10 beam-size=32 samples=50
 ----
-98.20% recall@10
-329 leaf vectors, 431 vectors, 25 full vectors, 42 partitions
+97.20% recall@10
+329 leaf vectors, 431 vectors, 26 full vectors, 42 partitions
 
 # ----------------------------------------------------------------------
 # Load 950 768-dimension image embeddings and search them using
@@ -288,20 +322,20 @@ CV stats:
 
 recall topk=10 beam-size=4 samples=50
 ----
-55.80% recall@10
-44 leaf vectors, 74 vectors, 19 full vectors, 7 partitions
+48.60% recall@10
+44 leaf vectors, 76 vectors, 20 full vectors, 7 partitions
 
 recall topk=10 beam-size=8 samples=50
 ----
-74.40% recall@10
-88 leaf vectors, 143 vectors, 23 full vectors, 13 partitions
+69.00% recall@10
+88 leaf vectors, 144 vectors, 25 full vectors, 13 partitions
 
 recall topk=10 beam-size=16 samples=50
 ----
-89.00% recall@10
-172 leaf vectors, 271 vectors, 27 full vectors, 25 partitions
+85.00% recall@10
+173 leaf vectors, 272 vectors, 30 full vectors, 25 partitions
 
 recall topk=10 beam-size=32 samples=50
 ----
-97.60% recall@10
-344 leaf vectors, 443 vectors, 30 full vectors, 41 partitions
+95.20% recall@10
+342 leaf vectors, 441 vectors, 33 full vectors, 41 partitions
