@@ -119,6 +119,12 @@ func (ubs *UnbufferedSender) sendBuffered(
 	return nil
 }
 
+func (ubs *UnbufferedSender) sendBufferedWithCtx(
+	ev *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation, ctx context.Context,
+) error {
+	return ubs.sendBuffered(ev, alloc)
+}
+
 // sendUnbuffered blocks until the event is sent to the underlying grpc stream.
 // It should be only called for non-error events. If this function returns an
 // error, caller must ensure that no further events are sent from

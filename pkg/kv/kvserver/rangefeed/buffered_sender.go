@@ -7,6 +7,7 @@ package rangefeed
 
 import (
 	"context"
+	"runtime/trace"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -83,6 +84,36 @@ func NewBufferedSender(
 	return bs
 }
 
+//nolint:deferunlockcheck
+func (bs *BufferedSender) sendBufferedWithCtx(
+	ev *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation, ctx context.Context,
+) error {
+	trace.WithRegion(ctx, "Locking", func() {
+		bs.queueMu.Lock()
+	})
+	defer func() {
+		trace.WithRegion(ctx, "Unlocking", func() {
+			bs.queueMu.Unlock()
+		})
+	}()
+
+	if bs.queueMu.stopped {
+		return errors.New("stream sender is stopped")
+	}
+	// TODO(wenyihu6): pass an actual context here
+	alloc.Use(context.Background())
+
+	trace.WithRegion(ctx, "Pushing", func() {
+		bs.queueMu.buffer.pushBack(sharedMuxEvent{ev, alloc})
+	})
+	bs.metrics.BufferedSenderQueueSize.Inc(1)
+	select {
+	case bs.notifyDataC <- struct{}{}:
+	default:
+	}
+	return nil
+}
+
 // sendBuffered buffers the event before sending it to the underlying
 // gRPC stream. It does not block. sendBuffered will take the
 // ownership of the alloc and release it if the returned error is
@@ -118,6 +149,11 @@ func (bs *BufferedSender) sendUnbuffered(ev *kvpb.MuxRangeFeedEvent) error {
 func (bs *BufferedSender) run(
 	ctx context.Context, stopper *stop.Stopper, onError func(streamID int64),
 ) error {
+
+	var (
+		events  []sharedMuxEvent
+		success bool
+	)
 	for {
 		select {
 		case <-ctx.Done():
@@ -129,19 +165,24 @@ func (bs *BufferedSender) run(
 			// error.
 			return nil
 		case <-bs.notifyDataC:
+
 			for {
-				e, success := bs.popFront()
+				trace.WithRegion(ctx, "Popping", func() {
+					events, success = bs.popFrontBatch()
+				})
 				bs.metrics.BufferedSenderQueueSize.Dec(1)
 				if !success {
 					break
 				}
-				err := bs.sender.Send(e.ev)
-				e.alloc.Release(ctx)
-				if e.ev.Error != nil {
-					onError(e.ev.StreamID)
-				}
-				if err != nil {
-					return err
+				for _, e := range events {
+					err := bs.sender.Send(e.ev)
+					e.alloc.Release(ctx)
+					if e.ev.Error != nil {
+						onError(e.ev.StreamID)
+					}
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -155,6 +196,20 @@ func (bs *BufferedSender) popFront() (e sharedMuxEvent, success bool) {
 	defer bs.queueMu.Unlock()
 	event, ok := bs.queueMu.buffer.popFront()
 	return event, ok
+}
+
+func (bs *BufferedSender) popFrontBatch() (events []sharedMuxEvent, success bool) {
+	const batchSize = 1024
+	bs.queueMu.Lock()
+	defer bs.queueMu.Unlock()
+	for range batchSize {
+		e, ok := bs.queueMu.buffer.popFront()
+		if !ok {
+			break
+		}
+		events = append(events, e)
+	}
+	return events, len(events) > 0
 }
 
 // cleanup is called when the sender is stopped. It is expected to free up
