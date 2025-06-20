@@ -486,6 +486,9 @@ func newTenantServer(
 	if err := args.tenantTimeSeriesServer.RegisterDRPCService(args.drpc); err != nil {
 		return nil, err
 	}
+	if err := sAdmin.RegisterDRPCService(args.drpc); err != nil {
+		return nil, err
+	}
 
 	// Tell the status/admin servers how to access SQL structures.
 	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
