@@ -1406,17 +1406,23 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 	putA := putArgs(keyA, valAStr, txn.Sequence)
 	ba.Add(putA)
 
-	require.Equal(t,
-		int64(len(keyA)+len(valA.RawBytes))+bufferedWriteStructOverhead+bufferedValueStructOverhead,
-		twb.estimateSize(ba),
-	)
+	expectedUnlockedPutSize := int64(len(keyA)+len(valA.RawBytes)) + bufferedWriteStructOverhead + bufferedValueStructOverhead
+	require.Equal(t, expectedUnlockedPutSize, twb.estimateSize(ba))
+
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	putA = putArgs(keyA, valAStr, txn.Sequence)
+	putA.MustAcquireExclusiveLock = true
+	ba.Add(putA)
+
+	require.Equal(t, expectedUnlockedPutSize+lockKeyInfoSize, twb.estimateSize(ba))
 
 	ba = &kvpb.BatchRequest{}
 	cputLarge := cputArgs(keyLarge, valLargeStr, "", txn.Sequence)
 	ba.Add(cputLarge)
 
 	require.Equal(t,
-		int64(len(keyLarge)+len(valLarge.RawBytes))+bufferedWriteStructOverhead+bufferedValueStructOverhead,
+		int64(len(keyLarge)+len(valLarge.RawBytes))+bufferedWriteStructOverhead+bufferedValueStructOverhead+lockKeyInfoSize,
 		twb.estimateSize(ba),
 	)
 
@@ -1426,10 +1432,15 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 
 	// NB: note that we're overcounting here, as we're deleting a key that's
 	// already present in the buffer. But that's what estimating is about.
-	require.Equal(t,
-		int64(len(keyA))+bufferedWriteStructOverhead+bufferedValueStructOverhead,
-		twb.estimateSize(ba),
-	)
+	expectedUnlockedDelSize := int64(len(keyA)) + bufferedWriteStructOverhead + bufferedValueStructOverhead
+	require.Equal(t, expectedUnlockedDelSize, twb.estimateSize(ba))
+
+	ba = &kvpb.BatchRequest{}
+	delA = delArgs(keyA, txn.Sequence)
+	delA.MustAcquireExclusiveLock = true
+	ba.Add(delA)
+
+	require.Equal(t, expectedUnlockedDelSize+lockKeyInfoSize, twb.estimateSize(ba))
 }
 
 // TestTxnWriteBufferFlushesWhenOverBudget verifies that the txnWriteBuffer
