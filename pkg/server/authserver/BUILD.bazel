@@ -44,6 +44,7 @@ go_library(
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_grpc_ecosystem_grpc_gateway//runtime:go_default_library",
+        "@io_storj_drpc//:drpc",
         "@org_golang_google_grpc//:grpc",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//metadata",
