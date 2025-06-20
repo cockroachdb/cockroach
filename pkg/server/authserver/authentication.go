@@ -47,6 +47,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"storj.io/drpc"
 )
 
 const (
@@ -132,6 +133,15 @@ type authenticationServer struct {
 func (s *authenticationServer) RegisterService(g *grpc.Server) {
 	serverpb.RegisterLogInServer(g, s)
 	serverpb.RegisterLogOutServer(g, s)
+
+}
+
+// RegisterService registers the LogIn and LogOut services with DRPC.
+func (s *authenticationServer) RegisterDRPCService(d drpc.Mux) error {
+	if err := serverpb.DRPCRegisterLogIn(d, s); err != nil {
+		return err
+	}
+	return serverpb.DRPCRegisterLogOut(d, s)
 }
 
 // RegisterGateway starts the gateway (i.e. reverse proxy) that proxies HTTP requests
