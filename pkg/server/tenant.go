@@ -480,14 +480,10 @@ func newTenantServer(
 		gw.RegisterService(args.grpc.Server)
 	}
 
-	if err := sAuth.RegisterDRPCService(args.drpc); err != nil {
-		return nil, err
-	}
-	if err := args.tenantTimeSeriesServer.RegisterDRPCService(args.drpc); err != nil {
-		return nil, err
-	}
-	if err := sAdmin.RegisterDRPCService(args.drpc); err != nil {
-		return nil, err
+	for _, s := range []drpcServiceRegistrar{sAdmin, sStatus, sAuth, args.tenantTimeSeriesServer} {
+		if err := s.RegisterDRPCService(args.drpc); err != nil {
+			return nil, err
+		}
 	}
 
 	// Tell the status/admin servers how to access SQL structures.
