@@ -23,7 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -100,6 +102,7 @@ type IndexBackfillMerger struct {
 	skipNewerTimestamps bool
 	flowCtx             *execinfra.FlowCtx
 	muBoundAccount      muBoundAccount
+	VectorIndexes       map[descpb.IndexID]*VectorIndexHelper
 }
 
 // OutputTypes is always nil.
@@ -137,6 +140,26 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context, output execinfra.RowRec
 	}()
 	defer output.ProducerDone()
 	defer execinfra.SendTraceData(ctx, ibm.flowCtx, output)
+
+	for _, idx := range ibm.spec.AddedIndexes {
+		idxDesc, err := catalog.MustFindIndexByID(ibm.desc, idx)
+		if err != nil {
+			panic(err)
+		}
+		if idxDesc.GetType() != idxtype.VECTOR {
+			continue
+		}
+
+		if ibm.VectorIndexes == nil {
+			ibm.VectorIndexes = make(map[descpb.IndexID]*VectorIndexHelper)
+		}
+
+		helper, err := NewVectorIndexHelper(ctx, ibm.flowCtx.EvalCtx, ibm.desc, idxDesc, 0, ibm.flowCtx.Cfg.VecIndexManager.(*vecindex.Manager))
+		if err != nil {
+			panic(err)
+		}
+		ibm.VectorIndexes[idx] = helper
+	}
 
 	mu := struct {
 		syncutil.Mutex
@@ -404,8 +427,35 @@ func (ibm *IndexBackfillMerger) merge(
 					return nil
 				}
 
+				var entryMerger func(
+					ctx context.Context,
+					txn *kv.Txn,
+					sourceKV *kv.KeyValue,
+					destKey roachpb.Key,
+				) (*kv.KeyValue, bool, error)
+				vecIndexHelper, ok := ibm.VectorIndexes[destinationID]
+				if ok {
+					entryMerger = func(
+						ctx context.Context,
+						txn *kv.Txn,
+						sourceKV *kv.KeyValue,
+						destKey roachpb.Key,
+					) (*kv.KeyValue, bool, error) {
+						return vecIndexHelper.MergeVector(ctx, txn, sourceKV, destKey)
+					}
+				} else {
+					entryMerger = func(
+						ctx context.Context,
+						txn *kv.Txn,
+						sourceKV *kv.KeyValue,
+						destKey roachpb.Key,
+					) (*kv.KeyValue, bool, error) {
+						return mergeEntry(sourceKV, destKey)
+					}
+				}
+
 				wb, memUsedInMerge, deletedKeys, keysToSkip, err := ibm.constructMergeBatch(
-					ctx, txn.KV(), keys, sourcePrefix, destPrefix, batch,
+					ctx, txn.KV(), keys, sourcePrefix, destPrefix, batch, entryMerger,
 				)
 				if err != nil || wb == nil {
 					return err
@@ -439,6 +489,7 @@ func (ibm *IndexBackfillMerger) constructMergeBatch(
 	sourcePrefix []byte,
 	destPrefix []byte,
 	batch *keyBatch,
+	entryMerger func(ctx context.Context, txn *kv.Txn, sourceKV *kv.KeyValue, destKey roachpb.Key) (*kv.KeyValue, bool, error),
 ) (*kv.Batch, int64, int, int, error) {
 	var keysToSkip int
 	var keysAdded int
@@ -506,9 +557,11 @@ func (ibm *IndexBackfillMerger) constructMergeBatch(
 		destKey = append(destKey, destPrefix...)
 		destKey = append(destKey, sourceKV.Key[prefixLen:]...)
 
-		mergedEntry, deleted, err := mergeEntry(sourceKV, destKey)
+		mergedEntry, deleted, err := entryMerger(ctx, txn, sourceKV, destKey)
 		if err != nil {
 			return nil, 0, 0, 0, err
+		} else if mergedEntry == nil {
+			continue
 		}
 
 		entryBytes := mergedEntryBytes(mergedEntry, deleted)

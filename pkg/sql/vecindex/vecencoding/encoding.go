@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
@@ -57,7 +58,7 @@ Vector KV Value:
 func EncodeMetadataKey(
 	indexPrefix []byte, encodedPrefixCols []byte, partitionKey cspann.PartitionKey,
 ) roachpb.Key {
-	capacity := len(indexPrefix) + len(encodedPrefixCols) + EncodedPartitionKeyLen(partitionKey) + 1
+	capacity := len(indexPrefix) + len(encodedPrefixCols) + EncodedPartitionKeyLen(partitionKey) + EncodedPartitionLevelLen(cspann.InvalidLevel)
 	keyBuffer := make([]byte, 0, capacity)
 	keyBuffer = append(keyBuffer, indexPrefix...)
 	keyBuffer = append(keyBuffer, encodedPrefixCols...)
@@ -117,7 +118,7 @@ type DecodedVectorKey struct {
 // and extracts the vector index specific portions of it in an VectorIndexKey
 // struct.
 func DecodeVectorKey(
-	keyBytes []byte, numPrefixColumns int,
+	keyBytes []byte, numPrefixColumns int, encodingType idxtype.T,
 ) (vecIndexKey DecodedVectorKey, err error) {
 	prefixLen := 0
 	for range numPrefixColumns {
@@ -132,17 +133,27 @@ func DecodeVectorKey(
 		keyBytes = keyBytes[prefixLen:]
 	}
 
-	partitionKey, keyBytes, err := DecodePartitionKey(keyBytes)
-	if err != nil {
-		return vecIndexKey, err
-	}
-	vecIndexKey.PartitionKey = partitionKey
+	// If the value is encoded as a vector index (the usual case), decode the partition key and level.
+	// Otherwise, this may be encoded as a FORWARD index for use as a temporary index. In that case,
+	// we set these to InvalidKey and InvalidLevel.
+	if encodingType == idxtype.VECTOR {
+		var partitionKey cspann.PartitionKey
+		partitionKey, keyBytes, err = DecodePartitionKey(keyBytes)
+		if err != nil {
+			return vecIndexKey, err
+		}
+		vecIndexKey.PartitionKey = partitionKey
 
-	level, keyBytes, err := DecodePartitionLevel(keyBytes)
-	if err != nil {
-		return vecIndexKey, err
+		var level cspann.Level
+		level, keyBytes, err = DecodePartitionLevel(keyBytes)
+		if err != nil {
+			return vecIndexKey, err
+		}
+		vecIndexKey.Level = level
+	} else {
+		vecIndexKey.PartitionKey = cspann.InvalidKey
+		vecIndexKey.Level = cspann.InvalidLevel
 	}
-	vecIndexKey.Level = level
 
 	if len(keyBytes) > 0 {
 		vecIndexKey.Suffix = keyBytes
