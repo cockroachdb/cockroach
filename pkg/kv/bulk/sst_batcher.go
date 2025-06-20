@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
@@ -244,7 +245,19 @@ type SSTBatcher struct {
 		nextExistingKey roachpb.Key
 	}
 
+	// mustSyncBeforeFlush is set to true if the caller must sync in fight flushes
+	// before starting a new flush.
+	mustSyncBeforeFlush bool
+
+	// asyncAddSSTs is a group that tracks the async flushes of SSTs.
 	asyncAddSSTs ctxgroup.Group
+
+	// flushSpan must be finished after waiting for the context group to finish.
+	flushSpan *tracing.Span
+
+	// cancelFlush is called by `Close` to cancel any in-flight flushes. Before
+	// waiting for the flushes to complete.
+	cancelFlush func()
 
 	valueScratch []byte
 
@@ -279,6 +292,7 @@ func MakeSSTBatcher(
 	scatterSplitRanges bool,
 	mem *mon.ConcurrentBoundAccount,
 	sendLimiter limit.ConcurrentRequestLimiter,
+	rc *rangecache.RangeCache,
 ) (*SSTBatcher, error) {
 	b := &SSTBatcher{
 		name:                   name,
@@ -290,10 +304,11 @@ func MakeSSTBatcher(
 		disableScatters:        !scatterSplitRanges,
 		mem:                    mem,
 		limiter:                sendLimiter,
+		rc:                     rc,
 	}
 	b.mu.lastFlush = timeutil.Now()
 	b.mu.tracingSpan = tracing.SpanFromContext(ctx)
-	b.Reset(ctx)
+	b.init(ctx)
 	return b, nil
 }
 
@@ -333,7 +348,7 @@ func MakeStreamSSTBatcher(
 	b.mu.lastFlush = timeutil.Now()
 	b.mu.tracingSpan = tracing.SpanFromContext(ctx)
 	b.SetOnFlush(onFlush)
-	b.Reset(ctx)
+	b.init(ctx)
 	return b, nil
 }
 
@@ -357,7 +372,7 @@ func MakeTestingSSTBatcher(
 		mem:            mem,
 		limiter:        sendLimiter,
 	}
-	b.Reset(ctx)
+	b.init(ctx)
 	return b, nil
 }
 
@@ -467,27 +482,26 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value 
 	return b.batch.sstWriter.PutRawMVCC(key, value)
 }
 
-// Reset clears all state in the batcher and prepares it for reuse.
-func (b *SSTBatcher) Reset(ctx context.Context) {
-	// TODO(jeffswenson): split `Reset` into:
-	// `init`: to be called once when the batcher is created to initialize fields like `SendWaitByStore`.
-	// `batch.reset`: to be called every time a flush is completed to reset the batch state.
-	// `waitForFlushes`: to be called when the batcher needs to wait for all in-progress flushes to complete.
-
-	if err := b.asyncAddSSTs.Wait(); err != nil {
-		log.Warningf(ctx, "closing with flushes in-progress encountered an error: %v", err)
-	}
-	b.asyncAddSSTs = ctxgroup.Group{}
-
+func (b *SSTBatcher) init(ctx context.Context) {
 	b.batch.reset(ctx, b.settings, b.writeAtBatchTS)
-
-	b.valueScratch = b.valueScratch[:0]
-
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
 	if b.mu.totalStats.SendWaitByStore == nil {
 		b.mu.totalStats.SendWaitByStore = make(map[roachpb.StoreID]time.Duration)
 	}
+}
+
+// Reset clears all state in the batcher and prepares it for reuse.
+func (b *SSTBatcher) Reset(ctx context.Context) error {
+	// TODO(jeffswenson): clean up callers of Reset. It is no longer necessary now that
+	// `Flush` always leaves the batcher in a quiescent state.
+	if err := b.syncFlush(); err != nil {
+		return errors.Wrap(err, "failed to sync flush before reset")
+	}
+	b.batch.reset(ctx, b.settings, b.writeAtBatchTS)
+	b.valueScratch = b.valueScratch[:0]
+	return nil
 }
 
 const (
@@ -519,10 +533,13 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 	shouldFlushDueToRange := b.batch.flushKey != nil && b.batch.flushKey.Compare(nextKey) <= 0
 
 	if shouldFlushDueToRange {
-		if err := b.doFlush(ctx, rangeFlush); err != nil {
-			return err
+		if b.mustSyncBeforeFlush {
+			err := b.syncFlush()
+			if err != nil {
+				return err
+			}
 		}
-		b.Reset(ctx)
+		b.startFlush(ctx, rangeFlush)
 		return nil
 	}
 
@@ -544,26 +561,34 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 			// not the same row for our purposes; we don't care what the error is.
 			return nil // keep going to row boundary.
 		}
-		if err := b.doFlush(ctx, sizeFlush); err != nil {
-			return err
+		if b.mustSyncBeforeFlush {
+			err := b.syncFlush()
+			if err != nil {
+				return err
+			}
 		}
-		b.Reset(ctx)
+		b.startFlush(ctx, sizeFlush)
 		return nil
 	}
 	return nil
 }
 
-// Flush sends the current batch, if any.
+// Flush sends the current batch and waits for all in-flight flushes to complete. Flush will
+// always leave the batcher in a `quiescent` state, meaning there are no in flight flushes.
 func (b *SSTBatcher) Flush(ctx context.Context) error {
-	if err := b.asyncAddSSTs.Wait(); err != nil {
-		return err
+	if b.mustSyncBeforeFlush {
+		err := b.syncFlush()
+		if err != nil {
+			return err
+		}
 	}
-	// Zero the group so it will be re-initialized if needed.
-	b.asyncAddSSTs = ctxgroup.Group{}
 
-	if err := b.doFlush(ctx, manualFlush); err != nil {
+	b.startFlush(ctx, manualFlush)
+
+	if err := b.syncFlush(); err != nil {
 		return err
 	}
+
 	// no need to lock b.mu since we just wait()'ed.
 	if !b.mu.maxWriteTS.IsEmpty() {
 		if now := b.db.Clock().Now(); now.Less(b.mu.maxWriteTS) {
@@ -580,27 +605,74 @@ func (b *SSTBatcher) Flush(ctx context.Context) error {
 	return nil
 }
 
-func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
-	if b.batch.sstWriter.DataSize == 0 {
+// syncFlush waits for all in-flight flushes to complete. Once this returns,
+// the batcher is guaranteed to be in a state where there are no async goroutines.
+func (b *SSTBatcher) syncFlush() error {
+	if b.cancelFlush == nil {
 		return nil
+	}
+
+	flushErr := b.asyncAddSSTs.Wait()
+
+	// We already waited for the flush to complete, but we must call cancel to
+	// avoid leaking the context.
+	b.cancelFlush()
+	b.cancelFlush = nil
+
+	b.flushSpan.Finish()
+	b.flushSpan = nil
+
+	b.asyncAddSSTs = ctxgroup.Group{}
+	b.mustSyncBeforeFlush = false
+
+	return flushErr
+}
+
+// startFlush starts a flush of the current batch. If it encounters any errors
+// the errors are reported by the call to `syncFlush`.
+//
+// if `mustSyncBeforeFlush` is true, the caller must call `syncFlush` before
+// starting another flush.
+//
+// The flush is always asynchronous. This allows the caller to start constructing
+// the next batch while the current one is being flushed. Multiple flushes may
+// be pipelined if the flush reason is `rangeFlush`. We can't pipeline more than
+// one flush to a single range because the request includes the current range size
+// and we use that as a signal to split and scatter the range.
+func (b *SSTBatcher) startFlush(ctx context.Context, reason int) {
+	if buildutil.CrdbTestBuild && b.mustSyncBeforeFlush {
+		panic(errors.AssertionFailedf("mustSyncBeforeFlush is set, but startFlush was called"))
+	}
+
+	defer b.batch.reset(ctx, b.settings, b.writeAtBatchTS)
+
+	if b.batch.sstWriter.DataSize == 0 {
+		return
 	}
 	beforeFlush := timeutil.Now()
 
 	b.batch.stats.Batches++
 
-	if delay := ingestDelay.Get(&b.settings.SV); delay != 0 {
-		if delay > time.Second || log.V(1) {
-			log.Infof(ctx, "%s delaying %s before flushing ingestion buffer...", b.name, delay)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(delay):
-		}
+	if b.cancelFlush == nil {
+		// TODO(jeffswenson): clean up context handling. This works well if the flush is
+		// triggered by `Flush`. But its a little weird if the flush is triggered by
+		// adding a kv that triggers an automatic flush.
+
+		// We create a new span for the flush since we can't guarantee that the span
+		// attached to the context will live as long as the SSTBatcher.
+		var flushCtx context.Context
+		flushCtx, b.cancelFlush = context.WithCancel(ctx)
+		flushCtx, b.flushSpan = tracing.ChildSpan(flushCtx, "sstbatcher-flush")
+		b.asyncAddSSTs = ctxgroup.WithContext(flushCtx)
 	}
 
 	if err := b.batch.sstWriter.Finish(); err != nil {
-		return errors.Wrapf(err, "finishing constructed sstable")
+		// Create a goroutine to push the error to `syncFlush`.
+		b.mustSyncBeforeFlush = true
+		b.asyncAddSSTs.Go(func() error {
+			return err
+		})
+		return
 	}
 
 	start := roachpb.Key(append([]byte(nil), b.batch.startKey...))
@@ -703,9 +775,15 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 	batchTS := b.batch.ts
 	currentBatchSummary := b.batch.rowCounter.BulkOpSummary
 	performanceStats := b.batch.copyStats()
-	res, err := b.limiter.Begin(ctx)
+
+	res, err := b.maybeDelay(ctx)
 	if err != nil {
-		return err
+		// Create a goroutine to push the error to `syncFlush`.
+		b.mustSyncBeforeFlush = true
+		b.asyncAddSSTs.Go(func() error {
+			return err
+		})
+		return
 	}
 
 	// If we're flushing due to a range boundary, we we might be flushing this
@@ -719,32 +797,24 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 	// that you could potentially end up with an entire buffer's worth of SSTs
 	// all inflight at once, effectively doubling the memory footprint, so we
 	// need to reserve memory from a monitor for the sst before we move on to
-	// the next one; if memory is not available we'll just block on the send
-	// and then move on to the next send after this SST is no longer being held
-	// in memory.
-	//
-	// TODO(jeffswenson): re-enable flush async after fixing performance and
-	// correctness issues.
-	//
-	// CORRECTNESS: Something has to surface the error from the async flush to
-	// the caller. Right now the error is logged by `Reset`.
-	// PERFORMANCE: The only caller that sets `rangeFlush` calls Reset immediatly
-	// after, which blocks on all in flight requests. So there is no performance
-	// benefit to the async flush.
-	//flushAsync := reason == rangeFlush
-	flushAsync := false
+	// the next one.
+	pipelineFlush := reason == rangeFlush
 
 	var reserved int64
-	if flushAsync {
+	if pipelineFlush {
 		if err := b.mem.Grow(ctx, int64(cap(data))); err != nil {
 			log.VEventf(ctx, 3, "%s unable to reserve enough memory to flush async: %v", b.name, err)
-			flushAsync = false
+			pipelineFlush = false
 		} else {
 			reserved = int64(cap(data))
 		}
 	}
 
-	fn := func(ctx context.Context) error {
+	if !pipelineFlush {
+		b.mustSyncBeforeFlush = true
+	}
+
+	b.asyncAddSSTs.GoCtx(func(ctx context.Context) error {
 		defer res.Release()
 		defer b.mem.Shrink(ctx, reserved)
 		results, err := b.adder.AddSSTable(ctx, batchTS, start, end, data, mvccStats, performanceStats)
@@ -761,7 +831,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 			if b.writeAtBatchTS {
 				b.mu.maxWriteTS.Forward(addResult.timestamp)
 			}
-			if !flushAsync {
+			if !pipelineFlush {
 				// If this was sent async then, by the time the reply gets back, it
 				// might not be the last range anymore. We can just discard the last
 				// range reply in this case though because async sends are only used
@@ -806,23 +876,32 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 			b.mu.tracingSpan.RecordStructured(performanceStats)
 		}
 		return nil
-	}
+	})
+}
 
-	if flushAsync {
-		if b.asyncAddSSTs == (ctxgroup.Group{}) {
-			b.asyncAddSSTs = ctxgroup.WithContext(ctx)
+func (b *SSTBatcher) maybeDelay(ctx context.Context) (limit.Reservation, error) {
+	// TODO(148371): delete the ingestion delay settings. These are less useful now that admission control
+	// is on by default.
+	if delay := ingestDelay.Get(&b.settings.SV); delay != 0 {
+		if delay > time.Second || log.V(1) {
+			log.Infof(ctx, "%s delaying %s before flushing ingestion buffer...", b.name, delay)
 		}
-		b.asyncAddSSTs.GoCtx(fn)
-		return nil
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(delay):
+		}
 	}
-
-	return fn(ctx)
+	return b.limiter.Begin(ctx)
 }
 
 // Close closes the underlying SST builder.
 func (b *SSTBatcher) Close(ctx context.Context) {
 	b.batch.close()
-	if err := b.asyncAddSSTs.Wait(); err != nil {
+	if b.cancelFlush != nil {
+		b.cancelFlush()
+	}
+	if err := b.syncFlush(); err != nil {
 		log.Warningf(ctx, "closing with flushes in-progress encountered an error: %v", err)
 	}
 	b.mem.Close(ctx)
