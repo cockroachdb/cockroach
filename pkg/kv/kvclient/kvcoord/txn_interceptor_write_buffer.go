@@ -655,7 +655,8 @@ func (twb *txnWriteBuffer) rollbackToSavepointLocked(ctx context.Context, s save
 	toDelete := make([]*bufferedWrite, 0)
 	it := twb.buffer.MakeIter()
 	for it.First(); it.Valid(); it.Next() {
-		if held := it.Cur().rollbackLockInfo(s.seqNum); !held {
+		hadLockInfo := it.Cur().lki != nil
+		if held := it.Cur().rollbackLockInfo(s.seqNum); hadLockInfo && !held {
 			// If we aren't still held, update our buffer size.
 			twb.bufferSize -= lockKeyInfoSize
 		}

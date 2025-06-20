@@ -1820,6 +1820,47 @@ func TestTxnWriteBufferRollbackToSavepoint(t *testing.T) {
 	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
 }
 
+// TestRollbackNeverHeldLock is a regression test for a bug around incorrect
+// accounting of the buffer size for completely unlocked writes that were rolled
+// back.
+func TestRollbackNeverHeldLock(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+
+	txn := makeTxnProto()
+	txn.Sequence = 10
+	txn.Sequence++
+	sp := &savepoint{seqNum: txn.Sequence}
+	twb.createSavepointLocked(ctx, sp)
+
+	txn.Sequence++
+	ba := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+	ba.Add(delArgs(roachpb.Key("a"), txn.Sequence))
+
+	br, pErr := twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	twb.rollbackToSavepointLocked(ctx, *sp)
+
+	// Commit the transaction.
+	ba = &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+	ba.Add(&kvpb.EndTxnRequest{Commit: true})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+}
+
 // TestTxnWriteBufferRollbackToSavepointMidTxn tests the savepoint rollback
 // logic in the presence of explicit savepoints.
 func TestTxnWriteBufferRollbackToSavepointMidTxn(t *testing.T) {
