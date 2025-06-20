@@ -10,8 +10,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/errors"
-	"google.golang.org/grpc"
 )
 
 type unaryDRPCBatchServiceToInternalAdapter struct {
@@ -22,11 +20,8 @@ type unaryDRPCBatchServiceToInternalAdapter struct {
 }
 
 func (a *unaryDRPCBatchServiceToInternalAdapter) Batch(
-	ctx context.Context, in *kvpb.BatchRequest, opts ...grpc.CallOption,
+	ctx context.Context, in *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, error) {
-	if len(opts) > 0 {
-		return nil, errors.New("CallOptions unsupported")
-	}
 	if a.useStreamPoolClient && a.drpcStreamPool != nil {
 		return a.drpcStreamPool.Send(ctx, in)
 	}
