@@ -1256,6 +1256,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	if err := sAuth.RegisterDRPCService(drpcServer); err != nil {
 		return nil, err
 	}
+	if err := sTS.RegisterDRPCService(drpcServer); err != nil {
+		return nil, err
+	}
 
 	// Tell the node event logger (join, restart) how to populate SQL entries
 	// into system.eventlog.
