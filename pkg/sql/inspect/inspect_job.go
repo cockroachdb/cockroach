@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -24,6 +25,20 @@ var _ jobs.Resumer = &inspectResumer{}
 // Resume implements the Resumer interface
 func (c *inspectResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	log.Infof(ctx, "starting INSPECT job")
+
+	jobExecCtx := execCtx.(sql.JobExecContext)
+	execCfg := jobExecCtx.ExecCfg()
+
+	var knobs sql.InspectTestingKnobs
+	if inspectKnobs := execCfg.InspectTestingKnobs; inspectKnobs != nil {
+		knobs = *inspectKnobs
+	}
+
+	if knobs.OnInspectJobStart != nil {
+		if err := knobs.OnInspectJobStart(); err != nil {
+			return err
+		}
+	}
 
 	if err := c.job.NoTxn().Update(ctx,
 		func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
