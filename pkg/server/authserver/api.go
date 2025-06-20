@@ -18,11 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 type Server interface {
 	RegisterService(*grpc.Server)
 	RegisterGateway(ctx context.Context, mux *runtime.ServeMux, conn *grpc.ClientConn) error
+
+	RegisterDRPCService(drpc.Mux) error
 
 	// UserLogin verifies an incoming request by a user to create an web
 	// authentication session. It checks the provided credentials against
