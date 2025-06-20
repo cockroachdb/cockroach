@@ -1513,6 +1513,7 @@ type ExecutorConfig struct {
 	EvalContextTestingKnobs              eval.TestingKnobs
 	TenantTestingKnobs                   *TenantTestingKnobs
 	TTLTestingKnobs                      *TTLTestingKnobs
+	InspectTestingKnobs                  *InspectTestingKnobs
 	SchemaTelemetryTestingKnobs          *SchemaTelemetryTestingKnobs
 	BackupRestoreTestingKnobs            *BackupRestoreTestingKnobs
 	StreamingTestingKnobs                *StreamingTestingKnobs
@@ -1966,6 +1967,16 @@ type TTLTestingKnobs struct {
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
 func (*TTLTestingKnobs) ModuleTestingKnobs() {}
+
+// InspectTestingKnobs contains testing knobs for the INSPECT command.
+type InspectTestingKnobs struct {
+	// OnInspectJobStart is called just before the inspect job begins execution.
+	// If it returns an error, the job fails immediately.
+	OnInspectJobStart func() error
+}
+
+// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
+func (*InspectTestingKnobs) ModuleTestingKnobs() {}
 
 // SchemaTelemetryTestingKnobs contains testing knobs for schema telemetry.
 type SchemaTelemetryTestingKnobs struct {
