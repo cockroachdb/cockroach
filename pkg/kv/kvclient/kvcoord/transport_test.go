@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 )
 
 func TestTransportMoveToFront(t *testing.T) {
@@ -221,17 +220,17 @@ type mockInternalClient struct {
 	pErr *kvpb.Error
 }
 
-var _ kvpb.InternalClient = &mockInternalClient{}
+var _ kvpb.RPCInternalClient = &mockInternalClient{}
 
 func (*mockInternalClient) ResetQuorum(
-	context.Context, *kvpb.ResetQuorumRequest, ...grpc.CallOption,
+	context.Context, *kvpb.ResetQuorumRequest,
 ) (*kvpb.ResetQuorumResponse, error) {
 	panic("unimplemented")
 }
 
 // Batch is part of the kvpb.InternalClient interface.
 func (m *mockInternalClient) Batch(
-	ctx context.Context, in *kvpb.BatchRequest, opts ...grpc.CallOption,
+	ctx context.Context, in *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, error) {
 	var sp *tracing.Span
 	if m.tr != nil {
@@ -256,75 +255,75 @@ func (m *mockInternalClient) Batch(
 }
 
 func (m *mockInternalClient) BatchStream(
-	ctx context.Context, opts ...grpc.CallOption,
-) (kvpb.Internal_BatchStreamClient, error) {
+	ctx context.Context,
+) (kvpb.RPCInternal_BatchStreamClient, error) {
 	return nil, fmt.Errorf("unsupported BatchStream call")
 }
 
 // RangeLookup implements the kvpb.InternalClient interface.
 func (m *mockInternalClient) RangeLookup(
-	ctx context.Context, rl *kvpb.RangeLookupRequest, _ ...grpc.CallOption,
+	ctx context.Context, rl *kvpb.RangeLookupRequest,
 ) (*kvpb.RangeLookupResponse, error) {
 	return nil, fmt.Errorf("unsupported RangeLookup call")
 }
 
 func (m *mockInternalClient) MuxRangeFeed(
-	ctx context.Context, opts ...grpc.CallOption,
-) (kvpb.Internal_MuxRangeFeedClient, error) {
+	ctx context.Context,
+) (kvpb.RPCInternal_MuxRangeFeedClient, error) {
 	return nil, fmt.Errorf("unsupported MuxRangeFeed call")
 }
 
 // GossipSubscription is part of the kvpb.InternalClient interface.
 func (m *mockInternalClient) GossipSubscription(
-	ctx context.Context, args *kvpb.GossipSubscriptionRequest, _ ...grpc.CallOption,
-) (kvpb.Internal_GossipSubscriptionClient, error) {
+	ctx context.Context, args *kvpb.GossipSubscriptionRequest,
+) (kvpb.RPCInternal_GossipSubscriptionClient, error) {
 	return nil, fmt.Errorf("unsupported GossipSubscripion call")
 }
 
 func (m *mockInternalClient) Join(
-	context.Context, *kvpb.JoinNodeRequest, ...grpc.CallOption,
+	context.Context, *kvpb.JoinNodeRequest,
 ) (*kvpb.JoinNodeResponse, error) {
 	return nil, fmt.Errorf("unsupported Join call")
 }
 
 func (m *mockInternalClient) TokenBucket(
-	ctx context.Context, in *kvpb.TokenBucketRequest, _ ...grpc.CallOption,
+	ctx context.Context, in *kvpb.TokenBucketRequest,
 ) (*kvpb.TokenBucketResponse, error) {
 	return nil, fmt.Errorf("unsupported TokenBucket call")
 }
 
 func (m *mockInternalClient) GetSpanConfigs(
-	_ context.Context, _ *roachpb.GetSpanConfigsRequest, _ ...grpc.CallOption,
+	_ context.Context, _ *roachpb.GetSpanConfigsRequest,
 ) (*roachpb.GetSpanConfigsResponse, error) {
 	return nil, fmt.Errorf("unsupported GetSpanConfigs call")
 }
 
 func (m *mockInternalClient) SpanConfigConformance(
-	_ context.Context, _ *roachpb.SpanConfigConformanceRequest, _ ...grpc.CallOption,
+	_ context.Context, _ *roachpb.SpanConfigConformanceRequest,
 ) (*roachpb.SpanConfigConformanceResponse, error) {
 	return nil, fmt.Errorf("unsupported SpanConfigConformance call")
 }
 
 func (m *mockInternalClient) GetAllSystemSpanConfigsThatApply(
-	context.Context, *roachpb.GetAllSystemSpanConfigsThatApplyRequest, ...grpc.CallOption,
+	context.Context, *roachpb.GetAllSystemSpanConfigsThatApplyRequest,
 ) (*roachpb.GetAllSystemSpanConfigsThatApplyResponse, error) {
 	return nil, fmt.Errorf("unsupported GetAllSystemSpanConfigsThatApply call")
 }
 
 func (m *mockInternalClient) UpdateSpanConfigs(
-	_ context.Context, _ *roachpb.UpdateSpanConfigsRequest, _ ...grpc.CallOption,
+	_ context.Context, _ *roachpb.UpdateSpanConfigsRequest,
 ) (*roachpb.UpdateSpanConfigsResponse, error) {
 	return nil, fmt.Errorf("unsupported UpdateSpanConfigs call")
 }
 
 func (m *mockInternalClient) TenantSettings(
-	context.Context, *kvpb.TenantSettingsRequest, ...grpc.CallOption,
-) (kvpb.Internal_TenantSettingsClient, error) {
+	context.Context, *kvpb.TenantSettingsRequest,
+) (kvpb.RPCInternal_TenantSettingsClient, error) {
 	return nil, fmt.Errorf("unsupported TenantSettings call")
 }
 
 func (n *mockInternalClient) GetRangeDescriptors(
-	context.Context, *kvpb.GetRangeDescriptorsRequest, ...grpc.CallOption,
-) (kvpb.Internal_GetRangeDescriptorsClient, error) {
+	context.Context, *kvpb.GetRangeDescriptorsRequest,
+) (kvpb.RPCInternal_GetRangeDescriptorsClient, error) {
 	return nil, fmt.Errorf("unsupported GetRangeDescriptors call")
 }

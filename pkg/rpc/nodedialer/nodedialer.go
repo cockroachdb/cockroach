@@ -395,16 +395,16 @@ func (c *baseInternalClient) asConn() *grpc.ClientConn {
 
 // Batch implements the RestrictedInternalClient interface.
 func (c *baseInternalClient) Batch(
-	ctx context.Context, ba *kvpb.BatchRequest, opts ...grpc.CallOption,
+	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, error) {
-	return kvpb.NewInternalClient(c.asConn()).Batch(ctx, ba, opts...)
+	return kvpb.NewInternalClient(c.asConn()).Batch(ctx, ba)
 }
 
 // MuxRangeFeed implements the RestrictedInternalClient interface.
 func (c *baseInternalClient) MuxRangeFeed(
-	ctx context.Context, opts ...grpc.CallOption,
-) (kvpb.Internal_MuxRangeFeedClient, error) {
-	return kvpb.NewInternalClient(c.asConn()).MuxRangeFeed(ctx, opts...)
+	ctx context.Context,
+) (kvpb.RPCInternal_MuxRangeFeedClient, error) {
+	return kvpb.NewInternalClient(c.asConn()).MuxRangeFeed(ctx)
 }
 
 var batchStreamPoolingEnabled = settings.RegisterBoolSetting(
@@ -444,19 +444,16 @@ func (c *batchStreamPoolClient) asPool() *rpc.BatchStreamPool {
 // Batch implements the RestrictedInternalClient interface, using the pooled
 // streams in the BatchStreamPool to issue the Batch RPC.
 func (c *batchStreamPoolClient) Batch(
-	ctx context.Context, ba *kvpb.BatchRequest, opts ...grpc.CallOption,
+	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, error) {
-	if len(opts) > 0 {
-		return nil, errors.AssertionFailedf("batchStreamPoolClient.Batch does not support CallOptions")
-	}
 	return c.asPool().Send(ctx, ba)
 }
 
 // MuxRangeFeed implements the RestrictedInternalClient interface.
 func (c *batchStreamPoolClient) MuxRangeFeed(
-	ctx context.Context, opts ...grpc.CallOption,
-) (kvpb.Internal_MuxRangeFeedClient, error) {
-	return kvpb.NewInternalClient(c.asPool().Conn()).MuxRangeFeed(ctx, opts...)
+	ctx context.Context,
+) (kvpb.RPCInternal_MuxRangeFeedClient, error) {
+	return kvpb.NewInternalClient(c.asPool().Conn()).MuxRangeFeed(ctx)
 }
 
 // tracingInternalClient wraps a RestrictedInternalClient and fills in trace
@@ -480,12 +477,12 @@ func maybeWrapInTracingClient(
 
 // Batch overrides the Batch RPC client method and fills in tracing information.
 func (c *tracingInternalClient) Batch(
-	ctx context.Context, ba *kvpb.BatchRequest, opts ...grpc.CallOption,
+	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, error) {
 	sp := tracing.SpanFromContext(ctx)
 	if sp != nil {
 		ba = ba.ShallowCopy()
 		ba.TraceInfo = sp.Meta().ToProto()
 	}
-	return c.RestrictedInternalClient.Batch(ctx, ba, opts...)
+	return c.RestrictedInternalClient.Batch(ctx, ba)
 }
