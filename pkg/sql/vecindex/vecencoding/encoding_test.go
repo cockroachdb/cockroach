@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
@@ -261,8 +262,8 @@ func TestDecodeVectorKey(t *testing.T) {
 	expectedSuffix := []byte("mySuffix")
 	buf = append(buf, expectedSuffix...)
 
-	// Call DecodeKey with numPrefixColumns=0.
-	indexKey, err := vecencoding.DecodeVectorKey(buf, 0)
+	// Call DecodeKey with numPrefixColumns=0 and idxtype.VECTOR.
+	indexKey, err := vecencoding.DecodeVectorKey(buf, 0, idxtype.VECTOR)
 	require.NoError(t, err)
 	// No prefix since numPrefixColumns=0.
 	require.Empty(t, indexKey.Prefix)
@@ -301,8 +302,8 @@ func TestDecodeKeyPrefixColumns(t *testing.T) {
 	expectedSuffix := []byte("suffixData")
 	buf = append(buf, expectedSuffix...)
 
-	// Extract the key with one prefix column.
-	key, err := vecencoding.DecodeVectorKey(buf, 2)
+	// Extract the key with two prefix columns and idxtype.VECTOR.
+	key, err := vecencoding.DecodeVectorKey(buf, 2, idxtype.VECTOR)
 	require.NoError(t, err)
 
 	// Verify that the extracted prefix matches.
@@ -312,4 +313,94 @@ func TestDecodeKeyPrefixColumns(t *testing.T) {
 	require.Equal(t, level, key.Level)
 	// Verify that the remaining bytes form the suffix.
 	require.Equal(t, expectedSuffix, key.Suffix)
+}
+
+func TestDecodeVectorKeyForwardIndex(t *testing.T) {
+	// Test idxtype.FORWARD case where index key does not include partition id or level.
+	// Build an encoded key with no prefix columns for a FORWARD index.
+	expectedSuffix := []byte("forwardIndexSuffix")
+	buf := make([]byte, len(expectedSuffix))
+	copy(buf, expectedSuffix)
+
+	// Call DecodeVectorKey with numPrefixColumns=0 and idxtype.FORWARD.
+	indexKey, err := vecencoding.DecodeVectorKey(buf, 0, idxtype.FORWARD)
+	require.NoError(t, err)
+	// No prefix since numPrefixColumns=0.
+	require.Empty(t, indexKey.Prefix)
+	// For FORWARD indexes, partition key and level should be invalid.
+	require.Equal(t, cspann.InvalidKey, indexKey.PartitionKey)
+	require.Equal(t, cspann.InvalidLevel, indexKey.Level)
+	// All bytes should be treated as suffix.
+	require.Equal(t, expectedSuffix, indexKey.Suffix)
+}
+
+func TestDecodeVectorKeyForwardIndexWithPrefix(t *testing.T) {
+	// Test idxtype.FORWARD case with prefix columns.
+	var buf []byte
+
+	// Encode a prefix column.
+	prefixVal := []byte("forwardPrefixValue")
+	buf = encoding.EncodeBytesAscending(buf, prefixVal)
+
+	// Capture the prefix bytes to compare later.
+	prefixEncoded := make([]byte, len(buf))
+	copy(prefixEncoded, buf)
+
+	// Append some suffix bytes (no partition key/level for FORWARD index).
+	expectedSuffix := []byte("forwardSuffixData")
+	buf = append(buf, expectedSuffix...)
+
+	// Extract the key with one prefix column and idxtype.FORWARD.
+	key, err := vecencoding.DecodeVectorKey(buf, 1, idxtype.FORWARD)
+	require.NoError(t, err)
+
+	// Verify that the extracted prefix matches.
+	require.Equal(t, prefixEncoded, key.Prefix)
+	// For FORWARD indexes, partition key and level should be invalid.
+	require.Equal(t, cspann.InvalidKey, key.PartitionKey)
+	require.Equal(t, cspann.InvalidLevel, key.Level)
+	// Verify that the remaining bytes form the suffix.
+	require.Equal(t, expectedSuffix, key.Suffix)
+}
+
+func TestDecodeVectorKeyBothIndexTypes(t *testing.T) {
+	// Test that demonstrates the difference between VECTOR and FORWARD index types.
+
+	// Test VECTOR index type (existing behavior).
+	t.Run("VectorIndex", func(t *testing.T) {
+		var buf []byte
+		// Encode a partition key.
+		partitionKey := cspann.PartitionKey(789)
+		buf = vecencoding.EncodePartitionKey(buf, partitionKey)
+		// Encode a partition level.
+		level := cspann.Level(3)
+		buf = vecencoding.EncodePartitionLevel(buf, level)
+		// Add some suffix bytes.
+		expectedSuffix := []byte("vectorSuffix")
+		buf = append(buf, expectedSuffix...)
+
+		indexKey, err := vecencoding.DecodeVectorKey(buf, 0, idxtype.VECTOR)
+		require.NoError(t, err)
+		require.Empty(t, indexKey.Prefix)
+		require.Equal(t, partitionKey, indexKey.PartitionKey)
+		require.Equal(t, level, indexKey.Level)
+		require.Equal(t, expectedSuffix, indexKey.Suffix)
+	})
+
+	// Test FORWARD index type (new behavior for temporary indexes).
+	t.Run("ForwardIndex", func(t *testing.T) {
+		// For FORWARD index, the same bytes are treated as suffix since
+		// there's no partition key/level encoding.
+		var buf []byte
+		// All data is treated as suffix for FORWARD index.
+		allData := []byte("allDataAsSuffix")
+		buf = append(buf, allData...)
+
+		indexKey, err := vecencoding.DecodeVectorKey(buf, 0, idxtype.FORWARD)
+		require.NoError(t, err)
+		require.Empty(t, indexKey.Prefix)
+		require.Equal(t, cspann.InvalidKey, indexKey.PartitionKey)
+		require.Equal(t, cspann.InvalidLevel, indexKey.Level)
+		require.Equal(t, allData, indexKey.Suffix)
+	})
 }

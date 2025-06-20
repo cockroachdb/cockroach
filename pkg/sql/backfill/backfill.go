@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
@@ -471,6 +473,8 @@ type muBoundAccount struct {
 type VectorIndexHelper struct {
 	// vectorOrd is the ordinal of the vector column in the table.
 	vectorOrd int
+	// vectorColID is the column ID of the vector column.
+	vectorColID catid.ColumnID
 	// centroid is an all zeros centroid of the appropriate dimension for the vector
 	// column. It's used to encode the vector in the reader. The writer will
 	// re-encode the vector with the centroid for the partition selected.
@@ -481,10 +485,105 @@ type VectorIndexHelper struct {
 	vecIndex *cspann.Index
 	// fullVecFetchSpec is the fetch spec for the full vector.
 	fullVecFetchSpec vecstorepb.GetFullVectorsFetchSpec
+	// mergeFetchSpec is the fetch spec for extracting vector column from primary key during merge.
+	mergeFetchSpec fetchpb.IndexFetchSpec
 	// indexPrefix are the prefix bytes for this index (/Tenant/Table/Index).
 	indexPrefix []byte
 	// evalCtx is the evaluation context used for vector operations.
 	evalCtx *eval.Context
+	// tableDesc is the table descriptor for the table containing the vector index.
+	tableDesc catalog.TableDescriptor
+	// vectorIndex is the vector index descriptor.
+	vectorIndex catalog.Index
+}
+
+func NewVectorIndexHelper(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	desc catalog.TableDescriptor,
+	idx catalog.Index,
+	sourceIndexID catid.IndexID,
+	vecIndexManager *vecindex.Manager,
+) (*VectorIndexHelper, error) {
+	vectorColID := idx.VectorColumnID()
+	vectorCol, err := catalog.MustFindColumnByID(desc, vectorColID)
+	if err != nil {
+		return nil, err
+	}
+
+	vecIndex, err := vecIndexManager.Get(ctx, desc.GetID(), idx.GetID())
+	if err != nil {
+		return nil, err
+	}
+
+	var sourceIndex catalog.Index
+	if sourceIndexID != 0 {
+		sourceIndex, err = catalog.MustFindIndexByID(desc, sourceIndexID)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		sourceIndex = desc.GetPrimaryIndex()
+	}
+
+	vih := &VectorIndexHelper{
+		vectorOrd:     vectorCol.Ordinal(),
+		vectorColID:   vectorColID,
+		centroid:      make(vector.T, idx.GetVecConfig().Dims),
+		numPrefixCols: idx.NumKeyColumns() - 1,
+		vecIndex:      vecIndex,
+		indexPrefix:   rowenc.MakeIndexKeyPrefix(evalCtx.Codec, desc.GetID(), idx.GetID()),
+		evalCtx:       evalCtx,
+		tableDesc:     desc,
+		vectorIndex:   idx,
+	}
+	if err := vecstore.InitGetFullVectorsFetchSpec(
+		&vih.fullVecFetchSpec,
+		evalCtx,
+		desc,
+		idx,
+		sourceIndex,
+	); err != nil {
+		return nil, err
+	}
+
+	// Initialize the merge fetch spec for extracting vector column and prefix columns from primary key.
+	// This is used by MergeVector to get the vector column and any prefix columns from primary key entries.
+	var columnsToFetch []descpb.ColumnID
+
+	// Add all the prefix columns (key columns except the vector column)
+	for i := range idx.NumKeyColumns() {
+		columnsToFetch = append(columnsToFetch, idx.GetKeyColumnID(i))
+	}
+
+	// Add primary key columns so EncodeSecondaryIndex has access to them
+	primaryIndex := desc.GetPrimaryIndex()
+	for i := range primaryIndex.NumKeyColumns() {
+		pkColID := primaryIndex.GetKeyColumnID(i)
+		// Avoid duplicates if PK column is already in the vector index
+		found := false
+		for _, existingColID := range columnsToFetch {
+			if existingColID == pkColID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			columnsToFetch = append(columnsToFetch, pkColID)
+		}
+	}
+
+	if err := rowenc.InitIndexFetchSpec(
+		&vih.mergeFetchSpec,
+		evalCtx.Codec,
+		desc,
+		desc.GetPrimaryIndex(), /* always use primary index for merge operations */
+		columnsToFetch,
+	); err != nil {
+		return nil, err
+	}
+
+	return vih, nil
 }
 
 // ReEncodeVector takes a rowenc.indexEntry, extracts the key values, unquantized
@@ -498,26 +597,24 @@ func (vih *VectorIndexHelper) ReEncodeVector(
 	ctx context.Context, txn *kv.Txn, inputEntry rowenc.IndexEntry, outputEntry *rowenc.IndexEntry,
 ) (*rowenc.IndexEntry, error) {
 	keyBytes := inputEntry.Key[len(vih.indexPrefix):]
-	key, err := vecencoding.DecodeVectorKey(keyBytes, vih.numPrefixCols)
+	key, err := vecencoding.DecodeVectorKey(keyBytes, vih.numPrefixCols, idxtype.VECTOR)
 	if err != nil {
 		return &rowenc.IndexEntry{}, err
 	}
 
-	// Decode vector and suffix bytes from the entry value.
 	valueBytes, err := inputEntry.Value.GetBytes()
 	if err != nil {
 		return &rowenc.IndexEntry{}, err
 	}
-	suffix, vec, err := vector.Decode(valueBytes)
+	suffix, vector, err := vector.Decode(valueBytes)
 	if err != nil {
 		return &rowenc.IndexEntry{}, err
 	}
 
-	// Locate a new partition for the key and re-encode the vector.
 	var searcher vecindex.MutationSearcher
 	searcher.Init(vih.evalCtx, vih.vecIndex, txn, &vih.fullVecFetchSpec)
 
-	if err := searcher.SearchForInsert(ctx, roachpb.Key(key.Prefix), vec); err != nil {
+	if err := searcher.SearchForInsert(ctx, roachpb.Key(key.Prefix), vector); err != nil {
 		return &rowenc.IndexEntry{}, err
 	}
 	key.PartitionKey = cspann.PartitionKey(tree.MustBeDInt(searcher.PartitionKey()))
@@ -537,6 +634,183 @@ func (vih *VectorIndexHelper) ReEncodeVector(
 	outputEntry.Family = inputEntry.Family
 
 	return outputEntry, nil
+}
+
+func (vih *VectorIndexHelper) MergeVector(
+	ctx context.Context, txn *kv.Txn, sourceKV *kv.KeyValue, destKey roachpb.Key,
+) (*kv.KeyValue, bool, error) {
+	tempWrapper, err := rowenc.DecodeWrapper(sourceKV.Value)
+	if err != nil {
+		return nil, false, err
+	}
+
+	if tempWrapper.Deleted {
+		// Not really anything we can do about a deleted key since that means the vector in the PK is already deleted.
+		return nil, true, nil
+	}
+
+	// Use span.Builder to build the spans we need to read all the key columns
+	// in the vector index from the primary key.
+	var builder span.Builder
+	builder.InitWithFetchSpec(vih.evalCtx, vih.evalCtx.Codec, &vih.mergeFetchSpec)
+
+	// Extract the key bytes from the temporary index entry
+	// The temporary index has the same key structure as the primary key
+	keyBytes := sourceKV.Key[len(vih.indexPrefix):]
+
+	// Decode the key bytes into EncDatumRow so we can use the span.Builder properly
+	var alloc tree.DatumAlloc
+	encRow := make(rowenc.EncDatumRow, len(vih.mergeFetchSpec.KeyAndSuffixColumns))
+	_, _, err = rowenc.DecodeKeyValsUsingSpec(vih.mergeFetchSpec.KeyAndSuffixColumns, keyBytes, encRow)
+	if err != nil {
+		return nil, false, err
+	}
+
+	// Use the span.Builder to create a proper span from the decoded EncDatumRow
+	span, containsNull, err := builder.SpanFromEncDatums(encRow)
+	if err != nil {
+		return nil, false, err
+	}
+	if containsNull {
+		// Primary key contains null, skip this entry
+		return nil, true, nil
+	}
+
+	// Use the span to fetch the vector column and prefix columns from the primary index
+	var fetcher row.Fetcher
+	err = fetcher.Init(ctx, row.FetcherInitArgs{
+		Txn:   txn,
+		Alloc: &alloc,
+		Spec:  &vih.mergeFetchSpec,
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	defer fetcher.Close(ctx)
+
+	err = fetcher.StartScan(ctx, []roachpb.Span{span}, nil /* spanIDs */, rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */), 1 /* rowLimit */)
+	if err != nil {
+		return nil, false, err
+	}
+
+	// Fetch the row containing the vector column
+	rowDatums, _, err := fetcher.NextRowDecoded(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	if rowDatums == nil {
+		// Primary key row not found -- this row is deleted
+		return nil, true, nil
+	}
+
+	// Create a custom colMap that maps column IDs to positions in our packed rowDatums array
+	// This includes both the vector index columns and the primary key columns
+	var colMap catalog.TableColMap
+	for i, colSpec := range vih.mergeFetchSpec.FetchedColumns {
+		colMap.Set(colSpec.ColumnID, i)
+	}
+
+	// Extract the vector column from the fetched row using the colMap
+	// Find the position of the vector column in the rowDatums array
+	vectorColPos, found := colMap.Get(vih.vectorColID)
+	if !found {
+		return nil, false, errors.AssertionFailedf("vector column ID %d not found in colMap", vih.vectorColID)
+	}
+	vectorDatum := rowDatums[vectorColPos]
+	if vectorDatum == tree.DNull {
+		// Null vector, skip this entry
+		return nil, true, nil
+	}
+	vector := tree.MustBeDPGVector(vectorDatum).T
+
+	// Now use EncodeSecondaryIndex to handle all the complex vector encoding logic
+	// Use the stored table descriptor and vector index
+	tableDesc := vih.tableDesc
+	vectorIndex := vih.vectorIndex
+
+	// We need to perform the vector search to get the partition key and quantized vector
+	// Extract the prefix columns for the search from the fetched rowDatums
+	var prefixKey roachpb.Key
+	if vih.numPrefixCols > 0 {
+		// Get the prefix column IDs from the vector index (all KEY columns except the vector column)
+		var prefixBuf []byte
+		for i := 0; i < vih.numPrefixCols; i++ {
+			prefixColID := vih.vectorIndex.GetKeyColumnID(i)
+
+			// Find this column in the fetched rowDatums using the colMap
+			prefixColPos, found := colMap.Get(prefixColID)
+			if !found {
+				return nil, false, errors.AssertionFailedf("prefix column ID %d not found in colMap", prefixColID)
+			}
+
+			prefixDatum := rowDatums[prefixColPos]
+			if prefixDatum == tree.DNull {
+				return nil, false, errors.AssertionFailedf("prefix column %d is null", prefixColID)
+			}
+
+			// Find the column type from the mergeFetchSpec
+			var colType *types.T
+			for _, colSpec := range vih.mergeFetchSpec.FetchedColumns {
+				if colSpec.ColumnID == prefixColID {
+					colType = colSpec.Type
+					break
+				}
+			}
+			if colType == nil {
+				return nil, false, errors.AssertionFailedf("could not find type for prefix column %d", prefixColID)
+			}
+
+			// Encode the prefix column datum
+			encDatum := rowenc.DatumToEncDatum(colType, prefixDatum)
+			var err error
+			prefixBuf, err = encDatum.Encode(colType, &alloc, catenumpb.DatumEncoding_ASCENDING_KEY, prefixBuf)
+			if err != nil {
+				return nil, false, err
+			}
+		}
+		prefixKey = prefixBuf
+	}
+
+	var searcher vecindex.MutationSearcher
+	searcher.Init(vih.evalCtx, vih.vecIndex, txn, &vih.fullVecFetchSpec)
+
+	if err := searcher.SearchForInsert(ctx, prefixKey, vector); err != nil {
+		return nil, false, err
+	}
+
+	// Set up the VectorIndexEncodingHelper with the search results
+	vh := rowenc.VectorIndexEncodingHelper{
+		PartitionKeys: map[descpb.IndexID]tree.Datum{
+			vectorIndex.GetID(): searcher.PartitionKey(),
+		},
+		QuantizedVecs: map[descpb.IndexID]tree.Datum{
+			vectorIndex.GetID(): searcher.EncodedVector(),
+		},
+	}
+
+	// Use EncodeSecondaryIndex to do all the complex encoding work
+	entries, err := rowenc.EncodeSecondaryIndex(
+		ctx,
+		vih.evalCtx.Codec,
+		tableDesc,
+		vectorIndex,
+		colMap,
+		rowDatums,
+		vh,
+		false, /* includeEmpty */
+	)
+	if err != nil {
+		return nil, false, err
+	}
+
+	if len(entries) != 1 {
+		return nil, false, errors.AssertionFailedf("expected exactly one index entry, got %d", len(entries))
+	}
+
+	return &kv.KeyValue{
+		Key:   entries[0].Key,
+		Value: &entries[0].Value,
+	}, false, nil
 }
 
 // IndexBackfiller is capable of backfilling all the added index.
@@ -571,7 +845,7 @@ type IndexBackfiller struct {
 
 	// map of index IDs to VectorIndexHelpers, so that writers can map from
 	// IndexEntry keys they see to the proper re-encoding logic.
-	VectorIndexes        map[descpb.IndexID]VectorIndexHelper
+	VectorIndexes        map[descpb.IndexID]*VectorIndexHelper
 	vectorEncodingHelper rowenc.VectorIndexEncodingHelper
 	VectorIndexManager   *vecindex.Manager
 	VectorOnly           bool
@@ -932,37 +1206,14 @@ func (ib *IndexBackfiller) initIndexes(
 		}
 
 		if ib.VectorIndexes == nil {
-			ib.VectorIndexes = make(map[descpb.IndexID]VectorIndexHelper)
+			ib.VectorIndexes = make(map[descpb.IndexID]*VectorIndexHelper)
 		}
 
-		vectorColID := idx.VectorColumnID()
-		vectorCol, err := catalog.MustFindColumnByID(desc, vectorColID)
+		helper, err := NewVectorIndexHelper(ctx, evalCtx, desc, idx, sourceIndexID, vecIndexManager)
 		if err != nil {
 			return err
 		}
 
-		vecIndex, err := vecIndexManager.Get(ctx, desc.GetID(), idx.GetID())
-		if err != nil {
-			return err
-		}
-
-		helper := VectorIndexHelper{
-			vectorOrd:     vectorCol.Ordinal(),
-			centroid:      make(vector.T, idx.GetVecConfig().Dims),
-			numPrefixCols: idx.NumKeyColumns() - 1,
-			vecIndex:      vecIndex,
-			indexPrefix:   rowenc.MakeIndexKeyPrefix(evalCtx.Codec, desc.GetID(), idx.GetID()),
-			evalCtx:       ib.evalCtx,
-		}
-		if err := vecstore.InitGetFullVectorsFetchSpec(
-			&helper.fullVecFetchSpec,
-			evalCtx,
-			desc,
-			idx,
-			ib.sourceIndex,
-		); err != nil {
-			return err
-		}
 		ib.VectorIndexes[idx.GetID()] = helper
 	}
 
