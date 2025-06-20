@@ -194,6 +194,44 @@ func (p *planner) removeTypeBackReferences(
 	return nil
 }
 
+func (p *planner) addRoutineViewBackReference(
+	ctx context.Context, routineID descpb.ID, ref descpb.ID,
+) error {
+	mutDesc, err := p.Descriptors().MutableByID(p.txn).Function(ctx, routineID)
+	if err != nil {
+		return err
+	}
+
+	// TODO(drewk): check if this is necessary.
+	if err := p.CheckPrivilege(ctx, mutDesc, privilege.EXECUTE); err != nil {
+		return err
+	}
+
+	if err := mutDesc.AddViewReference(ref); err != nil {
+		return err
+	}
+	if err := p.writeFuncSchemaChange(ctx, mutDesc); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *planner) removeRoutineViewBackReferences(
+	ctx context.Context, routineIDs []descpb.ID, ref descpb.ID,
+) error {
+	for _, routineID := range routineIDs {
+		mutDesc, err := p.Descriptors().MutableByID(p.txn).Function(ctx, routineID)
+		if err != nil {
+			return err
+		}
+		mutDesc.RemoveViewReference(ref)
+		if err := p.writeFuncSchemaChange(ctx, mutDesc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (p *planner) addBackRefsFromAllTypesInTable(
 	ctx context.Context, desc *tabledesc.Mutable,
 ) error {

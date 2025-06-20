@@ -1838,6 +1838,7 @@ message FunctionDescriptor {
       (gogoproto.casttype) = "TriggerID"];
     repeated uint32 policy_ids = 6 [(gogoproto.customname) = "PolicyIDs",
       (gogoproto.casttype) = "PolicyID"];
+    optional bool view_query = 7 [(gogoproto.nullable) = false];
   }
 
   optional string name = 1 [(gogoproto.nullable) = false];
