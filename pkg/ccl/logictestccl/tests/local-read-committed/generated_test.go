@@ -384,6 +384,13 @@ func TestReadCommittedLogic_cast(
 	runLogicTest(t, "cast")
 }
 
+func TestReadCommittedLogic_check(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "check")
+}
+
 func TestReadCommittedLogic_check_constraints(
 	t *testing.T,
 ) {
