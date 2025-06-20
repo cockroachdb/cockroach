@@ -1273,11 +1273,15 @@ type flushableBuffer struct {
 
 // flushBuffer flushes the given streamIngestionBuffer via the SST
 // batchers and returns the underlying streamIngestionBuffer to the pool.
-func (sip *streamIngestionProcessor) flushBuffer(b flushableBuffer) (*jobspb.ResolvedSpans, error) {
+func (sip *streamIngestionProcessor) flushBuffer(
+	b flushableBuffer,
+) (_ *jobspb.ResolvedSpans, err error) {
 	ctx, sp := tracing.ChildSpan(sip.Ctx(), "stream-ingestion-flush")
 	defer sp.Finish()
-	// Ensure the batcher is always reset, even on early error returns.
-	defer sip.batcher.Reset(ctx)
+	defer func() {
+		// Ensure the batcher is always reset, even on early error returns.
+		err = errors.CombineErrors(err, sip.batcher.Reset(ctx))
+	}()
 
 	// First process the point KVs.
 	//
