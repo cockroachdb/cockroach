@@ -396,7 +396,7 @@ func (m panicNodeMutator) Name() string {
 }
 
 func (m panicNodeMutator) Probability() float64 {
-	return 0.3
+	return 1.0
 }
 
 func (m panicNodeMutator) Generate(
@@ -404,9 +404,10 @@ func (m panicNodeMutator) Generate(
 ) []mutation {
 	var mutations []mutation
 	maxPanics := len(plan.upgrades)
-	numPanics := 1 + rng.Intn(maxPanics)
+	numPanics := 1 + rng.Intn(maxPanics) + 7
 
 	idx := newStepIndex(plan)
+	planSteps := plan.newStepSelector()
 	possiblePointsInTime := plan.
 		newStepSelector().
 		// We don't want to panic concurrently with other steps, and inserting before a concurrent step
@@ -418,11 +419,38 @@ func (m panicNodeMutator) Generate(
 	for range numPanics {
 		nodeList := planner.currentContext.System.Descriptor.Nodes
 		targetNode := nodeList.SeededRandNode(rng)
-		addRandomly := possiblePointsInTime.
-			RandomStep(rng).
-			InsertBefore(panicNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt})
+		randomStep := possiblePointsInTime.RandomStep(rng)
 
-		mutations = append(mutations, addRandomly...)
+		search, err := plan.newStepSelector().findStep(randomStep)
+		if err != nil {
+			return nil
+		}
+		var boundaries = stepSelector{}
+
+		for search < len(planSteps) {
+			step := planSteps[search]
+			implStart, validStart := step.impl.(restartWithNewBinaryStep)
+			_, validPanic := step.impl.(panicNodeStep)
+			implStartVirtual, validStartVirtual := step.impl.(restartVirtualClusterStep)
+			_, waitForStable := step.impl.(waitForStableClusterVersionStep)
+
+			if (validStart && implStart.node == targetNode[0]) || validPanic || (validStartVirtual && implStartVirtual.node == targetNode[0]) || waitForStable {
+				boundaries = append(boundaries, step)
+				break
+			}
+
+			boundaries = append(boundaries, step)
+			search += 1
+		}
+
+		addPanicStep := randomStep.
+			InsertBefore(panicNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode})
+		addRestartStep := boundaries.
+			RandomStep(rng).
+			InsertBefore(startNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt})
+
+		mutations = append(mutations, addPanicStep...)
+		mutations = append(mutations, addRestartStep...)
 	}
 
 	return mutations

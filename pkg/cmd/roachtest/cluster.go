@@ -2800,6 +2800,7 @@ func (c *clusterImpl) adminUIAddr(
 	external bool,
 ) ([]string, error) {
 	var addrs []string
+	fmt.Printf("----------\n\nCluster being used: %s\n\n----------\n", c.virtualCluster(opts.VirtualClusterName))
 	adminURLs, err := roachprod.AdminURL(
 		ctx,
 		l,
