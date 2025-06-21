@@ -51,6 +51,7 @@ var debugTimeSeriesDumpOpts = struct {
 	organizationName       string
 	userName               string
 	storeToNodeMapYAMLFile string
+	dryRun                 bool
 }{
 	format:       tsDumpText,
 	from:         timestampValue{},
@@ -58,6 +59,9 @@ var debugTimeSeriesDumpOpts = struct {
 	clusterLabel: "",
 	yaml:         "/tmp/tsdump.yaml",
 }
+
+// hostNameOverride is used to override the hostname for testing purpose.
+var hostNameOverride string
 
 var debugTimeSeriesDumpCmd = &cobra.Command{
 	Use:   "tsdump",
@@ -111,18 +115,16 @@ will then convert it to the --format requested in the current invocation.
 				return errors.New("no input file provided")
 			}
 
-			targetURL, err := getDatadogTargetURL(debugTimeSeriesDumpOpts.ddSite)
-			if err != nil {
-				return err
-			}
-
-			var datadogWriter = makeDatadogWriter(
-				targetURL,
+			datadogWriter, err := makeDatadogWriter(
+				debugTimeSeriesDumpOpts.ddSite,
 				cmd == tsDumpDatadogInit,
 				debugTimeSeriesDumpOpts.ddApiKey,
 				100,
-				doDDRequest,
+				hostNameOverride,
 			)
+			if err != nil {
+				return err
+			}
 			return datadogWriter.upload(args[0])
 		case tsDumpOpenMetrics:
 			if debugTimeSeriesDumpOpts.targetURL != "" {
@@ -257,15 +259,6 @@ will then convert it to the --format requested in the current invocation.
 			}
 		}
 	}),
-}
-
-func getDatadogTargetURL(site string) (string, error) {
-	host, ok := ddSiteToHostMap[site]
-	if !ok {
-		return "", fmt.Errorf("unsupported datadog site '%s'", site)
-	}
-	targetURL := fmt.Sprintf(targetURLFormat, host)
-	return targetURL, nil
 }
 
 func doRequest(req *http.Request) error {

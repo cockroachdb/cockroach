@@ -13,12 +13,14 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -145,7 +147,7 @@ func parseTSInput(t *testing.T, input string, w tsWriter) {
 }
 
 func parseDDInput(t *testing.T, input string, w *datadogWriter) {
-	var data *DatadogSeries
+	var data *datadogV2.MetricSeries
 	var source, storeNodeKey string
 
 	for _, s := range strings.Split(input, "\n") {
@@ -164,10 +166,10 @@ func parseDDInput(t *testing.T, input string, w *datadogWriter) {
 			(data != nil && data.Metric != metricName ||
 				(data != nil && source != nameValueTimestamp[1])) {
 			if data != nil {
-				_, err := w.emitDataDogMetrics([]DatadogSeries{*data})
+				_, err := w.emitDataDogMetrics([]datadogV2.MetricSeries{*data})
 				require.NoError(t, err)
 			}
-			data = &DatadogSeries{
+			data = &datadogV2.MetricSeries{
 				Metric: metricName,
 				Type:   w.resolveMetricType(metricName),
 			}
@@ -178,12 +180,12 @@ func parseDDInput(t *testing.T, input string, w *datadogWriter) {
 		require.NoError(t, err)
 		ts, err := strconv.ParseInt(nameValueTimestamp[3], 10, 64)
 		require.NoError(t, err)
-		data.Points = append(data.Points, DatadogPoint{
-			Value:     value,
-			Timestamp: ts,
+		data.Points = append(data.Points, datadogV2.MetricPoint{
+			Value:     &value,
+			Timestamp: &ts,
 		})
 	}
-	_, err := w.emitDataDogMetrics([]DatadogSeries{*data})
+	_, err := w.emitDataDogMetrics([]datadogV2.MetricSeries{*data})
 	require.NoError(t, err)
 }
 
@@ -193,7 +195,17 @@ func TestTsDumpFormatsDataDriven(t *testing.T) {
 	defer testutils.TestingHook(&getCurrentTime, func() time.Time {
 		return time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC)
 	})()
-
+	var testReqs []*http.Request
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r2 := r.Clone(r.Context())
+		// Clone the body so that it can be read again
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		r2.Body = io.NopCloser(bytes.NewReader(body))
+		testReqs = append(testReqs, r2)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
 	datadriven.Walk(t, "testdata/tsdump", func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var w tsWriter
@@ -204,28 +216,25 @@ func TestTsDumpFormatsDataDriven(t *testing.T) {
 				debugTimeSeriesDumpOpts.zendeskTicket = "zd-test"
 				debugTimeSeriesDumpOpts.organizationName = "test-org"
 				debugTimeSeriesDumpOpts.userName = "test-user"
-				var testReqs []*http.Request
 				var series int
 				d.ScanArgs(t, "series-threshold", &series)
-				var ddwriter = makeDatadogWriter(
-					"https://example.com/data", d.Cmd == "format-datadog-init", "api-key", series, func(req *http.Request,
-					) error {
-						testReqs = append(testReqs, req)
-						return nil
-					})
+				var ddwriter, err = makeDatadogWriter(
+					defaultDDSite, d.Cmd == "format-datadog-init", "api-key", series,
+					server.Listener.Addr().String(),
+				)
+				require.NoError(t, err)
 
 				parseDDInput(t, d.Input, ddwriter)
 
 				out := strings.Builder{}
 				for _, tr := range testReqs {
-					rc, err := tr.GetBody()
+					reader, err := gzip.NewReader(tr.Body)
 					require.NoError(t, err)
-					zipR, err := gzip.NewReader(rc)
-					require.NoError(t, err)
-					body, err := io.ReadAll(zipR)
+					body, err := io.ReadAll(reader)
 					require.NoError(t, err)
 					out.WriteString(fmt.Sprintf("%s: %s\nDD-API-KEY: %s\nBody: %s", tr.Method, tr.URL, tr.Header.Get("DD-API-KEY"), body))
 				}
+				testReqs = testReqs[:0] // reset the slice
 				return out.String()
 			case "format-json":
 				debugTimeSeriesDumpOpts.clusterLabel = "test-cluster"
