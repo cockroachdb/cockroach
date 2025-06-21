@@ -189,12 +189,26 @@ func getResultColumns(
 			a.Passthrough...,
 		), nil
 
+	case updateSwapOp:
+		a := args.(*updateSwapArgs)
+		return appendColumns(
+			tableColumns(a.Table, a.ReturnCols),
+			a.Passthrough...,
+		), nil
+
 	case upsertOp:
 		a := args.(*upsertArgs)
 		return tableColumns(a.Table, a.ReturnCols), nil
 
 	case deleteOp:
 		a := args.(*deleteArgs)
+		return appendColumns(
+			tableColumns(a.Table, a.ReturnCols),
+			a.Passthrough...,
+		), nil
+
+	case deleteSwapOp:
+		a := args.(*deleteSwapArgs)
 		return appendColumns(
 			tableColumns(a.Table, a.ReturnCols),
 			a.Passthrough...,

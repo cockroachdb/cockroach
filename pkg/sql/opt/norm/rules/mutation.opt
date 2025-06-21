@@ -50,3 +50,67 @@
 (Lock $rows:* & (HasZeroRows $rows))
 =>
 $rows
+
+# TrySwapMutation
+[TrySwapMutation, Normalize]
+(Update | Delete
+    $sel:(Select
+        (Scan $scanPrivate:*)
+        $filters:*
+    ) & (HasZeroOrOneRow $sel)
+    []
+    []
+    $mutationPrivate:* &
+        (CanUseSwapMutation
+            $mutationPrivate
+            $filters
+            $scanPrivate
+        ) &
+        (Let
+            ($values $ok):(BuildSwapMutationValues $mutationPrivate $filters $scanPrivate)
+            $ok
+        )
+)
+=>
+((OpName)
+    $values
+    []
+    []
+    (UseSwapMutation $mutationPrivate)
+)
+
+# TrySwapMutationProject
+[TrySwapMutationProject, Normalize]
+(Update | Delete
+    (Project
+        $sel:(Select
+            (Scan $scanPrivate:*)
+            $filters:*
+        ) & (HasZeroOrOneRow $sel)
+        $projections:*
+        $passthrough:*
+    )
+    []
+    []
+    $mutationPrivate:* &
+        (CanUseSwapMutation
+            $mutationPrivate
+            $filters
+            $scanPrivate
+        ) &
+        (Let
+            ($values $ok):(BuildSwapMutationValues $mutationPrivate $filters $scanPrivate)
+            $ok
+        )
+)
+=>
+((OpName)
+    (Project
+        $values
+        $projections
+        $passthrough
+    )
+    []
+    []
+    (UseSwapMutation $mutationPrivate)
+)
