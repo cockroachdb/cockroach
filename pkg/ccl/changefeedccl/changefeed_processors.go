@@ -637,6 +637,8 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 	// can ignore it from this point on.
 	if !ca.spec.Checkpoint.IsEmpty() {
 		if ca.spec.SpanLevelCheckpoint != nil {
+			log.Infof(ca.Ctx(), "legacy checkpoint: %#v", ca.spec.Checkpoint)
+			log.Infof(ca.Ctx(), "current checkpoint: %#v", ca.spec.SpanLevelCheckpoint)
 			return nil, errors.AssertionFailedf("both legacy and current checkpoint set on change aggregator spec")
 		}
 
