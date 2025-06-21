@@ -230,6 +230,8 @@ var (
 	// store for a store in the cluster. It includes the epoch and expiration of
 	// support.
 	localStoreLivenessSupportFor = []byte("slsf")
+	// localStoreWAGIndexSuffix is the suffix for WAG nodes.
+	localStoreWAGIndexSuffix = []byte("iwag")
 	// localRemovedLeakedRaftEntriesSuffix is DEPRECATED and remains to prevent
 	// reuse.
 	localRemovedLeakedRaftEntriesSuffix = []byte("dlre")
