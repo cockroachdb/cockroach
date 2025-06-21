@@ -1951,19 +1951,19 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 			0: {
 				ScanMaxIdleTime: time.Millisecond,
 				StoreSpecs: []base.StoreSpec{{
-					InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{"n1"}},
+					InMemory: true, Attributes: []string{"n1"},
 				}},
 			},
 			1: {
 				ScanMaxIdleTime: time.Millisecond,
 				StoreSpecs: []base.StoreSpec{{
-					InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{"n2"}},
+					InMemory: true, Attributes: []string{"n2"},
 				}},
 			},
 			2: {
 				ScanMaxIdleTime: time.Millisecond,
 				StoreSpecs: []base.StoreSpec{{
-					InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{"n3"}},
+					InMemory: true, Attributes: []string{"n3"},
 				}},
 			},
 		},

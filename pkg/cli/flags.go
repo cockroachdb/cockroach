@@ -1515,7 +1515,7 @@ func newSizeFlagVal(spec *storageconfig.Size) *sizeFlagVal {
 // pflag.Value interface.
 func (sv *sizeFlagVal) String() string {
 	if sv.spec.Percent != 0 {
-		return string(humanize.Ftoa(sv.spec.Percent)) + "%"
+		return humanize.Ftoa(sv.spec.Percent) + "%"
 	}
 	return string(humanizeutil.IBytes(sv.spec.Bytes))
 }

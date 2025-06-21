@@ -15,7 +15,6 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/errors"
@@ -85,31 +84,10 @@ func parseStoreProvisionedRate(
 
 // StoreSpec contains the details that can be specified in the cli pertaining
 // to the --store flag.
-type StoreSpec struct {
-	Path        string
-	Size        storageconfig.Size
-	BallastSize *storageconfig.Size
-	InMemory    bool
-	Attributes  roachpb.Attributes
-	// StickyVFSID is a unique identifier associated with a given store which
-	// will preserve the in-memory virtual file system (VFS) even after the
-	// storage engine has been closed. This only applies to in-memory storage
-	// engine.
-	StickyVFSID string
-	// PebbleOptions contains Pebble-specific options in the same format as a
-	// Pebble OPTIONS file. For example:
-	// [Options]
-	// delete_range_flush_delay=2s
-	// flush_split_bytes=4096
-	PebbleOptions string
-	// EncryptionOptions is set if encryption is enabled.
-	EncryptionOptions *storageconfig.EncryptionOptions
-	// ProvisionedRate is optional.
-	ProvisionedRate storageconfig.ProvisionedRate
-}
+type StoreSpec = storageconfig.Store
 
-// String returns a fully parsable version of the store spec.
-func (ss StoreSpec) String() string {
+// StoreSpecCmdLineString returns a fully parsable version of the store spec.
+func StoreSpecCmdLineString(ss storageconfig.Store) string {
 	// TODO(jackson): Implement redact.SafeFormatter
 	var buffer bytes.Buffer
 	if len(ss.Path) != 0 {
@@ -132,9 +110,9 @@ func (ss StoreSpec) String() string {
 			fmt.Fprintf(&buffer, "ballast-size=%s%%,", humanize.Ftoa(ss.BallastSize.Percent))
 		}
 	}
-	if len(ss.Attributes.Attrs) > 0 {
+	if len(ss.Attributes) > 0 {
 		fmt.Fprint(&buffer, "attrs=")
-		for i, attr := range ss.Attributes.Attrs {
+		for i, attr := range ss.Attributes {
 			if i != 0 {
 				fmt.Fprint(&buffer, ":")
 			}
@@ -157,11 +135,6 @@ func (ss StoreSpec) String() string {
 		buffer.Truncate(l - 1)
 	}
 	return buffer.String()
-}
-
-// IsEncrypted returns whether the StoreSpec has encryption enabled.
-func (ss StoreSpec) IsEncrypted() bool {
-	return ss.EncryptionOptions != nil
 }
 
 // NewStoreSpec parses the string passed into a --store flag and returns a
@@ -251,9 +224,9 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 				attrMap[attribute] = struct{}{}
 			}
 			for attribute := range attrMap {
-				ss.Attributes.Attrs = append(ss.Attributes.Attrs, attribute)
+				ss.Attributes = append(ss.Attributes, attribute)
 			}
-			sort.Strings(ss.Attributes.Attrs)
+			sort.Strings(ss.Attributes)
 		case "type":
 			if value == "mem" {
 				ss.InMemory = true
@@ -338,7 +311,7 @@ var _ pflag.Value = &StoreSpecList{}
 func (ssl StoreSpecList) String() string {
 	var buffer bytes.Buffer
 	for _, ss := range ssl.Specs {
-		fmt.Fprintf(&buffer, "--%s=%s ", cliflags.Store.Name, ss)
+		fmt.Fprintf(&buffer, "--%s=%s ", cliflags.Store.Name, StoreSpecCmdLineString(ss))
 	}
 	// Trim the extra space from the end if it exists.
 	if l := buffer.Len(); l > 0 {
@@ -383,7 +356,10 @@ func (ssl StoreSpecList) PriorCriticalAlertError() (err error) {
 		err = errors.WithDetailf(err, "%v", newErr)
 	}
 	for _, ss := range ssl.Specs {
-		path := ss.PreventedStartupFile()
+		if ss.InMemory {
+			continue
+		}
+		path := PreventedStartupFile(filepath.Join(ss.Path, AuxiliaryDir))
 		if path == "" {
 			continue
 		}
@@ -397,16 +373,6 @@ func (ssl StoreSpecList) PriorCriticalAlertError() (err error) {
 		addError(errors.Newf("From %s:\n\n%s\n", path, b))
 	}
 	return err
-}
-
-// PreventedStartupFile returns the path to a file which, if it exists, should
-// prevent the server from starting up. Returns an empty string for in-memory
-// engines.
-func (ss StoreSpec) PreventedStartupFile() string {
-	if ss.InMemory {
-		return ""
-	}
-	return PreventedStartupFile(filepath.Join(ss.Path, AuxiliaryDir))
 }
 
 // Type returns the underlying type in string form. This is part of pflag's

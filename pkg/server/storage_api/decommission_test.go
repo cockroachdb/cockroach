@@ -290,7 +290,7 @@ func decommissionTsArgs(region string, attrs ...string) base.TestServerArgs {
 			},
 		},
 		StoreSpecs: []base.StoreSpec{
-			{InMemory: true, Attributes: roachpb.Attributes{Attrs: attrs}},
+			{InMemory: true, Attributes: attrs},
 		},
 	}
 }
