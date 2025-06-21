@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 )
 
 // This file defines settings for default generations where randomization is
@@ -24,7 +25,7 @@ const defaultKeyspace = 200000
 const (
 	defaultRwRatio, defaultRate      = 0.0, 0.0
 	defaultMinBlock, defaultMaxBlock = 1, 1
-	defaultMinKey, defaultMaxKey     = int64(1), int64(defaultKeyspace)
+	defaultMinKey, defaultMaxKey     = int64(0), int64(defaultKeyspace)
 	defaultSkewedAccess              = false
 )
 
@@ -112,8 +113,15 @@ func (f randTestingFramework) defaultLoadGen() gen.BasicLoad {
 func (f randTestingFramework) defaultBasicRangesGen() gen.BasicRanges {
 	return gen.BasicRanges{
 		BaseRanges: gen.BaseRanges{
-			Ranges:            f.defaultStaticSettings.ranges,
-			KeySpace:          f.defaultStaticSettings.keySpace,
+			Ranges: f.defaultStaticSettings.ranges,
+			// TODO(kvoli): When adding a minKey parameter to range generation, we
+			// aren't re-using the f.defaultStaticSettings.minKey value here because
+			// it creates a range without any replicas in some randomly generated
+			// test configs, which then naturally causes assertion failures
+			// (unavailable/underreplicated). Fix this. For now, just use the minimum
+			// key supported.
+			MinKey:            int64(state.MinKey),
+			MaxKey:            f.defaultStaticSettings.maxKey,
 			ReplicationFactor: f.defaultStaticSettings.replicationFactor,
 			Bytes:             f.defaultStaticSettings.bytes,
 		},

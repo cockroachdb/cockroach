@@ -142,7 +142,8 @@ func TestLeaseQueue(t *testing.T) {
 				store.StoreID(),
 				changer,
 				testSettings,
-				s.MakeAllocator(store.StoreID()),
+				s.Allocator(store.StoreID()),
+				s.Node(store.NodeID()).AllocatorSync(),
 				s.StorePool(store.StoreID()),
 				start,
 			)

@@ -1,0 +1,130 @@
+gen_cluster nodes=7 node_cpu_rate_capacity=50000
+----
+
+# The placement will be skewed, s.t. n1/s1, n2/s2 and n3/s3 will have all the
+# replicas initially and n1/s1 will have every lease. Each range is initially
+# 256 MiB.
+gen_ranges ranges=21 placement_type=skewed bytes=268435456
+----
+
+# Set the rebalance mode to use the mma store rebalancer and disable the lease
+# and replicate queues so that only the mma store rebalancer is moving replicas
+# or leases.
+setting rebalance_mode=3
+----
+
+# node_cpu_rate_capacity
+# utilization: set request_cpu_per_access high to avoid utilization rebalancing
+
+gen_load rate=1000 rw_ratio=0.95 min_block=100 max_block=100 request_cpu_per_access=100 raft_cpu_per_write=10
+----
+
+# TODO(kvoli): Reduce this back to 30m once replica thrashing in later half is
+# resolved.
+eval duration=25m samples=1 seed=42
+----
+OK
+
+plot stat=cpu sample=1  show_last_value=true
+----
+----
+
+ 71387 ┤╭╮
+ 66628 ┤││
+ 61868 ┤│╰╮
+ 57109 ┤│ │
+ 52350 ┤│ │
+ 47591 ┤│ │
+ 42832 ┤│ ╰╮
+ 38073 ┤│  │
+ 33314 ┤│  ╰╮
+ 28555 ┤│   ╰─╮
+ 23796 ┤│     ╰──╮
+ 19036 ┤│  ╭──╮──╮──╮╮
+ 14277 ┤╭──│╭─╰────────────────────────────────────────────────────────────────────────
+  9518 ┤│ ╭│╯────────╯
+  4759 ┤│╭╭╯╯
+     0 ┼──╯
+                                              cpu
+
+last store values: [s1=14468 s2=14534 s3=14575 s4=14505 s5=14491 s6=14443 s7=14472]
+----
+----
+
+plot stat=write_bytes_per_second show_last_value=true
+----
+----
+
+ 5080 ┤╭╮
+ 4741 ┤╭─╮
+ 4403 ┤│╰│
+ 4064 ┤│╰│
+ 3725 ┤│ │╮
+ 3387 ┤│ ││
+ 3048 ┤│ ╰╮
+ 2709 ┤│  ╰╮──────────────────────────────────────────────────────────────────────────
+ 2371 ┤│  ╭╮─╭╮─╭╮────────────────────────────────────────────────────────────────────
+ 2032 ┤│  │╰─╯╰───────────────────────────────────────────────────────────────────────
+ 1693 ┤│  ││╯───────╮
+ 1355 ┤│ ╭│╯        ╰─────────────────────────────────────────────────────────────────
+ 1016 ┤│ ╭│
+  677 ┤│╭╮│
+  339 ┤╭╯╰╯
+    0 ┼╯╯
+                                    write_bytes_per_second
+
+last store values: [s1=1449 s2=2627 s3=2137 s4=2368 s5=2139 s6=2141 s7=2130]
+----
+----
+
+plot stat=replicas sample=1 show_last_value=true
+----
+----
+
+ 21.00 ┼╮╮
+ 19.60 ┤╰─╮
+ 18.20 ┤ ╰│
+ 16.80 ┤ ╰│
+ 15.40 ┤  │╮
+ 14.00 ┤  ╰╮
+ 12.60 ┤   ╰╮
+ 11.20 ┤   ╭╮──────────────────────────────────────────────────────────────────────────
+  9.80 ┤   ││──────────────────────────────────────────────────────────────────────────
+  8.40 ┤   │╰──────────────────────────────────────────────────────────────────────────
+  7.00 ┤   ││────────╮
+  5.60 ┤  ╭│╯        ╰─────────────────────────────────────────────────────────────────
+  4.20 ┤  ╭│
+  2.80 ┤ ╭─╯
+  1.40 ┤╭╯╯
+  0.00 ┼╯╯
+                                            replicas
+
+last store values: [s1=6 s2=11 s3=9 s4=10 s5=9 s6=9 s7=9]
+----
+----
+
+plot stat=leases sample=1 show_last_value=true
+----
+----
+
+ 21.00 ┼╮
+ 19.60 ┤│
+ 18.20 ┤│
+ 16.80 ┤│
+ 15.40 ┤╰╮
+ 14.00 ┤ │
+ 12.60 ┤ ╰╮
+ 11.20 ┤  │
+  9.80 ┤  │
+  8.40 ┤  ╰╮
+  7.00 ┤   ╰╮
+  5.60 ┤    ╰────╮
+  4.20 ┤   ╭──╮──╮──╮╮
+  2.80 ┤╭──│╭─╰────────────────────────────────────────────────────────────────────────
+  1.40 ┤│╭╭╯╯────────╯
+  0.00 ┼──╯
+                                             leases
+
+last store values: [s1=3 s2=3 s3=3 s4=3 s5=3 s6=3 s7=3]
+----
+----
