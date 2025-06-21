@@ -96,6 +96,13 @@ var upgrades = []upgradebase.Upgrade{
 		eventLogTableMigration,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column or index"),
 	),
+	upgrade.NewTenantUpgrade(
+		"add new hot range logger job",
+		clusterversion.V25_3_AddHotRangeLoggerJob.Version(),
+		upgrade.NoPrecondition,
+		addHotRangeLoggerJob,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this job"),
+	),
 
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.

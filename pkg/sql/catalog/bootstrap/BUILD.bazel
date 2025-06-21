@@ -62,6 +62,7 @@ go_test(
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
+        "//pkg/upgrade/upgradebase",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
