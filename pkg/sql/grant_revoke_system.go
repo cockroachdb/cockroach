@@ -48,10 +48,12 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 		if err := catprivilege.ValidateSyntheticPrivilegeObject(systemPrivilegeObject); err != nil {
 			return err
 		}
-		syntheticPrivDesc, err := params.p.getPrivilegeDescriptor(params.ctx, systemPrivilegeObject)
+		privDescInterface, err := params.p.getPrivilegeDescriptor(params.ctx, systemPrivilegeObject)
 		if err != nil {
 			return err
 		}
+
+		syntheticPrivDesc := privDescInterface.(*catpb.LockedPrivilegeDescriptor)
 
 		err = params.p.MustCheckGrantOptionsForUser(params.ctx, syntheticPrivDesc, systemPrivilegeObject, n.desiredprivs, params.p.User(), n.isGrant)
 		if err != nil {
@@ -259,7 +261,7 @@ func (n *changeNonDescriptorBackedPrivilegesNode) makeSystemPrivilegeObject(
 // system.privileges table to synthesize a PrivilegeDescriptor.
 func (p *planner) getPrivilegeDescriptor(
 	ctx context.Context, po privilege.Object,
-) (*catpb.PrivilegeDescriptor, error) {
+) (catpb.PrivilegeDescriptorInterface, error) {
 	switch d := po.(type) {
 	case catalog.TableDescriptor:
 		if d.IsVirtualTable() {
