@@ -86,7 +86,7 @@ func registerCDCMixedVersions(r registry.Registry) {
 		Name:             "cdc/mixed-version/checkpointing",
 		Owner:            registry.OwnerCDC,
 		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode(), spec.GCEZones(teamcityAgentZone), spec.Arch(vm.ArchAMD64)),
-		Timeout:          3 * time.Hour,
+		Timeout:          1 * time.Hour,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Randomized:       true,
