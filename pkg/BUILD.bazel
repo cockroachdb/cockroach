@@ -2014,6 +2014,7 @@ GO_TARGETS = [
     "//pkg/sql/idxusage:idxusage_test",
     "//pkg/sql/importer:importer",
     "//pkg/sql/importer:importer_test",
+    "//pkg/sql/inspect:inspect",
     "//pkg/sql/inverted:inverted",
     "//pkg/sql/inverted:inverted_test",
     "//pkg/sql/isql:isql",
