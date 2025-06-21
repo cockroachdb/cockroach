@@ -26,16 +26,16 @@ func NewTempEngine(
 	storeSpec base.StoreSpec,
 	diskWriteStats disk.WriteStatsManager,
 ) (diskmap.Factory, vfs.FS, error) {
-	return NewPebbleTempEngine(ctx, tempStorage, storeSpec, diskWriteStats)
+	return newTempEngine(ctx, tempStorage, storeSpec, diskWriteStats)
 }
 
-type pebbleTempEngine struct {
+type tempEngine struct {
 	db  *pebble.DB
 	env *fs.Env
 }
 
 // Close implements the diskmap.Factory interface.
-func (r *pebbleTempEngine) Close() {
+func (r *tempEngine) Close() {
 	if err := r.db.Close(); err != nil {
 		log.Fatalf(context.TODO(), "%v", err)
 	}
@@ -43,32 +43,21 @@ func (r *pebbleTempEngine) Close() {
 }
 
 // NewSortedDiskMap implements the diskmap.Factory interface.
-func (r *pebbleTempEngine) NewSortedDiskMap() diskmap.SortedDiskMap {
+func (r *tempEngine) NewSortedDiskMap() diskmap.SortedDiskMap {
 	return newPebbleMap(r.db, false /* allowDuplications */)
 }
 
 // NewSortedDiskMultiMap implements the diskmap.Factory interface.
-func (r *pebbleTempEngine) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
+func (r *tempEngine) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
 	return newPebbleMap(r.db, true /* allowDuplicates */)
 }
 
-// NewPebbleTempEngine creates a new Pebble engine for DistSQL processors to use
-// when the working set is larger than can be stored in memory.
-func NewPebbleTempEngine(
+func newTempEngine(
 	ctx context.Context,
 	tempStorage base.TempStorageConfig,
 	storeSpec base.StoreSpec,
 	diskWriteStats disk.WriteStatsManager,
-) (diskmap.Factory, vfs.FS, error) {
-	return newPebbleTempEngine(ctx, tempStorage, storeSpec, diskWriteStats)
-}
-
-func newPebbleTempEngine(
-	ctx context.Context,
-	tempStorage base.TempStorageConfig,
-	storeSpec base.StoreSpec,
-	diskWriteStats disk.WriteStatsManager,
-) (*pebbleTempEngine, vfs.FS, error) {
+) (*tempEngine, vfs.FS, error) {
 	var baseFS vfs.FS
 	var dir string
 	var cacheSize int64 = 128 << 20 // 128 MiB, arbitrary, but not "too big"
@@ -110,6 +99,7 @@ func newPebbleTempEngine(
 			cfg.opts.KeySchema = ""
 			cfg.opts.DisableWAL = true
 			cfg.opts.Experimental.UserKeyCategories = pebble.UserKeyCategories{}
+			cfg.opts.Experimental.ShortAttributeExtractor = nil
 			cfg.opts.Experimental.SpanPolicyFunc = nil
 			cfg.opts.BlockPropertyCollectors = nil
 			cfg.opts.EnableSQLRowSpillMetrics = true
@@ -124,7 +114,7 @@ func newPebbleTempEngine(
 	// Set store ID for the pebble engine. We are not using shared storage for
 	// temp stores so this cannot error out.
 	_ = p.SetStoreID(ctx, base.TempStoreID)
-	return &pebbleTempEngine{
+	return &tempEngine{
 		db:  p.db,
 		env: env,
 	}, env, nil
