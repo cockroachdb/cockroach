@@ -1,0 +1,130 @@
+gen_cluster nodes=10 node_cpu_rate_capacity=30000
+----
+
+# Read only workload, which generates 100_000 request cpu nanos/s evenly over
+# the first half of the keyspace, which will be on all stores initially.
+gen_ranges ranges=30 min_key=1 max_key=10000 placement_type=even
+----
+
+gen_load rate=1000 rw_ratio=1 request_cpu_per_access=100 min_key=1 max_key=10000
+----
+
+# Write only workload, which generates no CPU and 100_000 (x replication
+# factor) write bytes per second over the second half of the keyspace, which
+# are all on s1-s3 initially.
+gen_ranges ranges=30 min_key=10001 max_key=20000 placement_type=skewed add_to_existing=true
+----
+
+gen_load rate=20000 rw_ratio=0 min_block=1000 max_block=1000 min_key=10001 max_key=20000 add_to_existing=true
+----
+
+setting rebalance_mode=3 replicate_queue_enabled=false lease_queue_enabled=false split_queue_enabled=false
+----
+
+eval duration=20m samples=1 seed=42
+----
+OK
+
+plot stat=cpu show_last_value=true
+----
+----
+
+ 10404 ┤╭╮───╭╮╭───────────────────────────────────────────────────────────────────────
+  9710 ┤│╰─────────────────────────────────────────────────────────────────────────────
+  9017 ┤│
+  8323 ┤│
+  7629 ┤│
+  6936 ┤│
+  6242 ┤│
+  5549 ┤│
+  4855 ┤│
+  4162 ┤│
+  3468 ┤│
+  2774 ┤│
+  2081 ┤│
+  1387 ┤│
+   694 ┤│
+     0 ┼╯
+                                              cpu
+
+last store values: [s1=10021 s2=9925 s3=10036 s4=9990 s5=9983 s6=9939 s7=9950 s8=10112 s9=10013 s10=10025]
+----
+----
+
+plot stat=write_bytes_per_second show_last_value=true
+----
+----
+
+ 20000000 ┤╭───╮
+ 18666667 ┤│   ╰───╮
+ 17333333 ┤│   ╰───│
+ 16000000 ┤│       ╰───╮╮
+ 14666667 ┤│        │  ╰───╮
+ 13333333 ┤│        ╰────╮╮│
+ 12000000 ┤│             ╰╮│╮
+ 10666667 ┤│              ╰╰──╮
+  9333333 ┤│               ╰╮╰╰╮╭╮
+  8000000 ┤│                ╰─╮╰╯╰╮
+  6666667 ┤│                ╭╮╭──╭╮╮╭───╭─────────────────────────────────────────────────
+  5333333 ┤│               ╭╭────╯╰───────────────────────────────────────────────────────
+  4000000 ┤│             ╭─╭╯─────╯╯    ╰──╯
+  2666667 ┤│       ╭─────╭─╯╯──╯
+  1333333 ┤│   ╭───╮╭────╯─╯
+        0 ┼─────────╯
+                                        write_bytes_per_second
+
+last store values: [s1=5987951 s2=5990442 s3=5989112 s4=5997647 s5=6015082 s6=5993415 s7=6011391 s8=6013406 s9=5996057 s10=5995163]
+----
+----
+
+plot stat=replicas show_last_value=true
+----
+----
+
+ 39.00 ┼────╮
+ 37.00 ┤    ╰───╮
+ 35.00 ┤    ╰───╰╮
+ 33.00 ┤        ╰╰──╮╮
+ 31.00 ┤         │  ╰───╮
+ 29.00 ┤         ╰────╮╮│
+ 27.00 ┤              ╰─│╮
+ 25.00 ┤                ╰──╮
+ 23.00 ┤                ╰╮╰╰──╮
+ 21.00 ┤                 ╰─╮╰─╰╮
+ 19.00 ┤                   ╭────╮╭───╭──╮─╮
+ 17.00 ┤                ╭──╯╭──────────────────────────────────────────────────────────
+ 15.00 ┤                ╭───╯──╯╯    ╰──╯
+ 13.00 ┤        ╭╭───╭╭─╯╯╯─╯
+ 11.00 ┤        ╭╭────╯─╯
+  9.00 ┼─────────╯
+                                            replicas
+
+last store values: [s1=18 s2=18 s3=18 s4=18 s5=18 s6=18 s7=18 s8=18 s9=18 s10=18]
+----
+----
+
+plot stat=leases show_last_value=true
+----
+----
+
+ 33.00 ┼────╮
+ 31.00 ┤    │
+ 29.00 ┤    ╰───╮
+ 27.00 ┤        ╰────╮
+ 25.00 ┤             ╰╮
+ 23.00 ┤              ╰╮
+ 21.00 ┤               ╰─╮
+ 19.00 ┤                 ╰╮
+ 17.00 ┤                  ╰─╮
+ 15.00 ┤                    ╰─╮
+ 13.00 ┤                      ╰─╮
+ 11.00 ┤                        ╰──────────────────────────────────────────────────────
+  9.00 ┤
+  7.00 ┤                 ╭─────────────────────────────────────────────────────────────
+  5.00 ┤        ╭╭───────╯─────────────────────────────────────────────────────────────
+  3.00 ┼─────────╯─────╯───────────────────────────────────────────────────────────────
+                                             leases
+
+last store values: [s1=12 s2=3 s3=3 s4=7 s5=4 s6=8 s7=6 s8=3 s9=6 s10=8]
+----
+----

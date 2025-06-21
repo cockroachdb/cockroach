@@ -161,7 +161,7 @@ func TestStoreRebalancer(t *testing.T) {
 			gossip := gossip.NewGossip(s, testSettings)
 			gossip.Tick(ctx, start, s)
 
-			allocator := s.MakeAllocator(testingStore)
+			allocator := s.Allocator(testingStore)
 			storePool := s.StorePool(testingStore)
 			changer := state.NewReplicaChanger()
 			controller := op.NewController(changer, allocator, storePool, testSettings, testingStore)
@@ -191,7 +191,6 @@ func TestStoreRebalancerBalances(t *testing.T) {
 	testingStore := state.StoreID(1)
 	testSettings := config.DefaultSimulationSettings()
 	start := testSettings.StartTime
-	testSettings.ReplicaAddRate = 1
 	testSettings.ReplicaChangeBaseDelay = 1 * time.Second
 	testSettings.StateExchangeInterval = 1 * time.Second
 	testSettings.StateExchangeDelay = 0
@@ -273,7 +272,7 @@ func TestStoreRebalancerBalances(t *testing.T) {
 			// Update the storepool for informing allocator decisions.
 			gossip.Tick(ctx, start, s)
 
-			allocator := s.MakeAllocator(testingStore)
+			allocator := s.Allocator(testingStore)
 			storePool := s.StorePool(testingStore)
 			changer := state.NewReplicaChanger()
 			controller := op.NewController(changer, allocator, storePool, testSettings, testingStore)

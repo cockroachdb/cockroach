@@ -265,9 +265,8 @@ func getTestConfig(fileDir *string, mostlyInline bool) (testConfig logconfig.Con
 			// KV_DISTRIBUTION at severity below WARNING.
 			testConfig.Sinks.Stderr.Filter = severity.INFO
 			testConfig.Sinks.Stderr.Channels.Filters = map[logpb.Severity]logconfig.ChannelList{
-				logpb.Severity_INFO: {Channels: selectAllChannelsExceptSeparated()},
-				logpb.Severity_WARNING: {Channels: []logpb.Channel{channel.HEALTH, channel.STORAGE,
-					channel.KV_DISTRIBUTION}},
+				logpb.Severity_INFO:    {Channels: selectAllChannelsExceptSeparated()},
+				logpb.Severity_WARNING: {Channels: []logpb.Channel{channel.HEALTH, channel.STORAGE}},
 			}
 		} else {
 			// Preferring file output only.
@@ -304,7 +303,7 @@ func selectAllChannelsExceptSeparated() []logpb.Channel {
 	res := logconfig.AllChannels()
 	k := 0
 	for _, ch := range res {
-		if ch == channel.HEALTH || ch == channel.STORAGE || ch == channel.KV_DISTRIBUTION {
+		if ch == channel.HEALTH || ch == channel.STORAGE {
 			continue
 		}
 		res[k] = ch
