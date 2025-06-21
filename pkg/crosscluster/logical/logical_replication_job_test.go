@@ -2299,6 +2299,7 @@ func TestLogicalReplicationSchemaChanges(t *testing.T) {
 		{"drop table", "DROP TABLE tab", false},
 
 		// Dissalow storage param updates if is not the only change.
+		{"disable schema locked", "ALTER TABLE tab SET (schema_locked = false)", true},
 		{"storage param update", "ALTER TABLE tab ADD COLUMN C INT, SET (fillfactor = 70)", false},
 		{"storage param update", "ALTER TABLE tab SET (fillfactor = 70)", true},
 
@@ -2306,7 +2307,7 @@ func TestLogicalReplicationSchemaChanges(t *testing.T) {
 		{"reset ttl", "ALTER TABLE tab RESET (ttl)", false},
 		{"ttl expression", "ALTER TABLE tab SET (ttl_expiration_expression = $$ '2024-01-01 12:00:00'::TIMESTAMPTZ $$)", true},
 		{"ttl on", "ALTER TABLE tab SET (ttl = 'on', ttl_expire_after = '5m')", false},
-
+		{"enable schema locked", "ALTER TABLE tab SET (schema_locked = true)", true},
 		{"trigger", "CREATE TRIGGER my_trigger BEFORE INSERT ON tab FOR EACH ROW EXECUTE FUNCTION my_trigger()", false},
 	}
 

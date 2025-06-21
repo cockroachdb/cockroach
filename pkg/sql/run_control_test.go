@@ -1140,6 +1140,7 @@ func TestStatementTimeoutForSchemaChangeCommit(t *testing.T) {
 				dbWithHandler := gosql.OpenDB(connector)
 				defer dbWithHandler.Close()
 				conn := sqlutils.MakeSQLRunner(dbWithHandler)
+				conn.Exec(t, "SET create_table_with_schema_locked=false")
 				conn.Exec(t, "CREATE TABLE t1 (n int primary key)")
 				conn.Exec(t, `SET statement_timeout = '1s'`)
 				require.NoError(t, err)

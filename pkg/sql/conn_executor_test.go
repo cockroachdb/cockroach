@@ -696,6 +696,7 @@ func TestPrepareInExplicitTransactionDoesNotDeadlock(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	testDB := sqlutils.MakeSQLRunner(sqlDB)
+	testDB.Exec(t, "SET create_table_with_schema_locked=false")
 	testDB.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
 	testDB.Exec(t, "CREATE TABLE bar (i INT PRIMARY KEY)")
 

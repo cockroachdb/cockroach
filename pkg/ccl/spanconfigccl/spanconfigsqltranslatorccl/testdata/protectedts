@@ -136,10 +136,18 @@ release record-id=4
 block-gc-jobs
 ----
 
+exec-sql
+ALTER TABLE db.t1 SET (schema_locked=false);
+----
+
 # Create an index on t1 to ensure that subzones also see protected timestamps.
 exec-sql
 CREATE INDEX idx ON db.t1(id);
 ALTER INDEX db.t1@idx CONFIGURE ZONE USING gc.ttlseconds = 1;
+----
+
+exec-sql
+ALTER TABLE db.t1 SET (schema_locked=true);
 ----
 
 protect record-id=6 ts=6

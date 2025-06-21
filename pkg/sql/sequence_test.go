@@ -123,6 +123,7 @@ func TestSequenceOwnershipDependencies(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	if _, err := sqlConn.Exec(`
+SET create_table_with_schema_locked=false;
 CREATE DATABASE t;
 CREATE TABLE t.test(a INT PRIMARY KEY, b INT)`); err != nil {
 		t.Fatal(err)

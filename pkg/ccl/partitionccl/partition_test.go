@@ -120,6 +120,7 @@ SELECT count(*) > 0
 	// Set up the table to have an index which is partitioned by the enum value
 	// we're going to drop.
 	for _, stmt := range []string{
+		`SET create_table_with_schema_locked=false`,
 		`CREATE TYPE t AS ENUM ('a', 'b', 'c')`,
 		`CREATE TABLE tbl (
     i INT8, k t,

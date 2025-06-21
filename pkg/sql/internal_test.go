@@ -748,7 +748,7 @@ func TestInternalExecutorSyntheticDesc(t *testing.T) {
 	blah INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
-);`,
+) WITH (schema_locked = true);`,
 					string(*createStatement))
 				return nil
 			}))
@@ -770,7 +770,7 @@ func TestInternalExecutorSyntheticDesc(t *testing.T) {
 	blah INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
-);`,
+) WITH (schema_locked = true);`,
 							string(*createStatement))
 						return nil
 					})

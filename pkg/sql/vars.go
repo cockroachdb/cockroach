@@ -3986,7 +3986,7 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().CreateTableWithSchemaLocked), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(CreateTableWithSchemaLocked.Get(sv))
+			return formatBoolAsPostgresSetting(CreateTableWithSchemaLockedWithTestOverride(CreateTableWithSchemaLocked.Get(sv)))
 		},
 	},
 
