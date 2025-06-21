@@ -7553,9 +7553,13 @@ the locality flag on node startup. Returns an error if no region is set.`,
 		},
 		stringOverload1(
 			func(ctx context.Context, evalCtx *eval.Context, s string) (tree.Datum, error) {
-				regionConfig, err := evalCtx.Regions.CurrentDatabaseRegionConfig(ctx)
-				if err != nil {
-					return nil, err
+				var regionConfig eval.DatabaseRegionConfig
+				if evalCtx.Regions != nil {
+					var err error
+					regionConfig, err = evalCtx.Regions.CurrentDatabaseRegionConfig(ctx)
+					if err != nil {
+						return nil, err
+					}
 				}
 				if regionConfig == nil {
 					return nil, pgerror.Newf(
