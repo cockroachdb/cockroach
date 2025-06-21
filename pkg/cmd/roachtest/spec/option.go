@@ -282,6 +282,14 @@ func AWSVolumeThroughput(throughput int) Option {
 	}
 }
 
+// AWSVolumeIOPS sets the provisioned IOPS for EBS volumes when the cluster is
+// on AWS.
+func AWSVolumeIOPS(iops int) Option {
+	return func(spec *ClusterSpec) {
+		spec.AWS.VolumeIOPS = iops
+	}
+}
+
 // AWSZones is a node option which requests Geo-distributed nodes; only applies
 // when the test runs on AWS.
 //
