@@ -263,6 +263,11 @@ func alterChangefeedPlanHook(
 		}); err != nil {
 			return err
 		}
+		if featureChangefeedDuplicateCheckEnabled.Get(&p.ExecCfg().Settings.SV) {
+			if err := p.ExecCfg().JobRegistry.AddChangefeedIdentityHashToJobInfo(ctx, jobRecord.Details.(jobspb.ChangefeedDetails), job.InfoStorage(p.InternalSQLTxn()), p.InternalSQLTxn()); err != nil {
+				return err
+			}
+		}
 
 		telemetry.Count(telemetryPath)
 
