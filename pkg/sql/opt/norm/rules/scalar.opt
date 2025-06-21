@@ -288,6 +288,14 @@ $value
 =>
 $udf
 
+# EliminateNestedSubquery removes redundant nesting of subqueries by replacing
+# a subquery whose input is a single-row, single-column Values expression 
+# containing another subquery with just the inner subquery.
+[EliminateNestedSubquery, Normalize]
+(Subquery (Values [ (Tuple [ $subquery:(Subquery) ]) ]))
+=>
+$subquery
+
 # SimplifyCaseWhenConstValue removes branches known to not match. Any
 # branch known to match is used as the ELSE and further WHEN conditions
 # are skipped. If all WHEN conditions have been removed, the ELSE
