@@ -54,5 +54,5 @@
         (ParameterizedJoinPrivate)
     )
     []
-    (OutputCols (Root))
+    (MakePassthrough (OutputCols (Root)))
 )

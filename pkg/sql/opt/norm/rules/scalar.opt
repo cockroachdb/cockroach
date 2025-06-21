@@ -242,7 +242,7 @@ $input
             (Project
                 (Limit $input (IntConst 1) (EmptyOrdering))
                 [ (ProjectionsItem (True) (MakeBoolCol)) ]
-                (MakeEmptyColSet)
+                (MakePassthrough (MakeEmptyColSet))
             )
             (EmbeddedSubqueryPrivate $existsPrivate)
         )
@@ -325,7 +325,8 @@ $udf
         $values:(Values * $valuesPrivate:*)
         [ (ProjectionsItem $tuple:(Tuple)) ] &
             (IsTupleOfVars $tuple (ValuesCols $valuesPrivate))
-        $passthrough:* & (ColsAreEmpty $passthrough)
+        $projPrivate:* &
+            (ColsAreEmpty (Passthrough $projPrivate))
     )
     $scalar:*
     $private:*
