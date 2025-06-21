@@ -51,6 +51,11 @@ func (m *ManualTime) Since(t time.Time) time.Duration {
 	return m.Now().Sub(t)
 }
 
+// Until implements TimeSource interface
+func (m *ManualTime) Until(t time.Time) time.Duration {
+	return t.Sub(m.Now())
+}
+
 // NewTimer constructs a new timer.
 func (m *ManualTime) NewTimer() TimerI {
 	return &manualTimer{m: m}
