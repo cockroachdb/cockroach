@@ -17,8 +17,9 @@ func (d *delegator) delegateShowRoles() (tree.Statement, error) {
 	return d.parse(`
 SELECT
 	u.username,
-	IFNULL(string_agg(o.option || COALESCE('=' || o.value, ''), ', ' ORDER BY o.option), '') AS options,
-	ARRAY (SELECT role FROM system.role_members AS rm WHERE rm.member = u.username ORDER BY 1) AS member_of
+	COALESCE(array_remove(array_agg(o.option || COALESCE('=' || o.value, '') ORDER BY o.option), NULL), ARRAY[]::STRING[]) AS options,
+	ARRAY (SELECT role FROM system.role_members AS rm WHERE rm.member = u.username ORDER BY 1) AS member_of,
+	COALESCE(u.estimated_last_login_time::STRING, '') AS estimated_last_login_time
 FROM
 	system.users AS u LEFT JOIN system.role_options AS o ON u.username = o.username
 GROUP BY

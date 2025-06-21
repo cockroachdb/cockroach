@@ -12,12 +12,12 @@ GRANT developer TO abbey;
 query-sql
 SHOW ROLES
 ----
-abbey  {developer}
-admin  {}
-developer CREATEDB, NOLOGIN {}
-root  {admin}
-testuser NOLOGIN {}
-testuser2 CONTROLJOB, CREATEDB, NOLOGIN {}
+abbey  {} {developer}
+admin  {} {}
+developer {CREATEDB,NOLOGIN} {}
+root   {} {admin}
+testuser {NOLOGIN} {}
+testuser2 {CONTROLJOB,CREATEDB,NOLOGIN} {}
 
 query-sql
 SHOW GRANTS ON ROLE developer

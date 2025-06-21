@@ -157,7 +157,7 @@ func TestDoctorCluster(t *testing.T) {
 		"CREATE TABLE to_drop (id INT)",
 		"DROP TABLE to_drop",
 		"CREATE TABLE foo (id INT)",
-		"INSERT INTO system.users VALUES ('node', NULL, true, 3)",
+		"INSERT INTO system.users VALUES ('node', NULL, true, 3, NULL)",
 		"GRANT node TO root",
 		"DELETE FROM system.namespace WHERE name = 'foo'",
 		"SELECT pg_catalog.pg_sleep(1)",
@@ -222,7 +222,7 @@ func TestDoctorClusterDropped(t *testing.T) {
 	c.RunWithArgs([]string{"sql", "-e", strings.Join([]string{
 		"CREATE TABLE foo (i INT)",
 		desc,
-		"INSERT INTO system.users VALUES ('node', NULL, true, 3)",
+		"INSERT INTO system.users VALUES ('node', NULL, true, 3, NULL)",
 		"GRANT node TO root",
 		"DELETE FROM system.namespace WHERE name = 'foo'",
 		"SELECT pg_catalog.pg_sleep(1)",

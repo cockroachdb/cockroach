@@ -5,25 +5,25 @@ SHOW is_superuser
 ----
 on
 
-query TTT colnames,rowsort
+query TTTT colnames,rowsort
 SHOW USERS
 ----
-username  options  member_of
-admin     ·        {}
-root      ·        {admin}
-testuser  ·        {}
+username  options  member_of estimated_last_login_time
+admin     {}       {}        ·
+root      {}       {admin}   ·
+testuser  {}       {}        ·
 
 statement ok
 CREATE USER user1
 
-query TTT colnames,rowsort
+query TTTT colnames,rowsort
 SHOW USERS
 ----
-username  options  member_of
-admin     ·        {}
-root      ·        {admin}
-testuser  ·        {}
-user1     ·        {}
+username  options  member_of estimated_last_login_time
+admin     {}       {}        ·
+root      {}       {admin}   ·
+testuser  {}       {}        ·
+user1     {}       {}        ·
 
 statement error pgcode 42710 a role/user named admin already exists
 CREATE USER admin
@@ -88,19 +88,19 @@ statement error user "blix" does not exist
 PREPARE chpw2 AS ALTER USER blix WITH PASSWORD $1;
   EXECUTE chpw2('baz')
 
-query TTT colnames,rowsort
+query TTTT colnames,rowsort
 SHOW USERS
 ----
-username  options  member_of
-admin     ·        {}
-foo       ·        {}
-foo-bar   ·        {}
-root      ·        {admin}
-testuser  ·        {}
-user1     ·        {}
-user2     ·        {}
-user3     ·        {}
-ομηρος    ·        {}
+username  options  member_of estimated_last_login_time
+admin     {}       {}        ·
+foo       {}       {}        ·
+foo-bar   {}       {}        ·
+root      {}       {admin}   ·
+testuser  {}       {}        ·
+user1     {}       {}        ·
+user2     {}       {}        ·
+user3     {}       {}        ·
+ομηρος    {}       {}        ·
 
 statement error "": username is empty
 CREATE USER ""
@@ -132,7 +132,7 @@ statement error pq: user testuser does not have CREATEROLE privilege
 CREATE USER user4
 
 statement error pq: user testuser does not have INSERT privilege on relation users
-UPSERT INTO system.users VALUES (user1, 'newpassword', false)
+UPSERT INTO system.users VALUES (user1, 'newpassword', false, NULL)
 
 statement error pq: user testuser does not have SELECT privilege on relation user
 SHOW USERS
