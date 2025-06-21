@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -451,6 +452,10 @@ type Planner interface {
 
 	// RetryCounter is the number of times this statement has been retried.
 	RetryCounter() int
+
+	// ScanKeySpan issues a single Scan request to read [startKey, endKey) span
+	// via the Planner's txn.
+	ScanKeySpan(ctx context.Context, startKey, endKey roachpb.Key, targetBytes, maxSpanRequestKeys int64) (*kvpb.ScanResponse, error)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -34,7 +33,7 @@ func TestConcurrentProcessorsReadEpoch(t *testing.T) {
 			SQLEvalContext: &eval.TestingKnobs{
 				CallbackGenerators: map[string]*eval.CallbackValueGenerator{
 					"my_callback": eval.NewCallbackValueGenerator(
-						func(ctx context.Context, prev int, _ *kv.Txn) (int, error) {
+						func(ctx context.Context, prev int) (int, error) {
 							if prev < 10 {
 								return prev + 1, nil
 							}

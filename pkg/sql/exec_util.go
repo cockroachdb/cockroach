@@ -134,13 +134,12 @@ func init() {
 		evalCtx *eval.Context,
 		ctx context.Context,
 		opName redact.RedactableString,
-		txn *kv.Txn,
 		override sessiondata.InternalExecutorOverride,
 		stmt string,
 		qargs ...interface{},
 	) (eval.InternalRows, error) {
 		ie := evalCtx.JobExecContext.(JobExecContext).ExecCfg().InternalDB.Executor()
-		return ie.QueryIteratorEx(ctx, opName, txn, override, stmt, qargs...)
+		return ie.QueryIteratorEx(ctx, opName, nil /* txn */, override, stmt, qargs...)
 	}
 }
 

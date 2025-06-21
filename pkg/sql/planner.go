@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -1075,4 +1076,26 @@ func (p *planner) ExtendHistoryRetention(ctx context.Context, jobID jobspb.JobID
 // RetryCounter is part of the eval.Planner interface.
 func (p *planner) RetryCounter() int {
 	return p.autoRetryCounter + p.autoRetryStmtCounter
+}
+
+// ScanKeySpan is part of the eval.Planner interface.
+func (p *planner) ScanKeySpan(
+	ctx context.Context, startKey, endKey roachpb.Key, targetBytes, maxSpanRequestKeys int64,
+) (*kvpb.ScanResponse, error) {
+	ba := &kvpb.BatchRequest{}
+	ba.TargetBytes = targetBytes
+	ba.MaxSpanRequestKeys = maxSpanRequestKeys
+	ba.Add(&kvpb.ScanRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:    startKey,
+			EndKey: endKey,
+		},
+		ScanFormat: kvpb.KEY_VALUES,
+	})
+	br, pErr := p.txn.Send(ctx, ba)
+	if pErr != nil {
+		return nil, pErr.GoError()
+	}
+	resp := br.Responses[0].GetScan()
+	return resp, nil
 }

@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/sql/catalog/descpb",
