@@ -216,18 +216,35 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 			},
 			run: TestLDRCreateTablesTPCC,
 		},
+		{
+			name: "ldr/conflict",
+			clusterSpec: multiClusterSpec{
+				leftNodes:  3,
+				rightNodes: 3,
+				clusterOpts: []spec.Option{
+					spec.CPU(4),
+					spec.WorkloadNode(),
+					spec.WorkloadNodeCPU(4),
+					spec.VolumeSize(100),
+				},
+			},
+			ldrConfig: ldrConfig{
+				createTables: true,
+			},
+			run: TestLDRConflict,
+		},
 	}
 
 	for _, sp := range specs {
-
 		r.Add(registry.TestSpec{
-			Name:             sp.name,
-			Owner:            registry.OwnerDisasterRecovery,
-			Timeout:          60 * time.Minute,
-			CompatibleClouds: registry.OnlyGCE,
-			Suites:           registry.Suites(registry.Nightly),
-			Cluster:          sp.clusterSpec.ToSpec(r),
-			Leases:           registry.MetamorphicLeases,
+			Name:                       sp.name,
+			Owner:                      registry.OwnerDisasterRecovery,
+			Timeout:                    60 * time.Minute,
+			CompatibleClouds:           registry.OnlyGCE,
+			Suites:                     registry.Suites(registry.Nightly),
+			Cluster:                    sp.clusterSpec.ToSpec(r),
+			Leases:                     registry.MetamorphicLeases,
+			RequiresDeprecatedWorkload: true, // TODO(jeffswenson): require this only for conflict test.
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				rng, seed := randutil.NewPseudoRand()
 				t.L().Printf("random seed is %d", seed)
@@ -386,6 +403,70 @@ func TestLDRTPCC(
 	monitor.Wait()
 	validateLatency()
 	VerifyCorrectness(ctx, c, t, setup, leftJobID, rightJobID, 2*time.Minute, workload)
+}
+
+func TestLDRConflict(
+	ctx context.Context, t test.Test, c cluster.Cluster, setup multiClusterSetup, ldrConfig ldrConfig,
+) {
+	// TODO(jeffswenson): think about how to move this into the workload init.
+	setup.left.sysSQL.Exec(t, "CREATE DATABASE conflict")
+	setup.right.sysSQL.Exec(t, "CREATE DATABASE conflict")
+
+	// Okay, so what did I learn about connections here?
+	// 1. The external connections needs the certs embedded in the url and not on the host.
+	// 2. The workload needs the external connections because certs are not present on the workload node.
+	// 3. I should pass arguments as varargs to get proper escaping.
+
+	leftURLs, err := c.ExternalPGUrl(ctx, t.L(), setup.left.gatewayNodes, roachprod.PGURLOptions{
+		Database: "conflict",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rightURLs, err := c.ExternalPGUrl(ctx, t.L(), setup.right.gatewayNodes, roachprod.PGURLOptions{
+		Database: "conflict",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c.Run(ctx, option.WithNodes(setup.workloadNode), "./workload", "init", "conflict", leftURLs[0])
+
+	var leftJobID, rightJobID int
+	setup.right.sysSQL.Exec(t, fmt.Sprintf("CREATE EXTERNAL CONNECTION IF NOT EXISTS left AS '%s'", setup.left.PgURLForDatabase("conflict")))
+	setup.left.sysSQL.Exec(t, fmt.Sprintf("CREATE EXTERNAL CONNECTION IF NOT EXISTS right AS '%s'", setup.right.PgURLForDatabase("conflict")))
+
+	t.L().Printf("creating bidirectional replication job")
+	setup.right.sysSQL.QueryRow(t, `
+	CREATE LOGICALLY REPLICATED TABLE conflict.conflict FROM TABLE conflict.conflict
+		ON 'external://left'
+		WITH BIDIRECTIONAL ON 'external://right'
+	`).Scan(&rightJobID)
+
+	t.L().Printf("right job id: %d", rightJobID)
+	waitForReplicatedTime(t, rightJobID, setup.right.db, getLogicalDataReplicationJobInfo, 2*time.Minute)
+
+	setup.left.sysSQL.QueryRow(t, "SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'LOGICAL REPLICATION'").Scan(&leftJobID)
+	waitForReplicatedTime(t, leftJobID, setup.left.db, getLogicalDataReplicationJobInfo, 2*time.Minute)
+	t.L().Printf("left job id: %d", leftJobID)
+
+	// TODO(jeffswenson): mix in random schema changes. The high level plan is:
+	// 1. Pause the workload.
+	// 2. Wait for LDR replication to catch up.
+	// 3. Stop the LDR jobs.
+	// 4. Make random schema changes.
+	// 5. Start the LDR jobs again using now() as the cursor.
+	// 6. Resume the workload.
+	c.Run(ctx, option.WithNodes(setup.workloadNode), "./workload", "run", "conflict", "--duration=15m", leftURLs[0], rightURLs[0])
+
+	VerifyCorrectness(ctx, c, t, setup, leftJobID, rightJobID, 2*time.Minute, LDRWorkload{
+		dbName:     "conflict",
+		tableNames: []string{"conflict"},
+		// TODO(jeffswenson): I could generate a fixed seed, then use that to
+		// ensure the schema is the same. Which would let me randomly test create vs not.
+		manualSchemaSetup: true,
+	})
 }
 
 // TestLDRCreateTablesTPCC inits the left cluster with 1000 warehouse tpcc,
