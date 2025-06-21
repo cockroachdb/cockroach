@@ -14,9 +14,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
@@ -315,10 +317,11 @@ func testParallelConnections(
 		t.L().Printf("Creating connection: %d.", i+1)
 		semaphore <- struct{}{}
 
-		go func(index int) {
+		t.Go(func(ctx context.Context, _ *logger.Logger) error {
 			defer func() { <-semaphore }()
-			createConnectionFunc(index)
-		}(i)
+			createConnectionFunc(i)
+			return nil
+		}, task.Name(fmt.Sprintf("create-connection-%d", i)))
 	}
 
 	// Ensure all connections have been created.

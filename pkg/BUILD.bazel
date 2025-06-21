@@ -2454,6 +2454,7 @@ GO_TARGETS = [
     "//pkg/testutils/lint/passes/returncheck:returncheck",
     "//pkg/testutils/lint/passes/returnerrcheck:returnerrcheck",
     "//pkg/testutils/lint/passes/returnerrcheck:returnerrcheck_test",
+    "//pkg/testutils/lint/passes/roachtest:roachtest",
     "//pkg/testutils/lint/passes/shadow:shadow",
     "//pkg/testutils/lint/passes/staticcheck:staticcheck",
     "//pkg/testutils/lint/passes/unconvert:unconvert",
