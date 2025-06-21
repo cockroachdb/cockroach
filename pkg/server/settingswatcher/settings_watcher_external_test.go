@@ -63,7 +63,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 		// value (which would cause a panic in test builds).
 		systemOnlySetting: {2 << 20, 4 << 20},
 	}
-	fakeTenant := roachpb.MustMakeTenantID(2)
+	fakeTenant := roachpb.MustMakeTenantID(3)
 	systemTable := keys.SystemSQLCodec.TablePrefix(keys.SettingsTableID)
 	fakeCodec := keys.MakeSQLCodec(fakeTenant)
 	fakeTenantSpan := keys.MakeTenantSpan(fakeTenant)

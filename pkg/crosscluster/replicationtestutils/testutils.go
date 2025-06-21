@@ -114,7 +114,7 @@ var DefaultTenantStreamingClustersArgs = TenantStreamingClustersArgs{
 	SrcNumNodes:         1,
 	SrcClusterSettings:  DefaultClusterSettings,
 	DestTenantName:      roachpb.TenantName("destination"),
-	DestTenantID:        roachpb.MustMakeTenantID(2),
+	DestTenantID:        roachpb.MustMakeTenantID(3),
 	DestNumNodes:        1,
 	DestClusterSettings: DefaultClusterSettings,
 }
