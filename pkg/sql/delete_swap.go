@@ -133,6 +133,7 @@ func (d *deleteSwapNode) BatchedValues(rowIdx int) tree.Datums {
 }
 
 func (d *deleteSwapNode) Close(ctx context.Context) {
+	d.input.Close(ctx)
 	d.run.td.close(ctx)
 	*d = deleteSwapNode{}
 	deleteSwapNodePool.Put(d)
@@ -140,4 +141,8 @@ func (d *deleteSwapNode) Close(ctx context.Context) {
 
 func (d *deleteSwapNode) rowsWritten() int64 {
 	return d.run.td.rowsWritten
+}
+
+func (d *deleteSwapNode) enableAutoCommit() {
+	d.run.td.enableAutoCommit()
 }
