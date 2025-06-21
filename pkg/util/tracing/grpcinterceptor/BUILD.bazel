@@ -9,12 +9,10 @@ go_library(
         "//pkg/util/ctxutil",
         "//pkg/util/grpcutil",
         "//pkg/util/tracing",
+        "//pkg/util/tracing/interceptorutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@io_opentelemetry_go_otel//attribute",
-        "@io_opentelemetry_go_otel//codes",
         "@org_golang_google_grpc//:grpc",
         "@org_golang_google_grpc//metadata",
-        "@org_golang_google_grpc//status",
     ],
 )
 
@@ -29,6 +27,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/stop",
         "//pkg/util/tracing",
+        "//pkg/util/tracing/interceptorutil",
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//types",
