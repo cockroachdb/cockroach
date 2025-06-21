@@ -4531,6 +4531,114 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.consistency_check.currently_idle
+      exported_name: jobs_consistency_check_currently_idle
+      labeled_name: 'jobs{type: consistency_check, status: currently_idle}'
+      description: Number of consistency_check jobs currently considered Idle and can be freely shut down
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.consistency_check.currently_paused
+      exported_name: jobs_consistency_check_currently_paused
+      labeled_name: 'jobs{name: consistency_check, status: currently_paused}'
+      description: Number of consistency_check jobs currently considered Paused
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.consistency_check.currently_running
+      exported_name: jobs_consistency_check_currently_running
+      labeled_name: 'jobs{type: consistency_check, status: currently_running}'
+      description: Number of consistency_check jobs currently running in Resume or OnFailOrCancel state
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.consistency_check.expired_pts_records
+      exported_name: jobs_consistency_check_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: consistency_check}'
+      description: Number of expired protected timestamp records owned by consistency_check jobs
+      y_axis_label: records
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.consistency_check.fail_or_cancel_completed
+      exported_name: jobs_consistency_check_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: consistency_check, status: completed}'
+      description: Number of consistency_check jobs which successfully completed their failure or cancelation process
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.consistency_check.fail_or_cancel_failed
+      exported_name: jobs_consistency_check_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: consistency_check, status: failed}'
+      description: Number of consistency_check jobs which failed with a non-retriable error on their failure or cancelation process
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.consistency_check.fail_or_cancel_retry_error
+      exported_name: jobs_consistency_check_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: consistency_check, status: retry_error}'
+      description: Number of consistency_check jobs which failed with a retriable error on their failure or cancelation process
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.consistency_check.protected_age_sec
+      exported_name: jobs_consistency_check_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: consistency_check}'
+      description: The age of the oldest PTS record protected by consistency_check jobs
+      y_axis_label: seconds
+      type: GAUGE
+      unit: SECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.consistency_check.protected_record_count
+      exported_name: jobs_consistency_check_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: consistency_check}'
+      description: Number of protected timestamp records held by consistency_check jobs
+      y_axis_label: records
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.consistency_check.resume_completed
+      exported_name: jobs_consistency_check_resume_completed
+      labeled_name: 'jobs.resume{name: consistency_check, status: completed}'
+      description: Number of consistency_check jobs which successfully resumed to completion
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.consistency_check.resume_failed
+      exported_name: jobs_consistency_check_resume_failed
+      labeled_name: 'jobs.resume{name: consistency_check, status: failed}'
+      description: Number of consistency_check jobs which failed with a non-retriable error
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.consistency_check.resume_retry_error
+      exported_name: jobs_consistency_check_resume_retry_error
+      labeled_name: 'jobs.resume{name: consistency_check, status: retry_error}'
+      description: Number of consistency_check jobs which failed with a retriable error
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.create_stats.currently_idle
       exported_name: jobs_create_stats_currently_idle
       labeled_name: 'jobs{type: create_stats, status: currently_idle}'

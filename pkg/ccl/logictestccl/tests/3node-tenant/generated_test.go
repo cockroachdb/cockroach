@@ -379,6 +379,13 @@ func TestTenantLogic_cast(
 	runLogicTest(t, "cast")
 }
 
+func TestTenantLogic_check(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "check")
+}
+
 func TestTenantLogic_check_constraints(
 	t *testing.T,
 ) {

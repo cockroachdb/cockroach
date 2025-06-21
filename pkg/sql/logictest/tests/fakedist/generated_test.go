@@ -346,6 +346,13 @@ func TestLogic_ccl(
 	runLogicTest(t, "ccl")
 }
 
+func TestLogic_check(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "check")
+}
+
 func TestLogic_check_constraints(
 	t *testing.T,
 ) {

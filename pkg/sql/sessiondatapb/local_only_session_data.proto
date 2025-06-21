@@ -682,7 +682,9 @@ message LocalOnlySessionData {
   // to unconditionally attempt to apply the fast path for cascading deletes.
   // See also #146705.
   bool optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables = 173 [(gogoproto.customname) = "OptimizerDisableCrossRegionCascadeFastPathForRBRTables"];
-
+  // EnableScrubJob controls if a job is spanned when the EXPERIMENTAL SCRUB
+  // command is used.
+  bool enable_scrub_job = 174;
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
