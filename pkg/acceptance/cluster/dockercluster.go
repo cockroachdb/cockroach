@@ -487,7 +487,7 @@ func (l *DockerCluster) startNode(ctx context.Context, node *testNode, singleNod
 			Path: store.dir,
 			Size: storageconfig.Size{Bytes: int64(store.config.MaxRanges) * maxRangeBytes},
 		}
-		cmd = append(cmd, fmt.Sprintf("--store=%s", storeSpec))
+		cmd = append(cmd, fmt.Sprintf("--store=%s", base.StoreSpecCmdLineString(storeSpec)))
 	}
 	// Append --join flag for all nodes.
 	if !singleNode {
