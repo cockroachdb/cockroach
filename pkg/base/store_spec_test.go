@@ -93,13 +93,13 @@ target_file_size=2097152`
 		{"path=/mnt/hda1,attrs=hdd,attrs=ssd", "attrs field was used twice in store definition", StoreSpec{}},
 
 		// size
-		{"path=/mnt/hda1,size=671088640", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Capacity: 671088640}}},
-		{"path=/mnt/hda1,size=20GB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Capacity: 20000000000}}},
-		{"size=20GiB,path=/mnt/hda1", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Capacity: 21474836480}}},
-		{"size=0.1TiB,path=/mnt/hda1", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Capacity: 109951162777}}},
-		{"path=/mnt/hda1,size=.1TiB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Capacity: 109951162777}}},
-		{"path=/mnt/hda1,size=123TB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Capacity: 123000000000000}}},
-		{"path=/mnt/hda1,size=123TiB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Capacity: 135239930216448}}},
+		{"path=/mnt/hda1,size=671088640", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Bytes: 671088640}}},
+		{"path=/mnt/hda1,size=20GB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Bytes: 20000000000}}},
+		{"size=20GiB,path=/mnt/hda1", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Bytes: 21474836480}}},
+		{"size=0.1TiB,path=/mnt/hda1", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Bytes: 109951162777}}},
+		{"path=/mnt/hda1,size=.1TiB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Bytes: 109951162777}}},
+		{"path=/mnt/hda1,size=123TB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Bytes: 123000000000000}}},
+		{"path=/mnt/hda1,size=123TiB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Bytes: 135239930216448}}},
 		// %
 		{"path=/mnt/hda1,size=50.5%", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Percent: 50.5}}},
 		{"path=/mnt/hda1,size=100%", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Percent: 100}}},
@@ -124,18 +124,18 @@ target_file_size=2097152`
 		{"size=123TB", "no path specified", StoreSpec{}},
 
 		// ballast size
-		{"path=/mnt/hda1,ballast-size=671088640", "", StoreSpec{Path: "/mnt/hda1", BallastSize: &SizeSpec{Capacity: 671088640}}},
-		{"path=/mnt/hda1,ballast-size=20GB", "", StoreSpec{Path: "/mnt/hda1", BallastSize: &SizeSpec{Capacity: 20000000000}}},
+		{"path=/mnt/hda1,ballast-size=671088640", "", StoreSpec{Path: "/mnt/hda1", BallastSize: &SizeSpec{Bytes: 671088640}}},
+		{"path=/mnt/hda1,ballast-size=20GB", "", StoreSpec{Path: "/mnt/hda1", BallastSize: &SizeSpec{Bytes: 20000000000}}},
 		{"path=/mnt/hda1,ballast-size=1%", "", StoreSpec{Path: "/mnt/hda1", BallastSize: &SizeSpec{Percent: 1}}},
 		{"path=/mnt/hda1,ballast-size=100.000%", "ballast size (100.000%) must be between 0.000000% and 50.000000%", StoreSpec{}},
 		{"ballast-size=20GiB,path=/mnt/hda1,ballast-size=20GiB", "ballast-size field was used twice in store definition", StoreSpec{}},
 
 		// type
-		{"type=mem,size=20GiB", "", StoreSpec{Size: SizeSpec{Capacity: 21474836480}, InMemory: true}},
-		{"size=20GiB,type=mem", "", StoreSpec{Size: SizeSpec{Capacity: 21474836480}, InMemory: true}},
-		{"size=20.5GiB,type=mem", "", StoreSpec{Size: SizeSpec{Capacity: 22011707392}, InMemory: true}},
+		{"type=mem,size=20GiB", "", StoreSpec{Size: SizeSpec{Bytes: 21474836480}, InMemory: true}},
+		{"size=20GiB,type=mem", "", StoreSpec{Size: SizeSpec{Bytes: 21474836480}, InMemory: true}},
+		{"size=20.5GiB,type=mem", "", StoreSpec{Size: SizeSpec{Bytes: 22011707392}, InMemory: true}},
 		{"size=20GiB,type=mem,attrs=mem", "", StoreSpec{
-			Size:       SizeSpec{Capacity: 21474836480},
+			Size:       SizeSpec{Bytes: 21474836480},
 			InMemory:   true,
 			Attributes: roachpb.Attributes{Attrs: []string{"mem"}},
 		}},
@@ -162,11 +162,11 @@ target_file_size=2097152`
 		// all together
 		{"path=/mnt/hda1,attrs=hdd:ssd,size=20GiB", "", StoreSpec{
 			Path:       "/mnt/hda1",
-			Size:       SizeSpec{Capacity: 21474836480},
+			Size:       SizeSpec{Bytes: 21474836480},
 			Attributes: roachpb.Attributes{Attrs: []string{"hdd", "ssd"}},
 		}},
 		{"type=mem,attrs=hdd:ssd,size=20GiB", "", StoreSpec{
-			Size:       SizeSpec{Capacity: 21474836480},
+			Size:       SizeSpec{Bytes: 21474836480},
 			InMemory:   true,
 			Attributes: roachpb.Attributes{Attrs: []string{"hdd", "ssd"}},
 		}},
@@ -219,8 +219,8 @@ target_file_size=2097152`
 // StoreSpec aliases base.StoreSpec for convenience.
 type StoreSpec = base.StoreSpec
 
-// SizeSpec aliases storageconfig.SizeSpec for convenience.
-type SizeSpec = storageconfig.SizeSpec
+// Size aliases storageconfig.Size for convenience.
+type SizeSpec = storageconfig.Size
 
 func TestStoreSpecListPreventedStartupMessage(t *testing.T) {
 	defer leaktest.AfterTest(t)()

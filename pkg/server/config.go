@@ -782,7 +782,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		}
 
 		if spec.InMemory {
-			var sizeInBytes = spec.Size.Capacity
+			var sizeInBytes = spec.Size.Bytes
 			if spec.Size.Percent > 0 {
 				sysMem, err := status.GetTotalMemory(ctx)
 				if err != nil {
@@ -807,7 +807,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			if err != nil {
 				return Engines{}, errors.Wrap(err, "retrieving disk usage")
 			}
-			var sizeInBytes = spec.Size.Capacity
+			var sizeInBytes = spec.Size.Bytes
 			if spec.Size.Percent > 0 {
 				sizeInBytes = int64(float64(du.TotalBytes) * spec.Size.Percent / 100)
 			}
