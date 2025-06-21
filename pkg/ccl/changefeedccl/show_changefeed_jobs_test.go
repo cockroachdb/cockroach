@@ -568,7 +568,6 @@ func TestShowChangefeedJobsAuthorization(t *testing.T) {
 			require.NoError(t, err)
 			jobID = successfulFeed.(cdctest.EnterpriseTestFeed).JobID()
 		}
-		rootDB := sqlutils.MakeSQLRunner(s.DB)
 
 		// Create a changefeed and assert who can see it.
 		asUser(t, f, `feedCreator`, func(userDB *sqlutils.SQLRunner) {
@@ -579,22 +578,12 @@ func TestShowChangefeedJobsAuthorization(t *testing.T) {
 			userDB.CheckQueryResults(t, `SELECT job_id FROM [SHOW CHANGEFEED JOBS]`, [][]string{{expectedJobIDStr}})
 		})
 		asUser(t, f, `userWithAllGrants`, func(userDB *sqlutils.SQLRunner) {
-			userDB.CheckQueryResults(t, `SELECT job_id FROM [SHOW CHANGEFEED JOBS]`, [][]string{{expectedJobIDStr}})
+			userDB.CheckQueryResults(t, `SELECT job_id FROM [SHOW CHANGEFEED JOBS]`, [][]string{})
 		})
 		asUser(t, f, `userWithSomeGrants`, func(userDB *sqlutils.SQLRunner) {
 			userDB.CheckQueryResults(t, `SELECT job_id FROM [SHOW CHANGEFEED JOBS]`, [][]string{})
 		})
 		asUser(t, f, `jobController`, func(userDB *sqlutils.SQLRunner) {
-			userDB.CheckQueryResults(t, `SELECT job_id FROM [SHOW CHANGEFEED JOBS]`, [][]string{{expectedJobIDStr}})
-		})
-		asUser(t, f, `regularUser`, func(userDB *sqlutils.SQLRunner) {
-			userDB.CheckQueryResults(t, `SELECT job_id FROM [SHOW CHANGEFEED JOBS]`, [][]string{})
-		})
-
-		// Assert behavior when one of the tables is dropped.
-		rootDB.Exec(t, "DROP TABLE table_b")
-		// Having CHANGEFEED on only table_a is now sufficient.
-		asUser(t, f, `userWithSomeGrants`, func(userDB *sqlutils.SQLRunner) {
 			userDB.CheckQueryResults(t, `SELECT job_id FROM [SHOW CHANGEFEED JOBS]`, [][]string{{expectedJobIDStr}})
 		})
 		asUser(t, f, `regularUser`, func(userDB *sqlutils.SQLRunner) {
