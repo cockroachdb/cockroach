@@ -111,23 +111,25 @@ func closeItersOnBatch(m *metaTestRunner, reader readWriterID) (results []opRefe
 func generateMVCCScan(
 	ctx context.Context, m *metaTestRunner, reverse bool, inconsistent bool, args []string,
 ) *mvccScanOp {
-	key := m.keyGenerator.parse(args[0])
-	endKey := m.keyGenerator.parse(args[1])
+	reader := readWriterID(args[0])
+	key := m.keyGenerator.parse(args[1])
+	endKey := m.keyGenerator.parse(args[2])
 	if endKey.Less(key) {
 		key, endKey = endKey, key
 	}
 	var ts hlc.Timestamp
 	var txn txnID
 	if inconsistent {
-		ts = m.pastTSGenerator.parse(args[2])
+		ts = m.pastTSGenerator.parse(args[3])
 	} else {
-		txn = txnID(args[2])
+		txn = txnID(args[3])
 	}
-	maxKeys := int64(m.floatGenerator.parse(args[3]) * 32)
-	targetBytes := int64(m.floatGenerator.parse(args[4]) * (1 << 20))
-	allowEmpty := m.boolGenerator.parse(args[5])
+	maxKeys := int64(m.floatGenerator.parse(args[4]) * 32)
+	targetBytes := int64(m.floatGenerator.parse(args[5]) * (1 << 20))
+	allowEmpty := m.boolGenerator.parse(args[6])
 	return &mvccScanOp{
 		m:            m,
+		reader:       reader,
 		key:          key.Key,
 		endKey:       endKey.Key,
 		ts:           ts,
@@ -427,6 +429,7 @@ func (m mvccFindSplitKeyOp) run(ctx context.Context) string {
 
 type mvccScanOp struct {
 	m            *metaTestRunner
+	reader       readWriterID
 	key          roachpb.Key
 	endKey       roachpb.Key
 	ts           hlc.Timestamp
@@ -439,17 +442,13 @@ type mvccScanOp struct {
 }
 
 func (m mvccScanOp) run(ctx context.Context) string {
+	reader := m.m.getReadWriter(m.reader)
 	var txn *roachpb.Transaction
 	if !m.inconsistent {
 		txn = m.m.getTxn(m.txn)
 		m.ts = txn.ReadTimestamp
 	}
-	// While MVCCScanning on a batch works in Pebble, it does not in rocksdb.
-	// This is due to batch iterators not supporting SeekForPrev. For now, use
-	// m.engine instead of a readWriterGenerator-generated engine.Reader, otherwise
-	// we will try MVCCScanning on batches and produce diffs between runs on
-	// different engines that don't point to an actual issue.
-	result, err := storage.MVCCScan(ctx, m.m.engine, m.key, m.endKey, m.ts, storage.MVCCScanOptions{
+	result, err := storage.MVCCScan(ctx, reader, m.key, m.endKey, m.ts, storage.MVCCScanOptions{
 		Inconsistent: m.inconsistent,
 		Tombstones:   true,
 		Reverse:      m.reverse,
@@ -1143,6 +1142,7 @@ var opGenerators = []opGenerator{
 			return generateMVCCScan(ctx, m, false, false, args)
 		},
 		operands: []operandType{
+			operandReadWriter,
 			operandMVCCKey,
 			operandMVCCKey,
 			operandTransaction,
@@ -1159,6 +1159,7 @@ var opGenerators = []opGenerator{
 			return generateMVCCScan(ctx, m, false, true, args)
 		},
 		operands: []operandType{
+			operandReadWriter,
 			operandMVCCKey,
 			operandMVCCKey,
 			operandPastTS,
@@ -1175,6 +1176,7 @@ var opGenerators = []opGenerator{
 			return generateMVCCScan(ctx, m, true, false, args)
 		},
 		operands: []operandType{
+			operandReadWriter,
 			operandMVCCKey,
 			operandMVCCKey,
 			operandTransaction,
