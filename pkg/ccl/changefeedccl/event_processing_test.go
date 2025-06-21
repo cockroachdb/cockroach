@@ -78,7 +78,7 @@ func TestTopicForEvent(t *testing.T) {
 			details: jobspb.ChangefeedDetails{
 				TargetSpecifications: []jobspb.ChangefeedTargetSpecification{
 					{
-						TableID:           1,
+						DescID:            1,
 						StatementTimeName: "t1",
 					},
 				},
@@ -91,7 +91,7 @@ func TestTopicForEvent(t *testing.T) {
 			details: jobspb.ChangefeedDetails{
 				TargetSpecifications: []jobspb.ChangefeedTargetSpecification{
 					{
-						TableID:           1,
+						DescID:            1,
 						StatementTimeName: "old_name",
 					},
 				},
@@ -105,7 +105,7 @@ func TestTopicForEvent(t *testing.T) {
 				TargetSpecifications: []jobspb.ChangefeedTargetSpecification{
 					{
 						Type:              jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY,
-						TableID:           1,
+						DescID:            1,
 						FamilyName:        "fam",
 						StatementTimeName: "t1",
 					},
@@ -120,13 +120,13 @@ func TestTopicForEvent(t *testing.T) {
 				TargetSpecifications: []jobspb.ChangefeedTargetSpecification{
 					{
 						Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
-						TableID:           1,
+						DescID:            1,
 						FamilyName:        "fam",
 						StatementTimeName: "old_name",
 					},
 					{
 						Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
-						TableID:           1,
+						DescID:            1,
 						FamilyName:        "fam2",
 						StatementTimeName: "old_name",
 					},
@@ -141,7 +141,7 @@ func TestTopicForEvent(t *testing.T) {
 				TargetSpecifications: []jobspb.ChangefeedTargetSpecification{
 					{
 						Type:              jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY,
-						TableID:           1,
+						DescID:            1,
 						FamilyName:        "fam",
 						StatementTimeName: "t1",
 					},
@@ -153,10 +153,10 @@ func TestTopicForEvent(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c := kvEventToRowConsumer{
-				details:              makeChangefeedConfigFromJobDetails(tc.details),
+				details:              makeChangefeedConfigFromJobDetails(tc.details, nil, nil),
 				topicDescriptorCache: make(map[TopicIdentifier]TopicDescriptor),
 			}
-			tn, err := MakeTopicNamer(AllTargets(tc.details))
+			tn, err := MakeTopicNamer(AllTargets(tc.details, nil, nil)) // TODO: fix this
 			require.NoError(t, err)
 
 			td, err := c.topicForEvent(tc.event)

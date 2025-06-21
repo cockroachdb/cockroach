@@ -438,7 +438,7 @@ func TestDLQJSONQuery(t *testing.T) {
 	targets := changefeedbase.Targets{}
 	targets.Add(changefeedbase.Target{
 		Type:       jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
-		TableID:    tableDesc.GetID(),
+		DescID:     tableDesc.GetID(),
 		FamilyName: "primary",
 	})
 
