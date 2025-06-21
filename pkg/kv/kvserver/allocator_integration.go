@@ -259,11 +259,14 @@ func (as *AllocatorSync) PostApply(ctx context.Context, syncChangeID SyncChangeI
 		}
 		delete(as.mu.trackedChanges, syncChangeID)
 	}()
-	log.Infof(ctx, "PostApply: syncChangeID=%d success=%t tracked=%v",
-		syncChangeID, success, tracked)
-
 	if changeIDs := tracked.changeIDs; changeIDs != nil {
+		log.Infof(ctx, "PostApply: tracked=%v change_ids=%v success: %v", tracked, changeIDs, success)
 		as.mmAllocator.AdjustPendingChangesDisposition(changeIDs, success)
+	} else {
+		log.Infof(ctx, "PostApply: tracked=%v no change_ids success: %v", tracked, success)
+	}
+	if !success {
+		return
 	}
 	switch tracked.typ {
 	case AllocatorChangeTypeLeaseTransfer:
