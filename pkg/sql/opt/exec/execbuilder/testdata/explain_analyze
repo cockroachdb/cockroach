@@ -202,3 +202,78 @@ quality of service: regular
               execution time: 0µs
               table: tables@tables_database_name_idx (partial index)
               spans: [/'test' - /'test']
+
+# Regression test for not showing execution stats for mutation nodes when they
+# are wrapped in a spoolNode (which is the case when RETURNING is present)
+# (#139378).
+query T
+EXPLAIN ANALYZE DELETE FROM kv WHERE true RETURNING *;
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: custom
+rows decoded from KV: 4 (32 B, 8 KVs, 4 gRPC calls)
+maximum memory usage: <hidden>
+DistSQL network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• delete
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 4
+│ execution time: 0µs
+│ from: kv
+│ auto commit
+│
+└── • scan
+      sql nodes: <hidden>
+      kv nodes: <hidden>
+      regions: <hidden>
+      actual row count: 4
+      KV time: 0µs
+      KV rows decoded: 4
+      KV pairs read: 8
+      KV bytes read: 32 B
+      KV gRPC calls: 4
+      estimated max memory allocated: 0 B
+      missing stats
+      table: kv@kv_pkey
+      spans: FULL SCAN
+      locking strength: for update
+
+query T
+EXPLAIN ANALYZE INSERT INTO kv VALUES (1, 10) RETURNING k + v;
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: custom
+maximum memory usage: <hidden>
+DistSQL network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• render
+│
+└── • insert
+    │ sql nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 1
+    │ execution time: 0µs
+    │ estimated row count: 1
+    │ into: kv(k, v)
+    │
+    └── • values
+          sql nodes: <hidden>
+          regions: <hidden>
+          actual row count: 1
+          execution time: 0µs
+          size: 2 columns, 1 row
