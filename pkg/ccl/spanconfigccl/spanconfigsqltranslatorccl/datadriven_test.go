@@ -122,7 +122,7 @@ func TestDataDriven(t *testing.T) {
 					SQLExecutor: sqlExecutorKnobs,
 				},
 				StoreSpecs: []base.StoreSpec{
-					{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{attr}}},
+					{InMemory: true, Attributes: []string{attr}},
 				},
 			}
 		}

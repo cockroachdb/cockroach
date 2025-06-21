@@ -48,7 +48,6 @@ go_test(
     embed = [":fs"],
     deps = [
         "//pkg/base",
-        "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/storage/enginepb",
