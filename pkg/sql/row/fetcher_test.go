@@ -167,7 +167,7 @@ func TestNextRowSingle(t *testing.T) {
 
 			expectedVals := [2]int64{1, 1}
 			for {
-				datums, err := rf.NextRowDecoded(ctx)
+				datums, _, err := rf.NextRowDecoded(ctx)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -272,7 +272,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 
 			expectedVals := [2]int64{1, 1}
 			for {
-				datums, err := rf.NextRowDecoded(ctx)
+				datums, _, err := rf.NextRowDecoded(ctx)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -450,7 +450,7 @@ INDEX(c)
 	for {
 		// Just try to grab the row - we don't need to validate the contents
 		// in this test.
-		datums, err := rf.NextRowDecoded(ctx)
+		datums, _, err := rf.NextRowDecoded(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -607,7 +607,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 			nullCount := 0
 			var prevIdxVal int64
 			for {
-				datums, err := rf.NextRowDecoded(ctx)
+				datums, _, err := rf.NextRowDecoded(ctx)
 				if err != nil {
 					t.Fatal(err)
 				}

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
@@ -27,7 +28,6 @@ import (
 type vectorSearchProcessor struct {
 	execinfra.ProcessorBase
 	fetchSpec   *fetchpb.IndexFetchSpec
-	colOrdMap   catalog.TableColMap
 	prefixKeys  []roachpb.Key
 	queryVector vector.T
 
@@ -36,8 +36,7 @@ type vectorSearchProcessor struct {
 	currPrefix  roachpb.Key
 	targetCount uint64
 
-	row     rowenc.EncDatumRow
-	scratch rowenc.EncDatumRow
+	pkDecoder vecstore.PKDecoder
 }
 
 var _ execinfra.RowSourcedProcessor = &vectorSearchProcessor{}
@@ -62,12 +61,13 @@ func newVectorSearchProcessor(
 	}
 	searchBeamSize := int(flowCtx.EvalCtx.SessionData().VectorSearchBeamSize)
 	maxResults := int(v.targetCount)
-	v.searcher.Init(idx, flowCtx.Txn, searchBeamSize, maxResults)
+	v.searcher.Init(flowCtx.EvalCtx, idx, flowCtx.Txn, &spec.GetFullVectorsFetchSpec, searchBeamSize, maxResults)
 	colTypes := make([]*types.T, len(v.fetchSpec.FetchedColumns))
 	for i, col := range v.fetchSpec.FetchedColumns {
 		colTypes[i] = col.Type
-		v.colOrdMap.Set(col.ColumnID, i)
 	}
+	v.pkDecoder.Init(&spec.FetchSpec)
+
 	if err := v.Init(
 		ctx,
 		&v,
@@ -102,11 +102,17 @@ func (v *vectorSearchProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 			}
 			continue
 		}
-		if err := v.processSearchResult(next); err != nil {
+		_, err := v.pkDecoder.ExtractPrimaryKeyBytes(cspann.TreeKey(v.currPrefix), next.ChildKey.KeyBytes)
+		if err != nil {
 			v.MoveToDraining(err)
 			break
 		}
-		if outRow := v.ProcessRowHelper(v.row); outRow != nil {
+		row, err := v.pkDecoder.DecodeValueBytes(next.ValueBytes)
+		if err != nil {
+			v.MoveToDraining(err)
+			break
+		}
+		if outRow := v.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
 	}
@@ -138,52 +144,6 @@ func (v *vectorSearchProcessor) maybeSearch() (ok bool, err error) {
 		return false, err
 	}
 	return true, nil
-}
-
-// processSearchResult decodes the primary key columns from the search result
-// and stores them in v.vals.
-func (v *vectorSearchProcessor) processSearchResult(res *cspann.SearchResult) (err error) {
-	if v.row == nil {
-		v.row = make(rowenc.EncDatumRow, len(v.fetchSpec.FetchedColumns))
-	}
-	decodeFromKey := func(keyCols []fetchpb.IndexFetchSpec_KeyColumn, keyBytes []byte) error {
-		if len(keyCols) == 0 {
-			if len(keyBytes) > 0 {
-				return errors.AssertionFailedf("expected empty key bytes")
-			}
-			return nil
-		}
-		if cap(v.scratch) < len(keyCols) {
-			v.scratch = make(rowenc.EncDatumRow, len(keyCols))
-		}
-		v.scratch = v.scratch[:len(keyCols)]
-		_, _, err = rowenc.DecodeKeyValsUsingSpec(keyCols, keyBytes, v.scratch)
-		if err != nil {
-			return err
-		}
-		for i, col := range keyCols {
-			idx, ok := v.colOrdMap.Get(col.ColumnID)
-			if !ok {
-				continue
-			}
-			v.row[idx] = v.scratch[i]
-		}
-		return nil
-	}
-	// Decode the index prefix columns, if any,
-	keyPrefixCols := v.fetchSpec.KeyColumns()[:len(v.fetchSpec.KeyColumns())-1]
-	if err = decodeFromKey(keyPrefixCols, v.currPrefix); err != nil {
-		return err
-	}
-	// Decode the index suffix columns. This is usually the set of primary key
-	// columns.
-	keySuffixCols, keySuffixBytes := v.fetchSpec.KeySuffixColumns(), res.ChildKey.KeyBytes
-	if err = decodeFromKey(keySuffixCols, keySuffixBytes); err != nil {
-		return err
-	}
-	neededValueCols := len(v.fetchSpec.FetchedColumns)
-	_, err = rowenc.DecodeValueBytes(v.colOrdMap, res.ValueBytes, neededValueCols, v.row)
-	return err
 }
 
 // ChildCount is part of the execopnode.OpNode interface.
@@ -236,7 +196,7 @@ func newVectorMutationSearchProcessor(
 	if err != nil {
 		return nil, err
 	}
-	v.searcher.Init(idx, flowCtx.Txn)
+	v.searcher.Init(flowCtx.EvalCtx, idx, flowCtx.Txn, &spec.GetFullVectorsFetchSpec)
 
 	// Pass through the input columns, and add the partition column and optional
 	// quantized vector column.

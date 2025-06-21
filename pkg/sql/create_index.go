@@ -267,6 +267,8 @@ func makeIndexDescriptor(
 		if err != nil {
 			return nil, err
 		}
+
+		tabledesc.UpdateVectorIndexPrefixColDirections(&indexDesc, tableDesc.GetPrimaryIndex().IndexDesc())
 	}
 
 	if n.Sharded != nil {

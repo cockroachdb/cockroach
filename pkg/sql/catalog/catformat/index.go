@@ -274,10 +274,14 @@ func FormatIndexElements(
 				}
 			}
 		}
-		// The last column of an inverted or vector index cannot have a DESC
-		// direction because it does not have a linear ordering. Since the default
-		// direction is ASC, we omit the direction entirely for inverted/vector
-		// index columns.
+		// Vector indexes do not support ASC/DESC modifiers.
+		if !index.Type.HasScannablePrefix() {
+			continue
+		}
+		// The last column of an inverted index cannot have a DESC direction
+		// because it does not have a linear ordering. Since the default
+		// direction is ASC, we omit the direction entirely for inverted index
+		// columns.
 		if i < n-1 || index.Type.HasLinearOrdering() {
 			f.WriteByte(' ')
 			f.WriteString(index.KeyColumnDirections[i].String())

@@ -1,0 +1,28 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.sql.vecindex.vecstore.vecstorepb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore/vecstorepb";
+
+import "gogoproto/gogo.proto";
+import "sql/catalog/fetchpb/index_fetch.proto";
+import "sql/catalog/descpb/structured.proto";
+
+option (gogoproto.goproto_getters_all) = false;
+
+// GetFullVectorsFetchSpec encapsulates the information needed to get a full
+// vector from the PK. It is used in store_txn.GetFullVectors() to find the
+// unquantized vectors.
+message GetFullVectorsFetchSpec {
+  // Fetch spec into the PK that pulls out the vector column
+  sqlbase.IndexFetchSpec fetch_spec = 1 [(gogoproto.nullable) = false];
+
+  // Family ID for the vector column so that we can build a span.Splitter
+  repeated uint32 family_id = 2 [(gogoproto.customname) = "FamilyIDs",
+                        (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.FamilyID"];
+
+  sqlbase.IndexFetchSpec extract_pk_fetch_spec = 3 [(gogoproto.customname) = "ExtractPKFetchSpec", (gogoproto.nullable) = false];
+}

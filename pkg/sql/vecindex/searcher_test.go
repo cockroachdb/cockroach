@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
@@ -24,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore/vecstorepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -47,10 +50,10 @@ func TestSearcher(t *testing.T) {
 
 	runner.Exec(t, "CREATE TABLE t (id INT PRIMARY KEY, prefix INT NOT NULL, v VECTOR(2))")
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "defaultdb", "t")
-	vCol, err := catalog.MustFindColumnByName(tableDesc, "v")
+	baseTableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "defaultdb", "t")
+	vCol, err := catalog.MustFindColumnByName(baseTableDesc, "v")
 	require.NoError(t, err)
-	prefixCol, err := catalog.MustFindColumnByName(tableDesc, "prefix")
+	prefixCol, err := catalog.MustFindColumnByName(baseTableDesc, "prefix")
 	require.NoError(t, err)
 
 	indexDesc := descpb.IndexDescriptor{
@@ -60,20 +63,24 @@ func TestSearcher(t *testing.T) {
 		KeyColumnIDs:        []descpb.ColumnID{prefixCol.GetID(), vCol.GetID()},
 		KeyColumnNames:      []string{prefixCol.GetName(), vCol.GetName()},
 		KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
-		KeySuffixColumnIDs:  []descpb.ColumnID{tableDesc.GetPrimaryIndex().GetKeyColumnID(0)},
+		KeySuffixColumnIDs:  []descpb.ColumnID{baseTableDesc.GetPrimaryIndex().GetKeyColumnID(0)},
 		Version:             descpb.LatestIndexDescriptorVersion,
 		EncodingType:        catenumpb.SecondaryIndexEncoding,
 	}
 
+	// Now edit our fake index into the table descriptor.
+	rawTableDesc := baseTableDesc.TableDesc()
+	rawTableDesc.Indexes = append(rawTableDesc.Indexes, indexDesc)
+	tableDesc := tabledesc.NewBuilder(rawTableDesc).BuildImmutableTable()
+
 	quantizer := quantize.NewUnQuantizer(2, vecpb.L2SquaredDistance)
-	store, err := vecstore.NewWithColumnID(
+	store, err := vecstore.NewWithLeasedDesc(
 		ctx,
 		internalDB,
 		quantizer,
 		codec,
 		tableDesc,
 		indexDesc.ID,
-		vCol.GetID(),
 	)
 	require.NoError(t, err)
 
@@ -93,7 +100,21 @@ func TestSearcher(t *testing.T) {
 
 	// Insert two vectors into root partition.
 	var mutator MutationSearcher
-	mutator.Init(idx, tx)
+	evalCtx := eval.NewTestingEvalContext(srv.ApplicationLayer().ClusterSettings())
+	defer evalCtx.Stop(ctx)
+
+	var index catalog.Index
+	for _, idx := range tableDesc.NonPrimaryIndexes() {
+		if idx.GetID() == indexDesc.ID {
+			index = idx
+			break
+		}
+	}
+	require.NotNil(t, index)
+	var fullVecFetchSpec vecstorepb.GetFullVectorsFetchSpec
+	err = vecstore.InitGetFullVectorsFetchSpec(&fullVecFetchSpec, evalCtx, tableDesc, index, tableDesc.GetPrimaryIndex())
+	require.NoError(t, err)
+	mutator.Init(evalCtx, idx, tx, &fullVecFetchSpec)
 
 	// Reuse prefix, key bytes, value bytes and vector memory, to ensure it's
 	// allowed.
@@ -144,7 +165,7 @@ func TestSearcher(t *testing.T) {
 	original[0] = 1
 	original[1] = 1
 	var searcher Searcher
-	searcher.Init(idx, tx, 8 /* baseBeamSize */, 2 /* maxResults */)
+	searcher.Init(evalCtx, idx, tx, &fullVecFetchSpec, 8 /* baseBeamSize */, 2 /* maxResults */)
 	require.NoError(t, searcher.Search(ctx, prefix, original))
 	require.Nil(t, searcher.NextResult())
 

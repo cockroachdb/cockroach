@@ -2379,6 +2379,7 @@ GO_TARGETS = [
     "//pkg/sql/vecindex/vecencoding:vecencoding_test",
     "//pkg/sql/vecindex/vecpb:vecpb",
     "//pkg/sql/vecindex/vecpb:vecpb_test",
+    "//pkg/sql/vecindex/vecstore/vecstorepb:vecstorepb",
     "//pkg/sql/vecindex/vecstore:vecstore",
     "//pkg/sql/vecindex/vecstore:vecstore_test",
     "//pkg/sql/vecindex:vecindex",
