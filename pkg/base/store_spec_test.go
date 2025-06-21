@@ -148,7 +148,7 @@ target_file_size=2097152`
 
 		// provisioned rate
 		{"path=/mnt/hda1,provisioned-rate=bandwidth=200MiB/s", "",
-			StoreSpec{Path: "/mnt/hda1", ProvisionedRateSpec: base.ProvisionedRateSpec{ProvisionedBandwidth: 200 << 20}}},
+			StoreSpec{Path: "/mnt/hda1", ProvisionedRate: storageconfig.ProvisionedRate{ProvisionedBandwidth: 200 << 20}}},
 		{"path=/mnt/hda1,provisioned-rate=bandwidth=200MiB", "provisioned-rate field does not have bandwidth sub-field 200MiB ending in /s", StoreSpec{}},
 		{"path=/mnt/hda1,provisioned-rate=200MiB/s", "provisioned-rate field has invalid value 200MiB/s", StoreSpec{}},
 		{"path=/mnt/hda1,provisioned-rate=bandwidth=0B/s", "provisioned-rate field is trying to set bandwidth to 0", StoreSpec{}},
