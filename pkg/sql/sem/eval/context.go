@@ -100,11 +100,6 @@ type Context struct {
 	// The region entry in this variable is the gateway region.
 	Locality roachpb.Locality
 
-	// OriginalLocality is the initial Locality at the time the connection was
-	// established. Since Locality may be overridden in some paths, this provides
-	// a means of restoring the original Locality.
-	OriginalLocality roachpb.Locality
-
 	Tracer *tracing.Tracer
 
 	// The statement timestamp. May be different for every statement.
