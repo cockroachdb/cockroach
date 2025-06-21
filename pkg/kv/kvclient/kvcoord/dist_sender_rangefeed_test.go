@@ -49,10 +49,10 @@ type testRangefeedClient struct {
 }
 
 func (c *testRangefeedClient) MuxRangeFeed(
-	ctx context.Context, opts ...grpc.CallOption,
-) (kvpb.Internal_MuxRangeFeedClient, error) {
+	ctx context.Context,
+) (kvpb.RPCInternal_MuxRangeFeedClient, error) {
 	defer c.count()
-	return c.RestrictedInternalClient.MuxRangeFeed(ctx, opts...)
+	return c.RestrictedInternalClient.MuxRangeFeed(ctx)
 }
 
 type internalClientCounts struct {
