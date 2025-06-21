@@ -302,6 +302,7 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 			ViewID:          tbl.GetID(),
 			UsesTypeIDs:     catalog.MakeDescriptorIDSet(tbl.GetDependsOnTypes()...).Ordered(),
 			UsesRelationIDs: catalog.MakeDescriptorIDSet(tbl.GetDependsOn()...).Ordered(),
+			UsesRoutineIDs:  catalog.MakeDescriptorIDSet(tbl.GetDependsOnFunctions()...).Ordered(),
 			IsTemporary:     tbl.IsTemporary(),
 			IsMaterialized:  tbl.MaterializedView(),
 			ForwardReferences: func(tbl catalog.TableDescriptor) []*scpb.View_Reference {
