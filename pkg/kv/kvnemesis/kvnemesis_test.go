@@ -209,16 +209,24 @@ func randWithSeed(
 	t interface {
 		Logf(string, ...interface{})
 		Helper()
-	}, seedOrZero int64,
+	}, cfg kvnemesisTestCfg,
 ) (*rand.Rand, counter, int64) {
 	t.Helper()
+
 	var rngSource rand.Source
-	if seedOrZero > 0 {
-		rngSource = rand.NewSource(seedOrZero)
+	seedOrZero := cfg.seedOverride
+	if cfg.randSource != nil {
+		rngSource = cfg.randSource
+		t.Logf("using config-supplied random source, seed ignored")
 	} else {
-		rngSource, seedOrZero = randutil.NewTestRandSource()
+		if seedOrZero > 0 {
+			rngSource = rand.NewSource(seedOrZero)
+		} else {
+			rngSource, seedOrZero = randutil.NewTestRandSource()
+		}
+		t.Logf("seed: %d", seedOrZero)
 	}
-	t.Logf("seed: %d", seedOrZero)
+
 	countingSource := newCountingSource(rngSource.(rand.Source64))
 	return rand.New(countingSource), countingSource, seedOrZero
 }
@@ -233,7 +241,7 @@ type tBridge struct {
 	ll logLogger
 }
 
-func newTBridge(t *testing.T) *tBridge {
+func newTBridge(t testing.TB) *tBridge {
 	// NB: we're not using t.TempDir() because we want these to survive
 	// on failure.
 	td, err := os.MkdirTemp(datapathutils.DebuggableTempDir(), "kvnemesis")
@@ -263,6 +271,7 @@ type kvnemesisTestCfg struct {
 	numNodes     int
 	numSteps     int
 	concurrency  int
+	randSource   rand.Source
 	seedOverride int64
 	// The two knobs below inject illegal lease index errors and, for the
 	// resulting reproposals, reproposal errors. The injection is stateful and
@@ -418,6 +427,50 @@ func TestKVNemesisMultiNode(t *testing.T) {
 	})
 }
 
+// FuzzKVNemesisSingleNode is an attempt ot make it possible to run KVNemesis
+// with a coverage-guided fuzzer. It takes in []bytes as input and then uses
+// this to feed all random decisions in the test.
+func FuzzKVNemesisSingleNode(f *testing.F) {
+	defer leaktest.AfterTest(f)()
+	defer log.Scope(f).Close(f)
+
+	const (
+		// Set to > 0 to pre-generate corpus data.
+		corpusSize = 0
+		// I've set these to low values for now to at least get things running
+		// reliably. With all default settings the test runner fails without
+		// printing any useful info. I _think_ it might be the result of a
+		// hard-coded 10s timeout in the go-fuzz test worker.
+		numStep     = 10
+		concurrency = 1
+	)
+	for range corpusSize {
+		rndSource := randutil.NewRecordingRandSource(rand.NewSource(randutil.NewPseudoSeed()).(rand.Source64))
+		testKVNemesisImpl(f, kvnemesisTestCfg{
+			numNodes:                     1,
+			numSteps:                     numStep,
+			concurrency:                  concurrency,
+			randSource:                   rndSource,
+			invalidLeaseAppliedIndexProb: 0.2,
+			injectReproposalErrorProb:    0.2,
+			assertRaftApply:              true,
+		})
+		f.Add(rndSource.Output())
+	}
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		testKVNemesisImpl(t, kvnemesisTestCfg{
+			numNodes:                     1,
+			numSteps:                     numStep,
+			concurrency:                  concurrency,
+			randSource:                   randutil.NewFuzzRandSource(t, data),
+			invalidLeaseAppliedIndexProb: 0.2,
+			injectReproposalErrorProb:    0.2,
+			assertRaftApply:              true,
+		})
+	})
+}
+
 func TestKVNemesisMultiNode_LeaderLeases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -434,7 +487,7 @@ func TestKVNemesisMultiNode_LeaderLeases(t *testing.T) {
 	})
 }
 
-func testKVNemesisImpl(t *testing.T, cfg kvnemesisTestCfg) {
+func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 	skip.UnderRace(t)
 
 	if !buildutil.CrdbTestBuild {
@@ -446,7 +499,7 @@ func testKVNemesisImpl(t *testing.T, cfg kvnemesisTestCfg) {
 
 	// Can set a seed here for determinism. This works best when the seed was
 	// obtained with cfg.concurrency=1.
-	rng, countingSource, seed := randWithSeed(t, cfg.seedOverride)
+	rng, countingSource, seed := randWithSeed(t, cfg)
 
 	// 4 nodes so we have somewhere to move 3x replicated ranges to.
 	ctx := context.Background()
@@ -513,7 +566,7 @@ func TestRunReproductionSteps(t *testing.T) {
 	// Paste a repro as printed by kvnemesis here.
 }
 
-func dumpRaftLogsOnFailure(t *testing.T, dir string, srvs []serverutils.TestServerInterface) {
+func dumpRaftLogsOnFailure(t testing.TB, dir string, srvs []serverutils.TestServerInterface) {
 	if !t.Failed() {
 		return
 	}
