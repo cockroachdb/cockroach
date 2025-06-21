@@ -15153,6 +15153,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: replicas.cpunanospersecond
+      exported_name: replicas_cpunanospersecond
+      description: Nanoseconds of CPU time in Replica request processing including evaluation but not replication
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: replicas.leaders
       exported_name: replicas_leaders
       description: Number of raft leaders
