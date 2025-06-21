@@ -9,6 +9,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -46,6 +48,11 @@ func (desc *IndexDescriptor) FillColumns(elems tree.IndexElemList) error {
 	for _, c := range elems {
 		if c.Expr != nil {
 			return errors.AssertionFailedf("index elem expression should have been replaced with a column")
+		}
+		// Vector index prefix columns don't have a direction, nor do the vector columns themselves.
+		if !desc.Type.HasScannablePrefix() && c.Direction != tree.DefaultDirection {
+			return pgerror.Newf(pgcode.FeatureNotSupported,
+				"%s does not support the %s option", idxtype.ErrorText(desc.Type), c.Direction)
 		}
 		desc.KeyColumnNames = append(desc.KeyColumnNames, string(c.Column))
 		switch c.Direction {

@@ -39,7 +39,7 @@ ALTER TABLE simple ALTER PRIMARY KEY USING COLUMNS (b)
 
 # Alternate syntax.
 statement notice CREATE VECTOR INDEX will disable writes to the table while the index is being built
-CREATE INDEX ON simple USING cspann (vec1 ASC);
+CREATE INDEX ON simple USING cspann (vec1);
 
 # We allow hnsw as an alias for cspann.
 statement ok
@@ -96,7 +96,7 @@ statement ok
 CREATE TABLE alt_syntax (
   a INT PRIMARY KEY,
   vec1 VECTOR(3),
-  VECTOR INDEX vec_idx (vec1 ASC),
+  VECTOR INDEX vec_idx (vec1),
   FAMILY (a, vec1)
 )
 
@@ -188,12 +188,12 @@ CREATE TABLE prefix_cols (
   b INT,
   c INT,
   vec1 VECTOR(3),
-  VECTOR INDEX (c DESC, b, vec1),
+  VECTOR INDEX (c, b, vec1),
   FAMILY (a, b, c, vec1)
 )
 
 statement ok
-CREATE VECTOR INDEX another_index ON prefix_cols (b, c DESC, vec1)
+CREATE VECTOR INDEX another_index ON prefix_cols (b, c, vec1)
 
 onlyif config schema-locked-disabled
 query TT
@@ -205,8 +205,8 @@ prefix_cols  CREATE TABLE public.prefix_cols (
                c INT8 NULL,
                vec1 VECTOR(3) NULL,
                CONSTRAINT prefix_cols_pkey PRIMARY KEY (a ASC),
-               VECTOR INDEX prefix_cols_c_b_vec1_idx (c DESC, b ASC, vec1 vector_l2_ops),
-               VECTOR INDEX another_index (b ASC, c DESC, vec1 vector_l2_ops),
+               VECTOR INDEX prefix_cols_c_b_vec1_idx (c, b, vec1 vector_l2_ops),
+               VECTOR INDEX another_index (b, c, vec1 vector_l2_ops),
                FAMILY fam_0_a_b_c_vec1 (a, b, c, vec1)
              );
 
@@ -220,8 +220,8 @@ prefix_cols  CREATE TABLE public.prefix_cols (
                c INT8 NULL,
                vec1 VECTOR(3) NULL,
                CONSTRAINT prefix_cols_pkey PRIMARY KEY (a ASC),
-               VECTOR INDEX prefix_cols_c_b_vec1_idx (c DESC, b ASC, vec1 vector_l2_ops),
-               VECTOR INDEX another_index (b ASC, c DESC, vec1 vector_l2_ops),
+               VECTOR INDEX prefix_cols_c_b_vec1_idx (c, b, vec1 vector_l2_ops),
+               VECTOR INDEX another_index (b, c, vec1 vector_l2_ops),
                FAMILY fam_0_a_b_c_vec1 (a, b, c, vec1)
              ) WITH (schema_locked = true);
 
@@ -314,11 +314,11 @@ operator_class  CREATE TABLE public.operator_class (
                   vec1 VECTOR(3) NULL,
                   CONSTRAINT operator_class_pkey PRIMARY KEY (a ASC),
                   VECTOR INDEX operator_class_vec1_idx (vec1 vector_l2_ops),
-                  VECTOR INDEX operator_class_b_vec1_idx (b ASC, vec1 vector_cosine_ops),
+                  VECTOR INDEX operator_class_b_vec1_idx (b, vec1 vector_cosine_ops),
                   VECTOR INDEX operator_class_vec1_idx1 (vec1 vector_ip_ops),
-                  VECTOR INDEX operator_class_b_vec1_idx1 (b ASC, vec1 vector_l2_ops),
+                  VECTOR INDEX operator_class_b_vec1_idx1 (b, vec1 vector_l2_ops),
                   VECTOR INDEX operator_class_vec1_idx2 (vec1 vector_cosine_ops),
-                  VECTOR INDEX operator_class_b_vec1_idx2 (b ASC, vec1 vector_ip_ops),
+                  VECTOR INDEX operator_class_b_vec1_idx2 (b, vec1 vector_ip_ops),
                   FAMILY fam_0_a_b_vec1 (a, b, vec1)
                 ) WITH (schema_locked = true);
 
@@ -332,11 +332,11 @@ operator_class  CREATE TABLE public.operator_class (
                   vec1 VECTOR(3) NULL,
                   CONSTRAINT operator_class_pkey PRIMARY KEY (a ASC),
                   VECTOR INDEX operator_class_vec1_idx (vec1 vector_l2_ops),
-                  VECTOR INDEX operator_class_b_vec1_idx (b ASC, vec1 vector_cosine_ops),
+                  VECTOR INDEX operator_class_b_vec1_idx (b, vec1 vector_cosine_ops),
                   VECTOR INDEX operator_class_vec1_idx1 (vec1 vector_ip_ops),
-                  VECTOR INDEX operator_class_b_vec1_idx1 (b ASC, vec1 vector_l2_ops),
+                  VECTOR INDEX operator_class_b_vec1_idx1 (b, vec1 vector_l2_ops),
                   VECTOR INDEX operator_class_vec1_idx2 (vec1 vector_cosine_ops),
-                  VECTOR INDEX operator_class_b_vec1_idx2 (b ASC, vec1 vector_ip_ops),
+                  VECTOR INDEX operator_class_b_vec1_idx2 (b, vec1 vector_ip_ops),
                   FAMILY fam_0_a_b_vec1 (a, b, vec1)
                 );
 
@@ -362,10 +362,13 @@ CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (c, b))
 statement error column b has type tsvector, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/v25.3/inverted-indexes.html
 CREATE TABLE t (a INT PRIMARY KEY, b TSVECTOR, c VECTOR(3), VECTOR INDEX (b, c))
 
-statement error the last column in a vector index cannot have the DESC option
-CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC))
+statement error pq: a vector index does not support the ASC option
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b ASC, c))
 
-statement error vector column b does not have a fixed number of dimensions, so it cannot be indexed\nDETAIL: specify the number of dimensions in the type, like VECTOR\(128\) for 128 dimensions
+statement error pq: a vector index does not support the DESC option
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b DESC, c))
+
+statement error vector column b does not have a fixed number of dimensions, so it cannot be indexed
 CREATE TABLE t (a INT PRIMARY KEY, b VECTOR, VECTOR INDEX (b))
 
 # Try to use vector type in forward index.
@@ -374,25 +377,25 @@ CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), INDEX (b, c))
 
 # Storage param errors.
 statement error pgcode 22023 "build_beam_size" value must be between 1 and 512 inclusive
-CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) WITH (build_beam_size = 0))
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c) WITH (build_beam_size = 0))
 
 statement error pgcode 22023 "build_beam_size" value must be between 1 and 512 inclusive
-CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) WITH (build_beam_size = 513))
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c) WITH (build_beam_size = 513))
 
 statement error pgcode 22023 "min_partition_size" value must be between 1 and 1024 inclusive
-CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) WITH (min_partition_size = 0))
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c) WITH (min_partition_size = 0))
 
 statement error pgcode 22023 "min_partition_size" value must be between 1 and 1024 inclusive
-CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) WITH (min_partition_size = 1025))
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c) WITH (min_partition_size = 1025))
 
 statement error pgcode 22023 "max_partition_size" value must be between 4 and 4096 inclusive
-CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) WITH (max_partition_size = 3))
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c) WITH (max_partition_size = 3))
 
 statement error pgcode 22023 "max_partition_size" value must be between 4 and 4096 inclusive
-CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) WITH (max_partition_size = 4097))
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c) WITH (max_partition_size = 4097))
 
 statement error pgcode 22023 max_partition_size \(7\) must be at least four times the value of min_partition_size \(2\)
-CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) WITH (min_partition_size = 2, max_partition_size = 7))
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c) WITH (min_partition_size = 2, max_partition_size = 7))
 
 subtest end
 
@@ -419,7 +422,7 @@ CREATE VECTOR INDEX ON vec_errors (vec1, b)
 statement error column c has type tsvector, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/v25.3/inverted-indexes.html
 CREATE VECTOR INDEX ON vec_errors (c, vec1)
 
-statement error the last column in a vector index cannot have the DESC option
+statement error pq: a vector index does not support the DESC option
 CREATE VECTOR INDEX ON vec_errors (b, vec1 DESC)
 
 statement error vector column d does not have a fixed number of dimensions, so it cannot be indexed\nDETAIL: specify the number of dimensions in the type, like VECTOR\(128\) for 128 dimensions
@@ -905,5 +908,216 @@ INSERT INTO test_145973 VALUES (1)
 
 statement ok
 CREATE VECTOR INDEX vec_idx ON test_145973 (v)
+
+subtest end
+
+subtest test_146046
+
+statement ok
+CREATE TABLE test_146046 (
+  a INT PRIMARY KEY,
+  b INT,
+  vec1 VECTOR(3),
+  VECTOR INDEX idx1 (vec1) WITH (min_partition_size=1, max_partition_size=4),
+  VECTOR INDEX idx2 (b, vec1) WITH (min_partition_size=1, max_partition_size=4),
+  FAMILY (a), FAMILY (b), FAMILY (vec1)
+)
+
+statement ok
+INSERT INTO test_146046 (a, b, vec1) VALUES
+  (1, 1, '[1, 2, 3]'),
+  (2, 1, '[4, 5, 6]'),
+  (3, 2, '[7, 8, 9]'),
+  (4, 2, '[10, 11, 12]'),
+  (5, 2, '[13, 14, 15]'),
+  (6, NULL, '[16, 17, 18]'),
+  (7, NULL, '[1, 1, 1]'),
+  (8, NULL, NULL),
+  (9, 3, NULL);
+
+query IT rowsort
+SELECT a, vec1 FROM test_146046@idx1 ORDER BY vec1 <-> '[5, 5, 5]' LIMIT 1;
+----
+2  [4,5,6]
+
+query IT rowsort
+SELECT a, vec1 FROM test_146046@idx1 ORDER BY vec1 <-> '[5, 5, 5]' LIMIT 10;
+----
+2  [4,5,6]
+3  [7,8,9]
+1  [1,2,3]
+7  [1,1,1]
+4  [10,11,12]
+5  [13,14,15]
+6  [16,17,18]
+
+query IT rowsort
+SELECT a, vec1 FROM test_146046@idx1 ORDER BY vec1 <-> '[5, 5, 5]' LIMIT 3;
+----
+2  [4,5,6]
+3  [7,8,9]
+1  [1,2,3]
+
+statement ok
+DROP TABLE test_146046
+
+subtest end
+
+subtest compound_pk
+
+statement ok
+CREATE TABLE compound_pk (
+  cust_id INT NOT NULL,
+  dept_id INT NOT NULL,
+  embedding VECTOR(3),
+  PRIMARY KEY (cust_id, dept_id)
+)
+
+statement ok
+CREATE VECTOR INDEX idx ON compound_pk (cust_id, embedding) WITH (min_partition_size=1, max_partition_size=4)
+
+statement ok
+INSERT INTO compound_pk VALUES (1, 1, '[1, 2, 3]')
+
+statement ok
+INSERT INTO compound_pk VALUES (1, 2, '[4, 5, 6]')
+
+statement ok
+INSERT INTO compound_pk VALUES (2, 1, '[7, 8, 9]')
+
+statement ok
+INSERT INTO compound_pk VALUES (2, 2, '[10, 11, 12]')
+
+statement ok
+INSERT INTO compound_pk VALUES (3, 1, '[13, 14, 15]')
+
+statement ok
+INSERT INTO compound_pk VALUES (3, 2, '[16, 17, 18]')
+
+statement ok
+INSERT INTO compound_pk VALUES (4, 1, '[19, 20, 21]')
+
+statement ok
+INSERT INTO compound_pk VALUES (4, 2, '[22, 23, 24]')
+
+query IIT rowsort
+SELECT * FROM compound_pk@idx WHERE cust_id = 1 ORDER BY embedding <-> '[1, 2, 3]' LIMIT 2;
+----
+1 1  [1,2,3]
+1 2  [4,5,6]
+
+statement ok
+DROP TABLE compound_pk
+
+subtest end
+
+subtest composite_pk
+
+statement ok
+CREATE TABLE composite_pk (
+  cust_name VARCHAR(10) COLLATE de NOT NULL,
+  cust_id INT NOT NULL,
+  embedding VECTOR(3),
+  PRIMARY KEY (cust_name DESC, cust_id),
+  FAMILY fam_0_cust_name_cust_id_embedding (cust_name, cust_id, embedding)
+)
+
+statement ok
+CREATE VECTOR INDEX idx ON composite_pk (embedding) WITH (min_partition_size=1, max_partition_size=4)
+
+statement ok
+INSERT INTO composite_pk VALUES ('Bär', 1, '[1, 2, 3]')
+
+statement ok
+INSERT INTO composite_pk VALUES ('Bär', 2, '[4, 5, 6]')
+
+statement ok
+INSERT INTO composite_pk VALUES ('Bäz', 3, '[7, 8, 9]')
+
+statement ok
+INSERT INTO composite_pk VALUES ('Bäz', 4, '[10, 11, 12]')
+
+statement ok
+INSERT INTO composite_pk VALUES ('Bäaz', 5, '[13, 14, 15]')
+
+statement ok
+INSERT INTO composite_pk VALUES ('Bäaz', 6, '[19, 20, 21]')
+
+statement ok
+INSERT INTO composite_pk VALUES ('aBäz', 7, '[22, 23, 24]')
+
+statement ok
+INSERT INTO composite_pk VALUES ('aBäz', 8, '[22, 23, 24]')
+
+query TIT rowsort
+SELECT * FROM composite_pk@idx ORDER BY embedding <-> '[1, 2, 3]' LIMIT 2;
+----
+Bär 1  [1,2,3]
+Bär 2  [4,5,6]
+
+statement ok
+CREATE VECTOR INDEX idx2 ON composite_pk (cust_name, embedding) WITH (min_partition_size=1, max_partition_size=4)
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE composite_pk;
+----
+composite_pk  CREATE TABLE public.composite_pk (
+                cust_name VARCHAR(10) COLLATE de NOT NULL,
+                cust_id INT8 NOT NULL,
+                embedding VECTOR(3) NULL,
+                CONSTRAINT composite_pk_pkey PRIMARY KEY (cust_name DESC, cust_id ASC),
+                VECTOR INDEX idx (embedding vector_l2_ops) WITH (min_partition_size=1, max_partition_size=4),
+                VECTOR INDEX idx2 (cust_name, embedding vector_l2_ops) WITH (min_partition_size=1, max_partition_size=4),
+                FAMILY fam_0_cust_name_cust_id_embedding (cust_name, cust_id, embedding)
+              );
+
+query TIT rowsort
+SELECT * FROM composite_pk@idx2 WHERE cust_name = 'Bäz' ORDER BY embedding <-> '[10, 11, 12]' LIMIT 2;
+----
+Bäz 4  [10,11,12]
+Bäz 3  [7,8,9]
+
+statement ok
+ALTER TABLE composite_pk ALTER PRIMARY KEY USING COLUMNS (cust_id)
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE composite_pk;
+----
+composite_pk  CREATE TABLE public.composite_pk (
+                cust_name VARCHAR(10) COLLATE de NOT NULL,
+                cust_id INT8 NOT NULL,
+                embedding VECTOR(3) NULL,
+                CONSTRAINT composite_pk_pkey PRIMARY KEY (cust_id ASC),
+                VECTOR INDEX idx (embedding vector_l2_ops) WITH (min_partition_size=1, max_partition_size=4),
+                VECTOR INDEX idx2 (cust_name, embedding vector_l2_ops) WITH (min_partition_size=1, max_partition_size=4),
+                UNIQUE INDEX composite_pk_cust_name_cust_id_key (cust_name DESC, cust_id ASC),
+                FAMILY fam_0_cust_name_cust_id_embedding (cust_name, cust_id, embedding)
+              );
+
+query TIT rowsort
+SELECT * FROM composite_pk@idx2 WHERE cust_name = 'Bäz' ORDER BY embedding <-> '[10, 11, 12]' LIMIT 2;
+----
+Bäz  4  [10,11,12]
+Bäz  3  [7,8,9]
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE composite_pk;
+----
+composite_pk  CREATE TABLE public.composite_pk (
+                cust_name VARCHAR(10) COLLATE de NOT NULL,
+                cust_id INT8 NOT NULL,
+                embedding VECTOR(3) NULL,
+                CONSTRAINT composite_pk_pkey PRIMARY KEY (cust_id ASC),
+                VECTOR INDEX idx (embedding vector_l2_ops) WITH (min_partition_size=1, max_partition_size=4),
+                VECTOR INDEX idx2 (cust_name, embedding vector_l2_ops) WITH (min_partition_size=1, max_partition_size=4),
+                UNIQUE INDEX composite_pk_cust_name_cust_id_key (cust_name DESC, cust_id ASC),
+                FAMILY fam_0_cust_name_cust_id_embedding (cust_name, cust_id, embedding)
+              );
+
+statement ok
+DROP TABLE composite_pk
 
 subtest end

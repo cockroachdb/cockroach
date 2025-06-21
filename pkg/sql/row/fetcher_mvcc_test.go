@@ -135,7 +135,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		}
 		var rows []rowWithMVCCMetadata
 		for {
-			datums, err := rf.NextRowDecoded(ctx)
+			datums, _, err := rf.NextRowDecoded(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}

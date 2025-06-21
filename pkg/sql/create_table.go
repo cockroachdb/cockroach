@@ -2849,6 +2849,9 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 						Column:    tree.Name(name),
 						Direction: tree.Ascending,
 					}
+					if !indexDef.Type.HasScannablePrefix() {
+						elem.Direction = tree.DefaultDirection
+					}
 					col, err := catalog.MustFindColumnByID(td, idx.GetKeyColumnID(j))
 					if err != nil {
 						return nil, err

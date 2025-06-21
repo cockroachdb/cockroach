@@ -341,6 +341,10 @@ func processColNodeType(
 		panic(pgerror.New(pgcode.DatatypeMismatch,
 			"operator classes are only allowed for the last column of an inverted or vector index"))
 	}
+	if !n.Type.HasScannablePrefix() && columnNode.Direction != tree.DefaultDirection {
+		panic(pgerror.Newf(pgcode.FeatureNotSupported,
+			"%s does not support the %s option", idxtype.ErrorText(n.Type), columnNode.Direction))
+	}
 	// Disallow descending last column in inverted and vector indexes because they
 	// have no linear ordering.
 	if !n.Type.HasLinearOrdering() && columnNode.Direction == tree.Descending && lastColIdx {
@@ -637,10 +641,27 @@ func addColumnsForSecondaryIndex(
 	scpb.ForEachIndexColumn(relationElements, func(
 		current scpb.Status, target scpb.TargetStatus, e *scpb.IndexColumn,
 	) {
-		if e.IndexID != idxSpec.secondary.SourceIndexID || keyColIDs.Contains(e.ColumnID) ||
+		if e.IndexID != idxSpec.secondary.SourceIndexID {
+			return
+		}
+
+		// Vector index prefix columns that overlap with the primary key must match
+		// the primary key direction.
+		if n.Type == idxtype.VECTOR {
+			for i, keyCol := range idxSpec.columns {
+				if keyCol.ColumnID != e.ColumnID {
+					continue
+				}
+				idxSpec.columns[i].Direction = e.Direction
+				break
+			}
+		}
+
+		if keyColIDs.Contains(e.ColumnID) ||
 			e.Kind != scpb.IndexColumn_KEY {
 			return
 		}
+
 		// Check if the column name was duplicated from the STORING clause, in which
 		// case this isn't allowed.
 		// Note: The column IDs for the key suffix columns are derived by finding

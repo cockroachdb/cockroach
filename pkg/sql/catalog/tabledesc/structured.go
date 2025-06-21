@@ -2797,3 +2797,17 @@ func (desc *Mutable) BumpExternalAsOf(timestamp hlc.Timestamp) error {
 func (desc *Mutable) ForceModificationTime(modificationTime hlc.Timestamp) {
 	desc.ModificationTime = modificationTime
 }
+
+func UpdateVectorIndexPrefixColDirections(
+	vecIndexDesc *descpb.IndexDescriptor, primaryIndexDesc *descpb.IndexDescriptor,
+) {
+	numPrefixCols := len(vecIndexDesc.KeyColumnIDs) - 1
+	for i := 0; i < numPrefixCols; i++ {
+		for j, pkColID := range primaryIndexDesc.KeyColumnIDs {
+			if vecIndexDesc.KeyColumnIDs[i] == pkColID {
+				vecIndexDesc.KeyColumnDirections[i] = primaryIndexDesc.KeyColumnDirections[j]
+				break
+			}
+		}
+	}
+}
