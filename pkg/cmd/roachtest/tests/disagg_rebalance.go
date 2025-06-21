@@ -46,13 +46,13 @@ func registerDisaggRebalance(r registry.Registry) {
 				"./cockroach workload fixtures import tpcc --warehouses=%d --checks=false {pgurl:1}",
 				warehouses,
 			)
-			m := c.NewMonitor(ctx, c.Range(1, 3))
+			m := c.NewDeprecatedMonitor(ctx, c.Range(1, 3))
 			m.Go(func(ctx context.Context) error {
 				return c.RunE(ctx, option.WithNodes(c.Node(1)), cmd)
 			})
 			m.Wait()
 
-			m2 := c.NewMonitor(ctx, c.Range(1, 3))
+			m2 := c.NewDeprecatedMonitor(ctx, c.Range(1, 3))
 
 			m2.Go(func(ctx context.Context) error {
 				t.Status("run tpcc")

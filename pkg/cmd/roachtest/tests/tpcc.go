@@ -410,7 +410,7 @@ func runTPCC(
 		}
 	}
 	setupTPCC(ctx, t, l, c, opts)
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 	m.ExpectDeaths(int32(opts.ExpectedDeaths))
 	rampDur := rampDuration(c.IsLocal())
 	for i := range workloadInstances {
@@ -739,6 +739,7 @@ func registerTPCC(r registry.Registry) {
 		Suites:            registry.Suites(registry.MixedVersion, registry.Nightly),
 		Cluster:           mixedHeadroomSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		Monitor:           true,
 		Randomized:        true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCCMixedHeadroom(ctx, t, c)
@@ -2069,7 +2070,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 			c.Run(ctx, option.WithNodes(loadNodes), "haproxy -f haproxy.cfg -D")
 		}
 
-		m := c.NewMonitor(ctx, roachNodes)
+		m := c.NewDeprecatedMonitor(ctx, roachNodes)
 		m.Go(func(ctx context.Context) error {
 			t.Status("setting up dataset")
 			return loadTPCCBench(ctx, t, c, db, b, roachNodes, c.Node(loadNodes[0]))
@@ -2116,7 +2117,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 		// *abort* the line search and whole tpccbench run. Return the errors
 		// to indicate that the specific warehouse count failed, but that the
 		// line search ought to continue.
-		m := c.NewMonitor(ctx, roachNodes)
+		m := c.NewDeprecatedMonitor(ctx, roachNodes)
 
 		// If we're running chaos in this configuration, modify this config.
 		if b.Chaos {
@@ -2593,7 +2594,7 @@ func runTPCCPublished(
 			rampTime = 1 * time.Second
 		}
 
-		m := c.NewMonitor(ctx, crdbNodes)
+		m := c.NewDeprecatedMonitor(ctx, crdbNodes)
 
 		resultChan := make(chan *tpcc.Result, workloadCount)
 		for wIdx, w := range workers {

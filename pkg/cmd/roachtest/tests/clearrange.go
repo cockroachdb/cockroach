@@ -60,7 +60,7 @@ func registerClearRange(r registry.Registry) {
 func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressiveChecks bool) {
 	t.Status("restoring fixture")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-	m := c.NewMonitor(ctx)
+	m := c.NewDeprecatedMonitor(ctx)
 	m.Go(func(ctx context.Context) error {
 		// NB: on a 10 node cluster, this should take well below 3h.
 		tBegin := timeutil.Now()
@@ -83,7 +83,7 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 	}
 
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
-	m = c.NewMonitor(ctx)
+	m = c.NewDeprecatedMonitor(ctx)
 
 	// Also restore a much smaller table. We'll use it to run queries against
 	// the cluster after having dropped the large table above, verifying that

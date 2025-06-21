@@ -119,10 +119,6 @@ func Test_run(t *testing.T) {
 				startSystemID: 9999,
 			}
 
-			runnerCh := make(chan error)
-			defer close(runnerCh)
-			runner.monitor = &crdbMonitor{errCh: runnerCh}
-
 			runErr := runner.run()
 			require.Error(t, runErr)
 

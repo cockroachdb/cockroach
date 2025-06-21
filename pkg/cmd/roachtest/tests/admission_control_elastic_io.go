@@ -69,7 +69,7 @@ func registerElasticIO(r registry.Registry) {
 			roachtestutil.SetAdmissionControl(ctx, t, c, true)
 			duration := 30 * time.Minute
 			t.Status("running workload")
-			m := c.NewMonitor(ctx, c.CRDBNodes())
+			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 			labels := map[string]string{
 				"duration":    fmt.Sprintf("%d", duration.Milliseconds()),
 				"concurrency": "512",

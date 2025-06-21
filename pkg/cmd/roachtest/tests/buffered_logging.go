@@ -93,7 +93,7 @@ func registerBufferedLogging(r registry.Registry) {
 		c.Run(ctx, option.WithNodes(c.WorkloadNode()), initWorkloadCmd)
 
 		t.Status("running workload")
-		m := c.NewMonitor(ctx, c.CRDBNodes())
+		m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
 			joinedURLs := strings.Join(workloadPGURLs, " ")
 			runWorkloadCmd := fmt.Sprintf("./cockroach workload run kv --concurrency=32 --duration=1h %s", joinedURLs)

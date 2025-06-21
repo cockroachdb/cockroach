@@ -180,7 +180,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 			}
 			// Upload a file containing the ORM queries.
 			require.NoError(t, c.PutString(ctx, LargeSchemaOrmQueries, "ormQueries.sql", 0755, c.WorkloadNode()))
-			mon := c.NewMonitor(ctx, c.All())
+			mon := c.NewDeprecatedMonitor(ctx, c.All())
 			// Upload a file containing the web API calls we want to benchmark.
 			require.NoError(t, c.PutString(ctx,
 				LargeSchemaAPICalls,

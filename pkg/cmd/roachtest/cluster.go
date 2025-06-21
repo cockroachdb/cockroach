@@ -2220,7 +2220,10 @@ func (c *clusterImpl) StartE(
 			return errors.Wrap(err, "failed to wait for replication after starting cockroach")
 		}
 	}
-
+	// If starting the cluster was successful, mark the nodes as healthy. N.B. we must wait
+	// until cluster startup succeeds as we may have tests that purposely inject failures into
+	// cluster startup.
+	c.t.Monitor().ExpectProcessHealthy(nodes)
 	return nil
 }
 
@@ -2263,6 +2266,15 @@ func (c *clusterImpl) StartServiceForVirtualClusterE(
 			return err
 		}
 	}
+
+	// If we are starting a separate process virtual cluster, we need to
+	// mark each SQL instance as healthy.
+	if len(startOpts.SeparateProcessNodes) > 0 {
+		nodes := startOpts.SeparateProcessNodes
+		virtualClusterName := startOpts.RoachprodOpts.VirtualClusterName
+		sqlInstance := startOpts.RoachprodOpts.SQLInstance
+		c.t.Monitor().ExpectProcessHealthy(nodes, option.VirtualClusterName(virtualClusterName), option.SQLInstance(sqlInstance))
+	}
 	return nil
 }
 
@@ -2289,6 +2301,9 @@ func (c *clusterImpl) StopServiceForVirtualClusterE(
 	nodes := c.All()
 	if len(stopOpts.SeparateProcessNodes) > 0 {
 		nodes = stopOpts.SeparateProcessNodes
+		virtualClusterName := stopOpts.RoachprodOpts.VirtualClusterName
+		sqlInstance := stopOpts.RoachprodOpts.SQLInstance
+		c.t.Monitor().ExpectProcessDeath(nodes, option.VirtualClusterName(virtualClusterName), option.SQLInstance(sqlInstance))
 	}
 
 	return roachprod.StopServiceForVirtualCluster(
@@ -2395,6 +2410,7 @@ func (c *clusterImpl) StopE(
 		stopOpts.RoachprodOpts.Wait = true
 		stopOpts.RoachprodOpts.GracePeriod = 10
 	}
+	c.t.Monitor().ExpectProcessDeath(selectedNodesOrDefault(nodes, c.All()))
 	return errors.Wrap(roachprod.Stop(ctx, l, c.MakeNodes(nodes...), stopOpts.RoachprodOpts), "cluster.StopE")
 }
 
@@ -2422,6 +2438,7 @@ func (c *clusterImpl) SignalE(
 	if c.spec.NodeCount == 0 {
 		return nil // unit tests
 	}
+	c.t.Monitor().ExpectProcessDeath(selectedNodesOrDefault(nodes, c.All()))
 	return errors.Wrap(roachprod.Signal(ctx, l, c.MakeNodes(nodes...), sig), "cluster.Signal")
 }
 
@@ -2453,6 +2470,7 @@ func (c *clusterImpl) WipeE(
 	}
 	c.setStatusForClusterOpt("wiping", false, nodes...)
 	defer c.clearStatusForClusterOpt(false)
+	c.t.Monitor().ExpectProcessDeath(selectedNodesOrDefault(nodes, c.All()))
 	return roachprod.Wipe(ctx, l, c.MakeNodes(nodes...), c.IsSecure())
 }
 
@@ -3008,14 +3026,16 @@ func (c *clusterImpl) Extend(ctx context.Context, d time.Duration, l *logger.Log
 	return nil
 }
 
-// NewMonitor creates a monitor that can watch for unexpected crdb node deaths on m.Wait()
+// NewDeprecatedMonitor creates a monitor that can watch for unexpected crdb node deaths on m.Wait()
 // and provide roachtest safe goroutines.
 //
 // As a general rule, if the user has a workload node, do not monitor it. A
 // monitor's semantics around handling expected node deaths breaks down if it's
 // monitoring a workload node.
-func (c *clusterImpl) NewMonitor(ctx context.Context, opts ...option.Option) cluster.Monitor {
-	return newMonitor(ctx, c.t, c, opts...)
+func (c *clusterImpl) NewDeprecatedMonitor(
+	ctx context.Context, opts ...option.Option,
+) cluster.Monitor {
+	return newMonitor(ctx, c.t, c, false /* expectExactProcessDeath */, opts...)
 }
 
 func (c *clusterImpl) StartGrafana(

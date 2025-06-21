@@ -88,7 +88,7 @@ func runDiskStalledWALFailover(ctx context.Context, t test.Test, c cluster.Clust
 
 	t.Status("starting workload")
 	workloadStartAt := timeutil.Now()
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload run kv --read-percent 0 `+
 			`--duration 60m --concurrency 4096 --ramp=1m --max-rate 4096 --tolerate-errors `+
@@ -279,7 +279,7 @@ func runDiskStalledDetection(
 
 	t.Status("starting workload")
 	workloadStartAt := timeutil.Now()
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
 		// NB: Since we stall node 1, we run the workload only on nodes 2-3 so
 		// the post-stall QPS isn't affected by the fact that 1/3rd of workload
@@ -484,7 +484,7 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 
 	t.Status("starting oscillating workload and disk stall pattern")
 	testStartedAt := timeutil.Now()
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
 	// Setup stats collector.
 	promCfg := &prometheus.Config{}

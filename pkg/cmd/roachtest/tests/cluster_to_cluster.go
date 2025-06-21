@@ -663,7 +663,7 @@ func (rd *replicationDriver) crdbNodes() option.NodeListOption {
 }
 
 func (rd *replicationDriver) newMonitor(ctx context.Context) cluster.Monitor {
-	m := rd.c.NewMonitor(ctx, rd.crdbNodes())
+	m := rd.c.NewDeprecatedMonitor(ctx, rd.crdbNodes())
 	m.ExpectDeaths(rd.rs.expectedNodeDeaths)
 	return m
 }

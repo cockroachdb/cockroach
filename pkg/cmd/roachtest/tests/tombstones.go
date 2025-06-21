@@ -66,7 +66,7 @@ func registerPointTombstone(r registry.Registry) {
 			// logical value data.
 			const numOps1MB = 30720
 			t.Status("starting 1MB-value workload")
-			m := c.NewMonitor(ctx, c.CRDBNodes())
+			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf(`./cockroach workload run kv --read-percent 0 `+
 					`--concurrency 128 --max-rate 512 --tolerate-errors `+
@@ -82,7 +82,7 @@ func registerPointTombstone(r registry.Registry) {
 			// ~500MB of logical value data. The additional per-row overhead
 			// will be higher than above, since we're writing more rows.
 			t.Status("starting 4KB-value workload")
-			m = c.NewMonitor(ctx, c.Range(1, 3))
+			m = c.NewDeprecatedMonitor(ctx, c.Range(1, 3))
 			m.Go(func(ctx context.Context) error {
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf(`./cockroach workload run kv --read-percent 0 `+
 					`--concurrency 256 --max-rate 1024 --tolerate-errors `+
@@ -96,7 +96,7 @@ func registerPointTombstone(r registry.Registry) {
 			// Delete the initially written 1MB values (eg, ~30 GB)
 			t.Status("deleting previously-written 1MB values")
 			var statsAfterDeletes tableSizeInfo
-			m = c.NewMonitor(ctx, c.CRDBNodes())
+			m = c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				n1Conn := c.Conn(ctx, t.L(), 1)
 				defer n1Conn.Close()
@@ -128,7 +128,7 @@ func registerPointTombstone(r registry.Registry) {
 			// Wait for garbage collection to delete the non-live data.
 			targetSize := uint64(3 << 30) /* 3 GiB */
 			t.Status("waiting for garbage collection and compaction to reduce on-disk size to ", humanize.IBytes(targetSize))
-			m = c.NewMonitor(ctx, c.CRDBNodes())
+			m = c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				ticker := time.NewTicker(10 * time.Second)
 				defer ticker.Stop()

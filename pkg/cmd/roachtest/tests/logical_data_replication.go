@@ -271,7 +271,7 @@ func TestLDRBasic(
 
 	leftJobID, rightJobID := setupLDR(ctx, t, c, setup, ldrWorkload, ldrConfig)
 	workloadDoneCh := make(chan struct{})
-	monitor := c.NewMonitor(ctx, setup.CRDBNodes())
+	monitor := c.NewDeprecatedMonitor(ctx, setup.CRDBNodes())
 	validateLatency := setupLatencyVerifiers(ctx, t, c, monitor, leftJobID, rightJobID, setup, workloadDoneCh, 2*time.Minute)
 
 	monitor.Go(func(ctx context.Context) error {
@@ -308,7 +308,7 @@ func TestLDRSchemaChange(
 	leftJobID, rightJobID := setupLDR(ctx, t, c, setup, ldrWorkload, ldrConfig)
 
 	workloadDoneCh := make(chan struct{})
-	monitor := c.NewMonitor(ctx, setup.CRDBNodes())
+	monitor := c.NewDeprecatedMonitor(ctx, setup.CRDBNodes())
 	validateLatency := setupLatencyVerifiers(ctx, t, c, monitor, leftJobID, rightJobID, setup, workloadDoneCh, 2*time.Minute)
 
 	monitor.Go(func(ctx context.Context) error {
@@ -374,7 +374,7 @@ func TestLDRTPCC(
 
 	workloadDoneCh := make(chan struct{})
 	maxExpectedLatency := 3 * time.Minute
-	monitor := c.NewMonitor(ctx, setup.CRDBNodes())
+	monitor := c.NewDeprecatedMonitor(ctx, setup.CRDBNodes())
 	validateLatency := setupLatencyVerifiers(ctx, t, c, monitor, leftJobID, rightJobID, setup, workloadDoneCh, maxExpectedLatency)
 
 	monitor.Go(func(ctx context.Context) error {
@@ -427,7 +427,7 @@ func TestLDRCreateTablesTPCC(
 		fmt.Sprintf("./cockroach workload init tpcc --warehouses=%d --fks=false {pgurl:%d:system}", warehouses, setup.left.nodes[0]))
 
 	workloadDoneCh := make(chan struct{})
-	monitor := c.NewMonitor(ctx, setup.CRDBNodes())
+	monitor := c.NewDeprecatedMonitor(ctx, setup.CRDBNodes())
 	monitor.Go(func(ctx context.Context) error {
 		defer close(workloadDoneCh)
 		// Run workload on the left cluster. Unlike other ldr tests at the moment,
@@ -476,7 +476,7 @@ func TestLDRUpdateHeavy(
 
 	workloadDoneCh := make(chan struct{})
 	maxExpectedLatency := 3 * time.Minute
-	monitor := c.NewMonitor(ctx, setup.CRDBNodes())
+	monitor := c.NewDeprecatedMonitor(ctx, setup.CRDBNodes())
 	validateLatency := setupLatencyVerifiers(ctx, t, c, monitor, leftJobID, rightJobID, setup, workloadDoneCh, maxExpectedLatency)
 
 	monitor.Go(func(ctx context.Context) error {
@@ -580,7 +580,7 @@ func TestLDROnNodeShutdown(
 	// Setup latency verifiers, remembering to account for latency spike from killing a node
 	maxExpectedLatency := 5 * time.Minute
 	workloadDoneCh := make(chan struct{})
-	monitor := c.NewMonitor(ctx, setup.CRDBNodes())
+	monitor := c.NewDeprecatedMonitor(ctx, setup.CRDBNodes())
 	validateLatency := setupLatencyVerifiers(ctx, t, c, monitor, leftJobID, rightJobID, setup, workloadDoneCh, maxExpectedLatency)
 
 	monitor.Go(func(ctx context.Context) error {
@@ -630,7 +630,7 @@ func TestLDROnNetworkPartition(
 
 	leftJobID, rightJobID := setupLDR(ctx, t, c, setup, ldrWorkload, ldrConfig)
 
-	monitor := c.NewMonitor(ctx, setup.CRDBNodes())
+	monitor := c.NewDeprecatedMonitor(ctx, setup.CRDBNodes())
 	monitor.Go(func(ctx context.Context) error {
 		return c.RunE(ctx, option.WithNodes(setup.workloadNode), ldrWorkload.workload.sourceRunCmd("system", setup.CRDBNodes()))
 	})
@@ -905,7 +905,7 @@ func setupLDR(
 	if ldrConfig.initialScanTimeout != 0 {
 		initialScanTimeout = ldrConfig.initialScanTimeout
 	}
-	initScanMon := c.NewMonitor(ctx, setup.CRDBNodes())
+	initScanMon := c.NewDeprecatedMonitor(ctx, setup.CRDBNodes())
 	approxInitScanStart := timeutil.Now()
 	t.L().Printf("Waiting for initial scan(s) to complete")
 	initScanMon.Go(func(ctx context.Context) error {
@@ -1007,7 +1007,7 @@ func VerifyCorrectness(
 	}
 	fingerprints := make([]fingerprint, len(ldrWorkload.tableNames))
 
-	m := c.NewMonitor(context.Background(), setup.CRDBNodes())
+	m := c.NewDeprecatedMonitor(context.Background(), setup.CRDBNodes())
 	for i, tableName := range ldrWorkload.tableNames {
 		fingerprints[i] = fingerprint{
 			table: tableName,
