@@ -60,7 +60,7 @@ func newGetStreamReader(client blobspb.RPCBlob_GetStreamClient) ioctx.ReadCloser
 
 // newPutStreamReader creates an io.ReadCloser that uses gRPC's streaming API
 // to read chunks of data.
-func newPutStreamReader(client blobspb.Blob_PutStreamServer) ioctx.ReadCloserCtx {
+func newPutStreamReader(client blobspb.RPCBlob_PutStreamStream) ioctx.ReadCloserCtx {
 	return &blobStreamReader{stream: client}
 }
 
