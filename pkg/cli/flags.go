@@ -29,9 +29,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/errors"
+	"github.com/dustin/go-humanize"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -530,7 +532,7 @@ func init() {
 		// Alternatively remove the ability to configure shared storage without
 		// passing a bootstrap configuration file.
 		cliflagcfg.StringFlag(f, &serverCfg.StorageConfig.SharedStorage.URI, cliflags.SharedStorage)
-		cliflagcfg.VarFlag(f, &serverCfg.StorageConfig.SharedStorage.Cache, cliflags.SecondaryCache)
+		cliflagcfg.VarFlag(f, newSizeFlagVal(&serverCfg.StorageConfig.SharedStorage.Cache), cliflags.SecondaryCache)
 		cliflagcfg.VarFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
 		cliflagcfg.BoolFlag(f, &serverCfg.DisableMaxOffsetCheck, cliflags.DisableMaxOffsetCheck)
 		cliflagcfg.StringFlag(f, &serverCfg.ClockDevicePath, cliflags.ClockDevice)
@@ -975,7 +977,7 @@ func init() {
 	}
 	{
 		f := debugBallastCmd.Flags()
-		cliflagcfg.VarFlag(f, &debugCtx.ballastSize, cliflags.Size)
+		cliflagcfg.VarFlag(f, newSizeFlagVal(&debugCtx.ballastSize), cliflags.Size)
 	}
 	{
 		// TODO(ayang): clean up so dir isn't passed to both pebble and --store
@@ -1479,7 +1481,7 @@ func mtStartSQLFlagsInit(cmd *cobra.Command) error {
 		if spec.BallastSize == nil {
 			// Only override if there was no ballast size specified to start
 			// with.
-			zero := storageconfig.SizeSpec{Capacity: 0, Percent: 0}
+			zero := storageconfig.Size{Bytes: 0, Percent: 0}
 			spec.BallastSize = &zero
 		}
 	}
@@ -1495,6 +1497,44 @@ func populateStoreSpecsEncryption() error {
 		GetWALFailoverConfig(),
 		encryptionSpecs,
 	)
+}
+
+// sizeFlagVal is a pflag.Value wrapper for storageconfig.Size. It can be
+// set to an absolute bytes amount or a percentage.
+type sizeFlagVal struct {
+	spec *storageconfig.Size
+}
+
+var _ pflag.Value = &sizeFlagVal{}
+
+func newSizeFlagVal(spec *storageconfig.Size) *sizeFlagVal {
+	return &sizeFlagVal{spec: spec}
+}
+
+// String returns a string representation of the Size. It is part of the
+// pflag.Value interface.
+func (sv *sizeFlagVal) String() string {
+	if sv.spec.Percent != 0 {
+		return humanize.Ftoa(sv.spec.Percent) + "%"
+	}
+	return string(humanizeutil.IBytes(sv.spec.Bytes))
+}
+
+// Type returns the underlying type in string form.  It is part of the
+// pflag.Value interface.
+func (sv *sizeFlagVal) Type() string {
+	return "<bytes>|<percent%>"
+}
+
+// Set adds a new value to the StoreSpecValue. It is part of the pflag.Value
+// interface.
+func (sv *sizeFlagVal) Set(value string) error {
+	spec, err := storageconfig.ParseSizeSpec(value, storageconfig.SizeSpecConstraints{})
+	if err != nil {
+		return err
+	}
+	*sv.spec = spec
+	return nil
 }
 
 // RegisterFlags exists so that other packages can register flags using the

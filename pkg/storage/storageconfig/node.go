@@ -21,5 +21,5 @@ type SharedStorage struct {
 	URI string
 	// Cache is the size of the secondary cache used to store blocks from
 	// disaggregated shared storage.
-	Cache SizeSpec
+	Cache Size
 }

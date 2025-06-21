@@ -106,7 +106,7 @@ func TestPebbleDiskWriteMetrics(t *testing.T) {
 	ts, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		StoreSpecs: []base.StoreSpec{
-			{Size: storageconfig.SizeSpec{Capacity: base.MinimumStoreSize}, Path: tmpDir},
+			{Size: storageconfig.Size{Bytes: base.MinimumStoreSize}, Path: tmpDir},
 		},
 	})
 	defer ts.Stopper().Stop(ctx)

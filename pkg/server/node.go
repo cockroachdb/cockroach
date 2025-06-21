@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -1254,7 +1255,7 @@ func (n *Node) UpdateIOThreshold(id roachpb.StoreID, threshold *admissionpb.IOTh
 // diskStatsMap encapsulates all the logic for populating DiskStats for
 // admission.StoreMetrics.
 type diskStatsMap struct {
-	provisionedRate map[roachpb.StoreID]base.ProvisionedRateSpec
+	provisionedRate map[roachpb.StoreID]storageconfig.ProvisionedRate
 	diskMonitors    map[roachpb.StoreID]kvserver.DiskStatsMonitor
 }
 
@@ -1298,7 +1299,7 @@ func (dsm *diskStatsMap) initDiskStatsMap(
 	specs []base.StoreSpec, engines []storage.Engine, diskManager monitorManagerInterface,
 ) error {
 	*dsm = diskStatsMap{
-		provisionedRate: make(map[roachpb.StoreID]base.ProvisionedRateSpec),
+		provisionedRate: make(map[roachpb.StoreID]storageconfig.ProvisionedRate),
 		diskMonitors:    make(map[roachpb.StoreID]kvserver.DiskStatsMonitor),
 	}
 	for i := range engines {
@@ -1313,7 +1314,7 @@ func (dsm *diskStatsMap) initDiskStatsMap(
 		if err != nil {
 			return err
 		}
-		dsm.provisionedRate[id.StoreID] = specs[i].ProvisionedRateSpec
+		dsm.provisionedRate[id.StoreID] = specs[i].ProvisionedRate
 		dsm.diskMonitors[id.StoreID] = monitor
 	}
 	return nil
