@@ -6,6 +6,7 @@ go_library(
         "encryption_spec.go",
         "node.go",
         "size.go",
+        "store.go",
         "wal_failover.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/storage/storageconfig",
