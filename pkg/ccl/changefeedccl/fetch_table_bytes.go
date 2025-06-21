@@ -7,6 +7,7 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -17,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // FetchChangefeedUsageBytes fetches the total number of bytes of data watched
@@ -56,6 +58,22 @@ func FetchChangefeedUsageBytes(
 	return total, nil
 }
 
+type safeErrorsResponse []string
+
+// SafeFormat implements redact.SafeFormatter.
+func (es safeErrorsResponse) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.SafeString("[")
+	for _, e := range es {
+		w.SafeString(redact.SafeString(fmt.Sprintf("%q", e)))
+		if e != es[len(es)-1] {
+			w.SafeString(",")
+		}
+	}
+	w.SafeString("]")
+}
+
+var _ redact.SafeFormatter = safeErrorsResponse(nil)
+
 func fetchSizes(
 	ctx context.Context, execCfg *sql.ExecutorConfig, tableIDs []descpb.ID,
 ) (total int64, err error) {
@@ -79,7 +97,7 @@ func fetchSizes(
 		return 0, err
 	}
 	if len(resp.Errors) > 0 {
-		return 0, errors.Newf("errors fetching span stats: %v", resp.Errors)
+		return 0, errors.Newf("errors fetching span stats: %+v", safeErrorsResponse(resp.Errors))
 	}
 
 	for _, stats := range resp.SpanToStats {
