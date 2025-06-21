@@ -54,6 +54,7 @@ go_test(
     ],
     embed = [":ordering"],
     deps = [
+        "//pkg/kv",
         "//pkg/settings/cluster",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",

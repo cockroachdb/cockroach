@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -537,13 +538,14 @@ func (tb *rowLevelAfterTriggerBuilder) Build(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
+	txn *kv.Txn,
 	catalog cat.Catalog,
 	factoryI interface{},
 	binding opt.WithID,
 	bindingProps *props.Relational,
 	colMap opt.ColMap,
 ) (_ memo.RelExpr, err error) {
-	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, tb.stmtTreeInitFn,
+	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, txn, catalog, factoryI, tb.stmtTreeInitFn,
 		func(b *Builder) memo.RelExpr {
 			f := b.factory
 			md := f.Metadata()

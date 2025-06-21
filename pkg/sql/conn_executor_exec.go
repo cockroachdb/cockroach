@@ -3550,14 +3550,24 @@ func (ex *connExecutor) execWithDistSQLEngine(
 			len(planner.curPlan.triggers) != 0 {
 			var serialEvalCtx extendedEvalContext
 			ex.initEvalCtx(ctx, &serialEvalCtx, planner)
+			// firstReset tracks whether serialEvalCtx has already been reset at
+			// least once.
+			firstReset := true
 			evalCtxFactory = func(usedConcurrently bool) *extendedEvalContext {
 				// Reuse the same object if this factory is not used concurrently.
 				factoryEvalCtx := &serialEvalCtx
+				// The txn is considered new only on the first reset.
+				newTxn := firstReset
 				if usedConcurrently {
 					factoryEvalCtx = &extendedEvalContext{}
 					ex.initEvalCtx(ctx, factoryEvalCtx, planner)
+					// We're using a fresh eval context, so the txn is always
+					// considered new.
+					newTxn = true
+				} else {
+					firstReset = false
 				}
-				ex.resetEvalCtx(factoryEvalCtx, planner.txn, planner.ExtendedEvalContext().StmtTimestamp)
+				ex.resetEvalCtx(factoryEvalCtx, newTxn, planner.ExtendedEvalContext().StmtTimestamp)
 				factoryEvalCtx.Placeholders = &planner.semaCtx.Placeholders
 				factoryEvalCtx.Annotations = &planner.semaCtx.Annotations
 				factoryEvalCtx.SessionID = planner.ExtendedEvalContext().SessionID

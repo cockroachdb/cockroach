@@ -59,6 +59,7 @@ go_test(
         "//pkg/geo",
         "//pkg/geo/geoindex",
         "//pkg/geo/geopb",
+        "//pkg/kv",
         "//pkg/settings/cluster",
         "//pkg/sql/inverted",
         "//pkg/sql/opt",

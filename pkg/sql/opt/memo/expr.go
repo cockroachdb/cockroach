@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -1425,6 +1426,7 @@ type PostQueryBuilder interface {
 		ctx context.Context,
 		semaCtx *tree.SemaContext,
 		evalCtx *eval.Context,
+		txn *kv.Txn,
 		catalog cat.Catalog,
 		factory interface{},
 		binding opt.WithID,

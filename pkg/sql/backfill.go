@@ -781,10 +781,6 @@ func (sc *SchemaChanger) validateConstraints(
 			desc := descI.(*tabledesc.Mutable)
 			// Each check operates at the historical timestamp.
 			return runHistoricalTxn(ctx, func(ctx context.Context, txn descs.Txn, evalCtx *extendedEvalContext) error {
-				// If the constraint is a check constraint that fails validation, we
-				// need a semaContext set up that can resolve types in order to pretty
-				// print the check expression back to the user.
-				evalCtx.Txn = txn.KV()
 				// Use the DistSQLTypeResolver because we need to resolve types by ID.
 				collection := evalCtx.Descs
 				resolver := descs.NewDistSQLTypeResolver(collection, txn.KV())

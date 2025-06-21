@@ -353,7 +353,7 @@ func NewColBatchScan(
 		return nil, nil, err
 	}
 	if shouldCollectStats {
-		if flowTxn := flowCtx.EvalCtx.Txn; flowTxn != nil {
+		if flowTxn := flowCtx.Txn; flowTxn != nil {
 			base.ContentionEventsListener.Init(flowTxn.ID())
 		}
 	}

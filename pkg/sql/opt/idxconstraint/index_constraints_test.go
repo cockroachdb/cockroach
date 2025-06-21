@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -60,6 +61,7 @@ func TestIndexConstraints(t *testing.T) {
 		ctx := context.Background()
 		semaCtx := tree.MakeSemaContext(nil /* resolver */)
 		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+		txn := &kv.Txn{}
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var sv testutils.ScalarVars
@@ -67,7 +69,7 @@ func TestIndexConstraints(t *testing.T) {
 			var err error
 
 			var f norm.Factory
-			f.Init(ctx, &evalCtx, nil /* catalog */)
+			f.Init(ctx, &evalCtx, txn, nil /* catalog */)
 			md := f.Metadata()
 
 			evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation = true
@@ -101,13 +103,13 @@ func TestIndexConstraints(t *testing.T) {
 				var filters, optionalFilters memo.FiltersExpr
 				if idx := strings.Index(d.Input, "optional:"); idx >= 0 {
 					optional := d.Input[idx+len("optional:"):]
-					optionalFilters, err = buildFilters(optional, &semaCtx, &evalCtx, &f)
+					optionalFilters, err = buildFilters(optional, &semaCtx, &evalCtx, txn, &f)
 					if err != nil {
 						d.Fatalf(t, "%v", err)
 					}
 					d.Input = d.Input[:idx]
 				}
-				if filters, err = buildFilters(d.Input, &semaCtx, &evalCtx, &f); err != nil {
+				if filters, err = buildFilters(d.Input, &semaCtx, &evalCtx, txn, &f); err != nil {
 					d.Fatalf(t, "%v", err)
 				}
 
@@ -116,7 +118,7 @@ func TestIndexConstraints(t *testing.T) {
 				if sv.ComputedCols() != nil {
 					computedCols = make(map[opt.ColumnID]opt.ScalarExpr)
 					for col, expr := range sv.ComputedCols() {
-						b := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, &f)
+						b := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, txn, &f)
 						computedColExpr, err := b.Build(expr)
 						if err != nil {
 							d.Fatalf(t, "error building computed column expression: %v", err)
@@ -145,7 +147,7 @@ func TestIndexConstraints(t *testing.T) {
 				if !remainingFilter.IsTrue() {
 					execBld := execbuilder.New(
 						context.Background(), nil /* execFactory */, nil /* optimizer */, f.Memo(), nil, /* catalog */
-						&remainingFilter, &semaCtx, &evalCtx, false, /* allowAutoCommit */
+						&remainingFilter, &semaCtx, &evalCtx, txn, false, /* allowAutoCommit */
 						false, /* isANSIDML */
 					)
 					expr, err := execBld.BuildScalar()
@@ -228,11 +230,12 @@ func BenchmarkIndexConstraints(b *testing.B) {
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	txn := &kv.Txn{}
 
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
 			var f norm.Factory
-			f.Init(ctx, &evalCtx, nil /* catalog */)
+			f.Init(ctx, &evalCtx, txn, nil /* catalog */)
 			md := f.Metadata()
 			var sv testutils.ScalarVars
 			err := sv.Init(md, strings.Split(tc.vars, ", "))
@@ -241,7 +244,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 			}
 			indexCols := parseIndexColumns(b, md, strings.Split(tc.indexInfo, ", "))
 
-			filters, err := buildFilters(tc.expr, &semaCtx, &evalCtx, &f)
+			filters, err := buildFilters(tc.expr, &semaCtx, &evalCtx, txn, &f)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -304,7 +307,7 @@ func parseIndexColumns(tb testing.TB, md *opt.Metadata, colStrs []string) []opt.
 }
 
 func buildFilters(
-	input string, semaCtx *tree.SemaContext, evalCtx *eval.Context, f *norm.Factory,
+	input string, semaCtx *tree.SemaContext, evalCtx *eval.Context, txn *kv.Txn, f *norm.Factory,
 ) (memo.FiltersExpr, error) {
 	if input == "" {
 		return memo.TrueFilter, nil
@@ -313,7 +316,7 @@ func buildFilters(
 	if err != nil {
 		return memo.FiltersExpr{}, err
 	}
-	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, f)
+	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, txn, f)
 	root, err := b.Build(expr)
 	if err != nil {
 		return memo.FiltersExpr{}, err

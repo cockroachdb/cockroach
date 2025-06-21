@@ -55,6 +55,7 @@ go_library(
     deps = [
         "//pkg/build",
         "//pkg/clusterversion",
+        "//pkg/kv",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/security/username",
         "//pkg/server/telemetry",
@@ -124,6 +125,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":optbuilder"],
     deps = [
+        "//pkg/kv",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/colinfo/colinfotestutils",

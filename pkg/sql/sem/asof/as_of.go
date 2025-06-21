@@ -11,6 +11,7 @@ import (
 	"time"
 
 	apd "github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -111,6 +112,7 @@ func Eval(
 	asOf tree.AsOfClause,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
+	txn *kv.Txn,
 	opts ...EvalOption,
 ) (eval.AsOfSystemTime, error) {
 	o := evalOptions{}
@@ -218,7 +220,7 @@ func Eval(
 	if o.allowFutureTimestamp {
 		usage = AsOfFuture
 	}
-	ret.Timestamp, err = DatumToHLC(evalCtx, stmtTimestamp, d, usage)
+	ret.Timestamp, err = DatumToHLC(evalCtx, txn, stmtTimestamp, d, usage)
 	if err != nil {
 		return eval.AsOfSystemTime{}, errors.Wrap(err, "AS OF SYSTEM TIME")
 	}
@@ -280,7 +282,7 @@ const (
 // timestamp is used for 'AS OF SYSTEM TIME', it ensures the timestamp is not in
 // the future.
 func DatumToHLC(
-	evalCtx *eval.Context, stmtTimestamp time.Time, d tree.Datum, usage DatumToHLCUsage,
+	evalCtx *eval.Context, txn *kv.Txn, stmtTimestamp time.Time, d tree.Datum, usage DatumToHLCUsage,
 ) (hlc.Timestamp, error) {
 	ts := hlc.Timestamp{}
 	var convErr error
@@ -352,16 +354,15 @@ func DatumToHLC(
 		const hardCodedSkewTolerance = 500 * time.Millisecond
 		maxAllowedWallTime := stmtTimestamp.Add(hardCodedSkewTolerance).UnixNano()
 
-		if evalCtx.Txn != nil && evalCtx.Txn.DB() != nil {
+		if txn != nil && txn.DB() != nil {
 			// Allow additional tolerance based on actual clock offset.
-			clockSkew := evalCtx.Txn.DB().Clock().MaxOffset()
+			clockSkew := txn.DB().Clock().MaxOffset()
 			maxAllowedWallTime = max(maxAllowedWallTime,
 				stmtTimestamp.Add(clockSkew).UnixNano())
 
 			// For certain internal queries (e.g., lease counting), allow up to the
 			// provisional commit timestamp.
-			maxAllowedWallTime = max(maxAllowedWallTime,
-				evalCtx.Txn.ProvisionalCommitTimestamp().WallTime)
+			maxAllowedWallTime = max(maxAllowedWallTime, txn.ProvisionalCommitTimestamp().WallTime)
 		}
 
 		if ts.WallTime > maxAllowedWallTime {
