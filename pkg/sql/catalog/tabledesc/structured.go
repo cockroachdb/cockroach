@@ -1397,6 +1397,17 @@ func (desc *Mutable) DropConstraint(
 			}
 		}
 	} else if fk := constraint.AsForeignKey(); fk != nil {
+		if desc.IsLocalityRegionalByRow() && fk.GetConstraintID() == desc.RBRUsingConstraint {
+			return errors.WithHintf(
+				pgerror.Newf(
+					pgcode.InvalidTableDefinition,
+					`cannot drop constraint %q as it is used to determine the region in a REGIONAL BY ROW table`,
+					tree.ErrNameString(fk.GetName()),
+				),
+				`You must reset "%s" or change the table locality before dropping this constraint.`,
+				catpb.RBRUsingConstraintSettingName,
+			)
+		}
 		// Search through the descriptor's foreign key constraints and delete the
 		// one that we're supposed to be deleting.
 		for i := range desc.OutboundFKs {
@@ -2461,6 +2472,11 @@ func (desc *wrapper) GetRegionalByRowTableRegionColumnName() (tree.Name, error) 
 	return tree.Name(*colName), nil
 }
 
+// GetRegionalByRowUsingConstraint implements the TableDescriptor interface.
+func (desc *wrapper) GetRegionalByRowUsingConstraint() descpb.ConstraintID {
+	return desc.RBRUsingConstraint
+}
+
 // GetRowLevelTTL implements the TableDescriptor interface.
 func (desc *wrapper) GetRowLevelTTL() *catpb.RowLevelTTL {
 	return desc.RowLevelTTL
@@ -2575,6 +2591,12 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) []string {
 	}
 	if desc.IsSchemaLocked() {
 		appendStorageParam(`schema_locked`, `true`)
+	}
+	if usingFK := desc.GetRegionalByRowUsingConstraint(); usingFK != descpb.ConstraintID(0) {
+		if constraint := catalog.FindConstraintByID(desc, usingFK); constraint != nil {
+			appendStorageParam(catpb.RBRUsingConstraintSettingName,
+				fmt.Sprint(tree.Name(constraint.GetName())))
+		}
 	}
 	return storageParams
 }

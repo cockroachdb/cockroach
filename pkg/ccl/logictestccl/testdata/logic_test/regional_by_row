@@ -435,7 +435,7 @@ statement ok
 ALTER TABLE regional_by_row_table ADD CONSTRAINT unique_b_a UNIQUE(b, a)
 
 # Tests dropping a referenced column in REGIONAL BY ROW does not succeed.
-statement error cannot drop column crdb_region as it is used to store the region in a REGIONAL BY ROW table\nHINT: You must change the table locality before dropping this table
+statement error cannot drop column crdb_region as it is used to store the region in a REGIONAL BY ROW table\nHINT: You must change the table locality before dropping this column
 ALTER TABLE regional_by_row_table DROP COLUMN crdb_region
 
 # Tests changing the PK of a regional by row table.
@@ -619,7 +619,7 @@ pk  a     b     crdb_region_col
 20  NULL  NULL  ap-southeast-2
 
 # Tests dropping a referenced column in REGIONAL BY ROW does not succeed.
-statement error cannot drop column crdb_region_col as it is used to store the region in a REGIONAL BY ROW table\nHINT: You must change the table locality before dropping this table
+statement error cannot drop column crdb_region_col as it is used to store the region in a REGIONAL BY ROW table\nHINT: You must change the table locality before dropping this column
 ALTER TABLE regional_by_row_table_as DROP COLUMN crdb_region_col
 
 # Tests for altering the survivability of a REGIONAL BY ROW table.
