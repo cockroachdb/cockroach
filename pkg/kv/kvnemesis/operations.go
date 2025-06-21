@@ -38,6 +38,8 @@ func (op Operation) Result() *Result {
 		return &o.Result
 	case *BarrierOperation:
 		return &o.Result
+	case *FlushLockTableOperation:
+		return &o.Result
 	case *SplitOperation:
 		return &o.Result
 	case *MergeOperation:
@@ -137,6 +139,8 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	case *AddSSTableOperation:
 		o.format(w, fctx)
 	case *BarrierOperation:
+		o.format(w, fctx)
+	case *FlushLockTableOperation:
 		o.format(w, fctx)
 	case *SplitOperation:
 		o.format(w, fctx)
@@ -365,6 +369,11 @@ func (op BarrierOperation) format(w *strings.Builder, fctx formatCtx) {
 	} else {
 		fmt.Fprintf(w, `%s.Barrier(ctx, %s, %s)`, fctx.receiver, fmtKey(op.Key), fmtKey(op.EndKey))
 	}
+	op.Result.format(w)
+}
+
+func (op FlushLockTableOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(w, `%s.FlushLockTable(ctx, %s, %s)`, fctx.receiver, fmtKey(op.Key), fmtKey(op.EndKey))
 	op.Result.format(w)
 }
 

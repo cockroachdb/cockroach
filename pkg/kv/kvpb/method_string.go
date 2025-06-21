@@ -62,8 +62,9 @@ func _() {
 	_ = x[Probe-46]
 	_ = x[IsSpanEmpty-47]
 	_ = x[Excise-48]
-	_ = x[MaxMethod-48]
-	_ = x[NumMethods-49]
+	_ = x[FlushLockTable-49]
+	_ = x[MaxMethod-49]
+	_ = x[NumMethods-50]
 }
 
 func (i Method) String() string {
@@ -166,6 +167,8 @@ func (i Method) String() string {
 		return "IsSpanEmpty"
 	case Excise:
 		return "Excise"
+	case FlushLockTable:
+		return "FlushLockTable"
 	case NumMethods:
 		return "NumMethods"
 	default:
@@ -223,6 +226,7 @@ var StringToMethodMap = map[string]Method{
 	"Probe":                  46,
 	"IsSpanEmpty":            47,
 	"Excise":                 48,
-	"MaxMethod":              48,
-	"NumMethods":             49,
+	"FlushLockTable":         49,
+	"MaxMethod":              49,
+	"NumMethods":             50,
 }
