@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -5834,6 +5835,7 @@ func (d *DOid) Name() string {
 // Types that currently benefit from DOidWrapper are:
 // - DName => DOidWrapper(*DString, oid.T_name)
 // - DRefCursor => DOidWrapper(*DString, oid.T_refcursor)
+// - DCitext => DOIDWrapper(*DCollatedString, oidext.T_citext)
 type DOidWrapper struct {
 	Wrapped Datum
 	Oid     oid.Oid
@@ -5846,6 +5848,7 @@ func wrapWithOid(d Datum, oid oid.Oid) Datum {
 		return nil
 	case *DInt:
 	case *DString:
+	case *DCollatedString:
 	case *DArray:
 	case dNull, *DOidWrapper:
 		panic(errors.AssertionFailedf("cannot wrap %T with an Oid", v))
@@ -6000,6 +6003,22 @@ func NewDNameFromDString(d *DString) Datum {
 // initialized from a string.
 func NewDName(d string) Datum {
 	return NewDNameFromDString(NewDString(d))
+}
+
+// NewDCitextFromDString is a helper routine to create a *DCitext (implemented as
+// a *DOidWrapper) initialized from an existing *DCollatedString.
+func NewDCitextFromDCollatedString(d *DCollatedString) Datum {
+	return wrapWithOid(d, oidext.T_citext)
+}
+
+// NewDCitext is a helper routine to create a *DCitext (implemented as a *DOidWrapper)
+// initialized from a string.
+func NewDCitext(contents string, locale string, env *CollationEnvironment) (Datum, error) {
+	d, err := NewDCollatedString(contents, locale, env)
+	if err != nil {
+		return nil, err
+	}
+	return NewDCitextFromDCollatedString(d), nil
 }
 
 // NewDRefCursorFromDString is a helper routine to create a *DRefCursor

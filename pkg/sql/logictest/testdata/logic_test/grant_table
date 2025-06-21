@@ -161,6 +161,12 @@ test           pg_catalog          bytes                                  type  
 test           pg_catalog          bytes[]                                type         admin    ALL             false
 test           pg_catalog          bytes[]                                type         public   USAGE           false
 test           pg_catalog          bytes[]                                type         root     ALL             false
+test           pg_catalog          citext                                 type         admin    ALL             false
+test           pg_catalog          citext                                 type         public   USAGE           false
+test           pg_catalog          citext                                 type         root     ALL             false
+test           pg_catalog          citext[]                               type         admin    ALL             false
+test           pg_catalog          citext[]                               type         public   USAGE           false
+test           pg_catalog          citext[]                               type         root     ALL             false
 test           pg_catalog          date                                   type         admin    ALL             false
 test           pg_catalog          date                                   type         public   USAGE           false
 test           pg_catalog          date                                   type         root     ALL             false
@@ -566,6 +572,10 @@ test           pg_catalog   bytes           type         admin    ALL           
 test           pg_catalog   bytes           type         root     ALL             false
 test           pg_catalog   bytes[]         type         admin    ALL             false
 test           pg_catalog   bytes[]         type         root     ALL             false
+test           pg_catalog   citext          type         admin    ALL             false
+test           pg_catalog   citext          type         root     ALL             false
+test           pg_catalog   citext[]        type         admin    ALL             false
+test           pg_catalog   citext[]        type         root     ALL             false
 test           pg_catalog   date            type         admin    ALL             false
 test           pg_catalog   date            type         root     ALL             false
 test           pg_catalog   date[]          type         admin    ALL             false
@@ -818,6 +828,10 @@ a              pg_catalog   bytes           type         admin    ALL           
 a              pg_catalog   bytes           type         root     ALL             false
 a              pg_catalog   bytes[]         type         admin    ALL             false
 a              pg_catalog   bytes[]         type         root     ALL             false
+a              pg_catalog   citext          type         admin    ALL             false
+a              pg_catalog   citext          type         root     ALL             false
+a              pg_catalog   citext[]        type         admin    ALL             false
+a              pg_catalog   citext[]        type         root     ALL             false
 a              pg_catalog   date            type         admin    ALL             false
 a              pg_catalog   date            type         root     ALL             false
 a              pg_catalog   date[]          type         admin    ALL             false
@@ -1008,6 +1022,10 @@ defaultdb      pg_catalog   bytes           type         admin    ALL           
 defaultdb      pg_catalog   bytes           type         root     ALL             false
 defaultdb      pg_catalog   bytes[]         type         admin    ALL             false
 defaultdb      pg_catalog   bytes[]         type         root     ALL             false
+defaultdb      pg_catalog   citext          type         admin    ALL             false
+defaultdb      pg_catalog   citext          type         root     ALL             false
+defaultdb      pg_catalog   citext[]        type         admin    ALL             false
+defaultdb      pg_catalog   citext[]        type         root     ALL             false
 defaultdb      pg_catalog   date            type         admin    ALL             false
 defaultdb      pg_catalog   date            type         root     ALL             false
 defaultdb      pg_catalog   date[]          type         admin    ALL             false
@@ -1198,6 +1216,10 @@ postgres       pg_catalog   bytes           type         admin    ALL           
 postgres       pg_catalog   bytes           type         root     ALL             false
 postgres       pg_catalog   bytes[]         type         admin    ALL             false
 postgres       pg_catalog   bytes[]         type         root     ALL             false
+postgres       pg_catalog   citext          type         admin    ALL             false
+postgres       pg_catalog   citext          type         root     ALL             false
+postgres       pg_catalog   citext[]        type         admin    ALL             false
+postgres       pg_catalog   citext[]        type         root     ALL             false
 postgres       pg_catalog   date            type         admin    ALL             false
 postgres       pg_catalog   date            type         root     ALL             false
 postgres       pg_catalog   date[]          type         admin    ALL             false
@@ -1396,6 +1418,10 @@ test           pg_catalog   bytes           type         admin    ALL           
 test           pg_catalog   bytes           type         root     ALL             false
 test           pg_catalog   bytes[]         type         admin    ALL             false
 test           pg_catalog   bytes[]         type         root     ALL             false
+test           pg_catalog   citext          type         admin    ALL             false
+test           pg_catalog   citext          type         root     ALL             false
+test           pg_catalog   citext[]        type         admin    ALL             false
+test           pg_catalog   citext[]        type         root     ALL             false
 test           pg_catalog   date            type         admin    ALL             false
 test           pg_catalog   date            type         root     ALL             false
 test           pg_catalog   date[]          type         admin    ALL             false

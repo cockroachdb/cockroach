@@ -14,6 +14,7 @@ go_library(
     deps = [
         "//pkg/geo",
         "//pkg/geo/geopb",
+        "//pkg/sql/oidext",
         "//pkg/sql/pgrepl/lsn",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
