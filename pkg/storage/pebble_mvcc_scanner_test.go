@@ -219,7 +219,7 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 		GlobalUncertaintyLimit: ts1,
 	}
 	ui1 := uncertainty.Interval{GlobalLimit: txn1.GlobalUncertaintyLimit}
-	val := roachpb.Value{RawBytes: bytes.Repeat([]byte("v"), 1000)}
+	val := roachpb.MakeValueFromBytes(bytes.Repeat([]byte{'v'}, 1000))
 	func() {
 		batch := eng.NewBatch()
 		defer batch.Close()
