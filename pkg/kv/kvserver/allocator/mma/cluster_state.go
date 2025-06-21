@@ -1283,21 +1283,18 @@ func (cs *clusterState) gcPendingChanges(now time.Time) {
 
 func (cs *clusterState) pendingChangeEnacted(cid ChangeID, enactedAt time.Time, requireFound bool) {
 	change, ok := cs.pendingChanges[cid]
-	rs, rOk := cs.ranges[change.rangeID]
-	if !rOk {
-		panic(fmt.Sprintf("range %v not found in cluster state", change.rangeID))
-	}
 	if !ok {
 		if requireFound {
-			var msg string
-			msg += fmt.Sprintf("range state still exists for r%v and c%v with pending changes %v", change.rangeID, cid, rs.pendingChanges)
-			panic(fmt.Sprintf("change %v not found in cs.pendingChanges %v \n msg %s",
-				cid, cs.pendingChanges, msg))
+			panic(fmt.Sprintf("change %v not found", cid))
 		} else {
 			return
 		}
 	}
 	change.enactedAtTime = enactedAt
+	rs, ok := cs.ranges[change.rangeID]
+	if !ok {
+		panic(fmt.Sprintf("range %v not found in cluster state", change.rangeID))
+	}
 
 	log.Infof(context.Background(), "start removing change_id=%v, range_id=%v, change=%v", change.ChangeID, change.rangeID, change)
 	rs.removePendingChangeTracking(change.ChangeID)
@@ -1311,13 +1308,7 @@ func (cs *clusterState) undoPendingChange(cid ChangeID, requireFound bool) {
 	change, ok := cs.pendingChanges[cid]
 	if !ok {
 		if requireFound {
-			rs, rok := cs.ranges[change.rangeID]
-			var msg string
-			if rok {
-				msg += fmt.Sprintf("range state still exists for r%v and c%v with pending changes %v", change.rangeID, cid, rs.pendingChanges)
-			}
-			panic(fmt.Sprintf("change %v not found in cs.pendingChanges %v \n msg=%s",
-				cid, cs.pendingChanges, msg))
+			panic(fmt.Sprintf("change %v not found", cid))
 		} else {
 			return
 		}
