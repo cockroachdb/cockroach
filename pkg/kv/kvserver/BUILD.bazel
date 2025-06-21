@@ -370,6 +370,7 @@ go_test(
         "scatter_test.go",
         "scheduler_test.go",
         "single_key_test.go",
+        "snapshot_apply_prepare_test.go",
         "split_delay_helper_test.go",
         "split_queue_test.go",
         "split_trigger_helper_test.go",
