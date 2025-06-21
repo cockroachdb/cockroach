@@ -96,11 +96,11 @@ func TestSizeHelper(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			acc := lim.NewAccount(nil)
 			defer acc.Clear()
-			sh := sizeHelper{maxBytes: tt.max, account: &acc}
+			sh := SizePolicy{maxBytes: tt.max, account: &acc}
 
 			took := 0
 			for ln := len(tt.sizes); took < ln && !sh.done; took++ {
-				if size := tt.sizes[took]; !sh.add(size) {
+				if size := tt.sizes[took]; !sh.Add(size) {
 					require.True(t, sh.done)
 					break
 				}
