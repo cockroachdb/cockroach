@@ -97,6 +97,13 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column or index"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"add a new column to sql_instances table to store list of locality aware addresses",
+		clusterversion.V25_3_SQLInstancesAddLocalityAddressList.Version(),
+		upgrade.NoPrecondition,
+		sqlInstancesAddLocalityAddressListColumn,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this column"),
+	),
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
