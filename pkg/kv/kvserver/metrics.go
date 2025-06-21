@@ -513,6 +513,12 @@ var (
 		Measurement: "Read Ops",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaFollowerReadsMisses = metric.Metadata{
+		Name:        "follower_reads.misses_count",
+		Help:        "Number of follower reads missed by follower replicas due to too low closed timestamp",
+		Measurement: "Read Ops",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Server-side transaction metrics.
 	metaCommitWaitBeforeCommitTriggerCount = metric.Metadata{
@@ -2536,6 +2542,13 @@ throttled they do count towards 'delay.total' and 'delay.enginebackpressure'.
 		Unit:        metric.Unit_COUNT,
 	}
 
+	metaClosedTimestampDampeningInaccuracy = metric.Metadata{
+		Name:        "kv.closed_timestamp.dampening_inaccurate",
+		Help:        "Number of times dampening closed timestamp policy of closed timestamp policy takes effect",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	// Replica circuit breaker.
 	metaReplicaCircuitBreakerCurTripped = metric.Metadata{
 		Name: "kv.replica_circuit_breaker.num_tripped_replicas",
@@ -2843,7 +2856,8 @@ type StoreMetrics struct {
 	RecentReplicaQueriesPerSecond  *metric.ManualWindowHistogram
 
 	// Follower read metrics.
-	FollowerReadsCount *metric.Counter
+	FollowerReadsCount  *metric.Counter
+	FollowerReadsMisses *metric.Counter
 
 	// Server-side transaction metrics.
 	CommitWaitsBeforeCommitTrigger                           *metric.Counter
@@ -3173,8 +3187,9 @@ type StoreMetrics struct {
 	ClosedTimestampMaxBehindNanos *metric.Gauge
 
 	// Closed timestamp policy change on ranges metrics.
-	ClosedTimestampPolicyChange       *metric.Counter
-	ClosedTimestampLatencyInfoMissing *metric.Counter
+	ClosedTimestampPolicyChange        *metric.Counter
+	ClosedTimestampLatencyInfoMissing  *metric.Counter
+	ClosedTimestampDampeningInaccuracy *metric.Counter
 
 	// Replica circuit breaker.
 	ReplicaCircuitBreakerCurTripped *metric.Gauge
@@ -3575,7 +3590,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		),
 
 		// Follower reads metrics.
-		FollowerReadsCount: metric.NewCounter(metaFollowerReadsCount),
+		FollowerReadsCount:  metric.NewCounter(metaFollowerReadsCount),
+		FollowerReadsMisses: metric.NewCounter(metaFollowerReadsMisses),
 
 		// Server-side transaction metrics.
 		CommitWaitsBeforeCommitTrigger:                           metric.NewCounter(metaCommitWaitBeforeCommitTriggerCount),
@@ -4001,8 +4017,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		SplitsWithEstimatedStats:     metric.NewCounter(metaSplitEstimatedStats),
 		SplitEstimatedTotalBytesDiff: metric.NewCounter(metaSplitEstimatedTotalBytesDiff),
 
-		ClosedTimestampPolicyChange:       metric.NewCounter(metaClosedTimestampPolicyChange),
-		ClosedTimestampLatencyInfoMissing: metric.NewCounter(metaClosedTimestampLatencyInfoMissing),
+		ClosedTimestampPolicyChange:        metric.NewCounter(metaClosedTimestampPolicyChange),
+		ClosedTimestampLatencyInfoMissing:  metric.NewCounter(metaClosedTimestampLatencyInfoMissing),
+		ClosedTimestampDampeningInaccuracy: metric.NewCounter(metaClosedTimestampDampeningInaccuracy),
 	}
 	sm.categoryIterMetrics.init(storeRegistry)
 

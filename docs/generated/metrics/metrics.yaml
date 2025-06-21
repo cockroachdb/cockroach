@@ -11712,6 +11712,14 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: follower_reads.misses_count
+      exported_name: follower_reads_misses_count
+      description: Number of follower reads missed by follower replicas due to too low closed timestamp
+      y_axis_label: Read Ops
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: follower_reads.success_count
       exported_name: follower_reads_success_count
       description: Number of reads successfully processed by any replica
@@ -12004,6 +12012,14 @@ layers:
       exported_name: kv_allocator_load_based_replica_rebalancing_should_transfer
       description: The number times the allocator determined that the replica should be rebalanced to another store for better load distribution
       y_axis_label: Attempts
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: kv.closed_timestamp.dampening_inaccurate
+      exported_name: kv_closed_timestamp_dampening_inaccurate
+      description: Number of times dampening closed timestamp policy of closed timestamp policy takes effect
+      y_axis_label: Events
       type: COUNTER
       unit: COUNT
       aggregation: AVG
