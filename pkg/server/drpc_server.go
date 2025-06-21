@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
+	"storj.io/drpc"
 	"storj.io/drpc/drpcerr"
 )
 
@@ -74,4 +75,10 @@ func (s *drpcServer) health(ctx context.Context) error {
 	default:
 		return srverrors.ServerError(ctx, errors.Newf("unknown mode: %v", sm))
 	}
+}
+
+// drpcServiceRegistrar is implemented by servers that create a DRPC server and
+// registers it with drpc.Mux
+type drpcServiceRegistrar interface {
+	RegisterDRPCService(drpc.Mux) error
 }

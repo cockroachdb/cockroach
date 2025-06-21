@@ -119,7 +119,7 @@ func NewServer(
 func (s Server) ServeLocalReplicas(
 	ctx context.Context,
 	_ *serverpb.RecoveryCollectLocalReplicaInfoRequest,
-	stream serverpb.Admin_RecoveryCollectLocalReplicaInfoServer,
+	stream serverpb.RPCAdmin_RecoveryCollectLocalReplicaInfoStream,
 ) error {
 	v := s.settings.Version.ActiveVersion(ctx)
 	var stores []*kvserver.Store
@@ -149,7 +149,7 @@ func (s Server) ServeLocalReplicas(
 func (s Server) ServeClusterReplicas(
 	ctx context.Context,
 	req *serverpb.RecoveryCollectReplicaInfoRequest,
-	outStream serverpb.Admin_RecoveryCollectReplicaInfoServer,
+	outStream serverpb.RPCAdmin_RecoveryCollectReplicaInfoStream,
 	kvDB *kv.DB,
 ) (err error) {
 	var descriptors, nodes, replicas atomic.Int64
