@@ -44,6 +44,17 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+func getTableFromSpec(
+	spec *execinfrapb.ReadImportDataSpec,
+) *execinfrapb.ReadImportDataSpec_ImportTable {
+	if len(spec.Tables) > 0 {
+		for _, t := range spec.Tables {
+			return t
+		}
+	}
+	return spec.Table
+}
+
 func runImport(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -54,16 +65,15 @@ func runImport(
 	// Used to send ingested import rows to the KV layer.
 	kvCh := make(chan row.KVBatch, 10)
 
-	// Install type metadata in all of the import tables.
+	// Install type metadata in the import table.
 	spec = protoutil.Clone(spec).(*execinfrapb.ReadImportDataSpec)
 	importResolver := crosscluster.MakeCrossClusterTypeResolver(spec.Types)
-	for _, table := range spec.Tables {
-		cpy := tabledesc.NewBuilder(table.Desc).BuildCreatedMutableTable()
-		if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, importResolver); err != nil {
-			return nil, err
-		}
-		table.Desc = cpy.TableDesc()
+	table := getTableFromSpec(spec)
+	cpy := tabledesc.NewBuilder(table.Desc).BuildCreatedMutableTable()
+	if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, importResolver); err != nil {
+		return nil, err
 	}
+	table.Desc = cpy.TableDesc()
 
 	evalCtx := flowCtx.NewEvalCtx()
 	evalCtx.Regions = makeImportRegionOperator(spec.DatabasePrimaryRegion)
@@ -103,7 +113,7 @@ func runImport(
 	// at the end is one row containing an encoded BulkOpSummary.
 	var summary *kvpb.BulkOpSummary
 	group.GoCtx(func(ctx context.Context) error {
-		summary, err = ingestKvs(ctx, flowCtx, spec, progCh, kvCh)
+		summary, err = ingestKvs(ctx, flowCtx, spec, table.Desc.Name, progCh, kvCh)
 		return err
 	})
 
