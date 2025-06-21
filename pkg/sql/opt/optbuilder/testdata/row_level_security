@@ -2144,29 +2144,29 @@ project
 norm
 SELECT * FROM ob t1 INNER JOIN ob t2 ON t1.y = 20 AND t2.y/0 = 0;
 ----
-project
+barrier
  ├── columns: x:1!null y:2!null user_has_access:3!null x:6!null y:7 user_has_access:8!null
- └── inner-join (cross)
-      ├── columns: x:1!null y:2!null user_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5 x:6!null y:7 user_has_access:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
-      ├── barrier
-      │    ├── columns: x:1!null y:2!null user_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
-      │    └── select
-      │         ├── columns: x:1!null y:2!null user_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
-      │         ├── scan ob
-      │         │    └── columns: x:1!null y:2 user_has_access:3 crdb_internal_mvcc_timestamp:4 tableoid:5
-      │         └── filters
-      │              ├── user_has_access:3
-      │              └── y:2 = 20
-      ├── select
-      │    ├── columns: x:6!null y:7 user_has_access:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    ├── barrier
-      │    │    ├── columns: x:6!null y:7 user_has_access:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    └── select
-      │    │         ├── columns: x:6!null y:7 user_has_access:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │         ├── scan ob
-      │    │         │    └── columns: x:6!null y:7 user_has_access:8 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │         └── filters
-      │    │              └── user_has_access:8
-      │    └── filters
-      │         └── (y:7 / 0) = 0
-      └── filters (true)
+ └── project
+      ├── columns: x:1!null y:2!null user_has_access:3!null x:6!null y:7 user_has_access:8!null
+      └── inner-join (cross)
+           ├── columns: x:1!null y:2!null user_has_access:3!null x:6!null y:7 user_has_access:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+           ├── select
+           │    ├── columns: x:1!null y:2!null user_has_access:3!null
+           │    ├── scan ob
+           │    │    └── columns: x:1!null y:2 user_has_access:3
+           │    └── filters
+           │         ├── user_has_access:3
+           │         └── y:2 = 20
+           ├── select
+           │    ├── columns: x:6!null y:7 user_has_access:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+           │    ├── barrier
+           │    │    ├── columns: x:6!null y:7 user_has_access:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+           │    │    └── select
+           │    │         ├── columns: x:6!null y:7 user_has_access:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+           │    │         ├── scan ob
+           │    │         │    └── columns: x:6!null y:7 user_has_access:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+           │    │         └── filters
+           │    │              └── user_has_access:8
+           │    └── filters
+           │         └── (y:7 / 0) = 0
+           └── filters (true)

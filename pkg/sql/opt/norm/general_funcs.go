@@ -1605,3 +1605,13 @@ func (c *CustomFuncs) SplitLeakproofFilters(
 	}
 	return leakproofFilters, remainingFilters, true
 }
+
+// HasAllLeakProofFilters returns true if every filter given is leakproof.
+func (c *CustomFuncs) HasAllLeakProofFilters(filters memo.FiltersExpr) bool {
+	for i := range filters {
+		if !filters[i].ScalarProps().VolatilitySet.IsLeakproof() {
+			return false
+		}
+	}
+	return true
+}
