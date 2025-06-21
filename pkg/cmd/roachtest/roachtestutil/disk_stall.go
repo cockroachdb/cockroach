@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -23,6 +24,7 @@ type DiskStaller interface {
 	Setup(ctx context.Context)
 	Cleanup(ctx context.Context)
 	Stall(ctx context.Context, nodes option.NodeListOption)
+	StallForDuration(ctx context.Context, nodes option.NodeListOption, duration time.Duration)
 	Slow(ctx context.Context, nodes option.NodeListOption, bytesPerSecond int)
 	Unstall(ctx context.Context, nodes option.NodeListOption)
 	DataDir() string
@@ -39,7 +41,11 @@ func (n NoopDiskStaller) LogDir() string                                        
 func (n NoopDiskStaller) Setup(ctx context.Context)                              {}
 func (n NoopDiskStaller) Slow(_ context.Context, _ option.NodeListOption, _ int) {}
 func (n NoopDiskStaller) Stall(_ context.Context, _ option.NodeListOption)       {}
-func (n NoopDiskStaller) Unstall(_ context.Context, _ option.NodeListOption)     {}
+func (n NoopDiskStaller) StallForDuration(
+	_ context.Context, _ option.NodeListOption, _ time.Duration,
+) {
+}
+func (n NoopDiskStaller) Unstall(_ context.Context, _ option.NodeListOption) {}
 
 type Fataler interface {
 	Fatal(args ...interface{})
@@ -108,6 +114,49 @@ func (s *cgroupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOp
 		}
 		// NB: We log the error and continue on because unstalling may not
 		// succeed if the process has successfully exited.
+	}
+}
+
+// StallForDuration stalls the disk for the specified duration. This avoids creating
+// multiple SSH connections in quick succession, which can cause flakiness.
+func (s *cgroupDiskStaller) StallForDuration(
+	ctx context.Context, nodes option.NodeListOption, duration time.Duration,
+) {
+	maj, min := s.device(nodes)
+	cockroachIOController := filepath.Join("/sys/fs/cgroup/system.slice", SystemInterfaceSystemdUnitName()+".service", "io.max")
+
+	// Shuffle the order of read and write stall initiation.
+	rand.Shuffle(len(s.readOrWrite), func(i, j int) {
+		s.readOrWrite[i], s.readOrWrite[j] = s.readOrWrite[j], s.readOrWrite[i]
+	})
+
+	// Prepare bandwidth limit strings for stall and unstall.
+	var limits []string
+	for _, rw := range s.readOrWrite {
+		limits = append(limits, fmt.Sprintf("%s=4", rw.cgroupV2BandwidthProp()))
+	}
+	stallLimits := strings.Join(limits, " ")
+
+	// Prepare max bandwidth strings for unstall.
+	var maxLimits []string
+	for _, rw := range s.readOrWrite {
+		maxLimits = append(maxLimits, fmt.Sprintf("%s=max", rw.cgroupV2BandwidthProp()))
+	}
+	unstallLimits := strings.Join(maxLimits, " ")
+
+	// Build the command to stall the disk for the specified duration and then unstall it.
+	cmd := fmt.Sprintf(`'
+echo %d:%d %s > %s
+sleep %f
+echo %d:%d %s > %s
+'`,
+		maj, min, stallLimits, cockroachIOController,
+		duration.Seconds(),
+		maj, min, unstallLimits, cockroachIOController)
+
+	err := s.c.RunE(ctx, option.WithNodes(nodes), "sudo", "/bin/bash", "-c", cmd)
+	if err != nil {
+		s.f.L().PrintfCtx(ctx, "error in StallForDuration: %v", err)
 	}
 }
 
@@ -252,6 +301,23 @@ func (s *dmsetupDiskStaller) Slow(
 
 func (s *dmsetupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOption) {
 	s.c.Run(ctx, option.WithNodes(nodes), `sudo dmsetup resume data1`)
+}
+
+// StallForDuration stalls the disk for the specified duration. This avoids creating
+// multiple SSH connections in quick succession, which can cause flakiness.
+func (s *dmsetupDiskStaller) StallForDuration(
+	ctx context.Context, nodes option.NodeListOption, duration time.Duration,
+) {
+	cmd := fmt.Sprintf(`'
+sudo dmsetup suspend --noflush --nolockfs data1
+sleep %f
+sudo dmsetup resume data1
+'`, duration.Seconds())
+
+	err := s.c.RunE(ctx, option.WithNodes(nodes), "sudo", "/bin/bash", "-c", cmd)
+	if err != nil {
+		s.f.L().PrintfCtx(ctx, "error in StallForDuration: %v", err)
+	}
 }
 
 func (s *dmsetupDiskStaller) DataDir() string { return "{store-dir}" }
