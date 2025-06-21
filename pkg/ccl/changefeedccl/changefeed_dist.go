@@ -269,9 +269,6 @@ func startDistChangefeed(
 	if progress := localState.progress.GetChangefeed(); progress != nil && progress.SpanLevelCheckpoint != nil {
 		spanLevelCheckpoint = progress.SpanLevelCheckpoint
 	}
-	if checkpoint != nil && spanLevelCheckpoint != nil {
-		return errors.AssertionFailedf("both legacy and current checkpoint set on changefeed job progress")
-	}
 	p, planCtx, err := makePlan(execCtx, jobID, details, description, initialHighWater,
 		trackedSpans, checkpoint, spanLevelCheckpoint, localState.drainingNodes)(ctx, dsp)
 	if err != nil {

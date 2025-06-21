@@ -170,10 +170,8 @@ func alterChangefeedPlanHook(
 				if !changefeedProgress.Checkpoint.IsEmpty() {
 					return errors.AssertionFailedf("both legacy and current checkpoint set on changefeed job progress")
 				}
-				legacyCheckpoint := checkpoint.ConvertToLegacyCheckpoint(changefeedProgress.SpanLevelCheckpoint)
-				if err := changefeedProgress.SetCheckpoint(legacyCheckpoint, nil); err != nil {
-					return err
-				}
+				changefeedProgress.Checkpoint = checkpoint.ConvertToLegacyCheckpoint(changefeedProgress.SpanLevelCheckpoint)
+				changefeedProgress.SpanLevelCheckpoint = nil
 			}
 		}
 		newChangefeedStmt.Targets = newTargets
@@ -861,14 +859,20 @@ func generateNewProgress(
 }
 
 func removeSpansFromProgress(
-	progress jobspb.Progress, spansToRemove []roachpb.Span, statementTime hlc.Timestamp,
+	prevProgress jobspb.Progress, spansToRemove []roachpb.Span, statementTime hlc.Timestamp,
 ) error {
-	spanLevelCheckpoint, err := getSpanLevelCheckpointFromProgress(progress, statementTime)
+	changefeedProgress := prevProgress.GetChangefeed()
+	if changefeedProgress == nil {
+		return nil
+	}
+	changefeedCheckpoint := changefeedProgress.Checkpoint
+	if changefeedCheckpoint == nil {
+		return nil
+	}
+
+	spanLevelCheckpoint, err := getSpanLevelCheckpointFromProgress(prevProgress, statementTime)
 	if err != nil {
 		return err
-	}
-	if spanLevelCheckpoint == nil {
-		return nil
 	}
 	checkpointSpansMap := make(map[hlc.Timestamp]roachpb.Spans)
 	for ts, sp := range spanLevelCheckpoint.All() {
@@ -879,10 +883,7 @@ func removeSpansFromProgress(
 			checkpointSpansMap[ts] = spans
 		}
 	}
-	spanLevelCheckpoint = jobspb.NewTimestampSpansMap(checkpointSpansMap)
-	if err := progress.GetChangefeed().SetCheckpoint(nil, spanLevelCheckpoint); err != nil {
-		return err
-	}
+	changefeedProgress.SpanLevelCheckpoint = jobspb.NewTimestampSpansMap(checkpointSpansMap)
 
 	return nil
 }
