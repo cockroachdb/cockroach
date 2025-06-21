@@ -414,7 +414,7 @@ func BenchmarkEngineKeyVerify(b *testing.B) {
 					Key:       roachpb.Key("foobar"),
 					Timestamp: hlc.Timestamp{WallTime: 1711383740550067000, Logical: 2},
 				},
-				MVCCValue{Value: roachpb.Value{RawBytes: []byte("hello world")}},
+				MVCCValue{Value: roachpb.MakeValueFromBytes([]byte("hello world"))},
 			),
 		},
 		{
@@ -429,7 +429,7 @@ func BenchmarkEngineKeyVerify(b *testing.B) {
 						LocalTimestamp:   hlc.ClockTimestamp{WallTime: 1711383740550069000},
 						OmitInRangefeeds: true,
 					},
-					Value: roachpb.Value{RawBytes: []byte("hello world")},
+					Value: roachpb.MakeValueFromString("hello world"),
 				},
 			),
 		},
@@ -446,7 +446,7 @@ func BenchmarkEngineKeyVerify(b *testing.B) {
 					ValBytes: 100,
 				},
 				MVCCValue{
-					Value: roachpb.Value{RawBytes: []byte("hello world")},
+					Value: roachpb.MakeValueFromString("hello world"),
 				},
 			),
 		},

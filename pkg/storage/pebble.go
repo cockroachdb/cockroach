@@ -348,6 +348,33 @@ var concurrentDownloadCompactions = settings.RegisterIntSetting(
 	settings.IntWithMinimum(1),
 )
 
+var (
+	valueSeparationEnabled = settings.RegisterBoolSetting(
+		settings.SystemVisible,
+		"storage.value_separation.enabled",
+		"(experimental) whether or not values may be separated into blob files; "+
+			"requires columnar blocks to be enabled",
+		metamorphic.ConstantWithTestBool(
+			"storage.value_separation.enabled", false), /* defaultValue */
+	)
+	valueSeparationMinimumSize = settings.RegisterIntSetting(
+		settings.SystemVisible,
+		"storage.value_separation.minimum_size",
+		"the minimum size of a value that will be separated into a blob file",
+		int64(metamorphic.ConstantWithTestRange("storage.value_separation.minimum_size",
+			1<<10 /* 1 KiB (default) */, 25 /* 25 bytes (minimum) */, 1<<20 /* 1 MiB (maximum) */)),
+		settings.IntWithMinimum(1),
+	)
+	valueSeparationMaxReferenceDepth = settings.RegisterIntSetting(
+		settings.SystemVisible,
+		"storage.value_separation.max_reference_depth",
+		"the max reference depth bounds the number of unique, overlapping blob files referenced within a sstable;"+
+			" lower values improve scan performance but increase write amplification",
+		int64(metamorphic.ConstantWithTestRange("storage.value_separation.max_reference_depth", 10 /* default */, 2, 20)),
+		settings.IntWithMinimum(2),
+	)
+)
+
 // EngineComparer is a pebble.Comparer object that implements MVCC-specific
 // comparator settings for use with Pebble.
 var EngineComparer = func() pebble.Comparer {
@@ -452,7 +479,6 @@ func DefaultPebbleOptions() *pebble.Options {
 	// for why this was disabled, and what needs to be changed to reenable it.
 	// This issue tracks re-enablement: https://github.com/cockroachdb/pebble/issues/4139
 	opts.Experimental.MultiLevelCompactionHeuristic = pebble.NoMultiLevel{}
-
 	opts.Experimental.UserKeyCategories = userKeyCategories
 
 	opts.Levels[0] = pebble.LevelOptions{
@@ -800,6 +826,16 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	}
 	cfg.opts.Experimental.EnableDeleteOnlyCompactionExcises = func() bool {
 		return deleteCompactionsCanExcise.Get(&cfg.settings.SV)
+	}
+	cfg.opts.Experimental.ValueSeparationPolicy = func() pebble.ValueSeparationPolicy {
+		if !valueSeparationEnabled.Get(&cfg.settings.SV) {
+			return pebble.ValueSeparationPolicy{}
+		}
+		return pebble.ValueSeparationPolicy{
+			Enabled:               true,
+			MinimumSize:           int(valueSeparationMinimumSize.Get(&cfg.settings.SV)),
+			MaxBlobReferenceDepth: int(valueSeparationMaxReferenceDepth.Get(&cfg.settings.SV)),
+		}
 	}
 
 	auxDir := cfg.opts.FS.PathJoin(cfg.env.Dir, base.AuxiliaryDir)
