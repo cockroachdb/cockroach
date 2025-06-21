@@ -9,10 +9,9 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 
-	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/cli"
 	"github.com/spf13/cobra"
 )
 
@@ -23,21 +22,7 @@ import (
 // rperrors.Error, the error will automatically be wrapped with
 // rperrors.Unclassified.
 func Wrap(f func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Command, args []string) {
-	return func(cmd *cobra.Command, args []string) {
-		var err error
-		err = f(cmd, args)
-		if err != nil {
-			drtprodError, ok := rperrors.AsError(err)
-			if !ok {
-				drtprodError = rperrors.Unclassified{Err: err}
-				err = drtprodError
-			}
-
-			cmd.Printf("Error: %+v\n", err)
-
-			os.Exit(drtprodError.ExitCode())
-		}
-	}
+	return cli.Wrap(f)
 }
 
 // ExecuteCmdWithPrefix runs a shell command with the given arguments and streams the output.
