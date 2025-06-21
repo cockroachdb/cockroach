@@ -1724,7 +1724,7 @@ func (tc *TestCluster) WaitForNodeLiveness(t serverutils.TestFataler) {
 			if err := db.GetProto(context.Background(), key, &liveness); err != nil {
 				return err
 			}
-			if (liveness == livenesspb.Liveness{}) {
+			if (liveness.Equal(livenesspb.Liveness{})) {
 				return fmt.Errorf("no liveness record")
 			}
 			if liveness.Epoch < 1 {
