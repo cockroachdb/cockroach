@@ -216,6 +216,7 @@ func (n *scrubNode) startScrubTable(
 	var indexesSet bool
 	var physicalCheckSet bool
 	var constraintsSet bool
+	var kvStoreCheckSet bool
 	for _, option := range n.n.Options {
 		switch v := option.(type) {
 		case *tree.ScrubOptionIndex:
@@ -255,6 +256,20 @@ func (n *scrubNode) startScrubTable(
 			}
 			n.run.checkQueue = append(n.run.checkQueue, constraintsToCheck...)
 
+		case *tree.ScrubOptionKVStore:
+            if kvStoreCheckSet {
+                return pgerror.Newf(pgcode.Syntax,
+                    "cannot specify KVSTORE option more than once")
+            }
+
+            kvStoreCheckSet = true
+            kvStoreCheck, err := createUnexpectedKeyCheckOperation(
+                tableDesc, tableName, ts)
+			if err != nil {
+				return err
+			}
+			n.run.checkQueue = append(n.run.checkQueue, kvStoreCheck...)
+
 		default:
 			panic(errors.AssertionFailedf("unhandled SCRUB option received: %+v", v))
 		}
@@ -275,6 +290,12 @@ func (n *scrubNode) startScrubTable(
 			return err
 		}
 		n.run.checkQueue = append(n.run.checkQueue, constraintsToCheck...)
+		kvStoreCheck, err := createUnexpectedKeyCheckOperation(
+			tableDesc, tableName, ts)
+		if err != nil {
+			return err
+		}
+		n.run.checkQueue = append(n.run.checkQueue, kvStoreCheck...)
 
 		// Physical checks are no longer implemented.
 	}
@@ -448,5 +469,16 @@ func createConstraintCheckOperations(
 		}
 		results = append(results, op)
 	}
+	return results, nil
+}
+
+func createUnexpectedKeyCheckOperation(
+	tableDesc catalog.TableDescriptor,
+	tableName *tree.TableName,
+	asOf hlc.Timestamp,
+) (results []checkOperation, err error) {
+	var op checkOperation
+	op = newUnexpectedKeyCheckOperation(tableName, tableDesc, asOf)
+	results = append(results, op)
 	return results, nil
 }
