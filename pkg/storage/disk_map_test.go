@@ -40,7 +40,7 @@ func runTestForEngine(ctx context.Context, t *testing.T, filename string, engine
 			// creation and usage code involves too much test-specific code, so use
 			// a type switch with implementation-specific code instead.
 			switch e := engine.(type) {
-			case *pebbleTempEngine:
+			case *tempEngine:
 				iter, err := e.db.NewIter(&pebble.IterOptions{UpperBound: roachpb.KeyMax})
 				if err != nil {
 					t.Fatal(err)
@@ -167,14 +167,14 @@ func runTestForEngine(ctx context.Context, t *testing.T, filename string, engine
 	})
 }
 
-func TestPebbleMap(t *testing.T) {
+func TestTempEngineMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
-	e, _, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{
+	e, _, err := NewTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
 	}, base.StoreSpec{}, disk.NewWriteStatsManager(vfs.Default))
@@ -193,7 +193,7 @@ func TestPebbleMultiMap(t *testing.T) {
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
-	e, _, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{
+	e, _, err := NewTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
 	}, base.StoreSpec{}, disk.NewWriteStatsManager(vfs.Default))
@@ -212,7 +212,7 @@ func TestPebbleMapClose(t *testing.T) {
 	ctx := context.Background()
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
-	e, _, err := newPebbleTempEngine(ctx, base.TempStorageConfig{
+	e, _, err := newTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
 	}, base.StoreSpec{}, disk.NewWriteStatsManager(vfs.Default))
@@ -319,7 +319,7 @@ func TestPebbleMapClose(t *testing.T) {
 func BenchmarkPebbleMapWrite(b *testing.B) {
 	dir := b.TempDir()
 	ctx := context.Background()
-	tempEngine, _, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{
+	tempEngine, _, err := NewTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
 	}, base.DefaultTestStoreSpec, disk.NewWriteStatsManager(vfs.Default))
@@ -360,7 +360,7 @@ func BenchmarkPebbleMapIteration(b *testing.B) {
 	skip.UnderShort(b)
 	dir := b.TempDir()
 	ctx := context.Background()
-	tempEngine, _, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{
+	tempEngine, _, err := NewTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
 	}, base.DefaultTestStoreSpec, disk.NewWriteStatsManager(vfs.Default))
