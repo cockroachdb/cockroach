@@ -1103,6 +1103,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// TODO(sumeer): if the leaseholder executed a change that MMA was
 		// completely unaware of, we may not be able to apply the remaining
 		// changes here. We should discard such pending changes.
+		log.Infof(ctx, "remainingChanges %v", remainingChanges)
 		for _, change := range remainingChanges {
 			cs.applyReplicaChange(change.ReplicaChange, false)
 		}
@@ -1146,7 +1147,9 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// Since this range is going away, mark all the pending changes as
 		// enacted. This will allow the load adjustments to also be garbage
 		// collected in the future.
-		log.Infof(ctx, "rs.pendingChanges %v, cs.pendingChanges %v", rs.pendingChanges, cs.pendingChanges)
+		log.Infof(ctx, "rs.pendingChanges %v, cs.pendingChanges %v",
+			printPendingChanges(rs.pendingChanges), printMapPendingChanges(cs.pendingChanges))
+
 		for _, change := range rs.pendingChanges {
 			cs.pendingChangeEnacted(change.ChangeID, now, true)
 		}
@@ -1159,6 +1162,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			delete(cs.stores[replica.StoreID].adjusted.replicas, r)
 		}
 		delete(cs.ranges, r)
+		log.Infof(ctx, "after deleting cs.ranges %v", cs.ranges)
 	}
 	localss := cs.stores[msg.StoreID]
 	cs.meansMemo.clear()
@@ -1417,6 +1421,9 @@ func (cs *clusterState) applyReplicaChange(change ReplicaChange, applyLoadChange
 		panic(fmt.Sprintf("range %v not found in cluster state", change.rangeID))
 	}
 
+	log.Infof(context.Background(), "applying replica change %v to range %d on store %d",
+		change, change.rangeID, change.target.StoreID)
+	log.Infof(context.Background(), "before range state replicas: %v", cs.ranges[change.rangeID].replicas)
 	if change.isRemoval() {
 		delete(storeState.adjusted.replicas, change.rangeID)
 		rangeState.removeReplica(change.target.StoreID)
@@ -1443,9 +1450,13 @@ func (cs *clusterState) applyReplicaChange(change ReplicaChange, applyLoadChange
 	if applyLoadChange {
 		cs.applyChangeLoadDelta(change)
 	}
+	log.Infof(context.Background(), "after range state replicas: %v", cs.ranges[change.rangeID].replicas)
 }
 
 func (cs *clusterState) undoReplicaChange(change ReplicaChange) {
+	log.Infof(context.Background(), "undoing replica change %v to range %d on store %d",
+		change, change.rangeID, change.target.StoreID)
+	log.Infof(context.Background(), "before range state replicas: %v", cs.ranges[change.rangeID].replicas)
 	rangeState := cs.ranges[change.rangeID]
 	storeState := cs.stores[change.target.StoreID]
 	if change.isRemoval() || change.isUpdate() {
@@ -1462,6 +1473,7 @@ func (cs *clusterState) undoReplicaChange(change ReplicaChange) {
 		panic(fmt.Sprintf("unknown replica change %+v", change))
 	}
 	cs.undoChangeLoadDelta(change)
+	log.Infof(context.Background(), "after range state replicas: %v", cs.ranges[change.rangeID].replicas)
 }
 
 // TODO(kvoli,sumeerbhola): The load of the store and node can become negative
