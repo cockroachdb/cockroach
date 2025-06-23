@@ -3213,9 +3213,17 @@ func TestLeaseDescriptorRangeFeedFailure(t *testing.T) {
 							p.Params.ExecutionPhase != scop.PostCommitPhase {
 							return nil
 						}
+						foundDescriptorDrop := false
+						// Ensure we have a descriptor drop that will be executed before
+						// we mess with the range feed.
+						for _, op := range p.Stages[stageIdx].EdgeOps {
+							if _, ok := op.(*scop.MarkDescriptorAsDropped); ok {
+								foundDescriptorDrop = true
+							}
+						}
 						// Once this stage completes, we can "resume" the range feed,
 						// so the update is detected.
-						if stageIdx == 0 {
+						if foundDescriptorDrop {
 							rangeFeedResetChan = srv.ApplicationLayer(1).LeaseManager().(*lease.Manager).TestingSetDisableRangeFeedCheckpointFn(true)
 							enableAfterStageKnob.Swap(false)
 							grp.Go(func() error {
@@ -3239,15 +3247,20 @@ func TestLeaseDescriptorRangeFeedFailure(t *testing.T) {
 	// detects a problem.
 	defer srv.ApplicationLayer(1).LeaseManager().(*lease.Manager).TestingSetDisableRangeFeedCheckpointFn(false)
 	firstConn.Exec(t, "CREATE TABLE t1(n int)")
+	firstConn.Exec(t, "CREATE TABLE t2(n int)")
 	require.NoError(t, srv.WaitForFullReplication())
 	tx := secondConn.Begin(t)
 	_, err := tx.Exec("SELECT * FROM t1;")
+	require.NoError(t, err)
+	_, err = tx.Exec("SELECT * FROM t2;")
 	require.NoError(t, err)
 	// This schema change will wait for the connection on
 	// node 1 to release the lease. Because the rangefeed is
 	// disabled it will never know about the new version.
 	enableAfterStageKnob.Store(true)
-	firstConn.Exec(t, "ALTER TABLE t1 ADD COLUMN j INT DEFAULT 64")
+	firstConn.Exec(t, "SET autocommit_before_ddl=false")
+	firstConn.Exec(t, "SET use_declarative_schema_changer='unsafe_always'")
+	firstConn.Exec(t, "ALTER TABLE t1 ADD COLUMN j INT DEFAULT 64; DROP TABLE t2;")
 	_, err = tx.Exec("INSERT INTO t1 VALUES (32)")
 	if err != nil {
 		t.Fatal(err)
