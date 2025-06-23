@@ -4366,14 +4366,6 @@ func runCDCMultiDBTPCCMinimal(ctx context.Context, t test.Test, c cluster.Cluste
 	dbName := "defaultdb"
 	schemaNames := []string{"schema1", "schema2", "schema3", "schema4", "schema5"}
 	db := c.Conn(ctx, t.L(), 3)
-	if _, err := db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbName)); err != nil {
-		t.Fatalf("failed to create db %s: %v", dbName, err)
-	}
-	for _, schema := range schemaNames {
-		if _, err := db.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s.%s", dbName, schema)); err != nil {
-			t.Fatalf("failed to create schema %s: %v", schema, err)
-		}
-	}
 
 	// Aggressive GC and PTS settings for fast test and visible log activity
 	if _, err := db.Exec("ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 1"); err != nil {
