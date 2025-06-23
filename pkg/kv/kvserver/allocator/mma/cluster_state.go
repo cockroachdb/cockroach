@@ -1080,11 +1080,11 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		var remainingChanges, enactedChanges []*pendingReplicaChange
 		for _, change := range rs.pendingChanges {
 			ss := cs.stores[change.target.StoreID]
-			adjustedReplicas, ok := ss.adjusted.replicas[rangeMsg.RangeID]
+			adjustedReplica, ok := ss.adjusted.replicas[rangeMsg.RangeID]
 			if !ok {
-				adjustedReplicas.ReplicaID = noReplicaID
+				adjustedReplica.ReplicaID = noReplicaID
 			}
-			if adjustedReplicas.subsumesChange(change.prev.ReplicaIDAndType, change.next) {
+			if adjustedReplica.subsumesChange(change.prev.ReplicaIDAndType, change.next) {
 				// The change has been enacted according to the leaseholder.
 				enactedChanges = append(enactedChanges, change)
 			} else {
