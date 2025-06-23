@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "interceptorutil",
+    srcs = ["utils.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/interceptorutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/grpcutil",
+        "//pkg/util/tracing",
+        "@com_github_gogo_protobuf//types",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel//codes",
+        "@org_golang_google_grpc//metadata",
+        "@org_golang_google_grpc//status",
+    ],
+)
