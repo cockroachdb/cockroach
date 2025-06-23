@@ -313,6 +313,72 @@ func (authenticator *jwtAuthenticator) RetrieveIdentity(
 	return user, nil
 }
 
+// VerifyAndExtractIssuer checks a JWT’s JWS signature with the configured
+// key set and confirms the `iss` claim matches a configured issuer.
+//
+// It is called from the provisioning path in authJwtToken, AFTER
+// RetrieveIdentity has set the replacement identity. Audience, expiry and
+// other claim checks happen later in Authenticate(); this helper should not
+// modify state.
+//
+// Like ValidateJWTLogin, it returns two error values:
+//
+//	issuer       – the verified `iss` claim to build "jwt_token:<issuer>"
+//	detailedErr  – redactable detail for LogAuthFailed
+//	authErr      – high-level error shown to the client
+func (a *jwtAuthenticator) VerifyAndExtractIssuer(
+	ctx context.Context, st *cluster.Settings, tokenBytes []byte,
+) (issuer string, detailedErr redact.RedactableString, authErr error) {
+	a.reloadConfig(ctx, st)
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if !a.mu.conf.enabled {
+		return "", "", errors.New("JWT authentication: not enabled")
+	}
+
+	// Parse token without verifying signature to pull out issuer & key id.
+	unverified, err := jwt.ParseInsecure(tokenBytes)
+	if err != nil {
+		return "", redact.Sprintf("JWT authentication: invalid token format: %v", err),
+			errors.New("JWT authentication: invalid token")
+	}
+
+	issuer = unverified.Issuer()
+	if err := a.mu.conf.issuersConf.checkIssuerConfigured(issuer); err != nil {
+		return "", "", errors.WithDetail(
+			errors.New("JWT authentication: invalid issuer"),
+			fmt.Sprintf("token issued by %s", issuer),
+		)
+	}
+
+	// Fetch the JWKS (auto-fetch or static) for that issuer.
+	var set jwk.Set
+	if a.mu.conf.jwksAutoFetchEnabled {
+		set, err = a.remoteFetchJWKS(ctx, issuer)
+		if err != nil {
+			return "", redact.Sprintf("JWT authentication: unable to fetch jwks: %v", err),
+				errors.New("JWT authentication: unable to validate token")
+		}
+	} else {
+		set = a.mu.conf.jwks
+	}
+
+	// JWS verification
+	if _, err := jwt.Parse(
+		tokenBytes,
+		jwt.WithKeySet(set, jws.WithInferAlgorithmFromKey(true)),
+		jwt.WithValidate(false),
+	); err != nil {
+		return "", "", errors.WithDetailf(
+			errors.New("JWT authentication: invalid token"),
+			"unable to parse token: %v", err,
+		)
+	}
+
+	return issuer, "", nil
+}
+
 // remoteFetchJWKS fetches the JWKS URI from the provided issuer URL.
 func (authenticator *jwtAuthenticator) remoteFetchJWKS(
 	ctx context.Context, issuerURL string,
