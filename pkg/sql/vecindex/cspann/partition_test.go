@@ -44,10 +44,11 @@ func TestPartition(t *testing.T) {
 	valueBytes20b := ValueBytes{11, 12}
 
 	var workspace workspace.T
-	quantizer := quantize.NewUnQuantizer(2, vecpb.L2SquaredDistance)
+	unquantizer := quantize.NewUnQuantizer(2, vecpb.L2SquaredDistance)
+	rabitq := quantize.NewRaBitQuantizer(2, 42, vecpb.InnerProductDistance)
 
 	// newTestPartition creates a partition with 2 vectors.
-	newTestPartition := func() *Partition {
+	newTestPartition := func(quantizer quantize.Quantizer) *Partition {
 		vectors := vector.MakeSet(2)
 		vectors.Add(vec10)
 		vectors.Add(vec20)
@@ -69,7 +70,7 @@ func TestPartition(t *testing.T) {
 
 	t.Run("test Init", func(t *testing.T) {
 		// Validate that Init sets same values.
-		partition := newTestPartition()
+		partition := newTestPartition(unquantizer)
 		var partition2 Partition
 		partition2.Init(
 			*partition.Metadata(),
@@ -82,7 +83,7 @@ func TestPartition(t *testing.T) {
 	})
 
 	t.Run("test Clone", func(t *testing.T) {
-		partition := newTestPartition()
+		partition := newTestPartition(unquantizer)
 		cloned := partition.Clone()
 		require.Equal(t, partition, cloned)
 
@@ -101,7 +102,7 @@ func TestPartition(t *testing.T) {
 	})
 
 	t.Run("test Add", func(t *testing.T) {
-		partition := newTestPartition()
+		partition := newTestPartition(unquantizer)
 		require.True(t, partition.Add(&workspace, vec40, childKey40, valueBytes40, true /* overwrite */))
 		require.Equal(t, 4, partition.Count())
 		require.Equal(t, []ChildKey{childKey10, childKey20, childKey30, childKey40}, partition.ChildKeys())
@@ -111,14 +112,14 @@ func TestPartition(t *testing.T) {
 		checkPartitionMetadata(t, partition.Metadata(), Level(1), vector.T{4, 3.33})
 
 		// Add vector with duplicate key and overwrite=false. Expect no-op.
-		partition = newTestPartition()
+		partition = newTestPartition(unquantizer)
 		require.False(t, partition.Add(&workspace, vec20b, childKey20, valueBytes20b, false /* overwrite */))
 		require.Equal(t, 3, partition.Count())
 		require.Equal(t, []ValueBytes{valueBytes10, valueBytes20, valueBytes30}, partition.ValueBytes())
 
 		// Add vector with duplicate key and overwrite=true. Expect value to be
 		// updated.
-		partition = newTestPartition()
+		partition = newTestPartition(unquantizer)
 		require.False(t, partition.Add(&workspace, vec20b, childKey20, valueBytes20b, true /* overwrite */))
 		require.Equal(t, 3, partition.Count())
 		require.Equal(t, []ChildKey{childKey10, childKey30, childKey20}, partition.ChildKeys())
@@ -129,7 +130,7 @@ func TestPartition(t *testing.T) {
 	t.Run("test AddSet", func(t *testing.T) {
 		// Create empty partition.
 		metadata := PartitionMetadata{Level: 1, Centroid: vector.T{4, 3}}
-		partition := CreateEmptyPartition(quantizer, metadata)
+		partition := CreateEmptyPartition(unquantizer, metadata)
 
 		// Add empty set.
 		vectors := vector.MakeSet(2)
@@ -188,7 +189,7 @@ func TestPartition(t *testing.T) {
 	t.Run("test Search", func(t *testing.T) {
 		// Search empty partition.
 		metadata := PartitionMetadata{Level: LeafLevel, Centroid: vector.T{4, 3}}
-		partition := CreateEmptyPartition(quantizer, metadata)
+		partition := CreateEmptyPartition(unquantizer, metadata)
 		require.Equal(t, Level(1), partition.Level())
 
 		searchSet := SearchSet{MaxResults: 1}
@@ -198,7 +199,7 @@ func TestPartition(t *testing.T) {
 		require.Equal(t, SearchResults(nil), results)
 
 		// Search partition with 5 vectors.
-		partition = newTestPartition()
+		partition = newTestPartition(unquantizer)
 		vectors := vector.MakeSet(2)
 		vectors.Add(vec40)
 		vectors.Add(vec50)
@@ -219,8 +220,24 @@ func TestPartition(t *testing.T) {
 		require.Equal(t, SearchResults{result1, result2, result3}, results)
 	})
 
+	t.Run("test Search with IncludeCentroidDistances", func(t *testing.T) {
+		// Search partition with 3 vectors.
+		partition := newTestPartition(rabitq)
+
+		searchSet := SearchSet{MaxResults: 2, IncludeCentroidDistances: true}
+		_ = partition.Search(&workspace, RootKey, vector.T{1, 1}, &searchSet)
+		result1 := SearchResult{
+			QueryDistance: -11.52, ErrorBound: 8.96, CentroidDistance: -8.45, ParentPartitionKey: 1,
+			ChildKey: childKey30, ValueBytes: valueBytes30}
+		result2 := SearchResult{
+			QueryDistance: -6.1, ErrorBound: 4.48, CentroidDistance: -5.12, ParentPartitionKey: 1,
+			ChildKey: childKey20, ValueBytes: valueBytes20}
+		results := roundResults(searchSet.PopResults(), 2)
+		require.Equal(t, SearchResults{result1, result2}, results)
+	})
+
 	t.Run("test ReplaceWithLast", func(t *testing.T) {
-		partition := newTestPartition()
+		partition := newTestPartition(unquantizer)
 		partition.ReplaceWithLast(0)
 		require.Equal(t, 2, partition.Count())
 		require.Equal(t, []ChildKey{childKey30, childKey20}, partition.ChildKeys())
@@ -237,7 +254,7 @@ func TestPartition(t *testing.T) {
 	})
 
 	t.Run("test ReplaceWithLastByKey and Find", func(t *testing.T) {
-		partition := newTestPartition()
+		partition := newTestPartition(unquantizer)
 		require.Equal(t, 0, partition.Find(childKey10))
 		require.Equal(t, 2, partition.Find(childKey30))
 		require.True(t, partition.ReplaceWithLastByKey(childKey10))
@@ -252,7 +269,7 @@ func TestPartition(t *testing.T) {
 	})
 
 	t.Run("test Clear", func(t *testing.T) {
-		partition := newTestPartition()
+		partition := newTestPartition(unquantizer)
 		require.Equal(t, 3, partition.Clear())
 		require.Equal(t, 0, partition.Count())
 		require.Equal(t, []ChildKey{}, partition.ChildKeys())
@@ -273,6 +290,7 @@ func roundResults(results SearchResults, prec int) SearchResults {
 		result := &results[i]
 		result.QueryDistance = float32(scalar.Round(float64(result.QueryDistance), prec))
 		result.ErrorBound = float32(scalar.Round(float64(result.ErrorBound), prec))
+		result.CentroidDistance = float32(scalar.Round(float64(result.CentroidDistance), prec))
 		result.Vector = testutils.RoundFloats(result.Vector, prec)
 	}
 	return results
