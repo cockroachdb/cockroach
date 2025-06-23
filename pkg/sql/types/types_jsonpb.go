@@ -18,12 +18,8 @@ import (
 // MarshalJSONPB marshals the T to json. This is necessary as otherwise
 // this field will be lost to the crdb_internal.pb_to_json and the likes.
 func (t *T) MarshalJSONPB(marshaler *jsonpb.Marshaler) ([]byte, error) {
-	temp := *t
-	if err := temp.downgradeType(); err != nil {
-		return nil, err
-	}
 	var buf bytes.Buffer
-	if err := marshaler.Marshal(&buf, &temp.InternalType); err != nil {
+	if err := marshaler.Marshal(&buf, &t.InternalType); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
