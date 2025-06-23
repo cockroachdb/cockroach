@@ -430,7 +430,7 @@ func (ctx *FmtCtx) SetLocation(loc *time.Location) *time.Location {
 	return old
 }
 
-// WithReformatTableNames modifies FmtCtx to to substitute the printing of table
+// WithReformatTableNames modifies FmtCtx to substitute the printing of table
 // names using the provided function, calls fn, then restores the original table
 // formatting.
 func (ctx *FmtCtx) WithReformatTableNames(tableNameFmt func(*FmtCtx, *TableName), fn func()) {
