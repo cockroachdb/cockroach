@@ -75,10 +75,11 @@ func (m *multiMetricStoreRebalancer) rebalance(ctx context.Context) (attemptedCh
 	// We first construct a message containing the up-to-date store range
 	// information before any allocator pass. This ensures up to date
 	// allocator state.
-	storeLeaseholderMsg, allStores := m.store.MakeStoreLeaseholderMsg()
-	if !m.allocator.KnowsStores(allStores) {
-		log.Info(ctx, "mma rebalancer: noop since the allocator does not know all stores")
-		return false
+	knownStores := m.allocator.KnownStores()
+	storeLeaseholderMsg, numIgnoredRanges := m.store.MakeStoreLeaseholderMsg(knownStores)
+	if numIgnoredRanges > 0 {
+		log.Infof(ctx, "mma rebalancer: ignored %d ranges since the allocator does not know all stores",
+			numIgnoredRanges)
 	}
 	changes := m.allocator.ComputeChanges(ctx, &storeLeaseholderMsg, mma.ChangeOptions{
 		LocalStoreID: m.store.StoreID(),
