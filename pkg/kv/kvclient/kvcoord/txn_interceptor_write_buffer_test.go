@@ -1751,7 +1751,7 @@ func TestTxnWriteBufferRollbackToSavepoint(t *testing.T) {
 	require.Len(t, br.Responses, 2)
 	require.IsType(t, &kvpb.PutResponse{}, br.Responses[0].GetInner())
 	require.IsType(t, &kvpb.DeleteResponse{}, br.Responses[1].GetInner())
-	// Verify the
+	// Verify the state of the write buffer.
 	expBufferedWrites := []bufferedWrite{
 		makeBufferedWrite(keyA, makeBufferedValue("valA", 10)),
 		makeBufferedWrite(keyC, makeBufferedValue("", 11)),
@@ -1797,6 +1797,13 @@ func TestTxnWriteBufferRollbackToSavepoint(t *testing.T) {
 		makeBufferedWrite(keyA, makeBufferedValue("valA", 10)),
 	}
 	require.Equal(t, expBufferedWrites, twb.testingBufferedWritesAsSlice())
+	// Additionally ensure that we don't have a leak of rolled back writes.
+	{
+		bw := twb.testingBufferedWritesAsSlice()[0]
+		require.Greaterf(t, cap(bw.vals), 1, "should have kept the capacity of the slice")
+		vals := bw.vals[:cap(bw.vals)]
+		require.Equalf(t, bufferedValue{}, vals[1], "should have lost reference to the rolled back value")
+	}
 
 	// Commit the transaction.
 	ba = &kvpb.BatchRequest{}
