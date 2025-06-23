@@ -8,6 +8,7 @@ package cspann
 import (
 	"context"
 	"math"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
 	"github.com/cockroachdb/errors"
@@ -172,6 +173,8 @@ type levelSearcher struct {
 	parent *levelSearcher
 	// stats points to search stats that should be updated as the search runs.
 	stats *SearchStats
+	// excludedPartitions specifies which partitions to skip during search.
+	excludedPartitions []PartitionKey
 	// level is the K-means tree level being searched. This is undefined for the
 	// root level until SearchRoot is called.
 	level Level
@@ -244,7 +247,11 @@ func (s *levelSearcher) Init(
 			}
 			s.searchSet.MaxResults = maxResults
 			s.searchSet.MaxExtraResults = maxExtraResults
+
+			// Set additional fields that only apply to the last level.
 			s.searchSet.MatchKey = searchSet.MatchKey
+			s.searchSet.IncludeCentroidDistances = searchSet.IncludeCentroidDistances
+			s.excludedPartitions = searchSet.ExcludedPartitions
 		}
 	}
 }
@@ -298,12 +305,27 @@ func (s *levelSearcher) NextBatch(ctx context.Context) (ok bool, err error) {
 	// overlap with the previous batch, in terms of ordering and duplicates.
 	s.searchSet.Clear()
 
+	// filterPartitions filters parent results so that we don't even attempt to
+	// search excluded partitions.
+	filterPartitions := func(results []SearchResult) []SearchResult {
+		if s.excludedPartitions == nil {
+			return results
+		}
+		for i := 0; i < len(results); i++ {
+			if slices.Contains(s.excludedPartitions, results[i].ChildKey.PartitionKey) {
+				results = utils.ReplaceWithLast(results, i)
+				i--
+			}
+		}
+		return results
+	}
+
 	if firstBatch {
 		ok, err := s.parent.NextBatch(ctx)
 		if err != nil || !ok {
 			return ok, err
 		}
-		s.parentResults = s.parent.SearchSet().PopResults()
+		s.parentResults = filterPartitions(s.parent.SearchSet().PopResults())
 	} else if len(s.parentResults) < s.beamSize {
 		// Get more results from parent to try and fill the beam size.
 		parentResults := s.parent.SearchSet().PopResults()
@@ -319,6 +341,7 @@ func (s *levelSearcher) NextBatch(ctx context.Context) (ok bool, err error) {
 			}
 			parentResults = s.parent.SearchSet().PopResults()
 		}
+		parentResults = filterPartitions(parentResults)
 		if len(s.parentResults) == 0 {
 			s.parentResults = parentResults
 		} else {

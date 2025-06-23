@@ -446,6 +446,8 @@ func (s *testState) ForceSplitOrMerge(d *datadriven.TestData) string {
 
 		case "steps":
 			steps = s.parseInt(arg)
+			// Always discard any fixups triggered by the split or merge fixup.
+			s.DiscardFixups = true
 		}
 	}
 
