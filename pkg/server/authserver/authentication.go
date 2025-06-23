@@ -575,6 +575,7 @@ func (s *authenticationServer) VerifyJWT(
 	inputUser, _ := username.MakeSQLUsernameFromUserInput(usernameOptional, username.PurposeValidation)
 	retrievedUser, err := jwtVerifier.j.RetrieveIdentity(
 		ctx,
+		execCfg.Settings,
 		inputUser,
 		[]byte(jwtStr),
 		identMap,
