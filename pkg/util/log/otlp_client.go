@@ -8,7 +8,6 @@ package log
 import (
 	"bytes"
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
@@ -25,6 +24,11 @@ import (
 	"google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/status"
 )
+
+var logAttributeServiceKey = "service.name"
+var logAttributeServiceValue = "cockroachdb"
+var logAttributeSinkKey = "sink.name"
+var logIntrumentationLibrary = "cockroachdb.logger"
 
 // OpenTelemetry log sink
 type otlpSink struct {
@@ -97,8 +101,7 @@ func extractRecordsToOTLP(b []byte) []*lpb.LogRecord {
 
 func (sink *otlpSink) output(b []byte, opts sinkOutputOptions) error {
 	records := extractRecordsToOTLP(b)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	ctx := context.Background()
 
 	_, err := sink.lsc.Export(ctx, &collpb.ExportLogsServiceRequest{
 		ResourceLogs: []*lpb.ResourceLogs{
@@ -106,11 +109,11 @@ func (sink *otlpSink) output(b []byte, opts sinkOutputOptions) error {
 				Resource: &rpb.Resource{
 					Attributes: []*cpb.KeyValue{
 						{
-							Key:   "service.name",
-							Value: &cpb.AnyValue{Value: &cpb.AnyValue_StringValue{StringValue: "cockroachdb"}},
+							Key:   logAttributeServiceKey,
+							Value: &cpb.AnyValue{Value: &cpb.AnyValue_StringValue{StringValue: logAttributeServiceValue}},
 						},
 						{
-							Key:   "sink.name",
+							Key:   logAttributeSinkKey,
 							Value: &cpb.AnyValue{Value: &cpb.AnyValue_StringValue{StringValue: sink.name}},
 						},
 					},
@@ -118,7 +121,7 @@ func (sink *otlpSink) output(b []byte, opts sinkOutputOptions) error {
 				InstrumentationLibraryLogs: []*lpb.InstrumentationLibraryLogs{
 					{
 						InstrumentationLibrary: &cpb.InstrumentationLibrary{
-							Name:    "cockroachdb.logger",
+							Name:    logIntrumentationLibrary,
 							Version: build.BinaryVersion(),
 						},
 						Logs: records,
