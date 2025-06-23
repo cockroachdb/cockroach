@@ -14,168 +14,210 @@ import (
 
 func TestParseProvisioningSource(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tests := []struct {
+
+	// Test cases that should apply to both ldap and jwt_token
+	sharedTests := []struct {
 		name           string
-		sourceStr      string
+		idpStr         string
 		wantErr        bool
-		expectedMethod string
 		expectedIDP    string
 		expectedErrMsg string
 	}{
 		{
-			name:           "valid ldap source",
-			sourceStr:      "ldap:ldap.bar.com",
-			wantErr:        false,
-			expectedMethod: "ldap",
-			expectedIDP:    "ldap.bar.com",
-		},
-		{
-			name:           "valid ldap source with example.com",
-			sourceStr:      "ldap:ldap.example.com",
-			wantErr:        false,
-			expectedMethod: "ldap",
-			expectedIDP:    "ldap.example.com",
-		},
-		{
-			name:           "valid ldap source with simple hostname",
-			sourceStr:      "ldap:foo.bar",
-			wantErr:        false,
-			expectedMethod: "ldap",
-			expectedIDP:    "foo.bar",
-		},
-		{
-			name:           "missing auth method prefix",
-			sourceStr:      "ldap.example.com",
-			wantErr:        true,
-			expectedErrMsg: `PROVISIONSRC "ldap.example.com" was not prefixed with any valid auth methods ["ldap"]`,
-		},
-		{
-			name:           "invalid characters in IDP",
-			sourceStr:      "ldap:[]!@#%#^$&*",
-			wantErr:        true,
-			expectedErrMsg: `provided IDP "[]!@#%#^$&*" in PROVISIONSRC is non parseable`,
-		},
-		{
-			name:           "empty string",
-			sourceStr:      "",
-			wantErr:        true,
-			expectedErrMsg: `PROVISIONSRC "" was not prefixed with any valid auth methods ["ldap"]`,
-		},
-		{
-			name:           "invalid auth method",
-			sourceStr:      "oauth:example.com",
-			wantErr:        true,
-			expectedErrMsg: `PROVISIONSRC "oauth:example.com" was not prefixed with any valid auth methods ["ldap"]`,
+			name:        "valid source",
+			idpStr:      "idp.example.com",
+			wantErr:     false,
+			expectedIDP: "idp.example.com",
 		},
 		{
 			name:           "only auth method without IDP",
-			sourceStr:      "ldap:",
+			idpStr:         "",
 			wantErr:        true,
 			expectedErrMsg: `PROVISIONSRC IDP cannot be empty`,
 		},
 		{
 			name:           "IDP url with port",
-			sourceStr:      "ldap:example.com:389",
+			idpStr:         "example.com:389",
 			wantErr:        true,
 			expectedErrMsg: "unknown PROVISIONSRC IDP url format in \"example.com:389\"",
 		},
 		{
-			name:           "IDP url starts with double slash",
-			sourceStr:      "ldap://ldap.example.com",
-			wantErr:        false,
-			expectedMethod: "ldap",
-			expectedIDP:    "//ldap.example.com",
+			name:        "space in IDP url",
+			idpStr:      "idp1 idp2",
+			wantErr:     false,
+			expectedIDP: "idp1%20idp2",
 		},
 		{
-			name:           "space in IDP url",
-			sourceStr:      "ldap:ldap1 ldap2",
-			wantErr:        false,
-			expectedMethod: "ldap",
-			expectedIDP:    "ldap1%20ldap2",
+			name:        "IDP url starts with double slash",
+			idpStr:      "//idp.example.com",
+			wantErr:     false,
+			expectedIDP: "//idp.example.com",
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			source, err := ParseProvisioningSource(tt.sourceStr)
-			if tt.wantErr {
-				require.Error(t, err)
-				require.Nil(t, source)
-				require.Contains(t, err.Error(), tt.expectedErrMsg)
-			} else {
-				require.NoError(t, err)
-				require.NotNil(t, source)
-				require.Equal(t, tt.expectedMethod, source.authMethod)
-				require.Equal(t, tt.expectedIDP, source.idp.String())
+	for _, method := range []string{"ldap", "jwt_token"} {
+		t.Run(method, func(t *testing.T) {
+			for _, tt := range sharedTests {
+				t.Run(tt.name, func(t *testing.T) {
+					source, err := ParseProvisioningSource(method + ":" + tt.idpStr)
+					if tt.wantErr {
+						require.Error(t, err)
+						require.Nil(t, source)
+						if tt.expectedErrMsg != "" {
+							require.Contains(t, err.Error(), tt.expectedErrMsg)
+						}
+					} else {
+						require.NoError(t, err)
+						require.NotNil(t, source)
+						require.Equal(t, method, source.authMethod)
+						require.Equal(t, tt.expectedIDP, source.idp.String())
+					}
+				})
 			}
 		})
 	}
+
+	// Test case specific to jwt_token allowing https
+	t.Run("jwt_token/valid_https_source", func(t *testing.T) {
+		source, err := ParseProvisioningSource("jwt_token:https://accounts.google.com")
+		require.NoError(t, err)
+		require.NotNil(t, source)
+		require.Equal(t, "jwt_token", source.authMethod)
+		require.Equal(t, "https://accounts.google.com", source.idp.String())
+	})
+
+	// According to the current implementation of `parseIDP`, this is valid.
+	// The function `url.Parse` accepts this and the checks for Port and Opaque pass.
+	t.Run("ldap/https_source_is_valid_by_current_implementation", func(t *testing.T) {
+		source, err := ParseProvisioningSource("ldap:https://accounts.google.com")
+		require.NoError(t, err)
+		require.NotNil(t, source)
+		require.Equal(t, "ldap", source.authMethod)
+		require.Equal(t, "https://accounts.google.com", source.idp.String())
+	})
+
+	// Test cases that are independent of any valid auth method prefix
+	t.Run("global_failures", func(t *testing.T) {
+		globalTests := []struct {
+			name           string
+			sourceStr      string
+			expectedErrMsg string
+		}{
+			{
+				name:           "missing auth method prefix",
+				sourceStr:      "nocolon.example.com",
+				expectedErrMsg: `PROVISIONSRC "nocolon.example.com" was not prefixed with any valid auth methods`,
+			},
+			{
+				name:           "empty string",
+				sourceStr:      "",
+				expectedErrMsg: `PROVISIONSRC "" was not prefixed with any valid auth methods`,
+			},
+			{
+				name:           "invalid auth method",
+				sourceStr:      "oauth:example.com",
+				expectedErrMsg: `PROVISIONSRC "oauth:example.com" was not prefixed with any valid auth methods`,
+			},
+		}
+
+		for _, tt := range globalTests {
+			t.Run(tt.name, func(t *testing.T) {
+				_, err := ParseProvisioningSource(tt.sourceStr)
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.expectedErrMsg)
+			})
+		}
+	})
 }
 
 func TestValidateSource(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tests := []struct {
+
+	// Shared test cases
+	sharedTests := []struct {
 		name           string
-		sourceStr      string
+		idpStr         string
 		wantErr        bool
 		expectedErrMsg string
 	}{
 		{
-			name:      "valid ldap source",
-			sourceStr: "ldap:ldap.bar.com",
-			wantErr:   false,
-		},
-		{
-			name:      "valid ldap source with example.com",
-			sourceStr: "ldap:ldap.example.com",
-			wantErr:   false,
-		},
-		{
-			name:      "valid ldap source with simple hostname",
-			sourceStr: "ldap:foo.bar",
-			wantErr:   false,
-		},
-		{
-			name:           "missing auth method prefix",
-			sourceStr:      "ldap.example.com",
-			wantErr:        true,
-			expectedErrMsg: `PROVISIONSRC "ldap.example.com" was not prefixed with any valid auth methods ["ldap"]`,
+			name:    "valid source",
+			idpStr:  "idp.bar.com",
+			wantErr: false,
 		},
 		{
 			name:           "invalid characters in IDP",
-			sourceStr:      "ldap:[]!@#%#^$&*",
+			idpStr:         "[]!@#%#^$&*",
 			wantErr:        true,
 			expectedErrMsg: `provided IDP "[]!@#%#^$&*" in PROVISIONSRC is non parseable`,
 		},
 		{
-			name:           "empty string",
-			sourceStr:      "",
-			wantErr:        true,
-			expectedErrMsg: `PROVISIONSRC "" was not prefixed with any valid auth methods ["ldap"]`,
-		},
-		{
-			name:           "invalid auth method",
-			sourceStr:      "oauth:example.com",
-			wantErr:        true,
-			expectedErrMsg: `PROVISIONSRC "oauth:example.com" was not prefixed with any valid auth methods ["ldap"]`,
-		},
-		{
 			name:           "only auth method without IDP",
-			sourceStr:      "ldap:",
+			idpStr:         "",
 			wantErr:        true,
 			expectedErrMsg: `PROVISIONSRC IDP cannot be empty`,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateSource(tt.sourceStr)
-			if tt.wantErr {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), tt.expectedErrMsg)
-			} else {
-				require.NoError(t, err)
+	for _, method := range []string{"ldap", "jwt_token"} {
+		t.Run(method, func(t *testing.T) {
+			for _, tt := range sharedTests {
+				t.Run(tt.name, func(t *testing.T) {
+					err := ValidateSource(method + ":" + tt.idpStr)
+					if tt.wantErr {
+						require.Error(t, err)
+						if tt.expectedErrMsg != "" {
+							require.Contains(t, err.Error(), tt.expectedErrMsg)
+						}
+					} else {
+						require.NoError(t, err)
+					}
+				})
 			}
 		})
 	}
+
+	// Specific cases
+	t.Run("jwt_token/valid_https_source", func(t *testing.T) {
+		err := ValidateSource("jwt_token:https://accounts.google.com")
+		require.NoError(t, err)
+	})
+
+	t.Run("ldap/https_source_is_valid_by_current_implementation", func(t *testing.T) {
+		err := ValidateSource("ldap:https://accounts.google.com")
+		require.NoError(t, err)
+	})
+
+	// Global failure cases
+	t.Run("global_failures", func(t *testing.T) {
+		globalTests := []struct {
+			name           string
+			sourceStr      string
+			expectedErrMsg string
+		}{
+			{
+				name:           "missing auth method prefix",
+				sourceStr:      "nocolon.example.com",
+				expectedErrMsg: `PROVISIONSRC "nocolon.example.com" was not prefixed with any valid auth methods`,
+			},
+			{
+				name:           "empty string",
+				sourceStr:      "",
+				expectedErrMsg: `PROVISIONSRC "" was not prefixed with any valid auth methods`,
+			},
+			{
+				name:           "invalid auth method",
+				sourceStr:      "oauth:example.com",
+				expectedErrMsg: `PROVISIONSRC "oauth:example.com" was not prefixed with any valid auth methods`,
+			},
+		}
+
+		for _, tt := range globalTests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := ValidateSource(tt.sourceStr)
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.expectedErrMsg)
+			})
+		}
+	})
 }
