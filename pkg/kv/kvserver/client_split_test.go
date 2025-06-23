@@ -76,6 +76,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/maps"
 )
 
 // adminSplitArgs creates an AdminSplitRequest for the provided split key.
@@ -4605,9 +4606,7 @@ func TestStoreRangeSplitRaftSnapshotAfterRHSRebalanced(t *testing.T) {
 	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
 		rangeID:                    aRepl0.RangeID,
 		IncomingRaftMessageHandler: store2,
-		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-			dropReq: func(request *kvserverpb.RaftMessageRequest) bool { return true },
-		},
+		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{},
 	})
 
 	// Split at keyD: [keyStart, keyD) and [keyD, /Max)
@@ -4629,14 +4628,39 @@ func TestStoreRangeSplitRaftSnapshotAfterRHSRebalanced(t *testing.T) {
 	tc.RemoveVotersOrFatal(t, keyD, tc.Target(0))
 	tc.AddVotersOrFatal(t, keyD, tc.Target(3))
 
-	// Restore Raft traffic to store2, but drop MsgApp for old log entries as in
-	// the original test.
-	index := store0.LookupReplica(roachpb.RKey(keyStart)).GetLastIndex()
+	// Truncate the logs of the LHS to ensure store2 needs to be caught up using a
+	// snapshot.
+	index := func() kvpb.RaftIndex {
+		repl := store0.LookupReplica(roachpb.RKey(keyStart))
+		index := repl.GetLastIndex()
+		truncArgs := &kvpb.TruncateLogRequest{
+			RequestHeader: kvpb.RequestHeader{Key: keyStart},
+			Index:         index + 1,
+			RangeID:       repl.RangeID,
+		}
+		if _, err := kv.SendWrapped(ctx, distSender, truncArgs); err != nil {
+			t.Fatal(err)
+		}
+		waitForTruncationForTesting(t, repl, index)
+		return index
+	}()
+
+	beforeRaftSnaps := store2.Metrics().RangeSnapshotsAppliedByVoters.Count()
+
 	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
 		rangeID:                    aRepl0.RangeID,
 		IncomingRaftMessageHandler: store2,
 		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 			dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
+				// Make sure that even going forward no MsgApp for what we just
+				// truncated can make it through. The Raft transport is asynchronous so
+				// this is necessary to make the test pass reliably - otherwise the
+				// follower on store2 may catch up without needing a snapshot, tripping
+				// up the test.
+				//
+				// NB: the Index on the message is the log index that _precedes_ any of
+				// the entries in the MsgApp, so filter where msg.Index < index, not <=
+				// index.
 				return req.Message.Type == raftpb.MsgApp && kvpb.RaftIndex(req.Message.Index) < index
 			},
 			dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
@@ -4647,28 +4671,25 @@ func TestStoreRangeSplitRaftSnapshotAfterRHSRebalanced(t *testing.T) {
 	// Wait for all replicas to catch up. This will require a Raft snapshot to
 	// store2.
 	testutils.SucceedsSoon(t, func() error {
+		afterRaftSnaps := store2.Metrics().RangeSnapshotsAppliedByVoters.Count()
+		if afterRaftSnaps <= beforeRaftSnaps {
+			return errors.New("expected store2 to apply at least 1 additional raft snapshot")
+		}
 		getKeySet := func(engine storage.Engine) map[string]struct{} {
 			kvs, err := storage.Scan(context.Background(), engine, keyStart, keyEnd, 0)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			out := map[string]struct{}{}
 			for _, kv := range kvs {
 				out[string(kv.Key.Key)] = struct{}{}
 			}
 			return out
 		}
-		storeKeys0 := getKeySet(store0.TODOEngine())
-		storeKeys2 := getKeySet(store2.TODOEngine())
-		for k := range storeKeys0 {
-			if _, ok := storeKeys2[k]; !ok {
-				return fmt.Errorf("store2 missing key %s", roachpb.Key(k))
-			}
-		}
-		for k := range storeKeys2 {
-			if _, ok := storeKeys0[k]; !ok {
-				return fmt.Errorf("store2 has extra key %s", roachpb.Key(k))
-			}
+		storeKeys0 := getKeySet(store0.StateEngine())
+		storeKeys2 := getKeySet(store2.StateEngine())
+		if !maps.Equal(storeKeys0, storeKeys2) {
+			return fmt.Errorf(
+				"store0 and store2 have different keys: %s != %s", storeKeys0, storeKeys2,
+			)
 		}
 		return nil
 	})
