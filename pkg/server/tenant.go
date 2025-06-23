@@ -1335,6 +1335,7 @@ func makeTenantSQLServerArgs(
 			nodeLiveness:      optionalnodeliveness.MakeContainer(nil),
 			gossip:            gossip.MakeOptionalGossip(nil),
 			grpcServer:        grpcServer.Server,
+			drpcMux:           drpcServer.DRPCServer,
 			isMeta1Leaseholder: func(_ context.Context, _ hlc.ClockTimestamp) (bool, error) {
 				return false, errors.New("isMeta1Leaseholder is not available to secondary tenants")
 			},
