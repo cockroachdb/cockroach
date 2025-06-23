@@ -816,6 +816,22 @@ func (s StoreIDAndReplicaState) SafeFormat(w redact.SafePrinter, _ rune) {
 type rangeState struct {
 	// replicas is the adjusted replicas. It is always consistent with
 	// the storeState.adjusted.replicas in the corresponding stores.
+	//
+	// NB: Because pendingReplicaChange individually represents the change to a
+	// single store, a lease transfer or replica movement is represented using
+	// two pendingReplicaChanges. This is convenient since it allows composition
+	// of the simple pendingReplicaChange to represent various changes. And it
+	// allows for the enactment to be decoupled e.g. a new replica is added
+	// during the joint config and starts experiencing load before the old
+	// replica is removed. One unintended side-effect of this data-structural
+	// choice is that we could undo the effect of a lease transfer change on the
+	// lease shedding store before undoing the effect of the lease addition on
+	// the new leaseholder store (e.g. when doing time based GC -- though
+	// currently time-based GC is done for the whole clusterState so unclear if
+	// this is really possible). This allows multiple leaseholders, or no
+	// leaseholder, but only when there are still some pendingReplicaChanges for
+	// the rangeState. We consider this harmless since we will not make changes
+	// to a range that has pending changes.
 	replicas []StoreIDAndReplicaState
 	conf     *normalizedSpanConfig
 
