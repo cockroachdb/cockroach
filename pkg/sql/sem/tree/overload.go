@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -1108,7 +1109,19 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 			// Don't filter builtin routines.
 			return true
 		}
-		params := ol.Types.(ParamTypes)
+		params, ok := ol.Types.(ParamTypes)
+		if !ok {
+			if buildutil.CrdbTestBuild {
+				// All user-defined routines are expected to have non-nil
+				// ParamTypes set.
+				panic(errors.AssertionFailedf(
+					"found user-defined routine with non-ParamTypes Types field, %v", ol,
+				))
+			}
+			// Don't filter overloads that have nil ParamTypes or have variadic
+			// or homogeneous types.
+			return true
+		}
 		var outParams ParamTypes
 		if ol.Type == ProcedureRoutine && foundOutParams {
 			outParams = ol.OutParamTypes.(ParamTypes)
