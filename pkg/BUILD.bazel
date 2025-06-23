@@ -1701,7 +1701,6 @@ GO_TARGETS = [
     "//pkg/rpc/rpcbase:base",
     "//pkg/rpc/rpcbase:rpcbase",
     "//pkg/rpc/rpcpb:rpcpb",
-    "//pkg/rpc/testdrpcpb:testdrpcpb",
     "//pkg/rpc:rpc",
     "//pkg/rpc:rpc_test",
     "//pkg/scheduledjobs/schedulebase:schedulebase",

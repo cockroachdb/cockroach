@@ -183,37 +183,38 @@ func TestDefaultDRPCOption(t *testing.T) {
 	})
 }
 
-var unaryInterceptorCalled bool
-var streamInterceptorCalled bool
-
-// dummy unary interceptor for testing.
-func mockUnaryInterceptor(
-	ctx context.Context,
-	rpc string,
-	enc drpc.Encoding,
-	in, out drpc.Message,
-	cc *drpcclient.ClientConn,
-	invoker drpcclient.UnaryInvoker,
-) error {
-	unaryInterceptorCalled = true
-	return invoker(ctx, rpc, enc, in, out, cc)
-}
-
-// dummy stream interceptor for testing.
-func mockStreamInterceptor(
-	ctx context.Context,
-	rpc string,
-	enc drpc.Encoding,
-	cc *drpcclient.ClientConn,
-	streamer drpcclient.Streamer,
-) (drpc.Stream, error) {
-	streamInterceptorCalled = true
-	return streamer(ctx, rpc, enc, cc)
-}
-
 func TestDialDRPC_InterceptorsAreSet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	var unaryInterceptorCalled bool
+	var streamInterceptorCalled bool
+
+	// dummy unary interceptor for testing.
+	mockUnaryInterceptor := func(
+		ctx context.Context,
+		rpc string,
+		enc drpc.Encoding,
+		in, out drpc.Message,
+		cc *drpcclient.ClientConn,
+		invoker drpcclient.UnaryInvoker,
+	) error {
+		unaryInterceptorCalled = true
+		return invoker(ctx, rpc, enc, in, out, cc)
+	}
+
+	// dummy stream interceptor for testing.
+	mockStreamInterceptor := func(
+		ctx context.Context,
+		rpc string,
+		enc drpc.Encoding,
+		cc *drpcclient.ClientConn,
+		streamer drpcclient.Streamer,
+	) (drpc.Stream, error) {
+		streamInterceptorCalled = true
+		return streamer(ctx, rpc, enc, cc)
+	}
+
 	ctx := context.Background()
 	const numNodes = 1
 	args := base.TestClusterArgs{
@@ -237,20 +238,19 @@ func TestDialDRPC_InterceptorsAreSet(t *testing.T) {
 	rpcContextOptions.Stopper = c.Stopper()
 	rpcContextOptions.Settings = c.Server(0).ClusterSettings()
 	rpcCtx := rpc.NewContext(ctx, rpcContextOptions)
-	rpcCtx.Stopper = c.Stopper()
 	rpcCtx.ContextOptions = rpc.ContextOptions{Insecure: true}
-	rpcCtx.ClientOnly = true
+	//rpcCtx.ClientOnly = true
 	// Adding test interceptors
 	rpcCtx.Knobs = rpc.ContextTestingKnobs{
-		UnaryClientInterceptorDRPC: func(target string) drpcclient.UnaryClientInterceptor {
+		UnaryClientInterceptorDRPC: func(target string, class rpcbase.ConnectionClass) drpcclient.UnaryClientInterceptor {
 			return mockUnaryInterceptor
 		},
-		StreamClientInterceptorDRPC: func(target string) drpcclient.StreamClientInterceptor {
+		StreamClientInterceptorDRPC: func(target string, class rpcbase.ConnectionClass) drpcclient.StreamClientInterceptor {
 			return mockStreamInterceptor
 		},
 	}
 	getConn := rpc.DialDRPC(rpcCtx)
-	conn, err := getConn(ctx, rpcAddr, rpcbase.ConnectionClass(0))
+	conn, err := getConn(ctx, rpcAddr, rpcbase.DefaultClass)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, conn.Close()) }()
 	desc := c.LookupRangeOrFatal(t, c.ScratchRange(t))

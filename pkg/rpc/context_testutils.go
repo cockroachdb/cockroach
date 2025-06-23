@@ -39,9 +39,9 @@ type ContextTestingKnobs struct {
 	// unary RPC.
 	UnaryClientInterceptor func(target string, class rpcbase.ConnectionClass) grpc.UnaryClientInterceptor
 
-	UnaryClientInterceptorDRPC func(target string) drpcclient.UnaryClientInterceptor
+	UnaryClientInterceptorDRPC func(target string, class rpcbase.ConnectionClass) drpcclient.UnaryClientInterceptor
 
-	StreamClientInterceptorDRPC func(target string) drpcclient.StreamClientInterceptor
+	StreamClientInterceptorDRPC func(target string, class rpcbase.ConnectionClass) drpcclient.StreamClientInterceptor
 
 	// InjectedLatencyOracle if non-nil contains a map from target address
 	// (server.RPCServingAddr() of a remote node) to artificial latency in
