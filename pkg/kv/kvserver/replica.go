@@ -3074,6 +3074,15 @@ func (r *Replica) TryConstructMMARangeMsg() (mma.RangeMsg, bool) {
 	}
 	var isLeaseholder bool
 	var wasLeaseholder bool
+	// Will only use desc and conf if isLeaseholder is true, but we need these
+	// to be mutually consistent (i.e., if the RangeDescriptor changes to remove
+	// this Replica, we don't want to continue thinking isLeaseholder is true),
+	// so we read them under the same lock.
+	//
+	// TODO(sumeer): confirm that the descriptor is guaranteed to contain this
+	// Replica as a voter when isLeaseholder is true.
+	var desc *roachpb.RangeDescriptor
+	var conf roachpb.SpanConfig
 	func() {
 		r.mu.RLock()
 		defer r.mu.RUnlock()
@@ -3084,6 +3093,8 @@ func (r *Replica) TryConstructMMARangeMsg() (mma.RangeMsg, bool) {
 			r.mu.mmaRangeMessageNeeded.clearLastStateWhenNotLeaseholder()
 		}
 		r.mu.mmaRangeMessageNeeded.lastIsLeaseholder = isLeaseholder
+		desc = r.descRLocked()
+		conf = r.mu.conf
 	}()
 	// Fast path.
 	if !isLeaseholder {
@@ -3093,22 +3104,13 @@ func (r *Replica) TryConstructMMARangeMsg() (mma.RangeMsg, bool) {
 	rload := r.RangeLoad()
 	sendStreamStats := r.mu.mmaRangeMessageNeeded.getSendStreamStatsScratch()
 	r.flowControlV2.SendStreamStats(sendStreamStats)
-	var raftStatus *raft.Status
 	var needed bool
-	var desc *roachpb.RangeDescriptor
-	var conf roachpb.SpanConfig
 	func() {
 		r.mu.RLock()
 		defer r.mu.RUnlock()
-		raftStatus = r.raftStatusRLocked()
+		raftStatus := r.raftStatusRLocked()
 		needed = r.mu.mmaRangeMessageNeeded.getNeededAndReset(
 			rload, raftStatus, sendStreamStats)
-		if needed {
-			// TODO(sumeer): confirm that the descriptor is guaranteed to contain
-			// this Replica as a voter.
-			desc = r.descRLocked()
-			conf = r.mu.conf
-		}
 	}()
 	if !needed {
 		return mma.RangeMsg{RangeID: r.RangeID}, true
