@@ -9,6 +9,7 @@ go_library(
         "latency.go",
         "network_partition.go",
         "noop.go",
+        "option.go",
         "process_kill.go",
         "registry.go",
         "reset.go",
