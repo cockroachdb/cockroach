@@ -97,6 +97,8 @@ type fixupWorker struct {
 	tempChildKey        [1]ChildKey
 	tempValueBytes      [1]ValueBytes
 	tempMetadataToGet   []PartitionMetadataToGet
+	tempIndexCtx        Context
+	tempPartitionKeys   [3]PartitionKey
 }
 
 // ewFixupWorker returns a new worker for the given processor.
@@ -240,24 +242,33 @@ func (fw *fixupWorker) getFullVectorsForPartition(
 		vectors = vector.MakeSet(fw.index.quantizer.GetDims())
 		vectors.AddUndefined(len(fw.tempVectorsWithKeys))
 		for i := range fw.tempVectorsWithKeys {
-			if partition.Level() == LeafLevel {
-				// Leaf vectors from the primary index need to be randomized and
-				// possibly normalized.
-				fw.index.TransformVector(fw.tempVectorsWithKeys[i].Vector, vectors.At(i))
-			} else {
-				copy(vectors.At(i), fw.tempVectorsWithKeys[i].Vector)
-
-				// Convert mean centroids into spherical centroids for the Cosine
-				// and InnerProduct distance metrics.
-				switch fw.index.quantizer.GetDistanceMetric() {
-				case vecpb.CosineDistance, vecpb.InnerProductDistance:
-					num32.Normalize(vectors.At(i))
-				}
-			}
+			fw.transformFullVector(partition.Level(), fw.tempVectorsWithKeys[i].Vector, vectors.At(i))
 		}
 
 		return nil
 	})
 
 	return vectors, err
+}
+
+// transformFullVector ensures that the full vector fetched from a partition at
+// the given level has been properly randomized and normalized. It copies the
+// randomized, normalized vector into "randomized", which must be allocated by
+// the caller with the same length as the input vector.
+func (fw *fixupWorker) transformFullVector(level Level, vec, randomized vector.T) {
+	if level == LeafLevel {
+		// Leaf vectors from the primary index need to be randomized and possibly
+		// normalized.
+		fw.index.TransformVector(vec, randomized)
+	} else {
+		// This is an interior level, which means the vector is a partition
+		// centroid that's already normalized. However, it's a mean centroid, and
+		// needs to be converted into a spherical centroid for the Cosine and
+		// InnerProduct distance metrics.
+		copy(randomized, vec)
+		switch fw.index.quantizer.GetDistanceMetric() {
+		case vecpb.CosineDistance, vecpb.InnerProductDistance:
+			num32.Normalize(randomized)
+		}
+	}
 }

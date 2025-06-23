@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
 )
@@ -158,16 +159,49 @@ func TestQueryComparer(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup queryComparer.
 			var rot RandomOrthoTransformer
-			rot.Init(vecpb.RotNone, len(tc.queryVector), 42)
+			rot.Init(vecpb.RotGivens, len(tc.queryVector), 42)
 
 			var comparer queryComparer
-			comparer.Init(tc.metric, tc.queryVector, &rot)
+			comparer.InitOriginal(tc.metric, tc.queryVector, &rot)
 
-			// Make a copy of candidates to avoid modifying test data.
+			// Make a copy of the candidates.
 			candidates := make([]SearchResult, len(tc.candidates))
 			copy(candidates, tc.candidates)
 
-			// Test the main method.
+			// Randomize candidates from an interior level.
+			if tc.level != LeafLevel {
+				for i := range tc.candidates {
+					rot.RandomizeVector(tc.candidates[i].Vector, candidates[i].Vector)
+				}
+			}
+
+			// Test ComputeExactDistances.
+			comparer.ComputeExactDistances(tc.level, candidates)
+			require.Len(t, candidates, len(tc.expected), "number of candidates should be preserved")
+
+			for i, expected := range tc.expected {
+				require.InDelta(t, expected, candidates[i].QueryDistance, 1e-5,
+					"distance mismatch for candidate %d", i)
+
+				// Error bound should always be 0 for exact distances.
+				require.Equal(t, float32(0), candidates[i].ErrorBound,
+					"error bound should be 0 for exact distances")
+			}
+
+			// Test InitRandomized for interior levels.
+			if tc.level == LeafLevel {
+				return
+			}
+
+			// Transform the query vector.
+			queryVector := make([]float32, len(tc.queryVector))
+			rot.RandomizeVector(tc.queryVector, queryVector)
+			if tc.metric == vecpb.CosineDistance {
+				num32.Normalize(queryVector)
+			}
+			comparer.InitTransformed(tc.metric, queryVector, &rot)
+
+			// Test ComputeExactDistances.
 			comparer.ComputeExactDistances(tc.level, candidates)
 			require.Len(t, candidates, len(tc.expected), "number of candidates should be preserved")
 
