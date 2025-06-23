@@ -114,10 +114,13 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	setup := func(t *testing.T, canResize bool) (*kafkaSinkV2Fx, SinkPayload, []any) {
+	setup := func(t *testing.T, canResize bool, errorDetails bool) (*kafkaSinkV2Fx, SinkPayload, []any) {
 		fx := newKafkaSinkV2Fx(t, withSettings(func(settings *cluster.Settings) {
 			if canResize {
 				changefeedbase.BatchReductionRetryEnabled.Override(context.Background(), &settings.SV, true)
+			}
+			if errorDetails {
+				changefeedbase.KafkaV2IncludeErrorDetails.Override(context.Background(), &settings.SV, true)
 			}
 		}))
 		defer fx.close()
@@ -144,14 +147,14 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 	}
 
 	t.Run("resize disabled", func(t *testing.T) {
-		fx, payload, payloadAnys := setup(t, false)
+		fx, payload, payloadAnys := setup(t, false, false)
 		pr := kgo.ProduceResults{kgo.ProduceResult{Err: fmt.Errorf("..: %w", kerr.MessageTooLarge)}}
 		fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys...).Times(1).Return(pr)
 		require.Error(t, fx.sink.Flush(fx.ctx, payload))
 	})
 
 	t.Run("resize enabled and it keeps failing", func(t *testing.T) {
-		fx, payload, payloadAnys := setup(t, true)
+		fx, payload, payloadAnys := setup(t, true, true)
 
 		pr := kgo.ProduceResults{kgo.ProduceResult{Err: fmt.Errorf("..: %w", kerr.MessageTooLarge)}}
 		// it should keep splitting it in two until it hits size=1
@@ -176,7 +179,7 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 	})
 
 	t.Run("resize enabled and it gets everything", func(t *testing.T) {
-		fx, payload, payloadAnys := setup(t, true)
+		fx, payload, payloadAnys := setup(t, true, false)
 
 		prErr := kgo.ProduceResults{kgo.ProduceResult{Err: fmt.Errorf("..: %w", kerr.MessageTooLarge)}}
 		prOk := kgo.ProduceResults{}

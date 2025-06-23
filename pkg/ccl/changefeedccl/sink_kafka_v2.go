@@ -41,9 +41,10 @@ type kafkaSinkClientV2 struct {
 	client      KafkaClientV2
 	adminClient KafkaAdminClientV2
 
-	knobs          kafkaSinkV2Knobs
-	canTryResizing bool
-	recordResize   func(numRecords int64)
+	knobs               kafkaSinkV2Knobs
+	canTryResizing      bool
+	includeErrorDetails bool
+	recordResize        func(numRecords int64)
 
 	topicsForConnectionCheck []string
 
@@ -124,6 +125,7 @@ func newKafkaSinkClientV2(
 		knobs:                    knobs,
 		batchCfg:                 batchCfg,
 		canTryResizing:           changefeedbase.BatchReductionRetryEnabled.Get(&settings.SV),
+		includeErrorDetails:      changefeedbase.KafkaV2IncludeErrorDetails.Get(&settings.SV),
 		recordResize:             recordResize,
 		topicsForConnectionCheck: topicsForConnectionCheck,
 	}
@@ -165,7 +167,7 @@ func (k *kafkaSinkClientV2) Flush(ctx context.Context, payload SinkPayload) (ret
 				}
 				return nil
 			} else {
-				if len(msgs) == 1 && errors.Is(err, kerr.MessageTooLarge) {
+				if len(msgs) == 1 && errors.Is(err, kerr.MessageTooLarge) && k.includeErrorDetails {
 					msg := msgs[0]
 					mvccVal := msg.Context.Value(mvccTSKey{})
 					var ts hlc.Timestamp
