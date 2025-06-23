@@ -152,10 +152,10 @@ type Allocator interface {
 		rangeID roachpb.RangeID, canTransferLease bool, opts ChangeOptions,
 	) ([]pendingReplicaChange, error)
 
-	// KnowsStores is a temporary hack to deal with staleness in calling SetStore.
+	// KnownStores is a temporary hack to deal with staleness in calling SetStore.
 	//
 	// TODO(sumeer): remove once the integration is properly done.
-	KnowsStores(stores map[roachpb.StoreID]struct{}) bool
+	KnownStores() map[roachpb.StoreID]struct{}
 }
 
 // Avoid unused lint errors.

@@ -48,10 +48,15 @@ type StoreLeaseholderMsg struct {
 // something has changed since the last leaseholder informed the allocator. A
 // tiny change to the RangeLoad (decided by the caller) will not cause the
 // fields to be populated.
+//
+// To ensure that the allocator does not lose synchronization with the current
+// set of replicas, due to spurious changes (we had one undiagnosed example
+// where the allocator was spuriously told that a lease was transferred away),
+// the Replicas field is always populated).
 type RangeMsg struct {
 	roachpb.RangeID
-	Populated bool
 	Replicas  []StoreIDAndReplicaState
+	Populated bool
 	Conf      roachpb.SpanConfig
 	RangeLoad RangeLoad
 }
