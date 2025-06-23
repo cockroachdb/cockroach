@@ -84,7 +84,7 @@ func evalNewLease(
 			} else {
 				for _, acq := range acquisitions {
 					if err := storage.MVCCAcquireLock(ctx, readWriter,
-						&acq.Txn, acq.IgnoredSeqNums, acq.Strength, acq.Key, ms, 0, 0); err != nil {
+						&acq.Txn, acq.IgnoredSeqNums, acq.Strength, acq.Key, ms, 0, 0, true); err != nil {
 						return newFailedLeaseTrigger(isTransfer), err
 					}
 				}

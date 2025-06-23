@@ -1081,7 +1081,7 @@ func cmdAcquireLock(e *evalCtx) error {
 			txnMeta = &txn.TxnMeta
 			ignoredSeq = txn.IgnoredSeqNums
 		}
-		return storage.MVCCAcquireLock(e.ctx, rw, txnMeta, ignoredSeq, str, key, e.ms, maxLockConflicts, targetLockConflictBytes)
+		return storage.MVCCAcquireLock(e.ctx, rw, txnMeta, ignoredSeq, str, key, e.ms, maxLockConflicts, targetLockConflictBytes, false)
 	})
 }
 
