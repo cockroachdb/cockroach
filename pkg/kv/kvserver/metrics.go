@@ -3366,6 +3366,7 @@ func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, m *tenantSto
 	}
 
 	m.mu.released.Store(true)
+	m.mu.stack = debugutil.Stack()
 
 	// The refCount is zero, delete this instance after destroying its metrics.
 	// Note that concurrent attempts to create an instance will detect the zero
