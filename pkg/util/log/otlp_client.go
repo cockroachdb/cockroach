@@ -25,10 +25,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-var logAttributeServiceKey = "service.name"
-var logAttributeServiceValue = "cockroachdb"
-var logAttributeSinkKey = "sink.name"
-var logIntrumentationLibrary = "cockroachdb.logger"
+const logAttributeServiceKey = "service.name"
+const logAttributeServiceValue = "cockroachdb"
+const logAttributeSinkKey = "sink.name"
+const logIntrumentationLibrary = "cockroachdb.logger"
 
 // OpenTelemetry log sink
 type otlpSink struct {
