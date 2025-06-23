@@ -1404,7 +1404,9 @@ func runTestDBAddSSTable(
 	}
 }
 
-// TestAddSSTableMVCCStats tests that statistics are computed accurately.
+// TestAddSSTableMVCCStats tests that statistics are computed accurately with
+// the ComputeStatsDiff flag and with some bias when the engine has some
+// overlapping keys.
 func TestAddSSTableMVCCStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1419,107 +1421,132 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		Desc:            &roachpb.RangeDescriptor{},
 	}
 
-	engine := storage.NewDefaultInMemForTesting()
-	defer engine.Close()
+	testutils.RunTrueAndFalse(t, "ComputeStatsDiff", func(t *testing.T, computeStatsDiff bool) {
+		testutils.RunTrueAndFalse(t, "EngineHasRangeKey", func(t *testing.T, engineHasRangeKey bool) {
 
-	for _, kv := range []storage.MVCCKeyValue{
-		pointKV("A", 1, "A"),
-		pointKV("a", 1, "a"),
-		pointKV("a", 6, ""),
-		pointKV("b", 5, "bb"),
-		pointKV("c", 6, "ccccccccccccccccccccccccccccccccccccccccccccc"), // key 4b, 50b, live 64b
-		pointKV("d", 1, "d"),
-		pointKV("d", 2, ""),
-		pointKV("e", 1, "e"),
-		pointKV("u", 3, "u"),
-		pointKV("z", 2, "zzzzzz"),
-	} {
-		require.NoError(t, engine.PutRawMVCC(kv.Key, kv.Value))
-	}
+			expectEstimates := !computeStatsDiff || engineHasRangeKey
 
-	sst, start, end := storageutils.MakeSST(t, st, kvs{
-		pointKV("a", 4, "aaaaaa"), // mvcc-shadowed by existing delete.
-		pointKV("a", 2, "aa"),     // mvcc-shadowed within SST.
-		pointKV("c", 6, "ccc"),    // same TS as existing, LSM-shadows existing.
-		pointKV("d", 4, "dddd"),   // mvcc-shadow existing deleted d.
-		pointKV("e", 4, "eeee"),   // mvcc-shadow existing 1b.
-		pointKV("j", 2, "jj"),     // no colission – via MVCC or LSM – with existing.
-		pointKV("t", 3, ""),       // tombstone, no collission
-		pointKV("u", 5, ""),       // tombstone, shadows existing
+			engine := storage.NewDefaultInMemForTesting()
+			defer engine.Close()
+
+			if engineHasRangeKey {
+				require.NoError(t, engine.PutMVCCRangeKey(rangeKey("u", "zzzzzzzzzz", 1), storage.MVCCValue{}))
+			}
+
+			for _, kv := range []storage.MVCCKeyValue{
+				pointKV("A", 1, "A"),
+				pointKV("a", 1, "a"),
+				pointKV("b", 5, "bb"),
+				pointKV("c", 6, "ccccccccccccccccccccccccccccccccccccccccccccc"), // key 4b, 50b, live 64b
+				pointKV("d", 1, "d"),
+				pointKV("d", 2, ""),
+				pointKV("e", 1, "e"),
+				pointKV("u", 3, "u"),
+				pointKV("z", 2, "zzzzzz"),
+			} {
+				require.NoError(t, engine.PutRawMVCC(kv.Key, kv.Value))
+			}
+
+			sst, start, end := storageutils.MakeSST(t, st, kvs{
+				pointKV("a", 4, "aaaaaa"), // mvcc-shadowed by existing delete.
+				pointKV("a", 2, "aa"),     // mvcc-shadowed within SST.
+				pointKV("d", 4, "dddd"),   // mvcc-shadow existing deleted d.
+				pointKV("e", 1, "e"),      // duplicate
+				pointKV("j", 2, "jj"),     // no collision – via MVCC or LSM – with existing.
+				pointKV("t", 3, ""),       // tombstone, no collission
+				pointKV("u", 5, ""),       // tombstone, shadows existing
+			})
+
+			// estimatesCorrection describes the mvcc stats bias created when adding
+			// in sst into overlapping keyspace, when ComputeStatsDiff is not actually
+			// called.
+			estimatesCorrection := enginepb.MVCCStats{
+				// the sst will think it added 5 keys here, but a, e, and t shadow or are shadowed.
+				LiveCount: -3,
+				LiveBytes: -60,
+				// the sst will think it added 4 keys, but only j and t are new so 5 are over-counted.
+				KeyCount: -4,
+				KeyBytes: -20,
+				// the sst will think it added 6 values, but since e was a perfect (key+ts)
+				// collision, it *replaced* the existing value and is over-counted.
+				ValCount: -1,
+				ValBytes: -6,
+			}
+
+			// After EvalAddSSTable, cArgs.Stats contains a diff to the existing
+			// stats. Make sure recomputing from scratch gets the same answer as
+			// applying the diff to the stats
+			statsBefore := storageutils.EngineStats(t, engine, 0)
+			ts := hlc.Timestamp{WallTime: 7}
+			evalCtx.Stats = *statsBefore
+
+			cArgs := batcheval.CommandArgs{
+				EvalCtx: evalCtx.EvalContext(),
+				Header: kvpb.Header{
+					Timestamp: ts,
+				},
+				Args: &kvpb.AddSSTableRequest{
+					RequestHeader:    kvpb.RequestHeader{Key: start, EndKey: end},
+					Data:             sst,
+					ComputeStatsDiff: computeStatsDiff,
+				},
+				Stats: &enginepb.MVCCStats{},
+			}
+			var resp kvpb.AddSSTableResponse
+			_, err := batcheval.EvalAddSSTable(ctx, engine, cArgs, &resp)
+			require.NoError(t, err)
+
+			require.NoError(t, fs.WriteFile(engine.Env(), "sst", sst, fs.UnspecifiedWriteCategory))
+			require.NoError(t, engine.IngestLocalFiles(ctx, []string{"sst"}))
+
+			statsEvaled := statsBefore
+			statsEvaled.Add(*cArgs.Stats)
+
+			newStats := storageutils.EngineStats(t, engine, statsEvaled.LastUpdateNanos)
+			availableBytes := resp.AvailableBytes
+
+			if expectEstimates {
+				// Correct for bias.
+				statsEvaled.Add(estimatesCorrection)
+				availableBytes -= estimatesCorrection.Total()
+
+				// Actual stats are expected to be stimates.
+				newStats.ContainsEstimates = 1
+			}
+			require.Equal(t, newStats, statsEvaled)
+			require.Equal(t, max-newStats.Total(), availableBytes)
+
+			// Check stats for a single KV.
+			sst, start, end = storageutils.MakeSST(t, st, kvs{pointKV("zzzzzzz", int(ts.WallTime), "zzz")})
+			cArgs = batcheval.CommandArgs{
+				EvalCtx: evalCtx.EvalContext(),
+				Header:  kvpb.Header{Timestamp: ts},
+				Args: &kvpb.AddSSTableRequest{
+					RequestHeader:    kvpb.RequestHeader{Key: start, EndKey: end},
+					Data:             sst,
+					ComputeStatsDiff: computeStatsDiff,
+				},
+				Stats: &enginepb.MVCCStats{},
+			}
+			_, err = batcheval.EvalAddSSTable(ctx, engine, cArgs, &kvpb.AddSSTableResponse{})
+			require.NoError(t, err)
+
+			containsEstimates := int64(0)
+			if expectEstimates {
+				containsEstimates = 1
+			}
+			require.Equal(t, enginepb.MVCCStats{
+				ContainsEstimates: containsEstimates,
+				LastUpdateNanos:   ts.WallTime,
+				LiveBytes:         28,
+				LiveCount:         1,
+				KeyBytes:          20,
+				KeyCount:          1,
+				ValBytes:          8,
+				ValCount:          1,
+			}, *cArgs.Stats)
+		})
 	})
-	statsDelta := enginepb.MVCCStats{
-		// the sst will think it added 5 keys here, but a, c, e, and t shadow or are shadowed.
-		LiveCount: -4,
-		LiveBytes: -129,
-		// the sst will think it added 5 keys, but only j and t are new so 5 are over-counted.
-		KeyCount: -5,
-		KeyBytes: -22,
-		// the sst will think it added 6 values, but since one was a perfect (key+ts)
-		// collision, it *replaced* the existing value and is over-counted.
-		ValCount: -1,
-		ValBytes: -50,
-	}
-
-	// After EvalAddSSTable, cArgs.Stats contains a diff to the existing
-	// stats. Make sure recomputing from scratch gets the same answer as
-	// applying the diff to the stats
-	statsBefore := storageutils.EngineStats(t, engine, 0)
-	ts := hlc.Timestamp{WallTime: 7}
-	evalCtx.Stats = *statsBefore
-
-	cArgs := batcheval.CommandArgs{
-		EvalCtx: evalCtx.EvalContext(),
-		Header: kvpb.Header{
-			Timestamp: ts,
-		},
-		Args: &kvpb.AddSSTableRequest{
-			RequestHeader: kvpb.RequestHeader{Key: start, EndKey: end},
-			Data:          sst,
-		},
-		Stats: &enginepb.MVCCStats{},
-	}
-	var resp kvpb.AddSSTableResponse
-	_, err := batcheval.EvalAddSSTable(ctx, engine, cArgs, &resp)
-	require.NoError(t, err)
-
-	require.NoError(t, fs.WriteFile(engine.Env(), "sst", sst, fs.UnspecifiedWriteCategory))
-	require.NoError(t, engine.IngestLocalFiles(ctx, []string{"sst"}))
-
-	statsEvaled := statsBefore
-	statsEvaled.Add(*cArgs.Stats)
-	statsEvaled.Add(statsDelta)
-	statsEvaled.ContainsEstimates = 0
-
-	newStats := storageutils.EngineStats(t, engine, statsEvaled.LastUpdateNanos)
-	require.Equal(t, newStats, statsEvaled)
-
-	// Check that actual remaining bytes equals the returned remaining bytes once
-	// the delta for stats inaccuracy is applied.
-	require.Equal(t, max-newStats.Total(), resp.AvailableBytes-statsDelta.Total())
-
-	// Check stats for a single KV.
-	sst, start, end = storageutils.MakeSST(t, st, kvs{pointKV("zzzzzzz", int(ts.WallTime), "zzz")})
-	cArgs = batcheval.CommandArgs{
-		EvalCtx: evalCtx.EvalContext(),
-		Header:  kvpb.Header{Timestamp: ts},
-		Args: &kvpb.AddSSTableRequest{
-			RequestHeader: kvpb.RequestHeader{Key: start, EndKey: end},
-			Data:          sst,
-		},
-		Stats: &enginepb.MVCCStats{},
-	}
-	_, err = batcheval.EvalAddSSTable(ctx, engine, cArgs, &kvpb.AddSSTableResponse{})
-	require.NoError(t, err)
-	require.Equal(t, enginepb.MVCCStats{
-		ContainsEstimates: 1,
-		LastUpdateNanos:   ts.WallTime,
-		LiveBytes:         28,
-		LiveCount:         1,
-		KeyBytes:          20,
-		KeyCount:          1,
-		ValBytes:          8,
-		ValCount:          1,
-	}, *cArgs.Stats)
 }
 
 // TestAddSSTableIntentResolution tests that AddSSTable resolves

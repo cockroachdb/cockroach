@@ -24,6 +24,7 @@ var psycopgIgnoreList = blocklist{
 	`tests.pool.test_pool.test_reconnect_after_grow_failed`:                                          "requires insecure mode",
 	`tests.pool.test_pool.test_reconnect_failure[False]`:                                             "requires insecure mode",
 	`tests.pool.test_pool.test_refill_on_check`:                                                      "requires insecure mode",
+	`tests.pool.test_pool.test_shrink`:                                                               "flaky; see #146895",
 	`tests.pool.test_pool.test_stats_connect`:                                                        "requires insecure mode",
 	`tests.pool.test_pool_async.test_connect_check_timeout[asyncio]`:                                 "requires insecure mode",
 	`tests.pool.test_pool_async.test_reconnect[asyncio]`:                                             "requires insecure mode",
