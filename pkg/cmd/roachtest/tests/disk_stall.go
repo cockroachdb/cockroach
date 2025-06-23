@@ -129,7 +129,9 @@ func runDiskStalledWALFailover(ctx context.Context, t test.Test, c cluster.Clust
 					ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 					defer cancel()
 					t.Status("Unstalling disk on n1")
-					s.Unstall(ctx, c.Node(1))
+					if err = s.Unstall(ctx, c.Node(1)); err != nil {
+						t.Fatal(err)
+					}
 					t.Status("Unstalled disk on n1")
 				}()
 
@@ -378,7 +380,11 @@ func runDiskStalledDetection(
 	}
 
 	// Unstall the stalled node. It should be able to be reaped.
-	s.Unstall(ctx, c.Node(1))
+	// Note we only log errors since cgroup unstall is expected to fail due to
+	// nodes panicking from a detected disk stall.
+	if err = s.Unstall(ctx, c.Node(1)); err != nil {
+		t.L().Printf("failed to unstall disk: %v", err)
+	}
 	time.Sleep(1 * time.Second)
 	exit, ok = getProcessExitMonotonic(ctx, t, c, 1)
 	if doStall {
@@ -622,7 +628,9 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 				case <-ctx.Done():
 					t.Fatalf("context done while stall induced: %s", ctx.Err())
 				case <-time.After(operationDur):
-					s.Unstall(ctx, c.Node(1))
+					if err = s.Unstall(ctx, c.Node(1)); err != nil {
+						t.Fatal(err)
+					}
 					t.Status("disk stalls stopped")
 				}
 				return nil
