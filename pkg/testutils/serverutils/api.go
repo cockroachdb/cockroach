@@ -156,7 +156,7 @@ type RPCConn interface {
 	NewAdminClient() serverpb.RPCAdminClient
 	NewInitClient() serverpb.RPCInitClient
 	NewTimeSeriesClient() tspb.RPCTimeSeriesClient
-	NewInternalClient() kvpb.InternalClient
+	NewInternalClient() kvpb.RPCInternalClient
 	NewDistSQLClient() execinfrapb.RPCDistSQLClient
 }
 
