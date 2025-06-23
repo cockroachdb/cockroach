@@ -83,9 +83,9 @@ func normalizeAndValidateSelectForTarget(
 	}
 
 	// Sanity check target and descriptor refer to the same table.
-	if target.TableID != desc.GetID() {
+	if target.DescID != desc.GetID() {
 		return nil, errors.AssertionFailedf("target table id (%d) does not match descriptor id (%d)",
-			target.TableID, desc.GetID())
+			target.DescID, desc.GetID())
 	}
 
 	columnVisitor := checkColumnsVisitor{
