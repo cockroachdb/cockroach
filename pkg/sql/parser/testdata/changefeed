@@ -128,3 +128,53 @@ CREATE CHANGEFEED WITH OPTIONS (bucket_count = 'placeholder') AS SELECT *, * FRO
 CREATE CHANGEFEED WITH OPTIONS (bucket_count = ('placeholder')) AS SELECT (*), (*) FROM "family" AS "decimal" -- fully parenthesized
 CREATE CHANGEFEED WITH OPTIONS (bucket_count = '_') AS SELECT *, * FROM "family" AS "decimal" -- literals removed
 CREATE CHANGEFEED WITH OPTIONS (_ = 'placeholder') AS SELECT *, * FROM _ AS _ -- identifiers removed
+
+parse
+CREATE CHANGEFEED FOR DATABASE d1 INTO 'foo'
+----
+CREATE CHANGEFEED FOR DATABASE d1 INTO '*****' -- normalized!
+CREATE CHANGEFEED FOR DATABASE d1 INTO ('*****') -- fully parenthesized
+CREATE CHANGEFEED FOR DATABASE d1 INTO '_' -- literals removed
+CREATE CHANGEFEED FOR DATABASE _ INTO '*****' -- identifiers removed
+CREATE CHANGEFEED FOR DATABASE d1 INTO 'foo' -- passwords exposed
+
+# If you use quotes, you can create a changefeed for a table named "DATABASE".
+parse
+CREATE CHANGEFEED FOR "DATABASE" INTO 'foo'
+----
+CREATE CHANGEFEED FOR TABLE "DATABASE" INTO '*****' -- normalized!
+CREATE CHANGEFEED FOR TABLE ("DATABASE") INTO ('*****') -- fully parenthesized
+CREATE CHANGEFEED FOR TABLE "DATABASE" INTO '_' -- literals removed
+CREATE CHANGEFEED FOR TABLE _ INTO '*****' -- identifiers removed
+CREATE CHANGEFEED FOR TABLE "DATABASE" INTO 'foo' -- passwords exposed
+
+# If you use "FOR TABLE", you can also create a changefeed for a table named
+# "DATABASE".
+parse
+CREATE CHANGEFEED FOR TABLE DATABASE INTO 'foo'
+----
+CREATE CHANGEFEED FOR TABLE database INTO '*****' -- normalized!
+CREATE CHANGEFEED FOR TABLE (database) INTO ('*****') -- fully parenthesized
+CREATE CHANGEFEED FOR TABLE database INTO '_' -- literals removed
+CREATE CHANGEFEED FOR TABLE _ INTO '*****' -- identifiers removed
+CREATE CHANGEFEED FOR TABLE database INTO 'foo' -- passwords exposed
+
+# This works too.
+parse
+CREATE CHANGEFEED FOR TABLE "DATABASE" INTO 'foo'
+----
+CREATE CHANGEFEED FOR TABLE "DATABASE" INTO '*****' -- normalized!
+CREATE CHANGEFEED FOR TABLE ("DATABASE") INTO ('*****') -- fully parenthesized
+CREATE CHANGEFEED FOR TABLE "DATABASE" INTO '_' -- literals removed
+CREATE CHANGEFEED FOR TABLE _ INTO '*****' -- identifiers removed
+CREATE CHANGEFEED FOR TABLE "DATABASE" INTO 'foo' -- passwords exposed
+
+# You can't create a table-level changefeed for a table named "DATABASE" without
+# quotes.
+error
+CREATE CHANGEFEED FOR database INTO 'foo'
+----
+at or near "into": syntax error
+DETAIL: source SQL:
+CREATE CHANGEFEED FOR database INTO 'foo'
+                               ^
