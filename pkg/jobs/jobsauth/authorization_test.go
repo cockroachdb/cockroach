@@ -153,7 +153,7 @@ func makeChangefeedPayload(owner string, tableIDs []descpb.ID) *jobspb.Payload {
 	specs := make([]jobspb.ChangefeedTargetSpecification, len(tableIDs))
 	for i, tableID := range tableIDs {
 		specs[i] = jobspb.ChangefeedTargetSpecification{
-			TableID: tableID,
+			DescID: tableID,
 		}
 	}
 	return &jobspb.Payload{

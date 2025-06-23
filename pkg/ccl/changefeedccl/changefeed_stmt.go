@@ -984,7 +984,7 @@ func getTargetsAndTables(
 			}
 			targets[i] = jobspb.ChangefeedTargetSpecification{
 				Type:              typ,
-				TableID:           td.GetID(),
+				DescID:            td.GetID(),
 				FamilyName:        string(ct.FamilyName),
 				StatementTimeName: tables[td.GetID()].StatementTimeName,
 			}
