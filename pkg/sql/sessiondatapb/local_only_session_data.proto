@@ -689,6 +689,9 @@ message LocalOnlySessionData {
   // PL/pgSQL transaction control statements (COMMIT, ROLLBACK) when the stored
   // procedure is executed via a portal in the extended wire protocol.
   bool use_proc_txn_control_extended_protocol_fix = 175;
+  // EnableScrubJob controls if a job is initiated when the EXPERIMENTAL SCRUB
+  // command is used.
+  bool enable_scrub_job = 176;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

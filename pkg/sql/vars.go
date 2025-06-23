@@ -4078,6 +4078,23 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: globalTrue,
 	},
 
+	// CockroachDB extension.
+	`enable_scrub_job`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_scrub_job`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("enable_scrub_job", s)
+			if err != nil {
+				return err
+			}
+			m.SetEnableScrubJob(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableScrubJob), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
 	// CockroachDB extension. Configures the initial backoff duration for
 	// automatic retries of statements in explicit READ COMMITTED transactions
 	// that see a transaction retry error. For statements experiencing contention
