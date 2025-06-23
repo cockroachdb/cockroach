@@ -1166,3 +1166,78 @@ func TestJWTAuthWithIssuerJWKSConfAutoFetchJWKS(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractIssuer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+
+	t.Run("valid_token", func(t *testing.T) {
+		key := createRSAKey(t, keyID1)
+		tokenBytes := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+
+		issuer, err := verifier.ExtractIssuer(ctx, tokenBytes)
+		require.NoError(t, err)
+		require.Equal(t, issuer1, issuer)
+	})
+
+	t.Run("token_missing_issuer", func(t *testing.T) {
+		// Create a token without an issuer claim.
+		token := jwt.New()
+		require.NoError(t, token.Set(jwt.SubjectKey, username1))
+		key := createRSAKey(t, keyID1)
+		signedTokenBytes, err := jwt.Sign(token, jwt.WithKey(jwa.RS256, key))
+		require.NoError(t, err)
+
+		_, err = verifier.ExtractIssuer(ctx, signedTokenBytes)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "token does not have an 'iss' claim")
+	})
+
+	t.Run("malformed_token", func(t *testing.T) {
+		_, err := verifier.ExtractIssuer(ctx, []byte("not-a-real-token"))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to parse token")
+	})
+}
+
+func TestVerifySignatureAndIssuer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	// Enable JWT and configure a single issuer.
+	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer1)
+
+	// Create signing material.
+	keySet, key, _ := createJWKS(t)
+	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
+
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+
+	// Succeeds with correct issuer & signature.
+	require.NoError(t,
+		verifier.VerifySignatureAndIssuer(ctx, s.ClusterSettings(), token))
+
+	// Fails on wrong issuer.
+	badIssuerToken := createJWT(t, username1, audience1, issuer2, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+	err := verifier.VerifySignatureAndIssuer(ctx, s.ClusterSettings(), badIssuerToken)
+	require.ErrorContains(t, err, "JWT authentication: invalid issuer")
+	require.Contains(t, errors.FlattenDetails(err), "token issued by issuer2")
+
+	// Fails on bad signature (different key).
+	_, _, otherKey := createJWKS(t)
+	badSigToken := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), otherKey, jwa.ES384, "", "")
+	err = verifier.VerifySignatureAndIssuer(ctx, s.ClusterSettings(), badSigToken)
+	require.ErrorContains(t, err, "JWT authentication: invalid token")
+}
