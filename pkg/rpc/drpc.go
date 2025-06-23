@@ -79,12 +79,12 @@ func DialDRPC(
 
 		if rpcCtx.Knobs.UnaryClientInterceptorDRPC != nil {
 			if interceptor := rpcCtx.Knobs.UnaryClientInterceptorDRPC(target, rpcbase.DefaultClass); interceptor != nil {
-				rpcCtx.clientUnaryInterceptorsDRPC = []drpcclient.UnaryClientInterceptor{interceptor}
+				rpcCtx.clientUnaryInterceptorsDRPC = append(rpcCtx.clientUnaryInterceptorsDRPC, interceptor)
 			}
 		}
 		if rpcCtx.Knobs.StreamClientInterceptorDRPC != nil {
 			if interceptor := rpcCtx.Knobs.StreamClientInterceptorDRPC(target, rpcbase.DefaultClass); interceptor != nil {
-				rpcCtx.clientStreamInterceptorsDRPC = []drpcclient.StreamClientInterceptor{interceptor}
+				rpcCtx.clientStreamInterceptorsDRPC = append(rpcCtx.clientStreamInterceptorsDRPC, interceptor)
 			}
 		}
 		clientConn, _ := drpcclient.NewClientConnWithOptions(
