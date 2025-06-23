@@ -84,14 +84,17 @@ func (m *multiMetricStoreRebalancer) rebalance(ctx context.Context) (attemptedCh
 		LocalStoreID: m.store.StoreID(),
 	})
 
-	var success bool
 	for _, change := range changes {
-		success = true
+		success := true
 		repl := m.store.GetReplicaIfExists(change.RangeID)
 
 		if repl == nil {
 			log.VInfof(ctx, 1, "skipping pending change for r%d, replica not found", change.RangeID)
 			success = false
+			// TODO(sumeer): this is not clean, since we are bypassing the
+			// AllocatorSync, but we do need to tell MMA that this change is not
+			// going to be applied.
+			m.allocator.AdjustPendingChangesDisposition(change.ChangeIDs(), success)
 		} else {
 			changeID := m.as.MMAPreApply(repl.RangeUsageInfo(), change)
 			if change.IsTransferLease() {
