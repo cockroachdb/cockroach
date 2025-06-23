@@ -182,7 +182,7 @@ func parseChangeAddRemove(
 	return add, remove, replType
 }
 
-func printPendingChanges(changes []*pendingReplicaChange) string {
+func printPendingChangesTest(changes []*pendingReplicaChange) string {
 	var buf strings.Builder
 	fmt.Fprintf(&buf, "pending(%d)", len(changes))
 	for _, change := range changes {
@@ -405,7 +405,7 @@ func TestClusterState(t *testing.T) {
 
 				case "store-leaseholder-msg":
 					msg := parseStoreLeaseholderMsg(t, d.Input)
-					cs.processStoreLeaseholderMsgInternal(&msg, 2)
+					cs.processStoreLeaseholderMsgInternal(context.Background(), &msg, 2)
 					return ""
 
 				case "make-pending-changes":
@@ -455,11 +455,11 @@ func TestClusterState(t *testing.T) {
 						}
 					}
 					cs.createPendingChanges(changes...)
-					return printPendingChanges(testingGetPendingChanges(t, cs))
+					return printPendingChangesTest(testingGetPendingChanges(t, cs))
 
 				case "gc-pending-changes":
 					cs.gcPendingChanges(cs.ts.Now())
-					return printPendingChanges(testingGetPendingChanges(t, cs))
+					return printPendingChangesTest(testingGetPendingChanges(t, cs))
 
 				case "reject-pending-changes":
 					var changeIDsInt []int
@@ -467,10 +467,10 @@ func TestClusterState(t *testing.T) {
 					for _, id := range changeIDsInt {
 						cs.undoPendingChange(ChangeID(id), true)
 					}
-					return printPendingChanges(testingGetPendingChanges(t, cs))
+					return printPendingChangesTest(testingGetPendingChanges(t, cs))
 
 				case "get-pending-changes":
-					return printPendingChanges(testingGetPendingChanges(t, cs))
+					return printPendingChangesTest(testingGetPendingChanges(t, cs))
 
 				case "tick":
 					var seconds int
