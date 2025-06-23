@@ -112,9 +112,9 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 				// cancels the context and closes the range feed stream.
 				if spec.expectRetry {
 					rangeDB.EXPECT().RangeLookup(gomock.Any(), roachpb.RKeyMin, kvpb.INCONSISTENT, false).MinTimes(1).Return([]roachpb.RangeDescriptor{desc}, nil, nil) //.FirstRange().Return(&desc, nil)
-					client := kvpbmock.NewMockInternalClient(ctrl)
+					client := kvpbmock.NewMockRPCInternalClient(ctrl)
 
-					stream := kvpbmock.NewMockInternal_MuxRangeFeedClient(ctrl)
+					stream := kvpbmock.NewMockRPCInternal_MuxRangeFeedClient(ctrl)
 					stream.EXPECT().Send(gomock.Any()).Return(nil)
 					stream.EXPECT().Recv().Do(func() {
 						cancel()
