@@ -4554,3 +4554,122 @@ func TestSplitWithExternalFilesFastStats(t *testing.T) {
 		})
 	}
 }
+
+// TestStoreRangeSplitRaftSnapshotAfterRHSRebalanced tests that a replica that
+// learns about a split through a snapshot after the RHS has been rebalanced
+// away correctly deletes the RHS replica's on-disk data.
+//
+// Serves as a regression test for
+// https://github.com/cockroachdb/cockroach/issues/73462.
+func TestStoreRangeSplitRaftSnapshotAfterRHSRebalanced(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.WithIssue(t, 73462)
+
+	ctx := context.Background()
+	// Start a 5 node cluster.
+	tc := testcluster.StartTestCluster(t, 5, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	store0 := tc.GetFirstStoreFromServer(t, 0)
+	store2 := tc.GetFirstStoreFromServer(t, 2)
+	distSender := tc.Servers[0].DistSenderI().(kv.Sender)
+
+	// Create a scratch range and upreplicate to stores 2 and 3.
+	keyStart := tc.ScratchRange(t)
+	repl := store0.LookupReplica(roachpb.RKey(keyStart))
+	keyEnd := repl.Desc().EndKey.AsRawKey()
+	keyD := keyStart.Next().Next().Next().Next()
+
+	tc.AddVotersOrFatal(t, keyStart, tc.Targets(1, 2)...)
+	tc.WaitForValues(t, keyStart, []int64{0, 0, 0, 0, 0})
+
+	// Put some keys in [d, /Max) to ensure that the post-split RHS will have
+	// some data. When we learn about the split through the snapshot, we expect
+	// to delete data in the uncontained key range of [keyD, /Max). Adding some
+	// data here allows us to make this assertion.
+	key := keyD
+	for i := 0; i < 10; i++ {
+		key = key.Next()
+		if _, pErr := kv.SendWrapped(ctx, distSender, incrementArgs(key, 1)); pErr != nil {
+			t.Fatal(pErr)
+		}
+		tc.WaitForValues(t, key, []int64{1, 1, 1, 0, 0})
+	}
+
+	// Start dropping all Raft traffic to store2.
+	aRepl0 := store0.LookupReplica(roachpb.RKey(keyStart))
+	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
+		rangeID:                    aRepl0.RangeID,
+		IncomingRaftMessageHandler: store2,
+		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
+			dropReq: func(request *kvserverpb.RaftMessageRequest) bool { return true },
+		},
+	})
+
+	// Split at keyD: [keyStart, keyD) and [keyD, /Max)
+	if _, pErr := kv.SendWrapped(ctx, distSender, adminSplitArgs(keyD)); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Move the [keyD, /Max) replica from store2 to store4.
+	rhsDesc := store0.LookupReplica(roachpb.RKey(keyD)).Desc()
+	tc.RemoveVotersOrFatal(t, keyD, tc.Target(2))
+	tc.AddVotersOrFatal(t, keyD, tc.Target(4))
+
+	// Transfer the lease for [keyD, /Max) to store4.
+	tc.TransferRangeLeaseOrFatal(t, *rhsDesc, tc.Target(4))
+
+	// Move the [keyD, /Max) replica from store0 to store2. This allows us to
+	// assert store0 and store2 have the same data below, once we've allowed
+	// store2 to catch up via a snapshot.
+	tc.RemoveVotersOrFatal(t, keyD, tc.Target(0))
+	tc.AddVotersOrFatal(t, keyD, tc.Target(3))
+
+	// Restore Raft traffic to store2, but drop MsgApp for old log entries as in
+	// the original test.
+	index := store0.LookupReplica(roachpb.RKey(keyStart)).GetLastIndex()
+	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
+		rangeID:                    aRepl0.RangeID,
+		IncomingRaftMessageHandler: store2,
+		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
+			dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
+				return req.Message.Type == raftpb.MsgApp && kvpb.RaftIndex(req.Message.Index) < index
+			},
+			dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
+			dropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
+		},
+	})
+
+	// Wait for all replicas to catch up. This will require a Raft snapshot to
+	// store2.
+	testutils.SucceedsSoon(t, func() error {
+		getKeySet := func(engine storage.Engine) map[string]struct{} {
+			kvs, err := storage.Scan(context.Background(), engine, keyStart, keyEnd, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			out := map[string]struct{}{}
+			for _, kv := range kvs {
+				out[string(kv.Key.Key)] = struct{}{}
+			}
+			return out
+		}
+		storeKeys0 := getKeySet(store0.TODOEngine())
+		storeKeys2 := getKeySet(store2.TODOEngine())
+		for k := range storeKeys0 {
+			if _, ok := storeKeys2[k]; !ok {
+				return fmt.Errorf("store2 missing key %s", roachpb.Key(k))
+			}
+		}
+		for k := range storeKeys2 {
+			if _, ok := storeKeys0[k]; !ok {
+				return fmt.Errorf("store2 has extra key %s", roachpb.Key(k))
+			}
+		}
+		return nil
+	})
+}
