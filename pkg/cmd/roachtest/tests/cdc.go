@@ -4403,7 +4403,7 @@ func runCDCMultiDBTPCCMinimal(ctx context.Context, t test.Test, c cluster.Cluste
 		t.Fatalf("failed to write db list file: %v", err)
 	}
 
-	initCmd := fmt.Sprintf("./cockroach workload init tpccmultidb --warehouses=1 --db-list-file=%s {pgurl:1-3}", dbListFile)
+	initCmd := fmt.Sprintf("./cockroach workload init tpccmultidb --warehouses=100 --db-list-file=%s {pgurl:1-3}", dbListFile)
 	if err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), initCmd); err != nil {
 		t.Fatalf("failed to init tpccmultidb: %v", err)
 	}
