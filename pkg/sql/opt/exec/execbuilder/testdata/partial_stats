@@ -1261,3 +1261,34 @@ __merged__       {b}           2022-12-13 15:22:21.988179 +0000 UTC  61         
 # Finally, restore forecasts setting to its previous value.
 statement ok
 SET CLUSTER SETTING sql.stats.forecasts.enabled = $forecastsEnabledPrev
+
+subtest regression_148316
+
+# Ensure we can run DELETE statement on system.table_statistics.
+statement ok
+INSERT INTO system.users VALUES ('node', NULL, true, 3);
+
+statement ok
+GRANT node TO root;
+
+# Keep only partial stats on the target table.
+statement ok
+DELETE FROM system.table_statistics WHERE name NOT LIKE '%partial%' AND "tableID" = 'g'::REGCLASS::OID;
+
+query TT
+SELECT statistics_name, column_names FROM [SHOW STATISTICS FOR TABLE g] ORDER BY created
+----
+partial  {b}
+
+query T
+EXPLAIN SELECT * FROM g WHERE b = 10
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: g@g_pkey
+  spans: [/10 - /10]
+
+subtest end
