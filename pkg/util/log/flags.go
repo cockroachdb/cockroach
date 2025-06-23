@@ -121,7 +121,7 @@ func ApplyConfig(
 	closer := newBufferedSinkCloser()
 
 	// closes the underlying gRPC connection of OTLP sinks.
-	closeOtlpSinks := func() {
+	closeOTLPSinks := func() {
 		for _, fc := range sinkInfos {
 			if sink, ok := fc.sink.(*otlpSink); ok && sink.isNotShutdown() {
 				// The reason for nolint:grpcconnclose is that we are not using *rpc.Context
@@ -142,7 +142,7 @@ func ApplyConfig(
 		logging.setChannelLoggers(make(map[Channel]*loggerT), &si)
 		fd2CaptureCleanupFn()
 		secLoggersCancel()
-		closeOtlpSinks()
+		closeOTLPSinks()
 		if err := closer.Close(defaultCloserTimeout); err != nil {
 			fmt.Printf("# WARNING: %s\n", err.Error())
 		}
@@ -383,11 +383,11 @@ func ApplyConfig(
 	}
 
 	// Create the OpenTelemetry sinks.
-	for _, fc := range config.Sinks.OtlpServers {
+	for _, fc := range config.Sinks.OTLPServers {
 		if fc.Filter == severity.NONE {
 			continue
 		}
-		optlSinkInfo, err := newOtlpSinkInfo(*fc)
+		optlSinkInfo, err := newOTLPSinkInfo(*fc)
 		if err != nil {
 			return nil, err
 		}
@@ -462,7 +462,7 @@ func newHTTPSinkInfo(c logconfig.HTTPSinkConfig) (*sinkInfo, error) {
 	return info, nil
 }
 
-func newOtlpSinkInfo(c logconfig.OtlpSinkConfig) (*sinkInfo, error) {
+func newOTLPSinkInfo(c logconfig.OTLPSinkConfig) (*sinkInfo, error) {
 	info := &sinkInfo{}
 
 	if err := info.applyConfig(c.CommonSinkConfig); err != nil {
@@ -470,7 +470,7 @@ func newOtlpSinkInfo(c logconfig.OtlpSinkConfig) (*sinkInfo, error) {
 	}
 	info.applyFilters(c.Channels)
 
-	otlpSink, err := newOtlpSink(c)
+	otlpSink, err := newOTLPSink(c)
 	if err != nil {
 		return nil, err
 	}

@@ -33,7 +33,7 @@ type otlpSink struct {
 	name string
 }
 
-func newOtlpSink(config logconfig.OtlpSinkConfig) (*otlpSink, error) {
+func newOTLPSink(config logconfig.OTLPSinkConfig) (*otlpSink, error) {
 	dialOpts := []grpc.DialOption{grpc.WithUserAgent("CRDB OTLP over gRPC logs exporter")}
 	if *config.Insecure {
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))

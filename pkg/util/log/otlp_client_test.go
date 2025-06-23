@@ -32,7 +32,7 @@ func (s *mockLogsServiceServer) Export(
 	return &collpb.ExportLogsServiceResponse{}, nil
 }
 
-func TestOtlpClient(t *testing.T) {
+func TestOTLPClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sc := ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
@@ -55,11 +55,11 @@ func TestOtlpClient(t *testing.T) {
 	zeroDuration := time.Duration(0)
 	tb := true
 	format := "json"
-	cfg.Sinks.OtlpServers = map[string]*logconfig.OtlpSinkConfig{
+	cfg.Sinks.OTLPServers = map[string]*logconfig.OTLPSinkConfig{
 		"ops": {
 			Address:  lis.Addr().String(),
 			Channels: logconfig.SelectChannels(channel.OPS),
-			OtlpDefaults: logconfig.OtlpDefaults{
+			OTLPDefaults: logconfig.OTLPDefaults{
 				Insecure: &tb,
 				CommonSinkConfig: logconfig.CommonSinkConfig{
 					Format: &format,
@@ -100,6 +100,8 @@ func TestOtlpClient(t *testing.T) {
 			t.Fatalf("unable to decode json: %v", err)
 		}
 		require.Equal(t, "hello world", info["message"])
+		require.Equal(t, "OPS", info["channel"])
+		require.Equal(t, "INFO", info["severity"])
 	case <-time.After(time.Second * 5):
 		t.Fatal("log call exceeded timeout")
 	}
