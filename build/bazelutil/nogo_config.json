@@ -15,6 +15,15 @@
             "pkg/.*_generated\\.go$": "generated code"
         }
     },
+    "roachtestgo": {
+        "exclude_files": {
+            "pkg/cmd/roachtest/roachtestutil/task": "task manager implements goroutine management",
+            "pkg/cmd/roachtest/roachtestutil/mixedversion": "part of the roachtest framework",
+            "pkg/cmd/roachtest/operations": "operations do not run under the managed roachtest framework",
+            "pkg/cmd/roachtest/[^/]+\\.go$": "roachtest framework",
+            "_test\\.go$": "tests"
+        }
+    },
     "deepequalerrors": {
         "exclude_files": {
             "external/": "exclude all third-party code for all analyzers",

@@ -299,7 +299,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 				m.Go(
 					func(ctx context.Context, l *logger.Logger) error {
 						var err error
-						profiles[typ], err = roachtestutil.GetProfile(ctx, c, l, typ,
+						profiles[typ], err = roachtestutil.GetProfile(ctx, t, c, typ,
 							collectionDuration, c.CRDBNodes())
 						return err
 					},

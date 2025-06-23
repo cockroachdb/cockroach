@@ -20,14 +20,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/pprof/profile"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sync/errgroup"
 )
 
 type profileOptions struct {
@@ -277,9 +276,9 @@ func MeasureQPS(
 		}
 		// Count the inserts before sleeping.
 		var total atomic.Int64
-		group := ctxgroup.WithContext(ctx)
+		g := t.NewErrorGroup(task.WithContext(ctx))
 		for _, db := range dbs {
-			group.Go(func() error {
+			g.Go(func(ctx context.Context, l *logger.Logger) error {
 				var v float64
 				if err := db.QueryRowContext(
 					ctx, `SELECT sum(value) FROM crdb_internal.node_metrics WHERE name in ('sql.select.count', 'sql.insert.count')`,
@@ -291,7 +290,7 @@ func MeasureQPS(
 			})
 		}
 
-		require.NoError(t, group.Wait())
+		require.NoError(t, g.WaitE())
 		return int(total.Load())
 	}
 
@@ -408,8 +407,8 @@ func getProfileSingleNode(
 // Supported profile types are: {"cpu", "allocs", "mutex", "heap"}.
 func GetProfile(
 	ctx context.Context,
+	t task.GroupProvider,
 	cluster cluster.Cluster,
-	logger *logger.Logger,
 	profileType string,
 	duration time.Duration,
 	nodes option.NodeListOption,
@@ -417,16 +416,16 @@ func GetProfile(
 	profiles := make([]*profile.Profile, len(nodes))
 
 	// Create an error group to manage concurrent profile collection.
-	g, ctx := errgroup.WithContext(ctx)
+	g := t.NewErrorGroup(task.WithContext(ctx))
 
 	for i, nodeId := range nodes {
-		g.Go(func() error {
+		g.Go(func(ctx context.Context, l *logger.Logger) error {
 			var err error
-			profiles[i], err = getProfileSingleNode(ctx, cluster, logger, profileType,
+			profiles[i], err = getProfileSingleNode(ctx, cluster, l, profileType,
 				nodeId, duration)
 
 			if err != nil {
-				logger.Printf("error getting profile for node %d: %s", nodeId, err)
+				l.Printf("error getting profile for node %d: %s", nodeId, err)
 				return errors.Wrapf(err, "getting profile for n%d", nodeId)
 			}
 			return nil
@@ -434,7 +433,7 @@ func GetProfile(
 	}
 
 	// Wait for all profiles to complete or first error
-	if err := g.Wait(); err != nil {
+	if err := g.WaitE(); err != nil {
 		return nil, err
 	}
 
