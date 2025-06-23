@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -584,7 +585,6 @@ func (s resetClusterSettingStep) Run(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
 ) error {
 	stmt := fmt.Sprintf("RESET CLUSTER SETTING %s", s.name)
-
 	return serviceByName(h, s.virtualClusterName).ExecWithGateway(
 		rng, nodesRunningAtLeast(s.virtualClusterName, s.minVersion, h), stmt,
 	)
@@ -873,5 +873,66 @@ func (s restartNodeStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand
 }
 
 func (s restartNodeStep) ConcurrencyDisabled() bool {
+	return true
+}
+
+type networkPartitionStep struct {
+	partitions []failures.NetworkPartition
+}
+
+func (s networkPartitionStep) Background() shouldStop { return nil }
+
+func (s networkPartitionStep) Description() string {
+	return "network partition"
+}
+
+func (s networkPartitionStep) Run(
+	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
+) error {
+	args := failures.NetworkPartitionArgs{Partitions: s.partitions}
+	f := h.runner.failures[failures.IPTablesNetworkPartitionName]
+
+	if err := f.Setup(ctx, l, args); err != nil {
+		return errors.Wrapf(err, "failed to setup failure %s", failures.IPTablesNetworkPartitionName)
+	}
+
+	if err := f.Inject(ctx, l, args); err != nil {
+		return errors.Wrapf(err, "failed to inject failure %s", failures.IPTablesNetworkPartitionName)
+	}
+
+	return f.WaitForFailureToPropagate(ctx, l)
+}
+
+func (s networkPartitionStep) ConcurrencyDisabled() bool {
+	return false
+}
+
+type networkPartitionRecoveryStep struct {
+}
+
+func (s networkPartitionRecoveryStep) Background() shouldStop { return nil }
+
+func (s networkPartitionRecoveryStep) Description() string {
+	return "network partition recovery"
+}
+
+func (s networkPartitionRecoveryStep) Run(
+	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
+) error {
+	f := h.runner.failures[failures.IPTablesNetworkPartitionName]
+
+	if err := f.Recover(ctx, l); err != nil {
+		return errors.Wrapf(err, "failed to recover failure %s", failures.IPTablesNetworkPartitionName)
+	}
+
+	if err := f.WaitForFailureToRecover(ctx, l); err != nil {
+		return errors.Wrapf(err, "failed to wait for recovery of failure %s", failures.IPTablesNetworkPartitionName)
+	}
+
+	return f.Cleanup(ctx, l)
+
+}
+
+func (s networkPartitionRecoveryStep) ConcurrencyDisabled() bool {
 	return true
 }

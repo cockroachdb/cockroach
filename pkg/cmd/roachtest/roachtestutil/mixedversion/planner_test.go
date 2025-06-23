@@ -969,9 +969,3 @@ func Test_SeparateProcessUsesLatestPred(t *testing.T) {
 		require.Equal(t, latestVersion, version)
 	}
 }
-
-func Test_test(t *testing.T) {
-	mvt := newTest()
-	plan, _ := mvt.plan()
-	fmt.Printf("%s\n", plan.PrettyPrint())
-}

@@ -118,19 +118,19 @@ func (s *Service) prepareQuery(
 }
 
 func (s *Service) Query(rng *rand.Rand, query string, args ...interface{}) (*gosql.Rows, error) {
-	db, err := s.prepareQuery(rng, s.AvailableNodes(), query, args...)
+	db, err := s.prepareQuery(rng, s.Descriptor.Nodes, query, args...)
 	handleInternalError(err)
 	return db.QueryContext(s.ctx, query, args...)
 }
 
 func (s *Service) QueryRow(rng *rand.Rand, query string, args ...interface{}) *gosql.Row {
-	db, err := s.prepareQuery(rng, s.AvailableNodes(), query, args...)
+	db, err := s.prepareQuery(rng, s.Descriptor.Nodes, query, args...)
 	handleInternalError(err)
 	return db.QueryRowContext(s.ctx, query, args...)
 }
 
 func (s *Service) Exec(rng *rand.Rand, query string, args ...interface{}) error {
-	return s.ExecWithGateway(rng, s.AvailableNodes(), query, args...)
+	return s.ExecWithGateway(rng, s.Descriptor.Nodes, query, args...)
 }
 
 func (s *Service) ExecWithGateway(

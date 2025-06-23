@@ -11,6 +11,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"golang.org/x/exp/maps"
 )
@@ -396,7 +397,7 @@ func (m panicNodeMutator) Name() string {
 }
 
 func (m panicNodeMutator) Probability() float64 {
-	return 0.3
+	return 1
 }
 
 func (m panicNodeMutator) Generate(
@@ -412,7 +413,7 @@ func (m panicNodeMutator) Generate(
 			// We don't want to panic concurrently with other steps, and inserting before a concurrent step
 			// causes the step to run concurrently with that step, so we filter out any concurrent steps.
 			Filter(func(s *singleStep) bool {
-				return s.context.System.Stage >= InitUpgradeStage && !idx.IsConcurrent(s)
+				return s.context.System.Stage >= InitUpgradeStage && !idx.IsConcurrent(s) && !s.inFailureContext
 			})
 
 		targetNode := nodeList.SeededRandNode(rng)
@@ -430,7 +431,7 @@ func (m panicNodeMutator) Generate(
 			// so we avoid inserting after a hook step.
 			_, runHook := s.impl.(runHookStep)
 
-			return restart || waitForStable || runHook
+			return restart || waitForStable || runHook || s.inFailureContext
 		}
 
 		// The node should be restarted after the panic, but before any steps that are
@@ -447,12 +448,96 @@ func (m panicNodeMutator) Generate(
 
 		addPanicStep := stepToPanic.
 			InsertBefore(panicNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode})
-		addStartStep := validEndStep.
-			RandomStep(rng).
+		restartStep := validEndStep.
+			RandomStep(rng)
+		addRestartStep := restartStep.
 			InsertBefore(restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt, restartDesc})
 
+		failureContextSteps, _ := validEndStep.CutBefore(func(s *singleStep) bool {
+			return s == restartStep[0]
+		})
+		failureContextSteps.MarkInFailureContext()
+
 		mutations = append(mutations, addPanicStep...)
-		mutations = append(mutations, addStartStep...)
+		mutations = append(mutations, addRestartStep...)
+	}
+
+	return mutations
+}
+
+type networkPartitionMutator struct{}
+
+func (m networkPartitionMutator) Name() string { return failures.IPTablesNetworkPartitionName }
+
+func (m networkPartitionMutator) Probability() float64 {
+	return 1
+}
+
+func (m networkPartitionMutator) Generate(
+	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
+) []mutation {
+	var mutations []mutation
+	upgrades := randomUpgrades(rng, plan)
+	idx := newStepIndex(plan)
+	nodeList := planner.currentContext.System.Descriptor.Nodes
+	for _, upgrade := range upgrades {
+		possiblePointsInTime := upgrade.
+			Filter(func(s *singleStep) bool {
+
+				return s.context.System.Stage >= OnStartupStage && !idx.IsConcurrent(s) && !s.inFailureContext
+			})
+
+		stepToPartition := possiblePointsInTime.RandomStep(rng)
+
+		isInvalidRecoverStep := func(s *singleStep) bool {
+			_, waitForStable := s.impl.(waitForStableClusterVersionStep)
+			_, runHook := s.impl.(runHookStep)
+			_, restart := s.impl.(restartWithNewBinaryStep)
+
+			return runHook || waitForStable || restart || idx.IsConcurrent(s) || s.inFailureContext
+		}
+
+		_, validStartStep := possiblePointsInTime.CutAfter(func(s *singleStep) bool {
+			return s == stepToPartition[0]
+		})
+
+		validEndStep, _ := validStartStep.CutBefore(func(s *singleStep) bool {
+			return isInvalidRecoverStep(s)
+		})
+
+		nodeCount := len(nodeList)
+		partitionPoint := rng.Intn(nodeCount)
+
+		leftPartition := []install.Node{install.Node(nodeList[partitionPoint])}
+		var rightPartition []install.Node
+		for i := 0; i < nodeCount; i++ {
+			if i == nodeCount-1 && len(rightPartition) == 0 {
+				rightPartition = append(rightPartition, install.Node(nodeList[i]))
+			} else {
+				if rng.Float64() > 0.7 {
+					rightPartition = append(rightPartition, install.Node(nodeList[i]))
+				}
+			}
+		}
+		var partition []failures.NetworkPartition
+		types := [3]failures.PartitionType{failures.Bidirectional, failures.Incoming, failures.Outgoing}
+
+		partition = append(partition, failures.NetworkPartition{Source: leftPartition, Destination: rightPartition, Type: types[rng.Intn(len(types))]})
+
+		addPartition := stepToPartition.
+			InsertBefore(networkPartitionStep{partition})
+		recoveryStep := validEndStep.
+			RandomStep(rng)
+		addRecovery := recoveryStep.
+			InsertBefore(networkPartitionRecoveryStep{})
+
+		failureContextSteps, _ := validEndStep.CutBefore(func(s *singleStep) bool {
+			return s == recoveryStep[0]
+		})
+		failureContextSteps.MarkInFailureContext()
+
+		mutations = append(mutations, addPartition...)
+		mutations = append(mutations, addRecovery...)
 	}
 
 	return mutations
