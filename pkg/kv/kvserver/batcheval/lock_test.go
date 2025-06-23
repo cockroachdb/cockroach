@@ -195,9 +195,9 @@ func TestTxnBoundReplicatedLockTableView(t *testing.T) {
 	txn2 := roachpb.MakeTransaction("txn2", keyA, isolation.Serializable, roachpb.NormalUserPriority, makeTS(100, 0), 0, 0, 0, false)
 
 	// Have txn1 acquire 2 locks with different strengths.
-	err = storage.MVCCAcquireLock(ctx, engine, &txn1.TxnMeta, txn1.IgnoredSeqNums, lock.Exclusive, keyA, nil, 0, 0)
+	err = storage.MVCCAcquireLock(ctx, engine, &txn1.TxnMeta, txn1.IgnoredSeqNums, lock.Exclusive, keyA, nil, 0, 0, false)
 	require.NoError(t, err)
-	err = storage.MVCCAcquireLock(ctx, engine, &txn1.TxnMeta, txn1.IgnoredSeqNums, lock.Shared, keyB, nil, 0, 0)
+	err = storage.MVCCAcquireLock(ctx, engine, &txn1.TxnMeta, txn1.IgnoredSeqNums, lock.Shared, keyB, nil, 0, 0, false)
 	require.NoError(t, err)
 
 	reader := engine.NewReader(storage.StandardDurability)
