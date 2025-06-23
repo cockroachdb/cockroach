@@ -2574,3 +2574,17 @@ func validateExclusionTimestampForBatch(ts hlc.Timestamp, h Header) error {
 	}
 	return nil
 }
+
+func (r *AddSSTableRequest) Validate(bh Header) error {
+	if r.ComputeStatsDiff {
+		if r.DisallowConflicts || r.DisallowShadowingBelow.IsSet() {
+			return errors.New(
+				"invalid AddSSTableRequest: ComputeStatsDiff cannot be used with DisallowConflicts or DisallowShadowingBelow")
+		}
+		if r.MVCCStats != nil {
+			return errors.New(
+				"invalid AddSSTableRequest: ComputeStatsDiff cannot be used with precomputed MVCCStats")
+		}
+	}
+	return nil
+}
