@@ -25,7 +25,13 @@ type SearchResult struct {
 	QueryDistance float32
 	// ErrorBound captures the uncertainty of the distance estimate, which is
 	// highly likely to fall within QueryDistance ± ErrorBound.
-	ErrorBound float32
+	ErrorBound       float32
+	// CentroidDistance is the exact distance of the result vector from its
+	// centroid, according to the distance metric in use (e.g. L2Squared or
+	// Cosine).
+	// NOTE: This is only returned if the SearchSet.IncludeCentroidDistances is
+	// set to true.
+	CentroidDistance float32
 	// ParentPartitionKey is the key of the parent of the partition that contains
 	// the data vector.
 	ParentPartitionKey PartitionKey
@@ -182,6 +188,15 @@ type SearchSet struct {
 	// matching primary key.
 	MatchKey KeyBytes
 
+	// ExcludedPartitions specifies which partitions to skip during search.
+	// Vectors in any of these partitions will not be added to the set.
+	ExcludedPartitions []PartitionKey
+
+	// IncludeCentroidDistances indicates that search results need to have their
+	// CentroidDistance field set. This records the vector's distance from the
+	// centroid of its partition.
+	IncludeCentroidDistances bool
+
 	// Stats tracks useful information about the search, such as how many vectors
 	// and partitions were scanned.
 	Stats SearchStats
@@ -222,7 +237,8 @@ func (ss *SearchSet) Count() int {
 	return len(ss.candidates)
 }
 
-// Clear removes all candidates from the set.
+// Clear removes all candidates from the set, but does not otherwise disturb
+// other settings.
 func (ss *SearchSet) Clear() {
 	ss.candidates = ss.candidates[:0]
 	ss.deDuper.Clear()
@@ -254,6 +270,13 @@ func (ss *SearchSet) Add(candidate *SearchResult) {
 		return
 	}
 
+	// Skip vectors in excluded partitions.
+	if ss.ExcludedPartitions != nil {
+		if slices.Contains(ss.ExcludedPartitions, candidate.ParentPartitionKey) {
+			return
+		}
+	}
+
 	if ss.candidates == nil {
 		// Pre-allocate some capacity for candidates.
 		ss.candidates = make(searchResultHeap, 0, 16)
@@ -277,7 +300,7 @@ func (ss *SearchSet) AddSet(searchSet *SearchSet) {
 		return
 	}
 	ss.candidates = slices.Grow(ss.candidates, len(searchSet.candidates))
-	if ss.MatchKey != nil {
+	if ss.MatchKey != nil || ss.ExcludedPartitions != nil {
 		// Add each candidate individually in order to check the match key.
 		ss.AddAll(SearchResults(searchSet.candidates))
 	} else {
