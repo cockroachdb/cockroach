@@ -106,9 +106,9 @@ CREATE FUNCTION public.f(a public.notmyworkday)
   LANGUAGE SQL
   SECURITY INVOKER
   AS $$
-  SELECT a FROM test.public.t;
-  SELECT b FROM test.public.t@t_idx_b;
-  SELECT c FROM test.public.t@t_idx_c;
+  SELECT a FROM public.t;
+  SELECT b FROM public.t@t_idx_b;
+  SELECT c FROM public.t@t_idx_c;
   SELECT nextval('public.sq1'::REGCLASS);
 $$
 

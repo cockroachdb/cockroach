@@ -3596,6 +3596,11 @@ func createRoutinePopulate(
 					if err != nil {
 						return err
 					}
+					bodyStr, err = formatUnqualifyTableNames(bodyStr, fnIDToDBName[fnDesc.GetID()], fnDesc.GetLanguage())
+					if err != nil {
+						return err
+					}
+
 					bodyStr = strings.TrimSpace(bodyStr)
 					stmtStrs := strings.Split(bodyStr, "\n")
 					for i := range stmtStrs {

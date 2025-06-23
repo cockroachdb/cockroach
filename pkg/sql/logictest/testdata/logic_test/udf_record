@@ -82,7 +82,7 @@ f_table  CREATE FUNCTION public.f_table()
            LANGUAGE SQL
            SECURITY INVOKER
            AS $$
-           SELECT t.a, t.b FROM test.public.t ORDER BY a LIMIT 1;
+           SELECT t.a, t.b FROM public.t ORDER BY a LIMIT 1;
          $$
 
 query T
