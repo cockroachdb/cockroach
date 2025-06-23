@@ -673,6 +673,12 @@ func (twb *txnWriteBuffer) rollbackToSavepointLocked(ctx context.Context, s save
 		// Update size bookkeeping for the values we're rolling back.
 		for i := idx; i < len(bufferedVals); i++ {
 			twb.bufferSize -= bufferedVals[i].size()
+			// Lose reference to the value since we're no longer tracking its
+			// memory footprint.
+			// TODO(yuzefovich): we also decremented the buffer size by the
+			// struct overhead, yet we keep reusing the same slice, so we have
+			// some slop in accounting.
+			bufferedVals[i] = bufferedValue{}
 		}
 		// Rollback writes by truncating the buffered values.
 		it.Cur().vals = bufferedVals[:idx]
