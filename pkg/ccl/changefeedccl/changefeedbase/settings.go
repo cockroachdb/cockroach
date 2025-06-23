@@ -349,3 +349,16 @@ var Quantize = settings.RegisterDurationSettingWithExplicitUnit(
 	time.Duration(metamorphic.ConstantWithTestRange("changefeed.resolved_timestamp.granularity", 1, 0, 10))*time.Second,
 	settings.DurationWithMinimum(0),
 )
+
+// MaxRetryBackoff is the maximum time a changefeed will backoff when in
+// a top-level retry loop, for example during rolling restarts. It's
+// also used for determining how long between retries before the backoff
+// timer resets.
+var MaxRetryBackoff = settings.RegisterDurationSettingWithExplicitUnit(
+	settings.ApplicationLevel,
+	"changefeed.max_retry_backoff",
+	"the maximum time a changefeed will backoff when retrying after a restart and how long between retries before backoff resets",
+	10*time.Minute, /* defaultValue */
+	settings.DurationWithMinimum(1*time.Second),
+	settings.NonNegativeDurationWithMaximum(1*time.Hour),
+)
