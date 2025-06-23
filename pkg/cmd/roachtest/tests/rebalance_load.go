@@ -97,6 +97,12 @@ func registerRebalanceLoad(r registry.Registry) {
 		settings.ClusterSettings["kv.allocator.load_based_rebalancing"] = rebalanceMode
 		settings.ClusterSettings["kv.range_split.by_load_enabled"] = "false"
 
+		// Take a 10s profile every minute.
+		settings.ClusterSettings["server.cpu_profile.duration"] = "10s"
+		settings.ClusterSettings["server.cpu_profile.interval"] = "1m"
+		settings.ClusterSettings["server.cpu_profile.cpu_usage_combined_threshold"] = "1" // basically always true
+		settings.ClusterSettings["server.cpu_profile.total_dump_size_limit"] = "256 MiB"
+
 		if mixedVersion {
 			mvt := mixedversion.NewTest(ctx, t, t.L(), c, roachNodes, mixedversion.NeverUseFixtures,
 				mixedversion.ClusterSettingOption(
@@ -119,8 +125,6 @@ func registerRebalanceLoad(r registry.Registry) {
 				})
 			mvt.Run()
 		} else {
-			// Note that CPU profiling is already enabled by default, should there be
-			// a failure it will be available in the artifacts.
 			c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 			require.NoError(t, rebalanceByLoad(
 				ctx, t, t.L(), c, maxDuration,
