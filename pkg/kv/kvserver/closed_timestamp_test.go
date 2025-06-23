@@ -1353,7 +1353,7 @@ func verifyCanReadFromAllRepls(
 		repl := repls[i]
 		g.Go(func() (err error) {
 			var shouldRetry bool
-			for r := retry.StartWithCtx(ctx, retryOptions); r.Next(); <-r.NextCh() {
+			for r := retry.StartWithCtx(ctx, retryOptions); r.Next(); {
 				if shouldRetry, err = f(repl.Send(ctx, baRead)); !shouldRetry {
 					return err
 				}
