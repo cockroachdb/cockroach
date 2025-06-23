@@ -344,6 +344,18 @@ const (
 	ReportTypeLogFatal
 )
 
+// isForcePanicError checks if the error originated from crdb_internal.force_panic.
+// This is used to avoid sending test-induced panics to Sentry.
+func isForcePanicError(err error) bool {
+	fullErrStr := fmt.Sprintf("%+v", err)
+	if strings.Contains(fullErrStr, "crdb_internal.force_panic") ||
+		strings.Contains(fullErrStr, "colexecerror.NonCatchablePanic") {
+		return true
+	}
+
+	return false
+}
+
 // sendCrashReport posts to sentry.
 //
 // The crashReportType parameter adds a tag to the event that shows if the
@@ -351,7 +363,7 @@ const (
 func sendCrashReport(
 	ctx context.Context, sv *settings.Values, err error, crashReportType ReportType,
 ) {
-	if !ShouldSendReport(sv) {
+	if !ShouldSendReport(sv, err) {
 		return
 	}
 
@@ -360,13 +372,17 @@ func sendCrashReport(
 }
 
 // ShouldSendReport returns true iff SendReport() should be called.
-func ShouldSendReport(sv *settings.Values) bool {
+func ShouldSendReport(sv *settings.Values, err error) bool {
 	if sv == nil || !DiagnosticsReportingEnabled.Get(sv) || !CrashReports.Get(sv) {
 		return false // disabled via settings.
 	}
 	if !crashReportingActive {
 		return false // disabled via empty URL env var.
 	}
+	if isForcePanicError(err) {
+		return false // Skip reporting test-induced panics.
+	}
+
 	return true
 }
 

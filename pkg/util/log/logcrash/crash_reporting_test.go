@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -407,4 +408,94 @@ func makeTypeAssertionErr() (result runtime.Error) {
 	var x interface{}
 	_ = x.(int)
 	return nil
+}
+
+func TestIsForcePanicError(t *testing.T) {
+	testCases := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			name:     "regular error",
+			err:      errors.New("regular error"),
+			expected: false,
+		},
+		{
+			name:     "error with force_panic in message",
+			err:      errors.New("panic from crdb_internal.force_panic"),
+			expected: true,
+		},
+		{
+			name:     "error with NonCatchablePanic in message",
+			err:      errors.New("panic from colexecerror.NonCatchablePanic"),
+			expected: true,
+		},
+		{
+			name:     "wrapped error with force_panic",
+			err:      errors.Wrap(errors.New("crdb_internal.force_panic('test')"), "wrapped"),
+			expected: true,
+		},
+		{
+			name:     "error with force_panic in stack trace",
+			err:      errors.WithStackDepth(errors.New("test panic"), 1),
+			expected: false,
+		},
+		{
+			name:     "context canceled error",
+			err:      context.Canceled,
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := isForcePanicError(tc.err)
+			if result != tc.expected {
+				t.Errorf("isForcePanicError(%q) = %v, expected %v", tc.err.Error(), result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestShouldSendReportWithForcePanic(t *testing.T) {
+	oldCrashReportURL := crashReportURL
+	crashReportURL = "https://test-url"
+	defer func() { crashReportURL = oldCrashReportURL }()
+	crashReportingActive = true
+
+	testCases := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			name:     "regular error should be reported",
+			err:      errors.New("regular error"),
+			expected: true,
+		},
+		{
+			name:     "force_panic error should not be reported",
+			err:      errors.New("panic from crdb_internal.force_panic"),
+			expected: false,
+		},
+		{
+			name:     "NonCatchablePanic error should not be reported",
+			err:      errors.New("panic from colexecerror.NonCatchablePanic"),
+			expected: false,
+		},
+	}
+
+	sv := &settings.Values{}
+	DiagnosticsReportingEnabled.Override(context.Background(), sv, true)
+	CrashReports.Override(context.Background(), sv, true)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := ShouldSendReport(sv, tc.err)
+			if result != tc.expected {
+				t.Errorf("ShouldSendReport(sv, %q) = %v, expected %v", tc.err.Error(), result, tc.expected)
+			}
+		})
+	}
 }

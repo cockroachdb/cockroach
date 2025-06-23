@@ -51,7 +51,7 @@ func RecordError(ctx context.Context, err error, sv *settings.Values) {
 		// report is sent to sentry below.
 		log.Errorf(ctx, "encountered internal error:\n%+v", err)
 
-		if logcrash.ShouldSendReport(sv) {
+		if logcrash.ShouldSendReport(sv, err) {
 			event, extraDetails := errors.BuildSentryReport(err)
 			logcrash.SendReport(ctx, logcrash.ReportTypeError, event, extraDetails)
 		}

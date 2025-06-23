@@ -17,7 +17,7 @@ import (
 // The format string will be reproduced ad litteram in the report; the arguments
 // will be sanitized.
 func SendReport(ctx context.Context, sv *settings.Values, err error) {
-	if !logcrash.ShouldSendReport(sv) {
+	if !logcrash.ShouldSendReport(sv, err) {
 		return
 	}
 	event, extraDetails := errors.BuildSentryReport(err)
