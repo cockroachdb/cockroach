@@ -1582,14 +1582,23 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	}
 
 	serverpb.RegisterInitServer(s.grpc.Server, initServer)
+	if err := serverpb.DRPCRegisterInit(s.drpc.DRPCServer, initServer); err != nil {
+		return err
+	}
 
 	// Register the Migration service, to power internal crdb upgrades.
 	migrationServer := &migrationServer{server: s}
 	serverpb.RegisterMigrationServer(s.grpc.Server, migrationServer)
+	if err := serverpb.DRPCRegisterMigration(s.drpc.DRPCServer, migrationServer); err != nil {
+		return err
+	}
 	s.migrationServer = migrationServer // only for testing via testServer
 
 	// Register the KeyVisualizer Server
 	keyvispb.RegisterKeyVisualizerServer(s.grpc.Server, s.keyVisualizerServer)
+	if err := keyvispb.DRPCRegisterKeyVisualizer(s.drpc.DRPCServer, s.keyVisualizerServer); err != nil {
+		return err
+	}
 
 	// Start the RPC server. This opens the RPC/SQL listen socket,
 	// and dispatches the server worker for the RPC.
