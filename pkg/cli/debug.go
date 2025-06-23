@@ -1448,6 +1448,7 @@ func init() {
 		}),
 		tool.OpenOptions(pebbleOpenOptionLockDir{pebbleToolFS}),
 		tool.WithDBExciseSpanFn(pebbleExciseSpanFn),
+		tool.WithDBRemoteStorageFn(pebbleRemoteStorageFn),
 	)
 	debugPebbleCmd.AddCommand(pebbleTool.Commands...)
 	f := debugPebbleCmd.PersistentFlags()
@@ -1713,6 +1714,25 @@ func pebbleExciseSpanFn() (pebble.KeyRange, error) {
 		Start: start.Encode(),
 		End:   end.Encode(),
 	}, nil
+}
+
+func pebbleRemoteStorageFn(uri string) (remote.Storage, error) {
+	es, err := cloud.ExternalStorageFromURI(
+		context.Background(),
+		uri,
+		base.ExternalIODirConfig{},
+		cluster.MakeClusterSettings(),
+		nil, /* blobClientFactory: */
+		username.PublicRoleName(),
+		nil, /* db */
+		nil, /* limiters */
+		cloud.NilMetrics,
+	)
+	if err != nil {
+		return nil, err
+	}
+	wrapper := storage.MakeExternalStorageWrapper(context.Background(), es)
+	return wrapper, nil
 }
 
 func pebbleCryptoInitializer(ctx context.Context) {

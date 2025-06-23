@@ -6,6 +6,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -267,20 +268,20 @@ func getCompressionProfile(
 	ctx context.Context,
 	settings *cluster.Settings,
 	setting *settings.EnumSetting[CompressionAlgorithm],
-) *pebble.CompressionProfile {
+) *sstable.CompressionProfile {
 	switch setting.Get(&settings.SV) {
 	case CompressionAlgorithmSnappy:
-		return pebble.SnappyCompression
+		return sstable.SnappyCompression
 	case CompressionAlgorithmZstd:
-		return pebble.ZstdCompression
+		return sstable.ZstdCompression
 	case CompressionAlgorithmNone:
-		return pebble.NoCompression
+		return sstable.NoCompression
 	case CompressionAlgorithmMinLZ:
-		return pebble.MinLZCompression
+		return sstable.MinLZCompression
 	case CompressionAlgorithmFastest:
-		return pebble.FastestCompression
+		return sstable.FastestCompression
 	default:
-		return pebble.DefaultCompression
+		return sstable.DefaultCompression
 	}
 }
 
@@ -464,17 +465,30 @@ func DefaultPebbleOptions() *pebble.Options {
 	// once.
 	opts.TargetByteDeletionRate = 128 << 20 // 128 MB
 	opts.Experimental.ShortAttributeExtractor = shortAttributeExtractorForValues
-	opts.Experimental.SpanPolicyFunc = pebble.MakeStaticSpanPolicyFunc(
-		cockroachkvs.Compare,
-		pebble.KeyRange{
-			Start: EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix}),
-			End:   EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix.PrefixEnd()}),
-		},
-		pebble.SpanPolicy{
-			DisableValueSeparationBySuffix: true,
-			ValueStoragePolicy:             pebble.ValueStorageLowReadLatency,
-		},
-	)
+
+	lockTableStartKey := EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix})
+	lockTableEndKey := EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix.PrefixEnd()})
+	localEndKey := EncodeMVCCKey(MVCCKey{Key: keys.LocalPrefix.PrefixEnd()})
+	opts.Experimental.SpanPolicyFunc = func(startKey []byte) (policy pebble.SpanPolicy, endKey []byte, _ error) {
+		if !bytes.HasPrefix(startKey, keys.LocalPrefix) {
+			return pebble.SpanPolicy{}, nil, nil
+		}
+		// Prefer fast compression for all local keys, since they shouldn't take up
+		// a significant part of the space.
+		policy.PreferFastCompression = true
+
+		// We also disable value separation for lock keys.
+		if cockroachkvs.Compare(startKey, lockTableEndKey) >= 0 {
+			return policy, localEndKey, nil
+		}
+		if cockroachkvs.Compare(startKey, lockTableStartKey) < 0 {
+			return policy, lockTableStartKey, nil
+		}
+		policy.DisableValueSeparationBySuffix = true
+		policy.ValueStoragePolicy = pebble.ValueStorageLowReadLatency
+		return policy, lockTableEndKey, nil
+	}
+
 	// Disable multi-level compaction heuristic for now. See #134423
 	// for why this was disabled, and what needs to be changed to reenable it.
 	// This issue tracks re-enablement: https://github.com/cockroachdb/pebble/issues/4139
@@ -494,7 +508,6 @@ func DefaultPebbleOptions() *pebble.Options {
 		l.IndexBlockSize = 256 << 10 // 256 KB
 		l.FilterPolicy = bloom.FilterPolicy(10)
 		l.FilterType = pebble.TableFilter
-		l.TargetFileSize = opts.Levels[i-1].TargetFileSize * 2
 		l.EnsureL1PlusDefaults(&opts.Levels[i-1])
 	}
 
