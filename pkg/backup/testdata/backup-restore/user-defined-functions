@@ -93,7 +93,7 @@ CREATE FUNCTION sc1.f1(a sc1.enum1)
 	LANGUAGE SQL
 	SECURITY INVOKER
 	AS $$
-	SELECT a FROM db1.sc1.tbl1;
+	SELECT a FROM sc1.tbl1;
 	SELECT 'Good':::sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
 $$
@@ -130,7 +130,7 @@ CREATE FUNCTION sc1.f1(a sc1.enum1)
 	LANGUAGE SQL
 	SECURITY INVOKER
 	AS $$
-	SELECT a FROM db1_new.sc1.tbl1;
+	SELECT a FROM sc1.tbl1;
 	SELECT 'Good':::sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
 $$
@@ -279,7 +279,7 @@ CREATE FUNCTION sc1.f1(a sc1.enum1)
 	LANGUAGE SQL
 	SECURITY INVOKER
 	AS $$
-	SELECT a FROM db1.sc1.tbl1;
+	SELECT a FROM sc1.tbl1;
 	SELECT 'Good':::sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
 $$
@@ -317,7 +317,7 @@ CREATE FUNCTION sc1.f1(a sc1.enum1)
 	LANGUAGE SQL
 	SECURITY INVOKER
 	AS $$
-	SELECT a FROM db1.sc1.tbl1;
+	SELECT a FROM sc1.tbl1;
 	SELECT 'Good':::sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
 $$
