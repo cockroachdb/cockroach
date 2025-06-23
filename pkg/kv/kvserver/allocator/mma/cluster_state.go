@@ -1041,9 +1041,7 @@ func (cs *clusterState) processStoreLeaseholderMsg(ctx context.Context, msg *Sto
 }
 
 func (cs *clusterState) processStoreLeaseholderMsgInternal(
-	ctx context.Context,
-	msg *StoreLeaseholderMsg,
-	numTopKReplicas int,
+	ctx context.Context, msg *StoreLeaseholderMsg, numTopKReplicas int,
 ) {
 	log.Infof(ctx, "start processing processStoreLeaseholderMsgInternal %v", msg)
 	now := cs.ts.Now()
@@ -1062,12 +1060,42 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			cs.ranges[rangeMsg.RangeID] = rs
 		}
 		if !rangeMsg.Populated {
-			continue
+			// When there are no pending changes, confirm that the membership state
+			// is consistent. If not, fall through and make it consistent. We have
+			// seen an example where AdjustPendingChangesDisposition lied about
+			// being successful, and have not been able to find the root cause. So
+			// we'd rather force eventual consistency here.
+			if len(rs.pendingChanges) > 0 {
+				continue
+			}
+			mayHaveDiverged := false
+			if len(rs.replicas) == len(rangeMsg.Replicas) {
+				for i := range rs.replicas {
+					// Since we stuff rangeMsg.Replicas directly into the
+					// rangeState.replicas slice, in the common case we expect both of
+					// them to have the same replica at the same position. If they
+					// don't, they have either diverged, or there have been adjustments
+					// made n rangeState.replicas that have changed the ordering. The
+					// latter may be a false positive, but we don't mind the small
+					// amount of additional work below.
+					if rs.replicas[i] != rangeMsg.Replicas[i] {
+						mayHaveDiverged = true
+						break
+					}
+				}
+			} else {
+				mayHaveDiverged = true
+			}
+			if !mayHaveDiverged {
+				continue
+			}
 		}
 		// Set the range state and store state to match the range message state
 		// initially. The pending changes which are not enacted in the range
 		// message are handled and added back below.
-		rs.load = rangeMsg.RangeLoad
+		if rangeMsg.Populated {
+			rs.load = rangeMsg.RangeLoad
+		}
 		for _, replica := range rs.replicas {
 			ss := cs.stores[replica.StoreID]
 			if ss == nil {
@@ -1123,15 +1151,18 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		for _, change := range remainingChanges {
 			cs.applyReplicaChange(change.ReplicaChange, false)
 		}
-		normSpanConfig, err := makeNormalizedSpanConfig(&rangeMsg.Conf, cs.constraintMatcher.interner)
-		if err != nil {
-			// TODO(kvoli): Should we log as a warning here, or return further back out?
-			panic(err)
+		if rangeMsg.Populated {
+			normSpanConfig, err := makeNormalizedSpanConfig(&rangeMsg.Conf, cs.constraintMatcher.interner)
+			if err != nil {
+				// TODO(kvoli): Should we log as a warning here, or return further back out?
+				panic(err)
+			}
+			rs.conf = normSpanConfig
 		}
-		rs.conf = normSpanConfig
 		// NB: Always recompute the analyzed range constraints for any range,
 		// assuming the leaseholder wouldn't have sent the message if there was no
-		// change.
+		// change, or we noticed a divergence in membership above and fell through
+		// here.
 		rs.constraints = nil
 	}
 	// Remove ranges for which no longer the leaseholder.

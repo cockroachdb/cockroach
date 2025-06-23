@@ -613,18 +613,17 @@ func (a *allocatorState) AdminScatterOne(
 	panic("unimplemented")
 }
 
-// KnowsStores implements the Allocator interface.
-func (a *allocatorState) KnowsStores(stores map[roachpb.StoreID]struct{}) bool {
+// KnownStores implements the Allocator interface.
+func (a *allocatorState) KnownStores() map[roachpb.StoreID]struct{} {
+	stores := make(map[roachpb.StoreID]struct{})
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	// The allocatorState is a wrapper around the clusterState, which contains
 	// all the stores.
 	for storeID := range stores {
-		if _, ok := a.cs.stores[storeID]; !ok {
-			return false
-		}
+		stores[storeID] = struct{}{}
 	}
-	return true
+	return stores
 }
 
 type candidateInfo struct {

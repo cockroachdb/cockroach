@@ -3066,23 +3066,30 @@ type laggingState struct {
 	// hasSendQueue bool
 }
 
-// TryConstructMMARangeMsg constructs a mma.RangeMsg for the Replica iff the
-// replica is currently th leaseholder, in which case it returns true.
+// TryConstructMMARangeMsg attempts to constructs a mma.RangeMsg for the
+// Replica iff the replica is currently the leaseholder, in which case it
+// returns lh=true.
 //
-// When it is the leaseholder, there are two possibilities:
+// If it cannot construct the RangeMsg because one of the replicas is on a
+// store that is not included in knownStores, it returns lh=true,
+// ignored=true.
+//
+// When lh=true and ignored=false, there are two possibilities:
 //
 //   - There is at least one change that warrants informing MMA, in which case
 //     all the fields are populated, and Populated is true.
 //
-//   - Nothing has changed, in which case only the RangeID is set and Populated
-//     is false.
+//   - Nothing has changed (including membership), in which case only the
+//     RangeID and Replicas are set and Populated is false.
 //
 // Called periodically by the same entity (and must not be called
-// concurrently). If this method returned true the last time, that message
-// must have been fed to the allocator.
-func (r *Replica) TryConstructMMARangeMsg() (mma.RangeMsg, bool) {
+// concurrently). If this method returned lh=true and ignored=false the last
+// time, that message must have been fed to the allocator.
+func (r *Replica) TryConstructMMARangeMsg(
+	knownStores map[roachpb.StoreID]struct{},
+) (lh bool, ignored bool, msg mma.RangeMsg) {
 	if !r.IsInitialized() {
-		return mma.RangeMsg{}, false
+		return false, false, mma.RangeMsg{}
 	}
 	var isLeaseholder bool
 	var wasLeaseholder bool
@@ -3110,9 +3117,25 @@ func (r *Replica) TryConstructMMARangeMsg() (mma.RangeMsg, bool) {
 	}()
 	// Fast path.
 	if !isLeaseholder {
-		return mma.RangeMsg{}, false
+		return false, false, mma.RangeMsg{}
 	}
 	// isLeaseholder is true.
+	for _, repl := range desc.InternalReplicas {
+		if _, ok := knownStores[repl.StoreID]; !ok {
+			// If any of the replicas is on a store that is not included in
+			// knownStores, we cannot construct the RangeMsg.
+			// NB: very rare.
+			func() {
+				r.mu.RLock()
+				defer r.mu.RUnlock()
+				// Force needed=true, since the knownStores may be different in the
+				// next call.
+				r.mu.mmaRangeMessageNeeded.needed = true
+			}()
+			return true, true, mma.RangeMsg{}
+		}
+	}
+
 	rload := r.RangeLoad()
 	sendStreamStats := r.mu.mmaRangeMessageNeeded.getSendStreamStatsScratch()
 	r.flowControlV2.SendStreamStats(sendStreamStats)
@@ -3124,9 +3147,6 @@ func (r *Replica) TryConstructMMARangeMsg() (mma.RangeMsg, bool) {
 		needed = r.mu.mmaRangeMessageNeeded.getNeededAndReset(
 			rload, raftStatus, sendStreamStats)
 	}()
-	if !needed {
-		return mma.RangeMsg{RangeID: r.RangeID}, true
-	}
 	var replicas []mma.StoreIDAndReplicaState
 	for _, repl := range desc.InternalReplicas {
 		replica := mma.StoreIDAndReplicaState{
@@ -3147,11 +3167,18 @@ func (r *Replica) TryConstructMMARangeMsg() (mma.RangeMsg, bool) {
 			repl.IsAnyVoter() && r.mu.mmaRangeMessageNeeded.lastLaggingState[repl.ReplicaID].isLagging
 		replicas = append(replicas, replica)
 	}
-	return mma.RangeMsg{
+	if !needed {
+		return true, false, mma.RangeMsg{
+			RangeID:   r.RangeID,
+			Replicas:  replicas,
+			Populated: false,
+		}
+	}
+	return true, false, mma.RangeMsg{
 		RangeID:   r.RangeID,
-		Populated: true,
 		Replicas:  replicas,
+		Populated: true,
 		Conf:      conf,
 		RangeLoad: rload,
-	}, true
+	}
 }
