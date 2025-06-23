@@ -60,9 +60,9 @@ type failureSmokeTest struct {
 }
 
 func (t *failureSmokeTest) run(
-	ctx context.Context, l *logger.Logger, c cluster.Cluster, fr *failures.FailureRegistry,
+	ctx context.Context, l *logger.Logger, c cluster.Cluster,
 ) (err error) {
-	failer, err := roachtestutil.GetFailer(fr, c, t.failureName, l)
+	failer, err := c.GetFailer(l, c.CRDBNodes(), t.failureName)
 	if err != nil {
 		return err
 	}
@@ -153,10 +153,8 @@ func (t *failureSmokeTest) run(
 	return t.validateRecover(ctx, l, c, failer)
 }
 
-func (t *failureSmokeTest) noopRun(
-	ctx context.Context, l *logger.Logger, c cluster.Cluster, fr *failures.FailureRegistry,
-) error {
-	failer, err := roachtestutil.GetFailer(fr, c, t.failureName, l)
+func (t *failureSmokeTest) noopRun(ctx context.Context, l *logger.Logger, c cluster.Cluster) error {
+	failer, err := c.GetFailer(l, c.CRDBNodes(), t.failureName)
 	if err != nil {
 		return err
 	}
@@ -557,6 +555,71 @@ var cgroupsDiskStallTests = func(c cluster.Cluster) []failureSmokeTest {
 	return tests
 }
 
+var cgroupStallLogsTest = func(c cluster.Cluster) failureSmokeTest {
+	nodes := c.CRDBNodes()
+	rand.Shuffle(len(nodes), func(i, j int) {
+		nodes[i], nodes[j] = nodes[j], nodes[i]
+	})
+	// We only want to stall one node for this test. If we stall writes on a quorum
+	// of nodes, then auth-session login will fail even if logs are not stalled.
+	stalledNode := c.Node(nodes[0])
+	unaffectedNode := c.Node(nodes[1])
+
+	getSessionCookie := func(
+		ctx context.Context,
+		l *logger.Logger,
+		c cluster.Cluster,
+		node option.NodeListOption,
+	) bool {
+		loginCmd := fmt.Sprintf(
+			"%s auth-session login root --url={pgurl%s} --certs-dir ./certs --only-cookie",
+			test.DefaultCockroachPath, node,
+		)
+		err := c.RunE(ctx, option.WithNodes(node), loginCmd)
+		return err == nil
+	}
+
+	return failureSmokeTest{
+		testName:    fmt.Sprintf("%s/WritesStalled=true/LogsStalled=true", failures.CgroupsDiskStallName),
+		failureName: failures.CgroupsDiskStallName,
+		args: failures.DiskStallArgs{
+			StallWrites:  true,
+			RestartNodes: true,
+			Nodes:        stalledNode.InstallNodes(),
+			StallLogs:    true,
+		},
+		validateFailure: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f *failures.Failer) error {
+			// Confirm symlink exists
+			if err := c.RunE(ctx, option.WithNodes(stalledNode), "test -L logs"); err != nil {
+				return errors.Wrapf(err, "`logs` is not a symlink on node %d", stalledNode)
+			}
+
+			// The cockroach-sql-auth.log file is appended to each time an authenticated session event
+			// occurs, e.g. a client logging in. If we attempt to fetch a cookie from the stalled node,
+			// we should expect to see our request time out, as it will be unable to write to the log.
+			if getSessionCookie(ctx, l, c, stalledNode) {
+				return errors.Errorf("was able to successfully get session cookie from stalled node %d", stalledNode)
+			}
+
+			// The unaffected node should be able to write to the log, so we should be able to
+			// get the session cookie with no issues.
+			if !getSessionCookie(ctx, l, c, unaffectedNode) {
+				return errors.Errorf("was unable to get session cookie from unaffected node %d", unaffectedNode)
+			}
+			return nil
+		},
+		validateRecover: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f *failures.Failer) error {
+			if !getSessionCookie(ctx, l, c, stalledNode) {
+				return errors.Errorf("was unable to get session cookie from stalled node %d", stalledNode)
+			}
+			return nil
+		},
+		workload: func(ctx context.Context, c cluster.Cluster, args ...string) error {
+			return nil
+		},
+	}
+}
+
 var dmsetupDiskStallTest = func(c cluster.Cluster) failureSmokeTest {
 	rng, _ := randutil.NewPseudoRand()
 	// SeededRandGroups only returns an error if the requested size is larger than the
@@ -776,9 +839,7 @@ func defaultFailureSmokeTestWorkload(ctx context.Context, c cluster.Cluster, arg
 	return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 }
 
-func setupFailureSmokeTests(
-	ctx context.Context, t test.Test, c cluster.Cluster, fr *failures.FailureRegistry,
-) error {
+func setupFailureSmokeTests(ctx context.Context, t test.Test, c cluster.Cluster) error {
 	// Download any dependencies needed.
 	if err := c.Install(ctx, t.L(), c.CRDBNodes(), "nmap"); err != nil {
 		return err
@@ -802,9 +863,7 @@ func setupFailureSmokeTests(
 }
 
 func runFailureSmokeTest(ctx context.Context, t test.Test, c cluster.Cluster, noopFailer bool) {
-	fr := failures.NewFailureRegistry()
-	fr.Register()
-	if err := setupFailureSmokeTests(ctx, t, c, fr); err != nil {
+	if err := setupFailureSmokeTests(ctx, t, c); err != nil {
 		t.Error(err)
 	}
 
@@ -815,6 +874,7 @@ func runFailureSmokeTest(ctx context.Context, t test.Test, c cluster.Cluster, no
 		latencyTest(c),
 		dmsetupDiskStallTest(c),
 		resetVMTests(c),
+		cgroupStallLogsTest(c),
 	}
 	failureSmokeTests = append(failureSmokeTests, cgroupsDiskStallTests(c)...)
 	failureSmokeTests = append(failureSmokeTests, processKillTests(c)...)
@@ -845,7 +905,7 @@ func runFailureSmokeTest(ctx context.Context, t test.Test, c cluster.Cluster, no
 	for _, test := range failureSmokeTests {
 		t.L().Printf("\n=====running %s test=====", test.testName)
 		if noopFailer {
-			if err := test.noopRun(ctx, t.L(), c, fr); err != nil {
+			if err := test.noopRun(ctx, t.L(), c); err != nil {
 				t.Fatal(err)
 			}
 		} else {
@@ -856,7 +916,7 @@ func runFailureSmokeTest(ctx context.Context, t test.Test, c cluster.Cluster, no
 			cancel := t.GoWithCancel(func(goCtx context.Context, l *logger.Logger) error {
 				return backgroundWorkload(goCtx, c)
 			}, task.Name(fmt.Sprintf("%s-workload", test.testName)))
-			err := test.run(ctx, t.L(), c, fr)
+			err := test.run(ctx, t.L(), c)
 			cancel()
 			if err != nil {
 				t.Fatal(errors.Wrapf(err, "%s failed", test.testName))

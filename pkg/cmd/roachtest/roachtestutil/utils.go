@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -288,12 +287,4 @@ func PrefixCmdOutputWithTimestamp(cmd string) string {
 	// Don't prefix blank lines with timestamps.
 	awkCmd := `awk 'NF { cmd="date +\"%H:%M:%S\""; cmd | getline ts; close(cmd); print ts ":", $0; next } { print }'`
 	return fmt.Sprintf(`bash -c '%s' 2>&1 |`, cmd) + awkCmd
-}
-
-// GetFailer returns a *failures.Failer for the given failure mode name. Used
-// for conducting failure injection on a cluster.
-func GetFailer(
-	fr *failures.FailureRegistry, c cluster.Cluster, failureModeName string, l *logger.Logger,
-) (*failures.Failer, error) {
-	return fr.GetFailer(c.MakeNodes(c.CRDBNodes()), failureModeName, l, c.IsSecure())
 }

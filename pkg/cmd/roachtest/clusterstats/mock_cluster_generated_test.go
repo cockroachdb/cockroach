@@ -16,6 +16,7 @@ import (
 	option "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	spec "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	roachprod "github.com/cockroachdb/cockroach/pkg/roachprod"
+	failures "github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	install "github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	logger "github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	prometheus "github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
@@ -361,6 +362,26 @@ func (mr *MockClusterMockRecorder) Get(arg0, arg1, arg2, arg3 interface{}, arg4 
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2, arg3}, arg4...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockCluster)(nil).Get), varargs...)
+}
+
+// GetFailer mocks base method.
+func (m *MockCluster) GetFailer(arg0 *logger.Logger, arg1 option.NodeListOption, arg2 string, arg3 ...failures.ClusterOptionFunc) (*failures.Failer, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1, arg2}
+	for _, a := range arg3 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetFailer", varargs...)
+	ret0, _ := ret[0].(*failures.Failer)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetFailer indicates an expected call of GetFailer.
+func (mr *MockClusterMockRecorder) GetFailer(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFailer", reflect.TypeOf((*MockCluster)(nil).GetFailer), varargs...)
 }
 
 // GetPreemptedVMs mocks base method.
