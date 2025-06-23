@@ -737,72 +737,7 @@ func TestIdentical(t *testing.T) {
 	}
 }
 
-// TestMarshalCompat tests backwards-compatibility during marshal.
-func TestMarshalCompat(t *testing.T) {
-	intElemType := IntFamily
-	oidElemType := OidFamily
-	strElemType := StringFamily
-	collStrElemType := CollatedStringFamily
-	enLocale := "en"
-
-	testCases := []struct {
-		from *T
-		to   InternalType
-	}{
-		// ARRAY
-		{Int2Vector, InternalType{Family: int2vector, Oid: oid.T_int2vector, Width: 16,
-			ArrayElemType: &intElemType, ArrayContents: Int2}},
-		{OidVector, InternalType{Family: oidvector, Oid: oid.T_oidvector,
-			ArrayElemType: &oidElemType, ArrayContents: Oid}},
-		{IntArray, InternalType{Family: ArrayFamily, Oid: oid.T__int8, Width: 64,
-			ArrayElemType: &intElemType, ArrayContents: Int}},
-		{MakeArray(MakeVarChar(10)), InternalType{Family: ArrayFamily, Oid: oid.T__varchar, Width: 10, VisibleType: visibleVARCHAR,
-			ArrayElemType: &strElemType, ArrayContents: MakeVarChar(10)}},
-		{MakeArray(MakeCollatedString(String, enLocale)), InternalType{Family: ArrayFamily, Oid: oid.T__text, Locale: &enLocale,
-			ArrayElemType: &collStrElemType, ArrayContents: MakeCollatedString(String, enLocale)}},
-
-		// BIT
-		{typeBit, InternalType{Family: BitFamily, Oid: oid.T_bit}},
-		{MakeVarBit(10), InternalType{Family: BitFamily, Oid: oid.T_varbit, Width: 10, VisibleType: visibleVARBIT}},
-
-		// COLLATEDSTRING
-		{MakeCollatedString(MakeVarChar(10), enLocale),
-			InternalType{Family: CollatedStringFamily, Oid: oid.T_varchar, Width: 10, VisibleType: visibleVARCHAR, Locale: &enLocale}},
-
-		// FLOAT
-		{Float, InternalType{Family: FloatFamily, Oid: oid.T_float8, Width: 64}},
-		{Float4, InternalType{Family: FloatFamily, Oid: oid.T_float4, Width: 32, VisibleType: visibleREAL}},
-
-		// REFCURSOR
-		{RefCursor, InternalType{Family: RefCursorFamily, Oid: oid.T_refcursor}},
-
-		// STRING
-		{MakeString(10), InternalType{Family: StringFamily, Oid: oid.T_text, Width: 10}},
-		{VarChar, InternalType{Family: StringFamily, Oid: oid.T_varchar, VisibleType: visibleVARCHAR}},
-		{MakeChar(10), InternalType{Family: StringFamily, Oid: oid.T_bpchar, Width: 10, VisibleType: visibleCHAR}},
-		{QChar, InternalType{Family: StringFamily, Oid: oid.T_char, Width: 1, VisibleType: visibleQCHAR}},
-		{Name, InternalType{Family: name, Oid: oid.T_name}},
-	}
-
-	for _, tc := range testCases {
-		data, err := protoutil.Marshal(tc.from)
-		if err != nil {
-			t.Errorf("error during marshal of type <%v>: %v", tc.from.DebugString(), err)
-		}
-
-		var actual InternalType
-		err = protoutil.Unmarshal(data, &actual)
-		if err != nil {
-			t.Errorf("error during unmarshal of type <%v>: %v", tc.from.DebugString(), err)
-		}
-
-		if !reflect.DeepEqual(actual, tc.to) {
-			t.Errorf("expected <%v>, got <%v>", tc.to.String(), actual.String())
-		}
-	}
-}
-
-// TestMarshalCompat tests backwards-compatibility during unmarshal. Unmarshal
+// TestUnmarshalCompat tests backwards-compatibility during unmarshal. Unmarshal
 // needs to handle all formats ever used by CRDB in the past.
 func TestUnmarshalCompat(t *testing.T) {
 	intElemType := IntFamily

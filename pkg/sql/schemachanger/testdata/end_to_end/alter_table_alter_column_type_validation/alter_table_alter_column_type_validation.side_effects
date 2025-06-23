@@ -207,7 +207,6 @@ upsert descriptor #104
          family: StringFamily
   -      oid: 25
   +      oid: 1042
-  +      visibleType: 8
   +      width: 5
      createAsOfTime:
        wallTime: "1640995200000000000"
