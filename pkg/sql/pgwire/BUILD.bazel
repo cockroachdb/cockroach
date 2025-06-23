@@ -94,6 +94,7 @@ go_library(
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_go_ldap_ldap_v3//:ldap",
+        "@com_github_lestrrat_go_jwx_v2//jwt",
         "@com_github_lib_pq//oid",
         "@com_github_prometheus_client_model//go",
         "@com_github_xdg_go_scram//:scram",

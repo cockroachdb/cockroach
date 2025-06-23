@@ -14,8 +14,10 @@ import (
 const (
 	supportedAuthMethodLDAP             = "ldap"
 	testSupportedAuthMethodCertPassword = "cert-password"
+	supportedAuthMethodJWT              = "jwt_token"
 	baseProvisioningSettingName         = "security.provisioning."
 	ldapProvisioningEnableSettingName   = baseProvisioningSettingName + "ldap.enabled"
+	jwtProvisioningEnableSettingName    = baseProvisioningSettingName + "jwt.enabled"
 )
 
 // UserProvisioningConfig allows for customization of automatic user
@@ -31,6 +33,17 @@ var ldapProvisioningEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	ldapProvisioningEnableSettingName,
 	"enables automatic creation of SQL users upon successful LDAP login",
+	false,
+	settings.WithReportable(true),
+	settings.WithPublic,
+)
+
+// jwtProvisioningEnabled enables automatic user provisioning for jwt
+// authentication method.
+var jwtProvisioningEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	jwtProvisioningEnableSettingName,
+	"enables or disables automatic user provisioning for jwt authentication method",
 	false,
 	settings.WithReportable(true),
 	settings.WithPublic,
@@ -53,6 +66,8 @@ func (c clusterProvisioningConfig) Enabled(authMethod string) bool {
 		return ldapProvisioningEnabled.Get(&c.settings.SV)
 	case testSupportedAuthMethodCertPassword:
 		return Testing.Supported
+	case supportedAuthMethodJWT:
+		return jwtProvisioningEnabled.Get(&c.settings.SV)
 	default:
 		return false
 	}

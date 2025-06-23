@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -35,6 +37,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/go-ldap/ldap/v3"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/xdg-go/scram"
 )
 
@@ -787,50 +790,100 @@ func authJwtToken(
 	_ *hba.Entry,
 	identMap *identmap.Conf,
 ) (*AuthBehaviors, error) {
-	// Initialize the jwt verifier if it hasn't been already.
 	if jwtVerifier == nil {
 		jwtVerifier = ConfigureJWTAuth(sctx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
 	}
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(UseProvidedIdentity)
-	b.SetAuthenticator(func(
-		ctx context.Context, systemIdentity string, clientConnection bool, pwRetrieveFn PasswordRetrievalFn, _ *ldap.DN,
-	) error {
-		c.LogAuthInfof(ctx, "JWT token detected; attempting to use it")
-		if !clientConnection {
-			err := errors.New("JWT token authentication is only available for client connections")
-			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
-			return err
+
+	var token string
+	var validationErr error
+
+	validate := func() {
+		// Log that the JWT flow is starting.
+		c.LogAuthInfof(sctx, "JWT token detected; attempting to use it")
+
+		if err := c.SendAuthRequest(authCleartextPassword, nil); err != nil {
+			c.LogAuthFailed(sctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+			validationErr = err
+			return
 		}
-		// Request password from client.
-		if err := c.SendAuthRequest(authCleartextPassword, nil /* data */); err != nil {
-			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
-			return err
-		}
-		// Wait for the password response from the client.
 		pwdData, err := c.GetPwdData()
 		if err != nil {
-			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
-			return err
+			c.LogAuthFailed(sctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+			validationErr = err
+			return
+		}
+		tok, err := passwordString(pwdData)
+		if err != nil {
+			c.LogAuthFailed(sctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+			validationErr = err
+			return
+		}
+		token = tok
+		if len(token) == 0 {
+			validationErr = security.NewErrPasswordUserAuthFailed(user)
+			return
 		}
 
-		// Extract the token response from the password field.
-		token, err := passwordString(pwdData)
-		if err != nil {
-			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
-			return err
-		}
-		// If there is no token send the Password Auth Failed error to make the client prompt for a password.
-		if len(token) == 0 {
-			return security.NewErrPasswordUserAuthFailed(user)
-		}
-		if detailedErrors, authError := jwtVerifier.ValidateJWTLogin(ctx, execCfg.Settings, user, []byte(token), identMap); authError != nil {
+		// Validate the token and, if there's an error, log it with the correct reason.
+		if detailedErrors, authError := jwtVerifier.ValidateJWTLogin(sctx, execCfg.Settings, user, []byte(token), identMap); authError != nil {
 			errForLog := authError
 			if detailedErrors != "" {
 				errForLog = errors.Join(errForLog, errors.Newf("%s", detailedErrors))
 			}
-			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, errForLog)
-			return authError
+			c.LogAuthFailed(sctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, errForLog)
+			validationErr = authError
+			return
+		}
+
+		retrievedUser, err := jwtVerifier.RetrieveIdentity(sctx, user, []byte(token), identMap)
+		if err != nil {
+			c.LogAuthFailed(sctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
+			validationErr = err
+			return
+		}
+		b.SetReplacementIdentity(retrievedUser.Normalized())
+	}
+
+	validate()
+
+	b.SetProvisioner(func(ctx context.Context) error {
+		if validationErr != nil && pgerror.GetPGCode(validationErr) != pgcode.InvalidPassword {
+			return validationErr
+		}
+		if len(token) == 0 {
+			return errors.New("JWT provisioning: token was not available to provisioner")
+		}
+		c.LogAuthInfof(ctx, "JWT user not found; attempting to provision user.")
+		parsedToken, err := jwt.Parse([]byte(token), jwt.WithVerify(false))
+		if err != nil {
+			return errors.Wrap(err, "JWT provisioning: failed to parse token")
+		}
+		issuer := parsedToken.Issuer()
+		if issuer == "" {
+			return errors.New("JWT provisioning: token does not have an 'iss' claim")
+		}
+		idpString := "jwt_token:" + issuer
+		provisioningSource, err := provisioning.ParseProvisioningSource(idpString)
+		if err != nil {
+			return errors.Wrap(err, "JWT provisioning: invalid provisioning source")
+		}
+		if err := sql.CreateRoleForProvisioning(ctx, execCfg, user, provisioningSource.String()); err != nil {
+			return errors.Wrap(err, "JWT provisioning: failed to create role")
+		}
+		//nolint:returnerrcheck
+		return nil
+	})
+
+	b.SetAuthenticator(func(
+		ctx context.Context, _ string, _ bool, _ PasswordRetrievalFn, _ *ldap.DN,
+	) error {
+		if validationErr != nil && pgerror.GetPGCode(validationErr) == pgcode.InvalidPassword {
+			//nolint:returnerrcheck
+			return nil
+		} else if validationErr != nil {
+			return validationErr
 		}
 		// Ask the CCL verifier for groups (nil slice means feature disabled).
 		groups, err := jwtVerifier.ExtractGroups(ctx, execCfg.Settings, []byte(token))
