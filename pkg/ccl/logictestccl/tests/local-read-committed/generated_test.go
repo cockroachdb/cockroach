@@ -1077,6 +1077,13 @@ func TestReadCommittedLogic_insert(
 	runLogicTest(t, "insert")
 }
 
+func TestReadCommittedLogic_inspect(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "inspect")
+}
+
 func TestReadCommittedLogic_int_size(
 	t *testing.T,
 ) {
