@@ -3772,15 +3772,6 @@ type tpccWorkload struct {
 	noWait             bool
 }
 
-type tpccWorkload struct {
-	workloadNodes      option.NodeListOption
-	sqlNodes           option.NodeListOption
-	tpccWarehouseCount int
-	tolerateErrors     bool
-	conns              int
-	noWait             bool
-}
-
 func (tw *tpccWorkload) install(ctx context.Context, c cluster.Cluster) {
 	// For fixtures import, use the version built into the cockroach binary so
 	// the tpcc workload-versions match on release branches.
