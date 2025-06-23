@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -2511,9 +2512,8 @@ func runTPCCPublished(
 				// Run all the queries in parallel to find the total pending count.
 				found := make(chan int)
 				for _, nodeID := range crdbNodes {
-					nodeID := nodeID
-					go func() {
-						db := c.Conn(ctx, t.L(), nodeID)
+					t.Go(func(ctx context.Context, l *logger.Logger) error {
+						db := c.Conn(ctx, l, nodeID)
 						defer db.Close()
 						var n int
 						require.NoError(t,
@@ -2522,7 +2522,8 @@ func runTPCCPublished(
 								"SELECT value FROM crdb_internal.node_metrics WHERE name = 'queue.replicate.pending'",
 							).Scan(&n))
 						found <- n
-					}()
+						return nil
+					}, task.Name(fmt.Sprintf("check-replication-pending-%d", nodeID)))
 				}
 				var total int
 				// Wait until they have all completed.
