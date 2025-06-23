@@ -1605,7 +1605,6 @@ func (f *diskStallFailer) Setup(ctx context.Context) {
 }
 
 func (f *diskStallFailer) Cleanup(ctx context.Context) {
-	f.staller.Unstall(ctx, f.c.All())
 	// We have to stop the cluster before cleaning up the staller.
 	f.m.ExpectDeaths(int32(f.c.Spec().NodeCount))
 	f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.All())
@@ -1628,7 +1627,11 @@ func (f *diskStallFailer) Fail(ctx context.Context, nodeID int) {
 }
 
 func (f *diskStallFailer) Recover(ctx context.Context, nodeID int) {
-	f.staller.Unstall(ctx, f.c.Node(nodeID))
+	// Unstall may fail if the node died, but we handle restarting it below.
+	// TODO(darryl): convert this to using RestartNodes instead
+	if err := f.staller.Unstall(ctx, f.c.Node(nodeID)); err != nil {
+		f.t.L().Printf("failed to unstall disk %v", err)
+	}
 	// Pebble's disk stall detector should have terminated the node, but in case
 	// it didn't, we explicitly stop it first.
 	f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.Node(nodeID))
