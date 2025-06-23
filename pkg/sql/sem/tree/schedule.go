@@ -118,7 +118,7 @@ func (node *ScheduledChangefeed) Format(ctx *FmtCtx) {
 
 	if node.Select == nil {
 		ctx.WriteString(" ")
-		ctx.FormatNode(&node.Targets)
+		ctx.FormatNode(&node.TableTargets)
 	}
 
 	ctx.WriteString(" INTO ")
