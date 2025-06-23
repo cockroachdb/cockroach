@@ -154,7 +154,7 @@ func (p *Partition) Search(
 	w *workspace.T, partitionKey PartitionKey, queryVector vector.T, searchSet *SearchSet,
 ) int {
 	count := p.Count()
-	tempFloats := w.AllocFloats(count * 2)
+	tempFloats := w.AllocFloats(count * 3)
 	defer w.FreeFloats(tempFloats)
 
 	// Estimate distances of the data vectors from the query vector.
@@ -162,6 +162,11 @@ func (p *Partition) Search(
 	tempErrorBounds := tempFloats[count : count*2]
 	p.quantizer.EstimateDistances(
 		w, p.quantizedSet, queryVector, tempDistances, tempErrorBounds)
+
+	tempCentroidDistances := tempFloats[count*2 : count*3]
+	if searchSet.IncludeCentroidDistances {
+		p.quantizer.GetCentroidDistances(p.quantizedSet, tempCentroidDistances, true /* spherical */)
+	}
 
 	// Add candidates to the search set, which is responsible for retaining the
 	// top-k results.
@@ -172,6 +177,9 @@ func (p *Partition) Search(
 			ParentPartitionKey: partitionKey,
 			ChildKey:           p.childKeys[i],
 			ValueBytes:         p.valueBytes[i],
+		}
+		if searchSet.IncludeCentroidDistances {
+			searchSet.tempResult.CentroidDistance = tempCentroidDistances[i]
 		}
 		searchSet.Add(&searchSet.tempResult)
 	}
