@@ -18,11 +18,11 @@ var useFastRetry = envutil.EnvOrDefaultBool(
 	"COCKROACH_CHANGEFEED_TESTING_FAST_RETRY", false)
 
 // getRetry returns retry object for changefeed.
-func getRetry(ctx context.Context) Retry {
+func getRetry(ctx context.Context, maxBackoff time.Duration) Retry {
 	opts := retry.Options{
 		InitialBackoff: 1 * time.Second,
 		Multiplier:     2,
-		MaxBackoff:     1 * time.Minute,
+		MaxBackoff:     maxBackoff,
 	}
 
 	if useFastRetry {
