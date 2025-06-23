@@ -6,25 +6,25 @@ build
 ALTER TABLE t ALTER COLUMN c2 SET DATA TYPE CHAR(100)
 ----
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: CHAR(10)}, ABSENT], PUBLIC]
-  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 104, type: {family: StringFamily, oid: 1042, visibleType: 8, width: 10}, typeName: CHAR(10)}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 104, type: {family: StringFamily, oid: 1042, width: 10}, typeName: CHAR(10)}
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: CHAR(100)}, PUBLIC], ABSENT]
-  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 104, type: {family: StringFamily, oid: 1042, visibleType: 8, width: 100}, typeName: CHAR(100)}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 104, type: {family: StringFamily, oid: 1042, width: 100}, typeName: CHAR(100)}
 
 build
 ALTER TABLE t ALTER COLUMN c2 SET DATA TYPE CHAR(5)
 ----
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: CHAR(10)}, ABSENT], PUBLIC]
-  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 104, type: {family: StringFamily, oid: 1042, visibleType: 8, width: 10}, typeName: CHAR(10)}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 104, type: {family: StringFamily, oid: 1042, width: 10}, typeName: CHAR(10)}
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: CHAR(5)}, PUBLIC], ABSENT]
-  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 104, type: {family: StringFamily, oid: 1042, visibleType: 8, width: 5}, typeName: CHAR(5)}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 104, type: {family: StringFamily, oid: 1042, width: 5}, typeName: CHAR(5)}
 - [[CheckConstraint:{DescID: 104, IndexID: 1, ConstraintID: 2, ReferencedColumnIDs: [2]}, TRANSIENT_ABSENT], ABSENT]
   {columnIds: [2], constraintId: 2, expr: (CAST(CAST(c2 AS CHAR(5)) AS CHAR(10)) = c2), indexIdForValidation: 1, referencedColumnIds: [2], tableId: 104}
 
@@ -36,7 +36,7 @@ ALTER TABLE t ALTER COLUMN c2 SET DATA TYPE BIGINT USING c2::BIGINT
 - [[ColumnName:{DescID: 104, Name: c2, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: c2, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: CHAR(10)}, ABSENT], PUBLIC]
-  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 104, type: {family: StringFamily, oid: 1042, visibleType: 8, width: 10}, typeName: CHAR(10)}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 104, type: {family: StringFamily, oid: 1042, width: 10}, typeName: CHAR(10)}
 - [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC]
   {columnId: 3, indexId: 1, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]

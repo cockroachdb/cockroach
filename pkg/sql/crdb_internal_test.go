@@ -231,6 +231,7 @@ CREATE TABLE t.test (k INT);
 		kvDB, s.Codec(), "t", "test")
 	for i := range tableDesc.Columns {
 		if tableDesc.Columns[i].Name == "k" {
+			tableDesc.Columns[i].Type.InternalType.Oid = 0         // Pre-2.1 types don't have an OID.
 			tableDesc.Columns[i].Type.InternalType.VisibleType = 4 // Pre-2.1 BIT.
 			tableDesc.Columns[i].Type.InternalType.Width = 12      // Arbitrary non-std INT size.
 			break
