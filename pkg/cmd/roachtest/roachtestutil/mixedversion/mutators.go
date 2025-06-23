@@ -403,21 +403,20 @@ func (m panicNodeMutator) Generate(
 	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
 ) []mutation {
 	var mutations []mutation
-	maxPanics := len(plan.upgrades)
-	numPanics := 1 + rng.Intn(maxPanics) + 7
-
+	upgrades := randomUpgrades(rng, plan)
 	idx := newStepIndex(plan)
 	planSteps := plan.newStepSelector()
-	possiblePointsInTime := plan.
-		newStepSelector().
-		// We don't want to panic concurrently with other steps, and inserting before a concurrent step
-		// causes the step to run concurrently with that step, so we filter out any concurrent steps.
-		Filter(func(s *singleStep) bool {
-			return s.context.System.Stage >= InitUpgradeStage && !idx.IsConcurrent(s)
-		})
+	nodeList := planner.currentContext.System.Descriptor.Nodes
 
-	for range numPanics {
-		nodeList := planner.currentContext.System.Descriptor.Nodes
+	for _, upgrade := range upgrades {
+
+		possiblePointsInTime := upgrade.
+			// We don't want to panic concurrently with other steps, and inserting before a concurrent step
+			// causes the step to run concurrently with that step, so we filter out any concurrent steps.
+			Filter(func(s *singleStep) bool {
+				return s.context.System.Stage >= InitUpgradeStage && !idx.IsConcurrent(s)
+			})
+
 		targetNode := nodeList.SeededRandNode(rng)
 		randomStep := possiblePointsInTime.RandomStep(rng)
 
