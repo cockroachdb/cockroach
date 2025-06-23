@@ -1,0 +1,49 @@
+subtest setup
+
+statement ok
+SET enable_scrub_job = true;
+
+statement ok
+CREATE TABLE t1 (c1 INT);
+
+statement ok
+CREATE INDEX i1 ON t1 (c1);
+
+subtest end
+
+subtest scrub_job_implicit_txn
+
+statement ok
+EXPERIMENTAL SCRUB TABLE t1;
+
+query TTB
+SELECT description, status, finished IS NOT NULL AS finished FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY created DESC LIMIT 1
+----
+EXPERIMENTAL SCRUB TABLE t1  succeeded  true
+
+subtest end
+
+subtest scrub_job_multi_stmt_txn
+
+statement ok
+BEGIN;
+
+statement error pq: cannot run within a multi-statement transaction
+EXPERIMENTAL SCRUB TABLE t1;
+
+statement ok
+COMMIT;
+
+subtest end
+
+subtest scrub_database
+
+statement error pq: SCRUB DATABASE not supported with enable_scrub_job
+EXPERIMENTAL SCRUB DATABASE defaultdb;
+
+subtest cleanup
+
+statement ok
+DROP TABLE t1;
+
+subtest end

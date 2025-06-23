@@ -1144,6 +1144,13 @@ func TestLogic_insert(
 	runLogicTest(t, "insert")
 }
 
+func TestLogic_inspect(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "inspect")
+}
+
 func TestLogic_int_size(
 	t *testing.T,
 ) {
