@@ -40,6 +40,6 @@ func PrintTableEventType(t tableEventType) string {
 
 func CreateChangefeedTargets(tableID descpb.ID) changefeedbase.Targets {
 	targets := changefeedbase.Targets{}
-	targets.Add(changefeedbase.Target{TableID: tableID})
+	targets.Add(changefeedbase.Target{DescID: tableID})
 	return targets
 }

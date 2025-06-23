@@ -185,7 +185,7 @@ func watchedFamilesFromTarget(targets changefeedbase.Targets) (map[watchedFamily
 	}
 	watchedFamilies := make(map[watchedFamily]struct{}, targets.Size)
 	err := targets.EachTarget(func(t changefeedbase.Target) error {
-		watchedFamilies[watchedFamily{tableID: t.TableID, familyName: t.FamilyName}] = struct{}{}
+		watchedFamilies[watchedFamily{tableID: t.DescID, familyName: t.FamilyName}] = struct{}{}
 		return nil
 	})
 	if err != nil {
