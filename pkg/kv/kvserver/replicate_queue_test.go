@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
@@ -399,28 +400,35 @@ func TestReplicateQueueUpReplicateOddVoters(t *testing.T) {
 
 	tc.AddAndStartServer(t, base.TestServerArgs{})
 
-	if err := tc.Servers[0].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
-		return s.ForceReplicationScanAndProcess()
-	}); err != nil {
-		t.Fatal(err)
-	}
-	// After the initial splits have been performed, all of the resulting ranges
-	// should be present in replicate queue purgatory (because we only have a
-	// single store in the test and thus replication cannot succeed).
-	expected, err := tc.Servers[0].ExpectedInitialRangeCount()
-	if err != nil {
-		t.Fatal(err)
-	}
+	// NB: the following usually succeeds on the first attempt. However, it's
+	// also possible for s2 to initially enter "suspect" status, in which case
+	// there is a default 30s timeout (which we lower below) and we may need to
+	// retry a few times as the replicate queue won't add replicas to purgatory
+	// unless s2 is available as a replication target.
+	liveness.TimeAfterNodeSuspect.Override(context.Background(), &tc.Servers[0].ClusterSettings().SV, time.Second)
+	testutils.SucceedsSoon(t, func() error {
+		if err := tc.Servers[0].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+			return s.ForceReplicationScanAndProcess()
+		}); err != nil {
+			t.Fatal(err)
+		}
+		// After the initial splits have been performed, all of the resulting ranges
+		// should be present in replicate queue purgatory (because we only have a
+		// single store in the test and thus replication cannot succeed).
+		expected, err := tc.Servers[0].ExpectedInitialRangeCount()
+		require.NoError(t, err)
 
-	var store *kvserver.Store
-	_ = tc.Servers[0].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
-		store = s
+		var store *kvserver.Store
+		_ = tc.Servers[0].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+			store = s
+			return nil
+		})
+
+		if n := store.ReplicateQueuePurgatoryLength(); expected != n {
+			return errors.Errorf("expected %d replicas in purgatory, but found %d", expected, n)
+		}
 		return nil
 	})
-
-	if n := store.ReplicateQueuePurgatoryLength(); expected != n {
-		t.Fatalf("expected %d replicas in purgatory, but found %d", expected, n)
-	}
 
 	tc.AddAndStartServer(t, base.TestServerArgs{})
 
