@@ -2052,7 +2052,7 @@ func (m *Manager) refreshSomeLeases(ctx context.Context, refreshAndPurgeAllDescr
 				if _, err := acquireNodeLease(ctx, m, id, AcquireBackground); err != nil {
 					log.Errorf(ctx, "refreshing descriptor: %d lease failed: %s", id, err)
 
-					if errors.Is(err, catalog.ErrDescriptorNotFound) {
+					if errors.Is(err, catalog.ErrDescriptorNotFound) || errors.Is(err, catalog.ErrDescriptorDropped) {
 						// Lease renewal failed due to removed descriptor; Remove this descriptor from cache.
 						if err := purgeOldVersions(
 							ctx, m.storage.db.KV(), id, true /* dropped */, 0 /* minVersion */, m,
