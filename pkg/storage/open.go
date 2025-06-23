@@ -127,8 +127,8 @@ func BlockSize(size int) ConfigOption {
 // primarily for testing purposes.
 func TargetFileSize(size int64) ConfigOption {
 	return func(cfg *engineConfig) error {
-		for i := range cfg.opts.Levels {
-			cfg.opts.Levels[i].TargetFileSize = size
+		for i := range cfg.opts.TargetFileSizes {
+			cfg.opts.TargetFileSizes[i] = size
 		}
 		return nil
 	}
