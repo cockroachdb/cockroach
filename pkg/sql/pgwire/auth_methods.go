@@ -735,6 +735,18 @@ type JWTVerifier interface {
 	) (retrievedUser username.SQLUsername, authError error)
 
 	ExtractGroups(ctx context.Context, st *cluster.Settings, token []byte) ([]string, error)
+
+	// ExtractIssuer retrieves the 'iss' (issuer) claim from the token.
+	// It returns an error if the token cannot be parsed or if the issuer claim is missing.
+	ExtractIssuer(ctx context.Context, token []byte) (string, error)
+
+	// VerifySignatureAndIssuer performs only the cryptographic verification
+	// (signature + issuer check) needed to trust the token’s identity.
+	VerifySignatureAndIssuer(
+		_ context.Context,
+		_ *cluster.Settings,
+		_ []byte,
+	) (detailedErrorMsg redact.RedactableString, authError error)
 }
 
 var jwtVerifier JWTVerifier
@@ -757,6 +769,16 @@ func (c *noJWTConfigured) ExtractGroups(
 	ctx context.Context, _ *cluster.Settings, _ []byte,
 ) ([]string, error) {
 	return nil, errors.New("JWT authorization requires CCL features")
+}
+
+func (c *noJWTConfigured) ExtractIssuer(_ context.Context, _ []byte) (string, error) {
+	return "", errors.New("JWT token authentication has not been configured")
+}
+
+func (c *noJWTConfigured) VerifySignatureAndIssuer(
+	context.Context, *cluster.Settings, []byte,
+) (detailedErrorMsg redact.RedactableString, authError error) {
+	return "", errors.New("JWT token authentication has not been configured")
 }
 
 // ConfigureJWTAuth is a hook for the `jwtauthccl` library to add JWT login support. It's called to
@@ -787,51 +809,118 @@ func authJwtToken(
 	_ *hba.Entry,
 	identMap *identmap.Conf,
 ) (*AuthBehaviors, error) {
-	// Initialize the jwt verifier if it hasn't been already.
 	if jwtVerifier == nil {
 		jwtVerifier = ConfigureJWTAuth(sctx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
 	}
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(UseProvidedIdentity)
-	b.SetAuthenticator(func(
-		ctx context.Context, systemIdentity string, clientConnection bool, pwRetrieveFn PasswordRetrievalFn, _ *ldap.DN,
-	) error {
-		c.LogAuthInfof(ctx, "JWT token detected; attempting to use it")
-		if !clientConnection {
-			err := errors.New("JWT token authentication is only available for client connections")
-			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
-			return err
-		}
+
+	var token string
+
+	validate := func() error {
+		// Log that the JWT flow is starting.
+		c.LogAuthInfof(sctx, "JWT token detected; attempting to use it")
+
 		// Request password from client.
 		if err := c.SendAuthRequest(authCleartextPassword, nil /* data */); err != nil {
-			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+			c.LogAuthFailed(sctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
 			return err
 		}
 		// Wait for the password response from the client.
 		pwdData, err := c.GetPwdData()
 		if err != nil {
-			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+			c.LogAuthFailed(sctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
 			return err
 		}
-
 		// Extract the token response from the password field.
-		token, err := passwordString(pwdData)
+		tok, err := passwordString(pwdData)
 		if err != nil {
-			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+			c.LogAuthFailed(sctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
 			return err
 		}
+		token = tok
 		// If there is no token send the Password Auth Failed error to make the client prompt for a password.
 		if len(token) == 0 {
 			return security.NewErrPasswordUserAuthFailed(user)
 		}
-		if detailedErrors, authError := jwtVerifier.ValidateJWTLogin(ctx, execCfg.Settings, user, []byte(token), identMap); authError != nil {
+
+		// cryptographic check (sig + issuer)
+		if detail, err := jwtVerifier.VerifySignatureAndIssuer(
+			sctx, execCfg.Settings, []byte(token)); err != nil {
+			errForLog := err
+			if detail != "" {
+				errForLog = errors.Join(errForLog, errors.Newf("%s", detail))
+			}
+			c.LogAuthFailed(sctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, errForLog)
+			return err
+		}
+		retrievedUser, err := jwtVerifier.RetrieveIdentity(
+			sctx, user, []byte(token), identMap)
+		if err != nil {
+			c.LogAuthFailed(sctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
+			return err
+		}
+		b.SetReplacementIdentity(retrievedUser.Normalized())
+		return nil
+	}
+
+	validationErr := validate()
+
+	if validationErr != nil {
+		return b, validationErr
+	}
+
+	b.SetProvisioner(func(ctx context.Context) error {
+		if validationErr != nil {
+			return validationErr
+		}
+		if len(token) == 0 {
+			err := errors.New("JWT provisioning: token was not available to provisioner")
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PROVISIONING_ERROR, err)
+			return err
+		}
+		c.LogAuthInfof(ctx, "JWT user not found; attempting to provision user.")
+		issuer, err := jwtVerifier.ExtractIssuer(ctx, []byte(token))
+		if err != nil {
+			err = errors.Wrap(err, "JWT provisioning: failed to extract issuer")
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PROVISIONING_ERROR, err)
+			return err
+		}
+		idpString := "jwt_token:" + issuer
+		provisioningSource, err := provisioning.ParseProvisioningSource(idpString)
+		if err != nil {
+			err = errors.Wrap(err, "JWT provisioning: invalid provisioning source")
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PROVISIONING_ERROR, err)
+			return err
+		}
+		if err := sql.CreateRoleForProvisioning(ctx, execCfg, user, provisioningSource.String()); err != nil {
+			err = errors.Wrap(err, "JWT provisioning: failed to create role")
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PROVISIONING_ERROR, err)
+			return err
+		}
+		return nil
+	})
+
+	b.SetAuthenticator(func(
+		ctx context.Context, _ string, clientConnection bool, _ PasswordRetrievalFn, _ *ldap.DN,
+	) error {
+		if !clientConnection {
+			err := errors.New("JWT token authentication is only available for client connections")
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+			return err
+		}
+
+		// Validate the token and, if there's an error, log it with the correct reason.
+		if detailedErrors, authError := jwtVerifier.ValidateJWTLogin(
+			sctx, execCfg.Settings, user, []byte(token), identMap); authError != nil {
 			errForLog := authError
 			if detailedErrors != "" {
 				errForLog = errors.Join(errForLog, errors.Newf("%s", detailedErrors))
 			}
-			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, errForLog)
+			c.LogAuthFailed(sctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, errForLog)
 			return authError
 		}
+
 		// Ask the CCL verifier for groups (nil slice means feature disabled).
 		groups, err := jwtVerifier.ExtractGroups(ctx, execCfg.Settings, []byte(token))
 		if err != nil {
