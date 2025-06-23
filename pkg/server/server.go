@@ -1152,6 +1152,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			nodeLiveness:             optionalnodeliveness.MakeContainer(nodeLiveness),
 			gossip:                   gossip.MakeOptionalGossip(g),
 			grpcServer:               grpcServer.Server,
+			drpcMux:                  drpcServer.DRPCServer,
 			nodeIDContainer:          idContainer,
 			externalStorage:          externalStorage,
 			externalStorageFromURI:   externalStorageFromURI,
