@@ -273,6 +273,63 @@ func formatQuerySequencesForDisplay(
 	return fmtCtx.CloseAndGetString(), nil
 }
 
+// Drops the database component of the table names (i.e. unqualifies) when it matches the name provided.
+func formatUnqualifyTableNames(
+	queries string, databaseName string, lang catpb.Function_Language,
+) (string, error) {
+
+	// walking the table names using the reformat option. the buffer is simply discarded
+	unqualifyTableNamesCtx := tree.NewFmtCtx(tree.FmtSimple, tree.FmtReformatTableNames(func(ctx *tree.FmtCtx, tn *tree.TableName) {
+		if string(tn.CatalogName) == databaseName {
+			tn.ExplicitCatalog = false
+		}
+	}))
+	defer unqualifyTableNamesCtx.Close()
+
+	// a fresh buffer to rebuild the queries string
+	prettyPrintCtx := tree.NewFmtCtx(tree.FmtSimple)
+
+	switch lang {
+	case catpb.Function_SQL:
+		parsedStmts, err := parser.Parse(queries)
+		if err != nil {
+			return "", err
+		}
+
+		stmts := make(tree.Statements, len(parsedStmts))
+		for i, stmt := range parsedStmts {
+			stmts[i] = stmt.AST
+		}
+
+		for _, stmt := range stmts {
+			unqualifyTableNamesCtx.FormatNode(stmt)
+		}
+
+		for i, stmt := range stmts {
+			if i > 0 {
+				prettyPrintCtx.WriteString("\n")
+			}
+			prettyPrintCtx.FormatNode(stmt)
+			prettyPrintCtx.WriteString(";")
+		}
+	case catpb.Function_PLPGSQL:
+		var stmts plpgsqltree.Statement
+		plstmt, err := plpgsql.Parse(queries)
+		if err != nil {
+			return "", err
+		}
+		stmts = plstmt.AST
+
+		unqualifyTableNamesCtx.FormatNode(stmts)
+
+		prettyPrintCtx.FormatNode(stmts)
+	default:
+		return queries, nil
+	}
+
+	return prettyPrintCtx.CloseAndGetString(), nil
+}
+
 // formatViewQueryTypesForDisplay walks the view query and
 // look for serialized user-defined types. If it finds any,
 // it will deserialize it to display its name.

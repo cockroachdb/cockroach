@@ -121,7 +121,7 @@ CREATE FUNCTION sc1.f1(a sc1.enum1)
 	x INT8 := 0;
 	foobar sc1.enum1;
 	BEGIN
-	SELECT a FROM db1.sc1.tbl1;
+	SELECT a FROM sc1.tbl1;
 	SELECT 'Good':::sc1.enum1;
 	RETURN nextval('sc1.sq1'::REGCLASS);
 	END;
@@ -146,7 +146,7 @@ CREATE FUNCTION sc2.f2()
 	DECLARE
 	x INT8;
 	BEGIN
-	SELECT a FROM db1.sc2.tbl2 LIMIT 1 INTO x;
+	SELECT a FROM sc2.tbl2 LIMIT 1 INTO x;
 	SELECT sc1.f1('Good':::sc1.enum1);
 	CALL public.p_nested('Good':::sc1.enum1);
 	RETURN x;
@@ -184,7 +184,7 @@ CREATE FUNCTION sc1.f1(a sc1.enum1)
 	x INT8 := 0;
 	foobar sc1.enum1;
 	BEGIN
-	SELECT a FROM db1_new.sc1.tbl1;
+	SELECT a FROM sc1.tbl1;
 	SELECT 'Good':::sc1.enum1;
 	RETURN nextval('sc1.sq1'::REGCLASS);
 	END;
@@ -204,7 +204,7 @@ CREATE FUNCTION sc2.f2()
 	DECLARE
 	x INT8;
 	BEGIN
-	SELECT a FROM db1_new.sc2.tbl2 LIMIT 1 INTO x;
+	SELECT a FROM sc2.tbl2 LIMIT 1 INTO x;
 	SELECT sc1.f1('Good':::sc1.enum1);
 	CALL public.p_nested('Good':::sc1.enum1);
 	RETURN x;
@@ -376,7 +376,7 @@ CREATE FUNCTION sc1.f1(a sc1.enum1)
 	x INT8;
 	foobar sc1.enum1;
 	BEGIN
-	SELECT a FROM db1.sc1.tbl1;
+	SELECT a FROM sc1.tbl1;
 	SELECT 'Good':::sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS) INTO x;
 	RETURN x;
@@ -420,7 +420,7 @@ CREATE FUNCTION sc1.f1(a sc1.enum1)
 	x INT8;
 	foobar sc1.enum1;
 	BEGIN
-	SELECT a FROM db1.sc1.tbl1;
+	SELECT a FROM sc1.tbl1;
 	SELECT 'Good':::sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS) INTO x;
 	RETURN x;
