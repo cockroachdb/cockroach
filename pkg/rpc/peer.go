@@ -248,7 +248,7 @@ func newPeer[Conn rpcConn](rpcCtx *Context, k peerKey, peerOpts *peerOptions[Con
 		opts:               &rpcCtx.ContextOptions,
 		peers:              peerOpts.peers,
 		connOptions:        peerOpts.connOptions,
-		drpcDial:           dialDRPC(rpcCtx),
+		drpcDial:           DialDRPC(rpcCtx),
 		newHeartbeatClient: peerOpts.newHeartbeatClient,
 		heartbeatInterval:  rpcCtx.RPCHeartbeatInterval,
 		heartbeatTimeout:   rpcCtx.RPCHeartbeatTimeout,
