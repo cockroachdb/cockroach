@@ -233,7 +233,7 @@ func acquireLockOnKey(
 		// conflicts with un-contended replicated locks -- we need to do so before
 		// we can acquire our own replicated lock; do that now, and also acquire
 		// the replicated lock if no conflicts are found.
-		if err := storage.MVCCAcquireLock(ctx, readWriter, &txn.TxnMeta, txn.IgnoredSeqNums, str, key, ms, maxLockConflicts, targetLockConflictBytes); err != nil {
+		if err := storage.MVCCAcquireLock(ctx, readWriter, &txn.TxnMeta, txn.IgnoredSeqNums, str, key, ms, maxLockConflicts, targetLockConflictBytes, false); err != nil {
 			return roachpb.LockAcquisition{}, err
 		}
 	default:

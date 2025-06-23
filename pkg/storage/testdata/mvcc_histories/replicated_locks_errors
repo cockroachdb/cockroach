@@ -54,7 +54,16 @@ with t=A
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=5} lock=true stat=PENDING rts=10.000000000,0 gul=0,0
 lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=10} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
-error: (*withstack.withStack:) cannot acquire lock with strength Shared at seq number 5, already held at higher seq number 10
+error: (*withstack.withStack:) cannot acquire lock with strength Shared at seq number 5, already held at higher seq number 10 in txn 00000001-0000-0000-0000-000000000000
+
+run ok
+with t=A
+  txn_step seq=5
+  acquire_lock t=A k=k1 str=shared allow_sequence_number_regression
+----
+>> at end:
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=5} lock=true stat=PENDING rts=10.000000000,0 gul=0,0
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=5} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 
 run ok
 with t=A

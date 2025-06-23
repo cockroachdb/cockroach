@@ -90,7 +90,7 @@ func TestCheckSSTConflictsMaxLockConflicts(t *testing.T) {
 		if i%2 != 0 {
 			str = lock.Exclusive
 		}
-		require.NoError(t, MVCCAcquireLock(ctx, batch, &txn1.TxnMeta, txn1.IgnoredSeqNums, str, roachpb.Key(key), nil, 0, 0))
+		require.NoError(t, MVCCAcquireLock(ctx, batch, &txn1.TxnMeta, txn1.IgnoredSeqNums, str, roachpb.Key(key), nil, 0, 0, false))
 	}
 	require.NoError(t, batch.Commit(true))
 	batch.Close()
