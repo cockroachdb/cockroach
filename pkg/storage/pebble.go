@@ -267,20 +267,20 @@ func getCompressionProfile(
 	ctx context.Context,
 	settings *cluster.Settings,
 	setting *settings.EnumSetting[CompressionAlgorithm],
-) *pebble.CompressionProfile {
+) *sstable.CompressionProfile {
 	switch setting.Get(&settings.SV) {
 	case CompressionAlgorithmSnappy:
-		return pebble.SnappyCompression
+		return sstable.SnappyCompression
 	case CompressionAlgorithmZstd:
-		return pebble.ZstdCompression
+		return sstable.ZstdCompression
 	case CompressionAlgorithmNone:
-		return pebble.NoCompression
+		return sstable.NoCompression
 	case CompressionAlgorithmMinLZ:
-		return pebble.MinLZCompression
+		return sstable.MinLZCompression
 	case CompressionAlgorithmFastest:
-		return pebble.FastestCompression
+		return sstable.FastestCompression
 	default:
-		return pebble.DefaultCompression
+		return sstable.DefaultCompression
 	}
 }
 
@@ -494,7 +494,6 @@ func DefaultPebbleOptions() *pebble.Options {
 		l.IndexBlockSize = 256 << 10 // 256 KB
 		l.FilterPolicy = bloom.FilterPolicy(10)
 		l.FilterType = pebble.TableFilter
-		l.TargetFileSize = opts.Levels[i-1].TargetFileSize * 2
 		l.EnsureL1PlusDefaults(&opts.Levels[i-1])
 	}
 
