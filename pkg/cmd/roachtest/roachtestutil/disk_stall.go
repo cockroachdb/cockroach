@@ -7,6 +7,7 @@ package roachtestutil
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -22,6 +23,7 @@ type DiskStaller interface {
 	Setup(ctx context.Context)
 	Cleanup(ctx context.Context)
 	Stall(ctx context.Context, nodes option.NodeListOption)
+	StallCycle(ctx context.Context, nodes option.NodeListOption, stallDuration, unstallDuration time.Duration)
 	Slow(ctx context.Context, nodes option.NodeListOption, bytesPerSecond int)
 	Unstall(ctx context.Context, nodes option.NodeListOption)
 	DataDir() string
@@ -32,13 +34,16 @@ type NoopDiskStaller struct{}
 
 var _ DiskStaller = NoopDiskStaller{}
 
-func (n NoopDiskStaller) Cleanup(ctx context.Context)                            {}
-func (n NoopDiskStaller) DataDir() string                                        { return "{store-dir}" }
-func (n NoopDiskStaller) LogDir() string                                         { return "logs" }
-func (n NoopDiskStaller) Setup(ctx context.Context)                              {}
-func (n NoopDiskStaller) Slow(_ context.Context, _ option.NodeListOption, _ int) {}
-func (n NoopDiskStaller) Stall(_ context.Context, _ option.NodeListOption)       {}
-func (n NoopDiskStaller) Unstall(_ context.Context, _ option.NodeListOption)     {}
+func (n NoopDiskStaller) Cleanup(ctx context.Context)                                               {}
+func (n NoopDiskStaller) DataDir() string                                                           { return "{store-dir}" }
+func (n NoopDiskStaller) LogDir() string                                                            { return "logs" }
+func (n NoopDiskStaller) Setup(ctx context.Context)                                                 {}
+func (n NoopDiskStaller) Slow(_ context.Context, _ option.NodeListOption, _ int)                    {}
+func (n NoopDiskStaller) Stall(_ context.Context, _ option.NodeListOption)                          {}
+func (n NoopDiskStaller) StallCycle(
+	_ context.Context, _ option.NodeListOption, _, _ time.Duration,
+) {}
+func (n NoopDiskStaller) Unstall(_ context.Context, _ option.NodeListOption)                        {}
 
 type Fataler interface {
 	Fatal(args ...interface{})
@@ -98,6 +103,23 @@ func (s *cgroupDiskStaller) Stall(ctx context.Context, nodes option.NodeListOpti
 		StallWrites: true,
 		StallReads:  s.stallReads,
 		Nodes:       nodes.InstallNodes(),
+	}); err != nil {
+		s.f.Fatalf("failed to stall disk: %s", err)
+	}
+}
+
+func (s *cgroupDiskStaller) StallCycle(
+	ctx context.Context, nodes option.NodeListOption, stallDuration, unstallDuration time.Duration,
+) {
+	l := newDiskStallLogger(s.f.L(), nodes, "Stall")
+	if err := s.Failer.Inject(ctx, l, failures.DiskStallArgs{
+		StallLogs:            s.stallLogs,
+		StallWrites:          true,
+		StallReads:           s.stallReads,
+		Nodes:                nodes.InstallNodes(),
+		Cycle:                true,
+		CycleStallDuration:   stallDuration,
+		CycleUnstallDuration: unstallDuration,
 	}); err != nil {
 		s.f.Fatalf("failed to stall disk: %s", err)
 	}
@@ -163,6 +185,20 @@ func (s *dmsetupDiskStaller) Stall(ctx context.Context, nodes option.NodeListOpt
 	l := newDiskStallLogger(s.f.L(), nodes, "Stall")
 	if err := s.Failer.Inject(ctx, l, failures.DiskStallArgs{
 		Nodes: nodes.InstallNodes(),
+	}); err != nil {
+		s.f.Fatalf("failed to stall disk: %s", err)
+	}
+}
+
+func (s *dmsetupDiskStaller) StallCycle(
+	ctx context.Context, nodes option.NodeListOption, stallDuration, unstallDuration time.Duration,
+) {
+	l := newDiskStallLogger(s.f.L(), nodes, "Stall")
+	if err := s.Failer.Inject(ctx, l, failures.DiskStallArgs{
+		Nodes:                nodes.InstallNodes(),
+		Cycle:                true,
+		CycleStallDuration:   stallDuration,
+		CycleUnstallDuration: unstallDuration,
 	}); err != nil {
 		s.f.Fatalf("failed to stall disk: %s", err)
 	}

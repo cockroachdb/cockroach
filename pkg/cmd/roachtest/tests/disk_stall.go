@@ -612,36 +612,14 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 				case <-time.After(diskStallWaitDur):
 					t.Status("starting disk stall")
 				}
-				stallStart := timeutil.Now()
-				// Execute short 200ms stalls every 5s.
-				for timeutil.Since(stallStart) < operationDur {
-					select {
-					case <-ctx.Done():
-						t.Fatalf("context done while stall induced: %s", ctx.Err())
-					case <-time.After(stallInterval):
-						func() {
-							t.Status("short disk stall on n1")
-							s.Stall(ctx, c.Node(1))
-							defer func() {
-								// NB: We use a background context in the defer'ed unstall command,
-								// otherwise on test failure our Unstall calls will be ignored. Leaving
-								// the disk stalled will prevent artifact collection, making debugging
-								// difficult.
-								ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-								defer cancel()
-								s.Unstall(ctx, c.Node(1))
-								t.Status("unstalled disk on n1")
-							}()
-							select {
-							case <-ctx.Done():
-								t.Fatalf("context done while stall induced: %s", ctx.Err())
-							case <-time.After(shortStallDur):
-								return
-							}
-						}()
-					}
+				// Execute short 200ms stalls every 5s for 3 minutes.
+				s.StallCycle(ctx, c.Node(1), shortStallDur, stallInterval)
+				select {
+				case <-ctx.Done():
+					t.Fatalf("context done while stall induced: %s", ctx.Err())
+				case <-time.After(operationDur):
+					s.Unstall(ctx, c.Node(1))
 				}
-
 				return nil
 			}, task.Name("disk-stall-phase"))
 		} else {
