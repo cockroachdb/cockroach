@@ -158,7 +158,10 @@ func CollectStoresReplicaInfo(
 			return loqrecoverypb.ClusterReplicaInfo{}, CollectionStats{}, errors.New("can't collect info from stored that belong to different clusters")
 		}
 		nodes[ident.NodeID] = struct{}{}
-		if err := visitStoreReplicas(ctx, reader, ident.StoreID, ident.NodeID,
+		// TODO(sep-raft-log): use different readers when the raft and state machine
+		// engines are separate. Since the engines are immutable in this path, there
+		// is no question whether to and in which order to grab engine snapshots.
+		if err := visitStoreReplicas(ctx, reader, reader, ident.StoreID, ident.NodeID,
 			func(info loqrecoverypb.ReplicaInfo) error {
 				replicas = append(replicas, info)
 				return nil
@@ -178,18 +181,18 @@ func CollectStoresReplicaInfo(
 
 func visitStoreReplicas(
 	ctx context.Context,
-	reader storage.Reader,
+	state, raft storage.Reader,
 	storeID roachpb.StoreID,
 	nodeID roachpb.NodeID,
 	send func(info loqrecoverypb.ReplicaInfo) error,
 ) error {
-	if err := kvstorage.IterateRangeDescriptorsFromDisk(ctx, reader, func(desc roachpb.RangeDescriptor) error {
+	if err := kvstorage.IterateRangeDescriptorsFromDisk(ctx, state, func(desc roachpb.RangeDescriptor) error {
 		rsl := stateloader.Make(desc.RangeID)
-		rstate, err := rsl.Load(ctx, reader, &desc)
+		rstate, err := rsl.Load(ctx, state, &desc)
 		if err != nil {
 			return err
 		}
-		hstate, err := rsl.LoadHardState(ctx, reader)
+		hstate, err := rsl.LoadHardState(ctx, raft)
 		if err != nil {
 			return err
 		}
@@ -199,7 +202,7 @@ func visitStoreReplicas(
 		// outcome, and they will become committed as soon as the replica is
 		// designated as a survivor.
 		rangeUpdates, err := GetDescriptorChangesFromRaftLog(
-			ctx, desc.RangeID, rstate.RaftAppliedIndex+1, math.MaxInt64, reader)
+			ctx, desc.RangeID, rstate.RaftAppliedIndex+1, math.MaxInt64, raft)
 		if err != nil {
 			return err
 		}
