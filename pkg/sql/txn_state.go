@@ -252,9 +252,7 @@ func (ts *txnState) resetForNewSQLTxn(
 			if err := ts.setIsolationLevelLocked(isoLevel); err != nil {
 				panic(err)
 			}
-			if isoLevel != isolation.Serializable && !allowBufferedWritesForWeakIsolation.Get(&tranCtx.settings.SV) {
-				// TODO(#143497): we currently only support buffered writes
-				// under serializable isolation.
+			if !bufferedWritesIsAllowedForIsolationLevel(connCtx, tranCtx.settings, isoLevel) {
 				bufferedWritesEnabled = false
 			}
 			if bufferedWritesEnabled {

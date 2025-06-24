@@ -90,7 +90,7 @@ export function executeSql<RowType>(
 
 export const INTERNAL_SQL_API_APP = "$ internal-console";
 export const LONG_TIMEOUT = "300s";
-export const LARGE_RESULT_SIZE = 50000; // 50 kib
+export const LARGE_RESULT_SIZE = 1_000_000; // 1 Mb
 export const MAX_RESULT_SIZE = 2_147_483_647; // Max result size is max int32, which is 2Gib
 export const FALLBACK_DB = "system";
 
