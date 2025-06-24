@@ -15,18 +15,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type storeLoadAndNodeID struct {
+	nodeID    roachpb.NodeID
+	storeLoad *storeLoad
+}
+
 type testLoadInfoProvider struct {
 	t                  *testing.T
 	b                  strings.Builder
-	sloads             map[roachpb.StoreID]*storeLoad
+	sloads             map[roachpb.StoreID]storeLoadAndNodeID
 	nloads             map[roachpb.NodeID]*NodeLoad
 	returnedLoadSeqNum uint64
 }
 
-func (p *testLoadInfoProvider) getStoreReportedLoad(storeID roachpb.StoreID) *storeLoad {
+func (p *testLoadInfoProvider) getStoreReportedLoad(
+	storeID roachpb.StoreID,
+) (roachpb.NodeID, *storeLoad) {
 	sl, ok := p.sloads[storeID]
 	require.True(p.t, ok)
-	return sl
+	return sl.nodeID, sl.storeLoad
 }
 
 func (p *testLoadInfoProvider) getNodeReportedLoad(nodeID roachpb.NodeID) *NodeLoad {
@@ -50,7 +57,7 @@ func TestMeansMemo(t *testing.T) {
 	storeMap := map[roachpb.StoreID]roachpb.StoreDescriptor{}
 	loadProvider := &testLoadInfoProvider{
 		t:      t,
-		sloads: map[roachpb.StoreID]*storeLoad{},
+		sloads: map[roachpb.StoreID]storeLoadAndNodeID{},
 		nloads: map[roachpb.NodeID]*NodeLoad{},
 	}
 	mm := newMeansMemo(loadProvider, cm)
@@ -78,10 +85,7 @@ func TestMeansMemo(t *testing.T) {
 				var leaseCountLoad int64
 				d.ScanArgs(t, "secondary-load", &leaseCountLoad)
 				sLoad := &storeLoad{
-					StoreID:         desc.StoreID,
-					StoreDescriptor: desc,
-					NodeID:          desc.Node.NodeID,
-					reportedLoad:    LoadVector{LoadValue(cpuLoad), LoadValue(wbLoad), LoadValue(bsLoad)},
+					reportedLoad: LoadVector{LoadValue(cpuLoad), LoadValue(wbLoad), LoadValue(bsLoad)},
 					capacity: LoadVector{
 						LoadValue(cpuCapacity), LoadValue(wbCapacity), LoadValue(bsCapacity)},
 					reportedSecondaryLoad: SecondaryLoadVector{LoadValue(leaseCountLoad)},
@@ -91,7 +95,10 @@ func TestMeansMemo(t *testing.T) {
 						sLoad.capacity[i] = UnknownCapacity
 					}
 				}
-				loadProvider.sloads[roachpb.StoreID(storeID)] = sLoad
+				loadProvider.sloads[roachpb.StoreID(storeID)] = storeLoadAndNodeID{
+					nodeID:    desc.Node.NodeID,
+					storeLoad: sLoad,
+				}
 
 				return ""
 
