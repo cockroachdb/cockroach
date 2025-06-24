@@ -1,7 +1,12 @@
 # Trig functions
+#
 # In some cases x64 and arm64 may yeild slightly different results due to float
 # operation ordering/fusing differences, as allowed by spec, so some results are
 # checks using round(expr, 10) to ignore any minute float differences.
+#
+# Similarly, s390x can produce slightly different results (e.g. since it has
+# architectural support for some trig functions like atan), so we check rounded
+# results too.
 
 eval
 cos(0)
@@ -34,14 +39,14 @@ asin(1.0)
 1.5707963267948966
 
 eval
-atan(1.0)
+round(atan(1.0), 15)
 ----
-0.7853981633974483
+0.785398163397448
 
 eval
-atan2(1.0, 1.0)
+round(atan2(1.0, 1.0), 15)
 ----
-0.7853981633974483
+0.785398163397448
 
 eval
 cosd(0)
@@ -74,12 +79,12 @@ asind(1.0)
 90.0
 
 eval
-atand(1.0)
+round(atand(1.0), 10)
 ----
 45.0
 
 eval
-atan2d(1.0, 1.0)
+round(atan2d(1.0, 1.0), 10)
 ----
 45.0
 
