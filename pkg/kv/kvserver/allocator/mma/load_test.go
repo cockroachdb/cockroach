@@ -54,7 +54,7 @@ func (p *testLoadInfoProvider) computeLoadSummary(
 func TestMeansMemo(t *testing.T) {
 	interner := newStringInterner()
 	cm := newConstraintMatcher(interner)
-	storeMap := map[roachpb.StoreID]roachpb.StoreDescriptor{}
+	storeMap := map[roachpb.StoreID]StoreAttributesAndLocality{}
 	loadProvider := &testLoadInfoProvider{
 		t:      t,
 		sloads: map[roachpb.StoreID]storeLoadAndNodeID{},
@@ -67,16 +67,16 @@ func TestMeansMemo(t *testing.T) {
 			switch d.Cmd {
 			case "store":
 				for _, line := range strings.Split(d.Input, "\n") {
-					desc := parseStoreDescriptor(t, strings.TrimSpace(line))
-					cm.setStore(desc)
-					storeMap[desc.StoreID] = desc
+					sal := parseStoreAttributedAndLocality(t, strings.TrimSpace(line))
+					cm.setStore(sal)
+					storeMap[sal.StoreID] = sal
 				}
 				return ""
 
 			case "store-load":
 				var storeID int
 				d.ScanArgs(t, "store-id", &storeID)
-				desc, ok := storeMap[roachpb.StoreID(storeID)]
+				sal, ok := storeMap[roachpb.StoreID(storeID)]
 				require.True(t, ok)
 				var cpuLoad, wbLoad, bsLoad int64
 				d.ScanArgs(t, "load", &cpuLoad, &wbLoad, &bsLoad)
@@ -96,7 +96,7 @@ func TestMeansMemo(t *testing.T) {
 					}
 				}
 				loadProvider.sloads[roachpb.StoreID(storeID)] = storeLoadAndNodeID{
-					nodeID:    desc.Node.NodeID,
+					nodeID:    sal.NodeID,
 					storeLoad: sLoad,
 				}
 
