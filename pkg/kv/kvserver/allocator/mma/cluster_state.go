@@ -863,6 +863,22 @@ func (s StoreIDAndReplicaState) SafeFormat(w redact.SafePrinter, _ rune) {
 
 // rangeState is periodically updated based on reporting by the leaseholder.
 type rangeState struct {
+	// localRangOwner is used for rangeState GC. The StoreID mentioned here is
+	// the local store that last included that range in its StoreLeaseholderMsg,
+	// and therefore is considered the "owner" of the rangeState.
+	//
+	// NB: we can't use the current leaseholder to decide when to GC, since when
+	// the lease is being transferred from local store s1 to remote store s3,
+	// the rangeState will already state s3 as the leaseholder (either because
+	// the lease transfer was considered successful, or when it is pending).
+	//
+	// When transferring a replica (and lease) from local store s1 to local
+	// store s2, the localRangeOwner will initially be s1. If a
+	// StoreLeaseholderMsg from s2 arrives with the range before the
+	// StoreLeaseholderMsg from s1 without the range, the localRangeOwner will
+	// be updated to s2. If the opposite happens, the rangeState will be garbage
+	// collected, and later the StoreLeaseholderMsg from s2 will recreate it.
+	localRangeOwner roachpb.StoreID
 	// replicas is the adjusted replicas. It is always consistent with
 	// the storeState.adjusted.replicas in the corresponding stores.
 	//
@@ -879,8 +895,11 @@ type rangeState struct {
 	// currently time-based GC is done for the whole clusterState so unclear if
 	// this is really possible). This allows multiple leaseholders, or no
 	// leaseholder, but only when there are still some pendingReplicaChanges for
-	// the rangeState. We consider this harmless since we will not make changes
-	// to a range that has pending changes.
+	// the rangeState. We consider this harmless for the prototype since we will
+	// not make changes to a range that has pending changes. However, we cannot
+	// continue with this weakness in multi-store setting -- see the hazard
+	// discussed where pendingReplicaChange is declared, and how we plan to fix
+	// it.
 	replicas []StoreIDAndReplicaState
 	conf     *normalizedSpanConfig
 
@@ -911,7 +930,7 @@ type rangeState struct {
 	diversityIncreaseLastFailedAttempt time.Time
 }
 
-func newRangeState() *rangeState {
+func newRangeState(localRangeOwner roachpb.StoreID) *rangeState {
 	return &rangeState{
 		replicas:       []StoreIDAndReplicaState{},
 		pendingChanges: []*pendingReplicaChange{},
@@ -965,7 +984,11 @@ func (rs *rangeState) removePendingChangeTracking(changeID ChangeID) {
 //
 // We maintain one clusterState per node, even in multi-store settings. This
 // allows us to allow for coordination between the different local store
-// rebalancers, and queues making changes.
+// rebalancers, and queues making changes. There are production clusters where
+// the number of stores is an order of magnitude larger than the number of
+// nodes, and even though we have rebalancing components per store, we want to
+// reduce the sub-optimal decisions they make -- having a single clusterState
+// is important for that.
 type clusterState struct {
 	ts     timeutil.TimeSource
 	nodes  map[roachpb.NodeID]*nodeState
@@ -1104,8 +1127,10 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			if !rangeMsg.Populated {
 				panic(errors.AssertionFailedf("rangeMsg for new range r%v is not populated", rangeMsg.RangeID))
 			}
-			rs = newRangeState()
+			rs = newRangeState(msg.StoreID)
 			cs.ranges[rangeMsg.RangeID] = rs
+		} else if rs.localRangeOwner != msg.StoreID {
+			rs.localRangeOwner = msg.StoreID
 		}
 		if !rangeMsg.Populated {
 			// When there are no pending changes, confirm that the membership state
@@ -1213,7 +1238,8 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// here.
 		rs.constraints = nil
 	}
-	// Remove ranges for which no longer the leaseholder.
+	// Remove ranges for which this is the localRangeOwner, but for which it is
+	// no longer the leaseholder.
 	for r, rs := range cs.ranges {
 		_, ok := cs.scratchRangeMap[r]
 		if ok {
@@ -1222,21 +1248,12 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// Not the leaseholder for this range. Consider removing it.
 		//
 		// In a multi-store setting this is inefficient, since we are iterating
-		// over all ranges for which any local store is the leaseholder. We could
-		// be more efficient by maintaining an additional
+		// over all ranges for which any local store is the owner. We could be
+		// more efficient by maintaining an additional
 		// map[roachpb.StoreID]map[roachpb.RangeID]*rangeState, where the first
 		// map is keyed by a local StoreID. But we will only do this if we find
 		// the efficiency gains are worth it.
-		remove := false
-		for _, repl := range rs.replicas {
-			if repl.IsLeaseholder {
-				if repl.StoreID == msg.StoreID {
-					remove = true
-				}
-				break
-			}
-		}
-		if !remove {
+		if rs.localRangeOwner != msg.StoreID {
 			continue
 		}
 		// Since this range is going away, mark all the pending changes as
