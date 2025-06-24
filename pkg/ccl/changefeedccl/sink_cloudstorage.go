@@ -65,13 +65,33 @@ func cloudStorageFormatTime(ts hlc.Timestamp) string {
 	return fmt.Sprintf(`%s%09d%010d`, t.Format(f), t.Nanosecond(), ts.Logical)
 }
 
+// byteBufferWithTrackedLength is a bytes.Buffer that also tracks its length
+// separately and atomically. This is useful for codecs that write to the buffer
+// asynchronously, such as pgzip/zstd, because we can't safely call `buf.Len()`
+// while the codec is open, because buf.Write() may be called after
+// codec.Write() returns.
+type byteBufferWithTrackedLength struct {
+	bytes.Buffer
+	len atomic.Int64
+}
+
+func (b *byteBufferWithTrackedLength) Write(p []byte) (n int, err error) {
+	n, err = b.Buffer.Write(p)
+	b.len.Add(int64(n))
+	return n, err
+}
+
+func (b *byteBufferWithTrackedLength) Len() int {
+	return int(b.len.Load())
+}
+
 type cloudStorageSinkFile struct {
 	cloudStorageSinkKey
 	created       time.Time
 	codec         io.WriteCloser
 	rawSize       int
 	numMessages   int
-	buf           bytes.Buffer
+	buf           byteBufferWithTrackedLength
 	alloc         kvevent.Alloc
 	oldestMVCC    hlc.Timestamp
 	parquetCodec  *parquetWriter
