@@ -223,3 +223,72 @@ SELECT currval('discard_seq')
 query T rowsort
 SELECT table_name FROM [SHOW TABLES FROM pg_temp]
 ----
+
+# Check that DISCARD still works with follower reads.
+
+query T
+SET search_path = bar, public; SHOW search_path
+----
+bar, public
+
+query T
+SET timezone = 'Europe/Amsterdam'; SHOW timezone
+----
+Europe/Amsterdam
+
+statement ok
+PREPARE a AS SELECT 1
+
+statement ok
+CREATE SEQUENCE discard_seq2 START WITH 10
+
+statement ok
+SET experimental_enable_temp_tables = on
+
+statement ok
+CREATE TEMP TABLE tempy (a int)
+
+query T rowsort
+SELECT table_name FROM [SHOW TABLES FROM pg_temp]
+----
+tempy
+
+# Sleep longer than the follower_reads duration so that the DISCARD ALL sees
+# everything we just created.
+query B
+SELECT pg_sleep(5)
+----
+true
+
+statement ok
+SET default_transaction_use_follower_reads = on
+
+# DISCARD should be allowed, even with AOST set.
+statement ok
+DISCARD ALL
+
+# The DISCARD ALL should have reset default_transaction_use_follower_reads.
+query T
+SHOW default_transaction_use_follower_reads
+----
+off
+
+query T
+SHOW search_path
+----
+"$user", public
+
+query T
+SHOW timezone
+----
+UTC
+
+statement error prepared statement \"a\" does not exist
+DEALLOCATE a
+
+statement error pgcode 55000 pq: currval of sequence "test.public.discard_seq2" is not yet defined in this session
+SELECT currval('discard_seq2')
+
+query T rowsort
+SELECT table_name FROM [SHOW TABLES FROM pg_temp]
+----
