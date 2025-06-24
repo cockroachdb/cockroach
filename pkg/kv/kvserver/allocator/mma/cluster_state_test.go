@@ -102,13 +102,21 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 	msg.StoreID = roachpb.StoreID(parseInt(t, strings.TrimPrefix(lines[0], "store-id=")))
 
 	var rMsg RangeMsg
+	var notPopulatedOverride bool
+	tryAppendRangeMsg := func() {
+		if rMsg.RangeID != 0 {
+			if notPopulatedOverride {
+				rMsg.Populated = false
+			}
+			msg.Ranges = append(msg.Ranges, rMsg)
+			rMsg = RangeMsg{RangeID: 0}
+		}
+		notPopulatedOverride = false
+	}
 	for _, line := range lines[1:] {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "range-id") {
-			if rMsg.RangeID != 0 {
-				msg.Ranges = append(msg.Ranges, rMsg)
-			}
-			rMsg = RangeMsg{RangeID: 0}
+			tryAppendRangeMsg()
 			for _, field := range strings.Fields(line) {
 				parts := strings.SplitN(field, "=", 2)
 				switch parts[0] {
@@ -120,6 +128,8 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 				case "raft-cpu":
 					rMsg.RangeLoad.RaftCPU = LoadValue(parseInt(t, parts[1]))
 					rMsg.Populated = true
+				case "not-populated":
+					notPopulatedOverride = true
 				}
 			}
 		} else if strings.HasPrefix(line, "config=") {
@@ -151,10 +161,7 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 			rMsg.Populated = true
 		}
 	}
-	if rMsg.RangeID != 0 {
-		msg.Ranges = append(msg.Ranges, rMsg)
-	}
-
+	tryAppendRangeMsg()
 	return msg
 }
 
