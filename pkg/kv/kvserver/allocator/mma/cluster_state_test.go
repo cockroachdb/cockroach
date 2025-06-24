@@ -303,11 +303,11 @@ func TestClusterState(t *testing.T) {
 				for _, nodeID := range nodeList {
 					ns := cs.nodes[roachpb.NodeID(nodeID)]
 					fmt.Fprintf(&buf, "node-id=%s failure-summary=%s locality-tiers=%s\n",
-						ns.NodeID, ns.fdSummary, cs.stores[ns.stores[0]].StoreDescriptor.Locality())
+						ns.NodeID, ns.fdSummary, cs.stores[ns.stores[0]].StoreAttributesAndLocality.locality())
 					for _, storeID := range ns.stores {
 						ss := cs.stores[storeID]
 						fmt.Fprintf(&buf, "  store-id=%v membership=%v attrs=%s locality-code=%s\n",
-							ss.StoreID, ss.storeMembership, ss.Attrs, ss.localityTiers.str)
+							ss.StoreID, ss.storeMembership, ss.StoreAttrs, ss.localityTiers.str)
 					}
 				}
 				return buf.String()

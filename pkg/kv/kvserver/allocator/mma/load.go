@@ -144,10 +144,6 @@ type RangeLoad struct {
 // information we need each store to provide us periodically, i.e.,
 // StoreLoadMsg is the input used to compute this.
 type storeLoad struct {
-	roachpb.StoreID
-	roachpb.StoreDescriptor
-	roachpb.NodeID
-
 	// Aggregate store load. In general, we don't require this to be a sum of
 	// the range loads (since a sharded allocator may only have information
 	// about a subset of ranges).
@@ -328,7 +324,7 @@ func (mm *meansMemo) clear() {
 }
 
 type loadInfoProvider interface {
-	getStoreReportedLoad(roachpb.StoreID) *storeLoad
+	getStoreReportedLoad(roachpb.StoreID) (roachpb.NodeID, *storeLoad)
 	getNodeReportedLoad(roachpb.NodeID) *NodeLoad
 	computeLoadSummary(roachpb.StoreID, *meanStoreLoad, *meanNodeLoad) storeLoadSummary
 }
@@ -375,7 +371,7 @@ func computeMeansForStoreSet(
 	}
 	clear(scratchNodes)
 	for _, storeID := range means.stores {
-		sload := loadProvider.getStoreReportedLoad(storeID)
+		nodeID, sload := loadProvider.getStoreReportedLoad(storeID)
 		for j := range sload.reportedLoad {
 			means.storeLoad.load[j] += sload.reportedLoad[j]
 			if sload.capacity[j] == UnknownCapacity {
@@ -387,10 +383,9 @@ func computeMeansForStoreSet(
 		for j := range sload.reportedSecondaryLoad {
 			means.storeLoad.secondaryLoad[j] += sload.reportedSecondaryLoad[j]
 		}
-		nodeID := sload.NodeID
 		nLoad := scratchNodes[nodeID]
 		if nLoad == nil {
-			scratchNodes[sload.NodeID] = loadProvider.getNodeReportedLoad(nodeID)
+			scratchNodes[nodeID] = loadProvider.getNodeReportedLoad(nodeID)
 		}
 	}
 	for i := range means.storeLoad.load {
@@ -589,9 +584,6 @@ var _ = meansForStoreSetAllocator{}.ensureNonNilMapEntry
 var _ = (&meansMemo{}).clear
 var _ = RangeLoad{}.Load
 var _ = RangeLoad{}.RaftCPU
-var _ = storeLoad{}.StoreID
-var _ = storeLoad{}.StoreDescriptor
-var _ = storeLoad{}.NodeID
 var _ = storeLoad{}.reportedLoad
 var _ = storeLoad{}.capacity
 var _ = storeLoad{}.reportedSecondaryLoad
