@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant !local-mixed-25.2
 # cluster-opt: disable-mvcc-range-tombstones-for-point-deletes
 
 statement ok

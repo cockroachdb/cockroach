@@ -133,15 +133,12 @@ func (p *planner) fingerprintSpanFanout(
 	fingerprintPartition := func(
 		partition roachpb.Spans,
 	) func(ctx context.Context) error {
-		return func(ctx context.Context) error {
+		return func(ctx context.Context) (retErr error) {
 			// workCh is used to divide up the partition between workers. It is
 			// closed whenever there is no work to do. It might not be closed if
 			// the coordinator encounters an error.
 			workCh := make(chan roachpb.Span)
-			// The context will be canceled when the coordinator exits
-			// guaranteeing that the worker goroutines aren't leaked.
 			ctx, cancel := context.WithCancel(ctx)
-			defer cancel()
 
 			grp := ctxgroup.WithContext(ctx)
 			for range maxWorkerCount {
@@ -169,6 +166,27 @@ func (p *planner) fingerprintSpanFanout(
 					}
 				})
 			}
+			defer func() {
+				// Either workCh is closed (meaning that we've processed all the
+				// work), or we hit an error in the loop below. If it's the
+				// latter, we need to cancel the context to signal to the
+				// workers to shutdown ASAP.
+				if retErr != nil {
+					cancel()
+				}
+				// Regardless of how we got here, ensure that we always block
+				// until all workers exit.
+				// TODO(yuzefovich): refactor the logic here so that the
+				// coordinator goroutine had a single return point. This will
+				// also allow us to prevent a hypothetical scenario where we're
+				// blocked forever (i.e. until the context is canceled) writing
+				// into workCh which can happen if all worker goroutines exit
+				// due to an error.
+				grpErr := grp.Wait()
+				if retErr == nil {
+					retErr = grpErr
+				}
+			}()
 
 			for _, part := range partition {
 				rdi, err := p.execCfg.RangeDescIteratorFactory.NewLazyIterator(ctx, part, 64)
@@ -195,7 +213,7 @@ func (p *planner) fingerprintSpanFanout(
 				}
 			}
 			close(workCh)
-			return grp.Wait()
+			return nil
 		}
 	}
 
