@@ -888,3 +888,39 @@ define VectorMutationSearch {
     # the search must return the quantized vector.
     IsIndexPut bool
 }
+
+define UpdateSwap {
+    Input exec.Node
+    Table cat.Table
+    FetchCols exec.TableColumnOrdinalSet
+    UpdateCols exec.TableColumnOrdinalSet
+    ReturnCols exec.TableColumnOrdinalSet
+    Checks exec.CheckOrdinalSet
+    Passthrough colinfo.ResultColumns
+    UniqueWithTombstonesIndexes cat.IndexOrdinals
+
+    # If set, the input has already acquired the locks during the initial scan
+    # of the Update (i.e. on the "old" KVs within these indexes).
+    LockedIndexes cat.IndexOrdinals
+
+    # If set, the operator will commit the transaction as part of its execution.
+    AutoCommit bool
+}
+
+define DeleteSwap {
+    Input exec.Node
+    Table cat.Table
+    FetchCols exec.TableColumnOrdinalSet
+    ReturnCols exec.TableColumnOrdinalSet
+    Passthrough colinfo.ResultColumns
+
+    # If set, the input has already acquired the locks on the specified indexes
+    # on all keys that might be deleted from that index.
+    LockedIndexes cat.IndexOrdinals
+
+    # If set, the operator will commit the transaction as part of its execution.
+    # This is false when executing inside an explicit transaction, or there are
+    # multiple mutations in a statement, or the output of the mutation is
+    # processed through side-effecting expressions.
+    AutoCommit bool
+}
