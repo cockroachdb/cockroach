@@ -1,0 +1,32 @@
+# "ResultFormatCodes": [1] = binary
+send
+Parse {"Name": "s", "Query": "SELECT 'BOX(1 0,1 0)'::BOX2D;"}
+Bind {"DestinationPortal": "p", "PreparedStatement": "s", "ResultFormatCodes": [1]}
+Execute {"Portal": "p"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"binary":"3ff00000000000003ff000000000000000000000000000000000000000000000"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "SELECT $1::BOX2D"}
+Bind {"ParameterFormatCodes": [1], "Parameters": [{"binary":"3ff00000000000003ff000000000000000000000000000000000000000000000"}]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"BOX(1 0,1 0)"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
