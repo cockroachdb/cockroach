@@ -1587,16 +1587,24 @@ func (tl *txnLock) isIdempotentLockAcquisition(acq *roachpb.LockAcquisition) boo
 			tl.unreplicatedInfo.ts.Equal(acq.Txn.WriteTimestamp) && tl.unreplicatedInfo.ignoredSequenceNumbersEqual(acq)
 	case lock.Replicated:
 		// Lock is being re-acquired with the same strength.
-		return tl.replicatedInfo.held(acq.Strength) &&
-			// NB: Lock re-acquisitions at different timestamps are not considered
-			// idempotent. Strictly speaking, we could tighten this condition in a
-			// few ways:
-			// 1. We could consider lock re-acquisition at a lower timestamp idempotent,
-			// as a lock's timestamp at a given durability can never regress.
-			// 2. We could only check the timestamp if the lock is being acquired with
-			// strength lock.Intent, as we disregard the timestamp for all other lock
-			// strengths when dealing with replicated locks.
-			tl.replicatedInfo.ts.Equal(acq.Txn.WriteTimestamp)
+		isIdempotent := tl.replicatedInfo.held(acq.Strength)
+		// NB: Lock re-acquisitions at different timestamps are not considered
+		// idempotent. Strictly speaking, we could tighten this condition in a
+		// few ways:
+		//
+		// 1. We could consider lock re-acquisition at a lower timestamp idempotent,
+		// as a lock's timestamp at a given durability can never regress.
+		//
+		// 2. We could only check the timestamp if the lock is being acquired with
+		// strength lock.Intent, as we disregard the timestamp for all other lock
+		// strengths when dealing with replicated locks.
+		isIdempotent = isIdempotent && tl.replicatedInfo.ts.Equal(acq.Txn.WriteTimestamp)
+		// Lock acquisitions at a new epoch are not considered idempotent. In most
+		// cases of an epoch bump, the WriteTimestamp also changes. But in the case
+		// of an IntentMissingError, the WriteTimestamp isn't forwarded, but the
+		// on-disk intent has still changed.
+		isIdempotent = isIdempotent && tl.txn.Epoch == acq.Txn.Epoch
+		return isIdempotent
 	default:
 		panic(fmt.Sprintf("unknown lock durability: %s", acq.Durability))
 	}
@@ -3690,7 +3698,7 @@ func (kl *keyLocks) tryFreeLockOnReplicatedAcquire(
 	// Bail if there's an epoch number mismatch, as we can't compare sequence
 	// numbers across epochs. Note that we're not making any effort to forget
 	// unreplicated locks if the replicated lock acquisition corresponds to a
-	// newer epoch -- we defer to acquireLock to handle epcoh bumps instead.
+	// newer epoch -- we defer to acquireLock to handle epoch bumps instead.
 	if tl.txn.Epoch != acq.Txn.Epoch {
 		return false /* freed */, false /* mustGC */
 	}
