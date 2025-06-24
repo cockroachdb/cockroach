@@ -1504,6 +1504,10 @@ func (og *operationGenerator) createTableAs(ctx context.Context, tx pgx.Tx) (*op
 	if opStmt.expectedExecErrors.empty() {
 		opStmt.potentialExecErrors.merge(getValidGenerationErrors())
 	}
+	// Limit any CTAS statements to a maximum time of 1 minute.
+	opStmt.statementTimeout = time.Minute
+	opStmt.potentialExecErrors.add(pgcode.QueryCanceled)
+	og.potentialCommitErrors.add(pgcode.QueryCanceled)
 
 	opStmt.sql = fmt.Sprintf(`CREATE TABLE %s AS %s FETCH FIRST %d ROWS ONLY`,
 		destTableName, selectStatement.String(), MaxRowsToConsume)
@@ -3170,6 +3174,8 @@ type opStmt struct {
 	potentialExecErrors errorCodeSet
 	// queryResultCallback handles the results of the query execution.
 	queryResultCallback opStmtQueryResultCallback
+	// statementTimeout if this statement has a timeout.
+	statementTimeout time.Duration
 }
 
 // String implements Stringer
@@ -3286,6 +3292,16 @@ func (og *operationGenerator) WrapWithErrorState(err error, op *opStmt) error {
 func (s *opStmt) executeStmt(ctx context.Context, tx pgx.Tx, og *operationGenerator) error {
 	var err error
 	var rows pgx.Rows
+	// Apply any timeout for this statement
+	if s.statementTimeout > 0 {
+		_, err = tx.Exec(ctx, fmt.Sprintf("SET LOCAL statement_timeout='%s'", s.statementTimeout.String()))
+		if err != nil {
+			return errors.Mark(
+				og.WrapWithErrorState(errors.Wrap(err, "***UNEXPECTED ERROR; Unable to set statement timeout."), s),
+				errRunInTxnFatalSentinel,
+			)
+		}
+	}
 	// Statement doesn't produce any result set that needs to be validated.
 	if s.queryResultCallback == nil {
 		_, err = tx.Exec(ctx, s.sql)
@@ -3357,6 +3373,16 @@ func (s *opStmt) executeStmt(ctx context.Context, tx pgx.Tx, og *operationGenera
 	if s.queryResultCallback != nil {
 		if err := s.queryResultCallback(ctx, rows); err != nil {
 			return err
+		}
+	}
+	// Reset any timeout for this statement
+	if s.statementTimeout > 0 {
+		_, err = tx.Exec(ctx, "SET LOCAL statement_timeout=0")
+		if err != nil {
+			return errors.Mark(
+				og.WrapWithErrorState(errors.Wrap(err, "***UNEXPECTED ERROR; Unable to reset statement timeout."), s),
+				errRunInTxnFatalSentinel,
+			)
 		}
 	}
 	return nil
