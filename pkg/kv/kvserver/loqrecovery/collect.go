@@ -158,7 +158,7 @@ func CollectStoresReplicaInfo(
 			return loqrecoverypb.ClusterReplicaInfo{}, CollectionStats{}, errors.New("can't collect info from stored that belong to different clusters")
 		}
 		nodes[ident.NodeID] = struct{}{}
-		if err := visitStoreReplicas(ctx, reader, ident.StoreID, ident.NodeID, version,
+		if err := visitStoreReplicas(ctx, reader, ident.StoreID, ident.NodeID,
 			func(info loqrecoverypb.ReplicaInfo) error {
 				replicas = append(replicas, info)
 				return nil
@@ -181,7 +181,6 @@ func visitStoreReplicas(
 	reader storage.Reader,
 	storeID roachpb.StoreID,
 	nodeID roachpb.NodeID,
-	targetVersion clusterversion.ClusterVersion,
 	send func(info loqrecoverypb.ReplicaInfo) error,
 ) error {
 	if err := kvstorage.IterateRangeDescriptorsFromDisk(ctx, reader, func(desc roachpb.RangeDescriptor) error {

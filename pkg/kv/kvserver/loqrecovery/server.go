@@ -121,7 +121,6 @@ func (s Server) ServeLocalReplicas(
 	_ *serverpb.RecoveryCollectLocalReplicaInfoRequest,
 	stream serverpb.Admin_RecoveryCollectLocalReplicaInfoServer,
 ) error {
-	v := s.settings.Version.ActiveVersion(ctx)
 	var stores []*kvserver.Store
 	if err := s.stores.VisitStores(func(s *kvserver.Store) error {
 		stores = append(stores, s)
@@ -137,7 +136,7 @@ func (s Server) ServeLocalReplicas(
 		g.Go(func() error {
 			reader := s.TODOEngine().NewSnapshot()
 			defer reader.Close()
-			return visitStoreReplicas(ctx, reader, s.StoreID(), s.NodeID(), v,
+			return visitStoreReplicas(ctx, reader, s.StoreID(), s.NodeID(),
 				func(info loqrecoverypb.ReplicaInfo) error {
 					return syncStream.Send(&serverpb.RecoveryCollectLocalReplicaInfoResponse{ReplicaInfo: &info})
 				})
