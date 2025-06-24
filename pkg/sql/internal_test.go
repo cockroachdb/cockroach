@@ -488,7 +488,7 @@ func TestInternalExecutorInLeafTxnDoesNotPanic(t *testing.T) {
 
 	rootTxn := kvDB.NewTxn(ctx, "root-txn")
 
-	ltis, err := rootTxn.GetLeafTxnInputState(ctx)
+	ltis, err := rootTxn.GetLeafTxnInputState(ctx, nil /* readsTree */)
 	require.NoError(t, err)
 	leafTxn := kv.NewLeafTxn(ctx, kvDB, roachpb.NodeID(1), ltis, nil /* header */)
 

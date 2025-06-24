@@ -3981,6 +3981,7 @@ distribute_join_row_count_threshold                              1000
 distribute_scan_row_count_threshold                              10000
 distribute_sort_row_count_threshold                              1000
 distsql_plan_gateway_bias                                        2
+distsql_use_reduced_leaf_write_sets                              on
 enable_auto_rehoming                                             off
 enable_create_stats_using_extremes                               on
 enable_create_stats_using_extremes_bool_enum                     off

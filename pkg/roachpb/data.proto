@@ -769,6 +769,9 @@ message LeafTxnInputState {
   // in_flight_writes stores all writes that are in-flight and have not yet
   // been proven to have succeeded. Overlapping requests must chain on to
   // their success using a QueryIntent request.
+  //
+  // If DistSQLUseReducedLeafWriteSets is enabled, then this set might only
+  // include writes overlapping with key spans that the caller will read.
   repeated SequencedWrite in_flight_writes = 8 [(gogoproto.nullable) = false];
   // Whether stepping mode is enabled. False indicates synchronous
   // read-own-writes, where every KV read is able to observe the
@@ -784,9 +787,9 @@ message LeafTxnInputState {
   // buffered_writes stores all writes that are buffered on the root txn (on the
   // gateway node). Overlapping read requests need to be aware of these in order
   // to support read-your-own-writes.
-  // TODO(#139060): ship only a part of the write buffer that intersects with
-  // tables that we'll be scanned by the leaf. Also consider applying the same
-  // optimization to in_flight_writes.
+  //
+  // If DistSQLUseReducedLeafWriteSets is enabled, then this set might only
+  // include writes overlapping with key spans that the caller will read.
   repeated BufferedWrite buffered_writes = 11 [(gogoproto.nullable) = false];
 }
 

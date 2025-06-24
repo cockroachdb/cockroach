@@ -682,6 +682,9 @@ message LocalOnlySessionData {
   // to unconditionally attempt to apply the fast path for cascading deletes.
   // See also #146705.
   bool optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables = 173 [(gogoproto.customname) = "OptimizerDisableCrossRegionCascadeFastPathForRBRTables"];
+  // DistSQLUseReducedLeafWriteSets, when true, indicates that the DistSQL
+  // runner should use the reduced write sets when constructing LeafTxns.
+  bool distsql_use_reduced_leaf_write_sets = 174 [(gogoproto.customname) = "DistSQLUseReducedLeafWriteSets"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
