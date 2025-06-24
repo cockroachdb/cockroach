@@ -1103,7 +1103,7 @@ message ChangefeedTargetSpecification {
   }
 
   TargetType type = 1;
-  uint32 table_id = 2 [(gogoproto.customname) = "TableID",
+  uint32 descriptor_id = 2 [(gogoproto.customname) = "DescID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   string family_name = 3;
   string statement_time_name = 4;

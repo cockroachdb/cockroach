@@ -312,7 +312,7 @@ func mkTargets(tableDesc catalog.TableDescriptor) changefeedbase.Targets {
 	targets := changefeedbase.Targets{}
 	targets.Add(changefeedbase.Target{
 		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-		TableID:           tableDesc.GetID(),
+		DescID:            tableDesc.GetID(),
 		StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
 	})
 	return targets
