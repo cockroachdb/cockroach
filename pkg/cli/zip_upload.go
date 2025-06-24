@@ -97,7 +97,7 @@ const (
 	ddArchiveDefaultClient   = "datadog-archive" // TODO(arjunmahishi): make this a flag also
 
 	gcsPathTimeFormat = "dt=20060102/hour=15"
-	zipUploadRetries  = 5
+	zipUploadRetries  = 100
 
 	// datadog allows us to use logs API logs only for the last 72 hours. So, we
 	// are setting the oldest allowed log duration to 71 hours. The -1 hour is to
@@ -950,9 +950,14 @@ var gcsLogUpload = func(ctx context.Context, sig logUploadSig) (int, error) {
 
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.MaxRetries = zipUploadRetries
+	retryOpts.InitialBackoff = 1 * time.Second
+	retryOpts.MaxBackoff = 10 * time.Second
 
 	for retry := retry.Start(retryOpts); retry.Next(); {
-		objectWriter := gcsClient.Bucket(ddArchiveBucketName).Object(filename).NewWriter(ctx)
+
+		objectWriter := gcsClient.Bucket(ddArchiveBucketName).Object(filename).Retryer(
+			storage.WithPolicy(storage.RetryAlways),
+		).NewWriter(ctx)
 		w := gzip.NewWriter(objectWriter)
 		_, err = w.Write(data)
 		if err != nil {
