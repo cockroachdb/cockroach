@@ -526,7 +526,7 @@ CREATE TABLE foo (
 			targets := changefeedbase.Targets{}
 			targets.Add(changefeedbase.Target{
 				Type:       targetType,
-				TableID:    tableDesc.GetID(),
+				DescID:     tableDesc.GetID(),
 				FamilyName: tc.familyName,
 			})
 			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
@@ -770,7 +770,7 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 			targets := changefeedbase.Targets{}
 			targets.Add(changefeedbase.Target{
 				Type:       targetType,
-				TableID:    tableDesc.GetID(),
+				DescID:     tableDesc.GetID(),
 				FamilyName: tc.familyName,
 			})
 			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
@@ -1059,7 +1059,7 @@ CREATE TABLE foo (
 
 	targets := changefeedbase.Targets{}
 	targets.Add(changefeedbase.Target{
-		TableID: tableDesc.GetID(),
+		DescID: tableDesc.GetID(),
 	})
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	ctx := context.Background()
