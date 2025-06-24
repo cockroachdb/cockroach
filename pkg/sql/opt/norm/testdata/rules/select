@@ -2562,3 +2562,21 @@ barrier
       └── filters
            ├── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
            └── y:2 = 20 [outer=(2), constraints=(/2: [/20 - /20]; tight), fd=()-->(2)]
+
+# --------------------------------------------------
+# NormalizeLikeAny
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE strs_notnull (
+  s STRING NOT NULL,
+  cs STRING COLLATE en_US NOT NULL,
+  name NAME NOT NULL
+)
+----
+
+norm expect=NormalizeLikeAny
+SELECT * FROM strs_notnull WHERE s LIKE '%' AND cs LIKE '%' COLLATE en_US AND name LIKE '%'::NAME;
+----
+scan strs_notnull
+ └── columns: s:1!null cs:2!null name:3!null
