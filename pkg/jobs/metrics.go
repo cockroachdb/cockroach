@@ -146,7 +146,7 @@ func makeMetaCurrentlyPaused(jt jobspb.Type) metric.Metadata {
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
 		LabeledName: "jobs",
 		StaticLabels: metric.MakeLabelPairs(
-			metric.LabelName, typeStr,
+			metric.LabelType, typeStr,
 			metric.LabelStatus, "currently_paused",
 		),
 	}

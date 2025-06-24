@@ -65,7 +65,7 @@ layers:
       essential: true
     - name: jobs.changefeed.currently_paused
       exported_name: jobs_changefeed_currently_paused
-      labeled_name: 'jobs{name: changefeed, status: currently_paused}'
+      labeled_name: 'jobs{type: changefeed, status: currently_paused}'
       description: Number of changefeed jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -220,7 +220,7 @@ layers:
     metrics:
     - name: jobs.auto_create_stats.currently_paused
       exported_name: jobs_auto_create_stats_currently_paused
-      labeled_name: 'jobs{name: auto_create_stats, status: currently_paused}'
+      labeled_name: 'jobs{type: auto_create_stats, status: currently_paused}'
       description: Number of auto_create_stats jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -253,7 +253,7 @@ layers:
       essential: true
     - name: jobs.backup.currently_paused
       exported_name: jobs_backup_currently_paused
-      labeled_name: 'jobs{name: backup, status: currently_paused}'
+      labeled_name: 'jobs{type: backup, status: currently_paused}'
       description: Number of backup jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -697,7 +697,7 @@ layers:
     metrics:
     - name: jobs.row_level_ttl.currently_paused
       exported_name: jobs_row_level_ttl_currently_paused
-      labeled_name: 'jobs{name: row_level_ttl, status: currently_paused}'
+      labeled_name: 'jobs{type: row_level_ttl, status: currently_paused}'
       description: Number of row_level_ttl jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -3409,7 +3409,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_config_env_runner.currently_paused
       exported_name: jobs_auto_config_env_runner_currently_paused
-      labeled_name: 'jobs{name: auto_config_env_runner, status: currently_paused}'
+      labeled_name: 'jobs{type: auto_config_env_runner, status: currently_paused}'
       description: Number of auto_config_env_runner jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -3517,7 +3517,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_config_runner.currently_paused
       exported_name: jobs_auto_config_runner_currently_paused
-      labeled_name: 'jobs{name: auto_config_runner, status: currently_paused}'
+      labeled_name: 'jobs{type: auto_config_runner, status: currently_paused}'
       description: Number of auto_config_runner jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -3625,7 +3625,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_config_task.currently_paused
       exported_name: jobs_auto_config_task_currently_paused
-      labeled_name: 'jobs{name: auto_config_task, status: currently_paused}'
+      labeled_name: 'jobs{type: auto_config_task, status: currently_paused}'
       description: Number of auto_config_task jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -3733,7 +3733,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_create_partial_stats.currently_paused
       exported_name: jobs_auto_create_partial_stats_currently_paused
-      labeled_name: 'jobs{name: auto_create_partial_stats, status: currently_paused}'
+      labeled_name: 'jobs{type: auto_create_partial_stats, status: currently_paused}'
       description: Number of auto_create_partial_stats jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -3922,7 +3922,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_schema_telemetry.currently_paused
       exported_name: jobs_auto_schema_telemetry_currently_paused
-      labeled_name: 'jobs{name: auto_schema_telemetry, status: currently_paused}'
+      labeled_name: 'jobs{type: auto_schema_telemetry, status: currently_paused}'
       description: Number of auto_schema_telemetry jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -4030,7 +4030,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_span_config_reconciliation.currently_paused
       exported_name: jobs_auto_span_config_reconciliation_currently_paused
-      labeled_name: 'jobs{name: auto_span_config_reconciliation, status: currently_paused}'
+      labeled_name: 'jobs{type: auto_span_config_reconciliation, status: currently_paused}'
       description: Number of auto_span_config_reconciliation jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -4138,7 +4138,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_sql_stats_compaction.currently_paused
       exported_name: jobs_auto_sql_stats_compaction_currently_paused
-      labeled_name: 'jobs{name: auto_sql_stats_compaction, status: currently_paused}'
+      labeled_name: 'jobs{type: auto_sql_stats_compaction, status: currently_paused}'
       description: Number of auto_sql_stats_compaction jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -4246,7 +4246,7 @@ layers:
       derivative: NONE
     - name: jobs.auto_update_sql_activity.currently_paused
       exported_name: jobs_auto_update_sql_activity_currently_paused
-      labeled_name: 'jobs{name: auto_update_sql_activity, status: currently_paused}'
+      labeled_name: 'jobs{type: auto_update_sql_activity, status: currently_paused}'
       description: Number of auto_update_sql_activity jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -4542,7 +4542,7 @@ layers:
       derivative: NONE
     - name: jobs.create_stats.currently_paused
       exported_name: jobs_create_stats_currently_paused
-      labeled_name: 'jobs{name: create_stats, status: currently_paused}'
+      labeled_name: 'jobs{type: create_stats, status: currently_paused}'
       description: Number of create_stats jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -4641,7 +4641,7 @@ layers:
       derivative: NONE
     - name: jobs.history_retention.currently_paused
       exported_name: jobs_history_retention_currently_paused
-      labeled_name: 'jobs{name: history_retention, status: currently_paused}'
+      labeled_name: 'jobs{type: history_retention, status: currently_paused}'
       description: Number of history_retention jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -4749,7 +4749,7 @@ layers:
       derivative: NONE
     - name: jobs.hot_ranges_logger.currently_paused
       exported_name: jobs_hot_ranges_logger_currently_paused
-      labeled_name: 'jobs{name: hot_ranges_logger, status: currently_paused}'
+      labeled_name: 'jobs{type: hot_ranges_logger, status: currently_paused}'
       description: Number of hot_ranges_logger jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -4857,7 +4857,7 @@ layers:
       derivative: NONE
     - name: jobs.import.currently_paused
       exported_name: jobs_import_currently_paused
-      labeled_name: 'jobs{name: import, status: currently_paused}'
+      labeled_name: 'jobs{type: import, status: currently_paused}'
       description: Number of import jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -4965,7 +4965,7 @@ layers:
       derivative: NONE
     - name: jobs.import_rollback.currently_paused
       exported_name: jobs_import_rollback_currently_paused
-      labeled_name: 'jobs{name: import_rollback, status: currently_paused}'
+      labeled_name: 'jobs{type: import_rollback, status: currently_paused}'
       description: Number of import_rollback jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -5073,7 +5073,7 @@ layers:
       derivative: NONE
     - name: jobs.key_visualizer.currently_paused
       exported_name: jobs_key_visualizer_currently_paused
-      labeled_name: 'jobs{name: key_visualizer, status: currently_paused}'
+      labeled_name: 'jobs{type: key_visualizer, status: currently_paused}'
       description: Number of key_visualizer jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -5181,7 +5181,7 @@ layers:
       derivative: NONE
     - name: jobs.logical_replication.currently_paused
       exported_name: jobs_logical_replication_currently_paused
-      labeled_name: 'jobs{name: logical_replication, status: currently_paused}'
+      labeled_name: 'jobs{type: logical_replication, status: currently_paused}'
       description: Number of logical_replication jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -5297,7 +5297,7 @@ layers:
       derivative: NONE
     - name: jobs.migration.currently_paused
       exported_name: jobs_migration_currently_paused
-      labeled_name: 'jobs{name: migration, status: currently_paused}'
+      labeled_name: 'jobs{type: migration, status: currently_paused}'
       description: Number of migration jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -5405,7 +5405,7 @@ layers:
       derivative: NONE
     - name: jobs.mvcc_statistics_update.currently_paused
       exported_name: jobs_mvcc_statistics_update_currently_paused
-      labeled_name: 'jobs{name: mvcc_statistics_update, status: currently_paused}'
+      labeled_name: 'jobs{type: mvcc_statistics_update, status: currently_paused}'
       description: Number of mvcc_statistics_update jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -5513,7 +5513,7 @@ layers:
       derivative: NONE
     - name: jobs.new_schema_change.currently_paused
       exported_name: jobs_new_schema_change_currently_paused
-      labeled_name: 'jobs{name: new_schema_change, status: currently_paused}'
+      labeled_name: 'jobs{type: new_schema_change, status: currently_paused}'
       description: Number of new_schema_change jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -5621,7 +5621,7 @@ layers:
       derivative: NONE
     - name: jobs.poll_jobs_stats.currently_paused
       exported_name: jobs_poll_jobs_stats_currently_paused
-      labeled_name: 'jobs{name: poll_jobs_stats, status: currently_paused}'
+      labeled_name: 'jobs{type: poll_jobs_stats, status: currently_paused}'
       description: Number of poll_jobs_stats jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -5729,7 +5729,7 @@ layers:
       derivative: NONE
     - name: jobs.replication_stream_ingestion.currently_paused
       exported_name: jobs_replication_stream_ingestion_currently_paused
-      labeled_name: 'jobs{name: replication_stream_ingestion, status: currently_paused}'
+      labeled_name: 'jobs{type: replication_stream_ingestion, status: currently_paused}'
       description: Number of replication_stream_ingestion jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -5837,7 +5837,7 @@ layers:
       derivative: NONE
     - name: jobs.replication_stream_producer.currently_paused
       exported_name: jobs_replication_stream_producer_currently_paused
-      labeled_name: 'jobs{name: replication_stream_producer, status: currently_paused}'
+      labeled_name: 'jobs{type: replication_stream_producer, status: currently_paused}'
       description: Number of replication_stream_producer jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -5945,7 +5945,7 @@ layers:
       derivative: NONE
     - name: jobs.restore.currently_paused
       exported_name: jobs_restore_currently_paused
-      labeled_name: 'jobs{name: restore, status: currently_paused}'
+      labeled_name: 'jobs{type: restore, status: currently_paused}'
       description: Number of restore jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -6149,7 +6149,7 @@ layers:
       derivative: NONE
     - name: jobs.schema_change.currently_paused
       exported_name: jobs_schema_change_currently_paused
-      labeled_name: 'jobs{name: schema_change, status: currently_paused}'
+      labeled_name: 'jobs{type: schema_change, status: currently_paused}'
       description: Number of schema_change jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -6257,7 +6257,7 @@ layers:
       derivative: NONE
     - name: jobs.schema_change_gc.currently_paused
       exported_name: jobs_schema_change_gc_currently_paused
-      labeled_name: 'jobs{name: schema_change_gc, status: currently_paused}'
+      labeled_name: 'jobs{type: schema_change_gc, status: currently_paused}'
       description: Number of schema_change_gc jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -6365,7 +6365,7 @@ layers:
       derivative: NONE
     - name: jobs.sql_activity_flush.currently_paused
       exported_name: jobs_sql_activity_flush_currently_paused
-      labeled_name: 'jobs{name: sql_activity_flush, status: currently_paused}'
+      labeled_name: 'jobs{type: sql_activity_flush, status: currently_paused}'
       description: Number of sql_activity_flush jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -6473,7 +6473,7 @@ layers:
       derivative: NONE
     - name: jobs.standby_read_ts_poller.currently_paused
       exported_name: jobs_standby_read_ts_poller_currently_paused
-      labeled_name: 'jobs{name: standby_read_ts_poller, status: currently_paused}'
+      labeled_name: 'jobs{type: standby_read_ts_poller, status: currently_paused}'
       description: Number of standby_read_ts_poller jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -6581,7 +6581,7 @@ layers:
       derivative: NONE
     - name: jobs.typedesc_schema_change.currently_paused
       exported_name: jobs_typedesc_schema_change_currently_paused
-      labeled_name: 'jobs{name: typedesc_schema_change, status: currently_paused}'
+      labeled_name: 'jobs{type: typedesc_schema_change, status: currently_paused}'
       description: Number of typedesc_schema_change jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
@@ -6689,7 +6689,7 @@ layers:
       derivative: NONE
     - name: jobs.update_table_metadata_cache.currently_paused
       exported_name: jobs_update_table_metadata_cache_currently_paused
-      labeled_name: 'jobs{name: update_table_metadata_cache, status: currently_paused}'
+      labeled_name: 'jobs{type: update_table_metadata_cache, status: currently_paused}'
       description: Number of update_table_metadata_cache jobs currently considered Paused
       y_axis_label: jobs
       type: GAUGE
