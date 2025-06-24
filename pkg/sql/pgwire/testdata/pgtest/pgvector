@@ -45,3 +45,19 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"binary":"000200004000000040400000"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 2"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "SELECT $1::VECTOR"}
+Bind {"ParameterFormatCodes": [1], "Parameters": [{"binary":"000100003f800000"}]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"[1]"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
