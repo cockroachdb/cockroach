@@ -147,11 +147,6 @@ func (tsm *TimestampSpansMap) IsEmpty() bool {
 	return tsm == nil || len(tsm.Entries) == 0
 }
 
-// IsEmpty returns whether the checkpoint is empty.
-func (m *ChangefeedProgress_Checkpoint) IsEmpty() bool {
-	return m == nil || (len(m.Spans) == 0 && m.Timestamp.IsEmpty())
-}
-
 func (r RestoreDetails) OnlineImpl() bool {
 	return r.ExperimentalCopy || r.ExperimentalOnline
 }
