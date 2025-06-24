@@ -43,7 +43,6 @@ func (n *discardNode) startExec(params runParams) error {
 
 		// RESET ALL
 		if err := params.p.resetAllSessionVars(params.ctx); err != nil {
-
 			return err
 		}
 
