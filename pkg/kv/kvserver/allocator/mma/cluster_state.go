@@ -519,6 +519,54 @@ func (prc PendingRangeChange) LeaseTransferFrom() roachpb.StoreID {
 	panic("unreachable")
 }
 
+// TODO: we need to rethink how to model pending changes. pendingReplicaChange
+// was developed to allow us to have a simple way of representing all changes,
+// by composing one or more pendingReplicaChanges (each of which only touches
+// one store). For replica moves and lease transfers this results in a pair of
+// changes. For replica moves the pair is an addition at one store and a
+// removal at another store. These can be enacted separately, and noticed as
+// enacted separately, so having them become non-pending separately is useful.
+//
+// Lease transfers create a hazard with this modeling approach which can
+// result in no leaseholder or two leaseholders in the internal state of MMA.
+// As a reminder, we don't care if internal state of MMA is out-of-sync with
+// the real world: the StoreLeaseholderMsgs will eventually correct the state.
+// But we care about internal consistency. Also, as a reminder we want a
+// single rangeState for a range, regardless of the number of local stores.
+// This helps in having a single reality inside MMA, even if it is currently
+// incorrect.
+//
+// Example of the hazard: Consider a node with two stores s1 and s2, and range
+// r1, where s1 is the leaseholder. Say we decide to move the replica from s1
+// to s2 -- this is permitted since they are never in the same quorum. As part
+// of this move, the lease will also be transferred from s1 to s2. We
+// currently produce two pendingReplicaChanges, c1 removes the replica and
+// lease from s1, and c2 adds the replica and lease to s2. Say we receive a
+// StoreLeaseholderMsg from s2, which says that it is the leaseholder and has
+// a replica. This will cause us to mark c2 as done (no longer pending). But
+// we can't mark c1 as done since both the lease loss and replica loss are in
+// a single change. And then something causes c2 to be undone, e.g., GC or a
+// spurious error on the transfer path which causes the enacter to say that
+// the change was not successful. Now we will undo c1 and have s1 also as the
+// leaseholder, which is incorrect.
+//
+// To avoid this hazard, we need to model this as 3 pending changes, c1 for
+// removing the replica from s1, c2 for adding the replica to s2, and c3 for
+// transferring the lease from s1 to s2. c3 has to model load changes to two
+// stores. Having a single change c3 model the lease transfer means it is
+// either consider enacted or failed as a whole, so there will be exactly one
+// leaseholder.
+//
+// TODO(wenyi): For the prototype we are keeping this old modeling approach,
+// since we think it will suffice for single store roachtests. We have
+// discussed checking that a pending change is consistent with the current
+// rangeState. In the hazard example above, when c2 is enacted, because of a
+// StoreLeaseholderMsg from s2, we will check that c1 is still valid for the
+// current rangeState. From a replica loss perspective, it is valid, but from
+// a lease loss perspective, it is no longer valid since the lease is already
+// lost. We may have to relax the consistency checking to only check that the
+// replica loss is valid.
+
 // pendingReplicaChange is a proposed change to a single replica. Some
 // external entity (the leaseholder of the range) may choose to enact this
 // change. It may not be enacted if it will cause some invariant (like the
