@@ -630,6 +630,7 @@ func (s storeMembership) SafeFormat(w redact.SafePrinter, _ rune) {
 type storeState struct {
 	storeMembership
 	storeLoad
+	StoreAttributesAndLocality
 	adjusted struct {
 		load          LoadVector
 		secondaryLoad SecondaryLoadVector
@@ -781,13 +782,8 @@ func (ss *storeState) computeMaxFractionPending() {
 	ss.maxFractionPendingDecrease = fracDecrease
 }
 
-func newStoreState(storeID roachpb.StoreID, nodeID roachpb.NodeID) *storeState {
-	ss := &storeState{
-		storeLoad: storeLoad{
-			StoreID: storeID,
-			NodeID:  nodeID,
-		},
-	}
+func newStoreState() *storeState {
+	ss := &storeState{}
 	ss.adjusted.loadPendingChanges = map[ChangeID]*pendingReplicaChange{}
 	ss.adjusted.replicas = map[roachpb.RangeID]ReplicaState{}
 	ss.adjusted.topKRanges = map[roachpb.StoreID]*topKReplicas{}
@@ -1631,15 +1627,21 @@ func (cs *clusterState) setStore(desc roachpb.StoreDescriptor) {
 	ss, ok := cs.stores[desc.StoreID]
 	if !ok {
 		// This is the first time seeing this store.
-		ss = newStoreState(desc.StoreID, desc.Node.NodeID)
+		ss = newStoreState()
 		ss.localityTiers = cs.localityTierInterner.intern(desc.Locality())
 		ss.overloadStartTime = cs.ts.Now()
 		ss.overloadEndTime = cs.ts.Now()
+		ss.StoreAttributesAndLocality = StoreAttributesAndLocality{
+			StoreID:      desc.StoreID,
+			NodeID:       desc.Node.NodeID,
+			NodeAttrs:    desc.Node.Attrs,
+			NodeLocality: desc.Node.Locality,
+			StoreAttrs:   desc.Attrs,
+		}
 		cs.constraintMatcher.setStore(desc)
 		cs.stores[desc.StoreID] = ss
 		ns.stores = append(ns.stores, desc.StoreID)
 	}
-	ss.StoreDescriptor = desc
 }
 
 func (cs *clusterState) setStoreMembership(storeID roachpb.StoreID, state storeMembership) {
@@ -1666,11 +1668,11 @@ func (cs *clusterState) updateFailureDetectionSummary(
 // For meansMemo.
 var _ loadInfoProvider = &clusterState{}
 
-func (cs *clusterState) getStoreReportedLoad(storeID roachpb.StoreID) *storeLoad {
+func (cs *clusterState) getStoreReportedLoad(storeID roachpb.StoreID) (roachpb.NodeID, *storeLoad) {
 	if storeState, ok := cs.stores[storeID]; ok {
-		return &storeState.storeLoad
+		return storeState.NodeID, &storeState.storeLoad
 	}
-	return nil
+	return 0, nil
 }
 
 func (cs *clusterState) getNodeReportedLoad(nodeID roachpb.NodeID) *NodeLoad {
@@ -1802,6 +1804,22 @@ func computeLoadSummary(
 		maxFractionPendingDecrease: ss.maxFractionPendingDecrease,
 		loadSeqNum:                 ss.loadSeqNum,
 	}
+}
+
+type StoreAttributesAndLocality struct {
+	roachpb.StoreID
+	roachpb.NodeID
+	NodeAttrs    roachpb.Attributes
+	NodeLocality roachpb.Locality
+	StoreAttrs   roachpb.Attributes
+}
+
+// locality returns the locality of the Store, which is the Locality of the
+// node plus an extra tier for the node itself. Copied from
+// StoreDescriptor.Locality.
+func (saal *StoreAttributesAndLocality) locality() roachpb.Locality {
+	return saal.NodeLocality.AddTier(
+		roachpb.Tier{Key: "node", Value: saal.NodeID.String()})
 }
 
 // Avoid unused lint errors.
