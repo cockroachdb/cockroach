@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/policyrefresher"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
@@ -609,7 +610,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 				return
 			}
 			storeLoadMsg := allocator.MakeStoreLoadMsg(storeDesc, origTimestampNanos)
-			mmAllocator.SetStore(storeDesc)
+			mmAllocator.SetStore(state.StoreAttrAndLocFromDesc(storeDesc))
 			mmAllocator.ProcessStoreLoadMsg(context.TODO(), &storeLoadMsg)
 		},
 	)

@@ -192,7 +192,8 @@ func (s *Simulator) addStore(storeID state.StoreID, tick time.Time) {
 	// initiated in each node's allocator. We should instead handle this in mma,
 	// or integration component.
 	for _, node := range s.state.Nodes() {
-		node.MMAllocator().SetStore(s.state.StoreDescriptors(false, storeID)[0])
+		node.MMAllocator().SetStore(state.StoreAttrAndLocFromDesc(
+			s.state.StoreDescriptors(false, storeID)[0]))
 	}
 	s.mmSRs[storeID] = mmaintegration.NewMMAStoreRebalancer(
 		storeID,

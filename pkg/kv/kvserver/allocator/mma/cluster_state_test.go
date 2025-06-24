@@ -361,8 +361,8 @@ func TestClusterState(t *testing.T) {
 
 				case "set-store":
 					for _, next := range strings.Split(d.Input, "\n") {
-						desc := parseStoreDescriptor(t, next)
-						cs.setStore(desc)
+						sal := parseStoreAttributedAndLocality(t, next)
+						cs.setStore(sal)
 					}
 					return printNodeListMeta()
 
