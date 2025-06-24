@@ -60,6 +60,7 @@ CREATE TABLE system.users (
   "hashedPassword" BYTES NULL,
   "isRole"         BOOL NOT NULL DEFAULT false,
   user_id          OID NOT NULL,
+  estimated_last_login_time TIMESTAMPTZ NULL,
   CONSTRAINT "primary" PRIMARY KEY (username),
   UNIQUE INDEX users_user_id_idx (user_id ASC),
   FAMILY "primary" (username, user_id)
@@ -1370,7 +1371,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V25_3_AddEventLogColumnAndIndex.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V25_3_AddEstimatedLastLoginTime.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -1643,11 +1644,13 @@ var (
 				{Name: "hashedPassword", ID: 2, Type: types.Bytes, Nullable: true},
 				{Name: "isRole", ID: 3, Type: types.Bool, DefaultExpr: &falseBoolString},
 				{Name: "user_id", ID: 4, Type: types.Oid},
+				{Name: "estimated_last_login_time", ID: 5, Type: types.TimestampTZ, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{Name: "primary", ID: 0, ColumnNames: []string{"username", "user_id"}, ColumnIDs: []descpb.ColumnID{1, 4}, DefaultColumnID: 4},
 				{Name: "fam_2_hashedPassword", ID: 2, ColumnNames: []string{"hashedPassword"}, ColumnIDs: []descpb.ColumnID{2}, DefaultColumnID: 2},
 				{Name: "fam_3_isRole", ID: 3, ColumnNames: []string{"isRole"}, ColumnIDs: []descpb.ColumnID{3}, DefaultColumnID: 3},
+				{Name: "fam_5_estimated_last_login_time", ID: 5, ColumnNames: []string{"estimated_last_login_time"}, ColumnIDs: []descpb.ColumnID{5}, DefaultColumnID: 5},
 			},
 			pk("username"),
 			descpb.IndexDescriptor{

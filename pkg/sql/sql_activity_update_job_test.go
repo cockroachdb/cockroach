@@ -276,7 +276,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 	db.Exec(t, `SET CLUSTER SETTING sql.stats.activity.flush.enabled = true;`)
 
 	// Give permission to write to sys tables.
-	db.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3)")
+	db.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3, NULL)")
 	db.Exec(t, "GRANT node TO root")
 
 	// Make sure all the tables are empty initially.
@@ -694,7 +694,7 @@ func TestActivityStatusCombineAPI(t *testing.T) {
 	require.Greater(t, txnAppNameCnt, 0)
 
 	// Grant permission and change the activity table info
-	db.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3)")
+	db.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3, NULL)")
 	db.Exec(t, "GRANT node TO root")
 	db.Exec(t, "UPDATE system.public.statement_activity SET app_name = 'randomapp' where app_name = $1;", appName)
 	db.Exec(t, "UPDATE system.public.transaction_activity SET app_name = 'randomapp' where app_name = $1;", appName)
@@ -807,7 +807,7 @@ func TestSqlActivityUpdaterDataDriven(t *testing.T) {
 
 		db := sqlutils.MakeSQLRunner(sqlDB)
 		// Give create privileges to root user.
-		db.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3)")
+		db.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3, NULL)")
 		db.Exec(t, "GRANT node TO root")
 		db.Exec(t, `SET CLUSTER SETTING sql.stats.activity.flush.enabled = true;`)
 

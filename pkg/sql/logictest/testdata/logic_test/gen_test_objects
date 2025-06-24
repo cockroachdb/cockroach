@@ -215,9 +215,9 @@ prepared_transactions     "😠owne\gr"       text
 "protected_ts_reco""rds"  target           bytea
 "protected_ts_reco""rds"  ts               numeric
 "protected_ts_reco""rds"  "veri!fied"      boolean
-"ro😪l|e_options"          "opti}o& n"      text
+"ro😪l|e_options"          "%pvalue"        text
+"ro😪l|e_options"          option           text
 "ro😪l|e_options"          rowid            bigint
-"ro😪l|e_options"          "us'er_id"       oid
 
 subtest templates/different_templates_in_each_db
 
