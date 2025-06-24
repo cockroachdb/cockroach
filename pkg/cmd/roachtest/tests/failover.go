@@ -1594,18 +1594,24 @@ type diskStallFailer struct {
 	staller       diskStaller
 }
 
-func (f *diskStallFailer) Mode() failureMode           { return failureModeDiskStall }
-func (f *diskStallFailer) String() string              { return string(f.Mode()) }
-func (f *diskStallFailer) CanUseLocal() bool           { return false } // needs dmsetup
-func (f *diskStallFailer) CanUseChaos() bool           { return true }
-func (f *diskStallFailer) CanRunWith(failureMode) bool { return true }
+func (f *diskStallFailer) Mode() failureMode { return failureModeDiskStall }
+func (f *diskStallFailer) String() string    { return string(f.Mode()) }
+func (f *diskStallFailer) CanUseLocal() bool { return false } // needs dmsetup
+func (f *diskStallFailer) CanUseChaos() bool { return true }
+
+// CanRunWith returns false for other disk stalls, as the FI library it uses
+// does not allow concurrent failure modes to be injected without recovering
+// from them first.
+// TODO(darryl): This is a temporary workaround to reduce test failure noise.
+// We should fix this by merging concurrent disk stall failures and injecting
+// them in one shot.
+func (f *diskStallFailer) CanRunWith(other failureMode) bool { return other != failureModeDiskStall }
 
 func (f *diskStallFailer) Setup(ctx context.Context) {
 	f.staller.Setup(ctx)
 }
 
 func (f *diskStallFailer) Cleanup(ctx context.Context) {
-	f.staller.Unstall(ctx, f.c.All())
 	// We have to stop the cluster before cleaning up the staller.
 	f.m.ExpectDeaths(int32(f.c.Spec().NodeCount))
 	f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.All())
