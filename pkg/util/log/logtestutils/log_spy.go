@@ -79,6 +79,13 @@ func (s *LogSpy) ReadAll() []logpb.Entry {
 	return s.readLocked(math.MaxUint32)
 }
 
+// Reset clears the logs contained within the spy.
+func (s *LogSpy) Reset() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.logs = []logpb.Entry{}
+}
+
 // ReadAll consumes the specified number of logs contained within
 // the spy and returns them as a list. Once the logs are consumed
 // they cannot be read again.
@@ -120,12 +127,12 @@ logLoop:
 }
 
 // MatchesF returns a filter that matches log entries which contain
-// the input string.
-func MatchesF(s string) func(entry logpb.Entry) bool {
+// the input pattern.
+func MatchesF(pattern string) func(entry logpb.Entry) bool {
 	return func(entry logpb.Entry) bool {
-		exists, err := regexp.MatchString(s, entry.Message)
+		exists, err := regexp.MatchString(pattern, entry.Message)
 		if err != nil {
-			log.Errorf(context.Background(), "failed to match regex %s: %s", s, err)
+			log.Errorf(context.Background(), "failed to match regex %s: %s", pattern, err)
 		}
 		return exists
 	}
