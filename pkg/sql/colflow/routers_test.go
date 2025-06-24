@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -723,6 +724,11 @@ func TestHashRouterComputesDestination(t *testing.T) {
 		numOutputs      = 4
 		valsPushed      = make([]int, numOutputs)
 	)
+
+	if system.BigEndian {
+		// On big endian architectures we expect a different distribution.
+		expectedNumVals = []int{238, 260, 259, 267}
+	}
 
 	outputs := make([]routerOutput, numOutputs)
 	for i := range outputs {
