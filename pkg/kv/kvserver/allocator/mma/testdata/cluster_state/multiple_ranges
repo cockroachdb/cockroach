@@ -46,13 +46,21 @@ store-load-msg
   store-id=2 node-id=2 load=[45,40,50] capacity=[100,100,50] secondary-load=1 load-time=0s
 ----
 
-# StoreLeaseholderMsg, with empty ranges, since the range states have not changed.
+# StoreLeaseholderMsg, with empty information, since the range states have not changed.
 store-leaseholder-msg
 store-id=1
-  range-id=1
-  range-id=2
-  range-id=3
-  range-id=4
+  range-id=1 not-populated
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL
+  range-id=2 not-populated
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL
+  range-id=3 not-populated
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL
+  range-id=4 not-populated
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL
 ----
 
 # The top-2 ranges for store 2 are based on ByteSize.
@@ -66,8 +74,12 @@ store-id=2 node-id=2 reported=[45,40,50] adjusted=[45,40,50] node-reported-cpu=4
 # StoreLeaseholderMsg not containing r1 and r4 since no longer the leaseholder.
 store-leaseholder-msg
 store-id=1
-  range-id=2
-  range-id=3
+  range-id=2 not-populated
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL
+  range-id=3 not-populated
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL
 ----
 
 # r1 and r4 no longer mentioned in the top-k.
