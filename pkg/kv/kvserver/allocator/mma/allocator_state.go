@@ -339,6 +339,10 @@ func (a *allocatorState) rebalanceStores(
 				}
 				leaseChanges := MakeLeaseTransferChanges(
 					rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
+				if valid, reason := a.cs.preCheckOnApplyReplicaChanges(leaseChanges[:]); !valid {
+					panic(fmt.Sprintf("pre-check failed for lease transfer %v: due to %v",
+						leaseChanges, reason))
+				}
 				pendingChanges := a.cs.createPendingChanges(leaseChanges[:]...)
 				changes = append(changes, PendingRangeChange{
 					RangeID:               rangeID,
@@ -513,6 +517,11 @@ func (a *allocatorState) rebalanceStores(
 			}
 			replicaChanges := makeRebalanceReplicaChanges(
 				rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
+			log.Infof(ctx, "(replica-transfer) range %v from %v to %v", rangeID, removeTarget, addTarget)
+			if valid, reason := a.cs.preCheckOnApplyReplicaChanges(replicaChanges[:]); !valid {
+				panic(fmt.Sprintf("pre-check failed for replica changes: %v due to %v for %v",
+					replicaChanges, reason, rangeID))
+			}
 			pendingChanges := a.cs.createPendingChanges(replicaChanges[:]...)
 			changes = append(changes, PendingRangeChange{
 				RangeID:               rangeID,
@@ -597,22 +606,9 @@ func (a *allocatorState) AdjustPendingChangesDisposition(changeIDs []ChangeID, s
 func (a *allocatorState) RegisterExternalChanges(changes []ReplicaChange) []ChangeID {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	rangeID := roachpb.RangeID(-1)
-	// 1. Check that all changes correspond to the same range. Panic otherwise.
-	// 2. Return early if range already has some pending changes or the range does not exist.
-	returnEarly := false
-	for _, change := range changes {
-		if rangeID == -1 {
-			rangeID = change.rangeID
-			if a.cs.hasNoRangeIDOrHasPendingChanges(change.rangeID) {
-				returnEarly = true
-			}
-		} else if change.rangeID != rangeID {
-			panic(fmt.Sprintf("unexpected change rangeID %d != %d", change.rangeID, rangeID))
-		}
-	}
-
-	if returnEarly {
+	if valid, reason := a.cs.preCheckOnApplyReplicaChanges(changes); !valid {
+		log.Infof(context.Background(),
+			"did not register external changes: due to %v", reason)
 		return nil
 	}
 	pendingChanges := a.cs.createPendingChanges(changes...)

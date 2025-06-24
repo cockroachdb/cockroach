@@ -957,6 +957,20 @@ func (rs *rangeState) removeReplica(storeID roachpb.StoreID) {
 	// panic(errors.AssertionFailedf("store %v has no replica", storeID))
 }
 
+func replicaSetIsValid(replicas []StoreIDAndReplicaState) (bool, string) {
+	hasSeenLeaseholder := false
+	for _, repl := range replicas {
+		if repl.ReplicaState.IsLeaseholder {
+			if hasSeenLeaseholder {
+				// More than one leaseholder.
+				return false, "more than one leaseholder"
+			}
+			hasSeenLeaseholder = true
+		}
+	}
+	return hasSeenLeaseholder, "no leaseholder"
+}
+
 func (rs *rangeState) removePendingChangeTracking(changeID ChangeID) {
 	n := len(rs.pendingChanges)
 	found := false
@@ -1180,6 +1194,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// Find any pending changes which are now enacted, according to the
 		// leaseholder.
 		var remainingChanges, enactedChanges []*pendingReplicaChange
+		var remainingReplicaChanges []ReplicaChange
 		for _, change := range rs.pendingChanges {
 			ss := cs.stores[change.target.StoreID]
 			adjustedReplica, ok := ss.adjusted.replicas[rangeMsg.RangeID]
@@ -1191,6 +1206,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 				enactedChanges = append(enactedChanges, change)
 			} else {
 				remainingChanges = append(remainingChanges, change)
+				remainingReplicaChanges = append(remainingReplicaChanges, change.ReplicaChange)
 			}
 		}
 
@@ -1217,8 +1233,13 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// completely unaware of, we may not be able to apply the remaining
 		// changes here. We should discard such pending changes.
 		log.Infof(ctx, "remainingChanges %v", remainingChanges)
-		for _, change := range remainingChanges {
-			cs.applyReplicaChange(change.ReplicaChange, false)
+		if valid, reason := cs.preCheckOnApplyReplicaChanges(remainingReplicaChanges); valid {
+			for _, change := range remainingChanges {
+				cs.applyReplicaChange(change.ReplicaChange, false)
+			}
+		} else {
+			log.Infof(ctx, "remainingChanges %v are no longer valid due to %v",
+				remainingChanges, reason)
 		}
 		if rangeMsg.Populated {
 			normSpanConfig, err := makeNormalizedSpanConfig(&rangeMsg.Conf, cs.constraintMatcher.interner)
@@ -1405,9 +1426,10 @@ func (cs *clusterState) pendingChangeEnacted(cid ChangeID, enactedAt time.Time, 
 	}
 	change.enactedAtTime = enactedAt
 	rs, ok := cs.ranges[change.rangeID]
-	if !ok {
-		panic(fmt.Sprintf("range %v not found in cluster state", change.rangeID))
-	}
+	// TODO(wenyihu6): check whether this is still expected
+	//if !ok {
+	//panic(fmt.Sprintf("range %v not found in cluster state", change.rangeID))
+	//}
 
 	log.Infof(context.Background(), "start removing change_id=%v, range_id=%v, change=%v", change.ChangeID, change.rangeID, change)
 	log.Infof(context.Background(), "cs.pendingChanges has: %v, range state has: %v", printMapPendingChanges(cs.pendingChanges), printPendingChanges(rs.pendingChanges))
@@ -1434,6 +1456,10 @@ func (cs *clusterState) undoPendingChange(cid ChangeID, requireFound bool) {
 	rs.constraints = nil
 	// Undo the change delta as well as the replica change and remove the pending
 	// change from all tracking (range, store, cluster).
+	if valid, reason := cs.preCheckOnUndoReplicaChanges(change.ReplicaChange); !valid {
+		log.Infof(context.Background(), "did not undo change %v: due to %v", change.ChangeID, reason)
+		return
+	}
 	cs.undoReplicaChange(change.ReplicaChange)
 	log.Infof(context.Background(), "start removing from undoPending change_id=%v, range_id=%v, change=%v", change.ChangeID, change.rangeID, change)
 	log.Infof(context.Background(), "cs.pendingChanges has: %v, range state has: %v", printMapPendingChanges(cs.pendingChanges), printPendingChanges(rs.pendingChanges))
@@ -1482,7 +1508,6 @@ func printPendingChanges(changes []*pendingReplicaChange) string {
 func (cs *clusterState) createPendingChanges(changes ...ReplicaChange) []*pendingReplicaChange {
 	var pendingChanges []*pendingReplicaChange
 	now := cs.ts.Now()
-
 	for _, change := range changes {
 		cs.applyReplicaChange(change, true)
 		cs.changeSeqGen++
@@ -1505,12 +1530,84 @@ func (cs *clusterState) createPendingChanges(changes ...ReplicaChange) []*pendin
 	return pendingChanges
 }
 
-func (cs *clusterState) hasNoRangeIDOrHasPendingChanges(rangeID roachpb.RangeID) bool {
-	rstate, ok := cs.ranges[rangeID]
-	if ok && len(rstate.pendingChanges) > 0 {
-		log.VInfof(context.Background(), 2, "range %d has pending changes: %v", rangeID, rstate.pendingChanges)
+func (cs *clusterState) preCheckOnApplyReplicaChanges(changes []ReplicaChange) (valid bool, reason string) {
+	if len(changes) == 0 {
+		return false, "no changes to apply"
 	}
-	return !ok || len(rstate.pendingChanges) > 0
+	// preApplyReplicaChange is called before applying a change to the cluster
+	// state.
+	if len(changes) != 1 && len(changes) != 2 && len(changes) != 4 {
+		panic(fmt.Sprintf(
+			"applying replica changes must be of length 1, 2, or 4 but got %v in %v",
+			len(changes), changes))
+	}
+
+	rangeID := changes[0].rangeID
+	curr, ok := cs.ranges[rangeID]
+	if !ok {
+		return false, "range does not exist in cluster state"
+	}
+	if hasNoRangeIDOrHasPendingChanges := len(curr.pendingChanges) > 0; hasNoRangeIDOrHasPendingChanges {
+		log.VInfof(context.Background(), 2, "range %d has pending changes: %v", rangeID, curr.pendingChanges)
+		return false, "range has pending changes"
+	}
+
+	// 1. Check that all changes correspond to the same range. Panic otherwise.
+	// 2. Return early if range already has some pending changes or the range does not exist.
+	// Make a deep copy of the range state
+	copiedCurr := rangeState{
+		replicas: append([]StoreIDAndReplicaState{}, curr.replicas...),
+	}
+	if len(copiedCurr.pendingChanges) != 0 {
+		return false, "rangeState has pending changes"
+	}
+	if len(changes) == 0 {
+		return false, "no changes to apply"
+	}
+	for _, change := range changes {
+		if change.rangeID != rangeID {
+			panic(fmt.Sprintf("unexpected change rangeID %d != %d", change.rangeID, rangeID))
+		}
+		if change.isRemoval() {
+			copiedCurr.removeReplica(change.target.StoreID)
+		} else if change.isAddition() || change.isUpdate() {
+			pendingRepl := StoreIDAndReplicaState{
+				StoreID: change.target.StoreID,
+				ReplicaState: ReplicaState{
+					ReplicaIDAndType: change.next,
+				},
+			}
+			copiedCurr.setReplica(pendingRepl)
+		} else {
+			panic(fmt.Sprintf("unknown replica change %+v", change))
+		}
+	}
+	// check on the final state of currCopy and whether it is valid
+	return replicaSetIsValid(copiedCurr.replicas)
+}
+
+func (cs *clusterState) preCheckOnUndoReplicaChanges(change ReplicaChange) (bool, string) {
+	rangeID := change.rangeID
+	curr, ok := cs.ranges[rangeID]
+	if !ok {
+		return false, "range does not exist in cluster state"
+	}
+
+	copiedCurr := &rangeState{
+		replicas: append([]StoreIDAndReplicaState{}, curr.replicas...),
+	}
+	if change.isRemoval() || change.isUpdate() {
+		prevRepl := StoreIDAndReplicaState{
+			StoreID:      change.target.StoreID,
+			ReplicaState: change.prev,
+		}
+		copiedCurr.setReplica(prevRepl)
+	} else if change.isAddition() {
+		copiedCurr.removeReplica(change.target.StoreID)
+	} else {
+		panic(fmt.Sprintf("unknown replica change %+v", change))
+	}
+	return replicaSetIsValid(curr.replicas)
 }
 
 func (cs *clusterState) applyReplicaChange(change ReplicaChange, applyLoadChange bool) {
