@@ -76,6 +76,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/maps"
 )
 
 // adminSplitArgs creates an AdminSplitRequest for the provided split key.
@@ -4553,4 +4554,143 @@ func TestSplitWithExternalFilesFastStats(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestStoreRangeSplitRaftSnapshotAfterRHSRebalanced tests that a replica that
+// learns about a split through a snapshot after the RHS has been rebalanced
+// away correctly deletes the RHS replica's on-disk data.
+//
+// Serves as a regression test for
+// https://github.com/cockroachdb/cockroach/issues/73462.
+func TestStoreRangeSplitRaftSnapshotAfterRHSRebalanced(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.WithIssue(t, 73462)
+
+	ctx := context.Background()
+	// Start a 5 node cluster.
+	tc := testcluster.StartTestCluster(t, 5, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	store0 := tc.GetFirstStoreFromServer(t, 0)
+	store2 := tc.GetFirstStoreFromServer(t, 2)
+	distSender := tc.Servers[0].DistSenderI().(kv.Sender)
+
+	// Create a scratch range and upreplicate to stores 2 and 3.
+	keyStart := tc.ScratchRange(t)
+	repl := store0.LookupReplica(roachpb.RKey(keyStart))
+	keyEnd := repl.Desc().EndKey.AsRawKey()
+	keyD := keyStart.Next().Next().Next().Next()
+
+	tc.AddVotersOrFatal(t, keyStart, tc.Targets(1, 2)...)
+	tc.WaitForValues(t, keyStart, []int64{0, 0, 0, 0, 0})
+
+	// Put some keys in [d, /Max) to ensure that the post-split RHS will have
+	// some data. When we learn about the split through the snapshot, we expect
+	// to delete data in the uncontained key range of [keyD, /Max). Adding some
+	// data here allows us to make this assertion.
+	key := keyD
+	for i := 0; i < 10; i++ {
+		key = key.Next()
+		if _, pErr := kv.SendWrapped(ctx, distSender, incrementArgs(key, 1)); pErr != nil {
+			t.Fatal(pErr)
+		}
+		tc.WaitForValues(t, key, []int64{1, 1, 1, 0, 0})
+	}
+
+	// Start dropping all Raft traffic to store2.
+	aRepl0 := store0.LookupReplica(roachpb.RKey(keyStart))
+	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
+		rangeID:                    aRepl0.RangeID,
+		IncomingRaftMessageHandler: store2,
+		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{},
+	})
+
+	// Split at keyD: [keyStart, keyD) and [keyD, /Max)
+	if _, pErr := kv.SendWrapped(ctx, distSender, adminSplitArgs(keyD)); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Move the [keyD, /Max) replica from store2 to store4.
+	rhsDesc := store0.LookupReplica(roachpb.RKey(keyD)).Desc()
+	tc.RemoveVotersOrFatal(t, keyD, tc.Target(2))
+	tc.AddVotersOrFatal(t, keyD, tc.Target(4))
+
+	// Transfer the lease for [keyD, /Max) to store4.
+	tc.TransferRangeLeaseOrFatal(t, *rhsDesc, tc.Target(4))
+
+	// Move the [keyD, /Max) replica from store0 to store2. This allows us to
+	// assert store0 and store2 have the same data below, once we've allowed
+	// store2 to catch up via a snapshot.
+	tc.RemoveVotersOrFatal(t, keyD, tc.Target(0))
+	tc.AddVotersOrFatal(t, keyD, tc.Target(3))
+
+	// Truncate the logs of the LHS to ensure store2 needs to be caught up using a
+	// snapshot.
+	index := func() kvpb.RaftIndex {
+		repl := store0.LookupReplica(roachpb.RKey(keyStart))
+		index := repl.GetLastIndex()
+		truncArgs := &kvpb.TruncateLogRequest{
+			RequestHeader: kvpb.RequestHeader{Key: keyStart},
+			Index:         index + 1,
+			RangeID:       repl.RangeID,
+		}
+		if _, err := kv.SendWrapped(ctx, distSender, truncArgs); err != nil {
+			t.Fatal(err)
+		}
+		waitForTruncationForTesting(t, repl, index)
+		return index
+	}()
+
+	beforeRaftSnaps := store2.Metrics().RangeSnapshotsAppliedByVoters.Count()
+
+	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
+		rangeID:                    aRepl0.RangeID,
+		IncomingRaftMessageHandler: store2,
+		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
+			dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
+				// Make sure that even going forward no MsgApp for what we just
+				// truncated can make it through. The Raft transport is asynchronous so
+				// this is necessary to make the test pass reliably - otherwise the
+				// follower on store2 may catch up without needing a snapshot, tripping
+				// up the test.
+				//
+				// NB: the Index on the message is the log index that _precedes_ any of
+				// the entries in the MsgApp, so filter where msg.Index < index, not <=
+				// index.
+				return req.Message.Type == raftpb.MsgApp && kvpb.RaftIndex(req.Message.Index) < index
+			},
+			dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
+			dropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
+		},
+	})
+
+	// Wait for all replicas to catch up. This will require a Raft snapshot to
+	// store2.
+	testutils.SucceedsSoon(t, func() error {
+		afterRaftSnaps := store2.Metrics().RangeSnapshotsAppliedByVoters.Count()
+		if afterRaftSnaps <= beforeRaftSnaps {
+			return errors.New("expected store2 to apply at least 1 additional raft snapshot")
+		}
+		getKeySet := func(engine storage.Engine) map[string]struct{} {
+			kvs, err := storage.Scan(context.Background(), engine, keyStart, keyEnd, 0)
+			require.NoError(t, err)
+			out := map[string]struct{}{}
+			for _, kv := range kvs {
+				out[string(kv.Key.Key)] = struct{}{}
+			}
+			return out
+		}
+		storeKeys0 := getKeySet(store0.StateEngine())
+		storeKeys2 := getKeySet(store2.StateEngine())
+		if !maps.Equal(storeKeys0, storeKeys2) {
+			return fmt.Errorf(
+				"store0 and store2 have different keys: %s != %s", storeKeys0, storeKeys2,
+			)
+		}
+		return nil
+	})
 }
