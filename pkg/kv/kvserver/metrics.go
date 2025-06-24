@@ -249,6 +249,13 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
+	metaReqCPUNanos = metric.Metadata{
+		Name:        "replicas.cpunanospersecond",
+		Help:        "Nanoseconds of CPU time in Replica request processing including evaluation but not replication",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
 	// Storage metrics.
 	metaLiveBytes = metric.Metadata{
 		Name:        "livebytes",
@@ -3207,29 +3214,6 @@ type StoreMetrics struct {
 	DiskWriteMaxBytesPerSecond *metric.Gauge
 }
 
-type tenantMetricsRef struct {
-	// All fields are internal. Don't access them.
-
-	_tenantID roachpb.TenantID
-	_state    int32 // atomic; 0=usable 1=poisoned
-
-	// _stack helps diagnose use-after-release when it occurs.
-	// This field is populated in releaseTenant and printed
-	// in assertions on failure.
-	_stack struct {
-		syncutil.Mutex
-		debugutil.SafeStack
-	}
-}
-
-func (ref *tenantMetricsRef) assert(ctx context.Context) {
-	if atomic.LoadInt32(&ref._state) != 0 {
-		ref._stack.Lock()
-		defer ref._stack.Unlock()
-		log.FatalfDepth(ctx, 1, "tenantMetricsRef already finalized in:\n%s", ref._stack.SafeStack)
-	}
-}
-
 // TenantsStorageMetrics are metrics which are aggregated over all tenants
 // present on the server. The struct maintains child metrics used by each
 // tenant to track their individual values. The struct expects that children
@@ -3238,6 +3222,7 @@ func (ref *tenantMetricsRef) assert(ctx context.Context) {
 type TenantsStorageMetrics struct {
 	// NB: If adding more metrics to this struct, be sure to
 	// also update tenantsStorageMetricsSet().
+	ReqCPUNanos    *aggmetric.AggCounterFloat64
 	LiveBytes      *aggmetric.AggGauge
 	KeyBytes       *aggmetric.AggGauge
 	ValBytes       *aggmetric.AggGauge
@@ -3274,6 +3259,7 @@ type TenantsStorageMetrics struct {
 // see kvbase.TenantsStorageMetricsSet for public access. Assigned in init().
 func tenantsStorageMetricsSet() map[string]struct{} {
 	return map[string]struct{}{
+		metaReqCPUNanos.Name:    {},
 		metaLiveBytes.Name:      {},
 		metaKeyBytes.Name:       {},
 		metaValBytes.Name:       {},
@@ -3304,7 +3290,7 @@ func (sm *TenantsStorageMetrics) MetricStruct() {}
 // method are reference counted with decrements occurring in the corresponding
 // releaseTenant call. This method must be called prior to adding or subtracting
 // MVCC stats.
-func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) *tenantMetricsRef {
+func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) *tenantStorageMetrics {
 	// incRef increments the reference count if it is not already zero indicating
 	// that the struct has already been destroyed.
 	incRef := func(m *tenantStorageMetrics) (alreadyDestroyed bool) {
@@ -3319,15 +3305,13 @@ func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) *tenan
 	for {
 		if m, ok := sm.tenants.Load(tenantID); ok {
 			if alreadyDestroyed := incRef(m); !alreadyDestroyed {
-				return &tenantMetricsRef{
-					_tenantID: tenantID,
-				}
+				return m
 			}
 			// Somebody else concurrently took the reference count to zero, go back
 			// around. Because of the locking in releaseTenant, we know that we'll
 			// find a different value or no value at all on the next iteration.
 		} else {
-			m := &tenantStorageMetrics{}
+			m := &tenantStorageMetrics{tenantID: tenantID}
 			m.mu.Lock()
 			_, loaded := sm.tenants.LoadOrStore(tenantID, m)
 			if loaded {
@@ -3338,6 +3322,7 @@ func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) *tenan
 			// Successfully stored a new instance, initialize it and then unlock it.
 			tenantIDStr := tenantID.String()
 			m.mu.refCount++
+			m.ReqCPUNanos = sm.ReqCPUNanos.AddChild(tenantIDStr)
 			m.LiveBytes = sm.LiveBytes.AddChild(tenantIDStr)
 			m.KeyBytes = sm.KeyBytes.AddChild(tenantIDStr)
 			m.ValBytes = sm.ValBytes.AddChild(tenantIDStr)
@@ -3359,9 +3344,7 @@ func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) *tenan
 			m.SysCount = sm.SysCount.AddChild(tenantIDStr)
 			m.AbortSpanBytes = sm.AbortSpanBytes.AddChild(tenantIDStr)
 			m.mu.Unlock()
-			return &tenantMetricsRef{
-				_tenantID: tenantID,
-			}
+			return m
 		}
 	}
 }
@@ -3369,27 +3352,27 @@ func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) *tenan
 // releaseTenant releases the reference to the metrics for this tenant which was
 // acquired with acquireTenant. It will fatally log if no entry exists for this
 // tenant.
-func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, ref *tenantMetricsRef) {
-	m := sm.getTenant(ctx, ref) // NB: asserts against use-after-release
-	if atomic.SwapInt32(&ref._state, 1) != 0 {
-		ref.assert(ctx) // this will fatal
-		return          // unreachable
-	}
-	ref._stack.Lock()
-	ref._stack.SafeStack = debugutil.Stack()
-	ref._stack.Unlock()
+func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, m *tenantStorageMetrics) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.mu.released.Load() {
+		log.FatalfDepth(ctx, 1, "tenant metrics already released in:\n%s", m.mu.stack)
+	}
 	m.mu.refCount--
-	if m.mu.refCount < 0 {
-		log.Fatalf(ctx, "invalid refCount on metrics for tenant %v: %d", ref._tenantID, m.mu.refCount)
-	} else if m.mu.refCount > 0 {
+	if n := m.mu.refCount; n < 0 {
+		log.Fatalf(ctx, "invalid refCount on metrics for tenant %v: %d", m.tenantID, n)
+	} else if n > 0 {
 		return
 	}
+
+	m.mu.released.Store(true)
+	m.mu.stack = debugutil.Stack()
 
 	// The refCount is zero, delete this instance after destroying its metrics.
 	// Note that concurrent attempts to create an instance will detect the zero
 	// refCount value and construct a new instance.
+	m.ReqCPUNanos.Unlink() // counter
+	m.ReqCPUNanos = nil
 	for _, gptr := range []**aggmetric.Gauge{
 		&m.LiveBytes,
 		&m.KeyBytes,
@@ -3417,27 +3400,29 @@ func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, ref *tenantM
 		(*gptr).Unlink()
 		*gptr = nil
 	}
-	sm.tenants.Delete(ref._tenantID)
+	sm.tenants.Delete(m.tenantID)
 }
 
-// getTenant is a helper method used to retrieve the metrics for a tenant. The
-// call will log fatally if no such tenant has been previously acquired.
-func (sm *TenantsStorageMetrics) getTenant(
-	ctx context.Context, ref *tenantMetricsRef,
-) *tenantStorageMetrics {
-	ref.assert(ctx)
-	m, ok := sm.tenants.Load(ref._tenantID)
-	if !ok {
-		log.Fatalf(ctx, "no metrics exist for tenant %v", ref._tenantID)
-	}
-	return m
-}
-
+// tenantStorageMetrics is a struct that holds the metrics for all replicas (
+// within a Store) of a given tenant.
+//
+// Whenever it is guaranteed that the replica is not destroyed, the metrics
+// fields can be accessed directly (for example, when holding raftMu and having
+// previously checked the replica's destroyStatus).
+//
+// Whenever this is *not* guaranteed, use `TenantsStorageMetrics.acquireTenant`
+// ( followed by releaseTenant after completion of usage) instead to avoid
+// racing with a potential concurrent attempt to release the metrics.
 type tenantStorageMetrics struct {
-	mu struct {
+	tenantID roachpb.TenantID
+	mu       struct {
 		syncutil.Mutex
 		refCount int
+		released atomic.Bool // allowed to read without holding mu
+		stack    debugutil.SafeStack
 	}
+
+	ReqCPUNanos *aggmetric.CounterFloat64
 
 	LiveBytes      *aggmetric.Gauge
 	KeyBytes       *aggmetric.Gauge
@@ -3461,9 +3446,18 @@ type tenantStorageMetrics struct {
 	AbortSpanBytes *aggmetric.Gauge
 }
 
+func (tm *tenantStorageMetrics) assert(ctx context.Context) {
+	if tm.mu.released.Load() {
+		tm.mu.Lock()
+		defer tm.mu.Unlock()
+		log.Fatalf(ctx, "tenant metrics already released in:\n%s", tm.mu.stack)
+	}
+}
+
 func newTenantsStorageMetrics() *TenantsStorageMetrics {
 	b := aggmetric.MakeBuilder(multitenant.TenantIDLabel)
 	sm := &TenantsStorageMetrics{
+		ReqCPUNanos:    b.CounterFloat64(metaReqCPUNanos),
 		LiveBytes:      b.Gauge(metaLiveBytes),
 		KeyBytes:       b.Gauge(metaKeyBytes),
 		ValBytes:       b.Gauge(metaValBytes),
@@ -4020,10 +4014,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 // single snapshot of these gauges in the registry might mix the values of two
 // subsequent updates.
 func (sm *TenantsStorageMetrics) incMVCCGauges(
-	ctx context.Context, ref *tenantMetricsRef, delta enginepb.MVCCStats,
+	ctx context.Context, tm *tenantStorageMetrics, delta enginepb.MVCCStats,
 ) {
-	ref.assert(ctx)
-	tm := sm.getTenant(ctx, ref)
+	tm.assert(ctx)
 	tm.LiveBytes.Inc(delta.LiveBytes)
 	tm.KeyBytes.Inc(delta.KeyBytes)
 	tm.ValBytes.Inc(delta.ValBytes)
@@ -4047,17 +4040,17 @@ func (sm *TenantsStorageMetrics) incMVCCGauges(
 }
 
 func (sm *TenantsStorageMetrics) addMVCCStats(
-	ctx context.Context, ref *tenantMetricsRef, delta enginepb.MVCCStats,
+	ctx context.Context, tm *tenantStorageMetrics, delta enginepb.MVCCStats,
 ) {
-	sm.incMVCCGauges(ctx, ref, delta)
+	sm.incMVCCGauges(ctx, tm, delta)
 }
 
 func (sm *TenantsStorageMetrics) subtractMVCCStats(
-	ctx context.Context, ref *tenantMetricsRef, delta enginepb.MVCCStats,
+	ctx context.Context, tm *tenantStorageMetrics, delta enginepb.MVCCStats,
 ) {
 	var neg enginepb.MVCCStats
 	neg.Subtract(delta)
-	sm.incMVCCGauges(ctx, ref, neg)
+	sm.incMVCCGauges(ctx, tm, neg)
 }
 
 func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
