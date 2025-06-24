@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -124,7 +125,9 @@ func (m cephManager) install(ctx context.Context) {
 		rgwCmd = rgwCmd + ` --ssl-certificate="$(base64 -w0 certs/node.crt)" --ssl-private-key="$(base64 -w0 certs/node.key)"`
 	}
 	m.run(ctx, `starting object gateway`, rgwCmd)
-
+	// We have seen occasional failures in creating users, so we
+	// wait until a read only request succeeds before proceeding.
+	m.checkRGW(ctx)
 	m.run(ctx, `creating backup user`,
 		`sudo radosgw-admin user create --uid=backup --display-name=backup`)
 	m.run(ctx, `add keys to the user`,
@@ -165,4 +168,19 @@ func (m cephManager) run(ctx context.Context, msg string, cmd ...string) {
 	m.t.Status(cmd)
 	m.c.Run(ctx, option.WithNodes(m.cephNodes), cmd...)
 	m.t.Status(msg, " done")
+}
+
+// checkRGW verifies that the Ceph Object Gateway is up.
+func (m cephManager) checkRGW(ctx context.Context) {
+	m.t.Status("waiting for Ceph Object Gateway...")
+	cmd := `sudo radosgw-admin user list`
+	var err error
+	for i := 0; i < 10; i++ {
+		// Sleep for few seconds, then try the command.
+		time.Sleep(2 * time.Second)
+		if err = m.c.RunE(ctx, option.WithNodes(m.cephNodes), cmd); err == nil {
+			return
+		}
+	}
+	m.t.Error("Ceph Object Gateway not running", err)
 }
