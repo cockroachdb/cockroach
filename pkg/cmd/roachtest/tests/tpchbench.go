@@ -54,7 +54,7 @@ func runTPCHBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpchBen
 	t.Status("starting nodes")
 	c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), c.CRDBNodes())
 
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
 		conn := c.Conn(ctx, t.L(), 1)
 		defer conn.Close()

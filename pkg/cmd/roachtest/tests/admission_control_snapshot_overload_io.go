@@ -190,7 +190,7 @@ func runAdmissionControlSnapshotOverloadIO(
 	}
 
 	t.Status(fmt.Sprintf("starting kv workload thread (<%s)", time.Minute))
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
 
 		labels := map[string]string{

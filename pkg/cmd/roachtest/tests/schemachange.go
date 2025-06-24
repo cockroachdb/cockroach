@@ -40,7 +40,7 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
 
-			m := c.NewMonitor(ctx, c.All())
+			m := c.NewDeprecatedMonitor(ctx, c.All())
 			m.Go(func(ctx context.Context) error {
 				t.Status("loading fixture")
 				if _, err := db.Exec(
@@ -60,7 +60,7 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 				}, task.Name(fmt.Sprintf(`kv-%d`, node)))
 			}
 
-			m = c.NewMonitor(ctx, c.All())
+			m = c.NewDeprecatedMonitor(ctx, c.All())
 			m.Go(func(ctx context.Context) error {
 				t.Status("running schema change tests")
 				return waitForSchemaChanges(ctx, t.L(), db)
@@ -372,7 +372,7 @@ func makeSchemaChangeBulkIngestTest(
 
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmdWrite)
 
-			m := c.NewMonitor(ctx, c.CRDBNodes())
+			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
 			indexDuration := length
 			if c.IsLocal() {

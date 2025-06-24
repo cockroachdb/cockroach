@@ -4400,7 +4400,7 @@ FROM
 		// 1. Nothing special, fully self contained function.
 		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { Schema } . { UniqueName } (i int, j int) RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
 		// 2. 1 or more table or type references spread across parameters, return types, or the function body.
-		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { Schema } . { UniqueName } ({ ParamRefs }) RETURNS { ReturnRefs } LANGUAGE SQL AS $$ SELECT NULL WHERE { BodyRefs } $$`},
+		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { Schema } . { UniqueName } ({ ParamRefs }) RETURNS { ReturnRefs } LANGUAGE SQL AS $FUNC_BODY$ SELECT NULL WHERE { BodyRefs } $FUNC_BODY$`},
 		// 3. Reference a table that does not exist.
 		{pgcode.UndefinedTable, `CREATE FUNCTION { UniqueName } () RETURNS VOID LANGUAGE SQL AS $$ SELECT * FROM "ThisTableDoesNotExist" $$`},
 		// 4. Reference a UDT that does not exist.
@@ -4408,7 +4408,7 @@ FROM
 		// 5. Reference an Enum that's in the process of being dropped
 		{pgcode.UndefinedObject, `CREATE FUNCTION { UniqueName } (IN p1 { NonPublicEnum }) RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
 		// 6. Reference an Enum value that's in the process of being dropped
-		{pgcode.InvalidParameterValue, `CREATE FUNCTION { UniqueName } () RETURNS VOID LANGUAGE SQL AS $$ SELECT { NonPublicEnumMember } $$`},
+		{pgcode.InvalidParameterValue, `CREATE FUNCTION { UniqueName } () RETURNS VOID LANGUAGE SQL AS $FUNC_BODY$ SELECT { NonPublicEnumMember } $FUNC_BODY$`},
 	}, placeholderMap)
 	if err != nil {
 		return nil, err
@@ -5342,7 +5342,7 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 		return nil, err
 	}
 
-	triggerFunction := fmt.Sprintf(`CREATE FUNCTION %s() RETURNS TRIGGER AS $$ BEGIN %s;RETURN NULL;END; $$ LANGUAGE PLpgSQL`, triggerFunctionName, selectStmt.sql)
+	triggerFunction := fmt.Sprintf(`CREATE FUNCTION %s() RETURNS TRIGGER AS $FUNC_BODY$ BEGIN %s;RETURN NULL;END; $FUNC_BODY$ LANGUAGE PLpgSQL`, triggerFunctionName, selectStmt.sql)
 
 	og.LogMessage(fmt.Sprintf("Created trigger function %s", triggerFunction))
 

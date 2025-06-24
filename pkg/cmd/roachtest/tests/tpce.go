@@ -201,7 +201,7 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 	}
 
 	if opts.setupType == usingTPCEInit && !t.SkipInit() {
-		m := c.NewMonitor(ctx, c.CRDBNodes())
+		m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
 			estimatedSetupTimeStr := ""
 			if opts.estimatedSetupTime != 0 {
@@ -223,7 +223,7 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 		return
 	}
 
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
 		t.Status("running workload")
 		workloadDuration := opts.workloadDuration

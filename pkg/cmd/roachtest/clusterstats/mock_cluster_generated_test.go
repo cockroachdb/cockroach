@@ -572,23 +572,23 @@ func (mr *MockClusterMockRecorder) Name() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockCluster)(nil).Name))
 }
 
-// NewMonitor mocks base method.
-func (m *MockCluster) NewMonitor(arg0 context.Context, arg1 ...option.Option) cluster.Monitor {
+// NewDeprecatedMonitor mocks base method.
+func (m *MockCluster) NewDeprecatedMonitor(arg0 context.Context, arg1 ...option.Option) cluster.Monitor {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0}
 	for _, a := range arg1 {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "NewMonitor", varargs...)
+	ret := m.ctrl.Call(m, "NewDeprecatedMonitor", varargs...)
 	ret0, _ := ret[0].(cluster.Monitor)
 	return ret0
 }
 
-// NewMonitor indicates an expected call of NewMonitor.
-func (mr *MockClusterMockRecorder) NewMonitor(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
+// NewDeprecatedMonitor indicates an expected call of NewDeprecatedMonitor.
+func (mr *MockClusterMockRecorder) NewDeprecatedMonitor(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0}, arg1...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewMonitor", reflect.TypeOf((*MockCluster)(nil).NewMonitor), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewDeprecatedMonitor", reflect.TypeOf((*MockCluster)(nil).NewDeprecatedMonitor), varargs...)
 }
 
 // Node mocks base method.

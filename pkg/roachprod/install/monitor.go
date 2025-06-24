@@ -316,7 +316,7 @@ func (m *monitorNode) monitorNode(ctx context.Context, l *logger.Logger) {
 	if err := sess.Wait(); err != nil {
 		// If we got an error waiting for the session but the context
 		// is already canceled, do not send an error through the
-		// channel; context cancelation happens at the user's request
+		// channel; context cancellation happens at the user's request
 		// or when the test finishes. In either case, the monitor
 		// should quiesce. Reporting the error is confusing and can be
 		// noisy in the case of multiple monitors.

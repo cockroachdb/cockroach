@@ -127,6 +127,7 @@ func registerFollowerReads(r registry.Registry) {
 		),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+		Monitor:          true,
 		Randomized:       true,
 		Run:              runFollowerReadsMixedVersionSingleRegionTest,
 	})
@@ -142,6 +143,7 @@ func registerFollowerReads(r registry.Registry) {
 		),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+		Monitor:          true,
 		Randomized:       true,
 		Run:              runFollowerReadsMixedVersionGlobalTableTest,
 	})

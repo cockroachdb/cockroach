@@ -75,7 +75,7 @@ func registerYCSB(r registry.Registry) {
 		require.NoError(t, db.Close())
 
 		t.Status("running workload")
-		m := c.NewMonitor(ctx, c.CRDBNodes())
+		m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
 			var args string
 			args += " --ramp=" + roachtestutil.IfLocal(c, "0s", "2m")
