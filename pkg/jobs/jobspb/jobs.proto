@@ -1196,33 +1196,7 @@ message TimestampSpansMap {
 }
 
 message ChangefeedProgress {
-  reserved 1;
-
-  // Checkpoint describes a list of spans that the changefeed has progressed to
-  // at or above the specified timestamp.  This is used for situations where
-  // some spans are significantly behind the rest, such as during backfills or
-  // if specific spans are having issues progressing.  On restart, the
-  // changefeed will forward the specified spans to the specified timestamp.
-  // TODO(#139734): Delete this nested message type.
-  message Checkpoint {
-    option deprecated = true;
-    repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
-    util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
-
-    // NOTE: When adding fields to this message, make sure to also update IsEmpty.
-  }
-
-  reserved 2;
-  // Checkpoint is the deprecated span-level checkpoint for a
-  // changefeed. It consists of a list of spans and a single timestamp
-  // representing the minimum resolved timestamp of the spans.
-  // It is now deprecated in favor of SpanLevelCheckpoint.
-  //
-  // Invariant: At most one of Checkpoint and SpanLevelCheckpoint should be
-  // non-nil at any time.
-  //
-  // TODO(#139734): Delete this field and mark field number as reserved.
-  Checkpoint checkpoint = 4 [deprecated=true];
+  reserved 1, 2, 4;
 
   // ProtectedTimestampRecord is the ID of the protected timestamp record
   // corresponding to this job. While the job ought to clean up the record

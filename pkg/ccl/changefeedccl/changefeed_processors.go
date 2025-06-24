@@ -590,34 +590,18 @@ func makeKVFeedMonitoringCfg(
 }
 
 // getInitialHighWaterAndSpans returns the initial highwater and spans the
-// aggregator is responsible for watching based on ca.spec. InitialHighWater is
-// the minimal resolved timestamps of all InitialResolved timestamps.
-func (ca *changeAggregator) getInitialHighWaterAndSpans() (hlc.Timestamp, []roachpb.Span) {
-	if ca.spec.InitialHighWater != nil {
-		spans := make([]roachpb.Span, 0, len(ca.spec.Watches))
-		for _, watch := range ca.spec.Watches {
-			spans = append(spans, watch.Span)
-		}
-		return *ca.spec.InitialHighWater, spans
-	} else {
-		// Keep initialHighWater as the minimum of all InitialResolved timestamps.
-		// If there are any zero InitialResolved timestamps, initial scan is
-		// ongoing. If there are no zero InitialResolved timestamps, initial scan
-		// is not required.
-		var initialHighWater hlc.Timestamp
-		spans := make([]roachpb.Span, 0, len(ca.spec.Watches))
-		for i, watch := range ca.spec.Watches {
-			spans = append(spans, watch.Span)
-			if i == 0 {
-				initialHighWater = watch.InitialResolved
-				continue
-			}
-			if watch.InitialResolved.Less(initialHighWater) {
-				initialHighWater = watch.InitialResolved
-			}
-		}
-		return initialHighWater, spans
+// aggregator is responsible for watching based on ca.spec.
+func (ca *changeAggregator) getInitialHighWaterAndSpans() (hlc.Timestamp, []roachpb.Span, error) {
+	if ca.spec.InitialHighWater == nil {
+		return hlc.Timestamp{}, nil,
+			errors.AssertionFailedf("initial highwater is missing in change aggregator spec")
 	}
+	initialHighWater := *ca.spec.InitialHighWater
+	spans := make([]roachpb.Span, 0, len(ca.spec.Watches))
+	for _, watch := range ca.spec.Watches {
+		spans = append(spans, watch.Span)
+	}
+	return initialHighWater, spans, nil
 }
 
 // setupSpans is called on start to extract the spans for this changefeed as a
@@ -627,29 +611,13 @@ func (ca *changeAggregator) getInitialHighWaterAndSpans() (hlc.Timestamp, []roac
 // used to filter out some previously emitted rows, and by the cloudStorageSink
 // to name its output files in lexicographically monotonic fashion.
 func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err error) {
-	initialHighWater, spans := ca.getInitialHighWaterAndSpans()
-	ca.frontier, err = resolvedspan.NewAggregatorFrontier(ca.spec.Feed.StatementTime, initialHighWater, spans...)
+	initialHighWater, spans, err := ca.getInitialHighWaterAndSpans()
 	if err != nil {
 		return nil, err
 	}
-
-	// Convert the legacy checkpoint to the new span-level checkpoint so that we
-	// can ignore it from this point on.
-	if !ca.spec.Checkpoint.IsEmpty() {
-		if ca.spec.SpanLevelCheckpoint != nil {
-			return nil, errors.AssertionFailedf("both legacy and current checkpoint set on change aggregator spec")
-		}
-
-		// This conversion undoes an unnecessary conversion when the spec
-		// was created in the first place.
-		//lint:ignore SA1019 deprecated usage
-		legacyCheckpoint := &jobspb.ChangefeedProgress_Checkpoint{
-			Spans:     ca.spec.Checkpoint.Spans,
-			Timestamp: ca.spec.Checkpoint.Timestamp,
-		}
-		statementTime := ca.spec.Feed.StatementTime
-		ca.spec.SpanLevelCheckpoint = checkpoint.ConvertFromLegacyCheckpoint(legacyCheckpoint, statementTime, initialHighWater)
-		ca.spec.Checkpoint.Reset()
+	ca.frontier, err = resolvedspan.NewAggregatorFrontier(ca.spec.Feed.StatementTime, initialHighWater, spans...)
+	if err != nil {
+		return nil, err
 	}
 
 	// Checkpointed spans are spans that were above the highwater mark, and we
@@ -1147,11 +1115,8 @@ func (cs *cachedState) SetHighwater(frontier hlc.Timestamp) {
 }
 
 // SetCheckpoint implements the eval.ChangefeedState interface.
-func (cs *cachedState) SetCheckpoint(checkpoint *jobspb.TimestampSpansMap) error {
-	// It's not necessary to do a version gate check here because this
-	// copy of the checkpoint is only used in-memory on a coordinator node that
-	// knows about the new field.
-	return cs.progress.Details.(*jobspb.Progress_Changefeed).Changefeed.SetCheckpoint(nil, checkpoint)
+func (cs *cachedState) SetCheckpoint(checkpoint *jobspb.TimestampSpansMap) {
+	cs.progress.Details.(*jobspb.Progress_Changefeed).Changefeed.SpanLevelCheckpoint = checkpoint
 }
 
 // AggregatorFrontierSpans returns an iterator over the spans in the aggregator
@@ -1845,8 +1810,6 @@ func (cf *changeFrontier) checkpointJobProgress(
 	cf.metrics.FrontierUpdates.Inc(1)
 	if cf.js.job != nil {
 		var ptsUpdated bool
-		//lint:ignore SA1019 deprecated usage
-		var legacyCheckpoint *jobspb.ChangefeedProgress_Checkpoint
 		if err := cf.js.job.DebugNameNoTxn(changefeedJobProgressTxnName).Update(cf.Ctx(), func(
 			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
@@ -1862,16 +1825,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 			}
 
 			changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
-			if cv.IsActive(cf.Ctx(), clusterversion.V25_2) {
-				if err := changefeedProgress.SetCheckpoint(nil, spanLevelCheckpoint); err != nil {
-					return err
-				}
-			} else {
-				legacyCheckpoint = checkpoint.ConvertToLegacyCheckpoint(spanLevelCheckpoint)
-				if err := changefeedProgress.SetCheckpoint(legacyCheckpoint, nil); err != nil {
-					return err
-				}
-			}
+			changefeedProgress.SpanLevelCheckpoint = spanLevelCheckpoint
 
 			if ptsUpdated, err = cf.manageProtectedTimestamps(ctx, txn, changefeedProgress); err != nil {
 				log.Warningf(ctx, "error managing protected timestamp record: %v", err)
@@ -1892,20 +1846,13 @@ func (cf *changeFrontier) checkpointJobProgress(
 			cf.lastProtectedTimestampUpdate = timeutil.Now()
 		}
 		if log.V(2) {
-			if cv.IsActive(cf.Ctx(), clusterversion.V25_2) {
-				log.Infof(cf.Ctx(), "change frontier persisted highwater=%s and checkpoint=%s",
-					frontier, spanLevelCheckpoint)
-			} else {
-				log.Infof(cf.Ctx(), "change frontier persisted highwater=%s and checkpoint=%s",
-					frontier, legacyCheckpoint)
-			}
+			log.Infof(cf.Ctx(), "change frontier persisted highwater=%s and checkpoint=%s",
+				frontier, spanLevelCheckpoint)
 		}
 	}
 
 	cf.localState.SetHighwater(frontier)
-	if err := cf.localState.SetCheckpoint(spanLevelCheckpoint); err != nil {
-		return false, err
-	}
+	cf.localState.SetCheckpoint(spanLevelCheckpoint)
 
 	return true, nil
 }
