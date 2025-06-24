@@ -4,6 +4,7 @@ go_library(
     name = "system",
     srcs = [
         "cache_line.go",
+        "endian.go",
         "num_cpu.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/system",

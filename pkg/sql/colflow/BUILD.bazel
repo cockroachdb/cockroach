@@ -134,6 +134,7 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/system",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
