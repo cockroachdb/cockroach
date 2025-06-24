@@ -1587,59 +1587,29 @@ func (ef *execFactory) ConstructUpdate(
 		return nil, errors.AssertionFailedf("execution requires all update columns have a fetch column")
 	}
 
-	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
-	fetchCols := makeColList(table, fetchColOrdSet)
-	updateCols := makeColList(table, updateColOrdSet)
-
-	// Create the table updater, which does the bulk of the work.
-	ru, err := row.MakeUpdater(
-		ef.planner.ExecCfg().Codec,
-		tabDesc,
-		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
-		ordinalsToIndexes(table, lockedIndexes),
-		updateCols,
-		fetchCols,
-		row.UpdaterDefault,
-		ef.planner.SessionData(),
-		&ef.planner.ExecCfg().Settings.SV,
-		ef.planner.ExecCfg().GetRowMetrics(ef.planner.SessionData().Internal),
-	)
-	if err != nil {
-		return nil, err
-	}
 
 	upd := updateNodePool.Get().(*updateNode)
 	*upd = updateNode{
 		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
-		run: updateRun{
-			tu:             tableUpdater{ru: ru},
-			checkOrds:      checks,
-			numPassthrough: len(passthrough),
-		},
 	}
 
-	upd.run.regionLocalInfo.setupEnforceHomeRegion(ef.planner, table, ru.UpdateCols,
-		upd.run.tu.ru.UpdateColIDtoRowIndex)
-
 	// If rows are not needed, no columns are returned.
+	var returnCols []catalog.Column
 	if rowsNeeded {
-		returnCols := makeColList(table, returnColOrdSet)
-
+		returnCols = makeColList(table, returnColOrdSet)
 		upd.columns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
 		// Add the passthrough columns to the returning columns.
 		upd.columns = append(upd.columns, passthrough...)
+	}
 
-		// Set the rowIdxToRetIdx for the mutation. Update returns the non-mutation
-		// columns specified, in the same order they are defined in the table.
-		//
-		// The Updater derives/stores the fetch columns of the mutation and
-		// since the return columns are always a subset of the fetch columns,
-		// we can use use the fetch columns to generate the mapping for the
-		// returned rows.
-		upd.run.rowIdxToRetIdx = row.ColMapping(ru.FetchCols, returnCols)
-		upd.run.rowsNeeded = true
+	// Create the table updater, which does the bulk of the work.
+	if err := ef.constructUpdateRun(
+		&upd.run, table, fetchColOrdSet, updateColOrdSet, returnColOrdSet, rowsNeeded, returnCols,
+		checks, passthrough, uniqueWithTombstoneIndexes, lockedIndexes,
+	); err != nil {
+		return nil, err
 	}
 
 	if autoCommit {
@@ -1658,6 +1628,137 @@ func (ef *execFactory) ConstructUpdate(
 	// We could use serializeNode here, but using rowCountNode is an
 	// optimization that saves on calls to Next() by the caller.
 	return &rowCountNode{source: upd}, nil
+}
+
+func (ef *execFactory) ConstructUpdateSwap(
+	input exec.Node,
+	table cat.Table,
+	fetchColOrdSet exec.TableColumnOrdinalSet,
+	updateColOrdSet exec.TableColumnOrdinalSet,
+	returnColOrdSet exec.TableColumnOrdinalSet,
+	passthrough colinfo.ResultColumns,
+	lockedIndexes cat.IndexOrdinals,
+	autoCommit bool,
+) (exec.Node, error) {
+	// TODO(radu): the execution code has an annoying limitation that the fetch
+	// columns must be a superset of the update columns, even when the "old" value
+	// of a column is not necessary. The optimizer code for pruning columns is
+	// aware of this limitation.
+	if !updateColOrdSet.SubsetOf(fetchColOrdSet) {
+		return nil, errors.AssertionFailedf("execution requires all update columns have a fetch column")
+	}
+
+	// For update swap, fetch columns need to include at least every column that
+	// could appear in the primary index.
+	primaryIndex := table.Index(cat.PrimaryIndex)
+	for i := 0; i < primaryIndex.ColumnCount(); i++ {
+		col := primaryIndex.Column(i)
+		if col.Kind() == cat.System {
+			continue
+		}
+		if !fetchColOrdSet.Contains(col.Ordinal()) {
+			return nil, errors.AssertionFailedf("fetch columns missing col %v", col.ColName())
+		}
+	}
+
+	rowsNeeded := !returnColOrdSet.Empty()
+	tabDesc := table.(*optTable).desc
+
+	upd := updateSwapNodePool.Get().(*updateSwapNode)
+	*upd = updateSwapNode{
+		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
+	}
+
+	// If rows are not needed, no columns are returned.
+	var returnCols []catalog.Column
+	if rowsNeeded {
+		returnCols = makeColList(table, returnColOrdSet)
+		upd.columns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
+		// Add the passthrough columns to the returning columns.
+		upd.columns = append(upd.columns, passthrough...)
+	}
+
+	// Create the table updater, which does the bulk of the work.
+	if err := ef.constructUpdateRun(
+		&upd.run, table, fetchColOrdSet, updateColOrdSet, returnColOrdSet, rowsNeeded,
+		returnCols, exec.CheckOrdinalSet{} /* checks */, passthrough,
+		nil /* uniqueWithTombstoneIndexes */, lockedIndexes,
+	); err != nil {
+		return nil, err
+	}
+
+	if autoCommit {
+		upd.enableAutoCommit()
+	}
+
+	// Serialize the data-modifying plan to ensure that no data is observed that
+	// hasn't been validated first. See the comments on BatchedNext() in
+	// plan_batch.go.
+	if rowsNeeded {
+		return &spoolNode{
+			singleInputPlanNode: singleInputPlanNode{&serializeNode{source: upd}},
+		}, nil
+	}
+
+	// We could use serializeNode here, but using rowCountNode is an
+	// optimization that saves on calls to Next() by the caller.
+	return &rowCountNode{source: upd}, nil
+}
+
+func (ef *execFactory) constructUpdateRun(
+	run *updateRun,
+	table cat.Table,
+	fetchColOrdSet exec.TableColumnOrdinalSet,
+	updateColOrdSet exec.TableColumnOrdinalSet,
+	returnColOrdSet exec.TableColumnOrdinalSet,
+	rowsNeeded bool,
+	returnCols []catalog.Column,
+	checks exec.CheckOrdinalSet,
+	passthrough colinfo.ResultColumns,
+	uniqueWithTombstoneIndexes cat.IndexOrdinals,
+	lockedIndexes cat.IndexOrdinals,
+) error {
+	tabDesc := table.(*optTable).desc
+	fetchCols := makeColList(table, fetchColOrdSet)
+	updateCols := makeColList(table, updateColOrdSet)
+
+	// Create the table updater.
+	ru, err := row.MakeUpdater(
+		ef.planner.ExecCfg().Codec,
+		tabDesc,
+		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
+		ordinalsToIndexes(table, lockedIndexes),
+		updateCols,
+		fetchCols,
+		row.UpdaterDefault,
+		ef.planner.SessionData(),
+		&ef.planner.ExecCfg().Settings.SV,
+		ef.planner.ExecCfg().GetRowMetrics(ef.planner.SessionData().Internal),
+	)
+	if err != nil {
+		return err
+	}
+
+	run.tu = tableUpdater{ru: ru}
+	run.checkOrds = checks
+	run.numPassthrough = len(passthrough)
+
+	run.regionLocalInfo.setupEnforceHomeRegion(ef.planner, table, ru.UpdateCols,
+		run.tu.ru.UpdateColIDtoRowIndex)
+
+	if rowsNeeded {
+		// Set the rowIdxToRetIdx for the mutation. Update returns the non-mutation
+		// columns specified, in the same order they are defined in the table.
+		//
+		// The Updater derives/stores the fetch columns of the mutation and
+		// since the return columns are always a subset of the fetch columns,
+		// we can use use the fetch columns to generate the mapping for the
+		// returned rows.
+		run.rowIdxToRetIdx = row.ColMapping(ru.FetchCols, returnCols)
+		run.rowsNeeded = true
+	}
+
+	return nil
 }
 
 func (ef *execFactory) ConstructUpsert(
@@ -1770,45 +1871,30 @@ func (ef *execFactory) ConstructDelete(
 	lockedIndexes cat.IndexOrdinals,
 	autoCommit bool,
 ) (exec.Node, error) {
-	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
-	fetchCols := makeColList(table, fetchColOrdSet)
-
-	// Create the table deleter, which does the bulk of the work.
-	rd := row.MakeDeleter(
-		ef.planner.ExecCfg().Codec,
-		tabDesc,
-		ordinalsToIndexes(table, lockedIndexes),
-		fetchCols,
-		ef.planner.SessionData(),
-		&ef.planner.ExecCfg().Settings.SV,
-		ef.planner.ExecCfg().GetRowMetrics(ef.planner.SessionData().Internal),
-	)
 
 	// Now make a delete node. We use a pool.
 	del := deleteNodePool.Get().(*deleteNode)
 	*del = deleteNode{
 		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
-		run: deleteRun{
-			td:             tableDeleter{rd: rd},
-			numPassthrough: len(passthrough),
-		},
 	}
 
 	// If rows are not needed, no columns are returned.
+	var returnCols []catalog.Column
 	if rowsNeeded {
-		returnCols := makeColList(table, returnColOrdSet)
+		returnCols = makeColList(table, returnColOrdSet)
 		// Delete returns the non-mutation columns specified, in the same
 		// order they are defined in the table.
 		del.columns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
-
 		// Add the passthrough columns to the returning columns.
 		del.columns = append(del.columns, passthrough...)
-
-		del.run.rowIdxToRetIdx = row.ColMapping(rd.FetchCols, returnCols)
-		del.run.rowsNeeded = true
 	}
+
+	// Create the table deleter, which does the bulk of the work.
+	ef.constructDeleteRun(
+		&del.run, table, fetchColOrdSet, rowsNeeded, returnCols, passthrough, lockedIndexes,
+	)
 
 	if autoCommit {
 		del.enableAutoCommit()
@@ -1826,6 +1912,103 @@ func (ef *execFactory) ConstructDelete(
 	// We could use serializeNode here, but using rowCountNode is an
 	// optimization that saves on calls to Next() by the caller.
 	return &rowCountNode{source: del}, nil
+}
+
+func (ef *execFactory) ConstructDeleteSwap(
+	input exec.Node,
+	table cat.Table,
+	fetchColOrdSet exec.TableColumnOrdinalSet,
+	returnColOrdSet exec.TableColumnOrdinalSet,
+	passthrough colinfo.ResultColumns,
+	lockedIndexes cat.IndexOrdinals,
+	autoCommit bool,
+) (exec.Node, error) {
+	// For delete swap, fetch columns need to include at least every column that
+	// could appear in the primary index.
+	primaryIndex := table.Index(cat.PrimaryIndex)
+	for i := 0; i < primaryIndex.ColumnCount(); i++ {
+		col := primaryIndex.Column(i)
+		if col.Kind() == cat.System {
+			continue
+		}
+		if !fetchColOrdSet.Contains(col.Ordinal()) {
+			return nil, errors.AssertionFailedf("fetch columns missing col %v", col.ColName())
+		}
+	}
+
+	rowsNeeded := !returnColOrdSet.Empty()
+	tabDesc := table.(*optTable).desc
+
+	// Now make a delete node. We use a pool.
+	del := deleteSwapNodePool.Get().(*deleteSwapNode)
+	*del = deleteSwapNode{
+		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
+	}
+
+	// If rows are not needed, no columns are returned.
+	var returnCols []catalog.Column
+	if rowsNeeded {
+		returnCols = makeColList(table, returnColOrdSet)
+		// Delete returns the non-mutation columns specified, in the same
+		// order they are defined in the table.
+		del.columns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
+		// Add the passthrough columns to the returning columns.
+		del.columns = append(del.columns, passthrough...)
+	}
+
+	// Create the table deleter, which does the bulk of the work.
+	ef.constructDeleteRun(
+		&del.run, table, fetchColOrdSet, rowsNeeded, returnCols, passthrough, lockedIndexes,
+	)
+
+	if autoCommit {
+		del.enableAutoCommit()
+	}
+
+	// Serialize the data-modifying plan to ensure that no data is observed that
+	// hasn't been validated first. See the comments on BatchedNext() in
+	// plan_batch.go.
+	if rowsNeeded {
+		return &spoolNode{
+			singleInputPlanNode: singleInputPlanNode{&serializeNode{source: del}},
+		}, nil
+	}
+
+	// We could use serializeNode here, but using rowCountNode is an
+	// optimization that saves on calls to Next() by the caller.
+	return &rowCountNode{source: del}, nil
+}
+
+func (ef *execFactory) constructDeleteRun(
+	run *deleteRun,
+	table cat.Table,
+	fetchColOrdSet exec.TableColumnOrdinalSet,
+	rowsNeeded bool,
+	returnCols []catalog.Column,
+	passthrough colinfo.ResultColumns,
+	lockedIndexes cat.IndexOrdinals,
+) {
+	tabDesc := table.(*optTable).desc
+	fetchCols := makeColList(table, fetchColOrdSet)
+
+	// Create the table deleter.
+	rd := row.MakeDeleter(
+		ef.planner.ExecCfg().Codec,
+		tabDesc,
+		ordinalsToIndexes(table, lockedIndexes),
+		fetchCols,
+		ef.planner.SessionData(),
+		&ef.planner.ExecCfg().Settings.SV,
+		ef.planner.ExecCfg().GetRowMetrics(ef.planner.SessionData().Internal),
+	)
+
+	run.td = tableDeleter{rd: rd}
+	run.numPassthrough = len(passthrough)
+
+	if rowsNeeded {
+		run.rowIdxToRetIdx = row.ColMapping(rd.FetchCols, returnCols)
+		run.rowsNeeded = true
+	}
 }
 
 func (ef *execFactory) ConstructDeleteRange(

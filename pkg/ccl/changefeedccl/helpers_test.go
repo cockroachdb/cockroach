@@ -1736,6 +1736,7 @@ func ChangefeedJobPermissionsTestSetup(t *testing.T, s TestServer) {
 
 		`CREATE USER adminUser`,
 		`GRANT ADMIN TO adminUser`,
+		`CREATE ROLE feedowner`,
 
 		`CREATE USER otherAdminUser`,
 		`GRANT ADMIN TO otherAdminUser`,
@@ -1747,6 +1748,7 @@ func ChangefeedJobPermissionsTestSetup(t *testing.T, s TestServer) {
 		`CREATE USER jobController with CONTROLJOB`,
 
 		`CREATE USER userWithAllGrants`,
+		`GRANT feedowner TO userWithAllGrants`,
 		`GRANT CHANGEFEED ON table_a TO userWithAllGrants`,
 		`GRANT CHANGEFEED ON table_b TO userWithAllGrants`,
 
