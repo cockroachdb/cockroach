@@ -23,25 +23,14 @@ import "gogoproto/gogo.proto";
 // ChangeAggregatorSpec is the specification for a processor that watches for
 // changes in a set of spans. Each span may cross multiple ranges.
 message ChangeAggregatorSpec {
+  reserved 5;
+
   message Watch {
-    optional util.hlc.Timestamp initial_resolved = 1 [(gogoproto.nullable) = false, deprecated=true];
+    reserved 1;
+
     optional roachpb.Span span = 2 [(gogoproto.nullable) = false];
   }
   repeated Watch watches = 1 [(gogoproto.nullable) = false];
-
-  // Checkpoint enables change aggregators to resume faster on restart.
-  // TODO(#139734): Delete this nested message type.
-  message Checkpoint {
-    option deprecated = true;
-    repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
-    optional util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
-
-    // NOTE: When adding fields to this message, make sure to also update IsEmpty.
-  }
-
-  // Change aggregator checkpoint
-  // TODO(#139734): Delete this field and mark field number as reserved.
-  optional Checkpoint checkpoint = 5 [(gogoproto.nullable) = false, deprecated=true];
 
   // Feed is the specification for this changefeed.
   optional cockroach.sql.jobs.jobspb.ChangefeedDetails feed = 2 [(gogoproto.nullable) = false];
