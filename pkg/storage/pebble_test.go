@@ -631,6 +631,10 @@ func (l *nonFatalLogger) Fatalf(format string, args ...interface{}) {
 	l.t.Logf(format, args...)
 }
 
+func (l *nonFatalLogger) Infof(format string, args ...interface{}) {
+	l.t.Logf(format, args...)
+}
+
 func TestPebbleValidateKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
