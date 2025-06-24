@@ -24,8 +24,53 @@ import (
 )
 
 type allocatorState struct {
+	// Locking.
+	//
+	// Now (for prototype):
+	//
 	// mu is a crude stopgap to make everything in the MMA thread-safe. Every
 	// method that implements the Allocator interface must acquire this mutex.
+	//
+	// Future (for production):
+	//
+	// The main concern with the cure approach is that mu is held while doing
+	// slow decision-making. That prevents (a) other decision-making, (b) blocks
+	// updates from AllocatorSync from other components that are not currently
+	// using MMA.
+	//
+	// Option 1 Release mu frequently:
+	//
+	// The allocatorState is deliberately tightly coupled and we want it to be
+	// internally consistent. We expect allocatorState.rebalanceStores to be the
+	// longest lived holder of mu. We could modify it so that after it computes
+	// the cluster means and computes the overloaded stores it releases mu, and
+	// then reacquires it when trying to shed for each overloaded store. Note
+	// that when replicateQueue and leaseQueue also call into MMA, those calls
+	// will be per range and will hold mu for a very short time.
+	//
+	// This option doesn't change the fact that effectively everything done by
+	// MMA is single threaded, so it cannot scale to consume more than 1 vCPU.
+	// However, we also would like MMA to be efficient enough that even beefy
+	// nodes don't spend more than 1 vCPU on MMA, so perhaps this is ok.
+	//
+	// Option 2: Copy-on-write:
+	//
+	// Unclear how to make cow efficient for these data-structures.
+	//
+	// Option 3: Queue updates:
+	//
+	// Read lock would be held for computing decisions and then these decisions
+	// would be queued for adding as pending changes to MMA state. Decisions can
+	// be returned to enacting module with the expected range descriptor,
+	// without waiting for the addition to the pending changes in MMA. The
+	// assumption here is that there will be few conflicts on a single range,
+	// and those rare conflicts will result in some decisions becoming noops.
+	// The problem is that long-lived read locks with write locks result in
+	// read-read contention (to prevent writer starvation). If we had a
+	// try-write-lock that could quickly return with failure then we could avoid
+	// this. We could of course build our own queueing mechanism instead of
+	// relying on the queueing in mutex.
+
 	mu syncutil.Mutex
 	cs *clusterState
 
