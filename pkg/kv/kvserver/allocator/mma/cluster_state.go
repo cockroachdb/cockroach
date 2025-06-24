@@ -810,7 +810,7 @@ func (s StoreIDAndReplicaState) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (s StoreIDAndReplicaState) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("s%v:%v", s.StoreID, s.ReplicaState.ReplicaIDAndType)
+	w.Printf("s%v:%v voterIsLagging:%v", s.StoreID, s.ReplicaState.ReplicaIDAndType, s.ReplicaState.VoterIsLagging)
 }
 
 // rangeState is periodically updated based on reporting by the leaseholder.
