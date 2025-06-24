@@ -298,7 +298,7 @@ func runCDCBenchScan(
 	opts, settings := makeCDCBenchOptions(c)
 
 	c.Start(ctx, t.L(), opts, settings, nData)
-	m := c.NewMonitor(ctx, nData.Merge(nCoord))
+	m := c.NewDeprecatedMonitor(ctx, nData.Merge(nCoord))
 
 	conn := c.Conn(ctx, t.L(), nData[0])
 	defer conn.Close()
@@ -482,7 +482,7 @@ func runCDCBenchWorkload(
 	}
 
 	c.Start(ctx, t.L(), opts, settings, nData)
-	m := c.NewMonitor(ctx, nData.Merge(nCoord))
+	m := c.NewDeprecatedMonitor(ctx, nData.Merge(nCoord))
 
 	conn := c.Conn(ctx, t.L(), nData[0])
 	defer conn.Close()

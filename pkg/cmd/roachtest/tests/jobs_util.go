@@ -105,7 +105,7 @@ func executeNodeShutdown(
 		return err
 	}
 
-	m := c.NewMonitor(ctx, cfg.crdbNodes)
+	m := c.NewDeprecatedMonitor(ctx, cfg.crdbNodes)
 	m.ExpectDeath()
 	m.Go(func(ctx context.Context) error {
 		ticker := time.NewTicker(1 * time.Second)

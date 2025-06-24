@@ -283,20 +283,6 @@ func (h *Helper) GoCommand(cmd string, nodes option.NodeListOption) context.Canc
 	}, task.Name(desc))
 }
 
-// ExpectDeath alerts the testing infrastructure that a node is
-// expected to die. Regular restarts as part of the mixedversion
-// testing are already taken into account. This function should only
-// be used by tests that perform their own node restarts or chaos
-// events.
-func (h *Helper) ExpectDeath() {
-	h.ExpectDeaths(1)
-}
-
-// ExpectDeaths is the general version of `ExpectDeath()`.
-func (h *Helper) ExpectDeaths(n int) {
-	h.runner.monitor.ExpectDeaths(n)
-}
-
 // ClusterVersion returns the currently active cluster version. Avoids
 // querying the database if we are not running migrations, since the
 // test runner has cached version of the cluster versions.

@@ -203,7 +203,7 @@ func runKVBench(ctx context.Context, t test.Test, c cluster.Cluster, b kvBenchSp
 	}
 	s := search.NewLineSearcher(100 /* min */, 10000000 /* max */, b.EstimatedMaxThroughput, initStepSize, precision)
 	searchPredicate := func(maxrate int) (bool, error) {
-		m := c.NewMonitor(ctx, c.CRDBNodes())
+		m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 		// Restart
 		m.ExpectDeaths(int32(len(c.CRDBNodes())))
 		// Wipe cluster before starting a new run because factors like load-based

@@ -191,7 +191,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			stmt := ""
 			err := func() error {
 				done := make(chan error, 1)
-				m := c.NewMonitor(ctx, c.Node(1))
+				m := c.NewDeprecatedMonitor(ctx, c.Node(1))
 				m.Go(func(context.Context) error {
 					// Generate can potentially panic in bad cases, so
 					// to avoid Go routines from dying we are going
