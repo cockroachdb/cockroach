@@ -501,7 +501,7 @@ func (a *allocatorState) rebalanceStores(
 }
 
 // SetStore implements the Allocator interface.
-func (a *allocatorState) SetStore(store roachpb.StoreDescriptor) {
+func (a *allocatorState) SetStore(store StoreAttributesAndLocality) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.cs.setStore(store)

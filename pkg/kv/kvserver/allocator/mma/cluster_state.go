@@ -1306,11 +1306,11 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// kvserver.{minLeaseLoadFraction, minReplicaLoadFraction}.
 		//
 		// We should actually be using the min of this threshold and the n-th
-		// ranked load (across all ranges) per dimension reported by the store in
-		// StoreDescriptor, where say n is 50 (since it is possible that the store
-		// has a massive range that consumes 50% of the load, and another 100
-		// ranges that consume 0.5% each, and the only way to restore health is to
-		// shed those 100 ranges).
+		// ranked load (across all ranges) per dimension reported by the store,
+		// where say n is 50 (since it is possible that the store has a massive
+		// range that consumes 50% of the load, and another 100 ranges that
+		// consume 0.5% each, and the only way to restore health is to shed those
+		// 100 ranges).
 		const (
 			// minLeaseLoadFraction is the minimum fraction of the local store's load a
 			// lease must contribute, in order to consider it worthwhile rebalancing when
@@ -1611,36 +1611,30 @@ func (cs *clusterState) undoChangeLoadDelta(change ReplicaChange) {
 	cs.nodes[ss.NodeID].adjustedCPU -= change.loadDelta[CPURate]
 }
 
-// setStore updates the store descriptor in the cluster state. If the store
-// hasn't been seen before, it is also added to the cluster state.
+// setStore updates the store attributes and locality in the cluster state. If
+// the store hasn't been seen before, it is also added to the cluster state.
 //
 // TODO: We currently assume that the locality and attributes associated with a
 // store/node are fixed. This is a reasonable assumption for the locality,
 // however it is not for the attributes.
-func (cs *clusterState) setStore(desc roachpb.StoreDescriptor) {
-	ns, ok := cs.nodes[desc.Node.NodeID]
+func (cs *clusterState) setStore(sal StoreAttributesAndLocality) {
+	ns, ok := cs.nodes[sal.NodeID]
 	if !ok {
 		// This is the first time seeing the associated node.
-		ns = newNodeState(desc.Node.NodeID)
-		cs.nodes[desc.Node.NodeID] = ns
+		ns = newNodeState(sal.NodeID)
+		cs.nodes[sal.NodeID] = ns
 	}
-	ss, ok := cs.stores[desc.StoreID]
+	ss, ok := cs.stores[sal.StoreID]
 	if !ok {
 		// This is the first time seeing this store.
 		ss = newStoreState()
-		ss.localityTiers = cs.localityTierInterner.intern(desc.Locality())
+		ss.localityTiers = cs.localityTierInterner.intern(sal.locality())
 		ss.overloadStartTime = cs.ts.Now()
 		ss.overloadEndTime = cs.ts.Now()
-		ss.StoreAttributesAndLocality = StoreAttributesAndLocality{
-			StoreID:      desc.StoreID,
-			NodeID:       desc.Node.NodeID,
-			NodeAttrs:    desc.Node.Attrs,
-			NodeLocality: desc.Node.Locality,
-			StoreAttrs:   desc.Attrs,
-		}
-		cs.constraintMatcher.setStore(desc)
-		cs.stores[desc.StoreID] = ss
-		ns.stores = append(ns.stores, desc.StoreID)
+		ss.StoreAttributesAndLocality = sal
+		cs.constraintMatcher.setStore(sal)
+		cs.stores[sal.StoreID] = ss
+		ns.stores = append(ns.stores, sal.StoreID)
 	}
 }
 
@@ -1817,7 +1811,7 @@ type StoreAttributesAndLocality struct {
 // locality returns the locality of the Store, which is the Locality of the
 // node plus an extra tier for the node itself. Copied from
 // StoreDescriptor.Locality.
-func (saal *StoreAttributesAndLocality) locality() roachpb.Locality {
+func (saal StoreAttributesAndLocality) locality() roachpb.Locality {
 	return saal.NodeLocality.AddTier(
 		roachpb.Tier{Key: "node", Value: saal.NodeID.String()})
 }

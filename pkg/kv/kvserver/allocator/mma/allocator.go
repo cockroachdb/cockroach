@@ -33,9 +33,9 @@ type Allocator interface {
 	// with no knowledge.
 
 	// SetStore informs the allocator about a new store, or when something about
-	// the store descriptor has changed. The allocator's knowledge about the
-	// nodes in the cluster is a side effect of this method.
-	SetStore(store roachpb.StoreDescriptor)
+	// the store attributes and locality has changed. The allocator's knowledge
+	// about the nodes in the cluster is a side effect of this method.
+	SetStore(store StoreAttributesAndLocality)
 
 	// RemoveNodeAndStores tells the allocator to remove the NodeID and all its
 	// stores.

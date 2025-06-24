@@ -1167,10 +1167,20 @@ func (s *state) UpdateStorePool(
 		// TODO(mma): Support origin timestamps.
 		ts := s.clock.Now()
 		storeLoadMsg := allocator.MakeStoreLoadMsg(copiedDesc, ts.UnixNano())
-		node.mmAllocator.SetStore(copiedDesc)
+		node.mmAllocator.SetStore(StoreAttrAndLocFromDesc(copiedDesc))
 		ctx := logtags.AddTag(context.Background(), fmt.Sprintf("n%d", nodeID), "")
 		ctx = logtags.AddTag(ctx, "t", ts.Sub(s.settings.StartTime))
 		node.mmAllocator.ProcessStoreLoadMsg(ctx, &storeLoadMsg)
+	}
+}
+
+func StoreAttrAndLocFromDesc(desc roachpb.StoreDescriptor) mma.StoreAttributesAndLocality {
+	return mma.StoreAttributesAndLocality{
+		StoreID:      desc.StoreID,
+		NodeID:       desc.Node.NodeID,
+		NodeAttrs:    desc.Node.Attrs,
+		NodeLocality: desc.Node.Locality,
+		StoreAttrs:   desc.Attrs,
 	}
 }
 
