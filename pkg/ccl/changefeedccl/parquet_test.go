@@ -271,7 +271,7 @@ func makeRangefeedReaderAndDecoder(
 	targets := changefeedbase.Targets{}
 	targets.Add(changefeedbase.Target{
 		Type:       jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-		TableID:    tableDesc.GetID(),
+		DescID:     tableDesc.GetID(),
 		FamilyName: "primary",
 	})
 	sqlExecCfg := s.ExecutorConfig().(sql.ExecutorConfig)

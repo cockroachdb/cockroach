@@ -275,7 +275,7 @@ func makeScheduledChangefeedSpec(
 	var err error
 
 	tablePatterns := make([]tree.TablePattern, 0)
-	for _, target := range schedule.Targets {
+	for _, target := range schedule.TableTargets {
 		tablePatterns = append(tablePatterns, target.TableName)
 	}
 
@@ -284,12 +284,13 @@ func makeScheduledChangefeedSpec(
 		return nil, errors.Wrap(err, "qualifying target tables")
 	}
 
-	newTargets := make([]tree.ChangefeedTarget, 0)
+	newTargets := make([]tree.ChangefeedTableTarget, 0)
 	for i, table := range qualifiedTablePatterns {
-		newTargets = append(newTargets, tree.ChangefeedTarget{TableName: table, FamilyName: schedule.Targets[i].FamilyName})
+		target := schedule.TableTargets[i]
+		newTargets = append(newTargets, tree.ChangefeedTableTarget{TableName: table, FamilyName: target.FamilyName})
 	}
 
-	schedule.Targets = newTargets
+	schedule.TableTargets = newTargets
 
 	// We need to change the TableExpr inside the Select clause to be fully
 	// qualified. Otherwise, when we execute the schedule, we will parse the
@@ -626,10 +627,10 @@ func doCreateChangefeedSchedule(
 	}
 
 	createChangefeedNode := &tree.CreateChangefeed{
-		Targets: spec.Targets,
-		SinkURI: tree.NewStrVal(*spec.evaluatedSinkURI),
-		Options: spec.Options,
-		Select:  spec.Select,
+		TableTargets: spec.TableTargets,
+		SinkURI:      tree.NewStrVal(*spec.evaluatedSinkURI),
+		Options:      spec.Options,
+		Select:       spec.Select,
 	}
 
 	es, err := makeChangefeedSchedule(env, p.User(), scheduleLabel, recurrence, details, createChangefeedNode)

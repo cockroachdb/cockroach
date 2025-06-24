@@ -95,7 +95,7 @@ func newCdcEventDecoder(
 		srcTablesBySrcID[s.srcDesc.GetID()] = s.srcDesc
 		cdcEventTargets.Add(changefeedbase.Target{
 			Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
-			TableID:           s.srcDesc.GetID(),
+			DescID:            s.srcDesc.GetID(),
 			StatementTimeName: changefeedbase.StatementTimeName(s.srcDesc.GetName()),
 		})
 	}
