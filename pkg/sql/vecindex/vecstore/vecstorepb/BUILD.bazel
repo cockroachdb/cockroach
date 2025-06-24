@@ -8,7 +8,6 @@ proto_library(
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/sql/catalog/descpb:descpb_proto",
         "//pkg/sql/catalog/fetchpb:fetchpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
@@ -21,7 +20,6 @@ go_proto_library(
     proto = ":vecstorepb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/fetchpb",
         "@com_github_gogo_protobuf//gogoproto",
     ],
@@ -29,7 +27,9 @@ go_proto_library(
 
 go_library(
     name = "vecstorepb",
+    srcs = ["fullvecfetchspec.go"],
     embed = [":vecstorepb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore/vecstorepb",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/sql/catalog/descpb"],
 )
