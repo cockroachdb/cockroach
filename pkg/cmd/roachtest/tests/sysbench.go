@@ -264,6 +264,12 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 			return err
 		}
 
+		// The remainder of this method collects profiles and applies only to CRDB,
+		// so exit early if benchmarking postgres.
+		if opts.usePostgres {
+			return nil
+		}
+
 		t.Status("running 75 second workload to collect profiles")
 		{
 			// We store profiles in the perf directory. That way, they're not zipped
