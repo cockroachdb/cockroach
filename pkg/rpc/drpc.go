@@ -216,7 +216,7 @@ func newDRPCPeerOptions(
 				return a == b
 			},
 			newBatchStreamClient: func(ctx context.Context, cc drpc.Conn) (BatchStreamClient, error) {
-				return kvpb.NewDRPCInternalClientAdapter(cc).BatchStream(ctx)
+				return kvpb.NewDRPCKVBatchClientAdapter(cc).BatchStream(ctx)
 			},
 			newCloseNotifier: func(_ *stop.Stopper, cc drpc.Conn) closeNotifier {
 				return &drpcCloseNotifier{conn: cc}

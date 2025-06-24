@@ -28,6 +28,7 @@ func (a *unaryDRPCBatchServiceToInternalAdapter) Batch(
 }
 
 func (a *unaryDRPCBatchServiceToInternalAdapter) MuxRangeFeed(
-	ctx context.Context) (kvpb.RPCInternal_MuxRangeFeedClient, error) {
+	ctx context.Context,
+) (kvpb.RPCInternal_MuxRangeFeedClient, error) {
 	return a.muxRangeFeedClient.MuxRangeFeed(ctx)
 }
