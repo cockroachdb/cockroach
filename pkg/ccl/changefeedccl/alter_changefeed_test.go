@@ -82,6 +82,8 @@ func TestAlterChangefeedAddTargetPrivileges(t *testing.T) {
 		`CREATE TABLE table_b (id int, type type_a)`,
 		`CREATE TABLE table_c (id int, type type_a)`,
 		`CREATE USER feedCreator`,
+		`CREATE ROLE feedowner`,
+		`GRANT feedowner TO feedCreator`,
 		`GRANT SELECT ON table_a TO feedCreator`,
 		`GRANT CHANGEFEED ON table_a TO feedCreator`,
 		`CREATE EXTERNAL CONNECTION "first" AS 'kafka://nope'`,
@@ -123,22 +125,24 @@ func TestAlterChangefeedAddTargetPrivileges(t *testing.T) {
 			row.Scan(&jobID)
 			userDB.Exec(t, `PAUSE JOB $1`, jobID)
 			waitForJobState(userDB, t, catpb.JobID(jobID), `paused`)
+			userDB.Exec(t, `ALTER JOB $1 OWNER TO feedowner`, jobID)
 		})
 
 		// user1 is missing the CHANGEFEED privilege on table_b and table_c.
 		withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
 			userDB.ExpectErr(t,
-				"user user1 requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed",
+				"user user1 does not have privileges for job",
 				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='external://second'", jobID),
 			)
 		})
 		rootDB.Exec(t, `GRANT CHANGEFEED ON table_b TO user1`)
 		withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
 			userDB.ExpectErr(t,
-				"user user1 requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed",
+				"user user1 does not have privileges for job",
 				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='external://second'", jobID),
 			)
 		})
+		rootDB.Exec(t, `GRANT feedowner TO user1`)
 		rootDB.Exec(t, `GRANT CHANGEFEED ON table_c TO user1`)
 		withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
 			userDB.Exec(t,
@@ -175,19 +179,27 @@ func TestAlterChangefeedAddTargetPrivileges(t *testing.T) {
 			row.Scan(&jobID)
 			userDB.Exec(t, `PAUSE JOB $1`, jobID)
 			waitForJobState(userDB, t, catpb.JobID(jobID), `paused`)
+			userDB.Exec(t, `ALTER JOB $1 OWNER TO feedowner`, jobID)
 		})
 
 		// user2 is missing the SELECT privilege on table_b and table_c.
 		withUser(t, "user2", func(userDB *sqlutils.SQLRunner) {
 			userDB.ExpectErr(t,
-				"pq: user user2 with CONTROLCHANGEFEED role option requires the SELECT privilege on all target tables to be able to run an enterprise changefeed",
+				"pq: user user2 does not have privileges for job",
 				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='kafka://bar'", jobID),
 			)
 		})
 		rootDB.Exec(t, `GRANT SELECT ON table_b TO user2`)
 		withUser(t, "user2", func(userDB *sqlutils.SQLRunner) {
 			userDB.ExpectErr(t,
-				"pq: user user2 with CONTROLCHANGEFEED role option requires the SELECT privilege on all target tables to be able to run an enterprise changefeed",
+				"pq: user user2 does not have privileges for job",
+				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='kafka://bar'", jobID),
+			)
+		})
+		rootDB.Exec(t, `GRANT feedowner TO user2`)
+		withUser(t, "user2", func(userDB *sqlutils.SQLRunner) {
+			userDB.ExpectErr(t,
+				"requires the SELECT privilege on all target tables",
 				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='kafka://bar'", jobID),
 			)
 		})
@@ -1859,6 +1871,7 @@ func TestAlterChangefeedAccessControl(t *testing.T) {
 		})
 		rootDB.Exec(t, "PAUSE job $1", currentFeed.JobID())
 		waitForJobState(rootDB, t, currentFeed.JobID(), `paused`)
+		rootDB.Exec(t, "ALTER JOB $1 OWNER TO feedowner", currentFeed.JobID())
 
 		// Verify who can modify the existing changefeed.
 		asUser(t, f, `userWithAllGrants`, func(userDB *sqlutils.SQLRunner) {
@@ -1872,10 +1885,10 @@ func TestAlterChangefeedAccessControl(t *testing.T) {
 			userDB.ExpectErr(t, "pq: user jobcontroller requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed", fmt.Sprintf(`ALTER CHANGEFEED %d DROP table_b`, currentFeed.JobID()))
 		})
 		asUser(t, f, `userWithSomeGrants`, func(userDB *sqlutils.SQLRunner) {
-			userDB.ExpectErr(t, "pq: user userwithsomegrants does not have CHANGEFEED privilege on relation table_b", fmt.Sprintf(`ALTER CHANGEFEED %d ADD table_b`, currentFeed.JobID()))
+			userDB.ExpectErr(t, "does not have privileges for job", fmt.Sprintf(`ALTER CHANGEFEED %d ADD table_b`, currentFeed.JobID()))
 		})
 		asUser(t, f, `regularUser`, func(userDB *sqlutils.SQLRunner) {
-			userDB.ExpectErr(t, "pq: user regularuser does not have CHANGEFEED privilege on relation (table_a|table_b)", fmt.Sprintf(`ALTER CHANGEFEED %d ADD table_b`, currentFeed.JobID()))
+			userDB.ExpectErr(t, "does not have privileges for job", fmt.Sprintf(`ALTER CHANGEFEED %d ADD table_b`, currentFeed.JobID()))
 		})
 		closeCf()
 

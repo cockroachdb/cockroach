@@ -1918,6 +1918,16 @@ func (n *kvBatchServer) BatchStream(stream kvpb.DRPCKVBatch_BatchStreamStream) e
 	return (*Node)(n).batchStreamImpl(stream)
 }
 
+type kvRangeFeedServer Node
+
+func (n *Node) AsDRPCRangeFeedServer() kvpb.DRPCRangeFeedServer {
+	return (*kvRangeFeedServer)(n)
+}
+
+func (n *kvRangeFeedServer) MuxRangeFeed(stream kvpb.DRPCRangeFeed_MuxRangeFeedStream) error {
+	return (*Node)(n).muxRangeFeed(stream)
+}
+
 // spanForRequest is the retval of setupSpanForIncomingRPC. It groups together a
 // few variables needed when finishing an RPC's span.
 //
@@ -2092,7 +2102,7 @@ func (n *Node) RangeLookup(
 // MuxRangeFeedServer (default grpc.Stream) is not safe for concurrent calls to
 // Send.
 type lockedMuxStream struct {
-	wrapped kvpb.Internal_MuxRangeFeedServer
+	wrapped kvpb.RPCInternal_MuxRangeFeedStream
 	sendMu  syncutil.Mutex
 	metrics *rangefeed.LockedMuxStreamMetrics
 }
@@ -2188,6 +2198,10 @@ func (n *Node) defaultRangefeedConsumerID() int64 {
 
 // MuxRangeFeed implements the roachpb.InternalServer interface.
 func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
+	return n.muxRangeFeed(muxStream)
+}
+
+func (n *Node) muxRangeFeed(muxStream kvpb.RPCInternal_MuxRangeFeedStream) error {
 	lockedMuxStream := &lockedMuxStream{
 		wrapped: muxStream,
 		metrics: n.metrics.LockedMuxStreamMetrics,

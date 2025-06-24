@@ -7,7 +7,6 @@ package jobsauth
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -16,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
-	"github.com/cockroachdb/errors"
 )
 
 // An AccessLevel is used to indicate how strict an authorization check should
@@ -30,23 +28,6 @@ const (
 	// ControlAccess is used to perform authorization for modifying jobs (ex. PAUSE|CANCEL|RESUME JOB).
 	ControlAccess
 )
-
-var authorizers = make(map[jobspb.Type]Authorizer)
-
-// Authorizer is a function which returns a pgcode.InsufficientPrivilege error if
-// authorization for the job denoted by jobID and payload fails.
-type Authorizer func(
-	ctx context.Context, a AuthorizationAccessor, jobID jobspb.JobID, getLegacyPayload func(ctx context.Context) (*jobspb.Payload, error),
-) error
-
-// RegisterAuthorizer registers a AuthorizationCheck for a certain job type.
-func RegisterAuthorizer(typ jobspb.Type, fn Authorizer) {
-	if _, ok := authorizers[typ]; ok {
-		panic(fmt.Sprintf("cannot register two authorizers for the type %s", typ))
-	}
-
-	authorizers[typ] = fn
-}
 
 // AuthorizationAccessor is an interface for checking authorization on jobs.
 type AuthorizationAccessor interface {
@@ -118,26 +99,6 @@ func Authorize(
 	a AuthorizationAccessor,
 	jobID jobspb.JobID,
 	owner username.SQLUsername,
-	typ jobspb.Type,
-	accessLevel AccessLevel,
-	global GlobalJobPrivileges,
-) error {
-
-	legacyAuthErrFunc := func(ctx context.Context) (*jobspb.Payload, error) {
-		return nil, errors.New("legacy authorization check not implemented")
-	}
-	return AuthorizeAllowLegacyAuth(ctx, a, jobID, legacyAuthErrFunc, owner, typ, accessLevel, global)
-}
-
-// AutherizeAllowLegacyAuth functions like Authorize, and also provides
-// the deprecated job-specific custom authorization check allows access.
-func AuthorizeAllowLegacyAuth(
-	ctx context.Context,
-	a AuthorizationAccessor,
-	jobID jobspb.JobID,
-	getLegacyPayload func(ctx context.Context) (*jobspb.Payload, error),
-	owner username.SQLUsername,
-	typ jobspb.Type,
 	accessLevel AccessLevel,
 	global GlobalJobPrivileges,
 ) error {
@@ -186,9 +147,6 @@ func AuthorizeAllowLegacyAuth(
 		return nil
 	}
 
-	if check, ok := authorizers[typ]; ok {
-		return check(ctx, a, jobID, getLegacyPayload)
-	}
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s does not have privileges for job %d",
 		a.User(), jobID)

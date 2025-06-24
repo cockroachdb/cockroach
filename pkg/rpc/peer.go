@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc/status"
-	"storj.io/drpc"
 )
 
 type peerStatus int
@@ -124,7 +123,7 @@ type peer[Conn rpcConn] struct {
 	heartbeatInterval  time.Duration
 	heartbeatTimeout   time.Duration
 	connOptions        *ConnectionOptions[Conn]
-	drpcDial           dialFunc[drpc.Conn]
+
 	// b maintains connection health. This breaker's async probe is always
 	// active - it is the heartbeat loop and manages `mu.c.` (including
 	// recreating it after the connection fails and has to be redialed).
@@ -248,7 +247,6 @@ func newPeer[Conn rpcConn](rpcCtx *Context, k peerKey, peerOpts *peerOptions[Con
 		opts:               &rpcCtx.ContextOptions,
 		peers:              peerOpts.peers,
 		connOptions:        peerOpts.connOptions,
-		drpcDial:           DialDRPC(rpcCtx),
 		newHeartbeatClient: peerOpts.newHeartbeatClient,
 		heartbeatInterval:  rpcCtx.RPCHeartbeatInterval,
 		heartbeatTimeout:   rpcCtx.RPCHeartbeatTimeout,
@@ -385,13 +383,6 @@ func (p *peer[Conn]) runOnce(ctx context.Context, report func(error)) error {
 	defer func() {
 		_ = cc.Close() // nolint:grpcconnclose
 	}()
-	dc, err := p.drpcDial(ctx, p.k.TargetAddr, p.k.Class)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = dc.Close()
-	}()
 
 	// Set up notifications on a channel when gRPC tears down, so that we
 	// can trigger another instant heartbeat for expedited circuit breaker
@@ -416,7 +407,7 @@ func (p *peer[Conn]) runOnce(ctx context.Context, report func(error)) error {
 		return err
 	}
 
-	p.onInitialHeartbeatSucceeded(ctx, p.opts.Clock.Now(), cc, dc, report)
+	p.onInitialHeartbeatSucceeded(ctx, p.opts.Clock.Now(), cc, report)
 
 	return p.runHeartbeatUntilFailure(ctx, connClosedCh)
 }
@@ -579,7 +570,7 @@ func logOnHealthy(ctx context.Context, disconnected, now time.Time) {
 }
 
 func (p *peer[Conn]) onInitialHeartbeatSucceeded(
-	ctx context.Context, now time.Time, cc Conn, dc drpc.Conn, report func(err error),
+	ctx context.Context, now time.Time, cc Conn, report func(err error),
 ) {
 	// First heartbeat succeeded. By convention we update the breaker
 	// before updating the peer. The other way is fine too, just the
@@ -602,11 +593,10 @@ func (p *peer[Conn]) onInitialHeartbeatSucceeded(
 	// ahead of signaling the connFuture, so that the stream pool is ready for use
 	// by the time the connFuture is resolved.
 	p.mu.c.batchStreamPool.Bind(ctx, cc)
-	p.mu.c.drpcBatchStreamPool.Bind(ctx, dc)
 
 	// Close the channel last which is helpful for unit tests that
 	// first waitOrDefault for a healthy conn to then check metrics.
-	p.mu.c.connFuture.Resolve(cc, dc, nil /* err */)
+	p.mu.c.connFuture.Resolve(cc, nil /* err */)
 
 	logOnHealthy(ctx, p.mu.disconnected, now)
 }
@@ -724,7 +714,7 @@ func (p *peer[Conn]) onHeartbeatFailed(
 		// attention to the circuit breaker.
 		err = &netutil.InitialHeartbeatFailedError{WrappedErr: err}
 		var nilConn Conn
-		ls.c.connFuture.Resolve(nilConn, nil /* dc */, err)
+		ls.c.connFuture.Resolve(nilConn, err)
 	}
 
 	// Close down the stream pool that was bound to this connection.
@@ -765,7 +755,7 @@ func (p *peer[Conn]) onQuiesce(report func(error)) {
 	// NB: it's important that connFuture is resolved, or a caller sitting on
 	// `c.ConnectNoBreaker` would never be unblocked; after all, the probe won't
 	// start again in the future.
-	p.snap().c.connFuture.Resolve(cc, nil, errQuiescing)
+	p.snap().c.connFuture.Resolve(cc, errQuiescing)
 }
 
 func (p PeerSnap[Conn]) deletable(now time.Time) bool {

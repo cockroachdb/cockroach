@@ -3755,6 +3755,11 @@ service Cluster {
   rpc Join (JoinNodeRequest) returns (JoinNodeResponse) {}
 }
 
+// RangeFeed service implemented by nodes for KV API requests.
+service RangeFeed {
+  rpc MuxRangeFeed (stream RangeFeedRequest) returns (stream MuxRangeFeedEvent) {}
+}
+
 // Batch and RangeFeed service implemented by nodes for KV API requests.
 service Internal {
   rpc Batch (BatchRequest) returns (BatchResponse) {}

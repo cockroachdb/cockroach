@@ -652,6 +652,9 @@ define Delete {
 #  - the input to the delete is a scan (without limits);
 #  - there are no inbound FKs to the table.
 #
+# If both DeleteSwap and DeleteRange could be used for a DELETE statement,
+# DeleteSwap takes precedence.
+#
 # See the comment for ConstructScan for descriptions of the needed and
 # indexConstraint parameters, since DeleteRange combines Delete + Scan into a
 # single operator.
@@ -887,4 +890,112 @@ define VectorMutationSearch {
     # Indicates whether the search operation is for an index put or del. If set,
     # the search must return the quantized vector.
     IsIndexPut bool
+}
+
+# UpdateSwap performs an UPDATE statement as a compare-and-swap operation, which
+# only succeeds if the existing row matches what was expected. This
+# compare-and-swap allows the statement to skip the initial fetch from the
+# target table, which changes some simple UPDATE statements from 2 round trips
+# to 1 round trip.
+#
+# This fast path is only possible when certain conditions hold true:
+# - all columns in the primary index are constrained to a single exact value
+#   by the WHERE clause;
+# - only a single row is modified;
+# - there are no FK checks or cascades;
+# - there are no uniqueness checks;
+# - there are no check constraints;
+# - there are no after triggers.
+#
+# Multiple indexes and complex projections are supported.
+#
+# For example, the following statement would be able to use UpdateSwap, as it
+# only updates a single row and all columns are constrained to a single exact
+# value by the WHERE clause.
+#
+#   CREATE TABLE abcd (
+#     a INT PRIMARY KEY,
+#     b INT,
+#     c INT,
+#     d INT AS (b + c) VIRTUAL,
+#     INDEX (b)
+#   );
+#
+#   UPDATE abcd SET a = b + 1, c = 3
+#     WHERE a = 1
+#     AND b IS NOT DISTINCT FROM 2
+#     AND c IS NOT DISTINCT FROM NULL
+#     RETURNING c, d;
+#
+# The parameters are mostly the same as for Update.
+define UpdateSwap {
+    Input exec.Node
+    Table cat.Table
+    FetchCols exec.TableColumnOrdinalSet
+    UpdateCols exec.TableColumnOrdinalSet
+    ReturnCols exec.TableColumnOrdinalSet
+    Passthrough colinfo.ResultColumns
+
+    # If set, the input has already acquired the locks during the initial scan
+    # of the Update (i.e. on the "old" KVs within these indexes).
+    LockedIndexes cat.IndexOrdinals
+
+    # If set, the operator will commit the transaction as part of its execution.
+    AutoCommit bool
+}
+
+# DeleteSwap performs a DELETE statement as a compare-and-swap operation, which
+# only succeeds if the existing row matches what was expected. This
+# compare-and-swap allows the statement to skip the initial fetch from the
+# target table, which changes some simple DELETE statements from 2 round trips
+# to 1 round trip.
+#
+# This fast path is only possible when certain conditions hold true:
+# - all columns in the primary index are constrained to a single exact value
+#   by the WHERE clause;
+# - only a single row is deleted;
+# - there are no FK checks or cascades;
+# - there are no uniqueness checks;
+# - there are no after triggers.
+#
+# Multiple indexes and complex projections are supported.
+#
+# For example, the following statement would be able to use DeleteSwap, as it
+# only deletes a single row and all columns are constrained to a single exact
+# value by the WHERE clause.
+#
+#   CREATE TABLE abcd (
+#     a INT PRIMARY KEY,
+#     b INT,
+#     c INT,
+#     d INT AS (b + c) VIRTUAL,
+#     INDEX (b)
+#   );
+#
+#   DELETE FROM abcd
+#     WHERE a = 1
+#     AND b IS NOT DISTINCT FROM 2
+#     AND c IS NOT DISTINCT FROM NULL
+#     RETURNING *;
+#
+# If both DeleteSwap and DeleteRange could be used for a DELETE statement,
+# DeleteSwap takes precedence.
+#
+# The parameters are the same as for Delete.
+define DeleteSwap {
+    Input exec.Node
+    Table cat.Table
+    FetchCols exec.TableColumnOrdinalSet
+    ReturnCols exec.TableColumnOrdinalSet
+    Passthrough colinfo.ResultColumns
+
+    # If set, the input has already acquired the locks on the specified indexes
+    # on all keys that might be deleted from that index.
+    LockedIndexes cat.IndexOrdinals
+
+    # If set, the operator will commit the transaction as part of its execution.
+    # This is false when executing inside an explicit transaction, or there are
+    # multiple mutations in a statement, or the output of the mutation is
+    # processed through side-effecting expressions.
+    AutoCommit bool
 }
