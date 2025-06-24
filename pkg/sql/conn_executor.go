@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -3543,9 +3544,7 @@ func (ex *connExecutor) setTransactionModes(
 		if err := ex.state.setIsolationLevel(level); err != nil {
 			return pgerror.WithCandidateCode(err, pgcode.ActiveSQLTransaction)
 		}
-		if (level != isolation.Serializable) && !allowBufferedWritesForWeakIsolation.Get(&ex.server.cfg.Settings.SV) {
-			// TODO(#143497): we currently only support buffered writes under
-			// serializable isolation.
+		if !ex.bufferedWritesIsAllowedForIsolationLevel(ctx, level) {
 			ex.state.mu.txn.SetBufferedWritesEnabled(false)
 		}
 	}
@@ -3729,6 +3728,28 @@ func (ex *connExecutor) bufferedWritesEnabled(ctx context.Context) bool {
 		return false
 	}
 	return ex.sessionData().BufferedWritesEnabled && ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.V25_2)
+}
+
+func (ex *connExecutor) bufferedWritesIsAllowedForIsolationLevel(
+	ctx context.Context, isoLevel isolation.Level,
+) bool {
+	return bufferedWritesIsAllowedForIsolationLevel(ctx, ex.server.cfg.Settings, isoLevel)
+}
+
+func bufferedWritesIsAllowedForIsolationLevel(
+	ctx context.Context, st *cluster.Settings, isoLevel isolation.Level,
+) bool {
+	if isoLevel == isolation.Serializable {
+		return true
+	}
+
+	// We are at a weaker isolation level that requires lock loss detection which
+	// is only available on 25.3 or greater.
+	if !st.Version.IsActive(ctx, clusterversion.V25_3) {
+		return false
+	}
+
+	return allowBufferedWritesForWeakIsolation.Get(&st.SV)
 }
 
 // initEvalCtx initializes the fields of an extendedEvalContext that stay the
