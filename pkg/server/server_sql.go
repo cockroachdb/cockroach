@@ -511,6 +511,7 @@ func (r *refreshInstanceSessionListener) OnSessionDeleted(
 				r.cfg.Locality,
 				r.cfg.Settings.Version.LatestVersion(),
 				nodeID,
+				[]roachpb.LocalityAddress{},
 			); err != nil {
 				log.Warningf(ctx, "failed to update instance with new session ID: %v", err)
 				continue
@@ -607,26 +608,28 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.db,
 	)
 
-	// We can't use the nodeDialer as the sqlInstanceDialer unless we
-	// are serving the system tenant despite the fact that we've
-	// arranged for pod IDs and instance IDs to match since the
-	// secondary tenant gRPC servers currently live on a different
-	// port.
-	canUseNodeDialerAsSQLInstanceDialer := isMixedSQLAndKVNode && codec.ForSystemTenant()
-	if canUseNodeDialerAsSQLInstanceDialer {
-		cfg.sqlInstanceDialer = cfg.kvNodeDialer
-	} else {
-		// In a multi-tenant environment, use the sqlInstanceReader to resolve
-		// SQL pod addresses.
-		addressResolver := func(nodeID roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
+	addressResolver := func(nodeID roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
+		resolveWithSQLInstanceReader := func() (net.Addr, roachpb.Locality, error) {
 			info, err := cfg.sqlInstanceReader.GetInstance(cfg.rpcContext.MasterCtx, base.SQLInstanceID(nodeID))
 			if err != nil {
 				return nil, roachpb.Locality{}, errors.Wrapf(err, "unable to look up descriptor for n%d", nodeID)
 			}
-			return &util.UnresolvedAddr{AddressField: info.InstanceRPCAddr}, info.Locality, nil
+			defaultAddress := &util.UnresolvedAddr{AddressField: info.InstanceRPCAddr}
+			return cfg.Locality.LookupAddress(info.LocalityAddressList, defaultAddress), info.Locality, nil
 		}
-		cfg.sqlInstanceDialer = nodedialer.New(cfg.rpcContext, addressResolver)
+		// We can't use the nodeDialer as the sqlInstanceDialer unless we
+		// are serving the system tenant despite the fact that we've
+		// arranged for pod IDs and instance IDs to match since the
+		// secondary tenant gRPC servers currently live on a different
+		// port.
+		canUseNodeDialerAsSQLInstanceDialer := isMixedSQLAndKVNode && codec.ForSystemTenant()
+		if !canUseNodeDialerAsSQLInstanceDialer || cfg.Settings.Version.IsActive(ctx, clusterversion.V25_3) {
+			return resolveWithSQLInstanceReader()
+		}
+		g, _ := cfg.gossip.Optional(138715)
+		return gossip.AddressResolver(g)(nodeID)
 	}
+	cfg.sqlInstanceDialer = nodedialer.New(cfg.rpcContext, addressResolver)
 
 	jobRegistry := cfg.circularJobRegistry
 	{
@@ -794,17 +797,18 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	// Set up the DistSQL server.
 	distSQLCfg := execinfra.ServerConfig{
-		AmbientContext:   cfg.AmbientCtx,
-		Settings:         cfg.Settings,
-		RuntimeStats:     cfg.runtime,
-		LogicalClusterID: clusterIDForSQL,
-		ClusterName:      cfg.ClusterName,
-		NodeID:           cfg.nodeIDContainer,
-		Locality:         cfg.Locality,
-		Codec:            codec,
-		DB:               cfg.internalDB,
-		RPCContext:       cfg.rpcContext,
-		Stopper:          cfg.stopper,
+		AmbientContext:    cfg.AmbientCtx,
+		Settings:          cfg.Settings,
+		RuntimeStats:      cfg.runtime,
+		LogicalClusterID:  clusterIDForSQL,
+		ClusterName:       cfg.ClusterName,
+		NodeID:            cfg.nodeIDContainer,
+		Locality:          cfg.Locality,
+		LocalityAddresses: cfg.LocalityAddresses,
+		Codec:             codec,
+		DB:                cfg.internalDB,
+		RPCContext:        cfg.rpcContext,
+		Stopper:           cfg.stopper,
 
 		TempStorage:     tempEngine,
 		TempStoragePath: cfg.TempStorageConfig.Path,
@@ -1580,6 +1584,15 @@ func (s *SQLServer) preStart(
 		stopper.ShouldQuiesce(),
 		"sql create node instance row",
 		func(ctx context.Context) (sqlinstance.InstanceInfo, error) {
+			var localityAddressList []roachpb.LocalityAddress
+			if s.execCfg.Codec.ForSystemTenant() {
+				localityAddressList = s.distSQLServer.LocalityAddresses
+			} else {
+				localityAddressList = nil
+			}
+			if err != nil {
+				return sqlinstance.InstanceInfo{}, err
+			}
 			if hasNodeID {
 				// Write/acquire our instance row.
 				return s.sqlInstanceStorage.CreateNodeInstance(
@@ -1590,6 +1603,7 @@ func (s *SQLServer) preStart(
 					s.distSQLServer.Locality,
 					s.execCfg.Settings.Version.LatestVersion(),
 					nodeID,
+					localityAddressList,
 				)
 			}
 			return s.sqlInstanceStorage.CreateInstance(
@@ -1599,6 +1613,7 @@ func (s *SQLServer) preStart(
 				s.cfg.SQLAdvertiseAddr,
 				s.distSQLServer.Locality,
 				s.execCfg.Settings.Version.LatestVersion(),
+				localityAddressList,
 			)
 		})
 	if err != nil {

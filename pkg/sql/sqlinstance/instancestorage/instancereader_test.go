@@ -78,7 +78,7 @@ func TestReader(t *testing.T) {
 		const expiration = 10 * time.Minute
 		session.StartTS = clock.Now()
 		session.ExpTS = session.StartTS.Add(expiration.Nanoseconds(), 0)
-		instance, err := storage.CreateInstance(ctx, session, rpcAddr, sqlAddr, locality, binaryVersion)
+		instance, err := storage.CreateInstance(ctx, session, rpcAddr, sqlAddr, locality, binaryVersion, []roachpb.LocalityAddress{})
 		require.NoError(t, err)
 		err = slStorage.Insert(ctx, session.ID(), session.Expiration())
 		require.NoError(t, err)
@@ -107,7 +107,7 @@ func TestReader(t *testing.T) {
 		{
 			session.StartTS = clock.Now()
 			session.ExpTS = session.StartTS.Add(expiration.Nanoseconds(), 0)
-			instance, err := storage.CreateInstance(ctx, session, rpcAddr, sqlAddr, locality, binaryVersion)
+			instance, err := storage.CreateInstance(ctx, session, rpcAddr, sqlAddr, locality, binaryVersion, []roachpb.LocalityAddress{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -246,7 +246,7 @@ func TestReader(t *testing.T) {
 			for index, rpcAddr := range rpcAddresses {
 				sessions[index].StartTS = clock.Now()
 				sessions[index].ExpTS = sessions[index].StartTS.Add(expiration.Nanoseconds(), 0)
-				_, err := storage.CreateInstance(ctx, sessions[index], rpcAddr, sqlAddresses[index], localities[index], binaryVersions[index])
+				_, err := storage.CreateInstance(ctx, sessions[index], rpcAddr, sqlAddresses[index], localities[index], binaryVersions[index], []roachpb.LocalityAddress{})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -291,7 +291,7 @@ func TestReader(t *testing.T) {
 			locality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "region4"}}}
 			session.StartTS = clock.Now()
 			session.ExpTS = session.StartTS.Add(expiration.Nanoseconds(), 0)
-			instance, err := storage.CreateInstance(ctx, session, rpcAddresses[2], sqlAddresses[2], locality, binaryVersions[2])
+			instance, err := storage.CreateInstance(ctx, session, rpcAddresses[2], sqlAddresses[2], locality, binaryVersions[2], []roachpb.LocalityAddress{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -336,7 +336,7 @@ func TestReader(t *testing.T) {
 			for index, rpcAddr := range rpcAddresses {
 				sessions[index].StartTS = clock.Now()
 				sessions[index].ExpTS = sessions[index].StartTS.Add(expiration.Nanoseconds(), 0)
-				_, err := storage.CreateInstance(ctx, sessions[index], rpcAddr, sqlAddresses[index], localities[index], binaryVersions[index])
+				_, err := storage.CreateInstance(ctx, sessions[index], rpcAddr, sqlAddresses[index], localities[index], binaryVersions[index], []roachpb.LocalityAddress{})
 				if err != nil {
 					t.Fatal(err)
 				}

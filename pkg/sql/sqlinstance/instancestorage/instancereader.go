@@ -124,14 +124,15 @@ func (r *Reader) setCache(feed instanceCache) {
 
 func makeInstanceInfo(row instancerow) sqlinstance.InstanceInfo {
 	return sqlinstance.InstanceInfo{
-		InstanceID:      row.instanceID,
-		InstanceRPCAddr: row.rpcAddr,
-		InstanceSQLAddr: row.sqlAddr,
-		SessionID:       row.sessionID,
-		Locality:        row.locality,
-		BinaryVersion:   row.binaryVersion,
-		Region:          row.region,
-		IsDraining:      row.isDraining,
+		InstanceID:          row.instanceID,
+		InstanceRPCAddr:     row.rpcAddr,
+		InstanceSQLAddr:     row.sqlAddr,
+		SessionID:           row.sessionID,
+		Locality:            row.locality,
+		BinaryVersion:       row.binaryVersion,
+		Region:              row.region,
+		IsDraining:          row.isDraining,
+		LocalityAddressList: row.localityAddressList,
 	}
 }
 
