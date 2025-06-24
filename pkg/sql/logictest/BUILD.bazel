@@ -97,6 +97,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/metamorphic",
         "//pkg/util/randutil",
+        "//pkg/util/system",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_cockroach_go_v2//testserver",
