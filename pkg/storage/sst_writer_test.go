@@ -192,11 +192,11 @@ func TestSSTWriterOption(t *testing.T) {
 	// cluster setting that has been set to the given algorithm as the basis for
 	// determining which compression algorithm is used when the SSTWriterOption
 	// runs over an sstable.WriterOptions.
-	makeCompressionWriterOpt := func(alg CompressionAlgorithm) SSTWriterOption {
+	makeCompressionWriterOpt := func(alg SSTableCompressionProfile) SSTWriterOption {
 		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
-		CompressionAlgorithmStorage.Override(ctx, &st.SV, alg)
-		return WithCompressionFromClusterSetting(ctx, st, CompressionAlgorithmStorage)
+		CompressionAlgorithmBackupTransport.Override(ctx, &st.SV, alg)
+		return WithCompressionFromClusterSetting(ctx, st, CompressionAlgorithmBackupTransport)
 	}
 
 	tcs := []struct {
@@ -213,23 +213,44 @@ func TestSSTWriterOption(t *testing.T) {
 		},
 		{
 			"with snappy compression",
-			makeCompressionWriterOpt(CompressionAlgorithmSnappy),
+			makeCompressionWriterOpt(SSTableCompressionSnappy),
 			func(t *testing.T, opts *sstable.WriterOptions) {
 				require.Equal(t, block.SnappyCompression, opts.Compression)
 			},
 		},
 		{
 			"with zstd compression",
-			makeCompressionWriterOpt(CompressionAlgorithmZstd),
+			makeCompressionWriterOpt(SSTableCompressionZstd),
 			func(t *testing.T, opts *sstable.WriterOptions) {
 				require.Equal(t, block.ZstdCompression, opts.Compression)
 			},
 		},
 		{
 			"with minlz compression",
-			makeCompressionWriterOpt(CompressionAlgorithmMinLZ),
+			makeCompressionWriterOpt(SSTableCompressionMinLZ),
 			func(t *testing.T, opts *sstable.WriterOptions) {
 				require.Equal(t, block.MinLZCompression, opts.Compression)
+			},
+		},
+		{
+			"with fast compression",
+			makeCompressionWriterOpt(SSTableCompressionFast),
+			func(t *testing.T, opts *sstable.WriterOptions) {
+				require.Equal(t, block.FastCompression, opts.Compression)
+			},
+		},
+		{
+			"with balanced compression",
+			makeCompressionWriterOpt(SSTableCompressionBalanced),
+			func(t *testing.T, opts *sstable.WriterOptions) {
+				require.Equal(t, block.BalancedCompression, opts.Compression)
+			},
+		},
+		{
+			"with good compression",
+			makeCompressionWriterOpt(SSTableCompressionGood),
+			func(t *testing.T, opts *sstable.WriterOptions) {
+				require.Equal(t, block.GoodCompression, opts.Compression)
 			},
 		},
 	}
