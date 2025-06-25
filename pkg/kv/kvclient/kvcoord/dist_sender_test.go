@@ -4770,26 +4770,26 @@ func TestDistSenderSlowLogMessage(t *testing.T) {
 	br.Error = kvpb.NewError(errors.New("boom"))
 	desc := &roachpb.RangeDescriptor{RangeID: 9, StartKey: roachpb.RKey("x"), EndKey: roachpb.RKey("z")}
 	{
-		exp := `have been waiting 8.16s (120 attempts) for RPC Get(Shared,Unreplicated) ["a"] to` +
-			` r9:{x-z} [<no replicas>, next=0, gen=0]; resp: (err: boom)`
+		exp := `have been waiting 8.16s (120 attempts) for RPC Get(Shared,Unreplicated) [‹"a"›] to` +
+			` r9:{‹x›-‹z›} [<no replicas>, next=0, gen=0]; resp: (err: boom)`
 		var s redact.StringBuilder
 		slowRangeRPCWarningStr(&s, ba, dur, attempts, desc, nil /* err */, br)
-		act := s.RedactableString().StripMarkers()
+		act := s.RedactableString()
 		require.EqualValues(t, exp, act)
 	}
 	{
 		exp := `slow RPC finished after 8.16s (120 attempts)`
 		var s redact.StringBuilder
 		slowRangeRPCReturnWarningStr(&s, dur, attempts)
-		act := s.RedactableString().StripMarkers()
+		act := s.RedactableString()
 		require.EqualValues(t, exp, act)
 	}
 	{
-		exp := `have been waiting 8.16s (120 attempts) for RPC Get(Shared,Unreplicated) ["a"] to` +
+		exp := `have been waiting 8.16s (120 attempts) for RPC Get(Shared,Unreplicated) [‹"a"›] to` +
 			` replica (n2,s3):1; resp: (err: boom)`
 		var s redact.StringBuilder
 		slowReplicaRPCWarningStr(&s, ba, dur, attempts, nil /* err */, br)
-		act := s.RedactableString().StripMarkers()
+		act := s.RedactableString()
 		require.EqualValues(t, exp, act)
 	}
 }

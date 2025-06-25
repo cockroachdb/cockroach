@@ -487,7 +487,7 @@ func (br *BatchResponse) String() string {
 func (br *BatchResponse) SafeFormat(s redact.SafePrinter, verb rune) {
 	// Marking Error of BatchResponse as safe as Outside of the RPC boundaries,
 	// this field is nil and must neither be checked nor populated
-	s.Printf("(err: %s)", redact.Safe(br.Error.String()))
+	s.Printf("(err: %v)", br.Error)
 
 	for count, union := range br.Responses {
 		// Limit the strings to provide just a summary. Without this limit a log
